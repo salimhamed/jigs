@@ -44,3 +44,23 @@ _Avoid_: checkpoint, approval step
 The coding-agent runtime a step runs on (Claude Code, Codex, Pi), driven
 through `@ai-sdk/harness` adapters.
 _Avoid_: agent CLI, backend
+
+**Activation**:
+One waking of a run — its launch or any resume. Steps within one activation
+all see the same snapshot.
+_Avoid_: session, attempt
+
+**Snapshot**:
+The copy of a Linear ticket fetched at each activation and kept in run state.
+What steps read; the audit record of what agents saw.
+_Avoid_: cache, mirror
+
+**Ticket review**:
+The shipped head-jig that normalizes a ticket into a brief and issues a
+proceed / needs-human verdict.
+_Avoid_: intake, triage
+
+**Brief**:
+The normalized implementation plan a ticket review produces — the
+implementer's working plan. The ticket stays the definition of done.
+_Avoid_: plan, spec
