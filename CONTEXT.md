@@ -65,15 +65,10 @@ The working copy an agent step runs in. Requested by the pipeline; the runtime
 remembers every one it made and tears them down when the run ends.
 _Avoid_: checkout, clone, workspace
 
-**Sandbox**:
-The substrate a harness executes in — where the agent's process runs and its
-filesystem lives. Locally this is a pass-through to the real machine, pointed
-at a worktree. Not isolation; jigs sandboxes nothing.
-_Avoid_: container, jail, isolation
-
 **Harness**:
-The coding-agent runtime a step runs on (Claude Code, Codex, Pi).
-_Avoid_: agent CLI, backend
+The coding-agent runtime a step runs on, driven through its AI SDK provider
+with the worktree as plain `cwd` (Claude Code and Codex in v0).
+_Avoid_: agent CLI, backend, sandbox
 
 **Activation**:
 One waking of a run — its launch or any resume. Steps within one activation

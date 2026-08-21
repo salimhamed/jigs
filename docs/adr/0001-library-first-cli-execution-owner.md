@@ -1,5 +1,11 @@
 # Library-first package, CLI as the single execution owner
 
+> **Amended by [ADR 0004](./0004-cli-providers-drive-harnesses.md).** The
+> `@ai-sdk/harness` choice referenced below no longer holds: the community
+> CLI providers (`ai-sdk-provider-claude-code`, `ai-sdk-provider-codex-cli`)
+> drive the harnesses. `jigs/harnesses` stays the single pin point, now
+> wrapping those providers.
+
 > **Amended by [ADR 0003](./0003-durable-imperative-pipelines.md).** The
 > phrase "builds a DAG imperatively and default-exports it" below no longer
 > describes the model: a pipeline default-exports an async body the runtime
