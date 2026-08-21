@@ -6,20 +6,28 @@ tickets through agent implementation, review, and human approval to a merged PR.
 ## Language
 
 **Pipeline**:
-The full DAG of steps a ticket or feature moves through, defined in a plain
-TypeScript module. One pipeline definition can be reused across many runs.
-_Avoid_: workflow, flow
+The whole route a ticket or feature moves through, written as a plain
+TypeScript async body the runtime calls. One pipeline definition can be reused
+across many runs.
+_Avoid_: workflow, flow, DAG
 
 **Jig**:
-A reusable sub-DAG — a TypeScript function that returns a fragment of a
-pipeline (e.g. implement → agent review → human review → merge). Pipelines are
+A reusable stretch of a pipeline — an async TypeScript function you call from
+a pipeline body (e.g. implement ⇄ review until approved). Pipelines are
 composed from jigs.
 _Avoid_: segment, pattern, template
 
 **Step**:
-One node in a pipeline, usually a single agent invocation with its own harness,
-model, and repo binding.
+One recorded unit of work in a pipeline, awaited from the body and identified
+by its key. Three kinds: an **agent step** (a coding agent on a harness, in a
+worktree), a **model step** (a plain model call, no worktree), and a
+**function step** (plain TypeScript).
 _Avoid_: node, task, stage
+
+**Step key**:
+The author-supplied name a step's result is recorded under. Unique within an
+activation; what makes resume order-insensitive.
+_Avoid_: id, label
 
 **Run**:
 One execution of a pipeline. Detachable: it survives terminal close and idles
@@ -36,11 +44,33 @@ The central git-tracked repository holding the user's pipeline definitions.
 Target repos contain no pipeline code.
 _Avoid_: pipelines repo, config repo
 
+**Suspension**:
+A run pausing until a named external condition satisfies it. Never open-ended:
+every suspension declares what can wake it. A suspended run is not terminal,
+so it keeps its worktree.
+_Avoid_: pause, block
+
 **Gate**:
-A transition that blocks a run until a human approves.
+A suspension the pipeline plans for. v0 ships one, the pull request gate,
+satisfied by a human approving the PR.
 _Avoid_: checkpoint, approval step
 
+**Needs-human halt**:
+A suspension raised from a step's verdict rather than planned, satisfied by a
+human's reply on the Linear ticket.
+_Avoid_: failure, abort
+
+**Worktree**:
+The working copy an agent step runs in. Requested by the pipeline; the runtime
+remembers every one it made and tears them down when the run ends.
+_Avoid_: checkout, clone, workspace
+
+**Sandbox**:
+The substrate a harness executes in — where the agent's process runs and its
+filesystem lives. Locally this is a pass-through to the real machine, pointed
+at a worktree. Not isolation; jigs sandboxes nothing.
+_Avoid_: container, jail, isolation
+
 **Harness**:
-The coding-agent runtime a step runs on (Claude Code, Codex, Pi), driven
-through `@ai-sdk/harness` adapters.
+The coding-agent runtime a step runs on (Claude Code, Codex, Pi).
 _Avoid_: agent CLI, backend

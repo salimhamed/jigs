@@ -1,5 +1,13 @@
 # Library-first package, CLI as the single execution owner
 
+> **Amended by [ADR 0003](./0003-durable-imperative-pipelines.md).** The
+> phrase "builds a DAG imperatively and default-exports it" below no longer
+> describes the model: a pipeline default-exports an async body the runtime
+> calls, and there is no exported graph. Everything else here stands —
+> library-first, the CLI as single execution owner, definitions as config
+> modules that never launch themselves, the factory repo, the zod `inputs`
+> contract, and `jigs/harnesses` as the single pin point.
+
 jigs is a library-first ESM package with a thin CLI. The composable constructs
 (pipeline, jig, step, gate) are the public TypeScript API; the CLI owns the
 operational verbs (`run`, `ps`, `attach`, preflight) and is the only supported
