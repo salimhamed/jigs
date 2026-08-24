@@ -50,6 +50,12 @@ every suspension declares what can wake it. A suspended run is not terminal,
 so it keeps its worktree.
 _Avoid_: pause, block
 
+**Satisfier**:
+The named external condition a suspension declares can wake it — a PR
+approval for the gate, a human reply for the needs-human halt. Checked on
+every wake; an unsatisfied wake simply re-suspends.
+_Avoid_: trigger, wake condition
+
 **Gate**:
 A suspension the pipeline plans for. v0 ships one, the pull request gate,
 satisfied by a human approving the PR.
