@@ -1,0 +1,11 @@
+{
+  "eventType": "step_started",
+  "specVersion": 3,
+  "correlationId": "step_01M0XFK1Q4VHN632KQG86PW069",
+  "eventData": {
+    "stepName": "step//./workflows/slow//slowStep"
+  },
+  "runId": "wrun_01M0XFK1PFEVMD3TNM43MYZ4X3",
+  "eventId": "evnt_01M0XFKJ789Y9ER9BVS1216GX7",
+  "createdAt": "2026-08-25T22:10:43.560Z"
+}

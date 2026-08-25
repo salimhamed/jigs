@@ -1,0 +1,15 @@
+{
+  "eventType": "hook_received",
+  "specVersion": 3,
+  "correlationId": "hook_01M0XE4EY3T9X02M4DBE4Q0Y9V",
+  "eventData": {
+    "token": "gate:smoke-1",
+    "payload": {
+      "__type": "Uint8Array",
+      "data": "ZGV2bFt7ImFwcHJvdmVkIjoxLCJub3RlIjoyfSx0cnVlLCJzbW9rZSB0ZXN0Il0="
+    }
+  },
+  "runId": "wrun_01M0XE4EX4GVEAHDBY3RMG3FPS",
+  "eventId": "evnt_01M0XE4RBETTB5WEKV1QQE5DSM",
+  "createdAt": "2026-08-25T21:45:09.742Z"
+}

@@ -1,0 +1,11 @@
+{
+  "eventType": "step_started",
+  "specVersion": 3,
+  "correlationId": "step_01M0XE4EY3T9X02M4DBE4Q0Y9T",
+  "eventData": {
+    "stepName": "step//./workflows/gate//stepOne"
+  },
+  "runId": "wrun_01M0XE4EX4GVEAHDBY3RMG3FPS",
+  "eventId": "evnt_01M0XE4EZ0N0A87Z481ZT9MMKB",
+  "createdAt": "2026-08-25T21:45:00.128Z"
+}

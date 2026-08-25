@@ -1,5 +1,12 @@
 # Process-per-activation runs on a sqlite store
 
+> **Superseded by [ADR 0008](./0008-adopt-workflow-sdk-runtime.md).** The
+> Workflow SDK's Postgres World replaces the jigs-owned runtime described
+> below: no sqlite store, process-per-activation worker, or stateless
+> poller. The goals stand — detachable runs, idle-run-as-disk-state,
+> crash = re-run the step from zero — and the crash-model reasoning below
+> remains the reference for *why* those semantics were chosen.
+
 A run is disk state, not a process. A process exists only while an activation
 executes: `jigs run` (and every wake) spawns a detached worker that executes
 the pipeline body; a suspension writes its record and the process **exits**; a

@@ -1,0 +1,16 @@
+{
+  "eventType": "step_completed",
+  "specVersion": 3,
+  "correlationId": "step_01M0XE4EY3T9X02M4DBE4Q0Y9T",
+  "eventData": {
+    "stepName": "step//./workflows/gate//stepOne",
+    "workflowName": "workflow//./workflows/gate//gateWorkflow",
+    "result": {
+      "__type": "Uint8Array",
+      "data": "ZGV2bFt7ImdhdGVJZCI6MSwibWFya2VyIjoyLCJleGVjdXRlZEF0IjozfSwic21va2UtMSIsImZiZTE3MWU0LWRhODktNDNhMy05NWFkLTk2ZDZkOTM0OGIzZiIsIjIwMjYtMDgtMjVUMjE6NDU6MDAuMTMwWiJd"
+    }
+  },
+  "runId": "wrun_01M0XE4EX4GVEAHDBY3RMG3FPS",
+  "eventId": "evnt_01M0XE4EZ2HVNEK7DE53QMDK46",
+  "createdAt": "2026-08-25T21:45:00.130Z"
+}

@@ -18,16 +18,11 @@ composed from jigs.
 _Avoid_: segment, pattern, template
 
 **Step**:
-One recorded unit of work in a pipeline, awaited from the body and identified
-by its key. Three kinds: an **agent step** (a coding agent on a harness, in a
-worktree), a **model step** (a plain model call, no worktree), and a
-**function step** (plain TypeScript).
+One recorded unit of work in a pipeline, awaited from the body and memoized
+by the runtime's deterministic replay. Three kinds: an **agent step** (a
+coding agent on a harness, in a worktree), a **model step** (a plain model
+call, no worktree), and a **function step** (plain TypeScript).
 _Avoid_: node, task, stage
-
-**Step key**:
-The author-supplied name a step's result is recorded under. Unique within an
-activation; what makes resume order-insensitive.
-_Avoid_: id, label
 
 **Run**:
 One execution of a pipeline. Detachable: it survives terminal close and idles

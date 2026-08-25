@@ -1,0 +1,20 @@
+{
+  "runId": "wrun_01M0XE5A86WH16QC1HFAJW0K8D",
+  "stepId": "step_01M0XE5A8CMAHVPPCV656VK5A0",
+  "stepName": "step//./workflows/gate//stepTwo",
+  "status": "completed",
+  "input": {
+    "__type": "Uint8Array",
+    "data": "ZGV2bFt7ImFyZ3MiOjEsImNsb3N1cmVWYXJzIjotMSwidGhpc1ZhbCI6LTF9LFsyLDNdLCJhMmYxNmNiMi01ZDUzLTQxNTgtYTRkNC1iN2VhMjQ3MmQ0NGQiLHsiYXBwcm92ZWQiOjQsIm5vdGUiOjV9LHRydWUsInBvc3QtcmVzdGFydCBjb250cm9sIl0="
+  },
+  "attempt": 1,
+  "startedAt": "2026-08-25T21:46:00.882Z",
+  "createdAt": "2026-08-25T21:46:00.871Z",
+  "updatedAt": "2026-08-25T21:46:00.883Z",
+  "specVersion": 3,
+  "output": {
+    "__type": "Uint8Array",
+    "data": "ZGV2bFt7InNhd01hcmtlciI6MSwiY29tcGxldGVkQXQiOjJ9LCJhMmYxNmNiMi01ZDUzLTQxNTgtYTRkNC1iN2VhMjQ3MmQ0NGQiLCIyMDI2LTA4LTI1VDIxOjQ2OjAwLjg4M1oiXQ=="
+  },
+  "completedAt": "2026-08-25T21:46:00.883Z"
+}

@@ -1,0 +1,16 @@
+{
+  "eventType": "step_created",
+  "specVersion": 3,
+  "correlationId": "step_01M0XFK1Q4VHN632KQG86PW069",
+  "eventData": {
+    "stepName": "step//./workflows/slow//slowStep",
+    "workflowName": "workflow//./workflows/slow//slowWorkflow",
+    "input": {
+      "__type": "Uint8Array",
+      "data": "ZGV2bFt7ImFyZ3MiOjEsImNsb3N1cmVWYXJzIjotMSwidGhpc1ZhbCI6LTF9LFsyXSwibWlkc3RlcC1sb2NhbC0xIl0="
+    }
+  },
+  "runId": "wrun_01M0XFK1PFEVMD3TNM43MYZ4X3",
+  "eventId": "evnt_01M0XFK1QF6TCA0NCX0VYR93QM",
+  "createdAt": "2026-08-25T22:10:26.671Z"
+}

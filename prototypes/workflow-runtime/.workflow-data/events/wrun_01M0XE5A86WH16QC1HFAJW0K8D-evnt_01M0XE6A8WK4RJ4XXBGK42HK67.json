@@ -1,0 +1,15 @@
+{
+  "eventType": "hook_received",
+  "specVersion": 3,
+  "correlationId": "hook_01M0XE5A8CMAHVPPCV656VK59Z",
+  "eventData": {
+    "token": "gate:control-1",
+    "payload": {
+      "__type": "Uint8Array",
+      "data": "ZGV2bFt7ImFwcHJvdmVkIjoxLCJub3RlIjoyfSx0cnVlLCJwb3N0LXJlc3RhcnQgY29udHJvbCJd"
+    }
+  },
+  "runId": "wrun_01M0XE5A86WH16QC1HFAJW0K8D",
+  "eventId": "evnt_01M0XE6A8WK4RJ4XXBGK42HK67",
+  "createdAt": "2026-08-25T21:46:00.860Z"
+}

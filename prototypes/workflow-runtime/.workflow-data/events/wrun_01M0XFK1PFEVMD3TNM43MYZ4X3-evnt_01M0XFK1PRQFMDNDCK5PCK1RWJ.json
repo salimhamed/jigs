@@ -1,0 +1,22 @@
+{
+  "eventType": "run_created",
+  "specVersion": 3,
+  "eventData": {
+    "deploymentId": "dpl_local@4.3.0",
+    "workflowName": "workflow//./workflows/slow//slowWorkflow",
+    "input": {
+      "__type": "Uint8Array",
+      "data": "ZGV2bFtbMV0sIm1pZHN0ZXAtbG9jYWwtMSJd"
+    },
+    "executionContext": {
+      "traceCarrier": {},
+      "workflowCoreVersion": "4.8.4",
+      "features": {
+        "encryption": false
+      }
+    }
+  },
+  "runId": "wrun_01M0XFK1PFEVMD3TNM43MYZ4X3",
+  "eventId": "evnt_01M0XFK1PRQFMDNDCK5PCK1RWJ",
+  "createdAt": "2026-08-25T22:10:26.648Z"
+}
