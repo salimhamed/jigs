@@ -35,13 +35,14 @@ awaiting human review.
 _Avoid_: job, execution
 
 **Binding**:
-A registered target repository — where its checkout lives and its defaults. A
-binding attaches to a step, never to a run.
-_Avoid_: registration, target
+A target repository declared in the factory repo's config — a name mapped to
+where its checkout lives, pinned to its expected remote. A binding attaches
+to a step, never to a run.
+_Avoid_: registration, registry, target
 
 **Factory repo**:
-The central git-tracked repository holding the user's pipeline definitions.
-Target repos contain no pipeline code.
+The central git-tracked repository holding the user's pipeline definitions
+and bindings. Target repos contain no pipeline code.
 _Avoid_: pipelines repo, config repo
 
 **Suspension**:
