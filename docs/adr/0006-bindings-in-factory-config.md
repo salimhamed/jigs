@@ -1,5 +1,12 @@
 # Bindings are committed factory-repo config
 
+> **Amended by [ADR 0007](./0007-worktree-lifecycle.md).** "Human-managed,
+> never surprised" below is sharpened to "never *unsafely* moved": jigs
+> fast-forwards a binding checkout's default branch by default — pure-ff-only,
+> clean-checkout-only, skip-on-any-doubt — with a per-binding
+> `ff_default_branch: false` opt-out. The worktree-location convention and the
+> typed `worktree:` schema deferred below are now defined there.
+
 A binding is the least state that makes a name meaningful: `name → checkout
 path + expected remote`, declared in a committed `jigs.yml` at the factory
 repo root under a top-level `bindings:` section. Everything else — default

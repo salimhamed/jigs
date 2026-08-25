@@ -72,6 +72,23 @@ The working copy an agent step runs in. Requested by the pipeline; the runtime
 remembers every one it made and tears them down when the run ends.
 _Avoid_: checkout, clone, workspace
 
+**Worktree registry**:
+The run store's record of every worktree the runtime created — which run owns
+it and what state it is in. What reuse checks and the sweep consult.
+_Avoid_: worktree list, worktree cache
+
+**Sweep**:
+The reconciliation that compares worktrees on disk against the registry and
+run states — reporting what it finds, deleting only on explicit request. The
+cleanup net for runs that never reached their own teardown.
+_Avoid_: gc, prune, cleanup job
+
+**Abandoned worktree**:
+A worktree still on disk whose owning run is terminal or interrupted — leaked
+by a crash, or deliberately preserved because it held uncommitted work.
+Sweep-eligible; a suspended run's worktree is never abandoned.
+_Avoid_: orphan, stale worktree
+
 **Harness**:
 The coding-agent runtime a step runs on, driven through its AI SDK provider
 with the worktree as plain `cwd` (Claude Code and Codex in v0).
