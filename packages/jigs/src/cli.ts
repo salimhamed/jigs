@@ -58,9 +58,9 @@ function printBindingsTable(
 
 const out = (line: string) => console.log(line);
 
-const program = new Command("jigs").description(
-  "Guides coding agents through repeatable workflows",
-);
+const program = new Command("jigs")
+  .description("Guides coding agents through repeatable workflows")
+  .showHelpAfterError("(add --help for additional information)");
 
 program
   .command("bind")
@@ -95,6 +95,8 @@ program
     printBindingsTable(rows, out);
   });
 
+// Commander exits itself on its own parse errors; this catch sees only
+// action-handler failures (parseAsync wraps even synchronous throws).
 program.parseAsync().catch((err: unknown) => {
   if (err instanceof CliError) {
     console.error(`jigs: ${err.message}`);
