@@ -72,7 +72,7 @@ export function removeBinding(text: string, name: string): string {
   return doc.toString();
 }
 
-export function factoryConfigPath(factoryRoot: string): string {
+function factoryConfigPath(factoryRoot: string): string {
   return path.join(factoryRoot, FACTORY_CONFIG_FILE);
 }
 

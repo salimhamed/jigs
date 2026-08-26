@@ -46,14 +46,17 @@ function printBindingsTable(
     { name: "NAME", path: "PATH", remote: "REMOTE", state: "STATE" },
     ...cells,
   ];
-  const width = (key: "name" | "path" | "remote") =>
-    Math.max(...all.map((row) => row[key].length));
+  const widths = {
+    name: Math.max(...all.map((row) => row.name.length)),
+    path: Math.max(...all.map((row) => row.path.length)),
+    remote: Math.max(...all.map((row) => row.remote.length)),
+  };
   for (const row of all) {
     out(
       [
-        row.name.padEnd(width("name")),
-        row.path.padEnd(width("path")),
-        row.remote.padEnd(width("remote")),
+        row.name.padEnd(widths.name),
+        row.path.padEnd(widths.path),
+        row.remote.padEnd(widths.remote),
         row.state,
       ].join("  "),
     );
@@ -96,7 +99,7 @@ async function main(): Promise<void> {
       return;
     }
     case "bindings": {
-      parseArgs({ args: rest, options: {} });
+      if (rest.length > 0) throw new CliError("usage: jigs bindings");
       const rows = await listBindings({ cwd: process.cwd() });
       if (rows.length === 0) {
         out("no bindings");

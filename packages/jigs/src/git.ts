@@ -75,30 +75,3 @@ export async function deriveDefaultBranch(
   const prefix = `refs/remotes/${remote}/`;
   return ref.startsWith(prefix) ? ref.slice(prefix.length) : null;
 }
-
-export class RemoteMismatchError extends CliError {
-  readonly binding: string;
-  readonly pinned: string;
-  readonly found: string;
-
-  constructor(binding: string, pinned: string, found: string) {
-    super(
-      `binding ${binding}: remote mismatch — pinned ${pinned}, found ${found}`,
-      `if the checkout moved on purpose, re-pin it: jigs bind <path> --name ${binding}`,
-    );
-    this.name = "RemoteMismatchError";
-    this.binding = binding;
-    this.pinned = pinned;
-    this.found = found;
-  }
-}
-
-export function verifyBindingPin(
-  binding: string,
-  pinned: string,
-  found: string,
-): void {
-  if (pinned !== found) {
-    throw new RemoteMismatchError(binding, pinned, found);
-  }
-}

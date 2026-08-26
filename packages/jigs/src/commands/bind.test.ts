@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import {
@@ -54,9 +54,7 @@ test("re-bind is idempotent: no duplicate entries, comments preserved, bytes unc
   const target = makeTargetRepo(tmp);
   await bindRepo(target, deps());
   const withComment = `# keep me\n${jigsYml()}`;
-  const configPath = path.join(factory, "jigs.yml");
-  const { writeFileSync } = await import("node:fs");
-  writeFileSync(configPath, withComment);
+  writeFileSync(path.join(factory, "jigs.yml"), withComment);
 
   await bindRepo(target, deps());
   expect(jigsYml()).toBe(withComment);

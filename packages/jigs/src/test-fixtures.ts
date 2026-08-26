@@ -15,6 +15,8 @@ export function git(cwd: string, ...args: string[]): string {
   return execFileSync("git", args, {
     cwd,
     encoding: "utf8",
+    // Isolated from the developer's git config (init.defaultBranch, signing,
+    // hooks) so fixtures behave identically on every machine.
     env: {
       ...process.env,
       GIT_CONFIG_GLOBAL: "/dev/null",

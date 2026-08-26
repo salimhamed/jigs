@@ -17,7 +17,7 @@ import { CliError } from "../errors.ts";
 import { assertCheckoutRoot, resolveRemoteUrl } from "../git.ts";
 import { contractHome, expandHome } from "../paths.ts";
 
-export const BINDING_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const BINDING_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 export interface BindDeps {
   cwd: string;
@@ -34,7 +34,6 @@ export interface BindResult {
   name: string;
   path: string;
   remote: string;
-  factoryRoot: string;
   scaffolded: boolean;
 }
 
@@ -94,7 +93,7 @@ export async function bindRepo(
   );
 
   const scaffolded = await offerScaffold(target, deps);
-  return { name, path: storedPath, remote: url, factoryRoot, scaffolded };
+  return { name, path: storedPath, remote: url, scaffolded };
 }
 
 async function offerScaffold(target: string, deps: BindDeps): Promise<boolean> {
@@ -113,6 +112,7 @@ async function offerScaffold(target: string, deps: BindDeps): Promise<boolean> {
   deps.out(`no ${TARGET_CONFIG_FILE} in the target repo — proposed content:`);
   deps.out(content);
   if (!(await deps.confirm(`write ${targetConfigPath}?`))) return false;
+  // "wx": the interactive confirm leaves a window for the file to appear.
   writeFileSync(targetConfigPath, content, { flag: "wx" });
   return true;
 }

@@ -1,3 +1,4 @@
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import {
@@ -21,20 +22,12 @@ afterEach(() => {
   removeTmpDir(tmp);
 });
 
-const deps = {
-  get cwd() {
-    return factory;
-  },
-  get home() {
-    return tmp;
-  },
-  out: () => {},
-};
+const deps = () => ({ cwd: factory, home: tmp, out: () => {} });
 
 test("a healthy binding reports ok with the derived default branch", async () => {
   const target = makeTargetRepo(tmp, { defaultBranch: "main" });
-  await bindRepo(target, deps);
-  const [row] = await listBindings(deps);
+  await bindRepo(target, deps());
+  const [row] = await listBindings(deps());
   expect(row).toMatchObject({
     name: "target-repo",
     path: "~/target-repo",
@@ -44,18 +37,17 @@ test("a healthy binding reports ok with the derived default branch", async () =>
 
 test("an unset remote HEAD reports ok with a repair hint", async () => {
   const target = makeTargetRepo(tmp);
-  await bindRepo(target, deps);
-  const [row] = await listBindings(deps);
+  await bindRepo(target, deps());
+  const [row] = await listBindings(deps());
   expect(row?.state).toContain("ok (default: unknown");
   expect(row?.state).toContain("git remote set-head");
 });
 
 test("a moved checkout reports path missing", async () => {
   const target = makeTargetRepo(tmp);
-  await bindRepo(target, deps);
-  const { rmSync } = await import("node:fs");
+  await bindRepo(target, deps());
   rmSync(target, { recursive: true });
-  const [row] = await listBindings(deps);
+  const [row] = await listBindings(deps());
   expect(row?.state).toBe("path missing");
 });
 
@@ -63,7 +55,7 @@ test("a replaced checkout fails loudly naming the found remote", async () => {
   const target = makeTargetRepo(tmp, {
     remoteUrl: "git@github.com:acme/api.git",
   });
-  await bindRepo(target, deps);
+  await bindRepo(target, deps());
   git(
     target,
     "remote",
@@ -71,7 +63,7 @@ test("a replaced checkout fails loudly naming the found remote", async () => {
     "origin",
     "https://github.com/other/api.git",
   );
-  const [row] = await listBindings(deps);
+  const [row] = await listBindings(deps());
   expect(row?.state).toBe(
     "remote mismatch: found https://github.com/other/api.git",
   );
@@ -79,14 +71,13 @@ test("a replaced checkout fails loudly naming the found remote", async () => {
 
 test("notes carry ff_default_branch and workspace_dir", async () => {
   const target = makeTargetRepo(tmp, { defaultBranch: "main" });
-  await bindRepo(target, deps);
-  const { readFileSync, writeFileSync } = await import("node:fs");
+  await bindRepo(target, deps());
   const configPath = path.join(factory, "jigs.yml");
   writeFileSync(
     configPath,
     `${readFileSync(configPath, "utf8")}    workspace_dir: ~/worktrees\n    ff_default_branch: false\n`,
   );
-  const [row] = await listBindings(deps);
+  const [row] = await listBindings(deps());
   expect(row?.notes).toEqual([
     "ff_default_branch: off",
     "workspace_dir: ~/worktrees",

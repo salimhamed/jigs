@@ -5,13 +5,7 @@ import {
 } from "../config/factory-config.ts";
 import { locateFactoryRoot } from "../config/locate-factory.ts";
 import { CliError } from "../errors.ts";
-import {
-  checkoutRoot,
-  deriveDefaultBranch,
-  RemoteMismatchError,
-  resolveRemoteUrl,
-  verifyBindingPin,
-} from "../git.ts";
+import { checkoutRoot, deriveDefaultBranch, resolveRemoteUrl } from "../git.ts";
 import { expandHome } from "../paths.ts";
 
 export interface BindingsDeps {
@@ -40,7 +34,7 @@ export async function listBindings(deps: BindingsDeps): Promise<BindingRow[]> {
       name,
       path: binding.path,
       remote: binding.remote,
-      state: await resolveState(name, binding.path, binding.remote, deps.home),
+      state: await resolveState(binding.path, binding.remote, deps.home),
       notes,
     });
   }
@@ -48,7 +42,6 @@ export async function listBindings(deps: BindingsDeps): Promise<BindingRow[]> {
 }
 
 async function resolveState(
-  name: string,
   bindingPath: string,
   pinnedRemote: string,
   home?: string,
@@ -58,14 +51,12 @@ async function resolveState(
   if ((await checkoutRoot(target)) === null) return "not a git checkout";
   try {
     const { remote, url } = await resolveRemoteUrl(target);
-    verifyBindingPin(name, pinnedRemote, url);
+    if (url !== pinnedRemote) return `remote mismatch: found ${url}`;
     const branch = await deriveDefaultBranch(target, remote);
     return branch !== null
       ? `ok (default: ${branch})`
       : `ok (default: unknown — run: git remote set-head ${remote} -a)`;
   } catch (err) {
-    if (err instanceof RemoteMismatchError)
-      return `remote mismatch: found ${err.found}`;
     if (err instanceof CliError) return err.message;
     throw err;
   }
