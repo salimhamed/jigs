@@ -99,6 +99,32 @@ The copy of a Linear ticket fetched at each activation and kept in run state.
 What steps read; the audit record of what agents saw.
 _Avoid_: cache, mirror
 
+**Builder**:
+The agent that implemented a run's change. The review loop resumes its
+persisted session so review answers come from the agent that holds the
+context, falling back to a fresh agent fed the run's record when resume
+fails.
+_Avoid_: implementer, author agent
+
+**Ingress**:
+The service's static HTTP routes that receive provider webhooks — verify the
+signature, reconstruct the hook token from the payload, resume the hook.
+Stateless: an unroutable delivery is dropped, never queued.
+_Avoid_: webhook handler, receiver, endpoint
+
+**Wake**:
+One delivery of external activity to a suspended run — from a webhook, a
+manual poke, or reconciliation. Always a hint: the satisfier is re-checked
+against the provider API on every wake, and an unsatisfied wake re-suspends.
+_Avoid_: trigger, notification
+
+**Claim**:
+A run's run-long hold of an external resource's hook token, enforcing one
+active run per resource — claiming an owned token fails loudly, naming the
+owner. The ticket claim is a run's first act and doubles as the needs-human
+wake channel.
+_Avoid_: lock, lease
+
 **Ticket review**:
 The shipped head-jig that normalizes a ticket into a brief and issues a
 proceed / needs-human verdict.

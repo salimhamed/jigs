@@ -38,7 +38,10 @@ workspace with per-step token usage captured in the durable run result; and
   from convention into a runtime guarantee.
 - **Hook tokens are a global namespace per backend**: two active hooks cannot
   share a token (the second run fails outright), so jigs scopes tokens by run
-  ULID, never by ticket id alone.
+  ULID, never by ticket id alone. *Superseded by ADR 0009: tokens are
+  resource-scoped (`github:pr:…`, `linear:ticket:<uuid>`) and the collision
+  is the exclusivity lock — one active run per external resource, failing
+  loudly with the owner named.*
 - ADR 0007's worktree lifecycle stands unchanged; only the teardown hook's
   placement moves into SDK-run steps.
 
