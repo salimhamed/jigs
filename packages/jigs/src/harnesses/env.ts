@@ -27,14 +27,3 @@ export function stripApiCredentials(
   }
   return stripped;
 }
-
-// Pure variant: a copy of env with credentials removed and undefineds dropped.
-export function sanitizedEnv(
-  env: NodeJS.ProcessEnv = process.env,
-): Record<string, string> {
-  const clean: Record<string, string> = {};
-  for (const [key, value] of Object.entries(env)) {
-    if (value !== undefined && !shouldStrip(key)) clean[key] = value;
-  }
-  return clean;
-}

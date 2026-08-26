@@ -37,9 +37,7 @@ export type ClaudeStepOptions = ClaudeCodeSettings & { cwd: string };
 // Force-merged AFTER caller options so the invariants cannot be overridden:
 // strictMcpConfig makes the step's explicit mcpServers the entire MCP
 // universe (ADR 0011); settingSources ['project'] is how skills and config
-// reach the agent through the worktree (ADR 0004). Framework options
-// (permissionMode, skills, systemPrompt) belong to the step builders
-// (AGE-311), not here.
+// reach the agent through the worktree (ADR 0004).
 export function claudeStepSettings(
   options: ClaudeStepOptions,
 ): ClaudeCodeSettings {

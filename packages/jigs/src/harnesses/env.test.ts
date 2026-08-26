@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { sanitizedEnv, stripApiCredentials } from "./env.ts";
+import { stripApiCredentials } from "./env.ts";
 
 const dirty = () => ({
   ANTHROPIC_API_KEY: "sk-ant",
@@ -28,11 +28,4 @@ test("stripApiCredentials removes every credential var and reports them", () => 
     "OPENAI_API_KEY",
   ]);
   expect(env).toEqual({ PATH: "/usr/bin", HOME: "/home/tester" });
-});
-
-test("sanitizedEnv is pure and drops undefined values", () => {
-  const env: NodeJS.ProcessEnv = { ...dirty(), EMPTYISH: undefined };
-  const clean = sanitizedEnv(env);
-  expect(clean).toEqual({ PATH: "/usr/bin", HOME: "/home/tester" });
-  expect(env.ANTHROPIC_API_KEY).toBe("sk-ant");
 });

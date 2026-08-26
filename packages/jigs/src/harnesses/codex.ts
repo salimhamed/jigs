@@ -19,6 +19,8 @@ export function codexExecStepSettings(
 ): CodexExecSettings {
   const { codexHome, ...settings } = options;
   return {
+    // codex exec refuses a non-git cwd without this; an overridable default
+    // (before the spread), unlike the CODEX_HOME invariant below.
     skipGitRepoCheck: true,
     ...settings,
     env: { ...settings.env, CODEX_HOME: codexHome },
@@ -32,10 +34,6 @@ export type CodexAppServerStepOptions = CodexAppServerSettings & {
 
 // threadMode 'persistent' is an invariant: only persistent threads write
 // rollouts under CODEX_HOME/sessions, and a resuming builder needs them.
-// Note on resume failures (AGE-311 territory): a stale threadId on codex
-// 0.149.x escapes the provider's wrapper as a raw JsonRpcRequestError — match
-// /(thread.*not found|no rollout found for thread)/i or treat any resume
-// failure as stale.
 export function codexAppServerStepSettings(
   options: CodexAppServerStepOptions,
 ): CodexAppServerSettings {

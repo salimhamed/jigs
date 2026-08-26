@@ -1,4 +1,11 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import {
+  lstatSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -8,4 +15,31 @@ export function makeTmpDir(): string {
 
 export function removeTmpDir(dir: string): void {
   rmSync(dir, { recursive: true, force: true });
+}
+
+export interface ManagedCodexHomeState {
+  authIsSymlink: boolean;
+  authLinkTarget: string | null;
+  entries: string[];
+  configToml: string;
+}
+
+// Test-side inspection of a managed Codex home (parked here until AGE-315
+// defines what jigs doctor actually needs).
+export function managedCodexHomeState(home: string): ManagedCodexHomeState {
+  const authPath = path.join(home, "auth.json");
+  let authIsSymlink = false;
+  let authLinkTarget: string | null = null;
+  try {
+    authIsSymlink = lstatSync(authPath).isSymbolicLink();
+    authLinkTarget = authIsSymlink ? readlinkSync(authPath) : null;
+  } catch {
+    // missing auth.json reads as not-a-symlink
+  }
+  return {
+    authIsSymlink,
+    authLinkTarget,
+    entries: readdirSync(home).sort(),
+    configToml: readFileSync(path.join(home, "config.toml"), "utf8"),
+  };
 }

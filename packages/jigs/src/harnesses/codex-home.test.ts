@@ -6,10 +6,13 @@ import {
   CURATED_CONFIG_TOML,
   ensureManagedCodexHome,
   managedCodexHomePath,
-  managedCodexHomeState,
   removeManagedCodexHome,
 } from "./codex-home.ts";
-import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
+import {
+  makeTmpDir,
+  managedCodexHomeState,
+  removeTmpDir,
+} from "./test-fixtures.ts";
 
 let tmp: string;
 let realAuthPath: string;

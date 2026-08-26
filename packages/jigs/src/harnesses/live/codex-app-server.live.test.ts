@@ -3,11 +3,11 @@ import { existsSync, globSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { ensureManagedCodexHome } from "../codex-home.ts";
-import { sanitizedEnv } from "../env.ts";
+import { stripApiCredentials } from "../env.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import {
   assertLivePreconditions,
+  makeManagedHome,
   makeScratchRepo,
 } from "./fixtures/live-env.ts";
 
@@ -27,12 +27,7 @@ afterAll(() => {
 // within the deadline. A leaked client pool fails the deadline, not vitest.
 test("app-server step: persistent thread, rollout under the managed home, clean exit", async () => {
   const scratch = makeScratchRepo(tmp);
-  const home = ensureManagedCodexHome(
-    `live-appserver-${crypto.randomUUID().slice(0, 8)}`,
-    {
-      baseDir: path.join(tmp, "codex-homes"),
-    },
-  );
+  const home = makeManagedHome(tmp, "live-appserver");
   const fixture = path.join(
     import.meta.dirname,
     "fixtures",
@@ -40,8 +35,10 @@ test("app-server step: persistent thread, rollout under the managed home, clean 
   );
   const resultFile = path.join(tmp, "app-server-result.json");
 
+  const childEnv = { ...process.env };
+  stripApiCredentials(childEnv);
   await execFileAsync("node", [fixture, scratch, home, resultFile], {
-    env: sanitizedEnv(),
+    env: childEnv,
     timeout: 480_000,
     killSignal: "SIGKILL",
   });

@@ -85,32 +85,6 @@ export function ensureManagedCodexHome(
   return home;
 }
 
-export interface ManagedCodexHomeState {
-  authIsSymlink: boolean;
-  authLinkTarget: string | null;
-  entries: string[];
-  configToml: string;
-}
-
-// Used by tests now; jigs doctor later (AGE-315).
-export function managedCodexHomeState(home: string): ManagedCodexHomeState {
-  const authPath = path.join(home, "auth.json");
-  let authIsSymlink = false;
-  let authLinkTarget: string | null = null;
-  try {
-    authIsSymlink = lstatSync(authPath).isSymbolicLink();
-    authLinkTarget = authIsSymlink ? readlinkSync(authPath) : null;
-  } catch {
-    // missing auth.json reads as not-a-symlink
-  }
-  return {
-    authIsSymlink,
-    authLinkTarget,
-    entries: readdirSync(home).sort(),
-    configToml: readFileSync(path.join(home, "config.toml"), "utf8"),
-  };
-}
-
 // Explicit teardown for the run-end path (wired by the worktree lifecycle).
 export function removeManagedCodexHome(
   runKey: string,

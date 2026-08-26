@@ -1,4 +1,3 @@
-import path from "node:path";
 import { generateText } from "ai";
 import { parse } from "smol-toml";
 import { afterAll, beforeAll, expect, test } from "vitest";
@@ -7,16 +6,17 @@ import {
   codexExecStepSettings,
   withCodexAppServer,
 } from "../codex.ts";
-import {
-  ensureManagedCodexHome,
-  managedCodexHomeState,
-} from "../codex-home.ts";
 import { stripApiCredentials } from "../env.ts";
 import { codexExec } from "../index.ts";
-import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import {
+  makeTmpDir,
+  managedCodexHomeState,
+  removeTmpDir,
+} from "../test-fixtures.ts";
 import {
   assertLivePreconditions,
   makeControlCodexHome,
+  makeManagedHome,
   makeScratchRepo,
   PROBE_PROMPT,
 } from "./fixtures/live-env.ts";
@@ -38,12 +38,7 @@ beforeAll(() => {
   tmp = makeTmpDir();
   scratch = makeScratchRepo(tmp);
   controlHome = makeControlCodexHome(tmp, probeToken);
-  managedHome = ensureManagedCodexHome(
-    `live-isolation-${crypto.randomUUID().slice(0, 8)}`,
-    {
-      baseDir: path.join(tmp, "codex-homes"),
-    },
-  );
+  managedHome = makeManagedHome(tmp, "live-isolation");
 });
 afterAll(() => {
   removeTmpDir(tmp);
