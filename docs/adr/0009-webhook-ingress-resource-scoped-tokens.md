@@ -81,8 +81,11 @@ close-unmerged is a terminal failed run under ADR 0007's teardown matrix.
   superseded (amendment note there). The rule is now: *a token names the
   external thing being listened to; owning it is the exclusivity lock.*
 - ADR 0004 gains an amendment: Codex agent steps that resume a session use
-  the provider's app-server surface (`threadMode: 'persistent'`), pending
-  AGE-305; on failure, Codex builders fall back to exec + fresh-context only.
+  the provider's app-server surface (`threadMode: 'persistent'`), validated
+  by AGE-305. The stale-thread failure surfaces on codex 0.149.1 as a raw
+  JSON-RPC `no rollout found for thread id` error rather than the provider's
+  wrapped message, so the fresh-context fallback triggers on any resume
+  failure, not on one error string.
 - The fresh-context rebuild (brief + ticket snapshot + PR diff + comment
   threads) must stand alone as a first-class path, not a degraded one —
   session resume is an upgrade, never load-bearing.
