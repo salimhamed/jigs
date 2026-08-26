@@ -1,7 +1,11 @@
 import { defineConfig } from "tsdown";
 
 export default defineConfig({
-  entry: ["src/index.ts", "src/cli.ts"],
+  entry: {
+    index: "src/index.ts",
+    cli: "src/cli.ts",
+    "harnesses/index": "src/harnesses/index.ts",
+  },
   dts: true,
   fixedExtension: false,
 });
