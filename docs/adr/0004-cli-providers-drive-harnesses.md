@@ -46,9 +46,15 @@ didn't discriminate, and the rest of the ledger is lopsided:
   recommendations no longer bind v0.
 - *Amendment (ADR 0009 / AGE-293)*: Codex agent steps that resume a builder
   session use the provider's **app-server** surface
-  (`threadMode: 'persistent'`), not exec — validated by AGE-305. If that
-  prototype fails, Codex builders stay on exec and always use the review
-  loop's fresh-context fallback.
+  (`threadMode: 'persistent'`), not exec — validated end to end by AGE-305:
+  subscription auth, cross-process resume via
+  `providerOptions['codex-app-server'].threadId`, and structured output all
+  hold. Stale threads fail fast, but on codex 0.149.1 as a raw
+  `JsonRpcRequestError` (`no rollout found for thread id …`) that escapes the
+  provider's documented wrapper — detect resume failure by shape (match both
+  messages) or treat any resume failure as stale. The provider must be
+  created per step and closed in `finally` (`createCodexAppServer()` /
+  `provider.close()`), or the step process never exits.
 - *Amendment (ADR 0011 / AGE-294)*: MCP servers are the exception to
   "config reaches the agent through the worktree" — they are deny-by-default
   and declared per step (`strictMcpConfig` on Claude Code, a managed Codex

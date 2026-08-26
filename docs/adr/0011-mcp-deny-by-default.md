@@ -35,12 +35,24 @@ verified against the Codex source at `rust-v0.149.1`.
 - Codex's `config/mcpServer/reload` hot-refreshes servers into running
   threads by re-reading `config.toml` — under the managed home that file is
   the curated one, so the reload-into-live-threads race disarms itself.
-- Empirical validations ride
+- Empirical validations ran on
   [AGE-305](https://linear.app/salboogie/issue/AGE-305/codex-app-server-resume-prototype)
-  (already on the app-server surface): end-to-end isolation, symlinked auth
-  surviving a refresh with the real login intact, and #16045's unverified
-  claim that inline `-c` server definitions are ignored on 0.149.1 —
-  load-bearing for the declared-list scheme, tested first.
+  and all passed on 0.149.1: **#16045 refuted** — declared-list
+  `mcp_servers.*` overrides register and the declared server answers real
+  tool calls; isolation held on both surfaces against a live control (the
+  user's `qmd` callable from the real home, absent under the managed home);
+  the auth symlink survived every run with the real login intact (no live
+  token refresh was observed, so refresh survival still rests on the source
+  verification); the auto-trust hole reproduced — the workspace server
+  loaded and codex **prepended** a `[projects."<cwd>"] trust_level =
+  "trusted"` record into the curated `config.toml`, confirming the JIT
+  guard is load-bearing and the managed home is codex-mutable state.
+- Rollouts live under `CODEX_HOME/sessions`, so a Codex builder that must
+  resume needs the same managed home to survive between wakes — the managed
+  home is per-run durable state, not a disposable temp dir.
+- MCP availability checks must exercise a real tool call: agents
+  misreported their own MCP server list even when a server was demonstrably
+  callable (AGE-305, probe 6).
 - Amends ADR 0004's "skills/config reach agents through the worktree": MCP
   servers are the exception — declared per step, never repo-owned.
 
