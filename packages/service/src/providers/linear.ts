@@ -1,6 +1,6 @@
-// Minimal fetch-based Linear GraphQL client. Only ever called from inside
-// "use step" functions — env reads and network are side effects the workflow
-// body must not perform. LINEAR_API_URL override is a test seam.
+// Only ever called from inside "use step" functions — env reads and network
+// are side effects the workflow body must not perform. LINEAR_API_URL
+// override is a test seam.
 
 export interface LinearUser {
   id: string;
@@ -89,6 +89,8 @@ export async function listCommentsSince(
   const data = await linearGraphql<{
     issue: { comments: { nodes: LinearComment[] } };
   }>(
+    // Unpaginated `last: 50` is an accepted cap: wake re-checks only ever
+    // need the comments since the previous check.
     `query IssueComments($id: String!) {
       issue(id: $id) {
         comments(last: 50) { nodes { id body createdAt user { id name } } }

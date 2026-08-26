@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { getHookByToken, getRun, resumeHook, start } from "workflow/api";
+import { getWorld } from "workflow/runtime";
 import { registry } from "./registry";
 import {
   readSuspensionMetadata,
@@ -88,8 +89,10 @@ app.get("/api/runs/:runId", async (c) => {
 });
 
 async function listSuspensions(runId: string): Promise<SuspensionRecord[]> {
-  const { getWorld } = await import("workflow/runtime");
   const hooks = await getWorld().hooks.list({ runId });
+  // The world's list returns metadata still serialized (binary devalue);
+  // only getHookByToken hydrates it — hence the per-hook round trip. The
+  // rejection handler absorbs a hook disposed between list and get.
   const hydrated = await Promise.all(
     hooks.data.map((hook) =>
       getHookByToken(hook.token).then(

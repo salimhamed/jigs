@@ -18,27 +18,3 @@ export function prToken(pr: PrRef): string {
 export function ticketToken(issueId: string): string {
   return `linear:ticket:${issueId}`;
 }
-
-const PR_TOKEN_PATTERN = /^github:pr:([^/#]+)\/([^/#]+)#(\d+)$/;
-
-export function parsePrToken(token: string): PrRef | null {
-  const match = token.match(PR_TOKEN_PATTERN);
-  if (
-    match === null ||
-    match[1] === undefined ||
-    match[2] === undefined ||
-    match[3] === undefined
-  ) {
-    return null;
-  }
-  return { owner: match[1], repo: match[2], number: Number(match[3]) };
-}
-
-const TICKET_TOKEN_PATTERN =
-  /^linear:ticket:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
-
-export function parseTicketToken(token: string): { issueId: string } | null {
-  const match = token.match(TICKET_TOKEN_PATTERN);
-  if (match === null || match[1] === undefined) return null;
-  return { issueId: match[1] };
-}

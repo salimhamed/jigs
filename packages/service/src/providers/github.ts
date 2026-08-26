@@ -1,5 +1,5 @@
-// Minimal fetch-based GitHub REST client. Only ever called from inside
-// "use step" functions. GITHUB_API_URL override is a test seam.
+// Only ever called from inside "use step" functions. GITHUB_API_URL override
+// is a test seam.
 
 import type { PrRef } from "../suspension/tokens";
 
@@ -49,7 +49,7 @@ export async function fetchPrSnapshot(pr: PrRef): Promise<PrSnapshot> {
       user: { login: string } | null;
       submitted_at: string;
     }>
-  >(`${prPath}/reviews?per_page=100`);
+  >(`${prPath}/reviews?per_page=100`); // unpaginated cap, accepted for v0
   return {
     state: pull.state,
     merged: pull.merged,

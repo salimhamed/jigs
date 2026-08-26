@@ -22,8 +22,6 @@ type SuspensionDemoInputs = z.output<typeof suspensionDemoInputs> & {
   triggerId: string;
 };
 
-// Exercises the suspension primitives end to end: ticket claim as the run's
-// first act, an optional needs-human halt, and the pull request gate.
 export async function suspensionDemoPipeline(inputs: SuspensionDemoInputs) {
   "use workflow";
 
