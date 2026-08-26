@@ -1,0 +1,15 @@
+# Copy to ~/.config/systemd/user/jigs-service.service and adjust
+# WorkingDirectory to your checkout.
+[Unit]
+Description=jigs pipeline service (Workflow SDK runtime)
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/Code/Personal/jigs/jigs/packages/service
+ExecStart=/usr/bin/env node .output/server/index.mjs
+EnvironmentFile=%h/.config/jigs/service.env
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
