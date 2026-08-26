@@ -134,3 +134,28 @@ _Avoid_: intake, triage
 The normalized implementation plan a ticket review produces — the
 implementer's working plan. The ticket stays the definition of done.
 _Avoid_: plan, spec
+
+**Preflight**:
+The trigger-path verification, before a run is created, that its
+requirements are satisfiable — the pipeline's `requires` manifest plus jigs'
+service credentials. Aggregates every failure with repair instructions; a
+failed preflight means no run ever existed.
+_Avoid_: health check, validation, smoke test
+
+**Check catalog**:
+The shared module of requirement checks and their repair instructions, used
+by preflight, JIT checks, and `jigs doctor` — one source of repair text at
+launch and mid-run.
+_Avoid_: validators, checkers
+
+**JIT check**:
+The verification a step runs at hydration, just before burning agent turns —
+the only honest moment for requirements invisible before the body executes,
+like a step's MCP servers. Failure raises the needs-human halt.
+_Avoid_: runtime check, lazy check
+
+**Managed Codex home**:
+The jigs-owned `CODEX_HOME` directory every Codex step runs under — a curated
+zero-server `config.toml` plus a symlink to the real `auth.json`. What makes
+MCP deny-by-default enforceable on a harness with no strict-config flag.
+_Avoid_: isolated home, custom home, sandbox home

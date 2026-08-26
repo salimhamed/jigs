@@ -49,3 +49,8 @@ didn't discriminate, and the rest of the ledger is lopsided:
   (`threadMode: 'persistent'`), not exec — validated by AGE-305. If that
   prototype fails, Codex builders stay on exec and always use the review
   loop's fresh-context fallback.
+- *Amendment (ADR 0011 / AGE-294)*: MCP servers are the exception to
+  "config reaches the agent through the worktree" — they are deny-by-default
+  and declared per step (`strictMcpConfig` on Claude Code, a managed Codex
+  home on Codex); the worktree's `.mcp.json` and `.codex/config.toml` MCP
+  tables are never honored.
