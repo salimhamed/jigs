@@ -1,0 +1,63 @@
+// Minimal stdio MCP server: one tool that returns a fixed token, so tests can
+// observe whether MCP registration actually happened — model self-report
+// alone is not evidence (verified on AGE-305). Ported from
+// prototype/codex-app-server-resume.
+import { createInterface } from "node:readline";
+
+const TOKEN = process.env.PROBE_TOKEN ?? "PROBE-TOKEN-UNSET";
+const NAME = process.env.PROBE_SERVER_NAME ?? "probe";
+
+const send = (msg) => process.stdout.write(`${JSON.stringify(msg)}\n`);
+
+createInterface({ input: process.stdin }).on("line", (line) => {
+  if (!line.trim()) return;
+  let msg;
+  try {
+    msg = JSON.parse(line);
+  } catch {
+    return;
+  }
+  const { id, method, params } = msg;
+  if (method === "initialize") {
+    send({
+      jsonrpc: "2.0",
+      id,
+      result: {
+        protocolVersion: params?.protocolVersion ?? "2025-06-18",
+        capabilities: { tools: {} },
+        serverInfo: { name: NAME, version: "0.0.0" },
+      },
+    });
+  } else if (method === "tools/list") {
+    send({
+      jsonrpc: "2.0",
+      id,
+      result: {
+        tools: [
+          {
+            name: "get_probe_token",
+            description:
+              "Returns the secret probe token. Call to prove this MCP server is reachable.",
+            inputSchema: {
+              type: "object",
+              properties: {},
+              additionalProperties: false,
+            },
+          },
+        ],
+      },
+    });
+  } else if (method === "tools/call") {
+    send({
+      jsonrpc: "2.0",
+      id,
+      result: { content: [{ type: "text", text: TOKEN }] },
+    });
+  } else if (id !== undefined) {
+    send({
+      jsonrpc: "2.0",
+      id,
+      error: { code: -32601, message: `unhandled: ${method}` },
+    });
+  }
+});
