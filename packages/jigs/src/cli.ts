@@ -1,17 +1,10 @@
 #!/usr/bin/env node
 import readline from "node:readline/promises";
-import { parseArgs } from "node:util";
+import { Command } from "commander";
 import { bindRepo } from "./commands/bind.ts";
 import { type BindingRow, listBindings } from "./commands/bindings.ts";
 import { unbindRepo } from "./commands/unbind.ts";
 import { CliError } from "./errors.ts";
-
-const USAGE = `usage: jigs <command>
-
-commands:
-  bind <path> [--name <n>]   bind a repo checkout into this factory repo
-  unbind <name>              remove a binding
-  bindings                   list bindings with resolved state`;
 
 function makeConfirm(): ((question: string) => Promise<boolean>) | undefined {
   if (!process.stdin.isTTY || !process.stdout.isTTY) return undefined;
@@ -63,74 +56,49 @@ function printBindingsTable(
   }
 }
 
-async function main(): Promise<void> {
-  const [command, ...rest] = process.argv.slice(2);
-  const out = (line: string) => console.log(line);
+const out = (line: string) => console.log(line);
 
-  switch (command) {
-    case "bind": {
-      const { values, positionals } = parseArgs({
-        args: rest,
-        options: { name: { type: "string" } },
-        allowPositionals: true,
-      });
-      const target = positionals[0];
-      if (target === undefined || positionals.length > 1) {
-        throw new CliError("usage: jigs bind <path> [--name <n>]");
-      }
-      await bindRepo(
-        target,
-        { cwd: process.cwd(), confirm: makeConfirm(), out },
-        { name: values.name },
-      );
-      return;
-    }
-    case "unbind": {
-      const { positionals } = parseArgs({
-        args: rest,
-        options: {},
-        allowPositionals: true,
-      });
-      const name = positionals[0];
-      if (name === undefined || positionals.length > 1) {
-        throw new CliError("usage: jigs unbind <name>");
-      }
-      unbindRepo(name, { cwd: process.cwd(), out });
-      return;
-    }
-    case "bindings": {
-      if (rest.length > 0) throw new CliError("usage: jigs bindings");
-      const rows = await listBindings({ cwd: process.cwd() });
-      if (rows.length === 0) {
-        out("no bindings");
-        return;
-      }
-      printBindingsTable(rows, out);
-      return;
-    }
-    case undefined:
-    case "help":
-    case "--help":
-    case "-h": {
-      out(USAGE);
-      return;
-    }
-    default:
-      throw new CliError(`unknown command: ${command}`, USAGE);
-  }
-}
+const program = new Command("jigs").description(
+  "Guides coding agents through repeatable workflows",
+);
 
-main().catch((err: unknown) => {
+program
+  .command("bind")
+  .description("bind a repo checkout into this factory repo")
+  .argument("<path>", "path to an existing git checkout with a remote")
+  .option("--name <name>", "binding name (default: the repo dirname)")
+  .action(async (target: string, options: { name?: string }) => {
+    await bindRepo(
+      target,
+      { cwd: process.cwd(), confirm: makeConfirm(), out },
+      { name: options.name },
+    );
+  });
+
+program
+  .command("unbind")
+  .description("remove a binding")
+  .argument("<name>", "binding name")
+  .action((name: string) => {
+    unbindRepo(name, { cwd: process.cwd(), out });
+  });
+
+program
+  .command("bindings")
+  .description("list bindings with resolved state")
+  .action(async () => {
+    const rows = await listBindings({ cwd: process.cwd() });
+    if (rows.length === 0) {
+      out("no bindings");
+      return;
+    }
+    printBindingsTable(rows, out);
+  });
+
+program.parseAsync().catch((err: unknown) => {
   if (err instanceof CliError) {
     console.error(`jigs: ${err.message}`);
     if (err.hint !== undefined) console.error(`  ${err.hint}`);
-  } else if (
-    err instanceof Error &&
-    "code" in err &&
-    String((err as { code: unknown }).code).startsWith("ERR_PARSE_ARGS")
-  ) {
-    console.error(`jigs: ${err.message}`);
-    console.error(`  ${USAGE}`);
   } else {
     console.error(err);
   }
