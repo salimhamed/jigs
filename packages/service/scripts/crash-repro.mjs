@@ -57,7 +57,10 @@ const waitForLog = (server, regex, timeoutMs) =>
 
 const healthy = () =>
   waitFor(
-    () => fetch(`${BASE}/health`).then((r) => r.ok).catch(() => false),
+    () =>
+      fetch(`${BASE}/health`)
+        .then((r) => r.ok)
+        .catch(() => false),
     "/health",
   );
 
@@ -80,7 +83,11 @@ function assert(cond, message) {
 
 const START_RE = /\[slowStep\] START \S+ marker=([0-9a-f-]+)/;
 
-if (await fetch(`${BASE}/health`).then((r) => r.ok).catch(() => false)) {
+if (
+  await fetch(`${BASE}/health`)
+    .then((r) => r.ok)
+    .catch(() => false)
+) {
   console.error(`FAIL: something already listens on ${BASE} — stop it first`);
   process.exit(2);
 }

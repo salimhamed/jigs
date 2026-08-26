@@ -7,7 +7,19 @@ A lights-on software development factory: define pipelines that take tickets
 through implementation, review, and iteration by AI agents — blocking for
 human approval where it matters.
 
-**Status:** early scaffolding. The CLI currently prints Hello World.
+**Status:** runtime service skeleton. Pipelines run on the Vercel Workflow
+SDK with a self-hosted Postgres World (ADR 0008); the CLI still prints
+Hello World.
+
+## Layout
+
+pnpm workspace:
+
+- `packages/jigs` — the library-first package and `jigs` CLI (ADR 0001).
+- `packages/service` — the private Nitro app that owns execution: compiled
+  pipelines, health/trigger/resume/run routes.
+- `deploy/` — Postgres World compose file, systemd user unit, and the
+  [deploy runbook](deploy/README.md).
 
 ## Development
 
@@ -16,6 +28,7 @@ Requires Node >= 24 and pnpm.
 ```sh
 pnpm install
 pnpm dev        # run the CLI from source
-pnpm check      # lint + typecheck + test + build
-node dist/cli.js
+pnpm check      # lint + typecheck + test + build (all packages)
 ```
+
+To run the service locally see [deploy/README.md](deploy/README.md).

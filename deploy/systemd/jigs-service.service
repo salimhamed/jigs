@@ -1,5 +1,8 @@
 # Copy to ~/.config/systemd/user/jigs-service.service and adjust
-# WorkingDirectory to your checkout.
+# WorkingDirectory to your checkout. systemd user units don't inherit your
+# shell PATH: if node comes from a version manager (mise, nvm), replace
+# `env node` in ExecStart with the absolute path from `command -v node`
+# (for mise, the stable choice is %h/.local/share/mise/shims/node).
 [Unit]
 Description=jigs pipeline service (Workflow SDK runtime)
 After=network-online.target
