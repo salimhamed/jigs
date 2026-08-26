@@ -37,7 +37,9 @@
     "ai": "^7.0.79",
     "ai-sdk-provider-claude-code": "4.1.1",
     "ai-sdk-provider-codex-cli": "2.1.2",
+    "commander": "^15.0.0",
     "smol-toml": "^1.8.0",
+    "yaml": "^2.9.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

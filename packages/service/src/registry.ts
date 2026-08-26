@@ -1,5 +1,9 @@
 import type { z } from "zod";
 import { demoInputs, demoPipeline } from "../pipelines/demo";
+import {
+  suspensionDemoInputs,
+  suspensionDemoPipeline,
+} from "../pipelines/suspension-demo";
 
 export interface PipelineEntry<S extends z.ZodType = z.ZodType> {
   pipeline: (inputs: z.output<S> & { triggerId: string }) => Promise<unknown>;
@@ -15,6 +19,12 @@ const entries = {
     pipeline: demoPipeline,
     inputs: demoInputs,
     hookToken: (triggerId) => `demo:${triggerId}`,
+  },
+  // Resume tokens are resource-scoped (linear:ticket:<uuid>, github:pr:...),
+  // derived from inputs rather than the triggerId, so no hookToken here.
+  "suspension-demo": {
+    pipeline: suspensionDemoPipeline,
+    inputs: suspensionDemoInputs,
   },
 } satisfies Record<string, AnyPipelineEntry>;
 
