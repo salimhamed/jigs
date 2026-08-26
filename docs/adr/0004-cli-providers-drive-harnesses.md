@@ -44,3 +44,8 @@ didn't discriminate, and the rest of the ledger is lopsided:
 - AGE-286's findings (sandbox provider surface, lockstep pinning,
   cross-process resume) remain valid knowledge of the rejected path; its
   recommendations no longer bind v0.
+- *Amendment (ADR 0009 / AGE-293)*: Codex agent steps that resume a builder
+  session use the provider's **app-server** surface
+  (`threadMode: 'persistent'`), not exec — validated by AGE-305. If that
+  prototype fails, Codex builders stay on exec and always use the review
+  loop's fresh-context fallback.
