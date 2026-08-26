@@ -1,0 +1,72 @@
+import { existsSync } from "node:fs";
+import {
+  parseFactoryConfig,
+  readFactoryConfigText,
+} from "../config/factory-config.ts";
+import { locateFactoryRoot } from "../config/locate-factory.ts";
+import { CliError } from "../errors.ts";
+import {
+  checkoutRoot,
+  deriveDefaultBranch,
+  RemoteMismatchError,
+  resolveRemoteUrl,
+  verifyBindingPin,
+} from "../git.ts";
+import { expandHome } from "../paths.ts";
+
+export interface BindingsDeps {
+  cwd: string;
+  home?: string;
+}
+
+export interface BindingRow {
+  name: string;
+  path: string;
+  remote: string;
+  state: string;
+  notes: string[];
+}
+
+export async function listBindings(deps: BindingsDeps): Promise<BindingRow[]> {
+  const factoryRoot = locateFactoryRoot(deps.cwd);
+  const config = parseFactoryConfig(readFactoryConfigText(factoryRoot));
+  const rows: BindingRow[] = [];
+  for (const [name, binding] of Object.entries(config.bindings)) {
+    const notes: string[] = [];
+    if (!binding.ff_default_branch) notes.push("ff_default_branch: off");
+    if (binding.workspace_dir !== undefined)
+      notes.push(`workspace_dir: ${binding.workspace_dir}`);
+    rows.push({
+      name,
+      path: binding.path,
+      remote: binding.remote,
+      state: await resolveState(name, binding.path, binding.remote, deps.home),
+      notes,
+    });
+  }
+  return rows;
+}
+
+async function resolveState(
+  name: string,
+  bindingPath: string,
+  pinnedRemote: string,
+  home?: string,
+): Promise<string> {
+  const target = expandHome(bindingPath, home);
+  if (!existsSync(target)) return "path missing";
+  if ((await checkoutRoot(target)) === null) return "not a git checkout";
+  try {
+    const { remote, url } = await resolveRemoteUrl(target);
+    verifyBindingPin(name, pinnedRemote, url);
+    const branch = await deriveDefaultBranch(target, remote);
+    return branch !== null
+      ? `ok (default: ${branch})`
+      : `ok (default: unknown — run: git remote set-head ${remote} -a)`;
+  } catch (err) {
+    if (err instanceof RemoteMismatchError)
+      return `remote mismatch: found ${err.found}`;
+    if (err instanceof CliError) return err.message;
+    throw err;
+  }
+}

@@ -7,8 +7,9 @@ A lights-on software development factory: define pipelines that take tickets
 through implementation, review, and iteration by AI agents — blocking for
 human approval where it matters.
 
-**Status:** runtime service skeleton. Pipelines run on the Vercel Workflow
-SDK with a self-hosted Postgres World; the CLI still prints Hello World.
+**Status:** runtime service skeleton plus factory config. Pipelines run on
+the Vercel Workflow SDK with a self-hosted Postgres World; the CLI manages
+repo bindings (`jigs bind` / `unbind` / `bindings`) in a committed `jigs.yml`.
 
 ## Layout
 
