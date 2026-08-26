@@ -38,7 +38,7 @@ loginctl enable-linger "$USER"   # lights-on: survive logout
 
 `~/.config/jigs/service.env` is the service's `EnvironmentFile`. The
 `LINEAR_API_KEY` / `GITHUB_TOKEN` slots are consumed by trigger-path
-preflight from ADR 0010 onward; nothing reads them yet.
+preflight later; nothing reads them yet.
 
 The built server must run against the Postgres World
 (`WORKFLOW_TARGET_WORLD=@workflow/world-postgres`, as the env file sets):
@@ -56,7 +56,7 @@ WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5439/jigs \
 Serves the SDK's observability UI (default `http://localhost:3456`) reading
 the same World the service writes — run history, step attempts, events.
 
-## 5. Crash-model repro (ADR 0008)
+## 5. Crash-model repro
 
 Scripted (requires steps 1–2; stop anything on port 8992 first):
 

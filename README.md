@@ -8,14 +8,13 @@ through implementation, review, and iteration by AI agents — blocking for
 human approval where it matters.
 
 **Status:** runtime service skeleton. Pipelines run on the Vercel Workflow
-SDK with a self-hosted Postgres World (ADR 0008); the CLI still prints
-Hello World.
+SDK with a self-hosted Postgres World; the CLI still prints Hello World.
 
 ## Layout
 
 pnpm workspace:
 
-- `packages/jigs` — the library-first package and `jigs` CLI (ADR 0001).
+- `packages/jigs` — the library-first package and `jigs` CLI.
 - `packages/service` — the private Nitro app that owns execution: compiled
   pipelines, health/trigger/resume/run routes.
 - `deploy/` — Postgres World compose file, systemd user unit, and the

@@ -7,20 +7,16 @@ export const demoInputs = z.object({
 
 type DemoInputs = z.output<typeof demoInputs> & { triggerId: string };
 
-// Crash-model demo (ADR 0008, proven on AGE-304): slowStep's marker tells
-// replay from re-execution. Kill mid-step → startup rescue re-runs it from
-// zero (new marker); kill mid-suspension → resume replays the memoized
-// result (same marker).
+// Crash-model demo: slowStep's marker tells replay (same marker) from
+// re-execution (new marker) across a process kill.
 export async function demoPipeline(inputs: DemoInputs) {
   "use workflow";
 
   const slow = await slowStep(inputs.triggerId, inputs.stepSeconds);
 
-  // Hook tokens are a global namespace per backend: a second active hook on
-  // the same token fails that run outright, so the token embeds the
-  // route-minted triggerId. Keep the template in sync with the registry
-  // entry's hookToken. ADR 0009 later turns this collision into the
-  // resource-exclusivity lock.
+  // Hook tokens are a global namespace per backend (duplicates fail the
+  // run), so the token embeds the route-minted triggerId. Keep in sync with
+  // the registry entry's hookToken.
   using hook = createHook<{ approved: boolean; note?: string }>({
     token: `demo:${inputs.triggerId}`,
   });

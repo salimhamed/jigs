@@ -4,8 +4,7 @@ import { registry } from "./registry";
 
 const app = new Hono();
 
-// Liveness only, no Postgres roundtrip: dependency verification is
-// preflight's job (ADR 0010), and the World monitors its own backend.
+// Liveness only; dependency verification is preflight's job (ADR 0010).
 app.get("/health", (c) =>
   c.json({
     ok: true,
@@ -31,10 +30,8 @@ app.post("/api/pipelines/:name/runs", async (c) => {
   const body = await c.req
     .json<{ inputs?: unknown }>()
     .catch(() => ({}) as { inputs?: unknown });
-  // zod-parsed plain JSON doubles as the serialization guard: on
-  // workflow@4.8.4 a run whose workflow-level arguments fail serialization
-  // never reaches a terminal state — it stays `running` and is re-enqueued
-  // on every restart (ADR 0008).
+  // zod-parsed plain JSON is also the serialization guard: unserializable
+  // workflow args leave a run stuck `running` forever (workflow@4.8.4).
   const parsed = entry.inputs.safeParse(body.inputs ?? {});
   if (!parsed.success) {
     return c.json(

@@ -1,10 +1,7 @@
 #!/usr/bin/env node
-// Proves ADR 0008's crash model against the built service (AGE-306):
-//   suspension — kill while suspended at the hook; after restart + resume,
-//     the pre-kill step result is replayed from the event log, not re-run.
-//   midstep — kill while a step is in flight; startup rescue re-enqueues
-//     the run and re-runs that step from zero (fresh marker).
-// Requires: `pnpm build`, compose Postgres up, bootstrap done.
+// Crash-model repro: `suspension` kills while suspended at the hook and
+// asserts memoized replay; `midstep` kills mid-step and asserts a rescue
+// re-run from zero. Requires `pnpm build`, compose Postgres up, bootstrap.
 import { spawn } from "node:child_process";
 
 const mode = process.argv[2];
@@ -125,8 +122,7 @@ if (mode === "midstep") {
   );
 }
 
-// The hook only exists once the pipeline body reaches createHook; retry
-// until it is listening (404 until then).
+// The hook 404s until the pipeline body reaches createHook; retry.
 const resumed = await waitFor(async () => {
   const res = await api("/api/hooks/resume", {
     token: trigger.resumeToken,

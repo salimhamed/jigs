@@ -1,5 +1,3 @@
-# Postgres World for the jigs service (ADR 0008). Host port 5439 to stay
-# clear of local Postgres installs.
 name: jigs
 services:
   postgres:
