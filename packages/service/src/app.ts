@@ -1,6 +1,10 @@
 import { Hono } from "hono";
-import { getRun, resumeHook, start } from "workflow/api";
+import { getHookByToken, getRun, resumeHook, start } from "workflow/api";
 import { registry } from "./registry";
+import {
+  readSuspensionMetadata,
+  type SuspensionRecord,
+} from "./suspension/record";
 
 const app = new Hono();
 
@@ -71,7 +75,32 @@ app.get("/api/runs/:runId", async (c) => {
   const status = await run.status;
   const body: Record<string, unknown> = { runId: run.runId, status };
   if (status === "completed") body.returnValue = await run.returnValue;
+  if (status === "failed") {
+    body.error = await run.returnValue.then(
+      () => undefined,
+      (err: unknown) => String(err),
+    );
+  }
+  // The SDK has no `suspended` status — a parked run reads `running`, so
+  // jigs surfaces what the run is listening on from its hooks' metadata.
+  if (status === "running") body.suspensions = await listSuspensions(run.runId);
   return c.json(body);
 });
+
+async function listSuspensions(runId: string): Promise<SuspensionRecord[]> {
+  const { getWorld } = await import("workflow/runtime");
+  const hooks = await getWorld().hooks.list({ runId });
+  const hydrated = await Promise.all(
+    hooks.data.map((hook) =>
+      getHookByToken(hook.token).then(
+        (full) => readSuspensionMetadata(full.metadata),
+        () => null,
+      ),
+    ),
+  );
+  return hydrated.filter(
+    (record): record is SuspensionRecord => record !== null,
+  );
+}
 
 export default app;
