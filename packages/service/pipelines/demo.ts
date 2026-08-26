@@ -1,0 +1,54 @@
+import { createHook } from "workflow";
+import { z } from "zod";
+
+export const demoInputs = z.object({
+  stepSeconds: z.number().int().min(1).max(600).default(3),
+});
+
+type DemoInputs = z.output<typeof demoInputs> & { triggerId: string };
+
+// Crash-model demo (ADR 0008, proven on AGE-304): slowStep's marker tells
+// replay from re-execution. Kill mid-step → startup rescue re-runs it from
+// zero (new marker); kill mid-suspension → resume replays the memoized
+// result (same marker).
+export async function demoPipeline(inputs: DemoInputs) {
+  "use workflow";
+
+  const slow = await slowStep(inputs.triggerId, inputs.stepSeconds);
+
+  // Hook tokens are a global namespace per backend: a second active hook on
+  // the same token fails that run outright, so the token embeds the
+  // route-minted triggerId. Keep the template in sync with the registry
+  // entry's hookToken. ADR 0009 later turns this collision into the
+  // resource-exclusivity lock.
+  using hook = createHook<{ approved: boolean; note?: string }>({
+    token: `demo:${inputs.triggerId}`,
+  });
+  const approval = await hook;
+
+  const final = await finalStep(slow.marker, approval);
+
+  return { slowStep: slow, approval, finalStep: final };
+}
+
+async function slowStep(triggerId: string, stepSeconds: number) {
+  "use step";
+  const marker = crypto.randomUUID();
+  console.log(
+    `[slowStep] START triggerId=${triggerId} marker=${marker} pid=${process.pid} seconds=${stepSeconds}`,
+  );
+  await new Promise((resolve) => setTimeout(resolve, stepSeconds * 1000));
+  console.log(`[slowStep] END triggerId=${triggerId} marker=${marker}`);
+  return { marker, finishedAt: new Date().toISOString() };
+}
+
+async function finalStep(
+  sawMarker: string,
+  approval: { approved: boolean; note?: string },
+) {
+  "use step";
+  console.log(
+    `[finalStep] executed sawMarker=${sawMarker} approved=${approval.approved}`,
+  );
+  return { sawMarker, completedAt: new Date().toISOString() };
+}
