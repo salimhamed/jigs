@@ -5,6 +5,12 @@
 > and the CLI becomes its HTTP client. Pipelines are compiled artifacts
 > rather than modules invoked by path. Library-first packaging and the
 > `jigs/harnesses` pin point stand.
+>
+> _Note (AGE-306):_ the repo is a pnpm workspace since the runtime-service
+> skeleton landed — `jigs` remains the library-first package (now at
+> `packages/jigs`), and the ADR 0008 service lives beside it as the private
+> workspace package `@jigs/service`. Library-first packaging stands
+> unchanged.
 
 > **Amended by [ADR 0004](./0004-cli-providers-drive-harnesses.md).** The
 > `@ai-sdk/harness` choice referenced below no longer holds: the community

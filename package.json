@@ -1,7 +1,5 @@
 {
-  "name": "jigs",
-  "version": "0.1.0",
-  "description": "Guides coding agents through repeatable workflows",
+  "name": "jigs-workspace",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -10,36 +8,18 @@
     "node": ">=24"
   },
   "packageManager": "pnpm@11.21.0",
-  "bin": {
-    "jigs": "./dist/cli.js"
-  },
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
-  },
-  "files": [
-    "dist"
-  ],
   "scripts": {
-    "dev": "node src/cli.ts",
-    "build": "tsdown",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "dev": "pnpm --filter jigs dev",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r run test",
+    "build": "pnpm -r run build",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
-  },
-  "dependencies": {
-    "@ai-sdk/harness": "^1.0.73",
-    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.9",
     "@types/node": "^26.2.0",
-    "tsdown": "^0.22.14",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   }

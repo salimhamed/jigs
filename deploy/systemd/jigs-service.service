@@ -1,0 +1,15 @@
+# See deploy/README.md. Adjust WorkingDirectory to your checkout; if node
+# comes from a version manager, use its absolute path in ExecStart.
+[Unit]
+Description=jigs pipeline service (Workflow SDK runtime)
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/Code/Personal/jigs/jigs/packages/service
+ExecStart=/usr/bin/env node .output/server/index.mjs
+EnvironmentFile=%h/.config/jigs/service.env
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

@@ -159,3 +159,22 @@ The jigs-owned `CODEX_HOME` directory every Codex step runs under — a curated
 zero-server `config.toml` plus a symlink to the real `auth.json`. What makes
 MCP deny-by-default enforceable on a harness with no strict-config flag.
 _Avoid_: isolated home, custom home, sandbox home
+
+**Service**:
+The long-lived process (a systemd user unit) that owns execution: it hosts
+the compiled pipelines, creates runs at the trigger, and resumes them on
+wakes. Everything else — the CLI included — is its HTTP client.
+_Avoid_: server, daemon, worker
+
+**Trigger**:
+The service route that creates a run: it validates a named pipeline's zod
+`inputs` against plain JSON and calls the runtime's start. Distinct from a
+wake, which resumes a run that already exists. Preflight lives in the
+trigger path.
+_Avoid_: launch endpoint, kickoff, start route
+
+**World**:
+The Workflow SDK's persistence-and-queue backend the service runs against —
+the Postgres World in docker for jigs; the SDK's filesystem World only for
+scratch development. Selected by environment, never by code.
+_Avoid_: backend, database, store

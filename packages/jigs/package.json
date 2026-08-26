@@ -1,0 +1,37 @@
+{
+  "name": "jigs",
+  "version": "0.1.0",
+  "description": "Guides coding agents through repeatable workflows",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "author": "Salim Hamed",
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "jigs": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "node src/cli.ts",
+    "build": "tsdown",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "tsdown": "^0.22.14"
+  }
+}

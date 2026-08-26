@@ -1,0 +1,21 @@
+name: jigs
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: jigs-postgres
+    environment:
+      POSTGRES_USER: jigs
+      POSTGRES_PASSWORD: jigs
+      POSTGRES_DB: jigs
+    ports:
+      - "5439:5432"
+    volumes:
+      - jigs-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jigs -d jigs"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+volumes:
+  jigs-postgres-data:
