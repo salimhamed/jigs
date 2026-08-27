@@ -25,7 +25,7 @@ import {
   withCodexAppServer,
 } from "../harnesses/codex.ts";
 import { ensureManagedCodexHome } from "../harnesses/codex-home.ts";
-import { stripApiCredentials } from "../harnesses/env.ts";
+import { scrubbedEnv } from "../harnesses/env.ts";
 import { claudeCode, codexExec } from "../harnesses/index.ts";
 import type { McpServerConfig } from "./config.ts";
 import type { AgentWire, AskWire } from "./plan.ts";
@@ -60,16 +60,6 @@ export const realDeps: ExecuteDeps = {
   ensureCodexHome: (runKey) => ensureManagedCodexHome(runKey),
   withCodexAppServer,
 };
-
-function scrubbedEnv(): Record<string, string> {
-  const env: NodeJS.ProcessEnv = { ...process.env };
-  stripApiCredentials(env);
-  const clean: Record<string, string> = {};
-  for (const [key, value] of Object.entries(env)) {
-    if (value !== undefined) clean[key] = value;
-  }
-  return clean;
-}
 
 function toClaudeMcpServers(
   servers: Record<string, McpServerConfig>,

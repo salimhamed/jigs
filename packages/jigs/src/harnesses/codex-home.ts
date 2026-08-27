@@ -22,6 +22,13 @@ export const CURATED_CONFIG_TOML = `# jigs managed CODEX_HOME — curated by jig
 # is the entire MCP universe the agent sees (ADR 0011).
 `;
 
+// The real login every Codex surface shares: the managed home symlinks to
+// it, and the preflight harness check reads it (there is no runKey before a
+// run exists, so a managed home is not the place to look).
+export function realCodexAuthPath(home: string = homedir()): string {
+  return path.join(home, ".codex", "auth.json");
+}
+
 export interface CodexHomeOptions {
   baseDir?: string;
   realAuthPath?: string;
@@ -52,8 +59,7 @@ export function ensureManagedCodexHome(
   options: CodexHomeOptions = {},
 ): string {
   const home = managedCodexHomePath(runKey, options);
-  const realAuthPath =
-    options.realAuthPath ?? path.join(homedir(), ".codex", "auth.json");
+  const realAuthPath = options.realAuthPath ?? realCodexAuthPath();
   if (!existsSync(realAuthPath)) {
     throw new CodexAuthMissingError(realAuthPath);
   }

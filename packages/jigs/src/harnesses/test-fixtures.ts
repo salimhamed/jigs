@@ -24,8 +24,8 @@ export interface ManagedCodexHomeState {
   configToml: string;
 }
 
-// Test-side inspection of a managed Codex home (parked here until AGE-315
-// defines what jigs doctor actually needs).
+// Test-side inspection of a managed Codex home. Deliberately test-only:
+// managed homes are per-run state, and jigs doctor runs without a launch.
 export function managedCodexHomeState(home: string): ManagedCodexHomeState {
   const authPath = path.join(home, "auth.json");
   let authIsSymlink = false;
