@@ -19,3 +19,16 @@ test("demo-crash inputs default and reject out-of-contract values", () => {
 test("demo-crash hook token embeds the trigger id", () => {
   expect(registry["demo-crash"]?.hookToken?.("abc")).toBe("demo:abc");
 });
+
+test("steps-demo defaults to replay mode and rejects unknown modes", () => {
+  const entry = registry["steps-demo"];
+  expect(entry?.inputs.parse({})).toEqual({ mode: "replay" });
+  expect(entry?.inputs.parse({ mode: "bad-config" })).toEqual({
+    mode: "bad-config",
+  });
+  expect(entry?.inputs.safeParse({ mode: "explode" }).success).toBe(false);
+});
+
+test("steps-demo hook token embeds the trigger id", () => {
+  expect(registry["steps-demo"]?.hookToken?.("abc")).toBe("steps:abc");
+});
