@@ -1,7 +1,9 @@
 import path from "node:path";
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { expandHome } from "../paths.ts";
 import { branchDirname, factorySlug, worktreePath } from "./layout.ts";
+
+afterEach(() => vi.unstubAllEnvs());
 
 test("factorySlug embeds the dirname and is stable for equal paths", () => {
   const slug = factorySlug("/home/x/factories/acme");
@@ -44,27 +46,18 @@ test("workspace_dir override wins over the central root", () => {
 });
 
 test("central root defaults to the XDG data home", () => {
-  const previous = process.env.XDG_DATA_HOME;
-  process.env.XDG_DATA_HOME = "/xdg-data";
-  try {
-    const p = worktreePath({
-      factoryRoot: "/f/acme",
-      bindingName: "api",
-      branch: "main",
-    });
-    expect(p).toBe(
-      path.join(
-        "/xdg-data/jigs/worktrees",
-        factorySlug("/f/acme"),
-        "api",
-        "main",
-      ),
-    );
-  } finally {
-    if (previous === undefined) {
-      delete process.env.XDG_DATA_HOME;
-    } else {
-      process.env.XDG_DATA_HOME = previous;
-    }
-  }
+  vi.stubEnv("XDG_DATA_HOME", "/xdg-data");
+  const p = worktreePath({
+    factoryRoot: "/f/acme",
+    bindingName: "api",
+    branch: "main",
+  });
+  expect(p).toBe(
+    path.join(
+      "/xdg-data/jigs/worktrees",
+      factorySlug("/f/acme"),
+      "api",
+      "main",
+    ),
+  );
 });

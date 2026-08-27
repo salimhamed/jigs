@@ -7,23 +7,15 @@ import { WorktreeOwnedError } from "jigs";
 import type { Sql } from "postgres";
 import { expect, test } from "vitest";
 import { acquireWorktree } from "./acquire";
+import type { WorktreeRow } from "./registry";
 
-interface DbRow {
-  path: string;
-  branch: string;
-  owner_run_id: string;
-  state: string;
-  base_sha: string;
-  head_sha: string;
-  behind_default: number;
-}
-
-// Fakes the postgres tagged-template client: SELECTs read the store keyed by
-// the interpolated path, INSERT ... ON CONFLICT writes it back.
-function makeFakeSql(store: Map<string, DbRow>): Sql {
+// Fakes the postgres tagged-template client: registry SELECTs read the store
+// keyed by the interpolated path, INSERT ... ON CONFLICT writes it back, and
+// anything else (the advisory-lock SELECT) falls through to an empty array.
+function makeFakeSql(store: Map<string, WorktreeRow>): Sql {
   const sql = (strings: TemplateStringsArray, ...values: unknown[]) => {
     const query = strings.join("$");
-    if (query.trimStart().startsWith("SELECT")) {
+    if (query.includes("FROM jigs_worktrees")) {
       const row = store.get(values[0] as string);
       return Promise.resolve(row === undefined ? [] : [row]);
     }
@@ -33,16 +25,17 @@ function makeFakeSql(store: Map<string, DbRow>): Sql {
       store.set(path, {
         path,
         branch,
-        owner_run_id: ownerRunId,
+        ownerRunId,
         state,
-        base_sha: baseSha,
-        head_sha: headSha,
-        behind_default: behind,
+        baseSha,
+        headSha,
+        behindDefault: behind,
       });
       return Promise.resolve([]);
     }
     return Promise.resolve([]);
   };
+  sql.begin = (fn: (sql: unknown) => unknown) => Promise.resolve(fn(sql));
   return sql as unknown as Sql;
 }
 
@@ -54,7 +47,6 @@ const request = {
 };
 
 const cleanDisk: WorktreeStatus = {
-  exists: true,
   branchMatches: true,
   clean: true,
   diverged: false,
@@ -64,26 +56,15 @@ const cleanDisk: WorktreeStatus = {
   baseSha: "base1",
 };
 
-const missingDisk: WorktreeStatus = {
-  exists: false,
-  branchMatches: false,
-  clean: false,
-  diverged: false,
-  headSha: null,
-  behindDefault: null,
-  defaultBranch: null,
-  baseSha: null,
-};
-
-function registeredRow(ownerRunId: string): DbRow {
+function registeredRow(ownerRunId: string): WorktreeRow {
   return {
     path: request.worktreePath,
     branch: "feat",
-    owner_run_id: ownerRunId,
+    ownerRunId,
     state: "active",
-    base_sha: "base0",
-    head_sha: "head0",
-    behind_default: 0,
+    baseSha: "base0",
+    headSha: "head0",
+    behindDefault: 0,
   };
 }
 
@@ -106,7 +87,7 @@ test("a worktree registered to a live run is refused, naming the owner", async (
       worktreeStatus: async () => cleanDisk,
     }),
   ).rejects.toThrow(WorktreeOwnedError);
-  expect(store.get(request.worktreePath)?.owner_run_id).toBe("run_owner");
+  expect(store.get(request.worktreePath)?.ownerRunId).toBe("run_owner");
 });
 
 test("a terminal owner's clean worktree is reused and re-owned", async () => {
@@ -118,21 +99,21 @@ test("a terminal owner's clean worktree is reused and re-owned", async () => {
   });
   expect(facts.headSha).toBe("head1");
   expect(store.get(request.worktreePath)).toMatchObject({
-    owner_run_id: "run_new",
+    ownerRunId: "run_new",
     state: "active",
-    head_sha: "head1",
-    base_sha: "base1",
-    behind_default: 2,
+    headSha: "head1",
+    baseSha: "base1",
+    behindDefault: 2,
   });
 });
 
 test("no worktree on disk creates one and registers the requesting run", async () => {
-  const store = new Map<string, DbRow>();
+  const store = new Map<string, WorktreeRow>();
   const createCalls: CreateWorktreeOptions[] = [];
   const facts = await acquireWorktree(request, {
     sql: makeFakeSql(store),
     runIsLive: async () => false,
-    worktreeStatus: async () => missingDisk,
+    worktreeStatus: async () => null,
     createWorktree: async (options) => {
       createCalls.push(options);
       return createdFacts;
@@ -147,8 +128,8 @@ test("no worktree on disk creates one and registers the requesting run", async (
     },
   ]);
   expect(store.get(request.worktreePath)).toMatchObject({
-    owner_run_id: "run_new",
+    ownerRunId: "run_new",
     state: "active",
-    base_sha: "base2",
+    baseSha: "base2",
   });
 });

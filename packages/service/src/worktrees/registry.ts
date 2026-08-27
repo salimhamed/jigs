@@ -1,4 +1,9 @@
-import postgres, { type Sql } from "postgres";
+import postgres, {
+  type ISql,
+  type Options,
+  type PostgresType,
+  type Sql,
+} from "postgres";
 
 // The worktree registry holds state, never config: which run owns a worktree
 // and what state it is in. Placement and bindings stay in jigs.yml. It lives
@@ -15,44 +20,16 @@ export interface WorktreeRow {
   behindDefault: number;
 }
 
-interface DbRow {
-  path: string;
-  branch: string;
-  owner_run_id: string;
-  state: string;
-  base_sha: string;
-  head_sha: string;
-  behind_default: number;
+// Single construction point: the camel transform is what lets queries return
+// WorktreeRow-shaped rows straight from snake_case columns.
+export function connectRegistry(
+  url: string,
+  options: Options<Record<string, PostgresType>> = {},
+): Sql {
+  return postgres(url, { transform: postgres.camel, ...options });
 }
 
-function toWorktreeRow(db: DbRow): WorktreeRow {
-  return {
-    path: db.path,
-    branch: db.branch,
-    ownerRunId: db.owner_run_id,
-    state: db.state,
-    baseSha: db.base_sha,
-    headSha: db.head_sha,
-    behindDefault: db.behind_default,
-  };
-}
-
-let singleton: Sql | undefined;
-
-export function registrySql(): Sql {
-  if (singleton === undefined) {
-    const url = process.env.WORKFLOW_POSTGRES_URL;
-    if (url === undefined) {
-      throw new Error(
-        "WORKFLOW_POSTGRES_URL is not set — the worktree registry lives in the service's Postgres",
-      );
-    }
-    singleton = postgres(url);
-  }
-  return singleton;
-}
-
-export async function ensureWorktreeRegistry(sql: Sql): Promise<void> {
+export async function ensureWorktreeRegistry(sql: ISql): Promise<void> {
   await sql`
     CREATE TABLE IF NOT EXISTS jigs_worktrees (
       path text PRIMARY KEY,
@@ -69,20 +46,19 @@ export async function ensureWorktreeRegistry(sql: Sql): Promise<void> {
 }
 
 export async function getWorktree(
-  sql: Sql,
+  sql: ISql,
   path: string,
 ): Promise<WorktreeRow | null> {
-  const rows = await sql<DbRow[]>`
+  const rows = await sql<WorktreeRow[]>`
     SELECT path, branch, owner_run_id, state, base_sha, head_sha, behind_default
     FROM jigs_worktrees
     WHERE path = ${path}
   `;
-  const row = rows[0];
-  return row === undefined ? null : toWorktreeRow(row);
+  return rows[0] ?? null;
 }
 
 export async function upsertWorktree(
-  sql: Sql,
+  sql: ISql,
   row: WorktreeRow,
 ): Promise<void> {
   await sql`
@@ -100,14 +76,4 @@ export async function upsertWorktree(
       behind_default = EXCLUDED.behind_default,
       updated_at = now()
   `;
-}
-
-// The sweep/ps query shape: every worktree the runtime ever made.
-export async function listWorktrees(sql: Sql): Promise<WorktreeRow[]> {
-  const rows = await sql<DbRow[]>`
-    SELECT path, branch, owner_run_id, state, base_sha, head_sha, behind_default
-    FROM jigs_worktrees
-    ORDER BY path
-  `;
-  return rows.map(toWorktreeRow);
 }

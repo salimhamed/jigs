@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { CliError } from "../errors.ts";
 import { deriveDefaultBranch, git, tryGit } from "../git.ts";
@@ -140,35 +140,25 @@ export interface WorktreeStatusOptions {
 }
 
 export interface WorktreeStatus {
-  exists: boolean;
   branchMatches: boolean;
   clean: boolean;
   diverged: boolean;
-  headSha: string | null;
-  behindDefault: number | null;
-  defaultBranch: string | null;
-  baseSha: string | null;
+  headSha: string;
+  behindDefault: number;
+  defaultBranch: string;
+  baseSha: string;
 }
 
 export async function worktreeStatus(
   options: WorktreeStatusOptions,
-): Promise<WorktreeStatus> {
+): Promise<WorktreeStatus | null> {
   const { checkoutRoot, worktreePath, branch } = options;
   const toplevel = await tryGit(["rev-parse", "--show-toplevel"], worktreePath);
-  if (
-    toplevel === null ||
-    path.resolve(toplevel) !== path.resolve(worktreePath)
-  ) {
-    return {
-      exists: false,
-      branchMatches: false,
-      clean: false,
-      diverged: false,
-      headSha: null,
-      behindDefault: null,
-      defaultBranch: null,
-      baseSha: null,
-    };
+  if (toplevel === null) return null;
+  // git reports the physical toplevel, so a symlinked component in the
+  // requested path needs realpath, not lexical resolution, to match.
+  if (path.resolve(toplevel) !== realpathSync(path.resolve(worktreePath))) {
+    return null;
   }
 
   const defaultBranch = await resolveDefaultBranch(checkoutRoot);
@@ -206,7 +196,6 @@ export async function worktreeStatus(
     checkoutRoot,
   );
   return {
-    exists: true,
     branchMatches: checkedOut === branch,
     clean,
     diverged,

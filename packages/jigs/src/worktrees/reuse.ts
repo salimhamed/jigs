@@ -40,7 +40,6 @@ export interface ReuseRegistration {
 }
 
 export interface ReuseDiskFacts {
-  exists: boolean;
   branchMatches: boolean;
   clean: boolean;
   diverged: boolean;
@@ -53,11 +52,7 @@ export interface ReuseInput {
   disk: ReuseDiskFacts | null;
 }
 
-export interface ReuseDecision {
-  action: "reuse" | "create";
-}
-
-export function decideReuse(input: ReuseInput): ReuseDecision {
+export function decideReuse(input: ReuseInput): "reuse" | "create" {
   const { path, registration, requestingRunId, disk } = input;
   const sameOwner = registration?.ownerRunId === requestingRunId;
   if (registration?.ownerLive && !sameOwner) {
@@ -65,13 +60,13 @@ export function decideReuse(input: ReuseInput): ReuseDecision {
   }
   // A registry row with no directory is just a branch with no worktree —
   // fall through to three-way resolution.
-  if (disk === null || !disk.exists) return { action: "create" };
+  if (disk === null) return "create";
   if (!disk.branchMatches) {
     throw new WorktreeNotReusableError(path, "wrong-branch");
   }
   // The owner's own re-entry reuses as-is: the dirt is the run's own work.
-  if (sameOwner) return { action: "reuse" };
+  if (sameOwner) return "reuse";
   if (!disk.clean) throw new WorktreeNotReusableError(path, "dirty");
   if (disk.diverged) throw new WorktreeNotReusableError(path, "diverged");
-  return { action: "reuse" };
+  return "reuse";
 }

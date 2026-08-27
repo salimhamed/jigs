@@ -2,7 +2,6 @@ import {
   createWorktree,
   decideReuse,
   type WorktreeFacts,
-  type WorktreeStatus,
   worktreeStatus,
 } from "jigs";
 import type { Sql } from "postgres";
@@ -46,68 +45,61 @@ export async function acquireWorktree(
   const status = deps.worktreeStatus ?? worktreeStatus;
   const create = deps.createWorktree ?? createWorktree;
 
-  const row = await getWorktree(deps.sql, request.worktreePath);
-  const registration =
-    row === null
-      ? null
-      : {
-          ownerRunId: row.ownerRunId,
-          ownerLive: await isLive(row.ownerRunId),
-        };
-  const disk = await status({
-    checkoutRoot: request.checkoutRoot,
-    worktreePath: request.worktreePath,
-    branch: request.branch,
-  });
-  const decision = decideReuse({
-    path: request.worktreePath,
-    registration,
-    requestingRunId: request.runId,
-    disk,
-  });
+  // Per-path advisory lock: without it, two concurrent acquires for the same
+  // unowned path both read no live owner during the (fetch-long) window
+  // between getWorktree and upsertWorktree, and the loser silently steals
+  // ownership. The loser now blocks here, then sees the winner's row.
+  return deps.sql.begin(async (sql) => {
+    await sql`SELECT pg_advisory_xact_lock(hashtext(${request.worktreePath}))`;
 
-  const facts =
-    decision.action === "create"
-      ? await create({
-          checkoutRoot: request.checkoutRoot,
-          worktreePath: request.worktreePath,
-          branch: request.branch,
-        })
-      : reuseFacts(request, disk);
+    const row = await getWorktree(sql, request.worktreePath);
+    const registration =
+      row === null
+        ? null
+        : {
+            ownerRunId: row.ownerRunId,
+            ownerLive: await isLive(row.ownerRunId),
+          };
+    const disk = await status({
+      checkoutRoot: request.checkoutRoot,
+      worktreePath: request.worktreePath,
+      branch: request.branch,
+    });
+    const decision = decideReuse({
+      path: request.worktreePath,
+      registration,
+      requestingRunId: request.runId,
+      disk,
+    });
 
-  await upsertWorktree(deps.sql, {
-    path: facts.path,
-    branch: facts.branch,
-    ownerRunId: request.runId,
-    state: "active",
-    baseSha: facts.baseSha,
-    headSha: facts.headSha,
-    behindDefault: facts.behindDefault,
+    // decideReuse returns "create" only when disk is null; the second arm of
+    // the condition is for narrowing.
+    const facts: WorktreeFacts =
+      decision === "create" || disk === null
+        ? await create({
+            checkoutRoot: request.checkoutRoot,
+            worktreePath: request.worktreePath,
+            branch: request.branch,
+          })
+        : {
+            path: request.worktreePath,
+            branch: request.branch,
+            resolution: "local",
+            defaultBranch: disk.defaultBranch,
+            baseSha: disk.baseSha,
+            headSha: disk.headSha,
+            behindDefault: disk.behindDefault,
+          };
+
+    await upsertWorktree(sql, {
+      path: facts.path,
+      branch: facts.branch,
+      ownerRunId: request.runId,
+      state: "active",
+      baseSha: facts.baseSha,
+      headSha: facts.headSha,
+      behindDefault: facts.behindDefault,
+    });
+    return facts;
   });
-  return facts;
-}
-
-function reuseFacts(
-  request: AcquireWorktreeRequest,
-  disk: WorktreeStatus,
-): WorktreeFacts {
-  if (
-    disk.headSha === null ||
-    disk.behindDefault === null ||
-    disk.defaultBranch === null ||
-    disk.baseSha === null
-  ) {
-    throw new Error(
-      `worktree ${request.worktreePath} was decided reusable without disk facts`,
-    );
-  }
-  return {
-    path: request.worktreePath,
-    branch: request.branch,
-    resolution: "local",
-    defaultBranch: disk.defaultBranch,
-    baseSha: disk.baseSha,
-    headSha: disk.headSha,
-    behindDefault: disk.behindDefault,
-  };
 }

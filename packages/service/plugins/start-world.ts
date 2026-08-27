@@ -8,10 +8,12 @@ export default async function startWorld() {
   );
 
   if (process.env.WORKFLOW_POSTGRES_URL) {
-    const { ensureWorktreeRegistry, registrySql } = await import(
+    const { connectRegistry, ensureWorktreeRegistry } = await import(
       "../src/worktrees/registry"
     );
-    await ensureWorktreeRegistry(registrySql());
+    await ensureWorktreeRegistry(
+      connectRegistry(process.env.WORKFLOW_POSTGRES_URL),
+    );
     console.log("[service] worktree registry ensured");
   } else {
     console.log(

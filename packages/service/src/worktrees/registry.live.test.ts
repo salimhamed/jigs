@@ -1,14 +1,13 @@
-import postgres from "postgres";
 import { afterAll, expect, test } from "vitest";
 import {
+  connectRegistry,
   ensureWorktreeRegistry,
   getWorktree,
-  listWorktrees,
   upsertWorktree,
   type WorktreeRow,
 } from "./registry";
 
-const sql = postgres(
+const sql = connectRegistry(
   process.env.WORKFLOW_POSTGRES_URL ??
     "postgres://jigs:jigs@localhost:5439/jigs",
   { max: 1 },
@@ -55,12 +54,6 @@ test("re-upsert with a new owner updates the row in place", async () => {
   expect(await getWorktree(sql, testPath)).toEqual(
     row({ ownerRunId: "run_b", headSha: "head2", behindDefault: 0 }),
   );
-});
-
-test("listWorktrees returns registered rows (the sweep/ps query shape)", async () => {
-  await ensureWorktreeRegistry(sql);
-  await upsertWorktree(sql, row());
-  expect(await listWorktrees(sql)).toContainEqual(row());
 });
 
 test("getWorktree misses cleanly on an unregistered path", async () => {

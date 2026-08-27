@@ -1,4 +1,4 @@
-import { rmSync, writeFileSync } from "node:fs";
+import { rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import {
@@ -119,15 +119,33 @@ test("git operations survive the orchestrator's cwd being a removed worktree", a
   }
 });
 
-test("worktreeStatus reports a missing directory as not existing", async () => {
+test("worktreeStatus reports a missing directory as null", async () => {
   const { checkout } = makeRemoteBackedRepo(tmp);
   const status = await worktreeStatus({
     checkoutRoot: checkout,
     worktreePath: wtPath("never-made"),
     branch: "feat",
   });
-  expect(status.exists).toBe(false);
-  expect(status.headSha).toBeNull();
+  expect(status).toBeNull();
+});
+
+test("worktreeStatus sees a worktree through a symlinked parent directory", async () => {
+  const { checkout } = makeRemoteBackedRepo(tmp);
+  await createWorktree({
+    checkoutRoot: checkout,
+    worktreePath: wtPath("linked"),
+    branch: "agent/linked",
+  });
+  const linkedParent = path.join(tmp, "worktrees-link");
+  symlinkSync(path.join(tmp, "worktrees"), linkedParent);
+
+  const status = await worktreeStatus({
+    checkoutRoot: checkout,
+    worktreePath: path.join(linkedParent, "linked"),
+    branch: "agent/linked",
+  });
+  expect(status).not.toBeNull();
+  expect(status?.branchMatches).toBe(true);
 });
 
 test("worktreeStatus flags an untracked file as dirty", async () => {
@@ -145,10 +163,10 @@ test("worktreeStatus flags an untracked file as dirty", async () => {
     worktreePath: wt,
     branch: "agent/dirty",
   });
-  expect(status.exists).toBe(true);
-  expect(status.branchMatches).toBe(true);
-  expect(status.clean).toBe(false);
-  expect(status.diverged).toBe(false);
+  expect(status).not.toBeNull();
+  expect(status?.branchMatches).toBe(true);
+  expect(status?.clean).toBe(false);
+  expect(status?.diverged).toBe(false);
 });
 
 test("worktreeStatus flags divergence when local and origin both advanced", async () => {
@@ -170,8 +188,8 @@ test("worktreeStatus flags divergence when local and origin both advanced", asyn
     worktreePath: wt,
     branch: "agent/split",
   });
-  expect(status.clean).toBe(true);
-  expect(status.diverged).toBe(true);
+  expect(status?.clean).toBe(true);
+  expect(status?.diverged).toBe(true);
 });
 
 test("worktreeStatus treats behind-only as ff-safe, not diverged", async () => {
@@ -190,8 +208,8 @@ test("worktreeStatus treats behind-only as ff-safe, not diverged", async () => {
     worktreePath: wt,
     branch: "agent/behind",
   });
-  expect(status.exists).toBe(true);
-  expect(status.clean).toBe(true);
-  expect(status.diverged).toBe(false);
-  expect(status.headSha).toBe(facts.headSha);
+  expect(status).not.toBeNull();
+  expect(status?.clean).toBe(true);
+  expect(status?.diverged).toBe(false);
+  expect(status?.headSha).toBe(facts.headSha);
 });

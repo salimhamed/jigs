@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
-import { homedir } from "node:os";
 import path from "node:path";
-import { expandHome } from "../paths.ts";
+import { expandHome, jigsDataDir } from "../paths.ts";
 
 // Binding names are unique only per factory repo, so the path needs factory
 // identity — dirname alone would collide two factories named the same.
@@ -28,13 +27,7 @@ export function worktreePath(options: WorktreePathOptions): string {
   if (options.workspaceDir !== undefined) {
     return path.join(expandHome(options.workspaceDir), dirname);
   }
-  const base =
-    options.baseDir ??
-    path.join(
-      process.env.XDG_DATA_HOME ?? path.join(homedir(), ".local", "share"),
-      "jigs",
-      "worktrees",
-    );
+  const base = options.baseDir ?? path.join(jigsDataDir(), "worktrees");
   return path.join(
     base,
     factorySlug(options.factoryRoot),

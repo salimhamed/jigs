@@ -8,7 +8,6 @@ import {
 const path = "/data/worktrees/acme-abc12345/api/salim-fix";
 
 const cleanDisk = {
-  exists: true,
   branchMatches: true,
   clean: true,
   diverged: false,
@@ -45,7 +44,7 @@ test("unowned, clean, and ff-safe is reused", () => {
       requestingRunId: "run_new",
       disk: cleanDisk,
     }),
-  ).toEqual({ action: "reuse" });
+  ).toBe("reuse");
 });
 
 test("a terminal owner's clean worktree is reused", () => {
@@ -56,7 +55,7 @@ test("a terminal owner's clean worktree is reused", () => {
       requestingRunId: "run_new",
       disk: cleanDisk,
     }),
-  ).toEqual({ action: "reuse" });
+  ).toBe("reuse");
 });
 
 test("unowned but dirty is preserved and errors with guidance", () => {
@@ -104,7 +103,7 @@ test("no worktree on disk goes through three-way resolution", () => {
       requestingRunId: "run_new",
       disk: null,
     }),
-  ).toEqual({ action: "create" });
+  ).toBe("create");
 });
 
 test("a registry row whose directory is gone also creates", () => {
@@ -113,14 +112,9 @@ test("a registry row whose directory is gone also creates", () => {
       path,
       registration: { ownerRunId: "run_done", ownerLive: false },
       requestingRunId: "run_new",
-      disk: {
-        exists: false,
-        branchMatches: false,
-        clean: false,
-        diverged: false,
-      },
+      disk: null,
     }),
-  ).toEqual({ action: "create" });
+  ).toBe("create");
 });
 
 test("the owning run re-enters its own worktree even when dirty", () => {
@@ -131,5 +125,5 @@ test("the owning run re-enters its own worktree even when dirty", () => {
       requestingRunId: "run_owner",
       disk: { ...cleanDisk, clean: false },
     }),
-  ).toEqual({ action: "reuse" });
+  ).toBe("reuse");
 });

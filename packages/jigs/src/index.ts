@@ -6,23 +6,18 @@ export {
   type BranchResolution,
   type CreateWorktreeOptions,
   createWorktree,
-  fetchFreshness,
-  resolveDefaultBranch,
   type WorktreeFacts,
   type WorktreeStatus,
   type WorktreeStatusOptions,
   worktreeStatus,
 } from "./worktrees/create.ts";
 export {
-  branchDirname,
-  factorySlug,
   type WorktreePathOptions,
   worktreePath,
 } from "./worktrees/layout.ts";
 export {
   decideReuse,
   type NotReusableReason,
-  type ReuseDecision,
   type ReuseDiskFacts,
   type ReuseInput,
   type ReuseRegistration,
