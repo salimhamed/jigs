@@ -160,3 +160,46 @@ test("poke of an unknown run is a 404", async () => {
   });
   expect(res.status).toBe(404);
 });
+
+test("cancel of a run nobody holds is a 404", async () => {
+  const res = await app.request(
+    "/api/runs/wrun_01ZZZZZZZZZZZZZZZZZZZZZZZZ/cancel",
+    {
+      method: "POST",
+    },
+  );
+  expect(res.status).toBe(404);
+  expect(await res.json()).toEqual({ error: "not found" });
+});
+
+test("a pipeline's inputs route answers with its JSON Schema", async () => {
+  const res = await app.request("/api/pipelines/suspension-demo/inputs");
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as {
+    name: string;
+    inputs: { properties: Record<string, unknown>; required: string[] };
+  };
+  expect(body.name).toBe("suspension-demo");
+  expect(body.inputs.properties.issueId).toBeDefined();
+  expect(body.inputs.required).toEqual(["issueId"]);
+  // io: "input" — the defaulted field must not be demanded of the caller.
+  expect(body.inputs.required).not.toContain("askHuman");
+});
+
+test("an unknown pipeline's inputs route is a 404 naming the known pipelines", async () => {
+  const res = await app.request("/api/pipelines/nope/inputs");
+  expect(res.status).toBe(404);
+  const body = (await res.json()) as {
+    error: string;
+    knownPipelines: string[];
+  };
+  expect(body.error).toBe("unknown pipeline: nope");
+  expect(body.knownPipelines).toContain("suspension-demo");
+});
+
+test("GET /api/runs answers with empty runs and worktrees when nothing has launched", async () => {
+  vi.stubEnv("WORKFLOW_POSTGRES_URL", "");
+  const res = await app.request("/api/runs");
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ runs: [], worktrees: [] });
+});

@@ -2,6 +2,7 @@ import { type Context, Hono } from "hono";
 import { failedChecks } from "jigs/checks";
 import { getHookByToken, getRun, resumeHook, start } from "workflow/api";
 import { getWorld } from "workflow/runtime";
+import { z } from "zod";
 import {
   githubWebhookSecret,
   linearTimestampFresh,
@@ -11,6 +12,7 @@ import {
 } from "./ingress";
 import { doctor, preflight } from "./preflight";
 import { registry } from "./registry";
+import { listRuns, type RunRef, resolveRunRef } from "./runs";
 import {
   readSuspensionMetadata,
   type SuspensionRecord,
@@ -19,6 +21,17 @@ import {
   tokenFromGithubPayload,
   tokenFromLinearPayload,
 } from "./suspension/tokens";
+import {
+  connectRegistry,
+  listWorktrees,
+  type WorktreeRow,
+} from "./worktrees/registry";
+
+const TERMINAL_RUN_STATUSES: ReadonlySet<string> = new Set([
+  "completed",
+  "failed",
+  "cancelled",
+]);
 
 const app = new Hono();
 
@@ -32,18 +45,23 @@ app.get("/health", (c) =>
   }),
 );
 
+// The `inputs` contract the CLI validates `--input` against before it ever
+// calls the trigger. `io: "input"` is load-bearing: the default marks
+// `.default()`ed fields required, which would reject every valid launch.
+app.get("/api/pipelines/:name/inputs", (c) => {
+  const name = c.req.param("name");
+  const entry = registry[name];
+  if (!entry) return c.json(unknownPipeline(name), 404);
+  return c.json({
+    name,
+    inputs: z.toJSONSchema(entry.inputs, { io: "input" }),
+  });
+});
+
 app.post("/api/pipelines/:name/runs", async (c) => {
   const name = c.req.param("name");
   const entry = registry[name];
-  if (!entry) {
-    return c.json(
-      {
-        error: `unknown pipeline: ${name}`,
-        knownPipelines: Object.keys(registry),
-      },
-      404,
-    );
-  }
+  if (!entry) return c.json(unknownPipeline(name), 404);
 
   const body = await c.req
     .json<{ inputs?: unknown }>()
@@ -151,8 +169,9 @@ app.post("/ingress/linear", async (c) => {
 // Manual wake on the same code path as the ingress: resume every token the
 // run's suspensions are satisfied by. The fallback when a delivery was missed.
 app.post("/api/runs/:runId/poke", async (c) => {
-  const run = getRun(c.req.param("runId"));
-  if (!(await run.exists)) return c.json({ error: "not found" }, 404);
+  const ref = await resolveRunRef(c.req.param("runId"));
+  if (ref.kind !== "found") return c.json(refErrorBody(ref), refStatus(ref));
+  const run = getRun(ref.runId);
   const suspensions = await listSuspensions(run.runId);
   const tokens = [...new Set(suspensions.map((s) => s.satisfiedBy))];
   if (tokens.length === 0) {
@@ -170,9 +189,35 @@ app.post("/api/runs/:runId/poke", async (c) => {
   return c.json({ runId: run.runId, poked });
 });
 
+// Everything `jigs ps` renders: the SDK's runs overlaid with jigs' suspended
+// status, plus the worktree registry's own view of what is on disk.
+app.get("/api/runs", async (c) => {
+  const [runs, worktrees] = await Promise.all([listRuns(), readWorktrees()]);
+  return c.json({ runs, worktrees });
+});
+
+// The escape hatch for a zombie claim owner. Cancelling releases every hook
+// the run holds — the world deletes them on run_cancelled — so the tokens are
+// captured before the cancel, not after.
+app.post("/api/runs/:runId/cancel", async (c) => {
+  const ref = await resolveRunRef(c.req.param("runId"));
+  if (ref.kind !== "found") return c.json(refErrorBody(ref), refStatus(ref));
+  const run = getRun(ref.runId);
+  const status = await run.status;
+  if (TERMINAL_RUN_STATUSES.has(status)) {
+    return c.json({ error: `run is already ${status}`, status }, 409);
+  }
+  const suspensions = await listSuspensions(ref.runId);
+  const releasedTokens = [...new Set(suspensions.map((s) => s.satisfiedBy))];
+  await run.cancel();
+  // AGE-309 applies the teardown matrix to this run's worktrees here.
+  return c.json({ runId: ref.runId, cancelled: true, releasedTokens });
+});
+
 app.get("/api/runs/:runId", async (c) => {
-  const run = getRun(c.req.param("runId"));
-  if (!(await run.exists)) return c.json({ error: "not found" }, 404);
+  const ref = await resolveRunRef(c.req.param("runId"));
+  if (ref.kind !== "found") return c.json(refErrorBody(ref), refStatus(ref));
+  const run = getRun(ref.runId);
   const status = await run.status;
   const body: Record<string, unknown> = { runId: run.runId, status };
   if (status === "completed") body.returnValue = await run.returnValue;
@@ -187,6 +232,35 @@ app.get("/api/runs/:runId", async (c) => {
   if (status === "running") body.suspensions = await listSuspensions(run.runId);
   return c.json(body);
 });
+
+function unknownPipeline(name: string) {
+  return {
+    error: `unknown pipeline: ${name}`,
+    knownPipelines: Object.keys(registry),
+  };
+}
+
+function refErrorBody(ref: Exclude<RunRef, { kind: "found" }>) {
+  return ref.kind === "ambiguous"
+    ? { error: "ambiguous run ref", candidates: ref.candidates }
+    : { error: "not found" };
+}
+
+const refStatus = (ref: Exclude<RunRef, { kind: "found" }>) =>
+  ref.kind === "ambiguous" ? 409 : 404;
+
+// Connect-and-end per request, as the world plugin does: `ps` is
+// CLI-frequency, so a pooled connection would cost more concept than latency.
+async function readWorktrees(): Promise<WorktreeRow[]> {
+  const url = process.env.WORKFLOW_POSTGRES_URL;
+  if (url === undefined || url === "") return [];
+  const sql = connectRegistry(url);
+  try {
+    return await listWorktrees(sql);
+  } finally {
+    await sql.end();
+  }
+}
 
 // A signed but unparseable body is unroutable, like an unknown event type.
 function parseJson(rawBody: string): unknown {
