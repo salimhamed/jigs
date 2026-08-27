@@ -1,11 +1,14 @@
 import {
+  buildAgentWire,
   claude,
   type HarnessConfig,
   StructuredOutputUnsupportedError,
 } from "jigs/steps";
 import { expect, test } from "vitest";
+import { FatalError } from "workflow";
 import { z } from "zod";
-import { agent, ask, fn, parseOutput } from "./index";
+import { agent, ask, fn, parseOutput, runAgentStep } from "./index";
+import { JIT_FAILURE_PREFIX } from "./jit";
 
 // Module scope, like a real fn() step function — but without the directive:
 // the nitro workflow scan bundles any directive-bearing file into the server,
@@ -58,9 +61,38 @@ test("ask() rejects a harness descriptor carrying mcpServers before any step cal
     ask({
       harness: claude({
         model: "sonnet",
-        mcpServers: { probe: { command: "node" } },
+        mcpServers: { probe: { command: "node", probe: { tool: "ping" } } },
       }),
       prompt: "never runs",
     }),
   ).rejects.toThrow(/no MCP universe/);
+});
+
+test("an agent step whose declared MCP server cannot start throws a FatalError carrying the JIT prefix", async () => {
+  const wire = buildAgentWire({
+    harness: claude({
+      model: "sonnet",
+      mcpServers: {
+        linear: {
+          command: "definitely-not-a-binary",
+          probe: { tool: "get_probe_token" },
+        },
+      },
+    }),
+    cwd: "/work/tree",
+    prompt: "never reached — the JIT check fails first",
+  });
+
+  const failure = await runAgentStep(wire).then(
+    () => null,
+    (err: unknown) => err,
+  );
+
+  // FatalError skips the SDK's 3 retries, and only its raw message crosses
+  // the step boundary — so the halt text has to be in there.
+  expect(FatalError.is(failure)).toBe(true);
+  const message = (failure as Error).message;
+  expect(message.startsWith(JIT_FAILURE_PREFIX)).toBe(true);
+  expect(message).toContain("MCP server linear");
+  expect(message).toContain("→ fix the 'linear' server");
 });
