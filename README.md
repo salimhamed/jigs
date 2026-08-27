@@ -20,6 +20,8 @@ again, and `--force` skips its confirmation for a run still in flight. Logs
 themselves stay the SDK's: the verbs print
 `npx workflow web --backend @workflow/world-postgres <run>`, naming the world
 the service writes to; run it with `WORKFLOW_POSTGRES_URL` in your shell.
+Pipelines request worktrees and the runtime provisions and tears them down;
+`jigs sweep` reconciles what is on disk against the registry.
 
 ## Layout
 
