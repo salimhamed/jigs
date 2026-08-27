@@ -23,7 +23,14 @@ const mock = {
   viewer: { id: "bot-1" },
   comments: [],
   createdComments: [],
-  pr: { state: "open", merged: false, reviews: [] },
+  pr: {
+    state: "open",
+    merged: false,
+    headSha: "head-1",
+    reviews: [],
+    comments: [],
+    checkRuns: [],
+  },
 };
 
 const mockServer = createServer(async (req, res) => {
@@ -65,7 +72,15 @@ const mockServer = createServer(async (req, res) => {
   }
   if (req.method === "GET" && req.url?.startsWith("/github/repos/")) {
     if (req.url.includes("/reviews")) return json(mock.pr.reviews);
-    return json({ state: mock.pr.state, merged: mock.pr.merged });
+    if (req.url.includes("/check-runs")) {
+      return json({ check_runs: mock.pr.checkRuns });
+    }
+    if (req.url.includes("/comments")) return json(mock.pr.comments);
+    return json({
+      state: mock.pr.state,
+      merged: mock.pr.merged,
+      head: { sha: mock.pr.headSha },
+    });
   }
   res.writeHead(404);
   res.end();

@@ -63,7 +63,14 @@ export async function startLinearGithubStub() {
     creator: { id: "creator-1", name: "salim" },
     viewer: { id: "bot-1" },
     comments: [],
-    pr: { state: "open", merged: false, reviews: [] },
+    pr: {
+      state: "open",
+      merged: false,
+      headSha: "head-1",
+      reviews: [],
+      comments: [],
+      checkRuns: [],
+    },
   };
   const server = createServer(async (req, res) => {
     const json = (body) => {
@@ -88,7 +95,15 @@ export async function startLinearGithubStub() {
     }
     if (req.method === "GET" && req.url?.startsWith("/github/repos/")) {
       if (req.url.includes("/reviews")) return json(mock.pr.reviews);
-      return json({ state: mock.pr.state, merged: mock.pr.merged });
+      if (req.url.includes("/check-runs")) {
+        return json({ check_runs: mock.pr.checkRuns });
+      }
+      if (req.url.includes("/comments")) return json(mock.pr.comments);
+      return json({
+        state: mock.pr.state,
+        merged: mock.pr.merged,
+        head: { sha: mock.pr.headSha },
+      });
     }
     res.writeHead(404);
     res.end();
