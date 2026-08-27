@@ -5,8 +5,8 @@ import { parse } from "smol-toml";
 // The load-bearing JIT guard from ADR 0011: codex auto-trusts a writable cwd
 // (thread/start persists a trust record), and a worktree's .codex/config.toml
 // can declare mcp_servers even under the managed home. This callable check is
-// what makes deny-by-default hold; AGE-315 registers it into the check
-// catalog. A real TOML parse, not a regex — TOML admits too many spellings
+// what makes deny-by-default hold; it is registered in the check catalog as a
+// JIT check. A real TOML parse, not a regex — TOML admits too many spellings
 // and a false negative here defeats deny-by-default entirely.
 
 export type GuardResult =

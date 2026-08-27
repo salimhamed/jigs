@@ -60,7 +60,7 @@ test("ask() rejects a harness descriptor carrying mcpServers", () => {
     buildAskWire({
       harness: claude({
         model: "sonnet",
-        mcpServers: { probe: { command: "node" } },
+        mcpServers: { probe: { command: "node", probe: { tool: "ping" } } },
       }),
       prompt: "no universe for you",
     }),
@@ -71,7 +71,13 @@ test("every builder wire survives structuredClone — builders never inject live
   const agentWire = buildAgentWire({
     harness: codex({
       model: "gpt-5.5",
-      mcpServers: { probe: { command: "node", env: { TOKEN: "t" } } },
+      mcpServers: {
+        probe: {
+          command: "node",
+          env: { TOKEN: "t" },
+          probe: { tool: "ping" },
+        },
+      },
     }),
     cwd: "/work/tree",
     prompt: "implement it",

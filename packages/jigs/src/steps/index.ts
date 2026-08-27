@@ -6,6 +6,7 @@ export {
   type HarnessConfig,
   type HarnessOptions,
   type McpHttpServer,
+  type McpProbe,
   type McpServerConfig,
   type McpStdioServer,
   StructuredOutputUnsupportedError,

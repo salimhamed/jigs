@@ -89,8 +89,17 @@ test("claude agent step hydrates from wire config with the harness invariants fo
     harness: claude({
       model: "sonnet",
       mcpServers: {
-        probe: { command: "node", args: ["p.mjs"], env: { T: "1" } },
-        remote: { url: "https://mcp.example", headers: { a: "b" } },
+        probe: {
+          command: "node",
+          args: ["p.mjs"],
+          env: { T: "1" },
+          probe: { tool: "ping" },
+        },
+        remote: {
+          url: "https://mcp.example",
+          headers: { a: "b" },
+          probe: { tool: "ping" },
+        },
       },
     }),
     cwd: worktree,
@@ -119,7 +128,7 @@ test("codex agent step runs on the app-server under the managed home with fixed 
   const wire = buildAgentWire({
     harness: codex({
       model: "gpt-5.5",
-      mcpServers: { probe: { command: "node" } },
+      mcpServers: { probe: { command: "node", probe: { tool: "ping" } } },
     }),
     cwd: worktree,
     prompt: "implement it",

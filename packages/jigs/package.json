@@ -21,6 +21,10 @@
       "types": "./dist/harnesses/index.d.ts",
       "import": "./dist/harnesses/index.js"
     },
+    "./checks": {
+      "types": "./dist/checks/index.d.ts",
+      "import": "./dist/checks/index.js"
+    },
     "./steps": {
       "types": "./src/steps/index.ts",
       "default": "./src/steps/index.ts"
@@ -42,6 +46,7 @@
     "test:live": "vitest run --config vitest.live.config.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "ai": "^7.0.79",
     "ai-sdk-provider-claude-code": "4.1.1",
     "ai-sdk-provider-codex-cli": "2.1.2",
