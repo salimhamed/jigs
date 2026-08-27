@@ -5,10 +5,12 @@ import {
   assertCheckoutRoot,
   checkoutRoot,
   deriveDefaultBranch,
+  probeRemoteAuth,
   resolveRemoteUrl,
 } from "./git.ts";
 import {
   git,
+  makeRemoteBackedRepo,
   makeTargetRepo,
   makeTmpDir,
   removeTmpDir,
@@ -85,3 +87,17 @@ test("deriveDefaultBranch returns null when unset", async () => {
   const repo = makeTargetRepo(tmp);
   expect(await deriveDefaultBranch(repo)).toBeNull();
 });
+
+test("probeRemoteAuth returns null for a reachable remote and stderr for an unreachable one", async () => {
+  const { remoteDir } = makeRemoteBackedRepo(tmp);
+  expect(await probeRemoteAuth(remoteDir)).toBeNull();
+
+  // The regression guard for GIT_TERMINAL_PROMPT=0: an unreachable remote
+  // must fail inside the timeout, not hang on a credential prompt.
+  const stderr = await probeRemoteAuth(
+    path.join(tmp, "nonexistent.git"),
+    10_000,
+  );
+  expect(stderr).not.toBeNull();
+  expect(stderr).toContain("nonexistent.git");
+}, 20_000);
