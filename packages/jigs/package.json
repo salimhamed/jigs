@@ -44,7 +44,7 @@
   "scripts": {
     "dev": "node src/cli.ts",
     "build": "tsdown",
-    "gen:prompts": "node scripts/gen-prompts.ts",
+    "gen:prompts": "node scripts/gen-prompts.ts && biome check --write src/prompts/defaults.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",

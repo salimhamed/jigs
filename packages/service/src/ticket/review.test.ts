@@ -26,7 +26,6 @@ const snapshot: TicketSnapshot = {
   url: "https://linear.app/x/issue/AGE-313",
   branchName: "salimhamed/age-313-ticket-snapshot",
   state: "Todo",
-  creator: { id: "u1", name: "salim" },
   labels: ["ready-for-agent"],
   comments: [],
   blockedBy: [],

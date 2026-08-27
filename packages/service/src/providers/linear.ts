@@ -85,7 +85,6 @@ export interface RawIssueSnapshot {
   url: string;
   branchName: string;
   state: { name: string };
-  creator: LinearUser | null;
   labels: { nodes: Array<{ name: string }> };
   comments: { nodes: LinearComment[] };
   attachments: { nodes: Array<{ title: string; url: string }> };
@@ -95,8 +94,9 @@ export interface RawIssueSnapshot {
 }
 
 // The whole snapshot in one round trip, so every step in an activation reads
-// a copy taken at one instant. Unpaginated `last: 100` on comments is the
-// same accepted cap as listCommentsSince.
+// a copy taken at one instant. Unpaginated `last: 100` on comments is an
+// accepted cap: a ticket with more than 100 comments loses its oldest ones
+// from the reviewed copy.
 export async function fetchIssueSnapshot(
   issueId: string,
 ): Promise<RawIssueSnapshot> {
@@ -105,7 +105,6 @@ export async function fetchIssueSnapshot(
       issue(id: $id) {
         id identifier title description url branchName
         state { name }
-        creator { id name }
         labels { nodes { name } }
         comments(last: 100) { nodes { id body createdAt user { id name } } }
         attachments { nodes { title url } }

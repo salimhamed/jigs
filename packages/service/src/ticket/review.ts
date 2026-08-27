@@ -55,6 +55,8 @@ export interface TicketReviewOptions {
   snapshot: TicketSnapshot;
   harness: HarnessConfig;
   cwd: string;
+  // Interpolated with {{TICKET}} (the rendered snapshot), {{IDENTIFIER}} and
+  // {{TITLE}}; any other {{KEY}} is left verbatim.
   prompt?: string;
 }
 

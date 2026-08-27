@@ -2,7 +2,7 @@ import { claude } from "jigs/steps";
 import { z } from "zod";
 import { claimTicket } from "../src/suspension/claim";
 import { ticketReview } from "../src/ticket/review";
-import { ticketSnapshots } from "../src/ticket/snapshot";
+import { fetchSnapshot } from "../src/ticket/snapshot";
 
 export const ticketReviewDemoInputs = z.object({
   issueId: z.uuid(),
@@ -15,16 +15,15 @@ type TicketReviewDemoInputs = z.output<typeof ticketReviewDemoInputs> & {
 };
 
 // Ticket-review acceptance demo. The body — not the jig — owns the
-// per-activation snapshot: the refresh before the review is the launch-time
-// copy, and the refresh after a needs-human halt runs in the resume
+// per-activation snapshot: the fetch before the review is the launch-time
+// copy, and the fetch after a needs-human halt runs in the resume
 // activation, so its version carries the human's reply while version 1 stays
 // on the record.
 export async function ticketReviewDemoPipeline(inputs: TicketReviewDemoInputs) {
   "use workflow";
 
   const claim = await claimTicket(inputs.issueId);
-  const tickets = ticketSnapshots(inputs.issueId);
-  const snapshot = await tickets.refresh();
+  const snapshot = await fetchSnapshot(inputs.issueId, 1);
   console.log(
     `[ticket-review-demo] reviewing ${snapshot.identifier} branch=${snapshot.branchName}`,
   );
@@ -37,12 +36,12 @@ export async function ticketReviewDemoPipeline(inputs: TicketReviewDemoInputs) {
   });
 
   if (review.verdict === "needs-human") {
-    const resumed = await tickets.refresh();
+    const resumed = await fetchSnapshot(inputs.issueId, 2);
     return {
       verdict: review.verdict,
       findings: review.findings,
       brief: review.brief,
-      versions: tickets.versions.map((version) => version.version),
+      versions: [snapshot.version, resumed.version],
       resumedComments: resumed.comments.length,
     };
   }
@@ -51,6 +50,6 @@ export async function ticketReviewDemoPipeline(inputs: TicketReviewDemoInputs) {
     verdict: review.verdict,
     brief: review.brief,
     snapshot: review.snapshot,
-    versions: tickets.versions.map((version) => version.version),
+    versions: [snapshot.version],
   };
 }

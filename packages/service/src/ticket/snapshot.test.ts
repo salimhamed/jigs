@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { RawIssueSnapshot } from "../providers/linear";
-import { renderSnapshot, ticketSnapshots, toSnapshot } from "./snapshot";
+import { fetchSnapshot, renderSnapshot, toSnapshot } from "./snapshot";
 
 const fetchMock = vi.fn();
 
@@ -36,7 +36,6 @@ function rawIssue(overrides: Partial<RawIssueSnapshot> = {}): RawIssueSnapshot {
     url: "https://linear.app/x/issue/AGE-313",
     branchName: "salimhamed/age-313-ticket-snapshot",
     state: { name: "Todo" },
-    creator: { id: "u1", name: "salim" },
     labels: { nodes: [{ name: "ready-for-agent" }] },
     comments: { nodes: [comment("c1", "first pass looks right")] },
     attachments: { nodes: [{ title: "design doc", url: "https://doc.test" }] },
@@ -92,14 +91,13 @@ test("toSnapshot splits blocking relations, keeps links and sub-issues, and drop
   expect(snapshot.subIssues.map((ref) => ref.identifier)).toEqual(["AGE-400"]);
 });
 
-test("a null description and a null creator normalize rather than leak null into the prompt", () => {
+test("a null description normalizes rather than leaking null into the prompt", () => {
   const snapshot = toSnapshot(
-    rawIssue({ description: null, creator: null }),
+    rawIssue({ description: null }),
     1,
     "2026-08-26T13:00:00Z",
   );
   expect(snapshot.description).toBe("");
-  expect(snapshot.creator).toBeNull();
   expect(renderSnapshot(snapshot)).not.toContain("null");
 });
 
@@ -134,18 +132,11 @@ test("a refresh after a human comment adds a version carrying the reply and keep
     }),
   });
 
-  const tickets = ticketSnapshots("68bc9696-35d5-442d-ab56-214c8cfefbec");
-  const v1 = await tickets.refresh();
-  const v2 = await tickets.refresh();
+  const v1 = await fetchSnapshot("68bc9696-35d5-442d-ab56-214c8cfefbec", 1);
+  const v2 = await fetchSnapshot("68bc9696-35d5-442d-ab56-214c8cfefbec", 2);
 
   expect(v1.version).toBe(1);
   expect(v2.version).toBe(2);
   expect(v2.comments.map((c) => c.id)).toEqual(["c1", "c2"]);
   expect(v1.comments.map((c) => c.id)).toEqual(["c1"]);
-  expect(tickets.versions).toEqual([v1, v2]);
-  expect(tickets.latest()).toBe(v2);
-});
-
-test("latest() before any refresh names the issue rather than returning undefined", () => {
-  expect(() => ticketSnapshots("issue-uuid").latest()).toThrow("issue-uuid");
 });

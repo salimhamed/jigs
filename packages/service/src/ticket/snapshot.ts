@@ -38,7 +38,6 @@ export type TicketSnapshot = {
   url: string;
   branchName: string;
   state: string;
-  creator: { id: string; name: string } | null;
   labels: string[];
   comments: SnapshotComment[];
   blockedBy: TicketRef[];
@@ -62,7 +61,6 @@ export function toSnapshot(
     url: raw.url,
     branchName: raw.branchName,
     state: raw.state.name,
-    creator: raw.creator,
     labels: raw.labels.nodes.map((label) => label.name),
     comments: raw.comments.nodes.map((comment) => ({
       id: comment.id,
@@ -126,7 +124,12 @@ export function renderSnapshot(snapshot: TicketSnapshot): string {
   return `${lines.join("\n")}\n`;
 }
 
-async function fetchSnapshot(
+// Each fetch is its own memoized step record, so the World's step history *is*
+// the versioned audit trail — there is no jigs-owned snapshot store. On resume
+// the launch-time copy comes back from the record and the new fetch is
+// genuinely fresh, which is why a human's unblocking reply appears in the later
+// version without any special handling.
+export async function fetchSnapshot(
   issueId: string,
   version: number,
 ): Promise<TicketSnapshot> {
@@ -136,40 +139,4 @@ async function fetchSnapshot(
     `[snapshot] fetched issue=${issueId} identifier=${raw.identifier} version=${version}`,
   );
   return toSnapshot(raw, version, new Date().toISOString());
-}
-
-export interface TicketSnapshots {
-  versions: TicketSnapshot[];
-  refresh(): Promise<TicketSnapshot>;
-  latest(): TicketSnapshot;
-}
-
-/**
- * The versioned snapshot log for one ticket, held workflow-side.
- *
- * Each `refresh()` awaits one memoized step, so the World's step history *is*
- * the versioned audit trail — there is no jigs-owned snapshot store. A body
- * that suspends and refreshes again after the resume gets the launch-time
- * copy back from the record and a genuinely fresh copy for the new
- * activation, which is why a human's unblocking reply appears in the later
- * version without any special handling. The version number comes from the
- * array length rather than a clock, so replay stays deterministic.
- */
-export function ticketSnapshots(issueId: string): TicketSnapshots {
-  const versions: TicketSnapshot[] = [];
-  return {
-    versions,
-    async refresh() {
-      const snapshot = await fetchSnapshot(issueId, versions.length + 1);
-      versions.push(snapshot);
-      return snapshot;
-    },
-    latest() {
-      const snapshot = versions.at(-1);
-      if (snapshot === undefined) {
-        throw new Error(`no snapshot fetched yet for issue ${issueId}`);
-      }
-      return snapshot;
-    },
-  };
 }
