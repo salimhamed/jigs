@@ -2,6 +2,7 @@ import {
   createWorktree,
   decideReuse,
   type WorktreeFacts,
+  WorktreeOwnedError,
   worktreeStatus,
 } from "jigs";
 import type { Sql } from "postgres";
@@ -60,22 +61,29 @@ export async function acquireWorktree(
             ownerRunId: row.ownerRunId,
             ownerLive: await isLive(row.ownerRunId),
           };
+    // Refuse before touching disk: worktreeStatus fetches, and a foreign live
+    // owner should never surface as a network error or pay for the fetch.
+    if (registration?.ownerLive && registration.ownerRunId !== request.runId) {
+      throw new WorktreeOwnedError(
+        request.worktreePath,
+        registration.ownerRunId,
+      );
+    }
+
     const disk = await status({
       checkoutRoot: request.checkoutRoot,
       worktreePath: request.worktreePath,
       branch: request.branch,
     });
-    const decision = decideReuse({
+    decideReuse({
       path: request.worktreePath,
       registration,
       requestingRunId: request.runId,
       disk,
     });
 
-    // decideReuse returns "create" only when disk is null; the second arm of
-    // the condition is for narrowing.
     const facts: WorktreeFacts =
-      decision === "create" || disk === null
+      disk === null
         ? await create({
             checkoutRoot: request.checkoutRoot,
             worktreePath: request.worktreePath,

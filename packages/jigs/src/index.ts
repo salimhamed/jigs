@@ -8,7 +8,6 @@ export {
   createWorktree,
   type WorktreeFacts,
   type WorktreeStatus,
-  type WorktreeStatusOptions,
   worktreeStatus,
 } from "./worktrees/create.ts";
 export {

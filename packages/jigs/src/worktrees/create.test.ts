@@ -119,6 +119,25 @@ test("git operations survive the orchestrator's cwd being a removed worktree", a
   }
 });
 
+test("a worktree deleted without pruning can be recreated at the same path", async () => {
+  const { checkout } = makeRemoteBackedRepo(tmp);
+  const wt = wtPath("reborn");
+  await createWorktree({
+    checkoutRoot: checkout,
+    worktreePath: wt,
+    branch: "agent/reborn",
+  });
+  rmSync(wt, { recursive: true, force: true });
+
+  const facts = await createWorktree({
+    checkoutRoot: checkout,
+    worktreePath: wt,
+    branch: "agent/reborn",
+  });
+  expect(facts.resolution).toBe("local");
+  expect(git(wt, "rev-parse", "--abbrev-ref", "HEAD")).toBe("agent/reborn");
+});
+
 test("worktreeStatus reports a missing directory as null", async () => {
   const { checkout } = makeRemoteBackedRepo(tmp);
   const status = await worktreeStatus({

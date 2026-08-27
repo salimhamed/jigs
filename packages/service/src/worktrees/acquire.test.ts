@@ -90,6 +90,19 @@ test("a worktree registered to a live run is refused, naming the owner", async (
   expect(store.get(request.worktreePath)?.ownerRunId).toBe("run_owner");
 });
 
+test("a live foreign owner is refused before disk is ever inspected", async () => {
+  const store = new Map([[request.worktreePath, registeredRow("run_owner")]]);
+  await expect(
+    acquireWorktree(request, {
+      sql: makeFakeSql(store),
+      runIsLive: async () => true,
+      worktreeStatus: async () => {
+        throw new Error("worktreeStatus must not run for an owned worktree");
+      },
+    }),
+  ).rejects.toThrow(WorktreeOwnedError);
+});
+
 test("a terminal owner's clean worktree is reused and re-owned", async () => {
   const store = new Map([[request.worktreePath, registeredRow("run_done")]]);
   const facts = await acquireWorktree(request, {

@@ -20,9 +20,7 @@ export interface WorktreeFacts {
   behindDefault: number;
 }
 
-export async function resolveDefaultBranch(
-  checkoutRoot: string,
-): Promise<string> {
+async function resolveDefaultBranch(checkoutRoot: string): Promise<string> {
   let branch = await deriveDefaultBranch(checkoutRoot);
   if (branch === null) {
     await tryGit(["remote", "set-head", "origin", "--auto"], checkoutRoot);
@@ -39,7 +37,7 @@ export async function resolveDefaultBranch(
 
 // The freshness gate is fetch, never pull: the human checkout's local default
 // branch stays untouched, and new branches fork from origin/<default>.
-export async function fetchFreshness(
+async function fetchFreshness(
   checkoutRoot: string,
   defaultBranch: string,
   branch: string,
@@ -68,6 +66,10 @@ export async function createWorktree(
     checkoutRoot,
   );
   mkdirSync(path.dirname(worktreePath), { recursive: true });
+  // A worktree directory deleted without pruning leaves an admin entry that
+  // makes `worktree add` at the same path fail; prune only clears entries for
+  // missing, unlocked worktrees, so it is safe here.
+  await tryGit(["worktree", "prune"], checkoutRoot);
 
   const localRef = await tryGit(
     ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`],
@@ -133,12 +135,6 @@ export async function createWorktree(
   };
 }
 
-export interface WorktreeStatusOptions {
-  checkoutRoot: string;
-  worktreePath: string;
-  branch: string;
-}
-
 export interface WorktreeStatus {
   branchMatches: boolean;
   clean: boolean;
@@ -150,7 +146,7 @@ export interface WorktreeStatus {
 }
 
 export async function worktreeStatus(
-  options: WorktreeStatusOptions,
+  options: CreateWorktreeOptions,
 ): Promise<WorktreeStatus | null> {
   const { checkoutRoot, worktreePath, branch } = options;
   const toplevel = await tryGit(["rev-parse", "--show-toplevel"], worktreePath);
