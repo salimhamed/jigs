@@ -1,8 +1,9 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   closeSync,
   mkdirSync,
   openSync,
+  readFileSync,
   rmSync,
   statSync,
   writeSync,
@@ -40,14 +41,17 @@ export function checkoutLockPath(checkoutRoot: string, kind: string): string {
   );
 }
 
-function tryAcquire(lockPath: string): boolean {
+// The token is what makes the release safe: a holder that overran staleMs has
+// already been taken over, and must not delete its successor's lock file.
+function tryAcquire(lockPath: string): string | null {
+  const token = randomUUID();
   try {
     const fd = openSync(lockPath, "wx");
-    writeSync(fd, `${process.pid}\n${Date.now()}\n`);
+    writeSync(fd, `${token}\n`);
     closeSync(fd);
-    return true;
+    return token;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -65,23 +69,33 @@ export async function withFileLock<T>(
   mkdirSync(path.dirname(lockPath), { recursive: true });
 
   const deadline = Date.now() + timeoutMs;
-  while (!tryAcquire(lockPath)) {
+  let token = tryAcquire(lockPath);
+  while (token === null) {
     if (Date.now() > deadline) throw new LockTimeoutError(lockPath, timeoutMs);
     // A holder that crashed leaves the file behind forever; mtime age is the
     // only evidence available without a liveness protocol.
+    let stale = false;
     try {
-      if (Date.now() - statSync(lockPath).mtimeMs > staleMs) {
-        rmSync(lockPath, { force: true });
-        continue;
-      }
+      stale = Date.now() - statSync(lockPath).mtimeMs > staleMs;
     } catch {
       // released between the failed acquire and the stat — just retry
     }
-    await sleep(pollMs);
+    if (stale) rmSync(lockPath, { force: true });
+    else await sleep(pollMs);
+    token = tryAcquire(lockPath);
   }
   try {
     return await fn();
   } finally {
-    rmSync(lockPath, { force: true });
+    release(lockPath, token);
   }
+}
+
+function release(lockPath: string, token: string): void {
+  try {
+    if (readFileSync(lockPath, "utf8").trim() !== token) return;
+  } catch {
+    return;
+  }
+  rmSync(lockPath, { force: true });
 }

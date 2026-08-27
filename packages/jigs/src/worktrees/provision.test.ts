@@ -91,22 +91,22 @@ test("an existing destination is never overwritten", async () => {
 
 test(".jigs.yml self-copies into the worktree", async () => {
   inCheckout(".jigs.yml", "worktree:\n  copy: []\n");
-  const result = await provisionWorktree({
+  await provisionWorktree({
     checkoutRoot: checkout,
     worktreePath: worktree,
     config: config(),
   });
-  expect(result.copied).toContain(".jigs.yml");
   expect(read(".jigs.yml")).toBe("worktree:\n  copy: []\n");
 });
 
 test("a pattern matching nothing is not an error", async () => {
-  const result = await provisionWorktree({
-    checkoutRoot: checkout,
-    worktreePath: worktree,
-    config: config({ copy: ["never-exists-*"] }),
-  });
-  expect(result.copied).toEqual([]);
+  await expect(
+    provisionWorktree({
+      checkoutRoot: checkout,
+      worktreePath: worktree,
+      config: config({ copy: ["never-exists-*"] }),
+    }),
+  ).resolves.toBeUndefined();
 });
 
 test("a failing post_create command rejects with the command and exit code", async () => {
@@ -156,6 +156,16 @@ test("a post_create command reading stdin sees EOF instead of hanging", async ()
     config: config({ post_create: ["cat > stdin.txt"] }),
   });
   expect(read("stdin.txt")).toBe("");
+});
+
+test("a post_create command that backgrounds a process does not hold the request", async () => {
+  const started = Date.now();
+  await provisionWorktree({
+    checkoutRoot: checkout,
+    worktreePath: worktree,
+    config: config({ post_create: ["sh -c 'sleep 30 &'"] }),
+  });
+  expect(Date.now() - started).toBeLessThan(2_000);
 });
 
 test("the hook timeout is a single budget across commands", async () => {

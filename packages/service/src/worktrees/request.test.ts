@@ -148,7 +148,7 @@ test("a failing post_create leaves the row marked provision-failed and rethrows"
 test("a successful request registers the worktree as active", async () => {
   await provisionRequest(
     { runId: "run_a", binding: "api", branch: "feat", keep: true },
-    deps({ provision: async () => ({ copied: [] }) }),
+    deps({ provision: async () => {} }),
   );
   const row = store.get(path.join(workspace, "feat"));
   expect(row).toMatchObject({
@@ -164,7 +164,7 @@ test("the fast-forward notice is logged, never thrown", async () => {
   await provisionRequest(
     { runId: "run_a", binding: "api", branch: "feat" },
     deps({
-      provision: async () => ({ copied: [] }),
+      provision: async () => {},
       fastForward: async () => ({ moved: false, skipped: "dirty" as const }),
       log: (line: string) => lines.push(line),
     }),

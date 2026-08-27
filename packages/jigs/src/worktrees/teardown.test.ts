@@ -12,13 +12,11 @@ import {
   decideTeardown,
   isBranchMerged,
   isWorktreeDirty,
-  type RunOutcome,
 } from "./teardown.ts";
 
 test("done (merged) removes the worktree and deletes both branches", () => {
   expect(
     decideTeardown({
-      outcome: "completed",
       keep: false,
       dirty: false,
       merged: true,
@@ -32,28 +30,9 @@ test("done (merged) removes the worktree and deletes both branches", () => {
   });
 });
 
-test("completed but not merged keeps both branches", () => {
+test("an unmerged clean tree removes the worktree and keeps the branches", () => {
   expect(
     decideTeardown({
-      outcome: "completed",
-      keep: false,
-      dirty: false,
-      merged: false,
-    }),
-  ).toEqual(
-    decideTeardown({
-      outcome: "failed",
-      keep: false,
-      dirty: false,
-      merged: false,
-    }),
-  );
-});
-
-test("a failed run with a clean tree removes the worktree and keeps the branches", () => {
-  expect(
-    decideTeardown({
-      outcome: "failed",
       keep: false,
       dirty: false,
       merged: false,
@@ -67,27 +46,9 @@ test("a failed run with a clean tree removes the worktree and keeps the branches
   });
 });
 
-test("a cancelled run with a clean tree removes the worktree and keeps the branches", () => {
+test("an unmerged dirty tree is preserved as abandoned-dirty", () => {
   expect(
     decideTeardown({
-      outcome: "cancelled",
-      keep: false,
-      dirty: false,
-      merged: false,
-    }),
-  ).toEqual({
-    removeWorktree: true,
-    force: false,
-    deleteLocalBranch: false,
-    deleteRemoteBranch: false,
-    preserve: null,
-  });
-});
-
-test("a failed run with a dirty tree preserves it as abandoned-dirty", () => {
-  expect(
-    decideTeardown({
-      outcome: "failed",
       keep: false,
       dirty: true,
       merged: false,
@@ -101,68 +62,10 @@ test("a failed run with a dirty tree preserves it as abandoned-dirty", () => {
   });
 });
 
-test("a cancelled run with a dirty tree preserves it as abandoned-dirty", () => {
-  expect(
-    decideTeardown({
-      outcome: "cancelled",
-      keep: false,
-      dirty: true,
-      merged: false,
-    }),
-  ).toEqual({
-    removeWorktree: false,
-    force: false,
-    deleteLocalBranch: false,
-    deleteRemoteBranch: false,
-    preserve: "abandoned-dirty",
-  });
-});
-
-test("an owner whose outcome is unknown is treated as a failed run", () => {
-  expect(
-    decideTeardown({
-      outcome: "unknown",
-      keep: false,
-      dirty: false,
-      merged: false,
-    }),
-  ).toEqual(
-    decideTeardown({
-      outcome: "failed",
-      keep: false,
-      dirty: false,
-      merged: false,
-    }),
-  );
-  expect(
-    decideTeardown({
-      outcome: "unknown",
-      keep: false,
-      dirty: true,
-      merged: false,
-    }),
-  ).toEqual(
-    decideTeardown({
-      outcome: "failed",
-      keep: false,
-      dirty: true,
-      merged: false,
-    }),
-  );
-});
-
-test("keep: true wins over every outcome", () => {
-  const outcomes: RunOutcome[] = [
-    "completed",
-    "failed",
-    "cancelled",
-    "unknown",
-  ];
-  for (const outcome of outcomes) {
-    for (const dirty of [false, true]) {
-      expect(
-        decideTeardown({ outcome, keep: true, dirty, merged: true }),
-      ).toEqual({
+test("keep: true wins over every row", () => {
+  for (const dirty of [false, true]) {
+    for (const merged of [false, true]) {
+      expect(decideTeardown({ keep: true, dirty, merged })).toEqual({
         removeWorktree: false,
         force: false,
         deleteLocalBranch: false,
@@ -207,7 +110,6 @@ test("done (merged) removes the worktree and deletes the local and remote branch
   writeFileSync(path.join(worktree, "build.log"), "noise\n");
   await applyTeardown(
     decideTeardown({
-      outcome: "completed",
       keep: false,
       dirty: false,
       merged: true,
@@ -224,7 +126,6 @@ test("the remote delete is idempotent when GitHub already deleted the branch on 
   await expect(
     applyTeardown(
       decideTeardown({
-        outcome: "completed",
         keep: false,
         dirty: false,
         merged: true,
@@ -239,7 +140,6 @@ test("the remote delete is idempotent when GitHub already deleted the branch on 
 test("a failed run with a clean tree keeps both branches as insurance", async () => {
   await applyTeardown(
     decideTeardown({
-      outcome: "failed",
       keep: false,
       dirty: false,
       merged: false,
@@ -256,7 +156,6 @@ test("a failed run with a dirty tree preserves the worktree untouched and never 
   const head = git(worktree, "rev-parse", "HEAD");
   await applyTeardown(
     decideTeardown({
-      outcome: "failed",
       keep: false,
       dirty: true,
       merged: false,
@@ -271,7 +170,6 @@ test("a failed run with a dirty tree preserves the worktree untouched and never 
 test("keep: true leaves the worktree and branches alone", async () => {
   await applyTeardown(
     decideTeardown({
-      outcome: "completed",
       keep: true,
       dirty: false,
       merged: true,
@@ -286,7 +184,6 @@ test("keep: true leaves the worktree and branches alone", async () => {
 test("removing a worktree prunes the admin entry so the same path can be re-added", async () => {
   await applyTeardown(
     decideTeardown({
-      outcome: "failed",
       keep: false,
       dirty: false,
       merged: false,

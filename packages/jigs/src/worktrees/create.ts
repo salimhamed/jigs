@@ -135,6 +135,23 @@ export async function createWorktree(
   };
 }
 
+// What git itself considers a worktree of this checkout, so a sweep of a
+// workspace_dir binding can tell its own trees from the operator's other
+// directories. Paths are git's physical toplevels.
+export async function listWorktreePaths(
+  checkoutRoot: string,
+): Promise<string[]> {
+  const listing = await tryGit(
+    ["worktree", "list", "--porcelain"],
+    checkoutRoot,
+  );
+  if (listing === null) return [];
+  return listing
+    .split("\n")
+    .filter((line) => line.startsWith("worktree "))
+    .map((line) => line.slice("worktree ".length));
+}
+
 export interface WorktreeStatus {
   branchMatches: boolean;
   clean: boolean;

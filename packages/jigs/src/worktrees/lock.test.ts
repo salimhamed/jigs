@@ -53,6 +53,22 @@ test("a stale lock older than staleMs is taken over", async () => {
   ).resolves.toBe("ran");
 });
 
+test("a holder that was taken over as stale does not release its successor", async () => {
+  const overrun = withFileLock(lockPath, () => sleep(300));
+  await sleep(80);
+  await withFileLock(
+    lockPath,
+    async () => {
+      // The overrun holder has now run its release: the successor's lock file
+      // is not its to delete.
+      await overrun;
+      expect(existsSync(lockPath)).toBe(true);
+    },
+    { staleMs: 50, pollMs: 10, timeoutMs: 2_000 },
+  );
+  expect(existsSync(lockPath)).toBe(false);
+});
+
 test("the lock file is removed even when the body throws", async () => {
   await expect(
     withFileLock(lockPath, async () => {

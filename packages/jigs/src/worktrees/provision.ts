@@ -42,19 +42,18 @@ function tail(text: string): string {
   return text.trimEnd().split("\n").slice(-STDERR_TAIL_LINES).join("\n");
 }
 
-function copyOne(src: string, dest: string): boolean {
-  if (existsSync(dest)) return false;
+function copyOne(src: string, dest: string): void {
+  if (existsSync(dest)) return;
   mkdirSync(path.dirname(dest), { recursive: true });
   // recursive covers the directory match: the whole tree lands at once.
   cpSync(src, dest, { recursive: true });
-  return true;
 }
 
 function copyPatterns(
   checkoutRoot: string,
   worktreePath: string,
   patterns: string[],
-): string[] {
+): void {
   // dot:true is load-bearing — the point of `copy` is .env-class files, and
   // most globbers skip dotfiles by default. expandDirectories:false keeps a
   // directory a single match instead of its flattened contents.
@@ -64,14 +63,12 @@ function copyPatterns(
     onlyFiles: false,
     expandDirectories: false,
   });
-  const copied: string[] = [];
   for (const match of matches) {
     const relative = match.replace(/\/+$/, "");
     if (relative === "") continue;
     const src = path.join(checkoutRoot, relative);
-    if (copyOne(src, path.join(worktreePath, relative))) copied.push(relative);
+    copyOne(src, path.join(worktreePath, relative));
   }
-  return copied;
 }
 
 async function runCommand(
@@ -99,7 +96,10 @@ async function runCommand(
     child.on("error", (err) =>
       reject(new PostCreateFailedError(command, null, null, String(err))),
     );
-    child.on("close", (code, signal) => {
+    // exit, not close: close waits for the stdio pipes, which a hook that
+    // backgrounds a long-lived process keeps open long after sh itself is
+    // gone — and the spawn timeout no longer applies to that wait.
+    child.on("exit", (code, signal) => {
       if (code === 0) return resolve();
       reject(new PostCreateFailedError(command, code, signal, tail(stderr)));
     });
@@ -129,28 +129,20 @@ export interface ProvisionWorktreeOptions {
   config: TargetWorktreeConfig;
 }
 
-export interface ProvisionResult {
-  copied: string[];
-}
-
 export async function provisionWorktree(
   options: ProvisionWorktreeOptions,
-): Promise<ProvisionResult> {
+): Promise<void> {
   const { checkoutRoot, worktreePath, config } = options;
-  const copied = copyPatterns(checkoutRoot, worktreePath, config.copy);
+  copyPatterns(checkoutRoot, worktreePath, config.copy);
   // The file self-copies: it is gitignored in plenty of target repos, and the
   // worktree should describe itself the same way the checkout does.
   const selfSource = path.join(checkoutRoot, TARGET_CONFIG_FILE);
-  if (
-    existsSync(selfSource) &&
-    copyOne(selfSource, path.join(worktreePath, TARGET_CONFIG_FILE))
-  ) {
-    copied.push(TARGET_CONFIG_FILE);
+  if (existsSync(selfSource)) {
+    copyOne(selfSource, path.join(worktreePath, TARGET_CONFIG_FILE));
   }
   await runPostCreate(
     worktreePath,
     config.post_create,
     config.hook_timeout_minutes,
   );
-  return { copied };
 }

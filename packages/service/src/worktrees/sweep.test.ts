@@ -11,8 +11,9 @@ import path from "node:path";
 import type { ResolvedBinding } from "jigs";
 import type { Sql } from "postgres";
 import { afterEach, beforeEach, expect, test } from "vitest";
+import type { OwnerState } from "./acquire";
 import type { WorktreeRow } from "./registry";
-import { type OwnerState, sweepWorktrees } from "./sweep";
+import { sweepWorktrees } from "./sweep";
 
 // Real git worktrees on disk against a faked registry: the classifier and the
 // teardown matrix are already covered in jigs, so what this file proves is the
@@ -232,6 +233,16 @@ test("an unregistered directory is listed and only deleted with --clean", async 
   expect(existsSync(loose)).toBe(false);
 });
 
+test("a directory that is not a worktree at all is never listed or deleted", async () => {
+  const notes = path.join(workspace, "human-notes");
+  mkdirSync(notes, { recursive: true });
+  writeFileSync(path.join(notes, "todo.md"), "# not yours\n");
+
+  const report = await sweepWorktrees({ clean: true }, deps());
+  expect(report.entries).toEqual([]);
+  expect(existsSync(path.join(notes, "todo.md"))).toBe(true);
+});
+
 test("the unattended pass leaves unregistered directories alone", async () => {
   const loose = addWorktree("loose");
 
@@ -277,6 +288,34 @@ test("a completed owner's teardown deletes the row and fast-forwards the default
   expect(ffCalls).toEqual([checkout]);
   expect(store.size).toBe(0);
   // done (merged): the local branch goes with the worktree.
+  expect(() =>
+    git(checkout, "rev-parse", "--verify", "refs/heads/done"),
+  ).toThrow();
+});
+
+test("the merge check sees work pushed since the checkout last fetched", async () => {
+  const done = addWorktree("done");
+  writeFileSync(path.join(done, "shipped.txt"), "shipped\n");
+  git(done, "add", "shipped.txt");
+  git(done, "commit", "-q", "-m", "shipped");
+  // The merge lands from elsewhere — a PR merged on GitHub — so rewind the
+  // tracking ref the push moved: nothing local knows about it yet.
+  const stale = git(checkout, "rev-parse", "refs/remotes/origin/main");
+  git(done, "push", "-q", "origin", "done:main");
+  git(checkout, "update-ref", "refs/remotes/origin/main", stale);
+  register(done, "done");
+  await sweepWorktrees(
+    { clean: true },
+    deps({
+      readOwner: owners({ run_done: { terminal: true, status: "completed" } }),
+      // The fast-forward is the only fetch in the pass, so it has to run
+      // before the merge is decided.
+      fastForward: async ({ checkoutRoot }: { checkoutRoot: string }) => {
+        git(checkoutRoot, "fetch", "-q", "origin");
+        return { moved: false, skipped: "already-current" as const };
+      },
+    }),
+  );
   expect(() =>
     git(checkout, "rev-parse", "--verify", "refs/heads/done"),
   ).toThrow();

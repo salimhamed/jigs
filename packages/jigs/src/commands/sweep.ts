@@ -1,13 +1,9 @@
 import { CliError } from "../errors.ts";
 import type { SweepEntry } from "../worktrees/sweep.ts";
+import { type ServiceDeps, serviceFetch } from "./service.ts";
 
 // An HTTP client of the service (ADR 0008): the registry and the run states
 // the sweep joins against live in the service's process, not the shell's.
-
-export interface SweepDeps {
-  out: (line: string) => void;
-  serviceUrl: string;
-}
 
 export interface SweepOptions {
   clean?: boolean;
@@ -21,7 +17,7 @@ export interface SweepResult {
 }
 
 export async function sweepWorktrees(
-  deps: SweepDeps,
+  deps: ServiceDeps,
   options: SweepOptions = {},
 ): Promise<SweepResult> {
   const clean = options.clean === true;
@@ -32,20 +28,11 @@ export async function sweepWorktrees(
       "add --clean to delete, or drop --force to report",
     );
   }
-  const base = deps.serviceUrl.replace(/\/+$/, "");
-  let res: Response;
-  try {
-    res = await fetch(`${base}/api/worktrees/sweep`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ clean, force }),
-    });
-  } catch {
-    throw new CliError(
-      `could not reach the jigs service at ${base}`,
-      "is the jigs service running? pass --service or set JIGS_SERVICE_URL",
-    );
-  }
+  const res = await serviceFetch(deps.serviceUrl, "/api/worktrees/sweep", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ clean, force }),
+  });
   if (!res.ok) {
     throw new CliError(`sweep failed: HTTP ${res.status} ${await res.text()}`);
   }

@@ -39,6 +39,7 @@ export {
   type BranchResolution,
   type CreateWorktreeOptions,
   createWorktree,
+  listWorktreePaths,
   type WorktreeFacts,
   type WorktreeStatus,
   worktreeStatus,
@@ -57,7 +58,6 @@ export {
 } from "./worktrees/layout.ts";
 export {
   PostCreateFailedError,
-  type ProvisionResult,
   type ProvisionWorktreeOptions,
   provisionWorktree,
 } from "./worktrees/provision.ts";
@@ -81,7 +81,6 @@ export {
   decideTeardown,
   isBranchMerged,
   isWorktreeDirty,
-  type RunOutcome,
   type TeardownDecision,
   type TeardownPlan,
 } from "./worktrees/teardown.ts";

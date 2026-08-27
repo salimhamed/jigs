@@ -4,8 +4,6 @@ import { deriveDefaultBranch, tryGit } from "../git.ts";
 // execution so every row is a table test. Teardown is runtime-owned: authors
 // never write cleanup, because an author `finally` would fire on suspension.
 
-export type RunOutcome = "completed" | "failed" | "cancelled" | "unknown";
-
 export interface TeardownPlan {
   removeWorktree: boolean;
   force: boolean;
@@ -15,7 +13,6 @@ export interface TeardownPlan {
 }
 
 export interface TeardownDecision {
-  outcome: RunOutcome;
   keep: boolean;
   dirty: boolean;
   merged: boolean;
@@ -33,7 +30,7 @@ export function decideTeardown(decision: TeardownDecision): TeardownPlan {
   if (decision.keep) return { ...KEEP_EVERYTHING };
   // "Done" is the merged row, not merely the finished one: a run that
   // completed without merging still holds the only copy of its work.
-  if (decision.outcome === "completed" && decision.merged) {
+  if (decision.merged) {
     // Forced: a finished worktree normally holds untracked build output that
     // plain `worktree remove` refuses, and the work itself is already merged.
     return {

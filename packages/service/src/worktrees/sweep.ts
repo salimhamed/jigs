@@ -1,4 +1,10 @@
-import { existsSync, readdirSync, rmdirSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  readdirSync,
+  realpathSync,
+  rmdirSync,
+  rmSync,
+} from "node:fs";
 import path from "node:path";
 import {
   applyTeardown,
@@ -8,15 +14,15 @@ import {
   fastForwardDefaultBranch,
   isBranchMerged,
   isWorktreeDirty,
+  listWorktreePaths,
   type ResolvedBinding,
-  type RunOutcome,
   removeManagedCodexHome,
   resolveBindings,
   type SweepEntry,
   worktreeParentDir,
 } from "jigs";
 import type { Sql } from "postgres";
-import { getRun } from "workflow/api";
+import { type OwnerState, readOwner } from "./acquire";
 import { deleteWorktree, listWorktrees, setWorktreeState } from "./registry";
 import { factoryRoot } from "./request";
 
@@ -25,26 +31,6 @@ import { factoryRoot } from "./request";
 // callback, and a workflow-body `finally` fires on every suspension because
 // WorkflowSuspension is a thrown Error — so a terminal-state join is the only
 // honest trigger, and the teardown matrix falls out of the classifier.
-
-const TERMINAL_RUN_STATUSES: ReadonlySet<string> = new Set([
-  "completed",
-  "failed",
-  "cancelled",
-]);
-
-export interface OwnerState {
-  terminal: boolean;
-  status: string;
-}
-
-// A run the world no longer knows about is as terminal as one that finished:
-// nothing will ever come back for its worktree.
-async function readOwner(runId: string): Promise<OwnerState> {
-  const run = getRun(runId);
-  if (!(await run.exists)) return { terminal: true, status: "unknown" };
-  const status = await run.status;
-  return { terminal: TERMINAL_RUN_STATUSES.has(status), status };
-}
 
 // Remove the tree, keep both branches: what a discard with no merge behind it
 // looks like, whether the tree was dirty, unregistered, or half-provisioned.
@@ -55,13 +41,6 @@ const DISCARD_TREE = {
   deleteRemoteBranch: false,
   preserve: null,
 } as const;
-
-export function statusToOutcome(status: string): RunOutcome {
-  if (status === "completed" || status === "failed" || status === "cancelled") {
-    return status;
-  }
-  return "unknown";
-}
 
 export interface SweepOptions {
   clean?: boolean;
@@ -134,10 +113,20 @@ export async function sweepWorktrees(
   }
   const unregisteredCheckouts = new Map<string, string>();
   if (options.includeUnregistered !== false) {
+    const known = new Map<string, Set<string>>();
+    for (const binding of parents.values()) {
+      if (known.has(binding.checkoutRoot)) continue;
+      const paths = await listWorktreePaths(binding.checkoutRoot);
+      known.set(binding.checkoutRoot, new Set(paths.map(physicalPath)));
+    }
     for (const [parent, binding] of parents) {
       for (const name of readDirs(parent)) {
         const dir = path.join(parent, name);
         if (byPath.has(dir)) continue;
+        // A workspace_dir binding points at the operator's own directory,
+        // whose other contents are none of the sweep's business: only what
+        // git calls a worktree of this checkout is an orphan.
+        if (!known.get(binding.checkoutRoot)?.has(physicalPath(dir))) continue;
         unregisteredCheckouts.set(dir, binding.checkoutRoot);
         entries.push(
           classifySweep({
@@ -161,6 +150,7 @@ export async function sweepWorktrees(
   const removed: string[] = [];
   if (!clean) return { entries, removed, removedDirs: [] };
 
+  const fastForwarded = new Set<string>();
   for (const entry of entries) {
     if (!entry.eligible) continue;
     const row = byPath.get(entry.path);
@@ -170,13 +160,23 @@ export async function sweepWorktrees(
       row === undefined
         ? "unknown"
         : (owners.get(row.ownerRunId)?.status ?? "unknown");
-    const outcome = statusToOutcome(status);
+    // The post-merge half of the fast-forward requirement, and it runs first:
+    // whether the branch merged is read off refs/remotes/origin/<default>,
+    // which nothing but this fetch refreshes.
+    if (
+      status === "completed" &&
+      checkoutRoot !== "" &&
+      !fastForwarded.has(checkoutRoot)
+    ) {
+      fastForwarded.add(checkoutRoot);
+      const result = await ff({ checkoutRoot, enabled: true });
+      log(`[sweep] ${describeFf(checkoutRoot, result)}`);
+    }
     let plan = decideTeardown({
-      outcome,
       keep: row?.keep === true,
       dirty: entry.state === "abandoned-dirty",
       merged:
-        outcome === "completed" &&
+        status === "completed" &&
         checkoutRoot !== "" &&
         (await isBranchMerged(checkoutRoot, entry.branch)),
     });
@@ -209,12 +209,6 @@ export async function sweepWorktrees(
     }
     if (row !== undefined) await deleteWorktree(deps.sql, entry.path);
     removed.push(entry.path);
-
-    // The post-merge half of the fast-forward requirement.
-    if (status === "completed" && checkoutRoot !== "") {
-      const result = await ff({ checkoutRoot, enabled: true });
-      log(`[sweep] ${describeFf(checkoutRoot, result)}`);
-    }
   }
 
   const removedDirs = removeEmptyWorkspaceDirs(parents.keys());
@@ -258,6 +252,16 @@ function parentDirFor(binding: ResolvedBinding, deps: SweepDeps): string {
     factoryRoot: (deps.factoryRoot ?? factoryRoot)(),
     bindingName: binding.name,
   });
+}
+
+// git reports physical toplevels, so a symlinked component has to be resolved
+// on both sides before the paths can be compared.
+function physicalPath(dir: string): string {
+  try {
+    return realpathSync(path.resolve(dir));
+  } catch {
+    return path.resolve(dir);
+  }
 }
 
 function readDirs(dir: string): string[] {
