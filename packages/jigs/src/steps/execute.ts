@@ -50,6 +50,9 @@ export interface ExecuteDeps {
     prompt: string;
     system?: string;
     output?: OutputInterface<unknown, unknown, never>;
+    // Narrow on purpose: the only value jigs ever passes here is a Codex
+    // thread id.
+    providerOptions?: Record<string, Record<string, string>>;
   }): Promise<ExecutorGeneration>;
   ensureCodexHome(runKey: string): string;
   withCodexAppServer: typeof withCodexAppServer;
@@ -121,7 +124,7 @@ export async function executeAgentStep(
   wire: AgentWire,
   runKey: string,
   deps: ExecuteDeps = realDeps,
-): Promise<AgentStepResult<unknown>> {
+): Promise<AgentStepResult<unknown> | { resumeFailed: string }> {
   const harness = wire.harness;
   const env = scrubbedEnv();
   const output = outputSpec(wire.outputSchema);
@@ -130,10 +133,14 @@ export async function executeAgentStep(
     ...(wire.instructions !== undefined ? { system: wire.instructions } : {}),
     ...(output !== undefined ? { output } : {}),
   };
+  // A pointer recorded on the other harness cannot name a session here, so it
+  // is ignored rather than refused: the step starts fresh.
+  const resume =
+    wire.resume?.harness === harness.kind ? wire.resume : undefined;
 
-  const generation =
+  const generate = () =>
     harness.kind === "claude"
-      ? await deps.generateText({
+      ? deps.generateText({
           model: claudeCode(
             harness.model,
             claudeStepSettings({
@@ -142,6 +149,12 @@ export async function executeAgentStep(
               ...(wire.permissionMode !== undefined
                 ? { permissionMode: wire.permissionMode }
                 : {}),
+              // The provider gates bypassPermissions behind this paired flag;
+              // passing the mode is the consent.
+              ...(wire.permissionMode === "bypassPermissions"
+                ? { allowDangerouslySkipPermissions: true }
+                : {}),
+              ...(resume !== undefined ? { resume: resume.id } : {}),
               ...(harness.mcpServers !== undefined
                 ? { mcpServers: toClaudeMcpServers(harness.mcpServers) }
                 : {}),
@@ -149,7 +162,7 @@ export async function executeAgentStep(
           ),
           ...request,
         })
-      : await deps.withCodexAppServer((provider) =>
+      : deps.withCodexAppServer((provider) =>
           deps.generateText({
             model: provider(
               harness.model,
@@ -169,8 +182,34 @@ export async function executeAgentStep(
               }),
             ),
             ...request,
+            // ADR 0004's amendment names this field, and the provider prefers
+            // it over settings.resume — an explicit id takes the resume path.
+            ...(resume !== undefined
+              ? {
+                  providerOptions: {
+                    "codex-app-server": { threadId: resume.id },
+                  },
+                }
+              : {}),
           }),
         );
+
+  let generation: ExecutorGeneration;
+  if (resume === undefined) {
+    generation = await generate();
+  } else {
+    try {
+      generation = await generate();
+    } catch (err) {
+      // Returned, not thrown: workflow@4.8.4 retries a rejected step three
+      // times by default, so a session that is simply gone would burn three
+      // paid attempts before the fresh-context fallback ever ran. Any error
+      // is staleness — codex 0.149.1 reports it as a raw JSON-RPC "no rollout
+      // found for thread id", which escapes the provider's own not-found
+      // wrapper, so there is no error string worth matching on.
+      return { resumeFailed: String(err) };
+    }
+  }
 
   const session = extractAgentSession(
     harness.kind,

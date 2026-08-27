@@ -15,8 +15,8 @@ import {
   executeAskStep,
   realDeps,
 } from "../execute.ts";
-import { buildAgentWire, buildAskWire } from "../plan.ts";
-import type { StepUsage } from "../result.ts";
+import { type AgentWire, buildAgentWire, buildAskWire } from "../plan.ts";
+import type { AgentStepResult, StepUsage } from "../result.ts";
 
 let tmp: string;
 let deps: ExecuteDeps;
@@ -50,6 +50,19 @@ function assertUsage(usage: StepUsage | undefined): void {
   expect(usage?.outputTokens ?? 0).toBeGreaterThan(0);
 }
 
+// executeAgentStep answers a union; a step carrying no resume pointer can
+// only take the successful arm.
+async function runAgent(
+  wire: AgentWire,
+  runKey: string,
+): Promise<AgentStepResult<unknown>> {
+  const result = await executeAgentStep(wire, runKey, deps);
+  if ("resumeFailed" in result) {
+    throw new Error(`unexpected resume failure: ${result.resumeFailed}`);
+  }
+  return result;
+}
+
 test("claude agent step: structured output round-trips typed, usage and session captured", async () => {
   const runKey = `live-steps-claude-${crypto.randomUUID().slice(0, 8)}`;
   const wire = buildAgentWire({
@@ -60,7 +73,7 @@ test("claude agent step: structured output round-trips typed, usage and session 
     output: verdict,
   });
 
-  const result = await executeAgentStep(wire, runKey, deps);
+  const result = await runAgent(wire, runKey);
   const parsed = verdict.parse(result.output);
 
   expect(parsed).toEqual({ ok: true, word: "sky" });
@@ -78,7 +91,7 @@ test("codex agent step: structured output round-trips typed, usage and threadId 
     output: verdict,
   });
 
-  const result = await executeAgentStep(wire, runKey, deps);
+  const result = await runAgent(wire, runKey);
   const parsed = verdict.parse(result.output);
 
   expect(parsed).toEqual({ ok: true, word: "sky" });
