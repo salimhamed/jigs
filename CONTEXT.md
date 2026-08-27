@@ -130,6 +130,11 @@ The shipped head-jig that normalizes a ticket into a brief and issues a
 proceed / needs-human verdict.
 _Avoid_: intake, triage
 
+**Review loop**:
+The shipped jig that carries a brief from implementation to a merged PR:
+implement ⇄ agent review, then the pull request gate, answered by the builder.
+_Avoid_: build loop, PR loop
+
 **Brief**:
 The normalized implementation plan a ticket review produces — the
 implementer's working plan. The ticket stays the definition of done.
