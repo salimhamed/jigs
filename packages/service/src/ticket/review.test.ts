@@ -145,8 +145,6 @@ test("a needs-human verdict routes the findings to needsHuman and never the brie
   // One agent step, and nothing after the halt.
   expect(agentCalls).toHaveLength(1);
   expect(result.verdict).toBe("needs-human");
-  if (result.verdict !== "needs-human") throw new Error("unreachable");
-  expect(result.reply).toBe(reply);
   expect(result.brief).toContain("SECRET-BRIEF-TEXT");
 });
 

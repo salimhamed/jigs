@@ -8,7 +8,6 @@ import { fetchSnapshot } from "../src/ticket/snapshot";
 export const ticketReviewDemoInputs = z.object({
   issueId: z.uuid(),
   cwd: z.string(),
-  model: z.string().default("sonnet"),
   // snapshot-only halts on needsHuman without an agent step, so the repro
   // script can drive the two-activation shape end to end in-process.
   mode: z.enum(["review", "snapshot-only"]).default("review"),
@@ -44,19 +43,9 @@ export async function ticketReviewDemoPipeline(inputs: TicketReviewDemoInputs) {
   const review = await ticketReview({
     claim,
     snapshot,
-    harness: claude({ model: inputs.model }),
+    harness: claude({ model: "sonnet" }),
     cwd: inputs.cwd,
   });
-
-  if (review.verdict === "needs-human") {
-    const resumed = await fetchSnapshot(inputs.issueId);
-    return {
-      verdict: review.verdict,
-      findings: review.findings,
-      brief: review.brief,
-      resumedComments: resumed.comments.map((comment) => comment.id),
-    };
-  }
 
   return {
     verdict: review.verdict,

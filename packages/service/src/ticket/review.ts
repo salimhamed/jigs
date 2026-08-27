@@ -7,7 +7,7 @@ import type { HarnessConfig } from "jigs/steps";
 import { z } from "zod";
 import { agent } from "../steps";
 import type { TicketClaim } from "../suspension/claim";
-import { type HumanReply, needsHuman } from "../suspension/needs-human";
+import { needsHuman } from "../suspension/needs-human";
 import { renderSnapshot, type TicketSnapshot } from "./snapshot";
 
 // strictObject so the harness's native structured output carries
@@ -31,13 +31,10 @@ export type Handoff = {
   snapshot: TicketSnapshot;
 };
 
-export type TicketReviewResult =
-  | ({ verdict: "proceed"; findings: string[] } & Handoff)
-  | ({
-      verdict: "needs-human";
-      findings: string[];
-      reply: HumanReply;
-    } & Handoff);
+export type TicketReviewResult = Handoff & {
+  verdict: "proceed" | "needs-human";
+  findings: string[];
+};
 
 // Workflow-side only: these never cross the step serialization boundary.
 export type TicketReviewDeps = {
@@ -77,12 +74,10 @@ export async function ticketReview(
   });
   const { verdict, brief, findings } = review.output;
 
-  if (verdict === "proceed") return { verdict, brief, findings, snapshot };
-
-  // findings only: the comment is for the human and the record, never the
-  // data path — the brief reaches the builder in-process below.
-  const reply = await deps.needsHuman(claim, "ticket review needs a human", {
-    findings,
-  });
-  return { verdict, brief, findings, snapshot, reply };
+  if (verdict === "needs-human") {
+    // findings only: the comment is for the human and the record, never the
+    // data path — the brief reaches the builder in-process below.
+    await deps.needsHuman(claim, "ticket review needs a human", { findings });
+  }
+  return { verdict, brief, findings, snapshot };
 }

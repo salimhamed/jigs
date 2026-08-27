@@ -80,9 +80,6 @@ const mockServer = createServer(async (req, res) => {
     if (query.includes("comments")) {
       return json({ data: { issue: { comments: { nodes: mock.comments } } } });
     }
-    if (query.trim().startsWith("query { viewer")) {
-      return json({ data: { viewer: mock.viewer } });
-    }
     return json({
       data: { issue: { creator: mock.creator }, viewer: mock.viewer },
     });

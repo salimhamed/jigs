@@ -117,7 +117,7 @@ test("renderSnapshot includes every section a reviewing agent needs", () => {
   expect(rendered).toContain("AGE-400 sub");
 });
 
-test("a later fetch picks up comments added since the previous one", async () => {
+test("a later fetch carries the new comment while the earlier copy keeps its own", async () => {
   respond({ issue: rawIssue() });
   respond({
     issue: rawIssue({
@@ -130,8 +130,9 @@ test("a later fetch picks up comments added since the previous one", async () =>
     }),
   });
 
-  await fetchSnapshot("68bc9696-35d5-442d-ab56-214c8cfefbec");
+  const launch = await fetchSnapshot("68bc9696-35d5-442d-ab56-214c8cfefbec");
   const later = await fetchSnapshot("68bc9696-35d5-442d-ab56-214c8cfefbec");
 
+  expect(launch.comments.map((c) => c.id)).toEqual(["c1"]);
   expect(later.comments.map((c) => c.id)).toEqual(["c1", "c2"]);
 });

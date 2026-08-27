@@ -1,2 +1,2 @@
 export { ticketReviewPrompt } from "./defaults.ts";
-export { interpolate, type PromptValues } from "./interpolate.ts";
+export { interpolate } from "./interpolate.ts";
