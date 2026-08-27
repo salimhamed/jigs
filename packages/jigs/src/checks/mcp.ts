@@ -14,7 +14,7 @@ import { CHECK_TIMEOUT_MS, type Check, type CheckResult } from "./catalog.ts";
 const DECLARED_PER_STEP =
   "MCP servers are declared per step in the pipeline body, never repo-owned";
 
-function transportFor(server: McpServerConfig): Transport {
+function transportFor(server: McpServerConfig, cwd: string): Transport {
   if ("command" in server) {
     return new StdioClientTransport({
       command: server.command,
@@ -23,6 +23,10 @@ function transportFor(server: McpServerConfig): Transport {
       // harness passes its env down to the servers it spawns, so a check
       // spawning them any leaner fails servers the step would have run.
       env: { ...scrubbedEnv(), ...server.env },
+      // The worktree, for the same reason: a server whose command or args
+      // resolve relative to the working tree is otherwise proven somewhere it
+      // will never run.
+      cwd,
       stderr: "ignore",
     });
   }
@@ -36,6 +40,7 @@ function transportFor(server: McpServerConfig): Transport {
 async function checkMcpServer(
   name: string,
   server: McpServerConfig,
+  cwd: string,
 ): Promise<CheckResult> {
   // Typed required, still guarded: this check is the last thing standing
   // between a JSON-shaped caller and an unproven server.
@@ -50,7 +55,9 @@ async function checkMcpServer(
 
   const client = new Client({ name: "jigs", version: "0" });
   try {
-    await client.connect(transportFor(server), { timeout: CHECK_TIMEOUT_MS });
+    await client.connect(transportFor(server, cwd), {
+      timeout: CHECK_TIMEOUT_MS,
+    });
   } catch (err) {
     return {
       ok: false,
@@ -97,11 +104,12 @@ async function checkMcpServer(
 
 export function mcpServerChecks(
   servers: Record<string, McpServerConfig>,
+  cwd: string,
 ): Check[] {
   return Object.entries(servers).map(([name, server]) => ({
     id: `mcp.${name}`,
     label: `MCP server ${name}`,
-    run: () => checkMcpServer(name, server),
+    run: () => checkMcpServer(name, server, cwd),
   }));
 }
 

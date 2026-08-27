@@ -67,6 +67,19 @@ test("a check that never answers times out into a failure, not a hung report", a
   expect(report.checks[1]).toMatchObject({ reason: "A is broken" });
 });
 
+test("a timeout repair names the check that timed out, not a doctor run that cannot reproduce it", async () => {
+  const report = await runChecks(
+    [{ id: "hangs", label: "hanging check", run: () => new Promise(() => {}) }],
+    20,
+  );
+  const outcome = report.checks[0];
+  expect(outcome).toMatchObject({
+    ok: false,
+    repair: expect.stringContaining("hangs"),
+  });
+  expect(outcome?.ok === false && outcome.repair).not.toContain("jigs doctor");
+});
+
 test("formatFailures renders one repair line per failure and skips the passes", () => {
   const text = formatFailures({
     ok: false,

@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -23,8 +23,8 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-async function check(server: McpServerConfig) {
-  const report = await runChecks(mcpServerChecks({ linear: server }));
+async function check(server: McpServerConfig, cwd = process.cwd()) {
+  const report = await runChecks(mcpServerChecks({ linear: server }, cwd));
   const outcome = report.checks[0];
   if (outcome === undefined) throw new Error("no outcome");
   return outcome;
@@ -50,6 +50,21 @@ test("a server is spawned with the step's environment, not the SDK's minimal def
       probe: { tool: "get_probe_token" },
     }),
   ).toEqual({ id: "mcp.linear", label: "MCP server linear", ok: true });
+});
+
+test("a server is spawned in the worktree, so a relative arg resolves the way the step will resolve it", async () => {
+  copyFileSync(PROBE_SERVER, path.join(tmp, "probe-server.mjs"));
+  const server: McpServerConfig = {
+    command: "node",
+    args: ["probe-server.mjs"],
+    env: { PROBE_TOKEN: "t" },
+    probe: { tool: "get_probe_token" },
+  };
+  expect(await check(server, tmp)).toMatchObject({ ok: true });
+  expect(await check(server, path.dirname(tmp))).toMatchObject({
+    ok: false,
+    reason: expect.stringContaining("did not start or connect"),
+  });
 });
 
 test("a server whose command cannot start fails with a repair", async () => {

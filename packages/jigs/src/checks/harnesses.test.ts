@@ -66,6 +66,18 @@ test("an ANTHROPIC_API_KEY overriding the subscription login fails and names the
   );
 });
 
+test("the probe spawns the CLI with the unscrubbed env, so an API key can flip its auth mode", async () => {
+  let spawned: Record<string, string> | undefined;
+  await claudeAuthCheck({
+    env: { ...claudeEnv, ANTHROPIC_API_KEY: "sk-x" },
+    exec: async (_file, _args, options) => {
+      spawned = options.env;
+      return { stdout: JSON.stringify(API_KEY_OVERRIDE) };
+    },
+  }).run();
+  expect(spawned).toHaveProperty("ANTHROPIC_API_KEY", "sk-x");
+});
+
 test("a logged-out CLI fails with claude auth login", async () => {
   const result = await claudeResult(JSON.stringify({ loggedIn: false }));
   expect(result).toMatchObject({

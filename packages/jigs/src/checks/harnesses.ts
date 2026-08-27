@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { promisify } from "node:util";
 import { resolveClaudeExecutable } from "../harnesses/claude.ts";
 import { realCodexAuthPath } from "../harnesses/codex-home.ts";
-import { scrubbedEnv } from "../harnesses/env.ts";
+import { stringEnv } from "../harnesses/env.ts";
 import { CHECK_TIMEOUT_MS, type Check, type CheckResult } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 
@@ -26,9 +26,10 @@ type ClaudeAuthStatus = {
   apiKeySource?: unknown;
 };
 
-// Heuristic, never a model call (ADR 0010). The probe runs under the same
-// scrubbed env an agent step gets, so a credential the scrubber removes is
-// not reported as a problem the operator has to fix.
+// Heuristic, never a model call (ADR 0010). The probe runs under the
+// unscrubbed env: the Claude provider re-inherits every ANTHROPIC_*/CLAUDE_*
+// key from process.env regardless of the env a step hands it, so a probe that
+// scrubbed them would report a green the step will not honor.
 export function claudeAuthCheck(deps: ClaudeAuthDeps = {}): Check {
   const exec = deps.exec ?? execFileAsync;
   const env = deps.env ?? process.env;
@@ -50,7 +51,7 @@ export function claudeAuthCheck(deps: ClaudeAuthDeps = {}): Check {
       let stdout: string;
       try {
         ({ stdout } = await exec(executable, ["auth", "status", "--json"], {
-          env: scrubbedEnv(env),
+          env: stringEnv(env),
           timeout: CHECK_TIMEOUT_MS,
         }));
       } catch (err) {

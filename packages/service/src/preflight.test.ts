@@ -34,6 +34,7 @@ const { default: app } = await import("./app");
 
 let tmp: string;
 let claudeStub: string;
+let seededFactory: string;
 
 const SUBSCRIPTION_STATUS = JSON.stringify({
   loggedIn: true,
@@ -49,6 +50,7 @@ beforeAll(() => {
   claudeStub = path.join(tmp, "claude-stub");
   writeFileSync(claudeStub, `#!/bin/sh\necho '${SUBSCRIPTION_STATUS}'\n`);
   chmodSync(claudeStub, 0o755);
+  seededFactory = makeFactoryRepo(tmp, "bindings: {}\n");
 });
 afterAll(() => {
   removeTmpDir(tmp);
@@ -67,10 +69,7 @@ afterEach(() => {
 function seedThreeFailures(): void {
   vi.stubEnv("LINEAR_API_KEY", "");
   vi.stubEnv("GITHUB_TOKEN", "");
-  vi.stubEnv(
-    "JIGS_FACTORY_ROOT",
-    makeFactoryRepo(makeTmpDir(), "bindings: {}\n"),
-  );
+  vi.stubEnv("JIGS_FACTORY_ROOT", seededFactory);
 }
 
 const trigger = () =>

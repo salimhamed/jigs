@@ -28,6 +28,16 @@ export function stripApiCredentials(
   return stripped;
 }
 
+export function stringEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): Record<string, string> {
+  const clean: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (value !== undefined) clean[key] = value;
+  }
+  return clean;
+}
+
 // The exact environment an agent step runs under, as a plain string map.
 // Shared with the preflight harness checks so a check and the step it guards
 // cannot drift.
@@ -36,9 +46,5 @@ export function scrubbedEnv(
 ): Record<string, string> {
   const env: NodeJS.ProcessEnv = { ...base };
   stripApiCredentials(env);
-  const clean: Record<string, string> = {};
-  for (const [key, value] of Object.entries(env)) {
-    if (value !== undefined) clean[key] = value;
-  }
-  return clean;
+  return stringEnv(env);
 }

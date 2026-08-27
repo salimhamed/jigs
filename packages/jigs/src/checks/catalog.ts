@@ -23,6 +23,8 @@ export interface CheckReport {
   checks: CheckOutcome[];
 }
 
+// The trigger-path budget: one preflight or doctor check, and one phase of
+// the JIT MCP check, which runs under the larger JIT_TIMEOUT_MS outer race.
 export const CHECK_TIMEOUT_MS = 15_000;
 
 // Concurrent, bounded and total: one check throwing or hanging must not cost
@@ -39,7 +41,7 @@ export async function runChecks(
           resolve({
             ok: false,
             reason: `the check did not answer within ${timeoutMs}ms`,
-            repair: `re-run: jigs doctor — if it hangs again the service cannot reach what ${check.id} probes`,
+            repair: `the ${check.id} check did not answer within ${timeoutMs}ms — retry, and report this if it repeats`,
           }),
         );
       });
@@ -47,7 +49,7 @@ export async function runChecks(
         (err: unknown): CheckResult => ({
           ok: false,
           reason: String(err),
-          repair: `the ${check.id} check itself failed — report this, then re-run: jigs doctor`,
+          repair: `the ${check.id} check itself failed — report this`,
         }),
       );
       return { id: check.id, label: check.label, ...result };

@@ -72,12 +72,17 @@ export function doctorChecks(options: DoctorChecksOptions): Check[] {
   ];
 }
 
+// Strictly larger than the per-phase budget inside the MCP check, so a slow
+// server gets diagnosed by the phase that timed out rather than pre-empted by
+// the outer race into a generic "did not answer".
+export const JIT_TIMEOUT_MS = 45_000;
+
 // Everything a step can only learn at hydration, once the body has built its
 // harness config (ADR 0010's backstop half).
 export function jitChecks(wire: AgentWire): Check[] {
   const harness = wire.harness;
   return [
     ...(harness.kind === "codex" ? [codexWorktreeConfigCheck(wire.cwd)] : []),
-    ...mcpServerChecks(harness.mcpServers ?? {}),
+    ...mcpServerChecks(harness.mcpServers ?? {}, wire.cwd),
   ];
 }

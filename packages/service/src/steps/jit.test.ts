@@ -1,14 +1,9 @@
 import { claude } from "jigs/steps";
 import { expect, test } from "vitest";
-import { FatalError } from "workflow";
 import type { TicketClaim } from "../suspension/claim";
 import type { HumanReply } from "../suspension/needs-human";
-import {
-  type AgentOrHaltDeps,
-  agentOrHalt,
-  JIT_FAILURE_PREFIX,
-  jitFailureText,
-} from "./jit";
+import { JitCheckError } from "./index";
+import { type AgentOrHaltDeps, agentOrHalt } from "./jit";
 
 const claim = {
   issueId: "issue-1",
@@ -30,23 +25,6 @@ const reply: HumanReply = {
 
 const stepResult = { text: "done", output: undefined, files: [] };
 
-test("jitFailureText recognizes a JIT failure message and ignores every other error", () => {
-  expect(
-    jitFailureText(new FatalError(`${JIT_FAILURE_PREFIX}MCP server 'x': dead`)),
-  ).toBe("MCP server 'x': dead");
-  expect(jitFailureText(new Error("the agent hit its turn limit"))).toBeNull();
-  expect(jitFailureText("a bare string rejection")).toBeNull();
-});
-
-test("jitFailureText reads a rejection from another realm, where instanceof Error is false", () => {
-  // What the workflow body actually receives: an error object whose
-  // prototype chain belongs to the vm realm, so `instanceof Error` is false
-  // and String(err) prefixes the class name onto the message.
-  const foreign = { name: "FatalError", message: `${JIT_FAILURE_PREFIX}dead` };
-  expect(foreign instanceof Error).toBe(false);
-  expect(jitFailureText(foreign)).toBe("dead");
-});
-
 test("agentOrHalt posts the repair through needsHuman and re-runs the step after the reply", async () => {
   const reasons: string[] = [];
   let attempts = 0;
@@ -54,8 +32,8 @@ test("agentOrHalt posts the repair through needsHuman and re-runs the step after
     agent: async () => {
       attempts += 1;
       if (attempts === 1) {
-        throw new FatalError(
-          `${JIT_FAILURE_PREFIX}MCP server linear: did not start\n  → fix the linear server`,
+        throw new JitCheckError(
+          "MCP server linear: did not start\n  → fix the linear server",
         );
       }
       return stepResult;

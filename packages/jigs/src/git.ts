@@ -83,7 +83,7 @@ export async function probeRemoteAuth(
         GIT_TERMINAL_PROMPT: "0",
         GIT_ASKPASS: "",
         SSH_ASKPASS: "",
-        GIT_SSH_COMMAND: "ssh -oBatchMode=yes",
+        GIT_SSH_COMMAND: `${process.env.GIT_SSH_COMMAND ?? "ssh"} -oBatchMode=yes`,
       },
     });
     return null;
