@@ -15,7 +15,7 @@ const RUN_ID_SHAPE = /^(?:wrun_)?([0-9A-HJKMNP-TV-Z]{1,26})$/i;
 const RUN_ID_PREFIX = "wrun_";
 const RUN_ID_LENGTH = RUN_ID_PREFIX.length + 26;
 
-const TERMINAL_RUN_STATUSES: ReadonlySet<string> = new Set([
+export const TERMINAL_RUN_STATUSES: ReadonlySet<string> = new Set([
   "completed",
   "failed",
   "cancelled",
@@ -102,17 +102,15 @@ export async function listRuns(deps: RunListDeps = {}): Promise<RunRow[]> {
 // The compiler stamps each pipeline with the workflowId the world stores as
 // workflowName; untransformed (unit tests, plain imports) there is nothing to
 // map and the raw name is the honest answer.
-let pipelineByWorkflowId: Map<string, string> | null = null;
+const pipelineByWorkflowId = new Map(
+  Object.entries(registry).flatMap(([name, entry]) => {
+    const id = (entry.pipeline as { workflowId?: string }).workflowId;
+    return id === undefined ? [] : [[id, name] as [string, string]];
+  }),
+);
 
-function pipelineName(workflowName: string): string {
-  pipelineByWorkflowId ??= new Map(
-    Object.entries(registry).flatMap(([name, entry]) => {
-      const id = (entry.pipeline as { workflowId?: string }).workflowId;
-      return id === undefined ? [] : [[id, name] as [string, string]];
-    }),
-  );
-  return pipelineByWorkflowId.get(workflowName) ?? workflowName;
-}
+const pipelineName = (workflowName: string) =>
+  pipelineByWorkflowId.get(workflowName) ?? workflowName;
 
 const worldRunExists = (runId: string) => getRun(runId).exists;
 
@@ -139,7 +137,11 @@ async function worldRuns(): Promise<WorldRun[]> {
 
 const worldRunIds = () => worldRuns().then((runs) => runs.map((r) => r.runId));
 
+// Descending explicitly: the runs list is newest-first, hooks default to
+// oldest-first, and two pages taken from opposite ends stop overlapping.
 async function worldHookRunIds(): Promise<string[]> {
-  const page = await getWorld().hooks.list({ pagination: { limit: 1000 } });
+  const page = await getWorld().hooks.list({
+    pagination: { limit: 1000, sortOrder: "desc" },
+  });
   return page.data.map((hook) => hook.runId);
 }

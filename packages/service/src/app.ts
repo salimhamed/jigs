@@ -12,7 +12,12 @@ import {
 } from "./ingress";
 import { doctor, preflight } from "./preflight";
 import { registry } from "./registry";
-import { listRuns, type RunRef, resolveRunRef } from "./runs";
+import {
+  listRuns,
+  type RunRef,
+  resolveRunRef,
+  TERMINAL_RUN_STATUSES,
+} from "./runs";
 import {
   readSuspensionMetadata,
   type SuspensionRecord,
@@ -26,12 +31,6 @@ import {
   listWorktrees,
   type WorktreeRow,
 } from "./worktrees/registry";
-
-const TERMINAL_RUN_STATUSES: ReadonlySet<string> = new Set([
-  "completed",
-  "failed",
-  "cancelled",
-]);
 
 const app = new Hono();
 
@@ -92,6 +91,7 @@ app.post("/api/pipelines/:name/runs", async (c) => {
     {
       runId: run.runId,
       pipeline: name,
+      logs: logsPointer(run.runId),
       ...(entry.hookToken ? { resumeToken: entry.hookToken(triggerId) } : {}),
     },
     201,
@@ -170,7 +170,7 @@ app.post("/ingress/linear", async (c) => {
 // run's suspensions are satisfied by. The fallback when a delivery was missed.
 app.post("/api/runs/:runId/poke", async (c) => {
   const ref = await resolveRunRef(c.req.param("runId"));
-  if (ref.kind !== "found") return c.json(refErrorBody(ref), refStatus(ref));
+  if (ref.kind !== "found") return refError(c, ref);
   const run = getRun(ref.runId);
   const suspensions = await listSuspensions(run.runId);
   const tokens = [...new Set(suspensions.map((s) => s.satisfiedBy))];
@@ -201,7 +201,7 @@ app.get("/api/runs", async (c) => {
 // captured before the cancel, not after.
 app.post("/api/runs/:runId/cancel", async (c) => {
   const ref = await resolveRunRef(c.req.param("runId"));
-  if (ref.kind !== "found") return c.json(refErrorBody(ref), refStatus(ref));
+  if (ref.kind !== "found") return refError(c, ref);
   const run = getRun(ref.runId);
   const status = await run.status;
   if (TERMINAL_RUN_STATUSES.has(status)) {
@@ -216,10 +216,14 @@ app.post("/api/runs/:runId/cancel", async (c) => {
 
 app.get("/api/runs/:runId", async (c) => {
   const ref = await resolveRunRef(c.req.param("runId"));
-  if (ref.kind !== "found") return c.json(refErrorBody(ref), refStatus(ref));
+  if (ref.kind !== "found") return refError(c, ref);
   const run = getRun(ref.runId);
   const status = await run.status;
-  const body: Record<string, unknown> = { runId: run.runId, status };
+  const body: Record<string, unknown> = {
+    runId: run.runId,
+    status,
+    logs: logsPointer(run.runId),
+  };
   if (status === "completed") body.returnValue = await run.returnValue;
   if (status === "failed") {
     body.error = await run.returnValue.then(
@@ -240,14 +244,23 @@ function unknownPipeline(name: string) {
   };
 }
 
-function refErrorBody(ref: Exclude<RunRef, { kind: "found" }>) {
+function refError(
+  c: Context,
+  ref: Exclude<RunRef, { kind: "found" }>,
+): Response {
   return ref.kind === "ambiguous"
-    ? { error: "ambiguous run ref", candidates: ref.candidates }
-    : { error: "not found" };
+    ? c.json({ error: "ambiguous run ref", candidates: ref.candidates }, 409)
+    : c.json({ error: "not found" }, 404);
 }
 
-const refStatus = (ref: Exclude<RunRef, { kind: "found" }>) =>
-  ref.kind === "ambiguous" ? 409 : 404;
+// `workflow web` defaults to the local world, and only the service knows
+// which world it actually writes to.
+function logsPointer(runId: string): string {
+  const world = process.env.WORKFLOW_TARGET_WORLD;
+  return world === undefined || world === ""
+    ? `npx workflow web ${runId}`
+    : `npx workflow web --backend ${world} ${runId}`;
+}
 
 // Connect-and-end per request, as the world plugin does: `ps` is
 // CLI-frequency, so a pooled connection would cost more concept than latency.

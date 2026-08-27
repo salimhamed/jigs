@@ -3,7 +3,6 @@ import {
   readErrorBody,
   runRefError,
   type ServiceDeps,
-  serviceBase,
   serviceFetch,
 } from "./service.ts";
 
@@ -14,6 +13,8 @@ import {
 export interface LogsResult {
   runId: string;
   status: string;
+  error?: string;
+  logs?: string;
   suspensions?: Array<{ key: string; reason: string; satisfiedBy: string }>;
 }
 
@@ -21,8 +22,10 @@ export async function showLogs(
   ref: string,
   deps: ServiceDeps,
 ): Promise<LogsResult> {
-  const base = serviceBase(deps.serviceUrl);
-  const res = await serviceFetch(base, `/api/runs/${encodeURIComponent(ref)}`);
+  const res = await serviceFetch(
+    deps.serviceUrl,
+    `/api/runs/${encodeURIComponent(ref)}`,
+  );
   if (res.status === 404 || res.status === 409) {
     throw runRefError(ref, await readErrorBody(res));
   }
@@ -32,10 +35,11 @@ export async function showLogs(
   const result = (await res.json()) as LogsResult;
   deps.out(`run ${result.runId}`);
   deps.out(`status ${result.status}`);
+  if (result.error !== undefined) deps.out(`error ${result.error}`);
   for (const suspension of result.suspensions ?? []) {
     deps.out(`suspended on ${suspension.key}: ${suspension.reason}`);
     deps.out(`  satisfied by ${suspension.satisfiedBy}`);
   }
-  deps.out(`npx workflow web ${result.runId}`);
+  deps.out(result.logs ?? `npx workflow web ${result.runId}`);
   return result;
 }

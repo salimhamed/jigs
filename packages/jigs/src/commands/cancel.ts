@@ -3,7 +3,6 @@ import {
   readErrorBody,
   runRefError,
   type ServiceDeps,
-  serviceBase,
   serviceFetch,
 } from "./service.ts";
 
@@ -31,9 +30,8 @@ export async function cancelRun(
   ref: string,
   deps: CancelDeps,
 ): Promise<CancelResult | null> {
-  const base = serviceBase(deps.serviceUrl);
   const runPath = `/api/runs/${encodeURIComponent(ref)}`;
-  const lookup = await serviceFetch(base, runPath);
+  const lookup = await serviceFetch(deps.serviceUrl, runPath);
   if (lookup.status === 404 || lookup.status === 409) {
     throw runRefError(ref, await readErrorBody(lookup));
   }
@@ -67,7 +65,7 @@ export async function cancelRun(
   }
 
   const res = await serviceFetch(
-    base,
+    deps.serviceUrl,
     `/api/runs/${encodeURIComponent(run.runId)}/cancel`,
     { method: "POST" },
   );

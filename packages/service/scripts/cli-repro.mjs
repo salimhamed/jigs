@@ -130,8 +130,10 @@ assert(launched.code === 0, `jigs run exits 0 (${launched.output.trim()})`);
 const runId = launched.output.match(/^run (\S+)/m)?.[1];
 assert(runId !== undefined, `jigs run prints the run id (${runId})`);
 assert(
-  launched.output.includes("npx workflow web"),
-  "jigs run points at the log surface",
+  launched.output.includes(
+    "npx workflow web --backend @workflow/world-postgres",
+  ),
+  "jigs run points at the log surface, naming the world the service writes to",
 );
 await waitForLog(server, /\[prGate\] fetched/);
 
@@ -171,8 +173,10 @@ const byTicket = await jigs("logs", issueId);
 assert(byTicket.code === 0, "a ticket id resolves");
 assert(byTicket.output.includes(runId), "the ticket id resolves to its run");
 assert(
-  byTicket.output.includes("npx workflow web"),
-  "logs hands over to the SDK's log surface",
+  byTicket.output.includes(
+    "npx workflow web --backend @workflow/world-postgres",
+  ),
+  "logs hands over to the SDK's log surface, naming the world",
 );
 
 const byPrefix = await jigs("logs", runId.slice(0, 20));
@@ -238,6 +242,13 @@ assert(
   "the relaunched run holds the claim the cancel released",
 );
 await jigs("cancel", newRunId, "--force");
+
+// The seeded worktree is a fixture, not a fact about this machine: leaving it
+// behind would put a phantom `abandoned-dirty` row in every later `jigs ps`.
+// The LIKE also sweeps whatever earlier invocations left.
+const cleanup = postgres(PG_URL);
+await cleanup`DELETE FROM jigs_worktrees WHERE path LIKE '/tmp/jigs-cli-repro/%'`;
+await cleanup.end();
 
 console.log("\nPASS: verbs");
 server.child.kill("SIGKILL");

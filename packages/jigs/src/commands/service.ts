@@ -9,15 +9,12 @@ export interface ServiceDeps {
   serviceUrl: string;
 }
 
-export function serviceBase(serviceUrl: string): string {
-  return serviceUrl.replace(/\/+$/, "");
-}
-
 export async function serviceFetch(
-  base: string,
+  serviceUrl: string,
   path: string,
   init?: RequestInit,
 ): Promise<Response> {
+  const base = serviceUrl.replace(/\/+$/, "");
   try {
     return await fetch(`${base}${path}`, init);
   } catch {

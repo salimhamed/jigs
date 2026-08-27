@@ -3,11 +3,8 @@ import {
   readErrorBody,
   runRefError,
   type ServiceDeps,
-  serviceBase,
   serviceFetch,
 } from "./service.ts";
-
-export type PokeDeps = ServiceDeps;
 
 export interface PokeResult {
   runId: string;
@@ -16,11 +13,10 @@ export interface PokeResult {
 
 export async function pokeRun(
   runId: string,
-  deps: PokeDeps,
+  deps: ServiceDeps,
 ): Promise<PokeResult> {
-  const base = serviceBase(deps.serviceUrl);
   const res = await serviceFetch(
-    base,
+    deps.serviceUrl,
     `/api/runs/${encodeURIComponent(runId)}/poke`,
     { method: "POST" },
   );
@@ -29,7 +25,7 @@ export async function pokeRun(
     if (res.status === 409 && body.candidates === undefined) {
       throw new CliError(
         "run has no suspensions to poke",
-        `inspect it: GET ${base}/api/runs/${runId}`,
+        `inspect it: jigs logs ${runId}`,
       );
     }
     throw runRefError(runId, body);

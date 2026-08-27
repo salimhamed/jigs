@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { type CheckReport, formatFailures } from "../checks/catalog.ts";
 import { CliError } from "../errors.ts";
-import { type ServiceDeps, serviceBase, serviceFetch } from "./service.ts";
+import { type ServiceDeps, serviceFetch } from "./service.ts";
 
 export interface LaunchResult {
   runId: string;
   pipeline: string;
   resumeToken?: string;
+  logs?: string;
 }
 
 // Flat on purpose: one coercion rule to hold in your head. A nested value
@@ -57,13 +58,12 @@ export async function launchRun(
   pairs: string[],
   deps: ServiceDeps,
 ): Promise<LaunchResult> {
-  const base = serviceBase(deps.serviceUrl);
   const inputs = parseInputs(pairs);
 
   // Client-side first: a schema violation must cost no run. The registry owns
   // the schema, so the CLI fetches it rather than keeping a second copy.
   const schemaRes = await serviceFetch(
-    base,
+    deps.serviceUrl,
     `/api/pipelines/${encodeURIComponent(pipeline)}/inputs`,
   );
   if (schemaRes.status === 404) {
@@ -86,7 +86,7 @@ export async function launchRun(
   validateInputs(schema, inputs);
 
   const res = await serviceFetch(
-    base,
+    deps.serviceUrl,
     `/api/pipelines/${encodeURIComponent(pipeline)}/runs`,
     {
       method: "POST",
@@ -108,6 +108,6 @@ export async function launchRun(
   if (result.resumeToken !== undefined) {
     deps.out(`resume token ${result.resumeToken}`);
   }
-  deps.out(`logs: npx workflow web ${result.runId}`);
+  deps.out(`logs: ${result.logs ?? `npx workflow web ${result.runId}`}`);
   return result;
 }

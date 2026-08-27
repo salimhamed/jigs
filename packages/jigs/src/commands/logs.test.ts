@@ -27,6 +27,7 @@ test("logs prints the run's status, its suspensions, and the workflow web pointe
       JSON.stringify({
         runId: RUN,
         status: "running",
+        logs: `npx workflow web --backend @workflow/world-postgres ${RUN}`,
         suspensions: [
           {
             key: "pr-gate:acme/api#41",
@@ -46,6 +47,27 @@ test("logs prints the run's status, its suspensions, and the workflow web pointe
     "status running",
     "suspended on pr-gate:acme/api#41: waiting for approval",
     "  satisfied by github:pr:acme/api#41",
+    // The service names the world it writes to; `workflow web` would
+    // otherwise inspect the local one and find no run.
+    `npx workflow web --backend @workflow/world-postgres ${RUN}`,
+  ]);
+});
+
+test("a failed run's error is printed above the log pointer", async () => {
+  fetchMock.mockResolvedValueOnce(
+    new Response(
+      JSON.stringify({
+        runId: RUN,
+        status: "failed",
+        error: "ClaimConflictError: linear:ticket:… is already claimed",
+      }),
+    ),
+  );
+  await showLogs(RUN, deps());
+  expect(lines).toEqual([
+    `run ${RUN}`,
+    "status failed",
+    "error ClaimConflictError: linear:ticket:… is already claimed",
     `npx workflow web ${RUN}`,
   ]);
 });

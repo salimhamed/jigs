@@ -1,6 +1,6 @@
 import { CliError } from "../errors.ts";
 import { formatTable } from "../table.ts";
-import { type ServiceDeps, serviceBase, serviceFetch } from "./service.ts";
+import { type ServiceDeps, serviceFetch } from "./service.ts";
 
 export interface PsRun {
   runId: string;
@@ -25,8 +25,7 @@ export async function listRunsForPs(
   deps: ServiceDeps,
   now: Date = new Date(),
 ): Promise<PsResult> {
-  const base = serviceBase(deps.serviceUrl);
-  const res = await serviceFetch(base, "/api/runs");
+  const res = await serviceFetch(deps.serviceUrl, "/api/runs");
   if (!res.ok) {
     throw new CliError(`ps failed: HTTP ${res.status} ${await res.text()}`);
   }

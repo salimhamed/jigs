@@ -122,6 +122,12 @@ rejects fails in the CLI, before any run is created.
 `<run>` is a run id, a unique id prefix, or the ticket the run claimed — an
 ambiguous prefix lists its candidates instead of guessing.
 
+`jigs run` and `jigs logs` hand the log surface back to the SDK, printing
+`npx workflow web --backend @workflow/world-postgres <run>`. The backend is
+named by the service, not the CLI — `workflow web` otherwise inspects the
+local world and finds nothing. Run it with `WORKFLOW_POSTGRES_URL` set in
+your shell, as step 6 does.
+
 `jigs cancel` is the escape hatch when a run holds a resource nobody is
 coming back for: cancelling releases every hook it claimed, so the same
 ticket can be launched again. A suspended run cancels silently — no process

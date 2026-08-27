@@ -11,17 +11,10 @@ export {
   type PsRun,
   type PsWorktree,
 } from "./commands/ps.ts";
-export {
-  type LaunchResult,
-  launchRun,
-  parseInputs,
-  validateInputs,
-} from "./commands/run.ts";
-export type { ServiceDeps } from "./commands/service.ts";
+export { type LaunchResult, launchRun } from "./commands/run.ts";
 export { unbindRepo } from "./commands/unbind.ts";
 export { locateFactoryRoot } from "./config/locate-factory.ts";
 export { CliError } from "./errors.ts";
-export { formatTable } from "./table.ts";
 export {
   type BranchResolution,
   type CreateWorktreeOptions,
