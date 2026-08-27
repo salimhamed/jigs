@@ -6,7 +6,7 @@ import { defineConfig } from "vitest/config";
 // rate limits.
 export default defineConfig({
   test: {
-    include: ["src/harnesses/live/**/*.live.test.ts"],
+    include: ["src/**/live/**/*.live.test.ts"],
     testTimeout: 600_000,
     hookTimeout: 120_000,
     fileParallelism: false,
