@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { CliError } from "./errors.ts";
@@ -64,6 +65,32 @@ export async function resolveRemoteUrl(dir: string): Promise<ResolvedRemote> {
   }
   const url = await git(["remote", "get-url", name], dir);
   return { remote: name, url };
+}
+
+// Returns null when the remote answered, git's stderr when it did not. The
+// env is what keeps an unauthenticated probe from hanging forever on a
+// credential prompt instead of failing inside the timeout.
+export async function probeRemoteAuth(
+  url: string,
+  timeoutMs = 15_000,
+): Promise<string | null> {
+  try {
+    await execFileAsync("git", ["ls-remote", "--heads", url, "HEAD"], {
+      cwd: tmpdir(),
+      timeout: timeoutMs,
+      env: {
+        ...process.env,
+        GIT_TERMINAL_PROMPT: "0",
+        GIT_ASKPASS: "",
+        SSH_ASKPASS: "",
+        GIT_SSH_COMMAND: `${process.env.GIT_SSH_COMMAND ?? "ssh"} -oBatchMode=yes`,
+      },
+    });
+    return null;
+  } catch (err) {
+    const stderr = (err as { stderr?: string }).stderr;
+    return (stderr ?? "").trim() || String(err);
+  }
 }
 
 export async function deriveDefaultBranch(

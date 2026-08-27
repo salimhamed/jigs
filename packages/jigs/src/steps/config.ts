@@ -2,15 +2,26 @@
 // the workflow/step boundary, so a factory call returns options + a kind tag
 // and the step hydrates the real provider from it.
 
+// A real tool call is the only honest availability evidence (ADR 0011 —
+// agents misreport their own server list), and no tool is universally
+// side-effect-free, so the step declares which one the JIT check may call.
+// Required: TypeScript is the enforcement, not plan-time validation code.
+export type McpProbe = {
+  tool: string;
+  arguments?: Record<string, unknown>;
+};
+
 export type McpStdioServer = {
   command: string;
   args?: string[];
   env?: Record<string, string>;
+  probe: McpProbe;
 };
 
 export type McpHttpServer = {
   url: string;
   headers?: Record<string, string>;
+  probe: McpProbe;
 };
 
 export type McpServerConfig = McpStdioServer | McpHttpServer;

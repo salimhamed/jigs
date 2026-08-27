@@ -1,5 +1,6 @@
-// Only ever called from inside "use step" functions. GITHUB_API_URL override
-// is a test seam.
+// Called from inside "use step" functions and from the trigger-path
+// preflight — never from a workflow body, where env reads and network are
+// forbidden. GITHUB_API_URL override is a test seam.
 
 import type { PrRef } from "../suspension/tokens";
 
@@ -34,6 +35,11 @@ async function githubGet<T>(path: string): Promise<T> {
     throw new Error(`GitHub API ${res.status} on ${path}: ${await res.text()}`);
   }
   return (await res.json()) as T;
+}
+
+// The preflight probe for GITHUB_TOKEN.
+export async function getAuthenticatedUser(): Promise<{ login: string }> {
+  return githubGet<{ login: string }>("/user");
 }
 
 export async function fetchPrSnapshot(pr: PrRef): Promise<PrSnapshot> {

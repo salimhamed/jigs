@@ -7,7 +7,13 @@
 //   bad-config  a live function smuggled into agent() config fails the run
 //               at the SDK serialization boundary, before any harness spawns
 // Requires `pnpm build`, compose Postgres up, bootstrap.
-import { assert, createHarness, waitFor, waitForLog } from "./repro-lib.mjs";
+import {
+  assert,
+  createHarness,
+  startProviderStub,
+  waitFor,
+  waitForLog,
+} from "./repro-lib.mjs";
 
 const mode = process.argv[2];
 if (!["replay", "bad-config"].includes(mode)) {
@@ -17,6 +23,7 @@ if (!["replay", "bad-config"].includes(mode)) {
 
 const { startServer, healthy, ensurePortFree, api } = createHarness({
   port: process.env.PORT ?? "8993",
+  env: await startProviderStub(),
 });
 
 const START_RE = /\[fnStep\] START marker=([0-9a-f-]+)/g;

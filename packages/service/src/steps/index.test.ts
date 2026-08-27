@@ -1,11 +1,19 @@
 import {
+  buildAgentWire,
   claude,
   type HarnessConfig,
   StructuredOutputUnsupportedError,
 } from "jigs/steps";
 import { expect, test } from "vitest";
 import { z } from "zod";
-import { agent, ask, fn, parseOutput } from "./index";
+import {
+  agent,
+  ask,
+  fn,
+  JitCheckError,
+  parseOutput,
+  runAgentStep,
+} from "./index";
 
 // Module scope, like a real fn() step function — but without the directive:
 // the nitro workflow scan bundles any directive-bearing file into the server,
@@ -58,9 +66,53 @@ test("ask() rejects a harness descriptor carrying mcpServers before any step cal
     ask({
       harness: claude({
         model: "sonnet",
-        mcpServers: { probe: { command: "node" } },
+        mcpServers: { probe: { command: "node", probe: { tool: "ping" } } },
       }),
       prompt: "never runs",
     }),
   ).rejects.toThrow(/no MCP universe/);
+});
+
+test("an agent step whose declared MCP server cannot start returns the JIT failure instead of throwing", async () => {
+  const wire = buildAgentWire({
+    harness: claude({
+      model: "sonnet",
+      mcpServers: {
+        linear: {
+          command: "definitely-not-a-binary",
+          probe: { tool: "get_probe_token" },
+        },
+      },
+    }),
+    cwd: "/work/tree",
+    prompt: "never reached — the JIT check fails first",
+  });
+
+  const result = await runAgentStep(wire);
+
+  expect(result).toMatchObject({
+    jitFailure: expect.stringContaining("MCP server linear"),
+  });
+  expect(result).toMatchObject({
+    jitFailure: expect.stringContaining("→ fix the 'linear' server"),
+  });
+});
+
+test("agent() turns a failed JIT check into a thrown JitCheckError carrying the repair text", async () => {
+  const failing = agent({
+    harness: claude({
+      model: "sonnet",
+      mcpServers: {
+        linear: {
+          command: "definitely-not-a-binary",
+          probe: { tool: "get_probe_token" },
+        },
+      },
+    }),
+    cwd: "/work/tree",
+    prompt: "never reached — the JIT check fails first",
+  });
+  await expect(failing).rejects.toThrow(JitCheckError);
+  await expect(failing).rejects.toThrow(/MCP server linear/);
+  await expect(failing).rejects.toThrow(/→ fix the 'linear' server/);
 });

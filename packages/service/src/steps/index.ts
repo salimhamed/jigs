@@ -17,6 +17,16 @@ import {
 import { getWorkflowMetadata } from "workflow";
 import type { z } from "zod";
 
+// Thrown workflow-side, never inside the step: a step's rejection is rebuilt
+// from its message alone, so a JIT failure crosses the boundary as a returned
+// value and becomes an error here, where `instanceof` still means something.
+export class JitCheckError extends Error {
+  constructor(failures: string) {
+    super(failures);
+    this.name = "JitCheckError";
+  }
+}
+
 // The executor asks the harness for schema-conformant output; the real
 // validation is this workflow-side zod parse of the recorded raw output —
 // deterministic on replay, and where the result gets its `T`.
@@ -32,6 +42,7 @@ export async function agent<T = undefined>(
 ): Promise<AgentStepResult<T>> {
   const wire = buildAgentWire(config);
   const result = await runAgentStep(wire);
+  if ("jitFailure" in result) throw new JitCheckError(result.jitFailure);
   return { ...result, output: parseOutput(config.output, result.output) };
 }
 
@@ -64,8 +75,20 @@ export async function fn<Args extends unknown[], R>(
 // The executors touch node builtins, which the workflow bundle must never
 // see even transitively — hence the dynamic import inside the step body,
 // which the directive transform strips from the workflow side.
-async function runAgentStep(wire: AgentWire): Promise<AgentStepResult> {
+// Exported for the JIT halt test.
+export async function runAgentStep(
+  wire: AgentWire,
+): Promise<AgentStepResult | { jitFailure: string }> {
   "use step";
+  // JIT checks first — this is the last honest moment before agent turns
+  // get burned, and the servers only exist now that the body built them.
+  const { formatFailures, JIT_TIMEOUT_MS, jitChecks, runChecks } = await import(
+    "jigs/checks"
+  );
+  const report = await runChecks(jitChecks(wire), JIT_TIMEOUT_MS);
+  // Returned, not thrown: a failed step's rejection is rebuilt from its
+  // message, and a value is not a step failure, so no retries either.
+  if (!report.ok) return { jitFailure: formatFailures(report) };
   const { executeAgentStep } = await import("jigs/steps/execute");
   const { workflowRunId } = getWorkflowMetadata();
   return executeAgentStep(wire, workflowRunId);

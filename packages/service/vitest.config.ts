@@ -14,6 +14,12 @@ export default defineConfig({
         ),
       },
       {
+        find: /^jigs\/checks$/,
+        replacement: fileURLToPath(
+          new URL("../jigs/src/checks/index.ts", import.meta.url),
+        ),
+      },
+      {
         find: /^jigs\/steps$/,
         replacement: fileURLToPath(
           new URL("../jigs/src/steps/index.ts", import.meta.url),

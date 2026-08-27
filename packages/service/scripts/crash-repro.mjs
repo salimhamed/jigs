@@ -2,7 +2,13 @@
 // Crash-model repro: `suspension` kills while suspended at the hook and
 // asserts memoized replay; `midstep` kills mid-step and asserts a rescue
 // re-run from zero. Requires `pnpm build`, compose Postgres up, bootstrap.
-import { assert, createHarness, waitFor, waitForLog } from "./repro-lib.mjs";
+import {
+  assert,
+  createHarness,
+  startProviderStub,
+  waitFor,
+  waitForLog,
+} from "./repro-lib.mjs";
 
 const mode = process.argv[2];
 if (!["suspension", "midstep"].includes(mode)) {
@@ -12,6 +18,7 @@ if (!["suspension", "midstep"].includes(mode)) {
 
 const { startServer, healthy, ensurePortFree, api } = createHarness({
   port: process.env.PORT ?? "8992",
+  env: await startProviderStub(),
 });
 
 const START_RE = /\[slowStep\] START \S+ marker=([0-9a-f-]+)/;

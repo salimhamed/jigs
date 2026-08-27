@@ -32,3 +32,14 @@ test("steps-demo defaults to replay mode and rejects unknown modes", () => {
 test("steps-demo hook token embeds the trigger id", () => {
   expect(registry["steps-demo"]?.hookToken?.("abc")).toBe("steps:abc");
 });
+
+test("preflight-demo declares the bindings and harnesses its runs require", () => {
+  expect(registry["preflight-demo"]?.requires).toEqual({
+    bindings: ["api"],
+    harnesses: ["claude"],
+  });
+});
+
+test("a pipeline with no requires preflights against the core set alone", () => {
+  expect(registry["steps-demo"]?.requires).toBeUndefined();
+});

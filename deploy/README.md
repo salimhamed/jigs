@@ -39,7 +39,9 @@ loginctl enable-linger "$USER"   # lights-on: survive logout
 `~/.config/jigs/service.env` is the service's `EnvironmentFile`. The
 `LINEAR_API_KEY` / `GITHUB_TOKEN` slots are consumed by the suspension
 primitives (`needsHuman()` posts Linear comments, `pullRequestGate()`
-re-checks PR state) and by trigger-path preflight later.
+re-checks PR state), and both are validated on every trigger: preflight
+refuses to create a run when a requirement is unmet, reporting every failure
+with its repair. `jigs doctor` runs the same checks without a launch.
 
 The built server must run against the Postgres World
 (`WORKFLOW_TARGET_WORLD=@workflow/world-postgres`, as the env file sets):
