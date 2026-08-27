@@ -22,10 +22,10 @@ export {
   buildAskWire,
   type WireJsonSchema,
 } from "./plan.ts";
-export {
-  type AgentSession,
-  type AgentStepResult,
-  type StepFile,
-  type StepResult,
-  type StepUsage,
+export type {
+  AgentSession,
+  AgentStepResult,
+  StepFile,
+  StepResult,
+  StepUsage,
 } from "./result.ts";

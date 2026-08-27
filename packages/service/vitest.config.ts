@@ -6,9 +6,26 @@ import { configDefaults, defineConfig } from "vitest/config";
 // depend on a prior `pnpm build`.
 export default defineConfig({
   resolve: {
-    alias: {
-      jigs: fileURLToPath(new URL("../jigs/src/index.ts", import.meta.url)),
-    },
+    alias: [
+      {
+        find: /^jigs$/,
+        replacement: fileURLToPath(
+          new URL("../jigs/src/index.ts", import.meta.url),
+        ),
+      },
+      {
+        find: /^jigs\/steps$/,
+        replacement: fileURLToPath(
+          new URL("../jigs/src/steps/index.ts", import.meta.url),
+        ),
+      },
+      {
+        find: /^jigs\/steps\/execute$/,
+        replacement: fileURLToPath(
+          new URL("../jigs/src/steps/execute.ts", import.meta.url),
+        ),
+      },
+    ],
   },
   test: {
     exclude: [...configDefaults.exclude, "**/*.live.test.ts"],
