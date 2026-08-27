@@ -32,6 +32,8 @@ import {
   listWorktrees,
   type WorktreeRow,
 } from "./worktrees/registry";
+import { registrySql } from "./worktrees/sql";
+import { sweepWorktrees } from "./worktrees/sweep";
 
 const app = new Hono();
 
@@ -108,6 +110,30 @@ app.post("/api/pipelines/:name/runs", async (c) => {
 // The same catalog engine as preflight, without a pipeline or a launch. A
 // red report is still a report, so it answers 200.
 app.get("/api/doctor", async (c) => c.json(await doctor()));
+
+// `jigs sweep` is an HTTP client of this route (ADR 0008); the automatic
+// teardown pass calls the same function directly.
+app.post("/api/worktrees/sweep", async (c) => {
+  const body = await c.req
+    .json<{ clean?: boolean; force?: boolean }>()
+    .catch(() => ({}) as { clean?: boolean; force?: boolean });
+  const sql = registrySql();
+  if (sql === null) {
+    return c.json(
+      {
+        error:
+          "worktree registry unavailable: WORKFLOW_POSTGRES_URL is not configured",
+      },
+      503,
+    );
+  }
+  return c.json(
+    await sweepWorktrees(
+      { clean: body.clean === true, force: body.force === true },
+      { sql },
+    ),
+  );
+});
 
 app.post("/api/hooks/resume", async (c) => {
   const { token, payload } = await c.req.json<{
@@ -220,7 +246,12 @@ app.post("/api/runs/:runId/cancel", async (c) => {
   const { records } = await listSuspensions(ref.runId);
   const releasedTokens = [...new Set(records.map((s) => s.satisfiedBy))];
   await run.cancel();
-  // AGE-309 applies the teardown matrix to this run's worktrees here.
+  // Cancelling makes the run terminal, which is the whole trigger the teardown
+  // matrix needs: the terminal-state join — `sweepWorktrees` in
+  // ./worktrees/sweep, on the timer in plugins/start-world.ts — applies it on
+  // the next pass, and reuse already stops naming a cancelled run as an owner.
+  // Applying it here would mean running that whole-registry join, git fetches
+  // and all, inside this request, or teaching it a per-run filter first.
   return c.json({ runId: ref.runId, cancelled: true, releasedTokens });
 });
 

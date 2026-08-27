@@ -20,6 +20,9 @@ afterAll(() => {
 
 beforeEach(() => {
   vi.unstubAllEnvs();
+  // An ambient dev-database URL would otherwise make this lane open a real
+  // connection and read the operator's registry.
+  vi.stubEnv("WORKFLOW_POSTGRES_URL", "");
   vi.stubEnv("WORKFLOW_LOCAL_DATA_DIR", dataDir);
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "gh-hook-secret");
   vi.stubEnv("LINEAR_WEBHOOK_SECRET", "linear-hook-secret");
@@ -222,4 +225,17 @@ test("GET /api/runs answers with empty runs and worktrees when nothing has launc
   const res = await app.request("/api/runs");
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ runs: [], worktrees: [] });
+});
+
+test("POST /api/worktrees/sweep answers 503 when the worktree registry is unconfigured", async () => {
+  const res = await app.request("/api/worktrees/sweep", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ clean: false, force: false }),
+  });
+  expect(res.status).toBe(503);
+  expect(await res.json()).toEqual({
+    error:
+      "worktree registry unavailable: WORKFLOW_POSTGRES_URL is not configured",
+  });
 });

@@ -15,6 +15,10 @@ import {
   ticketReviewDemoInputs,
   ticketReviewDemoPipeline,
 } from "../pipelines/ticket-review-demo";
+import {
+  worktreeDemoInputs,
+  worktreeDemoPipeline,
+} from "../pipelines/worktree-demo";
 
 export interface PipelineEntry<S extends z.ZodType = z.ZodType> {
   pipeline: (inputs: z.output<S> & { triggerId: string }) => Promise<unknown>;
@@ -58,6 +62,12 @@ const entries = {
     pipeline: preflightDemoPipeline,
     inputs: preflightDemoInputs,
     requires: { bindings: ["api"], harnesses: ["claude"] },
+  },
+  "worktree-demo": {
+    pipeline: worktreeDemoPipeline,
+    inputs: worktreeDemoInputs,
+    hookToken: (triggerId) => `worktree:${triggerId}`,
+    requires: { bindings: ["scratch"] },
   },
 } satisfies Record<string, AnyPipelineEntry>;
 

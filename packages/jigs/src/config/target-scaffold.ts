@@ -2,8 +2,6 @@ import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { Document } from "yaml";
 
-export const TARGET_CONFIG_FILE = ".jigs.yml";
-
 const toolSetups: ReadonlyArray<readonly [string, string]> = [
   [".mise.toml", "mise install"],
   [".tool-versions", "mise install"],

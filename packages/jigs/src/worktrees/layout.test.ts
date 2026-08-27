@@ -1,7 +1,12 @@
 import path from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { expandHome } from "../paths.ts";
-import { branchDirname, factorySlug, worktreePath } from "./layout.ts";
+import {
+  branchDirname,
+  factorySlug,
+  worktreeParentDir,
+  worktreePath,
+} from "./layout.ts";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -43,6 +48,31 @@ test("workspace_dir override wins over the central root", () => {
     workspaceDir: "~/wt",
   });
   expect(p).toBe(path.join(expandHome("~/wt"), "salim-fix"));
+});
+
+test("worktreeParentDir is the branch-less half of the central path", () => {
+  const options = {
+    baseDir: "/data/worktrees",
+    factoryRoot: "/f/acme",
+    bindingName: "api",
+  };
+  expect(worktreeParentDir(options)).toBe(
+    path.join("/data/worktrees", factorySlug("/f/acme"), "api"),
+  );
+  expect(worktreePath({ ...options, branch: "salim/fix" })).toBe(
+    path.join(worktreeParentDir(options), "salim-fix"),
+  );
+});
+
+test("worktreeParentDir under workspace_dir is the workspace dir itself", () => {
+  expect(
+    worktreeParentDir({
+      baseDir: "/data/worktrees",
+      factoryRoot: "/f/acme",
+      bindingName: "api",
+      workspaceDir: "~/wt",
+    }),
+  ).toBe(expandHome("~/wt"));
 });
 
 test("central root defaults to the XDG data home", () => {
