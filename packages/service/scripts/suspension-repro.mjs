@@ -6,8 +6,13 @@
 //   needs-human      Linear comment with @-mention, visible suspension, reply satisfies
 // Requires `pnpm build`, compose Postgres up, bootstrap. Providers are mocked
 // in-process and fed to the service via LINEAR_API_URL / GITHUB_API_URL.
-import { createServer } from "node:http";
-import { assert, createHarness, waitFor, waitForLog } from "./repro-lib.mjs";
+import {
+  assert,
+  createHarness,
+  startLinearGithubStub,
+  waitFor,
+  waitForLog,
+} from "./repro-lib.mjs";
 
 const mode = process.argv[2];
 const MODES = ["conflict", "unsatisfied-wake", "gate-restart", "needs-human"];
@@ -18,75 +23,7 @@ if (!MODES.includes(mode)) {
 
 // ---- mock Linear + GitHub provider server ----------------------------------
 
-const mock = {
-  creator: { id: "creator-1", name: "salim" },
-  viewer: { id: "bot-1" },
-  comments: [],
-  createdComments: [],
-  pr: {
-    state: "open",
-    merged: false,
-    headSha: "head-1",
-    reviews: [],
-    comments: [],
-    checkRuns: [],
-  },
-};
-
-const mockServer = createServer(async (req, res) => {
-  const json = (body) => {
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify(body));
-  };
-  if (req.method === "POST" && req.url === "/graphql") {
-    let raw = "";
-    for await (const chunk of req) raw += chunk;
-    const { query, variables } = JSON.parse(raw);
-    if (query.includes("commentCreate")) {
-      const comment = {
-        id: `bot-comment-${mock.createdComments.length + 1}`,
-        body: variables.input.body,
-        createdAt: new Date().toISOString(),
-        user: { id: mock.viewer.id, name: "jigs" },
-      };
-      mock.comments.push(comment);
-      mock.createdComments.push(comment);
-      return json({
-        data: {
-          commentCreate: {
-            success: true,
-            comment: { id: comment.id, createdAt: comment.createdAt },
-          },
-        },
-      });
-    }
-    if (query.includes("comments")) {
-      return json({ data: { issue: { comments: { nodes: mock.comments } } } });
-    }
-    return json({
-      data: { issue: { creator: mock.creator }, viewer: mock.viewer },
-    });
-  }
-  if (req.method === "GET" && req.url === "/github/user") {
-    return json({ login: "jigs-bot" });
-  }
-  if (req.method === "GET" && req.url?.startsWith("/github/repos/")) {
-    if (req.url.includes("/reviews")) return json(mock.pr.reviews);
-    if (req.url.includes("/check-runs")) {
-      return json({ check_runs: mock.pr.checkRuns });
-    }
-    if (req.url.includes("/comments")) return json(mock.pr.comments);
-    return json({
-      state: mock.pr.state,
-      merged: mock.pr.merged,
-      head: { sha: mock.pr.headSha },
-    });
-  }
-  res.writeHead(404);
-  res.end();
-});
-await new Promise((resolve) => mockServer.listen(0, resolve));
-const MOCK_BASE = `http://localhost:${mockServer.address().port}`;
+const { mock, env } = await startLinearGithubStub();
 
 function addHumanComment(body) {
   mock.comments.push({
@@ -111,14 +48,8 @@ function approvePr() {
 
 const { startServer, healthy, ensurePortFree, api } = createHarness({
   port: process.env.PORT ?? "8993",
-  env: {
-    LINEAR_API_KEY: "mock-linear-key",
-    GITHUB_TOKEN: "mock-github-token",
-    LINEAR_API_URL: `${MOCK_BASE}/graphql`,
-    GITHUB_API_URL: `${MOCK_BASE}/github`,
-  },
+  env,
 });
-process.on("exit", () => mockServer.close());
 
 await ensurePortFree();
 

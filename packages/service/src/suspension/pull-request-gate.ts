@@ -27,7 +27,9 @@ export type GateWake =
       body: string;
       submittedAt: string;
     }
-  | { kind: "review-comments"; threads: ReviewThread[] }
+  // `body` is the summary of the CHANGES_REQUESTED review these threads were
+  // submitted with, when they came together.
+  | { kind: "review-comments"; threads: ReviewThread[]; body?: string }
   | {
       kind: "ci-red";
       headSha: string;
@@ -52,13 +54,10 @@ export const emptyGateCursor = (): GateCursor => ({
 });
 
 function lastHumanReviewer(snapshot: PrSnapshot): string | null {
-  for (let i = snapshot.reviews.length - 1; i >= 0; i -= 1) {
-    const review = snapshot.reviews[i];
-    if (review !== undefined && review.user !== snapshot.viewer) {
-      return review.user;
-    }
-  }
-  return null;
+  return (
+    snapshot.reviews.findLast((review) => review.user !== snapshot.viewer)
+      ?.user ?? null
+  );
 }
 
 export function classifyPrState(
@@ -107,7 +106,21 @@ export function classifyPrState(
       threads.push(thread);
     }
   }
-  if (threads.length > 0) wakes.push({ kind: "review-comments", threads });
+  // A CHANGES_REQUESTED review carrying inline comments is one act by one
+  // reviewer, and the ordinary GitHub flow: yielding it twice would burn two
+  // builder turns, the first of them answering a summary blind to the very
+  // threads it summarises.
+  if (threads.length > 0) {
+    const at = wakes.findLastIndex((wake) => wake.kind === "changes-requested");
+    const requested = at === -1 ? undefined : wakes.splice(at, 1)[0];
+    wakes.push({
+      kind: "review-comments",
+      threads,
+      ...(requested?.kind === "changes-requested"
+        ? { body: requested.body }
+        : {}),
+    });
+  }
 
   // The head the consumer was last told is red, so a red yields once per head
   // and a green only as a recovery from one — which is what resets the

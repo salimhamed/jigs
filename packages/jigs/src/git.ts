@@ -6,12 +6,13 @@ import { CliError } from "./errors.ts";
 
 const execFileAsync = promisify(execFile);
 
-export async function git(
-  args: string[],
-  cwd: string,
-  options: { maxBuffer?: number } = {},
-): Promise<string> {
-  const { stdout } = await execFileAsync("git", args, { cwd, ...options });
+export async function git(args: string[], cwd: string): Promise<string> {
+  // execFile's 1MB default rejects a large diff outright; the cap is a
+  // ceiling, not an allocation.
+  const { stdout } = await execFileAsync("git", args, {
+    cwd,
+    maxBuffer: 64 * 1024 * 1024,
+  });
   return stdout.trim();
 }
 
@@ -124,11 +125,7 @@ export async function diffSince(
   baseSha: string,
   maxChars = 200_000,
 ): Promise<string> {
-  // execFile's 1MB default would reject a large diff outright, well before
-  // the caller's own cap gets a say.
-  const diff = await git(["diff", `${baseSha}...HEAD`], worktreePath, {
-    maxBuffer: 64 * 1024 * 1024,
-  });
+  const diff = await git(["diff", `${baseSha}...HEAD`], worktreePath);
   return diff.length <= maxChars
     ? diff
     : `${diff.slice(0, maxChars)}\n… (diff truncated)`;

@@ -112,7 +112,7 @@ export async function sweepWorktrees(
   for (const binding of bindingList) {
     parents.set(parentDirFor(binding, deps), binding);
   }
-  const ffByCheckout = frozenCheckouts(bindingList);
+  const ffEnabled = ffByCheckout(bindingList);
   const unregisteredCheckouts = new Map<string, string>();
   if (options.includeUnregistered !== false) {
     const known = new Map<string, Set<string>>();
@@ -171,7 +171,7 @@ export async function sweepWorktrees(
       !fastForwarded.has(checkoutRoot)
     ) {
       fastForwarded.add(checkoutRoot);
-      const enabled = ffByCheckout.get(checkoutRoot) ?? true;
+      const enabled = ffEnabled.get(checkoutRoot) ?? true;
       const result = await ff({ checkoutRoot, enabled });
       log(`[sweep] ${describeFf(checkoutRoot, result)}`);
     }
@@ -238,17 +238,17 @@ export async function sweepWorktrees(
 }
 
 // A checkout is frozen if any binding on it opts out of the fast-forward.
-export function frozenCheckouts(
+export function ffByCheckout(
   bindings: ResolvedBinding[],
 ): Map<string, boolean> {
-  const frozen = new Map<string, boolean>();
+  const enabled = new Map<string, boolean>();
   for (const binding of bindings) {
-    frozen.set(
+    enabled.set(
       binding.checkoutRoot,
-      (frozen.get(binding.checkoutRoot) ?? true) && binding.ffDefaultBranch,
+      (enabled.get(binding.checkoutRoot) ?? true) && binding.ffDefaultBranch,
     );
   }
-  return frozen;
+  return enabled;
 }
 
 function bindingsOrNone(deps: SweepDeps): () => ResolvedBinding[] {

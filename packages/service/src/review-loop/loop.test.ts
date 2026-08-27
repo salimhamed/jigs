@@ -2,7 +2,7 @@ import type { WorktreeFacts } from "jigs";
 import { type AgentStepConfig, claude } from "jigs/steps";
 import { beforeEach, expect, test } from "vitest";
 import type { CheckRun, ReviewThread } from "../providers/github";
-import { parseOutput } from "../steps";
+import { parseOutput, ResumeFailedError } from "../steps";
 import type { TicketClaim } from "../suspension/claim";
 import type { GateWake } from "../suspension/pull-request-gate";
 import type { PrRef } from "../suspension/tokens";
@@ -300,6 +300,42 @@ test("the CI fix does not take over the builder's session pointer", async () => 
   // after it, and only the implement session holds the ticket and the change.
   const answering = calls.agent.at(-1);
   expect(answering?.resume).toEqual({ harness: "claude", id: "s-1" });
+});
+
+test("the CI fix runs inside the builder's session rather than context-free", async () => {
+  const deps = makeDeps([ciRed("sha-1"), { kind: "closed", merged: true }]);
+  await run(deps);
+
+  const fix = calls.agent.find((call) => call.prompt.startsWith("# Fix CI"));
+  expect(fix?.resume).toEqual({ harness: "claude", id: "s-1" });
+});
+
+test("a stale session sends the CI fix into a fresh context that then holds the change", async () => {
+  agentOutputs = [approved, answerFor([900])];
+  const deps = makeDeps([
+    ciRed("sha-1"),
+    { kind: "review-comments", threads: [thread(900)] },
+    { kind: "closed", merged: true },
+  ]);
+  const live = deps.agent;
+  let stale = true;
+  deps.agent = (async <T>(config: AgentStepConfig<T>) => {
+    if (stale && config.resume !== undefined) {
+      stale = false;
+      calls.agent.push(config as AgentStepConfig<unknown>);
+      throw new ResumeFailedError("no rollout found for thread id 0199-gone");
+    }
+    return live(config);
+  }) as ReviewLoopDeps["agent"];
+  await run(deps);
+
+  // s-1 and s-2 are implement and review, the throwing resume records no
+  // session, so the rebuilt fix is s-4 — and the answer resumes that.
+  const fresh = calls.agent[3];
+  expect(fresh?.resume).toBeUndefined();
+  expect(fresh?.prompt).toContain("AGE-316");
+  expect(fresh?.prompt).toContain("THE-DIFF");
+  expect(calls.agent.at(-1)?.resume).toEqual({ harness: "claude", id: "s-4" });
 });
 
 test("a fifth red neither fixes nor escalates a second time", async () => {

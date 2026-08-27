@@ -92,6 +92,34 @@ test("changes requested since the cursor yields a wake but keeps the gate open",
   expect(result.done).toBe(false);
 });
 
+test("a changes-requested review submitted with inline comments yields one wake carrying both", () => {
+  const threads = [thread(900, [[900, "reviewer"]])];
+  const result = classifyPrState(
+    snapshot({
+      reviews: [review(2, "CHANGES_REQUESTED")],
+      reviewThreads: threads,
+    }),
+    empty,
+  );
+
+  expect(result.wakes).toEqual([
+    { kind: "review-comments", threads, body: "please fix" },
+  ]);
+});
+
+test("an approval alongside inline comments is left alone", () => {
+  const threads = [thread(900, [[900, "reviewer"]])];
+  const result = classifyPrState(
+    snapshot({ reviews: [review(1, "APPROVED")], reviewThreads: threads }),
+    empty,
+  );
+
+  expect(result.wakes.map((wake) => wake.kind)).toEqual([
+    "approved",
+    "review-comments",
+  ]);
+});
+
 test("already-seen reviews are not re-yielded", () => {
   const reviews = [review(2, "CHANGES_REQUESTED")];
   const first = classifyPrState(snapshot({ reviews }), empty);

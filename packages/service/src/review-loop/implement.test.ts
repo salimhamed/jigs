@@ -118,7 +118,6 @@ test("an approved first cycle runs one implement and one review step", async () 
 
   expect(agentCalls).toHaveLength(2);
   expect(result.cycles).toBe(1);
-  expect(result.findings).toEqual([]);
   expect(result.session).toEqual({ harness: "claude", id: "s-1" });
   expect(humanCalls).toHaveLength(0);
 });

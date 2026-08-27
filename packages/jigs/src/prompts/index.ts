@@ -1,6 +1,7 @@
 export {
   answerReviewPrompt,
   codeReviewPrompt,
+  fixCiFreshPrompt,
   fixCiPrompt,
   implementPrompt,
   rebuildContextPrompt,

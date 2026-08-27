@@ -33,7 +33,6 @@ export interface ImplementAndReviewOptions {
 
 export type ImplementAndReviewResult = {
   session?: AgentSession;
-  findings: string[];
   cycles: number;
 };
 
@@ -103,7 +102,6 @@ export async function implementAndReview(
       if (verdict.output.verdict === "approved") {
         return {
           ...(session !== undefined ? { session } : {}),
-          findings: [],
           cycles,
         };
       }

@@ -4,7 +4,6 @@
 // teardown matrix.
 
 import type { WorktreeFacts } from "jigs";
-import { fixCiPrompt, interpolate } from "jigs/prompts";
 import type { HarnessConfig } from "jigs/steps";
 import { getWorkflowMetadata } from "workflow";
 import type { CheckRun } from "../providers/github";
@@ -15,6 +14,7 @@ import { pullRequestGate } from "../suspension/pull-request-gate";
 import type { PrRef } from "../suspension/tokens";
 import type { Handoff } from "../ticket/review";
 import { answerAsBuilder, type ThreadAnswers } from "./builder";
+import { fixCi, renderChecks } from "./fix-ci";
 import { implementAndReview } from "./implement";
 import {
   commentOnPr,
@@ -170,9 +170,7 @@ export async function reviewLoop(
             cwd: worktree.path,
             ...(session === undefined ? {} : { session }),
             threads: wake.kind === "review-comments" ? wake.threads : [],
-            ...(wake.kind === "changes-requested"
-              ? { reviewBody: wake.body }
-              : {}),
+            ...(wake.body === undefined ? {} : { reviewBody: wake.body }),
             handoff,
             baseSha: worktree.baseSha,
           },
@@ -215,17 +213,22 @@ export async function reviewLoop(
           }
           break;
         }
-        // The fix step's session is not the builder's: it holds only this
-        // turn, so `session` keeps pointing at the implement session.
-        await deps.agent({
-          harness: options.harness,
-          cwd: worktree.path,
-          permissionMode: "bypassPermissions",
-          prompt: interpolate(fixCiPrompt, {
-            CHECKS: renderChecks(wake.failing),
-            ATTEMPT: `${ciAttempts} of ${maxCiAttempts}`,
-          }),
-        });
+        // A resumed fix runs inside the builder's own session and leaves the
+        // pointer where it is; only the fresh-context rebuild becomes a new
+        // session, and that one is then the one holding the change.
+        const fixed = await fixCi(
+          {
+            harness: options.harness,
+            cwd: worktree.path,
+            ...(session === undefined ? {} : { session }),
+            failing: wake.failing,
+            attempt: `${ciAttempts} of ${maxCiAttempts}`,
+            handoff,
+            baseSha: worktree.baseSha,
+          },
+          { agent: deps.agent, readDiff: deps.readDiff },
+        );
+        session = fixed.session ?? session;
         const after = await pushWorktreeBranch(
           worktree.path,
           worktree.branch,
@@ -299,16 +302,6 @@ function prBody(handoff: Handoff): string {
     "",
     handoff.brief,
   ].join("\n");
-}
-
-function renderChecks(failing: CheckRun[]): string {
-  return failing.length === 0
-    ? "_(the provider reported a red build without naming a check)_"
-    : failing
-        .map(
-          (check) => `- **${check.name}** — ${check.conclusion} — ${check.url}`,
-        )
-        .join("\n");
 }
 
 function escalation(

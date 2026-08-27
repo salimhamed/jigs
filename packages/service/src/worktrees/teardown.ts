@@ -16,7 +16,7 @@ import {
   setWorktreeState,
 } from "./registry";
 import { factoryRoot } from "./request";
-import { frozenCheckouts } from "./sweep";
+import { ffByCheckout } from "./sweep";
 
 // The per-run teardown a jig calls on its own completion path. `merged` is
 // passed in and never derived: a squash merge leaves the branch tip
@@ -54,7 +54,7 @@ export async function teardownRun(
   } catch {
     bindings = [];
   }
-  const frozen = frozenCheckouts(bindings);
+  const ffEnabled = ffByCheckout(bindings);
 
   const rows = await listWorktreesForRun(deps.sql, runId);
   const fastForwarded = new Set<string>();
@@ -68,7 +68,7 @@ export async function teardownRun(
       fastForwarded.add(row.checkoutRoot);
       const result = await ff({
         checkoutRoot: row.checkoutRoot,
-        enabled: frozen.get(row.checkoutRoot) ?? true,
+        enabled: ffEnabled.get(row.checkoutRoot) ?? true,
       });
       log(`[teardown] ${describeFf(row.checkoutRoot, result)}`);
     }

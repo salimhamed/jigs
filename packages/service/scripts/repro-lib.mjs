@@ -55,14 +55,15 @@ export async function startProviderStub() {
   };
 }
 
-// The fuller stub: an issue with a creator, a comment list and a PR whose
-// state the caller mutates through the returned `mock`. suspension-repro and
-// jit-repro keep their own — their handlers answer commentCreate too.
+// The fuller stub: an issue with a creator, a comment list the bot can post
+// into, and a PR whose state the caller mutates through the returned `mock`.
+// jit-repro, ticket-review-repro and review-loop-repro keep their own.
 export async function startLinearGithubStub() {
   const mock = {
     creator: { id: "creator-1", name: "salim" },
     viewer: { id: "bot-1" },
     comments: [],
+    createdComments: [],
     pr: {
       state: "open",
       merged: false,
@@ -80,7 +81,26 @@ export async function startLinearGithubStub() {
     if (req.method === "POST" && req.url === "/graphql") {
       let raw = "";
       for await (const chunk of req) raw += chunk;
-      const { query } = JSON.parse(raw);
+      const { query, variables } = JSON.parse(raw);
+      // Before the "comments" check: the mutation string contains it too.
+      if (query.includes("commentCreate")) {
+        const comment = {
+          id: `bot-comment-${mock.createdComments.length + 1}`,
+          body: variables.input.body,
+          createdAt: new Date().toISOString(),
+          user: { id: mock.viewer.id, name: "jigs" },
+        };
+        mock.comments.push(comment);
+        mock.createdComments.push(comment);
+        return json({
+          data: {
+            commentCreate: {
+              success: true,
+              comment: { id: comment.id, createdAt: comment.createdAt },
+            },
+          },
+        });
+      }
       if (query.includes("comments")) {
         return json({
           data: { issue: { comments: { nodes: mock.comments } } },
