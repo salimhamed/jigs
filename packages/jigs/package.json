@@ -20,6 +20,14 @@
     "./harnesses": {
       "types": "./dist/harnesses/index.d.ts",
       "import": "./dist/harnesses/index.js"
+    },
+    "./steps": {
+      "types": "./src/steps/index.ts",
+      "default": "./src/steps/index.ts"
+    },
+    "./steps/execute": {
+      "types": "./src/steps/execute.ts",
+      "default": "./src/steps/execute.ts"
     }
   },
   "files": [
