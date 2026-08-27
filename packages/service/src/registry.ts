@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import { demoInputs, demoPipeline } from "../pipelines/demo";
+import { stepsDemoInputs, stepsDemoPipeline } from "../pipelines/steps-demo";
 import {
   suspensionDemoInputs,
   suspensionDemoPipeline,
@@ -19,6 +20,11 @@ const entries = {
     pipeline: demoPipeline,
     inputs: demoInputs,
     hookToken: (triggerId) => `demo:${triggerId}`,
+  },
+  "steps-demo": {
+    pipeline: stepsDemoPipeline,
+    inputs: stepsDemoInputs,
+    hookToken: (triggerId) => `steps:${triggerId}`,
   },
   // Resume tokens are resource-scoped (linear:ticket:<uuid>, github:pr:...),
   // derived from inputs rather than the triggerId, so no hookToken here.
