@@ -1,0 +1,358 @@
+import type { WorktreeFacts } from "jigs";
+import { type AgentStepConfig, claude } from "jigs/steps";
+import { beforeEach, expect, test } from "vitest";
+import type { CheckRun, ReviewThread } from "../providers/github";
+import { parseOutput } from "../steps";
+import type { TicketClaim } from "../suspension/claim";
+import type { GateWake } from "../suspension/pull-request-gate";
+import type { PrRef } from "../suspension/tokens";
+import type { Handoff } from "../ticket/review";
+import type { TicketSnapshot } from "../ticket/snapshot";
+import { PrClosedUnmergedError, type ReviewLoopDeps, reviewLoop } from "./loop";
+
+const claim = {
+  issueId: "68bc9696-35d5-442d-ab56-214c8cfefbec",
+  token: "linear:ticket:68bc9696-35d5-442d-ab56-214c8cfefbec",
+} as TicketClaim;
+
+const snapshot: TicketSnapshot = {
+  fetchedAt: "2026-08-26T13:00:00Z",
+  id: claim.issueId,
+  identifier: "AGE-316",
+  title: "Review loop jig",
+  description: "## Acceptance criteria\n\n- the builder answers in-thread",
+  url: "https://linear.app/x/issue/AGE-316",
+  branchName: "salimhamed/age-316-review-loop",
+  state: "Todo",
+  labels: [],
+  comments: [],
+  blockedBy: [],
+  blocks: [],
+  links: [],
+  subIssues: [],
+};
+
+const handoff: Handoff = { brief: "build it", snapshot };
+
+const worktree: WorktreeFacts = {
+  path: "/tmp/worktree",
+  branch: snapshot.branchName,
+  resolution: "new",
+  defaultBranch: "main",
+  baseSha: "base-sha-1",
+  headSha: "head-sha-1",
+  behindDefault: 0,
+};
+
+const pr: PrRef = { owner: "acme", repo: "api", number: 41 };
+
+const thread = (rootId: number): ReviewThread => ({
+  rootId,
+  path: "src/gate.ts",
+  line: 12,
+  comments: [
+    {
+      id: rootId,
+      rootId,
+      body: `comment on ${rootId}`,
+      user: "reviewer",
+      path: "src/gate.ts",
+      line: 12,
+      createdAt: "2026-08-26T12:00:00Z",
+    },
+  ],
+});
+
+const failing: CheckRun[] = [
+  { name: "test", conclusion: "failure", url: "http://ci.test/1" },
+];
+
+const ciRed = (
+  headSha: string,
+  mentionLogin: string | null = "salim",
+): GateWake => ({ kind: "ci-red", headSha, failing, mentionLogin });
+
+type Calls = {
+  agent: AgentStepConfig<unknown>[];
+  pushes: Array<[string, string, string]>;
+  replies: Array<[number, string]>;
+  comments: string[];
+  merges: string[];
+  teardowns: Array<{ merged: boolean }>;
+  needsHuman: number;
+  gateFinished: boolean;
+};
+
+let calls: Calls;
+let agentOutputs: unknown[];
+
+function makeDeps(wakes: GateWake[]): ReviewLoopDeps {
+  return {
+    agent: (async <T>(config: AgentStepConfig<T>) => {
+      calls.agent.push(config as AgentStepConfig<unknown>);
+      const raw =
+        config.output === undefined ? undefined : agentOutputs.shift();
+      return {
+        text: "",
+        output: parseOutput(config.output, raw),
+        files: [],
+        usage: undefined,
+        session: { harness: "claude" as const, id: `s-${calls.agent.length}` },
+      };
+    }) as ReviewLoopDeps["agent"],
+    needsHuman: (async () => {
+      calls.needsHuman += 1;
+      return {
+        commentId: "c1",
+        body: "carry on",
+        author: { id: "u1", name: "salim" },
+        createdAt: "2026-08-26T14:00:00Z",
+      };
+    }) as ReviewLoopDeps["needsHuman"],
+    gate: async function* gate() {
+      yield* wakes;
+      calls.gateFinished = true;
+    } as unknown as ReviewLoopDeps["gate"],
+    resolveRepo: async (binding: string) => ({
+      owner: pr.owner,
+      repo: pr.repo,
+      checkoutRoot: `/checkouts/${binding}`,
+    }),
+    pushWorktreeBranch: async (path, branch, baseSha) => {
+      calls.pushes.push([path, branch, baseSha]);
+      return { commits: 1 };
+    },
+    openPr: async () => pr,
+    replyInThread: async (_pr, rootId, body) => {
+      calls.replies.push([rootId, body]);
+    },
+    commentOnPr: async (_pr, body) => {
+      calls.comments.push(body);
+    },
+    squashMerge: async (_pr, title) => {
+      calls.merges.push(title);
+      return { merged: true, sha: "merge-sha" };
+    },
+    readDiff: async () => "THE-DIFF",
+    teardownRun: async (outcome) => {
+      calls.teardowns.push(outcome);
+      return ["/tmp/worktree"];
+    },
+  };
+}
+
+const approved = { verdict: "approved", findings: [] };
+const answerFor = (rootIds: number[]) => ({
+  answers: rootIds.map((threadId) => ({
+    threadId,
+    body: `answered ${threadId}`,
+  })),
+});
+
+const run = (deps: ReviewLoopDeps, merge: "jigs" | "human" = "jigs") =>
+  reviewLoop(
+    {
+      claim,
+      handoff,
+      harness: claude({ model: "sonnet" }),
+      worktree,
+      binding: "scratch",
+      merge,
+    },
+    deps,
+  );
+
+beforeEach(() => {
+  calls = {
+    agent: [],
+    pushes: [],
+    replies: [],
+    comments: [],
+    merges: [],
+    teardowns: [],
+    needsHuman: 0,
+    gateFinished: false,
+  };
+  // The first review verdict every test needs before the PR is opened.
+  agentOutputs = [approved];
+});
+
+test("the jig implements, pushes the ticket branch and opens the PR before the gate", async () => {
+  const deps = makeDeps([{ kind: "closed", merged: true }]);
+  const result = await run(deps);
+
+  expect(calls.pushes).toEqual([
+    ["/tmp/worktree", snapshot.branchName, "base-sha-1"],
+  ]);
+  expect(result).toEqual({ outcome: "merged", pr, cycles: 1 });
+});
+
+test("an empty branch fails loudly instead of opening an empty PR", async () => {
+  const deps = makeDeps([]);
+  deps.pushWorktreeBranch = async () => ({ commits: 0 });
+  await expect(run(deps)).rejects.toThrow(snapshot.branchName);
+});
+
+test("a review-comments wake answers every thread in place", async () => {
+  agentOutputs = [approved, answerFor([900, 910])];
+  const deps = makeDeps([
+    { kind: "review-comments", threads: [thread(900), thread(910)] },
+    { kind: "closed", merged: true },
+  ]);
+  await run(deps);
+
+  expect(calls.replies).toEqual([
+    [900, "answered 900"],
+    [910, "answered 910"],
+  ]);
+  expect(calls.comments).toEqual([]);
+});
+
+test("a changes-requested review body is answered on the PR conversation", async () => {
+  agentOutputs = [
+    approved,
+    { answers: [{ threadId: null, body: "addressed all four" }] },
+  ];
+  const deps = makeDeps([
+    {
+      kind: "changes-requested",
+      reviewId: 7,
+      reviewer: "salim",
+      body: "four things need fixing",
+      submittedAt: "2026-08-26T12:00:00Z",
+    },
+    { kind: "closed", merged: true },
+  ]);
+  await run(deps);
+
+  expect(calls.replies).toEqual([]);
+  expect(calls.comments).toEqual(["addressed all four"]);
+  const answering = calls.agent.at(-1);
+  expect(answering?.prompt).toContain("four things need fixing");
+});
+
+test("the fourth consecutive red escalates as an @-mention instead of a fix", async () => {
+  const deps = makeDeps([
+    ciRed("sha-1"),
+    ciRed("sha-2"),
+    ciRed("sha-3"),
+    ciRed("sha-4"),
+    { kind: "closed", merged: true },
+  ]);
+  await run(deps);
+
+  // Three bounded fix attempts, each followed by a push.
+  const fixes = calls.agent.filter((call) =>
+    call.prompt.startsWith("# Fix CI"),
+  );
+  expect(fixes).toHaveLength(3);
+  expect(fixes[0]?.prompt).toContain("attempt 1 of 3");
+  expect(fixes[0]?.prompt).toContain("**test** — failure");
+  expect(calls.pushes).toHaveLength(4); // the opening push plus three fixes
+
+  expect(calls.comments).toHaveLength(1);
+  expect(calls.comments[0]?.startsWith("@salim")).toBe(true);
+  expect(calls.comments[0]).toContain("3 fix attempts");
+  // Never needsHuman: the channel for this conversation is GitHub.
+  expect(calls.needsHuman).toBe(0);
+  // And the gate keeps being consumed past the escalation: the close after it
+  // still reached the jig.
+  expect(calls.teardowns).toEqual([{ merged: true }]);
+});
+
+test("a fifth red neither fixes nor escalates a second time", async () => {
+  const deps = makeDeps([
+    ciRed("sha-1"),
+    ciRed("sha-2"),
+    ciRed("sha-3"),
+    ciRed("sha-4"),
+    ciRed("sha-5"),
+    { kind: "closed", merged: true },
+  ]);
+  await run(deps);
+
+  expect(
+    calls.agent.filter((call) => call.prompt.startsWith("# Fix CI")),
+  ).toHaveLength(3);
+  expect(calls.comments).toHaveLength(1);
+});
+
+test("a green run resets the consecutive-red count", async () => {
+  const deps = makeDeps([
+    ciRed("sha-1"),
+    ciRed("sha-2"),
+    { kind: "ci-green", headSha: "sha-3" },
+    ciRed("sha-4"),
+    ciRed("sha-5"),
+    ciRed("sha-6"),
+    { kind: "closed", merged: true },
+  ]);
+  await run(deps);
+
+  expect(
+    calls.agent.filter((call) => call.prompt.startsWith("# Fix CI")),
+  ).toHaveLength(5);
+  expect(calls.comments).toEqual([]);
+});
+
+test("with no reviewer to name the escalation falls back to the repo owner", async () => {
+  const deps = makeDeps([
+    ciRed("sha-1", null),
+    ciRed("sha-2", null),
+    ciRed("sha-3", null),
+    ciRed("sha-4", null),
+    { kind: "closed", merged: true },
+  ]);
+  await run(deps);
+
+  expect(calls.comments[0]?.startsWith("@acme")).toBe(true);
+});
+
+test("an approval squash-merges and tears the run down", async () => {
+  const deps = makeDeps([
+    {
+      kind: "approved",
+      reviewId: 7,
+      reviewer: "salim",
+      submittedAt: "2026-08-26T12:00:00Z",
+    },
+    // Never reached: the jig returns on the approval.
+    { kind: "closed", merged: true },
+  ]);
+  const result = await run(deps);
+
+  expect(calls.merges).toEqual(["AGE-316 Review loop jig"]);
+  expect(calls.teardowns).toEqual([{ merged: true }]);
+  expect(result.outcome).toBe("merged");
+  expect(calls.gateFinished).toBe(false);
+});
+
+test("in human-merges mode an approval merges nothing and keeps listening", async () => {
+  const deps = makeDeps([
+    {
+      kind: "approved",
+      reviewId: 7,
+      reviewer: "salim",
+      submittedAt: "2026-08-26T12:00:00Z",
+    },
+    { kind: "closed", merged: true },
+  ]);
+  const result = await run(deps, "human");
+
+  expect(calls.merges).toEqual([]);
+  expect(calls.teardowns).toEqual([{ merged: true }]);
+  expect(result.outcome).toBe("merged");
+});
+
+test("a PR closed unmerged tears down on the failed rows and fails the run", async () => {
+  const deps = makeDeps([{ kind: "closed", merged: false }]);
+
+  await expect(run(deps)).rejects.toThrow(PrClosedUnmergedError);
+  // Teardown ran before the throw, on the failed-run rows.
+  expect(calls.teardowns).toEqual([{ merged: false }]);
+});
+
+test("a gate that stops delivering before the PR closes is an error, not a silent success", async () => {
+  const deps = makeDeps([]);
+  await expect(run(deps)).rejects.toThrow("stopped delivering wakes");
+});
