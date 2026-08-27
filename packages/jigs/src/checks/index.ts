@@ -1,20 +1,11 @@
 import type { AgentWire } from "../steps/plan.ts";
-import {
-  bindingChecks,
-  factoryConfigFailure,
-  readBindings,
-} from "./bindings.ts";
+import { bindingChecks } from "./bindings.ts";
 import type { Check } from "./catalog.ts";
 import { type CoreProbes, coreChecks } from "./core.ts";
 import { type HarnessKind, harnessChecks } from "./harnesses.ts";
 import { codexWorktreeConfigCheck, mcpServerChecks } from "./mcp.ts";
 
-export {
-  type BindingChecksOptions,
-  bindingChecks,
-  factoryConfigFailure,
-  readBindings,
-} from "./bindings.ts";
+export { type BindingChecksOptions, bindingChecks } from "./bindings.ts";
 export {
   CHECK_TIMEOUT_MS,
   type Check,
@@ -74,20 +65,9 @@ export interface DoctorChecksOptions {
 // No pipeline, so no manifest: doctor takes every declared binding and both
 // harnesses. MCP is absent on purpose — it is JIT-only (ADR 0011).
 export function doctorChecks(options: DoctorChecksOptions): Check[] {
-  let bindings: Check[];
-  try {
-    bindings = bindingChecks({
-      factoryRoot: options.factoryRoot,
-      names: Object.keys(readBindings(options.factoryRoot)),
-    });
-  } catch (err) {
-    // Unlike preflight, doctor has no manifest to excuse an unreadable
-    // config — the operator asked what is wrong, so say it.
-    bindings = [factoryConfigFailure(err)];
-  }
   return [
     ...coreChecks(options.probes),
-    ...bindings,
+    ...bindingChecks({ factoryRoot: options.factoryRoot }),
     ...harnessChecks(["claude", "codex"]),
   ];
 }

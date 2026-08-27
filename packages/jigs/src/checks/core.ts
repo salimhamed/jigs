@@ -7,8 +7,8 @@ export const RESTART_SERVICE = "systemctl --user restart jigs-service";
 // catalog owns the repair text, which is what makes preflight and doctor
 // say the same thing.
 export interface CoreProbes {
-  linearViewer(): Promise<void>;
-  githubWhoami(): Promise<void>;
+  linearViewer(): Promise<unknown>;
+  githubWhoami(): Promise<unknown>;
 }
 
 interface CredentialCheck {
@@ -16,7 +16,7 @@ interface CredentialCheck {
   label: string;
   variable: string;
   provider: string;
-  probe: () => Promise<void>;
+  probe: () => Promise<unknown>;
   env: NodeJS.ProcessEnv;
 }
 

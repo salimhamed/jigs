@@ -47,6 +47,26 @@ test("a check that throws becomes a failure, not a crash", async () => {
   expect(report.checks[1]).toMatchObject({ reason: "A is broken" });
 });
 
+test("a check that never answers times out into a failure, not a hung report", async () => {
+  const report = await runChecks(
+    [
+      {
+        id: "hangs",
+        label: "hanging check",
+        run: () => new Promise<never>(() => {}),
+      },
+      failedCheck("a", "check A", "A is broken", "fix A"),
+    ],
+    20,
+  );
+  expect(report.ok).toBe(false);
+  expect(report.checks[0]).toMatchObject({
+    ok: false,
+    reason: expect.stringContaining("did not answer within 20ms"),
+  });
+  expect(report.checks[1]).toMatchObject({ reason: "A is broken" });
+});
+
 test("formatFailures renders one repair line per failure and skips the passes", () => {
   const text = formatFailures({
     ok: false,

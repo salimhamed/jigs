@@ -1,3 +1,4 @@
+import type { CheckReport } from "../checks/catalog.ts";
 import { CliError } from "../errors.ts";
 
 // An HTTP client of the service (ADR 0008), deliberately not a local run of
@@ -9,20 +10,7 @@ export interface DoctorDeps {
   serviceUrl: string;
 }
 
-export interface DoctorOutcome {
-  id: string;
-  label: string;
-  ok: boolean;
-  reason?: string;
-  repair?: string;
-}
-
-export interface DoctorReport {
-  ok: boolean;
-  checks: DoctorOutcome[];
-}
-
-export async function runDoctor(deps: DoctorDeps): Promise<DoctorReport> {
+export async function runDoctor(deps: DoctorDeps): Promise<CheckReport> {
   const base = deps.serviceUrl.replace(/\/+$/, "");
   let res: Response;
   try {
@@ -36,7 +24,7 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorReport> {
   if (!res.ok) {
     throw new CliError(`doctor failed: HTTP ${res.status} ${await res.text()}`);
   }
-  const report = (await res.json()) as DoctorReport;
+  const report = (await res.json()) as CheckReport;
 
   let failures = 0;
   for (const check of report.checks) {
@@ -45,8 +33,8 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorReport> {
       continue;
     }
     failures += 1;
-    deps.out(`FAIL ${check.label}: ${check.reason ?? "failed"}`);
-    if (check.repair !== undefined) deps.out(`  → ${check.repair}`);
+    deps.out(`FAIL ${check.label}: ${check.reason}`);
+    deps.out(`  → ${check.repair}`);
   }
   if (failures > 0) {
     throw new CliError(`doctor found ${failures} problem(s)`);

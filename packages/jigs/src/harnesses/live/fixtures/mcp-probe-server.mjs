@@ -48,10 +48,15 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       },
     });
   } else if (method === "tools/call") {
+    // An unset token means the spawner did not pass the environment through,
+    // which is a real server failure and must read as one.
     send({
       jsonrpc: "2.0",
       id,
-      result: { content: [{ type: "text", text: TOKEN }] },
+      result: {
+        content: [{ type: "text", text: TOKEN }],
+        ...(process.env.PROBE_TOKEN === undefined ? { isError: true } : {}),
+      },
     });
   } else if (id !== undefined) {
     send({

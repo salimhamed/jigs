@@ -16,13 +16,7 @@ export interface Check {
 
 export type CheckOutcome = { id: string; label: string } & CheckResult;
 
-export type FailedCheck = {
-  id: string;
-  label: string;
-  ok: false;
-  reason: string;
-  repair: string;
-};
+export type FailedCheck = Extract<CheckOutcome, { ok: false }>;
 
 export interface CheckReport {
   ok: boolean;
@@ -31,12 +25,25 @@ export interface CheckReport {
 
 export const CHECK_TIMEOUT_MS = 15_000;
 
-// Concurrent and total: one check throwing must not cost the report its
-// other failures, because aggregation is the whole point.
-export async function runChecks(checks: Check[]): Promise<CheckReport> {
+// Concurrent, bounded and total: one check throwing or hanging must not cost
+// the report its other failures, because aggregation is the whole point.
+export async function runChecks(
+  checks: Check[],
+  timeoutMs: number = CHECK_TIMEOUT_MS,
+): Promise<CheckReport> {
   const outcomes = await Promise.all(
     checks.map(async (check): Promise<CheckOutcome> => {
-      const result = await check.run().catch(
+      const timeout = new Promise<CheckResult>((resolve) => {
+        // AbortSignal.timeout's timer is unref'd, so nothing to clean up.
+        AbortSignal.timeout(timeoutMs).addEventListener("abort", () =>
+          resolve({
+            ok: false,
+            reason: `the check did not answer within ${timeoutMs}ms`,
+            repair: `re-run: jigs doctor — if it hangs again the service cannot reach what ${check.id} probes`,
+          }),
+        );
+      });
+      const result = await Promise.race([check.run(), timeout]).catch(
         (err: unknown): CheckResult => ({
           ok: false,
           reason: String(err),

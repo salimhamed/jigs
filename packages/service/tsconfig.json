@@ -6,8 +6,7 @@
     "lib": ["esnext"],
     "allowImportingTsExtensions": true,
     "paths": {
-      "jigs": ["../jigs/src/index.ts"],
-      "jigs/checks": ["../jigs/src/checks/index.ts"]
+      "jigs": ["../jigs/src/index.ts"]
     },
     "plugins": [{ "name": "workflow" }]
   },

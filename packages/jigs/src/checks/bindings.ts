@@ -20,16 +20,12 @@ export interface BindingChecksOptions {
   // one unreadable jigs.yml must collapse to one failed check rather than a
   // throw out of the trigger path.
   factoryRoot: () => string;
-  names: string[];
+  // Omitted means every declared binding — what doctor needs, having no
+  // pipeline manifest to name them.
+  names?: string[];
 }
 
-export function readBindings(
-  factoryRoot: () => string,
-): Record<string, Binding> {
-  return parseFactoryConfig(readFactoryConfigText(factoryRoot())).bindings;
-}
-
-export function factoryConfigFailure(err: unknown): Check {
+function factoryConfigFailure(err: unknown): Check {
   return failedCheck(
     "binding.factory-config",
     FACTORY_CONFIG_FILE,
@@ -40,14 +36,16 @@ export function factoryConfigFailure(err: unknown): Check {
 
 export function bindingChecks(options: BindingChecksOptions): Check[] {
   // A pipeline requiring no bindings must not need a factory config at all.
-  if (options.names.length === 0) return [];
+  if (options.names?.length === 0) return [];
   let bindings: Record<string, Binding>;
   try {
-    bindings = readBindings(options.factoryRoot);
+    bindings = parseFactoryConfig(
+      readFactoryConfigText(options.factoryRoot()),
+    ).bindings;
   } catch (err) {
     return [factoryConfigFailure(err)];
   }
-  return options.names.map((name) => ({
+  return (options.names ?? Object.keys(bindings)).map((name) => ({
     id: `binding.${name}`,
     label: `binding ${name}`,
     run: () => checkBinding(name, bindings[name]),

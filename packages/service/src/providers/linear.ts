@@ -1,6 +1,6 @@
-// Only ever called from inside "use step" functions — env reads and network
-// are side effects the workflow body must not perform. LINEAR_API_URL
-// override is a test seam.
+// Called from inside "use step" functions and from the trigger-path
+// preflight — never from a workflow body, where env reads and network are
+// forbidden. LINEAR_API_URL override is a test seam.
 
 export interface LinearUser {
   id: string;

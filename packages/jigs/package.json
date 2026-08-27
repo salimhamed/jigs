@@ -22,8 +22,8 @@
       "import": "./dist/harnesses/index.js"
     },
     "./checks": {
-      "types": "./dist/checks/index.d.ts",
-      "import": "./dist/checks/index.js"
+      "types": "./src/checks/index.ts",
+      "default": "./src/checks/index.ts"
     },
     "./steps": {
       "types": "./src/steps/index.ts",

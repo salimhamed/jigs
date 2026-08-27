@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { McpServerConfig } from "../steps/config.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { runChecks } from "./catalog.ts";
@@ -20,6 +20,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   removeTmpDir(tmp);
+  vi.unstubAllEnvs();
 });
 
 async function check(server: McpServerConfig) {
@@ -35,6 +36,17 @@ test("a declared server that starts and answers its probe tool passes", async ()
       command: "node",
       args: [PROBE_SERVER],
       env: { PROBE_TOKEN: "t" },
+      probe: { tool: "get_probe_token" },
+    }),
+  ).toEqual({ id: "mcp.linear", label: "MCP server linear", ok: true });
+});
+
+test("a server is spawned with the step's environment, not the SDK's minimal default", async () => {
+  vi.stubEnv("PROBE_TOKEN", "ambient");
+  expect(
+    await check({
+      command: "node",
+      args: [PROBE_SERVER],
       probe: { tool: "get_probe_token" },
     }),
   ).toEqual({ id: "mcp.linear", label: "MCP server linear", ok: true });

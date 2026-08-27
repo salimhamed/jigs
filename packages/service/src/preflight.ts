@@ -14,31 +14,21 @@ import {
 import { getAuthenticatedUser } from "./providers/github";
 import { getViewer } from "./providers/linear";
 
-export type { PipelineRequires };
-
 export function factoryRoot(): string {
   const override = process.env.JIGS_FACTORY_ROOT;
   if (override !== undefined && override !== "") return override;
   return locateFactoryRoot(process.cwd());
 }
 
-export function serviceProbes(): CoreProbes {
-  return {
-    linearViewer: async () => {
-      await getViewer();
-    },
-    githubWhoami: async () => {
-      await getAuthenticatedUser();
-    },
-  };
-}
+const probes: CoreProbes = {
+  linearViewer: getViewer,
+  githubWhoami: getAuthenticatedUser,
+};
 
 export function preflight(requires: PipelineRequires): Promise<CheckReport> {
-  return runChecks(
-    preflightChecks({ factoryRoot, requires, probes: serviceProbes() }),
-  );
+  return runChecks(preflightChecks({ factoryRoot, requires, probes }));
 }
 
 export function doctor(): Promise<CheckReport> {
-  return runChecks(doctorChecks({ factoryRoot, probes: serviceProbes() }));
+  return runChecks(doctorChecks({ factoryRoot, probes }));
 }

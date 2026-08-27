@@ -1,11 +1,9 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import {
-  getDefaultEnvironment,
-  StdioClientTransport,
-} from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { checkWorktreeCodexMcpConfig } from "../harnesses/codex-config-guard.ts";
+import { scrubbedEnv } from "../harnesses/env.ts";
 import type { McpProbe, McpServerConfig } from "../steps/config.ts";
 import { CHECK_TIMEOUT_MS, type Check, type CheckResult } from "./catalog.ts";
 
@@ -21,9 +19,10 @@ function transportFor(server: McpServerConfig): Transport {
     return new StdioClientTransport({
       command: server.command,
       ...(server.args !== undefined ? { args: server.args } : {}),
-      // The default environment is merged underneath so PATH survives a
-      // server that declares only its own secrets.
-      env: { ...getDefaultEnvironment(), ...server.env },
+      // The step's own environment, not the SDK's six-variable default: the
+      // harness passes its env down to the servers it spawns, so a check
+      // spawning them any leaner fails servers the step would have run.
+      env: { ...scrubbedEnv(), ...server.env },
       stderr: "ignore",
     });
   }

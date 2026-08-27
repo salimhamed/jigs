@@ -5,7 +5,6 @@ export default defineConfig({
     index: "src/index.ts",
     cli: "src/cli.ts",
     "harnesses/index": "src/harnesses/index.ts",
-    "checks/index": "src/checks/index.ts",
   },
   dts: true,
   fixedExtension: false,
