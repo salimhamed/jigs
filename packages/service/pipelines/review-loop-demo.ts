@@ -1,6 +1,10 @@
 import { type AgentStepConfig, claude } from "jigs/steps";
 import { z } from "zod";
-import { type ReviewLoopDeps, realDeps, reviewLoop } from "../src/review-loop";
+import {
+  type ReviewLoopDeps,
+  realDeps,
+  reviewLoop,
+} from "../src/review-loop/loop";
 import { parseOutput, ResumeFailedError } from "../src/steps";
 import { claimTicket } from "../src/suspension/claim";
 import { needsHuman } from "../src/suspension/needs-human";
@@ -11,10 +15,7 @@ import { worktree } from "../src/worktrees";
 export const reviewLoopDemoInputs = z.object({
   issueId: z.uuid(),
   binding: z.string().default("scratch"),
-  branch: z.string().optional(),
   merge: z.enum(["jigs", "human"]).default("jigs"),
-  maxReviewCycles: z.number().int().positive().default(3),
-  maxCiAttempts: z.number().int().positive().default(3),
   // `scripted` drives the whole shape end to end without burning agent turns,
   // the way ticket-review-demo's snapshot-only mode does.
   agents: z.enum(["live", "scripted"]).default("live"),
@@ -36,7 +37,7 @@ export async function reviewLoopDemoPipeline(inputs: ReviewLoopDemoInputs) {
   const snapshot = await fetchSnapshot(inputs.issueId);
   const facts = await worktree({
     binding: inputs.binding,
-    branch: inputs.branch ?? snapshot.branchName,
+    branch: snapshot.branchName,
   });
   console.log(
     `[review-loop-demo] ${snapshot.identifier} on ${facts.branch} at ${facts.path}`,
@@ -65,13 +66,11 @@ export async function reviewLoopDemoPipeline(inputs: ReviewLoopDemoInputs) {
       worktree: facts,
       binding: inputs.binding,
       merge: inputs.merge,
-      maxReviewCycles: inputs.maxReviewCycles,
-      maxCiAttempts: inputs.maxCiAttempts,
     },
     deps,
   );
 
-  return { outcome: result.outcome, pr: result.pr, cycles: result.cycles };
+  return { pr: result.pr, cycles: result.cycles };
 }
 
 function scriptedDeps(staleResume: boolean, binding: string): ReviewLoopDeps {
@@ -93,11 +92,7 @@ function scriptedDeps(staleResume: boolean, binding: string): ReviewLoopDeps {
     // The scripted lane runs against a throwaway repo whose origin is a bare
     // directory, so there is no github.com remote to parse; the stubbed API
     // answers for any owner/repo.
-    resolveRepo: async () => ({
-      owner: "jigs",
-      repo: binding,
-      checkoutRoot: "",
-    }),
+    resolveRepo: async () => ({ owner: "jigs", repo: binding }),
   };
 }
 

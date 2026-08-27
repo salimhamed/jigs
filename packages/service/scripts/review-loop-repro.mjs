@@ -373,7 +373,10 @@ if (mode === "approve-merge" || mode === "ci-escalation") {
   approve();
   await poke();
   const final = await settled("completed");
-  assert(final.returnValue.outcome === "merged", "the run merged its PR");
+  assert(
+    final.returnValue.pr.number === mock.pr.number,
+    "the run returned the pull request it opened",
+  );
   assert(
     writes((w) => w.method === "PUT" && w.url.endsWith("/merge")).length === 1,
     "jigs squash-merged the pull request",

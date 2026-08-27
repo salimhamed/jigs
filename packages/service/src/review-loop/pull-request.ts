@@ -2,6 +2,7 @@
 // provider and jigs' git helpers. jigs is imported dynamically inside the git
 // steps — it reaches node builtins, which the workflow bundle must never see.
 
+import type { GithubRepoRef } from "jigs";
 import {
   createPullRequest,
   postPrComment,
@@ -9,12 +10,6 @@ import {
   squashMergePr,
 } from "../providers/github";
 import type { PrRef } from "../suspension/tokens";
-
-export type RepoRef = {
-  owner: string;
-  repo: string;
-  checkoutRoot: string;
-};
 
 export class RemoteNotGithubError extends Error {
   constructor(binding: string, url: string) {
@@ -34,7 +29,7 @@ export class EmptyBranchError extends Error {
   }
 }
 
-export async function resolveRepo(binding: string): Promise<RepoRef> {
+export async function resolveRepo(binding: string): Promise<GithubRepoRef> {
   "use step";
   const { parseGithubRemote, resolveBinding, resolveRemoteUrl } = await import(
     "jigs"
@@ -47,20 +42,23 @@ export async function resolveRepo(binding: string): Promise<RepoRef> {
   console.log(
     `[reviewLoop] binding ${binding} resolves to ${ref.owner}/${ref.repo}`,
   );
-  return { ...ref, checkoutRoot: resolved.checkoutRoot };
+  return ref;
 }
 
 export async function pushWorktreeBranch(
   worktreePath: string,
   branch: string,
   baseSha: string,
-): Promise<{ commits: number }> {
+): Promise<{ commits: number; headSha: string }> {
   "use step";
-  const { commitsAhead, pushBranch } = await import("jigs");
+  const { commitsAhead, headSha, pushBranch } = await import("jigs");
   const commits = await commitsAhead(worktreePath, baseSha);
   if (commits > 0) await pushBranch(worktreePath, branch);
-  console.log(`[reviewLoop] pushed ${branch} commits=${commits}`);
-  return { commits };
+  const head = await headSha(worktreePath);
+  console.log(
+    `[reviewLoop] pushed ${branch} commits=${commits} head=${head.slice(0, 8)}`,
+  );
+  return { commits, headSha: head };
 }
 
 export async function readDiff(
@@ -75,7 +73,7 @@ export async function readDiff(
 }
 
 export async function openPr(
-  repo: RepoRef,
+  repo: GithubRepoRef,
   head: string,
   base: string,
   title: string,

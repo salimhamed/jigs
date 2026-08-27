@@ -113,14 +113,10 @@ function makeDeps(wakes: GateWake[]): ReviewLoopDeps {
       yield* wakes;
       calls.gateFinished = true;
     } as unknown as ReviewLoopDeps["gate"],
-    resolveRepo: async (binding: string) => ({
-      owner: pr.owner,
-      repo: pr.repo,
-      checkoutRoot: `/checkouts/${binding}`,
-    }),
+    resolveRepo: async () => ({ owner: pr.owner, repo: pr.repo }),
     pushWorktreeBranch: async (path, branch, baseSha) => {
       calls.pushes.push([path, branch, baseSha]);
-      return { commits: 1 };
+      return { commits: 1, headSha: `pushed-${calls.pushes.length}` };
     },
     openPr: async () => pr,
     replyInThread: async (_pr, rootId, body) => {
@@ -184,12 +180,12 @@ test("the jig implements, pushes the ticket branch and opens the PR before the g
   expect(calls.pushes).toEqual([
     ["/tmp/worktree", snapshot.branchName, "base-sha-1"],
   ]);
-  expect(result).toEqual({ outcome: "merged", pr, cycles: 1 });
+  expect(result).toEqual({ pr, cycles: 1 });
 });
 
 test("an empty branch fails loudly instead of opening an empty PR", async () => {
   const deps = makeDeps([]);
-  deps.pushWorktreeBranch = async () => ({ commits: 0 });
+  deps.pushWorktreeBranch = async () => ({ commits: 0, headSha: "base-sha-1" });
   await expect(run(deps)).rejects.toThrow(snapshot.branchName);
 });
 
@@ -206,6 +202,21 @@ test("a review-comments wake answers every thread in place", async () => {
     [910, "answered 910"],
   ]);
   expect(calls.comments).toEqual([]);
+  // The answer prompts have the builder commit its fix, so the branch has to
+  // carry it before the reply claims it does.
+  expect(calls.pushes).toHaveLength(2);
+});
+
+test("an answer naming a thread the wake never carried lands on the conversation", async () => {
+  agentOutputs = [approved, answerFor([900, 4242])];
+  const deps = makeDeps([
+    { kind: "review-comments", threads: [thread(900)] },
+    { kind: "closed", merged: true },
+  ]);
+  await run(deps);
+
+  expect(calls.replies).toEqual([[900, "answered 900"]]);
+  expect(calls.comments).toEqual(["answered 4242"]);
 });
 
 test("a changes-requested review body is answered on the PR conversation", async () => {
@@ -258,6 +269,37 @@ test("the fourth consecutive red escalates as an @-mention instead of a fix", as
   // And the gate keeps being consumed past the escalation: the close after it
   // still reached the jig.
   expect(calls.teardowns).toEqual([{ merged: true }]);
+});
+
+test("a fix that commits nothing escalates instead of waiting for a wake that cannot come", async () => {
+  const deps = makeDeps([ciRed("sha-1"), { kind: "closed", merged: true }]);
+  // No new head means no new CI event, so the gate would never wake again.
+  deps.pushWorktreeBranch = async (path, branch, baseSha) => {
+    calls.pushes.push([path, branch, baseSha]);
+    return { commits: 1, headSha: "sha-1" };
+  };
+  await run(deps);
+
+  expect(
+    calls.agent.filter((call) => call.prompt.startsWith("# Fix CI")),
+  ).toHaveLength(1);
+  expect(calls.comments).toHaveLength(1);
+  expect(calls.comments[0]?.startsWith("@salim")).toBe(true);
+});
+
+test("the CI fix does not take over the builder's session pointer", async () => {
+  agentOutputs = [approved, answerFor([900])];
+  const deps = makeDeps([
+    ciRed("sha-1"),
+    { kind: "review-comments", threads: [thread(900)] },
+    { kind: "closed", merged: true },
+  ]);
+  await run(deps);
+
+  // s-1 is the implement step: the reviewer, the CI fix and the answer all ran
+  // after it, and only the implement session holds the ticket and the change.
+  const answering = calls.agent.at(-1);
+  expect(answering?.resume).toEqual({ harness: "claude", id: "s-1" });
 });
 
 test("a fifth red neither fixes nor escalates a second time", async () => {
@@ -323,7 +365,7 @@ test("an approval squash-merges and tears the run down", async () => {
 
   expect(calls.merges).toEqual(["AGE-316 Review loop jig"]);
   expect(calls.teardowns).toEqual([{ merged: true }]);
-  expect(result.outcome).toBe("merged");
+  expect(result.pr).toEqual(pr);
   expect(calls.gateFinished).toBe(false);
 });
 
@@ -341,7 +383,7 @@ test("in human-merges mode an approval merges nothing and keeps listening", asyn
 
   expect(calls.merges).toEqual([]);
   expect(calls.teardowns).toEqual([{ merged: true }]);
-  expect(result.outcome).toBe("merged");
+  expect(result.pr).toEqual(pr);
 });
 
 test("a PR closed unmerged tears down on the failed rows and fails the run", async () => {

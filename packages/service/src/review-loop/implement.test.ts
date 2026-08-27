@@ -148,8 +148,8 @@ test("the reviewer is never shown the brief and judges against the ticket", asyn
   expect(review?.prompt).toContain("base-sha-1");
   expect(review?.prompt).not.toContain("SECRET-BRIEF-TEXT");
   expect(review?.output).toBe(codeReviewVerdict);
-  // The reviewer reads the diff; it does not need the bypass the builder does.
-  expect(review?.permissionMode).toBeUndefined();
+  // The reviewer needs Bash to read the diff it judges against.
+  expect(review?.permissionMode).toBe("bypassPermissions");
 });
 
 test("a caller-supplied reviewer prompt replaces the default and is interpolated", async () => {

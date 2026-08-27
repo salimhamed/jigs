@@ -42,13 +42,13 @@ export type GateWake =
 export interface GateCursor {
   seenReviewIds: number[];
   seenCommentIds: number[];
-  ci: { headSha: string; state: "unknown" | "red" | "green" };
+  lastRedSha: string | null;
 }
 
 export const emptyGateCursor = (): GateCursor => ({
   seenReviewIds: [],
   seenCommentIds: [],
-  ci: { headSha: "", state: "unknown" },
+  lastRedSha: null,
 });
 
 function lastHumanReviewer(snapshot: PrSnapshot): string | null {
@@ -109,24 +109,21 @@ export function classifyPrState(
   }
   if (threads.length > 0) wakes.push({ kind: "review-comments", threads });
 
-  // The cursor's CI state records what the consumer was last told, so a red
-  // yields once per head and a green only as a recovery from red — which is
-  // what resets the consecutive-red count. Pending says nothing at all.
-  let ci = cursor.ci;
-  if (
-    snapshot.ci === "red" &&
-    (ci.headSha !== snapshot.headSha || ci.state !== "red")
-  ) {
+  // The head the consumer was last told is red, so a red yields once per head
+  // and a green only as a recovery from one — which is what resets the
+  // consecutive-red count. Pending says nothing at all.
+  let lastRedSha = cursor.lastRedSha;
+  if (snapshot.ci === "red" && lastRedSha !== snapshot.headSha) {
     wakes.push({
       kind: "ci-red",
       headSha: snapshot.headSha,
       failing: snapshot.failingChecks,
       mentionLogin: lastHumanReviewer(snapshot),
     });
-    ci = { headSha: snapshot.headSha, state: "red" };
-  } else if (snapshot.ci === "green" && ci.state === "red") {
+    lastRedSha = snapshot.headSha;
+  } else if (snapshot.ci === "green" && lastRedSha !== null) {
     wakes.push({ kind: "ci-green", headSha: snapshot.headSha });
-    ci = { headSha: snapshot.headSha, state: "green" };
+    lastRedSha = null;
   }
 
   // `done` is the PR being closed, and nothing else. An approval no longer
@@ -134,7 +131,7 @@ export function classifyPrState(
   // actually closes, so ending the review is the consumer's policy call.
   const done = snapshot.state === "closed";
   if (done) wakes.push({ kind: "closed", merged: snapshot.merged });
-  return { wakes, cursor: { seenReviewIds, seenCommentIds, ci }, done };
+  return { wakes, cursor: { seenReviewIds, seenCommentIds, lastRedSha }, done };
 }
 
 // One hook per PR, held across the whole review until the PR closes — the

@@ -16,6 +16,7 @@ import {
   setWorktreeState,
 } from "./registry";
 import { factoryRoot } from "./request";
+import { frozenCheckouts } from "./sweep";
 
 // The per-run teardown a jig calls on its own completion path. `merged` is
 // passed in and never derived: a squash merge leaves the branch tip
@@ -45,7 +46,15 @@ export async function teardownRun(
   const ff = deps.fastForward ?? fastForwardDefaultBranch;
   const removeCodexHome = deps.removeCodexHome ?? removeManagedCodexHome;
   const log = deps.log ?? ((line: string) => console.log(line));
-  const ffEnabled = ffByCheckout(deps);
+  // A service with no reachable factory config still tears down; only the
+  // fast-forward opt-out needs the binding list.
+  let bindings: ResolvedBinding[] = [];
+  try {
+    bindings = (deps.bindings ?? (() => resolveBindings(factoryRoot())))();
+  } catch {
+    bindings = [];
+  }
+  const frozen = frozenCheckouts(bindings);
 
   const rows = await listWorktreesForRun(deps.sql, runId);
   const fastForwarded = new Set<string>();
@@ -59,7 +68,7 @@ export async function teardownRun(
       fastForwarded.add(row.checkoutRoot);
       const result = await ff({
         checkoutRoot: row.checkoutRoot,
-        enabled: ffEnabled(row.checkoutRoot),
+        enabled: frozen.get(row.checkoutRoot) ?? true,
       });
       log(`[teardown] ${describeFf(row.checkoutRoot, result)}`);
     }
@@ -89,31 +98,4 @@ export async function teardownRun(
   // The run is finishing: nothing will resume its Codex threads.
   removeCodexHome(runId);
   return removed;
-}
-
-// A checkout is frozen if any binding on it opts out of the fast-forward. A
-// service with no reachable factory config still tears down; only the opt-out
-// needs the binding list.
-function ffByCheckout(
-  deps: TeardownRunDeps,
-): (checkoutRoot: string) => boolean {
-  let frozen: Map<string, boolean> | null = null;
-  return (checkoutRoot: string) => {
-    if (frozen === null) {
-      frozen = new Map();
-      let bindings: ResolvedBinding[] = [];
-      try {
-        bindings = (deps.bindings ?? (() => resolveBindings(factoryRoot())))();
-      } catch {
-        bindings = [];
-      }
-      for (const binding of bindings) {
-        frozen.set(
-          binding.checkoutRoot,
-          (frozen.get(binding.checkoutRoot) ?? true) && binding.ffDefaultBranch,
-        );
-      }
-    }
-    return frozen.get(checkoutRoot) ?? true;
-  };
 }

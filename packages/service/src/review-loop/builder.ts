@@ -47,10 +47,7 @@ export type BuilderDeps = {
 
 const realDeps: BuilderDeps = { agent, readDiff };
 
-export function renderThreads(
-  threads: ReviewThread[],
-  reviewBody?: string,
-): string {
+function renderThreads(threads: ReviewThread[], reviewBody?: string): string {
   const blocks = threads.map((thread) => {
     const where =
       thread.line === null

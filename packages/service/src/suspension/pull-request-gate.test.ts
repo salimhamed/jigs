@@ -186,7 +186,7 @@ test("a new red head yields ci-red naming the failing checks and the reviewer to
       mentionLogin: "salim",
     },
   ]);
-  expect(result.cursor.ci).toEqual({ headSha: "head-1", state: "red" });
+  expect(result.cursor.lastRedSha).toBe("head-1");
 });
 
 test("the same red head does not re-yield, but a new head does", () => {
@@ -217,7 +217,7 @@ test("a recovery to green yields ci-green, and green from nowhere yields nothing
     red.cursor,
   );
   expect(recovered.wakes).toEqual([{ kind: "ci-green", headSha: "head-2" }]);
-  expect(recovered.cursor.ci).toEqual({ headSha: "head-2", state: "green" });
+  expect(recovered.cursor.lastRedSha).toBeNull();
 });
 
 test("pending yields nothing and leaves the cursor's CI state alone", () => {
@@ -227,7 +227,7 @@ test("pending yields nothing and leaves the cursor's CI state alone", () => {
   );
   const pending = classifyPrState(snapshot({ ci: "pending" }), red.cursor);
   expect(pending.wakes).toEqual([]);
-  expect(pending.cursor.ci).toEqual(red.cursor.ci);
+  expect(pending.cursor.lastRedSha).toBe(red.cursor.lastRedSha);
 });
 
 test("a closed PR yields closed with the merged flag and finishes the gate", () => {

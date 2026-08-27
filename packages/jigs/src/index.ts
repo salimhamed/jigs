@@ -35,6 +35,7 @@ export { CliError } from "./errors.ts";
 export {
   commitsAhead,
   diffSince,
+  headSha,
   pushBranch,
   type ResolvedRemote,
   resolveRemoteUrl,

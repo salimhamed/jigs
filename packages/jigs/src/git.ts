@@ -106,6 +106,10 @@ export async function pushBranch(
   await git(["push", "origin", `HEAD:refs/heads/${branch}`], worktreePath);
 }
 
+export async function headSha(worktreePath: string): Promise<string> {
+  return git(["rev-parse", "HEAD"], worktreePath);
+}
+
 export async function commitsAhead(
   worktreePath: string,
   baseSha: string,

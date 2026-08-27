@@ -52,7 +52,6 @@ export interface ReviewLoopOptions {
 }
 
 export type ReviewLoopResult = {
-  outcome: "merged";
   pr: PrRef;
   cycles: number;
 };
@@ -180,7 +179,27 @@ export async function reviewLoop(
           { agent: deps.agent, readDiff: deps.readDiff },
         );
         session = answered.session ?? session;
-        await postAnswers(pr, answered.output, replyInThread, commentOnPr);
+        // The answer prompts tell the builder to commit its fix before
+        // replying, so the reply is only true once the branch carries it.
+        await pushWorktreeBranch(
+          worktree.path,
+          worktree.branch,
+          worktree.baseSha,
+        );
+        // Anything the model names that this wake did not carry is invented:
+        // replying into it 404s, and a 404 burns the step's three retries.
+        const known = new Set(
+          wake.kind === "review-comments"
+            ? wake.threads.map((thread) => thread.rootId)
+            : [],
+        );
+        await postAnswers(
+          pr,
+          answered.output,
+          known,
+          replyInThread,
+          commentOnPr,
+        );
         break;
       }
       case "ci-red": {
@@ -196,7 +215,9 @@ export async function reviewLoop(
           }
           break;
         }
-        const fix = await deps.agent({
+        // The fix step's session is not the builder's: it holds only this
+        // turn, so `session` keeps pointing at the implement session.
+        await deps.agent({
           harness: options.harness,
           cwd: worktree.path,
           permissionMode: "bypassPermissions",
@@ -205,12 +226,22 @@ export async function reviewLoop(
             ATTEMPT: `${ciAttempts} of ${maxCiAttempts}`,
           }),
         });
-        session = fix.session ?? session;
-        await pushWorktreeBranch(
+        const after = await pushWorktreeBranch(
           worktree.path,
           worktree.branch,
           worktree.baseSha,
         );
+        // A fix that committed nothing pushes no new head, so CI never runs
+        // again and no further wake can arrive: escalate now rather than wait
+        // on a wake that cannot come. The bound is spent past its once-per-
+        // streak comment so a later red in the same streak stays quiet.
+        if (after.headSha === wake.headSha) {
+          await commentOnPr(
+            pr,
+            escalation(wake.mentionLogin ?? pr.owner, wake, ciAttempts),
+          );
+          ciAttempts = maxCiAttempts + 1;
+        }
         break;
       }
       case "ci-green":
@@ -225,11 +256,11 @@ export async function reviewLoop(
         }
         await squashMerge(pr, title);
         await teardownRun({ merged: true });
-        return { outcome: "merged", pr, cycles: built.cycles };
+        return { pr, cycles: built.cycles };
       }
       case "closed": {
         await teardownRun({ merged: wake.merged });
-        if (wake.merged) return { outcome: "merged", pr, cycles: built.cycles };
+        if (wake.merged) return { pr, cycles: built.cycles };
         throw new PrClosedUnmergedError(pr);
       }
     }
@@ -242,11 +273,17 @@ export async function reviewLoop(
 async function postAnswers(
   pr: PrRef,
   answers: ThreadAnswers,
+  known: Set<number>,
   reply: typeof replyInThread,
   comment: typeof commentOnPr,
 ): Promise<void> {
   for (const answer of answers.answers) {
-    if (answer.threadId === null) {
+    if (answer.threadId !== null && !known.has(answer.threadId)) {
+      console.log(
+        `[reviewLoop] answer named unknown thread ${answer.threadId} — posting on the conversation instead`,
+      );
+    }
+    if (answer.threadId === null || !known.has(answer.threadId)) {
       await comment(pr, answer.body);
     } else {
       await reply(pr, answer.threadId, answer.body);
@@ -280,7 +317,7 @@ function escalation(
   attempts: number,
 ): string {
   return [
-    `@${login} CI is still red on \`${wake.headSha.slice(0, 8)}\` after ${attempts} fix attempts, so I am standing down rather than pushing a fourth guess.`,
+    `@${login} CI is still red on \`${wake.headSha.slice(0, 8)}\` after ${attempts} fix attempts, so I am standing down rather than guessing again.`,
     "",
     renderChecks(wake.failing),
   ].join("\n");

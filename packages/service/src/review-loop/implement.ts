@@ -87,6 +87,9 @@ export async function implementAndReview(
       const verdict = await deps.agent({
         harness: options.harness,
         cwd: options.cwd,
+        // The reviewer's whole prompt is built around running git diff, and
+        // Bash is not auto-approved below this mode.
+        permissionMode: "bypassPermissions",
         prompt: interpolate(options.reviewPrompt ?? codeReviewPrompt, {
           TICKET: ticket,
           BASE_SHA: options.baseSha,
