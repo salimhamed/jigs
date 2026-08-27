@@ -40,6 +40,18 @@ test("preflight-demo declares the bindings and harnesses its runs require", () =
   });
 });
 
+test("ticket-review-demo takes an issue uuid, defaults its model, and resumes on the ticket claim", () => {
+  const entry = registry["ticket-review-demo"];
+  expect(
+    entry?.inputs.parse({ issueId: crypto.randomUUID(), cwd: "/wt" }),
+  ).toMatchObject({ cwd: "/wt", model: "sonnet" });
+  expect(
+    entry?.inputs.safeParse({ issueId: "AGE-313", cwd: "/wt" }).success,
+  ).toBe(false);
+  expect(entry?.requires).toEqual({ harnesses: ["claude"] });
+  expect(entry?.hookToken).toBeUndefined();
+});
+
 test("a pipeline with no requires preflights against the core set alone", () => {
   expect(registry["steps-demo"]?.requires).toBeUndefined();
 });

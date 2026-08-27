@@ -11,6 +11,10 @@ import {
   suspensionDemoInputs,
   suspensionDemoPipeline,
 } from "../pipelines/suspension-demo";
+import {
+  ticketReviewDemoInputs,
+  ticketReviewDemoPipeline,
+} from "../pipelines/ticket-review-demo";
 
 export interface PipelineEntry<S extends z.ZodType = z.ZodType> {
   pipeline: (inputs: z.output<S> & { triggerId: string }) => Promise<unknown>;
@@ -39,6 +43,11 @@ const entries = {
   "suspension-demo": {
     pipeline: suspensionDemoPipeline,
     inputs: suspensionDemoInputs,
+  },
+  "ticket-review-demo": {
+    pipeline: ticketReviewDemoPipeline,
+    inputs: ticketReviewDemoInputs,
+    requires: { harnesses: ["claude"] },
   },
   "jit-demo": {
     pipeline: jitDemoPipeline,
