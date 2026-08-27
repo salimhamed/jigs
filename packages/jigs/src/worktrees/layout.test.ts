@@ -1,0 +1,70 @@
+import path from "node:path";
+import { expect, test } from "vitest";
+import { expandHome } from "../paths.ts";
+import { branchDirname, factorySlug, worktreePath } from "./layout.ts";
+
+test("factorySlug embeds the dirname and is stable for equal paths", () => {
+  const slug = factorySlug("/home/x/factories/acme");
+  expect(slug).toMatch(/^acme-[0-9a-f]{8}$/);
+  expect(factorySlug("/home/x/factories/acme")).toBe(slug);
+});
+
+test("factorySlug distinguishes same-named factories at different paths", () => {
+  expect(factorySlug("/a/factory")).not.toBe(factorySlug("/b/factory"));
+});
+
+test("branchDirname maps slashes to dashes", () => {
+  expect(branchDirname("salim/age-308-worktrees")).toBe(
+    "salim-age-308-worktrees",
+  );
+  expect(branchDirname("main")).toBe("main");
+});
+
+test("worktreePath joins base, factory slug, binding name, branch dirname", () => {
+  const p = worktreePath({
+    baseDir: "/data/worktrees",
+    factoryRoot: "/f/acme",
+    bindingName: "api",
+    branch: "salim/fix",
+  });
+  expect(p).toBe(
+    path.join("/data/worktrees", factorySlug("/f/acme"), "api", "salim-fix"),
+  );
+});
+
+test("workspace_dir override wins over the central root", () => {
+  const p = worktreePath({
+    baseDir: "/data/worktrees",
+    factoryRoot: "/f/acme",
+    bindingName: "api",
+    branch: "salim/fix",
+    workspaceDir: "~/wt",
+  });
+  expect(p).toBe(path.join(expandHome("~/wt"), "salim-fix"));
+});
+
+test("central root defaults to the XDG data home", () => {
+  const previous = process.env.XDG_DATA_HOME;
+  process.env.XDG_DATA_HOME = "/xdg-data";
+  try {
+    const p = worktreePath({
+      factoryRoot: "/f/acme",
+      bindingName: "api",
+      branch: "main",
+    });
+    expect(p).toBe(
+      path.join(
+        "/xdg-data/jigs/worktrees",
+        factorySlug("/f/acme"),
+        "api",
+        "main",
+      ),
+    );
+  } finally {
+    if (previous === undefined) {
+      delete process.env.XDG_DATA_HOME;
+    } else {
+      process.env.XDG_DATA_HOME = previous;
+    }
+  }
+});

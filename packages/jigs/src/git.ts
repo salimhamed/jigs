@@ -5,12 +5,15 @@ import { CliError } from "./errors.ts";
 
 const execFileAsync = promisify(execFile);
 
-async function git(args: string[], cwd: string): Promise<string> {
+export async function git(args: string[], cwd: string): Promise<string> {
   const { stdout } = await execFileAsync("git", args, { cwd });
   return stdout.trim();
 }
 
-async function tryGit(args: string[], cwd: string): Promise<string | null> {
+export async function tryGit(
+  args: string[],
+  cwd: string,
+): Promise<string | null> {
   try {
     return await git(args, cwd);
   } catch {
