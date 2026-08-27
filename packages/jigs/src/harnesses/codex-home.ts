@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
+import { jigsDataDir } from "../paths.ts";
 
 // The managed Codex home (ADR 0011): codex has no strict-config flag, so
 // deny-by-default is enforced by pointing CODEX_HOME at a jigs-owned
@@ -37,13 +38,7 @@ export function managedCodexHomePath(
   runKey: string,
   options: CodexHomeOptions = {},
 ): string {
-  const base =
-    options.baseDir ??
-    path.join(
-      process.env.XDG_DATA_HOME ?? path.join(homedir(), ".local", "share"),
-      "jigs",
-      "codex-homes",
-    );
+  const base = options.baseDir ?? path.join(jigsDataDir(), "codex-homes");
   return path.join(base, runKey);
 }
 

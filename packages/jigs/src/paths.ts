@@ -1,6 +1,13 @@
 import { homedir } from "node:os";
 import path from "node:path";
 
+export function jigsDataDir(): string {
+  return path.join(
+    process.env.XDG_DATA_HOME ?? path.join(homedir(), ".local", "share"),
+    "jigs",
+  );
+}
+
 export function expandHome(p: string, home: string = homedir()): string {
   if (p === "~") return home;
   if (p.startsWith("~/")) return path.join(home, p.slice(2));
