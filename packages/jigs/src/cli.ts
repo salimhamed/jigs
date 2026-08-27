@@ -3,6 +3,7 @@ import readline from "node:readline/promises";
 import { Command, Option } from "commander";
 import { bindRepo } from "./commands/bind.ts";
 import { type BindingRow, listBindings } from "./commands/bindings.ts";
+import { runDoctor } from "./commands/doctor.ts";
 import { pokeRun } from "./commands/poke.ts";
 import { unbindRepo } from "./commands/unbind.ts";
 import { CliError } from "./errors.ts";
@@ -95,6 +96,18 @@ program
   )
   .action(async (runId: string, options: { service: string }) => {
     await pokeRun(runId, { out, serviceUrl: options.service });
+  });
+
+program
+  .command("doctor")
+  .description("run the check catalog against the service, without launching")
+  .addOption(
+    new Option("--service <url>", "jigs service URL")
+      .env("JIGS_SERVICE_URL")
+      .default("http://localhost:8990"),
+  )
+  .action(async (options: { service: string }) => {
+    await runDoctor({ out, serviceUrl: options.service });
   });
 
 program

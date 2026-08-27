@@ -10,6 +10,8 @@ human approval where it matters.
 **Status:** runtime service skeleton plus factory config. Pipelines run on
 the Vercel Workflow SDK with a self-hosted Postgres World; the CLI manages
 repo bindings (`jigs bind` / `unbind` / `bindings`) in a committed `jigs.yml`.
+Every trigger preflights the pipeline's requirements before creating a run,
+and `jigs doctor` runs the same checks on demand.
 
 ## Layout
 
