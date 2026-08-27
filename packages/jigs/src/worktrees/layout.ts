@@ -22,16 +22,18 @@ export interface WorktreePathOptions {
   baseDir?: string;
 }
 
-export function worktreePath(options: WorktreePathOptions): string {
-  const dirname = branchDirname(options.branch);
+// The directory a binding's worktrees all sit directly under — what the
+// sweep scans to find directories the registry never heard of.
+export function worktreeParentDir(
+  options: Omit<WorktreePathOptions, "branch">,
+): string {
   if (options.workspaceDir !== undefined) {
-    return path.join(expandHome(options.workspaceDir), dirname);
+    return expandHome(options.workspaceDir);
   }
   const base = options.baseDir ?? path.join(jigsDataDir(), "worktrees");
-  return path.join(
-    base,
-    factorySlug(options.factoryRoot),
-    options.bindingName,
-    dirname,
-  );
+  return path.join(base, factorySlug(options.factoryRoot), options.bindingName);
+}
+
+export function worktreePath(options: WorktreePathOptions): string {
+  return path.join(worktreeParentDir(options), branchDirname(options.branch));
 }

@@ -1,0 +1,204 @@
+import { existsSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { afterEach, beforeEach, expect, test } from "vitest";
+import {
+  git,
+  makeRemoteBackedRepo,
+  makeTmpDir,
+  removeTmpDir,
+} from "../test-fixtures.ts";
+import {
+  applyTeardown,
+  decideTeardown,
+  isWorktreeDirty,
+  type RunOutcome,
+} from "./teardown.ts";
+
+test("done (merged) removes the worktree and deletes both branches", () => {
+  expect(
+    decideTeardown({ outcome: "completed", keep: false, dirty: false }),
+  ).toEqual({
+    removeWorktree: true,
+    force: true,
+    deleteLocalBranch: true,
+    deleteRemoteBranch: true,
+    preserve: null,
+  });
+});
+
+test("a failed run with a clean tree removes the worktree and keeps the branches", () => {
+  expect(
+    decideTeardown({ outcome: "failed", keep: false, dirty: false }),
+  ).toEqual({
+    removeWorktree: true,
+    force: false,
+    deleteLocalBranch: false,
+    deleteRemoteBranch: false,
+    preserve: null,
+  });
+});
+
+test("a cancelled run with a clean tree removes the worktree and keeps the branches", () => {
+  expect(
+    decideTeardown({ outcome: "cancelled", keep: false, dirty: false }),
+  ).toEqual({
+    removeWorktree: true,
+    force: false,
+    deleteLocalBranch: false,
+    deleteRemoteBranch: false,
+    preserve: null,
+  });
+});
+
+test("a failed run with a dirty tree preserves it as abandoned-dirty", () => {
+  expect(
+    decideTeardown({ outcome: "failed", keep: false, dirty: true }),
+  ).toEqual({
+    removeWorktree: false,
+    force: false,
+    deleteLocalBranch: false,
+    deleteRemoteBranch: false,
+    preserve: "abandoned-dirty",
+  });
+});
+
+test("a cancelled run with a dirty tree preserves it as abandoned-dirty", () => {
+  expect(
+    decideTeardown({ outcome: "cancelled", keep: false, dirty: true }),
+  ).toEqual({
+    removeWorktree: false,
+    force: false,
+    deleteLocalBranch: false,
+    deleteRemoteBranch: false,
+    preserve: "abandoned-dirty",
+  });
+});
+
+test("an owner whose outcome is unknown is treated as a failed run", () => {
+  expect(
+    decideTeardown({ outcome: "unknown", keep: false, dirty: false }),
+  ).toEqual(decideTeardown({ outcome: "failed", keep: false, dirty: false }));
+  expect(
+    decideTeardown({ outcome: "unknown", keep: false, dirty: true }),
+  ).toEqual(decideTeardown({ outcome: "failed", keep: false, dirty: true }));
+});
+
+test("keep: true wins over every outcome", () => {
+  const outcomes: RunOutcome[] = [
+    "completed",
+    "failed",
+    "cancelled",
+    "unknown",
+  ];
+  for (const outcome of outcomes) {
+    for (const dirty of [false, true]) {
+      expect(decideTeardown({ outcome, keep: true, dirty })).toEqual({
+        removeWorktree: false,
+        force: false,
+        deleteLocalBranch: false,
+        deleteRemoteBranch: false,
+        preserve: null,
+      });
+    }
+  }
+});
+
+let tmp: string;
+let remoteDir: string;
+let checkout: string;
+let worktree: string;
+
+beforeEach(() => {
+  tmp = makeTmpDir();
+  ({ remoteDir, checkout } = makeRemoteBackedRepo(tmp));
+  worktree = path.join(tmp, "wt", "feat");
+  git(checkout, "worktree", "add", "-q", worktree, "-b", "feat");
+  writeFileSync(path.join(worktree, "work.txt"), "agent work\n");
+  git(worktree, "add", "work.txt");
+  git(worktree, "commit", "-q", "-m", "agent work");
+  git(worktree, "push", "-q", "origin", "feat");
+});
+afterEach(() => {
+  removeTmpDir(tmp);
+});
+
+const target = () => ({
+  checkoutRoot: checkout,
+  worktreePath: worktree,
+  branch: "feat",
+});
+const localBranch = () =>
+  git(checkout, "rev-parse", "--verify", "--quiet", "refs/heads/feat") !== "";
+const remoteBranch = () =>
+  git(checkout, "ls-remote", "--heads", "origin", "feat") !== "";
+
+test("done (merged) removes the worktree and deletes the local and remote branches", async () => {
+  // Untracked build output is the normal state of a finished worktree.
+  writeFileSync(path.join(worktree, "build.log"), "noise\n");
+  await applyTeardown(
+    decideTeardown({ outcome: "completed", keep: false, dirty: false }),
+    target(),
+  );
+  expect(existsSync(worktree)).toBe(false);
+  expect(() => localBranch()).toThrow();
+  expect(remoteBranch()).toBe(false);
+});
+
+test("the remote delete is idempotent when GitHub already deleted the branch on merge", async () => {
+  git(remoteDir, "update-ref", "-d", "refs/heads/feat");
+  await expect(
+    applyTeardown(
+      decideTeardown({ outcome: "completed", keep: false, dirty: false }),
+      target(),
+    ),
+  ).resolves.toBeUndefined();
+  expect(existsSync(worktree)).toBe(false);
+  expect(() => localBranch()).toThrow();
+});
+
+test("a failed run with a clean tree keeps both branches as insurance", async () => {
+  await applyTeardown(
+    decideTeardown({ outcome: "failed", keep: false, dirty: false }),
+    target(),
+  );
+  expect(existsSync(worktree)).toBe(false);
+  expect(localBranch()).toBe(true);
+  expect(remoteBranch()).toBe(true);
+});
+
+test("a failed run with a dirty tree preserves the worktree untouched and never commits", async () => {
+  writeFileSync(path.join(worktree, "work.txt"), "half-finished\n");
+  const head = git(worktree, "rev-parse", "HEAD");
+  await applyTeardown(
+    decideTeardown({ outcome: "failed", keep: false, dirty: true }),
+    target(),
+  );
+  expect(existsSync(worktree)).toBe(true);
+  expect(await isWorktreeDirty(worktree)).toBe(true);
+  expect(git(worktree, "rev-parse", "HEAD")).toBe(head);
+});
+
+test("keep: true leaves the worktree and branches alone", async () => {
+  await applyTeardown(
+    decideTeardown({ outcome: "completed", keep: true, dirty: false }),
+    target(),
+  );
+  expect(existsSync(worktree)).toBe(true);
+  expect(localBranch()).toBe(true);
+  expect(remoteBranch()).toBe(true);
+});
+
+test("removing a worktree prunes the admin entry so the same path can be re-added", async () => {
+  await applyTeardown(
+    decideTeardown({ outcome: "failed", keep: false, dirty: false }),
+    target(),
+  );
+  expect(() =>
+    git(checkout, "worktree", "add", "-q", worktree, "feat"),
+  ).not.toThrow();
+});
+
+test("a clean worktree reads not-dirty and a missing directory does too", async () => {
+  expect(await isWorktreeDirty(worktree)).toBe(false);
+  expect(await isWorktreeDirty(path.join(tmp, "nowhere"))).toBe(false);
+});
