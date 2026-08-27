@@ -21,19 +21,40 @@ export function ticketToken(issueId: string): string {
   return `linear:ticket:${issueId}`;
 }
 
-// Any GitHub event carrying a pull_request + repository (pull_request,
-// pull_request_review, …) is routable; everything else (ping included) is not.
+type GithubPayload = {
+  pull_request?: { number?: unknown };
+  // issue_comment fires for issues too; only a PR carries issue.pull_request.
+  issue?: { number?: unknown; pull_request?: unknown };
+  check_suite?: { pull_requests?: Array<{ number?: unknown }> };
+  check_run?: { pull_requests?: Array<{ number?: unknown }> };
+  repository?: { name?: unknown; owner?: { login?: unknown } };
+};
+
+function prNumber(payload: GithubPayload): number | null {
+  const candidates = [
+    payload.pull_request?.number,
+    payload.issue?.pull_request === undefined
+      ? undefined
+      : payload.issue?.number,
+    payload.check_suite?.pull_requests?.[0]?.number,
+    payload.check_run?.pull_requests?.[0]?.number,
+  ];
+  const number = candidates.find((value) => typeof value === "number");
+  return number ?? null;
+}
+
+// Any GitHub event that names a pull request and a repository is routable:
+// pull_request and pull_request_review carry it directly, issue_comment
+// carries it only on a PR, and the check events carry it in a list. Everything
+// else (ping included) is not.
 export function tokenFromGithubPayload(payload: unknown): string | null {
   if (typeof payload !== "object" || payload === null) return null;
-  const { pull_request, repository } = payload as {
-    pull_request?: { number?: unknown };
-    repository?: { name?: unknown; owner?: { login?: unknown } };
-  };
-  const number = pull_request?.number;
+  const { repository } = payload as GithubPayload;
   const repo = repository?.name;
   const owner = repository?.owner?.login;
+  const number = prNumber(payload as GithubPayload);
   if (
-    typeof number !== "number" ||
+    number === null ||
     typeof repo !== "string" ||
     typeof owner !== "string"
   ) {

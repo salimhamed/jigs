@@ -91,6 +91,26 @@ test("a validly signed PR review delivery nobody is listening to is dropped with
   expect(await again.json()).toEqual({ delivered: false });
 });
 
+test("a signed check_suite delivery is routed to the PR it belongs to", async () => {
+  const body = JSON.stringify({
+    action: "completed",
+    check_suite: {
+      id: 9,
+      conclusion: "failure",
+      pull_requests: [{ number: 41 }],
+    },
+    repository: { name: "api", owner: { login: "acme" } },
+  });
+  const res = await postGithub(body, {
+    "x-hub-signature-256": `sha256=${sign(body, "gh-hook-secret")}`,
+    "x-github-event": "check_suite",
+  });
+  // Nobody is listening in this lane, so the delivery drops — what matters is
+  // that it was routed at all rather than acknowledged as unroutable.
+  expect(res.status).toBe(404);
+  expect(await res.json()).toEqual({ delivered: false });
+});
+
 test("an unroutable github event is acknowledged and ignored", async () => {
   const ping = JSON.stringify({
     zen: "Keep it logically awesome.",

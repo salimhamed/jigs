@@ -41,6 +41,9 @@ export async function suspensionDemoPipeline(inputs: SuspensionDemoInputs) {
     for await (const wake of pullRequestGate(inputs.pr)) {
       console.log(`[suspension-demo] gate wake kind=${wake.kind}`);
       wakes.push(wake);
+      // The gate ends itself only when the PR closes; what an approval means
+      // is the consumer's policy, and this demo's is to stop there.
+      if (wake.kind === "approved") break;
     }
   }
 

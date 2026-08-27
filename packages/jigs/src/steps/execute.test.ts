@@ -20,7 +20,7 @@ import {
   executeAskStep,
 } from "./execute.ts";
 import { buildAgentWire, buildAskWire } from "./plan.ts";
-import type { StepUsage } from "./result.ts";
+import type { AgentStepResult, StepUsage } from "./result.ts";
 
 const usage = { inputTokens: 12, outputTokens: 34 } as unknown as StepUsage;
 
@@ -75,6 +75,18 @@ function makeDeps(
   return { deps, captured };
 }
 
+// executeAgentStep answers a union; every test but the resume-failure ones
+// wants the successful arm.
+async function runAgent(
+  ...args: Parameters<typeof executeAgentStep>
+): Promise<AgentStepResult<unknown>> {
+  const result = await executeAgentStep(...args);
+  if ("resumeFailed" in result) {
+    throw new Error(`unexpected resume failure: ${result.resumeFailed}`);
+  }
+  return result;
+}
+
 function claudeSettingsOf(captured: Captured): ClaudeCodeSettings {
   const model = captured.options?.model as { settings?: ClaudeCodeSettings };
   const settings = model.settings;
@@ -109,7 +121,7 @@ test("claude agent step hydrates from wire config with the harness invariants fo
   });
   const { deps, captured } = makeDeps();
 
-  await executeAgentStep(wire, "run-1", deps);
+  await runAgent(wire, "run-1", deps);
 
   const settings = claudeSettingsOf(captured);
   expect(settings.cwd).toBe(worktree);
@@ -135,7 +147,7 @@ test("codex agent step runs on the app-server under the managed home with fixed 
   });
   const { deps, captured } = makeDeps();
 
-  await executeAgentStep(wire, "run-7", deps);
+  await runAgent(wire, "run-7", deps);
 
   expect(captured.codexModel).toBe("gpt-5.5");
   const settings = captured.codexSettings;
@@ -160,7 +172,7 @@ test("a declared output schema becomes an AI SDK output spec and the raw output 
   });
   const { deps, captured } = makeDeps({ output: { ok: true } });
 
-  const result = await executeAgentStep(wire, "run-1", deps);
+  const result = await runAgent(wire, "run-1", deps);
 
   expect(captured.options?.output).toBeDefined();
   expect(result.output).toEqual({ ok: true });
@@ -174,7 +186,7 @@ test("without an output schema no output spec is passed and output is undefined"
   });
   const { deps, captured } = makeDeps({ output: "should not surface" });
 
-  const result = await executeAgentStep(wire, "run-1", deps);
+  const result = await runAgent(wire, "run-1", deps);
 
   expect(captured.options?.output).toBeUndefined();
   expect(result.output).toBeUndefined();
@@ -190,7 +202,7 @@ test("usage passes through and the Claude session pointer is captured", async ()
     providerMetadata: { "claude-code": { sessionId: "s-42" } },
   });
 
-  const result = await executeAgentStep(wire, "run-1", deps);
+  const result = await runAgent(wire, "run-1", deps);
 
   expect(result.usage).toEqual(usage);
   expect(result.session).toEqual({ harness: "claude", id: "s-42" });
@@ -206,13 +218,123 @@ test("the Codex threadId is captured, and a missing pointer is omitted, never an
   const withThread = makeDeps({
     providerMetadata: { "codex-app-server": { threadId: "t-7" } },
   });
-  const threaded = await executeAgentStep(codexWire, "run-1", withThread.deps);
+  const threaded = await runAgent(codexWire, "run-1", withThread.deps);
   expect(threaded.session).toEqual({ harness: "codex", id: "t-7" });
 
   const bare = makeDeps();
-  const sessionless = await executeAgentStep(codexWire, "run-1", bare.deps);
+  const sessionless = await runAgent(codexWire, "run-1", bare.deps);
   expect(sessionless.session).toBeUndefined();
   expect("session" in sessionless).toBe(false);
+});
+
+test("a claude resume rides on the settings' resume field", async () => {
+  const wire = buildAgentWire({
+    harness: claude({ model: "sonnet" }),
+    cwd: worktree,
+    prompt: "answer the review",
+    resume: { harness: "claude", id: "s-42" },
+  });
+  const { deps, captured } = makeDeps();
+
+  await runAgent(wire, "run-1", deps);
+
+  expect(claudeSettingsOf(captured).resume).toBe("s-42");
+  expect(captured.options?.providerOptions).toBeUndefined();
+});
+
+test("a codex resume rides on providerOptions['codex-app-server'].threadId", async () => {
+  const wire = buildAgentWire({
+    harness: codex({ model: "gpt-5.5" }),
+    cwd: worktree,
+    prompt: "answer the review",
+    resume: { harness: "codex", id: "0199-thread" },
+  });
+  const { deps, captured } = makeDeps();
+
+  await runAgent(wire, "run-1", deps);
+
+  expect(captured.options?.providerOptions).toEqual({
+    "codex-app-server": { threadId: "0199-thread" },
+  });
+  // settings.resume is the provider's fallback, not the app-server contract.
+  expect(captured.codexSettings?.resume).toBeUndefined();
+});
+
+test("a session pointer recorded on the other harness is ignored, not refused", async () => {
+  const wire = buildAgentWire({
+    harness: claude({ model: "sonnet" }),
+    cwd: worktree,
+    prompt: "answer the review",
+    resume: { harness: "codex", id: "0199-thread" },
+  });
+  const { deps, captured } = makeDeps();
+
+  await runAgent(wire, "run-1", deps);
+
+  expect(claudeSettingsOf(captured).resume).toBeUndefined();
+  expect(captured.options?.providerOptions).toBeUndefined();
+});
+
+test("bypassPermissions pairs the provider's allowDangerouslySkipPermissions gate", async () => {
+  const bypass = buildAgentWire({
+    harness: claude({ model: "sonnet" }),
+    cwd: worktree,
+    prompt: "commit it",
+    permissionMode: "bypassPermissions" as PermissionMode,
+  });
+  const bypassed = makeDeps();
+  await runAgent(bypass, "run-1", bypassed.deps);
+  expect(
+    claudeSettingsOf(bypassed.captured).allowDangerouslySkipPermissions,
+  ).toBe(true);
+
+  const plain = buildAgentWire({
+    harness: claude({ model: "sonnet" }),
+    cwd: worktree,
+    prompt: "judge it",
+  });
+  const unbypassed = makeDeps();
+  await runAgent(plain, "run-1", unbypassed.deps);
+  expect(
+    claudeSettingsOf(unbypassed.captured).allowDangerouslySkipPermissions,
+  ).toBeUndefined();
+});
+
+test("a failed resume returns the resumeFailed marker instead of throwing", async () => {
+  const wire = buildAgentWire({
+    harness: codex({ model: "gpt-5.5" }),
+    cwd: worktree,
+    prompt: "answer the review",
+    resume: { harness: "codex", id: "0199-gone" },
+  });
+  const { deps } = makeDeps();
+  // The raw JSON-RPC error codex 0.149.1 actually raises — it matches no
+  // wrapper the provider documents, which is why any error reads as stale.
+  deps.generateText = () => {
+    throw new Error("no rollout found for thread id 0199-gone");
+  };
+
+  const result = await executeAgentStep(wire, "run-1", deps);
+
+  expect(result).toEqual({
+    resumeFailed: expect.stringContaining("no rollout found for thread id"),
+  });
+});
+
+test("a failure with no resume to blame still throws", async () => {
+  const wire = buildAgentWire({
+    harness: claude({ model: "sonnet" }),
+    cwd: worktree,
+    prompt: "go",
+  });
+  const { deps } = makeDeps();
+  deps.generateText = () => {
+    throw new Error("the harness fell over");
+  };
+
+  await expect(executeAgentStep(wire, "run-1", deps)).rejects.toThrow(
+    "the harness fell over",
+  );
 });
 
 test("the step env is a scrubbed copy: no API credentials, process.env untouched", async () => {
@@ -225,7 +347,7 @@ test("the step env is a scrubbed copy: no API credentials, process.env untouched
     });
     const { deps, captured } = makeDeps();
 
-    await executeAgentStep(wire, "run-1", deps);
+    await runAgent(wire, "run-1", deps);
 
     expect(claudeSettingsOf(captured).env?.ANTHROPIC_API_KEY).toBeUndefined();
     expect(process.env.ANTHROPIC_API_KEY).toBe("sk-test-scrub");

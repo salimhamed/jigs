@@ -27,6 +27,15 @@ export class JitCheckError extends Error {
   }
 }
 
+// Same shape, same reason: a stale session pointer crosses the boundary as a
+// returned marker so the SDK does not retry it, and becomes an error here.
+export class ResumeFailedError extends Error {
+  constructor(detail: string) {
+    super(detail);
+    this.name = "ResumeFailedError";
+  }
+}
+
 // The executor asks the harness for schema-conformant output; the real
 // validation is this workflow-side zod parse of the recorded raw output —
 // deterministic on replay, and where the result gets its `T`.
@@ -37,12 +46,23 @@ export function parseOutput<T>(
   return schema === undefined ? (undefined as T) : schema.parse(raw);
 }
 
+// Where the step's returned markers become errors: workflow-side, so no
+// retries are spent and `instanceof` still means something to the caller.
+export function unwrapAgentStep(
+  result: Awaited<ReturnType<typeof runAgentStep>>,
+): AgentStepResult {
+  if ("jitFailure" in result) throw new JitCheckError(result.jitFailure);
+  if ("resumeFailed" in result) {
+    throw new ResumeFailedError(result.resumeFailed);
+  }
+  return result;
+}
+
 export async function agent<T = undefined>(
   config: AgentStepConfig<T>,
 ): Promise<AgentStepResult<T>> {
   const wire = buildAgentWire(config);
-  const result = await runAgentStep(wire);
-  if ("jitFailure" in result) throw new JitCheckError(result.jitFailure);
+  const result = unwrapAgentStep(await runAgentStep(wire));
   return { ...result, output: parseOutput(config.output, result.output) };
 }
 
@@ -78,7 +98,9 @@ export async function fn<Args extends unknown[], R>(
 // Exported for the JIT halt test.
 export async function runAgentStep(
   wire: AgentWire,
-): Promise<AgentStepResult | { jitFailure: string }> {
+): Promise<
+  AgentStepResult | { jitFailure: string } | { resumeFailed: string }
+> {
   "use step";
   // JIT checks first — this is the last honest moment before agent turns
   // get burned, and the servers only exist now that the body built them.

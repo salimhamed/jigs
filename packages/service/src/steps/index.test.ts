@@ -12,7 +12,9 @@ import {
   fn,
   JitCheckError,
   parseOutput,
+  ResumeFailedError,
   runAgentStep,
+  unwrapAgentStep,
 } from "./index";
 
 // Module scope, like a real fn() step function — but without the directive:
@@ -96,6 +98,19 @@ test("an agent step whose declared MCP server cannot start returns the JIT failu
   expect(result).toMatchObject({
     jitFailure: expect.stringContaining("→ fix the 'linear' server"),
   });
+});
+
+test("the resumeFailed marker becomes a ResumeFailedError carrying the provider's own words", () => {
+  const detail = "no rollout found for thread id 0199-gone";
+  expect(() => unwrapAgentStep({ resumeFailed: detail })).toThrow(
+    ResumeFailedError,
+  );
+  expect(() => unwrapAgentStep({ resumeFailed: detail })).toThrow(detail);
+});
+
+test("a step result carrying neither marker passes through untouched", () => {
+  const result = { text: "done", output: undefined, files: [] };
+  expect(unwrapAgentStep(result)).toBe(result);
 });
 
 test("agent() turns a failed JIT check into a thrown JitCheckError carrying the repair text", async () => {

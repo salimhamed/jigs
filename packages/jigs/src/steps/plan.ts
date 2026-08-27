@@ -9,6 +9,7 @@ import {
   STRUCTURED_OUTPUT_SUPPORT,
   StructuredOutputUnsupportedError,
 } from "./config.ts";
+import type { AgentSession } from "./result.ts";
 
 export type AgentStepConfig<T = undefined> = {
   harness: HarnessConfig;
@@ -18,6 +19,10 @@ export type AgentStepConfig<T = undefined> = {
   // Mapped on Claude only: Codex approval/sandbox policies are jigs
   // invariants set at hydration, not authoring surface.
   permissionMode?: PermissionMode;
+  // A session pointer a previous agent step recorded. Nothing is validated
+  // here: a pointer naming another harness is resolved at hydration, where
+  // the harness actually is, and simply starts a fresh session.
+  resume?: AgentSession;
   output?: z.ZodType<T>;
 };
 

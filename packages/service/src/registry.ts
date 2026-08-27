@@ -6,6 +6,10 @@ import {
   preflightDemoInputs,
   preflightDemoPipeline,
 } from "../pipelines/preflight-demo";
+import {
+  reviewLoopDemoInputs,
+  reviewLoopDemoPipeline,
+} from "../pipelines/review-loop-demo";
 import { stepsDemoInputs, stepsDemoPipeline } from "../pipelines/steps-demo";
 import {
   suspensionDemoInputs,
@@ -62,6 +66,11 @@ const entries = {
     pipeline: preflightDemoPipeline,
     inputs: preflightDemoInputs,
     requires: { bindings: ["api"], harnesses: ["claude"] },
+  },
+  "review-loop-demo": {
+    pipeline: reviewLoopDemoPipeline,
+    inputs: reviewLoopDemoInputs,
+    requires: { bindings: ["scratch"], harnesses: ["claude"] },
   },
   "worktree-demo": {
     pipeline: worktreeDemoPipeline,

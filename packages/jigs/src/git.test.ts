@@ -1,11 +1,14 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import {
   assertCheckoutRoot,
   checkoutRoot,
+  commitsAhead,
   deriveDefaultBranch,
+  diffSince,
   probeRemoteAuth,
+  pushBranch,
   resolveRemoteUrl,
 } from "./git.ts";
 import {
@@ -86,6 +89,77 @@ test("deriveDefaultBranch reads refs/remotes/origin/HEAD", async () => {
 test("deriveDefaultBranch returns null when unset", async () => {
   const repo = makeTargetRepo(tmp);
   expect(await deriveDefaultBranch(repo)).toBeNull();
+});
+
+// A worktree of the fixture checkout, branched off the default and one commit
+// ahead — the shape the review loop pushes from.
+function branchWithWork(
+  parent: string,
+  checkout: string,
+  branch: string,
+  files: Record<string, string>,
+): { tree: string; baseSha: string } {
+  const tree = path.join(parent, branch);
+  const baseSha = git(checkout, "rev-parse", "HEAD");
+  git(checkout, "worktree", "add", "-q", tree, "-b", branch);
+  git(tree, "config", "user.name", "jigs-fixture");
+  git(tree, "config", "user.email", "fixture@jigs.test");
+  for (const [file, content] of Object.entries(files)) {
+    writeFileSync(path.join(tree, file), content);
+  }
+  git(tree, "add", ".");
+  git(tree, "commit", "-q", "-m", `work on ${branch}`);
+  return { tree, baseSha };
+}
+
+test("pushBranch creates the remote branch and is idempotent on a second call", async () => {
+  const { remoteDir, checkout } = makeRemoteBackedRepo(tmp);
+  const { tree } = branchWithWork(tmp, checkout, "feature", {
+    "shipped.txt": "shipped\n",
+  });
+
+  await pushBranch(tree, "feature");
+  expect(git(checkout, "ls-remote", "--heads", "origin", "feature")).toContain(
+    "refs/heads/feature",
+  );
+
+  // No new commits: the same push is a no-op rather than a rejection.
+  await expect(pushBranch(tree, "feature")).resolves.toBeUndefined();
+
+  writeFileSync(path.join(tree, "more.txt"), "more\n");
+  git(tree, "add", ".");
+  git(tree, "commit", "-q", "-m", "more work");
+  await pushBranch(tree, "feature");
+  expect(git(remoteDir, "rev-parse", "refs/heads/feature")).toBe(
+    git(tree, "rev-parse", "HEAD"),
+  );
+});
+
+test("commitsAhead counts the work on the branch and is 0 on an untouched one", async () => {
+  const { checkout } = makeRemoteBackedRepo(tmp);
+  const { tree, baseSha } = branchWithWork(tmp, checkout, "feature", {
+    "shipped.txt": "shipped\n",
+  });
+  expect(await commitsAhead(tree, baseSha)).toBe(1);
+
+  const idle = path.join(tmp, "idle");
+  git(checkout, "worktree", "add", "-q", idle, "-b", "idle");
+  expect(await commitsAhead(idle, baseSha)).toBe(0);
+});
+
+test("diffSince returns the branch diff and truncates at the cap", async () => {
+  const { checkout } = makeRemoteBackedRepo(tmp);
+  const { tree, baseSha } = branchWithWork(tmp, checkout, "feature", {
+    "shipped.txt": `${"line\n".repeat(500)}`,
+  });
+
+  const full = await diffSince(tree, baseSha);
+  expect(full).toContain("+++ b/shipped.txt");
+  expect(full).not.toContain("diff truncated");
+
+  const clipped = await diffSince(tree, baseSha, 100);
+  expect(clipped).toHaveLength(100 + "\n… (diff truncated)".length);
+  expect(clipped.endsWith("\n… (diff truncated)")).toBe(true);
 });
 
 test("probeRemoteAuth returns null for a reachable remote and stderr for an unreachable one", async () => {

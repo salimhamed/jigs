@@ -16,6 +16,11 @@ export function makeFakeSql(store: Map<string, WorktreeRow>): Sql {
       // No interpolation is listWorktrees; the real one orders by recency,
       // which insertion order stands in for here.
       if (values.length === 0) return Promise.resolve([...store.values()]);
+      if (statement.includes("owner_run_id =")) {
+        return Promise.resolve(
+          [...store.values()].filter((row) => row.ownerRunId === values[0]),
+        );
+      }
       const row = store.get(values[0] as string);
       return Promise.resolve(row === undefined ? [] : [row]);
     }
