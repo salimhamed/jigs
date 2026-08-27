@@ -12,11 +12,14 @@
     "build": "nitro build",
     "start": "node .output/server/index.mjs",
     "test": "vitest run",
+    "test:live": "vitest run --config vitest.live.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@workflow/world-postgres": "4.3.4",
     "hono": "^4.13.4",
+    "jigs": "workspace:*",
+    "postgres": "^3.4.7",
     "workflow": "4.8.4",
     "zod": "^4.4.3"
   },

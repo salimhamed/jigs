@@ -6,4 +6,16 @@ export default async function startWorld() {
   console.log(
     `[service] world started: ${process.env.WORKFLOW_TARGET_WORLD ?? "local (default)"}`,
   );
+
+  if (process.env.WORKFLOW_POSTGRES_URL) {
+    const { ensureWorktreeRegistry, registrySql } = await import(
+      "../src/worktrees/registry"
+    );
+    await ensureWorktreeRegistry(registrySql());
+    console.log("[service] worktree registry ensured");
+  } else {
+    console.log(
+      "[service] worktree registry skipped: WORKFLOW_POSTGRES_URL unset",
+    );
+  }
 }
