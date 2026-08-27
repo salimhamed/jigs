@@ -9,20 +9,38 @@ export default async function startWorld() {
     `[service] world started: ${process.env.WORKFLOW_TARGET_WORLD ?? "local (default)"}`,
   );
 
-  if (process.env.WORKFLOW_POSTGRES_URL) {
-    const { connectRegistry, ensureWorktreeRegistry } = await import(
-      "../src/worktrees/registry"
-    );
-    const sql = connectRegistry(process.env.WORKFLOW_POSTGRES_URL);
-    try {
-      await ensureWorktreeRegistry(sql);
-    } finally {
-      await sql.end();
-    }
-    console.log("[service] worktree registry ensured");
-  } else {
+  const { registrySql } = await import("../src/worktrees/sql");
+  const sql = registrySql();
+  if (sql === null) {
     console.log(
       "[service] worktree registry skipped: WORKFLOW_POSTGRES_URL unset",
     );
+    return;
+  }
+  const { ensureWorktreeRegistry } = await import("../src/worktrees/registry");
+  await ensureWorktreeRegistry(sql);
+  console.log("[service] worktree registry ensured");
+
+  // Teardown's trigger: the SDK has no run-completion callback, so the
+  // terminal-state join runs on a timer. It is the same pass `jigs sweep`
+  // calls, so the matrix has exactly one implementation.
+  const { sweepWorktrees } = await import("../src/worktrees/sweep");
+  let inFlight = false;
+  const pass = async () => {
+    if (inFlight) return;
+    inFlight = true;
+    try {
+      await sweepWorktrees({ clean: true }, { sql });
+    } finally {
+      inFlight = false;
+    }
+  };
+  await pass().catch(console.error);
+
+  const intervalMs = Number(process.env.JIGS_SWEEP_INTERVAL_MS ?? 60_000);
+  if (intervalMs > 0) {
+    setInterval(() => {
+      pass().catch(console.error);
+    }, intervalMs).unref();
   }
 }

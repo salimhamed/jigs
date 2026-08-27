@@ -32,6 +32,8 @@ import {
   listWorktrees,
   type WorktreeRow,
 } from "./worktrees/registry";
+import { registrySql } from "./worktrees/sql";
+import { sweepWorktrees } from "./worktrees/sweep";
 
 const app = new Hono();
 
@@ -108,6 +110,30 @@ app.post("/api/pipelines/:name/runs", async (c) => {
 // The same catalog engine as preflight, without a pipeline or a launch. A
 // red report is still a report, so it answers 200.
 app.get("/api/doctor", async (c) => c.json(await doctor()));
+
+// `jigs sweep` is an HTTP client of this route (ADR 0008); the automatic
+// teardown pass calls the same function directly.
+app.post("/api/worktrees/sweep", async (c) => {
+  const body = await c.req
+    .json<{ clean?: boolean; force?: boolean }>()
+    .catch(() => ({}) as { clean?: boolean; force?: boolean });
+  const sql = registrySql();
+  if (sql === null) {
+    return c.json(
+      {
+        error:
+          "worktree registry unavailable: WORKFLOW_POSTGRES_URL is not configured",
+      },
+      503,
+    );
+  }
+  return c.json(
+    await sweepWorktrees(
+      { clean: body.clean === true, force: body.force === true },
+      { sql },
+    ),
+  );
+});
 
 app.post("/api/hooks/resume", async (c) => {
   const { token, payload } = await c.req.json<{

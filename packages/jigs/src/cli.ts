@@ -9,6 +9,7 @@ import { showLogs } from "./commands/logs.ts";
 import { pokeRun } from "./commands/poke.ts";
 import { listRunsForPs } from "./commands/ps.ts";
 import { launchRun } from "./commands/run.ts";
+import { sweepWorktrees } from "./commands/sweep.ts";
 import { unbindRepo } from "./commands/unbind.ts";
 import { CliError } from "./errors.ts";
 import { formatTable } from "./table.ts";
@@ -149,6 +150,27 @@ program
   .action(async (options: { service: string }) => {
     await runDoctor({ out, serviceUrl: options.service });
   });
+
+program
+  .command("sweep")
+  .description(
+    "reconcile worktrees on disk against the registry and run states",
+  )
+  .option("--clean", "delete eligible worktrees instead of only reporting")
+  .option("--force", "also delete dirty worktrees (with --clean)")
+  .addOption(
+    new Option("--service <url>", "jigs service URL")
+      .env("JIGS_SERVICE_URL")
+      .default("http://localhost:8990"),
+  )
+  .action(
+    async (options: { clean?: boolean; force?: boolean; service: string }) => {
+      await sweepWorktrees(
+        { out, serviceUrl: options.service },
+        { clean: options.clean, force: options.force },
+      );
+    },
+  );
 
 program
   .command("bindings")
