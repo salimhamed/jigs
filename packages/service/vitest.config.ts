@@ -20,6 +20,12 @@ export default defineConfig({
         ),
       },
       {
+        find: /^jigs\/prompts$/,
+        replacement: fileURLToPath(
+          new URL("../jigs/src/prompts/index.ts", import.meta.url),
+        ),
+      },
+      {
         find: /^jigs\/steps$/,
         replacement: fileURLToPath(
           new URL("../jigs/src/steps/index.ts", import.meta.url),
