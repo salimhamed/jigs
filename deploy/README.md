@@ -47,7 +47,63 @@ at `workflow@4.8.4` the filesystem World fails to start from the production
 bundle (`Invalid version string: "bundled"`). It still works under
 `nitro dev` for scratch use.
 
-## 4. Run history (`workflow web`)
+## 4. Webhook ingress
+
+The service's `/ingress/github` and `/ingress/linear` routes receive provider
+webhooks: signature-verified, stateless, and safe to miss — every wake is
+re-checked against the provider, and `jigs poke <run>` (below) covers any
+delivery that never arrived.
+
+### Tunnel (one-time, manual)
+
+The ingress must be reachable from the public internet. tailscale funnel is
+the default:
+
+```sh
+tailscale funnel --bg 8990
+```
+
+The printed `https://<machine>.<tailnet>.ts.net` URL is your ingress URL.
+Alternative: `cloudflared tunnel --url http://localhost:8990` (or a named
+cloudflare tunnel for a stable hostname).
+
+### GitHub (per target repo)
+
+Put the ingress URL in the factory repo's `jigs.yml`:
+
+```yaml
+ingress_url: https://<machine>.<tailnet>.ts.net
+```
+
+then (re-)bind each target repo with `GITHUB_TOKEN` set — `jigs bind`
+creates the repo webhook, verifies it on later binds, and repairs drift. The
+signing secret is generated once into
+`~/.local/share/jigs/github-webhook-secret`; the service reads the same file.
+
+Manual alternative: one org-level webhook (org settings → Webhooks) pointed
+at `<ingress_url>/ingress/github`, content type `application/json`, events
+`pull_request` + `pull_request_review`, secret from that same file — covers
+every repo without per-repo binds.
+
+### Linear (one-time, org-level)
+
+Create one webhook in Linear (Settings → API → Webhooks) pointed at
+`<ingress_url>/ingress/linear` with resource types `Comment` only. Put its
+signing secret in `~/.config/jigs/service.env` as `LINEAR_WEBHOOK_SECRET`
+and restart the service.
+
+### Missed deliveries
+
+```sh
+jigs poke <runId>
+```
+
+manually wakes a suspended run over the same code path as a webhook delivery
+(`--service <url>` or `JIGS_SERVICE_URL` if the service is not on
+`http://localhost:8990`). Scripted end-to-end check (requires steps 1–2):
+`cd packages/service && node scripts/poke-repro.mjs`.
+
+## 5. Run history (`workflow web`)
 
 ```sh
 WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5439/jigs \
@@ -57,7 +113,7 @@ WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5439/jigs \
 Serves the SDK's observability UI (default `http://localhost:3456`) reading
 the same World the service writes — run history, step attempts, events.
 
-## 5. Crash-model repro
+## 6. Crash-model repro
 
 Scripted (requires steps 1–2; stop anything on port 8992 first):
 
