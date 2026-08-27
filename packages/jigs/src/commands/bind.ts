@@ -15,6 +15,11 @@ import {
 } from "../config/target-scaffold.ts";
 import { CliError } from "../errors.ts";
 import { assertCheckoutRoot, resolveRemoteUrl } from "../git.ts";
+import {
+  ensureRepoWebhook,
+  ensureWebhookSecret,
+  parseGithubRemote,
+} from "../github-webhook.ts";
 import { contractHome, expandHome } from "../paths.ts";
 
 const BINDING_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -35,6 +40,7 @@ export interface BindResult {
   path: string;
   remote: string;
   scaffolded: boolean;
+  webhook: "created" | "verified" | "updated" | "skipped";
 }
 
 export async function bindRepo(
@@ -93,7 +99,35 @@ export async function bindRepo(
   );
 
   const scaffolded = await offerScaffold(target, deps);
-  return { name, path: storedPath, remote: url, scaffolded };
+  const webhook = await ensureWebhook(url, config.ingress_url, deps);
+  return { name, path: storedPath, remote: url, scaffolded, webhook };
+}
+
+async function ensureWebhook(
+  remoteUrl: string,
+  ingressUrl: string | undefined,
+  deps: BindDeps,
+): Promise<BindResult["webhook"]> {
+  if (ingressUrl === undefined) {
+    deps.out("note: skipping webhook (no ingress_url in jigs.yml)");
+    return "skipped";
+  }
+  const token = process.env.GITHUB_TOKEN;
+  if (token === undefined || token === "") {
+    deps.out("note: skipping webhook (GITHUB_TOKEN is not set)");
+    return "skipped";
+  }
+  const repoRef = parseGithubRemote(remoteUrl);
+  if (repoRef === null) {
+    deps.out(
+      `note: skipping webhook (${remoteUrl} is not a github.com remote)`,
+    );
+    return "skipped";
+  }
+  const secret = ensureWebhookSecret();
+  const outcome = await ensureRepoWebhook({ ...repoRef, ingressUrl, secret });
+  deps.out(`webhook ${outcome}: ${repoRef.owner}/${repoRef.repo}`);
+  return outcome;
 }
 
 async function offerScaffold(target: string, deps: BindDeps): Promise<boolean> {
