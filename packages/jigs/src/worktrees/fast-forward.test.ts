@@ -50,14 +50,17 @@ test("a clean checkout on another branch moves the default ref without checking 
   expect(git(checkout, "rev-parse", "--abbrev-ref", "HEAD")).toBe("feat");
 });
 
-test("a dirty checkout is skipped, never errored", async () => {
-  commitToRemote(tmp, remoteDir, "main", { "new.txt": "x\n" });
+test("a dirty checkout is skipped, never errored, but still fetched", async () => {
+  const advanced = commitToRemote(tmp, remoteDir, "main", { "new.txt": "x\n" });
   writeFileSync(path.join(checkout, "README.md"), "# edited by a human\n");
   const before = localMain();
   const result = await ff();
   expect(result.skipped).toBe("dirty");
   expect(result.moved).toBe(false);
   expect(localMain()).toBe(before);
+  // The sweep's merged detection reads the remote-tracking ref, so the dirty
+  // guard must not starve it.
+  expect(git(checkout, "rev-parse", "refs/remotes/origin/main")).toBe(advanced);
 });
 
 test("a diverged local default is skipped as not-fast-forward", async () => {

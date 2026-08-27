@@ -13,9 +13,3 @@ export function registrySql(): Sql | null {
   client ??= connectRegistry(url);
   return client;
 }
-
-export async function closeRegistrySql(): Promise<void> {
-  const open = client;
-  client = null;
-  if (open !== null) await open.end();
-}

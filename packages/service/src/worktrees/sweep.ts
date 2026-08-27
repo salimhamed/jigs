@@ -107,9 +107,19 @@ export async function sweepWorktrees(
 
   // Directories the registry never heard of, found by scanning where each
   // binding's worktrees would live.
+  const bindingList = (deps.bindings ?? bindingsOrNone(deps))();
   const parents = new Map<string, ResolvedBinding>();
-  for (const binding of (deps.bindings ?? bindingsOrNone(deps))()) {
+  for (const binding of bindingList) {
     parents.set(parentDirFor(binding, deps), binding);
+  }
+  // A checkout is frozen if any binding on it opts out of the fast-forward.
+  const ffByCheckout = new Map<string, boolean>();
+  for (const binding of bindingList) {
+    ffByCheckout.set(
+      binding.checkoutRoot,
+      (ffByCheckout.get(binding.checkoutRoot) ?? true) &&
+        binding.ffDefaultBranch,
+    );
   }
   const unregisteredCheckouts = new Map<string, string>();
   if (options.includeUnregistered !== false) {
@@ -125,7 +135,7 @@ export async function sweepWorktrees(
         if (byPath.has(dir)) continue;
         // A workspace_dir binding points at the operator's own directory,
         // whose other contents are none of the sweep's business: only what
-        // git calls a worktree of this checkout is an orphan.
+        // git calls a worktree of this checkout is the sweep's to report.
         if (!known.get(binding.checkoutRoot)?.has(physicalPath(dir))) continue;
         unregisteredCheckouts.set(dir, binding.checkoutRoot);
         entries.push(
@@ -169,16 +179,18 @@ export async function sweepWorktrees(
       !fastForwarded.has(checkoutRoot)
     ) {
       fastForwarded.add(checkoutRoot);
-      const result = await ff({ checkoutRoot, enabled: true });
+      const enabled = ffByCheckout.get(checkoutRoot) ?? true;
+      const result = await ff({ checkoutRoot, enabled });
       log(`[sweep] ${describeFf(checkoutRoot, result)}`);
     }
+    const merged =
+      status === "completed" &&
+      checkoutRoot !== "" &&
+      (await isBranchMerged(checkoutRoot, entry.branch));
     let plan = decideTeardown({
       keep: row?.keep === true,
       dirty: entry.state === "abandoned-dirty",
-      merged:
-        status === "completed" &&
-        checkoutRoot !== "" &&
-        (await isBranchMerged(checkoutRoot, entry.branch)),
+      merged,
     });
 
     if (plan.preserve !== null) {
@@ -192,7 +204,13 @@ export async function sweepWorktrees(
       // branches still stay, as they do for any unmerged run.
       plan = DISCARD_TREE;
     }
-    if (entry.requiresForce && !force) continue;
+    // An untracked file is enough to read as dirty, so without the merged
+    // exemption the matrix's headline row — done and merged — would need
+    // --force. Scoped to abandoned-dirty: a provision-failed or unregistered
+    // tree reads as merged for want of commits of its own, and it is the
+    // diagnosis evidence ADR 0007 preserves.
+    const mergedOverride = merged && entry.state === "abandoned-dirty";
+    if (entry.requiresForce && !force && !mergedOverride) continue;
 
     if (entry.state !== "missing" && checkoutRoot !== "") {
       // Neither an unregistered directory nor a half-provisioned tree has a

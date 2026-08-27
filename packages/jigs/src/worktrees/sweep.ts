@@ -68,6 +68,19 @@ export function classifySweep(input: SweepInput): SweepEntry {
       reason: "keep: true was requested",
     };
   }
+  // The SDK reads a parked run as `running`, so non-terminal covers live and
+  // suspended owners alike: a suspended run keeps its worktree. It outranks
+  // provision-failed, a state a live run sits in whenever the worktree()
+  // request is retried or its rejection caught.
+  if (input.ownerTerminal === false) {
+    return {
+      ...base,
+      state: "held",
+      eligible: false,
+      requiresForce: false,
+      reason: "the owning run is still live or suspended",
+    };
+  }
   if (input.state === "provision-failed") {
     // The half-provisioned tree is the diagnosis evidence ADR 0007 preserves;
     // its owning run failed immediately, so without this the automatic pass
@@ -78,17 +91,6 @@ export function classifySweep(input: SweepInput): SweepEntry {
       eligible: true,
       requiresForce: true,
       reason: "provisioning failed — kept for diagnosis",
-    };
-  }
-  // The SDK reads a parked run as `running`, so non-terminal covers live and
-  // suspended owners alike: a suspended run keeps its worktree.
-  if (input.ownerTerminal === false) {
-    return {
-      ...base,
-      state: "held",
-      eligible: false,
-      requiresForce: false,
-      reason: "the owning run is still live or suspended",
     };
   }
   if (input.dirty) {

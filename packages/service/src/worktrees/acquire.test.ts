@@ -4,61 +4,10 @@ import type {
   WorktreeStatus,
 } from "jigs";
 import { WorktreeOwnedError } from "jigs";
-import type { Sql } from "postgres";
 import { expect, test } from "vitest";
 import { acquireWorktree } from "./acquire";
 import type { WorktreeRow } from "./registry";
-
-// Fakes the postgres tagged-template client: registry SELECTs read the store
-// keyed by the interpolated path, INSERT ... ON CONFLICT writes it back, and
-// anything else (the advisory-lock SELECT) falls through to an empty array.
-function makeFakeSql(store: Map<string, WorktreeRow>): Sql {
-  const sql = (strings: TemplateStringsArray, ...values: unknown[]) => {
-    const query = strings.join("$");
-    if (query.includes("FROM jigs_worktrees")) {
-      const row = store.get(values[0] as string);
-      return Promise.resolve(row === undefined ? [] : [row]);
-    }
-    if (query.trimStart().startsWith("INSERT")) {
-      const [
-        path,
-        branch,
-        ownerRunId,
-        state,
-        baseSha,
-        headSha,
-        behind,
-        checkoutRoot,
-        keep,
-      ] = values as [
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        number,
-        string,
-        boolean,
-      ];
-      store.set(path, {
-        path,
-        branch,
-        ownerRunId,
-        state,
-        baseSha,
-        headSha,
-        behindDefault: behind,
-        checkoutRoot,
-        keep,
-      });
-      return Promise.resolve([]);
-    }
-    return Promise.resolve([]);
-  };
-  sql.begin = (fn: (sql: unknown) => unknown) => Promise.resolve(fn(sql));
-  return sql as unknown as Sql;
-}
+import { makeFakeSql } from "./test-fixtures";
 
 const request = {
   runId: "run_new",

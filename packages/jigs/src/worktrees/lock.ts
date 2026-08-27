@@ -21,13 +21,6 @@ export interface FileLockOptions {
   pollMs?: number;
 }
 
-export class LockTimeoutError extends Error {
-  constructor(lockPath: string, timeoutMs: number) {
-    super(`timed out after ${timeoutMs}ms waiting for the lock ${lockPath}`);
-    this.name = "LockTimeoutError";
-  }
-}
-
 function locksDir(): string {
   return path.join(jigsDataDir(), "locks");
 }
@@ -71,7 +64,11 @@ export async function withFileLock<T>(
   const deadline = Date.now() + timeoutMs;
   let token = tryAcquire(lockPath);
   while (token === null) {
-    if (Date.now() > deadline) throw new LockTimeoutError(lockPath, timeoutMs);
+    if (Date.now() > deadline) {
+      throw new Error(
+        `timed out after ${timeoutMs}ms waiting for the lock ${lockPath}`,
+      );
+    }
     // A holder that crashed leaves the file behind forever; mtime age is the
     // only evidence available without a liveness protocol.
     let stale = false;

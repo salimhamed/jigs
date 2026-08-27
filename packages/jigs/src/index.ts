@@ -25,9 +25,7 @@ export {
 } from "./config/factory-config.ts";
 export { locateFactoryRoot } from "./config/locate-factory.ts";
 export {
-  parseTargetConfig,
   readTargetConfig,
-  TARGET_CONFIG_FILE,
   type TargetConfig,
   type TargetWorktreeConfig,
 } from "./config/target-config.ts";
@@ -48,7 +46,6 @@ export {
   describeFf,
   type FastForwardOptions,
   type FfResult,
-  type FfSkip,
   fastForwardDefaultBranch,
 } from "./worktrees/fast-forward.ts";
 export {
@@ -74,7 +71,6 @@ export {
   classifySweep,
   type SweepEntry,
   type SweepInput,
-  type SweepState,
 } from "./worktrees/sweep.ts";
 export {
   applyTeardown,

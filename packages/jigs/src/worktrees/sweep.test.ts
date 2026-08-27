@@ -56,6 +56,13 @@ test("a half-provisioned tree is kept for diagnosis until force", () => {
   expect(entry.requiresForce).toBe(true);
 });
 
+test("a live owner holds its worktree even in provision-failed", () => {
+  expect(
+    classifySweep(input({ state: "provision-failed", ownerTerminal: false }))
+      .state,
+  ).toBe("held");
+});
+
 test("keep: true wins over provision-failed", () => {
   expect(
     classifySweep(input({ state: "provision-failed", keep: true })).state,

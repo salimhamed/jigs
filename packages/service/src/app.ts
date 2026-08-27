@@ -246,7 +246,12 @@ app.post("/api/runs/:runId/cancel", async (c) => {
   const { records } = await listSuspensions(ref.runId);
   const releasedTokens = [...new Set(records.map((s) => s.satisfiedBy))];
   await run.cancel();
-  // AGE-309 applies the teardown matrix to this run's worktrees here.
+  // Cancelling makes the run terminal, which is the whole trigger the teardown
+  // matrix needs: the terminal-state join — `sweepWorktrees` in
+  // ./worktrees/sweep, on the timer in plugins/start-world.ts — applies it on
+  // the next pass, and reuse already stops naming a cancelled run as an owner.
+  // Applying it here would mean running that whole-registry join, git fetches
+  // and all, inside this request, or teaching it a per-run filter first.
   return c.json({ runId: ref.runId, cancelled: true, releasedTokens });
 });
 

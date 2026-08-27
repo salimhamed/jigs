@@ -9,35 +9,15 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ResolvedBinding } from "jigs";
-import type { Sql } from "postgres";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import type { OwnerState } from "./acquire";
 import type { WorktreeRow } from "./registry";
 import { sweepWorktrees } from "./sweep";
+import { makeFakeSql } from "./test-fixtures";
 
 // Real git worktrees on disk against a faked registry: the classifier and the
 // teardown matrix are already covered in jigs, so what this file proves is the
 // join — what gets removed, what survives, and what the store ends up holding.
-function makeFakeSql(store: Map<string, WorktreeRow>): Sql {
-  const sql = (strings: TemplateStringsArray, ...values: unknown[]) => {
-    const query = strings.join("$").trimStart();
-    if (query.startsWith("SELECT")) {
-      return Promise.resolve([...store.values()]);
-    }
-    if (query.startsWith("UPDATE")) {
-      const [state, rowPath] = values as [string, string];
-      const row = store.get(rowPath);
-      if (row !== undefined) store.set(rowPath, { ...row, state });
-      return Promise.resolve([]);
-    }
-    if (query.startsWith("DELETE")) {
-      store.delete(values[0] as string);
-      return Promise.resolve([]);
-    }
-    return Promise.resolve([]);
-  };
-  return sql as unknown as Sql;
-}
 
 function git(cwd: string, ...args: string[]): string {
   return execFileSync("git", args, {
@@ -291,6 +271,59 @@ test("a completed owner's teardown deletes the row and fast-forwards the default
   expect(() =>
     git(checkout, "rev-parse", "--verify", "refs/heads/done"),
   ).toThrow();
+});
+
+test("an untracked file does not cost a merged worktree its teardown", async () => {
+  const done = addWorktree("done");
+  writeFileSync(path.join(done, "shipped.txt"), "shipped\n");
+  git(done, "add", "shipped.txt");
+  git(done, "commit", "-q", "-m", "shipped");
+  git(done, "push", "-q", "origin", "done:main");
+  git(checkout, "fetch", "-q", "origin");
+  // Build output, not work: the branch is merged, so the tree still goes.
+  dirty(done);
+  register(done, "done");
+
+  await sweepWorktrees(
+    { clean: true },
+    deps({
+      readOwner: owners({ run_done: { terminal: true, status: "completed" } }),
+    }),
+  );
+  expect(existsSync(done)).toBe(false);
+  expect(store.size).toBe(0);
+  expect(() =>
+    git(checkout, "rev-parse", "--verify", "refs/heads/done"),
+  ).toThrow();
+});
+
+test("a binding with ff_default_branch: false freezes its checkout's default", async () => {
+  const done = addWorktree("done");
+  register(done, "done");
+  const ffCalls: Array<{ checkoutRoot: string; enabled?: boolean }> = [];
+
+  await sweepWorktrees(
+    { clean: true },
+    deps({
+      bindings: () => [
+        {
+          ...binding,
+          checkoutRoot: checkout,
+          workspaceDir: workspace,
+          ffDefaultBranch: false,
+        },
+      ],
+      readOwner: owners({ run_done: { terminal: true, status: "completed" } }),
+      fastForward: async (options: {
+        checkoutRoot: string;
+        enabled?: boolean;
+      }) => {
+        ffCalls.push(options);
+        return { moved: false, skipped: "disabled" as const };
+      },
+    }),
+  );
+  expect(ffCalls).toEqual([{ checkoutRoot: checkout, enabled: false }]);
 });
 
 test("the merge check sees work pushed since the checkout last fetched", async () => {

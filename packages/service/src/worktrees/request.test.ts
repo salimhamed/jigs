@@ -2,7 +2,6 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PostCreateFailedError, type ResolvedBinding } from "jigs";
-import type { Sql } from "postgres";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
   type AcquireWorktreeDeps,
@@ -11,62 +10,7 @@ import {
 } from "./acquire";
 import type { WorktreeRow } from "./registry";
 import { provisionRequest, WorktreeRegistryUnavailableError } from "./request";
-
-// The same tagged-template fake acquire.test.ts uses, plus the UPDATE the
-// provision-failed path issues.
-function makeFakeSql(store: Map<string, WorktreeRow>): Sql {
-  const sql = (strings: TemplateStringsArray, ...values: unknown[]) => {
-    const query = strings.join("$");
-    if (query.includes("FROM jigs_worktrees")) {
-      const row = store.get(values[0] as string);
-      return Promise.resolve(row === undefined ? [] : [row]);
-    }
-    if (query.trimStart().startsWith("INSERT")) {
-      const [
-        rowPath,
-        branch,
-        ownerRunId,
-        state,
-        baseSha,
-        headSha,
-        behindDefault,
-        checkoutRoot,
-        keep,
-      ] = values as [
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        number,
-        string,
-        boolean,
-      ];
-      store.set(rowPath, {
-        path: rowPath,
-        branch,
-        ownerRunId,
-        state,
-        baseSha,
-        headSha,
-        behindDefault,
-        checkoutRoot,
-        keep,
-      });
-      return Promise.resolve([]);
-    }
-    if (query.trimStart().startsWith("UPDATE")) {
-      const [state, rowPath] = values as [string, string];
-      const row = store.get(rowPath);
-      if (row !== undefined) store.set(rowPath, { ...row, state });
-      return Promise.resolve([]);
-    }
-    return Promise.resolve([]);
-  };
-  sql.begin = (fn: (sql: unknown) => unknown) => Promise.resolve(fn(sql));
-  return sql as unknown as Sql;
-}
+import { makeFakeSql } from "./test-fixtures";
 
 let tmp: string;
 let checkout: string;

@@ -56,6 +56,11 @@ async function attempt(checkoutRoot: string): Promise<FfResult> {
   if (defaultBranch === null) {
     return { moved: false, skipped: "no-default-branch" };
   }
+  // Fetch before the dirty guard: the guard exists to stop the local default
+  // ref from moving, and the merged-detection the sweep runs reads
+  // refs/remotes/origin/<default>, which nothing else refreshes.
+  await git(["fetch", "origin", defaultBranch], checkoutRoot);
+
   const dirt = await git(["status", "--porcelain"], checkoutRoot);
   if (dirt !== "") {
     return {
@@ -64,7 +69,6 @@ async function attempt(checkoutRoot: string): Promise<FfResult> {
       detail: `${dirt.split("\n").length} changed path(s)`,
     };
   }
-  await git(["fetch", "origin", defaultBranch], checkoutRoot);
 
   const local = await tryGit(
     ["rev-parse", "--verify", "--quiet", `refs/heads/${defaultBranch}`],
