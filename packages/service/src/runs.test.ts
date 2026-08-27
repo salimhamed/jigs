@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { listRuns, resolveRunRef, type WorldRun } from "./runs";
+import { isParkToken, listRuns, resolveRunRef, type WorldRun } from "./runs";
 
 const RUN_A = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 const RUN_B = "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ";
@@ -59,6 +59,14 @@ test("a full-length run id nobody minted falls through to unknown", async () => 
     lookupDeps([RUN_A]),
   );
   expect(ref).toEqual({ kind: "unknown" });
+});
+
+test("a ticket claim is not a park, and a metadata-less hook still is", () => {
+  expect(isParkToken(`linear:ticket:${crypto.randomUUID()}`)).toBe(false);
+  // The demo pipelines park on createHook({ token }) with no metadata, so
+  // parkedness cannot depend on a suspension envelope being hydratable.
+  expect(isParkToken(`demo:${crypto.randomUUID()}`)).toBe(true);
+  expect(isParkToken("github:pr:acme/api#41")).toBe(true);
 });
 
 const worldRun = (over: Partial<WorldRun> = {}): WorldRun => ({

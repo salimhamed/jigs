@@ -40,16 +40,56 @@ function coerce(raw: string): unknown {
   }
 }
 
+const SCHEMA_HINT = "check --input against the pipeline's inputs schema";
+
 export function validateInputs(
   schema: z.core.JSONSchema.BaseSchema,
   inputs: Record<string, unknown>,
 ): void {
   const result = z.fromJSONSchema(schema).safeParse(inputs);
   if (!result.success) {
+    throw new CliError(z.prettifyError(result.error), SCHEMA_HINT);
+  }
+  rejectUnknownKeys(schema, inputs);
+}
+
+// A plain z.object emits no `additionalProperties`, so the round trip accepts
+// a misspelled key and the service's own z.object then strips it: the launch
+// spends agent turns running with the default the user meant to override. A
+// z.looseObject emits `{}` and does genuinely accept extra keys.
+function rejectUnknownKeys(
+  schema: z.core.JSONSchema.BaseSchema,
+  inputs: Record<string, unknown>,
+): void {
+  const { properties, additionalProperties } = schema;
+  if (typeof properties !== "object" || properties === null) return;
+  if (additionalProperties !== undefined && additionalProperties !== false) {
+    return;
+  }
+  const known = Object.keys(properties);
+  const unknown = Object.keys(inputs).filter((key) => !known.includes(key));
+  if (unknown.length > 0) {
     throw new CliError(
-      z.prettifyError(result.error),
-      "check --input against the pipeline's inputs schema",
+      `unknown --input: ${unknown.join(", ")}`,
+      `this pipeline accepts: ${known.join(", ")}`,
     );
+  }
+}
+
+interface SchemaIssue {
+  path: Array<string | number>;
+  message: string;
+}
+
+// z.toJSONSchema silently drops .refine()/.superRefine(), so a violation of
+// one clears validateInputs and comes back as the trigger's 400. Rendering it
+// as a schema error makes a server-side rejection read like a client-side one.
+function schemaIssues(raw: string): SchemaIssue[] | null {
+  try {
+    const body = JSON.parse(raw) as { issues?: unknown };
+    return Array.isArray(body.issues) ? (body.issues as SchemaIssue[]) : null;
+  } catch {
+    return null;
   }
 }
 
@@ -100,7 +140,17 @@ export async function launchRun(
     throw new CliError("preflight failed — no run created");
   }
   if (!res.ok) {
-    throw new CliError(`launch failed: HTTP ${res.status} ${await res.text()}`);
+    const raw = await res.text();
+    const issues = schemaIssues(raw);
+    if (issues !== null) {
+      throw new CliError(
+        issues
+          .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+          .join("\n"),
+        SCHEMA_HINT,
+      );
+    }
+    throw new CliError(`launch failed: HTTP ${res.status} ${raw}`);
   }
   const result = (await res.json()) as LaunchResult;
   deps.out(`run ${result.runId}`);

@@ -73,6 +73,13 @@ export interface WorldRun {
   createdAt: Date;
 }
 
+// The ticket claim is held for the run's whole life, so it says nothing about
+// being parked; every other hook is something the run waits on, including one
+// carrying no jigs metadata to hydrate. `jigs ps` and `jigs cancel` must agree
+// on this or a run ps calls suspended is one cancel refuses to confirm.
+export const isParkToken = (token: string): boolean =>
+  !token.startsWith(ticketToken(""));
+
 export interface RunListDeps {
   listRuns?: () => Promise<WorldRun[]>;
   listHooks?: () => Promise<Array<{ runId: string; token: string }>>;
@@ -83,12 +90,8 @@ export async function listRuns(deps: RunListDeps = {}): Promise<RunRow[]> {
     (deps.listRuns ?? worldRuns)(),
     (deps.listHooks ?? worldHooks)(),
   ]);
-  // The ticket claim is held for the run's whole life, so it says nothing
-  // about being parked; every other hook is something the run waits on.
   const parkHooks = new Set(
-    hooks
-      .filter((hook) => !hook.token.startsWith(ticketToken("")))
-      .map((hook) => hook.runId),
+    hooks.filter((hook) => isParkToken(hook.token)).map((hook) => hook.runId),
   );
   return runs
     .map((run) => ({

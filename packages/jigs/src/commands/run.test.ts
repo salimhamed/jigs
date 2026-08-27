@@ -196,6 +196,71 @@ test("a started run prints its id, pipeline, resume token and log pointer", asyn
   });
 });
 
+test("a misspelled --input key is refused before the launch is paid for", async () => {
+  respondSchema();
+  const err = await failure(
+    launchRun(
+      "suspension-demo",
+      ["issueId=6b1c1d2e-0000-4000-8000-000000000000", "askhuman=true"],
+      deps(),
+    ),
+  );
+  expect(err).toBeInstanceOf(CliError);
+  expect(err?.message).toBe("unknown --input: askhuman");
+  expect(err?.hint).toContain("askHuman");
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test("a pipeline that accepts extra keys still takes them", () => {
+  const loose = z.toJSONSchema(z.looseObject({ issueId: z.string() }), {
+    io: "input",
+  });
+  expect(() => validateInputs(loose, { issueId: "x", extra: 1 })).not.toThrow();
+});
+
+test("a refinement only the service can see renders as a schema error", async () => {
+  respondSchema();
+  fetchMock.mockResolvedValueOnce(
+    new Response(
+      JSON.stringify({
+        error: "invalid inputs",
+        issues: [
+          { path: ["issueId"], message: "issue is closed" },
+          { path: [], message: "askHuman requires a reviewer" },
+        ],
+      }),
+      { status: 400 },
+    ),
+  );
+  const err = await failure(
+    launchRun(
+      "suspension-demo",
+      ["issueId=6b1c1d2e-0000-4000-8000-000000000000"],
+      deps(),
+    ),
+  );
+  expect(err).toBeInstanceOf(CliError);
+  expect(err?.message).toBe(
+    ["issueId: issue is closed", "(root): askHuman requires a reviewer"].join(
+      "\n",
+    ),
+  );
+  expect(err?.hint).toContain("inputs schema");
+});
+
+test("a 400 carrying no issues keeps the raw-body error", async () => {
+  respondSchema();
+  fetchMock.mockResolvedValueOnce(new Response("nope", { status: 400 }));
+  const err = await failure(
+    launchRun(
+      "suspension-demo",
+      ["issueId=6b1c1d2e-0000-4000-8000-000000000000"],
+      deps(),
+    ),
+  );
+  expect(err?.message).toBe("launch failed: HTTP 400 nope");
+});
+
 test("an unreachable service hints at --service / JIGS_SERVICE_URL", async () => {
   fetchMock.mockRejectedValueOnce(new TypeError("fetch failed"));
   const err = await failure(launchRun("suspension-demo", [], deps()));

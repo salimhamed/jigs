@@ -3,7 +3,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
+import { z } from "zod";
 import app from "./app";
+import { registry } from "./registry";
 
 // The local world binds its data dir on first use, so one fresh dir serves
 // the whole file; it starts empty — nobody holds any token here.
@@ -184,6 +186,24 @@ test("a pipeline's inputs route answers with its JSON Schema", async () => {
   expect(body.inputs.required).toEqual(["issueId"]);
   // io: "input" — the defaulted field must not be demanded of the caller.
   expect(body.inputs.required).not.toContain("askHuman");
+});
+
+test("a member zod cannot render leaves the route green and the member open", async () => {
+  registry["date-demo"] = {
+    pipeline: async () => undefined,
+    inputs: z.object({ when: z.date(), name: z.string() }),
+  };
+  try {
+    const res = await app.request("/api/pipelines/date-demo/inputs");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      inputs: { properties: Record<string, unknown> };
+    };
+    expect(body.inputs.properties.when).toEqual({});
+    expect(body.inputs.properties.name).toEqual({ type: "string" });
+  } finally {
+    delete registry["date-demo"];
+  }
 });
 
 test("an unknown pipeline's inputs route is a 404 naming the known pipelines", async () => {
