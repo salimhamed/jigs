@@ -29,7 +29,6 @@ export type TicketLink = {
 };
 
 export type TicketSnapshot = {
-  version: number;
   fetchedAt: string;
   id: string;
   identifier: string;
@@ -48,11 +47,9 @@ export type TicketSnapshot = {
 
 export function toSnapshot(
   raw: RawIssueSnapshot,
-  version: number,
   fetchedAt: string,
 ): TicketSnapshot {
   return {
-    version,
     fetchedAt,
     id: raw.id,
     identifier: raw.identifier,
@@ -129,14 +126,11 @@ export function renderSnapshot(snapshot: TicketSnapshot): string {
 // the launch-time copy comes back from the record and the new fetch is
 // genuinely fresh, which is why a human's unblocking reply appears in the later
 // version without any special handling.
-export async function fetchSnapshot(
-  issueId: string,
-  version: number,
-): Promise<TicketSnapshot> {
+export async function fetchSnapshot(issueId: string): Promise<TicketSnapshot> {
   "use step";
   const raw = await fetchIssueSnapshot(issueId);
   console.log(
-    `[snapshot] fetched issue=${issueId} identifier=${raw.identifier} version=${version}`,
+    `[snapshot] fetched issue=${issueId} identifier=${raw.identifier}`,
   );
-  return toSnapshot(raw, version, new Date().toISOString());
+  return toSnapshot(raw, new Date().toISOString());
 }

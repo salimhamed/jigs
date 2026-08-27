@@ -20,7 +20,7 @@ export const ticketReviewVerdict = z.strictObject({
 });
 
 /**
- * What a ticket review hands the implementer: the brief plus the snapshot it
+ * What a ticket review hands the builder: the brief plus the snapshot it
  * was written from. Both travel together on purpose — the ticket is
  * authoritative wherever the two conflict, and review or verify steps judge
  * the work against the snapshot's acceptance criteria, never against the
@@ -55,8 +55,8 @@ export interface TicketReviewOptions {
   snapshot: TicketSnapshot;
   harness: HarnessConfig;
   cwd: string;
-  // Interpolated with {{TICKET}} (the rendered snapshot), {{IDENTIFIER}} and
-  // {{TITLE}}; any other {{KEY}} is left verbatim.
+  // Interpolated with {{TICKET}} (the rendered snapshot); any other {{KEY}}
+  // is left verbatim.
   prompt?: string;
 }
 
@@ -67,8 +67,6 @@ export async function ticketReview(
   const { claim, snapshot } = options;
   const prompt = interpolate(options.prompt ?? ticketReviewPrompt, {
     TICKET: renderSnapshot(snapshot),
-    IDENTIFIER: snapshot.identifier,
-    TITLE: snapshot.title,
   });
 
   const review = await deps.agent({
@@ -82,7 +80,7 @@ export async function ticketReview(
   if (verdict === "proceed") return { verdict, brief, findings, snapshot };
 
   // findings only: the comment is for the human and the record, never the
-  // data path — the brief reaches the implementer in-process below.
+  // data path — the brief reaches the builder in-process below.
   const reply = await deps.needsHuman(claim, "ticket review needs a human", {
     findings,
   });

@@ -69,8 +69,7 @@ function rawIssue(overrides: Partial<RawIssueSnapshot> = {}): RawIssueSnapshot {
 }
 
 test("toSnapshot splits blocking relations, keeps links and sub-issues, and drops nothing else", () => {
-  const snapshot = toSnapshot(rawIssue(), 1, "2026-08-26T13:00:00Z");
-  expect(snapshot.version).toBe(1);
+  const snapshot = toSnapshot(rawIssue(), "2026-08-26T13:00:00Z");
   expect(snapshot.fetchedAt).toBe("2026-08-26T13:00:00Z");
   expect(snapshot.branchName).toBe("salimhamed/age-313-ticket-snapshot");
   expect(snapshot.state).toBe("Todo");
@@ -94,7 +93,6 @@ test("toSnapshot splits blocking relations, keeps links and sub-issues, and drop
 test("a null description normalizes rather than leaking null into the prompt", () => {
   const snapshot = toSnapshot(
     rawIssue({ description: null }),
-    1,
     "2026-08-26T13:00:00Z",
   );
   expect(snapshot.description).toBe("");
@@ -103,7 +101,7 @@ test("a null description normalizes rather than leaking null into the prompt", (
 
 test("renderSnapshot includes every section a reviewing agent needs", () => {
   const rendered = renderSnapshot(
-    toSnapshot(rawIssue(), 1, "2026-08-26T13:00:00Z"),
+    toSnapshot(rawIssue(), "2026-08-26T13:00:00Z"),
   );
   expect(rendered).toContain(
     "AGE-313 Ticket snapshot and the ticketReview jig",
@@ -119,7 +117,7 @@ test("renderSnapshot includes every section a reviewing agent needs", () => {
   expect(rendered).toContain("AGE-400 sub");
 });
 
-test("a refresh after a human comment adds a version carrying the reply and keeps the prior one", async () => {
+test("a later fetch picks up comments added since the previous one", async () => {
   respond({ issue: rawIssue() });
   respond({
     issue: rawIssue({
@@ -132,11 +130,8 @@ test("a refresh after a human comment adds a version carrying the reply and keep
     }),
   });
 
-  const v1 = await fetchSnapshot("68bc9696-35d5-442d-ab56-214c8cfefbec", 1);
-  const v2 = await fetchSnapshot("68bc9696-35d5-442d-ab56-214c8cfefbec", 2);
+  await fetchSnapshot("68bc9696-35d5-442d-ab56-214c8cfefbec");
+  const later = await fetchSnapshot("68bc9696-35d5-442d-ab56-214c8cfefbec");
 
-  expect(v1.version).toBe(1);
-  expect(v2.version).toBe(2);
-  expect(v2.comments.map((c) => c.id)).toEqual(["c1", "c2"]);
-  expect(v1.comments.map((c) => c.id)).toEqual(["c1"]);
+  expect(later.comments.map((c) => c.id)).toEqual(["c1", "c2"]);
 });

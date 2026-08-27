@@ -17,7 +17,6 @@ const claim = {
 } as TicketClaim;
 
 const snapshot: TicketSnapshot = {
-  version: 1,
   fetchedAt: "2026-08-26T13:00:00Z",
   id: claim.issueId,
   identifier: "AGE-313",
@@ -163,11 +162,12 @@ test("the default prompt is used and carries the rendered ticket", async () => {
 
 test("a caller-supplied prompt replaces the default and is interpolated", async () => {
   agentRaw = { verdict: "proceed", brief: "plan", findings: [] };
-  await review("Review {{TITLE}} only. {{UNKNOWN}}");
-  expect(agentCalls[0]?.prompt).toBe(
-    "Review Ticket snapshot and the ticketReview jig only. {{UNKNOWN}}",
-  );
-  expect(agentCalls[0]?.prompt).not.toContain("restate, not re-decide");
+  await review("Custom review of {{TICKET}} — {{UNKNOWN}}");
+  const prompt = agentCalls[0]?.prompt ?? "";
+  expect(prompt).toContain("Custom review of");
+  expect(prompt).toContain("AGE-313");
+  expect(prompt).toContain("{{UNKNOWN}}");
+  expect(prompt).not.toContain("restate, not re-decide");
 });
 
 test("the verdict schema is declared on the agent step so the harness emits it natively", async () => {
