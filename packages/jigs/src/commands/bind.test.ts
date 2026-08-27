@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
   git,
   makeFactoryRepo,
@@ -154,4 +154,102 @@ test("non-interactive bind skips the scaffold offer with a note", async () => {
   const result = await bindRepo(target, deps());
   expect(result.scaffolded).toBe(false);
   expect(lines.some((l) => l.includes("non-interactive"))).toBe(true);
+});
+
+// ---- the webhook leg --------------------------------------------------------
+
+const fetchMock = vi.fn();
+
+function stubWebhookEnv() {
+  vi.stubGlobal("fetch", fetchMock);
+  vi.stubEnv("GITHUB_TOKEN", "gh_test_token");
+  vi.stubEnv("GITHUB_API_URL", "http://mock.test/github");
+  vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
+  fetchMock.mockReset();
+}
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
+
+function makeIngressFactory(): void {
+  writeFileSync(
+    path.join(factory, "jigs.yml"),
+    "ingress_url: https://factory.example.ts.net\n",
+  );
+}
+
+test("re-bind with ingress_url configured performs no webhook writes the second time", async () => {
+  stubWebhookEnv();
+  makeIngressFactory();
+  const target = makeTargetRepo(tmp, {
+    remoteUrl: "git@github.com:acme/target-repo.git",
+  });
+  fetchMock
+    .mockResolvedValueOnce(new Response("[]"))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 9 })));
+  const first = await bindRepo(target, deps());
+  expect(first.webhook).toBe("created");
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  const created = JSON.parse(
+    String((fetchMock.mock.calls[1] as [string, RequestInit])[1].body),
+  );
+
+  const secretFile = path.join(tmp, "data", "jigs", "github-webhook-secret");
+  const secretBytes = readFileSync(secretFile);
+  expect(created.config.secret).toBe(secretBytes.toString("utf8").trim());
+
+  fetchMock.mockResolvedValueOnce(
+    new Response(
+      JSON.stringify([
+        {
+          id: 9,
+          active: true,
+          events: created.events,
+          config: {
+            url: created.config.url,
+            content_type: created.config.content_type,
+          },
+        },
+      ]),
+    ),
+  );
+  const second = await bindRepo(target, deps());
+  expect(second.webhook).toBe("verified");
+  expect(fetchMock).toHaveBeenCalledTimes(3);
+  const [, lastInit] = fetchMock.mock.calls[2] as [string, RequestInit];
+  expect(lastInit.method).toBe("GET");
+  expect(readFileSync(secretFile)).toEqual(secretBytes);
+});
+
+test("bind without ingress_url skips the webhook leg with a note", async () => {
+  stubWebhookEnv();
+  const target = makeTargetRepo(tmp);
+  const result = await bindRepo(target, deps());
+  expect(result.webhook).toBe("skipped");
+  expect(lines.some((l) => l.includes("no ingress_url"))).toBe(true);
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test("bind without GITHUB_TOKEN skips the webhook leg with a note", async () => {
+  stubWebhookEnv();
+  vi.stubEnv("GITHUB_TOKEN", "");
+  makeIngressFactory();
+  const target = makeTargetRepo(tmp);
+  const result = await bindRepo(target, deps());
+  expect(result.webhook).toBe("skipped");
+  expect(lines.some((l) => l.includes("GITHUB_TOKEN"))).toBe(true);
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test("bind with a non-github remote skips the webhook leg", async () => {
+  stubWebhookEnv();
+  makeIngressFactory();
+  const target = makeTargetRepo(tmp, {
+    remoteUrl: "git@gitlab.com:acme/target-repo.git",
+  });
+  const result = await bindRepo(target, deps());
+  expect(result.webhook).toBe("skipped");
+  expect(lines.some((l) => l.includes("not a github.com remote"))).toBe(true);
+  expect(fetchMock).not.toHaveBeenCalled();
 });

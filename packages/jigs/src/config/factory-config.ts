@@ -15,6 +15,9 @@ const bindingSchema = z.strictObject({
 
 const factoryConfigSchema = z.looseObject({
   bindings: z.record(z.string(), bindingSchema).default({}),
+  // Where provider webhooks reach this factory's service (the tunnel URL);
+  // `jigs bind` skips its webhook leg while unset.
+  ingress_url: z.url().optional(),
 });
 
 export type Binding = z.output<typeof bindingSchema>;

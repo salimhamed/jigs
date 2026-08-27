@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import readline from "node:readline/promises";
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { bindRepo } from "./commands/bind.ts";
 import { type BindingRow, listBindings } from "./commands/bindings.ts";
+import { pokeRun } from "./commands/poke.ts";
 import { unbindRepo } from "./commands/unbind.ts";
 import { CliError } from "./errors.ts";
 
@@ -81,6 +82,19 @@ program
   .argument("<name>", "binding name")
   .action((name: string) => {
     unbindRepo(name, { cwd: process.cwd(), out });
+  });
+
+program
+  .command("poke")
+  .description("manually wake a suspended run (the missed-delivery fallback)")
+  .argument("<run>", "run id")
+  .addOption(
+    new Option("--service <url>", "jigs service URL")
+      .env("JIGS_SERVICE_URL")
+      .default("http://localhost:8990"),
+  )
+  .action(async (runId: string, options: { service: string }) => {
+    await pokeRun(runId, { out, serviceUrl: options.service });
   });
 
 program
