@@ -6,8 +6,12 @@ import { CliError } from "./errors.ts";
 
 const execFileAsync = promisify(execFile);
 
-export async function git(args: string[], cwd: string): Promise<string> {
-  const { stdout } = await execFileAsync("git", args, { cwd });
+export async function git(
+  args: string[],
+  cwd: string,
+  options: { maxBuffer?: number } = {},
+): Promise<string> {
+  const { stdout } = await execFileAsync("git", args, { cwd, ...options });
   return stdout.trim();
 }
 
@@ -91,6 +95,39 @@ export async function probeRemoteAuth(
     const stderr = (err as { stderr?: string }).stderr;
     return (stderr ?? "").trim() || String(err);
   }
+}
+
+// No force: the branch is jigs-owned and only ever appended to, so a plain
+// push is create-or-fast-forward and stays idempotent on a re-push.
+export async function pushBranch(
+  worktreePath: string,
+  branch: string,
+): Promise<void> {
+  await git(["push", "origin", `HEAD:refs/heads/${branch}`], worktreePath);
+}
+
+export async function commitsAhead(
+  worktreePath: string,
+  baseSha: string,
+): Promise<number> {
+  return Number(
+    await git(["rev-list", "--count", `${baseSha}..HEAD`], worktreePath),
+  );
+}
+
+export async function diffSince(
+  worktreePath: string,
+  baseSha: string,
+  maxChars = 200_000,
+): Promise<string> {
+  // execFile's 1MB default would reject a large diff outright, well before
+  // the caller's own cap gets a say.
+  const diff = await git(["diff", `${baseSha}...HEAD`], worktreePath, {
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  return diff.length <= maxChars
+    ? diff
+    : `${diff.slice(0, maxChars)}\n… (diff truncated)`;
 }
 
 export async function deriveDefaultBranch(

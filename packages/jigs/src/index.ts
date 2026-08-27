@@ -30,6 +30,16 @@ export {
   type TargetWorktreeConfig,
 } from "./config/target-config.ts";
 export { CliError } from "./errors.ts";
+// The review loop lives in the service package but its git and remote-parsing
+// substrate is jigs', and the service imports jigs by package name.
+export {
+  commitsAhead,
+  diffSince,
+  pushBranch,
+  type ResolvedRemote,
+  resolveRemoteUrl,
+} from "./git.ts";
+export { type GithubRepoRef, parseGithubRemote } from "./github-webhook.ts";
 // The service tears down a run's managed home from the worktree lifecycle,
 // and jigs/harnesses is provider re-exports only, so the door is here.
 export { removeManagedCodexHome } from "./harnesses/codex-home.ts";

@@ -8,8 +8,15 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { CliError } from "./errors.ts";
 
-// AGE-313 extends this list; the drift PATCH picks it up on re-bind.
-export const WEBHOOK_EVENTS = ["pull_request", "pull_request_review"];
+// Complete for the review loop: reviews, inline review comments, PR
+// conversation comments, and CI. The drift PATCH picks up a change on re-bind.
+export const WEBHOOK_EVENTS = [
+  "pull_request",
+  "pull_request_review",
+  "pull_request_review_comment",
+  "issue_comment",
+  "check_suite",
+];
 
 export interface GithubRepoRef {
   owner: string;
