@@ -7,11 +7,11 @@ import {
   writeFactoryConfigText,
 } from "../config/factory-config.ts";
 import { locateFactoryRoot } from "../config/locate-factory.ts";
+import { TARGET_CONFIG_FILE } from "../config/target-config.ts";
 import {
   detectCopyFiles,
   generateTargetConfig,
   inferPostCreate,
-  TARGET_CONFIG_FILE,
 } from "../config/target-scaffold.ts";
 import { CliError } from "../errors.ts";
 import { assertCheckoutRoot, resolveRemoteUrl } from "../git.ts";
