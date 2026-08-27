@@ -84,9 +84,9 @@ signing secret is generated once into
 
 Manual alternative: one org-level webhook (org settings → Webhooks) pointed
 at `<ingress_url>/ingress/github`, content type `application/json`, events
-`pull_request`, `pull_request_review`, `pull_request_review_comment`,
-`issue_comment` and `check_suite`, secret from that same file — covers every
-repo without per-repo binds.
+`pull_request`, `pull_request_review`, `pull_request_review_comment` and
+`check_suite`, secret from that same file — covers every repo without
+per-repo binds.
 
 ### Linear (one-time, org-level)
 

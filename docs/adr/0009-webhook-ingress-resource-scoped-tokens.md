@@ -86,6 +86,13 @@ close-unmerged is a terminal failed run under ADR 0007's teardown matrix.
   JSON-RPC `no rollout found for thread id` error rather than the provider's
   wrapped message, so the fresh-context fallback triggers on any resume
   failure, not on one error string.
+- This ADR's "exiting on approval or close" is amended: the gate now ends only
+  when the pull request closes. `classifyPrState` sets `done` on
+  `state === "closed"` and nothing else, because human-merges mode has to keep
+  listening after an approval until a person presses merge. An approval is a
+  wake like any other, and what it means — squash-merge now, or wait — is the
+  consumer's policy; the review loop jig returns on it, and the suspension demo
+  breaks its own loop.
 - The fresh-context rebuild (brief + ticket snapshot + PR diff + comment
   threads) must stand alone as a first-class path, not a degraded one —
   session resume is an upgrade, never load-bearing.

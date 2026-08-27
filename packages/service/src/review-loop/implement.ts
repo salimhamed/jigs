@@ -27,7 +27,6 @@ export interface ImplementAndReviewOptions {
   baseSha: string;
   maxCycles?: number;
   // Interpolated with the same inert {{KEY}} pass as the defaults.
-  prompt?: string;
   reviewPrompt?: string;
 }
 
@@ -74,7 +73,7 @@ export async function implementAndReview(
         // The builder has to run git to commit, and acceptEdits still prompts
         // on Bash, which hangs headless.
         permissionMode: "bypassPermissions",
-        prompt: interpolate(options.prompt ?? implementPrompt, {
+        prompt: interpolate(implementPrompt, {
           TICKET: ticket,
           BRIEF: options.handoff.brief,
           REVIEW: review,

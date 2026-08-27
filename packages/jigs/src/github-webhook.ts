@@ -8,13 +8,12 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { CliError } from "./errors.ts";
 
-// Complete for the review loop: reviews, inline review comments, PR
-// conversation comments, and CI. The drift PATCH picks up a change on re-bind.
+// Complete for the review loop: reviews, inline review comments, and CI. The
+// drift PATCH picks up a change on re-bind.
 export const WEBHOOK_EVENTS = [
   "pull_request",
   "pull_request_review",
   "pull_request_review_comment",
-  "issue_comment",
   "check_suite",
 ];
 

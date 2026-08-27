@@ -187,6 +187,8 @@ test("an empty branch fails loudly instead of opening an empty PR", async () => 
   const deps = makeDeps([]);
   deps.pushWorktreeBranch = async () => ({ commits: 0, headSha: "base-sha-1" });
   await expect(run(deps)).rejects.toThrow(snapshot.branchName);
+  // The jig's own failure follows the failed-run rows rather than the sweep.
+  expect(calls.teardowns).toEqual([{ merged: false }]);
 });
 
 test("a review-comments wake answers every thread in place", async () => {
@@ -285,6 +287,9 @@ test("a fix that commits nothing escalates instead of waiting for a wake that ca
   ).toHaveLength(1);
   expect(calls.comments).toHaveLength(1);
   expect(calls.comments[0]?.startsWith("@salim")).toBe(true);
+  // Its own reason, not the exhausted-bound one: no attempt count was spent.
+  expect(calls.comments[0]).toContain("produced no new commit");
+  expect(calls.comments[0]).not.toContain("fix attempts");
 });
 
 test("the CI fix does not take over the builder's session pointer", async () => {
@@ -403,6 +408,28 @@ test("an approval squash-merges and tears the run down", async () => {
   expect(calls.teardowns).toEqual([{ merged: true }]);
   expect(result.pr).toEqual(pr);
   expect(calls.gateFinished).toBe(false);
+});
+
+test("a merge GitHub refuses leaves the PR open and the run listening", async () => {
+  const deps = makeDeps([
+    {
+      kind: "approved",
+      reviewId: 7,
+      reviewer: "salim",
+      submittedAt: "2026-08-26T12:00:00Z",
+    },
+    { kind: "closed", merged: false },
+  ]);
+  deps.squashMerge = async () => {
+    throw new Error("405 Pull Request is not mergeable");
+  };
+
+  await expect(run(deps)).rejects.toThrow(PrClosedUnmergedError);
+  expect(calls.comments).toHaveLength(1);
+  expect(calls.comments[0]).toContain("@salim");
+  expect(calls.comments[0]).toContain("not mergeable");
+  // The close after it is what tears the run down, on the failed rows.
+  expect(calls.teardowns).toEqual([{ merged: false }]);
 });
 
 test("in human-merges mode an approval merges nothing and keeps listening", async () => {

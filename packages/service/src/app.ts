@@ -247,10 +247,11 @@ app.post("/api/runs/:runId/cancel", async (c) => {
   const releasedTokens = [...new Set(records.map((s) => s.satisfiedBy))];
   await run.cancel();
   // A run that reaches its own completion tears itself down through
-  // `teardownRun` (./worktrees/teardown). Cancel is the one terminal
-  // transition with no body left to run, so the sweep timer stays its net:
-  // a cancelled run's dirty tree is exactly the wreckage the sweep exists to
-  // surface, and reuse already stops naming a cancelled run as an owner.
+  // `teardownRun` (./worktrees/teardown). The sweep timer is the net for
+  // cancel and for any run whose body ends before reaching that call — a
+  // claim conflict, a step out of retries. A cancelled run's dirty tree is
+  // exactly the wreckage the sweep exists to surface, and reuse already stops
+  // naming a cancelled run as an owner.
   return c.json({ runId: ref.runId, cancelled: true, releasedTokens });
 });
 

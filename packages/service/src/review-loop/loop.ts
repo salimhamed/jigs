@@ -47,7 +47,6 @@ export interface ReviewLoopOptions {
   merge?: "jigs" | "human";
   maxReviewCycles?: number;
   maxCiAttempts?: number;
-  prompt?: string;
   reviewPrompt?: string;
 }
 
@@ -131,7 +130,6 @@ export async function reviewLoop(
       ...(options.maxReviewCycles === undefined
         ? {}
         : { maxCycles: options.maxReviewCycles }),
-      ...(options.prompt === undefined ? {} : { prompt: options.prompt }),
       ...(options.reviewPrompt === undefined
         ? {}
         : { reviewPrompt: options.reviewPrompt }),
@@ -147,6 +145,9 @@ export async function reviewLoop(
   );
   // Thrown workflow-side, so the SDK does not retry an empty push three times.
   if (pushed.commits === 0) {
+    // The one failure the jig raises itself, so it follows the failed-run rows
+    // rather than waiting on the sweep timer like a run that dies mid-body.
+    await teardownRun({ merged: false });
     throw new EmptyBranchError(worktree.branch, worktree.baseSha);
   }
 
@@ -164,12 +165,13 @@ export async function reviewLoop(
     switch (wake.kind) {
       case "review-comments":
       case "changes-requested": {
+        const threads = wake.kind === "review-comments" ? wake.threads : [];
         const answered = await answerAsBuilder(
           {
             harness: options.harness,
             cwd: worktree.path,
             ...(session === undefined ? {} : { session }),
-            threads: wake.kind === "review-comments" ? wake.threads : [],
+            threads,
             ...(wake.body === undefined ? {} : { reviewBody: wake.body }),
             handoff,
             baseSha: worktree.baseSha,
@@ -186,11 +188,7 @@ export async function reviewLoop(
         );
         // Anything the model names that this wake did not carry is invented:
         // replying into it 404s, and a 404 burns the step's three retries.
-        const known = new Set(
-          wake.kind === "review-comments"
-            ? wake.threads.map((thread) => thread.rootId)
-            : [],
-        );
+        const known = new Set(threads.map((thread) => thread.rootId));
         await postAnswers(
           pr,
           answered.output,
@@ -241,7 +239,7 @@ export async function reviewLoop(
         if (after.headSha === wake.headSha) {
           await commentOnPr(
             pr,
-            escalation(wake.mentionLogin ?? pr.owner, wake, ciAttempts),
+            noCommitEscalation(wake.mentionLogin ?? pr.owner, wake),
           );
           ciAttempts = maxCiAttempts + 1;
         }
@@ -257,7 +255,16 @@ export async function reviewLoop(
           );
           break;
         }
-        await squashMerge(pr, title);
+        try {
+          await squashMerge(pr, title);
+        } catch (error) {
+          // GitHub answers 405 for a PR that is not mergeable, and the arm
+          // merges on approval without checking CI. Letting that escape would
+          // end the run without its own teardown; breaking keeps the gate
+          // listening so the eventual close tears the run down.
+          await commentOnPr(pr, mergeFailure(wake.reviewer, error));
+          break;
+        }
         await teardownRun({ merged: true });
         return { pr, cycles: built.cycles };
       }
@@ -314,4 +321,20 @@ function escalation(
     "",
     renderChecks(wake.failing),
   ].join("\n");
+}
+
+function noCommitEscalation(
+  login: string,
+  wake: { headSha: string; failing: CheckRun[] },
+): string {
+  return [
+    `@${login} my CI fix attempt produced no new commit on \`${wake.headSha.slice(0, 8)}\`, so nothing will re-run and I am standing down.`,
+    "",
+    renderChecks(wake.failing),
+  ].join("\n");
+}
+
+function mergeFailure(login: string, error: unknown): string {
+  const reason = error instanceof Error ? error.message : String(error);
+  return `@${login} I could not squash-merge this pull request: ${reason}. I am leaving it open and still listening — merge or close it yourself and I will follow.`;
 }

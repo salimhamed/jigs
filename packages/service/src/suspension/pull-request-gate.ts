@@ -65,11 +65,10 @@ export function classifyPrState(
   cursor: GateCursor,
 ): { wakes: GateWake[]; cursor: GateCursor; done: boolean } {
   const wakes: GateWake[] = [];
-  const seen = new Set(cursor.seenReviewIds);
-  const seenReviewIds = [...cursor.seenReviewIds];
+  const seenReviewIds = new Set(cursor.seenReviewIds);
   for (const review of snapshot.reviews) {
-    if (seen.has(review.id)) continue;
-    seenReviewIds.push(review.id);
+    if (seenReviewIds.has(review.id)) continue;
+    seenReviewIds.add(review.id);
     if (review.state === "APPROVED") {
       wakes.push({
         kind: "approved",
@@ -89,14 +88,12 @@ export function classifyPrState(
   }
 
   const seenComments = new Set(cursor.seenCommentIds);
-  const seenCommentIds = [...cursor.seenCommentIds];
   const threads: ReviewThread[] = [];
   for (const thread of snapshot.reviewThreads) {
     let unseen = false;
     for (const comment of thread.comments) {
       if (seenComments.has(comment.id)) continue;
       seenComments.add(comment.id);
-      seenCommentIds.push(comment.id);
       unseen = true;
     }
     // The viewer guard: jigs' own reply is the last word on a thread it just
@@ -144,7 +141,15 @@ export function classifyPrState(
   // actually closes, so ending the review is the consumer's policy call.
   const done = snapshot.state === "closed";
   if (done) wakes.push({ kind: "closed", merged: snapshot.merged });
-  return { wakes, cursor: { seenReviewIds, seenCommentIds, lastRedSha }, done };
+  return {
+    wakes,
+    cursor: {
+      seenReviewIds: [...seenReviewIds],
+      seenCommentIds: [...seenComments],
+      lastRedSha,
+    },
+    done,
+  };
 }
 
 // One hook per PR, held across the whole review until the PR closes — the
