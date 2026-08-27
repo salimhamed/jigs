@@ -85,7 +85,7 @@ function claudeSettingsOf(captured: Captured): ClaudeCodeSettings {
 const verdict = z.object({ ok: z.boolean() });
 
 test("claude agent step hydrates from wire config with the harness invariants forced", async () => {
-  const { wire } = buildAgentWire({
+  const wire = buildAgentWire({
     harness: claude({
       model: "sonnet",
       mcpServers: {
@@ -116,7 +116,7 @@ test("claude agent step hydrates from wire config with the harness invariants fo
 });
 
 test("codex agent step runs on the app-server under the managed home with fixed policies", async () => {
-  const { wire } = buildAgentWire({
+  const wire = buildAgentWire({
     harness: codex({
       model: "gpt-5.5",
       mcpServers: { probe: { command: "node" } },
@@ -143,7 +143,7 @@ test("codex agent step runs on the app-server under the managed home with fixed 
 });
 
 test("a declared output schema becomes an AI SDK output spec and the raw output is returned", async () => {
-  const { wire } = buildAgentWire({
+  const wire = buildAgentWire({
     harness: claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "judge it",
@@ -158,7 +158,7 @@ test("a declared output schema becomes an AI SDK output spec and the raw output 
 });
 
 test("without an output schema no output spec is passed and output is undefined", async () => {
-  const { wire } = buildAgentWire({
+  const wire = buildAgentWire({
     harness: claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "just do it",
@@ -172,7 +172,7 @@ test("without an output schema no output spec is passed and output is undefined"
 });
 
 test("usage passes through and the Claude session pointer is captured", async () => {
-  const { wire } = buildAgentWire({
+  const wire = buildAgentWire({
     harness: claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "go",
@@ -192,7 +192,7 @@ test("the Codex threadId is captured, and a missing pointer is omitted, never an
     harness: codex({ model: "gpt-5.5" }),
     cwd: worktree,
     prompt: "go",
-  }).wire;
+  });
 
   const withThread = makeDeps({
     providerMetadata: { "codex-app-server": { threadId: "t-7" } },
@@ -209,7 +209,7 @@ test("the Codex threadId is captured, and a missing pointer is omitted, never an
 test("the step env is a scrubbed copy: no API credentials, process.env untouched", async () => {
   process.env.ANTHROPIC_API_KEY = "sk-test-scrub";
   try {
-    const { wire } = buildAgentWire({
+    const wire = buildAgentWire({
       harness: claude({ model: "sonnet" }),
       cwd: worktree,
       prompt: "go",
@@ -226,7 +226,7 @@ test("the step env is a scrubbed copy: no API credentials, process.env untouched
 });
 
 test("claude ask step sees no MCP universe and loads no filesystem settings", async () => {
-  const { wire } = buildAskWire({
+  const wire = buildAskWire({
     harness: claude({ model: "sonnet" }),
     prompt: "summarize",
     system: "be terse",
@@ -244,7 +244,7 @@ test("claude ask step sees no MCP universe and loads no filesystem settings", as
 });
 
 test("codex ask step uses read-only exec in a scratch cwd it cleans up", async () => {
-  const { wire } = buildAskWire({
+  const wire = buildAskWire({
     harness: codex({ model: "gpt-5.5" }),
     prompt: "what is 2+2?",
   });

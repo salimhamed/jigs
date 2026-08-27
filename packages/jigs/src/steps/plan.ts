@@ -50,11 +50,6 @@ export type AskWire = {
   outputSchema?: WireJsonSchema;
 };
 
-export type WirePlan<W, T> = {
-  wire: W;
-  parseOutput: (raw: unknown) => T;
-};
-
 function checkOutputCapability(
   harness: HarnessConfig,
   output: z.ZodType | undefined,
@@ -65,14 +60,6 @@ function checkOutputCapability(
   ) {
     throw new StructuredOutputUnsupportedError(harness.kind);
   }
-}
-
-// The executor asks the harness for schema-conformant output; the real
-// validation is this workflow-side zod parse of the recorded raw output —
-// deterministic on replay, and where the result gets its `T`.
-function makeParseOutput<T>(output: z.ZodType<T> | undefined) {
-  return (raw: unknown): T =>
-    output === undefined ? (undefined as T) : output.parse(raw);
 }
 
 function toWireSchema(
@@ -87,9 +74,7 @@ function toWireSchema(
   return schema;
 }
 
-export function buildAgentWire<T = undefined>(
-  config: AgentStepConfig<T>,
-): WirePlan<AgentWire, T> {
+export function buildAgentWire<T>(config: AgentStepConfig<T>): AgentWire {
   checkOutputCapability(config.harness, config.output);
   const wire: AgentWire = {
     harness: config.harness,
@@ -102,12 +87,10 @@ export function buildAgentWire<T = undefined>(
     wire.permissionMode = config.permissionMode;
   const outputSchema = toWireSchema(config.output);
   if (outputSchema !== undefined) wire.outputSchema = outputSchema;
-  return { wire, parseOutput: makeParseOutput(config.output) };
+  return wire;
 }
 
-export function buildAskWire<T = undefined>(
-  config: AskStepConfig<T>,
-): WirePlan<AskWire, T> {
+export function buildAskWire<T>(config: AskStepConfig<T>): AskWire {
   checkOutputCapability(config.harness, config.output);
   // A model step sees no MCP universe at all — declaring servers it can never
   // reach would be a silent lie, so it fails here instead.
@@ -123,5 +106,5 @@ export function buildAskWire<T = undefined>(
   if (config.system !== undefined) wire.system = config.system;
   const outputSchema = toWireSchema(config.output);
   if (outputSchema !== undefined) wire.outputSchema = outputSchema;
-  return { wire, parseOutput: makeParseOutput(config.output) };
+  return wire;
 }

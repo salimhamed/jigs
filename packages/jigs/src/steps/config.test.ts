@@ -1,10 +1,5 @@
 import { expect, test } from "vitest";
-import {
-  claude,
-  codex,
-  STRUCTURED_OUTPUT_SUPPORT,
-  StructuredOutputUnsupportedError,
-} from "./config.ts";
+import { claude, codex, StructuredOutputUnsupportedError } from "./config.ts";
 
 test("claude() returns a tagged plain-data descriptor", () => {
   const descriptor = claude({
@@ -30,10 +25,6 @@ test("codex() returns a tagged plain-data descriptor", () => {
     mcpServers: { linear: { url: "https://mcp.example", headers: { a: "b" } } },
   });
   expect(structuredClone(descriptor)).toEqual(descriptor);
-});
-
-test("the capability table covers every harness kind and both support structured output", () => {
-  expect(STRUCTURED_OUTPUT_SUPPORT).toEqual({ claude: true, codex: true });
 });
 
 test("StructuredOutputUnsupportedError names the offending kind", () => {

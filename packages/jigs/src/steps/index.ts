@@ -1,15 +1,13 @@
 export {
   type ClaudeHarnessConfig,
-  type ClaudeHarnessOptions,
   type CodexHarnessConfig,
-  type CodexHarnessOptions,
   claude,
   codex,
   type HarnessConfig,
+  type HarnessOptions,
   type McpHttpServer,
   type McpServerConfig,
   type McpStdioServer,
-  STRUCTURED_OUTPUT_SUPPORT,
   StructuredOutputUnsupportedError,
 } from "./config.ts";
 // execute.ts is deliberately NOT re-exported here: this surface is imported
@@ -23,14 +21,11 @@ export {
   buildAgentWire,
   buildAskWire,
   type WireJsonSchema,
-  type WirePlan,
 } from "./plan.ts";
 export {
   type AgentSession,
   type AgentStepResult,
-  extractAgentSession,
   type StepFile,
   type StepResult,
   type StepUsage,
-  toStepResult,
 } from "./result.ts";

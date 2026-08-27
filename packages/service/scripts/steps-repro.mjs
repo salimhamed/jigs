@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Step-builder acceptance repro (AGE-311), patterned on crash-repro.mjs:
 //   replay      a completed fn step is not re-executed on resume; the
-//               recorded StepResult comes back verbatim
+//               recorded StepResult comes back verbatim, and a recorded
+//               AgentStepResult (usage, session, files) survives the World's
+//               step-record serialization into durable run state
 //   bad-config  a live function smuggled into agent() config fails the run
 //               at the SDK serialization boundary, before any harness spawns
 // Requires `pnpm build`, compose Postgres up, bootstrap.
@@ -44,11 +46,16 @@ if (mode === "bad-config") {
     !server.log.includes("[fnStep]"),
     "no step executed before the boundary rejected the config",
   );
-  const run = await api(`/api/runs/${trigger.runId}`);
-  assert(
-    run.status !== "completed",
-    `run blocked at the boundary, never completed (status: ${run.status})`,
-  );
+  // One sample right after the error proves nothing — poll to show the run
+  // stays blocked rather than completing moments later.
+  for (let poll = 1; poll <= 3; poll++) {
+    const run = await api(`/api/runs/${trigger.runId}`);
+    assert(
+      run.status !== "completed",
+      `run stays blocked at the boundary (poll ${poll}/3, status: ${run.status})`,
+    );
+    if (poll < 3) await new Promise((r) => setTimeout(r, 2000));
+  }
   console.log(`\nPASS: ${mode}`);
   server.child.kill("SIGKILL");
   process.exit(0);
@@ -90,6 +97,28 @@ assert(
   final.returnValue.first.text === "" &&
     Array.isArray(final.returnValue.first.files),
   "fn StepResult carries the uniform shape",
+);
+
+// AC4 at the run-state level: the recorded AgentStepResult shape (from
+// echoAgentResult in steps-demo.ts) survives the World's step-record
+// serialization into durable run state verbatim.
+const shape = final.returnValue.agentShape;
+assert(
+  typeof shape?.usage?.outputTokens === "number" &&
+    shape.usage.outputTokens === 5 &&
+    shape.usage.inputTokens === 17 &&
+    shape.usage.totalTokens === 22,
+  "agent usage survives into durable run state with numeric token counts",
+);
+assert(
+  shape.session?.harness === "claude" &&
+    shape.session?.id === "claude-session-0000",
+  "agent session pointer survives into durable run state intact",
+);
+assert(
+  shape.files?.[0]?.mediaType === "text/plain" &&
+    shape.files?.[0]?.base64 === "aGk=",
+  "agent files entry survives into durable run state intact",
 );
 
 console.log(`\nPASS: ${mode}`);

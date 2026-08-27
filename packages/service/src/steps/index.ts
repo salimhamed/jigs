@@ -15,28 +15,41 @@ import {
   type StepResult,
 } from "jigs/steps";
 import { getWorkflowMetadata } from "workflow";
+import type { z } from "zod";
+
+// The executor asks the harness for schema-conformant output; the real
+// validation is this workflow-side zod parse of the recorded raw output —
+// deterministic on replay, and where the result gets its `T`.
+function parseOutput<T>(schema: z.ZodType<T> | undefined, raw: unknown): T {
+  return schema === undefined ? (undefined as T) : schema.parse(raw);
+}
 
 export async function agent<T = undefined>(
   config: AgentStepConfig<T>,
 ): Promise<AgentStepResult<T>> {
-  const { wire, parseOutput } = buildAgentWire(config);
+  const wire = buildAgentWire(config);
   const result = await runAgentStep(wire);
-  return { ...result, output: parseOutput(result.output) };
+  return { ...result, output: parseOutput(config.output, result.output) };
 }
 
 export async function ask<T = undefined>(
   config: AskStepConfig<T>,
 ): Promise<StepResult<T>> {
-  const { wire, parseOutput } = buildAskWire(config);
+  const wire = buildAskWire(config);
   const result = await runAskStep(wire);
-  return { ...result, output: parseOutput(result.output) };
+  return { ...result, output: parseOutput(config.output, result.output) };
 }
 
-// The author's function carries its own "use step" at module scope; fn() only
-// normalizes its recorded return — deterministic workflow-side code, so
-// replay yields the identical StepResult. A closure can never cross the
-// boundary, which makes reference-plus-serializable-args the only honest
-// shape under the directive model.
+/**
+ * Wraps a step function's recorded return in the uniform StepResult. The
+ * passed function must be a module-scope function carrying its own
+ * `"use step"` directive: an inline closure or undirected function executes
+ * unmemoized in the workflow sandbox and re-fires on every replay — with no
+ * runtime error, because the workflow bundle replaces only directive-bearing
+ * functions with stubs, and a stub carries no runtime marker fn() could
+ * assert on. Reference-plus-serializable-args is the only honest shape under
+ * the directive model.
+ */
 export async function fn<Args extends unknown[], R>(
   step: (...args: Args) => R | Promise<R>,
   ...args: Args

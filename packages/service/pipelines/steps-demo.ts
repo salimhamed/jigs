@@ -1,4 +1,4 @@
-import { claude } from "jigs/steps";
+import { type AgentStepResult, claude } from "jigs/steps";
 import { createHook } from "workflow";
 import { z } from "zod";
 import { agent, fn } from "../src/steps";
@@ -12,7 +12,8 @@ type StepsDemoInputs = z.output<typeof stepsDemoInputs> & {
 };
 
 // Step-builder acceptance demo. replay: a completed fn step must not
-// re-execute on resume (its marker tells replay from re-execution).
+// re-execute on resume (its marker tells replay from re-execution), and a
+// recorded AgentStepResult must come back verbatim from run state.
 // bad-config: a live function smuggled into agent() config must fail at the
 // SDK serialization boundary, before any harness spawns.
 export async function stepsDemoPipeline(inputs: StepsDemoInputs) {
@@ -34,6 +35,7 @@ export async function stepsDemoPipeline(inputs: StepsDemoInputs) {
   }
 
   const first = await fn(makeMarker, inputs.triggerId);
+  const agentShape = await echoAgentResult();
 
   // Keep in sync with the registry entry's hookToken.
   using hook = createHook<{ note?: string }>({
@@ -43,7 +45,7 @@ export async function stepsDemoPipeline(inputs: StepsDemoInputs) {
 
   const second = await fn(echoMarker, first.output.marker);
 
-  return { first, second };
+  return { first, second, agentShape };
 }
 
 async function makeMarker(triggerId: string) {
@@ -57,4 +59,29 @@ async function echoMarker(marker: string) {
   "use step";
   console.log(`[fnStep] echo marker=${marker}`);
   return { echoed: marker };
+}
+
+// A representative recorded agent result, no live harness needed: proves the
+// full AgentStepResult shape — usage with defined and undefined token fields,
+// the session pointer, a files entry — survives the World's step-record
+// serialization into durable run state and back through replay.
+async function echoAgentResult(): Promise<AgentStepResult<undefined>> {
+  "use step";
+  return {
+    text: "recorded agent output",
+    output: undefined,
+    files: [{ mediaType: "text/plain", base64: "aGk=" }],
+    usage: {
+      inputTokens: 17,
+      inputTokenDetails: {
+        noCacheTokens: 17,
+        cacheReadTokens: undefined,
+        cacheWriteTokens: undefined,
+      },
+      outputTokens: 5,
+      outputTokenDetails: { textTokens: 5, reasoningTokens: undefined },
+      totalTokens: 22,
+    },
+    session: { harness: "claude", id: "claude-session-0000" },
+  };
 }

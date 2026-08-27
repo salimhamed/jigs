@@ -15,26 +15,23 @@ export type McpHttpServer = {
 
 export type McpServerConfig = McpStdioServer | McpHttpServer;
 
-export type ClaudeHarnessOptions = {
+// One shared options shape until the factories actually grow different
+// options; split then, not preemptively.
+export type HarnessOptions = {
   model: string;
   mcpServers?: Record<string, McpServerConfig>;
 };
 
-export type CodexHarnessOptions = {
-  model: string;
-  mcpServers?: Record<string, McpServerConfig>;
-};
-
-export type ClaudeHarnessConfig = ClaudeHarnessOptions & { kind: "claude" };
-export type CodexHarnessConfig = CodexHarnessOptions & { kind: "codex" };
+export type ClaudeHarnessConfig = HarnessOptions & { kind: "claude" };
+export type CodexHarnessConfig = HarnessOptions & { kind: "codex" };
 
 export type HarnessConfig = ClaudeHarnessConfig | CodexHarnessConfig;
 
-export function claude(options: ClaudeHarnessOptions): ClaudeHarnessConfig {
+export function claude(options: HarnessOptions): ClaudeHarnessConfig {
   return { kind: "claude", ...options };
 }
 
-export function codex(options: CodexHarnessOptions): CodexHarnessConfig {
+export function codex(options: HarnessOptions): CodexHarnessConfig {
   return { kind: "codex", ...options };
 }
 

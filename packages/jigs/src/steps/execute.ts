@@ -27,7 +27,7 @@ import {
 import { ensureManagedCodexHome } from "../harnesses/codex-home.ts";
 import { stripApiCredentials } from "../harnesses/env.ts";
 import { claudeCode, codexExec } from "../harnesses/index.ts";
-import type { HarnessConfig, McpServerConfig } from "./config.ts";
+import type { McpServerConfig } from "./config.ts";
 import type { AgentWire, AskWire } from "./plan.ts";
 import {
   type AgentStepResult,
@@ -135,6 +135,11 @@ export async function executeAgentStep(
   const harness = wire.harness;
   const env = scrubbedEnv();
   const output = outputSpec(wire.outputSchema);
+  const request = {
+    prompt: wire.prompt,
+    ...(wire.instructions !== undefined ? { system: wire.instructions } : {}),
+    ...(output !== undefined ? { output } : {}),
+  };
 
   const generation =
     harness.kind === "claude"
@@ -152,11 +157,7 @@ export async function executeAgentStep(
                 : {}),
             }),
           ),
-          prompt: wire.prompt,
-          ...(wire.instructions !== undefined
-            ? { system: wire.instructions }
-            : {}),
-          ...(output !== undefined ? { output } : {}),
+          ...request,
         })
       : await deps.withCodexAppServer((provider) =>
           deps.generateText({
@@ -177,32 +178,21 @@ export async function executeAgentStep(
                   : {}),
               }),
             ),
-            prompt: wire.prompt,
-            ...(wire.instructions !== undefined
-              ? { system: wire.instructions }
-              : {}),
-            ...(output !== undefined ? { output } : {}),
+            ...request,
           }),
         );
 
+  const session = extractAgentSession(
+    harness.kind,
+    generation.providerMetadata,
+  );
   return {
     ...toStepResult(
       generation,
       wire.outputSchema !== undefined ? generation.output : undefined,
     ),
-    ...sessionOf(harness, generation),
+    ...(session !== undefined ? { session } : {}),
   };
-}
-
-function sessionOf(
-  harness: HarnessConfig,
-  generation: ExecutorGeneration,
-): Pick<AgentStepResult, "session"> {
-  const session = extractAgentSession(
-    harness.kind,
-    generation.providerMetadata,
-  );
-  return session === undefined ? {} : { session };
 }
 
 export async function executeAskStep(
@@ -213,6 +203,11 @@ export async function executeAskStep(
   const harness = wire.harness;
   const env = scrubbedEnv();
   const output = outputSpec(wire.outputSchema);
+  const request = {
+    prompt: wire.prompt,
+    ...(wire.system !== undefined ? { system: wire.system } : {}),
+    ...(output !== undefined ? { output } : {}),
+  };
 
   let generation: ExecutorGeneration;
   if (harness.kind === "claude") {
@@ -226,9 +221,7 @@ export async function executeAskStep(
         env,
         pathToClaudeCodeExecutable: resolveClaudeExecutable(),
       }),
-      prompt: wire.prompt,
-      ...(wire.system !== undefined ? { system: wire.system } : {}),
-      ...(output !== undefined ? { output } : {}),
+      ...request,
     });
   } else {
     // codex exec needs a cwd even for a pure model call; a scratch tmp dir
@@ -246,9 +239,7 @@ export async function executeAskStep(
             sandboxMode: "read-only",
           }),
         ),
-        prompt: wire.prompt,
-        ...(wire.system !== undefined ? { system: wire.system } : {}),
-        ...(output !== undefined ? { output } : {}),
+        ...request,
       });
     } finally {
       rmSync(scratch, { recursive: true, force: true });
