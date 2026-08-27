@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
   createComment,
+  fetchIssueSnapshot,
   getIssueParticipants,
   listCommentsSince,
   mention,
@@ -38,6 +39,27 @@ test("requests carry the API key and hit the override URL", async () => {
   const { url, init } = lastRequest();
   expect(url).toBe("http://mock.test/graphql");
   expect(new Headers(init.headers).get("authorization")).toBe("lin_test_key");
+});
+
+test("fetchIssueSnapshot asks for the snapshot fields in one round trip", async () => {
+  respond({ issue: { id: "i1", identifier: "AGE-313" } });
+  const issue = await fetchIssueSnapshot("issue-uuid");
+  expect(issue.identifier).toBe("AGE-313");
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  const { url, body } = lastRequest();
+  expect(url).toBe("http://mock.test/graphql");
+  for (const field of [
+    "branchName",
+    "labels",
+    "comments(last: 100)",
+    "attachments",
+    "children",
+    "relations",
+    "inverseRelations",
+  ]) {
+    expect(body.query).toContain(field);
+  }
+  expect(body.variables).toEqual({ id: "issue-uuid" });
 });
 
 test("createComment posts a commentCreate mutation with the body verbatim", async () => {

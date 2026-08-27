@@ -71,6 +71,54 @@ export async function getIssueParticipants(
   return { creator: data.issue.creator, viewerId: data.viewer.id };
 }
 
+interface RawIssueRef {
+  id: string;
+  identifier: string;
+  title: string;
+}
+
+export interface RawIssueSnapshot {
+  id: string;
+  identifier: string;
+  title: string;
+  description: string | null;
+  url: string;
+  branchName: string;
+  state: { name: string };
+  creator: LinearUser | null;
+  labels: { nodes: Array<{ name: string }> };
+  comments: { nodes: LinearComment[] };
+  attachments: { nodes: Array<{ title: string; url: string }> };
+  children: { nodes: RawIssueRef[] };
+  relations: { nodes: Array<{ type: string; relatedIssue: RawIssueRef }> };
+  inverseRelations: { nodes: Array<{ type: string; issue: RawIssueRef }> };
+}
+
+// The whole snapshot in one round trip, so every step in an activation reads
+// a copy taken at one instant. Unpaginated `last: 100` on comments is the
+// same accepted cap as listCommentsSince.
+export async function fetchIssueSnapshot(
+  issueId: string,
+): Promise<RawIssueSnapshot> {
+  const data = await linearGraphql<{ issue: RawIssueSnapshot }>(
+    `query IssueSnapshot($id: String!) {
+      issue(id: $id) {
+        id identifier title description url branchName
+        state { name }
+        creator { id name }
+        labels { nodes { name } }
+        comments(last: 100) { nodes { id body createdAt user { id name } } }
+        attachments { nodes { title url } }
+        children { nodes { id identifier title } }
+        relations { nodes { type relatedIssue { id identifier title } } }
+        inverseRelations { nodes { type issue { id identifier title } } }
+      }
+    }`,
+    { id: issueId },
+  );
+  return data.issue;
+}
+
 export async function createComment(
   issueId: string,
   body: string,
