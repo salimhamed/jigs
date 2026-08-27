@@ -116,8 +116,9 @@ app.post("/ingress/linear", async (c) => {
     return c.json({ error: "invalid signature" }, 401);
   }
   const payload = parseJson(rawBody);
-  const timestamp = (payload as { webhookTimestamp?: unknown } | null)
-    ?.webhookTimestamp;
+  if (payload === null) return c.json({ ignored: true });
+  const timestamp = (payload as { webhookTimestamp?: unknown })
+    .webhookTimestamp;
   if (!linearTimestampFresh(timestamp, Date.now())) {
     return c.json({ error: "stale webhookTimestamp" }, 401);
   }

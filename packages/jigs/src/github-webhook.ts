@@ -65,7 +65,7 @@ interface RepoHook {
   id: number;
   active: boolean;
   events: string[];
-  config: { url?: string };
+  config: { url?: string; content_type?: string };
 }
 
 async function githubRequest<T>(
@@ -111,7 +111,15 @@ export async function ensureRepoWebhook({
     "GET",
     `${hooksPath}?per_page=100`,
   );
-  const existing = hooks.find((hook) => hook.config.url === hookUrl);
+  // Match by ingress pathname, not full URL: a changed ingress_url (new
+  // tunnel hostname) is drift on the existing hook, not a second hook.
+  const existing = hooks.find((hook) => {
+    try {
+      return new URL(hook.config.url ?? "").pathname === "/ingress/github";
+    } catch {
+      return false;
+    }
+  });
   const desired = {
     config: { url: hookUrl, content_type: "json", secret },
     events: WEBHOOK_EVENTS,
@@ -121,7 +129,12 @@ export async function ensureRepoWebhook({
     await githubRequest("POST", hooksPath, desired);
     return "created";
   }
-  if (existing.active && sameEvents(existing.events, WEBHOOK_EVENTS)) {
+  if (
+    existing.active &&
+    sameEvents(existing.events, WEBHOOK_EVENTS) &&
+    existing.config.url === hookUrl &&
+    existing.config.content_type === "json"
+  ) {
     return "verified";
   }
   // Full-config PATCH: GitHub never returns the secret, so re-sending it

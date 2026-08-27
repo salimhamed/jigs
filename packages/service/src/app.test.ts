@@ -131,6 +131,15 @@ test("a validly signed Comment delivery for an unclaimed issue is dropped with a
   expect(await res.json()).toEqual({ delivered: false });
 });
 
+test("a validly signed non-JSON linear body is acknowledged and ignored", async () => {
+  const body = "not json";
+  const res = await postLinear(body, {
+    "linear-signature": sign(body, "linear-hook-secret"),
+  });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ ignored: true });
+});
+
 test("an unroutable linear resource type is acknowledged and ignored", async () => {
   const body = JSON.stringify({
     action: "update",

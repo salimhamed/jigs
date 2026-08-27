@@ -206,7 +206,10 @@ test("re-bind with ingress_url configured performs no webhook writes the second 
           id: 9,
           active: true,
           events: created.events,
-          config: { url: created.config.url },
+          config: {
+            url: created.config.url,
+            content_type: created.config.content_type,
+          },
         },
       ]),
     ),

@@ -98,7 +98,10 @@ test("verifies an existing matching webhook with zero writes", async () => {
         id: 9,
         active: true,
         events: [...WEBHOOK_EVENTS].reverse(),
-        config: { url: "https://factory.example.ts.net/ingress/github" },
+        config: {
+          url: "https://factory.example.ts.net/ingress/github",
+          content_type: "json",
+        },
       },
     ]),
   );
@@ -114,7 +117,10 @@ test("patches a webhook whose events drifted", async () => {
           id: 9,
           active: true,
           events: ["pull_request"],
-          config: { url: "https://factory.example.ts.net/ingress/github" },
+          config: {
+            url: "https://factory.example.ts.net/ingress/github",
+            content_type: "json",
+          },
         },
       ]),
     )
@@ -128,6 +134,55 @@ test("patches a webhook whose events drifted", async () => {
   expect(patchUrl).toBe("http://mock.test/github/repos/acme/api/hooks/9");
   expect(patchInit.method).toBe("PATCH");
   expect(JSON.parse(String(patchInit.body)).events).toEqual(WEBHOOK_EVENTS);
+});
+
+test("patches a webhook whose ingress hostname changed instead of creating a second one", async () => {
+  fetchMock
+    .mockResolvedValueOnce(
+      jsonResponse([
+        {
+          id: 9,
+          active: true,
+          events: WEBHOOK_EVENTS,
+          config: {
+            url: "https://old-tunnel.example.ts.net/ingress/github",
+            content_type: "json",
+          },
+        },
+      ]),
+    )
+    .mockResolvedValueOnce(jsonResponse({ id: 9 }));
+  expect(await ensureRepoWebhook(opts)).toBe("updated");
+
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  const [patchUrl, patchInit] = fetchMock.mock.calls[1] as [
+    string,
+    RequestInit,
+  ];
+  expect(patchUrl).toBe("http://mock.test/github/repos/acme/api/hooks/9");
+  expect(patchInit.method).toBe("PATCH");
+  expect(JSON.parse(String(patchInit.body)).config.url).toBe(
+    "https://factory.example.ts.net/ingress/github",
+  );
+});
+
+test("patches a webhook whose content_type drifted from json", async () => {
+  fetchMock
+    .mockResolvedValueOnce(
+      jsonResponse([
+        {
+          id: 9,
+          active: true,
+          events: WEBHOOK_EVENTS,
+          config: {
+            url: "https://factory.example.ts.net/ingress/github",
+            content_type: "form",
+          },
+        },
+      ]),
+    )
+    .mockResolvedValueOnce(jsonResponse({ id: 9 }));
+  expect(await ensureRepoWebhook(opts)).toBe("updated");
 });
 
 test("a non-2xx response surfaces as a CliError naming the path", async () => {

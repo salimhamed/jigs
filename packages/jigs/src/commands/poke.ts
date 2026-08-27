@@ -17,7 +17,9 @@ export async function pokeRun(
   const base = deps.serviceUrl.replace(/\/+$/, "");
   let res: Response;
   try {
-    res = await fetch(`${base}/api/runs/${runId}/poke`, { method: "POST" });
+    res = await fetch(`${base}/api/runs/${encodeURIComponent(runId)}/poke`, {
+      method: "POST",
+    });
   } catch {
     throw new CliError(
       `could not reach the jigs service at ${base}`,
