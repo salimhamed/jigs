@@ -123,10 +123,9 @@ app.post("/ingress/linear", async (c) => {
   }
   const token = tokenFromLinearPayload(payload);
   if (token === null) return c.json({ ignored: true });
-  const { type } = payload as { type: string };
   const hint: WakeHint = {
     source: "linear",
-    type,
+    type: "Comment",
     ...optionalAction(payload),
   };
   return deliver(c, token, hint);

@@ -33,7 +33,7 @@ export function parseGithubRemote(url: string): GithubRepoRef | null {
   return null;
 }
 
-export function defaultJigsDataDir(): string {
+function defaultJigsDataDir(): string {
   return path.join(
     process.env.XDG_DATA_HOME ?? path.join(homedir(), ".local", "share"),
     "jigs",
@@ -107,7 +107,10 @@ export async function ensureRepoWebhook({
 }: EnsureRepoWebhookOptions): Promise<"created" | "verified" | "updated"> {
   const hookUrl = `${ingressUrl.replace(/\/+$/, "")}/ingress/github`;
   const hooksPath = `/repos/${owner}/${repo}/hooks`;
-  const hooks = await githubRequest<RepoHook[]>("GET", hooksPath);
+  const hooks = await githubRequest<RepoHook[]>(
+    "GET",
+    `${hooksPath}?per_page=100`,
+  );
   const existing = hooks.find((hook) => hook.config.url === hookUrl);
   const desired = {
     config: { url: hookUrl, content_type: "json", secret },

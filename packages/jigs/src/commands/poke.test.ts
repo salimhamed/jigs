@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { CliError } from "../errors.ts";
-import { pokeRun, resolveServiceUrl } from "./poke.ts";
+import { pokeRun } from "./poke.ts";
 
 const fetchMock = vi.fn();
 let lines: string[];
@@ -76,12 +76,16 @@ test("a connection failure hints that the service may be down", async () => {
   expect((failure as CliError).hint).toContain("is the jigs service running?");
 });
 
-test("--service and JIGS_SERVICE_URL override the default URL", () => {
-  expect(resolveServiceUrl(undefined, {})).toBe("http://localhost:8990");
-  expect(
-    resolveServiceUrl(undefined, { JIGS_SERVICE_URL: "http://env:1" }),
-  ).toBe("http://env:1");
-  expect(
-    resolveServiceUrl("http://flag:2", { JIGS_SERVICE_URL: "http://env:1" }),
-  ).toBe("http://flag:2");
+test("a trailing slash on the service URL does not break the poke route", async () => {
+  fetchMock.mockResolvedValueOnce(
+    new Response(JSON.stringify({ runId: "wr_abc", poked: [] })),
+  );
+  await pokeRun("wr_abc", {
+    out: (line: string) => lines.push(line),
+    serviceUrl: "http://svc.test:8990/",
+  });
+  expect(fetchMock).toHaveBeenCalledWith(
+    "http://svc.test:8990/api/runs/wr_abc/poke",
+    { method: "POST" },
+  );
 });

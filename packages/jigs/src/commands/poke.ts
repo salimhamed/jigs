@@ -1,17 +1,5 @@
 import { CliError } from "../errors.ts";
 
-export const DEFAULT_SERVICE_URL = "http://localhost:8990";
-
-export function resolveServiceUrl(
-  flag: string | undefined,
-  env: Record<string, string | undefined> = process.env,
-): string {
-  const fromEnv = env.JIGS_SERVICE_URL;
-  if (flag !== undefined && flag !== "") return flag;
-  if (fromEnv !== undefined && fromEnv !== "") return fromEnv;
-  return DEFAULT_SERVICE_URL;
-}
-
 export interface PokeDeps {
   out: (line: string) => void;
   serviceUrl: string;
@@ -26,14 +14,13 @@ export async function pokeRun(
   runId: string,
   deps: PokeDeps,
 ): Promise<PokeResult> {
+  const base = deps.serviceUrl.replace(/\/+$/, "");
   let res: Response;
   try {
-    res = await fetch(`${deps.serviceUrl}/api/runs/${runId}/poke`, {
-      method: "POST",
-    });
+    res = await fetch(`${base}/api/runs/${runId}/poke`, { method: "POST" });
   } catch {
     throw new CliError(
-      `could not reach the jigs service at ${deps.serviceUrl}`,
+      `could not reach the jigs service at ${base}`,
       "is the jigs service running? pass --service or set JIGS_SERVICE_URL",
     );
   }
@@ -43,7 +30,7 @@ export async function pokeRun(
   if (res.status === 409) {
     throw new CliError(
       "run has no suspensions to poke",
-      `inspect it: GET ${deps.serviceUrl}/api/runs/${runId}`,
+      `inspect it: GET ${base}/api/runs/${runId}`,
     );
   }
   if (!res.ok) {

@@ -71,7 +71,9 @@ test("creates the webhook when none matches", async () => {
 
   expect(fetchMock).toHaveBeenCalledTimes(2);
   const [listUrl] = fetchMock.mock.calls[0] as [string];
-  expect(listUrl).toBe("http://mock.test/github/repos/acme/api/hooks");
+  expect(listUrl).toBe(
+    "http://mock.test/github/repos/acme/api/hooks?per_page=100",
+  );
   const [createUrl, createInit] = fetchMock.mock.calls[1] as [
     string,
     RequestInit,
