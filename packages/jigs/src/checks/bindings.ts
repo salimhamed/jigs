@@ -8,10 +8,10 @@ import {
 import { checkoutRoot, probeRemoteAuth, resolveRemoteUrl } from "../git.ts";
 import { expandHome } from "../paths.ts";
 import {
-  CHECK_TIMEOUT_MS,
   type Check,
   type CheckResult,
   failedCheck,
+  PROBE_TIMEOUT_MS,
 } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 
@@ -101,7 +101,7 @@ async function checkBinding(
     };
   }
 
-  const stderr = await probeRemoteAuth(binding.remote, CHECK_TIMEOUT_MS);
+  const stderr = await probeRemoteAuth(binding.remote, PROBE_TIMEOUT_MS);
   if (stderr !== null) {
     return {
       ok: false,

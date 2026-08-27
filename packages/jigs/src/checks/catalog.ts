@@ -27,6 +27,10 @@ export interface CheckReport {
 // the JIT MCP check, which runs under the larger JIT_TIMEOUT_MS outer race.
 export const CHECK_TIMEOUT_MS = 15_000;
 
+// Strictly smaller: an inner probe that outlives the outer race loses its
+// specific repair text to the generic "did not answer" line.
+export const PROBE_TIMEOUT_MS = CHECK_TIMEOUT_MS - 3_000;
+
 // Concurrent, bounded and total: one check throwing or hanging must not cost
 // the report its other failures, because aggregation is the whole point.
 export async function runChecks(

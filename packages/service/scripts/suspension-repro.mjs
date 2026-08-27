@@ -60,6 +60,9 @@ const mockServer = createServer(async (req, res) => {
       data: { issue: { creator: mock.creator }, viewer: mock.viewer },
     });
   }
+  if (req.method === "GET" && req.url === "/github/user") {
+    return json({ login: "jigs-bot" });
+  }
   if (req.method === "GET" && req.url?.startsWith("/github/repos/")) {
     if (req.url.includes("/reviews")) return json(mock.pr.reviews);
     return json({ state: mock.pr.state, merged: mock.pr.merged });

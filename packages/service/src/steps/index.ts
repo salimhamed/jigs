@@ -21,11 +21,9 @@ import type { z } from "zod";
 // from its message alone, so a JIT failure crosses the boundary as a returned
 // value and becomes an error here, where `instanceof` still means something.
 export class JitCheckError extends Error {
-  readonly failures: string;
   constructor(failures: string) {
     super(failures);
     this.name = "JitCheckError";
-    this.failures = failures;
   }
 }
 

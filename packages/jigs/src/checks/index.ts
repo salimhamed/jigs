@@ -1,6 +1,6 @@
 import type { AgentWire } from "../steps/plan.ts";
 import { bindingChecks } from "./bindings.ts";
-import type { Check } from "./catalog.ts";
+import { CHECK_TIMEOUT_MS, type Check } from "./catalog.ts";
 import { type CoreProbes, coreChecks } from "./core.ts";
 import { type HarnessKind, harnessChecks } from "./harnesses.ts";
 import { codexWorktreeConfigCheck, mcpServerChecks } from "./mcp.ts";
@@ -72,10 +72,11 @@ export function doctorChecks(options: DoctorChecksOptions): Check[] {
   ];
 }
 
-// Strictly larger than the per-phase budget inside the MCP check, so a slow
-// server gets diagnosed by the phase that timed out rather than pre-empted by
-// the outer race into a generic "did not answer".
-export const JIT_TIMEOUT_MS = 45_000;
+// Strictly larger than the sum of the MCP check's three phase budgets
+// (connect, listTools, callTool), so a slow server is diagnosed by the phase
+// that timed out rather than pre-empted by the outer race into a generic
+// "did not answer".
+export const JIT_TIMEOUT_MS = 3 * CHECK_TIMEOUT_MS + 5_000;
 
 // Everything a step can only learn at hydration, once the body has built its
 // harness config (ADR 0010's backstop half).

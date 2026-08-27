@@ -2,6 +2,7 @@
 // suspension-repro): spawn the built server against the Postgres World,
 // poll, assert. Each script stays standalone-runnable.
 import { spawn } from "node:child_process";
+import { createServer } from "node:http";
 
 export function assert(cond, message) {
   if (!cond) {
@@ -23,6 +24,36 @@ export async function waitFor(fn, what, timeoutMs = 30_000) {
 
 export const waitForLog = (server, regex, timeoutMs) =>
   waitFor(() => server.log.match(regex), regex, timeoutMs);
+
+// Trigger-path preflight runs the core credential checks on every pipeline, so
+// even a repro that needs neither provider must answer them — otherwise the
+// trigger is refused, or the script makes live calls on every run.
+export async function startProviderStub() {
+  const server = createServer(async (req, res) => {
+    const json = (body) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(body));
+    };
+    if (req.method === "POST" && req.url === "/graphql") {
+      for await (const _chunk of req);
+      return json({ data: { viewer: { id: "bot-1", name: "jigs" } } });
+    }
+    if (req.method === "GET" && req.url === "/github/user") {
+      return json({ login: "jigs-bot" });
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  await new Promise((resolve) => server.listen(0, resolve));
+  process.on("exit", () => server.close());
+  const base = `http://localhost:${server.address().port}`;
+  return {
+    LINEAR_API_KEY: "mock-linear-key",
+    GITHUB_TOKEN: "mock-github-token",
+    LINEAR_API_URL: `${base}/graphql`,
+    GITHUB_API_URL: `${base}/github`,
+  };
+}
 
 export function createHarness({ port, env: extraEnv = {} }) {
   const base = `http://localhost:${port}`;

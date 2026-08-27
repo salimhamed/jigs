@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 import { resolveClaudeExecutable } from "../harnesses/claude.ts";
 import { realCodexAuthPath } from "../harnesses/codex-home.ts";
 import { stringEnv } from "../harnesses/env.ts";
-import { CHECK_TIMEOUT_MS, type Check, type CheckResult } from "./catalog.ts";
+import { type Check, type CheckResult, PROBE_TIMEOUT_MS } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 
 const execFileAsync = promisify(execFile);
@@ -52,7 +52,7 @@ export function claudeAuthCheck(deps: ClaudeAuthDeps = {}): Check {
       try {
         ({ stdout } = await exec(executable, ["auth", "status", "--json"], {
           env: stringEnv(env),
-          timeout: CHECK_TIMEOUT_MS,
+          timeout: PROBE_TIMEOUT_MS,
         }));
       } catch (err) {
         return {

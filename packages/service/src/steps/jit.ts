@@ -26,7 +26,7 @@ export async function agentOrHalt<T = undefined>(
       return await deps.agent(config);
     } catch (err) {
       if (!(err instanceof JitCheckError)) throw err;
-      await deps.needsHuman(claim, err.failures);
+      await deps.needsHuman(claim, err.message);
     }
   }
 }
