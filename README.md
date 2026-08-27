@@ -11,7 +11,15 @@ human approval where it matters.
 the Vercel Workflow SDK with a self-hosted Postgres World; the CLI manages
 repo bindings (`jigs bind` / `unbind` / `bindings`) in a committed `jigs.yml`.
 Every trigger preflights the pipeline's requirements before creating a run,
-and `jigs doctor` runs the same checks on demand.
+and `jigs doctor` runs the same checks on demand. The operational verbs are
+`jigs run` / `ps` / `logs` / `cancel` / `poke`, each an HTTP client of the
+service; a run can be named by its id, a unique id prefix, or the ticket it
+claimed. `jigs cancel <run>` is the escape hatch for a zombie claim owner —
+it releases every resource the run holds so the same ticket can be launched
+again, and `--force` skips its confirmation for a run still in flight. Logs
+themselves stay the SDK's: the verbs print
+`npx workflow web --backend @workflow/world-postgres <run>`, naming the world
+the service writes to; run it with `WORKFLOW_POSTGRES_URL` in your shell.
 
 ## Layout
 

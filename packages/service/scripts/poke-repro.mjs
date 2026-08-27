@@ -5,49 +5,18 @@
 // Also asserts poke exits nonzero for an unknown run and for a run holding no
 // suspensions. Requires `pnpm build`, compose Postgres up, bootstrap.
 import { execFile } from "node:child_process";
-import { createServer } from "node:http";
 import { promisify } from "node:util";
-import { assert, createHarness, waitFor, waitForLog } from "./repro-lib.mjs";
+import {
+  assert,
+  createHarness,
+  startLinearGithubStub,
+  waitFor,
+  waitForLog,
+} from "./repro-lib.mjs";
 
 const execFileAsync = promisify(execFile);
 
-// ---- mock Linear + GitHub provider server ----------------------------------
-
-const mock = {
-  creator: { id: "creator-1", name: "salim" },
-  viewer: { id: "bot-1" },
-  comments: [],
-  pr: { state: "open", merged: false, reviews: [] },
-};
-
-const mockServer = createServer(async (req, res) => {
-  const json = (body) => {
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify(body));
-  };
-  if (req.method === "POST" && req.url === "/graphql") {
-    let raw = "";
-    for await (const chunk of req) raw += chunk;
-    const { query } = JSON.parse(raw);
-    if (query.includes("comments")) {
-      return json({ data: { issue: { comments: { nodes: mock.comments } } } });
-    }
-    return json({
-      data: { issue: { creator: mock.creator }, viewer: mock.viewer },
-    });
-  }
-  if (req.method === "GET" && req.url === "/github/user") {
-    return json({ login: "jigs-bot" });
-  }
-  if (req.method === "GET" && req.url?.startsWith("/github/repos/")) {
-    if (req.url.includes("/reviews")) return json(mock.pr.reviews);
-    return json({ state: mock.pr.state, merged: mock.pr.merged });
-  }
-  res.writeHead(404);
-  res.end();
-});
-await new Promise((resolve) => mockServer.listen(0, resolve));
-const MOCK_BASE = `http://localhost:${mockServer.address().port}`;
+const { mock, env } = await startLinearGithubStub();
 
 function approvePr() {
   mock.pr.reviews.push({
@@ -64,14 +33,8 @@ function approvePr() {
 const PORT = process.env.PORT ?? "8994";
 const { base, startServer, healthy, ensurePortFree, api } = createHarness({
   port: PORT,
-  env: {
-    LINEAR_API_KEY: "mock-linear-key",
-    GITHUB_TOKEN: "mock-github-token",
-    LINEAR_API_URL: `${MOCK_BASE}/graphql`,
-    GITHUB_API_URL: `${MOCK_BASE}/github`,
-  },
+  env,
 });
-process.on("exit", () => mockServer.close());
 
 await ensurePortFree();
 

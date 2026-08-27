@@ -1,9 +1,10 @@
 import { CliError } from "../errors.ts";
-
-export interface PokeDeps {
-  out: (line: string) => void;
-  serviceUrl: string;
-}
+import {
+  readErrorBody,
+  runRefError,
+  type ServiceDeps,
+  serviceFetch,
+} from "./service.ts";
 
 export interface PokeResult {
   runId: string;
@@ -12,28 +13,22 @@ export interface PokeResult {
 
 export async function pokeRun(
   runId: string,
-  deps: PokeDeps,
+  deps: ServiceDeps,
 ): Promise<PokeResult> {
-  const base = deps.serviceUrl.replace(/\/+$/, "");
-  let res: Response;
-  try {
-    res = await fetch(`${base}/api/runs/${encodeURIComponent(runId)}/poke`, {
-      method: "POST",
-    });
-  } catch {
-    throw new CliError(
-      `could not reach the jigs service at ${base}`,
-      "is the jigs service running? pass --service or set JIGS_SERVICE_URL",
-    );
-  }
-  if (res.status === 404) {
-    throw new CliError(`run ${runId} not found`);
-  }
-  if (res.status === 409) {
-    throw new CliError(
-      "run has no suspensions to poke",
-      `inspect it: GET ${base}/api/runs/${runId}`,
-    );
+  const res = await serviceFetch(
+    deps.serviceUrl,
+    `/api/runs/${encodeURIComponent(runId)}/poke`,
+    { method: "POST" },
+  );
+  if (res.status === 404 || res.status === 409) {
+    const body = await readErrorBody(res);
+    if (res.status === 409 && body.candidates === undefined) {
+      throw new CliError(
+        "run has no suspensions to poke",
+        `inspect it: jigs logs ${runId}`,
+      );
+    }
+    throw runRefError(runId, body);
   }
   if (!res.ok) {
     throw new CliError(`poke failed: HTTP ${res.status} ${await res.text()}`);

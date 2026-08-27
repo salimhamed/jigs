@@ -2,6 +2,7 @@ import { type Context, Hono } from "hono";
 import { failedChecks } from "jigs/checks";
 import { getHookByToken, getRun, resumeHook, start } from "workflow/api";
 import { getWorld } from "workflow/runtime";
+import { z } from "zod";
 import {
   githubWebhookSecret,
   linearTimestampFresh,
@@ -12,6 +13,13 @@ import {
 import { doctor, preflight } from "./preflight";
 import { registry } from "./registry";
 import {
+  isParkToken,
+  listRuns,
+  type RunRef,
+  resolveRunRef,
+  TERMINAL_RUN_STATUSES,
+} from "./runs";
+import {
   readSuspensionMetadata,
   type SuspensionRecord,
 } from "./suspension/record";
@@ -19,6 +27,11 @@ import {
   tokenFromGithubPayload,
   tokenFromLinearPayload,
 } from "./suspension/tokens";
+import {
+  connectRegistry,
+  listWorktrees,
+  type WorktreeRow,
+} from "./worktrees/registry";
 
 const app = new Hono();
 
@@ -32,18 +45,29 @@ app.get("/health", (c) =>
   }),
 );
 
+// The `inputs` contract the CLI validates `--input` against before it ever
+// calls the trigger. `io: "input"` is load-bearing: the default marks
+// `.default()`ed fields required, which would reject every valid launch.
+// `unrepresentable: "any"` keeps a schema holding a z.date()/z.bigint()/
+// z.custom() from throwing the whole route to a 500 — the member renders as
+// `{}` and entry.inputs.safeParse at the trigger stays its real authority.
+app.get("/api/pipelines/:name/inputs", (c) => {
+  const name = c.req.param("name");
+  const entry = registry[name];
+  if (!entry) return c.json(unknownPipeline(name), 404);
+  return c.json({
+    name,
+    inputs: z.toJSONSchema(entry.inputs, {
+      io: "input",
+      unrepresentable: "any",
+    }),
+  });
+});
+
 app.post("/api/pipelines/:name/runs", async (c) => {
   const name = c.req.param("name");
   const entry = registry[name];
-  if (!entry) {
-    return c.json(
-      {
-        error: `unknown pipeline: ${name}`,
-        knownPipelines: Object.keys(registry),
-      },
-      404,
-    );
-  }
+  if (!entry) return c.json(unknownPipeline(name), 404);
 
   const body = await c.req
     .json<{ inputs?: unknown }>()
@@ -74,6 +98,7 @@ app.post("/api/pipelines/:name/runs", async (c) => {
     {
       runId: run.runId,
       pipeline: name,
+      logs: logsPointer(run.runId),
       ...(entry.hookToken ? { resumeToken: entry.hookToken(triggerId) } : {}),
     },
     201,
@@ -151,10 +176,11 @@ app.post("/ingress/linear", async (c) => {
 // Manual wake on the same code path as the ingress: resume every token the
 // run's suspensions are satisfied by. The fallback when a delivery was missed.
 app.post("/api/runs/:runId/poke", async (c) => {
-  const run = getRun(c.req.param("runId"));
-  if (!(await run.exists)) return c.json({ error: "not found" }, 404);
-  const suspensions = await listSuspensions(run.runId);
-  const tokens = [...new Set(suspensions.map((s) => s.satisfiedBy))];
+  const ref = await resolveRunRef(c.req.param("runId"));
+  if (ref.kind !== "found") return refError(c, ref);
+  const run = getRun(ref.runId);
+  const { records } = await listSuspensions(run.runId);
+  const tokens = [...new Set(records.map((s) => s.satisfiedBy))];
   if (tokens.length === 0) {
     return c.json({ error: "run has no suspensions to poke" }, 409);
   }
@@ -170,11 +196,44 @@ app.post("/api/runs/:runId/poke", async (c) => {
   return c.json({ runId: run.runId, poked });
 });
 
-app.get("/api/runs/:runId", async (c) => {
-  const run = getRun(c.req.param("runId"));
-  if (!(await run.exists)) return c.json({ error: "not found" }, 404);
+// Everything `jigs ps` renders: the SDK's runs overlaid with jigs' suspended
+// status, plus the worktree registry's own view of what is on disk.
+app.get("/api/runs", async (c) => {
+  const [runs, worktrees] = await Promise.all([listRuns(), readWorktrees()]);
+  return c.json({ runs, worktrees });
+});
+
+// The escape hatch for a zombie claim owner. Cancelling releases every hook
+// the run holds — the world deletes them on run_cancelled — so the tokens are
+// captured before the cancel, not after.
+app.post("/api/runs/:runId/cancel", async (c) => {
+  const ref = await resolveRunRef(c.req.param("runId"));
+  if (ref.kind !== "found") return refError(c, ref);
+  const run = getRun(ref.runId);
   const status = await run.status;
-  const body: Record<string, unknown> = { runId: run.runId, status };
+  if (TERMINAL_RUN_STATUSES.has(status)) {
+    return c.json(
+      { error: `run ${ref.runId} is already ${status}`, status },
+      409,
+    );
+  }
+  const { records } = await listSuspensions(ref.runId);
+  const releasedTokens = [...new Set(records.map((s) => s.satisfiedBy))];
+  await run.cancel();
+  // AGE-309 applies the teardown matrix to this run's worktrees here.
+  return c.json({ runId: ref.runId, cancelled: true, releasedTokens });
+});
+
+app.get("/api/runs/:runId", async (c) => {
+  const ref = await resolveRunRef(c.req.param("runId"));
+  if (ref.kind !== "found") return refError(c, ref);
+  const run = getRun(ref.runId);
+  const status = await run.status;
+  const body: Record<string, unknown> = {
+    runId: run.runId,
+    status,
+    logs: logsPointer(run.runId),
+  };
   if (status === "completed") body.returnValue = await run.returnValue;
   if (status === "failed") {
     body.error = await run.returnValue.then(
@@ -182,11 +241,55 @@ app.get("/api/runs/:runId", async (c) => {
       (err: unknown) => String(err),
     );
   }
-  // The SDK has no `suspended` status — a parked run reads `running`, so
-  // jigs surfaces what the run is listening on from its hooks' metadata.
-  if (status === "running") body.suspensions = await listSuspensions(run.runId);
+  // The SDK has no `suspended` status — a parked run reads `running`, so jigs
+  // reads parkedness off the hook tokens with the same predicate `jigs ps`
+  // uses. A hook carrying no jigs metadata still parks the run; it just has no
+  // record to explain itself with, which is why the two answers are separate.
+  if (status === "running") {
+    const { tokens, records } = await listSuspensions(run.runId);
+    body.suspensions = records;
+    body.suspended = tokens.some(isParkToken);
+  }
   return c.json(body);
 });
+
+function unknownPipeline(name: string) {
+  return {
+    error: `unknown pipeline: ${name}`,
+    knownPipelines: Object.keys(registry),
+  };
+}
+
+function refError(
+  c: Context,
+  ref: Exclude<RunRef, { kind: "found" }>,
+): Response {
+  return ref.kind === "ambiguous"
+    ? c.json({ error: "ambiguous run ref", candidates: ref.candidates }, 409)
+    : c.json({ error: "not found" }, 404);
+}
+
+// `workflow web` defaults to the local world, and only the service knows
+// which world it actually writes to.
+function logsPointer(runId: string): string {
+  const world = process.env.WORKFLOW_TARGET_WORLD;
+  return world === undefined || world === ""
+    ? `npx workflow web ${runId}`
+    : `npx workflow web --backend ${world} ${runId}`;
+}
+
+// Connect-and-end per request, as the world plugin does: `ps` is
+// CLI-frequency, so a pooled connection would cost more concept than latency.
+async function readWorktrees(): Promise<WorktreeRow[]> {
+  const url = process.env.WORKFLOW_POSTGRES_URL;
+  if (url === undefined || url === "") return [];
+  const sql = connectRegistry(url);
+  try {
+    return await listWorktrees(sql);
+  } finally {
+    await sql.end();
+  }
+}
 
 // A signed but unparseable body is unroutable, like an unknown event type.
 function parseJson(rawBody: string): unknown {
@@ -211,7 +314,11 @@ async function deliver(c: Context, token: string, hint: WakeHint) {
   }
 }
 
-async function listSuspensions(runId: string): Promise<SuspensionRecord[]> {
+// Raw tokens alongside the hydrated records: parkedness is a property of the
+// token, but only a record can say why, and both come from the one listing.
+async function listSuspensions(
+  runId: string,
+): Promise<{ tokens: string[]; records: SuspensionRecord[] }> {
   const hooks = await getWorld().hooks.list({ runId });
   // The world's list returns metadata still serialized (binary devalue);
   // only getHookByToken hydrates it — hence the per-hook round trip. The
@@ -224,9 +331,12 @@ async function listSuspensions(runId: string): Promise<SuspensionRecord[]> {
       ),
     ),
   );
-  return hydrated.filter(
-    (record): record is SuspensionRecord => record !== null,
-  );
+  return {
+    tokens: hooks.data.map((hook) => hook.token),
+    records: hydrated.filter(
+      (record): record is SuspensionRecord => record !== null,
+    ),
+  };
 }
 
 export default app;

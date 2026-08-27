@@ -62,7 +62,7 @@ test("a 409 becomes a CliError with an inspection hint", async () => {
   );
   expect(failure).toBeInstanceOf(CliError);
   expect((failure as CliError).message).toBe("run has no suspensions to poke");
-  expect((failure as CliError).hint).toContain("/api/runs/wr_done");
+  expect((failure as CliError).hint).toContain("jigs logs wr_done");
 });
 
 test("a connection failure hints that the service may be down", async () => {

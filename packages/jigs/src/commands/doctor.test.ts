@@ -31,7 +31,7 @@ test("a green report prints one ok line per check and does not throw", async () 
     ],
   });
   const report = await runDoctor(deps());
-  expect(fetchMock).toHaveBeenCalledWith("http://svc.test:8990/api/doctor");
+  expect(fetchMock.mock.calls[0]?.[0]).toBe("http://svc.test:8990/api/doctor");
   expect(report.ok).toBe(true);
   expect(lines).toEqual(["ok   Linear API key", "ok   binding api"]);
 });
@@ -89,5 +89,5 @@ test("a trailing slash on the service URL does not break the doctor route", asyn
     out: (line: string) => lines.push(line),
     serviceUrl: "http://svc.test:8990/",
   });
-  expect(fetchMock).toHaveBeenCalledWith("http://svc.test:8990/api/doctor");
+  expect(fetchMock.mock.calls[0]?.[0]).toBe("http://svc.test:8990/api/doctor");
 });

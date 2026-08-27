@@ -55,6 +55,58 @@ export async function startProviderStub() {
   };
 }
 
+// The fuller stub: an issue with a creator, a comment list and a PR whose
+// state the caller mutates through the returned `mock`. suspension-repro and
+// jit-repro keep their own — their handlers answer commentCreate too.
+export async function startLinearGithubStub() {
+  const mock = {
+    creator: { id: "creator-1", name: "salim" },
+    viewer: { id: "bot-1" },
+    comments: [],
+    pr: { state: "open", merged: false, reviews: [] },
+  };
+  const server = createServer(async (req, res) => {
+    const json = (body) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(body));
+    };
+    if (req.method === "POST" && req.url === "/graphql") {
+      let raw = "";
+      for await (const chunk of req) raw += chunk;
+      const { query } = JSON.parse(raw);
+      if (query.includes("comments")) {
+        return json({
+          data: { issue: { comments: { nodes: mock.comments } } },
+        });
+      }
+      return json({
+        data: { issue: { creator: mock.creator }, viewer: mock.viewer },
+      });
+    }
+    if (req.method === "GET" && req.url === "/github/user") {
+      return json({ login: "jigs-bot" });
+    }
+    if (req.method === "GET" && req.url?.startsWith("/github/repos/")) {
+      if (req.url.includes("/reviews")) return json(mock.pr.reviews);
+      return json({ state: mock.pr.state, merged: mock.pr.merged });
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  await new Promise((resolve) => server.listen(0, resolve));
+  process.on("exit", () => server.close());
+  const base = `http://localhost:${server.address().port}`;
+  return {
+    mock,
+    env: {
+      LINEAR_API_KEY: "mock-linear-key",
+      GITHUB_TOKEN: "mock-github-token",
+      LINEAR_API_URL: `${base}/graphql`,
+      GITHUB_API_URL: `${base}/github`,
+    },
+  };
+}
+
 export function createHarness({ port, env: extraEnv = {} }) {
   const base = `http://localhost:${port}`;
   const env = {
