@@ -34,19 +34,11 @@ export type AskStepConfig<T = undefined> = {
 
 export type WireJsonSchema = Record<string, unknown>;
 
-export type AgentWire = {
-  harness: HarnessConfig;
-  cwd: string;
-  prompt: string;
-  instructions?: string;
-  permissionMode?: PermissionMode;
+export type AgentWire = Omit<AgentStepConfig, "output"> & {
   outputSchema?: WireJsonSchema;
 };
 
-export type AskWire = {
-  harness: HarnessConfig;
-  prompt: string;
-  system?: string;
+export type AskWire = Omit<AskStepConfig, "output"> & {
   outputSchema?: WireJsonSchema;
 };
 
@@ -76,18 +68,9 @@ function toWireSchema(
 
 export function buildAgentWire<T>(config: AgentStepConfig<T>): AgentWire {
   checkOutputCapability(config.harness, config.output);
-  const wire: AgentWire = {
-    harness: config.harness,
-    cwd: config.cwd,
-    prompt: config.prompt,
-  };
-  if (config.instructions !== undefined)
-    wire.instructions = config.instructions;
-  if (config.permissionMode !== undefined)
-    wire.permissionMode = config.permissionMode;
-  const outputSchema = toWireSchema(config.output);
-  if (outputSchema !== undefined) wire.outputSchema = outputSchema;
-  return wire;
+  const { output, ...wire } = config;
+  const outputSchema = toWireSchema(output);
+  return outputSchema === undefined ? wire : { ...wire, outputSchema };
 }
 
 export function buildAskWire<T>(config: AskStepConfig<T>): AskWire {
@@ -99,12 +82,7 @@ export function buildAskWire<T>(config: AskStepConfig<T>): AskWire {
       "ask() is a plain model call with no MCP universe — mcpServers on the harness descriptor is only honored by agent()",
     );
   }
-  const wire: AskWire = {
-    harness: config.harness,
-    prompt: config.prompt,
-  };
-  if (config.system !== undefined) wire.system = config.system;
-  const outputSchema = toWireSchema(config.output);
-  if (outputSchema !== undefined) wire.outputSchema = outputSchema;
-  return wire;
+  const { output, ...wire } = config;
+  const outputSchema = toWireSchema(output);
+  return outputSchema === undefined ? wire : { ...wire, outputSchema };
 }

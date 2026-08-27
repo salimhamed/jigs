@@ -67,6 +67,7 @@ async function echoMarker(marker: string) {
 // serialization into durable run state and back through replay.
 async function echoAgentResult(): Promise<AgentStepResult<undefined>> {
   "use step";
+  console.log("[agentShape] START");
   return {
     text: "recorded agent output",
     output: undefined,

@@ -32,14 +32,6 @@ test("buildAgentWire converts the zod output schema into a wire JSON schema", ()
   expect(wire.outputSchema?.$schema).toBeUndefined();
 });
 
-test("the config schema parses recorded raw output typed and rejects non-conforming output", () => {
-  expect(verdict.parse({ approved: true, note: "ship it" })).toEqual({
-    approved: true,
-    note: "ship it",
-  });
-  expect(() => verdict.parse({ approved: "yes" })).toThrow();
-});
-
 test("without an output schema the wire omits it", () => {
   const wire = buildAskWire({
     harness: codex({ model: "gpt-5.5" }),

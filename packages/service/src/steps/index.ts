@@ -20,7 +20,10 @@ import type { z } from "zod";
 // The executor asks the harness for schema-conformant output; the real
 // validation is this workflow-side zod parse of the recorded raw output —
 // deterministic on replay, and where the result gets its `T`.
-function parseOutput<T>(schema: z.ZodType<T> | undefined, raw: unknown): T {
+export function parseOutput<T>(
+  schema: z.ZodType<T> | undefined,
+  raw: unknown,
+): T {
   return schema === undefined ? (undefined as T) : schema.parse(raw);
 }
 

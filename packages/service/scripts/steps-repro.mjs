@@ -85,6 +85,11 @@ assert(
   startLines.length === 1,
   `fn step executed exactly once (saw ${startLines.length} START lines)`,
 );
+const agentStarts = [...server.log.matchAll(/\[agentShape\] START/g)];
+assert(
+  agentStarts.length === 1,
+  `agent-shaped step executed exactly once (saw ${agentStarts.length} START lines)`,
+);
 assert(
   final.returnValue.first.output.marker === preResumeMarker,
   `recorded StepResult replayed verbatim (marker ${preResumeMarker})`,
