@@ -3,10 +3,20 @@ import readline from "node:readline/promises";
 import { Command, Option } from "commander";
 import { bindRepo } from "./commands/bind.ts";
 import { type BindingRow, listBindings } from "./commands/bindings.ts";
+import { cancelRun } from "./commands/cancel.ts";
 import { runDoctor } from "./commands/doctor.ts";
+import { showLogs } from "./commands/logs.ts";
 import { pokeRun } from "./commands/poke.ts";
+import { listRunsForPs } from "./commands/ps.ts";
+import { launchRun } from "./commands/run.ts";
 import { unbindRepo } from "./commands/unbind.ts";
 import { CliError } from "./errors.ts";
+import { formatTable } from "./table.ts";
+
+const serviceOption = () =>
+  new Option("--service <url>", "jigs service URL")
+    .env("JIGS_SERVICE_URL")
+    .default("http://localhost:8990");
 
 function makeConfirm(): ((question: string) => Promise<boolean>) | undefined {
   if (!process.stdin.isTTY || !process.stdout.isTTY) return undefined;
@@ -28,34 +38,18 @@ function printBindingsTable(
   rows: BindingRow[],
   out: (line: string) => void,
 ): void {
-  const cells = rows.map((row) => ({
-    name: row.name,
-    path: row.path,
-    remote: row.remote,
-    state:
+  const lines = formatTable(
+    ["NAME", "PATH", "REMOTE", "STATE"],
+    rows.map((row) => [
+      row.name,
+      row.path,
+      row.remote,
       row.notes.length > 0
         ? `${row.state} (${row.notes.join(", ")})`
         : row.state,
-  }));
-  const all = [
-    { name: "NAME", path: "PATH", remote: "REMOTE", state: "STATE" },
-    ...cells,
-  ];
-  const widths = {
-    name: Math.max(...all.map((row) => row.name.length)),
-    path: Math.max(...all.map((row) => row.path.length)),
-    remote: Math.max(...all.map((row) => row.remote.length)),
-  };
-  for (const row of all) {
-    out(
-      [
-        row.name.padEnd(widths.name),
-        row.path.padEnd(widths.path),
-        row.remote.padEnd(widths.remote),
-        row.state,
-      ].join("  "),
-    );
-  }
+    ]),
+  );
+  for (const line of lines) out(line);
 }
 
 const out = (line: string) => console.log(line);
@@ -86,14 +80,64 @@ program
   });
 
 program
+  .command("run")
+  .description("launch a pipeline")
+  .argument("<pipeline>", "pipeline name")
+  .option(
+    "--input <pair>",
+    "pipeline input as key=value (repeatable)",
+    (pair: string, previous: string[]) => [...previous, pair],
+    [] as string[],
+  )
+  .addOption(serviceOption())
+  .action(
+    async (pipeline: string, options: { input: string[]; service: string }) => {
+      await launchRun(pipeline, options.input, {
+        out,
+        serviceUrl: options.service,
+      });
+    },
+  );
+
+program
+  .command("ps")
+  .description("list runs and the worktrees the registry holds")
+  .addOption(serviceOption())
+  .action(async (options: { service: string }) => {
+    await listRunsForPs({ out, serviceUrl: options.service });
+  });
+
+program
+  .command("cancel")
+  .description("cancel a run, releasing every resource it claims")
+  .argument("<run>", "run id, unique id prefix, or ticket id")
+  .option("--force", "skip the confirmation for an in-flight run")
+  .addOption(serviceOption())
+  .action(
+    async (run: string, options: { force?: boolean; service: string }) => {
+      await cancelRun(run, {
+        out,
+        serviceUrl: options.service,
+        confirm: makeConfirm(),
+        force: options.force,
+      });
+    },
+  );
+
+program
+  .command("logs")
+  .description("show a run's state and the workflow web pointer to its logs")
+  .argument("<run>", "run id, unique id prefix, or ticket id")
+  .addOption(serviceOption())
+  .action(async (run: string, options: { service: string }) => {
+    await showLogs(run, { out, serviceUrl: options.service });
+  });
+
+program
   .command("poke")
   .description("manually wake a suspended run (the missed-delivery fallback)")
-  .argument("<run>", "run id")
-  .addOption(
-    new Option("--service <url>", "jigs service URL")
-      .env("JIGS_SERVICE_URL")
-      .default("http://localhost:8990"),
-  )
+  .argument("<run>", "run id, unique id prefix, or ticket id")
+  .addOption(serviceOption())
   .action(async (runId: string, options: { service: string }) => {
     await pokeRun(runId, { out, serviceUrl: options.service });
   });
@@ -101,11 +145,7 @@ program
 program
   .command("doctor")
   .description("run the check catalog against the service, without launching")
-  .addOption(
-    new Option("--service <url>", "jigs service URL")
-      .env("JIGS_SERVICE_URL")
-      .default("http://localhost:8990"),
-  )
+  .addOption(serviceOption())
   .action(async (options: { service: string }) => {
     await runDoctor({ out, serviceUrl: options.service });
   });

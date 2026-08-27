@@ -33,6 +33,10 @@ test("registered to a live run is a hard error naming the owner", () => {
     expect(err).toBeInstanceOf(WorktreeOwnedError);
     expect((err as WorktreeOwnedError).owningRunId).toBe("run_owner");
     expect((err as WorktreeOwnedError).message).toContain("run_owner");
+    // The escape hatch the repair names has to keep existing.
+    expect((err as WorktreeOwnedError).message).toContain(
+      "jigs cancel run_owner",
+    );
   }
 });
 
