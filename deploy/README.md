@@ -105,7 +105,33 @@ manually wakes a suspended run over the same code path as a webhook delivery
 `http://localhost:8990`). Scripted end-to-end check (requires steps 1–2):
 `cd packages/service && node scripts/poke-repro.mjs`.
 
-## 5. Run history (`workflow web`)
+## 5. Operating runs from the CLI
+
+```sh
+jigs run suspension-demo --input issueId=<uuid> --input askHuman=true
+jigs ps
+jigs logs <run>
+jigs cancel <run> [--force]
+```
+
+Every verb takes `--service <url>` / `JIGS_SERVICE_URL`. `--input` values are
+read as JSON with the raw string as the fallback, so `askHuman=true` is a
+boolean and `AGE-123` is a string; a value the pipeline's `inputs` schema
+rejects fails in the CLI, before any run is created.
+
+`<run>` is a run id, a unique id prefix, or the ticket the run claimed — an
+ambiguous prefix lists its candidates instead of guessing.
+
+`jigs cancel` is the escape hatch when a run holds a resource nobody is
+coming back for: cancelling releases every hook it claimed, so the same
+ticket can be launched again. A suspended run cancels silently — no process
+is involved — while a run still in flight is confirmed first, and `--force`
+skips that prompt when there is no terminal to answer it.
+
+Scripted end-to-end check (requires steps 1–2, and `pnpm build`):
+`cd packages/service && node scripts/cli-repro.mjs`.
+
+## 6. Run history (`workflow web`)
 
 ```sh
 WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5439/jigs \
@@ -115,7 +141,7 @@ WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5439/jigs \
 Serves the SDK's observability UI (default `http://localhost:3456`) reading
 the same World the service writes — run history, step attempts, events.
 
-## 6. Crash-model repro
+## 7. Crash-model repro
 
 Scripted (requires steps 1–2; stop anything on port 8992 first):
 
