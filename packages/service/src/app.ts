@@ -1,4 +1,5 @@
 import { type Context, Hono } from "hono";
+import { failedChecks } from "jigs/checks";
 import { getHookByToken, getRun, resumeHook, start } from "workflow/api";
 import { getWorld } from "workflow/runtime";
 import {
@@ -8,6 +9,7 @@ import {
   verifyLinearSignature,
   type WakeHint,
 } from "./ingress";
+import { doctor, preflight } from "./preflight";
 import { registry } from "./registry";
 import {
   readSuspensionMetadata,
@@ -56,6 +58,16 @@ app.post("/api/pipelines/:name/runs", async (c) => {
     );
   }
 
+  // Before the run exists (ADR 0010): every failure at once, each carrying
+  // its repair, and no run created. There is no skip flag.
+  const report = await preflight(entry.requires ?? {});
+  if (!report.ok) {
+    return c.json(
+      { error: "preflight failed", failures: failedChecks(report) },
+      424,
+    );
+  }
+
   const triggerId = crypto.randomUUID();
   const run = await start(entry.pipeline, [{ ...parsed.data, triggerId }]);
   return c.json(
@@ -67,6 +79,10 @@ app.post("/api/pipelines/:name/runs", async (c) => {
     201,
   );
 });
+
+// The same catalog engine as preflight, without a pipeline or a launch. A
+// red report is still a report, so it answers 200.
+app.get("/api/doctor", async (c) => c.json(await doctor()));
 
 app.post("/api/hooks/resume", async (c) => {
   const { token, payload } = await c.req.json<{

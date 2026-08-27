@@ -45,6 +45,16 @@ async function linearGraphql<T>(
   return json.data;
 }
 
+// The preflight probe for LINEAR_API_KEY: the cheapest call that proves the
+// key is both present and accepted.
+export async function getViewer(): Promise<LinearUser> {
+  const data = await linearGraphql<{ viewer: LinearUser }>(
+    "query { viewer { id name } }",
+    {},
+  );
+  return data.viewer;
+}
+
 export async function getIssueParticipants(
   issueId: string,
 ): Promise<{ creator: LinearUser | null; viewerId: string }> {

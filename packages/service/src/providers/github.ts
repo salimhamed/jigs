@@ -36,6 +36,11 @@ async function githubGet<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+// The preflight probe for GITHUB_TOKEN.
+export async function getAuthenticatedUser(): Promise<{ login: string }> {
+  return githubGet<{ login: string }>("/user");
+}
+
 export async function fetchPrSnapshot(pr: PrRef): Promise<PrSnapshot> {
   const prPath = `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}`;
   const pull = await githubGet<{ state: "open" | "closed"; merged: boolean }>(

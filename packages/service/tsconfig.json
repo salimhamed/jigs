@@ -5,7 +5,10 @@
     "moduleResolution": "bundler",
     "lib": ["esnext"],
     "allowImportingTsExtensions": true,
-    "paths": { "jigs": ["../jigs/src/index.ts"] },
+    "paths": {
+      "jigs": ["../jigs/src/index.ts"],
+      "jigs/checks": ["../jigs/src/checks/index.ts"]
+    },
     "plugins": [{ "name": "workflow" }]
   },
   "include": ["src", "pipelines", "plugins", "scripts", "nitro.config.ts"]
