@@ -7,7 +7,7 @@ export interface LaunchResult {
   runId: string;
   pipeline: string;
   resumeToken?: string;
-  logs?: string;
+  logs: string;
 }
 
 // Flat on purpose: one coercion rule to hold in your head. A nested value
@@ -108,6 +108,6 @@ export async function launchRun(
   if (result.resumeToken !== undefined) {
     deps.out(`resume token ${result.resumeToken}`);
   }
-  deps.out(`logs: ${result.logs ?? `npx workflow web ${result.runId}`}`);
+  deps.out(`logs: ${result.logs}`);
   return result;
 }

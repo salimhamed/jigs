@@ -9,12 +9,6 @@ import {
 // The escape hatch for a zombie claim owner: cancelling releases every
 // resource the run holds, so the next run on the same ticket can start.
 
-const TERMINAL_STATUSES: ReadonlySet<string> = new Set([
-  "completed",
-  "failed",
-  "cancelled",
-]);
-
 export interface CancelDeps extends ServiceDeps {
   confirm?: (question: string) => Promise<boolean>;
   force?: boolean;
@@ -43,15 +37,16 @@ export async function cancelRun(
   const run = (await lookup.json()) as {
     runId: string;
     status: string;
-    suspensions?: Array<{ key: string }>;
+    suspended?: boolean;
   };
-  if (TERMINAL_STATUSES.has(run.status)) {
-    throw new CliError(`run ${run.runId} is already ${run.status}`);
-  }
 
   // A suspended run holds no process, so there is nothing to destroy and
   // nothing to ask about. Only work actually in flight earns the prompt.
-  if ((run.suspensions ?? []).length === 0 && deps.force !== true) {
+  if (
+    run.status === "running" &&
+    run.suspended !== true &&
+    deps.force !== true
+  ) {
     if (deps.confirm === undefined) {
       throw new CliError(
         "refusing to cancel an in-flight run without confirmation",
@@ -70,7 +65,8 @@ export async function cancelRun(
     { method: "POST" },
   );
   if (!res.ok) {
-    throw new CliError(`cancel failed: HTTP ${res.status} ${await res.text()}`);
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new CliError(body.error ?? `cancel failed: HTTP ${res.status}`);
   }
   const result = (await res.json()) as CancelResult;
   deps.out(`cancelled ${result.runId}`);

@@ -69,18 +69,28 @@ const worldRun = (over: Partial<WorldRun> = {}): WorldRun => ({
   ...over,
 });
 
-test("a non-terminal run holding a hook is reported suspended", async () => {
+test("a non-terminal run holding a park hook is reported suspended", async () => {
   const rows = await listRuns({
     listRuns: async () => [worldRun()],
-    listHookRunIds: async () => [RUN_A],
+    listHooks: async () => [{ runId: RUN_A, token: "github:pr:acme/api#41" }],
   });
   expect(rows[0]?.status).toBe("suspended");
+});
+
+test("a run holding only its ticket claim is still running, not suspended", async () => {
+  const rows = await listRuns({
+    listRuns: async () => [worldRun()],
+    listHooks: async () => [
+      { runId: RUN_A, token: `linear:ticket:${crypto.randomUUID()}` },
+    ],
+  });
+  expect(rows[0]?.status).toBe("running");
 });
 
 test("a terminal run that still lists a hook keeps its own status", async () => {
   const rows = await listRuns({
     listRuns: async () => [worldRun({ status: "failed" })],
-    listHookRunIds: async () => [RUN_A],
+    listHooks: async () => [{ runId: RUN_A, token: "github:pr:acme/api#41" }],
   });
   expect(rows[0]?.status).toBe("failed");
 });
@@ -94,7 +104,7 @@ test("runs are listed newest first", async () => {
         createdAt: new Date("2026-08-26T11:00:00.000Z"),
       }),
     ],
-    listHookRunIds: async () => [],
+    listHooks: async () => [],
   });
   expect(rows.map((row) => row.runId)).toEqual([RUN_B, RUN_A]);
 });
@@ -102,7 +112,7 @@ test("runs are listed newest first", async () => {
 test("an unmapped workflow name is reported verbatim rather than guessed at", async () => {
   const rows = await listRuns({
     listRuns: async () => [worldRun()],
-    listHookRunIds: async () => [],
+    listHooks: async () => [],
   });
   expect(rows[0]?.pipeline).toBe("workflow//./pipelines/demo//demoPipeline");
 });

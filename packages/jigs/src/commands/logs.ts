@@ -14,7 +14,7 @@ export interface LogsResult {
   runId: string;
   status: string;
   error?: string;
-  logs?: string;
+  logs: string;
   suspensions?: Array<{ key: string; reason: string; satisfiedBy: string }>;
 }
 
@@ -40,6 +40,6 @@ export async function showLogs(
     deps.out(`suspended on ${suspension.key}: ${suspension.reason}`);
     deps.out(`  satisfied by ${suspension.satisfiedBy}`);
   }
-  deps.out(result.logs ?? `npx workflow web ${result.runId}`);
+  deps.out(result.logs);
   return result;
 }

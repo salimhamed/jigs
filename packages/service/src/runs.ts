@@ -75,23 +75,30 @@ export interface WorldRun {
 
 export interface RunListDeps {
   listRuns?: () => Promise<WorldRun[]>;
-  listHookRunIds?: () => Promise<string[]>;
+  listHooks?: () => Promise<Array<{ runId: string; token: string }>>;
 }
 
 export async function listRuns(deps: RunListDeps = {}): Promise<RunRow[]> {
-  const [runs, hookRunIds] = await Promise.all([
+  const [runs, hooks] = await Promise.all([
     (deps.listRuns ?? worldRuns)(),
-    (deps.listHookRunIds ?? worldHookRunIds)(),
+    (deps.listHooks ?? worldHooks)(),
   ]);
-  const holdingHooks = new Set(hookRunIds);
+  // The ticket claim is held for the run's whole life, so it says nothing
+  // about being parked; every other hook is something the run waits on.
+  const parkHooks = new Set(
+    hooks
+      .filter((hook) => !hook.token.startsWith(ticketToken("")))
+      .map((hook) => hook.runId),
+  );
   return runs
     .map((run) => ({
       runId: run.runId,
       pipeline: pipelineName(run.workflowName),
       // Same reasoning as GET /api/runs/:runId: the SDK has no `suspended`
-      // status, so a non-terminal run still holding a hook is parked.
+      // status, so a non-terminal run holding a hook other than its ticket
+      // claim is parked.
       status:
-        !TERMINAL_RUN_STATUSES.has(run.status) && holdingHooks.has(run.runId)
+        !TERMINAL_RUN_STATUSES.has(run.status) && parkHooks.has(run.runId)
           ? "suspended"
           : run.status,
       createdAt: run.createdAt.toISOString(),
@@ -127,21 +134,16 @@ async function worldRuns(): Promise<WorldRun[]> {
     resolveData: "none",
     pagination: { limit: 1000 },
   });
-  return page.data.map((run) => ({
-    runId: run.runId,
-    workflowName: run.workflowName,
-    status: run.status,
-    createdAt: run.createdAt,
-  }));
+  return page.data;
 }
 
 const worldRunIds = () => worldRuns().then((runs) => runs.map((r) => r.runId));
 
 // Descending explicitly: the runs list is newest-first, hooks default to
 // oldest-first, and two pages taken from opposite ends stop overlapping.
-async function worldHookRunIds(): Promise<string[]> {
+async function worldHooks(): Promise<Array<{ runId: string; token: string }>> {
   const page = await getWorld().hooks.list({
     pagination: { limit: 1000, sortOrder: "desc" },
   });
-  return page.data.map((hook) => hook.runId);
+  return page.data.map((hook) => ({ runId: hook.runId, token: hook.token }));
 }

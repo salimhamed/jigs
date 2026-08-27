@@ -205,7 +205,10 @@ app.post("/api/runs/:runId/cancel", async (c) => {
   const run = getRun(ref.runId);
   const status = await run.status;
   if (TERMINAL_RUN_STATUSES.has(status)) {
-    return c.json({ error: `run is already ${status}`, status }, 409);
+    return c.json(
+      { error: `run ${ref.runId} is already ${status}`, status },
+      409,
+    );
   }
   const suspensions = await listSuspensions(ref.runId);
   const releasedTokens = [...new Set(suspensions.map((s) => s.satisfiedBy))];
@@ -232,8 +235,13 @@ app.get("/api/runs/:runId", async (c) => {
     );
   }
   // The SDK has no `suspended` status — a parked run reads `running`, so
-  // jigs surfaces what the run is listening on from its hooks' metadata.
-  if (status === "running") body.suspensions = await listSuspensions(run.runId);
+  // jigs surfaces what the run is listening on from its hooks' metadata. The
+  // ticket claim is held for the run's whole life, so it alone is not a park.
+  if (status === "running") {
+    const suspensions = await listSuspensions(run.runId);
+    body.suspensions = suspensions;
+    body.suspended = suspensions.some((s) => s.key !== "ticket-claim");
+  }
   return c.json(body);
 });
 

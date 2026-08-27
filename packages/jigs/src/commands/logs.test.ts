@@ -60,6 +60,7 @@ test("a failed run's error is printed above the log pointer", async () => {
         runId: RUN,
         status: "failed",
         error: "ClaimConflictError: linear:ticket:… is already claimed",
+        logs: `npx workflow web ${RUN}`,
       }),
     ),
   );
