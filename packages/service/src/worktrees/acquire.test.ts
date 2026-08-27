@@ -28,7 +28,6 @@ function makeFakeSql(store: Map<string, WorktreeRow>): Sql {
         baseSha,
         headSha,
         behind,
-        binding,
         checkoutRoot,
         keep,
       ] = values as [
@@ -40,7 +39,6 @@ function makeFakeSql(store: Map<string, WorktreeRow>): Sql {
         string,
         number,
         string,
-        string,
         boolean,
       ];
       store.set(path, {
@@ -51,7 +49,6 @@ function makeFakeSql(store: Map<string, WorktreeRow>): Sql {
         baseSha,
         headSha,
         behindDefault: behind,
-        binding,
         checkoutRoot,
         keep,
       });
@@ -68,7 +65,6 @@ const request = {
   checkoutRoot: "/repos/api",
   worktreePath: "/data/worktrees/acme-abc12345/api/feat",
   branch: "feat",
-  binding: "api",
 };
 
 const cleanDisk: WorktreeStatus = {
@@ -90,7 +86,6 @@ function registeredRow(ownerRunId: string): WorktreeRow {
     baseSha: "base0",
     headSha: "head0",
     behindDefault: 0,
-    binding: "api",
     checkoutRoot: "/repos/api",
     keep: false,
   };

@@ -32,7 +32,6 @@ function row(overrides: Partial<WorktreeRow> = {}): WorktreeRow {
     baseSha: "base1",
     headSha: "head1",
     behindDefault: 3,
-    binding: "api",
     checkoutRoot: "/repos/api",
     keep: false,
     ...overrides,
@@ -67,11 +66,10 @@ test("getWorktree misses cleanly on an unregistered path", async () => {
   expect(await getWorktree(sql, "/nowhere/never-registered")).toBeNull();
 });
 
-test("the row carries its binding, checkout root, and keep flag", async () => {
+test("the row carries its checkout root and keep flag", async () => {
   await ensureWorktreeRegistry(sql);
   await upsertWorktree(sql, row({ keep: true }));
   expect(await getWorktree(sql, testPath)).toMatchObject({
-    binding: "api",
     checkoutRoot: "/repos/api",
     keep: true,
   });
@@ -100,30 +98,29 @@ test("deleteWorktree drops the row — the registry holds live worktrees only", 
   expect(await getWorktree(sql, testPath)).toBeNull();
 });
 
-test("ensure upgrades a table created before binding, checkout_root, and keep existed", async () => {
-  const legacy = "jigs_worktrees_legacy_probe";
-  await sql`DROP TABLE IF EXISTS ${sql(legacy)}`;
+test("ensure upgrades a table created before checkout_root and keep existed", async () => {
+  // Drops the real table and rebuilds it in its pre-column shape: every other
+  // test here re-ensures it, and the live lane owns the dev database.
+  await sql`DROP TABLE IF EXISTS jigs_worktrees`;
   await sql`
-    CREATE TABLE ${sql(legacy)} (
+    CREATE TABLE jigs_worktrees (
       path text PRIMARY KEY,
       branch text NOT NULL,
       owner_run_id text NOT NULL,
       state text NOT NULL,
       base_sha text NOT NULL,
       head_sha text NOT NULL,
-      behind_default integer NOT NULL
+      behind_default integer NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
     )
   `;
-  // The ALTERs in ensureWorktreeRegistry, applied to the pre-column shape.
-  await sql`ALTER TABLE ${sql(legacy)} ADD COLUMN IF NOT EXISTS binding text NOT NULL DEFAULT ''`;
-  await sql`ALTER TABLE ${sql(legacy)} ADD COLUMN IF NOT EXISTS checkout_root text NOT NULL DEFAULT ''`;
-  await sql`ALTER TABLE ${sql(legacy)} ADD COLUMN IF NOT EXISTS keep boolean NOT NULL DEFAULT false`;
+  await ensureWorktreeRegistry(sql);
   const columns = await sql<{ columnName: string }[]>`
     SELECT column_name FROM information_schema.columns
-    WHERE table_name = ${legacy}
+    WHERE table_name = 'jigs_worktrees'
   `;
   expect(columns.map((c) => c.columnName)).toEqual(
-    expect.arrayContaining(["binding", "checkout_root", "keep"]),
+    expect.arrayContaining(["checkout_root", "keep"]),
   );
-  await sql`DROP TABLE ${sql(legacy)}`;
 });

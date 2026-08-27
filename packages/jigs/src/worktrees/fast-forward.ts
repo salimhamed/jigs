@@ -28,10 +28,6 @@ export interface FastForwardOptions {
   lockPath?: string;
 }
 
-export function ffLockPath(checkoutRoot: string): string {
-  return checkoutLockPath(checkoutRoot, "ff");
-}
-
 export function describeFf(checkoutRoot: string, result: FfResult): string {
   if (result.moved) {
     return `fast-forwarded the default branch of ${checkoutRoot}: ${result.from?.slice(0, 8)} → ${result.to?.slice(0, 8)}`;
@@ -47,7 +43,7 @@ export async function fastForwardDefaultBranch(
   if (options.enabled === false) return { moved: false, skipped: "disabled" };
   try {
     return await withFileLock(
-      options.lockPath ?? ffLockPath(checkoutRoot),
+      options.lockPath ?? checkoutLockPath(checkoutRoot, "ff"),
       () => attempt(checkoutRoot),
     );
   } catch (err) {

@@ -39,14 +39,10 @@ export function parseTargetConfig(text: string): TargetConfig {
   return result.data;
 }
 
-export function targetConfigPath(checkoutRoot: string): string {
-  return path.join(checkoutRoot, TARGET_CONFIG_FILE);
-}
-
 // A target repo with no .jigs.yml provisions with schema defaults — copying
 // nothing and running nothing is a valid answer, not a misconfiguration.
 export function readTargetConfig(checkoutRoot: string): TargetConfig {
-  const file = targetConfigPath(checkoutRoot);
+  const file = path.join(checkoutRoot, TARGET_CONFIG_FILE);
   if (!existsSync(file)) return targetConfigSchema.parse({});
   return parseTargetConfig(readFileSync(file, "utf8"));
 }

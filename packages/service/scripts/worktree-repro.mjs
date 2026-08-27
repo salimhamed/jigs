@@ -5,8 +5,8 @@
 //               and registers the tree
 //   suspended   the run parks on a hook and KEEPS its worktree across a full
 //               automatic sweep pass
-//   teardown    after the run completes, the pass removes the worktree,
-//               deletes the local and remote branches, and drops the row
+//   teardown    after the branch merges and the run completes, the pass
+//               removes the worktree, deletes both branches, drops the row
 // Requires `pnpm build`, compose Postgres up, bootstrap.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
@@ -53,7 +53,10 @@ writeFileSync(
   path.join(checkout, ".jigs.yml"),
   'worktree:\n  copy: [.env]\n  post_create: ["echo provisioned > provisioned.txt"]\n',
 );
-git(checkout, "add", "README.md", ".jigs.yml");
+// What copy and post_create produce is gitignored — which is why copy globs
+// are gitignore-blind, and why the provisioned tree still reads clean.
+writeFileSync(path.join(checkout, ".gitignore"), ".env\nprovisioned.txt\n");
+git(checkout, "add", "README.md", ".jigs.yml", ".gitignore");
 git(checkout, "commit", "-q", "-m", "initial");
 git(checkout, "push", "-q", "-u", "origin", "main");
 git(checkout, "remote", "set-head", "origin", "main");
@@ -101,6 +104,16 @@ assert(
   existsSync(path.join(worktreePath, "provisioned.txt")),
   "post_create ran in the worktree",
 );
+
+// Branch deletion is the merged row, not merely the finished one, so the
+// repro has to look like a landed PR: real work on the branch, pushed, then
+// merged into origin's default branch while the run is still parked.
+writeFileSync(path.join(worktreePath, "shipped.txt"), "shipped\n");
+git(worktreePath, "add", "shipped.txt");
+git(worktreePath, "commit", "-q", "-m", "agent work");
+git(worktreePath, "push", "-q", "-u", "origin", BRANCH);
+git(worktreePath, "push", "-q", "origin", `${BRANCH}:main`);
+git(checkout, "fetch", "-q", "origin");
 
 // A suspended run is not terminal: a full sweep pass must leave it alone.
 const swept = await api("/api/worktrees/sweep", { clean: true, force: true });

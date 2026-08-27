@@ -50,7 +50,7 @@ function copyOne(src: string, dest: string): boolean {
   return true;
 }
 
-export function copyPatterns(
+function copyPatterns(
   checkoutRoot: string,
   worktreePath: string,
   patterns: string[],
@@ -106,7 +106,7 @@ async function runCommand(
   });
 }
 
-export async function runPostCreate(
+async function runPostCreate(
   worktreePath: string,
   commands: string[],
   hookTimeoutMinutes: number,

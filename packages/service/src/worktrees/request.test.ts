@@ -30,7 +30,6 @@ function makeFakeSql(store: Map<string, WorktreeRow>): Sql {
         baseSha,
         headSha,
         behindDefault,
-        binding,
         checkoutRoot,
         keep,
       ] = values as [
@@ -42,7 +41,6 @@ function makeFakeSql(store: Map<string, WorktreeRow>): Sql {
         string,
         number,
         string,
-        string,
         boolean,
       ];
       store.set(rowPath, {
@@ -53,7 +51,6 @@ function makeFakeSql(store: Map<string, WorktreeRow>): Sql {
         baseSha,
         headSha,
         behindDefault,
-        binding,
         checkoutRoot,
         keep,
       });
@@ -81,6 +78,9 @@ beforeEach(() => {
   checkout = path.join(tmp, "checkout");
   workspace = path.join(tmp, "workspace");
   store = new Map();
+  // An ambient dev-database URL would otherwise make this lane open a real
+  // connection and read the operator's registry.
+  vi.stubEnv("WORKFLOW_POSTGRES_URL", "");
   vi.stubEnv("JIGS_FACTORY_ROOT", tmp);
   writeFileSync(path.join(tmp, "jigs.yml"), "bindings: {}\n");
 });
@@ -154,7 +154,6 @@ test("a successful request registers the worktree as active", async () => {
   expect(row).toMatchObject({
     state: "active",
     ownerRunId: "run_a",
-    binding: "api",
     checkoutRoot: checkout,
     keep: true,
   });

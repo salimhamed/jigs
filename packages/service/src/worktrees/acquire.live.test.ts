@@ -47,7 +47,6 @@ test("concurrent acquires of one unowned path: the loser sees the winner's owner
     checkoutRoot: "/repos/api",
     worktreePath: testPath,
     branch: "feat",
-    binding: "api",
   });
   const runIsLive = async (runId: string) => runId === "run_winner";
 

@@ -27,7 +27,7 @@ export class LockTimeoutError extends Error {
   }
 }
 
-export function locksDir(): string {
+function locksDir(): string {
   return path.join(jigsDataDir(), "locks");
 }
 

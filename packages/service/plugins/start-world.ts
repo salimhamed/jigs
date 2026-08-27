@@ -23,14 +23,18 @@ export default async function startWorld() {
 
   // Teardown's trigger: the SDK has no run-completion callback, so the
   // terminal-state join runs on a timer. It is the same pass `jigs sweep`
-  // calls, so the matrix has exactly one implementation.
+  // calls, so the matrix has exactly one implementation — minus the
+  // unregistered-directory scan, which only a human should ever act on.
   const { sweepWorktrees } = await import("../src/worktrees/sweep");
   let inFlight = false;
   const pass = async () => {
     if (inFlight) return;
     inFlight = true;
     try {
-      await sweepWorktrees({ clean: true }, { sql });
+      await sweepWorktrees(
+        { clean: true, includeUnregistered: false },
+        { sql },
+      );
     } finally {
       inFlight = false;
     }

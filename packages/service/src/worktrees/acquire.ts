@@ -29,7 +29,6 @@ export interface AcquireWorktreeRequest {
   checkoutRoot: string;
   worktreePath: string;
   branch: string;
-  binding: string;
   keep?: boolean;
 }
 
@@ -109,7 +108,6 @@ export async function acquireWorktree(
       baseSha: facts.baseSha,
       headSha: facts.headSha,
       behindDefault: facts.behindDefault,
-      binding: request.binding,
       checkoutRoot: request.checkoutRoot,
       keep: request.keep === true,
     });

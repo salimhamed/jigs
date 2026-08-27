@@ -1,4 +1,4 @@
-import { tryGit } from "../git.ts";
+import { deriveDefaultBranch, tryGit } from "../git.ts";
 
 // The teardown matrix (ADR 0007), split into a pure decision and its git
 // execution so every row is a table test. Teardown is runtime-owned: authors
@@ -18,6 +18,7 @@ export interface TeardownDecision {
   outcome: RunOutcome;
   keep: boolean;
   dirty: boolean;
+  merged: boolean;
 }
 
 const KEEP_EVERYTHING: TeardownPlan = {
@@ -30,7 +31,9 @@ const KEEP_EVERYTHING: TeardownPlan = {
 
 export function decideTeardown(decision: TeardownDecision): TeardownPlan {
   if (decision.keep) return { ...KEEP_EVERYTHING };
-  if (decision.outcome === "completed") {
+  // "Done" is the merged row, not merely the finished one: a run that
+  // completed without merging still holds the only copy of its work.
+  if (decision.outcome === "completed" && decision.merged) {
     // Forced: a finished worktree normally holds untracked build output that
     // plain `worktree remove` refuses, and the work itself is already merged.
     return {
@@ -58,6 +61,26 @@ export interface ApplyTeardownTarget {
   checkoutRoot: string;
   worktreePath: string;
   branch: string;
+}
+
+// Unresolvable default branch or remote ref reads as not merged: the whole
+// point of the flag is that branch deletion needs positive evidence.
+export async function isBranchMerged(
+  checkoutRoot: string,
+  branch: string,
+): Promise<boolean> {
+  const defaultBranch = await deriveDefaultBranch(checkoutRoot);
+  if (defaultBranch === null) return false;
+  const merged = await tryGit(
+    [
+      "merge-base",
+      "--is-ancestor",
+      branch,
+      `refs/remotes/origin/${defaultBranch}`,
+    ],
+    checkoutRoot,
+  );
+  return merged !== null;
 }
 
 export async function isWorktreeDirty(worktreePath: string): Promise<boolean> {

@@ -18,12 +18,6 @@ export interface WorktreeRequest {
 export async function worktree(
   request: WorktreeRequest,
 ): Promise<WorktreeFacts> {
-  return provisionWorktreeStep(request);
-}
-
-async function provisionWorktreeStep(
-  request: WorktreeRequest,
-): Promise<WorktreeFacts> {
   "use step";
   const { provisionRequest } = await import("./request");
   const { workflowRunId } = getWorkflowMetadata();

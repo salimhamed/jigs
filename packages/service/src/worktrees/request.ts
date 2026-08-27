@@ -78,7 +78,6 @@ export async function provisionRequest(
       checkoutRoot: binding.checkoutRoot,
       worktreePath: target,
       branch: request.branch,
-      binding: binding.name,
       ...(request.keep === undefined ? {} : { keep: request.keep }),
     },
     { sql },

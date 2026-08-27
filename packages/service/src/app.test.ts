@@ -20,6 +20,9 @@ afterAll(() => {
 
 beforeEach(() => {
   vi.unstubAllEnvs();
+  // An ambient dev-database URL would otherwise make this lane open a real
+  // connection and read the operator's registry.
+  vi.stubEnv("WORKFLOW_POSTGRES_URL", "");
   vi.stubEnv("WORKFLOW_LOCAL_DATA_DIR", dataDir);
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "gh-hook-secret");
   vi.stubEnv("LINEAR_WEBHOOK_SECRET", "linear-hook-secret");

@@ -79,6 +79,7 @@ export {
 export {
   applyTeardown,
   decideTeardown,
+  isBranchMerged,
   isWorktreeDirty,
   type RunOutcome,
   type TeardownDecision,

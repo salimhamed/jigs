@@ -6,6 +6,7 @@ import {
   decideTeardown,
   describeFf,
   fastForwardDefaultBranch,
+  isBranchMerged,
   isWorktreeDirty,
   type ResolvedBinding,
   type RunOutcome,
@@ -65,6 +66,10 @@ export function statusToOutcome(status: string): RunOutcome {
 export interface SweepOptions {
   clean?: boolean;
   force?: boolean;
+  // Defaults on for a human running `jigs sweep`; the unattended pass turns
+  // it off, because a workspace_dir binding places worktrees directly in the
+  // operator's own directory, whose other contents a timer must never touch.
+  includeUnregistered?: boolean;
 }
 
 export interface SweepDeps {
@@ -128,24 +133,26 @@ export async function sweepWorktrees(
     parents.set(parentDirFor(binding, deps), binding);
   }
   const unregisteredCheckouts = new Map<string, string>();
-  for (const [parent, binding] of parents) {
-    for (const name of readDirs(parent)) {
-      const dir = path.join(parent, name);
-      if (byPath.has(dir)) continue;
-      unregisteredCheckouts.set(dir, binding.checkoutRoot);
-      entries.push(
-        classifySweep({
-          path: dir,
-          branch: name,
-          ownerRunId: null,
-          ownerTerminal: null,
-          keep: false,
-          state: "unregistered",
-          onDisk: true,
-          dirty: await isWorktreeDirty(dir),
-          registered: false,
-        }),
-      );
+  if (options.includeUnregistered !== false) {
+    for (const [parent, binding] of parents) {
+      for (const name of readDirs(parent)) {
+        const dir = path.join(parent, name);
+        if (byPath.has(dir)) continue;
+        unregisteredCheckouts.set(dir, binding.checkoutRoot);
+        entries.push(
+          classifySweep({
+            path: dir,
+            branch: name,
+            ownerRunId: null,
+            ownerTerminal: null,
+            keep: false,
+            state: "unregistered",
+            onDisk: true,
+            dirty: await isWorktreeDirty(dir),
+            registered: false,
+          }),
+        );
+      }
     }
   }
 
@@ -163,10 +170,15 @@ export async function sweepWorktrees(
       row === undefined
         ? "unknown"
         : (owners.get(row.ownerRunId)?.status ?? "unknown");
+    const outcome = statusToOutcome(status);
     let plan = decideTeardown({
-      outcome: statusToOutcome(status),
+      outcome,
       keep: row?.keep === true,
       dirty: entry.state === "abandoned-dirty",
+      merged:
+        outcome === "completed" &&
+        checkoutRoot !== "" &&
+        (await isBranchMerged(checkoutRoot, entry.branch)),
     });
 
     if (plan.preserve !== null) {
@@ -205,7 +217,7 @@ export async function sweepWorktrees(
     }
   }
 
-  const removedDirs = removeEmptyWorkspaceDirs(parents.keys(), removed);
+  const removedDirs = removeEmptyWorkspaceDirs(parents.keys());
 
   const gone = new Set(removed);
   // Known gap: a terminal run that never requested a worktree still leaks its
@@ -261,12 +273,8 @@ function readDirs(dir: string): string[] {
 // Only the per-binding parents, never the base: an empty <binding>/ left
 // behind after the last worktree is noise, but the workspace root is the
 // operator's.
-function removeEmptyWorkspaceDirs(
-  parents: Iterable<string>,
-  removed: string[],
-): string[] {
+function removeEmptyWorkspaceDirs(parents: Iterable<string>): string[] {
   const candidates = new Set<string>(parents);
-  for (const p of removed) candidates.add(path.dirname(p));
   const gone: string[] = [];
   for (const dir of candidates) {
     try {

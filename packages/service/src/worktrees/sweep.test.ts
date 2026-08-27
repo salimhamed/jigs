@@ -59,14 +59,22 @@ beforeEach(() => {
   tmp = mkdtempSync(path.join(tmpdir(), "jigs-sweep-test-"));
   checkout = path.join(tmp, "checkout");
   workspace = path.join(tmp, "workspace");
+  const remote = path.join(tmp, "remote.git");
   mkdirSync(checkout, { recursive: true });
   mkdirSync(workspace, { recursive: true });
+  mkdirSync(remote, { recursive: true });
+  // A real origin: whether a completed run's branch is merged is read off
+  // refs/remotes/origin/<default>, so the teardown matrix needs one.
+  git(remote, "init", "-q", "--bare", "--initial-branch", "main");
   git(checkout, "init", "-q", "--initial-branch", "main");
   git(checkout, "config", "user.name", "jigs-fixture");
   git(checkout, "config", "user.email", "fixture@jigs.test");
+  git(checkout, "remote", "add", "origin", remote);
   writeFileSync(path.join(checkout, "README.md"), "# fixture\n");
   git(checkout, "add", "README.md");
   git(checkout, "commit", "-q", "-m", "initial");
+  git(checkout, "push", "-q", "-u", "origin", "main");
+  git(checkout, "remote", "set-head", "origin", "main");
   store = new Map();
 });
 afterEach(() => {
@@ -100,7 +108,6 @@ function register(
     baseSha: "base1",
     headSha: "head1",
     behindDefault: 0,
-    binding: "api",
     checkoutRoot: checkout,
     keep: false,
     ...overrides,
@@ -225,6 +232,20 @@ test("an unregistered directory is listed and only deleted with --clean", async 
   expect(existsSync(loose)).toBe(false);
 });
 
+test("the unattended pass leaves unregistered directories alone", async () => {
+  const loose = addWorktree("loose");
+
+  const report = await sweepWorktrees(
+    { clean: true, includeUnregistered: false },
+    deps(),
+  );
+  expect(report.entries).toEqual([]);
+  expect(existsSync(loose)).toBe(true);
+
+  await sweepWorktrees({ clean: true }, deps());
+  expect(existsSync(loose)).toBe(false);
+});
+
 test("a registered path missing from disk drops only its row", async () => {
   register(path.join(workspace, "ghost"), "ghost");
   const report = await sweepWorktrees({ clean: true }, deps());
@@ -234,6 +255,13 @@ test("a registered path missing from disk drops only its row", async () => {
 
 test("a completed owner's teardown deletes the row and fast-forwards the default branch", async () => {
   const done = addWorktree("done");
+  writeFileSync(path.join(done, "shipped.txt"), "shipped\n");
+  git(done, "add", "shipped.txt");
+  git(done, "commit", "-q", "-m", "shipped");
+  // Merged is what earns the branch deletion, so origin's default branch has
+  // to actually contain the work.
+  git(done, "push", "-q", "origin", "done:main");
+  git(checkout, "fetch", "-q", "origin");
   register(done, "done");
   const ffCalls: string[] = [];
   await sweepWorktrees(
@@ -252,6 +280,24 @@ test("a completed owner's teardown deletes the row and fast-forwards the default
   expect(() =>
     git(checkout, "rev-parse", "--verify", "refs/heads/done"),
   ).toThrow();
+});
+
+test("a completed owner whose branch never merged keeps it as insurance", async () => {
+  const done = addWorktree("done");
+  writeFileSync(path.join(done, "unshipped.txt"), "unshipped\n");
+  git(done, "add", "unshipped.txt");
+  git(done, "commit", "-q", "-m", "unshipped");
+  register(done, "done");
+  await sweepWorktrees(
+    { clean: true },
+    deps({
+      readOwner: owners({ run_done: { terminal: true, status: "completed" } }),
+    }),
+  );
+  expect(existsSync(done)).toBe(false);
+  expect(git(checkout, "rev-parse", "--verify", "refs/heads/done")).toMatch(
+    /^[0-9a-f]{40}$/,
+  );
 });
 
 test("a failed owner's clean teardown keeps the branch as insurance", async () => {

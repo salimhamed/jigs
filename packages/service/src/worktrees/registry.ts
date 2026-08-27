@@ -19,7 +19,6 @@ export interface WorktreeRow {
   baseSha: string;
   headSha: string;
   behindDefault: number;
-  binding: string;
   checkoutRoot: string;
   keep: boolean;
 }
@@ -43,7 +42,6 @@ export async function ensureWorktreeRegistry(sql: ISql): Promise<void> {
       base_sha text NOT NULL,
       head_sha text NOT NULL,
       behind_default integer NOT NULL,
-      binding text NOT NULL DEFAULT '',
       checkout_root text NOT NULL DEFAULT '',
       keep boolean NOT NULL DEFAULT false,
       created_at timestamptz NOT NULL DEFAULT now(),
@@ -51,9 +49,7 @@ export async function ensureWorktreeRegistry(sql: ISql): Promise<void> {
     )
   `;
   // A dev database created before these columns existed upgrades in place —
-  // three idempotent ALTERs beat introducing a migration tool for three
-  // columns.
-  await sql`ALTER TABLE jigs_worktrees ADD COLUMN IF NOT EXISTS binding text NOT NULL DEFAULT ''`;
+  // two idempotent ALTERs beat introducing a migration tool for two columns.
   await sql`ALTER TABLE jigs_worktrees ADD COLUMN IF NOT EXISTS checkout_root text NOT NULL DEFAULT ''`;
   await sql`ALTER TABLE jigs_worktrees ADD COLUMN IF NOT EXISTS keep boolean NOT NULL DEFAULT false`;
 }
@@ -64,7 +60,7 @@ export async function getWorktree(
 ): Promise<WorktreeRow | null> {
   const rows = await sql<WorktreeRow[]>`
     SELECT path, branch, owner_run_id, state, base_sha, head_sha,
-           behind_default, binding, checkout_root, keep
+           behind_default, checkout_root, keep
     FROM jigs_worktrees
     WHERE path = ${path}
   `;
@@ -74,7 +70,7 @@ export async function getWorktree(
 export async function listWorktrees(sql: ISql): Promise<WorktreeRow[]> {
   return sql<WorktreeRow[]>`
     SELECT path, branch, owner_run_id, state, base_sha, head_sha,
-           behind_default, binding, checkout_root, keep
+           behind_default, checkout_root, keep
     FROM jigs_worktrees
     ORDER BY updated_at DESC
   `;
@@ -87,11 +83,11 @@ export async function upsertWorktree(
   await sql`
     INSERT INTO jigs_worktrees
       (path, branch, owner_run_id, state, base_sha, head_sha, behind_default,
-       binding, checkout_root, keep)
+       checkout_root, keep)
     VALUES
       (${row.path}, ${row.branch}, ${row.ownerRunId}, ${row.state},
        ${row.baseSha}, ${row.headSha}, ${row.behindDefault},
-       ${row.binding}, ${row.checkoutRoot}, ${row.keep})
+       ${row.checkoutRoot}, ${row.keep})
     ON CONFLICT (path) DO UPDATE SET
       branch = EXCLUDED.branch,
       owner_run_id = EXCLUDED.owner_run_id,
@@ -99,7 +95,6 @@ export async function upsertWorktree(
       base_sha = EXCLUDED.base_sha,
       head_sha = EXCLUDED.head_sha,
       behind_default = EXCLUDED.behind_default,
-      binding = EXCLUDED.binding,
       checkout_root = EXCLUDED.checkout_root,
       keep = EXCLUDED.keep,
       updated_at = now()
