@@ -76,6 +76,19 @@ export async function listWorktrees(sql: ISql): Promise<WorktreeRow[]> {
   `;
 }
 
+export async function listWorktreesForRun(
+  sql: ISql,
+  runId: string,
+): Promise<WorktreeRow[]> {
+  return sql<WorktreeRow[]>`
+    SELECT path, branch, owner_run_id, state, base_sha, head_sha,
+           behind_default, checkout_root, keep
+    FROM jigs_worktrees
+    WHERE owner_run_id = ${runId}
+    ORDER BY updated_at DESC
+  `;
+}
+
 export async function upsertWorktree(
   sql: ISql,
   row: WorktreeRow,
