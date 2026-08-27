@@ -12,9 +12,29 @@ export {
   type PsWorktree,
 } from "./commands/ps.ts";
 export { type LaunchResult, launchRun } from "./commands/run.ts";
+export {
+  type SweepOptions,
+  type SweepResult,
+  sweepWorktrees,
+} from "./commands/sweep.ts";
 export { unbindRepo } from "./commands/unbind.ts";
+export {
+  type ResolvedBinding,
+  resolveBinding,
+  resolveBindings,
+} from "./config/factory-config.ts";
 export { locateFactoryRoot } from "./config/locate-factory.ts";
+export {
+  parseTargetConfig,
+  readTargetConfig,
+  TARGET_CONFIG_FILE,
+  type TargetConfig,
+  type TargetWorktreeConfig,
+} from "./config/target-config.ts";
 export { CliError } from "./errors.ts";
+// The service tears down a run's managed home from the worktree lifecycle,
+// and jigs/harnesses is provider re-exports only, so the door is here.
+export { removeManagedCodexHome } from "./harnesses/codex-home.ts";
 export {
   type BranchResolution,
   type CreateWorktreeOptions,
@@ -24,9 +44,23 @@ export {
   worktreeStatus,
 } from "./worktrees/create.ts";
 export {
+  describeFf,
+  type FastForwardOptions,
+  type FfResult,
+  type FfSkip,
+  fastForwardDefaultBranch,
+} from "./worktrees/fast-forward.ts";
+export {
   type WorktreePathOptions,
+  worktreeParentDir,
   worktreePath,
 } from "./worktrees/layout.ts";
+export {
+  PostCreateFailedError,
+  type ProvisionResult,
+  type ProvisionWorktreeOptions,
+  provisionWorktree,
+} from "./worktrees/provision.ts";
 export {
   decideReuse,
   type NotReusableReason,
@@ -36,3 +70,17 @@ export {
   WorktreeNotReusableError,
   WorktreeOwnedError,
 } from "./worktrees/reuse.ts";
+export {
+  classifySweep,
+  type SweepEntry,
+  type SweepInput,
+  type SweepState,
+} from "./worktrees/sweep.ts";
+export {
+  applyTeardown,
+  decideTeardown,
+  isWorktreeDirty,
+  type RunOutcome,
+  type TeardownDecision,
+  type TeardownPlan,
+} from "./worktrees/teardown.ts";

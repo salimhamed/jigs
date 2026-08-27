@@ -3,6 +3,7 @@ import path from "node:path";
 import { parseDocument } from "yaml";
 import { z } from "zod";
 import { CliError } from "../errors.ts";
+import { expandHome } from "../paths.ts";
 
 export const FACTORY_CONFIG_FILE = "jigs.yml";
 
@@ -39,6 +40,51 @@ export function parseFactoryConfig(text: string): FactoryConfig {
     );
   }
   return result.data;
+}
+
+export interface ResolvedBinding {
+  name: string;
+  checkoutRoot: string;
+  remote: string;
+  workspaceDir?: string;
+  ffDefaultBranch: boolean;
+}
+
+function resolved(name: string, binding: Binding): ResolvedBinding {
+  return {
+    name,
+    checkoutRoot: expandHome(binding.path),
+    remote: binding.remote,
+    ...(binding.workspace_dir === undefined
+      ? {}
+      : { workspaceDir: binding.workspace_dir }),
+    ffDefaultBranch: binding.ff_default_branch,
+  };
+}
+
+// The binding a worktree request names, with `~` and the config's boolean
+// defaults already resolved, so callers never re-derive either.
+export function resolveBinding(
+  factoryRoot: string,
+  name: string,
+): ResolvedBinding {
+  const { bindings } = parseFactoryConfig(readFactoryConfigText(factoryRoot));
+  const binding = bindings[name];
+  if (binding === undefined) {
+    const bound = Object.keys(bindings);
+    throw new CliError(
+      `no binding named ${name} in ${FACTORY_CONFIG_FILE}`,
+      bound.length > 0 ? `bound: ${bound.join(", ")}` : "nothing is bound yet",
+    );
+  }
+  return resolved(name, binding);
+}
+
+export function resolveBindings(factoryRoot: string): ResolvedBinding[] {
+  const { bindings } = parseFactoryConfig(readFactoryConfigText(factoryRoot));
+  return Object.entries(bindings).map(([name, binding]) =>
+    resolved(name, binding),
+  );
 }
 
 export interface BindingPin {
