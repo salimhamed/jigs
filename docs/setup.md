@@ -40,6 +40,18 @@ would mean the CLI generating, installing and naming units, and every repair
 instruction growing a "which one" — `jigs service restart` is the whole
 answer instead.
 
+**Upgrading.** A factory installs `jigs` and `@jigs/service` with `link:`,
+pointed at your checkout of this repo, so the upgrade is `git pull` here — no
+version range to move in any factory's `package.json`. Two things do not
+follow on their own: `pnpm build` again in this checkout — `link:` builds
+nothing, so every factory's `jigs` binary and `jigs` type imports are whatever
+it last emitted — and `jigs init` again in each factory, which offers to append any step wrappers
+jigs has grown since to that factory's `steps/jigs.ts` (part 2, step 1);
+`jigs build` warns when a factory is missing some. Both packages carry ordinary
+semver from `0.1.0` on, and the number is a signal to you rather than an input
+to anything: no step id carries a jigs version, so a release never renames a
+memoization key ([ADR 0013](adr/0013-factory-owned-steps.md)).
+
 ## Part 2 — a factory (per repo)
 
 Every step below runs **inside the factory repo**. Ports are derived from the

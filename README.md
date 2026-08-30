@@ -42,6 +42,10 @@ pnpm workspace:
   checked-in list both times. The only test that can see a factory-owned step
   wrapper still take a factory-local, version-free id.
 
+Both packages carry ordinary semver. Every `"use step"` wrapper lives in the
+factory that runs it, so no step id carries a jigs version and a release never
+renames a memoization key — [ADR 0013](docs/adr/0013-factory-owned-steps.md).
+
 ## Development
 
 Requires Node >= 24 and pnpm.

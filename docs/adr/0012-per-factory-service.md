@@ -1,5 +1,11 @@
 # A service per factory repo, and @jigs/service as its library
 
+> **Amended by [ADR 0013](./0013-factory-owned-steps.md).** The `"use step"`
+> wrappers moved to the factory repo, so no jigs package carries a directive
+> and no step id carries a package version. The `"version": "0.0.0"` pin below
+> is gone: `jigs` and `@jigs/service` are both `0.1.0` on ordinary semver. The
+> per-factory service and the library shape stand.
+
 Each factory repo builds and runs its **own** service. `@jigs/service` stops
 being an application and becomes the library that factory installs: the app
 and its routes, the step, suspension and worktree primitives its pipelines are
@@ -43,7 +49,8 @@ wrappers that delegate to them, and ids are factory-local paths —
 `step//./steps/jigs//worktree`, no version anywhere. The wrappers are
 `jigs init` output, not hand-written, which is what makes the fifteen-chances
 risk a scaffolding problem rather than a per-factory one. The consequences
-below still hold except where noted; the version pin stays until AGE-334.
+below still hold except where noted; the decision is recorded in full as
+[ADR 0013](./0013-factory-owned-steps.md), which also removes the version pin.
 
 ## Amended: what the factory owns, and how it stays current (AGE-333)
 
@@ -88,7 +95,8 @@ it.
   by AGE-332*: with no directives left here a subpath is no longer half an id,
   so the map is an ordinary export map and the guard is inverted — it now
   asserts that no compiled source in the package carries a directive at all
-  (`templates/` is exempt: it scaffolds the wrappers into the factory).
+  (`templates/` is exempt: it scaffolds the wrappers into the factory). The pin
+  guard went with the pin ([ADR 0013](./0013-factory-owned-steps.md)).
 - **Nothing routes through the `.` export.** `src/factory.ts` is types only,
   deliberately: re-exporting a step module through `.` would change that
   module's subpath, and therefore its ids.
@@ -153,9 +161,12 @@ it.
 ## Known costs, accepted with eyes open
 
 - The version can never move. `@jigs/service` gets no semver signal at all;
-  what changed between two factory installs is a git question. *Superseded by
-  AGE-332*: no id carries the version now, so this cost is being paid down —
-  the pin itself is removed on AGE-334.
+  what changed between two factory installs is a git question. *Retired by
+  [ADR 0013](./0013-factory-owned-steps.md)*: no id carries the version, the
+  pin is gone, and both packages are at `0.1.0` on ordinary semver. Retired
+  with it: the exports-map exact-string trap (the first consequence above
+  records that). The peer set stays for its other reason, one copy of
+  `workflow` per process.
 - A factory installs the SDK, its World, hono and zod itself, and those pins
   must match the ones `@jigs/service` peers on. The factory `package.json`
   template carries the same versions, and `src/package.test.ts` fails when the
