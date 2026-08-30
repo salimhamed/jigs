@@ -12,9 +12,6 @@ test("the start-world plugin resolves to a file that exists", () => {
   expect(existsSync(plugin)).toBe(true);
 });
 
-test("the entry defaults to the generated one and an explicit entry wins", () => {
+test("the route serves the entry `prepare()` generates", () => {
   expect(defineJigsService().routes?.["/**"]).toBe("./.jigs/server.ts");
-  expect(defineJigsService({ entry: "./src/server.ts" }).routes?.["/**"]).toBe(
-    "./src/server.ts",
-  );
 });

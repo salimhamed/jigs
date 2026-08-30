@@ -17,3 +17,20 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+
+  # The only job that compiles a workflow directive — see
+  # e2e/check-step-ids.mjs for why nothing else can.
+  step-ids:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # `jigs build` runs from the fixture's own install, so the CLI has to
+      # exist as the built artifact its bin entry points at.
+      - run: pnpm build
+      - run: pnpm e2e

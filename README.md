@@ -7,31 +7,37 @@ A lights-on software development factory: define pipelines that take tickets
 through implementation, review, and iteration by AI agents — blocking for
 human approval where it matters.
 
-**Status:** runtime service skeleton plus factory config. Pipelines run on
-the Vercel Workflow SDK with a self-hosted Postgres World; the CLI manages
-repo bindings (`jigs bind` / `unbind` / `bindings`) in a committed `jigs.yml`.
-Every trigger preflights the pipeline's requirements before creating a run,
-and `jigs doctor` runs the same checks on demand. The operational verbs are
-`jigs run` / `ps` / `logs` / `cancel` / `poke`, each an HTTP client of the
-service `jigs service start` supervises for this factory; a run can be named by its id, a unique id prefix, or the ticket it
-claimed. `jigs cancel <run>` is the escape hatch for a zombie claim owner —
-it releases every resource the run holds so the same ticket can be launched
-again, and `--force` skips its confirmation for a run still in flight. Logs
-themselves stay the SDK's: the verbs print
-`npx workflow web --backend @workflow/world-postgres <run>`, naming the world
-the service writes to; run it with `WORKFLOW_POSTGRES_URL` in your shell.
-Pipelines request worktrees and the runtime provisions and tears them down;
-`jigs sweep` reconciles what is on disk against the registry.
+**Status:** a library and a CLI, not an application. Pipelines live in
+**factory repos**, one per user: `jigs init` scaffolds one, `jigs build`
+compiles its pipelines into a service of its own on the Vercel Workflow SDK
+over its own Postgres World, and `jigs service start` (`stop` / `restart` /
+`status` / `logs`) supervises it. The CLI manages repo bindings
+(`jigs bind` / `unbind` / `bindings`) in that factory's committed `jigs.yml`,
+which also carries the port its service answers on. Every trigger preflights
+the pipeline's requirements before creating a run, and `jigs doctor` runs the
+same checks on demand. The operational verbs are `jigs run` / `ps` / `logs` /
+`cancel` / `poke`, each an HTTP client of the factory's own service; a run can
+be named by its id, a unique id prefix, or the ticket it claimed.
+`jigs cancel <run>` is the escape hatch for a zombie claim owner, and logs
+themselves stay the SDK's — the verbs print the `workflow web` invocation that
+reads the factory's own World. Pipelines request worktrees and the runtime
+provisions and tears them down; `jigs sweep` reconciles what is on disk
+against the registry. The [setup runbook](docs/setup.md) walks all of it: the
+machine once, then a factory at a time.
 
 ## Layout
 
 pnpm workspace:
 
 - `packages/jigs` — the library-first package and `jigs` CLI.
-- `packages/service` — the private Nitro app that owns execution: compiled
-  pipelines, health/trigger/resume/run routes.
-- `deploy/` — Postgres World compose file, systemd user unit, and the
-  [deploy runbook](deploy/README.md).
+- `packages/service` — `@jigs/service`, the library a factory repo installs:
+  the app and its health/trigger/resume/run routes, the step, suspension and
+  worktree primitives pipelines are written against, the Nitro build config,
+  and the templates `jigs init` scaffolds from. It is consumed as raw
+  TypeScript, because the workflow directives inside it only compile that way.
+- `e2e/fixture-factory` — a one-pipeline factory repo, built in CI, whose
+  emitted step ids are diffed against a checked-in list. The only test that
+  can see @jigs/service packaged wrong.
 
 ## Development
 
@@ -41,8 +47,8 @@ Requires Node >= 24 and pnpm.
 pnpm install
 pnpm dev        # run the CLI from source
 pnpm check      # lint + typecheck + test + build (all packages)
+pnpm e2e        # build e2e/fixture-factory and diff its step ids
 ```
 
-Start this factory's service with `jigs service start` (`stop` / `restart` /
-`status` / `logs`). The Postgres World compose file lives in
-[deploy/README.md](deploy/README.md).
+No pipeline lives in this repo, so `pnpm build` compiles no workflow
+directive — `pnpm e2e` is what proves that half still works.

@@ -1,0 +1,221 @@
+# Setting up jigs
+
+Two parts, and the split is the point: the machine is set up once, and then
+every factory repo is set up the same way, on its own ports, against its own
+World. Nothing below is global except part 1.
+
+## Part 1 — the machine (once)
+
+- **Node >= 24** and **pnpm**. If node comes from a version manager, make sure
+  the shell that runs `jigs service start` has it on `PATH` — the service is
+  spawned with the CLI's own node.
+- **docker**, with the daemon running. Each factory brings up its own Postgres
+  container; nothing is shared between them.
+- **The jigs CLI on `PATH`.** From a checkout of this repo:
+
+  ```sh
+  pnpm install
+  pnpm build
+  ```
+
+  then link `packages/jigs/dist/cli.js` as `jigs` however you prefer. A
+  factory repo installs `jigs` as a dependency too, so `pnpm exec jigs` inside
+  one always works without this.
+- **The agent harness CLIs** a factory's agent steps drive: the Claude Code
+  CLI (`claude` on `PATH`, or `JIGS_CLAUDE_EXECUTABLE` in a factory's `.env`)
+  and `codex`, each logged in to its subscription — `claude auth login`,
+  `codex login`. `jigs doctor` probes both; a trigger's preflight probes the
+  ones its pipeline declares in `requires.harnesses`, and refuses the run when
+  one is missing or logged out.
+- **A tunnel tool**, if any factory will receive provider webhooks:
+  `tailscale` (funnel) or `cloudflared`. Installed once, run per factory.
+- **`loginctl enable-linger "$USER"`** for lights-on: services started by
+  `jigs service start` are detached from the terminal, but a user session
+  manager still reaps them at logout without lingering.
+
+There is no systemd unit and no `~/.config/jigs/service.env`. Both assumed a
+single global service; supervision is now a pidfile per factory under the jigs
+data dir, and the environment is the factory's own `.env`. A unit per factory
+would mean the CLI generating, installing and naming units, and every repair
+instruction growing a "which one" — `jigs service restart` is the whole
+answer instead.
+
+## Part 2 — a factory (per repo)
+
+Every step below runs **inside the factory repo**. Ports are derived from the
+factory's path, so two factories on one machine never collide; the numbers in
+your own output are the ones to use.
+
+### 1. Scaffold
+
+```sh
+mkdir my-factory && cd my-factory && git init
+jigs init
+```
+
+`jigs init` writes `jigs.yml` (the service port and, later, the ingress URL),
+`package.json`, `nitro.config.ts`, `docker-compose.yml`, `.env.example`, a
+`jigs.config.ts`, an example pipeline, and the `tsconfig.json`,
+`pnpm-workspace.yaml` and `.gitignore` a factory build needs — then prints the
+commands below with this factory's ports filled in. It runs none of them:
+every one can fail in a way only a human should see.
+
+### 2. Install, World, bootstrap
+
+```sh
+cp .env.example .env      # then fill in LINEAR_API_KEY / GITHUB_TOKEN
+pnpm install
+docker compose up -d --wait
+# bootstrap does not read .env, so pass the World URL explicitly:
+WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:<postgresPort>/jigs \
+  pnpm exec bootstrap
+```
+
+`bootstrap` is idempotent — re-run it freely (it applies the SDK's migrations
+and the graphile-worker schema).
+
+`.env` is this factory's environment file: `jigs service start` loads it into
+the service process, and `PORT` comes from `jigs.yml` rather than from here.
+The `LINEAR_API_KEY` / `GITHUB_TOKEN` slots are consumed by the suspension
+primitives (`needsHuman()` posts Linear comments, `pullRequestGate()`
+re-checks PR state), and both are validated on every trigger: preflight
+refuses to create a run when a requirement is unmet, reporting every failure
+with its repair. `jigs doctor` runs the same checks without a launch.
+
+The service must run against the Postgres World
+(`WORKFLOW_TARGET_WORLD=@workflow/world-postgres`, as `.env.example` sets): at
+`workflow@4.8.4` the filesystem World fails to start from a production bundle
+(`Invalid version string: "bundled"`).
+
+### 3. Build and start
+
+```sh
+jigs build
+jigs service start
+jigs service status
+```
+
+`jigs build` compiles this factory's pipelines into `.output/server/index.mjs`
+using the factory's own nitro and its own copy of the SDK — the copy that
+compiles the step ids has to be the copy that registers them. `jigs service
+start|stop|restart|status|logs` supervises that build; `logs` prints the
+service's own stdout, which is not the same thing as a run's history (step 6).
+
+Rebuild after every pipeline change. `jigs build` warns when a run is still in
+flight: a pipeline that changed shape no longer answers to the step ids its
+parked run was memoized under.
+
+### 4. Bind target repos
+
+```sh
+GITHUB_TOKEN=… jigs bind ../some-target-repo
+jigs bindings
+```
+
+A binding is a name in `jigs.yml` mapped to a checkout, pinned to its expected
+remote. Pipelines name bindings; the runtime provisions worktrees from them.
+
+### 5. Webhook ingress
+
+The service's `/ingress/github` and `/ingress/linear` routes receive provider
+webhooks: signature-verified, stateless, and safe to miss — every wake is
+re-checked against the provider, and `jigs poke <run>` covers any delivery
+that never arrived.
+
+#### Tunnel (one-time per factory, manual)
+
+The ingress must be reachable from the public internet, on **this factory's**
+service port:
+
+```sh
+tailscale funnel --bg <servicePort>
+```
+
+The printed `https://<machine>.<tailnet>.ts.net` URL is this factory's ingress
+URL. Alternative: `cloudflared tunnel --url http://localhost:<servicePort>`
+(or a named cloudflare tunnel for a stable hostname). One tailnet machine can
+funnel a limited number of ports; factories that will never receive webhooks
+need no tunnel at all.
+
+Put the URL in this factory's `jigs.yml`:
+
+```yaml
+ingress_url: https://<machine>.<tailnet>.ts.net
+```
+
+#### GitHub (per target repo)
+
+(Re-)bind each target repo with `GITHUB_TOKEN` set — `jigs bind` creates the
+repo webhook from `ingress_url`, verifies it on later binds, and repairs
+drift. The signing secret is the one thing here that is not per factory: one
+file per machine at `~/.local/share/jigs/github-webhook-secret`, generated on
+the first bind and shared by every factory's repo webhooks. The service reads
+the same file, or `GITHUB_WEBHOOK_SECRET` from `.env` if set.
+
+Manual alternative: one org-level webhook (org settings → Webhooks) pointed at
+`<ingress_url>/ingress/github`, content type `application/json`, events
+`pull_request`, `pull_request_review`, `pull_request_review_comment` and
+`check_suite`, secret from that same file — covers every repo without per-repo
+binds. Note that it points at one factory: an org-level hook and several
+factories do not mix.
+
+#### Linear
+
+Create a webhook in Linear (Settings → API → Webhooks) pointed at
+`<ingress_url>/ingress/linear` with resource types `Comment` only. Put its
+signing secret in this factory's `.env` as `LINEAR_WEBHOOK_SECRET` and
+`jigs service restart`.
+
+#### Missed deliveries
+
+```sh
+jigs poke <run>
+```
+
+manually wakes a suspended run over the same code path as a webhook delivery.
+
+### 6. Operating runs
+
+```sh
+jigs run <pipeline> --input issueId=<uuid>
+jigs ps
+jigs logs <run>
+jigs cancel <run> [--force]
+jigs sweep
+```
+
+Every verb dials the service of the factory you are standing in;
+`--service <url>` / `JIGS_SERVICE_URL` overrides that. `--input` values are
+read as JSON with the raw string as the fallback, so `askHuman=true` is a
+boolean and `AGE-123` is a string; a value the pipeline's `inputs` schema
+rejects fails in the CLI, before any run is created.
+
+`<run>` is a run id, a unique id prefix, or the ticket the run claimed — an
+ambiguous prefix lists its candidates instead of guessing.
+
+`jigs cancel` is the escape hatch when a run holds a resource nobody is coming
+back for: cancelling releases every hook it claimed, so the same ticket can be
+launched again. A suspended run cancels silently — no process is involved —
+while a run still in flight is confirmed first, and `--force` skips that
+prompt when there is no terminal to answer it.
+
+### 7. Run history (`workflow web`)
+
+`jigs run` and `jigs logs` hand the log surface back to the SDK, printing
+
+```sh
+npx workflow web --backend @workflow/world-postgres <run>
+```
+
+The backend is named by the service, not the CLI — `workflow web` otherwise
+inspects the local world and finds nothing. Run it from inside the factory,
+with that factory's World URL in your shell:
+
+```sh
+WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:<postgresPort>/jigs \
+  pnpm exec workflow web --backend @workflow/world-postgres
+```
+
+Serves the SDK's observability UI (default `http://localhost:3456`) reading
+the World this factory's service writes — run history, step attempts, events.
+It is one UI per World, so run it in the factory whose runs you want.

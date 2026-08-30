@@ -1,5 +1,11 @@
 # Preflight in the trigger path, JIT as the backstop
 
+> **Amended by [ADR 0012](./0012-per-factory-service.md).** The two service
+> credentials are read from the factory repo's own `.env`, loaded by
+> `jigs service start`, not from a systemd unit's `EnvironmentFile`. The
+> reasoning below — including why CLI-side checks are the wrong place — is
+> unchanged: the service's environment is still not the shell's.
+
 Before a run exists, the service's trigger path verifies the run's
 requirements and refuses to call `start()` on any failure. The check list is
 computed, not hand-maintained: the pipeline's `requires: { bindings,

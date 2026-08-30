@@ -1,7 +1,9 @@
 # jigs — agent guide
 
 See `README.md` for what jigs is and the dev commands (`pnpm check` runs lint,
-typecheck, test, and build).
+typecheck, test, and build). `pnpm check` covers no workflow directive — no
+pipeline lives here — so run `pnpm e2e` too: it builds `e2e/fixture-factory`
+and diffs its emitted step ids against a checked-in list.
 
 ## Agent skills
 

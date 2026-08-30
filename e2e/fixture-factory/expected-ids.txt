@@ -1,0 +1,11 @@
+# The workflow and step ids `jigs build` emits for this fixture factory.
+# Recorded by: node e2e/check-step-ids.mjs --record
+#
+# Every line is a memoization key in the World. A change here is a change in
+# every factory's durable run state, so a diff is a finding, not a chore.
+step//./pipelines/fixture//localStep
+step//@jigs/service/steps@0.0.0//runAgentStep
+step//@jigs/service/steps@0.0.0//runAskStep
+step//@jigs/service/worktrees@0.0.0//worktree
+step//workflow@4.8.4//fetch
+workflow//./pipelines/fixture//fixturePipeline

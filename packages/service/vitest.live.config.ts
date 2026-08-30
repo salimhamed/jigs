@@ -1,8 +1,10 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
-// Live registry tests: require the service's Postgres (docker, :5439 by
-// default). Serial on purpose — they share one table.
+// Live registry tests: they need a real Postgres on :5439, which is what
+// test/docker-compose.yml brings up (`docker compose -f test/docker-compose.yml
+// up -d --wait`). Not a factory's World — this container belongs to these
+// tests. Serial on purpose: they share one table.
 export default defineConfig({
   resolve: {
     alias: [

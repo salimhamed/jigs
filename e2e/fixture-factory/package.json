@@ -1,0 +1,22 @@
+{
+  "name": "jigs-fixture-factory",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@jigs/service": "link:../../packages/service",
+    "@workflow/world-postgres": "4.3.4",
+    "hono": "^4.13.4",
+    "jigs": "link:../../packages/jigs",
+    "postgres": "^3.4.7",
+    "workflow": "4.8.4",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "nitro": "3.0.260610-beta",
+    "typescript": "^7.0.2"
+  }
+}
