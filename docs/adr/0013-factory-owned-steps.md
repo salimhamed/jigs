@@ -29,11 +29,11 @@ The cost only lands because these ids are memoization keys. A library whose
 steps are addressed by version cannot be versioned: a bump renames every key
 at once, and every run parked mid-flight replays against ids that no longer
 exist — no error, a clean build, just runs that have lost their memory. Moving
-the wrappers across the `node_modules` boundary changes which addressing
-scheme applies to them, and that is the whole trick. The e2e guard
-proves it the only way it can be proved: it builds `e2e/fixture-factory`
-twice, once with `@jigs/service` rewritten to a fake version, and diffs the
-two id sets against each other and against the checked-in list.
+the wrappers across the `node_modules` boundary changes which addressing scheme
+applies to them, and that is the whole trick. The e2e guard proves it the only
+way it can be proved: it builds `e2e/fixture-factory` twice, once with
+`@jigs/service` rewritten to a fake version, and diffs the two id sets against
+each other and against the checked-in list.
 
 **`@jigs/service` still ships as raw TypeScript, and that is now a choice
 rather than a constraint.** ADR 0012 required it — directives do not survive a
@@ -42,17 +42,14 @@ requirement lapsed. The replacement was measured, not assumed: building the
 package to `dist/` with tsdown, repointing every `exports` entry at the
 emitted `.js`, and rebuilding the fixture produced the same eighteen ids and
 the same zero `node:` specifiers in the workflow bundle. It stays source
-anyway, for reasons that have nothing to do with directives: a factory
-installs this package with `link:`, and `link:` builds nothing, so a `dist/`
-would be whatever the jigs checkout last happened to emit — `git pull` would
-stop being the whole upgrade. `src/nitro.ts` also hands Nitro an absolute path
-into this package (`../plugins/start-world.ts`), which under `dist/` becomes a
-path into the bundler's output layout. And `jigs` itself source-exports every
-subpath `@jigs/service` reaches (`jigs/checks`, `jigs/prompts`, `jigs/steps`,
-`jigs/steps/execute`), so a compiled `@jigs/service` would take no raw
-TypeScript out of a factory's build regardless. Neither package is published,
-so there is no third party for a conventional `exports` map to be conventional
-for.
+anyway, for a reason that has nothing to do with directives: a factory installs
+this package with `link:`, and `link:` builds nothing, so a `dist/` would be
+whatever the jigs checkout last happened to emit — `git pull` would stop being
+the whole upgrade. `src/nitro.ts` is that in miniature: it hands Nitro an
+absolute path into this package (`../plugins/start-world.ts`), which under
+`dist/` becomes a path into the bundler's output layout. If jigs ever
+publishes, the trade is worth re-taking, and the experiment above is recorded
+so it does not have to be re-run.
 
 ## Consequences
 
@@ -73,12 +70,9 @@ for.
   while the directives lived here, so a wildcard entry — which the SDK cannot
   match by exact string — collapsed two modules into one namespace, and a
   missing entry was a module no factory could reach. Neither is an id bug any
-  more. *Supersedes* the first bullet of ADR 0012's consequences, and retires
-  the note in `src/package.test.ts` about arming the
-  compiler's discovery gate with a `"./package.json"` export: that gate decides
-  only whether directive-bearing files inside a package get transformed, and
-  this package has none. (It also reads `package.json` by walking up from the
-  file on disk, not through the exports map, so no export entry arms it.)
+  more, and the note in `src/package.test.ts` about arming the compiler's
+  discovery gate goes too: this package carries no workflow directive, so the
+  gate has nothing to decide about it.
 - **A version bump is now an ordinary release chore.** Nothing reads either
   package's version at runtime and factories install both by `link:`, so the
   number is a signal to readers rather than a resolution input — but it is an
@@ -120,8 +114,6 @@ for.
   function that runs unmemoized and re-fires on every replay. The mitigation is
   that they are scaffold output rather than hand-written, that the fixture
   compiles the scaffold verbatim, and that `jigs build` warns on drift.
-- The step-id derivation walks up to a workspace root the build tool detects,
-  not one jigs declares. A factory that is its own repo gets the right answer;
-  a factory nested under another workspace does not, which is why
-  `e2e/fixture-factory` names its own `workspaceDir` to reproduce a real
-  factory from inside this repo.
+- The step-id derivation still walks up to a workspace root the build tool
+  detects rather than one jigs declares — untouched by this, and recorded in
+  [ADR 0012](./0012-per-factory-service.md)'s known costs.

@@ -73,12 +73,10 @@ test("every subpath the scaffolded wrappers reach is in the exports map", async 
 });
 
 test("every exports target is raw TypeScript that exists on disk", () => {
-  // Source exports are a choice now, not a constraint: with no directives left
-  // here, a compiled dist shape builds the same ids (ADR 0013 records the
-  // experiment). It stays source because a factory installs this package with
-  // `link:`, which builds nothing — the checkout's own files are what the
-  // factory's build compiles, so there is no dist to be stale. A target that
-  // is not .ts, or has moved, resolves to nothing at all.
+  // A factory installs this package with `link:`, which builds nothing — the
+  // checkout's own files are what its build compiles, so a target that is not
+  // .ts, or has moved, resolves to nothing at all. ADR 0013 records why source
+  // stays now that no directive requires it.
   for (const target of exportTargets) {
     expect(target).toMatch(/\.ts$/);
     expect(existsSync(path.join(packageDir, target))).toBe(true);
