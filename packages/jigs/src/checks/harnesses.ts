@@ -89,7 +89,7 @@ export function claudeAuthCheck(deps: ClaudeAuthDeps = {}): Check {
         return {
           ok: false,
           reason: `the Claude Code CLI is using an API key from ${String(status.apiKeySource)} instead of the subscription login`,
-          repair: `remove ${String(status.apiKeySource)} from ${SERVICE_ENV_FILE} (and from the service unit's environment), then: ${RESTART_SERVICE}`,
+          repair: `remove ${String(status.apiKeySource)} from ${SERVICE_ENV_FILE} (and from the shell you start the service from), then: ${RESTART_SERVICE}`,
         };
       }
       if (status.authMethod !== "claude.ai") {

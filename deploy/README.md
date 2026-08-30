@@ -1,5 +1,9 @@
 # Deploying the jigs service
 
+> Superseded by `jigs service start|stop|restart|status|logs`, which supervises
+> a service per factory repo. The systemd unit below is the single global
+> service and is kept only until that cutover finishes.
+
 From a clean checkout to a running service (Linux, systemd user session).
 Requires Node >= 24, pnpm, and docker.
 

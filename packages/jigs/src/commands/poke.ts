@@ -16,7 +16,7 @@ export async function pokeRun(
   deps: ServiceDeps,
 ): Promise<PokeResult> {
   const res = await serviceFetch(
-    deps.serviceUrl,
+    deps,
     `/api/runs/${encodeURIComponent(runId)}/poke`,
     { method: "POST" },
   );

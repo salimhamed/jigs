@@ -9,15 +9,30 @@ import { showLogs } from "./commands/logs.ts";
 import { pokeRun } from "./commands/poke.ts";
 import { listRunsForPs } from "./commands/ps.ts";
 import { launchRun } from "./commands/run.ts";
+import { resolveServiceTarget } from "./commands/service.ts";
+import {
+  restartService,
+  serviceLogs,
+  serviceStatus,
+  startService,
+  stopService,
+} from "./commands/service-lifecycle.ts";
 import { sweepWorktrees } from "./commands/sweep.ts";
 import { unbindRepo } from "./commands/unbind.ts";
 import { CliError } from "./errors.ts";
 import { formatTable } from "./table.ts";
 
+// No `.default()`: commander evaluates defaults eagerly, so resolving the
+// factory's service URL here would walk the filesystem on `jigs --help`.
+// Every action resolves it instead, inside the error handling.
 const serviceOption = () =>
-  new Option("--service <url>", "jigs service URL")
-    .env("JIGS_SERVICE_URL")
-    .default("http://localhost:8990");
+  new Option(
+    "--service <url>",
+    "jigs service URL (default: this factory's service.port in jigs.yml)",
+  ).env("JIGS_SERVICE_URL");
+
+const serviceTarget = (explicit?: string) =>
+  resolveServiceTarget(process.cwd(), explicit);
 
 function makeConfirm(): ((question: string) => Promise<boolean>) | undefined {
   if (!process.stdin.isTTY || !process.stdout.isTTY) return undefined;
@@ -92,10 +107,13 @@ program
   )
   .addOption(serviceOption())
   .action(
-    async (pipeline: string, options: { input: string[]; service: string }) => {
+    async (
+      pipeline: string,
+      options: { input: string[]; service?: string },
+    ) => {
       await launchRun(pipeline, options.input, {
         out,
-        serviceUrl: options.service,
+        ...serviceTarget(options.service),
       });
     },
   );
@@ -104,8 +122,8 @@ program
   .command("ps")
   .description("list runs and the worktrees the registry holds")
   .addOption(serviceOption())
-  .action(async (options: { service: string }) => {
-    await listRunsForPs({ out, serviceUrl: options.service });
+  .action(async (options: { service?: string }) => {
+    await listRunsForPs({ out, ...serviceTarget(options.service) });
   });
 
 program
@@ -115,10 +133,10 @@ program
   .option("--force", "skip the confirmation for an in-flight run")
   .addOption(serviceOption())
   .action(
-    async (run: string, options: { force?: boolean; service: string }) => {
+    async (run: string, options: { force?: boolean; service?: string }) => {
       await cancelRun(run, {
         out,
-        serviceUrl: options.service,
+        ...serviceTarget(options.service),
         confirm: makeConfirm(),
         force: options.force,
       });
@@ -130,8 +148,8 @@ program
   .description("show a run's state and the workflow web pointer to its logs")
   .argument("<run>", "run id, unique id prefix, or ticket id")
   .addOption(serviceOption())
-  .action(async (run: string, options: { service: string }) => {
-    await showLogs(run, { out, serviceUrl: options.service });
+  .action(async (run: string, options: { service?: string }) => {
+    await showLogs(run, { out, ...serviceTarget(options.service) });
   });
 
 program
@@ -139,16 +157,16 @@ program
   .description("manually wake a suspended run (the missed-delivery fallback)")
   .argument("<run>", "run id, unique id prefix, or ticket id")
   .addOption(serviceOption())
-  .action(async (runId: string, options: { service: string }) => {
-    await pokeRun(runId, { out, serviceUrl: options.service });
+  .action(async (runId: string, options: { service?: string }) => {
+    await pokeRun(runId, { out, ...serviceTarget(options.service) });
   });
 
 program
   .command("doctor")
   .description("run the check catalog against the service, without launching")
   .addOption(serviceOption())
-  .action(async (options: { service: string }) => {
-    await runDoctor({ out, serviceUrl: options.service });
+  .action(async (options: { service?: string }) => {
+    await runDoctor({ out, ...serviceTarget(options.service) });
   });
 
 program
@@ -158,19 +176,61 @@ program
   )
   .option("--clean", "delete eligible worktrees instead of only reporting")
   .option("--force", "also delete dirty worktrees (with --clean)")
-  .addOption(
-    new Option("--service <url>", "jigs service URL")
-      .env("JIGS_SERVICE_URL")
-      .default("http://localhost:8990"),
-  )
+  .addOption(serviceOption())
   .action(
-    async (options: { clean?: boolean; force?: boolean; service: string }) => {
+    async (options: { clean?: boolean; force?: boolean; service?: string }) => {
       await sweepWorktrees(
-        { out, serviceUrl: options.service },
+        { out, ...serviceTarget(options.service) },
         { clean: options.clean, force: options.force },
       );
     },
   );
+
+const service = program
+  .command("service")
+  .description("supervise this factory repo's service process");
+
+service
+  .command("start")
+  .description("start this factory's service in the background")
+  .action(() => {
+    startService({ cwd: process.cwd(), out });
+  });
+
+service
+  .command("stop")
+  .description("stop this factory's service")
+  .action(async () => {
+    await stopService({ cwd: process.cwd(), out });
+  });
+
+service
+  .command("restart")
+  .description("stop then start this factory's service")
+  .action(async () => {
+    await restartService({ cwd: process.cwd(), out });
+  });
+
+service
+  .command("status")
+  .description("report whether this factory's service is running")
+  .action(() => {
+    serviceStatus({ cwd: process.cwd(), out });
+  });
+
+service
+  .command("logs")
+  .description("print the tail of the service process's output")
+  .option("--lines <n>", "how many lines to print (default: 50)", (raw) => {
+    const lines = Number(raw);
+    if (!Number.isInteger(lines) || lines < 1) {
+      throw new CliError(`--lines must be a positive integer, got ${raw}`);
+    }
+    return lines;
+  })
+  .action((options: { lines?: number }) => {
+    serviceLogs({ cwd: process.cwd(), out }, { lines: options.lines });
+  });
 
 program
   .command("bindings")

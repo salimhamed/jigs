@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import path from "node:path";
 import {
   type Binding,
   FACTORY_CONFIG_FILE,
@@ -25,12 +26,17 @@ export interface BindingChecksOptions {
   names?: string[];
 }
 
-function factoryConfigFailure(err: unknown): Check {
+// The service runs inside the factory repo now, so the repair is about that
+// one file — naming it by path, since the thunk may have failed before there
+// was a factory root to name.
+function factoryConfigFailure(err: unknown, factoryRoot?: string): Check {
   return failedCheck(
     "binding.factory-config",
     FACTORY_CONFIG_FILE,
     `the factory config could not be read: ${err instanceof Error ? err.message : String(err)}`,
-    `point the service at the factory repo with JIGS_FACTORY_ROOT in ${SERVICE_ENV_FILE}, then: ${RESTART_SERVICE}`,
+    factoryRoot === undefined
+      ? `start the service from a factory repo — the directory holding ${FACTORY_CONFIG_FILE}`
+      : `create or repair ${path.join(factoryRoot, FACTORY_CONFIG_FILE)}, then: ${RESTART_SERVICE}`,
   );
 }
 
@@ -38,12 +44,12 @@ export function bindingChecks(options: BindingChecksOptions): Check[] {
   // A pipeline requiring no bindings must not need a factory config at all.
   if (options.names?.length === 0) return [];
   let bindings: Record<string, Binding>;
+  let factoryRoot: string | undefined;
   try {
-    bindings = parseFactoryConfig(
-      readFactoryConfigText(options.factoryRoot()),
-    ).bindings;
+    factoryRoot = options.factoryRoot();
+    bindings = parseFactoryConfig(readFactoryConfigText(factoryRoot)).bindings;
   } catch (err) {
-    return [factoryConfigFailure(err)];
+    return [factoryConfigFailure(err, factoryRoot)];
   }
   return (options.names ?? Object.keys(bindings)).map((name) => ({
     id: `binding.${name}`,

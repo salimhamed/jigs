@@ -25,7 +25,7 @@ export async function listRunsForPs(
   deps: ServiceDeps,
   now: Date = new Date(),
 ): Promise<PsResult> {
-  const res = await serviceFetch(deps.serviceUrl, "/api/runs");
+  const res = await serviceFetch(deps, "/api/runs");
   if (!res.ok) {
     throw new CliError(`ps failed: HTTP ${res.status} ${await res.text()}`);
   }

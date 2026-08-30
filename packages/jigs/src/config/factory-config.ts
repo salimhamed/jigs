@@ -4,6 +4,7 @@ import { parseDocument } from "yaml";
 import { z } from "zod";
 import { CliError } from "../errors.ts";
 import { expandHome } from "../paths.ts";
+import { factorySlug } from "../worktrees/layout.ts";
 
 export const FACTORY_CONFIG_FILE = "jigs.yml";
 
@@ -14,11 +15,22 @@ const bindingSchema = z.strictObject({
   ff_default_branch: z.boolean().default(true),
 });
 
+const portSchema = z.int().min(1).max(65535);
+
+const serviceSchema = z.strictObject({
+  port: portSchema.default(8990),
+});
+
 const factoryConfigSchema = z.looseObject({
   bindings: z.record(z.string(), bindingSchema).default({}),
   // Where provider webhooks reach this factory's service (the tunnel URL);
   // `jigs bind` skips its webhook leg while unset.
   ingress_url: z.url().optional(),
+  // One service per factory repo, so the address belongs to the factory
+  // rather than the machine; the default is the single global service's port.
+  // Only the address lives here — the World the service writes is a
+  // credential-bearing URL, so it stays in the factory's own .env.
+  service: serviceSchema.prefault({}),
 });
 
 export type Binding = z.output<typeof bindingSchema>;
@@ -85,6 +97,23 @@ export function resolveBindings(factoryRoot: string): ResolvedBinding[] {
   return Object.entries(bindings).map(([name, binding]) =>
     resolved(name, binding),
   );
+}
+
+export interface ResolvedService {
+  slug: string;
+  port: number;
+  serviceUrl: string;
+}
+
+// What is addressed per factory: the URL its CLI verbs talk to and the slug
+// that keys its pidfile and worktrees.
+export function resolveService(factoryRoot: string): ResolvedService {
+  const { service } = parseFactoryConfig(readFactoryConfigText(factoryRoot));
+  return {
+    slug: factorySlug(factoryRoot),
+    port: service.port,
+    serviceUrl: `http://localhost:${service.port}`,
+  };
 }
 
 export interface BindingPin {

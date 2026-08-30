@@ -166,9 +166,10 @@ MCP deny-by-default enforceable on a harness with no strict-config flag.
 _Avoid_: isolated home, custom home, sandbox home
 
 **Service**:
-The long-lived process (a systemd user unit) that owns execution: it hosts
-the compiled pipelines, creates runs at the trigger, and resumes them on
-wakes. Everything else — the CLI included — is its HTTP client.
+The long-lived process (one per factory repo, supervised by `jigs service`)
+that owns execution: it hosts the compiled pipelines, creates runs at the
+trigger, and resumes them on wakes. Everything else — the CLI included — is
+its HTTP client.
 _Avoid_: server, daemon, worker
 
 **Trigger**:

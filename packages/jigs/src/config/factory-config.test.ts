@@ -1,7 +1,10 @@
 import { expect, test } from "vitest";
+import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import { factorySlug } from "../worktrees/layout.ts";
 import {
   parseFactoryConfig,
   removeBinding,
+  resolveService,
   upsertBinding,
 } from "./factory-config.ts";
 
@@ -104,4 +107,29 @@ test("ff_default_branch defaults to true", () => {
 test("parseFactoryConfig tolerates unknown top-level keys and empty files", () => {
   expect(parseFactoryConfig("").bindings).toEqual({});
   expect(parseFactoryConfig("pipelines: {}\n").bindings).toEqual({});
+});
+
+test("the service block defaults to the port the single global service used", () => {
+  const config = parseFactoryConfig(commented);
+  expect(config.service).toEqual({ port: 8990 });
+});
+
+test("parseFactoryConfig rejects an out-of-range port naming the field", () => {
+  expect(() => parseFactoryConfig("service:\n  port: 70000\n")).toThrow(
+    /service\.port/,
+  );
+});
+
+test("resolveService derives the service address and the slug", () => {
+  const tmp = makeTmpDir();
+  try {
+    const factory = makeFactoryRepo(tmp, "service:\n  port: 9100\n");
+    expect(resolveService(factory)).toEqual({
+      slug: factorySlug(factory),
+      port: 9100,
+      serviceUrl: "http://localhost:9100",
+    });
+  } finally {
+    removeTmpDir(tmp);
+  }
 });

@@ -28,7 +28,7 @@ test("an unset LINEAR_API_KEY fails before any probe runs", async () => {
   expect(check).toMatchObject({
     ok: false,
     reason: expect.stringContaining("LINEAR_API_KEY is not set"),
-    repair: expect.stringContaining("~/.config/jigs/service.env"),
+    repair: expect.stringContaining("the factory repo's .env"),
   });
   expect(calls).not.toContain("linear");
 });

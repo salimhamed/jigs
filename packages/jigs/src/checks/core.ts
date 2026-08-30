@@ -1,7 +1,11 @@
 import type { Check, CheckResult } from "./catalog.ts";
 
-export const SERVICE_ENV_FILE = "~/.config/jigs/service.env";
-export const RESTART_SERVICE = "systemctl --user restart jigs-service";
+// The service belongs to a factory repo, so its environment file is that
+// repo's own .env and the restart is the CLI verb that supervises it — both
+// stay correct for whichever factory raised the check, unlike the single
+// global path and unit name they replace.
+export const SERVICE_ENV_FILE = "the factory repo's .env";
+export const RESTART_SERVICE = "jigs service restart";
 
 // The probes live in the service (they are its provider clients); the
 // catalog owns the repair text, which is what makes preflight and doctor
