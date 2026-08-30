@@ -26,13 +26,15 @@ _Avoid_: node, task, stage
 
 **Step id**:
 The name the runtime memoizes a step's result under, derived at compile time
-from where the step's code was reached — a path relative to the factory root
-plus the function's name for every jigs step, because the `"use step"`
-wrappers live in the factory's own `steps/jigs.ts`, and the package's name,
-version and export subpath for a step reached inside an installed dependency
-(the SDK's own `step//workflow@4.8.4//fetch` is the one such id a factory
-emits today). Not authored, not stable across a move — a step id that changes
-is every in-flight run losing its memory.
+from where the step's code was reached. It is an address, and there are two
+schemes: a file in the factory is addressed by its path relative to the
+factory root plus the function's name — every jigs step, since the
+`"use step"` wrappers live in the factory's own `steps/jigs.ts` — and a file
+inside an installed dependency by that package's name, version and export
+subpath (the SDK's own `step//workflow@4.8.4//fetch` is the one such id a
+factory emits today). No jigs package's version appears in any of them, so
+releasing jigs moves none. Not authored, not stable across a move — a step id
+that changes is every in-flight run losing its memory.
 _Avoid_: step key, step name, cache key
 
 **Step wrapper**:

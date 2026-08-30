@@ -36,13 +36,6 @@ async function sourceFiles(dir: string): Promise<string[]> {
   return files.flat().filter((file) => file.endsWith(".ts"));
 }
 
-test("the version stays pinned to 0.0.0 until AGE-334 retires the pin", () => {
-  // No emitted id carries this version any more — the guard below is what
-  // keeps it that way. The pin outlives its reason by one ticket: it is
-  // removed on AGE-334, with the fixture ids re-recorded there.
-  expect(pkg.version).toBe("0.0.0");
-});
-
 test("no compiled source carries a workflow directive — templates scaffold them into the factory", async () => {
   // The wrappers live in the factory repo, which is what keeps this package's
   // version out of every memoization key. A directive sneaking back in here
@@ -80,9 +73,12 @@ test("every subpath the scaffolded wrappers reach is in the exports map", async 
 });
 
 test("every exports target is raw TypeScript that exists on disk", () => {
-  // This package has no build step — the factory's compiler consumes these
-  // files as source — so a target that is not .ts, or has moved, resolves to
-  // nothing at all.
+  // Source exports are a choice now, not a constraint: with no directives left
+  // here, a compiled dist shape builds the same ids (ADR 0013 records the
+  // experiment). It stays source because a factory installs this package with
+  // `link:`, which builds nothing — the checkout's own files are what the
+  // factory's build compiles, so there is no dist to be stale. A target that
+  // is not .ts, or has moved, resolves to nothing at all.
   for (const target of exportTargets) {
     expect(target).toMatch(/\.ts$/);
     expect(existsSync(path.join(packageDir, target))).toBe(true);
@@ -94,14 +90,6 @@ test("the runtime a factory supplies is a peer here, and still a devDependency",
   // of `workflow` per process is what makes a compiled step id resolve to a
   // registered function. They stay in devDependencies so this repo's own
   // tests and build still resolve them.
-  //
-  // The compiler decides whether to follow imports into a package by looking
-  // for `workflow` in any of its dependency fields — but it reads them through
-  // `require.resolve("@jigs/service/package.json")`, which this exports map
-  // does not answer, so today it fails open and follows regardless. Adding a
-  // "./package.json" export would arm that gate, and then dropping this peer
-  // would silently stop the compiler following the factory's imports into
-  // this package's workflow-side code.
   const peers: Record<string, string> = pkg.peerDependencies;
   expect(Object.keys(peers)).toContain("workflow");
   for (const [name, range] of Object.entries(peers)) {

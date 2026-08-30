@@ -43,7 +43,8 @@ wrappers that delegate to them, and ids are factory-local paths —
 `step//./steps/jigs//worktree`, no version anywhere. The wrappers are
 `jigs init` output, not hand-written, which is what makes the fifteen-chances
 risk a scaffolding problem rather than a per-factory one. The consequences
-below still hold except where noted; the version pin stays until AGE-334.
+below still hold except where noted; the decision is recorded in full as
+[ADR 0013](./0013-factory-owned-steps.md), which also removes the version pin.
 
 ## Amended: what the factory owns, and how it stays current (AGE-333)
 
@@ -152,10 +153,20 @@ it.
 
 ## Known costs, accepted with eyes open
 
-- The version can never move. `@jigs/service` gets no semver signal at all;
-  what changed between two factory installs is a git question. *Superseded by
-  AGE-332*: no id carries the version now, so this cost is being paid down —
-  the pin itself is removed on AGE-334.
+- ~~The version can never move. `@jigs/service` gets no semver signal at all;
+  what changed between two factory installs is a git question.~~ *Retired by
+  [ADR 0013](./0013-factory-owned-steps.md)*: no id carries the version, the
+  pin is gone, and both packages are at `0.1.0` on ordinary semver. Two more
+  costs go with it. The **exports-map exact-string trap** — a subpath was half
+  an id, so a wildcard entry the SDK could not match by exact string collapsed
+  two modules into one namespace — is retired because a subpath is no longer
+  half of anything; the map is an ordinary export map and `src/package.test.ts`
+  guards the inverse, that no source here carries a directive. The
+  **discovery-gate fail-open note** is retired with it: that gate decides only
+  whether directive-bearing files inside a package are transformed, and this
+  package has none — nor does the gate read `package.json` through the exports
+  map, so no `"./package.json"` entry could arm it. The peer set stays for its
+  other reason, one copy of `workflow` per process.
 - A factory installs the SDK, its World, hono and zod itself, and those pins
   must match the ones `@jigs/service` peers on. The factory `package.json`
   template carries the same versions, and `src/package.test.ts` fails when the
