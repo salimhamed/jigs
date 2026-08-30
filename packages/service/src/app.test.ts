@@ -4,8 +4,28 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
-import app from "./app";
-import { registry } from "./registry";
+import { createApp } from "./app";
+import type { Factory } from "./factory";
+
+// The routes are exercised against pipelines this file declares, never the
+// package's demos: what is under test is the framework, and the demos leave.
+const fixture = {
+  pipelines: {
+    plain: {
+      pipeline: async () => undefined,
+      inputs: z.object({
+        issueId: z.uuid(),
+        askHuman: z.boolean().default(false),
+      }),
+    },
+    dated: {
+      pipeline: async () => undefined,
+      inputs: z.object({ when: z.date(), name: z.string() }),
+    },
+  },
+} satisfies Factory;
+
+const app = createApp(fixture);
 
 // The local world binds its data dir on first use, so one fresh dir serves
 // the whole file; it starts empty — nobody holds any token here.
@@ -198,13 +218,13 @@ test("cancel of a run nobody holds is a 404", async () => {
 });
 
 test("a pipeline's inputs route answers with its JSON Schema", async () => {
-  const res = await app.request("/api/pipelines/suspension-demo/inputs");
+  const res = await app.request("/api/pipelines/plain/inputs");
   expect(res.status).toBe(200);
   const body = (await res.json()) as {
     name: string;
     inputs: { properties: Record<string, unknown>; required: string[] };
   };
-  expect(body.name).toBe("suspension-demo");
+  expect(body.name).toBe("plain");
   expect(body.inputs.properties.issueId).toBeDefined();
   expect(body.inputs.required).toEqual(["issueId"]);
   // io: "input" — the defaulted field must not be demanded of the caller.
@@ -212,21 +232,13 @@ test("a pipeline's inputs route answers with its JSON Schema", async () => {
 });
 
 test("a member zod cannot render leaves the route green and the member open", async () => {
-  registry["date-demo"] = {
-    pipeline: async () => undefined,
-    inputs: z.object({ when: z.date(), name: z.string() }),
+  const res = await app.request("/api/pipelines/dated/inputs");
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as {
+    inputs: { properties: Record<string, unknown> };
   };
-  try {
-    const res = await app.request("/api/pipelines/date-demo/inputs");
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as {
-      inputs: { properties: Record<string, unknown> };
-    };
-    expect(body.inputs.properties.when).toEqual({});
-    expect(body.inputs.properties.name).toEqual({ type: "string" });
-  } finally {
-    delete registry["date-demo"];
-  }
+  expect(body.inputs.properties.when).toEqual({});
+  expect(body.inputs.properties.name).toEqual({ type: "string" });
 });
 
 test("an unknown pipeline's inputs route is a 404 naming the known pipelines", async () => {
@@ -237,7 +249,30 @@ test("an unknown pipeline's inputs route is a 404 naming the known pipelines", a
     knownPipelines: string[];
   };
   expect(body.error).toBe("unknown pipeline: nope");
-  expect(body.knownPipelines).toContain("suspension-demo");
+  expect(body.knownPipelines).toEqual(["plain", "dated"]);
+});
+
+test("health names the factory that answers here, and the injected pipelines", async () => {
+  vi.stubEnv("JIGS_FACTORY_ROOT", "/factories/acme");
+  const res = await app.request("/health");
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({
+    ok: true,
+    factoryRoot: "/factories/acme",
+    pipelines: ["plain", "dated"],
+  });
+});
+
+test("health outside a factory reports a null root rather than failing liveness", async () => {
+  vi.stubEnv("JIGS_FACTORY_ROOT", "");
+  const cwd = vi.spyOn(process, "cwd").mockReturnValue(dataDir);
+  try {
+    const res = await app.request("/health");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, factoryRoot: null });
+  } finally {
+    cwd.mockRestore();
+  }
 });
 
 test("GET /api/runs answers with empty runs and worktrees when nothing has launched", async () => {

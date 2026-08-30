@@ -37,7 +37,7 @@ export async function stepsDemoPipeline(inputs: StepsDemoInputs) {
   const first = await fn(makeMarker, inputs.triggerId);
   const agentShape = await echoAgentResult();
 
-  // Keep in sync with the registry entry's hookToken.
+  // Keep in sync with the factory entry's hookToken.
   using hook = createHook<{ note?: string }>({
     token: `steps:${inputs.triggerId}`,
   });

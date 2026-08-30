@@ -6,5 +6,5 @@ import { defineConfig } from "nitro";
 export default defineConfig({
   modules: ["workflow/nitro"],
   plugins: ["plugins/start-world.ts"],
-  routes: { "/**": "./src/app.ts" },
+  routes: { "/**": "./src/server.ts" },
 });

@@ -1,4 +1,6 @@
 import { expect, test } from "vitest";
+import { z } from "zod";
+import type { Factory } from "./factory";
 import { isParkToken, listRuns, resolveRunRef, type WorldRun } from "./runs";
 
 const RUN_A = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
@@ -69,16 +71,35 @@ test("a ticket claim is not a park, and a metadata-less hook still is", () => {
   expect(isParkToken("github:pr:acme/api#41")).toBe(true);
 });
 
+// Compiled pipelines carry the workflowId the world records as workflowName;
+// the fixture stamps one so the mapping has something to map.
+const STAMPED_WORKFLOW_ID = "workflow//./pipelines/crash//crashPipeline";
+
+const stampedPipeline = Object.assign(async () => undefined, {
+  workflowId: STAMPED_WORKFLOW_ID,
+});
+
+const factory: Factory = {
+  pipelines: {
+    stamped: { pipeline: stampedPipeline, inputs: z.object({}) },
+    // Untransformed, so it contributes no mapping — as a plain import does.
+    unstamped: {
+      pipeline: async () => undefined,
+      inputs: z.object({}),
+    },
+  },
+};
+
 const worldRun = (over: Partial<WorldRun> = {}): WorldRun => ({
   runId: RUN_A,
-  workflowName: "workflow//./pipelines/demo//demoPipeline",
+  workflowName: STAMPED_WORKFLOW_ID,
   status: "running",
   createdAt: new Date("2026-08-26T10:00:00.000Z"),
   ...over,
 });
 
 test("a non-terminal run holding a park hook is reported suspended", async () => {
-  const rows = await listRuns({
+  const rows = await listRuns(factory, {
     listRuns: async () => [worldRun()],
     listHooks: async () => [{ runId: RUN_A, token: "github:pr:acme/api#41" }],
   });
@@ -86,7 +107,7 @@ test("a non-terminal run holding a park hook is reported suspended", async () =>
 });
 
 test("a run holding only its ticket claim is still running, not suspended", async () => {
-  const rows = await listRuns({
+  const rows = await listRuns(factory, {
     listRuns: async () => [worldRun()],
     listHooks: async () => [
       { runId: RUN_A, token: `linear:ticket:${crypto.randomUUID()}` },
@@ -96,7 +117,7 @@ test("a run holding only its ticket claim is still running, not suspended", asyn
 });
 
 test("a terminal run that still lists a hook keeps its own status", async () => {
-  const rows = await listRuns({
+  const rows = await listRuns(factory, {
     listRuns: async () => [worldRun({ status: "failed" })],
     listHooks: async () => [{ runId: RUN_A, token: "github:pr:acme/api#41" }],
   });
@@ -104,7 +125,7 @@ test("a terminal run that still lists a hook keeps its own status", async () => 
 });
 
 test("runs are listed newest first", async () => {
-  const rows = await listRuns({
+  const rows = await listRuns(factory, {
     listRuns: async () => [
       worldRun({ createdAt: new Date("2026-08-26T09:00:00.000Z") }),
       worldRun({
@@ -117,10 +138,18 @@ test("runs are listed newest first", async () => {
   expect(rows.map((row) => row.runId)).toEqual([RUN_B, RUN_A]);
 });
 
-test("an unmapped workflow name is reported verbatim rather than guessed at", async () => {
-  const rows = await listRuns({
+test("a stamped workflow id is reported as the name its factory gave it", async () => {
+  const rows = await listRuns(factory, {
     listRuns: async () => [worldRun()],
     listHooks: async () => [],
   });
-  expect(rows[0]?.pipeline).toBe("workflow//./pipelines/demo//demoPipeline");
+  expect(rows[0]?.pipeline).toBe("stamped");
+});
+
+test("an unmapped workflow name is reported verbatim rather than guessed at", async () => {
+  const rows = await listRuns(factory, {
+    listRuns: async () => [worldRun({ workflowName: "workflow//./nope//x" })],
+    listHooks: async () => [],
+  });
+  expect(rows[0]?.pipeline).toBe("workflow//./nope//x");
 });

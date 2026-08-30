@@ -9,6 +9,7 @@ import {
   test,
   vi,
 } from "vitest";
+import { z } from "zod";
 // Real git fixtures, reached by path: they are test-only, so they stay out
 // of the jigs package's export map.
 import {
@@ -30,7 +31,20 @@ vi.mock("workflow/api", () => ({
   resumeHook: async () => ({}),
 }));
 
-const { default: app } = await import("./app");
+const { createApp } = await import("./app");
+
+// A fixture rather than a demo: what preflight owes the trigger path is the
+// same whatever pipelines a factory declares, and this one declares exactly
+// the requirement the assertions below are about.
+const app = createApp({
+  pipelines: {
+    bound: {
+      pipeline: async () => undefined,
+      inputs: z.object({}),
+      requires: { bindings: ["api"], harnesses: ["claude"] },
+    },
+  },
+});
 
 let tmp: string;
 let claudeStub: string;
@@ -73,7 +87,7 @@ function seedThreeFailures(): void {
 }
 
 const trigger = () =>
-  app.request("/api/pipelines/preflight-demo/runs", {
+  app.request("/api/pipelines/bound/runs", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ inputs: {} }),
@@ -165,7 +179,7 @@ test("a green preflight lets the trigger call start()", async () => {
   expect(res.status).toBe(201);
   expect(await res.json()).toMatchObject({
     runId: "wr_started",
-    pipeline: "preflight-demo",
+    pipeline: "bound",
   });
   expect(start).toHaveBeenCalledTimes(1);
   removeTmpDir(workspace);
