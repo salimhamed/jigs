@@ -17,7 +17,7 @@ export async function worktree(
   request: WorktreeRequest,
 ): Promise<WorktreeFacts> {
   "use step";
-  const { provisionWorktree } = await import("@jigs/service/worktrees");
+  const { provisionRunWorktree } = await import("@jigs/service/worktrees");
   const { workflowRunId } = getWorkflowMetadata();
-  return provisionWorktree(request, workflowRunId);
+  return provisionRunWorktree(request, workflowRunId);
 }

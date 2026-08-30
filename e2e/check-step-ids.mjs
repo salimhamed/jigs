@@ -1,12 +1,13 @@
 // The only check that can see a broken @jigs/service packaging.
 //
-// Durable step ids are derived at compile time from the package name, version
-// and export subpath a directive-bearing file is reached through, and they are
-// the memoization keys in the World. Every way of breaking that is silent: a
-// closed discovery gate emits a bundle with no steps in it, a collapsed export
-// map gives two modules one namespace, a version bump renames every id at
-// once. None of it throws — the build is clean and the ids are simply wrong,
-// in somebody else's repo, against runs already in flight.
+// No jigs package carries a directive, so every durable step id is derived at
+// compile time from the factory-local path of the file that declares it — and
+// those ids are the memoization keys in the World. Every way of breaking that
+// is silent: a closed discovery gate emits a bundle with no steps in it, a
+// wrapper that loses its directive drops out of the manifest and runs
+// unmemoized, a wrapper file that moves or is renamed takes a new id with it.
+// None of it throws — the build is clean and the ids are simply wrong, in
+// somebody else's repo, against runs already in flight.
 //
 // So: build the fixture factory the way a real factory builds, read the ids
 // back out of the bundle, and diff them against the recorded list.

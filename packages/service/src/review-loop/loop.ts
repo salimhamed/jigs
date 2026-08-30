@@ -34,10 +34,10 @@ export class PrClosedUnmergedError extends Error {
   }
 }
 
-// Here rather than beside pushWorktreeBranch, which raises the fact this
-// error reports: the loop is what turns an empty push into a failure, and
-// ./pull-request reaches node builtins, so nothing workflow-side can import a
-// value from it.
+// Here rather than beside pushWorktreeBranch, which reports the empty branch:
+// ./pull-request imports node builtins at module scope, so nothing
+// workflow-side can import a value from it. The loop is what turns an empty
+// push into a failure anyway.
 export class EmptyBranchError extends Error {
   constructor(branch: string, baseSha: string) {
     super(

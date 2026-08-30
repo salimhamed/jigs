@@ -81,8 +81,10 @@ below still hold except where noted; the version pin stays until AGE-334.
 - **Nothing in this repo compiles a workflow directive any more.** The demos
   left with the pipelines, so `pnpm build` cannot prove the packaging still
   works. `e2e/fixture-factory` exists for that alone: one pipeline exercising a
-  factory-local workflow body, a factory-local inline step, and steps imported
-  from `@jigs/service`, with the emitted ids diffed against a checked-in list.
+  factory-local workflow body, a factory-local inline step, and a factory-owned
+  step wrapper in `steps/` delegating to `@jigs/service` in `node_modules`
+  (*amended by AGE-332*, which replaced the imported-step path), with the
+  emitted ids diffed against a checked-in list.
   A closed discovery gate, a collapsed step namespace, and a renamed id all
   build clean — the id diff is the only place they are visible.
 
@@ -113,7 +115,9 @@ below still hold except where noted; the version pin stays until AGE-334.
 ## Known costs, accepted with eyes open
 
 - The version can never move. `@jigs/service` gets no semver signal at all;
-  what changed between two factory installs is a git question.
+  what changed between two factory installs is a git question. *Superseded by
+  AGE-332*: no id carries the version now, so this cost is being paid down —
+  the pin itself is removed on AGE-334.
 - A factory installs the SDK, its World, hono and zod itself, and those pins
   must match the ones `@jigs/service` peers on. The factory `package.json`
   template carries the same versions, and `src/package.test.ts` fails when the

@@ -19,7 +19,10 @@ export interface WorktreeRequest {
   keep?: boolean;
 }
 
-export async function provisionWorktree(
+// Named for the run it belongs to, like its teardown counterpart below —
+// `provisionWorktree` is already jigs' own git-level primitive, which
+// ./request calls underneath this.
+export async function provisionRunWorktree(
   request: WorktreeRequest,
   runId: string,
 ): Promise<WorktreeFacts> {

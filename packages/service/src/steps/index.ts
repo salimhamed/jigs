@@ -55,11 +55,6 @@ export type AgentFn = <T = undefined>(
   config: AgentStepConfig<T>,
 ) => Promise<AgentStepResult<T>>;
 
-/** {@link ask} with its step wrapper already bound. */
-export type AskFn = <T = undefined>(
-  config: AskStepConfig<T>,
-) => Promise<StepResult<T>>;
-
 // The executor asks the harness for schema-conformant output; the real
 // validation is this workflow-side zod parse of the recorded raw output —
 // deterministic on replay, and where the result gets its `T`.

@@ -36,19 +36,19 @@ async function sourceFiles(dir: string): Promise<string[]> {
   return files.flat().filter((file) => file.endsWith(".ts"));
 }
 
-test("the version is pinned to 0.0.0 — bumping it orphans every in-flight run", () => {
-  // The version is half of a step id, and step ids are the memoization keys in
-  // Postgres. A bump silently renames every step, so runs mid-flight replay
-  // against ids that no longer exist. There is no migration; never bump this.
+test("the version stays pinned to 0.0.0 until AGE-334 retires the pin", () => {
+  // No emitted id carries this version any more — the guard below is what
+  // keeps it that way. The pin outlives its reason by one ticket: it is
+  // removed on AGE-334, with the fixture ids re-recorded there.
   expect(pkg.version).toBe("0.0.0");
 });
 
-test("no file in this package carries a workflow directive", async () => {
+test("no compiled source carries a workflow directive — templates scaffold them into the factory", async () => {
   // The wrappers live in the factory repo, which is what keeps this package's
   // version out of every memoization key. A directive sneaking back in here
   // compiles clean and resurrects a version-bearing id, so this is the guard
-  // that has to hold. src/ and plugins/ are the whole surface: this package is
-  // a library, and the pipelines that consume it live in factory repos.
+  // that has to hold. src/ and plugins/ are what this package compiles;
+  // templates/ ships as factory-local source and is meant to carry directives.
   const scanned = [
     ...(await sourceFiles("src")),
     ...(await sourceFiles("plugins")),
