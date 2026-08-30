@@ -62,7 +62,7 @@ test("an ANTHROPIC_API_KEY overriding the subscription login fails and names the
     repair: expect.stringContaining("ANTHROPIC_API_KEY"),
   });
   expect(result.ok === false && result.repair).toContain(
-    "~/.config/jigs/service.env",
+    "the factory repo's .env",
   );
 });
 

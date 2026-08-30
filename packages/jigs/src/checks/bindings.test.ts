@@ -105,18 +105,16 @@ test("a fully wired binding passes", async () => {
   });
 });
 
-test("a missing jigs.yml collapses to one failed check, not a throw", async () => {
+test("a missing jigs.yml collapses to one failed check naming the file, not a throw", async () => {
+  const root = path.join(tmp, "no-factory-here");
   const report = await runChecks(
-    bindingChecks({
-      factoryRoot: () => path.join(tmp, "no-factory-here"),
-      names: ["api", "web"],
-    }),
+    bindingChecks({ factoryRoot: () => root, names: ["api", "web"] }),
   );
   expect(report.checks).toHaveLength(1);
   expect(report.checks[0]).toMatchObject({
     id: "binding.factory-config",
     ok: false,
-    repair: expect.stringContaining("JIGS_FACTORY_ROOT"),
+    repair: expect.stringContaining(path.join(root, "jigs.yml")),
   });
 });
 

@@ -22,10 +22,7 @@ export async function showLogs(
   ref: string,
   deps: ServiceDeps,
 ): Promise<LogsResult> {
-  const res = await serviceFetch(
-    deps.serviceUrl,
-    `/api/runs/${encodeURIComponent(ref)}`,
-  );
+  const res = await serviceFetch(deps, `/api/runs/${encodeURIComponent(ref)}`);
   if (res.status === 404 || res.status === 409) {
     throw runRefError(ref, await readErrorBody(res));
   }

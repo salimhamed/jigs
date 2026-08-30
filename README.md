@@ -13,7 +13,7 @@ repo bindings (`jigs bind` / `unbind` / `bindings`) in a committed `jigs.yml`.
 Every trigger preflights the pipeline's requirements before creating a run,
 and `jigs doctor` runs the same checks on demand. The operational verbs are
 `jigs run` / `ps` / `logs` / `cancel` / `poke`, each an HTTP client of the
-service; a run can be named by its id, a unique id prefix, or the ticket it
+service `jigs service start` supervises for this factory; a run can be named by its id, a unique id prefix, or the ticket it
 claimed. `jigs cancel <run>` is the escape hatch for a zombie claim owner —
 it releases every resource the run holds so the same ticket can be launched
 again, and `--force` skips its confirmation for a run still in flight. Logs
@@ -43,4 +43,6 @@ pnpm dev        # run the CLI from source
 pnpm check      # lint + typecheck + test + build (all packages)
 ```
 
-To run the service locally see [deploy/README.md](deploy/README.md).
+Start this factory's service with `jigs service start` (`stop` / `restart` /
+`status` / `logs`). The Postgres World compose file lives in
+[deploy/README.md](deploy/README.md).

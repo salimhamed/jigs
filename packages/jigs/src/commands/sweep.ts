@@ -28,7 +28,7 @@ export async function sweepWorktrees(
       "add --clean to delete, or drop --force to report",
     );
   }
-  const res = await serviceFetch(deps.serviceUrl, "/api/worktrees/sweep", {
+  const res = await serviceFetch(deps, "/api/worktrees/sweep", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ clean, force }),
