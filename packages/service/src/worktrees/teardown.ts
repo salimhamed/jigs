@@ -28,7 +28,8 @@ import { ffByCheckout } from "./sweep";
 // "is somebody else's leftover reclaimable", and it answers `held` for a run
 // still executing its own body. Both paths share the one matrix
 // implementation (decideTeardown / applyTeardown), which is what ADR 0007
-// requires; the sweep timer stays the net for runs that never reach here.
+// requires; the operator's `jigs sweep` is the net for runs that never reach
+// here — nothing reclaims a worktree unattended.
 
 export interface TeardownRunDeps {
   sql: Sql;

@@ -21,30 +21,7 @@ export default async function startWorld() {
   await ensureWorktreeRegistry(sql);
   console.log("[service] worktree registry ensured");
 
-  // Teardown's trigger: the SDK has no run-completion callback, so the
-  // terminal-state join runs on a timer. It is the same pass `jigs sweep`
-  // calls, so the matrix has exactly one implementation — minus the
-  // unregistered-directory scan, which only a human should ever act on.
-  const { sweepWorktrees } = await import("../src/worktrees/sweep");
-  let inFlight = false;
-  const pass = async () => {
-    if (inFlight) return;
-    inFlight = true;
-    try {
-      await sweepWorktrees(
-        { clean: true, includeUnregistered: false },
-        { sql },
-      );
-    } finally {
-      inFlight = false;
-    }
-  };
-  await pass().catch(console.error);
-
-  const intervalMs = Number(process.env.JIGS_SWEEP_INTERVAL_MS ?? 60_000);
-  if (intervalMs > 0) {
-    setInterval(() => {
-      pass().catch(console.error);
-    }, intervalMs).unref();
-  }
+  // No background sweep: a run that finishes cleanly tears itself down, and
+  // everything else stays on disk, visible in `jigs ps`, until the operator
+  // reclaims it through `jigs sweep` — nothing deletes behind their back.
 }

@@ -26,11 +26,12 @@ import { type OwnerState, readOwner } from "./acquire";
 import { deleteWorktree, listWorktrees, setWorktreeState } from "./registry";
 import { factoryRoot } from "./request";
 
-// The one disk-against-registry-against-run-states join. Automatic teardown
-// and `jigs sweep` are the same function: the SDK exposes no run-completion
-// callback, and a workflow-body `finally` fires on every suspension because
-// WorkflowSuspension is a thrown Error — so a terminal-state join is the only
-// honest trigger, and the teardown matrix falls out of the classifier.
+// The one disk-against-registry-against-run-states join, behind both `jigs
+// sweep` and the worktree table `jigs ps` renders. Nothing runs it unattended:
+// the SDK exposes no run-completion callback, a workflow-body `finally` fires
+// on every suspension (WorkflowSuspension is a thrown Error), and a background
+// timer was rejected as a surprise — so leftovers stay visible until an
+// operator acts, and the teardown matrix falls out of the classifier.
 
 // Remove the tree, keep both branches: what a discard with no merge behind it
 // looks like, whether the tree was dirty, unregistered, or half-provisioned.
@@ -45,9 +46,11 @@ const DISCARD_TREE = {
 export interface SweepOptions {
   clean?: boolean;
   force?: boolean;
-  // Defaults on for a human running `jigs sweep`; the unattended pass turns
-  // it off, because a workspace_dir binding places worktrees directly in the
-  // operator's own directory, whose other contents a timer must never touch.
+  // A clean scoped to operator-approved worktrees: only entries whose path is
+  // listed are acted on. Absent means every eligible entry.
+  paths?: string[];
+  // Off for callers that must never act on the operator's own directories —
+  // a workspace_dir binding places worktrees directly among them.
   includeUnregistered?: boolean;
 }
 
@@ -152,9 +155,11 @@ export async function sweepWorktrees(
   const removed: string[] = [];
   if (!clean) return { entries, removed, removedDirs: [] };
 
+  const approved = options.paths === undefined ? null : new Set(options.paths);
   const fastForwarded = new Set<string>();
   for (const entry of entries) {
     if (!entry.eligible) continue;
+    if (approved !== null && !approved.has(entry.path)) continue;
     const row = byPath.get(entry.path);
     const checkoutRoot =
       row?.checkoutRoot ?? unregisteredCheckouts.get(entry.path) ?? "";

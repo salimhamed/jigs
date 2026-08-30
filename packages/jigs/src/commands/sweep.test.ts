@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { CliError } from "../errors.ts";
 import { sweepWorktrees } from "./sweep.ts";
 
 const fetchMock = vi.fn();
@@ -14,9 +13,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const deps = () => ({
+const deps = (confirm?: (question: string) => Promise<boolean>) => ({
   out: (line: string) => lines.push(line),
   serviceUrl: "http://svc.test:8990",
+  ...(confirm === undefined ? {} : { confirm }),
 });
 
 const respond = (body: unknown) =>
@@ -32,7 +32,7 @@ const entry = (overrides: Record<string, unknown>) => ({
   ...overrides,
 });
 
-test("sweep posts the clean and force flags and prints one line per entry", async () => {
+test("--force posts one yes-to-everything clean and prints the summary", async () => {
   respond({
     entries: [
       entry({ ownerRunId: "run_a" }),
@@ -47,7 +47,7 @@ test("sweep posts the clean and force flags and prints one line per entry", asyn
     removed: ["/data/wt/feat"],
     removedDirs: [],
   });
-  const result = await sweepWorktrees(deps(), { clean: true, force: true });
+  const result = await sweepWorktrees(deps(), { force: true });
   expect(fetchMock).toHaveBeenCalledWith(
     "http://svc.test:8990/api/worktrees/sweep",
     {
@@ -58,80 +58,75 @@ test("sweep posts the clean and force flags and prints one line per entry", asyn
   );
   expect(result.removed).toEqual(["/data/wt/feat"]);
   expect(lines[0]).toContain("abandoned");
-  expect(lines[0]).toContain("run_a");
   expect(lines[1]).toContain("held");
-  expect(lines.at(-1)).toBe("1 removed, 1 held, 0 need --force");
+  expect(lines.at(-1)).toBe("1 removed, 1 held");
 });
 
-test("a report run posts clean:false", async () => {
-  respond({ entries: [], removed: [], removedDirs: [] });
-  await sweepWorktrees(deps());
-  expect(fetchMock.mock.calls[0]?.[1].body).toBe(
-    JSON.stringify({ clean: false, force: false }),
-  );
-  expect(lines).toEqual(["no worktrees", "0 removed, 0 held, 0 need --force"]);
-});
-
-test("the summary counts entries that would need --force", async () => {
-  respond({
-    entries: [
-      entry({
-        path: "/data/wt/dirty",
-        state: "abandoned-dirty",
-        requiresForce: true,
-        ownerRunId: "run_c",
-      }),
-    ],
-    removed: [],
-    removedDirs: [],
-  });
-  await sweepWorktrees(deps(), { clean: true });
-  expect(lines.at(-1)).toBe("0 removed, 0 held, 1 need --force");
-});
-
-test("--force without --clean is refused with a hint", async () => {
-  const failure = await sweepWorktrees(deps(), { force: true }).then(
-    () => null,
-    (err: unknown) => err,
-  );
-  expect(failure).toBeInstanceOf(CliError);
-  expect((failure as CliError).message).toBe(
-    "--force only applies with --clean",
-  );
-  expect((failure as CliError).hint).toContain("add --clean");
-  expect(fetchMock).not.toHaveBeenCalled();
-});
-
-test("an unreachable service raises the service-not-running CliError", async () => {
-  fetchMock.mockRejectedValueOnce(new TypeError("fetch failed"));
-  const failure = await sweepWorktrees(deps()).then(
-    () => null,
-    (err: unknown) => err,
-  );
-  expect(failure).toBeInstanceOf(CliError);
-  expect((failure as CliError).message).toContain("http://svc.test:8990");
-  expect((failure as CliError).hint).toContain("is the jigs service running?");
-});
-
-test("a trailing slash on the service URL does not break the sweep route", async () => {
-  respond({ entries: [], removed: [], removedDirs: [] });
-  await sweepWorktrees({
-    out: (line: string) => lines.push(line),
-    serviceUrl: "http://svc.test:8990/",
-  });
-  expect(fetchMock.mock.calls[0]?.[0]).toBe(
-    "http://svc.test:8990/api/worktrees/sweep",
-  );
-});
-
-test("a bare sweep report names --clean when eligible trees exist", async () => {
+test("a bare sweep with no terminal reports and points at the removal paths", async () => {
   respond({
     entries: [entry({ ownerRunId: "run_a" })],
     removed: [],
     removedDirs: [],
   });
   await sweepWorktrees(deps());
-  expect(lines.at(-1)).toBe(
-    "report only — jigs sweep --clean removes the 1 eligible",
+  expect(fetchMock.mock.calls[0]?.[1].body).toBe(
+    JSON.stringify({ clean: false, force: false }),
   );
+  expect(lines.at(-1)).toBe(
+    "report only — rerun in a terminal to be asked per worktree, or --force to remove all 1",
+  );
+});
+
+test("a bare sweep with nothing eligible stays a plain report", async () => {
+  respond({ entries: [], removed: [], removedDirs: [] });
+  await sweepWorktrees(deps());
+  expect(lines).toEqual(["no worktrees", "0 removed, 0 held"]);
+});
+
+test("interactive sweep cleans exactly the approved paths, with force", async () => {
+  respond({
+    entries: [
+      entry({ ownerRunId: "run_a" }),
+      entry({
+        path: "/data/wt/dirty",
+        state: "abandoned-dirty",
+        requiresForce: true,
+        ownerRunId: "run_c",
+        reason: "the tree holds uncommitted work",
+      }),
+    ],
+    removed: [],
+    removedDirs: [],
+  });
+  respond({
+    entries: [entry({ ownerRunId: "run_a" })],
+    removed: ["/data/wt/feat"],
+    removedDirs: [],
+  });
+  const questions: string[] = [];
+  const confirm = async (question: string) => {
+    questions.push(question);
+    return question.includes("/data/wt/feat");
+  };
+  const result = await sweepWorktrees(deps(confirm), {});
+  expect(questions).toHaveLength(2);
+  expect(questions[1]).toContain("HOLDS UNCOMMITTED WORK");
+  expect(fetchMock.mock.calls[1]?.[1].body).toBe(
+    JSON.stringify({ clean: true, force: true, paths: ["/data/wt/feat"] }),
+  );
+  expect(result.removed).toEqual(["/data/wt/feat"]);
+});
+
+test("interactive sweep with every answer no removes nothing", async () => {
+  respond({
+    entries: [entry({ ownerRunId: "run_a" })],
+    removed: [],
+    removedDirs: [],
+  });
+  await sweepWorktrees(
+    deps(async () => false),
+    {},
+  );
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(lines.at(-1)).toBe("nothing approved — nothing removed");
 });

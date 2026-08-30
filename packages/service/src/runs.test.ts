@@ -1,13 +1,7 @@
 import { expect, test } from "vitest";
 import { z } from "zod";
 import type { Factory } from "./factory";
-import {
-  isParkToken,
-  listRuns,
-  overlayWorktreeStates,
-  resolveRunRef,
-  type WorldRun,
-} from "./runs";
+import { isParkToken, listRuns, resolveRunRef, type WorldRun } from "./runs";
 
 const RUN_A = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 const RUN_B = "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ";
@@ -158,19 +152,4 @@ test("an unmapped workflow name is reported verbatim rather than guessed at", as
     listHooks: async () => [],
   });
   expect(rows[0]?.pipeline).toBe("workflow//./nope//x");
-});
-
-test("a terminal owner's still-registered worktree reads abandoned, not active", () => {
-  const runs = [
-    { runId: RUN_A, pipeline: "ship", status: "cancelled", createdAt: "" },
-    { runId: RUN_B, pipeline: "ship", status: "running", createdAt: "" },
-  ];
-  const worktrees = [
-    { path: "/wt/a", state: "active", ownerRunId: RUN_A },
-    { path: "/wt/b", state: "active", ownerRunId: RUN_B },
-    { path: "/wt/c", state: "abandoned-dirty", ownerRunId: RUN_A },
-  ];
-  expect(
-    overlayWorktreeStates(runs, worktrees).map((row) => row.state),
-  ).toEqual(["abandoned", "active", "abandoned-dirty"]);
 });

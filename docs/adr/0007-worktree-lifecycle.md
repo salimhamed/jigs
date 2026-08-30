@@ -106,3 +106,17 @@ files are the kept record.
   Workflow SDK spike (AGE-304) replaces the execution engine, only the
   placement of the teardown hook moves; the matrix, sweep, freshness, and ff
   rules stand.
+
+## Amendment (2026-08-30, AGE-318 dogfood)
+
+The background sweep timer is removed, and `reviewLoop` no longer calls
+teardown itself. The first mid-stream cancellation showed the timer deleting
+state between two commands an operator was reading — automation nobody asked
+for. The lifecycle is now: a merged run's pipeline calls `teardownWorktrees`
+as its own last line (a plain sequential call, never a `finally` — suspension
+is a thrown error); every other ending leaves the worktree on disk, `jigs ps`
+shows it as `abandoned` via the same classifier sweep uses, and the operator
+reclaims it through `jigs sweep` — interactive per worktree on a terminal,
+report-only otherwise, `--force` as the explicit unattended yes (the old
+`--clean`/`--force` pair collapsed into it). `jigs cancel` names the worktrees
+it leaves behind. The matrix (decide/apply) is unchanged.

@@ -78,7 +78,6 @@ type Calls = {
   replies: Array<[number, string]>;
   comments: string[];
   merges: string[];
-  teardowns: Array<{ merged: boolean }>;
   needsHuman: number;
   gateFinished: boolean;
 };
@@ -130,10 +129,6 @@ function makeDeps(wakes: GateWake[]): ReviewLoopDeps {
       return { merged: true, sha: "merge-sha" };
     },
     readDiff: async () => "THE-DIFF",
-    teardownRun: async (outcome) => {
-      calls.teardowns.push(outcome);
-      return ["/tmp/worktree"];
-    },
   };
 }
 
@@ -165,7 +160,6 @@ beforeEach(() => {
     replies: [],
     comments: [],
     merges: [],
-    teardowns: [],
     needsHuman: 0,
     gateFinished: false,
   };
@@ -188,7 +182,6 @@ test("an empty branch fails loudly instead of opening an empty PR", async () => 
   deps.pushWorktreeBranch = async () => ({ commits: 0, headSha: "base-sha-1" });
   await expect(run(deps)).rejects.toThrow(snapshot.branchName);
   // The jig's own failure follows the failed-run rows rather than the sweep.
-  expect(calls.teardowns).toEqual([{ merged: false }]);
 });
 
 test("a review-comments wake answers every thread in place", async () => {
@@ -270,7 +263,6 @@ test("the fourth consecutive red escalates as an @-mention instead of a fix", as
   expect(calls.needsHuman).toBe(0);
   // And the gate keeps being consumed past the escalation: the close after it
   // still reached the jig.
-  expect(calls.teardowns).toEqual([{ merged: true }]);
 });
 
 test("a fix that commits nothing escalates instead of waiting for a wake that cannot come", async () => {
@@ -391,7 +383,7 @@ test("with no reviewer to name the escalation falls back to the repo owner", asy
   expect(calls.comments[0]?.startsWith("@acme")).toBe(true);
 });
 
-test("an approval squash-merges and tears the run down", async () => {
+test("an approval squash-merges and returns the merged PR", async () => {
   const deps = makeDeps([
     {
       kind: "approved",
@@ -405,7 +397,6 @@ test("an approval squash-merges and tears the run down", async () => {
   const result = await run(deps);
 
   expect(calls.merges).toEqual(["AGE-316 Review loop jig"]);
-  expect(calls.teardowns).toEqual([{ merged: true }]);
   expect(result.pr).toEqual(pr);
   expect(calls.gateFinished).toBe(false);
 });
@@ -428,8 +419,7 @@ test("a merge GitHub refuses leaves the PR open and the run listening", async ()
   expect(calls.comments).toHaveLength(1);
   expect(calls.comments[0]).toContain("@salim");
   expect(calls.comments[0]).toContain("not mergeable");
-  // The close after it is what tears the run down, on the failed rows.
-  expect(calls.teardowns).toEqual([{ merged: false }]);
+  // The close after it is what ends the run; its worktree stays for sweep.
 });
 
 test("in human-merges mode an approval merges nothing and keeps listening", async () => {
@@ -445,16 +435,14 @@ test("in human-merges mode an approval merges nothing and keeps listening", asyn
   const result = await run(deps, "human");
 
   expect(calls.merges).toEqual([]);
-  expect(calls.teardowns).toEqual([{ merged: true }]);
   expect(result.pr).toEqual(pr);
 });
 
-test("a PR closed unmerged tears down on the failed rows and fails the run", async () => {
+test("a PR closed unmerged fails the run and leaves the worktree for sweep", async () => {
   const deps = makeDeps([{ kind: "closed", merged: false }]);
 
   await expect(run(deps)).rejects.toThrow(PrClosedUnmergedError);
   // Teardown ran before the throw, on the failed-run rows.
-  expect(calls.teardowns).toEqual([{ merged: false }]);
 });
 
 test("a gate that stops delivering before the PR closes is an error, not a silent success", async () => {

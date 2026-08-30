@@ -204,7 +204,7 @@ jigs run <pipeline> --input issueId=<uuid>
 jigs ps
 jigs logs <run>
 jigs cancel <run> [--force]
-jigs sweep
+jigs sweep [--force]
 ```
 
 Every verb dials the service of the factory you are standing in;
@@ -220,7 +220,17 @@ ambiguous prefix lists its candidates instead of guessing.
 back for: cancelling releases every hook it claimed, so the same ticket can be
 launched again. A suspended run cancels silently — no process is involved —
 while a run still in flight is confirmed first, and `--force` skips that
-prompt when there is no terminal to answer it.
+prompt when there is no terminal to answer it. Cancel never deletes anything:
+it names the worktrees the run leaves behind, and `jigs sweep` is how they are
+reclaimed.
+
+`jigs sweep` is the only thing that ever removes a leftover worktree — nothing
+runs in the background. A run whose PR merged tears its own worktree down (the
+pipeline's last line); every other ending leaves the tree on disk, visible in
+`jigs ps` as `abandoned`. On a terminal, `jigs sweep` asks per worktree, with
+a louder warning for trees holding uncommitted work; without a terminal it
+only reports, and `jigs sweep --force` removes everything eligible without
+asking — dirty trees included, so it is the flag for cron, not for habit.
 
 ### 7. Run history (`workflow web`)
 
