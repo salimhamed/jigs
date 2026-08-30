@@ -135,7 +135,7 @@ test("start refuses when the factory has not built its service", () => {
     return undefined;
   })();
   expect(err?.message).toContain(path.join(root, SERVICE_ENTRY));
-  expect(err?.hint).toContain("pnpm build");
+  expect(err?.hint).toContain("jigs build");
   expect(io.spawns).toHaveLength(0);
 });
 

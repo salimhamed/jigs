@@ -3,8 +3,10 @@ import readline from "node:readline/promises";
 import { Command, Option } from "commander";
 import { bindRepo } from "./commands/bind.ts";
 import { type BindingRow, listBindings } from "./commands/bindings.ts";
+import { buildFactoryService } from "./commands/build.ts";
 import { cancelRun } from "./commands/cancel.ts";
 import { runDoctor } from "./commands/doctor.ts";
+import { initFactory } from "./commands/init.ts";
 import { showLogs } from "./commands/logs.ts";
 import { pokeRun } from "./commands/poke.ts";
 import { listRunsForPs } from "./commands/ps.ts";
@@ -73,6 +75,20 @@ const out = (line: string) => console.log(line);
 const program = new Command("jigs")
   .description("Guides coding agents through repeatable workflows")
   .showHelpAfterError("(add --help for additional information)");
+
+program
+  .command("init")
+  .description("scaffold a factory repo in the current directory")
+  .action(() => {
+    initFactory({ cwd: process.cwd(), out });
+  });
+
+program
+  .command("build")
+  .description("compile this factory's pipelines into its service bundle")
+  .action(async () => {
+    await buildFactoryService({ cwd: process.cwd(), out });
+  });
 
 program
   .command("bind")

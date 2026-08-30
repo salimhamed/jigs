@@ -17,19 +17,29 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "jigs": "workspace:*"
+  },
+  "peerDependencies": {
     "@workflow/world-postgres": "4.3.4",
     "hono": "^4.13.4",
-    "jigs": "workspace:*",
     "postgres": "^3.4.7",
     "workflow": "4.8.4",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@workflow/world-postgres": "4.3.4",
+    "hono": "^4.13.4",
     "nitro": "3.0.260610-beta",
-    "rollup": "^4.62.5"
+    "postgres": "^3.4.7",
+    "rollup": "^4.62.5",
+    "workflow": "4.8.4",
+    "zod": "^4.4.3"
   },
   "exports": {
     ".": "./src/factory.ts",
+    "./app": "./src/app.ts",
+    "./build": "./src/build.ts",
+    "./nitro": "./src/nitro.ts",
     "./steps": "./src/steps/index.ts",
     "./steps/jit": "./src/steps/jit.ts",
     "./suspension/claim": "./src/suspension/claim.ts",

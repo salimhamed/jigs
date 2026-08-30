@@ -1,0 +1,23 @@
+import { fn } from "@jigs/service/steps";
+import { z } from "zod";
+
+export const exampleInputs = z.object({
+  note: z.string().default("hello from {{FACTORY_NAME}}"),
+});
+
+type ExampleInputs = z.output<typeof exampleInputs> & { triggerId: string };
+
+// Scaffolding: delete it once this factory has a pipeline of its own. It is
+// here so a fresh factory has something `jigs run` can launch end to end.
+export async function examplePipeline(inputs: ExampleInputs) {
+  "use workflow";
+
+  const said = await fn(say, inputs.note);
+  return said.output;
+}
+
+async function say(note: string) {
+  "use step";
+  console.log(`[example] ${note}`);
+  return { note, at: new Date().toISOString() };
+}

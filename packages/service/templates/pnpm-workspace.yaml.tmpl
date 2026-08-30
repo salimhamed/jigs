@@ -1,0 +1,7 @@
+# pnpm 11 no longer reads the `pnpm` field in package.json, so the native
+# postinstalls are allowed here or not at all. Without them the workflow
+# compiler has no swc or esbuild binary and silently compiles nothing.
+allowBuilds:
+  '@swc/core': true
+  cbor-extract: true
+  esbuild: true

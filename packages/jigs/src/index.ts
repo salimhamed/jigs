@@ -1,8 +1,10 @@
 export type { CheckOutcome, CheckReport } from "./checks/catalog.ts";
 export { type BindResult, bindRepo } from "./commands/bind.ts";
 export { type BindingRow, listBindings } from "./commands/bindings.ts";
+export { type BuildDeps, buildFactoryService } from "./commands/build.ts";
 export { type CancelResult, cancelRun } from "./commands/cancel.ts";
 export { runDoctor } from "./commands/doctor.ts";
+export { type InitResult, initFactory } from "./commands/init.ts";
 export { type LogsResult, showLogs } from "./commands/logs.ts";
 export { type PokeResult, pokeRun } from "./commands/poke.ts";
 export {

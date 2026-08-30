@@ -1,0 +1,22 @@
+# This factory's own Postgres World. The project name namespaces the
+# container and the volume, so two factories on one machine never collide.
+name: {{FACTORY_NAME}}
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: jigs
+      POSTGRES_PASSWORD: jigs
+      POSTGRES_DB: jigs
+    ports:
+      - "{{POSTGRES_PORT}}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jigs -d jigs"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+volumes:
+  postgres-data:
