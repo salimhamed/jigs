@@ -165,10 +165,8 @@ it.
   [ADR 0013](./0013-factory-owned-steps.md)*: no id carries the version, the
   pin is gone, and both packages are at `0.1.0` on ordinary semver. Retired
   with it: the exports-map exact-string trap (the first consequence above
-  records that) and the discovery-gate fail-open note in `src/package.test.ts`,
-  since this package carries no directive and that gate has nothing to decide
-  about it. The peer set stays for its other reason, one copy of `workflow` per
-  process.
+  records that). The peer set stays for its other reason, one copy of
+  `workflow` per process.
 - A factory installs the SDK, its World, hono and zod itself, and those pins
   must match the ones `@jigs/service` peers on. The factory `package.json`
   template carries the same versions, and `src/package.test.ts` fails when the

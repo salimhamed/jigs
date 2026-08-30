@@ -40,8 +40,9 @@ rather than a constraint.** ADR 0012 required it — directives do not survive a
 compile, and a stripped directive is silent — and with no directives left, the
 requirement lapsed. The replacement was measured, not assumed: building the
 package to `dist/` with tsdown, repointing every `exports` entry at the
-emitted `.js`, and rebuilding the fixture produced the same eighteen ids and
-the same zero `node:` specifiers in the workflow bundle. It stays source
+emitted `.js`, and patching `src/nitro.ts`'s plugin path — the first thing
+`dist/` breaks — then rebuilding the fixture produced the same eighteen ids
+and the same zero `node:` specifiers in the workflow bundle. It stays source
 anyway, for a reason that has nothing to do with directives: a factory installs
 this package with `link:`, and `link:` builds nothing, so a `dist/` would be
 whatever the jigs checkout last happened to emit — `git pull` would stop being
