@@ -25,7 +25,7 @@ export async function worktreeDemoPipeline(inputs: WorktreeDemoInputs) {
   });
   console.log(`[worktree-demo] provisioned ${facts.path} on ${facts.branch}`);
 
-  // Keep in sync with the registry entry's hookToken.
+  // Keep in sync with the factory entry's hookToken.
   using hook = createHook<{ note?: string }>({
     token: `worktree:${inputs.triggerId}`,
   });

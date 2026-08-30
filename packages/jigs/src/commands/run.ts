@@ -100,7 +100,7 @@ export async function launchRun(
 ): Promise<LaunchResult> {
   const inputs = parseInputs(pairs);
 
-  // Client-side first: a schema violation must cost no run. The registry owns
+  // Client-side first: a schema violation must cost no run. The factory owns
   // the schema, so the CLI fetches it rather than keeping a second copy.
   const schemaRes = await serviceFetch(
     deps.serviceUrl,

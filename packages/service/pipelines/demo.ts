@@ -16,7 +16,7 @@ export async function demoPipeline(inputs: DemoInputs) {
 
   // Hook tokens are a global namespace per backend (duplicates fail the
   // run), so the token embeds the route-minted triggerId. Keep in sync with
-  // the registry entry's hookToken.
+  // the factory entry's hookToken.
   using hook = createHook<{ approved: boolean; note?: string }>({
     token: `demo:${inputs.triggerId}`,
   });

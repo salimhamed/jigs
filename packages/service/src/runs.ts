@@ -4,7 +4,7 @@
 
 import { getHookByToken, getRun } from "workflow/api";
 import { getWorld } from "workflow/runtime";
-import { registry } from "./registry";
+import type { Factory } from "./factory";
 import { ticketToken } from "./suspension/tokens";
 
 // The SDK mints run ids as `wrun_` + a ULID, so a ref is run-id-shaped (with
@@ -85,7 +85,10 @@ export interface RunListDeps {
   listHooks?: () => Promise<Array<{ runId: string; token: string }>>;
 }
 
-export async function listRuns(deps: RunListDeps = {}): Promise<RunRow[]> {
+export async function listRuns(
+  factory: Factory,
+  deps: RunListDeps = {},
+): Promise<RunRow[]> {
   const [runs, hooks] = await Promise.all([
     (deps.listRuns ?? worldRuns)(),
     (deps.listHooks ?? worldHooks)(),
@@ -93,10 +96,19 @@ export async function listRuns(deps: RunListDeps = {}): Promise<RunRow[]> {
   const parkHooks = new Set(
     hooks.filter((hook) => isParkToken(hook.token)).map((hook) => hook.runId),
   );
+  // The compiler stamps each pipeline with the workflowId the world stores as
+  // workflowName; untransformed (unit tests, plain imports) there is nothing to
+  // map and the raw name below is the honest answer.
+  const pipelineByWorkflowId = new Map(
+    Object.entries(factory.pipelines).flatMap(([name, entry]) => {
+      const id = (entry.pipeline as { workflowId?: string }).workflowId;
+      return id === undefined ? [] : [[id, name] as [string, string]];
+    }),
+  );
   return runs
     .map((run) => ({
       runId: run.runId,
-      pipeline: pipelineName(run.workflowName),
+      pipeline: pipelineByWorkflowId.get(run.workflowName) ?? run.workflowName,
       // Same reasoning as GET /api/runs/:runId: the SDK has no `suspended`
       // status, so a non-terminal run holding a hook other than its ticket
       // claim is parked.
@@ -108,19 +120,6 @@ export async function listRuns(deps: RunListDeps = {}): Promise<RunRow[]> {
     }))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
-
-// The compiler stamps each pipeline with the workflowId the world stores as
-// workflowName; untransformed (unit tests, plain imports) there is nothing to
-// map and the raw name is the honest answer.
-const pipelineByWorkflowId = new Map(
-  Object.entries(registry).flatMap(([name, entry]) => {
-    const id = (entry.pipeline as { workflowId?: string }).workflowId;
-    return id === undefined ? [] : [[id, name] as [string, string]];
-  }),
-);
-
-const pipelineName = (workflowName: string) =>
-  pipelineByWorkflowId.get(workflowName) ?? workflowName;
 
 const worldRunExists = (runId: string) => getRun(runId).exists;
 

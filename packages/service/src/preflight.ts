@@ -14,7 +14,7 @@ import {
 import { getAuthenticatedUser } from "./providers/github";
 import { getViewer } from "./providers/linear";
 
-function factoryRoot(): string {
+export function factoryRoot(): string {
   const override = process.env.JIGS_FACTORY_ROOT;
   if (override !== undefined && override !== "") return override;
   return locateFactoryRoot(process.cwd());
