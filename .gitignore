@@ -6,3 +6,4 @@ dist/
 .output/
 .workflow-data/
 .swc/
+.jigs/

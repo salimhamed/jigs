@@ -35,7 +35,7 @@ test("a suspended run renders as suspended, not running", async () => {
     runs: [
       {
         runId: RUN,
-        pipeline: "suspension-demo",
+        pipeline: "deliver-feature",
         status: "suspended",
         createdAt: "2026-08-26T11:30:00.000Z",
       },
@@ -45,7 +45,7 @@ test("a suspended run renders as suspended, not running", async () => {
   await listRunsForPs(deps(), NOW);
   expect(lines).toEqual([
     "RUN                              PIPELINE         STATUS     AGE",
-    `${RUN}  suspension-demo  suspended  30m`,
+    `${RUN}  deliver-feature  suspended  30m`,
   ]);
 });
 
@@ -54,7 +54,7 @@ test("a worktree the registry marks abandoned-dirty is shown, not filtered", asy
     runs: [
       {
         runId: RUN,
-        pipeline: "suspension-demo",
+        pipeline: "deliver-feature",
         status: "failed",
         createdAt: "2026-08-25T12:00:00.000Z",
       },

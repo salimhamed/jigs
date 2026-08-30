@@ -1,5 +1,11 @@
 # Adopt the Vercel Workflow SDK as the execution runtime
 
+> **Amended by [ADR 0012](./0012-per-factory-service.md).** There is no single
+> global service: each factory repo builds and runs its own, against its own
+> Postgres World, supervised by `jigs service` through a pidfile rather than a
+> systemd user unit. The Nitro build moves with it — the factory compiles its
+> own pipelines with its own install. Everything else here stands.
+
 jigs does not build its own durable-execution runtime: pipelines run on
 Vercel's Workflow SDK (`workflow`), with the self-hosted Postgres World
 (`@workflow/world-postgres`) as store and queue. ADR 0003's programming model

@@ -9,9 +9,6 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "nitro dev",
-    "build": "nitro build",
-    "start": "node .output/server/index.mjs",
     "test": "vitest run",
     "test:live": "vitest run --config vitest.live.config.ts",
     "typecheck": "tsc --noEmit"
@@ -31,7 +28,6 @@
     "hono": "^4.13.4",
     "nitro": "3.0.260610-beta",
     "postgres": "^3.4.7",
-    "rollup": "^4.62.5",
     "workflow": "4.8.4",
     "zod": "^4.4.3"
   },

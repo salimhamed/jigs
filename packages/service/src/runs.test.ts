@@ -65,8 +65,8 @@ test("a full-length run id nobody minted falls through to unknown", async () => 
 
 test("a ticket claim is not a park, and a metadata-less hook still is", () => {
   expect(isParkToken(`linear:ticket:${crypto.randomUUID()}`)).toBe(false);
-  // The demo pipelines park on createHook({ token }) with no metadata, so
-  // parkedness cannot depend on a suspension envelope being hydratable.
+  // A pipeline that parks on createHook({ token }) with no metadata is still
+  // parked, so parkedness cannot depend on a hydratable suspension envelope.
   expect(isParkToken(`demo:${crypto.randomUUID()}`)).toBe(true);
   expect(isParkToken("github:pr:acme/api#41")).toBe(true);
 });

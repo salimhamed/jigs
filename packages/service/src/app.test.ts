@@ -7,8 +7,8 @@ import { z } from "zod";
 import { createApp } from "./app";
 import type { Factory } from "./factory";
 
-// The routes are exercised against pipelines this file declares, never the
-// package's demos: what is under test is the framework, and the demos leave.
+// The routes are exercised against pipelines this file declares: what is under
+// test is the framework.
 const fixture = {
   pipelines: {
     plain: {

@@ -45,8 +45,8 @@ test("every file carrying a workflow directive is an exact exports target", asyn
   // A step file reached through no export subpath, or through a wildcard the
   // SDK cannot match by exact string, compiles fine and fails only at runtime
   // in the factory repo. Adding a step file means adding an exports entry.
-  // src/ and plugins/ are the factory-facing surface; pipelines/ is this app's
-  // own workflows, which factory repos replace rather than import.
+  // src/ and plugins/ are the whole surface: this package is a library, and
+  // the pipelines that consume it live in factory repos.
   const scanned = [
     ...(await sourceFiles("src")),
     ...(await sourceFiles("plugins")),
@@ -74,6 +74,13 @@ test("the runtime a factory supplies is a peer here, and still a devDependency",
   // of `workflow` per process is what makes a compiled step id resolve to a
   // registered function. They stay in devDependencies so this repo's own
   // tests and build still resolve them.
+  //
+  // The compiler decides whether to follow imports into a package by looking
+  // for `workflow` in any of its dependency fields — but it reads them through
+  // `require.resolve("@jigs/service/package.json")`, which this exports map
+  // does not answer, so today it fails open and follows regardless. Adding a
+  // "./package.json" export would arm that gate, and then dropping this peer
+  // would silently stop compiling every step in this package.
   const peers: Record<string, string> = pkg.peerDependencies;
   expect(Object.keys(peers)).toContain("workflow");
   for (const [name, range] of Object.entries(peers)) {

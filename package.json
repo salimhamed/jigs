@@ -15,6 +15,7 @@
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
     "build": "pnpm -r run build",
+    "e2e": "pnpm -C e2e/fixture-factory install --frozen-lockfile && pnpm -C e2e/fixture-factory exec jigs build && node e2e/check-step-ids.mjs && pnpm -C e2e/fixture-factory typecheck",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {

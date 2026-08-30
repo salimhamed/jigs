@@ -24,6 +24,14 @@ coding agent on a harness, in a worktree), a **model step** (a plain model
 call, no worktree), and a **function step** (plain TypeScript).
 _Avoid_: node, task, stage
 
+**Step id**:
+The name the runtime memoizes a step's result under, derived at compile time
+from where the step's code was reached: its package name, that package's
+version and the export subpath, or a path relative to the factory root for a
+factory-local step. Not authored, not stable across a move — a step id that
+changes is every in-flight run losing its memory.
+_Avoid_: step key, step name, cache key
+
 **Run**:
 One execution of a pipeline. Detachable: it survives terminal close and idles
 awaiting human review.
@@ -180,7 +188,8 @@ trigger path.
 _Avoid_: launch endpoint, kickoff, start route
 
 **World**:
-The Workflow SDK's persistence-and-queue backend the service runs against —
-the Postgres World in docker for jigs; the SDK's filesystem World only for
-scratch development. Selected by environment, never by code.
+The Workflow SDK's persistence-and-queue backend a service runs against —
+one per factory repo: its own Postgres container on its own port, holding
+only its runs. The SDK's filesystem World is for scratch development only.
+Selected by environment, never by code.
 _Avoid_: backend, database, store

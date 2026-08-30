@@ -1,0 +1,3 @@
+# Never started — `jigs build` only needs this file to find the factory root.
+service:
+  port: 8999

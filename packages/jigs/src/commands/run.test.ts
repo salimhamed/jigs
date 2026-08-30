@@ -31,7 +31,7 @@ const inputsSchema = z.toJSONSchema(
 const respondSchema = () =>
   fetchMock.mockResolvedValueOnce(
     new Response(
-      JSON.stringify({ name: "suspension-demo", inputs: inputsSchema }),
+      JSON.stringify({ name: "deliver-feature", inputs: inputsSchema }),
     ),
   );
 
@@ -59,12 +59,12 @@ test("a value the pipeline's schema rejects fails with the schema's own error", 
 test("a schema violation never reaches the trigger route", async () => {
   respondSchema();
   const err = await failure(
-    launchRun("suspension-demo", ["issueId=AGE-123"], deps()),
+    launchRun("deliver-feature", ["issueId=AGE-123"], deps()),
   );
   expect(err).toBeInstanceOf(CliError);
   expect(fetchMock).toHaveBeenCalledTimes(1);
   expect(fetchMock.mock.calls[0]?.[0]).toBe(
-    "http://svc.test:8990/api/pipelines/suspension-demo/inputs",
+    "http://svc.test:8990/api/pipelines/deliver-feature/inputs",
   );
 });
 
@@ -109,14 +109,14 @@ test("an unknown pipeline fails naming the pipelines the service does host", asy
     new Response(
       JSON.stringify({
         error: "unknown pipeline: nope",
-        knownPipelines: ["demo-crash", "suspension-demo"],
+        knownPipelines: ["triage-bug", "deliver-feature"],
       }),
       { status: 404 },
     ),
   );
   const err = await failure(launchRun("nope", [], deps()));
   expect(err?.message).toBe("unknown pipeline: nope");
-  expect(err?.hint).toContain("demo-crash, suspension-demo");
+  expect(err?.hint).toContain("triage-bug, deliver-feature");
 });
 
 test("a refused launch prints every preflight failure with its repair", async () => {
@@ -147,7 +147,7 @@ test("a refused launch prints every preflight failure with its repair", async ()
   );
   const err = await failure(
     launchRun(
-      "suspension-demo",
+      "deliver-feature",
       ["issueId=6b1c1d2e-0000-4000-8000-000000000000"],
       deps(),
     ),
@@ -169,7 +169,7 @@ test("a started run prints its id, pipeline, resume token and log pointer", asyn
     new Response(
       JSON.stringify({
         runId: "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
-        pipeline: "suspension-demo",
+        pipeline: "deliver-feature",
         resumeToken: "demo:trigger-1",
         logs: "npx workflow web --backend @workflow/world-postgres wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
       }),
@@ -177,19 +177,19 @@ test("a started run prints its id, pipeline, resume token and log pointer", asyn
     ),
   );
   await launchRun(
-    "suspension-demo",
+    "deliver-feature",
     ["issueId=6b1c1d2e-0000-4000-8000-000000000000"],
     deps(),
   );
   expect(lines).toEqual([
     "run wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
-    "pipeline suspension-demo",
+    "pipeline deliver-feature",
     "resume token demo:trigger-1",
     "logs: npx workflow web --backend @workflow/world-postgres wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
   ]);
   const [, trigger] = fetchMock.mock.calls;
   expect(trigger?.[0]).toBe(
-    "http://svc.test:8990/api/pipelines/suspension-demo/runs",
+    "http://svc.test:8990/api/pipelines/deliver-feature/runs",
   );
   expect(JSON.parse(String(trigger?.[1]?.body))).toEqual({
     inputs: { issueId: "6b1c1d2e-0000-4000-8000-000000000000" },
@@ -200,7 +200,7 @@ test("a misspelled --input key is refused before the launch is paid for", async 
   respondSchema();
   const err = await failure(
     launchRun(
-      "suspension-demo",
+      "deliver-feature",
       ["issueId=6b1c1d2e-0000-4000-8000-000000000000", "askhuman=true"],
       deps(),
     ),
@@ -234,7 +234,7 @@ test("a refinement only the service can see renders as a schema error", async ()
   );
   const err = await failure(
     launchRun(
-      "suspension-demo",
+      "deliver-feature",
       ["issueId=6b1c1d2e-0000-4000-8000-000000000000"],
       deps(),
     ),
@@ -253,7 +253,7 @@ test("a 400 carrying no issues keeps the raw-body error", async () => {
   fetchMock.mockResolvedValueOnce(new Response("nope", { status: 400 }));
   const err = await failure(
     launchRun(
-      "suspension-demo",
+      "deliver-feature",
       ["issueId=6b1c1d2e-0000-4000-8000-000000000000"],
       deps(),
     ),
@@ -263,7 +263,7 @@ test("a 400 carrying no issues keeps the raw-body error", async () => {
 
 test("an unreachable service hints at --service / JIGS_SERVICE_URL", async () => {
   fetchMock.mockRejectedValueOnce(new TypeError("fetch failed"));
-  const err = await failure(launchRun("suspension-demo", [], deps()));
+  const err = await failure(launchRun("deliver-feature", [], deps()));
   expect(err?.message).toContain("http://svc.test:8990");
   expect(err?.hint).toContain("JIGS_SERVICE_URL");
 });

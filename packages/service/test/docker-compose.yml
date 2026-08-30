@@ -1,8 +1,11 @@
-name: jigs
+# The Postgres the *.live.test.ts files in this package run against. Named
+# apart from any factory's own World so the two never share a container or a
+# volume: docker compose -f test/docker-compose.yml up -d --wait
+name: jigs-service-tests
 services:
   postgres:
     image: postgres:17-alpine
-    container_name: jigs-postgres
+    container_name: jigs-service-tests-postgres
     environment:
       POSTGRES_USER: jigs
       POSTGRES_PASSWORD: jigs
@@ -10,7 +13,7 @@ services:
     ports:
       - "5439:5432"
     volumes:
-      - jigs-postgres-data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U jigs -d jigs"]
       interval: 5s
@@ -18,4 +21,4 @@ services:
       retries: 10
     restart: unless-stopped
 volumes:
-  jigs-postgres-data:
+  postgres-data:
