@@ -1,0 +1,14 @@
+import type { Factory } from "@jigs/service";
+import { exampleInputs, examplePipeline } from "./pipelines/example.ts";
+
+// This factory's pipelines, keyed by the name `jigs run` takes. `jigs build`
+// generates the service entry from this file — nothing else imports it.
+export default {
+  pipelines: {
+    // Scaffolding: delete it with pipelines/example.ts.
+    example: {
+      pipeline: examplePipeline,
+      inputs: exampleInputs,
+    },
+  },
+} satisfies Factory;

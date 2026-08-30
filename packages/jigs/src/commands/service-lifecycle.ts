@@ -26,8 +26,8 @@ import { jigsDataDir } from "../paths.ts";
 // this" repair string to one constant, `jigs service restart`.
 
 // The factory repo builds its service with nitro; this is where that build
-// lands. Producing it is the factory's own job, so a missing entry is an
-// error here, never something jigs silently builds.
+// lands. Producing it is `jigs build`'s job, so a missing entry is an error
+// here, never something the supervisor silently builds.
 export const SERVICE_ENTRY = ".output/server/index.mjs";
 
 const STOP_TIMEOUT_MS = 10_000;
@@ -126,7 +126,7 @@ export function startService(deps: ServiceLifecycleDeps): void {
   if (!existsSync(entry)) {
     throw new CliError(
       `no built service at ${entry}`,
-      `build this factory's service first: pnpm build in ${sv.factoryRoot}`,
+      `build this factory's service first: jigs build in ${sv.factoryRoot}`,
     );
   }
 

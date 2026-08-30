@@ -68,3 +68,33 @@ test("every exports target is raw TypeScript that exists on disk", () => {
     expect(existsSync(path.join(packageDir, target))).toBe(true);
   }
 });
+
+test("the runtime a factory supplies is a peer here, and still a devDependency", () => {
+  // A factory repo installs the SDK, its World, hono and zod itself: one copy
+  // of `workflow` per process is what makes a compiled step id resolve to a
+  // registered function. They stay in devDependencies so this repo's own
+  // tests and build still resolve them.
+  const peers: Record<string, string> = pkg.peerDependencies;
+  expect(Object.keys(peers)).toContain("workflow");
+  for (const [name, range] of Object.entries(peers)) {
+    expect(pkg.devDependencies[name], name).toBe(range);
+    expect(pkg.dependencies[name], name).toBeUndefined();
+  }
+});
+
+test("the factory template pins the same versions this package peers on", async () => {
+  // The template is what a factory installs; a peer bumped here and not there
+  // gives the factory two copies of the SDK and a manifest full of step ids
+  // nothing registers.
+  const template = JSON.parse(
+    (
+      await readFile(
+        path.join(packageDir, "templates", "package.json.tmpl"),
+        "utf8",
+      )
+    ).replaceAll("{{JIGS_REPO}}", "/jigs"),
+  );
+  for (const [name, range] of Object.entries<string>(pkg.peerDependencies)) {
+    expect(template.dependencies[name], name).toBe(range);
+  }
+});
