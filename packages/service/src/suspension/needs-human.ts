@@ -62,7 +62,7 @@ export async function needsHuman(
   try {
     let cursor = posted.postedAt;
     for await (const _hint of claim.hook) {
-      const check = await checkForReply(claim.issueId, cursor, posted.viewerId);
+      const check = await checkForReply(claim.issueId, cursor, posted.commentId);
       if (check.reply !== null) return check.reply;
       cursor = check.cursor;
     }
@@ -96,15 +96,18 @@ export async function postNeedsHumanComment(
 export async function checkForHumanReply(
   issueId: string,
   sinceIso: string,
-  viewerId: string,
+  postedCommentId: string,
 ): Promise<{ reply: HumanReply | null; cursor: string }> {
   const comments = await listCommentsSince(issueId, sinceIso);
   const cursor = comments.reduce(
     (max, comment) => (comment.createdAt > max ? comment.createdAt : max),
     sinceIso,
   );
+  // A factory may run on its operator's own API key, so author identity
+  // cannot tell the run's comment from the human's (AGE-349): exclude
+  // exactly the comment this suspension posted instead.
   const human = comments.find(
-    (comment) => comment.user !== null && comment.user.id !== viewerId,
+    (comment) => comment.user !== null && comment.id !== postedCommentId,
   );
   console.log(
     `[needsHuman] re-check issue=${issueId} since=${sinceIso} found=${human !== undefined}`,
