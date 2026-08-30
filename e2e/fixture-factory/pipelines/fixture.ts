@@ -1,6 +1,6 @@
 import { fn } from "@jigs/service/steps";
-import { worktree } from "@jigs/service/worktrees";
 import { z } from "zod";
+import { worktree } from "../steps/worktrees.ts";
 
 export const fixtureInputs = z.object({
   provision: z.boolean().default(false),
@@ -9,9 +9,9 @@ export const fixtureInputs = z.object({
 type FixtureInputs = z.output<typeof fixtureInputs> & { triggerId: string };
 
 // One pipeline, three compile paths — a factory-local "use workflow" body, a
-// factory-local "use step" beside it, and steps reached through
-// @jigs/service in node_modules. Nothing here ever runs; what CI reads is the
-// ids the build emits for all three.
+// factory-local "use step" beside it, and a factory-owned step wrapper in
+// steps/ delegating to @jigs/service in node_modules. Nothing here ever runs;
+// what CI reads is the ids the build emits for all three.
 export async function fixturePipeline(inputs: FixtureInputs) {
   "use workflow";
 

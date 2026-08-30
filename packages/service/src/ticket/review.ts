@@ -5,9 +5,9 @@
 import { interpolate, ticketReviewPrompt } from "jigs/prompts";
 import type { HarnessConfig } from "jigs/steps";
 import { z } from "zod";
-import { agent } from "../steps";
+import type { AgentFn } from "../steps";
 import type { TicketClaim } from "../suspension/claim";
-import { needsHuman } from "../suspension/needs-human";
+import type { NeedsHumanFn } from "../suspension/needs-human";
 import { renderSnapshot, type TicketSnapshot } from "./snapshot";
 
 // strictObject so the harness's native structured output carries
@@ -38,11 +38,9 @@ export type TicketReviewResult = Handoff & {
 
 // Workflow-side only: these never cross the step serialization boundary.
 export type TicketReviewDeps = {
-  agent: typeof agent;
-  needsHuman: typeof needsHuman;
+  agent: AgentFn;
+  needsHuman: NeedsHumanFn;
 };
-
-const realDeps: TicketReviewDeps = { agent, needsHuman };
 
 export interface TicketReviewOptions {
   claim: TicketClaim;
@@ -59,7 +57,7 @@ export interface TicketReviewOptions {
 
 export async function ticketReview(
   options: TicketReviewOptions,
-  deps: TicketReviewDeps = realDeps,
+  deps: TicketReviewDeps,
 ): Promise<TicketReviewResult> {
   const { claim, snapshot } = options;
   const prompt = interpolate(options.prompt ?? ticketReviewPrompt, {

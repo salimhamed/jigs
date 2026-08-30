@@ -5,12 +5,12 @@
 
 import type { AgentStepConfig, AgentStepResult } from "jigs/steps";
 import type { TicketClaim } from "../suspension/claim";
-import { needsHuman } from "../suspension/needs-human";
-import { agent, JitCheckError } from "./index";
+import type { NeedsHumanFn } from "../suspension/needs-human";
+import { type AgentFn, JitCheckError } from "./index";
 
 export interface AgentOrHaltDeps {
-  agent: typeof agent;
-  needsHuman: typeof needsHuman;
+  agent: AgentFn;
+  needsHuman: NeedsHumanFn;
 }
 
 // Unbounded on purpose: the halt is a pause the human ends, and each loop
@@ -19,7 +19,7 @@ export interface AgentOrHaltDeps {
 export async function agentOrHalt<T = undefined>(
   claim: TicketClaim,
   config: AgentStepConfig<T>,
-  deps: AgentOrHaltDeps = { agent, needsHuman },
+  deps: AgentOrHaltDeps,
 ): Promise<AgentStepResult<T>> {
   for (;;) {
     try {

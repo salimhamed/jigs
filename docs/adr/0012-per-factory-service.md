@@ -31,13 +31,30 @@ permanent identity, not metadata. Hence `@jigs/service` is pinned at
 and every run parked mid-flight replays against ids that no longer exist. There
 is no migration for that, and nothing throws when it happens.
 
+## Amended: the wrappers moved to the factory anyway (AGE-332)
+
+The "put the directives in the factory repo" option below was rejected on the
+count of wrappers, and that trade was re-taken once the cost of the other side
+came due: a version baked into every memoization key means `@jigs/service` can
+never be versioned at all, and `0.0.0` is a lie every reader has to be told.
+So no jigs package carries a directive now. `@jigs/service` exports plain
+implementation functions, the factory owns roughly fifteen scaffolded `"use
+step"` wrappers that delegate to them, and ids are factory-local paths —
+`step//./steps/worktrees//worktree`, no version anywhere. The wrappers are
+`jigs init` output, not hand-written, which is what makes the fifteen-chances
+risk a scaffolding problem rather than a per-factory one. The consequences
+below still hold except where noted; the version pin stays until AGE-334.
+
 ## Consequences
 
 - **The exports map is compile-time contract, one literal entry per
   directive-bearing file.** A subpath is half an id, so a wildcard entry (which
   the SDK cannot match by exact string) collapses two modules into the package
   root namespace, and a missing entry is a module the factory cannot reach.
-  `src/package.test.ts` guards the map, the pin, and the peer set.
+  `src/package.test.ts` guards the map, the pin, and the peer set. *Superseded
+  by AGE-332*: with no directives left here a subpath is no longer half an id,
+  so the map is an ordinary export map and the guard is inverted — it now
+  asserts that no file in the package carries a directive at all.
 - **Nothing routes through the `.` export.** `src/factory.ts` is types only,
   deliberately: re-exporting a step module through `.` would change that
   module's subpath, and therefore its ids.

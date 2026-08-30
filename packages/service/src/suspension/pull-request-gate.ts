@@ -1,6 +1,7 @@
-// Determinism rule for this module: provider fetches live inside "use step";
-// the generator body only sequences memoized snapshots through the pure
-// classifier, so the cursor replays identically across restarts.
+// Determinism rule for this module: the provider fetch lives in fetchPrState,
+// which the factory wraps as a step and injects; the generator body only
+// sequences memoized snapshots through the pure classifier, so the cursor
+// replays identically across restarts.
 
 import { createHook } from "workflow";
 import {
@@ -152,6 +153,9 @@ export function classifyPrState(
   };
 }
 
+/** {@link pullRequestGate} with its step already bound. */
+export type GateFn = (pr: PrRef) => AsyncGenerator<GateWake, void, undefined>;
+
 // One hook per PR, held across the whole review until the PR closes — the
 // token is never released mid-review. The satisfier re-check lives inside the
 // iterator:
@@ -160,6 +164,7 @@ export function classifyPrState(
 // already approved before the gate started, without needing a webhook.
 export async function* pullRequestGate(
   pr: PrRef,
+  fetchState: typeof fetchPrState,
 ): AsyncGenerator<GateWake, void, undefined> {
   const token = prToken(pr);
   const hook = createHook<unknown>({
@@ -177,12 +182,12 @@ export async function* pullRequestGate(
       throw new ClaimConflictError(token, conflict.runId);
     }
     let cursor: GateCursor = emptyGateCursor();
-    let result = classifyPrState(await fetchPrState(pr), cursor);
+    let result = classifyPrState(await fetchState(pr), cursor);
     cursor = result.cursor;
     yield* result.wakes;
     if (result.done) return;
     for await (const _hint of hook) {
-      result = classifyPrState(await fetchPrState(pr), cursor);
+      result = classifyPrState(await fetchState(pr), cursor);
       cursor = result.cursor;
       yield* result.wakes;
       if (result.done) return;
@@ -192,8 +197,7 @@ export async function* pullRequestGate(
   }
 }
 
-async function fetchPrState(pr: PrRef): Promise<PrSnapshot> {
-  "use step";
+export async function fetchPrState(pr: PrRef): Promise<PrSnapshot> {
   const snapshot = await fetchPrSnapshot(pr);
   console.log(
     `[prGate] fetched ${pr.owner}/${pr.repo}#${pr.number} state=${snapshot.state} merged=${snapshot.merged} reviews=${snapshot.reviews.length} threads=${snapshot.reviewThreads.length} ci=${snapshot.ci}`,

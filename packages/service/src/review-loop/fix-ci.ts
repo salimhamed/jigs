@@ -6,10 +6,10 @@
 import { fixCiFreshPrompt, fixCiPrompt, interpolate } from "jigs/prompts";
 import type { AgentSession, HarnessConfig } from "jigs/steps";
 import type { CheckRun } from "../providers/github";
-import { agent, ResumeFailedError } from "../steps";
+import { type AgentFn, ResumeFailedError } from "../steps";
 import type { Handoff } from "../ticket/review";
 import { renderSnapshot } from "../ticket/snapshot";
-import { readDiff } from "./pull-request";
+import type { readDiff } from "./pull-request";
 
 export interface FixCiOptions {
   harness: HarnessConfig;
@@ -22,11 +22,9 @@ export interface FixCiOptions {
 }
 
 export type FixCiDeps = {
-  agent: typeof agent;
+  agent: AgentFn;
   readDiff: typeof readDiff;
 };
-
-const realDeps: FixCiDeps = { agent, readDiff };
 
 export type FixCiResult = {
   // Set only when the resume failed and a fresh context did the fix: that
@@ -46,7 +44,7 @@ export function renderChecks(failing: CheckRun[]): string {
 
 export async function fixCi(
   options: FixCiOptions,
-  deps: FixCiDeps = realDeps,
+  deps: FixCiDeps,
 ): Promise<FixCiResult> {
   const checks = renderChecks(options.failing);
 

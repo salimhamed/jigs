@@ -4,11 +4,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
 
-// This package is consumed by factory repos as source, so its package.json is
-// load-bearing at compile time in a way nothing else here is: the Workflow SDK
+// This package is consumed by factory repos as source, and the Workflow SDK
 // derives durable step ids from the package name, version and export subpath a
-// step file is reached through. Every assertion below guards a failure that is
-// otherwise silent — no error, just wrong ids, in someone else's repo.
+// directive-bearing file is reached through. So this package carries no
+// directives at all: the "use step" wrappers live in the factory, ids are
+// factory-local paths, and no version of anything is a memoization key. Every
+// assertion below guards a failure that is otherwise silent — no error, just
+// wrong ids, in someone else's repo.
 
 const packageDir = fileURLToPath(new URL("..", import.meta.url));
 const pkg = JSON.parse(
@@ -41,23 +43,22 @@ test("the version is pinned to 0.0.0 — bumping it orphans every in-flight run"
   expect(pkg.version).toBe("0.0.0");
 });
 
-test("every file carrying a workflow directive is an exact exports target", async () => {
-  // A step file reached through no export subpath, or through a wildcard the
-  // SDK cannot match by exact string, compiles fine and fails only at runtime
-  // in the factory repo. Adding a step file means adding an exports entry.
-  // src/ and plugins/ are the whole surface: this package is a library, and
-  // the pipelines that consume it live in factory repos.
+test("no file in this package carries a workflow directive", async () => {
+  // The wrappers live in the factory repo, which is what keeps this package's
+  // version out of every memoization key. A directive sneaking back in here
+  // compiles clean and resurrects a version-bearing id, so this is the guard
+  // that has to hold. src/ and plugins/ are the whole surface: this package is
+  // a library, and the pipelines that consume it live in factory repos.
   const scanned = [
     ...(await sourceFiles("src")),
     ...(await sourceFiles("plugins")),
   ];
-  const missing: string[] = [];
+  const directed: string[] = [];
   for (const file of scanned) {
     const source = await readFile(path.join(packageDir, file), "utf8");
-    if (!directive.test(source)) continue;
-    if (!exportTargets.includes(`./${file}`)) missing.push(file);
+    if (directive.test(source)) directed.push(file);
   }
-  expect(missing).toEqual([]);
+  expect(directed).toEqual([]);
 });
 
 test("every exports target is raw TypeScript that exists on disk", () => {

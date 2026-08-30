@@ -121,13 +121,12 @@ export function renderSnapshot(snapshot: TicketSnapshot): string {
   return `${lines.join("\n")}\n`;
 }
 
-// Each fetch is its own memoized step record, so the World's step history *is*
-// the versioned audit trail — there is no jigs-owned snapshot store. On resume
-// the launch-time copy comes back from the record and the new fetch is
-// genuinely fresh, which is why a human's unblocking reply appears in the later
-// version without any special handling.
+// Wrapped as a step by the factory, so each fetch is its own memoized step
+// record and the World's step history *is* the versioned audit trail — there
+// is no jigs-owned snapshot store. On resume the launch-time copy comes back
+// from the record and the new fetch is genuinely fresh, which is why a human's
+// unblocking reply appears in the later version without any special handling.
 export async function fetchSnapshot(issueId: string): Promise<TicketSnapshot> {
-  "use step";
   const raw = await fetchIssueSnapshot(issueId);
   console.log(
     `[snapshot] fetched issue=${issueId} identifier=${raw.identifier}`,
