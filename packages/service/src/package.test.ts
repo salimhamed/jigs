@@ -4,11 +4,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
 
-// This package is consumed by factory repos as source, so its package.json is
-// load-bearing at compile time in a way nothing else here is: the Workflow SDK
+// This package is consumed by factory repos as source, and the Workflow SDK
 // derives durable step ids from the package name, version and export subpath a
-// step file is reached through. Every assertion below guards a failure that is
-// otherwise silent — no error, just wrong ids, in someone else's repo.
+// directive-bearing file is reached through. So this package carries no
+// directives at all: the "use step" wrappers live in the factory, ids are
+// factory-local paths, and no version of anything is a memoization key. Every
+// assertion below guards a failure that is otherwise silent — no error, just
+// wrong ids, in someone else's repo.
 
 const packageDir = fileURLToPath(new URL("..", import.meta.url));
 const pkg = JSON.parse(
@@ -34,35 +36,35 @@ async function sourceFiles(dir: string): Promise<string[]> {
   return files.flat().filter((file) => file.endsWith(".ts"));
 }
 
-test("the version is pinned to 0.0.0 — bumping it orphans every in-flight run", () => {
-  // The version is half of a step id, and step ids are the memoization keys in
-  // Postgres. A bump silently renames every step, so runs mid-flight replay
-  // against ids that no longer exist. There is no migration; never bump this.
+test("the version stays pinned to 0.0.0 until AGE-334 retires the pin", () => {
+  // No emitted id carries this version any more — the guard below is what
+  // keeps it that way. The pin outlives its reason by one ticket: it is
+  // removed on AGE-334, with the fixture ids re-recorded there.
   expect(pkg.version).toBe("0.0.0");
 });
 
-test("every file carrying a workflow directive is an exact exports target", async () => {
-  // A step file reached through no export subpath, or through a wildcard the
-  // SDK cannot match by exact string, compiles fine and fails only at runtime
-  // in the factory repo. Adding a step file means adding an exports entry.
-  // src/ and plugins/ are the whole surface: this package is a library, and
-  // the pipelines that consume it live in factory repos.
+test("no compiled source carries a workflow directive — templates scaffold them into the factory", async () => {
+  // The wrappers live in the factory repo, which is what keeps this package's
+  // version out of every memoization key. A directive sneaking back in here
+  // compiles clean and resurrects a version-bearing id, so this is the guard
+  // that has to hold. src/ and plugins/ are what this package compiles;
+  // templates/ ships as factory-local source and is meant to carry directives.
   const scanned = [
     ...(await sourceFiles("src")),
     ...(await sourceFiles("plugins")),
   ];
-  const missing: string[] = [];
+  const directed: string[] = [];
   for (const file of scanned) {
     const source = await readFile(path.join(packageDir, file), "utf8");
-    if (!directive.test(source)) continue;
-    if (!exportTargets.includes(`./${file}`)) missing.push(file);
+    if (directive.test(source)) directed.push(file);
   }
-  expect(missing).toEqual([]);
+  expect(directed).toEqual([]);
 });
 
 test("every exports target is raw TypeScript that exists on disk", () => {
-  // Compiled output would strip the directives, and a target that has moved
-  // resolves to nothing at all.
+  // This package has no build step — the factory's compiler consumes these
+  // files as source — so a target that is not .ts, or has moved, resolves to
+  // nothing at all.
   for (const target of exportTargets) {
     expect(target).toMatch(/\.ts$/);
     expect(existsSync(path.join(packageDir, target))).toBe(true);
@@ -80,7 +82,8 @@ test("the runtime a factory supplies is a peer here, and still a devDependency",
   // `require.resolve("@jigs/service/package.json")`, which this exports map
   // does not answer, so today it fails open and follows regardless. Adding a
   // "./package.json" export would arm that gate, and then dropping this peer
-  // would silently stop compiling every step in this package.
+  // would silently stop the compiler following the factory's imports into
+  // this package's workflow-side code.
   const peers: Record<string, string> = pkg.peerDependencies;
   expect(Object.keys(peers)).toContain("workflow");
   for (const [name, range] of Object.entries(peers)) {

@@ -5,20 +5,18 @@
 
 import type { WorktreeFacts } from "jigs";
 import type { HarnessConfig } from "jigs/steps";
-import { getWorkflowMetadata } from "workflow";
 import type { CheckRun } from "../providers/github";
-import { agent } from "../steps";
+import type { AgentFn } from "../steps";
 import type { TicketClaim } from "../suspension/claim";
-import { needsHuman } from "../suspension/needs-human";
-import { pullRequestGate } from "../suspension/pull-request-gate";
+import type { NeedsHumanFn } from "../suspension/needs-human";
+import type { GateFn } from "../suspension/pull-request-gate";
 import type { PrRef } from "../suspension/tokens";
 import type { Handoff } from "../ticket/review";
 import { answerAsBuilder, type ThreadAnswers } from "./builder";
 import { fixCi, renderChecks } from "./fix-ci";
 import { implementAndReview } from "./implement";
-import {
+import type {
   commentOnPr,
-  EmptyBranchError,
   openPr,
   pushWorktreeBranch,
   readDiff,
@@ -33,6 +31,19 @@ export class PrClosedUnmergedError extends Error {
       `pull request ${pr.owner}/${pr.repo}#${pr.number} was closed without merging`,
     );
     this.name = "PrClosedUnmergedError";
+  }
+}
+
+// Here rather than beside pushWorktreeBranch, which reports the empty branch:
+// ./pull-request imports node builtins at module scope, so nothing
+// workflow-side can import a value from it. The loop is what turns an empty
+// push into a failure anyway.
+export class EmptyBranchError extends Error {
+  constructor(branch: string, baseSha: string) {
+    super(
+      `${branch} holds no commits since ${baseSha} — the builder finished without committing, so there is nothing to open a pull request for`,
+    );
+    this.name = "EmptyBranchError";
   }
 }
 
@@ -55,11 +66,14 @@ export type ReviewLoopResult = {
   cycles: number;
 };
 
-// Workflow-side only: these never cross the step serialization boundary.
+// Workflow-side only: these never cross the step serialization boundary. The
+// factory constructs this object, binding each entry to its own "use step"
+// wrapper — a jig imported from a package cannot own the steps it calls
+// without baking this package's version into their ids.
 export type ReviewLoopDeps = {
-  agent: typeof agent;
-  needsHuman: typeof needsHuman;
-  gate: typeof pullRequestGate;
+  agent: AgentFn;
+  needsHuman: NeedsHumanFn;
+  gate: GateFn;
   resolveRepo: typeof resolveRepo;
   pushWorktreeBranch: typeof pushWorktreeBranch;
   openPr: typeof openPr;
@@ -70,40 +84,9 @@ export type ReviewLoopDeps = {
   teardownRun: (outcome: { merged: boolean }) => Promise<string[]>;
 };
 
-// The per-run half of the teardown matrix, on the jig's own completion path.
-// The sweep timer stays the net for runs that never get here.
-async function teardownRunStep(outcome: {
-  merged: boolean;
-}): Promise<string[]> {
-  "use step";
-  const { registrySql } = await import("../worktrees/sql");
-  const { teardownRun } = await import("../worktrees/teardown");
-  const { workflowRunId } = getWorkflowMetadata();
-  const sql = registrySql();
-  if (sql === null) return [];
-  return teardownRun(workflowRunId, outcome, { sql });
-}
-
-// teardownRunStep is declared above on purpose: the workflow transform
-// rewrites a directive-bearing function into a binding, so a reference taken
-// before its declaration reads undefined rather than hoisting.
-export const realDeps: ReviewLoopDeps = {
-  agent,
-  needsHuman,
-  gate: pullRequestGate,
-  resolveRepo,
-  pushWorktreeBranch,
-  openPr,
-  replyInThread,
-  commentOnPr,
-  squashMerge,
-  readDiff,
-  teardownRun: teardownRunStep,
-};
-
 export async function reviewLoop(
   options: ReviewLoopOptions,
-  deps: ReviewLoopDeps = realDeps,
+  deps: ReviewLoopDeps,
 ): Promise<ReviewLoopResult> {
   const { handoff, worktree } = options;
   const maxCiAttempts = options.maxCiAttempts ?? 3;

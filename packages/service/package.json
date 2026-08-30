@@ -38,6 +38,7 @@
     "./nitro": "./src/nitro.ts",
     "./steps": "./src/steps/index.ts",
     "./steps/jit": "./src/steps/jit.ts",
+    "./steps/run": "./src/steps/run.ts",
     "./suspension/claim": "./src/suspension/claim.ts",
     "./suspension/needs-human": "./src/suspension/needs-human.ts",
     "./suspension/pull-request-gate": "./src/suspension/pull-request-gate.ts",

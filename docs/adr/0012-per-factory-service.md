@@ -31,13 +31,31 @@ permanent identity, not metadata. Hence `@jigs/service` is pinned at
 and every run parked mid-flight replays against ids that no longer exist. There
 is no migration for that, and nothing throws when it happens.
 
+## Amended: the wrappers moved to the factory anyway (AGE-332)
+
+The "put the directives in the factory repo" option below was rejected on the
+count of wrappers, and that trade was re-taken once the cost of the other side
+came due: a version baked into every memoization key means `@jigs/service` can
+never be versioned at all, and `0.0.0` is a lie every reader has to be told.
+So no jigs package carries a directive now. `@jigs/service` exports plain
+implementation functions, the factory owns roughly fifteen scaffolded `"use
+step"` wrappers that delegate to them, and ids are factory-local paths —
+`step//./steps/worktrees//worktree`, no version anywhere. The wrappers are
+`jigs init` output, not hand-written, which is what makes the fifteen-chances
+risk a scaffolding problem rather than a per-factory one. The consequences
+below still hold except where noted; the version pin stays until AGE-334.
+
 ## Consequences
 
 - **The exports map is compile-time contract, one literal entry per
   directive-bearing file.** A subpath is half an id, so a wildcard entry (which
   the SDK cannot match by exact string) collapses two modules into the package
   root namespace, and a missing entry is a module the factory cannot reach.
-  `src/package.test.ts` guards the map, the pin, and the peer set.
+  `src/package.test.ts` guards the map, the pin, and the peer set. *Superseded
+  by AGE-332*: with no directives left here a subpath is no longer half an id,
+  so the map is an ordinary export map and the guard is inverted — it now
+  asserts that no compiled source in the package carries a directive at all
+  (`templates/` is exempt: it scaffolds the wrappers into the factory).
 - **Nothing routes through the `.` export.** `src/factory.ts` is types only,
   deliberately: re-exporting a step module through `.` would change that
   module's subpath, and therefore its ids.
@@ -64,8 +82,10 @@ is no migration for that, and nothing throws when it happens.
 - **Nothing in this repo compiles a workflow directive any more.** The demos
   left with the pipelines, so `pnpm build` cannot prove the packaging still
   works. `e2e/fixture-factory` exists for that alone: one pipeline exercising a
-  factory-local workflow body, a factory-local inline step, and steps imported
-  from `@jigs/service`, with the emitted ids diffed against a checked-in list.
+  factory-local workflow body, a factory-local inline step, and a factory-owned
+  step wrapper in `steps/` delegating to `@jigs/service` in `node_modules`
+  (*amended by AGE-332*, which replaced the imported-step path), with the
+  emitted ids diffed against a checked-in list.
   A closed discovery gate, a collapsed step namespace, and a renamed id all
   build clean — the id diff is the only place they are visible.
 
@@ -96,7 +116,9 @@ is no migration for that, and nothing throws when it happens.
 ## Known costs, accepted with eyes open
 
 - The version can never move. `@jigs/service` gets no semver signal at all;
-  what changed between two factory installs is a git question.
+  what changed between two factory installs is a git question. *Superseded by
+  AGE-332*: no id carries the version now, so this cost is being paid down —
+  the pin itself is removed on AGE-334.
 - A factory installs the SDK, its World, hono and zod itself, and those pins
   must match the ones `@jigs/service` peers on. The factory `package.json`
   template carries the same versions, and `src/package.test.ts` fails when the

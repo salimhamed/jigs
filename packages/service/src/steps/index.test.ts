@@ -13,9 +13,10 @@ import {
   JitCheckError,
   parseOutput,
   ResumeFailedError,
-  runAgentStep,
+  type RunAgentStep,
   unwrapAgentStep,
 } from "./index";
+import { runAgent } from "./run";
 
 // Module scope, like a real fn() step function — but without the directive:
 // the nitro workflow scan bundles any directive-bearing file into the server,
@@ -23,6 +24,14 @@ import {
 async function addAndTag(a: number, b: number) {
   return { sum: a + b, tag: "added" };
 }
+
+// Stands in for a factory's wrapper, minus the directive: it delegates to
+// runAgent the way the scaffolded one does.
+const runStep: RunAgentStep = (wire) => runAgent(wire, "run-under-test");
+
+const refuse = (): never => {
+  throw new Error("the step was called");
+};
 
 test("fn() wraps a module-scope step function's return in a uniform StepResult", async () => {
   const result = await fn(addAndTag, 2, 40);
@@ -54,24 +63,30 @@ test("parseOutput throws for non-conforming recorded raw output", () => {
 test("agent() rejects a structured-output declaration the harness cannot honor before any step call", async () => {
   const incapable = { kind: "pi", model: "pi-1" } as unknown as HarnessConfig;
   await expect(
-    agent({
-      harness: incapable,
-      cwd: "/nowhere",
-      prompt: "never runs",
-      output: z.object({ ok: z.boolean() }),
-    }),
+    agent(
+      {
+        harness: incapable,
+        cwd: "/nowhere",
+        prompt: "never runs",
+        output: z.object({ ok: z.boolean() }),
+      },
+      refuse,
+    ),
   ).rejects.toThrow(StructuredOutputUnsupportedError);
 });
 
 test("ask() rejects a harness descriptor carrying mcpServers before any step call", async () => {
   await expect(
-    ask({
-      harness: claude({
-        model: "sonnet",
-        mcpServers: { probe: { command: "node", probe: { tool: "ping" } } },
-      }),
-      prompt: "never runs",
-    }),
+    ask(
+      {
+        harness: claude({
+          model: "sonnet",
+          mcpServers: { probe: { command: "node", probe: { tool: "ping" } } },
+        }),
+        prompt: "never runs",
+      },
+      refuse,
+    ),
   ).rejects.toThrow(/no MCP universe/);
 });
 
@@ -90,7 +105,7 @@ test("an agent step whose declared MCP server cannot start returns the JIT failu
     prompt: "never reached — the JIT check fails first",
   });
 
-  const result = await runAgentStep(wire);
+  const result = await runStep(wire);
 
   expect(result).toMatchObject({
     jitFailure: expect.stringContaining("MCP server linear"),
@@ -114,19 +129,22 @@ test("a step result carrying neither marker passes through untouched", () => {
 });
 
 test("agent() turns a failed JIT check into a thrown JitCheckError carrying the repair text", async () => {
-  const failing = agent({
-    harness: claude({
-      model: "sonnet",
-      mcpServers: {
-        linear: {
-          command: "definitely-not-a-binary",
-          probe: { tool: "get_probe_token" },
+  const failing = agent(
+    {
+      harness: claude({
+        model: "sonnet",
+        mcpServers: {
+          linear: {
+            command: "definitely-not-a-binary",
+            probe: { tool: "get_probe_token" },
+          },
         },
-      },
-    }),
-    cwd: "/work/tree",
-    prompt: "never reached — the JIT check fails first",
-  });
+      }),
+      cwd: "/work/tree",
+      prompt: "never reached — the JIT check fails first",
+    },
+    runStep,
+  );
   await expect(failing).rejects.toThrow(JitCheckError);
   await expect(failing).rejects.toThrow(/MCP server linear/);
   await expect(failing).rejects.toThrow(/→ fix the 'linear' server/);

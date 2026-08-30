@@ -11,10 +11,10 @@ import {
 import type { AgentSession, AgentStepResult, HarnessConfig } from "jigs/steps";
 import { z } from "zod";
 import type { ReviewThread } from "../providers/github";
-import { agent, ResumeFailedError } from "../steps";
+import { type AgentFn, ResumeFailedError } from "../steps";
 import type { Handoff } from "../ticket/review";
 import { renderSnapshot } from "../ticket/snapshot";
-import { readDiff } from "./pull-request";
+import type { readDiff } from "./pull-request";
 
 // threadId null means the pull request conversation: a review body has no
 // thread root to reply into.
@@ -41,11 +41,9 @@ export interface AnswerAsBuilderOptions {
 }
 
 export type BuilderDeps = {
-  agent: typeof agent;
+  agent: AgentFn;
   readDiff: typeof readDiff;
 };
-
-const realDeps: BuilderDeps = { agent, readDiff };
 
 function renderThreads(threads: ReviewThread[], reviewBody?: string): string {
   const blocks = threads.map((thread) => {
@@ -77,7 +75,7 @@ function renderThreads(threads: ReviewThread[], reviewBody?: string): string {
 
 export async function answerAsBuilder(
   options: AnswerAsBuilderOptions,
-  deps: BuilderDeps = realDeps,
+  deps: BuilderDeps,
 ): Promise<AgentStepResult<ThreadAnswers>> {
   const threads = renderThreads(options.threads, options.reviewBody);
 

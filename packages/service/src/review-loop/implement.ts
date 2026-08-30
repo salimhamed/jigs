@@ -5,9 +5,9 @@
 import { codeReviewPrompt, implementPrompt, interpolate } from "jigs/prompts";
 import type { AgentSession, HarnessConfig } from "jigs/steps";
 import { z } from "zod";
-import { agent } from "../steps";
+import type { AgentFn } from "../steps";
 import type { TicketClaim } from "../suspension/claim";
-import { needsHuman } from "../suspension/needs-human";
+import type { NeedsHumanFn } from "../suspension/needs-human";
 import type { Handoff } from "../ticket/review";
 import { renderSnapshot } from "../ticket/snapshot";
 
@@ -37,11 +37,9 @@ export type ImplementAndReviewResult = {
 
 // Workflow-side only: these never cross the step serialization boundary.
 export type ImplementDeps = {
-  agent: typeof agent;
-  needsHuman: typeof needsHuman;
+  agent: AgentFn;
+  needsHuman: NeedsHumanFn;
 };
-
-const realDeps: ImplementDeps = { agent, needsHuman };
 
 const FIRST_PASS = "_(first pass)_";
 
@@ -53,7 +51,7 @@ function renderFindings(findings: string[]): string {
 
 export async function implementAndReview(
   options: ImplementAndReviewOptions,
-  deps: ImplementDeps = realDeps,
+  deps: ImplementDeps,
 ): Promise<ImplementAndReviewResult> {
   const maxCycles = options.maxCycles ?? 3;
   const ticket = renderSnapshot(options.handoff.snapshot);

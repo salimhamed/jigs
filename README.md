@@ -33,11 +33,13 @@ pnpm workspace:
 - `packages/service` — `@jigs/service`, the library a factory repo installs:
   the app and its health/trigger/resume/run routes, the step, suspension and
   worktree primitives pipelines are written against, the Nitro build config,
-  and the templates `jigs init` scaffolds from. It is consumed as raw
-  TypeScript, because the workflow directives inside it only compile that way.
+  and the templates `jigs init` scaffolds from. It carries no workflow
+  directive of its own and has no build step: it ships as raw TypeScript and
+  the factory's own build compiles it.
 - `e2e/fixture-factory` — a one-pipeline factory repo, built in CI, whose
   emitted step ids are diffed against a checked-in list. The only test that
-  can see @jigs/service packaged wrong.
+  can see a factory-owned step wrapper still take a factory-local,
+  version-free id.
 
 ## Development
 
