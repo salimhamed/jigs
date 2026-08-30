@@ -1,5 +1,6 @@
 {
   "name": "@jigs/service",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -26,5 +27,19 @@
   "devDependencies": {
     "nitro": "3.0.260610-beta",
     "rollup": "^4.62.5"
+  },
+  "exports": {
+    ".": "./src/factory.ts",
+    "./steps": "./src/steps/index.ts",
+    "./steps/jit": "./src/steps/jit.ts",
+    "./suspension/claim": "./src/suspension/claim.ts",
+    "./suspension/needs-human": "./src/suspension/needs-human.ts",
+    "./suspension/pull-request-gate": "./src/suspension/pull-request-gate.ts",
+    "./ticket/review": "./src/ticket/review.ts",
+    "./ticket/snapshot": "./src/ticket/snapshot.ts",
+    "./review-loop/loop": "./src/review-loop/loop.ts",
+    "./review-loop/pull-request": "./src/review-loop/pull-request.ts",
+    "./worktrees": "./src/worktrees/index.ts",
+    "./plugins/start-world": "./plugins/start-world.ts"
   }
 }

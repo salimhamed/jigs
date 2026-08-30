@@ -1,5 +1,3 @@
-import type { PipelineRequires } from "jigs/checks";
-import type { z } from "zod";
 import { demoInputs, demoPipeline } from "../pipelines/demo";
 import { jitDemoInputs, jitDemoPipeline } from "../pipelines/jit-demo";
 import {
@@ -23,17 +21,7 @@ import {
   worktreeDemoInputs,
   worktreeDemoPipeline,
 } from "../pipelines/worktree-demo";
-
-export interface PipelineEntry<S extends z.ZodType = z.ZodType> {
-  pipeline: (inputs: z.output<S> & { triggerId: string }) => Promise<unknown>;
-  inputs: S;
-  hookToken?: (triggerId: string) => string;
-  // The manifest half of preflight's computed check list (ADR 0010).
-  requires?: PipelineRequires;
-}
-
-// biome-ignore lint/suspicious/noExplicitAny: heterogeneous schemas per entry
-type AnyPipelineEntry = PipelineEntry<any>;
+import type { AnyPipelineEntry } from "./factory";
 
 const entries = {
   "demo-crash": {
