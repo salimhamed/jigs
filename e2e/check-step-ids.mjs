@@ -112,10 +112,20 @@ function workflowBundle() {
 
 function withFakeVersion(run) {
   const original = readFileSync(servicePackage, "utf8");
-  writeFileSync(
-    servicePackage,
-    original.replace('"version": "0.0.0"', `"version": "${FAKE_VERSION}"`),
+  const { version } = JSON.parse(original);
+  const bumped = original.replace(
+    `"version": "${version}"`,
+    `"version": "${FAKE_VERSION}"`,
   );
+  // A bump that silently failed to land would make this whole assertion
+  // vacuous: two identical builds, ids "unchanged", nothing tested.
+  if (bumped === original) {
+    fail(
+      `could not rewrite @jigs/service's version (${version}) for the bumped build`,
+      "the version field in packages/service/package.json no longer matches this replace — retarget it",
+    );
+  }
+  writeFileSync(servicePackage, bumped);
   try {
     return run();
   } finally {

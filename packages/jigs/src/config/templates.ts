@@ -10,9 +10,7 @@ export const TEMPLATE_SUFFIX = ".tmpl";
 
 const TEMPLATES_FROM_ROOT = path.join("packages", "service", "templates");
 
-// `jigs init` runs before the factory has installed anything, so
-// @jigs/service cannot be resolved as a dependency — the templates are found
-// on disk from this module instead.
+// The root is the directory holding the factory templates.
 export function locateRepoRoot(): string {
   let dir = path.dirname(fileURLToPath(import.meta.url));
   while (true) {
@@ -28,6 +26,9 @@ export function locateRepoRoot(): string {
   }
 }
 
+// `jigs init` runs before the factory has installed anything, so
+// @jigs/service cannot be resolved as a dependency — the templates are found
+// on disk from this module instead.
 export function locateTemplates(): string {
   return path.join(locateRepoRoot(), TEMPLATES_FROM_ROOT);
 }
