@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -7,7 +8,12 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import {
+  appendBlock,
+  missingWrappers,
+  STEPS_FILE,
+} from "../config/steps-scaffold.ts";
+import { locateTemplates, TEMPLATE_SUFFIX } from "../config/templates.ts";
 import { CliError } from "../errors.ts";
 import { interpolate } from "../prompts/interpolate.ts";
 
@@ -16,26 +22,22 @@ import { interpolate } from "../prompts/interpolate.ts";
 // schema, the build, the service — is printed, never run. Those are the steps
 // a human has to be able to see fail.
 
-// Every template file is stored as `<destination name>.tmpl` so nothing in
-// here is a live file of this repo — an example pipeline named `.ts` would be
-// compiled into this package's own service bundle.
-const TEMPLATE_SUFFIX = ".tmpl";
-const TEMPLATES_FROM_ROOT = path.join("packages", "service", "templates");
-
 export interface InitDeps {
   cwd: string;
   out: (line: string) => void;
+  confirm?: (question: string) => Promise<boolean>;
   templatesDir?: string;
 }
 
 export interface InitResult {
   created: string[];
   skipped: string[];
+  appended: string[];
   servicePort: number;
   postgresPort: number;
 }
 
-export function initFactory(deps: InitDeps): InitResult {
+export async function initFactory(deps: InitDeps): Promise<InitResult> {
   const root = path.resolve(deps.cwd);
   const templates = deps.templatesDir ?? locateTemplates();
   const ports = factoryPorts(root);
@@ -68,6 +70,8 @@ export function initFactory(deps: InitDeps): InitResult {
   for (const file of created.sort()) deps.out(`created ${file}`);
   for (const file of skipped.sort()) deps.out(`kept    ${file}`);
 
+  const appended = await offerMissingWrappers(root, templates, deps);
+
   deps.out("");
   deps.out(
     `${factoryName(root)} listens on :${ports.servicePort}, its World on :${ports.postgresPort}`,
@@ -84,7 +88,44 @@ export function initFactory(deps: InitDeps): InitResult {
   deps.out("  jigs build");
   deps.out("  jigs service start");
 
-  return { created, skipped, ...ports };
+  return { created, skipped, appended, ...ports };
+}
+
+/**
+ * The whole lifecycle of the scaffold after the first run: this factory keeps
+ * every wrapper it has, and is offered the ones jigs has grown since. Nothing
+ * regenerates the file — a rewrite would renumber ids the World is already
+ * memoizing against.
+ */
+async function offerMissingWrappers(
+  root: string,
+  templates: string,
+  deps: InitDeps,
+): Promise<string[]> {
+  const destination = path.join(root, STEPS_FILE);
+  const template = readFileSync(
+    path.join(templates, `${STEPS_FILE}${TEMPLATE_SUFFIX}`),
+    "utf8",
+  );
+  const existing = readFileSync(destination, "utf8");
+  const missing = missingWrappers(template, existing);
+  if (missing.length === 0) return [];
+
+  const names = missing.map((wrapper) => wrapper.name);
+  deps.out("");
+  deps.out(`${STEPS_FILE} has no wrapper for ${names.length} jigs step(s):`);
+  for (const name of names) deps.out(`  ${name}`);
+  if (deps.confirm === undefined) {
+    deps.out("re-run jigs init on a terminal to add them");
+    return [];
+  }
+  if (!(await deps.confirm(`append them to ${STEPS_FILE}?`))) {
+    deps.out(`left ${STEPS_FILE} alone`);
+    return [];
+  }
+  appendFileSync(destination, appendBlock(missing, existing));
+  deps.out(`appended ${names.length} wrapper(s) to ${STEPS_FILE}`);
+  return names;
 }
 
 // Two factories on one machine must not fight over a port or a container. The
@@ -121,23 +162,4 @@ function templateFiles(dir: string, prefix = ""): string[] {
       return templateFiles(path.join(dir, entry.name), relative);
     return entry.name.endsWith(TEMPLATE_SUFFIX) ? [relative] : [];
   });
-}
-
-// `jigs init` runs before the factory has installed anything, so
-// @jigs/service cannot be resolved as a dependency — the templates are found
-// on disk from this module instead.
-function locateTemplates(): string {
-  let dir = path.dirname(fileURLToPath(import.meta.url));
-  while (true) {
-    const candidate = path.join(dir, TEMPLATES_FROM_ROOT);
-    if (existsSync(candidate)) return candidate;
-    const parent = path.dirname(dir);
-    if (parent === dir) {
-      throw new CliError(
-        `could not find the factory templates (${TEMPLATES_FROM_ROOT})`,
-        `jigs must run from a jigs checkout to scaffold a factory`,
-      );
-    }
-    dir = parent;
-  }
 }

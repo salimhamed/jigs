@@ -1,8 +1,12 @@
 import { fn } from "@jigs/service/steps";
 import { z } from "zod";
+import { fetchSnapshot } from "../steps/jigs.ts";
 
 export const exampleInputs = z.object({
   note: z.string().default("hello from {{FACTORY_NAME}}"),
+  // Optional so `jigs run example` still works before this factory has
+  // credentials for Linear.
+  ticket: z.string().optional(),
 });
 
 type ExampleInputs = z.output<typeof exampleInputs> & { triggerId: string };
@@ -13,6 +17,13 @@ export async function examplePipeline(inputs: ExampleInputs) {
   "use workflow";
 
   const said = await fn(say, inputs.note);
+  // Every jigs step reaches a pipeline through this factory's own
+  // steps/jigs.ts — that file is where the durable step ids come from, which
+  // is why it is committed source and not something the build regenerates.
+  if (inputs.ticket !== undefined) {
+    const snapshot = await fetchSnapshot(inputs.ticket);
+    console.log(`[example] ${snapshot.identifier} ${snapshot.title}`);
+  }
   return said.output;
 }
 

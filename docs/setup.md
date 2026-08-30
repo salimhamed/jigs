@@ -55,10 +55,21 @@ jigs init
 
 `jigs init` writes `jigs.yml` (the service port and, later, the ingress URL),
 `package.json`, `nitro.config.ts`, `docker-compose.yml`, `.env.example`, a
-`jigs.config.ts`, an example pipeline, and the `tsconfig.json`,
-`pnpm-workspace.yaml` and `.gitignore` a factory build needs — then prints the
-commands below with this factory's ports filled in. It runs none of them:
-every one can fail in a way only a human should see.
+`jigs.config.ts`, an example pipeline, `steps/jigs.ts`, and the
+`tsconfig.json`, `pnpm-workspace.yaml` and `.gitignore` a factory build needs
+— then prints the commands below with this factory's ports filled in. It runs
+none of them: every one can fail in a way only a human should see.
+
+`steps/jigs.ts` is the one to know about. It holds this factory's `"use step"`
+wrappers around jigs' step implementations, plus the jigs (`reviewLoop`,
+`ticketReview`, `needsHuman`, …) wired on top of them — so a pipeline imports
+its steps from `../steps/jigs.ts`, never from `@jigs/service` directly. It is
+ordinary committed source: commit it, edit it, and **do not rename it or its
+exported functions**. Each name compiles to a durable step id
+(`step//./steps/jigs//worktree`) that the World memoizes runs against, so a
+rename orphans every run this factory has parked — with a clean build and no
+error. Re-running `jigs init` never rewrites the file: it offers to append the
+wrappers jigs has grown since, and `jigs build` warns when any are missing.
 
 ### 2. Install, World, bootstrap
 

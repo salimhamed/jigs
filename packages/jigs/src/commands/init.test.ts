@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vitest";
+import { STEPS_FILE } from "../config/steps-scaffold.ts";
 import { initFactory } from "./init.ts";
 
 const scaffold = (name: string) => {
@@ -9,15 +10,25 @@ const scaffold = (name: string) => {
   return dir;
 };
 
-function init(dir: string) {
+async function init(
+  dir: string,
+  confirm?: (question: string) => Promise<boolean>,
+) {
   const lines: string[] = [];
-  const result = initFactory({ cwd: dir, out: (line) => lines.push(line) });
+  const result = await initFactory({
+    cwd: dir,
+    out: (line) => lines.push(line),
+    ...(confirm === undefined ? {} : { confirm }),
+  });
   return { ...result, lines };
 }
 
-test("scaffolds a factory that can be installed and built", () => {
+const yes = async () => true;
+const no = async () => false;
+
+test("scaffolds a factory that can be installed and built", async () => {
   const dir = scaffold("acme-factory");
-  const { created } = init(dir);
+  const { created } = await init(dir);
 
   expect(created.sort()).toEqual([
     ".env.example",
@@ -29,6 +40,7 @@ test("scaffolds a factory that can be installed and built", () => {
     "package.json",
     path.join("pipelines", "example.ts"),
     "pnpm-workspace.yaml",
+    STEPS_FILE,
     "tsconfig.json",
   ]);
   // Spike finding 6: hono resolves as an external otherwise.
@@ -41,11 +53,23 @@ test("scaffolds a factory that can be installed and built", () => {
   );
 });
 
-test("the docker project and ports all carry the factory", () => {
+test("the scaffolded wrappers carry the directive and the tsconfig compiles them", async () => {
+  const dir = scaffold("epsilon");
+  await init(dir);
+
+  expect(readFileSync(path.join(dir, STEPS_FILE), "utf8")).toContain(
+    '"use step"',
+  );
+  expect(readFileSync(path.join(dir, "tsconfig.json"), "utf8")).toContain(
+    '"steps"',
+  );
+});
+
+test("the docker project and ports all carry the factory", async () => {
   const first = scaffold("alpha");
   const second = scaffold("beta");
-  const a = init(first);
-  const b = init(second);
+  const a = await init(first);
+  const b = await init(second);
 
   const compose = readFileSync(path.join(first, "docker-compose.yml"), "utf8");
   expect(compose).toContain("name: alpha");
@@ -57,21 +81,59 @@ test("the docker project and ports all carry the factory", () => {
   );
 });
 
-test("an existing file is kept, never overwritten", () => {
+test("an existing file is kept, never overwritten", async () => {
   const dir = scaffold("gamma");
-  init(dir);
+  await init(dir);
   writeFileSync(path.join(dir, "jigs.yml"), "service:\n  port: 9999\n");
 
-  const again = init(dir);
+  const again = await init(dir);
 
   expect(again.created).toEqual([]);
   expect(again.skipped).toContain("jigs.yml");
   expect(readFileSync(path.join(dir, "jigs.yml"), "utf8")).toContain("9999");
 });
 
-test("the commands only a human should run are printed, not run", () => {
+test("a re-run offers the wrappers this factory is missing and appends only those", async () => {
+  const dir = scaffold("zeta");
+  await init(dir);
+  const stepsPath = path.join(dir, STEPS_FILE);
+  const trimmed = readFileSync(stepsPath, "utf8").replace(
+    /export async function worktree\([\s\S]*?\n}\n/,
+    "",
+  );
+  writeFileSync(stepsPath, trimmed);
+
+  const again = await init(dir, yes);
+
+  expect(again.appended).toEqual(["worktree"]);
+  expect(again.lines.join("\n")).toContain("no wrapper for 1 jigs step(s)");
+  const repaired = readFileSync(stepsPath, "utf8");
+  expect(repaired).toContain("export async function worktree(");
+  // Everything that was there is still there, byte for byte: a rewrite would
+  // renumber ids the World is already memoizing against.
+  expect(repaired.startsWith(trimmed)).toBe(true);
+  expect(await init(dir, yes)).toMatchObject({ appended: [] });
+});
+
+test("a declined offer leaves the wrappers alone", async () => {
+  const dir = scaffold("eta");
+  await init(dir);
+  const stepsPath = path.join(dir, STEPS_FILE);
+  const trimmed = readFileSync(stepsPath, "utf8").replace(
+    /export async function readDiff\([\s\S]*?\n}\n/,
+    "",
+  );
+  writeFileSync(stepsPath, trimmed);
+
+  const again = await init(dir, no);
+
+  expect(again.appended).toEqual([]);
+  expect(readFileSync(stepsPath, "utf8")).toBe(trimmed);
+});
+
+test("the commands only a human should run are printed, not run", async () => {
   const dir = scaffold("delta");
-  const { lines } = init(dir);
+  const { lines } = await init(dir);
 
   const printed = lines.join("\n");
   expect(printed).toContain("docker compose up -d --wait");
