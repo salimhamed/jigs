@@ -38,12 +38,45 @@ count of wrappers, and that trade was re-taken once the cost of the other side
 came due: a version baked into every memoization key means `@jigs/service` can
 never be versioned at all, and `0.0.0` is a lie every reader has to be told.
 So no jigs package carries a directive now. `@jigs/service` exports plain
-implementation functions, the factory owns roughly fifteen scaffolded `"use
-step"` wrappers that delegate to them, and ids are factory-local paths —
-`step//./steps/worktrees//worktree`, no version anywhere. The wrappers are
+implementation functions, the factory owns fifteen scaffolded `"use step"`
+wrappers that delegate to them, and ids are factory-local paths —
+`step//./steps/jigs//worktree`, no version anywhere. The wrappers are
 `jigs init` output, not hand-written, which is what makes the fifteen-chances
 risk a scaffolding problem rather than a per-factory one. The consequences
 below still hold except where noted; the version pin stays until AGE-334.
+
+## Amended: what the factory owns, and how it stays current (AGE-333)
+
+The wrappers are **committed, human-owned source** in one file,
+`steps/jigs.ts`, holding all fifteen and the jigs wired on top of them
+(`reviewLoop`, `ticketReview`, `needsHuman`, `agent`, `gate`, …) with their
+deps injected. Not generated into a `.jigs/` directory at build time: a fresh
+clone has to typecheck before it has ever built, and the factory's own
+filenames have to be the step ids. That makes the file's path and every
+exported function name load-bearing exactly as `pipelines/` filenames already
+are, which its header comment says in as many words.
+
+`jigs init` writes it once and never rewrites it. On a re-run it diffs the
+factory's file against the scaffold and *offers* to append the wrappers jigs
+has grown since — the offer-pattern `jigs bind` already uses — and `jigs build`
+warns about the same drift with the re-run as its repair. The scaffold
+template is the one list of steps: a wrapper added there reaches both. A
+`jigs steps sync` regenerate command was deliberately not built while the API
+is still settling, and neither was a single-dispatch `call(name, ...)` step —
+every step in run history would then read as `call`, which trades away the
+debugging legibility this dogfood era is for.
+
+**The wrapper bodies import their implementations at module scope.** That was
+unverified — the pre-AGE-332 shims used `await import()` inside the body to
+keep node builtins out of the workflow bundle — so it was settled by building
+the fixture both ways: the workflow bundle is byte-identical. The directive
+transform erases each wrapper body *and the imports only that body reaches*,
+so a wrapper module compiles down to one stub line per step on the workflow
+side, and `steps/jigs.ts` sitting on top of `@jigs/service/steps/run`,
+`/worktrees` and `/review-loop/pull-request` pulls none of them across. The
+e2e guard now asserts that directly: zero `node:` specifiers in the workflow
+bundle, with the fixture's pipeline calling the jigs so they are genuinely in
+it.
 
 ## Consequences
 
@@ -82,12 +115,16 @@ below still hold except where noted; the version pin stays until AGE-334.
 - **Nothing in this repo compiles a workflow directive any more.** The demos
   left with the pipelines, so `pnpm build` cannot prove the packaging still
   works. `e2e/fixture-factory` exists for that alone: one pipeline exercising a
-  factory-local workflow body, a factory-local inline step, and a factory-owned
-  step wrapper in `steps/` delegating to `@jigs/service` in `node_modules`
-  (*amended by AGE-332*, which replaced the imported-step path), with the
-  emitted ids diffed against a checked-in list.
+  factory-local workflow body, a factory-local inline step, and the `jigs init`
+  scaffold verbatim in `steps/jigs.ts` delegating to `@jigs/service` in
+  `node_modules` (*amended by AGE-332*, which replaced the imported-step path),
+  with the emitted ids diffed against a checked-in list.
   A closed discovery gate, a collapsed step namespace, and a renamed id all
   build clean — the id diff is the only place they are visible.
+  *Amended by AGE-333*: the guard builds the fixture twice, the first time with
+  `@jigs/service` on a fake version, and asserts the ids do not move. That the
+  library can be versioned without renaming a memoization key is the property
+  this whole shape was bought for, and nothing else can observe it.
 
 ## Considered options
 

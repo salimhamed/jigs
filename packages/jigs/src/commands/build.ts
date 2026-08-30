@@ -1,8 +1,10 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { locateFactoryRoot } from "../config/locate-factory.ts";
+import { missingWrappers, STEPS_FILE } from "../config/steps-scaffold.ts";
+import { locateTemplates, TEMPLATE_SUFFIX } from "../config/templates.ts";
 import { CliError } from "../errors.ts";
 import { listRunsForPs } from "./ps.ts";
 import { resolveServiceTarget } from "./service.ts";
@@ -44,6 +46,7 @@ export interface BuildDeps {
 export async function buildFactoryService(deps: BuildDeps): Promise<void> {
   const factoryRoot = locateFactoryRoot(deps.cwd);
   await warnAboutRunsInFlight(factoryRoot, deps.out);
+  warnAboutMissingWrappers(factoryRoot, deps.out);
 
   const prepare = deps.prepare ?? (await loadPrepare(factoryRoot));
   await prepare(factoryRoot);
@@ -111,6 +114,39 @@ async function warnAboutRunsInFlight(
     out(`  ${run.runId}  ${run.pipeline}  ${run.status}`);
   }
   out("  jigs ps to look, jigs cancel <run> to release one");
+}
+
+// A step jigs exports with no wrapper in this factory is a step no pipeline
+// here can call, and nothing else says so: the build is clean, the manifest is
+// simply short. A warning rather than a refusal — the factory owns this file,
+// and skipping a step it never uses is a legitimate choice.
+function warnAboutMissingWrappers(
+  factoryRoot: string,
+  out: (line: string) => void,
+): void {
+  const stepsFile = path.join(factoryRoot, STEPS_FILE);
+  if (!existsSync(stepsFile)) return;
+  let missing: ReturnType<typeof missingWrappers>;
+  try {
+    missing = missingWrappers(
+      readFileSync(
+        path.join(locateTemplates(), `${STEPS_FILE}${TEMPLATE_SUFFIX}`),
+        "utf8",
+      ),
+      readFileSync(stepsFile, "utf8"),
+    );
+  } catch {
+    // No jigs checkout to read the scaffold from; the build itself does not
+    // need one, so this check simply does not run.
+    return;
+  }
+  if (missing.length === 0) return;
+  out(
+    `warning: ${STEPS_FILE} has no wrapper for ${missing.length} jigs step(s): ${missing
+      .map((wrapper) => wrapper.name)
+      .join(", ")}`,
+  );
+  out(`  jigs init in ${factoryRoot} offers to append them`);
 }
 
 /**

@@ -61,6 +61,24 @@ test("no compiled source carries a workflow directive — templates scaffold the
   expect(directed).toEqual([]);
 });
 
+test("every subpath the scaffolded wrappers reach is in the exports map", async () => {
+  // templates/steps/jigs.ts.tmpl is what `jigs init` writes into a factory,
+  // and a factory resolves it through this map alone. A subpath dropped here
+  // is a wrapper that cannot resolve in every factory that already has one.
+  const scaffold = await readFile(
+    path.join(packageDir, "templates", "steps", "jigs.ts.tmpl"),
+    "utf8",
+  );
+  const reached = new Set(
+    [...scaffold.matchAll(/from "@jigs\/service(\/[^"]*)?"/g)].map(
+      (match) => `.${match[1] ?? ""}`,
+    ),
+  );
+  for (const subpath of reached) {
+    expect(Object.keys(pkg.exports), subpath).toContain(subpath);
+  }
+});
+
 test("every exports target is raw TypeScript that exists on disk", () => {
   // This package has no build step — the factory's compiler consumes these
   // files as source — so a target that is not .ts, or has moved, resolves to

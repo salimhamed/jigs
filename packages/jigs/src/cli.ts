@@ -79,8 +79,8 @@ const program = new Command("jigs")
 program
   .command("init")
   .description("scaffold a factory repo in the current directory")
-  .action(() => {
-    initFactory({ cwd: process.cwd(), out });
+  .action(async () => {
+    await initFactory({ cwd: process.cwd(), confirm: makeConfirm(), out });
   });
 
 program

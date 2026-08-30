@@ -36,10 +36,11 @@ pnpm workspace:
   and the templates `jigs init` scaffolds from. It carries no workflow
   directive of its own and has no build step: it ships as raw TypeScript and
   the factory's own build compiles it.
-- `e2e/fixture-factory` — a one-pipeline factory repo, built in CI, whose
-  emitted step ids are diffed against a checked-in list. The only test that
-  can see a factory-owned step wrapper still take a factory-local,
-  version-free id.
+- `e2e/fixture-factory` — a one-pipeline factory repo carrying the `jigs init`
+  scaffold verbatim, built in CI twice: once as committed and once with
+  `@jigs/service` on a fake version, its emitted step ids diffed against a
+  checked-in list both times. The only test that can see a factory-owned step
+  wrapper still take a factory-local, version-free id.
 
 ## Development
 
@@ -49,7 +50,7 @@ Requires Node >= 24 and pnpm.
 pnpm install
 pnpm dev        # run the CLI from source
 pnpm check      # lint + typecheck + test + build (all packages)
-pnpm e2e        # build e2e/fixture-factory and diff its step ids
+pnpm e2e        # build e2e/fixture-factory twice and diff its step ids
 ```
 
 No pipeline lives in this repo, so `pnpm build` compiles no workflow
