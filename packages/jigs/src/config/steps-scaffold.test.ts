@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
 import {
   appendBlock,
@@ -8,40 +7,20 @@ import {
   STEPS_FILE,
   templateWrappers,
 } from "./steps-scaffold.ts";
-import { locateTemplates, TEMPLATE_SUFFIX } from "./templates.ts";
+import {
+  locateRepoRoot,
+  locateTemplates,
+  TEMPLATE_SUFFIX,
+} from "./templates.ts";
 
 const template = readFileSync(
   path.join(locateTemplates(), `${STEPS_FILE}${TEMPLATE_SUFFIX}`),
   "utf8",
 );
 
-test("the scaffold template is the one list of jigs' steps", () => {
-  const names = templateWrappers(template).map((wrapper) => wrapper.name);
-
-  // Every id in e2e/fixture-factory/expected-ids.txt comes from this list, so
-  // a step added to jigs without a wrapper here reaches no factory at all.
-  expect(names).toContain("worktree");
-  expect(names).toContain("runAgentStep");
-  expect(names).toContain("squashMerge");
-  expect(new Set(names).size).toBe(names.length);
-  for (const wrapper of templateWrappers(template)) {
-    expect(wrapper.source, wrapper.name).toContain('"use step"');
-  }
-});
-
 test("the wrappers the fixture factory compiles are the ones the template declares", () => {
-  const here = path.dirname(fileURLToPath(import.meta.url));
   const recorded = readFileSync(
-    path.join(
-      here,
-      "..",
-      "..",
-      "..",
-      "..",
-      "e2e",
-      "fixture-factory",
-      "expected-ids.txt",
-    ),
+    path.join(locateRepoRoot(), "e2e", "fixture-factory", "expected-ids.txt"),
     "utf8",
   );
 

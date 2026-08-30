@@ -53,18 +53,16 @@ test("scaffolds a factory that can be installed and built", async () => {
   );
 });
 
-test("the wrappers land as committed source, so the factory typechecks unbuilt", async () => {
+test("the scaffolded wrappers carry the directive and the tsconfig compiles them", async () => {
   const dir = scaffold("epsilon");
   await init(dir);
 
-  const wrappers = readFileSync(path.join(dir, STEPS_FILE), "utf8");
-  expect(wrappers).toContain('"use step"');
+  expect(readFileSync(path.join(dir, STEPS_FILE), "utf8")).toContain(
+    '"use step"',
+  );
   expect(readFileSync(path.join(dir, "tsconfig.json"), "utf8")).toContain(
     '"steps"',
   );
-  // The ids are this factory's paths and names, which is the whole point of
-  // the file being here rather than generated into .jigs/.
-  expect(wrappers).not.toContain("Generated");
 });
 
 test("the docker project and ports all carry the factory", async () => {

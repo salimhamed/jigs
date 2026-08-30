@@ -13,11 +13,10 @@ const TEMPLATES_FROM_ROOT = path.join("packages", "service", "templates");
 // `jigs init` runs before the factory has installed anything, so
 // @jigs/service cannot be resolved as a dependency — the templates are found
 // on disk from this module instead.
-export function locateTemplates(): string {
+export function locateRepoRoot(): string {
   let dir = path.dirname(fileURLToPath(import.meta.url));
   while (true) {
-    const candidate = path.join(dir, TEMPLATES_FROM_ROOT);
-    if (existsSync(candidate)) return candidate;
+    if (existsSync(path.join(dir, TEMPLATES_FROM_ROOT))) return dir;
     const parent = path.dirname(dir);
     if (parent === dir) {
       throw new CliError(
@@ -27,4 +26,8 @@ export function locateTemplates(): string {
     }
     dir = parent;
   }
+}
+
+export function locateTemplates(): string {
+  return path.join(locateRepoRoot(), TEMPLATES_FROM_ROOT);
 }

@@ -3,7 +3,11 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { locateFactoryRoot } from "../config/locate-factory.ts";
-import { missingWrappers, STEPS_FILE } from "../config/steps-scaffold.ts";
+import {
+  missingWrappers,
+  STEPS_FILE,
+  type StepWrapper,
+} from "../config/steps-scaffold.ts";
 import { locateTemplates, TEMPLATE_SUFFIX } from "../config/templates.ts";
 import { CliError } from "../errors.ts";
 import { listRunsForPs } from "./ps.ts";
@@ -126,7 +130,7 @@ function warnAboutMissingWrappers(
 ): void {
   const stepsFile = path.join(factoryRoot, STEPS_FILE);
   if (!existsSync(stepsFile)) return;
-  let missing: ReturnType<typeof missingWrappers>;
+  let missing: StepWrapper[];
   try {
     missing = missingWrappers(
       readFileSync(
@@ -136,8 +140,9 @@ function warnAboutMissingWrappers(
       readFileSync(stepsFile, "utf8"),
     );
   } catch {
-    // No jigs checkout to read the scaffold from; the build itself does not
-    // need one, so this check simply does not run.
+    // Neither file readable — no jigs checkout to read the scaffold from, or
+    // this factory's own wrappers are unreadable. The build itself needs
+    // neither, so this check simply does not run.
     return;
   }
   if (missing.length === 0) return;

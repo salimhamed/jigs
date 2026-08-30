@@ -94,10 +94,9 @@ export function missingWrappers(
 ): StepWrapper[] {
   return templateWrappers(template).filter(
     (wrapper) =>
-      !new RegExp(
-        `^export (?:async function|function|const|let|var) ${wrapper.name}\\b`,
-        "m",
-      ).test(existing),
+      !new RegExp(`^export (?:async )?function ${wrapper.name}\\b`, "m").test(
+        existing,
+      ),
   );
 }
 

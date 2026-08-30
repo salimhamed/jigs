@@ -9,11 +9,12 @@
 // None of it throws — the build is clean and the ids are simply wrong, in
 // somebody else's repo, against runs already in flight.
 //
-// So: build the fixture factory the way a real factory builds, read the ids
-// back out of the bundle, and diff them against the recorded list. Then build
-// it a second time with @jigs/service on a fake version, because "the ids do
-// not move when the library is versioned" is the property this whole shape was
-// bought for, and it is the one nothing else can observe.
+// So: build the fixture factory the way a real factory builds, twice — first
+// with @jigs/service on a fake version, then as committed, so the tree is left
+// holding a build of the real one. Read the ids back out of each bundle and
+// diff both against the recorded list, because "the ids do not move when the
+// library is versioned" is the property this whole shape was bought for, and
+// it is the one nothing else can observe.
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -172,8 +173,10 @@ if (drift.missing.length > 0 || drift.unexpected.length > 0) {
 
 const moved = reportDiff(ids, bumpedIds);
 if (moved.missing.length > 0 || moved.unexpected.length > 0) {
+  // Both sides of a rename, so the count is the larger side, not the sum.
+  const count = Math.max(moved.missing.length, moved.unexpected.length);
   fail(
-    `versioning @jigs/service moved ${moved.missing.length + moved.unexpected.length} step id(s)`,
+    `versioning @jigs/service moved ${count} step id(s)`,
     "a directive is back inside a jigs package: its ids carry that package's version, and bumping it orphans every parked run",
   );
 }
