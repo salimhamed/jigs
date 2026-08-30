@@ -29,6 +29,8 @@ export async function runAgent(
   return executeAgentStep(wire, runKey);
 }
 
+// A passthrough today, so the factory's ask wrapper imports this module
+// rather than jigs internals.
 export async function runAsk(
   wire: AskWire,
   runKey: string,

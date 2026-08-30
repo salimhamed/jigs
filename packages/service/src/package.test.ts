@@ -62,8 +62,9 @@ test("no compiled source carries a workflow directive — templates scaffold the
 });
 
 test("every exports target is raw TypeScript that exists on disk", () => {
-  // Compiled output would strip the directives, and a target that has moved
-  // resolves to nothing at all.
+  // This package has no build step — the factory's compiler consumes these
+  // files as source — so a target that is not .ts, or has moved, resolves to
+  // nothing at all.
   for (const target of exportTargets) {
     expect(target).toMatch(/\.ts$/);
     expect(existsSync(path.join(packageDir, target))).toBe(true);
@@ -81,7 +82,8 @@ test("the runtime a factory supplies is a peer here, and still a devDependency",
   // `require.resolve("@jigs/service/package.json")`, which this exports map
   // does not answer, so today it fails open and follows regardless. Adding a
   // "./package.json" export would arm that gate, and then dropping this peer
-  // would silently stop compiling every step in this package.
+  // would silently stop the compiler following the factory's imports into
+  // this package's workflow-side code.
   const peers: Record<string, string> = pkg.peerDependencies;
   expect(Object.keys(peers)).toContain("workflow");
   for (const [name, range] of Object.entries(peers)) {

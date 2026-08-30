@@ -54,7 +54,8 @@ below still hold except where noted; the version pin stays until AGE-334.
   `src/package.test.ts` guards the map, the pin, and the peer set. *Superseded
   by AGE-332*: with no directives left here a subpath is no longer half an id,
   so the map is an ordinary export map and the guard is inverted — it now
-  asserts that no file in the package carries a directive at all.
+  asserts that no compiled source in the package carries a directive at all
+  (`templates/` is exempt: it scaffolds the wrappers into the factory).
 - **Nothing routes through the `.` export.** `src/factory.ts` is types only,
   deliberately: re-exporting a step module through `.` would change that
   module's subpath, and therefore its ids.
