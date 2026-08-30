@@ -18,6 +18,7 @@
 // code never crosses into the workflow sandbox.
 
 import {
+  type ReviewLoopDeps,
   type ReviewLoopOptions,
   reviewLoop as reviewLoopJig,
 } from "@jigs/service/review-loop/loop";
@@ -182,18 +183,22 @@ export function ticketReview(options: TicketReviewOptions) {
   return ticketReviewJig(options, { agent, needsHuman });
 }
 
+// Exported so a pipeline that must override an entry can spread the rest
+// rather than rebuild the map.
+export const reviewLoopDeps: ReviewLoopDeps = {
+  agent,
+  needsHuman,
+  gate,
+  resolveRepo,
+  pushWorktreeBranch,
+  openPr,
+  replyInThread,
+  commentOnPr,
+  squashMerge,
+  readDiff,
+  teardownRun: teardownWorktrees,
+};
+
 export function reviewLoop(options: ReviewLoopOptions) {
-  return reviewLoopJig(options, {
-    agent,
-    needsHuman,
-    gate,
-    resolveRepo,
-    pushWorktreeBranch,
-    openPr,
-    replyInThread,
-    commentOnPr,
-    squashMerge,
-    readDiff,
-    teardownRun: teardownWorktrees,
-  });
+  return reviewLoopJig(options, reviewLoopDeps);
 }
