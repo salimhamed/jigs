@@ -62,7 +62,11 @@ export async function needsHuman(
   try {
     let cursor = posted.postedAt;
     for await (const _hint of claim.hook) {
-      const check = await checkForReply(claim.issueId, cursor, posted.commentId);
+      const check = await checkForReply(
+        claim.issueId,
+        cursor,
+        posted.commentId,
+      );
       if (check.reply !== null) return check.reply;
       cursor = check.cursor;
     }
