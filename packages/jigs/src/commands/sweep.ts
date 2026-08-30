@@ -37,11 +37,15 @@ export async function sweepWorktrees(
     throw new CliError(`sweep failed: HTTP ${res.status} ${await res.text()}`);
   }
   const result = (await res.json()) as SweepResult;
-  printEntries(result, deps.out);
+  printEntries(result, clean, deps.out);
   return result;
 }
 
-function printEntries(result: SweepResult, out: (line: string) => void): void {
+function printEntries(
+  result: SweepResult,
+  clean: boolean,
+  out: (line: string) => void,
+): void {
   if (result.entries.length === 0) {
     out("no worktrees");
   } else {
@@ -66,4 +70,12 @@ function printEntries(result: SweepResult, out: (line: string) => void): void {
   out(
     `${result.removed.length} removed, ${held} held, ${needForce} need --force${dirs}`,
   );
+  // A bare sweep only reports; without this line "0 removed" beside an
+  // eligible tree reads as a failed cleanup rather than a withheld one.
+  const eligible = result.entries.filter(
+    (entry) => entry.eligible && !entry.requiresForce,
+  ).length;
+  if (!clean && eligible > 0) {
+    out(`report only — jigs sweep --clean removes the ${eligible} eligible`);
+  }
 }

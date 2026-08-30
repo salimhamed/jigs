@@ -123,3 +123,15 @@ test("a trailing slash on the service URL does not break the sweep route", async
     "http://svc.test:8990/api/worktrees/sweep",
   );
 });
+
+test("a bare sweep report names --clean when eligible trees exist", async () => {
+  respond({
+    entries: [entry({ ownerRunId: "run_a" })],
+    removed: [],
+    removedDirs: [],
+  });
+  await sweepWorktrees(deps());
+  expect(lines.at(-1)).toBe(
+    "report only — jigs sweep --clean removes the 1 eligible",
+  );
+});

@@ -121,6 +121,24 @@ export async function listRuns(
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+// The worktree registry's stored state lags a cancelled run until the sweep
+// timer reaps the row, so `jigs ps` relabels off the run list it already
+// carries — it must never say `active` beside an owner it lists as terminal.
+export function overlayWorktreeStates<
+  T extends { state: string; ownerRunId: string },
+>(runs: RunRow[], worktrees: T[]): T[] {
+  const terminal = new Set(
+    runs
+      .filter((run) => TERMINAL_RUN_STATUSES.has(run.status))
+      .map((run) => run.runId),
+  );
+  return worktrees.map((worktree) =>
+    worktree.state === "active" && terminal.has(worktree.ownerRunId)
+      ? { ...worktree, state: "abandoned" }
+      : worktree,
+  );
+}
+
 const worldRunExists = (runId: string) => getRun(runId).exists;
 
 const worldHookRunId = (token: string) =>

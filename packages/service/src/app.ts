@@ -15,6 +15,7 @@ import { doctor, factoryRoot, preflight } from "./preflight";
 import {
   isParkToken,
   listRuns,
+  overlayWorktreeStates,
   type RunRef,
   resolveRunRef,
   TERMINAL_RUN_STATUSES,
@@ -235,7 +236,7 @@ export function createApp(factory: Factory): Hono {
       listRuns(factory),
       readWorktrees(),
     ]);
-    return c.json({ runs, worktrees });
+    return c.json({ runs, worktrees: overlayWorktreeStates(runs, worktrees) });
   });
 
   // The escape hatch for a zombie claim owner. Cancelling releases every hook
