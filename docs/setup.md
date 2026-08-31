@@ -172,13 +172,24 @@ parked run was memoized under.
 
 #### Step timeout
 
-A step gets **45 minutes**, sized for agent steps; the service prints the
-ceiling it started with (`[service] step ceiling: 45m (default)`). The ceiling
-is worth knowing about rather than a formality: the World runs every step over
-HTTP and re-queues one whose dispatch it loses, and node's own five-minute
-default was cutting long agent steps off and launching a second agent into a
-worktree the first was still working in (AGE-360). Raise it in this factory's
-`jigs.yml` if its builders run longer:
+A step runs **for as long as it takes**. The service prints the ceiling it
+started with:
+
+```
+[service] step ceiling: no limit on the step route at http://localhost:8990; undici defaults elsewhere
+```
+
+Worth knowing about rather than a formality: the World runs every step over
+HTTP against the service's own port and re-queues one whose dispatch it loses,
+and node's own five-minute default was cutting long agent steps off and
+launching a second agent into a worktree the first was still working in
+(AGE-360). The service answers that by scoping a no-timeout HTTP dispatcher to
+its own origin — so the step self-invocation waits, and every other request it
+makes (GitHub, Linear, the agent providers) keeps node's defaults and still
+fails against a wedged server.
+
+Cap it in this factory's `jigs.yml` only if you would rather a hung step fail
+than hang:
 
 ```yaml
 service:

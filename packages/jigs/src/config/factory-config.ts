@@ -4,7 +4,6 @@ import { parseDocument } from "yaml";
 import { z } from "zod";
 import { CliError } from "../errors.ts";
 import { expandHome } from "../paths.ts";
-import { DEFAULT_STEP_TIMEOUT_MINUTES } from "../step-timeout.ts";
 import { factorySlug } from "../worktrees/layout.ts";
 
 export const FACTORY_CONFIG_FILE = "jigs.yml";
@@ -20,9 +19,10 @@ const portSchema = z.int().min(1).max(65535);
 
 const serviceSchema = z.strictObject({
   port: portSchema.default(8990),
-  // The ceiling on one step's wall clock (see ../step-timeout.ts). Whole
-  // minutes: nothing here is worth expressing more finely.
-  step_timeout_minutes: z.int().min(1).default(DEFAULT_STEP_TIMEOUT_MINUTES),
+  // An optional cap on one step's wall clock (see ../step-timeout.ts). Unset
+  // is the default and means none: a step waits as long as it takes. Whole
+  // minutes — nothing here is worth expressing more finely.
+  step_timeout_minutes: z.int().min(1).optional(),
 });
 
 const factoryConfigSchema = z.looseObject({
@@ -107,7 +107,8 @@ export interface ResolvedService {
   slug: string;
   port: number;
   serviceUrl: string;
-  stepTimeoutMinutes: number;
+  // undefined is "no cap", the default.
+  stepTimeoutMinutes: number | undefined;
 }
 
 // What is addressed per factory: the URL its CLI verbs talk to and the slug

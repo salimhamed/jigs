@@ -103,19 +103,23 @@ function livePid(sv: Supervisor): number | undefined {
 
 // The factory's own `.env` is the service's environment file, World URL and
 // credentials included. `PORT` and the step timeout are the exceptions: both
-// are declared in jigs.yml — the address the child must listen on, and the
-// ceiling it must raise its HTTP dispatcher to — so jigs.yml wins over `.env`
-// for them.
+// are declared in jigs.yml — the address the child must listen on, and the cap
+// it must bound its step dispatcher by — so jigs.yml wins over `.env` for
+// them. Including when the cap is absent: unset means uncapped, and an
+// inherited value must not quietly reintroduce one.
 function childEnv(sv: Supervisor): Record<string, string> {
   const dotenvPath = path.join(sv.factoryRoot, ".env");
-  return {
+  const env: Record<string, string> = {
     ...stringEnv(process.env),
     ...(existsSync(dotenvPath)
       ? (parseEnv(readFileSync(dotenvPath, "utf8")) as Record<string, string>)
       : {}),
     PORT: String(sv.service.port),
-    [STEP_TIMEOUT_ENV]: String(sv.service.stepTimeoutMinutes),
   };
+  const minutes = sv.service.stepTimeoutMinutes;
+  if (minutes === undefined) delete env[STEP_TIMEOUT_ENV];
+  else env[STEP_TIMEOUT_ENV] = String(minutes);
+  return env;
 }
 
 export function startService(deps: ServiceLifecycleDeps): void {

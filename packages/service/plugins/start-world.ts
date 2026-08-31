@@ -2,7 +2,7 @@
 // a plain default export works.
 export default async function startWorld() {
   // Before the World starts polling: the queue's very first step dispatch has
-  // to go out on the raised dispatcher, not node's five-minute default.
+  // to go out on the scoped dispatcher, not node's five-minute default.
   const { describeStepCeiling, raiseStepCeiling } = await import(
     "../src/step-ceiling"
   );

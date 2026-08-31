@@ -111,7 +111,8 @@ test("parseFactoryConfig tolerates unknown top-level keys and empty files", () =
 
 test("the service block defaults to the port the single global service used", () => {
   const config = parseFactoryConfig(commented);
-  expect(config.service).toEqual({ port: 8990, step_timeout_minutes: 45 });
+  // No step_timeout_minutes: unset is the default, and it means uncapped.
+  expect(config.service).toEqual({ port: 8990 });
 });
 
 test("parseFactoryConfig rejects an out-of-range port naming the field", () => {
@@ -134,7 +135,7 @@ test("resolveService derives the service address and the slug", () => {
       slug: factorySlug(factory),
       port: 9100,
       serviceUrl: "http://localhost:9100",
-      stepTimeoutMinutes: 45,
+      stepTimeoutMinutes: undefined,
     });
   } finally {
     removeTmpDir(tmp);
