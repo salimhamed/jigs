@@ -116,6 +116,20 @@ test("the fast-forward notice is logged, never thrown", async () => {
   expect(lines[0]).toContain("dirty");
 });
 
+test("a provisioned worktree logs its binding, branch, and path", async () => {
+  const lines: string[] = [];
+  await provisionRequest(
+    { runId: "run_a", binding: "api", branch: "feat" },
+    deps({
+      provision: async () => {},
+      log: (line: string) => lines.push(line),
+    }),
+  );
+  expect(lines).toContain(
+    `[worktree] provisioned binding=api branch=feat path=${path.join(workspace, "feat")}`,
+  );
+});
+
 test("an unconfigured registry is refused before any disk work", async () => {
   await expect(
     provisionRequest(

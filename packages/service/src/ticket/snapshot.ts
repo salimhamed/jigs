@@ -128,8 +128,9 @@ export function renderSnapshot(snapshot: TicketSnapshot): string {
 // unblocking reply appears in the later version without any special handling.
 export async function fetchSnapshot(issueId: string): Promise<TicketSnapshot> {
   const raw = await fetchIssueSnapshot(issueId);
+  const snapshot = toSnapshot(raw, new Date().toISOString());
   console.log(
-    `[snapshot] fetched issue=${issueId} identifier=${raw.identifier}`,
+    `[snapshot] fetched issue=${issueId} identifier=${raw.identifier} state=${snapshot.state} labels=${snapshot.labels.length === 0 ? "none" : snapshot.labels.join(",")} comments=${snapshot.comments.length}`,
   );
-  return toSnapshot(raw, new Date().toISOString());
+  return snapshot;
 }

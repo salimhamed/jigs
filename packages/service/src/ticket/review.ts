@@ -76,6 +76,9 @@ export async function ticketReview(
     output: ticketReviewVerdict,
   });
   const { verdict, brief, findings } = review.output;
+  console.log(
+    `[ticketReview] ${snapshot.identifier} verdict=${verdict} findings=${findings.length}`,
+  );
 
   if (verdict === "needs-human") {
     // findings only: the comment is for the human and the record, never the

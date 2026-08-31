@@ -118,6 +118,7 @@ test("renderSnapshot includes every section a reviewing agent needs", () => {
 });
 
 test("a later fetch carries the new comment while the earlier copy keeps its own", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
   respond({ issue: rawIssue() });
   respond({
     issue: rawIssue({
@@ -135,4 +136,12 @@ test("a later fetch carries the new comment while the earlier copy keeps its own
 
   expect(launch.comments.map((c) => c.id)).toEqual(["c1"]);
   expect(later.comments.map((c) => c.id)).toEqual(["c1", "c2"]);
+  expect(log).toHaveBeenNthCalledWith(
+    1,
+    "[snapshot] fetched issue=68bc9696-35d5-442d-ab56-214c8cfefbec identifier=AGE-313 state=Todo labels=ready-for-agent comments=1",
+  );
+  expect(log).toHaveBeenNthCalledWith(
+    2,
+    "[snapshot] fetched issue=68bc9696-35d5-442d-ab56-214c8cfefbec identifier=AGE-313 state=Todo labels=ready-for-agent comments=2",
+  );
 });
