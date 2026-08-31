@@ -45,12 +45,39 @@ pointed at your checkout of this repo, so the upgrade is `git pull` here — no
 version range to move in any factory's `package.json`. Two things do not
 follow on their own: `pnpm build` again in this checkout — `link:` builds
 nothing, so every factory's `jigs` binary and `jigs` type imports are whatever
-it last emitted — and `jigs init` again in each factory, which offers to append any step wrappers
-jigs has grown since to that factory's `steps/jigs.ts` (part 2, step 1);
-`jigs build` warns when a factory is missing some. Both packages carry ordinary
-semver from `0.1.0` on, and the number is a signal to you rather than an input
-to anything: no step id carries a jigs version, so a release never renames a
-memoization key ([ADR 0013](adr/0013-factory-owned-steps.md)).
+it last emitted — and each factory's own `steps/jigs.ts`, which you extend by
+hand with a wrapper for any step jigs has grown since, and with anything a
+jig's deps object has grown that is yours to write rather than to wrap (part 2,
+step 1). Typecheck the factory after a pull: the deps objects are typed, so
+both kinds of gap are a compile error rather than a surprise at run time.
+
+Both packages carry ordinary semver from `0.1.0` on, and nothing here moves it
+by hand. A PR's title is a conventional commit — CI rejects one that is not —
+and merging it to `main` opens or updates a release-please PR carrying the next
+version and the CHANGELOG entries it earned; that PR merges itself once its own
+checks pass, and the tags and GitHub Releases follow. `jigs` and `@jigs/service`
+release in lockstep, so both always read the same number. The number is still a
+signal to you rather than an input to anything: no step id carries a jigs
+version, so a release never renames a memoization key
+([ADR 0013](adr/0013-factory-owned-steps.md)), which is what makes automating
+it safe ([ADR 0014](adr/0014-release-automation.md)).
+
+**Releasing this repo (once, by whoever owns it).** Two prerequisites live in
+GitHub's console rather than in the tree, and the release workflow is inert
+without either:
+
+- **A `RELEASE_PLEASE_TOKEN` repository secret.** A fine-grained PAT on this
+  repo with **Contents: read and write** (the tags, the CHANGELOGs, the
+  version bumps), **Pull requests: read and write** (open and merge the
+  release PR) and **Issues: read and write** (release-please manages its own
+  labels). It is a PAT rather than `GITHUB_TOKEN` because GitHub raises no
+  workflow run for an event `GITHUB_TOKEN` caused: the release PR would get no
+  checks to watch, and its squash would never re-run the release
+  ([ADR 0014](adr/0014-release-automation.md)).
+- **Settings → General → "Default to PR title for squash merge commits".**
+  Without it a squash's subject is the branch name, every merge parses as a
+  non-releasable unit, and the release PR simply never appears — with no error
+  anywhere.
 
 ## Part 2 — a factory (per repo)
 
@@ -65,12 +92,18 @@ mkdir my-factory && cd my-factory && git init
 jigs init
 ```
 
-`jigs init` writes `jigs.yml` (the service port and, later, the ingress URL),
-`package.json`, `nitro.config.ts`, `docker-compose.yml`, `.env.example`, a
-`jigs.config.ts`, an example pipeline, `steps/jigs.ts`, and the
-`tsconfig.json`, `pnpm-workspace.yaml` and `.gitignore` a factory build needs
-— then prints the commands below with this factory's ports filled in. It runs
-none of them: every one can fail in a way only a human should see.
+`jigs init` writes infrastructure only: `jigs.yml` (the service port and,
+later, the ingress URL), `package.json`, `nitro.config.ts`,
+`docker-compose.yml`, `.env.example`, and the `tsconfig.json`,
+`pnpm-workspace.yaml` and `.gitignore` a factory build needs — then prints the
+commands below with this factory's ports filled in. It runs none of them:
+every one can fail in a way only a human should see.
+
+The code is yours to write: `jigs.config.ts` (this factory's pipelines, keyed
+by the name `jigs run` takes), the pipelines themselves, and `steps/jigs.ts`.
+The factory repo owns that boilerplate until the API stabilizes — jigs
+scaffolds none of it, so nothing it writes goes stale under you.
+`e2e/fixture-factory` in the jigs checkout is a worked example to copy from.
 
 `steps/jigs.ts` is the one to know about. It holds this factory's `"use step"`
 wrappers around jigs' step implementations, plus the jigs (`reviewLoop`,
@@ -80,8 +113,17 @@ ordinary committed source: commit it, edit it, and **do not rename it or its
 exported functions**. Each name compiles to a durable step id
 (`step//./steps/jigs//worktree`) that the World memoizes runs against, so a
 rename orphans every run this factory has parked — with a clean build and no
-error. Re-running `jigs init` never rewrites the file: it offers to append the
-wrappers jigs has grown since, and `jigs build` warns when any are missing.
+error.
+
+Not everything in that file wraps something jigs ships. `reviewLoop`'s deps
+require a **`describePr`** the factory writes outright: given the handoff, the
+worktree path, the branch point and the builder's session, it returns the
+`{ title, body }` the pull request opens with. jigs has no implementation to
+wrap here on purpose — how a pull request introduces itself is the factory's
+voice, and the title is what the target repo's own CI and release tooling read
+(the fixture's is a plain deterministic string; a real factory can ask its
+agent). It is a required member, so a factory cannot quietly end up without
+one.
 
 ### 2. Install, World, bootstrap
 

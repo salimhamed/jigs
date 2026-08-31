@@ -44,11 +44,13 @@ count of wrappers, and that trade was re-taken once the cost of the other side
 came due: a version baked into every memoization key means `@jigs/service` can
 never be versioned at all, and `0.0.0` is a lie every reader has to be told.
 So no jigs package carries a directive now. `@jigs/service` exports plain
-implementation functions, the factory owns fifteen scaffolded `"use step"`
-wrappers that delegate to them, and ids are factory-local paths —
-`step//./steps/jigs//worktree`, no version anywhere. The wrappers are
-`jigs init` output, not hand-written, which is what makes the fifteen-chances
-risk a scaffolding problem rather than a per-factory one. The consequences
+implementation functions, the factory owns fifteen `"use step"` wrappers that
+delegate to them, and ids are factory-local paths —
+`step//./steps/jigs//worktree`, no version anywhere. The wrappers were
+`jigs init` output when this was written, which is what made the
+fifteen-chances risk a scaffolding problem rather than a per-factory one
+(*amended by AGE-336*: they are hand-written committed source now, so the risk
+is per-factory again — see the amendment below). The consequences
 below still hold except where noted; the decision is recorded in full as
 [ADR 0013](./0013-factory-owned-steps.md), which also removes the version pin.
 
@@ -63,11 +65,10 @@ filenames have to be the step ids. That makes the file's path and every
 exported function name load-bearing exactly as `pipelines/` filenames already
 are, which its header comment says in as many words.
 
-`jigs init` writes it once and never rewrites it. On a re-run it diffs the
-factory's file against the scaffold and *offers* to append the wrappers jigs
-has grown since — the offer-pattern `jigs bind` already uses — and `jigs build`
-warns about the same drift with the re-run as its repair. The scaffold
-template is the one list of steps: a wrapper added there reaches both. A
+`jigs init` no longer writes it at all (*amended by AGE-336*: the code
+scaffold, the re-run append offer, and the `jigs build` drift warning were
+removed — the boilerplate churned faster than the library, so it lives in the
+operator's factory repo until the API stabilizes). A
 `jigs steps sync` regenerate command was deliberately not built while the API
 is still settling, and neither was a single-dispatch `call(name, ...)` step —
 every step in run history would then read as `call`, which trades away the
@@ -95,8 +96,10 @@ it.
   by AGE-332*: with no directives left here a subpath is no longer half an id,
   so the map is an ordinary export map and the guard is inverted — it now
   asserts that no compiled source in the package carries a directive at all
-  (`templates/` is exempt: it scaffolds the wrappers into the factory). The pin
-  guard went with the pin ([ADR 0013](./0013-factory-owned-steps.md)).
+  (`templates/` was exempt as the thing that scaffolded the wrappers into the
+  factory; *amended by AGE-336*: it holds infrastructure only and no TypeScript
+  at all, so the guard scans `src/` and `plugins/` and needs no exemption). The
+  pin guard went with the pin ([ADR 0013](./0013-factory-owned-steps.md)).
 - **Nothing routes through the `.` export.** `src/factory.ts` is types only,
   deliberately: re-exporting a step module through `.` would change that
   module's subpath, and therefore its ids.
@@ -123,9 +126,11 @@ it.
 - **Nothing in this repo compiles a workflow directive any more.** The demos
   left with the pipelines, so `pnpm build` cannot prove the packaging still
   works. `e2e/fixture-factory` exists for that alone: one pipeline exercising a
-  factory-local workflow body, a factory-local inline step, and the `jigs init`
-  scaffold verbatim in `steps/jigs.ts` delegating to `@jigs/service` in
-  `node_modules` (*amended by AGE-332*, which replaced the imported-step path),
+  factory-local workflow body, a factory-local inline step, and a
+  factory-owned `steps/jigs.ts` delegating to `@jigs/service` in
+  `node_modules` (*amended by AGE-332*, which replaced the imported-step path,
+  and by AGE-336, which made the fixture's copy the worked example rather than
+  a scaffold mirror),
   with the emitted ids diffed against a checked-in list.
   A closed discovery gate, a collapsed step namespace, and a renamed id all
   build clean — the id diff is the only place they are visible.

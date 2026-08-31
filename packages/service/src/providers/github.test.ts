@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
   createPullRequest,
   fetchPrSnapshot,
+  fetchPrTitle,
   postPrComment,
   replyToReviewThread,
   squashMergePr,
@@ -239,6 +240,14 @@ test("createPullRequest posts head, base, title and body and returns the number"
     title: "AGE-316 Review loop jig",
     body: "the brief",
   });
+});
+
+test("the PR title is read back from GitHub, not remembered", async () => {
+  fetchMock.mockResolvedValueOnce(json({ title: "fix(gate): retry on 502" }));
+
+  expect(await fetchPrTitle(pr)).toBe("fix(gate): retry on 502");
+  const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect(url).toBe("http://mock.test/github/repos/acme/api/pulls/41");
 });
 
 test("a squash merge PUTs merge_method squash with the commit title", async () => {

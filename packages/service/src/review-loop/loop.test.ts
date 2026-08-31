@@ -72,12 +72,16 @@ const ciRed = (
   mentionLogin: string | null = "salim",
 ): GateWake => ({ kind: "ci-red", headSha, failing, mentionLogin });
 
+type Describe = Parameters<ReviewLoopDeps["describePr"]>[0];
+
 type Calls = {
   agent: AgentStepConfig<unknown>[];
   pushes: Array<[string, string, string]>;
   replies: Array<[number, string]>;
   comments: string[];
-  merges: string[];
+  merges: number[];
+  describes: Describe[];
+  opens: Array<[string, string]>;
   needsHuman: number;
   gateFinished: boolean;
 };
@@ -117,15 +121,22 @@ function makeDeps(wakes: GateWake[]): ReviewLoopDeps {
       calls.pushes.push([path, branch, baseSha]);
       return { commits: 1, headSha: `pushed-${calls.pushes.length}` };
     },
-    openPr: async () => pr,
+    describePr: async (input) => {
+      calls.describes.push(input);
+      return { title: "described title", body: "described body" };
+    },
+    openPr: async (_repo, _head, _base, title, body) => {
+      calls.opens.push([title, body]);
+      return pr;
+    },
     replyInThread: async (_pr, rootId, body) => {
       calls.replies.push([rootId, body]);
     },
     commentOnPr: async (_pr, body) => {
       calls.comments.push(body);
     },
-    squashMerge: async (_pr, title) => {
-      calls.merges.push(title);
+    squashMerge: async (target) => {
+      calls.merges.push(target.number);
       return { merged: true, sha: "merge-sha" };
     },
     readDiff: async () => "THE-DIFF",
@@ -160,6 +171,8 @@ beforeEach(() => {
     replies: [],
     comments: [],
     merges: [],
+    describes: [],
+    opens: [],
     needsHuman: 0,
     gateFinished: false,
   };
@@ -181,7 +194,31 @@ test("an empty branch fails loudly instead of opening an empty PR", async () => 
   const deps = makeDeps([]);
   deps.pushWorktreeBranch = async () => ({ commits: 0, headSha: "base-sha-1" });
   await expect(run(deps)).rejects.toThrow(snapshot.branchName);
+  // Nothing describes a branch that turned out to carry nothing.
+  expect(calls.describes).toEqual([]);
   // The jig's own failure follows the failed-run rows rather than the sweep.
+});
+
+test("the factory's description is what the PR is opened with", async () => {
+  const deps = makeDeps([{ kind: "closed", merged: true }]);
+  await run(deps);
+
+  // Jigs holds no title or body of its own: whatever describePr returned is
+  // verbatim what GitHub gets.
+  expect(calls.describes).toHaveLength(1);
+  expect(calls.opens).toEqual([["described title", "described body"]]);
+});
+
+test("describePr sees the builder's session and the branch point", async () => {
+  const deps = makeDeps([{ kind: "closed", merged: true }]);
+  await run(deps);
+
+  // s-1 is the implement call, so a description agent can resume the context
+  // that wrote the change rather than reading the diff cold.
+  expect(calls.describes[0]?.session).toEqual({ harness: "claude", id: "s-1" });
+  expect(calls.describes[0]?.baseSha).toBe("base-sha-1");
+  expect(calls.describes[0]?.worktreePath).toBe("/tmp/worktree");
+  expect(calls.describes[0]?.handoff).toEqual(handoff);
 });
 
 test("a review-comments wake answers every thread in place", async () => {
@@ -396,7 +433,9 @@ test("an approval squash-merges and returns the merged PR", async () => {
   ]);
   const result = await run(deps);
 
-  expect(calls.merges).toEqual(["AGE-316 Review loop jig"]);
+  // No title crosses the boundary: the merge reads the PR's own, so a title
+  // a reviewer corrected after the PR opened is the one that ships.
+  expect(calls.merges).toEqual([pr.number]);
   expect(result.pr).toEqual(pr);
   expect(calls.gateFinished).toBe(false);
 });

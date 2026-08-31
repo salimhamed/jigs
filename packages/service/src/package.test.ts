@@ -36,12 +36,12 @@ async function sourceFiles(dir: string): Promise<string[]> {
   return files.flat().filter((file) => file.endsWith(".ts"));
 }
 
-test("no compiled source carries a workflow directive — templates scaffold them into the factory", async () => {
+test("no compiled source carries a workflow directive — the factory writes its own", async () => {
   // The wrappers live in the factory repo, which is what keeps this package's
   // version out of every memoization key. A directive sneaking back in here
   // compiles clean and resurrects a version-bearing id, so this is the guard
   // that has to hold. src/ and plugins/ are what this package compiles;
-  // templates/ ships as factory-local source and is meant to carry directives.
+  // templates/ is infrastructure only and carries no TypeScript of its own.
   const scanned = [
     ...(await sourceFiles("src")),
     ...(await sourceFiles("plugins")),
@@ -54,16 +54,25 @@ test("no compiled source carries a workflow directive — templates scaffold the
   expect(directed).toEqual([]);
 });
 
-test("every subpath the scaffolded wrappers reach is in the exports map", async () => {
-  // templates/steps/jigs.ts.tmpl is what `jigs init` writes into a factory,
-  // and a factory resolves it through this map alone. A subpath dropped here
-  // is a wrapper that cannot resolve in every factory that already has one.
-  const scaffold = await readFile(
-    path.join(packageDir, "templates", "steps", "jigs.ts.tmpl"),
+test("every subpath the fixture factory's wrappers reach is in the exports map", async () => {
+  // A factory resolves this package through the exports map alone, so a
+  // subpath dropped here is a wrapper that cannot resolve in every factory
+  // that already has one. The fixture factory is the one factory in this repo,
+  // and its wrappers are the closest thing left to a worked example.
+  const wrappers = await readFile(
+    path.join(
+      packageDir,
+      "..",
+      "..",
+      "e2e",
+      "fixture-factory",
+      "steps",
+      "jigs.ts",
+    ),
     "utf8",
   );
   const reached = new Set(
-    [...scaffold.matchAll(/from "@jigs\/service(\/[^"]*)?"/g)].map(
+    [...wrappers.matchAll(/from "@jigs\/service(\/[^"]*)?"/g)].map(
       (match) => `.${match[1] ?? ""}`,
     ),
   );

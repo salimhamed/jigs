@@ -17,7 +17,7 @@ export const fixtureInputs = z.object({
 type FixtureInputs = z.output<typeof fixtureInputs> & { triggerId: string };
 
 // One pipeline, three compile paths — a factory-local "use workflow" body, a
-// factory-local "use step" beside it, and this factory's scaffolded steps/
+// factory-local "use step" beside it, and this factory's own steps/
 // wrappers with the shipped jigs wired on top of them. Nothing here ever runs;
 // what CI reads is the ids the build emits for all three.
 export async function fixturePipeline(inputs: FixtureInputs) {

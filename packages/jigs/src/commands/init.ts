@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import {
-  appendFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -8,31 +7,26 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
-import {
-  appendBlock,
-  missingWrappers,
-  STEPS_FILE,
-} from "../config/steps-scaffold.ts";
 import { locateTemplates, TEMPLATE_SUFFIX } from "../config/templates.ts";
 import { CliError } from "../errors.ts";
 import { interpolate } from "../prompts/interpolate.ts";
 
-// Scaffolds a factory repo: the files a factory needs to build and run its
-// own service. Everything that touches the machine — docker, the World
-// schema, the build, the service — is printed, never run. Those are the steps
-// a human has to be able to see fail.
+// Scaffolds a factory repo: the infrastructure a factory needs to build and
+// run its own service. Nothing a pipeline is written in — jigs.config.ts, the
+// pipelines, the step wrappers — is written here; a factory owns its own code.
+// Everything that touches the machine — docker, the World schema, the build,
+// the service — is printed, never run. Those are the steps a human has to be
+// able to see fail.
 
 export interface InitDeps {
   cwd: string;
   out: (line: string) => void;
-  confirm?: (question: string) => Promise<boolean>;
   templatesDir?: string;
 }
 
 export interface InitResult {
   created: string[];
   skipped: string[];
-  appended: string[];
   servicePort: number;
   postgresPort: number;
 }
@@ -70,11 +64,13 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   for (const file of created.sort()) deps.out(`created ${file}`);
   for (const file of skipped.sort()) deps.out(`kept    ${file}`);
 
-  const appended = await offerMissingWrappers(root, templates, deps);
-
   deps.out("");
   deps.out(
     `${factoryName(root)} listens on :${ports.servicePort}, its World on :${ports.postgresPort}`,
+  );
+  deps.out("");
+  deps.out(
+    "write this factory's own jigs.config.ts, pipelines/ and steps/jigs.ts — jigs scaffolds none of them",
   );
   deps.out("");
   deps.out("next, in this directory (jigs runs none of these for you):");
@@ -88,44 +84,7 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   deps.out("  jigs build");
   deps.out("  jigs service start");
 
-  return { created, skipped, appended, ...ports };
-}
-
-/**
- * The whole lifecycle of the scaffold after the first run: this factory keeps
- * every wrapper it has, and is offered the ones jigs has grown since. Nothing
- * regenerates the file — a rewrite would renumber ids the World is already
- * memoizing against.
- */
-async function offerMissingWrappers(
-  root: string,
-  templates: string,
-  deps: InitDeps,
-): Promise<string[]> {
-  const destination = path.join(root, STEPS_FILE);
-  const template = readFileSync(
-    path.join(templates, `${STEPS_FILE}${TEMPLATE_SUFFIX}`),
-    "utf8",
-  );
-  const existing = readFileSync(destination, "utf8");
-  const missing = missingWrappers(template, existing);
-  if (missing.length === 0) return [];
-
-  const names = missing.map((wrapper) => wrapper.name);
-  deps.out("");
-  deps.out(`${STEPS_FILE} has no wrapper for ${names.length} jigs step(s):`);
-  for (const name of names) deps.out(`  ${name}`);
-  if (deps.confirm === undefined) {
-    deps.out("re-run jigs init on a terminal to add them");
-    return [];
-  }
-  if (!(await deps.confirm(`append them to ${STEPS_FILE}?`))) {
-    deps.out(`left ${STEPS_FILE} alone`);
-    return [];
-  }
-  appendFileSync(destination, appendBlock(missing, existing));
-  deps.out(`appended ${names.length} wrapper(s) to ${STEPS_FILE}`);
-  return names;
+  return { created, skipped, ...ports };
 }
 
 // Two factories on one machine must not fight over a port or a container. The
