@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "jigs": "workspace:*"
+    "jigs": "workspace:*",
+    "undici": "^7.28.0"
   },
   "peerDependencies": {
     "@workflow/world-postgres": "4.3.4",

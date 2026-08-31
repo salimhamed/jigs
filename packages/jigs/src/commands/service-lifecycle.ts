@@ -18,6 +18,7 @@ import { locateFactoryRoot } from "../config/locate-factory.ts";
 import { CliError } from "../errors.ts";
 import { stringEnv } from "../harnesses/env.ts";
 import { jigsDataDir } from "../paths.ts";
+import { STEP_TIMEOUT_ENV } from "../step-timeout.ts";
 
 // Supervision is a pidfile under the jigs data dir, keyed by factory slug —
 // not a systemd unit. A service per factory repo would otherwise need a unit
@@ -101,8 +102,10 @@ function livePid(sv: Supervisor): number | undefined {
 }
 
 // The factory's own `.env` is the service's environment file, World URL and
-// credentials included. `PORT` is the exception: jigs.yml declares the
-// address the CLI dials, so the child has to listen on it.
+// credentials included. `PORT` and the step timeout are the exceptions: both
+// are declared in jigs.yml — the address the child must listen on, and the
+// ceiling it must raise its HTTP dispatcher to — so jigs.yml wins over `.env`
+// for them.
 function childEnv(sv: Supervisor): Record<string, string> {
   const dotenvPath = path.join(sv.factoryRoot, ".env");
   return {
@@ -111,6 +114,7 @@ function childEnv(sv: Supervisor): Record<string, string> {
       ? (parseEnv(readFileSync(dotenvPath, "utf8")) as Record<string, string>)
       : {}),
     PORT: String(sv.service.port),
+    [STEP_TIMEOUT_ENV]: String(sv.service.stepTimeoutMinutes),
   };
 }
 

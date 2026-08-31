@@ -4,3 +4,6 @@
 service:
   # Derived from this factory's path so two factories never fight over a port.
   port: {{SERVICE_PORT}}
+  # How long one step may run before the World gives up on it and re-queues.
+  # Sized for agent steps; raise it if this factory's builders run longer.
+  # step_timeout_minutes: 45

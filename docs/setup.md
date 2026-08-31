@@ -170,6 +170,24 @@ Rebuild after every pipeline change. `jigs build` warns when a run is still in
 flight: a pipeline that changed shape no longer answers to the step ids its
 parked run was memoized under.
 
+#### Step timeout
+
+A step gets **45 minutes**, sized for agent steps; the service prints the
+ceiling it started with (`[service] step ceiling: 45m (default)`). The ceiling
+is worth knowing about rather than a formality: the World runs every step over
+HTTP and re-queues one whose dispatch it loses, and node's own five-minute
+default was cutting long agent steps off and launching a second agent into a
+worktree the first was still working in (AGE-360). Raise it in this factory's
+`jigs.yml` if its builders run longer:
+
+```yaml
+service:
+  step_timeout_minutes: 90
+```
+
+`jigs service restart` applies it. Either way a worktree admits one agent at a
+time: a second one is refused, not queued.
+
 ### 4. Bind target repos
 
 ```sh

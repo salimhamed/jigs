@@ -27,6 +27,12 @@ import {
 import { ensureManagedCodexHome } from "../harnesses/codex-home.ts";
 import { scrubbedEnv } from "../harnesses/env.ts";
 import { claudeCode, codexExec } from "../harnesses/index.ts";
+import { stepTimeoutMs } from "../step-timeout.ts";
+import {
+  checkoutLockPath,
+  FileLockTimeoutError,
+  withFileLock,
+} from "../worktrees/lock.ts";
 import type { McpServerConfig } from "./config.ts";
 import type { AgentWire, AskWire } from "./plan.ts";
 import {
@@ -120,10 +126,40 @@ function outputSpec(
     : Output.object({ schema: jsonSchema<unknown>(schema) });
 }
 
+// One agent per worktree, always (AGE-360). The World re-queues a step whose
+// HTTP dispatch was cut short while the step itself is still running, and
+// workflow@4.8.4 neither cancels the first execution nor dedupes the second —
+// two agents in one worktree is a state its data model permits. This advisory
+// lock is what forbids it. Fail-fast rather than queue: a second agent that
+// waited its turn would only corrupt the worktree later.
 export async function executeAgentStep(
   wire: AgentWire,
   runKey: string,
   deps: ExecuteDeps = realDeps,
+): Promise<AgentStepResult<unknown> | { resumeFailed: string }> {
+  try {
+    return await withFileLock(
+      checkoutLockPath(wire.cwd, "agent-step"),
+      () => generateAgentStep(wire, runKey, deps),
+      // The holder is the request the step ceiling bounds, so staleness has to
+      // outlast it — otherwise the takeover this exists to prevent becomes
+      // legal one tick before the timeout that causes it.
+      { timeoutMs: 0, staleMs: stepTimeoutMs() + 60_000 },
+    );
+  } catch (err) {
+    if (err instanceof FileLockTimeoutError) {
+      throw new Error(
+        `an agent is already running in ${wire.cwd} — refusing to start a second one in the same worktree`,
+      );
+    }
+    throw err;
+  }
+}
+
+async function generateAgentStep(
+  wire: AgentWire,
+  runKey: string,
+  deps: ExecuteDeps,
 ): Promise<AgentStepResult<unknown> | { resumeFailed: string }> {
   const harness = wire.harness;
   const env = scrubbedEnv();

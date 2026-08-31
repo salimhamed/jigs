@@ -28,11 +28,15 @@ let tmp: string;
 // The claude provider validates cwd existence at model construction.
 let worktree: string;
 const savedClaudeExecutable = process.env.JIGS_CLAUDE_EXECUTABLE;
+// The agent step takes a lock under the jigs data dir; nothing here may write
+// to the real one.
+const savedDataHome = process.env.XDG_DATA_HOME;
 beforeAll(() => {
   tmp = makeTmpDir();
   worktree = path.join(tmp, "worktree");
   mkdirSync(worktree);
   process.env.JIGS_CLAUDE_EXECUTABLE = "/fake/claude";
+  process.env.XDG_DATA_HOME = path.join(tmp, "data");
 });
 afterAll(() => {
   removeTmpDir(tmp);
@@ -41,6 +45,8 @@ afterAll(() => {
   } else {
     process.env.JIGS_CLAUDE_EXECUTABLE = savedClaudeExecutable;
   }
+  if (savedDataHome === undefined) delete process.env.XDG_DATA_HOME;
+  else process.env.XDG_DATA_HOME = savedDataHome;
 });
 
 type Captured = {
@@ -335,6 +341,79 @@ test("a failure with no resume to blame still throws", async () => {
   await expect(executeAgentStep(wire, "run-1", deps)).rejects.toThrow(
     "the harness fell over",
   );
+});
+
+test("a second agent in the same worktree is refused while the first is running", async () => {
+  const wire = buildAgentWire({
+    harness: claude({ model: "sonnet" }),
+    cwd: worktree,
+    prompt: "implement it",
+  });
+  let releaseFirst = () => {};
+  const first = makeDeps();
+  first.deps.generateText = async () => {
+    await new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    return { text: "done", files: [], usage };
+  };
+
+  const inFlight = runAgent(wire, "run-1", first.deps);
+  // Yield so the first call is inside the lock before the second tries.
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  const second = makeDeps();
+  await expect(executeAgentStep(wire, "run-1", second.deps)).rejects.toThrow(
+    /an agent is already running in .* refusing to start a second one/,
+  );
+  expect(second.captured.options).toBeUndefined();
+
+  releaseFirst();
+  await inFlight;
+
+  // Released, so the worktree takes the next agent step normally.
+  const after = makeDeps();
+  await runAgent(wire, "run-1", after.deps);
+  expect(after.captured.options?.prompt).toBe("implement it");
+});
+
+test("a busy worktree does not block an agent in another one", async () => {
+  const other = path.join(tmp, "worktree-2");
+  mkdirSync(other, { recursive: true });
+  let releaseFirst = () => {};
+  const first = makeDeps();
+  first.deps.generateText = async () => {
+    await new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    return { text: "done", files: [], usage };
+  };
+
+  const inFlight = runAgent(
+    buildAgentWire({
+      harness: claude({ model: "sonnet" }),
+      cwd: worktree,
+      prompt: "implement it",
+    }),
+    "run-1",
+    first.deps,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  const elsewhere = makeDeps();
+  await runAgent(
+    buildAgentWire({
+      harness: claude({ model: "sonnet" }),
+      cwd: other,
+      prompt: "implement it elsewhere",
+    }),
+    "run-1",
+    elsewhere.deps,
+  );
+  expect(elsewhere.captured.options?.prompt).toBe("implement it elsewhere");
+
+  releaseFirst();
+  await inFlight;
 });
 
 test("the step env is a scrubbed copy: no API credentials, process.env untouched", async () => {

@@ -4,6 +4,7 @@ import { parseDocument } from "yaml";
 import { z } from "zod";
 import { CliError } from "../errors.ts";
 import { expandHome } from "../paths.ts";
+import { DEFAULT_STEP_TIMEOUT_MINUTES } from "../step-timeout.ts";
 import { factorySlug } from "../worktrees/layout.ts";
 
 export const FACTORY_CONFIG_FILE = "jigs.yml";
@@ -19,6 +20,9 @@ const portSchema = z.int().min(1).max(65535);
 
 const serviceSchema = z.strictObject({
   port: portSchema.default(8990),
+  // The ceiling on one step's wall clock (see ../step-timeout.ts). Whole
+  // minutes: nothing here is worth expressing more finely.
+  step_timeout_minutes: z.int().min(1).default(DEFAULT_STEP_TIMEOUT_MINUTES),
 });
 
 const factoryConfigSchema = z.looseObject({
@@ -28,8 +32,8 @@ const factoryConfigSchema = z.looseObject({
   ingress_url: z.url().optional(),
   // One service per factory repo, so the address belongs to the factory
   // rather than the machine; the default is the single global service's port.
-  // Only the address lives here — the World the service writes is a
-  // credential-bearing URL, so it stays in the factory's own .env.
+  // Only non-secret operating parameters live here — the World the service
+  // writes is a credential-bearing URL, so it stays in the factory's own .env.
   service: serviceSchema.prefault({}),
 });
 
@@ -103,6 +107,7 @@ export interface ResolvedService {
   slug: string;
   port: number;
   serviceUrl: string;
+  stepTimeoutMinutes: number;
 }
 
 // What is addressed per factory: the URL its CLI verbs talk to and the slug
@@ -113,6 +118,7 @@ export function resolveService(factoryRoot: string): ResolvedService {
     slug: factorySlug(factoryRoot),
     port: service.port,
     serviceUrl: `http://localhost:${service.port}`,
+    stepTimeoutMinutes: service.step_timeout_minutes,
   };
 }
 

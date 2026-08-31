@@ -1,6 +1,14 @@
 // The documented defineNitroPlugin subpath doesn't exist at nitro 3.0.260610-beta;
 // a plain default export works.
 export default async function startWorld() {
+  // Before the World starts polling: the queue's very first step dispatch has
+  // to go out on the raised dispatcher, not node's five-minute default.
+  const { describeStepCeiling, raiseStepCeiling } = await import(
+    "../src/step-ceiling"
+  );
+  await raiseStepCeiling();
+  console.log(`[service] step ceiling: ${describeStepCeiling()}`);
+
   const { getWorld } = await import("workflow/runtime");
   await getWorld().start?.();
   // Startup reconciliation of suspended runs (poke every held hook) would

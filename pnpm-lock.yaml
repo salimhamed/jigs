@@ -60,6 +60,9 @@ importers:
       jigs:
         specifier: workspace:*
         version: link:../jigs
+      undici:
+        specifier: ^7.28.0
+        version: 7.28.0
     devDependencies:
       '@workflow/world-postgres':
         specifier: 4.3.4
