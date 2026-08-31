@@ -4,7 +4,6 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test, vi } from "vitest";
-import { STEPS_FILE } from "../config/steps-scaffold.ts";
 import { buildFactoryService, type ExecFile } from "./build.ts";
 
 // A factory with no reachable service: the run-in-flight warning is a best
@@ -91,33 +90,6 @@ test("outside a factory repo, the verb refuses before touching anything", async 
     buildFactoryService({ cwd: outside, out: () => {}, prepare, execFile: ok }),
   ).rejects.toThrow(/not inside a factory repo/);
   expect(prepare).not.toHaveBeenCalled();
-});
-
-test("a step with no wrapper in this factory is a warning naming the repair", async () => {
-  const root = factory();
-  mkdirSync(path.join(root, path.dirname(STEPS_FILE)));
-  writeFileSync(
-    path.join(root, STEPS_FILE),
-    'export async function worktree() {\n  "use step";\n}\n',
-  );
-  const lines: string[] = [];
-
-  await buildFactoryService({
-    cwd: root,
-    out: (line) => lines.push(line),
-    prepare: vi.fn(),
-    execFile: ok,
-  });
-
-  const printed = lines.join("\n");
-  expect(printed).toContain("has no wrapper for");
-  expect(printed).toContain("readDiff");
-  expect(printed).not.toContain(", worktree");
-  expect(printed).toContain("jigs init");
-  // Warned, then built anyway — the factory owns this file.
-  expect(lines.at(-1)).toBe(
-    `built ${path.join(root, ".output/server/index.mjs")}`,
-  );
 });
 
 test("a run still in flight is a warning, not a refusal", async () => {

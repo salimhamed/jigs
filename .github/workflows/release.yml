@@ -1,0 +1,74 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      # A PAT, not GITHUB_TOKEN, in both steps below: events raised by
+      # GITHUB_TOKEN start no workflow run. With it, the release PR would get
+      # no checks to watch, and the squash back onto main would not re-run
+      # this workflow — so no tags and no Releases would ever be cut.
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+
+      # `gh pr merge --auto` needs branch protection: GitHub only offers
+      # auto-merge on a PR that cannot merge immediately, and this one always
+      # can. Watching the checks by hand is the same wait, spelled out.
+      - name: Merge the release PR
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        env:
+          # `gh` reads the repository from `--repo`, then `GH_REPO`, then the
+          # working directory's git remote — never from GITHUB_REPOSITORY. The
+          # action above talks to the API and checks nothing out, so without
+          # this every `gh` call below aborts on "not a git repository".
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          PRS: ${{ steps.release.outputs.prs }}
+          # Every check run the release PR must pass, as GitHub names them
+          # (a job id in .github/workflows/). A job added there and not here
+          # is a check this step can merge past.
+          EXPECTED_CHECKS: ci step-ids pr-title
+        run: |
+          set -euo pipefail
+          pr="$(jq -r '.[0].number' <<<"$PRS")"
+          echo "release PR: #$pr"
+
+          # `--watch` waits only on the checks already in the rollup, and check
+          # runs enter it as their workflow runs are created rather than all at
+          # once — a rollup holding pr-title alone reads as green. So wait for
+          # every expected run to register first, which also covers the empty
+          # rollup `gh pr checks` fails outright on.
+          missing="?"
+          for _ in $(seq 30); do
+            registered="$(gh pr checks "$pr" --json name --jq '.[].name' || true)"
+            missing=""
+            for want in $EXPECTED_CHECKS; do
+              grep -qxF "$want" <<<"$registered" || missing="$missing $want"
+            done
+            [ -n "$missing" ] || break
+            echo "waiting for check run(s):$missing"
+            sleep 10
+          done
+          if [ -n "$missing" ]; then
+            echo "check run(s) never registered:$missing" >&2
+            exit 1
+          fi
+
+          gh pr checks "$pr" --watch --fail-fast --interval 15
+
+          gh pr merge "$pr" --squash --delete-branch

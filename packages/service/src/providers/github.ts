@@ -257,6 +257,13 @@ export async function createPullRequest(
   );
 }
 
+export async function fetchPrTitle(pr: PrRef): Promise<string> {
+  const pull = await githubGet<{ title: string }>(
+    `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}`,
+  );
+  return pull.title;
+}
+
 export async function squashMergePr(
   pr: PrRef,
   title: string,

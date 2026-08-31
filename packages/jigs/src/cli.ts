@@ -80,7 +80,7 @@ program
   .command("init")
   .description("scaffold a factory repo in the current directory")
   .action(async () => {
-    await initFactory({ cwd: process.cwd(), confirm: makeConfirm(), out });
+    await initFactory({ cwd: process.cwd(), out });
   });
 
 program

@@ -2,7 +2,6 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vitest";
-import { STEPS_FILE } from "../config/steps-scaffold.ts";
 import { initFactory } from "./init.ts";
 
 const scaffold = (name: string) => {
@@ -10,37 +9,29 @@ const scaffold = (name: string) => {
   return dir;
 };
 
-async function init(
-  dir: string,
-  confirm?: (question: string) => Promise<boolean>,
-) {
+async function init(dir: string) {
   const lines: string[] = [];
   const result = await initFactory({
     cwd: dir,
     out: (line) => lines.push(line),
-    ...(confirm === undefined ? {} : { confirm }),
   });
   return { ...result, lines };
 }
-
-const yes = async () => true;
-const no = async () => false;
 
 test("scaffolds a factory that can be installed and built", async () => {
   const dir = scaffold("acme-factory");
   const { created } = await init(dir);
 
+  // Infrastructure only: jigs.config.ts, the pipelines and the step wrappers
+  // are this factory's own source, and nothing here writes a line of them.
   expect(created.sort()).toEqual([
     ".env.example",
     ".gitignore",
     "docker-compose.yml",
-    "jigs.config.ts",
     "jigs.yml",
     "nitro.config.ts",
     "package.json",
-    path.join("pipelines", "example.ts"),
     "pnpm-workspace.yaml",
-    STEPS_FILE,
     "tsconfig.json",
   ]);
   // Spike finding 6: hono resolves as an external otherwise.
@@ -53,16 +44,13 @@ test("scaffolds a factory that can be installed and built", async () => {
   );
 });
 
-test("the scaffolded wrappers carry the directive and the tsconfig compiles them", async () => {
+test("the tsconfig compiles the code this factory will write", async () => {
   const dir = scaffold("epsilon");
   await init(dir);
 
-  expect(readFileSync(path.join(dir, STEPS_FILE), "utf8")).toContain(
-    '"use step"',
-  );
-  expect(readFileSync(path.join(dir, "tsconfig.json"), "utf8")).toContain(
-    '"steps"',
-  );
+  const tsconfig = readFileSync(path.join(dir, "tsconfig.json"), "utf8");
+  expect(tsconfig).toContain('"steps"');
+  expect(tsconfig).toContain('"pipelines"');
 });
 
 test("the docker project and ports all carry the factory", async () => {
@@ -93,49 +81,12 @@ test("an existing file is kept, never overwritten", async () => {
   expect(readFileSync(path.join(dir, "jigs.yml"), "utf8")).toContain("9999");
 });
 
-test("a re-run offers the wrappers this factory is missing and appends only those", async () => {
-  const dir = scaffold("zeta");
-  await init(dir);
-  const stepsPath = path.join(dir, STEPS_FILE);
-  const trimmed = readFileSync(stepsPath, "utf8").replace(
-    /export async function worktree\([\s\S]*?\n}\n/,
-    "",
-  );
-  writeFileSync(stepsPath, trimmed);
-
-  const again = await init(dir, yes);
-
-  expect(again.appended).toEqual(["worktree"]);
-  expect(again.lines.join("\n")).toContain("no wrapper for 1 jigs step(s)");
-  const repaired = readFileSync(stepsPath, "utf8");
-  expect(repaired).toContain("export async function worktree(");
-  // Everything that was there is still there, byte for byte: a rewrite would
-  // renumber ids the World is already memoizing against.
-  expect(repaired.startsWith(trimmed)).toBe(true);
-  expect(await init(dir, yes)).toMatchObject({ appended: [] });
-});
-
-test("a declined offer leaves the wrappers alone", async () => {
-  const dir = scaffold("eta");
-  await init(dir);
-  const stepsPath = path.join(dir, STEPS_FILE);
-  const trimmed = readFileSync(stepsPath, "utf8").replace(
-    /export async function readDiff\([\s\S]*?\n}\n/,
-    "",
-  );
-  writeFileSync(stepsPath, trimmed);
-
-  const again = await init(dir, no);
-
-  expect(again.appended).toEqual([]);
-  expect(readFileSync(stepsPath, "utf8")).toBe(trimmed);
-});
-
 test("the commands only a human should run are printed, not run", async () => {
   const dir = scaffold("delta");
   const { lines } = await init(dir);
 
   const printed = lines.join("\n");
+  expect(printed).toContain("jigs scaffolds none of them");
   expect(printed).toContain("docker compose up -d --wait");
   expect(printed).toContain("pnpm exec bootstrap");
   expect(printed).toContain("jigs build");

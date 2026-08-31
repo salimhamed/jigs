@@ -60,13 +60,11 @@ so it does not have to be re-run.
   exported wrapper orphans every run that factory has parked, and the build
   stays green while it happens. The file's own header comment says so, and
   `docs/setup.md` says it again at the point a reader first sees the file.
-- **The wrappers are committed source, maintained by an offer rather than a
-  regenerate.** `jigs init` writes the file once and never rewrites it; on a
-  re-run it diffs the factory's copy against the scaffold and offers to append
-  the wrappers jigs has grown since — the offer pattern `jigs bind` already
-  uses — and `jigs build` warns about the same drift with the re-run as its
-  repair. `packages/service/templates/steps/jigs.ts.tmpl` is the single list of
-  steps, so a wrapper added there reaches every factory through that offer.
+- **The wrappers are committed source the factory maintains by hand.**
+  `jigs init` no longer writes or amends the file at all — the boilerplate
+  churned faster than the library while the API settles, so it lives in the
+  operator's factory repo, with `e2e/fixture-factory/steps/jigs.ts` as the
+  worked example (amended from the original offer-to-append design).
 - **The exports map is an ordinary export map again.** A subpath was half an id
   while the directives lived here, so a wildcard entry — which the SDK cannot
   match by exact string — collapsed two modules into one namespace, and a
@@ -92,7 +90,9 @@ so it does not have to be re-run.
   directory, a fresh clone would not typecheck until it had built once, and the
   step ids — which are these filenames — would be owned by a generator rather
   than by the repo they name. Committed source with an append offer keeps the
-  ids where a human can see them.
+  ids where a human can see them (amended — the append offer is gone, so it is
+  committed source and nothing else; the rejection stands on the three counts
+  above, which never depended on it).
 - **Patch the SDK's `module-specifier.js`** so a step in an installed package
   is addressed without its version. Rejected: it is a standing fork of a
   dependency on its fastest-moving surface, carried into every factory install,
@@ -112,9 +112,9 @@ so it does not have to be re-run.
 
 - Fifteen wrappers per factory, each a chance to lose durability silently — a
   wrapper that is missing or loses its directive is not an error, it is a
-  function that runs unmemoized and re-fires on every replay. The mitigation is
-  that they are scaffold output rather than hand-written, that the fixture
-  compiles the scaffold verbatim, and that `jigs build` warns on drift.
+  function that runs unmemoized and re-fires on every replay. With the scaffold
+  and drift warning gone (amended — boilerplate lives in the factory repo for
+  now), the fixture and the factory's own id tests are the remaining guard.
 - The step-id derivation still walks up to a workspace root the build tool
   detects rather than one jigs declares — untouched by this, and recorded in
   [ADR 0012](./0012-per-factory-service.md)'s known costs.

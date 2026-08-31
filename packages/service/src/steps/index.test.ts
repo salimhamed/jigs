@@ -26,7 +26,7 @@ async function addAndTag(a: number, b: number) {
 }
 
 // Stands in for a factory's wrapper, minus the directive: it delegates to
-// runAgent the way the scaffolded one does.
+// runAgent the way a factory's own does.
 const runStep: RunAgentStep = (wire) => runAgent(wire, "run-under-test");
 
 const refuse = (): never => {

@@ -33,14 +33,15 @@ pnpm workspace:
 - `packages/service` — `@jigs/service`, the library a factory repo installs:
   the app and its health/trigger/resume/run routes, the step, suspension and
   worktree primitives pipelines are written against, the Nitro build config,
-  and the templates `jigs init` scaffolds from. It carries no workflow
-  directive of its own and has no build step: it ships as raw TypeScript and
-  the factory's own build compiles it.
-- `e2e/fixture-factory` — a one-pipeline factory repo carrying the `jigs init`
-  scaffold verbatim, built in CI twice: once as committed and once with
-  `@jigs/service` on a fake version, its emitted step ids diffed against a
-  checked-in list both times. The only test that can see a factory-owned step
-  wrapper still take a factory-local, version-free id.
+  and the infrastructure templates `jigs init` scaffolds from. It carries no
+  workflow directive of its own and has no build step: it ships as raw
+  TypeScript and the factory's own build compiles it.
+- `e2e/fixture-factory` — a one-pipeline factory repo carrying its own
+  `steps/jigs.ts`, `jigs.config.ts` and pipeline, built in CI twice: once as
+  committed and once with `@jigs/service` on a fake version, its emitted step
+  ids diffed against a checked-in list both times. The only test that can see
+  a factory-owned step wrapper still take a factory-local, version-free id —
+  and the worked example a new factory copies its boilerplate from.
 
 Both packages carry ordinary semver. Every `"use step"` wrapper lives in the
 factory that runs it, so no step id carries a jigs version and a release never

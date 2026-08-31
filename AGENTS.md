@@ -5,6 +5,10 @@ typecheck, test, and build). `pnpm check` covers no workflow directive — no
 pipeline lives here — so run `pnpm e2e` too: it builds `e2e/fixture-factory`
 and diffs its emitted step ids against a checked-in list.
 
+PR titles are conventional commits, enforced by CI — the squashed title is what
+release-please reads to cut a release
+([ADR 0014](docs/adr/0014-release-automation.md)).
+
 ## Agent skills
 
 ### Issue tracker

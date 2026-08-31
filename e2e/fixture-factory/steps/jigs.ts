@@ -8,9 +8,9 @@
 // replay simply looks up ids that no longer exist. Treat them exactly like the
 // filenames in pipelines/.
 //
-// `jigs init` writes this file once and never rewrites it — it is your source
-// from here on. When a jigs release adds a step, re-running `jigs init` offers
-// to append the wrappers you are missing, and `jigs build` warns when any are.
+// jigs scaffolds none of this — the file is hand-written source the factory
+// owns. When a jigs release adds a step, add its wrapper here yourself; the
+// factory's typecheck is what tells you a jig's deps object is missing one.
 //
 // The implementations are imported at module scope on purpose: the `"use
 // step"` transform erases each body below out of the workflow bundle, and the
@@ -183,6 +183,13 @@ export function ticketReview(options: TicketReviewOptions) {
   return ticketReviewJig(options, { agent, needsHuman });
 }
 
+// Deterministic on purpose: this fixture exists to pin step ids, so its PR
+// presentation is a plain workflow-side function rather than an agent call.
+const describePr: ReviewLoopDeps["describePr"] = async ({ handoff }) => ({
+  title: `fixture: ${handoff.snapshot.identifier}`,
+  body: handoff.brief,
+});
+
 // Exported so a pipeline that must override an entry can spread the rest
 // rather than rebuild the map.
 export const reviewLoopDeps: ReviewLoopDeps = {
@@ -196,6 +203,7 @@ export const reviewLoopDeps: ReviewLoopDeps = {
   commentOnPr,
   squashMerge,
   readDiff,
+  describePr,
 };
 
 export function reviewLoop(options: ReviewLoopOptions) {

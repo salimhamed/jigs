@@ -24,15 +24,6 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const factory = path.join(here, "fixture-factory");
 const bundle = path.join(factory, ".output", "server", "index.mjs");
 const expectedFile = path.join(factory, "expected-ids.txt");
-const scaffold = path.join(
-  here,
-  "..",
-  "packages",
-  "service",
-  "templates",
-  "steps",
-  "jigs.ts.tmpl",
-);
 const servicePackage = path.join(
   here,
   "..",
@@ -49,28 +40,9 @@ const HEADER = `# The workflow and step ids \`jigs build\` emits for this fixtur
 # every factory's durable run state, so a diff is a finding, not a chore.
 `;
 
-// The fixture's wrappers are not a hand-written approximation of the scaffold:
-// they are the scaffold, so what CI compiles is what `jigs init` writes. Run
-// last, after the id diff, so a wrapper file that moved reports as the ids it
-// took with it rather than as a missing file.
-function checkScaffoldMatches() {
-  let wrappers;
-  try {
-    wrappers = readFileSync(path.join(factory, "steps", "jigs.ts"), "utf8");
-  } catch {
-    fail(
-      "the fixture factory has no steps/jigs.ts",
-      "the scaffold's path is half of every step id — restore the file rather than renaming it",
-    );
-  }
-  if (wrappers !== readFileSync(scaffold, "utf8")) {
-    fail(
-      "the fixture's steps/jigs.ts has drifted from the jigs init scaffold",
-      `copy it back: cp ${path.relative(process.cwd(), scaffold)} e2e/fixture-factory/steps/jigs.ts`,
-    );
-  }
-}
-
+// No separate "the wrappers are still there" check: the fixture's pipeline
+// imports them, so a missing steps/jigs.ts fails the build below, and a moved
+// one reports as the ids it took with it in the diff.
 function build() {
   execFileSync(path.join(factory, "node_modules", ".bin", "jigs"), ["build"], {
     cwd: factory,
@@ -190,8 +162,6 @@ if (moved.missing.length > 0 || moved.unexpected.length > 0) {
     "a directive is back inside a jigs package: its ids carry that package's version, and bumping it orphans every parked run",
   );
 }
-
-checkScaffoldMatches();
 
 console.log(
   `\n${ids.length} step/workflow id(s) match ${expectedFile}, and are unchanged with @jigs/service at ${FAKE_VERSION}`,

@@ -15,6 +15,7 @@ import {
 } from "jigs";
 import {
   createPullRequest,
+  fetchPrTitle,
   postPrComment,
   replyToReviewThread,
   squashMergePr,
@@ -98,13 +99,17 @@ export async function commentOnPr(pr: PrRef, body: string): Promise<void> {
   console.log(`[reviewLoop] commented on #${pr.number}`);
 }
 
+// The subject is read here rather than carried in from `describePr`: a
+// reviewer who corrects the title — to satisfy a conventional-commit check on
+// the target repo, usually — does it between the PR opening and this merge,
+// and a title captured at open time would ship the one they corrected away.
 export async function squashMerge(
   pr: PrRef,
-  title: string,
 ): Promise<{ merged: boolean; sha: string }> {
+  const title = await fetchPrTitle(pr);
   const result = await squashMergePr(pr, title);
   console.log(
-    `[reviewLoop] squash-merged #${pr.number} merged=${result.merged} sha=${result.sha}`,
+    `[reviewLoop] squash-merged #${pr.number} as "${title}" merged=${result.merged} sha=${result.sha}`,
   );
   return result;
 }

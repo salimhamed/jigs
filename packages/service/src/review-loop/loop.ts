@@ -4,9 +4,12 @@
 // only when the PR merged — every other ending throws — and it never cleans
 // up: the pipeline calls teardownWorktrees after a merged return, and a thrown
 // ending leaves the worktree for `jigs sweep` (ADR 0007).
+//
+// The factory owns PR presentation: `describePr` names the pull request and
+// writes its body, and jigs carries no default for either.
 
 import type { WorktreeFacts } from "jigs";
-import type { HarnessConfig } from "jigs/steps";
+import type { AgentSession, HarnessConfig } from "jigs/steps";
 import type { CheckRun } from "../providers/github";
 import type { AgentFn } from "../steps";
 import type { TicketClaim } from "../suspension/claim";
@@ -83,6 +86,15 @@ export type ReviewLoopDeps = {
   commentOnPr: typeof commentOnPr;
   squashMerge: typeof squashMerge;
   readDiff: typeof readDiff;
+  // Not a `typeof` like its neighbours: jigs ships no implementation to point
+  // at. How a pull request introduces itself is the factory's voice, so the
+  // factory writes it — required, so a factory cannot forget to have one.
+  describePr: (input: {
+    handoff: Handoff;
+    worktreePath: string;
+    baseSha: string;
+    session?: AgentSession;
+  }) => Promise<{ title: string; body: string }>;
 };
 
 export async function reviewLoop(
@@ -91,11 +103,11 @@ export async function reviewLoop(
 ): Promise<ReviewLoopResult> {
   const { handoff, worktree } = options;
   const maxCiAttempts = options.maxCiAttempts ?? 3;
-  const title = `${handoff.snapshot.identifier} ${handoff.snapshot.title}`;
   // Destructured, never invoked as `deps.step(...)`: the SDK serializes a step
   // call's receiver along with its arguments, and this object holds functions.
   const {
     commentOnPr,
+    describePr,
     openPr,
     pushWorktreeBranch,
     replyInThread,
@@ -134,13 +146,22 @@ export async function reviewLoop(
     throw new EmptyBranchError(worktree.branch, worktree.baseSha);
   }
 
+  // After the push, so nothing writes a description for a branch that turned
+  // out to have nothing on it.
+  const described = await describePr({
+    handoff,
+    worktreePath: worktree.path,
+    baseSha: worktree.baseSha,
+    ...(session === undefined ? {} : { session }),
+  });
+
   const repo = await resolveRepo(options.binding);
   const pr = await openPr(
     repo,
     worktree.branch,
     worktree.defaultBranch,
-    title,
-    prBody(handoff),
+    described.title,
+    described.body,
   );
 
   let ciAttempts = 0;
@@ -239,7 +260,7 @@ export async function reviewLoop(
           break;
         }
         try {
-          await squashMerge(pr, title);
+          await squashMerge(pr);
         } catch (error) {
           // GitHub answers 405 for a PR that is not mergeable, and the arm
           // merges on approval without checking CI. Letting that escape would
@@ -280,16 +301,6 @@ async function postAnswers(
       await reply(pr, answer.threadId, answer.body);
     }
   }
-}
-
-function prBody(handoff: Handoff): string {
-  return [
-    `Implements [${handoff.snapshot.identifier}](${handoff.snapshot.url}) — ${handoff.snapshot.title}.`,
-    "",
-    "## Brief",
-    "",
-    handoff.brief,
-  ].join("\n");
 }
 
 function escalation(
