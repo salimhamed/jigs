@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.9](https://github.com/salimhamed/jigs/compare/service-v0.1.8...service-v0.1.9) (2026-08-31)
+
+
+### Features
+
+* **service:** log ticket review, worktree, and snapshot milestones ([#58](https://github.com/salimhamed/jigs/issues/58)) ([4edd6e9](https://github.com/salimhamed/jigs/commit/4edd6e9ca1a789b69d5710b9bcd8253d196e6db0))
+
 ## [0.1.8](https://github.com/salimhamed/jigs/compare/service-v0.1.7...service-v0.1.8) (2026-08-31)
 
 
