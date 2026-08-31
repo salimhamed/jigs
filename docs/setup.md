@@ -278,6 +278,9 @@ jigs cancel <run> [--force]
 jigs sweep [--force]
 ```
 
+Factories upgrading past 0.1.4 must pass the injected Linear `identifier` as
+the second argument to `claimTicket`, or adopt the `ticket=` input shown above.
+
 Every verb dials the service of the factory you are standing in;
 `--service <url>` / `JIGS_SERVICE_URL` overrides that. `--input` values are
 read as JSON with the raw string as the fallback, so `askHuman=true` is a
