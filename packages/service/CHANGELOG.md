@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.6](https://github.com/salimhamed/jigs/compare/service-v0.1.5...service-v0.1.6) (2026-08-31)
+
+
+### Bug Fixes
+
+* **service:** log an outcome line for every ingress delivery ([#52](https://github.com/salimhamed/jigs/issues/52)) ([2398937](https://github.com/salimhamed/jigs/commit/2398937c7a94daf854a790187bc13284e2805c6a))
+
 ## [0.1.5](https://github.com/salimhamed/jigs/compare/service-v0.1.4...service-v0.1.5) (2026-08-31)
 
 
