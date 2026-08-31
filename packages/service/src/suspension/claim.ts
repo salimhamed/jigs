@@ -18,6 +18,7 @@ export class ClaimConflictError extends Error {
 
 export interface TicketClaim {
   issueId: string;
+  identifier: string;
   token: string;
   hook: Hook<unknown>;
 }
@@ -27,8 +28,12 @@ export interface TicketClaim {
 // step. The hook is deliberately not `using`-scoped — it is held for the
 // run's whole life (the SDK auto-disposes it at terminal state) and doubles
 // as needsHuman()'s wake channel.
-export async function claimTicket(issueId: string): Promise<TicketClaim> {
+export async function claimTicket(
+  issueId: string,
+  identifier: string,
+): Promise<TicketClaim> {
   const token = ticketToken(issueId);
+  const identifierToken = ticketToken(identifier);
   const hook = createHook<unknown>({
     token,
     metadata: suspensionMetadata({
@@ -41,5 +46,18 @@ export async function claimTicket(issueId: string): Promise<TicketClaim> {
   if (conflict !== null) {
     throw new ClaimConflictError(token, conflict.runId);
   }
-  return { issueId, token, hook };
+  const identifierHook = createHook<unknown>({
+    token: identifierToken,
+    metadata: suspensionMetadata({
+      key: "ticket-claim-alias",
+      reason: "one active run per ticket",
+      satisfiedBy: identifierToken,
+    }),
+  });
+  const identifierConflict = await identifierHook.getConflict();
+  if (identifierConflict !== null) {
+    hook.dispose();
+    throw new ClaimConflictError(identifierToken, identifierConflict.runId);
+  }
+  return { issueId, identifier, token, hook };
 }

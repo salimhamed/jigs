@@ -41,6 +41,14 @@ test("a ticket id resolves through its claim hook", async () => {
   expect(ref).toEqual({ kind: "found", runId: RUN_A });
 });
 
+test("a lowercase ticket identifier retries with its canonical casing", async () => {
+  const ref = await resolveRunRef(
+    "age-317",
+    lookupDeps([RUN_A], { "linear:ticket:AGE-317": RUN_A }),
+  );
+  expect(ref).toEqual({ kind: "found", runId: RUN_A });
+});
+
 test("a ticket UUID — what today's pipelines claim with — resolves the same way", async () => {
   const issueId = crypto.randomUUID();
   const ref = await resolveRunRef(

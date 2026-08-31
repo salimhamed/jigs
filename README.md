@@ -17,7 +17,8 @@ which also carries the port its service answers on. Every trigger preflights
 the pipeline's requirements before creating a run, and `jigs doctor` runs the
 same checks on demand. The operational verbs are `jigs run` / `ps` / `logs` /
 `cancel` / `poke`, each an HTTP client of the factory's own service; a run can
-be named by its id, a unique id prefix, or the ticket it claimed.
+be named by its id, a unique id prefix, or the ticket it claimed (its Linear
+identifier or UUID).
 `jigs cancel <run>` is the escape hatch for a zombie claim owner, and logs
 themselves stay the SDK's — the verbs print the `workflow web` invocation that
 reads the factory's own World. Pipelines request worktrees and the runtime

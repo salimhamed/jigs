@@ -12,6 +12,7 @@ import {
   type WakeHint,
 } from "./ingress";
 import { doctor, factoryRoot, preflight } from "./preflight";
+import { resolveIssueRef } from "./providers/linear";
 import {
   isParkToken,
   listRuns,
@@ -96,8 +97,25 @@ export function createApp(factory: Factory): Hono {
       );
     }
 
+    let issue: { id: string; identifier: string } | undefined;
+    if (hasTicket(parsed.data)) {
+      try {
+        issue = await resolveIssueRef(parsed.data.ticket);
+      } catch (err) {
+        return c.json({ error: `invalid ticket: ${String(err)}` }, 400);
+      }
+    }
+
     const triggerId = crypto.randomUUID();
-    const run = await start(entry.pipeline, [{ ...parsed.data, triggerId }]);
+    const run = await start(entry.pipeline, [
+      {
+        ...parsed.data,
+        triggerId,
+        ...(issue === undefined
+          ? {}
+          : { issueId: issue.id, identifier: issue.identifier }),
+      },
+    ]);
     return c.json(
       {
         runId: run.runId,
@@ -320,6 +338,15 @@ export function createApp(factory: Factory): Hono {
   }
 
   return app;
+}
+
+function hasTicket(value: unknown): value is { ticket: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "ticket" in value &&
+    typeof value.ticket === "string"
+  );
 }
 
 // Liveness must answer from anywhere, including a service started outside a

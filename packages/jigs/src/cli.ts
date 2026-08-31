@@ -145,7 +145,10 @@ program
 program
   .command("cancel")
   .description("cancel a run, releasing every resource it claims")
-  .argument("<run>", "run id, unique id prefix, or ticket id")
+  .argument(
+    "<run>",
+    "run id, unique id prefix, or ticket (`AGE-123` or its UUID)",
+  )
   .option("--force", "skip the confirmation for an in-flight run")
   .addOption(serviceOption())
   .action(
@@ -162,7 +165,10 @@ program
 program
   .command("logs")
   .description("show a run's state and the workflow web pointer to its logs")
-  .argument("<run>", "run id, unique id prefix, or ticket id")
+  .argument(
+    "<run>",
+    "run id, unique id prefix, or ticket (`AGE-123` or its UUID)",
+  )
   .addOption(serviceOption())
   .action(async (run: string, options: { service?: string }) => {
     await showLogs(run, { out, ...serviceTarget(options.service) });
@@ -171,7 +177,10 @@ program
 program
   .command("poke")
   .description("manually wake a suspended run (the missed-delivery fallback)")
-  .argument("<run>", "run id, unique id prefix, or ticket id")
+  .argument(
+    "<run>",
+    "run id, unique id prefix, or ticket (`AGE-123` or its UUID)",
+  )
   .addOption(serviceOption())
   .action(async (runId: string, options: { service?: string }) => {
     await pokeRun(runId, { out, ...serviceTarget(options.service) });

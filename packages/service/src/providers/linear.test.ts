@@ -5,6 +5,7 @@ import {
   getIssueParticipants,
   listCommentsSince,
   mention,
+  resolveIssueRef,
 } from "./linear";
 
 const fetchMock = vi.fn();
@@ -60,6 +61,15 @@ test("fetchIssueSnapshot asks for the snapshot fields in one round trip", async 
     expect(body.query).toContain(field);
   }
   expect(body.variables).toEqual({ id: "issue-uuid" });
+});
+
+test("resolveIssueRef normalizes either accepted Linear reference", async () => {
+  respond({ issue: { id: "issue-uuid", identifier: "AGE-346" } });
+  await expect(resolveIssueRef("AGE-346")).resolves.toEqual({
+    id: "issue-uuid",
+    identifier: "AGE-346",
+  });
+  expect(lastRequest().body.variables).toEqual({ id: "AGE-346" });
 });
 
 test("createComment posts a commentCreate mutation with the body verbatim", async () => {

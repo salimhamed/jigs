@@ -55,6 +55,22 @@ export async function getViewer(): Promise<LinearUser> {
   return data.viewer;
 }
 
+export interface LinearIssueRef {
+  id: string;
+  identifier: string;
+}
+
+export async function resolveIssueRef(ticket: string): Promise<LinearIssueRef> {
+  const data = await linearGraphql<{ issue: LinearIssueRef | null }>(
+    `query IssueRef($id: String!) {
+      issue(id: $id) { id identifier }
+    }`,
+    { id: ticket },
+  );
+  if (data.issue === null) throw new Error(`Linear issue not found: ${ticket}`);
+  return data.issue;
+}
+
 export async function getIssueParticipants(
   issueId: string,
 ): Promise<{ creator: LinearUser | null; viewerId: string }> {
