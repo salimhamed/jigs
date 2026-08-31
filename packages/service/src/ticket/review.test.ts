@@ -1,5 +1,5 @@
 import { type AgentStepConfig, claude } from "jigs/steps";
-import { beforeEach, expect, test } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 import { parseOutput } from "../steps";
 import type { TicketClaim } from "../suspension/claim";
 import type { HumanReply } from "../suspension/needs-human";
@@ -115,6 +115,7 @@ test("ticketReview rejects when the agent returns a verdict the schema refuses",
 });
 
 test("a proceed verdict returns the brief with the snapshot it was reviewed against", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
   agentRaw = {
     verdict: "proceed",
     brief: "Implement the snapshot fetch, then the jig.",
@@ -125,9 +126,13 @@ test("a proceed verdict returns the brief with the snapshot it was reviewed agai
   expect(result.brief).toBe("Implement the snapshot fetch, then the jig.");
   expect(result.snapshot).toBe(snapshot);
   expect(humanCalls).toHaveLength(0);
+  expect(log).toHaveBeenCalledWith(
+    "[ticketReview] AGE-313 verdict=proceed findings=0",
+  );
 });
 
 test("a needs-human verdict routes the findings to needsHuman and never the brief", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
   agentRaw = {
     verdict: "needs-human",
     brief: "SECRET-BRIEF-TEXT that must not reach Linear",
@@ -146,6 +151,9 @@ test("a needs-human verdict routes the findings to needsHuman and never the brie
   expect(agentCalls).toHaveLength(1);
   expect(result.verdict).toBe("needs-human");
   expect(result.brief).toContain("SECRET-BRIEF-TEXT");
+  expect(log).toHaveBeenCalledWith(
+    "[ticketReview] AGE-313 verdict=needs-human findings=1",
+  );
 });
 
 test("the default prompt is used and carries the rendered ticket", async () => {

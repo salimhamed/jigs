@@ -278,6 +278,10 @@ jigs cancel <run> [--force]
 jigs sweep [--force]
 ```
 
+jigs narrates every pipeline milestone in `jigs logs`. A pipeline body that
+needs `console.log` is missing a jigs-side line; file a ticket instead of
+adding one to the pipeline.
+
 Factories upgrading past 0.1.4 must pass the injected Linear `identifier` as
 the second argument to `claimTicket`, or adopt the `ticket=` input shown above.
 

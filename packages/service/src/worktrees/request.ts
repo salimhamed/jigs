@@ -102,5 +102,8 @@ export async function provisionRequest(
     await setWorktreeState(sql, facts.path, "provision-failed");
     throw err;
   }
+  log(
+    `[worktree] provisioned binding=${binding.name} branch=${facts.branch} path=${facts.path}`,
+  );
   return facts;
 }
