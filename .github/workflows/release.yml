@@ -32,8 +32,12 @@ jobs:
       # `gh pr merge --auto` needs branch protection: GitHub only offers
       # auto-merge on a PR that cannot merge immediately, and this one always
       # can. Watching the checks by hand is the same wait, spelled out.
+      # Not gated on the action's prs_created output: that is false when the
+      # release PR already existed unchanged, which is exactly the state a
+      # failed earlier run leaves behind — the PR would sit unmerged until an
+      # unrelated release-worthy commit updated it. Looking the PR up by its
+      # well-known head branch makes every run a chance to finish the job.
       - name: Merge the release PR
-        if: ${{ steps.release.outputs.prs_created == 'true' }}
         env:
           # `gh` reads the repository from `--repo`, then `GH_REPO`, then the
           # working directory's git remote — never from GITHUB_REPOSITORY. The
@@ -46,14 +50,18 @@ jobs:
           # itself needs the PAT (its push must re-run this workflow).
           GH_TOKEN: ${{ github.token }}
           MERGE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-          PRS: ${{ steps.release.outputs.prs }}
           # Every check run the release PR must pass, as GitHub names them
           # (a job id in .github/workflows/). A job added there and not here
           # is a check this step can merge past.
           EXPECTED_CHECKS: ci step-ids pr-title
         run: |
           set -euo pipefail
-          pr="$(jq -r '.[0].number' <<<"$PRS")"
+          pr="$(gh pr list --head release-please--branches--main --state open \
+            --json number --jq '.[0].number // empty')"
+          if [ -z "$pr" ]; then
+            echo "no open release PR — nothing to merge"
+            exit 0
+          fi
           echo "release PR: #$pr"
 
           # `--watch` waits only on the checks already in the rollup, and check
