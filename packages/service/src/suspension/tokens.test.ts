@@ -17,6 +17,17 @@ test("ticket token carries the UUID", () => {
   expect(ticketToken(issueId)).toBe(`linear:ticket:${issueId}`);
 });
 
+test.each([
+  ["empty", "", "an empty string"],
+  ["undefined", undefined, "undefined"],
+  ["null", null, "null"],
+  ["non-string", 42, "number"],
+])("ticket token rejects an %s segment", (_kind, issueId, expectedKind) => {
+  expect(() => ticketToken(issueId as string)).toThrow(
+    `ticketToken requires a non-empty string; received ${expectedKind}`,
+  );
+});
+
 test("a pull_request_review payload reconstructs the exact pr token", () => {
   const payload = {
     action: "submitted",

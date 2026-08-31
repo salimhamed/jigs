@@ -5,7 +5,7 @@
 import { getHookByToken, getRun } from "workflow/api";
 import { getWorld } from "workflow/runtime";
 import type { Factory } from "./factory";
-import { ticketToken } from "./suspension/tokens";
+import { TICKET_TOKEN_PREFIX, ticketToken } from "./suspension/tokens";
 
 // The SDK mints run ids as `wrun_` + a ULID, so a ref is run-id-shaped (with
 // or without the prefix, full or truncated) or it is a ticket ref. Crockford
@@ -82,7 +82,7 @@ export interface WorldRun {
 // carrying no jigs metadata to hydrate. `jigs ps` and `jigs cancel` must agree
 // on this or a run ps calls suspended is one cancel refuses to confirm.
 export const isParkToken = (token: string): boolean =>
-  !token.startsWith(ticketToken(""));
+  !token.startsWith(TICKET_TOKEN_PREFIX);
 
 export interface RunListDeps {
   listRuns?: () => Promise<WorldRun[]>;

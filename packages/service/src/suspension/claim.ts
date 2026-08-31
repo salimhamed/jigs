@@ -32,6 +32,11 @@ export async function claimTicket(
   issueId: string,
   identifier: string,
 ): Promise<TicketClaim> {
+  if (typeof identifier !== "string" || identifier === "") {
+    throw new TypeError(
+      "claimTicket received a missing or empty identifier; AGE-346 changed claimTicket to require the injected Linear identifier as its second argument",
+    );
+  }
   const token = ticketToken(issueId);
   const identifierToken = ticketToken(identifier);
   const hook = createHook<unknown>({
