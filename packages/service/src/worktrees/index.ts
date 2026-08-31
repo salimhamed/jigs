@@ -1,8 +1,9 @@
 // The step side of the worktree lifecycle: what the factory's "use step"
-// wrappers delegate to. The runtime creates a worktree, registers it, and
-// tears it down when the run reaches a terminal state — authors write no
-// cleanup, because an author `finally` would fire on every suspension too,
-// and a suspended run keeps its worktree.
+// wrappers delegate to. The runtime creates a worktree and registers it; the
+// pipeline calls teardown as a plain sequential line after a merged
+// reviewLoop return — never in a `finally`, which would fire on every
+// suspension, and a suspended run keeps its worktree. Every other ending
+// leaves the tree for the operator's `jigs sweep`.
 //
 // Everything below reaches node builtins, so this module must only ever be
 // imported from inside a step body. `WorktreeRequest` is a type, so a
@@ -29,8 +30,9 @@ export async function provisionRunWorktree(
   return provisionRequest({ ...request, runId });
 }
 
-// The per-run half of the teardown matrix, on a jig's own completion path.
-// The sweep timer stays the net for runs that never get there.
+// The per-run half of the teardown matrix, called by the pipeline after a
+// merged reviewLoop return. The operator's `jigs sweep` is the net for runs
+// that never get there.
 export async function teardownRunWorktrees(
   runId: string,
   outcome: { merged: boolean },

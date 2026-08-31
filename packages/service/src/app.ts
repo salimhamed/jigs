@@ -27,11 +27,7 @@ import {
   tokenFromGithubPayload,
   tokenFromLinearPayload,
 } from "./suspension/tokens";
-import {
-  connectRegistry,
-  listWorktrees,
-  type WorktreeRow,
-} from "./worktrees/registry";
+import { listWorktreesForRun } from "./worktrees/registry";
 import { registrySql } from "./worktrees/sql";
 import { sweepWorktrees } from "./worktrees/sweep";
 
@@ -117,12 +113,11 @@ export function createApp(factory: Factory): Hono {
   // red report is still a report, so it answers 200.
   app.get("/api/doctor", async (c) => c.json(await doctor()));
 
-  // `jigs sweep` is an HTTP client of this route (ADR 0008); the automatic
-  // teardown pass calls the same function directly.
+  // `jigs sweep` is an HTTP client of this route (ADR 0008). `paths` scopes a
+  // clean to the worktrees an operator approved one by one.
   app.post("/api/worktrees/sweep", async (c) => {
-    const body = await c.req
-      .json<{ clean?: boolean; force?: boolean }>()
-      .catch(() => ({}) as { clean?: boolean; force?: boolean });
+    type SweepBody = { clean?: boolean; force?: boolean; paths?: string[] };
+    const body = await c.req.json<SweepBody>().catch(() => ({}) as SweepBody);
     const sql = registrySql();
     if (sql === null) {
       return c.json(
@@ -135,7 +130,13 @@ export function createApp(factory: Factory): Hono {
     }
     return c.json(
       await sweepWorktrees(
-        { clean: body.clean === true, force: body.force === true },
+        {
+          clean: body.clean === true,
+          force: body.force === true,
+          ...(Array.isArray(body.paths)
+            ? { paths: body.paths.filter((p) => typeof p === "string") }
+            : {}),
+        },
         { sql },
       ),
     );
@@ -229,11 +230,18 @@ export function createApp(factory: Factory): Hono {
   });
 
   // Everything `jigs ps` renders: the SDK's runs overlaid with jigs' suspended
-  // status, plus the worktree registry's own view of what is on disk.
+  // status, plus the worktrees as the sweep classifier sees them — the one
+  // deriver of worktree state, so ps and sweep can never disagree.
   app.get("/api/runs", async (c) => {
+    const sql = registrySql();
     const [runs, worktrees] = await Promise.all([
       listRuns(factory),
-      readWorktrees(),
+      sql === null
+        ? []
+        : sweepWorktrees(
+            { clean: false, includeUnregistered: false },
+            { sql },
+          ).then((report) => report.entries),
     ]);
     return c.json({ runs, worktrees });
   });
@@ -255,13 +263,24 @@ export function createApp(factory: Factory): Hono {
     const { records } = await listSuspensions(ref.runId);
     const releasedTokens = [...new Set(records.map((s) => s.satisfiedBy))];
     await run.cancel();
-    // A run that reaches its own completion tears itself down through
-    // `teardownRun` (./worktrees/teardown). The sweep timer is the net for
-    // cancel and for any run whose body ends before reaching that call — a
-    // claim conflict, a step out of retries. A cancelled run's dirty tree is
-    // exactly the wreckage the sweep exists to surface, and reuse already stops
-    // naming a cancelled run as an owner.
-    return c.json({ runId: ref.runId, cancelled: true, releasedTokens });
+    // Cancel never cleans up: name what stays so the operator knows where the
+    // worktree is and that `jigs sweep` is the way to reclaim it.
+    const sql = registrySql();
+    const worktrees =
+      sql === null
+        ? []
+        : (await listWorktreesForRun(sql, ref.runId)).map((row) => row.path);
+    // A merged run's pipeline tears its own worktree down; everything else —
+    // cancel included — leaves the tree on disk for the operator's `jigs
+    // sweep`. A cancelled run's dirty tree is exactly the wreckage the sweep
+    // exists to surface, and reuse already stops naming a cancelled run as an
+    // owner.
+    return c.json({
+      runId: ref.runId,
+      cancelled: true,
+      releasedTokens,
+      worktrees,
+    });
   });
 
   app.get("/api/runs/:runId", async (c) => {
@@ -329,19 +348,6 @@ function logsPointer(runId: string): string {
   return world === undefined || world === ""
     ? `npx workflow web ${runId}`
     : `npx workflow web --backend ${world} ${runId}`;
-}
-
-// Connect-and-end per request, as the world plugin does: `ps` is
-// CLI-frequency, so a pooled connection would cost more concept than latency.
-async function readWorktrees(): Promise<WorktreeRow[]> {
-  const url = process.env.WORKFLOW_POSTGRES_URL;
-  if (url === undefined || url === "") return [];
-  const sql = connectRegistry(url);
-  try {
-    return await listWorktrees(sql);
-  } finally {
-    await sql.end();
-  }
 }
 
 // A signed but unparseable body is unroutable, like an unknown event type.

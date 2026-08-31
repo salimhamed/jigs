@@ -1,7 +1,9 @@
 // The review loop jig (ADR 0009): implement ⇄ agent review until approved,
 // then a pull request whose human review the builder answers, whose red CI the
-// builder fixes under a bound, and whose close ends the run under ADR 0007's
-// teardown matrix.
+// builder fixes under a bound, and whose close ends the run. The loop returns
+// only when the PR merged — every other ending throws — and it never cleans
+// up: the pipeline calls teardownWorktrees after a merged return, and a thrown
+// ending leaves the worktree for `jigs sweep` (ADR 0007).
 
 import type { WorktreeFacts } from "jigs";
 import type { HarnessConfig } from "jigs/steps";
@@ -81,7 +83,6 @@ export type ReviewLoopDeps = {
   commentOnPr: typeof commentOnPr;
   squashMerge: typeof squashMerge;
   readDiff: typeof readDiff;
-  teardownRun: (outcome: { merged: boolean }) => Promise<string[]>;
 };
 
 export async function reviewLoop(
@@ -100,7 +101,6 @@ export async function reviewLoop(
     replyInThread,
     resolveRepo,
     squashMerge,
-    teardownRun,
   } = deps;
 
   const built = await implementAndReview(
@@ -127,10 +127,10 @@ export async function reviewLoop(
     worktree.baseSha,
   );
   // Thrown workflow-side, so the SDK does not retry an empty push three times.
+  // Like every thrown ending, it leaves the worktree behind for `jigs sweep`:
+  // the loop never tears down (the pipeline calls teardownWorktrees after a
+  // merged return; nothing cleans up a failure except the operator).
   if (pushed.commits === 0) {
-    // The one failure the jig raises itself, so it follows the failed-run rows
-    // rather than waiting on the sweep timer like a run that dies mid-body.
-    await teardownRun({ merged: false });
     throw new EmptyBranchError(worktree.branch, worktree.baseSha);
   }
 
@@ -243,16 +243,14 @@ export async function reviewLoop(
         } catch (error) {
           // GitHub answers 405 for a PR that is not mergeable, and the arm
           // merges on approval without checking CI. Letting that escape would
-          // end the run without its own teardown; breaking keeps the gate
-          // listening so the eventual close tears the run down.
+          // fail the run on a recoverable state; breaking keeps the gate
+          // listening so the eventual close still ends the run.
           await commentOnPr(pr, mergeFailure(wake.reviewer, error));
           break;
         }
-        await teardownRun({ merged: true });
         return { pr, cycles: built.cycles };
       }
       case "closed": {
-        await teardownRun({ merged: wake.merged });
         if (wake.merged) return { pr, cycles: built.cycles };
         throw new PrClosedUnmergedError(pr);
       }

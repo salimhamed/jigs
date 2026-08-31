@@ -190,17 +190,17 @@ program
   .description(
     "reconcile worktrees on disk against the registry and run states",
   )
-  .option("--clean", "delete eligible worktrees instead of only reporting")
-  .option("--force", "also delete dirty worktrees (with --clean)")
+  .option(
+    "--force",
+    "delete every eligible worktree without asking, dirty ones included",
+  )
   .addOption(serviceOption())
-  .action(
-    async (options: { clean?: boolean; force?: boolean; service?: string }) => {
-      await sweepWorktrees(
-        { out, ...serviceTarget(options.service) },
-        { clean: options.clean, force: options.force },
-      );
-    },
-  );
+  .action(async (options: { force?: boolean; service?: string }) => {
+    await sweepWorktrees(
+      { out, confirm: makeConfirm(), ...serviceTarget(options.service) },
+      { force: options.force },
+    );
+  });
 
 const service = program
   .command("service")

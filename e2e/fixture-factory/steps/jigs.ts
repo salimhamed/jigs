@@ -196,7 +196,6 @@ export const reviewLoopDeps: ReviewLoopDeps = {
   commentOnPr,
   squashMerge,
   readDiff,
-  teardownRun: teardownWorktrees,
 };
 
 export function reviewLoop(options: ReviewLoopOptions) {

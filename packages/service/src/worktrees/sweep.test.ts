@@ -148,6 +148,22 @@ test("--clean removes the clean abandoned worktree and leaves the dirty one", as
   expect(store.get(messy)?.state).toBe("abandoned-dirty");
 });
 
+test("paths scopes a clean to the approved worktrees only", async () => {
+  const approvedTree = addWorktree("approved");
+  const declined = addWorktree("declined");
+  register(approvedTree, "approved");
+  register(declined, "declined");
+
+  const report = await sweepWorktrees(
+    { clean: true, force: true, paths: [approvedTree] },
+    deps(),
+  );
+  expect(report.removed).toEqual([approvedTree]);
+  expect(existsSync(approvedTree)).toBe(false);
+  expect(existsSync(declined)).toBe(true);
+  expect(store.has(declined)).toBe(true);
+});
+
 test("--clean --force removes the dirty one too", async () => {
   const messy = addWorktree("messy");
   dirty(messy);

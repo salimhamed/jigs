@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   fetchSnapshot,
   reviewLoop,
+  teardownWorktrees,
   ticketReview,
   worktree,
 } from "../steps/jigs.ts";
@@ -45,6 +46,9 @@ export async function fixturePipeline(inputs: FixtureInputs) {
       worktree: tree,
       binding: "none",
     });
+    // The loop returns only when the PR merged; teardown is the pipeline's
+    // own last line now, never the jig's.
+    await teardownWorktrees({ merged: true });
   }
   return local.output;
 }

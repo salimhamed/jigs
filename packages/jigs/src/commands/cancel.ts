@@ -18,6 +18,7 @@ export interface CancelResult {
   runId: string;
   cancelled: boolean;
   releasedTokens: string[];
+  worktrees: string[];
 }
 
 export async function cancelRun(
@@ -71,5 +72,10 @@ export async function cancelRun(
   const result = (await res.json()) as CancelResult;
   deps.out(`cancelled ${result.runId}`);
   for (const token of result.releasedTokens) deps.out(`released ${token}`);
+  // Cancel never cleans up; the sentence replaces what a background pass
+  // would otherwise do silently.
+  for (const path of result.worktrees ?? []) {
+    deps.out(`worktree kept at ${path} — jigs sweep to review`);
+  }
   return result;
 }
