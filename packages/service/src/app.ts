@@ -1,7 +1,7 @@
 import { type Context, Hono } from "hono";
 import { failedChecks } from "jigs/checks";
 import { getHookByToken, getRun, resumeHook, start } from "workflow/api";
-import { HookNotFoundError } from "workflow/internal/errors";
+import { HookNotFoundError } from "workflow/errors";
 import { getWorld } from "workflow/runtime";
 import { z } from "zod";
 import type { Factory } from "./factory";

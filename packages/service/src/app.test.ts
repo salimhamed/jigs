@@ -11,7 +11,7 @@ import {
   test,
   vi,
 } from "vitest";
-import { HookNotFoundError } from "workflow/internal/errors";
+import { HookNotFoundError } from "workflow/errors";
 import { z } from "zod";
 import { createApp } from "./app";
 import { type Factory, ticketInput } from "./factory";
