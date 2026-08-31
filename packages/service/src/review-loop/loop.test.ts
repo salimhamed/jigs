@@ -4,7 +4,7 @@ import { beforeEach, expect, test } from "vitest";
 import type { CheckRun, ReviewThread } from "../providers/github";
 import { parseOutput, ResumeFailedError } from "../steps";
 import type { TicketClaim } from "../suspension/claim";
-import type { GateWake } from "../suspension/pull-request-gate";
+import type { GateAck, GateWake } from "../suspension/pull-request-gate";
 import type { PrRef } from "../suspension/tokens";
 import type { Handoff } from "../ticket/review";
 import type { TicketSnapshot } from "../ticket/snapshot";
@@ -84,6 +84,7 @@ type Calls = {
   opens: Array<[string, string]>;
   needsHuman: number;
   gateFinished: boolean;
+  acks: GateAck[];
 };
 
 let calls: Calls;
@@ -112,8 +113,17 @@ function makeDeps(wakes: GateWake[]): ReviewLoopDeps {
         createdAt: "2026-08-26T14:00:00Z",
       };
     }) as ReviewLoopDeps["needsHuman"],
-    gate: async function* gate() {
-      yield* wakes;
+    // Not `yield* wakes`: an array iterator drops what `next(ack)` sends, and
+    // the acks are what carry the loop's own reply ids back to the gate.
+    gate: async function* gate(): AsyncGenerator<
+      GateWake,
+      void,
+      GateAck | undefined
+    > {
+      for (const wake of wakes) {
+        const ack = yield wake;
+        if (ack !== undefined) calls.acks.push(ack);
+      }
       calls.gateFinished = true;
     } as unknown as ReviewLoopDeps["gate"],
     resolveRepo: async () => ({ owner: pr.owner, repo: pr.repo }),
@@ -135,6 +145,7 @@ function makeDeps(wakes: GateWake[]): ReviewLoopDeps {
     },
     replyInThread: async (_pr, rootId, body) => {
       calls.replies.push([rootId, body]);
+      return { id: rootId + 1 };
     },
     commentOnPr: async (_pr, body) => {
       calls.comments.push(body);
@@ -196,6 +207,7 @@ beforeEach(() => {
     opens: [],
     needsHuman: 0,
     gateFinished: false,
+    acks: [],
   };
   // The first review verdict every test needs before the PR is opened.
   agentOutputs = [approved];
@@ -320,6 +332,34 @@ test("a review-comments wake answers every thread in place", async () => {
   // The answer prompts have the builder commit its fix, so the branch has to
   // carry it before the reply claims it does.
   expect(calls.pushes).toHaveLength(2);
+});
+
+test("the ids of the replies it posts ride back into the gate", async () => {
+  agentOutputs = [approved, answerFor([900, 910])];
+  const deps = makeDeps([
+    { kind: "review-comments", threads: [thread(900), thread(910)] },
+    { kind: "closed", merged: true },
+  ]);
+  await run(deps);
+
+  // What keeps the gate from waking the builder back into a thread whose only
+  // new comment is jigs' own reply, without filtering by author (AGE-363).
+  expect(calls.acks).toEqual([{ selfCommentIds: [901, 911] }]);
+});
+
+test("answers that land on the conversation ack nothing", async () => {
+  agentOutputs = [
+    approved,
+    { answers: [{ threadId: null, body: "addressed it" }] },
+  ];
+  const deps = makeDeps([
+    { kind: "review-comments", threads: [thread(900)] },
+    { kind: "closed", merged: true },
+  ]);
+  await run(deps);
+
+  expect(calls.comments).toEqual(["addressed it"]);
+  expect(calls.acks).toEqual([]);
 });
 
 test("an answer naming a thread the wake never carried lands on the conversation", async () => {

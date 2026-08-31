@@ -39,8 +39,9 @@ export interface PrSnapshot {
   state: "open" | "closed";
   merged: boolean;
   headSha: string;
-  // The authenticated login, so a consumer can tell its own comments from a
-  // human's without guessing at bot names.
+  // The authenticated login. Never proof of authorship: a factory on its
+  // operator's personal token has the operator as the viewer, so nothing may
+  // read "the viewer wrote it" as "jigs wrote it" (AGE-363).
   viewer: string;
   reviews: PrReview[];
   reviewThreads: ReviewThread[];

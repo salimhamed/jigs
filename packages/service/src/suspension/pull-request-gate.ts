@@ -1,7 +1,9 @@
 // Determinism rule for this module: the provider fetch lives in fetchPrState,
 // which the factory wraps as a step and injects; the generator body only
 // sequences memoized snapshots through the pure classifier, so the cursor
-// replays identically across restarts.
+// replays identically across restarts. The acks the consumer hands back are
+// memoized step results too (the ids GitHub gave its replies), so they replay
+// with it.
 
 import { createHook } from "workflow";
 import {
@@ -45,13 +47,35 @@ export type GateWake =
 export interface GateCursor {
   seenReviewIds: number[];
   seenCommentIds: number[];
+  // Review-thread replies jigs posted itself. Author identity cannot stand in
+  // for this: a factory running on its operator's own token has the operator
+  // as `snapshot.viewer`, so filtering by viewer swallows the very review
+  // comments the loop exists to answer (AGE-363, the collision AGE-349 fixed
+  // on the Linear side).
+  selfCommentIds: number[];
   lastRedSha: string | null;
+}
+
+/** What the consumer hands back through `next()` after posting its replies. */
+export interface GateAck {
+  selfCommentIds: number[];
 }
 
 export const emptyGateCursor = (): GateCursor => ({
   seenReviewIds: [],
   seenCommentIds: [],
+  selfCommentIds: [],
   lastRedSha: null,
+});
+
+export const ackGateCursor = (
+  cursor: GateCursor,
+  ack: GateAck,
+): GateCursor => ({
+  ...cursor,
+  selfCommentIds: [
+    ...new Set([...cursor.selfCommentIds, ...ack.selfCommentIds]),
+  ],
 });
 
 function lastHumanReviewer(snapshot: PrSnapshot): string | null {
@@ -64,7 +88,12 @@ function lastHumanReviewer(snapshot: PrSnapshot): string | null {
 export function classifyPrState(
   snapshot: PrSnapshot,
   cursor: GateCursor,
-): { wakes: GateWake[]; cursor: GateCursor; done: boolean } {
+): {
+  wakes: GateWake[];
+  cursor: GateCursor;
+  done: boolean;
+  skippedSelfThreads: number;
+} {
   const wakes: GateWake[] = [];
   const seenReviewIds = new Set(cursor.seenReviewIds);
   for (const review of snapshot.reviews) {
@@ -89,20 +118,23 @@ export function classifyPrState(
   }
 
   const seenComments = new Set(cursor.seenCommentIds);
+  const selfComments = new Set(cursor.selfCommentIds);
   const threads: ReviewThread[] = [];
+  // The self guard: jigs' own reply is the last word on a thread it just
+  // answered, and must not wake the loop back into it. Identified by the ids
+  // the loop posted, so a human sharing the token's identity still wakes it.
+  let skippedSelfThreads = 0;
   for (const thread of snapshot.reviewThreads) {
-    let unseen = false;
+    let human = false;
+    let ours = 0;
     for (const comment of thread.comments) {
       if (seenComments.has(comment.id)) continue;
       seenComments.add(comment.id);
-      unseen = true;
+      if (selfComments.has(comment.id)) ours += 1;
+      else human = true;
     }
-    // The viewer guard: jigs' own reply is the last word on a thread it just
-    // answered, and must not wake the loop back into it.
-    const last = thread.comments.at(-1);
-    if (unseen && last !== undefined && last.user !== snapshot.viewer) {
-      threads.push(thread);
-    }
+    if (human) threads.push(thread);
+    else if (ours > 0) skippedSelfThreads += 1;
   }
   // A CHANGES_REQUESTED review carrying inline comments is one act by one
   // reviewer, and the ordinary GitHub flow: yielding it twice would burn two
@@ -147,14 +179,43 @@ export function classifyPrState(
     cursor: {
       seenReviewIds: [...seenReviewIds],
       seenCommentIds: [...seenComments],
+      selfCommentIds: [...selfComments],
       lastRedSha,
     },
     done,
+    skippedSelfThreads,
   };
 }
 
 /** {@link pullRequestGate} with its step already bound. */
-export type GateFn = (pr: PrRef) => AsyncGenerator<GateWake, void, undefined>;
+export type GateFn = (
+  pr: PrRef,
+) => AsyncGenerator<GateWake, void, GateAck | undefined>;
+
+// One fetch-classify-deliver round. The acks arrive between wakes, so they
+// fold into the cursor the round returns rather than the one it was handed.
+async function* gateRound(
+  pr: PrRef,
+  fetchState: typeof fetchPrState,
+  cursor: GateCursor,
+): AsyncGenerator<
+  GateWake,
+  { cursor: GateCursor; done: boolean },
+  GateAck | undefined
+> {
+  const result = classifyPrState(await fetchState(pr), cursor);
+  if (result.skippedSelfThreads > 0) {
+    console.log(
+      `[prGate] ${pr.owner}/${pr.repo}#${pr.number} skipped ${result.skippedSelfThreads} thread(s) whose only new comments were jigs' own replies`,
+    );
+  }
+  let next = result.cursor;
+  for (const wake of result.wakes) {
+    const ack = yield wake;
+    if (ack !== undefined) next = ackGateCursor(next, ack);
+  }
+  return { cursor: next, done: result.done };
+}
 
 // One hook per PR, held across the whole review until the PR closes — the
 // token is never released mid-review. The satisfier re-check lives inside the
@@ -165,7 +226,7 @@ export type GateFn = (pr: PrRef) => AsyncGenerator<GateWake, void, undefined>;
 export async function* pullRequestGate(
   pr: PrRef,
   fetchState: typeof fetchPrState,
-): AsyncGenerator<GateWake, void, undefined> {
+): AsyncGenerator<GateWake, void, GateAck | undefined> {
   const token = prToken(pr);
   const hook = createHook<unknown>({
     token,
@@ -182,15 +243,13 @@ export async function* pullRequestGate(
       throw new ClaimConflictError(token, conflict.runId);
     }
     let cursor: GateCursor = emptyGateCursor();
-    let result = classifyPrState(await fetchState(pr), cursor);
-    cursor = result.cursor;
-    yield* result.wakes;
-    if (result.done) return;
+    let round = yield* gateRound(pr, fetchState, cursor);
+    cursor = round.cursor;
+    if (round.done) return;
     for await (const _hint of hook) {
-      result = classifyPrState(await fetchState(pr), cursor);
-      cursor = result.cursor;
-      yield* result.wakes;
-      if (result.done) return;
+      round = yield* gateRound(pr, fetchState, cursor);
+      cursor = round.cursor;
+      if (round.done) return;
     }
   } finally {
     hook.dispose();
