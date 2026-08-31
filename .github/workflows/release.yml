@@ -8,6 +8,9 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  # For GITHUB_TOKEN's read of the release PR's check rollup below.
+  checks: read
+  statuses: read
 
 concurrency:
   group: release-${{ github.ref }}
@@ -37,7 +40,12 @@ jobs:
           # action above talks to the API and checks nothing out, so without
           # this every `gh` call below aborts on "not a git repository".
           GH_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          # Reads use GITHUB_TOKEN: the fine-grained PAT cannot read
+          # statusCheckRollup without a Checks grant, and a read triggers
+          # nothing, so the anti-loop rule costs nothing here. Only the merge
+          # itself needs the PAT (its push must re-run this workflow).
+          GH_TOKEN: ${{ github.token }}
+          MERGE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           PRS: ${{ steps.release.outputs.prs }}
           # Every check run the release PR must pass, as GitHub names them
           # (a job id in .github/workflows/). A job added there and not here
@@ -71,4 +79,4 @@ jobs:
 
           gh pr checks "$pr" --watch --fail-fast --interval 15
 
-          gh pr merge "$pr" --squash --delete-branch
+          GH_TOKEN="$MERGE_TOKEN" gh pr merge "$pr" --squash --delete-branch
