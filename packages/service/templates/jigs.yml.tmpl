@@ -4,6 +4,7 @@
 service:
   # Derived from this factory's path so two factories never fight over a port.
   port: {{SERVICE_PORT}}
-  # How long one step may run before the World gives up on it and re-queues.
-  # Sized for agent steps; raise it if this factory's builders run longer.
-  # step_timeout_minutes: 45
+  # An optional cap on one step's wall clock. Unset — the default — means a
+  # step waits as long as it takes, which is what agent steps want. Set it
+  # only to make a wedged step fail instead of hang.
+  # step_timeout_minutes: 90

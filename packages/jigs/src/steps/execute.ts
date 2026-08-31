@@ -27,7 +27,7 @@ import {
 import { ensureManagedCodexHome } from "../harnesses/codex-home.ts";
 import { scrubbedEnv } from "../harnesses/env.ts";
 import { claudeCode, codexExec } from "../harnesses/index.ts";
-import { stepTimeoutMs } from "../step-timeout.ts";
+import { stepTimeoutMs, WORKER_JOB_EXPIRY_MS } from "../step-timeout.ts";
 import {
   checkoutLockPath,
   FileLockTimeoutError,
@@ -141,10 +141,15 @@ export async function executeAgentStep(
     return await withFileLock(
       checkoutLockPath(wire.cwd, "agent-step"),
       () => generateAgentStep(wire, runKey, deps),
-      // The holder is the request the step ceiling bounds, so staleness has to
-      // outlast it — otherwise the takeover this exists to prevent becomes
-      // legal one tick before the timeout that causes it.
-      { timeoutMs: 0, staleMs: stepTimeoutMs() + 60_000 },
+      // Staleness has to outlast anything that could dispatch this step a
+      // second time — otherwise the takeover this exists to prevent becomes
+      // legal one tick before the timeout that causes it. With a cap that is
+      // the cap; uncapped, it is graphile-worker's job expiry, the only
+      // redelivery left once the World's own fetch stops aborting.
+      {
+        timeoutMs: 0,
+        staleMs: (stepTimeoutMs() ?? WORKER_JOB_EXPIRY_MS) + 60_000,
+      },
     );
   } catch (err) {
     if (err instanceof FileLockTimeoutError) {

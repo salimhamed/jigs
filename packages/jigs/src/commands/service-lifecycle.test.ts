@@ -88,8 +88,24 @@ test("start runs the built entry in the factory root on the factory's port", () 
   expect(spec?.env.LINEAR_API_KEY).toBe("lin");
   // jigs.yml, not .env, is where a factory's address is declared.
   expect(spec?.env.PORT).toBe("9100");
-  expect(spec?.env.JIGS_STEP_TIMEOUT_MINUTES).toBe("45");
+  // Unset in jigs.yml is uncapped, and jigs.yml wins: an inherited value
+  // must not quietly put a ceiling back.
+  expect(spec?.env.JIGS_STEP_TIMEOUT_MINUTES).toBeUndefined();
   expect(lines[0]).toContain("at http://localhost:9100");
+});
+
+test("a factory that caps its steps hands the cap to the child", () => {
+  const root = builtFactory(
+    tmp,
+    "service:\n  port: 9100\n  step_timeout_minutes: 90\n",
+  );
+  // The cap jigs.yml declares, not the one the environment carried in.
+  writeFileSync(path.join(root, ".env"), "JIGS_STEP_TIMEOUT_MINUTES=5\n");
+  const io = fake();
+
+  startService(deps(root, io));
+
+  expect(io.spawns[0]?.env.JIGS_STEP_TIMEOUT_MINUTES).toBe("90");
 });
 
 test("the factory's own .env owns the world the service writes", () => {
