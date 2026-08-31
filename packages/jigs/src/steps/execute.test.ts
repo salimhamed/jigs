@@ -154,7 +154,7 @@ test("codex agent step runs on the app-server under the managed home with fixed 
   expect(settings?.cwd).toBe(worktree);
   expect(settings?.threadMode).toBe("persistent");
   expect(settings?.approvalPolicy).toBe("never");
-  expect(settings?.sandboxPolicy).toBe("workspace-write");
+  expect(settings?.sandboxPolicy).toBe("danger-full-access");
   expect(settings?.autoApprove).toBe(true);
   expect(settings?.env?.CODEX_HOME).toBe(path.join(tmp, "codex-home", "run-7"));
   expect(settings?.mcpServers).toEqual({

@@ -176,7 +176,12 @@ export async function executeAgentStep(
                   codexHome: deps.ensureCodexHome(runKey),
                   env,
                   approvalPolicy: "never",
-                  sandboxPolicy: "workspace-write",
+                  // Unsandboxed on purpose (AGE-359): a jigs worktree's real
+                  // git dir lives in the main checkout's
+                  // .git/worktrees/<name>/, outside the workspace, so
+                  // workspace-write fails every commit on a read-only index
+                  // lock. Same trust level the claude path already runs at.
+                  sandboxPolicy: "danger-full-access",
                   autoApprove: true,
                   ...(harness.mcpServers !== undefined
                     ? { mcpServers: toCodexMcpServers(harness.mcpServers) }
