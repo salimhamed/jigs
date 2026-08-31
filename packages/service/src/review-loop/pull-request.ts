@@ -8,6 +8,7 @@ import {
   diffSince,
   type GithubRepoRef,
   headSha,
+  isWorktreeDirty,
   parseGithubRemote,
   pushBranch,
   resolveBinding,
@@ -47,14 +48,18 @@ export async function pushWorktreeBranch(
   worktreePath: string,
   branch: string,
   baseSha: string,
-): Promise<{ commits: number; headSha: string }> {
+): Promise<{ commits: number; headSha: string; dirty: boolean }> {
   const commits = await commitsAhead(worktreePath, baseSha);
   if (commits > 0) await pushBranch(worktreePath, branch);
   const head = await headSha(worktreePath);
+  // Reported alongside the commit count because the two together are what tell
+  // an empty push apart: no commits and a clean tree is a builder that did
+  // nothing, no commits and a dirty tree is work that can still be saved.
+  const dirty = await isWorktreeDirty(worktreePath);
   console.log(
-    `[reviewLoop] pushed ${branch} commits=${commits} head=${head.slice(0, 8)}`,
+    `[reviewLoop] pushed ${branch} commits=${commits} head=${head.slice(0, 8)} dirty=${dirty}`,
   );
-  return { commits, headSha: head };
+  return { commits, headSha: head, dirty };
 }
 
 export async function readDiff(

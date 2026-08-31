@@ -9,6 +9,7 @@
 // writes its body, and jigs carries no default for either.
 
 import type { WorktreeFacts } from "jigs";
+import { commitWorkPrompt } from "jigs/prompts";
 import type { AgentSession, HarnessConfig } from "jigs/steps";
 import type { CheckRun } from "../providers/github";
 import type { AgentFn } from "../steps";
@@ -44,9 +45,11 @@ export class PrClosedUnmergedError extends Error {
 // workflow-side can import a value from it. The loop is what turns an empty
 // push into a failure anyway.
 export class EmptyBranchError extends Error {
-  constructor(branch: string, baseSha: string) {
+  constructor(branch: string, baseSha: string, recovered = false) {
     super(
-      `${branch} holds no commits since ${baseSha} — the builder finished without committing, so there is nothing to open a pull request for`,
+      `${branch} holds no commits since ${baseSha} — the builder finished without committing, so there is nothing to open a pull request for${
+        recovered ? ", and a commit-recovery round did not change that" : ""
+      }`,
     );
     this.name = "EmptyBranchError";
   }
@@ -133,7 +136,7 @@ export async function reviewLoop(
   );
   let session = built.session;
 
-  const pushed = await pushWorktreeBranch(
+  let pushed = await pushWorktreeBranch(
     worktree.path,
     worktree.branch,
     worktree.baseSha,
@@ -143,7 +146,31 @@ export async function reviewLoop(
   // the loop never tears down (the pipeline calls teardownWorktrees after a
   // merged return; nothing cleans up a failure except the operator).
   if (pushed.commits === 0) {
-    throw new EmptyBranchError(worktree.branch, worktree.baseSha);
+    // A dirty tree is a complete implementation the builder forgot to commit —
+    // an approved one, by the time the push runs — so it gets exactly one
+    // bounded round to save it. A clean tree has nothing to save.
+    if (!pushed.dirty) {
+      throw new EmptyBranchError(worktree.branch, worktree.baseSha);
+    }
+    console.log(
+      "[reviewLoop] empty push with dirty worktree — sending builder back to commit",
+    );
+    const committed = await deps.agent({
+      harness: options.harness,
+      cwd: worktree.path,
+      permissionMode: "bypassPermissions",
+      ...(session === undefined ? {} : { resume: session }),
+      prompt: commitWorkPrompt,
+    });
+    session = committed.session ?? session;
+    pushed = await pushWorktreeBranch(
+      worktree.path,
+      worktree.branch,
+      worktree.baseSha,
+    );
+    if (pushed.commits === 0) {
+      throw new EmptyBranchError(worktree.branch, worktree.baseSha, true);
+    }
   }
 
   // After the push, so nothing writes a description for a branch that turned

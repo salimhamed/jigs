@@ -119,7 +119,11 @@ function makeDeps(wakes: GateWake[]): ReviewLoopDeps {
     resolveRepo: async () => ({ owner: pr.owner, repo: pr.repo }),
     pushWorktreeBranch: async (path, branch, baseSha) => {
       calls.pushes.push([path, branch, baseSha]);
-      return { commits: 1, headSha: `pushed-${calls.pushes.length}` };
+      return {
+        commits: 1,
+        headSha: `pushed-${calls.pushes.length}`,
+        dirty: false,
+      };
     },
     describePr: async (input) => {
       calls.describes.push(input);
@@ -142,6 +146,23 @@ function makeDeps(wakes: GateWake[]): ReviewLoopDeps {
     readDiff: async () => "THE-DIFF",
   };
 }
+
+// The first `empty` pushes report a dirty worktree and no commits; every push
+// after them carries one.
+const emptyPushes =
+  (empty: number): ReviewLoopDeps["pushWorktreeBranch"] =>
+  async (path, branch, baseSha) => {
+    calls.pushes.push([path, branch, baseSha]);
+    const commits = calls.pushes.length > empty ? 1 : 0;
+    return {
+      commits,
+      headSha: `pushed-${calls.pushes.length}`,
+      dirty: commits === 0,
+    };
+  };
+
+const commitRounds = () =>
+  calls.agent.filter((call) => call.prompt.startsWith("# Commit your work"));
 
 const approved = { verdict: "approved", findings: [] };
 const answerFor = (rootIds: number[]) => ({
@@ -190,13 +211,48 @@ test("the jig implements, pushes the ticket branch and opens the PR before the g
   expect(result).toEqual({ pr, cycles: 1 });
 });
 
-test("an empty branch fails loudly instead of opening an empty PR", async () => {
+test("an empty branch with a clean tree fails loudly instead of opening an empty PR", async () => {
   const deps = makeDeps([]);
-  deps.pushWorktreeBranch = async () => ({ commits: 0, headSha: "base-sha-1" });
+  deps.pushWorktreeBranch = async (path, branch, baseSha) => {
+    calls.pushes.push([path, branch, baseSha]);
+    return { commits: 0, headSha: "base-sha-1", dirty: false };
+  };
   await expect(run(deps)).rejects.toThrow(snapshot.branchName);
   // Nothing describes a branch that turned out to carry nothing.
   expect(calls.describes).toEqual([]);
+  // Nothing to recover, so no commit round is spent and no second push runs:
+  // implement and review are the only agent calls.
+  expect(commitRounds()).toEqual([]);
+  expect(calls.pushes).toHaveLength(1);
   // The jig's own failure follows the failed-run rows rather than the sweep.
+});
+
+test("an empty push with a dirty worktree sends the builder back to commit", async () => {
+  const deps = makeDeps([{ kind: "closed", merged: true }]);
+  deps.pushWorktreeBranch = emptyPushes(1);
+  const result = await run(deps);
+
+  const rounds = commitRounds();
+  expect(rounds).toHaveLength(1);
+  // Inside the builder's own session: it is the one holding the work it left
+  // uncommitted.
+  expect(rounds[0]?.resume).toEqual({ harness: "claude", id: "s-1" });
+  expect(rounds[0]?.cwd).toBe("/tmp/worktree");
+  // The second push carries the commit, so the run continues into the PR.
+  expect(calls.pushes).toHaveLength(2);
+  expect(calls.describes).toHaveLength(1);
+  expect(result).toEqual({ pr, cycles: 1 });
+});
+
+test("a commit round that still commits nothing fails the run", async () => {
+  const deps = makeDeps([]);
+  deps.pushWorktreeBranch = emptyPushes(2);
+
+  await expect(run(deps)).rejects.toThrow("commit-recovery round");
+  // Exactly one round: the recovery is bounded, not a loop.
+  expect(commitRounds()).toHaveLength(1);
+  expect(calls.pushes).toHaveLength(2);
+  expect(calls.describes).toEqual([]);
 });
 
 test("the factory's description is what the PR is opened with", async () => {
@@ -307,7 +363,7 @@ test("a fix that commits nothing escalates instead of waiting for a wake that ca
   // No new head means no new CI event, so the gate would never wake again.
   deps.pushWorktreeBranch = async (path, branch, baseSha) => {
     calls.pushes.push([path, branch, baseSha]);
-    return { commits: 1, headSha: "sha-1" };
+    return { commits: 1, headSha: "sha-1", dirty: false };
   };
   await run(deps);
 
