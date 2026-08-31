@@ -1,6 +1,7 @@
 import { type Context, Hono } from "hono";
 import { failedChecks } from "jigs/checks";
 import { getHookByToken, getRun, resumeHook, start } from "workflow/api";
+import { HookNotFoundError } from "workflow/internal/errors";
 import { getWorld } from "workflow/runtime";
 import { z } from "zod";
 import type { Factory } from "./factory";
@@ -442,9 +443,12 @@ async function deliver(
     const result = await resume(token, hint);
     console.log(`[ingress] ${provider} accepted ${correlation}`);
     return c.json({ delivered: true, ...result });
-  } catch {
+  } catch (error) {
+    const reason = HookNotFoundError.is(error)
+      ? "no-matching-hook"
+      : "delivery-failed";
     console.log(
-      `[ingress] ${provider} dropped reason=no-matching-hook ${correlation}`,
+      `[ingress] ${provider} dropped reason=${reason} ${correlation}`,
     );
     return c.json({ delivered: false }, 404);
   }

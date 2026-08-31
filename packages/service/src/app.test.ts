@@ -11,6 +11,7 @@ import {
   test,
   vi,
 } from "vitest";
+import { HookNotFoundError } from "workflow/internal/errors";
 import { z } from "zod";
 import { createApp } from "./app";
 import { type Factory, ticketInput } from "./factory";
@@ -55,7 +56,9 @@ beforeEach(() => {
   vi.stubEnv("WORKFLOW_LOCAL_DATA_DIR", dataDir);
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "gh-hook-secret");
   vi.stubEnv("LINEAR_WEBHOOK_SECRET", "linear-hook-secret");
-  resumeHookMock.mockReset().mockRejectedValue(new Error("no matching hook"));
+  resumeHookMock
+    .mockReset()
+    .mockRejectedValue(new HookNotFoundError("unclaimed-test-token"));
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -145,6 +148,20 @@ test("a GitHub delivery matching a hook logs acceptance with its token", async (
   expect(res.status).toBe(200);
   expect(log).toHaveBeenCalledExactlyOnceWith(
     "[ingress] github accepted token=github:pr:acme/api#41 event=pull_request_review",
+  );
+});
+
+test("a GitHub delivery failure is not misreported as a missing hook", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+  resumeHookMock.mockRejectedValueOnce(new Error("database unavailable"));
+  const res = await postGithub(reviewPayload, {
+    "x-hub-signature-256": `sha256=${sign(reviewPayload, "gh-hook-secret")}`,
+    "x-github-event": "pull_request_review",
+  });
+  expect(res.status).toBe(404);
+  expect(await res.json()).toEqual({ delivered: false });
+  expect(log).toHaveBeenCalledExactlyOnceWith(
+    "[ingress] github dropped reason=delivery-failed token=github:pr:acme/api#41 event=pull_request_review",
   );
 });
 
