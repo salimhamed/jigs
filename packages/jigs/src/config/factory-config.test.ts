@@ -111,13 +111,19 @@ test("parseFactoryConfig tolerates unknown top-level keys and empty files", () =
 
 test("the service block defaults to the port the single global service used", () => {
   const config = parseFactoryConfig(commented);
-  expect(config.service).toEqual({ port: 8990 });
+  expect(config.service).toEqual({ port: 8990, step_timeout_minutes: 45 });
 });
 
 test("parseFactoryConfig rejects an out-of-range port naming the field", () => {
   expect(() => parseFactoryConfig("service:\n  port: 70000\n")).toThrow(
     /service\.port/,
   );
+});
+
+test("parseFactoryConfig rejects a step timeout under a minute", () => {
+  expect(() =>
+    parseFactoryConfig("service:\n  step_timeout_minutes: 0\n"),
+  ).toThrow(/service\.step_timeout_minutes/);
 });
 
 test("resolveService derives the service address and the slug", () => {
@@ -128,7 +134,21 @@ test("resolveService derives the service address and the slug", () => {
       slug: factorySlug(factory),
       port: 9100,
       serviceUrl: "http://localhost:9100",
+      stepTimeoutMinutes: 45,
     });
+  } finally {
+    removeTmpDir(tmp);
+  }
+});
+
+test("resolveService carries a factory's own step timeout", () => {
+  const tmp = makeTmpDir();
+  try {
+    const factory = makeFactoryRepo(
+      tmp,
+      "service:\n  port: 9100\n  step_timeout_minutes: 90\n",
+    );
+    expect(resolveService(factory).stepTimeoutMinutes).toBe(90);
   } finally {
     removeTmpDir(tmp);
   }

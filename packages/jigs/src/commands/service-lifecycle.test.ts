@@ -88,6 +88,7 @@ test("start runs the built entry in the factory root on the factory's port", () 
   expect(spec?.env.LINEAR_API_KEY).toBe("lin");
   // jigs.yml, not .env, is where a factory's address is declared.
   expect(spec?.env.PORT).toBe("9100");
+  expect(spec?.env.JIGS_STEP_TIMEOUT_MINUTES).toBe("45");
   expect(lines[0]).toContain("at http://localhost:9100");
 });
 
