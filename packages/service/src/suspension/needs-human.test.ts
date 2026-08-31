@@ -27,8 +27,8 @@ beforeEach(() => {
 test("a findings payload renders as prose with its markdown intact", async () => {
   await postNeedsHumanComment("issue-1", "ticket review needs a human", {
     findings: [
-      "**Increment source** is undecided.",
-      "Choose either `package.json` or a release tag.",
+      "**Which source should set the version?**\n    - a) `package.json` (recommended)\n    - b) The release tag\n\n    Evidence: The ticket names both sources.",
+      "**Should this apply to prereleases?**",
     ],
   });
 
@@ -37,8 +37,8 @@ test("a findings payload renders as prose with its markdown intact", async () =>
     [
       "@[Salim](user-1) ticket review needs a human",
       "",
-      "- **Increment source** is undecided.",
-      "- Choose either `package.json` or a release tag.",
+      "1. **Which source should set the version?**\n    - a) `package.json` (recommended)\n    - b) The release tag\n\n    Evidence: The ticket names both sources.",
+      "1. **Should this apply to prereleases?**",
     ].join("\n"),
   );
 });
