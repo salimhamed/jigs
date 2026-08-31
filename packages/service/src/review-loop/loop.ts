@@ -12,7 +12,7 @@ import type { WorktreeFacts } from "jigs";
 import { commitWorkPrompt } from "jigs/prompts";
 import type { AgentSession, HarnessConfig } from "jigs/steps";
 import type { CheckRun } from "../providers/github";
-import type { AgentFn } from "../steps";
+import { type AgentFn, ResumeFailedError } from "../steps";
 import type { TicketClaim } from "../suspension/claim";
 import type { NeedsHumanFn } from "../suspension/needs-human";
 import type { GateFn } from "../suspension/pull-request-gate";
@@ -155,14 +155,12 @@ export async function reviewLoop(
     console.log(
       "[reviewLoop] empty push with dirty worktree — sending builder back to commit",
     );
-    const committed = await deps.agent({
+    const committed = await commitLeftoverWork(deps.agent, {
       harness: options.harness,
       cwd: worktree.path,
-      permissionMode: "bypassPermissions",
-      ...(session === undefined ? {} : { resume: session }),
-      prompt: commitWorkPrompt,
+      ...(session === undefined ? {} : { session }),
     });
-    session = committed.session ?? session;
+    session = committed ?? session;
     pushed = await pushWorktreeBranch(
       worktree.path,
       worktree.branch,
@@ -307,6 +305,41 @@ export async function reviewLoop(
   throw new Error(
     `the pull request gate for ${pr.owner}/${pr.repo}#${pr.number} stopped delivering wakes before the PR closed`,
   );
+}
+
+// Resume-first with the first-class fresh-context fallback the CI fix and the
+// review answers have (ADR 0009), and no rebuilt context to go with it: the
+// work this round commits is on disk in the cwd, so a fresh builder reading the
+// worktree has everything the resumed one would have had.
+async function commitLeftoverWork(
+  agent: AgentFn,
+  options: { harness: HarnessConfig; cwd: string; session?: AgentSession },
+): Promise<AgentSession | undefined> {
+  if (options.session !== undefined) {
+    try {
+      const resumed = await agent({
+        harness: options.harness,
+        cwd: options.cwd,
+        permissionMode: "bypassPermissions",
+        resume: options.session,
+        prompt: commitWorkPrompt,
+      });
+      return resumed.session;
+    } catch (err) {
+      if (!(err instanceof ResumeFailedError)) throw err;
+      console.log(
+        "[reviewLoop] resume failed — committing from a fresh context",
+      );
+    }
+  }
+
+  const committed = await agent({
+    harness: options.harness,
+    cwd: options.cwd,
+    permissionMode: "bypassPermissions",
+    prompt: commitWorkPrompt,
+  });
+  return committed.session;
 }
 
 async function postAnswers(

@@ -244,6 +244,33 @@ test("an empty push with a dirty worktree sends the builder back to commit", asy
   expect(result).toEqual({ pr, cycles: 1 });
 });
 
+test("a stale session commits from a fresh context rather than failing the run", async () => {
+  const deps = makeDeps([{ kind: "closed", merged: true }]);
+  deps.pushWorktreeBranch = emptyPushes(1);
+  const live = deps.agent;
+  let stale = true;
+  deps.agent = (async <T>(config: AgentStepConfig<T>) => {
+    if (stale && config.resume !== undefined) {
+      stale = false;
+      calls.agent.push(config as AgentStepConfig<unknown>);
+      throw new ResumeFailedError("no rollout found for thread id 0199-gone");
+    }
+    return live(config);
+  }) as ReviewLoopDeps["agent"];
+  const result = await run(deps);
+
+  // The same prompt either way: the work is on disk, so the fresh round needs
+  // no rebuilt context of its own.
+  const rounds = commitRounds();
+  expect(rounds).toHaveLength(2);
+  expect(rounds[0]?.resume).toEqual({ harness: "claude", id: "s-1" });
+  expect(rounds[1]?.resume).toBeUndefined();
+  // The throwing resume records no session, so the fresh round is s-4 — and it
+  // is the one now holding the change.
+  expect(calls.describes[0]?.session).toEqual({ harness: "claude", id: "s-4" });
+  expect(result).toEqual({ pr, cycles: 1 });
+});
+
 test("a commit round that still commits nothing fails the run", async () => {
   const deps = makeDeps([]);
   deps.pushWorktreeBranch = emptyPushes(2);
