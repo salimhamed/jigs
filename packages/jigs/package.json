@@ -1,6 +1,6 @@
 {
   "name": "jigs",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Guides coding agents through repeatable workflows",
   "private": true,
   "type": "module",
