@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/salimhamed/jigs/compare/service-v0.1.2...service-v0.1.3) (2026-08-31)
+
+
+### Miscellaneous Chores
+
+* **service:** Synchronize jigs versions
+
 ## [0.1.2](https://github.com/salimhamed/jigs/compare/service-v0.1.1...service-v0.1.2) (2026-08-31)
 
 
