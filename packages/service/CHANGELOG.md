@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.5](https://github.com/salimhamed/jigs/compare/service-v0.1.4...service-v0.1.5) (2026-08-31)
+
+
+### Features
+
+* let step self-invocations wait forever and scope the ceiling to them ([#49](https://github.com/salimhamed/jigs/issues/49)) ([eb52bb6](https://github.com/salimhamed/jigs/commit/eb52bb668655c48da97c094c7b35382ce2faa645))
+
+
+### Bug Fixes
+
+* answer the operator's review comments on personal-token factories ([#48](https://github.com/salimhamed/jigs/issues/48)) ([e6fea24](https://github.com/salimhamed/jigs/commit/e6fea2403287ba23cb132c15b5d197469138e61d))
+* **service:** render needs-human comments as prose ([#51](https://github.com/salimhamed/jigs/issues/51)) ([c820ec5](https://github.com/salimhamed/jigs/commit/c820ec52f77c7dda0d8a28a567014ab7af3629b0))
+
 ## [0.1.4](https://github.com/salimhamed/jigs/compare/service-v0.1.3...service-v0.1.4) (2026-08-31)
 
 
