@@ -34,8 +34,12 @@ import { sweepWorktrees } from "./worktrees/sweep";
 
 // The app is library code: a factory repo installs @jigs/service and hands in
 // its own pipelines, so nothing here may import a pipeline module.
-export function createApp(factory: Factory): Hono {
+export function createApp(
+  factory: Factory,
+  deps: { resumeIngressHook?: typeof resumeHook } = {},
+): Hono {
   const app = new Hono();
+  const resumeIngressHook = deps.resumeIngressHook ?? resumeHook;
 
   // Liveness only; dependency verification is preflight's job (ADR 0010).
   // With a service per factory repo, `factoryRoot` is the only thing that says
@@ -175,53 +179,78 @@ export function createApp(factory: Factory): Hono {
 
   // The ingress is stateless (ADR 0009): verify, reconstruct the token, resume.
   // A delivery nobody is listening to is dropped with a 404 — no mapping
-  // tables, no delivery log. Wakes are hints; consumers re-check the provider.
+  // tables or persisted deliveries. Wakes are hints; consumers re-check the
+  // provider.
   app.post("/ingress/github", async (c) => {
+    const event = ingressField(c.req.header("x-github-event") ?? "unknown");
     const secret = githubWebhookSecret();
     if (secret === null) {
+      console.log(
+        `[ingress] github rejected reason=configuration event=${event}`,
+      );
       return c.json({ error: "no GitHub webhook secret configured" }, 503);
     }
     const rawBody = await c.req.text();
     const signature = c.req.header("x-hub-signature-256");
     if (!verifyGithubSignature(rawBody, signature, secret)) {
+      console.log(`[ingress] github rejected reason=signature event=${event}`);
       return c.json({ error: "invalid signature" }, 401);
     }
     const payload = parseJson(rawBody);
     const token = tokenFromGithubPayload(payload);
-    if (token === null) return c.json({ ignored: true });
+    if (token === null) {
+      console.log(
+        `[ingress] github ignored reason=unrecognized-event event=${event}`,
+      );
+      return c.json({ ignored: true });
+    }
     const hint: WakeHint = {
       source: "github",
       event: c.req.header("x-github-event") ?? "unknown",
       ...optionalAction(payload),
     };
-    return deliver(c, token, hint);
+    return deliver(c, "github", token, hint, event, resumeIngressHook);
   });
 
   app.post("/ingress/linear", async (c) => {
     const secret = process.env.LINEAR_WEBHOOK_SECRET;
     if (secret === undefined || secret === "") {
+      console.log("[ingress] linear rejected reason=configuration");
       return c.json({ error: "LINEAR_WEBHOOK_SECRET is not configured" }, 503);
     }
     const rawBody = await c.req.text();
     const signature = c.req.header("linear-signature");
     if (!verifyLinearSignature(rawBody, signature, secret)) {
+      console.log("[ingress] linear rejected reason=signature");
       return c.json({ error: "invalid signature" }, 401);
     }
     const payload = parseJson(rawBody);
-    if (payload === null) return c.json({ ignored: true });
+    if (payload === null) {
+      console.log("[ingress] linear ignored reason=unrecognized-shape");
+      return c.json({ ignored: true });
+    }
+    const event = linearEvent(payload);
     const timestamp = (payload as { webhookTimestamp?: unknown })
       .webhookTimestamp;
     if (!linearTimestampFresh(timestamp, Date.now())) {
+      console.log(
+        `[ingress] linear rejected reason=timestamp${event === null ? "" : ` event=${event}`}`,
+      );
       return c.json({ error: "stale webhookTimestamp" }, 401);
     }
     const token = tokenFromLinearPayload(payload);
-    if (token === null) return c.json({ ignored: true });
+    if (token === null) {
+      console.log(
+        `[ingress] linear ignored reason=unrecognized-event${event === null ? "" : ` event=${event}`}`,
+      );
+      return c.json({ ignored: true });
+    }
     const hint: WakeHint = {
       source: "linear",
       type: "Comment",
       ...optionalAction(payload),
     };
-    return deliver(c, token, hint);
+    return deliver(c, "linear", token, hint, event, resumeIngressHook);
   });
 
   // Manual wake on the same code path as the ingress: resume every token the
@@ -391,11 +420,32 @@ function optionalAction(payload: unknown): { action?: string } {
   return typeof action === "string" ? { action } : {};
 }
 
-async function deliver(c: Context, token: string, hint: WakeHint) {
+function ingressField(value: string): string {
+  return value.replace(/[\r\n\t]/g, " ");
+}
+
+function linearEvent(payload: unknown): string | null {
+  const type = (payload as { type?: unknown }).type;
+  return typeof type === "string" ? ingressField(type) : null;
+}
+
+async function deliver(
+  c: Context,
+  provider: WakeHint["source"],
+  token: string,
+  hint: WakeHint,
+  event: string | null,
+  resume: typeof resumeHook,
+) {
+  const correlation = `token=${ingressField(token)}${event === null ? "" : ` event=${event}`}`;
   try {
-    const result = await resumeHook(token, hint);
+    const result = await resume(token, hint);
+    console.log(`[ingress] ${provider} accepted ${correlation}`);
     return c.json({ delivered: true, ...result });
   } catch {
+    console.log(
+      `[ingress] ${provider} dropped reason=no-matching-hook ${correlation}`,
+    );
     return c.json({ delivered: false }, 404);
   }
 }

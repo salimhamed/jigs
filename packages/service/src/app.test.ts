@@ -2,7 +2,15 @@ import { createHmac } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  expect,
+  test,
+  vi,
+} from "vitest";
 import { z } from "zod";
 import { createApp } from "./app";
 import { type Factory, ticketInput } from "./factory";
@@ -25,7 +33,8 @@ const fixture = {
   },
 } satisfies Factory;
 
-const app = createApp(fixture);
+const resumeHookMock = vi.fn();
+const app = createApp(fixture, { resumeIngressHook: resumeHookMock });
 
 // The local world binds its data dir on first use, so one fresh dir serves
 // the whole file; it starts empty — nobody holds any token here.
@@ -46,7 +55,9 @@ beforeEach(() => {
   vi.stubEnv("WORKFLOW_LOCAL_DATA_DIR", dataDir);
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "gh-hook-secret");
   vi.stubEnv("LINEAR_WEBHOOK_SECRET", "linear-hook-secret");
+  resumeHookMock.mockReset().mockRejectedValue(new Error("no matching hook"));
 });
+afterEach(() => vi.restoreAllMocks());
 
 const sign = (body: string, secret: string) =>
   createHmac("sha256", secret).update(body).digest("hex");
@@ -73,11 +84,15 @@ const commentPayload = () =>
   });
 
 test("POST /ingress/github with a forged signature is a 401", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
   const res = await postGithub(reviewPayload, {
     "x-hub-signature-256": `sha256=${sign(reviewPayload, "wrong-secret")}`,
     "x-github-event": "pull_request_review",
   });
   expect(res.status).toBe(401);
+  expect(log).toHaveBeenCalledExactlyOnceWith(
+    "[ingress] github rejected reason=signature event=pull_request_review",
+  );
 });
 
 test("POST /ingress/github without a signature header is a 401", async () => {
@@ -88,15 +103,20 @@ test("POST /ingress/github without a signature header is a 401", async () => {
 });
 
 test("POST /ingress/github without a configured secret is a 503", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "");
   vi.stubEnv("XDG_DATA_HOME", dataDir);
   const res = await postGithub(reviewPayload, {
     "x-hub-signature-256": `sha256=${sign(reviewPayload, "gh-hook-secret")}`,
   });
   expect(res.status).toBe(503);
+  expect(log).toHaveBeenCalledExactlyOnceWith(
+    "[ingress] github rejected reason=configuration event=unknown",
+  );
 });
 
 test("a validly signed PR review delivery nobody is listening to is dropped with a 404", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
   const send = () =>
     postGithub(reviewPayload, {
       "x-hub-signature-256": `sha256=${sign(reviewPayload, "gh-hook-secret")}`,
@@ -105,10 +125,27 @@ test("a validly signed PR review delivery nobody is listening to is dropped with
   const res = await send();
   expect(res.status).toBe(404);
   expect(await res.json()).toEqual({ delivered: false });
+  expect(log).toHaveBeenLastCalledWith(
+    "[ingress] github dropped reason=no-matching-hook token=github:pr:acme/api#41 event=pull_request_review",
+  );
   // Nothing accumulated: the identical delivery drops the same way again.
   const again = await send();
   expect(again.status).toBe(404);
   expect(await again.json()).toEqual({ delivered: false });
+  expect(log).toHaveBeenCalledTimes(2);
+});
+
+test("a GitHub delivery matching a hook logs acceptance with its token", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+  resumeHookMock.mockResolvedValueOnce({});
+  const res = await postGithub(reviewPayload, {
+    "x-hub-signature-256": `sha256=${sign(reviewPayload, "gh-hook-secret")}`,
+    "x-github-event": "pull_request_review",
+  });
+  expect(res.status).toBe(200);
+  expect(log).toHaveBeenCalledExactlyOnceWith(
+    "[ingress] github accepted token=github:pr:acme/api#41 event=pull_request_review",
+  );
 });
 
 test("a signed check_suite delivery is routed to the PR it belongs to", async () => {
@@ -132,6 +169,7 @@ test("a signed check_suite delivery is routed to the PR it belongs to", async ()
 });
 
 test("an unroutable github event is acknowledged and ignored", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
   const ping = JSON.stringify({
     zen: "Keep it logically awesome.",
     hook_id: 1,
@@ -143,17 +181,25 @@ test("an unroutable github event is acknowledged and ignored", async () => {
   });
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ ignored: true });
+  expect(log).toHaveBeenCalledExactlyOnceWith(
+    "[ingress] github ignored reason=unrecognized-event event=ping",
+  );
 });
 
 test("POST /ingress/linear with a forged signature is a 401", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
   const body = commentPayload();
   const res = await postLinear(body, {
     "linear-signature": sign(body, "wrong-secret"),
   });
   expect(res.status).toBe(401);
+  expect(log).toHaveBeenCalledExactlyOnceWith(
+    "[ingress] linear rejected reason=signature",
+  );
 });
 
 test("POST /ingress/linear with a valid signature but a stale webhookTimestamp is a 401 (replay)", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
   const body = JSON.stringify({
     action: "create",
     type: "Comment",
@@ -165,27 +211,56 @@ test("POST /ingress/linear with a valid signature but a stale webhookTimestamp i
   });
   expect(res.status).toBe(401);
   expect(await res.json()).toEqual({ error: "stale webhookTimestamp" });
+  expect(log).toHaveBeenCalledExactlyOnceWith(
+    "[ingress] linear rejected reason=timestamp event=Comment",
+  );
 });
 
 test("a validly signed Comment delivery for an unclaimed issue is dropped with a 404", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
   const body = commentPayload();
+  const issueId = (JSON.parse(body) as { data: { issueId: string } }).data
+    .issueId;
   const res = await postLinear(body, {
     "linear-signature": sign(body, "linear-hook-secret"),
   });
   expect(res.status).toBe(404);
   expect(await res.json()).toEqual({ delivered: false });
+  expect(log).toHaveBeenCalledExactlyOnceWith(
+    `[ingress] linear dropped reason=no-matching-hook token=linear:ticket:${issueId} event=Comment`,
+  );
+});
+
+test("a Linear delivery matching a hook logs acceptance with its token", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+  resumeHookMock.mockResolvedValueOnce({});
+  const body = commentPayload();
+  const issueId = (JSON.parse(body) as { data: { issueId: string } }).data
+    .issueId;
+  const res = await postLinear(body, {
+    "linear-signature": sign(body, "linear-hook-secret"),
+  });
+  expect(res.status).toBe(200);
+  expect(log).toHaveBeenCalledExactlyOnceWith(
+    `[ingress] linear accepted token=linear:ticket:${issueId} event=Comment`,
+  );
 });
 
 test("a validly signed non-JSON linear body is acknowledged and ignored", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
   const body = "not json";
   const res = await postLinear(body, {
     "linear-signature": sign(body, "linear-hook-secret"),
   });
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ ignored: true });
+  expect(log).toHaveBeenCalledExactlyOnceWith(
+    "[ingress] linear ignored reason=unrecognized-shape",
+  );
 });
 
 test("an unroutable linear resource type is acknowledged and ignored", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
   const body = JSON.stringify({
     action: "update",
     type: "Issue",
@@ -197,6 +272,9 @@ test("an unroutable linear resource type is acknowledged and ignored", async () 
   });
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ ignored: true });
+  expect(log).toHaveBeenCalledExactlyOnceWith(
+    "[ingress] linear ignored reason=unrecognized-event event=Issue",
+  );
 });
 
 test("poke of an unknown run is a 404", async () => {
