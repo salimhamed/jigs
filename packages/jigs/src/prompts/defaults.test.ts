@@ -3,6 +3,7 @@ import { expect, test } from "vitest";
 import {
   answerReviewPrompt,
   codeReviewPrompt,
+  commitWorkPrompt,
   fixCiFreshPrompt,
   fixCiPrompt,
   implementPrompt,
@@ -13,6 +14,7 @@ import {
 const generated: Record<string, string> = {
   "answer-review.md": answerReviewPrompt,
   "code-review.md": codeReviewPrompt,
+  "commit-work.md": commitWorkPrompt,
   "fix-ci-fresh.md": fixCiFreshPrompt,
   "fix-ci.md": fixCiPrompt,
   "implement.md": implementPrompt,

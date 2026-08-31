@@ -9,9 +9,10 @@
 // writes its body, and jigs carries no default for either.
 
 import type { WorktreeFacts } from "jigs";
+import { commitWorkPrompt } from "jigs/prompts";
 import type { AgentSession, HarnessConfig } from "jigs/steps";
 import type { CheckRun } from "../providers/github";
-import type { AgentFn } from "../steps";
+import { type AgentFn, ResumeFailedError } from "../steps";
 import type { TicketClaim } from "../suspension/claim";
 import type { NeedsHumanFn } from "../suspension/needs-human";
 import type { GateFn } from "../suspension/pull-request-gate";
@@ -44,9 +45,11 @@ export class PrClosedUnmergedError extends Error {
 // workflow-side can import a value from it. The loop is what turns an empty
 // push into a failure anyway.
 export class EmptyBranchError extends Error {
-  constructor(branch: string, baseSha: string) {
+  constructor(branch: string, baseSha: string, recovered = false) {
     super(
-      `${branch} holds no commits since ${baseSha} — the builder finished without committing, so there is nothing to open a pull request for`,
+      `${branch} holds no commits since ${baseSha} — the builder finished without committing, so there is nothing to open a pull request for${
+        recovered ? ", and a commit-recovery round did not change that" : ""
+      }`,
     );
     this.name = "EmptyBranchError";
   }
@@ -133,7 +136,7 @@ export async function reviewLoop(
   );
   let session = built.session;
 
-  const pushed = await pushWorktreeBranch(
+  let pushed = await pushWorktreeBranch(
     worktree.path,
     worktree.branch,
     worktree.baseSha,
@@ -143,7 +146,29 @@ export async function reviewLoop(
   // the loop never tears down (the pipeline calls teardownWorktrees after a
   // merged return; nothing cleans up a failure except the operator).
   if (pushed.commits === 0) {
-    throw new EmptyBranchError(worktree.branch, worktree.baseSha);
+    // A dirty tree is a complete implementation the builder forgot to commit —
+    // an approved one, by the time the push runs — so it gets exactly one
+    // bounded round to save it. A clean tree has nothing to save.
+    if (!pushed.dirty) {
+      throw new EmptyBranchError(worktree.branch, worktree.baseSha);
+    }
+    console.log(
+      "[reviewLoop] empty push with dirty worktree — sending builder back to commit",
+    );
+    const committed = await commitLeftoverWork(deps.agent, {
+      harness: options.harness,
+      cwd: worktree.path,
+      ...(session === undefined ? {} : { session }),
+    });
+    session = committed ?? session;
+    pushed = await pushWorktreeBranch(
+      worktree.path,
+      worktree.branch,
+      worktree.baseSha,
+    );
+    if (pushed.commits === 0) {
+      throw new EmptyBranchError(worktree.branch, worktree.baseSha, true);
+    }
   }
 
   // After the push, so nothing writes a description for a branch that turned
@@ -280,6 +305,41 @@ export async function reviewLoop(
   throw new Error(
     `the pull request gate for ${pr.owner}/${pr.repo}#${pr.number} stopped delivering wakes before the PR closed`,
   );
+}
+
+// Resume-first with the first-class fresh-context fallback the CI fix and the
+// review answers have (ADR 0009), and no rebuilt context to go with it: the
+// work this round commits is on disk in the cwd, so a fresh builder reading the
+// worktree has everything the resumed one would have had.
+async function commitLeftoverWork(
+  agent: AgentFn,
+  options: { harness: HarnessConfig; cwd: string; session?: AgentSession },
+): Promise<AgentSession | undefined> {
+  if (options.session !== undefined) {
+    try {
+      const resumed = await agent({
+        harness: options.harness,
+        cwd: options.cwd,
+        permissionMode: "bypassPermissions",
+        resume: options.session,
+        prompt: commitWorkPrompt,
+      });
+      return resumed.session;
+    } catch (err) {
+      if (!(err instanceof ResumeFailedError)) throw err;
+      console.log(
+        "[reviewLoop] resume failed — committing from a fresh context",
+      );
+    }
+  }
+
+  const committed = await agent({
+    harness: options.harness,
+    cwd: options.cwd,
+    permissionMode: "bypassPermissions",
+    prompt: commitWorkPrompt,
+  });
+  return committed.session;
 }
 
 async function postAnswers(
