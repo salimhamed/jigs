@@ -90,13 +90,19 @@ export async function openPr(
   return { owner: repo.owner, repo: repo.repo, number };
 }
 
+// The posted id is returned rather than dropped: the gate cursor needs the ids
+// of jigs' own replies to tell its last word on a thread from a human's, which
+// author identity cannot do on a personal-token factory (AGE-363).
 export async function replyInThread(
   pr: PrRef,
   rootId: number,
   body: string,
-): Promise<void> {
-  await replyToReviewThread(pr, rootId, body);
-  console.log(`[reviewLoop] replied in thread ${rootId} on #${pr.number}`);
+): Promise<{ id: number }> {
+  const posted = await replyToReviewThread(pr, rootId, body);
+  console.log(
+    `[reviewLoop] replied in thread ${rootId} on #${pr.number} as comment ${posted.id}`,
+  );
+  return posted;
 }
 
 export async function commentOnPr(pr: PrRef, body: string): Promise<void> {

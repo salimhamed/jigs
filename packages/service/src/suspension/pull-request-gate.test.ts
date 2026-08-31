@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import type { PrSnapshot, ReviewThread } from "../providers/github";
 import {
+  ackGateCursor,
   classifyPrState,
   emptyGateCursor,
   type GateCursor,
@@ -148,7 +149,72 @@ test("an unanswered thread since the cursor yields review-comments", () => {
   expect(result.cursor.seenCommentIds).toEqual([900, 910]);
 });
 
-test("a thread whose last comment is ours yields nothing but is still recorded", () => {
+// The whole point of the self guard being id-based: on a factory running the
+// operator's own token the viewer IS the reviewer, and filtering by author
+// swallowed every human review comment (AGE-363).
+test("a comment by the viewer's own login still yields review-comments", () => {
+  const threads = [thread(900, [[900, "salim"]])];
+  const result = classifyPrState(
+    snapshot({ viewer: "salim", reviewThreads: threads }),
+    empty,
+  );
+
+  expect(result.wakes).toEqual([{ kind: "review-comments", threads }]);
+});
+
+test("a thread whose only new comment is our own acked reply yields nothing", () => {
+  const threads = [thread(900, [[900, "reviewer"]])];
+  const first = classifyPrState(snapshot({ reviewThreads: threads }), empty);
+  expect(first.wakes).toHaveLength(1);
+
+  const answered = [
+    thread(900, [
+      [900, "reviewer"],
+      [901, "salim"],
+    ]),
+  ];
+  const second = classifyPrState(
+    snapshot({ viewer: "salim", reviewThreads: answered }),
+    ackGateCursor(first.cursor, { selfCommentIds: [901] }),
+  );
+
+  expect(second.wakes).toEqual([]);
+  expect(second.skippedSelfThreads).toBe(1);
+  expect(second.cursor.seenCommentIds).toEqual([900, 901]);
+  expect(second.cursor.selfCommentIds).toEqual([901]);
+});
+
+test("a human's follow-up on a thread we answered re-opens it", () => {
+  const threads = [thread(900, [[900, "reviewer"]])];
+  const first = classifyPrState(snapshot({ reviewThreads: threads }), empty);
+  const answered = [
+    thread(900, [
+      [900, "reviewer"],
+      [901, "salim"],
+    ]),
+  ];
+  const second = classifyPrState(
+    snapshot({ viewer: "salim", reviewThreads: answered }),
+    ackGateCursor(first.cursor, { selfCommentIds: [901] }),
+  );
+
+  // The operator, on their own token: same login as our reply above.
+  const followUp = [
+    thread(900, [
+      [900, "reviewer"],
+      [901, "salim"],
+      [902, "salim"],
+    ]),
+  ];
+  const third = classifyPrState(
+    snapshot({ viewer: "salim", reviewThreads: followUp }),
+    second.cursor,
+  );
+  expect(third.wakes).toEqual([{ kind: "review-comments", threads: followUp }]);
+  expect(third.skippedSelfThreads).toBe(0);
+});
+
+test("an unacked reply of ours is a wake — the guard is ids, not identity", () => {
   const threads = [
     thread(900, [
       [900, "reviewer"],
@@ -157,33 +223,8 @@ test("a thread whose last comment is ours yields nothing but is still recorded",
   ];
   const result = classifyPrState(snapshot({ reviewThreads: threads }), empty);
 
-  expect(result.wakes).toEqual([]);
+  expect(result.wakes).toEqual([{ kind: "review-comments", threads }]);
   expect(result.cursor.seenCommentIds).toEqual([900, 901]);
-});
-
-test("a human's follow-up on an answered thread re-opens it", () => {
-  const answered = [
-    thread(900, [
-      [900, "reviewer"],
-      [901, "jigs-bot"],
-    ]),
-  ];
-  const first = classifyPrState(snapshot({ reviewThreads: answered }), empty);
-
-  const followUp = [
-    thread(900, [
-      [900, "reviewer"],
-      [901, "jigs-bot"],
-      [902, "reviewer"],
-    ]),
-  ];
-  const second = classifyPrState(
-    snapshot({ reviewThreads: followUp }),
-    first.cursor,
-  );
-  expect(second.wakes).toEqual([
-    { kind: "review-comments", threads: followUp },
-  ]);
 });
 
 test("already-seen comments are not re-yielded", () => {

@@ -15,7 +15,7 @@ import type { CheckRun } from "../providers/github";
 import { type AgentFn, ResumeFailedError } from "../steps";
 import type { TicketClaim } from "../suspension/claim";
 import type { NeedsHumanFn } from "../suspension/needs-human";
-import type { GateFn } from "../suspension/pull-request-gate";
+import type { GateAck, GateFn } from "../suspension/pull-request-gate";
 import type { PrRef } from "../suspension/tokens";
 import type { Handoff } from "../ticket/review";
 import { answerAsBuilder, type ThreadAnswers } from "./builder";
@@ -190,117 +190,132 @@ export async function reviewLoop(
   );
 
   let ciAttempts = 0;
-  for await (const wake of deps.gate(pr)) {
-    switch (wake.kind) {
-      case "review-comments":
-      case "changes-requested": {
-        const threads = wake.kind === "review-comments" ? wake.threads : [];
-        const answered = await answerAsBuilder(
-          {
-            harness: options.harness,
-            cwd: worktree.path,
-            ...(session === undefined ? {} : { session }),
-            threads,
-            ...(wake.body === undefined ? {} : { reviewBody: wake.body }),
-            handoff,
-            baseSha: worktree.baseSha,
-          },
-          { agent: deps.agent, readDiff: deps.readDiff },
-        );
-        session = answered.session ?? session;
-        // The answer prompts tell the builder to commit its fix before
-        // replying, so the reply is only true once the branch carries it.
-        await pushWorktreeBranch(
-          worktree.path,
-          worktree.branch,
-          worktree.baseSha,
-        );
-        // Anything the model names that this wake did not carry is invented:
-        // replying into it 404s, and a 404 burns the step's three retries.
-        const known = new Set(threads.map((thread) => thread.rootId));
-        await postAnswers(
-          pr,
-          answered.output,
-          known,
-          replyInThread,
-          commentOnPr,
-        );
-        break;
-      }
-      case "ci-red": {
-        ciAttempts += 1;
-        if (ciAttempts > maxCiAttempts) {
-          // Exactly once per red streak, and on GitHub rather than through
-          // needsHuman: the conversation about this PR belongs on this PR.
-          if (ciAttempts === maxCiAttempts + 1) {
+  // Driven by hand rather than `for await`: the gate has to be told the ids of
+  // the replies this loop posts, and only `next(ack)` can carry them back
+  // (AGE-363). The finally is what `for await` did for free — ending the gate
+  // on an early return disposes its hook.
+  const gate = deps.gate(pr);
+  let ack: GateAck | undefined;
+  try {
+    while (true) {
+      const next = await gate.next(ack);
+      if (next.done === true) break;
+      ack = undefined;
+      const wake = next.value;
+      switch (wake.kind) {
+        case "review-comments":
+        case "changes-requested": {
+          const threads = wake.kind === "review-comments" ? wake.threads : [];
+          const answered = await answerAsBuilder(
+            {
+              harness: options.harness,
+              cwd: worktree.path,
+              ...(session === undefined ? {} : { session }),
+              threads,
+              ...(wake.body === undefined ? {} : { reviewBody: wake.body }),
+              handoff,
+              baseSha: worktree.baseSha,
+            },
+            { agent: deps.agent, readDiff: deps.readDiff },
+          );
+          session = answered.session ?? session;
+          // The answer prompts tell the builder to commit its fix before
+          // replying, so the reply is only true once the branch carries it.
+          await pushWorktreeBranch(
+            worktree.path,
+            worktree.branch,
+            worktree.baseSha,
+          );
+          // Anything the model names that this wake did not carry is invented:
+          // replying into it 404s, and a 404 burns the step's three retries.
+          const known = new Set(threads.map((thread) => thread.rootId));
+          const posted = await postAnswers(
+            pr,
+            answered.output,
+            known,
+            replyInThread,
+            commentOnPr,
+          );
+          if (posted.length > 0) ack = { selfCommentIds: posted };
+          break;
+        }
+        case "ci-red": {
+          ciAttempts += 1;
+          if (ciAttempts > maxCiAttempts) {
+            // Exactly once per red streak, and on GitHub rather than through
+            // needsHuman: the conversation about this PR belongs on this PR.
+            if (ciAttempts === maxCiAttempts + 1) {
+              await commentOnPr(
+                pr,
+                escalation(wake.mentionLogin ?? pr.owner, wake, maxCiAttempts),
+              );
+            }
+            break;
+          }
+          // A resumed fix runs inside the builder's own session and leaves the
+          // pointer where it is; only the fresh-context rebuild becomes a new
+          // session, and that one is then the one holding the change.
+          const fixed = await fixCi(
+            {
+              harness: options.harness,
+              cwd: worktree.path,
+              ...(session === undefined ? {} : { session }),
+              failing: wake.failing,
+              attempt: `${ciAttempts} of ${maxCiAttempts}`,
+              handoff,
+              baseSha: worktree.baseSha,
+            },
+            { agent: deps.agent, readDiff: deps.readDiff },
+          );
+          session = fixed.session ?? session;
+          const after = await pushWorktreeBranch(
+            worktree.path,
+            worktree.branch,
+            worktree.baseSha,
+          );
+          // A fix that committed nothing pushes no new head, so CI never runs
+          // again and no further wake can arrive: escalate now rather than wait
+          // on a wake that cannot come. The bound is spent past its once-per-
+          // streak comment so a later red in the same streak stays quiet.
+          if (after.headSha === wake.headSha) {
             await commentOnPr(
               pr,
-              escalation(wake.mentionLogin ?? pr.owner, wake, maxCiAttempts),
+              noCommitEscalation(wake.mentionLogin ?? pr.owner, wake),
             );
+            ciAttempts = maxCiAttempts + 1;
           }
           break;
         }
-        // A resumed fix runs inside the builder's own session and leaves the
-        // pointer where it is; only the fresh-context rebuild becomes a new
-        // session, and that one is then the one holding the change.
-        const fixed = await fixCi(
-          {
-            harness: options.harness,
-            cwd: worktree.path,
-            ...(session === undefined ? {} : { session }),
-            failing: wake.failing,
-            attempt: `${ciAttempts} of ${maxCiAttempts}`,
-            handoff,
-            baseSha: worktree.baseSha,
-          },
-          { agent: deps.agent, readDiff: deps.readDiff },
-        );
-        session = fixed.session ?? session;
-        const after = await pushWorktreeBranch(
-          worktree.path,
-          worktree.branch,
-          worktree.baseSha,
-        );
-        // A fix that committed nothing pushes no new head, so CI never runs
-        // again and no further wake can arrive: escalate now rather than wait
-        // on a wake that cannot come. The bound is spent past its once-per-
-        // streak comment so a later red in the same streak stays quiet.
-        if (after.headSha === wake.headSha) {
-          await commentOnPr(
-            pr,
-            noCommitEscalation(wake.mentionLogin ?? pr.owner, wake),
-          );
-          ciAttempts = maxCiAttempts + 1;
-        }
-        break;
-      }
-      case "ci-green":
-        ciAttempts = 0;
-        break;
-      case "approved": {
-        if (options.merge === "human") {
-          console.log(
-            `[reviewLoop] approved by ${wake.reviewer} — human-merges mode, waiting for the merge`,
-          );
+        case "ci-green":
+          ciAttempts = 0;
           break;
+        case "approved": {
+          if (options.merge === "human") {
+            console.log(
+              `[reviewLoop] approved by ${wake.reviewer} — human-merges mode, waiting for the merge`,
+            );
+            break;
+          }
+          try {
+            await squashMerge(pr);
+          } catch (error) {
+            // GitHub answers 405 for a PR that is not mergeable, and the arm
+            // merges on approval without checking CI. Letting that escape would
+            // fail the run on a recoverable state; breaking keeps the gate
+            // listening so the eventual close still ends the run.
+            await commentOnPr(pr, mergeFailure(wake.reviewer, error));
+            break;
+          }
+          return { pr, cycles: built.cycles };
         }
-        try {
-          await squashMerge(pr);
-        } catch (error) {
-          // GitHub answers 405 for a PR that is not mergeable, and the arm
-          // merges on approval without checking CI. Letting that escape would
-          // fail the run on a recoverable state; breaking keeps the gate
-          // listening so the eventual close still ends the run.
-          await commentOnPr(pr, mergeFailure(wake.reviewer, error));
-          break;
+        case "closed": {
+          if (wake.merged) return { pr, cycles: built.cycles };
+          throw new PrClosedUnmergedError(pr);
         }
-        return { pr, cycles: built.cycles };
-      }
-      case "closed": {
-        if (wake.merged) return { pr, cycles: built.cycles };
-        throw new PrClosedUnmergedError(pr);
       }
     }
+  } finally {
+    await gate.return();
   }
   throw new Error(
     `the pull request gate for ${pr.owner}/${pr.repo}#${pr.number} stopped delivering wakes before the PR closed`,
@@ -342,13 +357,17 @@ async function commitLeftoverWork(
   return committed.session;
 }
 
+// Returns the ids of the thread replies it posted, for the gate's self guard.
+// Conversation comments are left out: they never appear among the review
+// threads the guard filters.
 async function postAnswers(
   pr: PrRef,
   answers: ThreadAnswers,
   known: Set<number>,
   reply: typeof replyInThread,
   comment: typeof commentOnPr,
-): Promise<void> {
+): Promise<number[]> {
+  const posted: number[] = [];
   for (const answer of answers.answers) {
     if (answer.threadId !== null && !known.has(answer.threadId)) {
       console.log(
@@ -358,9 +377,10 @@ async function postAnswers(
     if (answer.threadId === null || !known.has(answer.threadId)) {
       await comment(pr, answer.body);
     } else {
-      await reply(pr, answer.threadId, answer.body);
+      posted.push((await reply(pr, answer.threadId, answer.body)).id);
     }
   }
+  return posted;
 }
 
 function escalation(
