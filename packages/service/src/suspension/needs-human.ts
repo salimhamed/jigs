@@ -87,7 +87,7 @@ export async function postNeedsHumanComment(
   const lines = [`${creator !== null ? `${mention(creator)} ` : ""}${reason}`];
   if (payload !== undefined) {
     if (isFindingsPayload(payload)) {
-      lines.push("", ...payload.findings.map((finding) => `- ${finding}`));
+      lines.push("", ...payload.findings.map((finding) => `1. ${finding}`));
     } else {
       lines.push("", "```json", JSON.stringify(payload, null, 2), "```");
     }
