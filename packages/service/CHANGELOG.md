@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/salimhamed/jigs/compare/service-v0.1.6...service-v0.1.7) (2026-08-31)
+
+
+### Bug Fixes
+
+* **service:** never mint a ticket token from a missing segment ([#54](https://github.com/salimhamed/jigs/issues/54)) ([6ecf98a](https://github.com/salimhamed/jigs/commit/6ecf98ae7c56098217b675fbbc1a935cc0f943ba))
+
 ## [0.1.6](https://github.com/salimhamed/jigs/compare/service-v0.1.5...service-v0.1.6) (2026-08-31)
 
 
