@@ -8,9 +8,13 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
-  # For GITHUB_TOKEN's read of the release PR's check rollup below.
+  # For GITHUB_TOKEN's read of the release PR's check rollup below. `gh pr
+  # checks` also resolves each check's workflowRun over GraphQL, which is an
+  # Actions read — without it every node in the reply errors and the poll
+  # never sees a name.
   checks: read
   statuses: read
+  actions: read
 
 concurrency:
   group: release-${{ github.ref }}
