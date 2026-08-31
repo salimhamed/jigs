@@ -84,17 +84,30 @@ export async function postNeedsHumanComment(
   payload: JsonValue | undefined,
 ) {
   const { creator, viewerId } = await getIssueParticipants(issueId);
-  const lines = [
-    `${creator !== null ? `${mention(creator)} ` : ""}this run needs a human.`,
-    "",
-    `**Reason:** ${reason}`,
-  ];
+  const lines = [`${creator !== null ? `${mention(creator)} ` : ""}${reason}`];
   if (payload !== undefined) {
-    lines.push("", "```json", JSON.stringify(payload, null, 2), "```");
+    if (isFindingsPayload(payload)) {
+      lines.push("", ...payload.findings.map((finding) => `- ${finding}`));
+    } else {
+      lines.push("", "```json", JSON.stringify(payload, null, 2), "```");
+    }
   }
   const comment = await createComment(issueId, lines.join("\n"));
   console.log(`[needsHuman] posted comment=${comment.id} issue=${issueId}`);
   return { commentId: comment.id, postedAt: comment.createdAt, viewerId };
+}
+
+function isFindingsPayload(
+  payload: JsonValue,
+): payload is { findings: string[] } {
+  return (
+    typeof payload === "object" &&
+    payload !== null &&
+    !Array.isArray(payload) &&
+    Object.keys(payload).length === 1 &&
+    Array.isArray(payload.findings) &&
+    payload.findings.every((finding) => typeof finding === "string")
+  );
 }
 
 export async function checkForHumanReply(
