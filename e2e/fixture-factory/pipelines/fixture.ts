@@ -1,3 +1,4 @@
+import { ticketInput } from "@jigs/service";
 import { fn } from "@jigs/service/steps";
 import { claimTicket } from "@jigs/service/suspension/claim";
 import { claude } from "jigs/steps";
@@ -11,10 +12,15 @@ import {
 } from "../steps/jigs.ts";
 
 export const fixtureInputs = z.object({
+  ticket: ticketInput,
   provision: z.boolean().default(false),
 });
 
-type FixtureInputs = z.output<typeof fixtureInputs> & { triggerId: string };
+type FixtureInputs = z.output<typeof fixtureInputs> & {
+  triggerId: string;
+  issueId: string;
+  identifier: string;
+};
 
 // One pipeline, three compile paths — a factory-local "use workflow" body, a
 // factory-local "use step" beside it, and this factory's own steps/
@@ -29,8 +35,8 @@ export async function fixturePipeline(inputs: FixtureInputs) {
   // have to reach the workflow bundle for the build to prove they drag no
   // node builtins in behind their step-side imports.
   if (inputs.provision) {
-    const claim = await claimTicket(inputs.triggerId);
-    const snapshot = await fetchSnapshot(inputs.triggerId);
+    const claim = await claimTicket(inputs.issueId, inputs.identifier);
+    const snapshot = await fetchSnapshot(inputs.issueId);
     const harness = claude({ model: "fixture" });
     const tree = await worktree({ binding: "none", branch: "fixture" });
     const handoff = await ticketReview({

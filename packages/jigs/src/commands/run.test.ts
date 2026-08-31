@@ -22,7 +22,7 @@ const deps = () => ({
 
 const inputsSchema = z.toJSONSchema(
   z.object({
-    issueId: z.uuid(),
+    ticket: z.union([z.uuid(), z.string().regex(/^[A-Z][A-Z0-9]*-\d+$/)]),
     askHuman: z.boolean().default(false),
   }),
   { io: "input" },
@@ -44,14 +44,14 @@ const failure = (promise: Promise<unknown>) =>
 test("a value the pipeline's schema rejects fails with the schema's own error", () => {
   const thrown = (() => {
     try {
-      validateInputs(inputsSchema, { issueId: "AGE-123" });
+      validateInputs(inputsSchema, { ticket: "not-a-ticket" });
     } catch (err) {
       return err as CliError;
     }
     return null;
   })();
   expect(thrown).toBeInstanceOf(CliError);
-  expect(thrown?.message).toContain("Invalid UUID");
+  expect(thrown?.message).toContain("Invalid input");
   expect(thrown?.hint).toContain("inputs schema");
   expect(fetchMock).not.toHaveBeenCalled();
 });
@@ -59,7 +59,7 @@ test("a value the pipeline's schema rejects fails with the schema's own error", 
 test("a schema violation never reaches the trigger route", async () => {
   respondSchema();
   const err = await failure(
-    launchRun("deliver-feature", ["issueId=AGE-123"], deps()),
+    launchRun("deliver-feature", ["ticket=not-a-ticket"], deps()),
   );
   expect(err).toBeInstanceOf(CliError);
   expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -146,11 +146,7 @@ test("a refused launch prints every preflight failure with its repair", async ()
     ),
   );
   const err = await failure(
-    launchRun(
-      "deliver-feature",
-      ["issueId=6b1c1d2e-0000-4000-8000-000000000000"],
-      deps(),
-    ),
+    launchRun("deliver-feature", ["ticket=AGE-346"], deps()),
   );
   expect(err?.message).toBe("preflight failed — no run created");
   expect(lines.join("\n")).toBe(
@@ -176,11 +172,7 @@ test("a started run prints its id, pipeline, resume token and log pointer", asyn
       { status: 201 },
     ),
   );
-  await launchRun(
-    "deliver-feature",
-    ["issueId=6b1c1d2e-0000-4000-8000-000000000000"],
-    deps(),
-  );
+  await launchRun("deliver-feature", ["ticket=AGE-346"], deps());
   expect(lines).toEqual([
     "run wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
     "pipeline deliver-feature",
@@ -192,18 +184,14 @@ test("a started run prints its id, pipeline, resume token and log pointer", asyn
     "http://svc.test:8990/api/pipelines/deliver-feature/runs",
   );
   expect(JSON.parse(String(trigger?.[1]?.body))).toEqual({
-    inputs: { issueId: "6b1c1d2e-0000-4000-8000-000000000000" },
+    inputs: { ticket: "AGE-346" },
   });
 });
 
 test("a misspelled --input key is refused before the launch is paid for", async () => {
   respondSchema();
   const err = await failure(
-    launchRun(
-      "deliver-feature",
-      ["issueId=6b1c1d2e-0000-4000-8000-000000000000", "askhuman=true"],
-      deps(),
-    ),
+    launchRun("deliver-feature", ["ticket=AGE-346", "askhuman=true"], deps()),
   );
   expect(err).toBeInstanceOf(CliError);
   expect(err?.message).toBe("unknown --input: askhuman");
@@ -212,10 +200,10 @@ test("a misspelled --input key is refused before the launch is paid for", async 
 });
 
 test("a pipeline that accepts extra keys still takes them", () => {
-  const loose = z.toJSONSchema(z.looseObject({ issueId: z.string() }), {
+  const loose = z.toJSONSchema(z.looseObject({ ticket: z.string() }), {
     io: "input",
   });
-  expect(() => validateInputs(loose, { issueId: "x", extra: 1 })).not.toThrow();
+  expect(() => validateInputs(loose, { ticket: "x", extra: 1 })).not.toThrow();
 });
 
 test("a refinement only the service can see renders as a schema error", async () => {
@@ -225,7 +213,7 @@ test("a refinement only the service can see renders as a schema error", async ()
       JSON.stringify({
         error: "invalid inputs",
         issues: [
-          { path: ["issueId"], message: "issue is closed" },
+          { path: ["ticket"], message: "issue is closed" },
           { path: [], message: "askHuman requires a reviewer" },
         ],
       }),
@@ -233,15 +221,11 @@ test("a refinement only the service can see renders as a schema error", async ()
     ),
   );
   const err = await failure(
-    launchRun(
-      "deliver-feature",
-      ["issueId=6b1c1d2e-0000-4000-8000-000000000000"],
-      deps(),
-    ),
+    launchRun("deliver-feature", ["ticket=AGE-346"], deps()),
   );
   expect(err).toBeInstanceOf(CliError);
   expect(err?.message).toBe(
-    ["issueId: issue is closed", "(root): askHuman requires a reviewer"].join(
+    ["ticket: issue is closed", "(root): askHuman requires a reviewer"].join(
       "\n",
     ),
   );
@@ -252,11 +236,7 @@ test("a 400 carrying no issues keeps the raw-body error", async () => {
   respondSchema();
   fetchMock.mockResolvedValueOnce(new Response("nope", { status: 400 }));
   const err = await failure(
-    launchRun(
-      "deliver-feature",
-      ["issueId=6b1c1d2e-0000-4000-8000-000000000000"],
-      deps(),
-    ),
+    launchRun("deliver-feature", ["ticket=AGE-346"], deps()),
   );
   expect(err?.message).toBe("launch failed: HTTP 400 nope");
 });

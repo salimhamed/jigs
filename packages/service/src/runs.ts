@@ -55,7 +55,11 @@ export async function resolveRunRef(
   // every run's first act, and the world deletes hooks at terminal state, so
   // the token resolves exactly the run that currently holds the ticket.
   const hookRunId = deps.hookRunId ?? worldHookRunId;
-  const owner = await hookRunId(ticketToken(ref));
+  const owner =
+    (await hookRunId(ticketToken(ref))) ??
+    (ref === ref.toUpperCase()
+      ? null
+      : await hookRunId(ticketToken(ref.toUpperCase())));
   return owner === null ? { kind: "unknown" } : { kind: "found", runId: owner };
 }
 

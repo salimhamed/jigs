@@ -5,7 +5,7 @@ import path from "node:path";
 import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { createApp } from "./app";
-import type { Factory } from "./factory";
+import { type Factory, ticketInput } from "./factory";
 
 // The routes are exercised against pipelines this file declares: what is under
 // test is the framework.
@@ -14,7 +14,7 @@ const fixture = {
     plain: {
       pipeline: async () => undefined,
       inputs: z.object({
-        issueId: z.uuid(),
+        ticket: ticketInput,
         askHuman: z.boolean().default(false),
       }),
     },
@@ -225,8 +225,8 @@ test("a pipeline's inputs route answers with its JSON Schema", async () => {
     inputs: { properties: Record<string, unknown>; required: string[] };
   };
   expect(body.name).toBe("plain");
-  expect(body.inputs.properties.issueId).toBeDefined();
-  expect(body.inputs.required).toEqual(["issueId"]);
+  expect(body.inputs.properties.ticket).toBeDefined();
+  expect(body.inputs.required).toEqual(["ticket"]);
   // io: "input" — the defaulted field must not be demanded of the caller.
   expect(body.inputs.required).not.toContain("askHuman");
 });

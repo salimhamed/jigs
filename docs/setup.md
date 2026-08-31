@@ -260,7 +260,7 @@ manually wakes a suspended run over the same code path as a webhook delivery.
 ### 6. Operating runs
 
 ```sh
-jigs run <pipeline> --input issueId=<uuid>
+jigs run <pipeline> --input ticket=AGE-123
 jigs ps
 jigs logs <run>
 jigs cancel <run> [--force]
