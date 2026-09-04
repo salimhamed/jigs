@@ -99,12 +99,12 @@ function factoryPorts(factoryRoot: string): {
 } {
   const digest = createHash("sha256").update(factoryRoot).digest();
   const offset = digest.readUInt16BE(0) % 100;
-  // The dashboard sits next to the service. Derived here and written into
-  // jigs.yml as a number: nothing reads it back as an offset, so an operator
-  // is free to move either one.
+  // Three disjoint ranges, one offset: a dashboard port next to the service
+  // port would be another factory's service port whenever their offsets
+  // differ by one.
   return {
     servicePort: 8990 + offset,
-    dashboardPort: 8991 + offset,
+    dashboardPort: 9090 + offset,
     postgresPort: 5440 + offset,
   };
 }

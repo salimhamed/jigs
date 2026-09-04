@@ -16,6 +16,8 @@ import { setWorld } from "workflow/runtime";
 import { z } from "zod";
 import { createApp } from "./app";
 import { type Factory, ticketInput } from "./factory";
+import * as stalls from "./stalls";
+import * as sql from "./worktrees/sql";
 
 // The routes are exercised against pipelines this file declares: what is under
 // test is the framework.
@@ -448,6 +450,30 @@ test("GET /api/runs/:ref/steps answers with the run's steps and its dead jobs", 
 test("a steps request for a run nobody launched answers on the ref", async () => {
   const res = await app.request(`/api/runs/${RUN}/steps`);
   expect(res.status).toBe(404);
+});
+
+test("GET /api/runs/:ref reports a stalled run as stalled, like `jigs ps` does", async () => {
+  // `jigs ps` and `jigs logs` must not disagree about the same run, so both
+  // read the one derivation in runs.ts.
+  setWorld({
+    runs: { get: async () => ({ status: "running" }) },
+    steps: { list: async () => ({ data: [] }) },
+    hooks: { list: async () => ({ data: [] }) },
+  } as unknown as Parameters<typeof setWorld>[0]);
+  vi.spyOn(stalls, "listJobRunIds").mockResolvedValue({
+    dead: [RUN],
+    live: [],
+  });
+  vi.spyOn(sql, "registrySql").mockReturnValue({} as never);
+
+  const res = await app.request(`/api/runs/${RUN}`);
+
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({
+    runId: RUN,
+    status: "stalled",
+    suspended: false,
+  });
 });
 
 test("GET /api/schedules answers with what the factory declared, and what is next", async () => {

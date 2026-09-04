@@ -15,6 +15,11 @@
 // diff both against the recorded list, because "the ids do not move when the
 // library is versioned" is the property this whole shape was bought for, and
 // it is the one nothing else can observe.
+//
+// Then start the bundle once: a factory installs @jigs/service by `link:`, so
+// an import this package adds resolves only if the factory declares it too,
+// and nothing says otherwise until the built service starts in someone else's
+// repo.
 import { execFileSync, spawn } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -122,7 +127,7 @@ const BOOT_MARKERS = ["Listening on:", "[service] dashboard:"];
 // the message is what identifies it either way.
 const BOOT_UNRESOLVED = /ERR_MODULE_NOT_FOUND|Cannot find (?:module|package)/;
 
-function boots() {
+function bootOutcome() {
   const child = spawn(process.execPath, [bundle], {
     cwd: factory,
     env: {
@@ -135,7 +140,12 @@ function boots() {
   });
   return new Promise((resolve) => {
     let output = "";
+    let settled = false;
+    // The kill below makes the process exit, which fires the handler that
+    // would settle a second time with a failure.
     const settle = (problem) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       child.kill("SIGKILL");
       resolve({ output, problem });
@@ -216,7 +226,7 @@ if (moved.missing.length > 0 || moved.unexpected.length > 0) {
 }
 
 console.log("\n=== boot: the built bundle resolves every import and listens");
-const boot = await boots();
+const boot = await bootOutcome();
 if (boot.problem !== null) {
   console.error(boot.output);
   fail(

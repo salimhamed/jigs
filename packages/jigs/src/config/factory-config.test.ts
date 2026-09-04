@@ -8,16 +8,20 @@ import {
   upsertBinding,
 } from "./factory-config.ts";
 
+// The dashboard port has no default, so every config that has to parse at all
+// carries a service block.
+const SERVICE = "service:\n  port: 8990\n  dashboard_port: 9090\n";
+
 const commented = `# Factory repo config.
-bindings:
+${SERVICE}bindings:
   # The main API service.
   acme-api:
     path: ~/Code/acme-api # local checkout
     remote: git@github.com:acme/api.git
 `;
 
-test("upsertBinding creates the bindings block in an empty file", () => {
-  const text = upsertBinding("", "acme-api", {
+test("upsertBinding creates the bindings block in a file without one", () => {
+  const text = upsertBinding(SERVICE, "acme-api", {
     path: "~/Code/acme-api",
     remote: "git@github.com:acme/api.git",
   });
@@ -49,7 +53,7 @@ test("re-upsert with identical values is byte-identical", () => {
 });
 
 test("upsertBinding re-pins the remote without touching other fields", () => {
-  const withExtras = `bindings:
+  const withExtras = `${SERVICE}bindings:
   acme-api:
     path: ~/Code/acme-api
     remote: git@github.com:acme/api.git
@@ -84,7 +88,7 @@ test("removeBinding on an unknown name lists bound names", () => {
 });
 
 test("parseFactoryConfig rejects unknown per-binding keys naming the key", () => {
-  const text = `bindings:
+  const text = `${SERVICE}bindings:
   acme-api:
     path: ~/Code/acme-api
     remote: git@github.com:acme/api.git
@@ -95,7 +99,7 @@ test("parseFactoryConfig rejects unknown per-binding keys naming the key", () =>
 
 test("parseFactoryConfig rejects a binding missing required fields", () => {
   expect(() =>
-    parseFactoryConfig("bindings:\n  acme-api:\n    path: ~/x\n"),
+    parseFactoryConfig(`${SERVICE}bindings:\n  acme-api:\n    path: ~/x\n`),
   ).toThrow(/remote/);
 });
 
@@ -104,27 +108,35 @@ test("ff_default_branch defaults to true", () => {
   expect(config.bindings["acme-api"]?.ff_default_branch).toBe(true);
 });
 
-test("parseFactoryConfig tolerates unknown top-level keys and empty files", () => {
-  expect(parseFactoryConfig("").bindings).toEqual({});
-  expect(parseFactoryConfig("pipelines: {}\n").bindings).toEqual({});
+test("parseFactoryConfig tolerates unknown top-level keys", () => {
+  expect(parseFactoryConfig(`pipelines: {}\n${SERVICE}`).bindings).toEqual({});
 });
 
-test("the service block defaults to the port the single global service used", () => {
-  const config = parseFactoryConfig(commented);
+test("the service port defaults to the one the single global service used", () => {
+  const config = parseFactoryConfig("service:\n  dashboard_port: 9090\n");
   // No step_timeout_minutes: unset is the default, and it means uncapped.
-  expect(config.service).toEqual({ port: 8990, dashboard_port: 8991 });
+  expect(config.service).toEqual({ port: 8990, dashboard_port: 9090 });
 });
 
 test("parseFactoryConfig rejects an out-of-range port naming the field", () => {
-  expect(() => parseFactoryConfig("service:\n  port: 70000\n")).toThrow(
-    /service\.port/,
-  );
+  expect(() =>
+    parseFactoryConfig("service:\n  port: 70000\n  dashboard_port: 9090\n"),
+  ).toThrow(/service\.port/);
 });
 
 test("parseFactoryConfig rejects an out-of-range dashboard port the same way", () => {
   expect(() =>
     parseFactoryConfig("service:\n  port: 9100\n  dashboard_port: 0\n"),
   ).toThrow(/service\.dashboard_port/);
+});
+
+test("a config with no dashboard port refuses to parse, naming the field", () => {
+  // No default on purpose: any number jigs picked would be some other
+  // factory's service port, and this one is the operator's to choose.
+  expect(() => parseFactoryConfig("service:\n  port: 9100\n")).toThrow(
+    /service\.dashboard_port/,
+  );
+  expect(() => parseFactoryConfig("")).toThrow(/service\.dashboard_port/);
 });
 
 test("the dashboard port is read as written, never derived from the port", () => {
@@ -136,7 +148,9 @@ test("the dashboard port is read as written, never derived from the port", () =>
 
 test("parseFactoryConfig rejects a step timeout under a minute", () => {
   expect(() =>
-    parseFactoryConfig("service:\n  step_timeout_minutes: 0\n"),
+    parseFactoryConfig(
+      "service:\n  dashboard_port: 9090\n  step_timeout_minutes: 0\n",
+    ),
   ).toThrow(/service\.step_timeout_minutes/);
 });
 
@@ -145,14 +159,14 @@ test("resolveService derives the service address and the slug", () => {
   try {
     const factory = makeFactoryRepo(
       tmp,
-      "service:\n  port: 9100\n  dashboard_port: 9101\n",
+      "service:\n  port: 9100\n  dashboard_port: 9200\n",
     );
     expect(resolveService(factory)).toEqual({
       slug: factorySlug(factory),
       port: 9100,
       serviceUrl: "http://localhost:9100",
-      dashboardPort: 9101,
-      dashboardUrl: "http://localhost:9101",
+      dashboardPort: 9200,
+      dashboardUrl: "http://localhost:9200",
       stepTimeoutMinutes: undefined,
     });
   } finally {
@@ -165,7 +179,7 @@ test("resolveService carries a factory's own step timeout", () => {
   try {
     const factory = makeFactoryRepo(
       tmp,
-      "service:\n  port: 9100\n  step_timeout_minutes: 90\n",
+      "service:\n  port: 9100\n  dashboard_port: 9200\n  step_timeout_minutes: 90\n",
     );
     expect(resolveService(factory).stepTimeoutMinutes).toBe(90);
   } finally {

@@ -10,7 +10,10 @@ import { buildFactoryService, type ExecFile } from "./build.ts";
 // effort, so every test here exercises the build path itself.
 function factory(port = 59321): string {
   const root = mkdtempSync(path.join(tmpdir(), "jigs-build-"));
-  writeFileSync(path.join(root, "jigs.yml"), `service:\n  port: ${port}\n`);
+  writeFileSync(
+    path.join(root, "jigs.yml"),
+    `service:\n  port: ${port}\n  dashboard_port: 9090\n`,
+  );
   mkdirSync(path.join(root, "node_modules", ".bin"), { recursive: true });
   writeFileSync(path.join(root, "node_modules", ".bin", "nitro"), "");
   return root;

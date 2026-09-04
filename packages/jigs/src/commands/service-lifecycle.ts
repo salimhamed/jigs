@@ -102,11 +102,11 @@ function livePid(sv: Supervisor): number | undefined {
 }
 
 // The factory's own `.env` is the service's environment file, World URL and
-// credentials included. `PORT` and the step timeout are the exceptions: both
-// are declared in jigs.yml — the address the child must listen on, and the cap
-// it must bound its step dispatcher by — so jigs.yml wins over `.env` for
-// them. Including when the cap is absent: unset means uncapped, and an
-// inherited value must not quietly reintroduce one.
+// credentials included. What jigs.yml declares wins over it: the two addresses
+// the child must listen on, the cap it must bound its step dispatcher by, and
+// the base URL derived from the first of those. Including when the cap is
+// absent: unset means uncapped, and an inherited value must not quietly
+// reintroduce one.
 //
 // `WORKFLOW_LOCAL_BASE_URL` pins every queue worker in the child — the
 // dashboard's included — to the service's own workflow routes. Left unset the

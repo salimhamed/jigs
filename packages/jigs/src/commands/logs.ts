@@ -60,11 +60,15 @@ export async function showLogs(
   return result;
 }
 
-// A World the service cannot read the timeline out of leaves the run's own
-// state above, which is still the answer to "what is this run doing".
+// A timeline the service cannot read still leaves the run's own state above,
+// which is the answer to "what is this run doing" — but say so rather than
+// let the missing table read as a run with no steps.
 async function showTimeline(runId: string, deps: ServiceDeps): Promise<void> {
   const res = await serviceFetch(deps, `/api/runs/${runId}/steps`);
-  if (!res.ok) return;
+  if (!res.ok) {
+    deps.out(`timeline unavailable: HTTP ${res.status}`);
+    return;
+  }
   const { steps, deadJobs } = (await res.json()) as {
     steps: StepRow[];
     deadJobs: DeadJob[];

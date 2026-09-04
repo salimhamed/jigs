@@ -2,7 +2,7 @@ import type { ISql } from "postgres";
 import { afterEach, expect, test } from "vitest";
 import { setWorld } from "workflow/runtime";
 import {
-  listDeadJobs,
+  listJobRunIds,
   listRunDeadJobs,
   listRunSteps,
   runsWithActiveStep,
@@ -41,10 +41,11 @@ const payloadFor = (runId: string) => ({
 
 const fakeSql = (rows: unknown[]) => (async () => rows) as unknown as ISql;
 
-const deadJob = (over: Record<string, unknown> = {}) => ({
+const job = (over: Record<string, unknown> = {}) => ({
   id: "4128",
   task: "jigs:workflow",
   attempts: 3,
+  dead: true,
   lastError: "Queue execution failed (404): Not Found",
   createdAt: new Date("2026-09-04T10:00:00.000Z"),
   payload: payloadFor(RUN_A),
@@ -93,30 +94,31 @@ test("a pending step counts as in flight, like a running one", async () => {
   expect(await runsWithActiveStep([RUN_A])).toEqual([RUN_A]);
 });
 
-test("a dead job names the run its queue message body carries", async () => {
-  const jobs = await listDeadJobs(fakeSql([deadJob()]));
-  expect(jobs).toEqual([
-    {
-      id: "4128",
-      task: "jigs:workflow",
-      attempts: 3,
-      lastError: "Queue execution failed (404): Not Found",
-      createdAt: "2026-09-04T10:00:00.000Z",
-      runId: RUN_A,
-    },
-  ]);
+test("a job is sorted into dead or live by the run its message body names", async () => {
+  const jobs = await listJobRunIds(
+    fakeSql([
+      job(),
+      job({ id: "4129", dead: false, payload: payloadFor(RUN_B) }),
+    ]),
+  );
+  expect(jobs).toEqual({ dead: [RUN_A], live: [RUN_B] });
 });
 
-test("a job whose payload names no run is reported without one", async () => {
-  const jobs = await listDeadJobs(fakeSql([deadJob({ payload: null })]));
-  expect(jobs[0]?.runId).toBeNull();
+test("a job whose payload names no run belongs to neither list", async () => {
+  const jobs = await listJobRunIds(fakeSql([job({ payload: null })]));
+  expect(jobs).toEqual({ dead: [], live: [] });
 });
 
-test("the per-run listing keeps only that run's jobs, and drops the payload", async () => {
+test("the per-run listing keeps that run's dead jobs, and drops the columns it read them by", async () => {
   const jobs = await listRunDeadJobs(
-    fakeSql([deadJob(), deadJob({ id: "4129", payload: payloadFor(RUN_B) })]),
+    fakeSql([
+      job({ id: "4127", dead: false, payload: payloadFor(RUN_B) }),
+      job({ id: "4129", payload: payloadFor(RUN_B) }),
+      job(),
+    ]),
     RUN_B,
   );
-  expect(jobs.map((job) => job.id)).toEqual(["4129"]);
+  expect(jobs.map((row) => row.id)).toEqual(["4129"]);
   expect(jobs[0]).not.toHaveProperty("payload");
+  expect(jobs[0]).not.toHaveProperty("dead");
 });

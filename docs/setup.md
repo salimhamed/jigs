@@ -377,20 +377,21 @@ port:
 ```yaml
 service:
   port: 8990
-  dashboard_port: 8991
+  dashboard_port: 9090
 ```
 
-`jigs init` writes both, the second as the first plus one; they are two
-committed numbers, so either can move. `jigs service start`, `restart` and
+`jigs init` writes both, from ranges that cannot overlap. `dashboard_port` is
+required — a factory without one refuses to parse, naming the field — and both
+are committed numbers, so either can move. `jigs service start`, `restart` and
 `status` print the address:
 
 ```
 started my-factory: pid 91234 at http://localhost:8990
-dashboard: http://localhost:8991
+dashboard: http://localhost:9090
 ```
 
 `jigs run` and `jigs logs <run>` print the run's own page there
-(`http://localhost:8991/run/<run>`), and `jigs logs` follows it with the step
+(`http://localhost:9090/run/<run>`), and `jigs logs` follows it with the step
 timeline and any queue job that died holding the run's resume, each with the
 SQL that puts it back on the queue:
 

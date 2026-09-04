@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 const RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
-const DASHBOARD = `http://localhost:8991/run/${RUN}`;
+const DASHBOARD = `http://localhost:9090/run/${RUN}`;
 
 const deps = () => ({
   out: (line: string) => lines.push(line),
@@ -142,13 +142,18 @@ test("a dead job is printed with its error's first line and a copy-pasteable req
   ]);
 });
 
-test("a timeline the service cannot read leaves the run's own state printed", async () => {
+test("a timeline the service cannot read says so rather than reading as no steps", async () => {
   fetchMock.mockResolvedValueOnce(
     new Response(JSON.stringify({ runId: RUN, status: "running", logs: "" })),
   );
   fetchMock.mockResolvedValueOnce(new Response("nope", { status: 503 }));
   await showLogs(RUN, deps());
-  expect(lines).toEqual([`run ${RUN}`, "status running", ""]);
+  expect(lines).toEqual([
+    `run ${RUN}`,
+    "status running",
+    "",
+    "timeline unavailable: HTTP 503",
+  ]);
 });
 
 test("an unresolvable ref fails before the pointer is printed", async () => {

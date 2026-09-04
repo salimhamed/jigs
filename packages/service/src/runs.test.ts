@@ -2,6 +2,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
 import type { Factory } from "./factory";
 import {
+  derivedRunStatus,
   isParkToken,
   listRuns,
   resolveRunRef,
@@ -126,11 +127,18 @@ test("a non-terminal run holding a park hook is reported suspended", async () =>
   expect(rows[0]?.status).toBe("suspended");
 });
 
+const jobs =
+  (dead: string[], live: string[] = []) =>
+  async () => ({
+    dead,
+    live,
+  });
+
 test("a running run with a dead job and nothing in flight is stalled", async () => {
   const rows = await listRuns(factory, {
     listRuns: async () => [worldRun()],
     listHooks: async () => [],
-    deadJobRunIds: async () => [RUN_A],
+    jobRunIds: jobs([RUN_A]),
     runsWithActiveStep: async () => [],
   });
   expect(rows[0]?.status).toBe("stalled");
@@ -140,8 +148,21 @@ test("a dead job beside a step still in flight is not a stall", async () => {
   const rows = await listRuns(factory, {
     listRuns: async () => [worldRun()],
     listHooks: async () => [],
-    deadJobRunIds: async () => [RUN_A],
+    jobRunIds: jobs([RUN_A]),
     runsWithActiveStep: async () => [RUN_A],
+  });
+  expect(rows[0]?.status).toBe("running");
+});
+
+test("a healed run is not stalled: the dead row stays, but a live job replaced it", async () => {
+  // A requeue and the World's own restart reconciliation each add a job
+  // beside the dead one, which nothing ever clears — so a recovered run would
+  // otherwise read stalled in every gap between its steps.
+  const rows = await listRuns(factory, {
+    listRuns: async () => [worldRun()],
+    listHooks: async () => [],
+    jobRunIds: jobs([RUN_A], [RUN_A]),
+    runsWithActiveStep: async () => [],
   });
   expect(rows[0]?.status).toBe("running");
 });
@@ -150,7 +171,7 @@ test("a run parked on a hook reads suspended even with a dead job", async () => 
   const rows = await listRuns(factory, {
     listRuns: async () => [worldRun()],
     listHooks: async () => [{ runId: RUN_A, token: "github:pr:acme/api#41" }],
-    deadJobRunIds: async () => [RUN_A],
+    jobRunIds: jobs([RUN_A]),
     runsWithActiveStep: async () => [],
   });
   expect(rows[0]?.status).toBe("suspended");
@@ -160,10 +181,25 @@ test("a dead job left behind by a terminal run does not restate its status", asy
   const rows = await listRuns(factory, {
     listRuns: async () => [worldRun({ status: "completed" })],
     listHooks: async () => [],
-    deadJobRunIds: async () => [RUN_A],
+    jobRunIds: jobs([RUN_A]),
     runsWithActiveStep: async () => [],
   });
   expect(rows[0]?.status).toBe("completed");
+});
+
+test("derivedRunStatus is the one thing `jigs ps` and the run route both read", () => {
+  expect(derivedRunStatus("running", { parked: false, stalled: true })).toBe(
+    "stalled",
+  );
+  expect(derivedRunStatus("running", { parked: true, stalled: true })).toBe(
+    "suspended",
+  );
+  expect(derivedRunStatus("failed", { parked: false, stalled: true })).toBe(
+    "failed",
+  );
+  expect(derivedRunStatus("pending", { parked: false, stalled: true })).toBe(
+    "pending",
+  );
 });
 
 test("a run holding only its ticket claim is still running, not suspended", async () => {

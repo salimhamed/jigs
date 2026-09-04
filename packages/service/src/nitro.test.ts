@@ -6,9 +6,14 @@ import { defineJigsService } from "./nitro.ts";
 test("the plugins this package ships resolve to files that exist", () => {
   // Nitro resolves a bare plugins entry against the build root, which for a
   // factory repo is the factory. A wrong path here fails at build time in
-  // someone else's repo and nowhere in this one.
-  for (const plugin of (defineJigsService().plugins ?? []).slice(0, 2)) {
-    expect(path.isAbsolute(plugin as string)).toBe(true);
+  // someone else's repo and nowhere in this one. The generated ones are
+  // relative and belong to the factory, so absoluteness is what tells the two
+  // kinds apart.
+  const shipped = (defineJigsService().plugins ?? []).filter((plugin) =>
+    path.isAbsolute(plugin as string),
+  );
+  expect(shipped).toHaveLength(2);
+  for (const plugin of shipped) {
     expect(existsSync(plugin as string)).toBe(true);
   }
 });

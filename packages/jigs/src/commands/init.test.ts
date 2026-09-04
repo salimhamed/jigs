@@ -66,9 +66,13 @@ test("the docker project and ports all carry the factory", async () => {
   expect(a.servicePort).not.toBe(b.servicePort);
   const yml = readFileSync(path.join(first, "jigs.yml"), "utf8");
   expect(yml).toContain(`port: ${a.servicePort}`);
-  // Written as a number, once: nothing derives it from the port at read time.
-  expect(yml).toContain(`dashboard_port: ${a.servicePort + 1}`);
-  expect(a.dashboardPort).toBe(a.servicePort + 1);
+  expect(yml).toContain(`dashboard_port: ${a.dashboardPort}`);
+  expect(a.dashboardPort).not.toBe(b.dashboardPort);
+  // Disjoint ranges: one factory's dashboard is never another's service.
+  for (const port of [a.servicePort, b.servicePort]) {
+    expect(a.dashboardPort).not.toBe(port);
+    expect(b.dashboardPort).not.toBe(port);
+  }
 });
 
 test("an existing file is kept, never overwritten", async () => {

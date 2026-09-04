@@ -126,9 +126,17 @@ export function commitToRemote(
   return sha;
 }
 
+// A factory config that declares no service block does not parse — both ports
+// are required — and most callers here are about bindings, so one is supplied
+// unless the caller declares its own.
+const SERVICE_BLOCK = "service:\n  port: 8990\n  dashboard_port: 9090\n";
+
 export function makeFactoryRepo(parent: string, jigsYml = ""): string {
   const dir = path.join(parent, "factory");
   mkdirSync(dir, { recursive: true });
-  writeFileSync(path.join(dir, "jigs.yml"), jigsYml);
+  const text = jigsYml.includes("service:")
+    ? jigsYml
+    : `${jigsYml}${SERVICE_BLOCK}`;
+  writeFileSync(path.join(dir, "jigs.yml"), text);
   return dir;
 }

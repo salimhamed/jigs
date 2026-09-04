@@ -23,8 +23,6 @@ export interface DeadJobView {
   createdAt: string;
 }
 
-// A step in either state is work the run is still waiting on, so nothing is
-// stalled while one exists.
 const ACTIVE_STEP_STATUSES: ReadonlySet<string> = new Set([
   "running",
   "pending",
@@ -63,44 +61,56 @@ export async function runsWithActiveStep(runIds: string[]): Promise<string[]> {
   return busy.filter((runId): runId is string => runId !== null);
 }
 
-interface DeadJobRow extends Omit<DeadJobView, "createdAt"> {
+interface JobRow extends Omit<DeadJobView, "createdAt"> {
   createdAt: Date;
+  dead: boolean;
   payload: unknown;
+}
+
+/** Which runs the queue holds a dead job for, and which it still holds a live
+ *  one for. A dead row outlives its own recovery — a requeue and the World's
+ *  own restart reconciliation both add a job rather than clearing it — so only
+ *  the two answers together say whether anything is still coming. */
+export interface JobRunIds {
+  dead: string[];
+  live: string[];
 }
 
 // graphile's documented `jobs` view carries no payload, and the payload is the
 // only thing that names the run a job belongs to.
-async function deadJobRows(sql: ISql): Promise<DeadJobRow[]> {
-  return await sql<DeadJobRow[]>`
+async function jobRows(sql: ISql): Promise<JobRow[]> {
+  return await sql<JobRow[]>`
     SELECT jobs.id, jobs.task_identifier AS task, jobs.attempts,
+           jobs.attempts >= jobs.max_attempts AS dead,
            jobs.last_error, jobs.created_at, body.payload
     FROM graphile_worker.jobs
     JOIN graphile_worker._private_jobs AS body ON body.id = jobs.id
-    WHERE jobs.attempts >= jobs.max_attempts
     ORDER BY jobs.created_at
   `;
 }
 
-/** The jobs the queue has given up on, each with the run its body names. */
-export async function listDeadJobs(
-  sql: ISql,
-): Promise<Array<DeadJobView & { runId: string | null }>> {
-  return (await deadJobRows(sql)).map((row) => ({
-    ...view(row),
-    runId: runIdOf(row.payload),
-  }));
+export async function listJobRunIds(sql: ISql): Promise<JobRunIds> {
+  const named = (await jobRows(sql)).flatMap((row) => {
+    const runId = runIdOf(row.payload);
+    return runId === null ? [] : [{ runId, dead: row.dead }];
+  });
+  return {
+    dead: named.filter((job) => job.dead).map((job) => job.runId),
+    live: named.filter((job) => !job.dead).map((job) => job.runId),
+  };
 }
 
+/** The jobs the queue gave up on for one run. */
 export async function listRunDeadJobs(
   sql: ISql,
   runId: string,
 ): Promise<DeadJobView[]> {
-  return (await deadJobRows(sql))
-    .filter((row) => runIdOf(row.payload) === runId)
+  return (await jobRows(sql))
+    .filter((row) => row.dead && runIdOf(row.payload) === runId)
     .map(view);
 }
 
-function view({ payload: _payload, ...job }: DeadJobRow): DeadJobView {
+function view({ payload: _payload, dead: _dead, ...job }: JobRow): DeadJobView {
   return { ...job, createdAt: job.createdAt.toISOString() };
 }
 
