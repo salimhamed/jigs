@@ -254,13 +254,17 @@ test("findIssueInProject returns null when every match is trashed", async () => 
   ).resolves.toBeNull();
 });
 
-// `orderBy: createdAt` sorts newest first, so the first live node wins.
-test("findIssueInProject returns the newest match", async () => {
+test("findIssueInProject returns the first non-trashed node, which Linear orders newest first", async () => {
   respond({ projects: { nodes: [projectQuery] } });
   respond({
     issues: {
       nodes: [
-        { ...foundIssue, id: "newest-uuid", identifier: "CAI-451" },
+        {
+          ...foundIssue,
+          id: "newest-uuid",
+          identifier: "CAI-451",
+          description: null,
+        },
         { ...foundIssue, id: "older-uuid", identifier: "CAI-450" },
       ],
     },
@@ -270,6 +274,7 @@ test("findIssueInProject returns the newest match", async () => {
     titlePrefix: "S3: salim-dev — ",
   });
   expect(issue?.identifier).toBe("CAI-451");
+  expect(issue?.description).toBe("");
 });
 
 test("listCommentsSince filters strictly after the cursor", async () => {

@@ -236,19 +236,23 @@ interface RawIssueMatch {
   trashed: boolean | null;
 }
 
-export async function findIssueInProject(input: {
-  project: string;
-  titlePrefix: string;
-}): Promise<{
+export interface LinearIssueMatch {
   id: string;
   identifier: string;
   url: string;
   title: string;
   description: string;
   state: string;
-} | null> {
+}
+
+export async function findIssueInProject(input: {
+  project: string;
+  titlePrefix: string;
+}): Promise<LinearIssueMatch | null> {
   const project = await resolveProject(input.project);
   const data = await linearGraphql<{ issues: { nodes: RawIssueMatch[] } }>(
+    // Unpaginated `first: 5` is an accepted cap: enough unless humans trash
+    // five same-prefix issues in one bucket.
     `query FindIssue($projectId: ID!, $prefix: String!) {
       issues(filter: { project: { id: { eq: $projectId } }, title: { startsWith: $prefix } }, orderBy: createdAt, first: 5) {
         nodes { id identifier url title description state { name } trashed }
