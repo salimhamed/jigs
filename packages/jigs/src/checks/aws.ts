@@ -24,6 +24,12 @@ function isEnoent(err: unknown): boolean {
   );
 }
 
+function wasKilled(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  const failure = err as { killed?: unknown; signal?: unknown };
+  return failure.killed === true || failure.signal != null;
+}
+
 function lastStderrLine(err: unknown): string {
   const stderr =
     typeof err === "object" && err !== null && "stderr" in err
@@ -56,7 +62,7 @@ export function awsCredentialsCheck(deps: AwsCredentialsDeps = {}): Check {
       }
 
       try {
-        await exec("aws", ["sts", "get-caller-identity", "--output", "json"], {
+        await exec("aws", ["sts", "get-caller-identity"], {
           env: stringEnv(env),
           timeout: PROBE_TIMEOUT_MS,
         });
@@ -66,6 +72,16 @@ export function awsCredentialsCheck(deps: AwsCredentialsDeps = {}): Check {
             ok: false,
             reason: "the aws executable is not on PATH",
             repair: "install the AWS CLI v2",
+          };
+        }
+        // A killed probe carries no stderr to quote, and the generic
+        // credentials repair would send the operator to a config file that is
+        // fine — the network to AWS is what did not answer.
+        if (wasKilled(err)) {
+          return {
+            ok: false,
+            reason: `\`aws sts get-caller-identity\` did not answer within ${PROBE_TIMEOUT_MS / 1000}s under profile ${profile}`,
+            repair: `check network access to AWS SSO, or run: aws sso login --profile ${profile}`,
           };
         }
         const detail = lastStderrLine(err);

@@ -56,7 +56,7 @@ export function preflightChecks(options: PreflightChecksOptions): Check[] {
       names: options.requires.bindings ?? [],
     }),
     ...harnessChecks(options.requires.harnesses ?? []),
-    ...(options.requires.aws === true ? [awsCredentialsCheck()] : []),
+    ...(options.requires.aws ? [awsCredentialsCheck()] : []),
   ];
 }
 

@@ -27,6 +27,10 @@ World. Nothing below is global except part 1.
   `codex login`. `jigs doctor` probes both; a trigger's preflight probes the
   ones its pipeline declares in `requires.harnesses`, and refuses the run when
   one is missing or logged out.
+- **The AWS CLI v2**, if any pipeline declares `requires: { aws: true }`
+  alongside its bindings and harnesses: preflight probes the service's
+  `AWS_PROFILE` with `aws sts get-caller-identity` and refuses the run when it
+  resolves nothing — `aws sso login --profile <profile>`.
 - **A tunnel tool**, if any factory will receive provider webhooks:
   `tailscale` (funnel) or `cloudflared`. Installed once, run per factory.
 - **`loginctl enable-linger "$USER"`** for lights-on: services started by

@@ -89,6 +89,27 @@ test("a failure unrelated to SSO points at the profile's own credentials", async
   });
 });
 
+test("a probe killed by the timeout blames the network, not the config file", async () => {
+  const result = await awsCredentialsCheck({
+    env: { AWS_PROFILE: "prod" },
+    exec: rejecting(
+      Object.assign(new Error("Command failed: aws sts get-caller-identity"), {
+        code: null,
+        killed: true,
+        signal: "SIGTERM",
+        stderr: "",
+      }),
+    ),
+  }).run();
+  expect(result).toMatchObject({
+    ok: false,
+    reason: expect.stringContaining("did not answer within 12s"),
+    repair:
+      "check network access to AWS SSO, or run: aws sso login --profile prod",
+  });
+  expect(result.ok === false && result.reason).toContain("prod");
+});
+
 test("a resolved identity passes with no message", async () => {
   const result = await awsCredentialsCheck({
     env: { AWS_PROFILE: "prod" },
@@ -117,11 +138,6 @@ test("the probe runs the CLI by argv under the profile's env, never a shell", as
     },
   }).run();
   expect(spawned.file).toBe("aws");
-  expect(spawned.args).toEqual([
-    "sts",
-    "get-caller-identity",
-    "--output",
-    "json",
-  ]);
+  expect(spawned.args).toEqual(["sts", "get-caller-identity"]);
   expect(spawned.env).toHaveProperty("AWS_PROFILE", "prod");
 });
