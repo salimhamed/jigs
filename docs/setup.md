@@ -314,6 +314,51 @@ a louder warning for trees holding uncommitted work; without a terminal it
 only reports, and `jigs sweep --force` removes everything eligible without
 asking — dirty trees included, so it is the flag for cron, not for habit.
 
+**Recurring runs.** A pipeline can also fire on a schedule this factory
+declares beside its pipelines, in `jigs.config.ts`:
+
+```ts
+export default {
+  pipelines: {
+    "weekly-report": { pipeline: weeklyReport, inputs: weeklyReportInputs },
+  },
+  schedules: {
+    "monday-report": {
+      pipeline: "weekly-report",
+      cron: "0 9 * * 1",
+      inputs: { audience: "team" },
+    },
+  },
+} satisfies Factory;
+```
+
+Five cron fields, in the service host's local time. `jigs build` and
+`jigs service restart`, and the service's own log names what it scheduled:
+
+```
+[schedule] monday-report scheduled: 0 9 * * 1 → weekly-report, next 2026-09-07T09:00:00.000Z
+```
+
+`jigs ps` then prints a schedule table under the runs, and every run the
+schedule fired carries its name in the `TRIGGER` column:
+
+```
+RUN                              PIPELINE       STATUS   TRIGGER                  AGE
+wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM  weekly-report  running  schedule:monday-report   2m
+
+SCHEDULE       PIPELINE       CRON       NEXT                      ACTIVE
+monday-report  weekly-report  0 9 * * 1  2026-09-14T09:00:00.000Z  wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM
+```
+
+Each fire is an ordinary trigger: the inputs are validated against the
+pipeline's schema, preflight runs, and a failure is a line in
+`jigs service logs` with no run created. A tick whose last run is still active
+is skipped and says so, and a tick missed while the service was down is not
+made up — the next occurrence is computed from now. A schedule naming a
+pipeline that does not exist, a cron that does not parse, or inputs the schema
+rejects is refused at startup with its repair, and `jigs doctor` reports the
+same thing on demand.
+
 ### 7. Run history (`workflow web`)
 
 `jigs run` and `jigs logs` hand the log surface back to the SDK, printing

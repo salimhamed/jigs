@@ -4,6 +4,7 @@ import type { NitroConfig } from "nitro/types";
 /** Where `prepare()` writes generated sources, relative to the factory root. */
 export const GENERATED_DIR = ".jigs";
 export const GENERATED_ENTRY_FILE = "server.ts";
+export const GENERATED_SCHEDULES_FILE = "schedules.ts";
 
 // Nitro resolves a bare `plugins` entry against the build root, which is the
 // factory rather than this package, so the path has to be absolute and
@@ -21,7 +22,16 @@ export function defineJigsService(): NitroConfig {
   // severs the SDK's vendored CLI.
   return {
     modules: ["workflow/nitro"],
-    plugins: [startWorldPlugin],
+    // The ticker fires the factory's compiled pipelines, which only the
+    // factory's own tree can import — hence a generated plugin, resolved
+    // against the build root, rather than a second file shipped from here.
+    // Nitro invokes plugins in order without awaiting them, so this one is
+    // called after the World start rather than after the World is up; the
+    // first fire is a whole cron tick away either way.
+    plugins: [
+      startWorldPlugin,
+      `./${GENERATED_DIR}/${GENERATED_SCHEDULES_FILE}`,
+    ],
     // The workflow builder's scan directory stays at its default (the whole
     // root): bounding it to pipelines/ would make a misfiled pipeline
     // silently invisible, which is worse than scanning a little extra.

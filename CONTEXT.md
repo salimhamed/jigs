@@ -196,6 +196,14 @@ wake, which resumes a run that already exists. Preflight lives in the
 trigger path.
 _Avoid_: launch endpoint, kickoff, start route
 
+**Schedule**:
+A named recurring trigger a factory declares — a pipeline, a five-field cron
+in the service host's local time, and the static inputs to fire it with. The
+service is the clock; each fire goes through the trigger path, so a missed
+tick is skipped and a fire while the schedule's last run is still active is
+skipped too.
+_Avoid_: cron job, timer, recurring run
+
 **World**:
 The Workflow SDK's persistence-and-queue backend a service runs against —
 one per factory repo: its own Postgres container on its own port, holding

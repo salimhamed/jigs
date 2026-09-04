@@ -15,3 +15,9 @@ test("the start-world plugin resolves to a file that exists", () => {
 test("the route serves the entry `prepare()` generates", () => {
   expect(defineJigsService().routes?.["/**"]).toBe("./.jigs/server.ts");
 });
+
+test("the schedules plugin is the factory's own, and comes after the world's", () => {
+  // It imports the factory's compiled pipelines, so it is generated into the
+  // factory tree rather than shipped from here.
+  expect(defineJigsService().plugins?.[1]).toBe("./.jigs/schedules.ts");
+});

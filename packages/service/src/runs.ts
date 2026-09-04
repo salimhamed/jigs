@@ -3,6 +3,7 @@
 // resolver would need its own index and a second round trip.
 
 import { getHookByToken, getRun } from "workflow/api";
+import { hydrateData, observabilityRevivers } from "workflow/observability";
 import { getWorld } from "workflow/runtime";
 import type { Factory } from "./factory";
 import { TICKET_TOKEN_PREFIX, ticketToken } from "./suspension/tokens";
@@ -67,6 +68,7 @@ export interface RunRow {
   runId: string;
   pipeline: string;
   status: string;
+  trigger: string;
   createdAt: string;
 }
 
@@ -75,7 +77,34 @@ export interface WorldRun {
   workflowName: string;
   status: string;
   createdAt: Date;
+  // Lifted out of the run's stored inputs by the listing below, so callers
+  // (and their fakes) never handle the world's serialized form.
+  triggerId?: string;
 }
+
+const SCHEDULE_TRIGGER_PREFIX = "schedule:";
+const MANUAL_TRIGGER = "manual";
+
+/** What a scheduled fire records as its triggerId: the schedule that fired
+ *  it and the tick it fired on. */
+export function scheduleTriggerId(name: string, at: Date): string {
+  const seconds = new Date(Math.floor(at.getTime() / 1000) * 1000);
+  return `${SCHEDULE_TRIGGER_PREFIX}${name}:${seconds.toISOString().replace(".000Z", "Z")}`;
+}
+
+/** The `trigger` column: which schedule launched a run, or `manual`. A
+ *  triggerId nothing can read — an encrypted World's inputs — reads as
+ *  manual too, because that is what every other launch is. */
+export function triggerLabel(triggerId: string | undefined): string {
+  if (triggerId === undefined || !triggerId.startsWith(SCHEDULE_TRIGGER_PREFIX))
+    return MANUAL_TRIGGER;
+  const rest = triggerId.slice(SCHEDULE_TRIGGER_PREFIX.length);
+  const end = rest.indexOf(":");
+  return `${SCHEDULE_TRIGGER_PREFIX}${end === -1 ? rest : rest.slice(0, end)}`;
+}
+
+export const scheduleTrigger = (name: string): string =>
+  `${SCHEDULE_TRIGGER_PREFIX}${name}`;
 
 // The ticket claim is held for the run's whole life, so it says nothing about
 // being parked; every other hook is something the run waits on, including one
@@ -120,6 +149,7 @@ export async function listRuns(
         !TERMINAL_RUN_STATUSES.has(run.status) && parkHooks.has(run.runId)
           ? "suspended"
           : run.status,
+      trigger: triggerLabel(run.triggerId),
       createdAt: run.createdAt.toISOString(),
     }))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -135,12 +165,37 @@ const worldHookRunId = (token: string) =>
 
 // One page, deliberately: both the prefix scan and `jigs ps` are
 // conveniences over a developer-scale run table, not indexes to page through.
+// `resolveData: "all"` is what makes the trigger readable at all — a run's
+// triggerId lives in its stored inputs and the world has no index on it.
 async function worldRuns(): Promise<WorldRun[]> {
   const page = await getWorld().runs.list({
-    resolveData: "none",
+    resolveData: "all",
     pagination: { limit: 1000 },
   });
-  return page.data;
+  return page.data.map((run) => {
+    const triggerId = triggerIdOf(run.input);
+    return { ...run, ...(triggerId === undefined ? {} : { triggerId }) };
+  });
+}
+
+// Run inputs come back in the world's serialized form; the SDK's
+// observability hydrator is the one public way to read them, and it leaves
+// an encrypted payload as bytes rather than throwing. An input nobody can
+// read costs the run its trigger, never the listing.
+function triggerIdOf(input: unknown): string | undefined {
+  let args: unknown;
+  try {
+    args = hydrateData(input, observabilityRevivers);
+  } catch {
+    return undefined;
+  }
+  const first = Array.isArray(args) ? args[0] : undefined;
+  return typeof first === "object" &&
+    first !== null &&
+    "triggerId" in first &&
+    typeof first.triggerId === "string"
+    ? first.triggerId
+    : undefined;
 }
 
 const worldRunIds = () => worldRuns().then((runs) => runs.map((r) => r.runId));
