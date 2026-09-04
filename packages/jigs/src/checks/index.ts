@@ -1,4 +1,5 @@
 import type { AgentWire } from "../steps/plan.ts";
+import { awsCredentialsCheck } from "./aws.ts";
 import { bindingChecks } from "./bindings.ts";
 import { CHECK_TIMEOUT_MS, type Check } from "./catalog.ts";
 import { type CoreProbes, coreChecks } from "./core.ts";
@@ -38,6 +39,7 @@ export { codexWorktreeConfigCheck, mcpServerChecks } from "./mcp.ts";
 export interface PipelineRequires {
   bindings?: string[];
   harnesses?: HarnessKind[];
+  aws?: true;
 }
 
 export interface PreflightChecksOptions {
@@ -54,6 +56,7 @@ export function preflightChecks(options: PreflightChecksOptions): Check[] {
       names: options.requires.bindings ?? [],
     }),
     ...harnessChecks(options.requires.harnesses ?? []),
+    ...(options.requires.aws ? [awsCredentialsCheck()] : []),
   ];
 }
 
@@ -63,12 +66,16 @@ export interface DoctorChecksOptions {
 }
 
 // No pipeline, so no manifest: doctor takes every declared binding and both
-// harnesses. MCP is absent on purpose — it is JIT-only (ADR 0011).
+// harnesses. MCP is absent on purpose — it is JIT-only (ADR 0011). AWS is
+// conditional for the same reason: with no manifest to read, a set
+// AWS_PROFILE is the only evidence this factory uses AWS at all.
 export function doctorChecks(options: DoctorChecksOptions): Check[] {
+  const profile = process.env.AWS_PROFILE;
   return [
     ...coreChecks(options.probes),
     ...bindingChecks({ factoryRoot: options.factoryRoot }),
     ...harnessChecks(["claude", "codex"]),
+    ...(profile !== undefined && profile !== "" ? [awsCredentialsCheck()] : []),
   ];
 }
 
