@@ -112,6 +112,12 @@ Every step below runs **inside the factory repo**. Ports are derived from the
 factory's path, so two factories on one machine never collide; the numbers in
 your own output are the ones to use.
 
+The steps are numbered for reading, not sequenced: binding a repo (step 4)
+writes `jigs.yml`, building (step 3) compiles pipelines, and neither reads the
+other's output — the README's quick start binds first for that reason. Only the
+scaffold has to come before everything, and only the build has to come before
+the service starts.
+
 ### 1. Scaffold
 
 ```sh
@@ -415,7 +421,7 @@ are committed numbers, so either can move. `jigs service start`, `restart` and
 `status` print the address:
 
 ```
-started my-factory: pid 91234 at http://localhost:8990
+started my-factory-2286ac2a: pid 91234 at http://localhost:8990
 dashboard: http://localhost:9090
 ```
 

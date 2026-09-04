@@ -95,6 +95,9 @@ test("the commands only a human should run are printed, not run", async () => {
   expect(printed).toContain("jigs scaffolds none of them");
   expect(printed).toContain("docker compose up -d --wait");
   expect(printed).toContain("pnpm exec bootstrap");
+  // bootstrap loads the .env copied a line earlier, so the World URL it used
+  // to be prefixed with was never the thing that told it where to connect.
+  expect(printed).not.toContain("WORKFLOW_POSTGRES_URL=");
   expect(printed).toContain("jigs build");
   expect(printed).toContain("jigs service start");
   // Printing them is the whole point: nothing was executed.

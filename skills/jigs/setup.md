@@ -96,9 +96,9 @@ jigs service status
 from `jigs.yml`; do not guess either.
 
 ```
-started my-factory: pid 3343834 at http://localhost:9010
+started my-factory-2286ac2a: pid 3343834 at http://localhost:9010
 dashboard: http://localhost:9110
-logs: ~/.local/share/jigs/services/my-factory.log
+logs: ~/.local/share/jigs/services/my-factory-2286ac2a.log
 ```
 
 Open the dashboard URL to confirm it answers, then:

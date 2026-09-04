@@ -27,9 +27,5 @@ Routing rules:
   and no change.
 - If the argument is empty, ask which of the four is wanted. Do not guess.
 
-Two things hold on every route:
-
-- Never decide on your own that some other task should become a jigs run.
-  Operate jigs when asked; author pipelines when asked.
-- Flags are read, not recalled: `jigs --help` and `jigs <verb> --help` are the
-  source. The route files say which command and why.
+On every route, flags are read rather than recalled: `jigs --help` and
+`jigs <verb> --help` are the source. The route files say which command and why.

@@ -42,9 +42,16 @@ pnpm install
 pnpm build
 ```
 
-Then put `packages/jigs/dist/cli.js` on your `PATH` as `jigs`, however you
-prefer — a symlink is fine. Inside a factory repo, `pnpm exec jigs` also works
-without this.
+Then put `packages/jigs/dist/cli.js` on your `PATH` as `jigs`. The build gives
+that file its own shebang and execute bit, so a symlink is all it takes:
+
+```sh
+mkdir -p ~/.local/bin
+ln -s "$PWD/packages/jigs/dist/cli.js" ~/.local/bin/jigs
+```
+
+Any directory already on your `PATH` works just as well. Inside a factory repo,
+`pnpm exec jigs` also works without this.
 
 ### 2. Scaffold a factory
 
@@ -109,9 +116,9 @@ jigs service start
 ```
 
 ```
-started my-factory: pid 3343834 at http://localhost:9010
+started my-factory-2286ac2a: pid 3343834 at http://localhost:9010
 dashboard: http://localhost:9110
-logs: ~/.local/share/jigs/services/my-factory.log
+logs: ~/.local/share/jigs/services/my-factory-2286ac2a.log
 ```
 
 Open the dashboard URL it prints. `jigs service status` prints both URLs again
@@ -143,16 +150,11 @@ the dashboard.
 ### Upgrading later
 
 The `jigs` command runs from `packages/jigs/dist/`, which is gitignored and
-refreshed only by `pnpm build`. The service half ships as source and is live the
-moment you pull, so a pull without a rebuild leaves an old CLI talking to a new
-service. Upgrade in this order:
-
-```sh
-cd <jigs checkout> && git pull && pnpm build
-cd <factory> && git pull && pnpm install
-pnpm exec jigs build && pnpm exec jigs service restart
-pnpm exec jigs service status
-```
+refreshed only by `pnpm build`, while the service half ships as source and is
+live the moment you pull — so a pull without a rebuild leaves an old CLI talking
+to a new service. Rebuild this checkout first, then the factory: the **Upgrading**
+notes in [the setup runbook](docs/setup.md#part-1--the-machine-once) carry the
+four commands in order and the failure they avoid.
 
 ## The `/jigs` skill
 

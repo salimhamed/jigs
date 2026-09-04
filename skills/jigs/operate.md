@@ -30,9 +30,9 @@ broken; re-run, and read `jigs service logs` if it persists.
 the port.
 
 ```
-my-factory: running pid 3343834 at http://localhost:9010
+my-factory-2286ac2a: running pid 3343834 at http://localhost:9010
 dashboard: http://localhost:9110
-factory /tmp/my-factory
+factory /home/you/my-factory
 ```
 
 ## Naming a run
