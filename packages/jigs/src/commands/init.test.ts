@@ -64,9 +64,11 @@ test("the docker project and ports all carry the factory", async () => {
   expect(compose).toContain(`"${a.postgresPort}:5432"`);
   expect(a.postgresPort).not.toBe(b.postgresPort);
   expect(a.servicePort).not.toBe(b.servicePort);
-  expect(readFileSync(path.join(first, "jigs.yml"), "utf8")).toContain(
-    `port: ${a.servicePort}`,
-  );
+  const yml = readFileSync(path.join(first, "jigs.yml"), "utf8");
+  expect(yml).toContain(`port: ${a.servicePort}`);
+  // Written as a number, once: nothing derives it from the port at read time.
+  expect(yml).toContain(`dashboard_port: ${a.servicePort + 1}`);
+  expect(a.dashboardPort).toBe(a.servicePort + 1);
 });
 
 test("an existing file is kept, never overwritten", async () => {

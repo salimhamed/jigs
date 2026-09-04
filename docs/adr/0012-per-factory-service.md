@@ -105,7 +105,11 @@ it.
   module's subpath, and therefore its ids.
 - **Two factories share nothing.** Each has its own World container on its own
   port, its own service port derived from its path, its own `.env`, its own
-  bindings. *Amends [ADR 0008](./0008-adopt-workflow-sdk-runtime.md)*, whose
+  bindings. *Amended by AGE-373*: and its own dashboard port. The SDK's
+  observability UI has to run inside the service process rather than beside it,
+  because opening the World also starts a queue worker — a standalone UI
+  process steals the service's queue jobs and delivers them to its own port,
+  where there is no workflow route. *Amends [ADR 0008](./0008-adopt-workflow-sdk-runtime.md)*, whose
   "long-lived server (systemd user unit)" and "Postgres in docker is standing
   infrastructure" were both written for one global service. Supervision is a
   pidfile per factory: a unit per factory would put unit generation, naming and

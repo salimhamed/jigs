@@ -4,6 +4,8 @@
 service:
   # Derived from this factory's path so two factories never fight over a port.
   port: {{SERVICE_PORT}}
+  # Where this factory's service hosts the SDK's run dashboard.
+  dashboard_port: {{DASHBOARD_PORT}}
   # An optional cap on one step's wall clock. Unset — the default — means a
   # step waits as long as it takes, which is what agent steps want. Set it
   # only to make a wedged step fail instead of hang.

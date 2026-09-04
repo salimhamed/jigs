@@ -67,6 +67,9 @@ importers:
         specifier: ^7.28.0
         version: 7.28.0
     devDependencies:
+      '@workflow/web':
+        specifier: 4.1.20
+        version: 4.1.20(supports-color@8.1.1)
       '@workflow/world-postgres':
         specifier: 4.3.4
         version: 4.3.4(@types/pg@8.23.1)(postgres@3.4.9)(supports-color@8.1.1)(typescript@7.0.2)

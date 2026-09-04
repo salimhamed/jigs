@@ -19,6 +19,9 @@ const portSchema = z.int().min(1).max(65535);
 
 const serviceSchema = z.strictObject({
   port: portSchema.default(8990),
+  // Where this factory's service hosts the SDK's run dashboard. Written by
+  // `jigs init` beside the port; two committed numbers, never derived here.
+  dashboard_port: portSchema.default(8991),
   // An optional cap on one step's wall clock (see ../step-timeout.ts). Unset
   // is the default and means none: a step waits as long as it takes. Whole
   // minutes — nothing here is worth expressing more finely.
@@ -107,6 +110,8 @@ export interface ResolvedService {
   slug: string;
   port: number;
   serviceUrl: string;
+  dashboardPort: number;
+  dashboardUrl: string;
   // undefined is "no cap", the default.
   stepTimeoutMinutes: number | undefined;
 }
@@ -119,6 +124,8 @@ export function resolveService(factoryRoot: string): ResolvedService {
     slug: factorySlug(factoryRoot),
     port: service.port,
     serviceUrl: `http://localhost:${service.port}`,
+    dashboardPort: service.dashboard_port,
+    dashboardUrl: `http://localhost:${service.dashboard_port}`,
     stepTimeoutMinutes: service.step_timeout_minutes,
   };
 }

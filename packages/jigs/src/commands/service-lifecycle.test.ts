@@ -94,6 +94,24 @@ test("start runs the built entry in the factory root on the factory's port", () 
   expect(lines[0]).toContain("at http://localhost:9100");
 });
 
+test("the child is told where to host its dashboard and where its queue delivers", () => {
+  const root = builtFactory(
+    tmp,
+    "service:\n  port: 9100\n  dashboard_port: 9101\n",
+  );
+  const io = fake();
+
+  startService(deps(root, io));
+
+  expect(io.spawns[0]?.env.JIGS_DASHBOARD_PORT).toBe("9101");
+  // Every queue worker in the child, the dashboard's included, dispatches to
+  // the service's own workflow routes rather than a guessed port.
+  expect(io.spawns[0]?.env.WORKFLOW_LOCAL_BASE_URL).toBe(
+    "http://localhost:9100",
+  );
+  expect(lines).toContain("dashboard: http://localhost:9101");
+});
+
 test("a factory that caps its steps hands the cap to the child", () => {
   const root = builtFactory(
     tmp,
@@ -221,6 +239,7 @@ test("status reports the pid, the url and the factory root", () => {
   expect(lines[0]).toBe(
     `${factorySlug(root)}: running pid 4242 at http://localhost:9100`,
   );
+  expect(lines).toContain("dashboard: http://localhost:8991");
   expect(lines).toContain(`factory ${root}`);
 });
 

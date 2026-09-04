@@ -15,19 +15,23 @@ afterEach(() => {
 });
 
 const RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
+const DASHBOARD = `http://localhost:8991/run/${RUN}`;
 
 const deps = () => ({
   out: (line: string) => lines.push(line),
   serviceUrl: "http://svc.test:8990",
 });
 
-test("logs prints the run's status, its suspensions, and the workflow web pointer", async () => {
+const timeline = (body: unknown) =>
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(body)));
+
+test("logs prints the run's status, its suspensions, and the dashboard link", async () => {
   fetchMock.mockResolvedValueOnce(
     new Response(
       JSON.stringify({
         runId: RUN,
         status: "running",
-        logs: `npx workflow web --backend @workflow/world-postgres ${RUN}`,
+        logs: DASHBOARD,
         suspensions: [
           {
             key: "pr-gate:acme/api#41",
@@ -38,18 +42,23 @@ test("logs prints the run's status, its suspensions, and the workflow web pointe
       }),
     ),
   );
+  timeline({ steps: [], deadJobs: [] });
   await showLogs("AGE-317", deps());
   expect(fetchMock.mock.calls[0]?.[0]).toBe(
     "http://svc.test:8990/api/runs/AGE-317",
+  );
+  // The timeline is asked for by the run id the first call resolved, never by
+  // the ref the operator typed.
+  expect(fetchMock.mock.calls[1]?.[0]).toBe(
+    `http://svc.test:8990/api/runs/${RUN}/steps`,
   );
   expect(lines).toEqual([
     `run ${RUN}`,
     "status running",
     "suspended on pr-gate:acme/api#41: waiting for approval",
     "  satisfied by github:pr:acme/api#41",
-    // The service names the world it writes to; `workflow web` would
-    // otherwise inspect the local one and find no run.
-    `npx workflow web --backend @workflow/world-postgres ${RUN}`,
+    // The service hosts the dashboard, so only it can name the port.
+    DASHBOARD,
   ]);
 });
 
@@ -60,17 +69,86 @@ test("a failed run's error is printed above the log pointer", async () => {
         runId: RUN,
         status: "failed",
         error: "ClaimConflictError: linear:ticket:… is already claimed",
-        logs: `npx workflow web ${RUN}`,
+        logs: DASHBOARD,
       }),
     ),
   );
+  timeline({ steps: [], deadJobs: [] });
   await showLogs(RUN, deps());
   expect(lines).toEqual([
     `run ${RUN}`,
     "status failed",
     "error ClaimConflictError: linear:ticket:… is already claimed",
-    `npx workflow web ${RUN}`,
+    DASHBOARD,
   ]);
+});
+
+test("the step timeline reports a duration, a step still running, and its error", async () => {
+  fetchMock.mockResolvedValueOnce(
+    new Response(JSON.stringify({ runId: RUN, status: "running", logs: "" })),
+  );
+  timeline({
+    steps: [
+      {
+        name: "step//./steps/jigs//claimTicket",
+        status: "completed",
+        attempt: 1,
+        startedAt: "2026-09-04T10:00:00.000Z",
+        completedAt: "2026-09-04T10:00:02.500Z",
+        error: null,
+      },
+      {
+        name: "step//./steps/jigs//runAgent",
+        status: "running",
+        attempt: 2,
+        startedAt: "2026-09-04T10:00:03.000Z",
+        completedAt: null,
+        error: "Error: the harness exited 1\n  at run (agent.ts:12)",
+      },
+    ],
+    deadJobs: [],
+  });
+  await showLogs(RUN, deps());
+  expect(lines.slice(3)).toEqual([
+    "",
+    "STEP                             STATUS     ATTEMPT  STARTED                   TOOK     ERROR",
+    "step//./steps/jigs//claimTicket  completed  1        2026-09-04T10:00:00.000Z  2.5s     ",
+    "step//./steps/jigs//runAgent     running    2        2026-09-04T10:00:03.000Z  running  Error: the harness exited 1",
+  ]);
+});
+
+test("a dead job is printed with its error's first line and a copy-pasteable requeue", async () => {
+  fetchMock.mockResolvedValueOnce(
+    new Response(JSON.stringify({ runId: RUN, status: "running", logs: "" })),
+  );
+  timeline({
+    steps: [],
+    deadJobs: [
+      {
+        id: "4128",
+        task: "jigs:workflow",
+        attempts: 3,
+        lastError:
+          "Queue execution failed (404): Not Found\n  at executeMessageOverHttp",
+        createdAt: "2026-09-04T10:00:00.000Z",
+      },
+    ],
+  });
+  await showLogs(RUN, deps());
+  expect(lines.slice(3)).toEqual([
+    "",
+    "dead job 4128 (jigs:workflow) after 3 attempts: Queue execution failed (404): Not Found",
+    "  requeue: select graphile_worker.reschedule_jobs(array[4128]::bigint[], run_at := now(), attempts := 0)",
+  ]);
+});
+
+test("a timeline the service cannot read leaves the run's own state printed", async () => {
+  fetchMock.mockResolvedValueOnce(
+    new Response(JSON.stringify({ runId: RUN, status: "running", logs: "" })),
+  );
+  fetchMock.mockResolvedValueOnce(new Response("nope", { status: 503 }));
+  await showLogs(RUN, deps());
+  expect(lines).toEqual([`run ${RUN}`, "status running", ""]);
 });
 
 test("an unresolvable ref fails before the pointer is printed", async () => {

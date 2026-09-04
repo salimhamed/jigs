@@ -55,6 +55,13 @@ jig's deps object has grown that is yours to write rather than to wrap (part 2,
 step 1). Typecheck the factory after a pull: the deps objects are typed, so
 both kinds of gap are a compile error rather than a surprise at run time.
 
+A third does not follow either, and this one is not a compile error: `link:`
+installs none of `@jigs/service`'s own dependencies, so a jigs release that
+adds a runtime dependency needs that package added to this factory's
+`package.json` at the same version — the service otherwise starts and dies with
+`ERR_MODULE_NOT_FOUND`, which names the package. `jigs init`'s
+`package.json` template carries the current set; compare it after a pull.
+
 Both packages carry ordinary semver from `0.1.0` on, and nothing here moves it
 by hand. A PR's title is a conventional commit — CI rejects one that is not —
 and merging it to `main` opens or updates a release-please PR carrying the next
@@ -96,8 +103,8 @@ mkdir my-factory && cd my-factory && git init
 jigs init
 ```
 
-`jigs init` writes infrastructure only: `jigs.yml` (the service port and,
-later, the ingress URL), `package.json`, `nitro.config.ts`,
+`jigs init` writes infrastructure only: `jigs.yml` (the service and dashboard
+ports and, later, the ingress URL), `package.json`, `nitro.config.ts`,
 `docker-compose.yml`, `.env.example`, and the `tsconfig.json`,
 `pnpm-workspace.yaml` and `.gitignore` a factory build needs — then prints the
 commands below with this factory's ports filled in. It runs none of them:
@@ -361,23 +368,51 @@ pipeline that does not exist, a cron that does not parse, or inputs the schema
 rejects is refused at startup with its repair, and `jigs doctor` reports the
 same thing on demand.
 
-### 7. Run history (`workflow web`)
+### 7. Run history (the dashboard)
 
-`jigs run` and `jigs logs` hand the log surface back to the SDK, printing
+The service hosts the SDK's observability UI — run history, step attempts,
+events — on the port this factory's `jigs.yml` declares beside its service
+port:
 
-```sh
-npx workflow web --backend @workflow/world-postgres <run>
+```yaml
+service:
+  port: 8990
+  dashboard_port: 8991
 ```
 
-The backend is named by the service, not the CLI — `workflow web` otherwise
-inspects the local world and finds nothing. Run it from inside the factory,
-with that factory's World URL in your shell:
+`jigs init` writes both, the second as the first plus one; they are two
+committed numbers, so either can move. `jigs service start`, `restart` and
+`status` print the address:
+
+```
+started my-factory: pid 91234 at http://localhost:8990
+dashboard: http://localhost:8991
+```
+
+`jigs run` and `jigs logs <run>` print the run's own page there
+(`http://localhost:8991/run/<run>`), and `jigs logs` follows it with the step
+timeline and any queue job that died holding the run's resume, each with the
+SQL that puts it back on the queue:
+
+```
+STEP                          STATUS   ATTEMPT  STARTED                   TOOK     ERROR
+step//./steps/jigs//worktree  completed  1      2026-09-04T10:00:00.000Z  1.2s
+
+dead job 4128 (jigs:workflow) after 3 attempts: Queue execution failed (404): Not Found
+  requeue: select graphile_worker.reschedule_jobs(array[4128]::bigint[], run_at := now(), attempts := 0)
+```
+
+`jigs ps` reports such a run as `stalled` rather than `running`: it holds no
+suspension, has no step in flight, and nothing is coming to move it.
+
+**Never run a standalone `workflow web` against a live World without
+`WORKFLOW_LOCAL_BASE_URL` pointing at that factory's service** — opening the
+World starts a queue worker in that process too, and it will steal queue jobs
+and deliver them to its own port, where there is no workflow route. That is
+what the hosted dashboard exists to avoid; if you must run the CLI anyway:
 
 ```sh
 WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:<postgresPort>/jigs \
+WORKFLOW_LOCAL_BASE_URL=http://localhost:<servicePort> \
   pnpm exec workflow web --backend @workflow/world-postgres
 ```
-
-Serves the SDK's observability UI (default `http://localhost:3456`) reading
-the World this factory's service writes — run history, step attempts, events.
-It is one UI per World, so run it in the factory whose runs you want.

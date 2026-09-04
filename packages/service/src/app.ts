@@ -21,6 +21,7 @@ import {
   TERMINAL_RUN_STATUSES,
 } from "./runs";
 import { listSchedules, scheduleChecks } from "./schedules";
+import { listRunDeadJobs, listRunSteps } from "./stalls";
 import {
   readSuspensionMetadata,
   type SuspensionRecord,
@@ -326,6 +327,20 @@ export function createApp(
     });
   });
 
+  // What the run's own status cannot say: which steps ran, and whether a queue
+  // job died holding its resume. Both are what `jigs logs` renders as a
+  // timeline, and the second is the only sign of a stall.
+  app.get("/api/runs/:runId/steps", async (c) => {
+    const ref = await resolveRunRef(c.req.param("runId"));
+    if (ref.kind !== "found") return refError(c, ref);
+    const sql = registrySql();
+    const [steps, deadJobs] = await Promise.all([
+      listRunSteps(ref.runId),
+      sql === null ? [] : listRunDeadJobs(sql, ref.runId),
+    ]);
+    return c.json({ steps, deadJobs });
+  });
+
   app.get("/api/runs/:runId", async (c) => {
     const ref = await resolveRunRef(c.req.param("runId"));
     if (ref.kind !== "found") return refError(c, ref);
@@ -384,9 +399,15 @@ function refError(
     : c.json({ error: "not found" }, 404);
 }
 
-// `workflow web` defaults to the local world, and only the service knows
-// which world it actually writes to.
+// The run's page on the dashboard this service hosts. A service started
+// without a dashboard port — a scratch run, a test — has none to point at, so
+// it names the SDK's own CLI instead, with the world it actually writes to:
+// that CLI otherwise inspects the local world and finds nothing.
 function logsPointer(runId: string): string {
+  const dashboardPort = process.env.JIGS_DASHBOARD_PORT;
+  if (dashboardPort !== undefined && dashboardPort !== "") {
+    return `http://localhost:${dashboardPort}/run/${runId}`;
+  }
   const world = process.env.WORKFLOW_TARGET_WORLD;
   return world === undefined || world === ""
     ? `npx workflow web ${runId}`

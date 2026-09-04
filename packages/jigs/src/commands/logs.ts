@@ -1,4 +1,5 @@
 import { CliError } from "../errors.ts";
+import { formatTable } from "../table.ts";
 import {
   readErrorBody,
   runRefError,
@@ -6,9 +7,9 @@ import {
   serviceFetch,
 } from "./service.ts";
 
-// jigs contributes the one thing `workflow web` cannot do — resolving a
-// ticket id or a ULID prefix to a run — and then hands the log surface back
-// to the SDK, which already ships it (ADR 0008).
+// jigs contributes the two things the dashboard cannot — resolving a ticket id
+// or a ULID prefix to a run, and the queue jobs that died holding its resume —
+// then points at the run's page on the dashboard the service hosts.
 
 export interface LogsResult {
   runId: string;
@@ -16,6 +17,23 @@ export interface LogsResult {
   error?: string;
   logs: string;
   suspensions?: Array<{ key: string; reason: string; satisfiedBy: string }>;
+}
+
+interface StepRow {
+  name: string;
+  status: string;
+  attempt: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  error: string | null;
+}
+
+interface DeadJob {
+  id: string;
+  task: string;
+  attempts: number;
+  lastError: string | null;
+  createdAt: string;
 }
 
 export async function showLogs(
@@ -38,5 +56,62 @@ export async function showLogs(
     deps.out(`  satisfied by ${suspension.satisfiedBy}`);
   }
   deps.out(result.logs);
+  await showTimeline(result.runId, deps);
   return result;
+}
+
+// A World the service cannot read the timeline out of leaves the run's own
+// state above, which is still the answer to "what is this run doing".
+async function showTimeline(runId: string, deps: ServiceDeps): Promise<void> {
+  const res = await serviceFetch(deps, `/api/runs/${runId}/steps`);
+  if (!res.ok) return;
+  const { steps, deadJobs } = (await res.json()) as {
+    steps: StepRow[];
+    deadJobs: DeadJob[];
+  };
+  if (steps.length > 0) {
+    deps.out("");
+    for (const line of formatTable(
+      ["STEP", "STATUS", "ATTEMPT", "STARTED", "TOOK", "ERROR"],
+      steps.map((step) => [
+        step.name,
+        step.status,
+        String(step.attempt),
+        step.startedAt ?? "-",
+        took(step),
+        firstLine(step.error),
+      ]),
+    )) {
+      deps.out(line);
+    }
+  }
+  // The queue gave up on these, so nothing is coming to move the run. jigs
+  // prints the requeue rather than running it: what to do about a job that
+  // failed three times is the operator's call.
+  for (const job of deadJobs) {
+    deps.out("");
+    deps.out(
+      `dead job ${job.id} (${job.task}) after ${job.attempts} attempts: ${firstLine(job.lastError)}`,
+    );
+    deps.out(
+      `  requeue: select graphile_worker.reschedule_jobs(array[${job.id}]::bigint[], run_at := now(), attempts := 0)`,
+    );
+  }
+}
+
+function took(step: StepRow): string {
+  if (step.startedAt === null) return "-";
+  if (step.completedAt === null) return "running";
+  const ms =
+    new Date(step.completedAt).getTime() - new Date(step.startedAt).getTime();
+  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
+}
+
+// A queue job's last error can be a whole HTML error page on one line, and
+// the requeue below it is the part an operator acts on.
+const ERROR_WIDTH = 160;
+
+function firstLine(text: string | null): string {
+  const line = text === null ? "" : (text.split("\n")[0] ?? "");
+  return line.length > ERROR_WIDTH ? `${line.slice(0, ERROR_WIDTH)}…` : line;
 }

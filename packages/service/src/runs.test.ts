@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
 import type { Factory } from "./factory";
 import {
@@ -11,6 +11,12 @@ import {
 
 const RUN_A = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 const RUN_B = "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ";
+
+// An ambient dev-database URL would otherwise make the dead-job read here open
+// a real connection to the operator's own World.
+beforeEach(() => {
+  vi.stubEnv("WORKFLOW_POSTGRES_URL", "");
+});
 
 const lookupDeps = (runIds: string[], hooks: Record<string, string> = {}) => ({
   listRunIds: async () => runIds,
@@ -118,6 +124,46 @@ test("a non-terminal run holding a park hook is reported suspended", async () =>
     listHooks: async () => [{ runId: RUN_A, token: "github:pr:acme/api#41" }],
   });
   expect(rows[0]?.status).toBe("suspended");
+});
+
+test("a running run with a dead job and nothing in flight is stalled", async () => {
+  const rows = await listRuns(factory, {
+    listRuns: async () => [worldRun()],
+    listHooks: async () => [],
+    deadJobRunIds: async () => [RUN_A],
+    runsWithActiveStep: async () => [],
+  });
+  expect(rows[0]?.status).toBe("stalled");
+});
+
+test("a dead job beside a step still in flight is not a stall", async () => {
+  const rows = await listRuns(factory, {
+    listRuns: async () => [worldRun()],
+    listHooks: async () => [],
+    deadJobRunIds: async () => [RUN_A],
+    runsWithActiveStep: async () => [RUN_A],
+  });
+  expect(rows[0]?.status).toBe("running");
+});
+
+test("a run parked on a hook reads suspended even with a dead job", async () => {
+  const rows = await listRuns(factory, {
+    listRuns: async () => [worldRun()],
+    listHooks: async () => [{ runId: RUN_A, token: "github:pr:acme/api#41" }],
+    deadJobRunIds: async () => [RUN_A],
+    runsWithActiveStep: async () => [],
+  });
+  expect(rows[0]?.status).toBe("suspended");
+});
+
+test("a dead job left behind by a terminal run does not restate its status", async () => {
+  const rows = await listRuns(factory, {
+    listRuns: async () => [worldRun({ status: "completed" })],
+    listHooks: async () => [],
+    deadJobRunIds: async () => [RUN_A],
+    runsWithActiveStep: async () => [],
+  });
+  expect(rows[0]?.status).toBe("completed");
 });
 
 test("a run holding only its ticket claim is still running, not suspended", async () => {

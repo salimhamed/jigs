@@ -6,7 +6,9 @@ import { getHookByToken, getRun } from "workflow/api";
 import { hydrateData, observabilityRevivers } from "workflow/observability";
 import { getWorld } from "workflow/runtime";
 import type { Factory } from "./factory";
+import { listDeadJobs, runsWithActiveStep } from "./stalls";
 import { TICKET_TOKEN_PREFIX, ticketToken } from "./suspension/tokens";
+import { registrySql } from "./worktrees/sql";
 
 // The SDK mints run ids as `wrun_` + a ULID, so a ref is run-id-shaped (with
 // or without the prefix, full or truncated) or it is a ticket ref. Crockford
@@ -115,15 +117,44 @@ export const isParkToken = (token: string): boolean =>
 export interface RunListDeps {
   listRuns?: () => Promise<WorldRun[]>;
   listHooks?: () => Promise<Array<{ runId: string; token: string }>>;
+  deadJobRunIds?: () => Promise<string[]>;
+  runsWithActiveStep?: (runIds: string[]) => Promise<string[]>;
+}
+
+// A dead queue job is the only evidence a run has nothing coming to move it,
+// so the step listing is only asked for the runs one names — a World with no
+// dead job costs one query and no step read at all.
+async function stalledRuns(deps: RunListDeps): Promise<Set<string>> {
+  const dead = [...new Set(await (deps.deadJobRunIds ?? worldDeadJobRunIds)())];
+  if (dead.length === 0) return new Set();
+  const busy = new Set(
+    await (deps.runsWithActiveStep ?? runsWithActiveStep)(dead),
+  );
+  return new Set(dead.filter((runId) => !busy.has(runId)));
+}
+
+// Suspended first: a run parked on a hook is waiting on the world, not on a
+// job nobody is going to deliver.
+function derivedStatus(
+  run: WorldRun,
+  parkHooks: ReadonlySet<string>,
+  stalled: ReadonlySet<string>,
+): string {
+  if (TERMINAL_RUN_STATUSES.has(run.status)) return run.status;
+  if (parkHooks.has(run.runId)) return "suspended";
+  return run.status === "running" && stalled.has(run.runId)
+    ? "stalled"
+    : run.status;
 }
 
 export async function listRuns(
   factory: Factory,
   deps: RunListDeps = {},
 ): Promise<RunRow[]> {
-  const [runs, hooks] = await Promise.all([
+  const [runs, hooks, stalled] = await Promise.all([
     (deps.listRuns ?? worldRuns)(),
     (deps.listHooks ?? worldHooks)(),
+    stalledRuns(deps),
   ]);
   const parkHooks = new Set(
     hooks.filter((hook) => isParkToken(hook.token)).map((hook) => hook.runId),
@@ -143,11 +174,9 @@ export async function listRuns(
       pipeline: pipelineByWorkflowId.get(run.workflowName) ?? run.workflowName,
       // Same reasoning as GET /api/runs/:runId: the SDK has no `suspended`
       // status, so a non-terminal run holding a hook other than its ticket
-      // claim is parked.
-      status:
-        !TERMINAL_RUN_STATUSES.has(run.status) && parkHooks.has(run.runId)
-          ? "suspended"
-          : run.status,
+      // claim is parked. It has no `stalled` either, and a run whose resume
+      // job died reads `running` forever.
+      status: derivedStatus(run, parkHooks, stalled),
       trigger: triggerLabel(run.triggerId),
       createdAt: run.createdAt.toISOString(),
     }))
@@ -155,6 +184,13 @@ export async function listRuns(
 }
 
 const worldRunExists = (runId: string) => getRun(runId).exists;
+
+async function worldDeadJobRunIds(): Promise<string[]> {
+  const sql = registrySql();
+  if (sql === null) return [];
+  const jobs = await listDeadJobs(sql);
+  return jobs.flatMap((job) => (job.runId === null ? [] : [job.runId]));
+}
 
 const worldHookRunId = (token: string) =>
   getHookByToken(token).then(

@@ -15,7 +15,7 @@
 // diff both against the recorded list, because "the ids do not move when the
 // library is versioned" is the property this whole shape was bought for, and
 // it is the one nothing else can observe.
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -105,6 +105,58 @@ function withFakeVersion(run) {
   }
 }
 
+// A factory installs @jigs/service with `link:`, which installs none of that
+// package's own dependencies — so every runtime import it adds resolves only
+// if the factory's package.json lists the package too. Nothing about that is
+// visible until the built bundle starts, in someone else's repo, with
+// ERR_MODULE_NOT_FOUND naming the package. Booting it once here is the only
+// place this repo can see it, so this check is about module resolution and
+// the two listeners coming up — not about the World, whose URL below points
+// at nothing on purpose.
+const BOOT_PORT = 18990;
+const BOOT_DASHBOARD_PORT = 18991;
+const BOOT_TIMEOUT_MS = 90_000;
+const BOOT_MARKERS = ["Listening on:", "[service] dashboard:"];
+// A top-level import that cannot resolve exits the process; one behind a
+// plugin's dynamic import is caught by nitro and only costs the dashboard, so
+// the message is what identifies it either way.
+const BOOT_UNRESOLVED = /ERR_MODULE_NOT_FOUND|Cannot find (?:module|package)/;
+
+function boots() {
+  const child = spawn(process.execPath, [bundle], {
+    cwd: factory,
+    env: {
+      ...process.env,
+      PORT: String(BOOT_PORT),
+      JIGS_DASHBOARD_PORT: String(BOOT_DASHBOARD_PORT),
+      WORKFLOW_TARGET_WORLD: "@workflow/world-postgres",
+      WORKFLOW_POSTGRES_URL: "postgres://nobody@127.0.0.1:1/nothing",
+    },
+  });
+  return new Promise((resolve) => {
+    let output = "";
+    const settle = (problem) => {
+      clearTimeout(timer);
+      child.kill("SIGKILL");
+      resolve({ output, problem });
+    };
+    const read = (chunk) => {
+      output += chunk;
+      if (BOOT_UNRESOLVED.test(output)) settle("it could not resolve a module");
+      else if (BOOT_MARKERS.every((m) => output.includes(m))) settle(null);
+    };
+    const timer = setTimeout(
+      () => settle(`it did not start listening within ${BOOT_TIMEOUT_MS}ms`),
+      BOOT_TIMEOUT_MS,
+    );
+    child.stdout.setEncoding("utf8").on("data", read);
+    child.stderr.setEncoding("utf8").on("data", read);
+    child.on("exit", (code, signal) =>
+      settle(`it exited (code ${code}, signal ${signal}) before listening`),
+    );
+  });
+}
+
 function reportDiff(expected, actual) {
   const missing = expected.filter((id) => !actual.includes(id));
   const unexpected = actual.filter((id) => !expected.includes(id));
@@ -160,6 +212,16 @@ if (moved.missing.length > 0 || moved.unexpected.length > 0) {
   fail(
     `versioning @jigs/service moved ${count} step id(s)`,
     "a directive is back inside a jigs package: its ids carry that package's version, and bumping it orphans every parked run",
+  );
+}
+
+console.log("\n=== boot: the built bundle resolves every import and listens");
+const boot = await boots();
+if (boot.problem !== null) {
+  console.error(boot.output);
+  fail(
+    `the built service did not start: ${boot.problem}`,
+    "if the output above names a package it cannot find, @jigs/service imports it at run time and the factory package.json template (and this fixture's) must list it too",
   );
 }
 
