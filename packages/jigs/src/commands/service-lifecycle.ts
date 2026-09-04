@@ -102,11 +102,16 @@ function livePid(sv: Supervisor): number | undefined {
 }
 
 // The factory's own `.env` is the service's environment file, World URL and
-// credentials included. `PORT` and the step timeout are the exceptions: both
-// are declared in jigs.yml — the address the child must listen on, and the cap
-// it must bound its step dispatcher by — so jigs.yml wins over `.env` for
-// them. Including when the cap is absent: unset means uncapped, and an
-// inherited value must not quietly reintroduce one.
+// credentials included. What jigs.yml declares wins over it: the two addresses
+// the child must listen on, the cap it must bound its step dispatcher by, and
+// the base URL derived from the first of those. Including when the cap is
+// absent: unset means uncapped, and an inherited value must not quietly
+// reintroduce one.
+//
+// `WORKFLOW_LOCAL_BASE_URL` pins every queue worker in the child — the
+// dashboard's included — to the service's own workflow routes. Left unset the
+// World guesses a port the process happens to listen on, and a queue job
+// delivered to a port with no workflow route dies after three 404s.
 function childEnv(sv: Supervisor): Record<string, string> {
   const dotenvPath = path.join(sv.factoryRoot, ".env");
   const env: Record<string, string> = {
@@ -115,6 +120,8 @@ function childEnv(sv: Supervisor): Record<string, string> {
       ? (parseEnv(readFileSync(dotenvPath, "utf8")) as Record<string, string>)
       : {}),
     PORT: String(sv.service.port),
+    JIGS_DASHBOARD_PORT: String(sv.service.dashboardPort),
+    WORKFLOW_LOCAL_BASE_URL: sv.service.serviceUrl,
   };
   const minutes = sv.service.stepTimeoutMinutes;
   if (minutes === undefined) delete env[STEP_TIMEOUT_ENV];
@@ -157,6 +164,7 @@ export function startService(deps: ServiceLifecycleDeps): void {
   mkdirSync(path.dirname(pidfile), { recursive: true });
   writeFileSync(pidfile, `${pid}\n`);
   sv.out(`started ${sv.service.slug}: pid ${pid} at ${sv.service.serviceUrl}`);
+  sv.out(`dashboard: ${sv.service.dashboardUrl}`);
   sv.out(`logs: ${logFile}`);
 }
 
@@ -202,14 +210,15 @@ export function serviceStatus(deps: ServiceLifecycleDeps): void {
       ? `${sv.service.slug}: not running (${sv.service.serviceUrl})`
       : `${sv.service.slug}: running pid ${pid} at ${sv.service.serviceUrl}`,
   );
+  sv.out(`dashboard: ${sv.service.dashboardUrl}`);
   sv.out(`factory ${sv.factoryRoot}`);
 }
 
-// `jigs logs <run>` is about a run — it resolves the ref and hands the log
-// surface to the SDK's `workflow web`. This is about the process: the stdout
-// the supervisor redirects, which the SDK cannot know about. Different
-// subject, so the `service` namespace keeps them apart rather than one
-// shadowing the other.
+// `jigs logs <run>` is about a run — it resolves the ref and points at the
+// run's page on the dashboard the service hosts. This is about the process:
+// the stdout the supervisor redirects, which no dashboard can know about.
+// Different subject, so the `service` namespace keeps them apart rather than
+// one shadowing the other.
 export function serviceLogs(
   deps: ServiceLifecycleDeps,
   options: { lines?: number } = {},

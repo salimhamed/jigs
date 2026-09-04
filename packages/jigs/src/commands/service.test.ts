@@ -16,14 +16,20 @@ afterEach(() => {
 // The env var reaches this function as `explicit`: commander's `.env()`
 // fills the option before the action runs.
 test("an explicit --service / JIGS_SERVICE_URL wins over the factory config", () => {
-  const factory = makeFactoryRepo(tmp, "service:\n  port: 9100\n");
+  const factory = makeFactoryRepo(
+    tmp,
+    "service:\n  port: 9100\n  dashboard_port: 9200\n",
+  );
   expect(resolveServiceTarget(factory, "http://elsewhere:1234")).toEqual({
     serviceUrl: "http://elsewhere:1234",
   });
 });
 
 test("without an explicit url the factory the user stands in names its service", () => {
-  const factory = makeFactoryRepo(tmp, "service:\n  port: 9100\n");
+  const factory = makeFactoryRepo(
+    tmp,
+    "service:\n  port: 9100\n  dashboard_port: 9200\n",
+  );
   expect(resolveServiceTarget(factory)).toEqual({
     serviceUrl: "http://localhost:9100",
     factoryRoot: factory,

@@ -14,19 +14,22 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "croner": "10.0.1",
     "jigs": "workspace:*",
     "undici": "^7.28.0"
   },
   "peerDependencies": {
+    "@workflow/web": "4.1.20",
     "@workflow/world-postgres": "4.3.4",
+    "croner": "10.0.1",
     "hono": "^4.13.4",
     "postgres": "^3.4.7",
     "workflow": "4.8.4",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@workflow/web": "4.1.20",
     "@workflow/world-postgres": "4.3.4",
+    "croner": "10.0.1",
     "hono": "^4.13.4",
     "nitro": "3.0.260610-beta",
     "postgres": "^3.4.7",
@@ -50,6 +53,7 @@
     "./review-loop/loop": "./src/review-loop/loop.ts",
     "./review-loop/pull-request": "./src/review-loop/pull-request.ts",
     "./worktrees": "./src/worktrees/index.ts",
+    "./plugins/start-dashboard": "./plugins/start-dashboard.ts",
     "./plugins/start-world": "./plugins/start-world.ts",
     "./providers/linear": "./src/providers/linear.ts"
   }

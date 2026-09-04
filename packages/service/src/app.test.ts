@@ -12,9 +12,12 @@ import {
   vi,
 } from "vitest";
 import { HookNotFoundError } from "workflow/errors";
+import { setWorld } from "workflow/runtime";
 import { z } from "zod";
 import { createApp } from "./app";
 import { type Factory, ticketInput } from "./factory";
+import * as stalls from "./stalls";
+import * as sql from "./worktrees/sql";
 
 // The routes are exercised against pipelines this file declares: what is under
 // test is the framework.
@@ -33,6 +36,8 @@ const fixture = {
     },
   },
 } satisfies Factory;
+
+const RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 
 const resumeHookMock = vi.fn();
 const app = createApp(fixture, { resumeIngressHook: resumeHookMock });
@@ -76,7 +81,12 @@ beforeEach(() => {
     .mockReset()
     .mockRejectedValue(new HookNotFoundError("unclaimed-test-token"));
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  // Clears the cached world too, so the next getWorld() opens the local one
+  // again from the data dir above.
+  setWorld(undefined);
+});
 
 const sign = (body: string, secret: string) =>
   createHmac("sha256", secret).update(body).digest("hex");
@@ -394,6 +404,75 @@ test("GET /api/runs answers with empty runs and worktrees when nothing has launc
     runs: [],
     worktrees: [],
     schedules: [],
+  });
+});
+
+test("GET /api/runs/:ref/steps answers with the run's steps and its dead jobs", async () => {
+  setWorld({
+    runs: { get: async () => ({}) },
+    steps: {
+      list: async () => ({
+        data: [
+          {
+            stepName: "step//./steps/jigs//worktree",
+            status: "failed",
+            attempt: 3,
+            createdAt: new Date("2026-09-04T10:00:00.000Z"),
+            startedAt: new Date("2026-09-04T10:00:00.000Z"),
+            completedAt: new Date("2026-09-04T10:00:04.000Z"),
+            error: { message: "worktree is held by another run" },
+          },
+        ],
+      }),
+    },
+  } as unknown as Parameters<typeof setWorld>[0]);
+
+  const res = await app.request(`/api/runs/${RUN}/steps`);
+
+  expect(res.status).toBe(200);
+  // No World Postgres in this lane, so the queue half is empty rather than a
+  // 503: the steps are still the answer to what the run did.
+  expect(await res.json()).toEqual({
+    steps: [
+      {
+        name: "step//./steps/jigs//worktree",
+        status: "failed",
+        attempt: 3,
+        startedAt: "2026-09-04T10:00:00.000Z",
+        completedAt: "2026-09-04T10:00:04.000Z",
+        error: "worktree is held by another run",
+      },
+    ],
+    deadJobs: [],
+  });
+});
+
+test("a steps request for a run nobody launched answers on the ref", async () => {
+  const res = await app.request(`/api/runs/${RUN}/steps`);
+  expect(res.status).toBe(404);
+});
+
+test("GET /api/runs/:ref reports a stalled run as stalled, like `jigs ps` does", async () => {
+  // `jigs ps` and `jigs logs` must not disagree about the same run, so both
+  // read the one derivation in runs.ts.
+  setWorld({
+    runs: { get: async () => ({ status: "running" }) },
+    steps: { list: async () => ({ data: [] }) },
+    hooks: { list: async () => ({ data: [] }) },
+  } as unknown as Parameters<typeof setWorld>[0]);
+  vi.spyOn(stalls, "listJobRunIds").mockResolvedValue({
+    dead: [RUN],
+    live: [],
+  });
+  vi.spyOn(sql, "registrySql").mockReturnValue({} as never);
+
+  const res = await app.request(`/api/runs/${RUN}`);
+
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({
+    runId: RUN,
+    status: "stalled",
+    suspended: false,
   });
 });
 

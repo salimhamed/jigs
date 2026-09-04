@@ -1,3 +1,5 @@
-# Never started — `jigs build` only needs this file to find the factory root.
+# Never started by this file's ports — the boot stage of the id check passes
+# its own. `jigs build` only needs this to find the factory root.
 service:
   port: 8999
+  dashboard_port: 9099

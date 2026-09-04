@@ -189,6 +189,14 @@ trigger, and resumes them on wakes. Everything else — the CLI included — is
 its HTTP client.
 _Avoid_: server, daemon, worker
 
+**Dashboard**:
+The SDK's run-history UI, hosted by the service on a second port the factory
+declares — one dashboard per factory, reading the World its own service
+writes. `jigs logs` links to a run's page there. Never run standalone against
+a live World: opening that World starts a second queue worker, which delivers
+the run's own jobs to a port with no workflow route.
+_Avoid_: observability UI, web, console
+
 **Trigger**:
 The service route that creates a run: it validates a named pipeline's zod
 `inputs` against plain JSON and calls the runtime's start. Distinct from a

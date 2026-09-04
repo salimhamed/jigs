@@ -12,7 +12,10 @@ beforeEach(() => {
   factory = makeFactoryRepo(tmp);
   writeFileSync(
     path.join(factory, "jigs.yml"),
-    `bindings:
+    `service:
+  port: 8990
+  dashboard_port: 9090
+bindings:
   # api service
   api:
     path: ~/Code/api

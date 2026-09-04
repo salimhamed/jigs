@@ -164,7 +164,7 @@ program
 
 program
   .command("logs")
-  .description("show a run's state and the workflow web pointer to its logs")
+  .description("show a run's state, step timeline, and dashboard link")
   .argument(
     "<run>",
     "run id, unique id prefix, or ticket (`AGE-123` or its UUID)",

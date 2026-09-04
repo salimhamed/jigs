@@ -12,6 +12,9 @@ export const GENERATED_SCHEDULES_FILE = "schedules.ts";
 const startWorldPlugin = fileURLToPath(
   new URL("../plugins/start-world.ts", import.meta.url),
 );
+const startDashboardPlugin = fileURLToPath(
+  new URL("../plugins/start-dashboard.ts", import.meta.url),
+);
 
 /** The whole Nitro build config for a factory repo, so a factory's own
  *  nitro.config.ts is two lines. */
@@ -27,6 +30,7 @@ export function defineJigsService(): NitroConfig {
     // — harmless, because the first fire is a whole cron tick away.
     plugins: [
       startWorldPlugin,
+      startDashboardPlugin,
       `./${GENERATED_DIR}/${GENERATED_SCHEDULES_FILE}`,
     ],
     // The workflow builder's scan directory stays at its default (the whole

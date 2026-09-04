@@ -7,7 +7,9 @@
   },
   "dependencies": {
     "@jigs/service": "link:../../packages/service",
+    "@workflow/web": "4.1.20",
     "@workflow/world-postgres": "4.3.4",
+    "croner": "10.0.1",
     "hono": "^4.13.4",
     "jigs": "link:../../packages/jigs",
     "postgres": "^3.4.7",

@@ -13,20 +13,22 @@ compiles its pipelines into a service of its own on the Vercel Workflow SDK
 over its own Postgres World, and `jigs service start` (`stop` / `restart` /
 `status` / `logs`) supervises it. The CLI manages repo bindings
 (`jigs bind` / `unbind` / `bindings`) in that factory's committed `jigs.yml`,
-which also carries the port its service answers on. Every trigger preflights
-the pipeline's requirements before creating a run, and `jigs doctor` runs the
-same checks on demand. A factory can also declare recurring **schedules** in
-its config — the service fires each on its cron tick through that same
-trigger path, skipping a tick whose last run is still going. The operational
-verbs are `jigs run` / `ps` / `logs` / `cancel` / `poke`, each an HTTP client
-of the factory's own service; a run can be named by its id, a unique id
-prefix, or the ticket it claimed (its Linear identifier or UUID).
-`jigs cancel <run>` is the escape hatch for a zombie claim owner, and logs
-themselves stay the SDK's — the verbs print the `workflow web` invocation that
-reads the factory's own World. Pipelines request worktrees and the runtime
-provisions and tears them down; `jigs sweep` reconciles what is on disk
-against the registry. The [setup runbook](docs/setup.md) walks all of it: the
-machine once, then a factory at a time.
+which also carries the ports its service and dashboard answer on. Every
+trigger preflights the pipeline's requirements before creating a run, and
+`jigs doctor` runs the same checks on demand. A factory can also declare
+recurring **schedules** in its config — the service fires each on its cron
+tick through that same trigger path, skipping a tick whose last run is still
+going. The operational verbs are `jigs run` / `ps` / `logs` / `cancel` /
+`poke`, each an HTTP client of the factory's own service; a run can be named by
+its id, a unique id prefix, or the ticket it claimed (its Linear identifier or
+UUID).
+`jigs cancel <run>` is the escape hatch for a zombie claim owner, and the
+service hosts the SDK's run dashboard on a port of its own, which `jigs logs`
+links to beside a run's step timeline and any queue job that died holding its
+resume. Pipelines request worktrees and the runtime provisions and tears them
+down; `jigs sweep` reconciles what is on disk against the registry. The
+[setup runbook](docs/setup.md) walks all of it: the machine once, then a
+factory at a time.
 
 ## Layout
 

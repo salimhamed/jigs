@@ -14,13 +14,16 @@ import {
 } from "./ingress";
 import { doctor, factoryRoot } from "./preflight";
 import {
+  derivedRunStatus,
   isParkToken,
   listRuns,
   type RunRef,
   resolveRunRef,
+  stalledRuns,
   TERMINAL_RUN_STATUSES,
 } from "./runs";
 import { listSchedules, scheduleChecks } from "./schedules";
+import { listRunDeadJobs, listRunSteps } from "./stalls";
 import {
   readSuspensionMetadata,
   type SuspensionRecord,
@@ -326,6 +329,20 @@ export function createApp(
     });
   });
 
+  // What the run's own status cannot say: which steps ran, and whether a queue
+  // job died holding its resume. Both are what `jigs logs` renders as a
+  // timeline, and the second is the only sign of a stall.
+  app.get("/api/runs/:runId/steps", async (c) => {
+    const ref = await resolveRunRef(c.req.param("runId"));
+    if (ref.kind !== "found") return refError(c, ref);
+    const sql = registrySql();
+    const [steps, deadJobs] = await Promise.all([
+      listRunSteps(ref.runId),
+      sql === null ? [] : listRunDeadJobs(sql, ref.runId),
+    ]);
+    return c.json({ steps, deadJobs });
+  });
+
   app.get("/api/runs/:runId", async (c) => {
     const ref = await resolveRunRef(c.req.param("runId"));
     if (ref.kind !== "found") return refError(c, ref);
@@ -343,14 +360,20 @@ export function createApp(
         (err: unknown) => String(err),
       );
     }
-    // The SDK has no `suspended` status — a parked run reads `running`, so jigs
-    // reads parkedness off the hook tokens with the same predicate `jigs ps`
-    // uses. A hook carrying no jigs metadata still parks the run; it just has no
-    // record to explain itself with, which is why the two answers are separate.
+    // The SDK has neither `suspended` nor `stalled`, so jigs derives both —
+    // through the same function `jigs ps` reads, or the two verbs disagree
+    // about the same run. A hook carrying no jigs metadata still parks the
+    // run; it just has no record to explain itself with, which is why
+    // `suspended` and `suspensions` are separate answers.
     if (status === "running") {
       const { tokens, records } = await listSuspensions(run.runId);
+      const parked = tokens.some(isParkToken);
       body.suspensions = records;
-      body.suspended = tokens.some(isParkToken);
+      body.suspended = parked;
+      body.status = derivedRunStatus(status, {
+        parked,
+        stalled: !parked && (await stalledRuns()).has(run.runId),
+      });
     }
     return c.json(body);
   });
@@ -384,13 +407,15 @@ function refError(
     : c.json({ error: "not found" }, 404);
 }
 
-// `workflow web` defaults to the local world, and only the service knows
-// which world it actually writes to.
+// The run's page on the dashboard this service hosts. A service started
+// without a dashboard port has none to point at, and the answer is not to name
+// a standalone `workflow web`: run against a live World it opens a second queue
+// worker and steals the jobs this run is waiting on.
 function logsPointer(runId: string): string {
-  const world = process.env.WORKFLOW_TARGET_WORLD;
-  return world === undefined || world === ""
-    ? `npx workflow web ${runId}`
-    : `npx workflow web --backend ${world} ${runId}`;
+  const port = process.env.JIGS_DASHBOARD_PORT;
+  return port === undefined || port === ""
+    ? "dashboard: not configured"
+    : `http://localhost:${port}/run/${runId}`;
 }
 
 // A signed but unparseable body is unroutable, like an unknown event type.

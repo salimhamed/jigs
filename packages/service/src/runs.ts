@@ -6,7 +6,9 @@ import { getHookByToken, getRun } from "workflow/api";
 import { hydrateData, observabilityRevivers } from "workflow/observability";
 import { getWorld } from "workflow/runtime";
 import type { Factory } from "./factory";
+import { type JobRunIds, listJobRunIds, runsWithActiveStep } from "./stalls";
 import { TICKET_TOKEN_PREFIX, ticketToken } from "./suspension/tokens";
+import { registrySql } from "./worktrees/sql";
 
 // The SDK mints run ids as `wrun_` + a ULID, so a ref is run-id-shaped (with
 // or without the prefix, full or truncated) or it is a ticket ref. Crockford
@@ -112,18 +114,56 @@ export function triggerLabel(triggerId: string | undefined): string {
 export const isParkToken = (token: string): boolean =>
   !token.startsWith(TICKET_TOKEN_PREFIX);
 
-export interface RunListDeps {
+export interface StallDeps {
+  jobRunIds?: () => Promise<JobRunIds>;
+  runsWithActiveStep?: (runIds: string[]) => Promise<string[]>;
+}
+
+export interface RunListDeps extends StallDeps {
   listRuns?: () => Promise<WorldRun[]>;
   listHooks?: () => Promise<Array<{ runId: string; token: string }>>;
+}
+
+/**
+ * The runs nothing is coming back for: the queue gave up on a job of theirs,
+ * holds no live one to replace it, and no step is in flight. All three,
+ * because a dead row is never cleared — a requeue and the World's own restart
+ * reconciliation each add a job beside it, and a healed run would otherwise
+ * read stalled in every gap between its steps.
+ */
+export async function stalledRuns(deps: StallDeps = {}): Promise<Set<string>> {
+  const jobs = await (deps.jobRunIds ?? worldJobRunIds)();
+  const live = new Set(jobs.live);
+  const stranded = [...new Set(jobs.dead)].filter((id) => !live.has(id));
+  if (stranded.length === 0) return new Set();
+  const busy = new Set(
+    await (deps.runsWithActiveStep ?? runsWithActiveStep)(stranded),
+  );
+  return new Set(stranded.filter((runId) => !busy.has(runId)));
+}
+
+/**
+ * The one status derivation `jigs ps` and `jigs logs` both read. Suspended
+ * first: a run parked on a hook is waiting on the world, not on a job nobody
+ * is going to deliver.
+ */
+export function derivedRunStatus(
+  status: string,
+  run: { parked: boolean; stalled: boolean },
+): string {
+  if (TERMINAL_RUN_STATUSES.has(status)) return status;
+  if (run.parked) return "suspended";
+  return status === "running" && run.stalled ? "stalled" : status;
 }
 
 export async function listRuns(
   factory: Factory,
   deps: RunListDeps = {},
 ): Promise<RunRow[]> {
-  const [runs, hooks] = await Promise.all([
+  const [runs, hooks, stalled] = await Promise.all([
     (deps.listRuns ?? worldRuns)(),
     (deps.listHooks ?? worldHooks)(),
+    stalledRuns(deps),
   ]);
   const parkHooks = new Set(
     hooks.filter((hook) => isParkToken(hook.token)).map((hook) => hook.runId),
@@ -141,13 +181,13 @@ export async function listRuns(
     .map((run) => ({
       runId: run.runId,
       pipeline: pipelineByWorkflowId.get(run.workflowName) ?? run.workflowName,
-      // Same reasoning as GET /api/runs/:runId: the SDK has no `suspended`
-      // status, so a non-terminal run holding a hook other than its ticket
-      // claim is parked.
-      status:
-        !TERMINAL_RUN_STATUSES.has(run.status) && parkHooks.has(run.runId)
-          ? "suspended"
-          : run.status,
+      // The SDK has neither status: a non-terminal run holding a hook other
+      // than its ticket claim is parked, and a run whose resume job died
+      // reads `running` forever.
+      status: derivedRunStatus(run.status, {
+        parked: parkHooks.has(run.runId),
+        stalled: stalled.has(run.runId),
+      }),
       trigger: triggerLabel(run.triggerId),
       createdAt: run.createdAt.toISOString(),
     }))
@@ -155,6 +195,11 @@ export async function listRuns(
 }
 
 const worldRunExists = (runId: string) => getRun(runId).exists;
+
+async function worldJobRunIds(): Promise<JobRunIds> {
+  const sql = registrySql();
+  return sql === null ? { dead: [], live: [] } : await listJobRunIds(sql);
+}
 
 const worldHookRunId = (token: string) =>
   getHookByToken(token).then(

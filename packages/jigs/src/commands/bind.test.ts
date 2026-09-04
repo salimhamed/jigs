@@ -175,7 +175,7 @@ afterEach(() => {
 function makeIngressFactory(): void {
   writeFileSync(
     path.join(factory, "jigs.yml"),
-    "ingress_url: https://factory.example.ts.net\n",
+    "ingress_url: https://factory.example.ts.net\nservice:\n  port: 8990\n  dashboard_port: 9090\n",
   );
 }
 

@@ -60,7 +60,10 @@ function fake(): Fake {
 
 // A factory repo that has already built its service, which is what every
 // verb but the unbuilt-repo test starts from.
-function builtFactory(parent = tmp, yml = "service:\n  port: 9100\n"): string {
+function builtFactory(
+  parent = tmp,
+  yml = "service:\n  port: 9100\n  dashboard_port: 9200\n",
+): string {
   const root = makeFactoryRepo(parent, yml);
   const entry = path.join(root, SERVICE_ENTRY);
   mkdirSync(path.dirname(entry), { recursive: true });
@@ -94,10 +97,25 @@ test("start runs the built entry in the factory root on the factory's port", () 
   expect(lines[0]).toContain("at http://localhost:9100");
 });
 
+test("the child is told where to host its dashboard and where its queue delivers", () => {
+  const root = builtFactory();
+  const io = fake();
+
+  startService(deps(root, io));
+
+  expect(io.spawns[0]?.env.JIGS_DASHBOARD_PORT).toBe("9200");
+  // Every queue worker in the child, the dashboard's included, dispatches to
+  // the service's own workflow routes rather than a guessed port.
+  expect(io.spawns[0]?.env.WORKFLOW_LOCAL_BASE_URL).toBe(
+    "http://localhost:9100",
+  );
+  expect(lines).toContain("dashboard: http://localhost:9200");
+});
+
 test("a factory that caps its steps hands the cap to the child", () => {
   const root = builtFactory(
     tmp,
-    "service:\n  port: 9100\n  step_timeout_minutes: 90\n",
+    "service:\n  port: 9100\n  dashboard_port: 9200\n  step_timeout_minutes: 90\n",
   );
   // The cap jigs.yml declares, not the one the environment carried in.
   writeFileSync(path.join(root, ".env"), "JIGS_STEP_TIMEOUT_MINUTES=5\n");
@@ -221,6 +239,7 @@ test("status reports the pid, the url and the factory root", () => {
   expect(lines[0]).toBe(
     `${factorySlug(root)}: running pid 4242 at http://localhost:9100`,
   );
+  expect(lines).toContain("dashboard: http://localhost:9200");
   expect(lines).toContain(`factory ${root}`);
 });
 

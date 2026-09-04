@@ -28,6 +28,7 @@ export interface InitResult {
   created: string[];
   skipped: string[];
   servicePort: number;
+  dashboardPort: number;
   postgresPort: number;
 }
 
@@ -39,6 +40,7 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
     FACTORY_NAME: factoryName(root),
     JIGS_REPO: path.resolve(templates, "..", "..", ".."),
     SERVICE_PORT: String(ports.servicePort),
+    DASHBOARD_PORT: String(ports.dashboardPort),
     POSTGRES_PORT: String(ports.postgresPort),
   };
 
@@ -66,7 +68,7 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
 
   deps.out("");
   deps.out(
-    `${factoryName(root)} listens on :${ports.servicePort}, its World on :${ports.postgresPort}`,
+    `${factoryName(root)} listens on :${ports.servicePort}, its dashboard on :${ports.dashboardPort}, its World on :${ports.postgresPort}`,
   );
   deps.out("");
   deps.out(
@@ -92,11 +94,19 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
 // same pair back.
 function factoryPorts(factoryRoot: string): {
   servicePort: number;
+  dashboardPort: number;
   postgresPort: number;
 } {
   const digest = createHash("sha256").update(factoryRoot).digest();
   const offset = digest.readUInt16BE(0) % 100;
-  return { servicePort: 8990 + offset, postgresPort: 5440 + offset };
+  // Three disjoint ranges, one offset: a dashboard port next to the service
+  // port would be another factory's service port whenever their offsets
+  // differ by one.
+  return {
+    servicePort: 8990 + offset,
+    dashboardPort: 9090 + offset,
+    postgresPort: 5440 + offset,
+  };
 }
 
 function factoryName(factoryRoot: string): string {

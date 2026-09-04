@@ -64,9 +64,15 @@ test("the docker project and ports all carry the factory", async () => {
   expect(compose).toContain(`"${a.postgresPort}:5432"`);
   expect(a.postgresPort).not.toBe(b.postgresPort);
   expect(a.servicePort).not.toBe(b.servicePort);
-  expect(readFileSync(path.join(first, "jigs.yml"), "utf8")).toContain(
-    `port: ${a.servicePort}`,
-  );
+  const yml = readFileSync(path.join(first, "jigs.yml"), "utf8");
+  expect(yml).toContain(`port: ${a.servicePort}`);
+  expect(yml).toContain(`dashboard_port: ${a.dashboardPort}`);
+  expect(a.dashboardPort).not.toBe(b.dashboardPort);
+  // Disjoint ranges: one factory's dashboard is never another's service.
+  for (const port of [a.servicePort, b.servicePort]) {
+    expect(a.dashboardPort).not.toBe(port);
+    expect(b.dashboardPort).not.toBe(port);
+  }
 });
 
 test("an existing file is kept, never overwritten", async () => {
