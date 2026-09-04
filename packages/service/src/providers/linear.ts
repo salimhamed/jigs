@@ -1,6 +1,6 @@
-// Called from inside "use step" functions and from the trigger-path
-// preflight — never from a workflow body, where env reads and network are
-// forbidden. LINEAR_API_URL override is a test seam.
+// These read env and hit the network, so a caller must reach them only from
+// inside a "use step" function or the trigger-path preflight — never from a
+// workflow body, where both are forbidden. LINEAR_API_URL is a test seam.
 
 export interface LinearUser {
   id: string;
@@ -157,7 +157,7 @@ export async function createComment(
 
 interface RawProject {
   id: string;
-  teams: { nodes: Array<{ id: string; key: string }> };
+  teams: { nodes: Array<{ id: string }> };
 }
 
 const PROJECT_UUID =
@@ -168,7 +168,7 @@ async function resolveProject(ref: string): Promise<RawProject> {
   if (PROJECT_UUID.test(ref)) {
     const data = await linearGraphql<{ project: RawProject | null }>(
       `query Project($ref: String!) {
-        project(id: $ref) { id teams { nodes { id key } } }
+        project(id: $ref) { id teams { nodes { id } } }
       }`,
       { ref },
     );
@@ -179,8 +179,8 @@ async function resolveProject(ref: string): Promise<RawProject> {
   }
   const data = await linearGraphql<{ projects: { nodes: RawProject[] } }>(
     `query ProjectBySlugId($ref: String!) {
-      projects(filter: { slugId: { eq: $ref } }) {
-        nodes { id teams { nodes { id key } } }
+      projects(filter: { slugId: { eq: $ref } }, first: 1) {
+        nodes { id teams { nodes { id } } }
       }
     }`,
     { ref },

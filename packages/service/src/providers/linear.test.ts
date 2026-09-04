@@ -96,7 +96,7 @@ test("createComment posts a commentCreate mutation with the body verbatim", asyn
 
 const projectQuery = {
   id: "project-uuid",
-  teams: { nodes: [{ id: "team-uuid", key: "CAI" }] },
+  teams: { nodes: [{ id: "team-uuid" }] },
 };
 
 const createdIssue = {
@@ -116,7 +116,7 @@ test("createIssueInProject resolves a slugId then creates in its first team", as
     }),
   ).resolves.toEqual(createdIssue);
   const [lookup, create] = requestBodies();
-  expect(lookup.query).toContain("slugId: { eq: $ref }");
+  expect(lookup.query).toContain("slugId: { eq: $ref } }, first: 1");
   expect(lookup.variables).toEqual({ ref: "04889d3e87bb" });
   expect(create.query).toContain("issueCreate");
   expect(create.variables.input).toEqual({
@@ -147,6 +147,20 @@ test("createIssueInProject throws naming the unresolvable project", async () => 
   await expect(
     createIssueInProject({ project: "nope", title: "t", description: "d" }),
   ).rejects.toThrow("Linear project not found: nope");
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test("createIssueInProject throws when the project carries no team", async () => {
+  respond({
+    projects: { nodes: [{ id: "project-uuid", teams: { nodes: [] } }] },
+  });
+  await expect(
+    createIssueInProject({
+      project: "04889d3e87bb",
+      title: "t",
+      description: "d",
+    }),
+  ).rejects.toThrow("Linear project has no team: 04889d3e87bb");
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
