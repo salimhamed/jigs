@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.11](https://github.com/salimhamed/jigs/compare/jigs-v0.1.10...jigs-v0.1.11) (2026-09-04)
+
+
+### Miscellaneous Chores
+
+* **jigs:** Synchronize jigs versions
+
 ## [0.1.10](https://github.com/salimhamed/jigs/compare/jigs-v0.1.9...jigs-v0.1.10) (2026-09-04)
 
 
