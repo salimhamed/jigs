@@ -155,6 +155,77 @@ export async function createComment(
   return data.commentCreate.comment;
 }
 
+interface RawProject {
+  id: string;
+  teams: { nodes: Array<{ id: string; key: string }> };
+}
+
+const PROJECT_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// A Linear project URL ends in its slugId, so accept that as well as the UUID.
+async function resolveProject(ref: string): Promise<RawProject> {
+  if (PROJECT_UUID.test(ref)) {
+    const data = await linearGraphql<{ project: RawProject | null }>(
+      `query Project($ref: String!) {
+        project(id: $ref) { id teams { nodes { id key } } }
+      }`,
+      { ref },
+    );
+    if (data.project === null) {
+      throw new Error(`Linear project not found: ${ref}`);
+    }
+    return data.project;
+  }
+  const data = await linearGraphql<{ projects: { nodes: RawProject[] } }>(
+    `query ProjectBySlugId($ref: String!) {
+      projects(filter: { slugId: { eq: $ref } }) {
+        nodes { id teams { nodes { id key } } }
+      }
+    }`,
+    { ref },
+  );
+  const project = data.projects.nodes[0];
+  if (project === undefined) {
+    throw new Error(`Linear project not found: ${ref}`);
+  }
+  return project;
+}
+
+export async function createIssueInProject(input: {
+  project: string;
+  title: string;
+  description: string;
+}): Promise<{ id: string; identifier: string; url: string }> {
+  const project = await resolveProject(input.project);
+  const team = project.teams.nodes[0];
+  if (team === undefined) {
+    throw new Error(`Linear project has no team: ${input.project}`);
+  }
+  const data = await linearGraphql<{
+    issueCreate: {
+      success: boolean;
+      issue: { id: string; identifier: string; url: string };
+    };
+  }>(
+    `mutation CreateIssue($input: IssueCreateInput!) {
+      issueCreate(input: $input) { success issue { id identifier url } }
+    }`,
+    {
+      input: {
+        teamId: team.id,
+        projectId: project.id,
+        title: input.title,
+        description: input.description,
+      },
+    },
+  );
+  if (!data.issueCreate.success) {
+    throw new Error(`Linear issueCreate failed for project ${input.project}`);
+  }
+  return data.issueCreate.issue;
+}
+
 export async function listCommentsSince(
   issueId: string,
   sinceIso: string,
