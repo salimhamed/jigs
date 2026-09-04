@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
   createComment,
+  createIssueInProject,
   fetchIssueSnapshot,
   getIssueParticipants,
   listCommentsSince,
@@ -24,6 +25,11 @@ afterEach(() => {
 const respond = (data: unknown) =>
   fetchMock.mockResolvedValueOnce(
     new Response(JSON.stringify({ data }), { status: 200 }),
+  );
+
+const requestBodies = () =>
+  fetchMock.mock.calls.map(([, init]) =>
+    JSON.parse((init as RequestInit).body as string),
   );
 
 const lastRequest = () => {
@@ -86,6 +92,88 @@ test("createComment posts a commentCreate mutation with the body verbatim", asyn
   expect(request.query).toContain("commentCreate");
   expect(request.variables.input).toEqual({ issueId: "issue-uuid", body });
   expect(request.variables.input.body).toContain("@[salim](u1)");
+});
+
+const projectQuery = {
+  id: "project-uuid",
+  teams: { nodes: [{ id: "team-uuid" }] },
+};
+
+const createdIssue = {
+  id: "issue-uuid",
+  identifier: "CAI-7",
+  url: "https://linear.app/acme/issue/CAI-7",
+};
+
+test("createIssueInProject resolves a slugId then creates in its first team", async () => {
+  respond({ projects: { nodes: [projectQuery] } });
+  respond({ issueCreate: { success: true, issue: createdIssue } });
+  await expect(
+    createIssueInProject({
+      project: "04889d3e87bb",
+      title: "a ticket",
+      description: "# body",
+    }),
+  ).resolves.toEqual(createdIssue);
+  const [lookup, create] = requestBodies();
+  expect(lookup.query).toContain("slugId: { eq: $ref } }, first: 1");
+  expect(lookup.variables).toEqual({ ref: "04889d3e87bb" });
+  expect(create.query).toContain("issueCreate");
+  expect(create.variables.input).toEqual({
+    teamId: "team-uuid",
+    projectId: "project-uuid",
+    title: "a ticket",
+    description: "# body",
+  });
+});
+
+test("createIssueInProject looks a UUID up as the project id", async () => {
+  respond({ project: projectQuery });
+  respond({ issueCreate: { success: true, issue: createdIssue } });
+  await createIssueInProject({
+    project: "68bc9696-35d5-442d-ab56-214c8cfefbec",
+    title: "a ticket",
+    description: "body",
+  });
+  const [lookup] = requestBodies();
+  expect(lookup.query).toContain("project(id: $ref)");
+  expect(lookup.variables).toEqual({
+    ref: "68bc9696-35d5-442d-ab56-214c8cfefbec",
+  });
+});
+
+test("createIssueInProject throws naming the unresolvable project", async () => {
+  respond({ projects: { nodes: [] } });
+  await expect(
+    createIssueInProject({ project: "nope", title: "t", description: "d" }),
+  ).rejects.toThrow("Linear project not found: nope");
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test("createIssueInProject throws when the project carries no team", async () => {
+  respond({
+    projects: { nodes: [{ id: "project-uuid", teams: { nodes: [] } }] },
+  });
+  await expect(
+    createIssueInProject({
+      project: "04889d3e87bb",
+      title: "t",
+      description: "d",
+    }),
+  ).rejects.toThrow("Linear project has no team: 04889d3e87bb");
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test("createIssueInProject throws when issueCreate reports failure", async () => {
+  respond({ projects: { nodes: [projectQuery] } });
+  respond({ issueCreate: { success: false, issue: null } });
+  await expect(
+    createIssueInProject({
+      project: "04889d3e87bb",
+      title: "t",
+      description: "d",
+    }),
+  ).rejects.toThrow("Linear issueCreate failed for project 04889d3e87bb");
 });
 
 test("listCommentsSince filters strictly after the cursor", async () => {
