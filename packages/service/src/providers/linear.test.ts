@@ -3,6 +3,7 @@ import {
   createComment,
   createIssueInProject,
   fetchIssueSnapshot,
+  findIssueInProject,
   getIssueParticipants,
   listCommentsSince,
   mention,
@@ -174,6 +175,101 @@ test("createIssueInProject throws when issueCreate reports failure", async () =>
       description: "d",
     }),
   ).rejects.toThrow("Linear issueCreate failed for project 04889d3e87bb");
+});
+
+const foundIssue = {
+  id: "issue-uuid",
+  identifier: "CAI-450",
+  url: "https://linear.app/acme/issue/CAI-450",
+  title: "S3: salim-dev — a finding",
+  description: "# body",
+  state: { name: "Todo" },
+  trashed: null,
+};
+
+test("findIssueInProject filters by project and title prefix", async () => {
+  respond({ projects: { nodes: [projectQuery] } });
+  respond({ issues: { nodes: [foundIssue] } });
+  await expect(
+    findIssueInProject({
+      project: "04889d3e87bb",
+      titlePrefix: "S3: salim-dev — ",
+    }),
+  ).resolves.toEqual({
+    id: "issue-uuid",
+    identifier: "CAI-450",
+    url: "https://linear.app/acme/issue/CAI-450",
+    title: "S3: salim-dev — a finding",
+    description: "# body",
+    state: "Todo",
+  });
+  const [lookup, find] = requestBodies();
+  expect(lookup.variables).toEqual({ ref: "04889d3e87bb" });
+  expect(find.query).toContain("title: { startsWith: $prefix }");
+  expect(find.query).toContain("orderBy: createdAt");
+  expect(find.variables).toEqual({
+    projectId: "project-uuid",
+    prefix: "S3: salim-dev — ",
+  });
+});
+
+test("findIssueInProject returns null when nothing matches", async () => {
+  respond({ projects: { nodes: [projectQuery] } });
+  respond({ issues: { nodes: [] } });
+  await expect(
+    findIssueInProject({ project: "04889d3e87bb", titlePrefix: "S3: gone — " }),
+  ).resolves.toBeNull();
+});
+
+test("findIssueInProject skips trashed matches", async () => {
+  respond({ projects: { nodes: [projectQuery] } });
+  respond({
+    issues: {
+      nodes: [
+        {
+          ...foundIssue,
+          id: "trashed-uuid",
+          identifier: "CAI-9",
+          trashed: true,
+        },
+        foundIssue,
+      ],
+    },
+  });
+  const issue = await findIssueInProject({
+    project: "04889d3e87bb",
+    titlePrefix: "S3: salim-dev — ",
+  });
+  expect(issue?.identifier).toBe("CAI-450");
+});
+
+test("findIssueInProject returns null when every match is trashed", async () => {
+  respond({ projects: { nodes: [projectQuery] } });
+  respond({ issues: { nodes: [{ ...foundIssue, trashed: true }] } });
+  await expect(
+    findIssueInProject({
+      project: "04889d3e87bb",
+      titlePrefix: "S3: salim-dev — ",
+    }),
+  ).resolves.toBeNull();
+});
+
+// `orderBy: createdAt` sorts newest first, so the first live node wins.
+test("findIssueInProject returns the newest match", async () => {
+  respond({ projects: { nodes: [projectQuery] } });
+  respond({
+    issues: {
+      nodes: [
+        { ...foundIssue, id: "newest-uuid", identifier: "CAI-451" },
+        { ...foundIssue, id: "older-uuid", identifier: "CAI-450" },
+      ],
+    },
+  });
+  const issue = await findIssueInProject({
+    project: "04889d3e87bb",
+    titlePrefix: "S3: salim-dev — ",
+  });
+  expect(issue?.identifier).toBe("CAI-451");
 });
 
 test("listCommentsSince filters strictly after the cursor", async () => {

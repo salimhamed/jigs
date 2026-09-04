@@ -226,6 +226,50 @@ export async function createIssueInProject(input: {
   return data.issueCreate.issue;
 }
 
+interface RawIssueMatch {
+  id: string;
+  identifier: string;
+  url: string;
+  title: string;
+  description: string | null;
+  state: { name: string };
+  trashed: boolean | null;
+}
+
+export async function findIssueInProject(input: {
+  project: string;
+  titlePrefix: string;
+}): Promise<{
+  id: string;
+  identifier: string;
+  url: string;
+  title: string;
+  description: string;
+  state: string;
+} | null> {
+  const project = await resolveProject(input.project);
+  const data = await linearGraphql<{ issues: { nodes: RawIssueMatch[] } }>(
+    `query FindIssue($projectId: ID!, $prefix: String!) {
+      issues(filter: { project: { id: { eq: $projectId } }, title: { startsWith: $prefix } }, orderBy: createdAt, first: 5) {
+        nodes { id identifier url title description state { name } trashed }
+      }
+    }`,
+    { projectId: project.id, prefix: input.titlePrefix },
+  );
+  // `orderBy: createdAt` sorts newest first, so the first live node is the
+  // newest match. Live issues carry `trashed: null` rather than false.
+  const issue = data.issues.nodes.find((node) => node.trashed !== true);
+  if (issue === undefined) return null;
+  return {
+    id: issue.id,
+    identifier: issue.identifier,
+    url: issue.url,
+    title: issue.title,
+    description: issue.description ?? "",
+    state: issue.state.name,
+  };
+}
+
 export async function listCommentsSince(
   issueId: string,
   sinceIso: string,
