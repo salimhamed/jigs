@@ -1,5 +1,5 @@
-// The one trigger path (ADR 0010): validate the inputs, preflight the
-// pipeline's requirements, resolve a ticket ref, create the run. The HTTP
+// The one trigger path: validate the inputs, preflight the pipeline's
+// requirements, resolve a ticket ref, create the run. The HTTP
 // route and the schedule ticker both go through here, so a scheduled fire is
 // an ordinary run and neither caller can drift from the other's checks.
 

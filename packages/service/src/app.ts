@@ -85,7 +85,7 @@ export function createApp(
     const result = await startRun(
       factory,
       name,
-      body.inputs ?? {},
+      body.inputs,
       crypto.randomUUID(),
     );
     switch (result.kind) {

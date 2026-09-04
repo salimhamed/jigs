@@ -44,18 +44,12 @@ to, and one pipeline can carry several schedules with different inputs.
   terminal to report to, so the formatted failures go to `jigs logs` under the
   schedule's name and no run is created — the same repair text a refused
   `jigs run` prints.
-- **A malformed schedule costs its own tick and nothing else.** An unknown
-  pipeline, a cron croner rejects, or inputs the schema rejects are logged with
-  their repair at startup and left unscheduled; the service starts, the other
-  schedules run, and `jigs doctor` reports the same three failures on demand
+- **A malformed schedule costs its own tick and nothing else.** A name
+  carrying a `:` (which would answer for another schedule's runs), an unknown
+  pipeline, a cron croner rejects, or inputs the schema rejects are logged
+  with their repair at startup and left unscheduled; the service starts, the
+  other schedules run, and `jigs doctor` reports the same failures on demand
   through the check catalog.
-- **The ticker starts from a generated nitro plugin, beside the World start.**
-  It needs the factory's *compiled* pipelines, which only the factory's own
-  tree can import, so `jigs build` writes `.jigs/schedules.ts` next to the
-  `.jigs/server.ts` entry it already generates. Nitro invokes plugins in order
-  but does not await them, so "after the World start" is an ordering of calls,
-  not of completions — harmless here, because the first fire is a whole cron
-  tick away.
 - **No timezone field.** The cron is evaluated in the service host's local
   time, the way a crontab on that host would be. A factory's service and its
   operator are on the same machine today; the field can be added the day they
@@ -69,18 +63,9 @@ to, and one pipeline can carry several schedules with different inputs.
   cancelling the run that holds the old one, and every service restart is a
   replay of a run whose only job was to wait. A cron string in a config file is
   the thing an operator edits; a parked run is not.
-- **A system crontab or systemd timer calling `jigs run`** — no code at all.
-  Rejected for the same reason preflight is not in the CLI
-  ([ADR 0010](./0010-preflight-in-trigger-path.md)): the shell that timer runs
-  in is not the service's environment, and it puts unit generation and naming
-  back in the CLI that [ADR 0012](./0012-per-factory-service.md) took out.
 - **One-shot timestamps** (fire once at a named instant) and **a reminder
   pipeline** to hang them on — both in the ticket, both deferred: nothing
   consumes them yet, and a one-shot's real question is what happens to a fire
   whose instant passed while the service was down, which is the catch-up
   policy this ADR does not have. A one-shot is also expressible as a cron
   today, at the cost of firing again next year.
-- **A `jigs schedule` verb family** (`list`, `pause`, `run-now`) — rejected as
-  a surface with nothing behind it: the listing is `jigs ps`, pausing is
-  commenting out a line in the config, and firing now is `jigs run` with the
-  same inputs.

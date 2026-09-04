@@ -22,12 +22,9 @@ export function defineJigsService(): NitroConfig {
   // severs the SDK's vendored CLI.
   return {
     modules: ["workflow/nitro"],
-    // The ticker fires the factory's compiled pipelines, which only the
-    // factory's own tree can import — hence a generated plugin, resolved
-    // against the build root, rather than a second file shipped from here.
-    // Nitro invokes plugins in order without awaiting them, so this one is
-    // called after the World start rather than after the World is up; the
-    // first fire is a whole cron tick away either way.
+    // Nitro invokes plugins in order without awaiting them, so the generated
+    // ticker starts after the World start is *called*, not after it finishes
+    // — harmless, because the first fire is a whole cron tick away.
     plugins: [
       startWorldPlugin,
       `./${GENERATED_DIR}/${GENERATED_SCHEDULES_FILE}`,

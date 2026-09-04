@@ -63,6 +63,24 @@ test("a schedule naming a pipeline this factory does not have fails its check", 
   );
 });
 
+test("a schedule name carrying a colon fails its check — it would answer for another", async () => {
+  const result = await check(
+    "schedule.nightly:sweep",
+    factory({
+      "nightly:sweep": {
+        pipeline: "sweep",
+        cron: "0 3 * * *",
+        inputs: { target: "a" },
+      },
+    }),
+  );
+  expect(result.ok).toBe(false);
+  expect(result.ok === false && result.reason).toContain('contains ":"');
+  expect(result.ok === false && result.repair).toContain(
+    'rename the "nightly:sweep" schedule in jigs.config.ts',
+  );
+});
+
 test("a cron croner rejects fails its check", async () => {
   const result = await check(
     "schedule.nightly",

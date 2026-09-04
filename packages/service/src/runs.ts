@@ -85,11 +85,13 @@ export interface WorldRun {
 const SCHEDULE_TRIGGER_PREFIX = "schedule:";
 const MANUAL_TRIGGER = "manual";
 
+export const scheduleTriggerLabel = (name: string): string =>
+  `${SCHEDULE_TRIGGER_PREFIX}${name}`;
+
 /** What a scheduled fire records as its triggerId: the schedule that fired
  *  it and the tick it fired on. */
 export function scheduleTriggerId(name: string, at: Date): string {
-  const seconds = new Date(Math.floor(at.getTime() / 1000) * 1000);
-  return `${SCHEDULE_TRIGGER_PREFIX}${name}:${seconds.toISOString().replace(".000Z", "Z")}`;
+  return `${scheduleTriggerLabel(name)}:${at.toISOString().slice(0, 19)}Z`;
 }
 
 /** The `trigger` column: which schedule launched a run, or `manual`. A
@@ -100,11 +102,8 @@ export function triggerLabel(triggerId: string | undefined): string {
     return MANUAL_TRIGGER;
   const rest = triggerId.slice(SCHEDULE_TRIGGER_PREFIX.length);
   const end = rest.indexOf(":");
-  return `${SCHEDULE_TRIGGER_PREFIX}${end === -1 ? rest : rest.slice(0, end)}`;
+  return scheduleTriggerLabel(end === -1 ? rest : rest.slice(0, end));
 }
-
-export const scheduleTrigger = (name: string): string =>
-  `${SCHEDULE_TRIGGER_PREFIX}${name}`;
 
 // The ticket claim is held for the run's whole life, so it says nothing about
 // being parked; every other hook is something the run waits on, including one
@@ -166,7 +165,9 @@ const worldHookRunId = (token: string) =>
 // One page, deliberately: both the prefix scan and `jigs ps` are
 // conveniences over a developer-scale run table, not indexes to page through.
 // `resolveData: "all"` is what makes the trigger readable at all — a run's
-// triggerId lives in its stored inputs and the world has no index on it.
+// triggerId lives in its stored inputs and the world has no index on it. It
+// costs nothing extra: world-postgres selects every column either way and
+// only strips the data fields after the query.
 async function worldRuns(): Promise<WorldRun[]> {
   const page = await getWorld().runs.list({
     resolveData: "all",

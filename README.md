@@ -16,11 +16,11 @@ over its own Postgres World, and `jigs service start` (`stop` / `restart` /
 which also carries the port its service answers on. Every trigger preflights
 the pipeline's requirements before creating a run, and `jigs doctor` runs the
 same checks on demand. A factory can also declare recurring **schedules** in
-its config — the service fires each on its cron tick through that same trigger
-path, skipping a tick whose last run is still going. The operational verbs are `jigs run` / `ps` / `logs` /
-`cancel` / `poke`, each an HTTP client of the factory's own service; a run can
-be named by its id, a unique id prefix, or the ticket it claimed (its Linear
-identifier or UUID).
+its config — the service fires each on its cron tick through that same
+trigger path, skipping a tick whose last run is still going. The operational
+verbs are `jigs run` / `ps` / `logs` / `cancel` / `poke`, each an HTTP client
+of the factory's own service; a run can be named by its id, a unique id
+prefix, or the ticket it claimed (its Linear identifier or UUID).
 `jigs cancel <run>` is the escape hatch for a zombie claim owner, and logs
 themselves stay the SDK's — the verbs print the `workflow web` invocation that
 reads the factory's own World. Pipelines request worktrees and the runtime

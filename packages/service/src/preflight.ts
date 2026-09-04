@@ -30,8 +30,9 @@ export function preflight(requires: PipelineRequires): Promise<CheckReport> {
   return runChecks(preflightChecks({ factoryRoot, requires, probes }));
 }
 
-// `extra` is where the checks that need the factory itself join the catalog's
-// own — the declared schedules, which only the app can see.
-export function doctor(extra: Check[] = []): Promise<CheckReport> {
-  return runChecks([...doctorChecks({ factoryRoot, probes }), ...extra]);
+export function doctor(factoryChecks: Check[]): Promise<CheckReport> {
+  return runChecks([
+    ...doctorChecks({ factoryRoot, probes }),
+    ...factoryChecks,
+  ]);
 }

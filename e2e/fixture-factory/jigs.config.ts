@@ -5,9 +5,8 @@ export default {
   pipelines: {
     fixture: { pipeline: fixturePipeline, inputs: fixtureInputs },
   },
-  // Nothing fires here — this factory's service is never started. What the
-  // build proves is that a declared schedule type-checks and compiles, and
-  // that it emits no step id of its own.
+  // Never fires — what the build proves is that a schedule compiles and emits
+  // no step id of its own.
   schedules: {
     "nightly-fixture": {
       pipeline: "fixture",

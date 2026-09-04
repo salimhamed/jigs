@@ -332,8 +332,10 @@ export default {
 } satisfies Factory;
 ```
 
-Five cron fields, in the service host's local time. `jigs build` and
-`jigs service restart`, and the service's own log names what it scheduled:
+Five cron fields, read in the service host's local time — UTC on the host in
+this example, which is why the timestamps below carry a `Z`. `jigs build` and
+`jigs service restart` to pick the schedule up; the service's own log then
+names what it scheduled:
 
 ```
 [schedule] monday-report scheduled: 0 9 * * 1 → weekly-report, next 2026-09-07T09:00:00.000Z

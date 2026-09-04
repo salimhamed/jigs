@@ -10,8 +10,8 @@ import type { Factory, Schedule } from "./factory";
 import {
   listRuns,
   type RunRow,
-  scheduleTrigger,
   scheduleTriggerId,
+  scheduleTriggerLabel,
   TERMINAL_RUN_STATUSES,
 } from "./runs";
 import { type StartRunResult, startRun } from "./trigger";
@@ -143,6 +143,15 @@ function scheduleProblem(
   name: string,
   schedule: Schedule,
 ): ScheduleProblem | null {
+  // The tick is appended to the name with a ":", and both the trigger column
+  // and the overlap skip read the name back by splitting on the first one — so
+  // a name carrying its own would answer for another schedule's runs.
+  if (name.includes(":")) {
+    return {
+      reason: `schedule name "${name}" contains ":"`,
+      repair: `rename the "${name}" schedule in jigs.config.ts to a name without ":" — it is what a run's trigger id is read back out of`,
+    };
+  }
   const entry = factory.pipelines[schedule.pipeline];
   if (!entry) {
     return {
@@ -174,7 +183,7 @@ function scheduleProblem(
 }
 
 function activeRunId(rows: RunRow[], name: string): string | null {
-  const trigger = scheduleTrigger(name);
+  const trigger = scheduleTriggerLabel(name);
   const active = rows.find(
     (row) => row.trigger === trigger && !TERMINAL_RUN_STATUSES.has(row.status),
   );
