@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.11](https://github.com/salimhamed/jigs/compare/service-v0.1.10...service-v0.1.11) (2026-09-04)
+
+
+### Features
+
+* **service:** find a Linear issue in a project by title prefix ([#63](https://github.com/salimhamed/jigs/issues/63)) ([ae59b31](https://github.com/salimhamed/jigs/commit/ae59b315ff3ff6e5ed7a99ff12b54474cddb79c3))
+
 ## [0.1.10](https://github.com/salimhamed/jigs/compare/service-v0.1.9...service-v0.1.10) (2026-09-04)
 
 
