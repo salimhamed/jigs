@@ -1,10 +1,16 @@
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import {
   type Check,
   failedCheck,
   formatFailures,
   runChecks,
 } from "./catalog.ts";
+import {
+  type CoreProbes,
+  doctorChecks,
+  type PipelineRequires,
+  preflightChecks,
+} from "./index.ts";
 
 const passing = (id: string): Check => ({
   id,
@@ -102,4 +108,39 @@ test("formatFailures renders one repair line per failure and skips the passes", 
     ],
   });
   expect(text).toBe("check A: broken\n  → fix A\ncheck C: worse\n  → fix C");
+});
+
+const probes: CoreProbes = {
+  linearViewer: async () => ({}),
+  githubWhoami: async () => ({}),
+};
+
+const factoryRoot = () => "/nowhere";
+
+const preflightIds = (requires: PipelineRequires): string[] =>
+  preflightChecks({ factoryRoot, requires, probes }).map((check) => check.id);
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+test("a pipeline requiring aws gets the credentials check", () => {
+  expect(preflightIds({ aws: true })).toContain("aws.credentials");
+});
+
+test("a pipeline that does not require aws does not get it", () => {
+  expect(preflightIds({ harnesses: ["claude"] })).not.toContain(
+    "aws.credentials",
+  );
+});
+
+test("doctor checks aws only when a profile is set, having no manifest to read", () => {
+  vi.stubEnv("AWS_PROFILE", "");
+  expect(doctorChecks({ factoryRoot, probes }).map((c) => c.id)).not.toContain(
+    "aws.credentials",
+  );
+  vi.stubEnv("AWS_PROFILE", "some-profile");
+  expect(doctorChecks({ factoryRoot, probes }).map((c) => c.id)).toContain(
+    "aws.credentials",
+  );
 });
