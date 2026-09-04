@@ -37,6 +37,22 @@ const fixture = {
 const resumeHookMock = vi.fn();
 const app = createApp(fixture, { resumeIngressHook: resumeHookMock });
 
+// A second factory, because what the schedule routes answer is a property of
+// the config handed in. Nothing ticks here: the ticker is started by the
+// generated nitro plugin, not by the app.
+const scheduled = {
+  pipelines: fixture.pipelines,
+  schedules: {
+    "nightly-plain": {
+      pipeline: "plain",
+      cron: "0 3 * * *",
+      inputs: { ticket: "AGE-317" },
+    },
+    "broken-cron": { pipeline: "plain", cron: "always", inputs: {} },
+  },
+} satisfies Factory;
+const scheduledApp = createApp(scheduled);
+
 // The local world binds its data dir on first use, so one fresh dir serves
 // the whole file; it starts empty — nobody holds any token here.
 let dataDir: string;
@@ -374,7 +390,39 @@ test("GET /api/runs answers with empty runs and worktrees when nothing has launc
   vi.stubEnv("WORKFLOW_POSTGRES_URL", "");
   const res = await app.request("/api/runs");
   expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ runs: [], worktrees: [] });
+  expect(await res.json()).toEqual({
+    runs: [],
+    worktrees: [],
+    schedules: [],
+  });
+});
+
+test("GET /api/schedules answers with what the factory declared, and what is next", async () => {
+  const res = await scheduledApp.request("/api/schedules");
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as Array<{
+    name: string;
+    pipeline: string;
+    cron: string;
+    next: string | null;
+    active: string | null;
+  }>;
+  expect(body.map((s) => s.name)).toEqual(["nightly-plain", "broken-cron"]);
+  expect(body[0]).toMatchObject({
+    name: "nightly-plain",
+    pipeline: "plain",
+    cron: "0 3 * * *",
+    active: null,
+  });
+  expect(new Date(body[0]?.next ?? "").getTime()).toBeGreaterThan(Date.now());
+  // Declared but unschedulable: it is still reported, with nothing to come.
+  expect(body[1]).toMatchObject({ name: "broken-cron", next: null });
+});
+
+test("a factory with no schedules answers an empty listing", async () => {
+  const res = await app.request("/api/schedules");
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual([]);
 });
 
 test("POST /api/worktrees/sweep answers 503 when the worktree registry is unconfigured", async () => {

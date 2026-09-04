@@ -99,16 +99,19 @@ test("a run still in flight is a warning, not a refusal", async () => {
         runId: "wrun_01",
         pipeline: "example",
         status: "suspended",
+        trigger: "manual",
         createdAt: new Date().toISOString(),
       },
       {
         runId: "wrun_02",
         pipeline: "example",
         status: "completed",
+        trigger: "manual",
         createdAt: new Date().toISOString(),
       },
     ],
     worktrees: [],
+    schedules: [],
   };
   const server = createServer((_req, res) => {
     res.setHeader("content-type", "application/json");

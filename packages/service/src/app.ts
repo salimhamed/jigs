@@ -1,6 +1,6 @@
 import { type Context, Hono } from "hono";
 import { failedChecks } from "jigs/checks";
-import { getHookByToken, getRun, resumeHook, start } from "workflow/api";
+import { getHookByToken, getRun, resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
 import { getWorld } from "workflow/runtime";
 import { z } from "zod";
@@ -12,8 +12,7 @@ import {
   verifyLinearSignature,
   type WakeHint,
 } from "./ingress";
-import { doctor, factoryRoot, preflight } from "./preflight";
-import { resolveIssueRef } from "./providers/linear";
+import { doctor, factoryRoot } from "./preflight";
 import {
   isParkToken,
   listRuns,
@@ -21,6 +20,7 @@ import {
   resolveRunRef,
   TERMINAL_RUN_STATUSES,
 } from "./runs";
+import { listSchedules, scheduleChecks } from "./schedules";
 import {
   readSuspensionMetadata,
   type SuspensionRecord,
@@ -29,6 +29,7 @@ import {
   tokenFromGithubPayload,
   tokenFromLinearPayload,
 } from "./suspension/tokens";
+import { startRun } from "./trigger";
 import { listWorktreesForRun } from "./worktrees/registry";
 import { registrySql } from "./worktrees/sql";
 import { sweepWorktrees } from "./worktrees/sweep";
@@ -74,67 +75,55 @@ export function createApp(
     });
   });
 
+  // The manual half of the trigger path; the schedule ticker fires the same
+  // function, so preflight and ticket resolution cannot differ between them.
   app.post("/api/pipelines/:name/runs", async (c) => {
     const name = c.req.param("name");
-    const entry = factory.pipelines[name];
-    if (!entry) return c.json(unknownPipeline(name), 404);
-
     const body = await c.req
       .json<{ inputs?: unknown }>()
       .catch(() => ({}) as { inputs?: unknown });
-    // zod-parsed plain JSON is also the serialization guard: unserializable
-    // workflow args leave a run stuck `running` forever (workflow@4.8.4).
-    const parsed = entry.inputs.safeParse(body.inputs ?? {});
-    if (!parsed.success) {
-      return c.json(
-        { error: "invalid inputs", issues: parsed.error.issues },
-        400,
-      );
-    }
-
-    // Before the run exists (ADR 0010): every failure at once, each carrying
-    // its repair, and no run created. There is no skip flag.
-    const report = await preflight(entry.requires ?? {});
-    if (!report.ok) {
-      return c.json(
-        { error: "preflight failed", failures: failedChecks(report) },
-        424,
-      );
-    }
-
-    let issue: { id: string; identifier: string } | undefined;
-    if (hasTicket(parsed.data)) {
-      try {
-        issue = await resolveIssueRef(parsed.data.ticket);
-      } catch (err) {
-        return c.json({ error: `invalid ticket: ${String(err)}` }, 400);
-      }
-    }
-
-    const triggerId = crypto.randomUUID();
-    const run = await start(entry.pipeline, [
-      {
-        ...parsed.data,
-        triggerId,
-        ...(issue === undefined
-          ? {}
-          : { issueId: issue.id, identifier: issue.identifier }),
-      },
-    ]);
-    return c.json(
-      {
-        runId: run.runId,
-        pipeline: name,
-        logs: logsPointer(run.runId),
-        ...(entry.hookToken ? { resumeToken: entry.hookToken(triggerId) } : {}),
-      },
-      201,
+    const result = await startRun(
+      factory,
+      name,
+      body.inputs,
+      crypto.randomUUID(),
     );
+    switch (result.kind) {
+      case "unknown-pipeline":
+        return c.json(unknownPipeline(name), 404);
+      case "invalid-inputs":
+        return c.json({ error: "invalid inputs", issues: result.issues }, 400);
+      case "preflight-failed":
+        return c.json(
+          { error: "preflight failed", failures: failedChecks(result.report) },
+          424,
+        );
+      case "invalid-ticket":
+        return c.json({ error: `invalid ticket: ${result.reason}` }, 400);
+      case "started":
+        return c.json(
+          {
+            runId: result.runId,
+            pipeline: name,
+            logs: logsPointer(result.runId),
+            ...(result.resumeToken === undefined
+              ? {}
+              : { resumeToken: result.resumeToken }),
+          },
+          201,
+        );
+    }
   });
+
+  // What this factory fires on its own, with the next occurrence of each and
+  // the run it is already waiting on.
+  app.get("/api/schedules", async (c) => c.json(await listSchedules(factory)));
 
   // The same catalog engine as preflight, without a pipeline or a launch. A
   // red report is still a report, so it answers 200.
-  app.get("/api/doctor", async (c) => c.json(await doctor()));
+  app.get("/api/doctor", async (c) =>
+    c.json(await doctor(scheduleChecks(factory))),
+  );
 
   // `jigs sweep` is an HTTP client of this route (ADR 0008). `paths` scopes a
   // clean to the worktrees an operator approved one by one.
@@ -291,7 +280,13 @@ export function createApp(
             { sql },
           ).then((report) => report.entries),
     ]);
-    return c.json({ runs, worktrees });
+    // The schedules ride along on the same run listing the table above
+    // renders, so ps stays one round trip and the two tables can never
+    // disagree about which schedule is busy.
+    const schedules = await listSchedules(factory, {
+      listRuns: async () => runs,
+    });
+    return c.json({ runs, worktrees, schedules });
   });
 
   // The escape hatch for a zombie claim owner. Cancelling releases every hook
@@ -368,15 +363,6 @@ export function createApp(
   }
 
   return app;
-}
-
-function hasTicket(value: unknown): value is { ticket: string } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "ticket" in value &&
-    typeof value.ticket === "string"
-  );
 }
 
 // Liveness must answer from anywhere, including a service started outside a

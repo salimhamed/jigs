@@ -46,6 +46,15 @@ const app = createApp({
   },
 });
 
+// Doctor's schedule half needs a factory that declares one: those checks are
+// the factory's own, so they can only arrive through the app.
+const scheduledApp = createApp({
+  pipelines: {
+    bound: { pipeline: async () => undefined, inputs: z.object({}) },
+  },
+  schedules: { nightly: { pipeline: "bound", cron: "always", inputs: {} } },
+});
+
 let tmp: string;
 let claudeStub: string;
 let seededFactory: string;
@@ -183,6 +192,21 @@ test("a green preflight lets the trigger call start()", async () => {
   });
   expect(start).toHaveBeenCalledTimes(1);
   removeTmpDir(workspace);
+});
+
+test("doctor reports a malformed schedule beside the catalog's own checks", async () => {
+  seedThreeFailures();
+  const body = (await (await scheduledApp.request("/api/doctor")).json()) as {
+    ok: boolean;
+    checks: Failure[];
+  };
+  expect(body.ok).toBe(false);
+  const schedule = body.checks.find((check) => check.id === "schedule.nightly");
+  expect(schedule?.label).toBe("schedule nightly");
+  expect(schedule?.repair).toContain("fix schedules.nightly.cron");
+  // Still the whole catalog: the schedule checks are appended to it, not a
+  // replacement for it.
+  expect(body.checks.map((check) => check.id)).toContain("core.github-token");
 });
 
 test("doctor names an unreadable factory config instead of staying silent", async () => {

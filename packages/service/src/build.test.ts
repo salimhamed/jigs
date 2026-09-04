@@ -19,6 +19,19 @@ test("the entry is a real file that composes the app from the factory's config",
   expect(source).toContain('from "../jigs.config.ts"');
 });
 
+test("the schedules plugin is generated beside the entry, holding the ticker", () => {
+  const root = factory();
+  prepare(root);
+
+  const source = readFileSync(
+    path.join(root, GENERATED_DIR, "schedules.ts"),
+    "utf8",
+  );
+  expect(source).toContain('from "@jigs/service/schedules"');
+  expect(source).toContain('from "../jigs.config.ts"');
+  expect(source).toContain("startSchedules(factory)");
+});
+
 test("preparing twice restores a hand-edited entry", () => {
   const root = factory();
   const entry = prepare(root);

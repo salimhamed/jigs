@@ -4,6 +4,7 @@
 
 import { locateFactoryRoot } from "jigs";
 import {
+  type Check,
   type CheckReport,
   type CoreProbes,
   doctorChecks,
@@ -29,6 +30,9 @@ export function preflight(requires: PipelineRequires): Promise<CheckReport> {
   return runChecks(preflightChecks({ factoryRoot, requires, probes }));
 }
 
-export function doctor(): Promise<CheckReport> {
-  return runChecks(doctorChecks({ factoryRoot, probes }));
+export function doctor(factoryChecks: Check[]): Promise<CheckReport> {
+  return runChecks([
+    ...doctorChecks({ factoryRoot, probes }),
+    ...factoryChecks,
+  ]);
 }

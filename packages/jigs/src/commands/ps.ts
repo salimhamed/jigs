@@ -6,7 +6,16 @@ export interface PsRun {
   runId: string;
   pipeline: string;
   status: string;
+  trigger: string;
   createdAt: string;
+}
+
+export interface PsSchedule {
+  name: string;
+  pipeline: string;
+  cron: string;
+  next: string | null;
+  active: string | null;
 }
 
 export interface PsWorktree {
@@ -19,6 +28,7 @@ export interface PsWorktree {
 export interface PsResult {
   runs: PsRun[];
   worktrees: PsWorktree[];
+  schedules: PsSchedule[];
 }
 
 export async function listRunsForPs(
@@ -35,11 +45,12 @@ export async function listRunsForPs(
     deps.out("no runs");
   } else {
     for (const line of formatTable(
-      ["RUN", "PIPELINE", "STATUS", "AGE"],
+      ["RUN", "PIPELINE", "STATUS", "TRIGGER", "AGE"],
       result.runs.map((run) => [
         run.runId,
         run.pipeline,
         run.status,
+        run.trigger,
         age(run.createdAt, now),
       ]),
     )) {
@@ -59,6 +70,21 @@ export async function listRunsForPs(
         worktree.branch,
         worktree.state,
         worktree.ownerRunId,
+      ]),
+    )) {
+      deps.out(line);
+    }
+  }
+  if (result.schedules.length > 0) {
+    deps.out("");
+    for (const line of formatTable(
+      ["SCHEDULE", "PIPELINE", "CRON", "NEXT", "ACTIVE"],
+      result.schedules.map((schedule) => [
+        schedule.name,
+        schedule.pipeline,
+        schedule.cron,
+        schedule.next ?? "-",
+        schedule.active ?? "-",
       ]),
     )) {
       deps.out(line);

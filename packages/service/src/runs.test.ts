@@ -1,7 +1,13 @@
 import { expect, test } from "vitest";
 import { z } from "zod";
 import type { Factory } from "./factory";
-import { isParkToken, listRuns, resolveRunRef, type WorldRun } from "./runs";
+import {
+  isParkToken,
+  listRuns,
+  resolveRunRef,
+  scheduleTriggerId,
+  type WorldRun,
+} from "./runs";
 
 const RUN_A = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 const RUN_B = "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ";
@@ -160,4 +166,33 @@ test("an unmapped workflow name is reported verbatim rather than guessed at", as
     listHooks: async () => [],
   });
   expect(rows[0]?.pipeline).toBe("workflow//./nope//x");
+});
+
+test("a run launched by hand reads as a manual trigger", async () => {
+  const rows = await listRuns(factory, {
+    listRuns: async () => [worldRun({ triggerId: crypto.randomUUID() })],
+    listHooks: async () => [],
+  });
+  expect(rows[0]?.trigger).toBe("manual");
+});
+
+test("a scheduled run names its schedule, without the tick it fired on", async () => {
+  const triggerId = scheduleTriggerId(
+    "nightly-sweep",
+    new Date("2026-08-26T03:00:00.400Z"),
+  );
+  expect(triggerId).toBe("schedule:nightly-sweep:2026-08-26T03:00:00Z");
+  const rows = await listRuns(factory, {
+    listRuns: async () => [worldRun({ triggerId })],
+    listHooks: async () => [],
+  });
+  expect(rows[0]?.trigger).toBe("schedule:nightly-sweep");
+});
+
+test("a run whose inputs cannot be read reads as manual, like every other launch", async () => {
+  const rows = await listRuns(factory, {
+    listRuns: async () => [worldRun()],
+    listHooks: async () => [],
+  });
+  expect(rows[0]?.trigger).toBe("manual");
 });
