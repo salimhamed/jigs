@@ -62,6 +62,22 @@ adds a runtime dependency needs that package added to this factory's
 `ERR_MODULE_NOT_FOUND`, which names the package. `jigs init`'s
 `package.json` template carries the current set; compare it after a pull.
 
+The order those fall in matters, because the two halves upgrade at different
+moments. `@jigs/service` ships raw TypeScript, so the service side of a change
+is live as soon as the factory rebuilds; the CLI runs from
+`packages/jigs/dist/`, which is gitignored and moves only when `pnpm build`
+runs. Pull without rebuilding and an old CLI talks to a new service — which
+surfaced as `jigs: invalid jigs.yml: service: Unrecognized key:
+"dashboard_port"` the day `dashboard_port` landed, a stale CLI rejecting a field
+its own schema had never heard of. So:
+
+```sh
+cd <jigs checkout> && git pull && pnpm build   # refresh the linked CLI first
+cd <factory> && git pull && pnpm install       # any new runtime dep the release names
+pnpm exec jigs build && pnpm exec jigs service restart
+pnpm exec jigs service status                  # prints the service and dashboard URLs
+```
+
 Both packages carry ordinary semver from `0.1.0` on, and nothing here moves it
 by hand. A PR's title is a conventional commit — CI rejects one that is not —
 and merging it to `main` opens or updates a release-please PR carrying the next
@@ -142,13 +158,14 @@ one.
 cp .env.example .env      # then fill in LINEAR_API_KEY / GITHUB_TOKEN
 pnpm install
 docker compose up -d --wait
-# bootstrap does not read .env, so pass the World URL explicitly:
-WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:<postgresPort>/jigs \
-  pnpm exec bootstrap
+pnpm exec bootstrap
 ```
 
 `bootstrap` is idempotent — re-run it freely (it applies the SDK's migrations
-and the graphile-worker schema).
+and the graphile-worker schema). It loads this factory's `.env` itself, so the
+World URL that `.env.example` already carries is the one it uses; run it after
+the copy above, or pass `WORKFLOW_POSTGRES_URL=…` in front of it to bootstrap a
+World before there is an `.env` to read.
 
 `.env` is this factory's environment file: `jigs service start` loads it into
 the service process, and `PORT` comes from `jigs.yml` rather than from here.
@@ -176,6 +193,11 @@ using the factory's own nitro and its own copy of the SDK — the copy that
 compiles the step ids has to be the copy that registers them. `jigs service
 start|stop|restart|status|logs` supervises that build; `logs` prints the
 service's own stdout, which is not the same thing as a run's history (step 6).
+
+`start` reports the pid as soon as it has spawned the process and does not wait
+for the port, so a `jigs ps` or `jigs doctor` fired straight after it can still
+answer "could not reach the jigs service" while the service is booting. Re-run
+it a second later; `jigs service logs` shows how far the boot got.
 
 Rebuild after every pipeline change. `jigs build` warns when a run is still in
 flight: a pipeline that changed shape no longer answers to the step ids its
@@ -219,6 +241,13 @@ jigs bindings
 
 A binding is a name in `jigs.yml` mapped to a checkout, pinned to its expected
 remote. Pipelines name bindings; the runtime provisions worktrees from them.
+
+`GITHUB_TOKEN` above is for the repo webhook, not for the binding: `jigs bind`
+records the binding either way, and says which half it skipped — the webhook
+needs both the token and an `ingress_url` in this factory's `jigs.yml` (step 5).
+On a terminal it also offers to scaffold a `.jigs.yml` in the target repo, which
+is where that repo declares what its worktrees need before an agent can work in
+them.
 
 ### 5. Webhook ingress
 
