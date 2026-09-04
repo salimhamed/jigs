@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.12](https://github.com/salimhamed/jigs/compare/service-v0.1.11...service-v0.1.12) (2026-09-04)
+
+
+### Features
+
+* **service:** fire pipelines on a recurring schedule ([#65](https://github.com/salimhamed/jigs/issues/65)) ([de21f8b](https://github.com/salimhamed/jigs/commit/de21f8b7e416ab259738d9d10b8e1e802e2ef6cb))
+
 ## [0.1.11](https://github.com/salimhamed/jigs/compare/service-v0.1.10...service-v0.1.11) (2026-09-04)
 
 
