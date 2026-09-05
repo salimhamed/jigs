@@ -43,17 +43,17 @@ export function makeClonedBinding(
     remoteDir,
   );
 
-  const seed = path.join(parent, "seed-checkout");
-  mkdirSync(seed, { recursive: true });
-  git(seed, "init", "-q", "--initial-branch", defaultBranch);
-  git(seed, "config", "user.name", "jigs-fixture");
-  git(seed, "config", "user.email", "fixture@jigs.test");
-  writeFileSync(path.join(seed, "README.md"), "# fixture\n");
-  git(seed, "add", "README.md");
-  git(seed, "commit", "-q", "-m", "initial");
-  git(seed, "remote", "add", "origin", remoteDir);
-  git(seed, "push", "-q", "origin", defaultBranch);
-  rmSync(seed, { recursive: true, force: true });
+  const bootstrap = path.join(parent, "bootstrap-checkout");
+  mkdirSync(bootstrap, { recursive: true });
+  git(bootstrap, "init", "-q", "--initial-branch", defaultBranch);
+  git(bootstrap, "config", "user.name", "jigs-fixture");
+  git(bootstrap, "config", "user.email", "fixture@jigs.test");
+  writeFileSync(path.join(bootstrap, "README.md"), "# fixture\n");
+  git(bootstrap, "add", "README.md");
+  git(bootstrap, "commit", "-q", "-m", "initial");
+  git(bootstrap, "remote", "add", "origin", remoteDir);
+  git(bootstrap, "push", "-q", "origin", defaultBranch);
+  rmSync(bootstrap, { recursive: true, force: true });
 
   const binding = path.join(parent, "binding");
   const repoDir = path.join(binding, "repo.git");

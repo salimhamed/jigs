@@ -94,8 +94,9 @@ jigs bind git@github.com:owner/repo.git
 jigs bindings
 ```
 
-A **binding** maps a name to a target repo's remote URL; jigs keeps its own
-clone per binding and cuts agent worktrees from it.
+A **binding** maps a name to a target repo's remote URL plus how its worktrees
+are provisioned; jigs keeps its own clone per binding and cuts agent worktrees
+from it.
 
 ### 6. Build and start the service
 

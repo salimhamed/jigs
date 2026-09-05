@@ -1,13 +1,10 @@
 import {
   type Binding,
   bindingRepoDir,
-  bindingSeedDir,
-  DEFAULT_WORKTREE_CONFIG,
   ensureBindingClone,
   locateFactoryRoot,
   provisionWorktree,
   resolveBinding,
-  resolveWorktreeConfig,
   type WorktreeFacts,
   worktreePath,
 } from "jigs";
@@ -18,7 +15,7 @@ import { registrySql } from "./sql";
 
 // The step side of the pipeline's worktree() request: resolve the binding,
 // make sure its clone exists, acquire and register the tree, then provision it
-// from the seed directory or the target repo's own .jigs.yml.
+// as the binding describes.
 
 export function factoryRoot(): string {
   const override = process.env.JIGS_FACTORY_ROOT;
@@ -67,7 +64,6 @@ export async function provisionRequest(
   const binding = resolve(request.binding);
   const dirs = { factoryRoot: factoryRoot(), bindingName: binding.name };
   const repoDir = bindingRepoDir(dirs);
-  const seedDir = bindingSeedDir(dirs);
   const target = worktreePath({ ...dirs, branch: request.branch });
 
   // Lazily, on the first request of this binding: both the reuse check and
@@ -85,20 +81,11 @@ export async function provisionRequest(
     { sql },
   );
 
-  const resolved = resolveWorktreeConfig({
-    seedDir,
-    worktreePath: facts.path,
-  });
-  if (resolved === null) {
-    log(
-      `[worktree] no .jigs.yml in ${seedDir} or the worktree — copying nothing, running nothing`,
-    );
-  }
   try {
     await provision({
-      seedDir,
+      binding,
+      factoryRoot: dirs.factoryRoot,
       worktreePath: facts.path,
-      config: resolved ?? DEFAULT_WORKTREE_CONFIG,
     });
   } catch (err) {
     // The half-provisioned tree stays on disk, marked for diagnosis: an agent

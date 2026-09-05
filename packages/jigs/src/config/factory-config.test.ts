@@ -4,6 +4,7 @@ import { factorySlug } from "../worktrees/layout.ts";
 import {
   parseFactoryConfig,
   removeBinding,
+  resolveBinding,
   resolveService,
   upsertBinding,
 } from "./factory-config.ts";
@@ -25,9 +26,38 @@ test("upsertBinding creates the bindings block in a file without one", () => {
     "acme-api",
     "git@github.com:acme/api.git",
   );
+  expect(text).not.toContain("copy");
   expect(parseFactoryConfig(text).bindings["acme-api"]).toEqual({
     remote: "git@github.com:acme/api.git",
+    copy: [],
+    post_create: [],
+    hook_timeout_minutes: 10,
   });
+});
+
+test("a binding carries the worktree provisioning it declares", () => {
+  const text = `${SERVICE}bindings:
+  acme-api:
+    remote: git@github.com:acme/api.git
+    copy: [bindings/acme-api/.env]
+    post_create: [npm ci]
+    hook_timeout_minutes: 20
+`;
+  expect(parseFactoryConfig(text).bindings["acme-api"]).toEqual({
+    remote: "git@github.com:acme/api.git",
+    copy: ["bindings/acme-api/.env"],
+    post_create: ["npm ci"],
+    hook_timeout_minutes: 20,
+  });
+});
+
+test("parseFactoryConfig rejects a non-positive hook timeout", () => {
+  const text = `${SERVICE}bindings:
+  acme-api:
+    remote: git@github.com:acme/api.git
+    hook_timeout_minutes: 0
+`;
+  expect(() => parseFactoryConfig(text)).toThrow(/hook_timeout_minutes/);
 });
 
 test("upsertBinding preserves comments on existing entries", () => {
@@ -63,6 +93,29 @@ test("upsertBinding re-pins the remote in place, comment kept", () => {
     "git@github.com:acme/api-moved.git",
   );
   expect(text).toContain("# the one on GitHub");
+});
+
+test("re-pinning a remote leaves the provisioning keys and comments untouched", () => {
+  const provisioned = `${SERVICE}bindings:
+  # The main API service.
+  acme-api:
+    remote: git@github.com:acme/api.git # the one on GitHub
+    copy: [.env]
+    post_create: [npm ci]
+    hook_timeout_minutes: 20
+`;
+  const text = upsertBinding(
+    provisioned,
+    "acme-api",
+    "git@github.com:acme/api-moved.git",
+  );
+  expect(text).toBe(provisioned.replace("acme/api.git", "acme/api-moved.git"));
+  expect(parseFactoryConfig(text).bindings["acme-api"]).toEqual({
+    remote: "git@github.com:acme/api-moved.git",
+    copy: [".env"],
+    post_create: ["npm ci"],
+    hook_timeout_minutes: 20,
+  });
 });
 
 test("removeBinding removes one entry and preserves siblings' comments", () => {
@@ -143,6 +196,25 @@ test("the dashboard port is read as written, never derived from the port", () =>
     "service:\n  port: 9100\n  dashboard_port: 3456\n",
   );
   expect(config.service.dashboard_port).toBe(3456);
+});
+
+test("resolveBinding returns the binding under its name, defaults applied", () => {
+  const tmp = makeTmpDir();
+  try {
+    const factory = makeFactoryRepo(
+      tmp,
+      "bindings:\n  acme-api:\n    remote: git@github.com:acme/api.git\n    post_create: [npm ci]\n",
+    );
+    expect(resolveBinding(factory, "acme-api")).toEqual({
+      name: "acme-api",
+      remote: "git@github.com:acme/api.git",
+      copy: [],
+      post_create: ["npm ci"],
+      hook_timeout_minutes: 10,
+    });
+  } finally {
+    removeTmpDir(tmp);
+  }
 });
 
 test("resolveService derives the service address and the slug", () => {

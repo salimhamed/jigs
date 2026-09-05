@@ -9,8 +9,11 @@
 > option below — auth is the operator's ssh agent, location is not
 > configurable, and the disk is jigs', one object store per binding per
 > factory. `jigs bind` is now a pure config edit plus the webhook leg.
-> Non-git provisioning inputs (an `.env`, an untracked `.jigs.yml`) move to a
-> per-binding **seed directory** beside the clone.
+> Worktree provisioning now lives on the binding itself — `copy`,
+> `post_create` and `hook_timeout_minutes` in the factory repo's `jigs.yml`,
+> with `copy` entries relative to the binding's own `bindings/<name>/`
+> directory in that repo. The target repo's `.jigs.yml` and the per-binding
+> seed directory are gone entirely.
 
 A binding is the least state that makes a name meaningful: `name → checkout
 path + expected remote`, declared in a committed `jigs.yml` at the factory

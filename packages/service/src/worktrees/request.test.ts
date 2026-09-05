@@ -1,10 +1,9 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   type Binding,
   bindingRepoDir,
-  bindingSeedDir,
   PostCreateFailedError,
   type ProvisionWorktreeOptions,
   worktreePath,
@@ -21,7 +20,6 @@ import { makeFakeSql } from "./test-fixtures";
 
 let tmp: string;
 let repoDir: string;
-let seedDir: string;
 let target: string;
 let store: Map<string, WorktreeRow>;
 
@@ -36,7 +34,6 @@ beforeEach(() => {
   writeFileSync(path.join(tmp, "jigs.yml"), "bindings: {}\n");
   const dirs = { factoryRoot: tmp, bindingName: "api" };
   repoDir = bindingRepoDir(dirs);
-  seedDir = bindingSeedDir(dirs);
   target = worktreePath({ ...dirs, branch: "feat" });
 });
 afterEach(() => {
@@ -47,6 +44,9 @@ afterEach(() => {
 const binding: Binding = {
   name: "api",
   remote: "git@github.com:acme/api.git",
+  copy: [".env"],
+  post_create: ["npm ci"],
+  hook_timeout_minutes: 20,
 };
 
 // The acquire seam keeps the registry write real (through the fake sql) while
@@ -132,13 +132,8 @@ test("the clone is ensured before the worktree is acquired", async () => {
   expect(order).toEqual([`clone ${repoDir} ${binding.remote}`, "acquire"]);
 });
 
-test("the seed directory's .jigs.yml is what provisions the worktree", async () => {
-  mkdirSync(seedDir, { recursive: true });
-  writeFileSync(path.join(seedDir, ".jigs.yml"), "worktree:\n  copy: [.env]\n");
-  mkdirSync(target, { recursive: true });
-  writeFileSync(path.join(target, ".jigs.yml"), "worktree:\n  copy: []\n");
+test("the binding's own provisioning is what the worktree is provisioned with", async () => {
   const calls: ProvisionWorktreeOptions[] = [];
-
   await provisionRequest(
     { runId: "run_a", binding: "api", branch: "feat" },
     deps({
@@ -147,39 +142,7 @@ test("the seed directory's .jigs.yml is what provisions the worktree", async () 
       },
     }),
   );
-  expect(calls).toEqual([
-    {
-      seedDir,
-      worktreePath: target,
-      config: { copy: [".env"], post_create: [], hook_timeout_minutes: 10 },
-    },
-  ]);
-});
-
-test("with no .jigs.yml on either side the request says so and provisions nothing", async () => {
-  const lines: string[] = [];
-  const calls: ProvisionWorktreeOptions[] = [];
-  await provisionRequest(
-    { runId: "run_a", binding: "api", branch: "feat" },
-    deps({
-      provision: async (options: ProvisionWorktreeOptions) => {
-        calls.push(options);
-      },
-      log: (line: string) => lines.push(line),
-    }),
-  );
-  expect(calls[0]?.config).toEqual({
-    copy: [],
-    post_create: [],
-    hook_timeout_minutes: 10,
-  });
-  expect(
-    lines.some(
-      (line) =>
-        line.includes("no .jigs.yml") &&
-        line.includes("copying nothing, running nothing"),
-    ),
-  ).toBe(true);
+  expect(calls).toEqual([{ binding, factoryRoot: tmp, worktreePath: target }]);
 });
 
 test("a provisioned worktree logs its binding, branch, and path", async () => {

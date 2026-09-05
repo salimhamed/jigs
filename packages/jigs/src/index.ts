@@ -22,13 +22,6 @@ export {
 export { unbindRepo } from "./commands/unbind.ts";
 export { type Binding, resolveBinding } from "./config/factory-config.ts";
 export { locateFactoryRoot } from "./config/locate-factory.ts";
-export {
-  DEFAULT_WORKTREE_CONFIG,
-  readTargetConfig,
-  resolveWorktreeConfig,
-  type TargetConfig,
-  type TargetWorktreeConfig,
-} from "./config/target-config.ts";
 export { CliError } from "./errors.ts";
 // The review loop lives in the service package but its git and remote-parsing
 // substrate is jigs', and the service imports jigs by package name.
@@ -61,11 +54,11 @@ export {
   type BindingDirOptions,
   bindingDir,
   bindingRepoDir,
-  bindingSeedDir,
   type WorktreePathOptions,
   worktreePath,
 } from "./worktrees/layout.ts";
 export {
+  CopySourceMissingError,
   PostCreateFailedError,
   type ProvisionWorktreeOptions,
   provisionWorktree,

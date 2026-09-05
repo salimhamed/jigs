@@ -82,9 +82,25 @@ A binding is a name in `jigs.yml` mapped to a target repo's remote URL. jigs
 keeps its own bare clone per binding under
 `~/.local/share/jigs/bindings/<factory>/<binding>/repo.git`, cloned on the first
 worktree request, and cuts every worktree from it — the operator's own checkout
-is not involved. Anything a worktree needs that git does not carry (an `.env`,
-an untracked `.jigs.yml`) goes in that binding's `seed/` directory, where a
-`.jigs.yml` wins over the repo's own. `jigs bind` also creates the repo's GitHub
+is not involved. The binding also carries how its worktrees are provisioned —
+`jigs bind` writes `remote:` only, the rest is hand-edited and optional:
+
+```yaml
+bindings:
+  forge:
+    remote: git@github.com:owner/Forge.git
+    copy: [.env]
+    post_create: [npm ci]
+    hook_timeout_minutes: 20
+```
+
+A `copy:` entry is a path relative to the binding's own `bindings/<name>/`
+directory in the factory repo and lands at that same relative path in the
+worktree — `bindings/forge/.env` above arrives as `.env` at the worktree root.
+An entry that matches nothing, or that reaches outside that directory, fails
+the worktree request by name. `.env`-class files therefore belong in the
+factory repo under `bindings/<name>/`, gitignored as `bindings/*/.env`, never
+in the target repo. `jigs bind` also creates the repo's GitHub
 webhook, but only when the factory has an `ingress_url` in `jigs.yml` and
 `GITHUB_TOKEN` is set in the environment — it says which one it skipped and why.
 `jigs unbind` edits the config only; the clone stays on disk.

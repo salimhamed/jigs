@@ -1,6 +1,8 @@
 # This factory repo's config. `jigs bind <remote-url>` adds a target repo here;
 # `ingress_url` is the public tunnel address provider webhooks reach.
 # ingress_url: https://<machine>.<tailnet>.ts.net
+# A binding may also carry `post_create`, `hook_timeout_minutes`, and:
+# copy: [.env]  # from bindings/<name>/ in this repo, into the worktree
 service:
   # Derived from this factory's path so two factories never fight over a port.
   port: {{SERVICE_PORT}}

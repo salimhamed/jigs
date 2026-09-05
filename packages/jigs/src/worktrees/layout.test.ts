@@ -3,7 +3,6 @@ import { afterEach, expect, test, vi } from "vitest";
 import {
   bindingDir,
   bindingRepoDir,
-  bindingSeedDir,
   branchDirname,
   factorySlug,
   worktreeParentDir,
@@ -41,11 +40,10 @@ test("bindingDir joins base, factory slug, and binding name", () => {
   );
 });
 
-test("the clone and the seed directory sit inside the binding directory", () => {
+test("the clone sits inside the binding directory", () => {
   expect(bindingRepoDir(options)).toBe(
     path.join(bindingDir(options), "repo.git"),
   );
-  expect(bindingSeedDir(options)).toBe(path.join(bindingDir(options), "seed"));
 });
 
 test("worktreeParentDir is the binding's worktrees directory", () => {

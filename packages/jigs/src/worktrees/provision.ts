@@ -2,15 +2,14 @@ import { spawn } from "node:child_process";
 import { cpSync, existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { globSync } from "tinyglobby";
-import {
-  TARGET_CONFIG_FILE,
-  type TargetWorktreeConfig,
-} from "../config/target-config.ts";
-import { tryGit } from "../git.ts";
+import type { Binding } from "../config/factory-config.ts";
+import { CliError } from "../errors.ts";
 
 // Provisioning ports .worktreerc.yml semantics (ADR 0007): gitignore-blind
 // disk globs that must match dotfiles, a directory match copying its whole
-// tree, existing destinations never overwritten, fail-fast post_create.
+// tree, existing destinations never overwritten, fail-fast post_create. The
+// binding says what to copy and run; its own directory in the factory repo,
+// `bindings/<name>/`, is the root both ends of a copy are relative to.
 
 export class PostCreateFailedError extends Error {
   readonly command: string;
@@ -37,38 +36,114 @@ export class PostCreateFailedError extends Error {
   }
 }
 
+export class CopySourceMissingError extends Error {
+  readonly bindingName: string;
+  readonly entry: string;
+
+  constructor(bindingName: string, entry: string, copyDir: string) {
+    super(
+      `binding ${bindingName}: copy entry ${entry} matches nothing under ${copyDir}/`,
+    );
+    this.name = "CopySourceMissingError";
+    this.bindingName = bindingName;
+    this.entry = entry;
+  }
+}
+
 const STDERR_TAIL_LINES = 20;
 
 function tail(text: string): string {
   return text.trimEnd().split("\n").slice(-STDERR_TAIL_LINES).join("\n");
 }
 
-function copyOne(src: string, dest: string, overwrite = false): void {
-  if (!overwrite && existsSync(dest)) return;
+function copyOne(src: string, dest: string): void {
+  if (existsSync(dest)) return;
   mkdirSync(path.dirname(dest), { recursive: true });
   // recursive covers the directory match: the whole tree lands at once.
   cpSync(src, dest, { recursive: true });
 }
 
-function copyPatterns(
-  seedDir: string,
+function isInside(root: string, candidate: string): boolean {
+  const resolvedRoot = path.resolve(root);
+  const resolved = path.resolve(root, candidate);
+  return (
+    resolved === resolvedRoot || resolved.startsWith(resolvedRoot + path.sep)
+  );
+}
+
+// Both ends of a copy are relative paths under their own root, so both are
+// checked: a `..` entry would otherwise write anywhere on disk, and an
+// absolute one matches nothing and would look like a forgotten file.
+function assertInsideCopyDir(
+  bindingName: string,
+  copyDir: string,
+  sourceDir: string,
   worktreePath: string,
-  patterns: string[],
+  entry: string,
+  relative: string,
 ): void {
-  // dot:true is load-bearing — the point of `copy` is .env-class files, and
-  // most globbers skip dotfiles by default. expandDirectories:false keeps a
-  // directory a single match instead of its flattened contents.
-  const matches = globSync(patterns, {
-    cwd: seedDir,
-    dot: true,
-    onlyFiles: false,
-    expandDirectories: false,
-  });
-  for (const match of matches) {
-    const relative = match.replace(/\/+$/, "");
-    if (relative === "") continue;
-    const src = path.join(seedDir, relative);
-    copyOne(src, path.join(worktreePath, relative));
+  if (
+    path.isAbsolute(relative) ||
+    !isInside(sourceDir, relative) ||
+    !isInside(worktreePath, relative)
+  ) {
+    throw new CliError(
+      `binding ${bindingName}: copy entry ${entry} must be a relative path inside ${copyDir}/`,
+      `copy entries are relative to ${copyDir}/ in the factory repo and land at the same path in the worktree`,
+    );
+  }
+}
+
+// One glob per entry rather than one over the whole list: an entry that
+// matches nothing has to be nameable in the error.
+function copySources(
+  bindingName: string,
+  factoryRoot: string,
+  worktreePath: string,
+  entries: string[],
+): void {
+  const copyDir = path.join("bindings", bindingName);
+  const sourceDir = path.join(factoryRoot, copyDir);
+  for (const entry of entries) {
+    assertInsideCopyDir(
+      bindingName,
+      copyDir,
+      sourceDir,
+      worktreePath,
+      entry,
+      entry,
+    );
+    // dot:true is load-bearing — the point of `copy` is .env-class files, and
+    // most globbers skip dotfiles by default. expandDirectories:false keeps a
+    // directory a single match instead of its flattened contents.
+    const matches = globSync([entry], {
+      cwd: sourceDir,
+      dot: true,
+      onlyFiles: false,
+      expandDirectories: false,
+    });
+    const relatives = matches
+      .map((match) => match.replace(/\/+$/, ""))
+      .filter((relative) => relative !== "");
+    // A factory that declared a secret and forgot to put it there must not
+    // provision a worktree quietly missing it.
+    if (relatives.length === 0) {
+      throw new CopySourceMissingError(bindingName, entry, copyDir);
+    }
+    for (const relative of relatives) {
+      assertInsideCopyDir(
+        bindingName,
+        copyDir,
+        sourceDir,
+        worktreePath,
+        entry,
+        relative,
+      );
+      copyOne(
+        path.join(sourceDir, relative),
+        path.join(worktreePath, relative),
+      );
+    }
   }
 }
 
@@ -124,42 +199,20 @@ async function runPostCreate(
   }
 }
 
-// Not a git repository reads as untracked: a bare directory has nothing the
-// write could dirty.
-async function isTracked(worktreePath: string): Promise<boolean> {
-  const found = await tryGit(
-    ["ls-files", "--error-unmatch", "--", TARGET_CONFIG_FILE],
-    worktreePath,
-  );
-  return found !== null;
-}
-
 export interface ProvisionWorktreeOptions {
-  seedDir: string;
+  binding: Binding;
+  factoryRoot: string;
   worktreePath: string;
-  config: TargetWorktreeConfig;
 }
 
 export async function provisionWorktree(
   options: ProvisionWorktreeOptions,
 ): Promise<void> {
-  const { seedDir, worktreePath, config } = options;
-  // A binding with no seed directory copies nothing and still runs its hooks.
-  if (existsSync(seedDir)) {
-    copyPatterns(seedDir, worktreePath, config.copy);
-    // The file self-copies, and overwrites where a `copy:` pattern would not,
-    // so the worktree describes what it was provisioned with — except over a
-    // tracked one, where the write only makes the worktree born dirty and so
-    // unreusable. The seed's file is the config jigs uses either way, tracked
-    // or not; it just does not land in the tree.
-    const selfSource = path.join(seedDir, TARGET_CONFIG_FILE);
-    if (existsSync(selfSource) && !(await isTracked(worktreePath))) {
-      copyOne(selfSource, path.join(worktreePath, TARGET_CONFIG_FILE), true);
-    }
-  }
+  const { binding, factoryRoot, worktreePath } = options;
+  copySources(binding.name, factoryRoot, worktreePath, binding.copy);
   await runPostCreate(
     worktreePath,
-    config.post_create,
-    config.hook_timeout_minutes,
+    binding.post_create,
+    binding.hook_timeout_minutes,
   );
 }
