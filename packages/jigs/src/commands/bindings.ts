@@ -1,55 +1,57 @@
 import { existsSync } from "node:fs";
+import path from "node:path";
 import {
   parseFactoryConfig,
   readFactoryConfigText,
 } from "../config/factory-config.ts";
 import { locateFactoryRoot } from "../config/locate-factory.ts";
 import { CliError } from "../errors.ts";
-import { checkoutRoot, deriveDefaultBranch, resolveRemoteUrl } from "../git.ts";
-import { expandHome } from "../paths.ts";
+import { deriveDefaultBranch, resolveRemoteUrl } from "../git.ts";
+import { bindingRepoDir } from "../worktrees/layout.ts";
 
 export interface BindingsDeps {
   cwd: string;
-  home?: string;
 }
 
 export interface BindingRow {
   name: string;
-  path: string;
   remote: string;
+  clone: string;
   state: string;
 }
 
+// Offline by decree: what a binding is, where its clone would be, and what the
+// clone on disk says — never the network.
 export async function listBindings(deps: BindingsDeps): Promise<BindingRow[]> {
   const factoryRoot = locateFactoryRoot(deps.cwd);
   const config = parseFactoryConfig(readFactoryConfigText(factoryRoot));
   const rows: BindingRow[] = [];
   for (const [name, binding] of Object.entries(config.bindings)) {
+    const clone = bindingRepoDir({ factoryRoot, bindingName: name });
     rows.push({
       name,
-      path: binding.path,
       remote: binding.remote,
-      state: await resolveState(binding.path, binding.remote, deps.home),
+      clone,
+      state: await resolveState(clone, binding.remote),
     });
   }
   return rows;
 }
 
 async function resolveState(
-  bindingPath: string,
+  repoDir: string,
   pinnedRemote: string,
-  home?: string,
 ): Promise<string> {
-  const target = expandHome(bindingPath, home);
-  if (!existsSync(target)) return "path missing";
-  if ((await checkoutRoot(target)) === null) return "not a git checkout";
+  if (!existsSync(path.join(repoDir, "HEAD"))) {
+    return "not cloned (cloned on the first worktree)";
+  }
   try {
-    const { remote, url } = await resolveRemoteUrl(target);
-    if (url !== pinnedRemote) return `remote mismatch: found ${url}`;
-    const branch = await deriveDefaultBranch(target, remote);
+    const { remote, url } = await resolveRemoteUrl(repoDir);
+    if (url !== pinnedRemote) return `cloned, remote drifted: ${url}`;
+    const branch = await deriveDefaultBranch(repoDir, remote);
     return branch !== null
-      ? `ok (default: ${branch})`
-      : `ok (default: unknown — run: git remote set-head ${remote} -a)`;
+      ? `cloned (default: ${branch})`
+      : "cloned (default: unknown — will be set on the next fetch)";
   } catch (err) {
     if (err instanceof CliError) return err.message;
     throw err;

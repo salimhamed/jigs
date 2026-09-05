@@ -1,24 +1,27 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { TargetWorktreeConfig } from "../config/target-config.ts";
-import {
-  git,
-  makeRemoteBackedRepo,
-  makeTmpDir,
-  removeTmpDir,
-} from "../test-fixtures.ts";
+import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { PostCreateFailedError, provisionWorktree } from "./provision.ts";
 
+// Provisioning is git-blind: a seed directory to copy from and a worktree to
+// copy into is the whole world it sees.
 let tmp: string;
-let checkout: string;
+let seedDir: string;
 let worktree: string;
 
 beforeEach(() => {
   tmp = makeTmpDir();
-  checkout = makeRemoteBackedRepo(tmp).checkout;
+  seedDir = path.join(tmp, "seed");
   worktree = path.join(tmp, "wt");
-  git(checkout, "worktree", "add", "-q", worktree, "-b", "feat");
+  for (const dir of [seedDir, worktree]) mkdirSync(dir, { recursive: true });
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -36,8 +39,8 @@ function config(
   };
 }
 
-const inCheckout = (file: string, content: string) => {
-  const target = path.join(checkout, file);
+const inSeed = (file: string, content: string) => {
+  const target = path.join(seedDir, file);
   mkdirSync(path.dirname(target), { recursive: true });
   writeFileSync(target, content);
 };
@@ -45,9 +48,9 @@ const inCheckout = (file: string, content: string) => {
 const read = (file: string) => readFileSync(path.join(worktree, file), "utf8");
 
 test("a .env listed in copy lands in the worktree", async () => {
-  inCheckout(".env", "SECRET=1\n");
+  inSeed(".env", "SECRET=1\n");
   await provisionWorktree({
-    checkoutRoot: checkout,
+    seedDir,
     worktreePath: worktree,
     config: config({ copy: [".env"] }),
   });
@@ -55,10 +58,10 @@ test("a .env listed in copy lands in the worktree", async () => {
 });
 
 test("a bare * pattern copies dotfiles too", async () => {
-  inCheckout(".env", "SECRET=1\n");
-  inCheckout("plain.txt", "hello\n");
+  inSeed(".env", "SECRET=1\n");
+  inSeed("plain.txt", "hello\n");
   await provisionWorktree({
-    checkoutRoot: checkout,
+    seedDir,
     worktreePath: worktree,
     config: config({ copy: ["*"] }),
   });
@@ -67,10 +70,10 @@ test("a bare * pattern copies dotfiles too", async () => {
 });
 
 test("a directory match copies the whole tree", async () => {
-  inCheckout("secrets/a.txt", "a\n");
-  inCheckout("secrets/nested/b.txt", "b\n");
+  inSeed("secrets/a.txt", "a\n");
+  inSeed("secrets/nested/b.txt", "b\n");
   await provisionWorktree({
-    checkoutRoot: checkout,
+    seedDir,
     worktreePath: worktree,
     config: config({ copy: ["secrets"] }),
   });
@@ -79,10 +82,10 @@ test("a directory match copies the whole tree", async () => {
 });
 
 test("an existing destination is never overwritten", async () => {
-  inCheckout(".env", "FROM_CHECKOUT=1\n");
+  inSeed(".env", "FROM_SEED=1\n");
   writeFileSync(path.join(worktree, ".env"), "ALREADY_HERE=1\n");
   await provisionWorktree({
-    checkoutRoot: checkout,
+    seedDir,
     worktreePath: worktree,
     config: config({ copy: [".env"] }),
   });
@@ -90,19 +93,32 @@ test("an existing destination is never overwritten", async () => {
 });
 
 test(".jigs.yml self-copies into the worktree", async () => {
-  inCheckout(".jigs.yml", "worktree:\n  copy: []\n");
+  inSeed(".jigs.yml", "worktree:\n  copy: []\n");
   await provisionWorktree({
-    checkoutRoot: checkout,
+    seedDir,
     worktreePath: worktree,
     config: config(),
   });
   expect(read(".jigs.yml")).toBe("worktree:\n  copy: []\n");
 });
 
+test("a seeded .jigs.yml replaces the one the repo committed", async () => {
+  // The seed is what jigs provisioned with, so it must be what the worktree
+  // says it was provisioned with.
+  inSeed(".jigs.yml", "worktree:\n  post_create: [npm ci]\n");
+  writeFileSync(path.join(worktree, ".jigs.yml"), "worktree:\n  copy: []\n");
+  await provisionWorktree({
+    seedDir,
+    worktreePath: worktree,
+    config: config(),
+  });
+  expect(read(".jigs.yml")).toBe("worktree:\n  post_create: [npm ci]\n");
+});
+
 test("a pattern matching nothing is not an error", async () => {
   await expect(
     provisionWorktree({
-      checkoutRoot: checkout,
+      seedDir,
       worktreePath: worktree,
       config: config({ copy: ["never-exists-*"] }),
     }),
@@ -111,7 +127,7 @@ test("a pattern matching nothing is not an error", async () => {
 
 test("a failing post_create command rejects with the command and exit code", async () => {
   const failure = await provisionWorktree({
-    checkoutRoot: checkout,
+    seedDir,
     worktreePath: worktree,
     config: config({ post_create: ["exit 3"] }),
   }).then(
@@ -126,7 +142,7 @@ test("a failing post_create command rejects with the command and exit code", asy
 test("commands after a failure never run", async () => {
   await expect(
     provisionWorktree({
-      checkoutRoot: checkout,
+      seedDir,
       worktreePath: worktree,
       config: config({ post_create: ["exit 1", "touch after.txt"] }),
     }),
@@ -137,7 +153,7 @@ test("commands after a failure never run", async () => {
 test("post_create runs in the worktree with VIRTUAL_ENV stripped", async () => {
   vi.stubEnv("VIRTUAL_ENV", "/some/venv");
   await provisionWorktree({
-    checkoutRoot: checkout,
+    seedDir,
     worktreePath: worktree,
     config: config({
       post_create: [
@@ -151,7 +167,7 @@ test("post_create runs in the worktree with VIRTUAL_ENV stripped", async () => {
 
 test("a post_create command reading stdin sees EOF instead of hanging", async () => {
   await provisionWorktree({
-    checkoutRoot: checkout,
+    seedDir,
     worktreePath: worktree,
     config: config({ post_create: ["cat > stdin.txt"] }),
   });
@@ -161,7 +177,7 @@ test("a post_create command reading stdin sees EOF instead of hanging", async ()
 test("a post_create command that backgrounds a process does not hold the request", async () => {
   const started = Date.now();
   await provisionWorktree({
-    checkoutRoot: checkout,
+    seedDir,
     worktreePath: worktree,
     config: config({ post_create: ["sh -c 'sleep 30 &'"] }),
   });
@@ -170,7 +186,7 @@ test("a post_create command that backgrounds a process does not hold the request
 
 test("the hook timeout is a single budget across commands", async () => {
   const failure = await provisionWorktree({
-    checkoutRoot: checkout,
+    seedDir,
     worktreePath: worktree,
     config: config({
       post_create: ["sleep 5", "touch never.txt"],
@@ -183,4 +199,15 @@ test("the hook timeout is a single budget across commands", async () => {
   expect(failure).toBeInstanceOf(PostCreateFailedError);
   expect((failure as PostCreateFailedError).signal).toBe("SIGTERM");
   expect(existsSync(path.join(worktree, "never.txt"))).toBe(false);
+});
+
+test("a binding with no seed directory copies nothing and still runs post_create", async () => {
+  rmSync(seedDir, { recursive: true, force: true });
+  await provisionWorktree({
+    seedDir,
+    worktreePath: worktree,
+    config: config({ copy: [".env"], post_create: ["touch ran.txt"] }),
+  });
+  expect(existsSync(path.join(worktree, ".env"))).toBe(false);
+  expect(existsSync(path.join(worktree, "ran.txt"))).toBe(true);
 });

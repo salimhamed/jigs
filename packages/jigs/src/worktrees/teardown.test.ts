@@ -3,7 +3,7 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import {
   git,
-  makeRemoteBackedRepo,
+  makeClonedBinding,
   makeTmpDir,
   removeTmpDir,
 } from "../test-fixtures.ts";
@@ -78,14 +78,24 @@ test("keep: true wins over every row", () => {
 
 let tmp: string;
 let remoteDir: string;
-let checkout: string;
+let repoDir: string;
 let worktree: string;
 
 beforeEach(() => {
   tmp = makeTmpDir();
-  ({ remoteDir, checkout } = makeRemoteBackedRepo(tmp));
-  worktree = path.join(tmp, "wt", "feat");
-  git(checkout, "worktree", "add", "-q", worktree, "-b", "feat");
+  const binding = makeClonedBinding(tmp);
+  ({ remoteDir, repoDir } = binding);
+  worktree = path.join(binding.worktreesDir, "feat");
+  git(
+    repoDir,
+    "worktree",
+    "add",
+    "-q",
+    worktree,
+    "-b",
+    "feat",
+    "refs/remotes/origin/main",
+  );
   writeFileSync(path.join(worktree, "work.txt"), "agent work\n");
   git(worktree, "add", "work.txt");
   git(worktree, "commit", "-q", "-m", "agent work");
@@ -96,14 +106,14 @@ afterEach(() => {
 });
 
 const target = () => ({
-  checkoutRoot: checkout,
+  repoDir,
   worktreePath: worktree,
   branch: "feat",
 });
 const localBranch = () =>
-  git(checkout, "rev-parse", "--verify", "--quiet", "refs/heads/feat") !== "";
+  git(repoDir, "rev-parse", "--verify", "--quiet", "refs/heads/feat") !== "";
 const remoteBranch = () =>
-  git(checkout, "ls-remote", "--heads", "origin", "feat") !== "";
+  git(repoDir, "ls-remote", "--heads", "origin", "feat") !== "";
 
 test("done (merged) removes the worktree and deletes the local and remote branches", async () => {
   // Untracked build output is the normal state of a finished worktree.
@@ -191,19 +201,25 @@ test("removing a worktree prunes the admin entry so the same path can be re-adde
     target(),
   );
   expect(() =>
-    git(checkout, "worktree", "add", "-q", worktree, "feat"),
+    git(repoDir, "worktree", "add", "-q", worktree, "feat"),
   ).not.toThrow();
 });
 
 test("a branch origin's default branch does not contain reads unmerged", async () => {
-  expect(await isBranchMerged(checkout, "feat")).toBe(false);
-  git(checkout, "push", "-q", "origin", "feat:main");
-  git(checkout, "fetch", "-q", "origin");
-  expect(await isBranchMerged(checkout, "feat")).toBe(true);
+  expect(await isBranchMerged(repoDir, "feat")).toBe(false);
+  git(repoDir, "push", "-q", "origin", "feat:main");
+  git(repoDir, "fetch", "-q", "origin");
+  expect(await isBranchMerged(repoDir, "feat")).toBe(true);
 });
 
-test("a checkout with no resolvable default branch reads unmerged", async () => {
-  expect(await isBranchMerged(path.join(tmp, "nowhere"), "feat")).toBe(false);
+test("a clone with no resolvable default branch reads unmerged", async () => {
+  git(repoDir, "push", "-q", "origin", "feat:main");
+  git(repoDir, "fetch", "-q", "origin");
+  // What a clone whose first fetch died before set-head looks like: the work
+  // is merged, but with no default branch to compare against it cannot be
+  // proven, and branch deletion needs positive evidence.
+  git(repoDir, "symbolic-ref", "-d", "refs/remotes/origin/HEAD");
+  expect(await isBranchMerged(repoDir, "feat")).toBe(false);
 });
 
 test("a clean worktree reads not-dirty and a missing directory does too", async () => {

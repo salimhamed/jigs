@@ -20,14 +20,12 @@ export {
   sweepWorktrees,
 } from "./commands/sweep.ts";
 export { unbindRepo } from "./commands/unbind.ts";
-export {
-  type ResolvedBinding,
-  resolveBinding,
-  resolveBindings,
-} from "./config/factory-config.ts";
+export { type Binding, resolveBinding } from "./config/factory-config.ts";
 export { locateFactoryRoot } from "./config/locate-factory.ts";
 export {
+  type ResolvedWorktreeConfig,
   readTargetConfig,
+  resolveWorktreeConfig,
   type TargetConfig,
   type TargetWorktreeConfig,
 } from "./config/target-config.ts";
@@ -47,6 +45,10 @@ export { type GithubRepoRef, parseGithubRemote } from "./github-webhook.ts";
 // and jigs/harnesses is provider re-exports only, so the door is here.
 export { removeManagedCodexHome } from "./harnesses/codex-home.ts";
 export {
+  type EnsureBindingCloneOptions,
+  ensureBindingClone,
+} from "./worktrees/clone.ts";
+export {
   type BranchResolution,
   type CreateWorktreeOptions,
   createWorktree,
@@ -56,8 +58,11 @@ export {
   worktreeStatus,
 } from "./worktrees/create.ts";
 export {
+  type BindingDirOptions,
+  bindingDir,
+  bindingRepoDir,
+  bindingSeedDir,
   type WorktreePathOptions,
-  worktreeParentDir,
   worktreePath,
 } from "./worktrees/layout.ts";
 export {

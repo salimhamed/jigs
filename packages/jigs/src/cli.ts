@@ -57,8 +57,8 @@ function printBindingsTable(
   out: (line: string) => void,
 ): void {
   const lines = formatTable(
-    ["NAME", "PATH", "REMOTE", "STATE"],
-    rows.map((row) => [row.name, row.path, row.remote, row.state]),
+    ["NAME", "REMOTE", "CLONE", "STATE"],
+    rows.map((row) => [row.name, row.remote, row.clone, row.state]),
   );
   for (const line of lines) out(line);
 }
@@ -85,11 +85,18 @@ program
 
 program
   .command("bind")
-  .description("bind a repo checkout into this factory repo")
-  .argument("<path>", "path to an existing git checkout with a remote")
-  .option("--name <name>", "binding name (default: the repo dirname)")
-  .action(async (target: string, options: { name?: string }) => {
-    await bindRepo(target, { cwd: process.cwd(), out }, { name: options.name });
+  .description("bind a target repo by its remote URL")
+  .argument(
+    "<remote-url>",
+    "the target repo's git remote (e.g. git@github.com:owner/repo.git)",
+  )
+  .option("--name <name>", "binding name (default: the repo name, lowercased)")
+  .action(async (remoteUrl: string, options: { name?: string }) => {
+    await bindRepo(
+      remoteUrl,
+      { cwd: process.cwd(), out },
+      { name: options.name },
+    );
   });
 
 program
@@ -248,7 +255,7 @@ service
 
 program
   .command("bindings")
-  .description("list bindings with resolved state")
+  .description("list bindings with their clone state")
   .action(async () => {
     const rows = await listBindings({ cwd: process.cwd() });
     if (rows.length === 0) {

@@ -25,43 +25,54 @@ export function git(cwd: string, ...args: string[]): string {
   }).trim();
 }
 
-export interface TargetRepoOptions {
-  name?: string;
-  remoteUrl?: string | null;
-  files?: Record<string, string>;
-  defaultBranch?: string;
+export interface ClonedBinding {
+  remoteDir: string;
+  repoDir: string;
+  worktreesDir: string;
 }
 
-export function makeTargetRepo(
+// Builds exactly what ensureBindingClone builds — a bare "GitHub" with one
+// commit on its default branch, and jigs' own bare clone of it — so a test's
+// clone and a service's clone cannot drift apart.
+export function makeClonedBinding(
   parent: string,
-  options: TargetRepoOptions = {},
-): string {
-  const dir = path.join(parent, options.name ?? "target-repo");
-  mkdirSync(dir, { recursive: true });
-  git(dir, "init", "-q");
-  if (options.remoteUrl !== null) {
-    git(
-      dir,
-      "remote",
-      "add",
-      "origin",
-      options.remoteUrl ?? "git@github.com:acme/target-repo.git",
-    );
-  }
-  for (const [file, content] of Object.entries(options.files ?? {})) {
-    const filePath = path.join(dir, file);
-    mkdirSync(path.dirname(filePath), { recursive: true });
-    writeFileSync(filePath, content);
-  }
-  if (options.defaultBranch !== undefined) {
-    git(
-      dir,
-      "symbolic-ref",
-      "refs/remotes/origin/HEAD",
-      `refs/remotes/origin/${options.defaultBranch}`,
-    );
-  }
-  return dir;
+  defaultBranch = "main",
+): ClonedBinding {
+  const remoteDir = path.join(parent, "remote.git");
+  git(
+    parent,
+    "init",
+    "-q",
+    "--bare",
+    "--initial-branch",
+    defaultBranch,
+    remoteDir,
+  );
+
+  const seed = path.join(parent, "seed-checkout");
+  mkdirSync(seed, { recursive: true });
+  git(seed, "init", "-q", "--initial-branch", defaultBranch);
+  git(seed, "config", "user.name", "jigs-fixture");
+  git(seed, "config", "user.email", "fixture@jigs.test");
+  writeFileSync(path.join(seed, "README.md"), "# fixture\n");
+  git(seed, "add", "README.md");
+  git(seed, "commit", "-q", "-m", "initial");
+  git(seed, "remote", "add", "origin", remoteDir);
+  git(seed, "push", "-q", "origin", defaultBranch);
+  rmSync(seed, { recursive: true, force: true });
+
+  const binding = path.join(parent, "binding");
+  const repoDir = path.join(binding, "repo.git");
+  mkdirSync(binding, { recursive: true });
+  git(binding, "init", "-q", "--bare", repoDir);
+  // commit-tree and friends need an identity, and the fixture git() reads no
+  // global config.
+  git(repoDir, "config", "user.name", "jigs-fixture");
+  git(repoDir, "config", "user.email", "fixture@jigs.test");
+  git(repoDir, "remote", "add", "origin", remoteDir);
+  git(repoDir, "fetch", "-q", "origin");
+  git(repoDir, "remote", "set-head", "origin", "-a");
+  return { remoteDir, repoDir, worktreesDir: path.join(binding, "worktrees") };
 }
 
 export interface RemoteBackedRepoOptions {

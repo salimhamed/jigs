@@ -1,17 +1,21 @@
 # Centrally housed worktrees, policy-owned teardown, guarded fast-forward
 
-> **Amended 2026-09-05.** The guarded fast-forward is **removed entirely** —
-> jigs no longer moves anyone's local default branch, at activation freshness or
-> at post-merge teardown, and the `ff_default_branch` opt-out is gone with it.
-> The sweep now fetches `origin/<default>` explicitly before its merge check,
-> which is the one thing the fast-forward was load-bearing for. The sweep also
-> no longer scans for unregistered directories — every worktree it can see came
-> from a registry row — so the `unregistered` state is gone from the classifier,
-> and `workspace_dir`, the binding key that put worktrees among the operator's
-> own directories, is gone too. Everything else below stands: the three-way
-> branch resolution, the `base_sha`/`head_sha`/`behind_default` triple, the
-> explicit-cwd invariant, the reuse rules, the teardown matrix, and
-> `.jigs.yml`'s `copy`/`post_create`/`hook_timeout_minutes` semantics.
+> **Amended 2026-09-05 (R5).** Worktrees are cut from jigs' own bare clone of
+> the binding's remote, at
+> `jigsDataDir()/bindings/<factory-slug>/<binding-name>/{repo.git,seed,worktrees/<branch-dirname>}`.
+> The guarded fast-forward is **removed entirely** — jigs never touches
+> anyone's checkout, so there is nothing to fast-forward, and the
+> `ff_default_branch` opt-out is gone with it; the sweep now fetches
+> `origin/<default>` explicitly before its merge check, which is the one thing
+> the fast-forward was load-bearing for. `workspace_dir` is gone too. The sweep
+> also no longer scans for unregistered directories — every worktree it can see
+> came from a registry row — so the `unregistered` state is gone from the
+> classifier. Everything else below stands: the three-way branch resolution,
+> the `base_sha`/`head_sha`/`behind_default` triple, the explicit-cwd
+> invariant, the reuse rules, the teardown matrix, and `.jigs.yml`'s
+> `copy`/`post_create`/`hook_timeout_minutes` semantics — whose `copy` source
+> is now the binding's seed directory, and whose config is read from the seed
+> directory first, then the worktree.
 
 Worktrees live in a central data dir —
 `~/.local/share/jigs/worktrees/<factory-slug>/<binding-name>/<branch-dirname>`

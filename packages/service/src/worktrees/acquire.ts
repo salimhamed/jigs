@@ -38,7 +38,7 @@ async function runIsLive(runId: string): Promise<boolean> {
 
 export interface AcquireWorktreeRequest {
   runId: string;
-  checkoutRoot: string;
+  repoDir: string;
   worktreePath: string;
   branch: string;
   keep?: boolean;
@@ -84,7 +84,7 @@ export async function acquireWorktree(
     }
 
     const disk = await status({
-      checkoutRoot: request.checkoutRoot,
+      repoDir: request.repoDir,
       worktreePath: request.worktreePath,
       branch: request.branch,
     });
@@ -98,7 +98,7 @@ export async function acquireWorktree(
     const facts: WorktreeFacts =
       disk === null
         ? await create({
-            checkoutRoot: request.checkoutRoot,
+            repoDir: request.repoDir,
             worktreePath: request.worktreePath,
             branch: request.branch,
           })
@@ -120,7 +120,7 @@ export async function acquireWorktree(
       baseSha: facts.baseSha,
       headSha: facts.headSha,
       behindDefault: facts.behindDefault,
-      checkoutRoot: request.checkoutRoot,
+      repoDir: request.repoDir,
       keep: request.keep === true,
     });
     return facts;

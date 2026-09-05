@@ -1,58 +1,24 @@
-import { execFileSync } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import type { WorktreeRow } from "./registry";
 import { teardownRun } from "./teardown";
-import { makeFakeSql } from "./test-fixtures";
+import { git, makeClonedBinding, makeFakeSql } from "./test-fixtures";
 
 // Real git worktrees against a faked registry, as sweep.test.ts does: the
 // matrix itself is covered in jigs, so what this file proves is the per-run
 // join — what a merged run removes, what an unmerged one keeps.
 
-function git(cwd: string, ...args: string[]): string {
-  return execFileSync("git", args, {
-    cwd,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      GIT_CONFIG_GLOBAL: "/dev/null",
-      GIT_CONFIG_SYSTEM: "/dev/null",
-    },
-  }).trim();
-}
-
 let tmp: string;
-let checkout: string;
-let workspace: string;
+let repoDir: string;
+let worktreesDir: string;
 let store: Map<string, WorktreeRow>;
 let removedHomes: string[];
 
 beforeEach(() => {
   tmp = mkdtempSync(path.join(tmpdir(), "jigs-teardown-test-"));
-  checkout = path.join(tmp, "checkout");
-  workspace = path.join(tmp, "workspace");
-  const remote = path.join(tmp, "remote.git");
-  for (const dir of [checkout, workspace, remote]) {
-    mkdirSync(dir, { recursive: true });
-  }
-  git(remote, "init", "-q", "--bare", "--initial-branch", "main");
-  git(checkout, "init", "-q", "--initial-branch", "main");
-  git(checkout, "config", "user.name", "jigs-fixture");
-  git(checkout, "config", "user.email", "fixture@jigs.test");
-  git(checkout, "remote", "add", "origin", remote);
-  writeFileSync(path.join(checkout, "README.md"), "# fixture\n");
-  git(checkout, "add", "README.md");
-  git(checkout, "commit", "-q", "-m", "initial");
-  git(checkout, "push", "-q", "-u", "origin", "main");
-  git(checkout, "remote", "set-head", "origin", "main");
+  ({ repoDir, worktreesDir } = makeClonedBinding(tmp));
   store = new Map();
   removedHomes = [];
 });
@@ -63,8 +29,17 @@ afterEach(() => {
 // A worktree with a commit of its own, pushed to origin — the shape a run's
 // branch is in by the time the review loop reaches its teardown.
 function runWorktree(branch: string, runId = "run_1"): string {
-  const target = path.join(workspace, branch);
-  git(checkout, "worktree", "add", "-q", target, "-b", branch);
+  const target = path.join(worktreesDir, branch);
+  git(
+    repoDir,
+    "worktree",
+    "add",
+    "-q",
+    target,
+    "-b",
+    branch,
+    "refs/remotes/origin/main",
+  );
   writeFileSync(path.join(target, "shipped.txt"), "shipped\n");
   git(target, "add", "shipped.txt");
   git(target, "commit", "-q", "-m", "agent work");
@@ -77,7 +52,7 @@ function runWorktree(branch: string, runId = "run_1"): string {
     baseSha: "base1",
     headSha: "head1",
     behindDefault: 0,
-    checkoutRoot: checkout,
+    repoDir,
     keep: false,
   });
   return target;
@@ -91,8 +66,8 @@ const deps = (overrides: Record<string, unknown> = {}) => ({
 });
 
 const localBranches = () =>
-  git(checkout, "branch", "--list", "--format=%(refname:short)");
-const remoteBranches = () => git(checkout, "ls-remote", "--heads", "origin");
+  git(repoDir, "branch", "--list", "--format=%(refname:short)");
+const remoteBranches = () => git(repoDir, "ls-remote", "--heads", "origin");
 
 test("a merged run removes the worktree and both branches", async () => {
   const target = runWorktree("feature");
@@ -111,13 +86,21 @@ test("a squash-merged branch is torn down even though it is not an ancestor of t
   const target = runWorktree("feature");
   // A squash merge on origin: the work lands, the branch tip does not, so
   // `merge-base --is-ancestor` would answer false and the done row would
-  // silently degrade to the failed one.
-  git(checkout, "merge", "--squash", "feature");
-  git(checkout, "commit", "-q", "-m", "squashed feature (#41)");
-  git(checkout, "push", "-q", "origin", "main");
-  git(checkout, "fetch", "-q", "origin");
+  // silently degrade to the failed one. Built with plumbing because the clone
+  // is bare and has no index to merge in.
+  const squashed = git(
+    repoDir,
+    "commit-tree",
+    "feature^{tree}",
+    "-p",
+    "refs/remotes/origin/main",
+    "-m",
+    "squashed feature (#41)",
+  );
+  git(repoDir, "push", "-q", "origin", `${squashed}:refs/heads/main`);
+  git(repoDir, "fetch", "-q", "origin");
   expect(() =>
-    git(checkout, "merge-base", "--is-ancestor", "feature", "origin/main"),
+    git(repoDir, "merge-base", "--is-ancestor", "feature", "origin/main"),
   ).toThrow();
 
   await teardownRun("run_1", { merged: true }, deps());

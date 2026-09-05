@@ -12,7 +12,7 @@ run it for you whenever you want.
 - `jigs build` compiles that factory's pipelines into a **service** of its own,
   backed by its own Postgres **World** on its own port.
 - `jigs run` creates a run, and the service executes it with coding agents in git
-  worktrees.
+  worktrees **cut from jigs' own clone of the target repo**.
 - The **dashboard** the service hosts shows every run's full step history.
 - **Schedules** declared in the factory fire pipelines on a cron tick.
 
@@ -90,12 +90,12 @@ re-run.
 ### 5. Bind a target repo
 
 ```sh
-jigs bind ../some-target-repo
+jigs bind git@github.com:owner/repo.git
 jigs bindings
 ```
 
-A **binding** maps a name to an existing checkout; pipelines name bindings, and
-the runtime makes worktrees from them.
+A **binding** maps a name to a target repo's remote URL; jigs keeps its own
+clone per binding and cuts agent worktrees from it.
 
 ### 6. Build and start the service
 

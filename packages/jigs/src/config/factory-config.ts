@@ -3,13 +3,13 @@ import path from "node:path";
 import { parseDocument } from "yaml";
 import { z } from "zod";
 import { CliError } from "../errors.ts";
-import { expandHome } from "../paths.ts";
 import { factorySlug } from "../worktrees/layout.ts";
 
 export const FACTORY_CONFIG_FILE = "jigs.yml";
 
+// A binding is a name and a remote URL, nothing more: where the clone lives is
+// jigs' business and every other fact is derived from git at each activation.
 const bindingSchema = z.strictObject({
-  path: z.string().min(1),
   remote: z.string().min(1),
 });
 
@@ -36,7 +36,7 @@ const factoryConfigSchema = z.looseObject({
   service: z.preprocess((block) => block ?? {}, serviceSchema),
 });
 
-export type Binding = z.output<typeof bindingSchema>;
+export type BindingEntry = z.output<typeof bindingSchema>;
 export type FactoryConfig = z.output<typeof factoryConfigSchema>;
 
 export function parseFactoryConfig(text: string): FactoryConfig {
@@ -57,26 +57,14 @@ export function parseFactoryConfig(text: string): FactoryConfig {
   return result.data;
 }
 
-export interface ResolvedBinding {
+export interface Binding {
   name: string;
-  checkoutRoot: string;
   remote: string;
 }
 
-function resolved(name: string, binding: Binding): ResolvedBinding {
-  return {
-    name,
-    checkoutRoot: expandHome(binding.path),
-    remote: binding.remote,
-  };
-}
-
-// The binding a worktree request names, with `~` already expanded, so callers
-// never re-derive it.
-export function resolveBinding(
-  factoryRoot: string,
-  name: string,
-): ResolvedBinding {
+// The binding a worktree request names, carrying the name the caller asked for
+// so nothing downstream has to thread it separately.
+export function resolveBinding(factoryRoot: string, name: string): Binding {
   const { bindings } = parseFactoryConfig(readFactoryConfigText(factoryRoot));
   const binding = bindings[name];
   if (binding === undefined) {
@@ -86,14 +74,7 @@ export function resolveBinding(
       bound.length > 0 ? `bound: ${bound.join(", ")}` : "nothing is bound yet",
     );
   }
-  return resolved(name, binding);
-}
-
-export function resolveBindings(factoryRoot: string): ResolvedBinding[] {
-  const { bindings } = parseFactoryConfig(readFactoryConfigText(factoryRoot));
-  return Object.entries(bindings).map(([name, binding]) =>
-    resolved(name, binding),
-  );
+  return { name, remote: binding.remote };
 }
 
 export interface ResolvedService {
@@ -105,7 +86,7 @@ export interface ResolvedService {
 }
 
 // What is addressed per factory: the URL its CLI verbs talk to and the slug
-// that keys its pidfile and worktrees.
+// that keys its pidfile and its bindings' directories.
 export function resolveService(factoryRoot: string): ResolvedService {
   const { service } = parseFactoryConfig(readFactoryConfigText(factoryRoot));
   return {
@@ -117,25 +98,17 @@ export function resolveService(factoryRoot: string): ResolvedService {
   };
 }
 
-export interface BindingPin {
-  path: string;
-  remote: string;
-}
-
+// Returns the text unchanged when nothing moved, so a re-bind is byte-identical
+// and every comment in the file survives.
 export function upsertBinding(
   text: string,
   name: string,
-  pin: BindingPin,
+  remote: string,
 ): string {
   const doc = parseDocument(text);
-  let changed = false;
-  for (const [key, value] of Object.entries(pin)) {
-    if (doc.getIn(["bindings", name, key]) !== value) {
-      doc.setIn(["bindings", name, key], value);
-      changed = true;
-    }
-  }
-  return changed ? doc.toString() : text;
+  if (doc.getIn(["bindings", name, "remote"]) === remote) return text;
+  doc.setIn(["bindings", name, "remote"], remote);
+  return doc.toString();
 }
 
 export function removeBinding(text: string, name: string): string {

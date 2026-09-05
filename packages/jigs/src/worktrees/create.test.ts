@@ -4,33 +4,40 @@ import { afterEach, beforeEach, expect, test } from "vitest";
 import {
   commitToRemote,
   git,
-  makeRemoteBackedRepo,
+  makeClonedBinding,
   makeTmpDir,
   removeTmpDir,
 } from "../test-fixtures.ts";
 import { createWorktree, worktreeStatus } from "./create.ts";
 
 let tmp: string;
+let repoDir: string;
+let remoteDir: string;
+let worktreesDir: string;
+
 beforeEach(() => {
   tmp = makeTmpDir();
+  ({ repoDir, remoteDir, worktreesDir } = makeClonedBinding(tmp));
 });
 afterEach(() => {
   removeTmpDir(tmp);
 });
 
 function wtPath(name: string): string {
-  return path.join(tmp, "worktrees", name);
+  return path.join(worktreesDir, name);
 }
 
+const localBranches = () =>
+  git(repoDir, "for-each-ref", "--format=%(refname)", "refs/heads");
+
 test("existing local branch is checked out as-is and never reset", async () => {
-  const { checkout, remoteDir } = makeRemoteBackedRepo(tmp);
-  const shaA = git(checkout, "rev-parse", "HEAD");
-  git(checkout, "branch", "feat");
+  const shaA = git(repoDir, "rev-parse", "refs/remotes/origin/main");
+  git(repoDir, "branch", "feat", shaA);
   const shaB = commitToRemote(tmp, remoteDir, "feat", { "b.txt": "remote" });
   expect(shaB).not.toBe(shaA);
 
   const facts = await createWorktree({
-    checkoutRoot: checkout,
+    repoDir,
     worktreePath: wtPath("feat"),
     branch: "feat",
   });
@@ -40,31 +47,32 @@ test("existing local branch is checked out as-is and never reset", async () => {
 });
 
 test("remote-only branch is tracked", async () => {
-  const { checkout, remoteDir } = makeRemoteBackedRepo(tmp);
   const remoteSha = commitToRemote(tmp, remoteDir, "feat", { "b.txt": "1" });
 
   const facts = await createWorktree({
-    checkoutRoot: checkout,
+    repoDir,
     worktreePath: wtPath("feat"),
     branch: "feat",
   });
   expect(facts.resolution).toBe("remote");
   expect(facts.headSha).toBe(remoteSha);
-  expect(git(checkout, "rev-parse", "--abbrev-ref", "feat@{upstream}")).toBe(
+  expect(git(repoDir, "rev-parse", "--abbrev-ref", "feat@{upstream}")).toBe(
     "origin/feat",
   );
 });
 
-test("unknown branch forks from origin default, not the stale local one", async () => {
-  const { checkout, remoteDir } = makeRemoteBackedRepo(tmp);
-  const staleLocalMain = git(checkout, "rev-parse", "refs/heads/main");
+test("unknown branch forks from origin default, not a stale local one", async () => {
+  // A leftover refs/heads/main from an earlier life of this clone: nothing
+  // fast-forwards it any more, so it must never be the fork point.
+  const staleLocalMain = git(repoDir, "rev-parse", "refs/remotes/origin/main");
+  git(repoDir, "update-ref", "refs/heads/main", staleLocalMain);
   const advancedRemoteMain = commitToRemote(tmp, remoteDir, "main", {
     "c.txt": "newer",
   });
   expect(advancedRemoteMain).not.toBe(staleLocalMain);
 
   const facts = await createWorktree({
-    checkoutRoot: checkout,
+    repoDir,
     worktreePath: wtPath("fresh"),
     branch: "agent/fresh",
   });
@@ -74,31 +82,24 @@ test("unknown branch forks from origin default, not the stale local one", async 
   expect(facts.behindDefault).toBe(0);
 });
 
-test("worktree creation leaves the local default branch alone", async () => {
-  const { checkout, remoteDir } = makeRemoteBackedRepo(tmp);
-  const mainShaBefore = git(checkout, "rev-parse", "refs/heads/main");
-  const headBefore = git(checkout, "symbolic-ref", "HEAD");
-  const statusBefore = git(checkout, "status", "--porcelain");
+test("worktree creation never writes refs/heads/<default>", async () => {
   const advancedRemoteMain = commitToRemote(tmp, remoteDir, "main", {
     "d.txt": "advance",
   });
 
   const facts = await createWorktree({
-    checkoutRoot: checkout,
+    repoDir,
     worktreePath: wtPath("untouched"),
     branch: "agent/untouched",
   });
-  expect(git(checkout, "rev-parse", "refs/heads/main")).toBe(mainShaBefore);
-  expect(git(checkout, "symbolic-ref", "HEAD")).toBe(headBefore);
-  expect(git(checkout, "status", "--porcelain")).toBe(statusBefore);
+  expect(localBranches().split("\n")).toEqual(["refs/heads/agent/untouched"]);
   expect(facts.baseSha).toBe(advancedRemoteMain);
 });
 
 test("git operations survive the orchestrator's cwd being a removed worktree", async () => {
-  const { checkout } = makeRemoteBackedRepo(tmp);
   const first = wtPath("one");
   await createWorktree({
-    checkoutRoot: checkout,
+    repoDir,
     worktreePath: first,
     branch: "agent/one",
   });
@@ -106,10 +107,10 @@ test("git operations survive the orchestrator's cwd being a removed worktree", a
   try {
     process.chdir(first);
     rmSync(first, { recursive: true, force: true });
-    git(checkout, "worktree", "prune");
+    git(repoDir, "worktree", "prune");
 
     const facts = await createWorktree({
-      checkoutRoot: checkout,
+      repoDir,
       worktreePath: wtPath("two"),
       branch: "agent/two",
     });
@@ -120,17 +121,16 @@ test("git operations survive the orchestrator's cwd being a removed worktree", a
 });
 
 test("a worktree deleted without pruning can be recreated at the same path", async () => {
-  const { checkout } = makeRemoteBackedRepo(tmp);
   const wt = wtPath("reborn");
   await createWorktree({
-    checkoutRoot: checkout,
+    repoDir,
     worktreePath: wt,
     branch: "agent/reborn",
   });
   rmSync(wt, { recursive: true, force: true });
 
   const facts = await createWorktree({
-    checkoutRoot: checkout,
+    repoDir,
     worktreePath: wt,
     branch: "agent/reborn",
   });
@@ -139,9 +139,8 @@ test("a worktree deleted without pruning can be recreated at the same path", asy
 });
 
 test("worktreeStatus reports a missing directory as null", async () => {
-  const { checkout } = makeRemoteBackedRepo(tmp);
   const status = await worktreeStatus({
-    checkoutRoot: checkout,
+    repoDir,
     worktreePath: wtPath("never-made"),
     branch: "feat",
   });
@@ -149,17 +148,16 @@ test("worktreeStatus reports a missing directory as null", async () => {
 });
 
 test("worktreeStatus sees a worktree through a symlinked parent directory", async () => {
-  const { checkout } = makeRemoteBackedRepo(tmp);
   await createWorktree({
-    checkoutRoot: checkout,
+    repoDir,
     worktreePath: wtPath("linked"),
     branch: "agent/linked",
   });
   const linkedParent = path.join(tmp, "worktrees-link");
-  symlinkSync(path.join(tmp, "worktrees"), linkedParent);
+  symlinkSync(worktreesDir, linkedParent);
 
   const status = await worktreeStatus({
-    checkoutRoot: checkout,
+    repoDir,
     worktreePath: path.join(linkedParent, "linked"),
     branch: "agent/linked",
   });
@@ -168,17 +166,16 @@ test("worktreeStatus sees a worktree through a symlinked parent directory", asyn
 });
 
 test("worktreeStatus flags an untracked file as dirty", async () => {
-  const { checkout } = makeRemoteBackedRepo(tmp);
   const wt = wtPath("dirty");
   await createWorktree({
-    checkoutRoot: checkout,
+    repoDir,
     worktreePath: wt,
     branch: "agent/dirty",
   });
   writeFileSync(path.join(wt, "scratch.txt"), "wip");
 
   const status = await worktreeStatus({
-    checkoutRoot: checkout,
+    repoDir,
     worktreePath: wt,
     branch: "agent/dirty",
   });
@@ -189,10 +186,9 @@ test("worktreeStatus flags an untracked file as dirty", async () => {
 });
 
 test("worktreeStatus flags divergence when local and origin both advanced", async () => {
-  const { checkout, remoteDir } = makeRemoteBackedRepo(tmp);
   const wt = wtPath("split");
   await createWorktree({
-    checkoutRoot: checkout,
+    repoDir,
     worktreePath: wt,
     branch: "agent/split",
   });
@@ -203,7 +199,7 @@ test("worktreeStatus flags divergence when local and origin both advanced", asyn
   commitToRemote(tmp, remoteDir, "agent/split", { "remote.txt": "remote" });
 
   const status = await worktreeStatus({
-    checkoutRoot: checkout,
+    repoDir,
     worktreePath: wt,
     branch: "agent/split",
   });
@@ -212,10 +208,9 @@ test("worktreeStatus flags divergence when local and origin both advanced", asyn
 });
 
 test("worktreeStatus treats behind-only as ff-safe, not diverged", async () => {
-  const { checkout, remoteDir } = makeRemoteBackedRepo(tmp);
   const wt = wtPath("behind");
   const facts = await createWorktree({
-    checkoutRoot: checkout,
+    repoDir,
     worktreePath: wt,
     branch: "agent/behind",
   });
@@ -223,7 +218,7 @@ test("worktreeStatus treats behind-only as ff-safe, not diverged", async () => {
   commitToRemote(tmp, remoteDir, "agent/behind", { "more.txt": "ahead" });
 
   const status = await worktreeStatus({
-    checkoutRoot: checkout,
+    repoDir,
     worktreePath: wt,
     branch: "agent/behind",
   });

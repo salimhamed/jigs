@@ -1,13 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import {
-  git,
-  makeFactoryRepo,
-  makeTargetRepo,
-  makeTmpDir,
-  removeTmpDir,
-} from "../test-fixtures.ts";
+import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { type BindDeps, bindRepo } from "./bind.ts";
 
 let tmp: string;
@@ -26,85 +20,71 @@ afterEach(() => {
 function deps(overrides: Partial<BindDeps> = {}): BindDeps {
   return {
     cwd: factory,
-    home: tmp,
     out: (line) => lines.push(line),
     ...overrides,
   };
 }
 
 const jigsYml = () => readFileSync(path.join(factory, "jigs.yml"), "utf8");
+const API = "git@github.com:acme/Api.git";
 
-test("zero-config bind writes a ~-contracted binding with the pinned remote", async () => {
-  const target = makeTargetRepo(tmp, {
-    remoteUrl: "git@github.com:acme/target-repo.git",
-  });
-  const result = await bindRepo(target, deps());
-  expect(result).toMatchObject({
-    name: "target-repo",
-    path: "~/target-repo",
-    remote: "git@github.com:acme/target-repo.git",
-  });
-  expect(jigsYml()).toContain("target-repo:");
-  expect(jigsYml()).toContain("path: ~/target-repo");
-  expect(jigsYml()).toContain("remote: git@github.com:acme/target-repo.git");
+test("bind writes the remote under a name derived from the repo", async () => {
+  const result = await bindRepo(API, deps());
+  expect(result).toMatchObject({ name: "api", remote: API });
+  expect(jigsYml()).toContain("api:");
+  expect(jigsYml()).toContain(`remote: ${API}`);
+});
+
+test("a non-github remote's name comes from the last path segment", async () => {
+  const result = await bindRepo("git@gitlab.com:acme/Other-Thing.git", deps());
+  expect(result.name).toBe("other-thing");
 });
 
 test("re-bind is idempotent: no duplicate entries, comments preserved, bytes unchanged", async () => {
-  const target = makeTargetRepo(tmp);
-  await bindRepo(target, deps());
+  await bindRepo(API, deps());
   const withComment = `# keep me\n${jigsYml()}`;
   writeFileSync(path.join(factory, "jigs.yml"), withComment);
 
-  await bindRepo(target, deps());
+  await bindRepo(API, deps());
   expect(jigsYml()).toBe(withComment);
+  expect(lines.some((l) => l.includes("already points at"))).toBe(true);
 });
 
-test("re-bind after a remote change re-pins with a notice", async () => {
-  const target = makeTargetRepo(tmp, {
-    remoteUrl: "git@github.com:acme/old.git",
-  });
-  await bindRepo(target, deps());
-  git(target, "remote", "set-url", "origin", "git@github.com:acme/new.git");
-
-  await bindRepo(target, deps());
-  expect(jigsYml()).toContain("git@github.com:acme/new.git");
-  expect(jigsYml()).not.toContain("git@github.com:acme/old.git");
-  expect(lines.some((l) => l.includes("remote pin updated"))).toBe(true);
+test("a name already bound to another remote is refused, hinting unbind", async () => {
+  await bindRepo(API, deps());
+  const failure = await bindRepo("git@github.com:acme/api-moved.git", deps(), {
+    name: "api",
+  }).then(
+    () => null,
+    (err: unknown) => err,
+  );
+  expect(String(failure)).toContain("already bound to");
+  expect((failure as { hint?: string }).hint).toContain("jigs unbind api");
+  expect(jigsYml()).not.toContain("api-moved");
 });
 
 test("--name overrides the derived name", async () => {
-  const target = makeTargetRepo(tmp);
-  const result = await bindRepo(target, deps(), { name: "api" });
-  expect(result.name).toBe("api");
-  expect(jigsYml()).toContain("api:");
-});
-
-test("name collision with a different path errors with a --name hint", async () => {
-  const first = makeTargetRepo(tmp, { name: "group-a/repo" });
-  const second = makeTargetRepo(tmp, { name: "group-b/repo" });
-  await bindRepo(first, deps());
-  await expect(bindRepo(second, deps())).rejects.toThrow("already bound to");
+  const result = await bindRepo(API, deps(), { name: "forge" });
+  expect(result.name).toBe("forge");
+  expect(jigsYml()).toContain("forge:");
 });
 
 test("invalid binding name errors", async () => {
-  const target = makeTargetRepo(tmp);
-  await expect(bindRepo(target, deps(), { name: "bad name!" })).rejects.toThrow(
+  await expect(bindRepo(API, deps(), { name: "bad name!" })).rejects.toThrow(
     "invalid binding name",
   );
 });
 
-test("an invalid target never touches jigs.yml", async () => {
+test("a path argument is refused with the remote-URL hint", async () => {
   const before = jigsYml();
-  await expect(bindRepo(path.join(tmp, "missing"), deps())).rejects.toThrow(
-    "not a directory",
-  );
-  await expect(bindRepo(tmp, deps())).rejects.toThrow("not a git checkout");
+  for (const arg of ["../some-target-repo", tmp, "~/Code/api"]) {
+    await expect(bindRepo(arg, deps())).rejects.toThrow("looks like a path");
+  }
   expect(jigsYml()).toBe(before);
 });
 
 test("bind outside a factory repo fails with guidance", async () => {
-  const target = makeTargetRepo(tmp);
-  await expect(bindRepo(target, deps({ cwd: tmp }))).rejects.toThrow(
+  await expect(bindRepo(API, deps({ cwd: tmp }))).rejects.toThrow(
     "not inside a factory repo",
   );
 });
@@ -135,13 +115,10 @@ function makeIngressFactory(): void {
 test("re-bind with ingress_url configured performs no webhook writes the second time", async () => {
   stubWebhookEnv();
   makeIngressFactory();
-  const target = makeTargetRepo(tmp, {
-    remoteUrl: "git@github.com:acme/target-repo.git",
-  });
   fetchMock
     .mockResolvedValueOnce(new Response("[]"))
     .mockResolvedValueOnce(new Response(JSON.stringify({ id: 9 })));
-  const first = await bindRepo(target, deps());
+  const first = await bindRepo(API, deps());
   expect(first.webhook).toBe("created");
   expect(fetchMock).toHaveBeenCalledTimes(2);
   const created = JSON.parse(
@@ -167,7 +144,7 @@ test("re-bind with ingress_url configured performs no webhook writes the second 
       ]),
     ),
   );
-  const second = await bindRepo(target, deps());
+  const second = await bindRepo(API, deps());
   expect(second.webhook).toBe("verified");
   expect(fetchMock).toHaveBeenCalledTimes(3);
   const [, lastInit] = fetchMock.mock.calls[2] as [string, RequestInit];
@@ -177,8 +154,7 @@ test("re-bind with ingress_url configured performs no webhook writes the second 
 
 test("bind without ingress_url skips the webhook leg with a note", async () => {
   stubWebhookEnv();
-  const target = makeTargetRepo(tmp);
-  const result = await bindRepo(target, deps());
+  const result = await bindRepo(API, deps());
   expect(result.webhook).toBe("skipped");
   expect(lines.some((l) => l.includes("no ingress_url"))).toBe(true);
   expect(fetchMock).not.toHaveBeenCalled();
@@ -188,8 +164,7 @@ test("bind without GITHUB_TOKEN skips the webhook leg with a note", async () => 
   stubWebhookEnv();
   vi.stubEnv("GITHUB_TOKEN", "");
   makeIngressFactory();
-  const target = makeTargetRepo(tmp);
-  const result = await bindRepo(target, deps());
+  const result = await bindRepo(API, deps());
   expect(result.webhook).toBe("skipped");
   expect(lines.some((l) => l.includes("GITHUB_TOKEN"))).toBe(true);
   expect(fetchMock).not.toHaveBeenCalled();
@@ -198,10 +173,7 @@ test("bind without GITHUB_TOKEN skips the webhook leg with a note", async () => 
 test("bind with a non-github remote skips the webhook leg", async () => {
   stubWebhookEnv();
   makeIngressFactory();
-  const target = makeTargetRepo(tmp, {
-    remoteUrl: "git@gitlab.com:acme/target-repo.git",
-  });
-  const result = await bindRepo(target, deps());
+  const result = await bindRepo("git@gitlab.com:acme/api.git", deps());
   expect(result.webhook).toBe("skipped");
   expect(lines.some((l) => l.includes("not a github.com remote"))).toBe(true);
   expect(fetchMock).not.toHaveBeenCalled();

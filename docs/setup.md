@@ -226,12 +226,16 @@ A worktree admits one agent at a time: a second one is refused, not queued.
 ### 4. Bind target repos
 
 ```sh
-GITHUB_TOKEN=… jigs bind ../some-target-repo
+GITHUB_TOKEN=… jigs bind git@github.com:owner/repo.git
 jigs bindings
 ```
 
-A binding is a name in `jigs.yml` mapped to a checkout, pinned to its expected
-remote. Pipelines name bindings; the runtime provisions worktrees from them.
+A binding is a name in `jigs.yml` mapped to a target repo's **remote URL**.
+jigs keeps its own bare clone per binding, at
+`~/.local/share/jigs/bindings/<factory>/<binding>/repo.git`, and cuts every
+agent worktree from it — so the first run against a new binding pays for the
+clone, and your own checkout of the repo is not involved at all. Pipelines name
+bindings; the runtime provisions worktrees from them.
 
 `GITHUB_TOKEN` above is for the repo webhook, not for the binding: `jigs bind`
 records the binding either way and says which half it skipped — the webhook
@@ -239,6 +243,12 @@ needs both the token and an `ingress_url` in this factory's `jigs.yml` (step 5).
 
 The target repo declares what its worktrees need before an agent can work in
 them — files to copy in, commands to run — in a `.jigs.yml` at its own root.
+
+What git does not carry goes in the binding's **seed directory**,
+`<binding dir>/seed/`: put the `.env`-class files your `copy:` patterns name
+there, and a `.jigs.yml` there if the target repo's own copy is untracked — a
+seeded one wins over the repo's. `jigs bindings` prints each binding's clone
+path, and `jigs unbind` leaves the clone on disk for you to `rm -rf`.
 
 ### 5. Webhook ingress
 

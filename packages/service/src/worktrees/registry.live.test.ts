@@ -32,7 +32,7 @@ function row(overrides: Partial<WorktreeRow> = {}): WorktreeRow {
     baseSha: "base1",
     headSha: "head1",
     behindDefault: 3,
-    checkoutRoot: "/repos/api",
+    repoDir: "/data/bindings/acme-abc12345/api/repo.git",
     keep: false,
     ...overrides,
   };
@@ -66,11 +66,11 @@ test("getWorktree misses cleanly on an unregistered path", async () => {
   expect(await getWorktree(sql, "/nowhere/never-registered")).toBeNull();
 });
 
-test("the row carries its checkout root and keep flag", async () => {
+test("the row carries its repo dir and keep flag", async () => {
   await ensureWorktreeRegistry(sql);
   await upsertWorktree(sql, row({ keep: true }));
   expect(await getWorktree(sql, testPath)).toMatchObject({
-    checkoutRoot: "/repos/api",
+    repoDir: "/data/bindings/acme-abc12345/api/repo.git",
     keep: true,
   });
 });
@@ -98,8 +98,8 @@ test("deleteWorktree drops the row — the registry holds live worktrees only", 
   expect(await getWorktree(sql, testPath)).toBeNull();
 });
 
-test("ensure upgrades a table created before checkout_root and keep existed", async () => {
-  // Drops the real table and rebuilds it in its pre-column shape: every other
+test("a table that predates repo_dir refuses to start, naming the drop", async () => {
+  // Drops the real table and rebuilds it in its pre-rename shape: every other
   // test here re-ensures it, and the live lane owns the dev database.
   await sql`DROP TABLE IF EXISTS jigs_worktrees`;
   await sql`
@@ -111,16 +111,16 @@ test("ensure upgrades a table created before checkout_root and keep existed", as
       base_sha text NOT NULL,
       head_sha text NOT NULL,
       behind_default integer NOT NULL,
+      checkout_root text NOT NULL DEFAULT '',
+      keep boolean NOT NULL DEFAULT false,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )
   `;
-  await ensureWorktreeRegistry(sql);
-  const columns = await sql<{ columnName: string }[]>`
-    SELECT column_name FROM information_schema.columns
-    WHERE table_name = 'jigs_worktrees'
-  `;
-  expect(columns.map((c) => c.columnName)).toEqual(
-    expect.arrayContaining(["checkout_root", "keep"]),
+  await expect(ensureWorktreeRegistry(sql)).rejects.toThrow(
+    /DROP TABLE jigs_worktrees/,
   );
+
+  await sql`DROP TABLE jigs_worktrees`;
+  await expect(ensureWorktreeRegistry(sql)).resolves.toBeUndefined();
 });

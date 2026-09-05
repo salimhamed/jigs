@@ -46,7 +46,7 @@ test("a red report prints the reason and repair for each failure and throws a Cl
         label: "binding api",
         ok: false,
         reason: "no binding named 'api'",
-        repair: "run: jigs bind <path> --name api",
+        repair: "run: jigs bind <the-api-remote-url> --name api",
       },
       {
         id: "harness.codex-auth",
@@ -66,7 +66,7 @@ test("a red report prints the reason and repair for each failure and throws a Cl
   expect(lines).toEqual([
     "ok   Linear API key",
     "FAIL binding api: no binding named 'api'",
-    "  → run: jigs bind <path> --name api",
+    "  → run: jigs bind <the-api-remote-url> --name api",
     "FAIL Codex subscription login: no Codex login found",
     "  → run: codex login",
   ]);

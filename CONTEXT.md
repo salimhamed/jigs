@@ -48,9 +48,24 @@ _Avoid_: job, execution
 
 **Binding**:
 A target repository declared in the factory repo's config — a name mapped to
-where its checkout lives, pinned to its expected remote. A binding attaches
-to a step, never to a run.
-_Avoid_: registration, registry, target
+the repo's remote URL. jigs keeps its own clone per binding; the operator's
+checkout of the repo is not part of it. A binding attaches to a step, never to
+a run.
+_Avoid_: registration, registry, target, checkout
+
+**Binding clone**:
+The bare git clone jigs keeps for each binding of each factory, under the jigs
+data directory. Created on the first worktree request, fetched before every
+cut, and the `git -C` root for every worktree, branch and push operation of
+that binding's runs. Nobody edits it; it has no working tree.
+_Avoid_: mirror, cache, bare repo
+
+**Seed directory**:
+The per-binding directory holding what a worktree needs and git does not carry
+— `.env`-class files a `.jigs.yml` `copy:` pattern names, and an untracked
+`.jigs.yml` itself. Operator-populated, read-only to jigs, the replacement for
+reading those out of a human's checkout.
+_Avoid_: fixtures, template, overlay
 
 **Factory repo**:
 The central git-tracked repository holding the user's pipeline definitions
@@ -80,8 +95,9 @@ human's reply on the Linear ticket.
 _Avoid_: failure, abort
 
 **Worktree**:
-The working copy an agent step runs in. Requested by the pipeline; the runtime
-remembers every one it made and tears them down when the run ends.
+The working copy an agent step runs in, cut from the binding's clone. Requested
+by the pipeline; the runtime remembers every one it made and tears them down
+when the run ends.
 _Avoid_: checkout, clone, workspace
 
 **Worktree registry**:

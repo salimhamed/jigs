@@ -6,10 +6,10 @@ import postgres, {
 } from "postgres";
 
 // The worktree registry holds state, never config: which run owns a worktree
-// and what state it is in. Placement and bindings stay in jigs.yml. It lives
-// in the same Postgres as the World; the table prefix keeps clear of the
-// SDK's own tables. It holds live worktrees only — teardown deletes the row.
-// States: active, provision-failed, abandoned-dirty.
+// and what state it is in. Bindings stay in jigs.yml. It lives in the same
+// Postgres as the World; the table prefix keeps clear of the SDK's own tables.
+// It holds live worktrees only — teardown deletes the row. States: active,
+// provision-failed, abandoned-dirty.
 
 export interface WorktreeRow {
   path: string;
@@ -19,7 +19,7 @@ export interface WorktreeRow {
   baseSha: string;
   headSha: string;
   behindDefault: number;
-  checkoutRoot: string;
+  repoDir: string;
   keep: boolean;
 }
 
@@ -42,16 +42,25 @@ export async function ensureWorktreeRegistry(sql: ISql): Promise<void> {
       base_sha text NOT NULL,
       head_sha text NOT NULL,
       behind_default integer NOT NULL,
-      checkout_root text NOT NULL DEFAULT '',
+      repo_dir text NOT NULL,
       keep boolean NOT NULL DEFAULT false,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )
   `;
-  // A dev database created before these columns existed upgrades in place —
-  // two idempotent ALTERs beat introducing a migration tool for two columns.
-  await sql`ALTER TABLE jigs_worktrees ADD COLUMN IF NOT EXISTS checkout_root text NOT NULL DEFAULT ''`;
-  await sql`ALTER TABLE jigs_worktrees ADD COLUMN IF NOT EXISTS keep boolean NOT NULL DEFAULT false`;
+  // CREATE TABLE IF NOT EXISTS is silent about a table that predates the
+  // column, and every insert would then fail one layer deeper, mid-run.
+  const columns = await sql<{ columnName: string }[]>`
+    SELECT column_name FROM information_schema.columns
+    WHERE table_name = 'jigs_worktrees' AND column_name = 'repo_dir'
+  `;
+  if (columns.length === 0) {
+    throw new Error(
+      "jigs_worktrees predates the repo_dir column. The registry holds live " +
+        "worktrees only and the service recreates it on start, so the repair " +
+        "is to drop it: psql \"$WORKFLOW_POSTGRES_URL\" -c 'DROP TABLE jigs_worktrees'",
+    );
+  }
 }
 
 export async function getWorktree(
@@ -60,7 +69,7 @@ export async function getWorktree(
 ): Promise<WorktreeRow | null> {
   const rows = await sql<WorktreeRow[]>`
     SELECT path, branch, owner_run_id, state, base_sha, head_sha,
-           behind_default, checkout_root, keep
+           behind_default, repo_dir, keep
     FROM jigs_worktrees
     WHERE path = ${path}
   `;
@@ -70,7 +79,7 @@ export async function getWorktree(
 export async function listWorktrees(sql: ISql): Promise<WorktreeRow[]> {
   return sql<WorktreeRow[]>`
     SELECT path, branch, owner_run_id, state, base_sha, head_sha,
-           behind_default, checkout_root, keep
+           behind_default, repo_dir, keep
     FROM jigs_worktrees
     ORDER BY updated_at DESC
   `;
@@ -82,7 +91,7 @@ export async function listWorktreesForRun(
 ): Promise<WorktreeRow[]> {
   return sql<WorktreeRow[]>`
     SELECT path, branch, owner_run_id, state, base_sha, head_sha,
-           behind_default, checkout_root, keep
+           behind_default, repo_dir, keep
     FROM jigs_worktrees
     WHERE owner_run_id = ${runId}
     ORDER BY updated_at DESC
@@ -96,11 +105,11 @@ export async function upsertWorktree(
   await sql`
     INSERT INTO jigs_worktrees
       (path, branch, owner_run_id, state, base_sha, head_sha, behind_default,
-       checkout_root, keep)
+       repo_dir, keep)
     VALUES
       (${row.path}, ${row.branch}, ${row.ownerRunId}, ${row.state},
        ${row.baseSha}, ${row.headSha}, ${row.behindDefault},
-       ${row.checkoutRoot}, ${row.keep})
+       ${row.repoDir}, ${row.keep})
     ON CONFLICT (path) DO UPDATE SET
       branch = EXCLUDED.branch,
       owner_run_id = EXCLUDED.owner_run_id,
@@ -108,7 +117,7 @@ export async function upsertWorktree(
       base_sha = EXCLUDED.base_sha,
       head_sha = EXCLUDED.head_sha,
       behind_default = EXCLUDED.behind_default,
-      checkout_root = EXCLUDED.checkout_root,
+      repo_dir = EXCLUDED.repo_dir,
       keep = EXCLUDED.keep,
       updated_at = now()
   `;

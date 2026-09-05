@@ -55,7 +55,7 @@ export function decideTeardown(decision: TeardownDecision): TeardownPlan {
 }
 
 export interface ApplyTeardownTarget {
-  checkoutRoot: string;
+  repoDir: string;
   worktreePath: string;
   branch: string;
 }
@@ -63,10 +63,10 @@ export interface ApplyTeardownTarget {
 // Unresolvable default branch or remote ref reads as not merged: the whole
 // point of the flag is that branch deletion needs positive evidence.
 export async function isBranchMerged(
-  checkoutRoot: string,
+  repoDir: string,
   branch: string,
 ): Promise<boolean> {
-  const defaultBranch = await deriveDefaultBranch(checkoutRoot);
+  const defaultBranch = await deriveDefaultBranch(repoDir);
   if (defaultBranch === null) return false;
   const merged = await tryGit(
     [
@@ -75,7 +75,7 @@ export async function isBranchMerged(
       branch,
       `refs/remotes/origin/${defaultBranch}`,
     ],
-    checkoutRoot,
+    repoDir,
   );
   return merged !== null;
 }
@@ -89,24 +89,24 @@ export async function applyTeardown(
   plan: TeardownPlan,
   target: ApplyTeardownTarget,
 ): Promise<void> {
-  const { checkoutRoot, worktreePath, branch } = target;
+  const { repoDir, worktreePath, branch } = target;
   if (plan.removeWorktree) {
     const args = ["worktree", "remove", worktreePath];
     if (plan.force) args.push("--force");
     // Tolerated: the directory may already be gone, which prune settles.
-    await tryGit(args, checkoutRoot);
+    await tryGit(args, repoDir);
   }
   // Branch deletion strictly after removal — git refuses to delete a branch
   // still checked out in a worktree.
   if (plan.deleteLocalBranch) {
-    await tryGit(["branch", "-D", branch], checkoutRoot);
+    await tryGit(["branch", "-D", branch], repoDir);
   }
   if (plan.deleteRemoteBranch) {
     // Idempotent by construction: git exits non-zero when the remote ref is
     // already gone, which is the normal case under GitHub delete-on-merge.
-    await tryGit(["push", "origin", "--delete", branch], checkoutRoot);
+    await tryGit(["push", "origin", "--delete", branch], repoDir);
   }
   if (plan.removeWorktree) {
-    await tryGit(["worktree", "prune"], checkoutRoot);
+    await tryGit(["worktree", "prune"], repoDir);
   }
 }

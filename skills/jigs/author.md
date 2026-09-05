@@ -79,8 +79,8 @@ with its arguments, and a deps object holds functions.
 ## The requires manifest
 
 `requires` on a pipeline entry is what preflight checks before a run is ever
-created: `bindings` (names that must resolve to a checkout on the expected
-remote), `harnesses` (`claude`, `codex` — each must be installed and logged in),
+created: `bindings` (names that must be declared, with a remote git can
+reach), `harnesses` (`claude`, `codex` — each must be installed and logged in),
 and `aws: true` (the service's AWS profile must resolve). Two credentials are
 checked on every trigger whatever the manifest says: `LINEAR_API_KEY` and
 `GITHUB_TOKEN`. A failed preflight means no run ever existed.

@@ -74,15 +74,20 @@ for a pipeline that touches neither. `WORKFLOW_TARGET_WORLD` and
 ## 4. Bind the target repos
 
 ```sh
-jigs bind ../some-target-repo
+jigs bind git@github.com:owner/repo.git
 jigs bindings
 ```
 
-A binding is a name in `jigs.yml` mapped to an existing checkout and pinned to
-its expected remote. Pipelines name bindings; the runtime provisions worktrees
-from them. `jigs bind` also creates the repo's GitHub webhook, but only when the
-factory has an `ingress_url` in `jigs.yml` and `GITHUB_TOKEN` is set in the
-environment — it says which one it skipped and why.
+A binding is a name in `jigs.yml` mapped to a target repo's remote URL. jigs
+keeps its own bare clone per binding under
+`~/.local/share/jigs/bindings/<factory>/<binding>/repo.git`, cloned on the first
+worktree request, and cuts every worktree from it — the operator's own checkout
+is not involved. Anything a worktree needs that git does not carry (an `.env`,
+an untracked `.jigs.yml`) goes in that binding's `seed/` directory, where a
+`.jigs.yml` wins over the repo's own. `jigs bind` also creates the repo's GitHub
+webhook, but only when the factory has an `ingress_url` in `jigs.yml` and
+`GITHUB_TOKEN` is set in the environment — it says which one it skipped and why.
+`jigs unbind` edits the config only; the clone stays on disk.
 
 ## 5. Build and start
 
