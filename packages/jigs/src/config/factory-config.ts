@@ -23,10 +23,6 @@ const serviceSchema = z.strictObject({
   // never derived: a default would silently land on another factory's service
   // port, and the two numbers have to be the operator's to move.
   dashboard_port: portSchema,
-  // An optional cap on one step's wall clock (see ../step-timeout.ts). Unset
-  // is the default and means none: a step waits as long as it takes. Whole
-  // minutes — nothing here is worth expressing more finely.
-  step_timeout_minutes: z.int().min(1).optional(),
 });
 
 const factoryConfigSchema = z.looseObject({
@@ -114,8 +110,6 @@ export interface ResolvedService {
   serviceUrl: string;
   dashboardPort: number;
   dashboardUrl: string;
-  // undefined is "no cap", the default.
-  stepTimeoutMinutes: number | undefined;
 }
 
 // What is addressed per factory: the URL its CLI verbs talk to and the slug
@@ -128,7 +122,6 @@ export function resolveService(factoryRoot: string): ResolvedService {
     serviceUrl: `http://localhost:${service.port}`,
     dashboardPort: service.dashboard_port,
     dashboardUrl: `http://localhost:${service.dashboard_port}`,
-    stepTimeoutMinutes: service.step_timeout_minutes,
   };
 }
 

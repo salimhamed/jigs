@@ -6,7 +6,7 @@ export default async function startWorld() {
   const { describeStepCeiling, raiseStepCeiling } = await import(
     "../src/step-ceiling"
   );
-  await raiseStepCeiling();
+  raiseStepCeiling();
   console.log(`[service] step ceiling: ${describeStepCeiling()}`);
 
   const { getWorld } = await import("workflow/runtime");

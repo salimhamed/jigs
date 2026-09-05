@@ -114,7 +114,6 @@ test("parseFactoryConfig tolerates unknown top-level keys", () => {
 
 test("the service port defaults to the one the single global service used", () => {
   const config = parseFactoryConfig("service:\n  dashboard_port: 9090\n");
-  // No step_timeout_minutes: unset is the default, and it means uncapped.
   expect(config.service).toEqual({ port: 8990, dashboard_port: 9090 });
 });
 
@@ -146,14 +145,6 @@ test("the dashboard port is read as written, never derived from the port", () =>
   expect(config.service.dashboard_port).toBe(3456);
 });
 
-test("parseFactoryConfig rejects a step timeout under a minute", () => {
-  expect(() =>
-    parseFactoryConfig(
-      "service:\n  dashboard_port: 9090\n  step_timeout_minutes: 0\n",
-    ),
-  ).toThrow(/service\.step_timeout_minutes/);
-});
-
 test("resolveService derives the service address and the slug", () => {
   const tmp = makeTmpDir();
   try {
@@ -167,21 +158,7 @@ test("resolveService derives the service address and the slug", () => {
       serviceUrl: "http://localhost:9100",
       dashboardPort: 9200,
       dashboardUrl: "http://localhost:9200",
-      stepTimeoutMinutes: undefined,
     });
-  } finally {
-    removeTmpDir(tmp);
-  }
-});
-
-test("resolveService carries a factory's own step timeout", () => {
-  const tmp = makeTmpDir();
-  try {
-    const factory = makeFactoryRepo(
-      tmp,
-      "service:\n  port: 9100\n  dashboard_port: 9200\n  step_timeout_minutes: 90\n",
-    );
-    expect(resolveService(factory).stepTimeoutMinutes).toBe(90);
   } finally {
     removeTmpDir(tmp);
   }

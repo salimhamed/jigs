@@ -1,4 +1,3 @@
-import { STEP_TIMEOUT_ENV, stepTimeoutMs } from "jigs";
 import {
   Agent,
   Dispatcher,
@@ -6,37 +5,16 @@ import {
   setGlobalDispatcher,
 } from "undici";
 
-// Lifts the ceiling on how long one step may run. The ceiling is not ours:
-// @workflow/world-postgres 4.3.4 runs every step by POSTing the step route and
-// awaiting the response with a bare `fetch` and no dispatcher
-// (dist/queue.js:223), so node's undici default `headersTimeout` of 300s
-// aborts the request five minutes in, graphile-worker fails and redelivers the
-// job (maxAttempts 3, exp(attempts)-second backoff), and a second agent starts
-// against a worktree the first is still working in — the AGE-360 duplicates,
-// whose step_started events landed 5:04 and 5:09 apart. world-postgres takes
-// no config for this and `createWorld()` is called with no arguments, so the
-// only reachable knob is the dispatcher node's global fetch uses.
+// The World runs every step by POSTing the step route with a bare `fetch`, so
+// undici's default 300s headersTimeout aborts any step past five minutes and
+// the job is redelivered into a worktree the first agent is still working in.
+// @workflow/world-local's own queue answers this with `headersTimeout: 0`;
+// world-postgres was ported without it and takes no config, so the only
+// reachable knob is the global dispatcher.
 //
-// @workflow/world-local already does exactly this — its queue builds an Agent
-// with `headersTimeout: 0`, "allows long-running steps" — and world-postgres
-// was ported without it, which is why the ADR 0008 prototype's 600-second step
-// passed.
-//
-// But the global dispatcher governs every outbound fetch in this process
-// (GitHub, Linear, the agent providers), and those should still fail against a
-// wedged server. So what is installed routes rather than overrides (AGE-364):
-// the self-invocation gets no headers timeout at all, everything else keeps
-// undici's own defaults, untouched.
-
-export interface StepCeiling {
-  // null is "wait as long as the step takes" — the default.
-  timeoutMs: number | null;
-  // The origins the World self-invokes on. Empty means the environment did
-  // not name one; see matchesSelfOrigin.
-  selfOrigins: string[];
-}
-
-export type DispatcherInstall = (ceiling: StepCeiling) => Promise<void> | void;
+// That dispatcher governs every outbound fetch in the process, and GitHub,
+// Linear and the agent providers should still fail against a wedged server —
+// hence a router rather than an override.
 
 const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 
@@ -115,47 +93,26 @@ export class SelfOriginDispatcher extends Dispatcher {
   }
 }
 
-const undiciGlobalDispatcher: DispatcherInstall = (ceiling) => {
-  // Uncapped is world-local's own agent verbatim: headersTimeout 0, and
-  // undici's default bodyTimeout left where it is — the wait is for the step
-  // to finish, and its response body follows its headers immediately.
-  const timeouts =
-    ceiling.timeoutMs === null
-      ? { headersTimeout: 0 }
-      : { headersTimeout: ceiling.timeoutMs, bodyTimeout: ceiling.timeoutMs };
-  // Userland undici and node's internal copy share
-  // Symbol.for('undici.globalDispatcher.1'), and node installs its own only
-  // lazily — so this is what `fetch` picks up.
+// The self agent is world-local's verbatim: headersTimeout 0, and undici's
+// default bodyTimeout left where it is — the wait is for the step to finish,
+// and its response body follows its headers immediately.
+//
+// Userland undici and node's internal copy share
+// Symbol.for('undici.globalDispatcher.1'), and node installs its own only
+// lazily — so this is what `fetch` picks up.
+export function raiseStepCeiling(env: NodeJS.ProcessEnv = process.env): void {
   setGlobalDispatcher(
     new SelfOriginDispatcher(
-      ceiling.selfOrigins,
-      new Agent(timeouts),
+      selfOrigins(env),
+      new Agent({ headersTimeout: 0 }),
       getGlobalDispatcher(),
     ),
   );
-};
-
-export function stepCeiling(env: NodeJS.ProcessEnv = process.env): StepCeiling {
-  return { timeoutMs: stepTimeoutMs(env), selfOrigins: selfOrigins(env) };
-}
-
-export async function raiseStepCeiling(
-  env: NodeJS.ProcessEnv = process.env,
-  install: DispatcherInstall = undiciGlobalDispatcher,
-): Promise<StepCeiling> {
-  const ceiling = stepCeiling(env);
-  await install(ceiling);
-  return ceiling;
 }
 
 export function describeStepCeiling(
   env: NodeJS.ProcessEnv = process.env,
 ): string {
-  const { timeoutMs, selfOrigins: origins } = stepCeiling(env);
-  const scope = origins[0] ?? "any loopback origin";
-  const limit =
-    timeoutMs === null
-      ? "no limit"
-      : `${timeoutMs / 60_000}m (${STEP_TIMEOUT_ENV})`;
-  return `${limit} on the step route at ${scope}; undici defaults elsewhere`;
+  const scope = selfOrigins(env)[0] ?? "any loopback origin";
+  return `uncapped on the step route at ${scope}; undici defaults elsewhere`;
 }

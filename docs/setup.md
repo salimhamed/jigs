@@ -205,34 +205,23 @@ Rebuild after every pipeline change. `jigs build` warns when a run is still in
 flight: a pipeline that changed shape no longer answers to the step ids its
 parked run was memoized under.
 
-#### Step timeout
+#### Step ceiling
 
 A step runs **for as long as it takes**. The service prints the ceiling it
 started with:
 
 ```
-[service] step ceiling: no limit on the step route at http://localhost:8990; undici defaults elsewhere
+[service] step ceiling: uncapped on the step route at http://localhost:8990; undici defaults elsewhere
 ```
 
-Worth knowing about rather than a formality: the World runs every step over
-HTTP against the service's own port and re-queues one whose dispatch it loses,
-and node's own five-minute default was cutting long agent steps off and
-launching a second agent into a worktree the first was still working in
-(AGE-360). The service answers that by scoping a no-timeout HTTP dispatcher to
-its own origin — so the step self-invocation waits, and every other request it
-makes (GitHub, Linear, the agent providers) keeps node's defaults and still
-fails against a wedged server.
+The World runs every step over HTTP against the service's own port, and node's
+five-minute default was cutting long agent steps off and launching a second
+agent into a worktree the first was still working in. The service scopes a
+no-timeout HTTP dispatcher to its own origin — so the step self-invocation
+waits, and every other request it makes (GitHub, Linear, the agent providers)
+keeps node's defaults and still fails against a wedged server.
 
-Cap it in this factory's `jigs.yml` only if you would rather a hung step fail
-than hang:
-
-```yaml
-service:
-  step_timeout_minutes: 90
-```
-
-`jigs service restart` applies it. Either way a worktree admits one agent at a
-time: a second one is refused, not queued.
+A worktree admits one agent at a time: a second one is refused, not queued.
 
 ### 4. Bind target repos
 

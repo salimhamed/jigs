@@ -18,7 +18,6 @@ import { locateFactoryRoot } from "../config/locate-factory.ts";
 import { CliError } from "../errors.ts";
 import { stringEnv } from "../harnesses/env.ts";
 import { jigsDataDir } from "../paths.ts";
-import { STEP_TIMEOUT_ENV } from "../step-timeout.ts";
 
 // Supervision is a pidfile under the jigs data dir, keyed by factory slug —
 // not a systemd unit. A service per factory repo would otherwise need a unit
@@ -103,10 +102,7 @@ function livePid(sv: Supervisor): number | undefined {
 
 // The factory's own `.env` is the service's environment file, World URL and
 // credentials included. What jigs.yml declares wins over it: the two addresses
-// the child must listen on, the cap it must bound its step dispatcher by, and
-// the base URL derived from the first of those. Including when the cap is
-// absent: unset means uncapped, and an inherited value must not quietly
-// reintroduce one.
+// the child listens on, and the base URL derived from the first of them.
 //
 // `WORKFLOW_LOCAL_BASE_URL` pins every queue worker in the child — the
 // dashboard's included — to the service's own workflow routes. Left unset the
@@ -114,7 +110,7 @@ function livePid(sv: Supervisor): number | undefined {
 // delivered to a port with no workflow route dies after three 404s.
 function childEnv(sv: Supervisor): Record<string, string> {
   const dotenvPath = path.join(sv.factoryRoot, ".env");
-  const env: Record<string, string> = {
+  return {
     ...stringEnv(process.env),
     ...(existsSync(dotenvPath)
       ? (parseEnv(readFileSync(dotenvPath, "utf8")) as Record<string, string>)
@@ -123,10 +119,6 @@ function childEnv(sv: Supervisor): Record<string, string> {
     JIGS_DASHBOARD_PORT: String(sv.service.dashboardPort),
     WORKFLOW_LOCAL_BASE_URL: sv.service.serviceUrl,
   };
-  const minutes = sv.service.stepTimeoutMinutes;
-  if (minutes === undefined) delete env[STEP_TIMEOUT_ENV];
-  else env[STEP_TIMEOUT_ENV] = String(minutes);
-  return env;
 }
 
 export function startService(deps: ServiceLifecycleDeps): void {
