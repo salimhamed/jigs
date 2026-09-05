@@ -62,6 +62,20 @@ adds a runtime dependency needs that package added to this factory's
 `ERR_MODULE_NOT_FOUND`, which names the package. `jigs init`'s
 `package.json` template carries the current set; compare it after a pull.
 
+The order matters, because the two halves upgrade at different moments.
+`@jigs/service` ships raw TypeScript, so the service side of a change is live as
+soon as the factory rebuilds; the CLI runs from `packages/jigs/dist/`, which is
+gitignored and moves only when `pnpm build` runs. Pull without rebuilding and an
+old CLI talks to a new service, which surfaces as the CLI rejecting a `jigs.yml`
+field it has not learned about yet (`Unrecognized key: "dashboard_port"`). So:
+
+```sh
+cd <jigs checkout> && git pull && pnpm build   # refresh the linked CLI first
+cd <factory> && git pull && pnpm install       # any new runtime dep the release names
+pnpm exec jigs build && pnpm exec jigs service restart
+pnpm exec jigs service status                  # prints the service and dashboard URLs
+```
+
 Both packages carry ordinary semver from `0.1.0` on, and nothing here moves it
 by hand. A PR's title is a conventional commit — CI rejects one that is not —
 and merging it to `main` opens or updates a release-please PR carrying the next
@@ -95,6 +109,11 @@ without either:
 Every step below runs **inside the factory repo**. Ports are derived from the
 factory's path, so two factories on one machine never collide; the numbers in
 your own output are the ones to use.
+
+The steps are numbered for reading, not sequenced: only the scaffold has to come
+before everything, and only the build has to come before the service starts.
+Binding a repo (step 4) and building (step 3) do not read each other's output,
+which is why the README's quick start binds first.
 
 ### 1. Scaffold
 
@@ -142,13 +161,13 @@ one.
 cp .env.example .env      # then fill in LINEAR_API_KEY / GITHUB_TOKEN
 pnpm install
 docker compose up -d --wait
-# bootstrap does not read .env, so pass the World URL explicitly:
-WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:<postgresPort>/jigs \
-  pnpm exec bootstrap
+pnpm exec bootstrap
 ```
 
-`bootstrap` is idempotent — re-run it freely (it applies the SDK's migrations
-and the graphile-worker schema).
+`bootstrap` applies the SDK's migrations and the graphile-worker schema, and is
+idempotent. It loads this factory's `.env` itself, so run it after the copy
+above; pass `WORKFLOW_POSTGRES_URL=…` in front of it to bootstrap a World before
+there is an `.env` to read.
 
 `.env` is this factory's environment file: `jigs service start` loads it into
 the service process, and `PORT` comes from `jigs.yml` rather than from here.
@@ -176,6 +195,11 @@ using the factory's own nitro and its own copy of the SDK — the copy that
 compiles the step ids has to be the copy that registers them. `jigs service
 start|stop|restart|status|logs` supervises that build; `logs` prints the
 service's own stdout, which is not the same thing as a run's history (step 6).
+
+`start` reports the pid as soon as it has spawned the process and does not wait
+for the port, so a `jigs ps` or `jigs doctor` fired straight after it can still
+answer "could not reach the jigs service" while the service is booting. Re-run
+it a second later; `jigs service logs` shows how far the boot got.
 
 Rebuild after every pipeline change. `jigs build` warns when a run is still in
 flight: a pipeline that changed shape no longer answers to the step ids its
@@ -219,6 +243,14 @@ jigs bindings
 
 A binding is a name in `jigs.yml` mapped to a checkout, pinned to its expected
 remote. Pipelines name bindings; the runtime provisions worktrees from them.
+
+`GITHUB_TOKEN` above is for the repo webhook, not for the binding: `jigs bind`
+records the binding either way and says which half it skipped — the webhook
+needs both the token and an `ingress_url` in this factory's `jigs.yml` (step 5).
+
+On a terminal, `jigs bind` also offers to scaffold a `.jigs.yml` in the target
+repo, where that repo declares what its worktrees need before an agent can work
+in them.
 
 ### 5. Webhook ingress
 
@@ -386,7 +418,7 @@ are committed numbers, so either can move. `jigs service start`, `restart` and
 `status` print the address:
 
 ```
-started my-factory: pid 91234 at http://localhost:8990
+started my-factory-2286ac2a: pid 91234 at http://localhost:8990
 dashboard: http://localhost:9090
 ```
 

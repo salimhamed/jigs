@@ -79,10 +79,8 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   deps.out("  cp .env.example .env");
   deps.out("  pnpm install");
   deps.out("  docker compose up -d --wait");
-  deps.out("  # bootstrap does not read .env, so pass the World URL:");
-  deps.out(
-    `  WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:${ports.postgresPort}/jigs pnpm exec bootstrap`,
-  );
+  deps.out("  # bootstrap reads the .env copied above for the World URL:");
+  deps.out("  pnpm exec bootstrap");
   deps.out("  jigs build");
   deps.out("  jigs service start");
 

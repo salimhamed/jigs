@@ -1,0 +1,6 @@
+interface:
+  display_name: "jigs"
+  short_description: "Work with a jigs software factory — operate its runs, author its pipelines, set one up, or answer a question about how jigs works."
+
+policy:
+  allow_implicit_invocation: false
