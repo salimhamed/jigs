@@ -48,9 +48,10 @@ _Avoid_: job, execution
 
 **Binding**:
 A target repository declared in the factory repo's config — a name mapped to
-the repo's remote URL. jigs keeps its own clone per binding; the operator's
-checkout of the repo is not part of it. A binding attaches to a step, never to
-a run.
+the repo's remote URL plus the worktree provisioning it carries (`copy`,
+`post_create`, `hook_timeout_minutes`), the one place that story is told. jigs
+keeps its own clone per binding; the operator's checkout of the repo is not
+part of it. A binding attaches to a step, never to a run.
 _Avoid_: registration, registry, target, checkout
 
 **Binding clone**:
@@ -60,13 +61,6 @@ cut, and the `git -C` root for that binding's worktree, branch and
 branch-deletion operations — a run's push comes from the worktree itself.
 Nobody edits it; it has no working tree.
 _Avoid_: mirror, cache, bare repo
-
-**Seed directory**:
-The per-binding directory holding what a worktree needs and git does not carry
-— `.env`-class files a `.jigs.yml` `copy:` pattern names, and an untracked
-`.jigs.yml` itself. Operator-populated, read-only to jigs, the replacement for
-reading those out of a human's checkout.
-_Avoid_: fixtures, template, overlay
 
 **Factory repo**:
 The central git-tracked repository holding the user's pipeline definitions

@@ -1,6 +1,0 @@
-# Worktree provisioning for this repo.
-
-worktree:
-  copy: [] # files copied into each worktree, e.g. .env
-  post_create:
-    - pnpm install --frozen-lockfile

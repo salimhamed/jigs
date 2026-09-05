@@ -241,14 +241,39 @@ bindings; the runtime provisions worktrees from them.
 records the binding either way and says which half it skipped — the webhook
 needs both the token and an `ingress_url` in this factory's `jigs.yml` (step 5).
 
-The target repo declares what its worktrees need before an agent can work in
-them — files to copy in, commands to run — in a `.jigs.yml` at its own root.
+The binding also declares what its worktrees need before an agent can work in
+them — files to copy in, commands to run:
 
-What git does not carry goes in the binding's **seed directory**,
-`<binding dir>/seed/`: put the `.env`-class files your `copy:` patterns name
-there, and a `.jigs.yml` there if the target repo's own copy is untracked — a
-seeded one wins over the repo's. `jigs bindings` prints each binding's clone
-path, and `jigs unbind` leaves the clone on disk for you to `rm -rf`.
+```yaml
+bindings:
+  forge:
+    remote: git@github.com:downstreamimpact/Forge.git
+    copy: [.env]
+    post_create: [mise exec -- npm ci]
+    hook_timeout_minutes: 20
+```
+
+**A `copy:` entry is a path relative to the binding's own `bindings/<name>/`
+directory in this factory repo, and lands at that same relative path inside the
+worktree.** So the file above is `bindings/forge/.env` here and arrives as
+`.env` at the worktree root; `config/app.local` there arrives as
+`config/app.local`. One directory per binding, mirroring the target repo's
+tree, so nothing needs a mapping syntax — an entry that reaches outside it, or
+that matches nothing, fails the worktree request by naming the binding and the
+entry rather than handing an agent a tree missing its secrets.
+
+All three provisioning keys are optional and hand-edited: `jigs bind` writes
+`remote:` and nothing else. `post_create` commands run in the worktree, fail
+fast, and share one `hook_timeout_minutes` budget (default 10).
+
+Secrets therefore live in this factory repo, gitignored: put the `.env`-class
+files under `bindings/<name>/` and add `bindings/*/.env` to the factory's
+`.gitignore` — the directory itself can hold committed non-secret files. They
+sit next to the pipelines that need them, on the machine that provisions the
+worktrees, without ever being committed.
+
+`jigs bindings` prints each binding's clone path, and `jigs unbind` leaves the
+clone on disk for you to `rm -rf`.
 
 ### 5. Webhook ingress
 

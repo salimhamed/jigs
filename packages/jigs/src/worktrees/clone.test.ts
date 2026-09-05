@@ -15,13 +15,13 @@ beforeEach(() => {
   vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "xdg"));
   remoteDir = path.join(tmp, "remote.git");
   git(tmp, "init", "-q", "--bare", "--initial-branch", "main", remoteDir);
-  const seed = path.join(tmp, "seed");
-  git(tmp, "init", "-q", "--initial-branch", "main", seed);
-  git(seed, "config", "user.name", "jigs-fixture");
-  git(seed, "config", "user.email", "fixture@jigs.test");
-  git(seed, "commit", "-q", "--allow-empty", "-m", "initial");
-  git(seed, "remote", "add", "origin", remoteDir);
-  git(seed, "push", "-q", "origin", "main");
+  const bootstrap = path.join(tmp, "bootstrap");
+  git(tmp, "init", "-q", "--initial-branch", "main", bootstrap);
+  git(bootstrap, "config", "user.name", "jigs-fixture");
+  git(bootstrap, "config", "user.email", "fixture@jigs.test");
+  git(bootstrap, "commit", "-q", "--allow-empty", "-m", "initial");
+  git(bootstrap, "remote", "add", "origin", remoteDir);
+  git(bootstrap, "push", "-q", "origin", "main");
   repoDir = path.join(tmp, "binding", "repo.git");
 });
 afterEach(() => {

@@ -2,7 +2,7 @@
 
 > **Amended 2026-09-05 (R5).** Worktrees are cut from jigs' own bare clone of
 > the binding's remote, at
-> `jigsDataDir()/bindings/<factory-slug>/<binding-name>/{repo.git,seed,worktrees/<branch-dirname>}`.
+> `jigsDataDir()/bindings/<factory-slug>/<binding-name>/{repo.git,worktrees/<branch-dirname>}`.
 > The guarded fast-forward is **removed entirely** — jigs never touches
 > anyone's checkout, so there is nothing to fast-forward, and the
 > `ff_default_branch` opt-out is gone with it; the sweep now fetches
@@ -12,10 +12,16 @@
 > came from a registry row — so the `unregistered` state is gone from the
 > classifier. Everything else below stands: the three-way branch resolution,
 > the `base_sha`/`head_sha`/`behind_default` triple, the explicit-cwd
-> invariant, the reuse rules, the teardown matrix, and `.jigs.yml`'s
-> `copy`/`post_create`/`hook_timeout_minutes` semantics — whose `copy` source
-> is now the binding's seed directory, and whose config is read from the seed
-> directory first, then the worktree. A parked run must not straddle the
+> invariant, the reuse rules, the teardown matrix, and the
+> `copy`/`post_create`/`hook_timeout_minutes` semantics. Those three keys now
+> live on the binding itself, in the factory repo's committed `jigs.yml`, with
+> `copy` entries relative to the binding's own `bindings/<name>/` directory in
+> that repo and landing at the same relative path in the worktree — one
+> reviewable place describes how a worktree is provisioned. The target repo's
+> `.jigs.yml` and the per-binding seed directory are gone entirely, and a
+> `copy` entry that matches nothing, or that reaches outside
+> `bindings/<name>/`, now fails the `worktree()` request by name instead of
+> provisioning silently. A parked run must not straddle the
 > rollout: its memoized worktree path points into the old layout, and its
 > teardown would find no registry row for it.
 

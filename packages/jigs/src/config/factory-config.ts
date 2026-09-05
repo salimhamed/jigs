@@ -1,16 +1,24 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { parseDocument } from "yaml";
+import { type Document, parseDocument } from "yaml";
 import { z } from "zod";
 import { CliError } from "../errors.ts";
 import { factorySlug } from "../worktrees/layout.ts";
 
 export const FACTORY_CONFIG_FILE = "jigs.yml";
 
-// A binding is a name and a remote URL, nothing more: where the clone lives is
-// jigs' business and every other fact is derived from git at each activation.
+// A binding is a name, a remote URL, and how a worktree cut from that remote
+// is provisioned — the single place that story is told. Where the clone lives
+// is jigs' business, and every other fact is derived from git at each
+// activation.
 const bindingSchema = z.strictObject({
   remote: z.string().min(1),
+  // Paths, or globs, relative to this binding's own `bindings/<name>/`
+  // directory in the factory repo; each lands at that same relative path in
+  // the worktree. For what git does not carry.
+  copy: z.array(z.string()).default([]),
+  post_create: z.array(z.string()).default([]),
+  hook_timeout_minutes: z.number().positive().default(10),
 });
 
 const portSchema = z.int().min(1).max(65535);
@@ -57,13 +65,12 @@ export function parseFactoryConfig(text: string): FactoryConfig {
   return result.data;
 }
 
-export interface Binding {
+// The binding as everything downstream sees it: the operator's entry with its
+// provisioning defaults applied, plus the name the caller asked for.
+export interface Binding extends BindingEntry {
   name: string;
-  remote: string;
 }
 
-// The binding a worktree request names, carrying the name the caller asked for
-// so nothing downstream has to thread it separately.
 export function resolveBinding(factoryRoot: string, name: string): Binding {
   const { bindings } = parseFactoryConfig(readFactoryConfigText(factoryRoot));
   const binding = bindings[name];
@@ -74,7 +81,7 @@ export function resolveBinding(factoryRoot: string, name: string): Binding {
       bound.length > 0 ? `bound: ${bound.join(", ")}` : "nothing is bound yet",
     );
   }
-  return { name, remote: binding.remote };
+  return { name, ...binding };
 }
 
 export interface ResolvedService {
@@ -98,8 +105,9 @@ export function resolveService(factoryRoot: string): ResolvedService {
   };
 }
 
-// Returns the text unchanged when nothing moved, so a re-bind is byte-identical
-// and every comment in the file survives.
+// Writes `remote` and nothing else — the provisioning keys are the operator's
+// to hand-edit. Returns the text unchanged when nothing moved, so a re-bind is
+// byte-identical and every comment in the file survives.
 export function upsertBinding(
   text: string,
   name: string,
@@ -108,7 +116,7 @@ export function upsertBinding(
   const doc = parseDocument(text);
   if (doc.getIn(["bindings", name, "remote"]) === remote) return text;
   doc.setIn(["bindings", name, "remote"], remote);
-  return doc.toString();
+  return stringify(doc);
 }
 
 export function removeBinding(text: string, name: string): string {
@@ -121,7 +129,14 @@ export function removeBinding(text: string, name: string): string {
     );
   }
   doc.deleteIn(["bindings", name]);
-  return doc.toString();
+  return stringify(doc);
+}
+
+// Unpadded flow collections, which is how the docs and the scaffolded
+// jigs.yml write a `copy:` list: with the default padding a re-bind rewrites
+// the operator's `[.env]` as `[ .env ]` just by passing through.
+function stringify(doc: Document): string {
+  return doc.toString({ flowCollectionPadding: false });
 }
 
 function factoryConfigPath(factoryRoot: string): string {

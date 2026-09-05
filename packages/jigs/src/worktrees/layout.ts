@@ -36,10 +36,6 @@ export function bindingRepoDir(options: BindingDirOptions): string {
   return path.join(bindingDir(options), "repo.git");
 }
 
-export function bindingSeedDir(options: BindingDirOptions): string {
-  return path.join(bindingDir(options), "seed");
-}
-
 export function worktreeParentDir(options: BindingDirOptions): string {
   return path.join(bindingDir(options), "worktrees");
 }
