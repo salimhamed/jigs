@@ -1,3 +1,4 @@
+import type { BindingClone } from "jigs";
 import type { ISql } from "postgres";
 
 export interface RegistryGateDeps {
@@ -43,6 +44,68 @@ export async function gateOnWorktreeRegistry(
   return true;
 }
 
+export interface BindingCloneGateDeps {
+  bindings?: () => BindingClone[];
+  ensure?: (options: { repoDir: string; remote: string }) => Promise<void>;
+  exit?: (code: number) => void;
+  log?: (line: string) => void;
+  error?: (line: string) => void;
+}
+
+function describe(err: unknown): string {
+  if (err instanceof Error) {
+    const hint = (err as { hint?: string }).hint;
+    return hint === undefined ? err.message : `${err.message} — ${hint}`;
+  }
+  return String(err);
+}
+
+// Cloning at start rather than when a run asks for a worktree is what keeps a
+// minute of `git fetch` out of that run, and puts a remote jigs cannot reach
+// in front of the operator at start instead of mid-agent.
+export async function gateOnBindingClones(
+  deps: BindingCloneGateDeps = {},
+): Promise<boolean> {
+  const log = deps.log ?? ((line: string) => console.log(line));
+  const error = deps.error ?? ((line: string) => console.error(line));
+  const exit = deps.exit ?? process.exit;
+
+  let declared: BindingClone[];
+  let ensure: (options: { repoDir: string; remote: string }) => Promise<void>;
+  try {
+    // Inside the try: reading the factory config is itself fallible, and a
+    // service that cannot tell what is bound must not start.
+    const jigs = await import("jigs");
+    ensure = deps.ensure ?? jigs.ensureBindingClone;
+    if (deps.bindings !== undefined) {
+      declared = deps.bindings();
+    } else {
+      const { factoryRoot } = await import("../src/preflight");
+      declared = jigs.bindingClones(factoryRoot());
+    }
+  } catch (err) {
+    error(`[service] bindings unreadable: ${describe(err)}`);
+    exit(1);
+    return false;
+  }
+
+  for (const binding of declared) {
+    // Before, not after: a first fetch of a large repo holds the boot for
+    // minutes, and this line is the only thing that says which one.
+    log(
+      `[service] binding ${binding.name}: ensuring clone at ${binding.repoDir}`,
+    );
+    try {
+      await ensure({ repoDir: binding.repoDir, remote: binding.remote });
+    } catch (err) {
+      error(`[service] binding ${binding.name}: ${describe(err)}`);
+      exit(1);
+      return false;
+    }
+  }
+  return true;
+}
+
 // The documented defineNitroPlugin subpath doesn't exist at nitro 3.0.260610-beta;
 // a plain default export works.
 export default async function startWorld() {
@@ -54,9 +117,14 @@ export default async function startWorld() {
   raiseStepCeiling();
   console.log(`[service] step ceiling: ${describeStepCeiling()}`);
 
-  // Also before the World starts: a run that reaches its first worktree
-  // request against an unusable registry has already burned an agent.
+  // Also before the World starts: a run that asks for a worktree against an
+  // unusable registry has already burned an agent.
   if (!(await gateOnWorktreeRegistry())) return;
+
+  // And before it too: a binding whose clone does not exist yet fails every
+  // run that names it, so the fetch happens once, here, where it is a startup
+  // cost rather than an agent's.
+  if (!(await gateOnBindingClones())) return;
 
   const { getWorld } = await import("workflow/runtime");
   await getWorld().start?.();

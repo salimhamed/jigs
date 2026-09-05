@@ -1,5 +1,3 @@
-import { existsSync } from "node:fs";
-import path from "node:path";
 import {
   parseFactoryConfig,
   readFactoryConfigText,
@@ -7,6 +5,7 @@ import {
 import { locateFactoryRoot } from "../config/locate-factory.ts";
 import { CliError } from "../errors.ts";
 import { deriveDefaultBranch, resolveRemoteUrl } from "../git.ts";
+import { hasBindingClone } from "../worktrees/clone.ts";
 import { bindingRepoDir } from "../worktrees/layout.ts";
 
 export interface BindingsDeps {
@@ -42,16 +41,19 @@ async function resolveState(
   repoDir: string,
   pinnedRemote: string,
 ): Promise<string> {
-  if (!existsSync(path.join(repoDir, "HEAD"))) {
-    return "not cloned (cloned on the first worktree)";
-  }
+  // The same marker the startup gate, doctor and the worktree request read,
+  // so all four agree about which bindings have a clone.
+  if (!hasBindingClone(repoDir)) return "not cloned (restart the service)";
   try {
     const { remote, url } = await resolveRemoteUrl(repoDir);
     if (url !== pinnedRemote) return `cloned, remote drifted: ${url}`;
     const branch = await deriveDefaultBranch(repoDir, remote);
-    return branch !== null
-      ? `cloned (default: ${branch})`
-      : "cloned (default: unknown — will be set on the next fetch)";
+    if (branch === null) {
+      // Past the marker, which is origin/HEAD itself — so this is a ref git
+      // wrote and no longer reads as a branch.
+      throw new CliError(`${repoDir} has an origin/HEAD naming no branch`);
+    }
+    return `cloned (default: ${branch})`;
   } catch (err) {
     if (err instanceof CliError) return err.message;
     throw err;

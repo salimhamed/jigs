@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -35,11 +35,20 @@ beforeEach(() => {
   const dirs = { factoryRoot: tmp, bindingName: "api" };
   repoDir = bindingRepoDir(dirs);
   target = worktreePath({ ...dirs, branch: "feat" });
+  markClone();
 });
 afterEach(() => {
   vi.unstubAllEnvs();
   rmSync(tmp, { recursive: true, force: true });
 });
+
+// The service clones every binding at start, so the request path finds one
+// already there — the marker is what says so.
+function markClone(): void {
+  const dir = path.join(repoDir, "refs", "remotes", "origin");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, "HEAD"), "ref: refs/remotes/origin/main\n");
+}
 
 const binding: Binding = {
   name: "api",
@@ -54,7 +63,6 @@ const binding: Binding = {
 const deps = (overrides: Record<string, unknown> = {}) => ({
   sql: makeFakeSql(store),
   resolveBinding: () => binding,
-  ensureClone: async () => {},
   acquire: (
     request: AcquireWorktreeRequest,
     acquireDeps: AcquireWorktreeDeps,
@@ -106,30 +114,18 @@ test("a successful request registers the worktree as active against the clone", 
   });
 });
 
-test("the clone is ensured before the worktree is acquired", async () => {
-  const order: string[] = [];
-  await provisionRequest(
+test("a binding with no clone is refused, naming the restart that makes one", async () => {
+  rmSync(repoDir, { recursive: true, force: true });
+  const failure = await provisionRequest(
     { runId: "run_a", binding: "api", branch: "feat" },
-    deps({
-      ensureClone: async (options: { repoDir: string; remote: string }) => {
-        order.push(`clone ${options.repoDir} ${options.remote}`);
-      },
-      acquire: async () => {
-        order.push("acquire");
-        return {
-          path: target,
-          branch: "feat",
-          resolution: "new" as const,
-          defaultBranch: "main",
-          baseSha: "base1",
-          headSha: "base1",
-          behindDefault: 0,
-        };
-      },
-      provision: async () => {},
-    }),
+    deps({ provision: async () => {} }),
+  ).then(
+    () => null,
+    (err: unknown) => err,
   );
-  expect(order).toEqual([`clone ${repoDir} ${binding.remote}`, "acquire"]);
+  expect(String(failure)).toContain(`binding api has no clone at ${repoDir}`);
+  expect((failure as { hint?: string }).hint).toContain("jigs service restart");
+  expect(store.size).toBe(0);
 });
 
 test("the binding's own provisioning is what the worktree is provisioned with", async () => {

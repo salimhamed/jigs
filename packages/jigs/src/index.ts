@@ -38,8 +38,11 @@ export { type GithubRepoRef, parseGithubRemote } from "./github-webhook.ts";
 // and jigs/harnesses is provider re-exports only, so the door is here.
 export { removeManagedCodexHome } from "./harnesses/codex-home.ts";
 export {
+  type BindingClone,
+  bindingClones,
   type EnsureBindingCloneOptions,
   ensureBindingClone,
+  hasBindingClone,
 } from "./worktrees/clone.ts";
 export {
   type BranchResolution,

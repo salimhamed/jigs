@@ -1,11 +1,14 @@
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
   makeFactoryRepo,
   makeRemoteBackedRepo,
   makeTmpDir,
   removeTmpDir,
 } from "../test-fixtures.ts";
+import { ensureBindingClone } from "../worktrees/clone.ts";
+import { bindingRepoDir } from "../worktrees/layout.ts";
 import { bindingChecks } from "./bindings.ts";
 import { runChecks } from "./catalog.ts";
 
@@ -13,13 +16,26 @@ let tmp: string;
 
 beforeEach(() => {
   tmp = makeTmpDir();
+  vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
 });
 afterEach(() => {
+  vi.unstubAllEnvs();
   removeTmpDir(tmp);
 });
 
 const yml = (name: string, remote: string) =>
   `bindings:\n  ${name}:\n    remote: ${remote}\n`;
+
+// Stands in for the clone the service makes at start, for the cases whose
+// remote is deliberately unreachable.
+function markClone(factoryRoot: string, name: string): void {
+  const dir = path.join(
+    bindingRepoDir({ factoryRoot, bindingName: name }),
+    "refs/remotes/origin",
+  );
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, "HEAD"), "ref: refs/remotes/origin/main\n");
+}
 
 async function check(factoryRoot: string, name: string) {
   const report = await runChecks(
@@ -43,9 +59,21 @@ test("an undeclared binding fails with the exact jigs bind invocation", async ()
   expect(outcome.ok === false && outcome.repair).toContain("remote-url");
 });
 
+test("a declared binding with no clone yet names the restart that makes one", async () => {
+  const { remoteDir } = makeRemoteBackedRepo(tmp);
+  const factory = makeFactoryRepo(tmp, yml("api", remoteDir));
+  expect(await check(factory, "api")).toMatchObject({
+    ok: false,
+    reason: "binding api has no clone yet",
+    repair:
+      "restart the service: jigs service restart (it clones every binding on start)",
+  });
+});
+
 test("a binding whose remote cannot be reached fails the auth probe", async () => {
   const unreachable = path.join(tmp, "nonexistent.git");
   const factory = makeFactoryRepo(tmp, yml("api", unreachable));
+  markClone(factory, "api");
   const outcome = await check(factory, "api");
   expect(outcome).toMatchObject({
     ok: false,
@@ -53,9 +81,13 @@ test("a binding whose remote cannot be reached fails the auth probe", async () =
   });
 });
 
-test("a declared binding whose remote answers passes", async () => {
+test("a declared, cloned binding whose remote answers passes", async () => {
   const { remoteDir } = makeRemoteBackedRepo(tmp);
   const factory = makeFactoryRepo(tmp, yml("api", remoteDir));
+  await ensureBindingClone({
+    repoDir: bindingRepoDir({ factoryRoot: factory, bindingName: "api" }),
+    remote: remoteDir,
+  });
   expect(await check(factory, "api")).toEqual({
     id: "binding.api",
     label: "binding api",
