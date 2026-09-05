@@ -27,7 +27,6 @@ import {
 import { ensureManagedCodexHome } from "../harnesses/codex-home.ts";
 import { scrubbedEnv } from "../harnesses/env.ts";
 import { claudeCode, codexExec } from "../harnesses/index.ts";
-import { stepTimeoutMs, WORKER_JOB_EXPIRY_MS } from "../step-timeout.ts";
 import {
   checkoutLockPath,
   FileLockTimeoutError,
@@ -126,7 +125,11 @@ function outputSpec(
     : Output.object({ schema: jsonSchema<unknown>(schema) });
 }
 
-// One agent per worktree, always (AGE-360). The World re-queues a step whose
+// graphile-worker's 4h job expiry is the last thing that can redeliver a step,
+// so the lock a takeover guard holds has to outlast it.
+const LOCK_STALE_MS = 4 * 60 * 60_000 + 60_000;
+
+// One agent per worktree, always. The World re-queues a step whose
 // HTTP dispatch was cut short while the step itself is still running, and
 // workflow@4.8.4 neither cancels the first execution nor dedupes the second —
 // two agents in one worktree is a state its data model permits. This advisory
@@ -141,15 +144,7 @@ export async function executeAgentStep(
     return await withFileLock(
       checkoutLockPath(wire.cwd, "agent-step"),
       () => generateAgentStep(wire, runKey, deps),
-      // Staleness has to outlast anything that could dispatch this step a
-      // second time — otherwise the takeover this exists to prevent becomes
-      // legal one tick before the timeout that causes it. With a cap that is
-      // the cap; uncapped, it is graphile-worker's job expiry, the only
-      // redelivery left once the World's own fetch stops aborting.
-      {
-        timeoutMs: 0,
-        staleMs: (stepTimeoutMs() ?? WORKER_JOB_EXPIRY_MS) + 60_000,
-      },
+      { timeoutMs: 0, staleMs: LOCK_STALE_MS },
     );
   } catch (err) {
     if (err instanceof FileLockTimeoutError) {

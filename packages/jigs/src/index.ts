@@ -46,14 +46,6 @@ export { type GithubRepoRef, parseGithubRemote } from "./github-webhook.ts";
 // The service tears down a run's managed home from the worktree lifecycle,
 // and jigs/harnesses is provider re-exports only, so the door is here.
 export { removeManagedCodexHome } from "./harnesses/codex-home.ts";
-// The service's startup plugin is what raises the step ceiling, so the value
-// and its environment variable have to cross the package boundary.
-export {
-  STEP_TIMEOUT_ENV,
-  stepTimeoutMinutes,
-  stepTimeoutMs,
-  WORKER_JOB_EXPIRY_MS,
-} from "./step-timeout.ts";
 export {
   type BranchResolution,
   type CreateWorktreeOptions,

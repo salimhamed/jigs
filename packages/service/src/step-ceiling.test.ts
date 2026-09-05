@@ -1,6 +1,5 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { STEP_TIMEOUT_ENV } from "jigs";
 import {
   Agent,
   type Dispatcher,
@@ -21,22 +20,8 @@ afterEach(() => {
   setGlobalDispatcher(restore);
 });
 
-test("an unset knob is no ceiling at all on the step route", async () => {
-  const seen: Array<number | null> = [];
-  const install = (ceiling: { timeoutMs: number | null }) => {
-    seen.push(ceiling.timeoutMs);
-  };
-
-  expect((await raiseStepCeiling({}, install)).timeoutMs).toBeNull();
-  expect(
-    (await raiseStepCeiling({ [STEP_TIMEOUT_ENV]: "90" }, install)).timeoutMs,
-  ).toBe(90 * 60_000);
-  expect(seen).toEqual([null, 90 * 60_000]);
-});
-
-test("the ceiling is scoped to the origin the World self-invokes on", async () => {
-  const raised = await raiseStepCeiling({ PORT: "8990" }, () => {});
-  expect(raised.selfOrigins).toEqual([
+test("the ceiling is scoped to the origin the World self-invokes on", () => {
+  expect(selfOrigins({ PORT: "8990" })).toEqual([
     "http://localhost:8990",
     "http://127.0.0.1:8990",
     "http://[::1]:8990",
@@ -46,6 +31,11 @@ test("the ceiling is scoped to the origin the World self-invokes on", async () =
     selfOrigins({ PORT: "8990", WORKFLOW_LOCAL_BASE_URL: "http://svc:3000/x" }),
   ).toEqual(["http://svc:3000"]);
   expect(selfOrigins({})).toEqual([]);
+});
+
+test("raising the ceiling is what puts the router in front of global fetch", () => {
+  raiseStepCeiling({ PORT: "8990" });
+  expect(getGlobalDispatcher()).toBeInstanceOf(SelfOriginDispatcher);
 });
 
 test("only the self origin matches; everything jigs calls out to does not", () => {
@@ -64,12 +54,12 @@ test("with no origin to resolve, loopback is the match and nothing else is", () 
   expect(matchesSelfOrigin("not a url", [])).toBe(false);
 });
 
-test("the startup line names the limit, the scope and what is left alone", () => {
+test("the startup line names the scope and what is left alone", () => {
   expect(describeStepCeiling({ PORT: "8990" })).toBe(
-    "no limit on the step route at http://localhost:8990; undici defaults elsewhere",
+    "uncapped on the step route at http://localhost:8990; undici defaults elsewhere",
   );
-  expect(describeStepCeiling({ PORT: "8990", [STEP_TIMEOUT_ENV]: "90" })).toBe(
-    `90m (${STEP_TIMEOUT_ENV}) on the step route at http://localhost:8990; undici defaults elsewhere`,
+  expect(describeStepCeiling({})).toBe(
+    "uncapped on the step route at any loopback origin; undici defaults elsewhere",
   );
 });
 
