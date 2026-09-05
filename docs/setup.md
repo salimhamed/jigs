@@ -237,9 +237,8 @@ remote. Pipelines name bindings; the runtime provisions worktrees from them.
 records the binding either way and says which half it skipped — the webhook
 needs both the token and an `ingress_url` in this factory's `jigs.yml` (step 5).
 
-On a terminal, `jigs bind` also offers to scaffold a `.jigs.yml` in the target
-repo, where that repo declares what its worktrees need before an agent can work
-in them.
+The target repo declares what its worktrees need before an agent can work in
+them — files to copy in, commands to run — in a `.jigs.yml` at its own root.
 
 ### 5. Webhook ingress
 

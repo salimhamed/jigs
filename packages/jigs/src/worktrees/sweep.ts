@@ -8,20 +8,17 @@ export type SweepState =
   | "abandoned"
   | "abandoned-dirty"
   | "provision-failed"
-  | "unregistered"
   | "missing";
 
 export interface SweepInput {
   path: string;
   branch: string;
-  ownerRunId: string | null;
-  // null when there is no owning run to ask about (an unregistered directory).
-  ownerTerminal: boolean | null;
+  ownerRunId: string;
+  ownerTerminal: boolean;
   keep: boolean;
   state: string;
   onDisk: boolean;
   dirty: boolean;
-  registered: boolean;
 }
 
 export interface SweepEntry {
@@ -35,28 +32,19 @@ export interface SweepEntry {
 }
 
 export function classifySweep(input: SweepInput): SweepEntry {
-  const owner =
-    input.ownerRunId === null ? {} : { ownerRunId: input.ownerRunId };
-  const base = { path: input.path, branch: input.branch, ...owner };
+  const base = {
+    path: input.path,
+    branch: input.branch,
+    ownerRunId: input.ownerRunId,
+  };
 
-  if (input.registered && !input.onDisk) {
+  if (!input.onDisk) {
     return {
       ...base,
       state: "missing",
       eligible: true,
       requiresForce: false,
       reason: "registered but gone from disk — the row is stale",
-    };
-  }
-  if (!input.registered) {
-    return {
-      ...base,
-      state: "unregistered",
-      eligible: true,
-      requiresForce: input.dirty,
-      reason: input.dirty
-        ? "on disk with no registry row, and dirty"
-        : "on disk with no registry row",
     };
   }
   if (input.keep) {
@@ -72,7 +60,7 @@ export function classifySweep(input: SweepInput): SweepEntry {
   // suspended owners alike: a suspended run keeps its worktree. It outranks
   // provision-failed, a state a live run sits in whenever the worktree()
   // request is retried or its rejection caught.
-  if (input.ownerTerminal === false) {
+  if (!input.ownerTerminal) {
     return {
       ...base,
       state: "held",

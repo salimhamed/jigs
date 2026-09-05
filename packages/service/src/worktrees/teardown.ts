@@ -2,12 +2,8 @@ import { rmSync } from "node:fs";
 import {
   applyTeardown,
   decideTeardown,
-  describeFf,
-  fastForwardDefaultBranch,
   isWorktreeDirty,
-  type ResolvedBinding,
   removeManagedCodexHome,
-  resolveBindings,
 } from "jigs";
 import type { Sql } from "postgres";
 import {
@@ -15,8 +11,6 @@ import {
   listWorktreesForRun,
   setWorktreeState,
 } from "./registry";
-import { factoryRoot } from "./request";
-import { ffByCheckout } from "./sweep";
 
 // The per-run teardown a jig calls on its own completion path. `merged` is
 // passed in and never derived: a squash merge leaves the branch tip
@@ -33,8 +27,6 @@ import { ffByCheckout } from "./sweep";
 
 export interface TeardownRunDeps {
   sql: Sql;
-  bindings?: () => ResolvedBinding[];
-  fastForward?: typeof fastForwardDefaultBranch;
   removeCodexHome?: (runKey: string) => void;
   log?: (line: string) => void;
 }
@@ -44,35 +36,12 @@ export async function teardownRun(
   outcome: { merged: boolean },
   deps: TeardownRunDeps,
 ): Promise<string[]> {
-  const ff = deps.fastForward ?? fastForwardDefaultBranch;
   const removeCodexHome = deps.removeCodexHome ?? removeManagedCodexHome;
   const log = deps.log ?? ((line: string) => console.log(line));
-  // A service with no reachable factory config still tears down; only the
-  // fast-forward opt-out needs the binding list.
-  let bindings: ResolvedBinding[] = [];
-  try {
-    bindings = (deps.bindings ?? (() => resolveBindings(factoryRoot())))();
-  } catch {
-    bindings = [];
-  }
-  const ffEnabled = ffByCheckout(bindings);
 
   const rows = await listWorktreesForRun(deps.sql, runId);
-  const fastForwarded = new Set<string>();
   const removed: string[] = [];
   for (const row of rows) {
-    if (
-      outcome.merged &&
-      row.checkoutRoot !== "" &&
-      !fastForwarded.has(row.checkoutRoot)
-    ) {
-      fastForwarded.add(row.checkoutRoot);
-      const result = await ff({
-        checkoutRoot: row.checkoutRoot,
-        enabled: ffEnabled.get(row.checkoutRoot) ?? true,
-      });
-      log(`[teardown] ${describeFf(row.checkoutRoot, result)}`);
-    }
     const plan = decideTeardown({
       keep: row.keep,
       dirty: await isWorktreeDirty(row.path),

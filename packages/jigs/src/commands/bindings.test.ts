@@ -1,5 +1,4 @@
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
-import path from "node:path";
+import { rmSync } from "node:fs";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import {
   git,
@@ -67,21 +66,6 @@ test("a replaced checkout fails loudly naming the found remote", async () => {
   expect(row?.state).toBe(
     "remote mismatch: found https://github.com/other/api.git",
   );
-});
-
-test("notes carry ff_default_branch and workspace_dir", async () => {
-  const target = makeTargetRepo(tmp, { defaultBranch: "main" });
-  await bindRepo(target, deps());
-  const configPath = path.join(factory, "jigs.yml");
-  writeFileSync(
-    configPath,
-    `${readFileSync(configPath, "utf8")}    workspace_dir: ~/worktrees\n    ff_default_branch: false\n`,
-  );
-  const [row] = await listBindings(deps());
-  expect(row?.notes).toEqual([
-    "ff_default_branch: off",
-    "workspace_dir: ~/worktrees",
-  ]);
 });
 
 test("bindings outside a factory repo fails with guidance", async () => {

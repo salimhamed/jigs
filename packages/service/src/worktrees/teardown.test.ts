@@ -85,11 +85,6 @@ function runWorktree(branch: string, runId = "run_1"): string {
 
 const deps = (overrides: Record<string, unknown> = {}) => ({
   sql: makeFakeSql(store),
-  bindings: () => [],
-  fastForward: async () => ({
-    moved: false,
-    skipped: "already-current" as const,
-  }),
   removeCodexHome: (runKey: string) => removedHomes.push(runKey),
   log: () => {},
   ...overrides,
@@ -130,53 +125,6 @@ test("a squash-merged branch is torn down even though it is not an ancestor of t
   expect(existsSync(target)).toBe(false);
   expect(localBranches().split("\n")).not.toContain("feature");
   expect(remoteBranches()).not.toContain("refs/heads/feature");
-});
-
-test("a merged run fast-forwards the checkout's default branch first", async () => {
-  runWorktree("feature");
-  const ffCalls: Array<{ checkoutRoot: string; enabled?: boolean }> = [];
-
-  await teardownRun(
-    "run_1",
-    { merged: true },
-    deps({
-      fastForward: async (options: {
-        checkoutRoot: string;
-        enabled?: boolean;
-      }) => {
-        ffCalls.push(options);
-        return { moved: false, skipped: "already-current" as const };
-      },
-    }),
-  );
-
-  expect(ffCalls).toEqual([{ checkoutRoot: checkout, enabled: true }]);
-});
-
-test("a binding with ff_default_branch: false freezes its checkout's default", async () => {
-  runWorktree("feature");
-  const ffCalls: Array<{ enabled?: boolean }> = [];
-
-  await teardownRun(
-    "run_1",
-    { merged: true },
-    deps({
-      bindings: () => [
-        {
-          name: "scratch",
-          checkoutRoot: checkout,
-          remote: "git@github.com:acme/api.git",
-          ffDefaultBranch: false,
-        },
-      ],
-      fastForward: async (options: { enabled?: boolean }) => {
-        ffCalls.push(options);
-        return { moved: false, skipped: "disabled" as const };
-      },
-    }),
-  );
-
-  expect(ffCalls).toEqual([{ checkoutRoot: checkout, enabled: false }]);
 });
 
 test("a merged run's dirty tree still goes — the matrix's forced row", async () => {

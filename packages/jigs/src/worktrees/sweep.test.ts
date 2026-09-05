@@ -11,7 +11,6 @@ function input(overrides: Partial<SweepInput> = {}): SweepInput {
     state: "active",
     onDisk: true,
     dirty: false,
-    registered: true,
     ...overrides,
   };
 }
@@ -74,27 +73,4 @@ test("a registered path missing from disk is a stale row", () => {
   expect(entry.state).toBe("missing");
   expect(entry.eligible).toBe(true);
   expect(entry.requiresForce).toBe(false);
-});
-
-test("a directory with no registry row is unregistered", () => {
-  const entry = classifySweep(
-    input({ registered: false, ownerRunId: null, ownerTerminal: null }),
-  );
-  expect(entry.state).toBe("unregistered");
-  expect(entry.eligible).toBe(true);
-  expect(entry.requiresForce).toBe(false);
-  expect(entry.ownerRunId).toBeUndefined();
-});
-
-test("a dirty unregistered directory needs force", () => {
-  const entry = classifySweep(
-    input({
-      registered: false,
-      ownerRunId: null,
-      ownerTerminal: null,
-      dirty: true,
-    }),
-  );
-  expect(entry.state).toBe("unregistered");
-  expect(entry.requiresForce).toBe(true);
 });

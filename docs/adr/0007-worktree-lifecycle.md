@@ -1,5 +1,18 @@
 # Centrally housed worktrees, policy-owned teardown, guarded fast-forward
 
+> **Amended 2026-09-05.** The guarded fast-forward is **removed entirely** —
+> jigs no longer moves anyone's local default branch, at activation freshness or
+> at post-merge teardown, and the `ff_default_branch` opt-out is gone with it.
+> The sweep now fetches `origin/<default>` explicitly before its merge check,
+> which is the one thing the fast-forward was load-bearing for. The sweep also
+> no longer scans for unregistered directories — every worktree it can see came
+> from a registry row — so the `unregistered` state is gone from the classifier,
+> and `workspace_dir`, the binding key that put worktrees among the operator's
+> own directories, is gone too. Everything else below stands: the three-way
+> branch resolution, the `base_sha`/`head_sha`/`behind_default` triple, the
+> explicit-cwd invariant, the reuse rules, the teardown matrix, and
+> `.jigs.yml`'s `copy`/`post_create`/`hook_timeout_minutes` semantics.
+
 Worktrees live in a central data dir —
 `~/.local/share/jigs/worktrees/<factory-slug>/<binding-name>/<branch-dirname>`
 — never beside the human's checkout unless a binding's `workspace_dir` says so.

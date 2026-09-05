@@ -1,5 +1,10 @@
 # Bindings are committed factory-repo config
 
+> **Superseded in part, 2026-09-05.** The fast-forward described below and both
+> per-binding options that governed it (`ff_default_branch`, `workspace_dir`)
+> are removed — see [ADR 0007](./0007-worktree-lifecycle.md)'s amendment. The
+> binding-path model itself is replaced in the follow-up change.
+>
 > **Amended by [ADR 0007](./0007-worktree-lifecycle.md).** "Human-managed,
 > never surprised" below is sharpened to "never *unsafely* moved": jigs
 > fast-forwards a binding checkout's default branch by default — pure-ff-only,

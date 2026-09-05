@@ -11,8 +11,6 @@ export const FACTORY_CONFIG_FILE = "jigs.yml";
 const bindingSchema = z.strictObject({
   path: z.string().min(1),
   remote: z.string().min(1),
-  workspace_dir: z.string().min(1).optional(),
-  ff_default_branch: z.boolean().default(true),
 });
 
 const portSchema = z.int().min(1).max(65535);
@@ -63,8 +61,6 @@ export interface ResolvedBinding {
   name: string;
   checkoutRoot: string;
   remote: string;
-  workspaceDir?: string;
-  ffDefaultBranch: boolean;
 }
 
 function resolved(name: string, binding: Binding): ResolvedBinding {
@@ -72,15 +68,11 @@ function resolved(name: string, binding: Binding): ResolvedBinding {
     name,
     checkoutRoot: expandHome(binding.path),
     remote: binding.remote,
-    ...(binding.workspace_dir === undefined
-      ? {}
-      : { workspaceDir: binding.workspace_dir }),
-    ffDefaultBranch: binding.ff_default_branch,
   };
 }
 
-// The binding a worktree request names, with `~` and the config's boolean
-// defaults already resolved, so callers never re-derive either.
+// The binding a worktree request names, with `~` already expanded, so callers
+// never re-derive it.
 export function resolveBinding(
   factoryRoot: string,
   name: string,

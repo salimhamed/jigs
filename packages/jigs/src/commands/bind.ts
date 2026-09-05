@@ -1,4 +1,4 @@
-import { existsSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 import {
   parseFactoryConfig,
@@ -7,12 +7,6 @@ import {
   writeFactoryConfigText,
 } from "../config/factory-config.ts";
 import { locateFactoryRoot } from "../config/locate-factory.ts";
-import { TARGET_CONFIG_FILE } from "../config/target-config.ts";
-import {
-  detectCopyFiles,
-  generateTargetConfig,
-  inferPostCreate,
-} from "../config/target-scaffold.ts";
 import { CliError } from "../errors.ts";
 import { assertCheckoutRoot, resolveRemoteUrl } from "../git.ts";
 import {
@@ -27,7 +21,6 @@ const BINDING_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 export interface BindDeps {
   cwd: string;
   home?: string;
-  confirm?: (question: string) => Promise<boolean>;
   out: (line: string) => void;
 }
 
@@ -39,7 +32,6 @@ export interface BindResult {
   name: string;
   path: string;
   remote: string;
-  scaffolded: boolean;
   webhook: "created" | "verified" | "updated" | "skipped";
 }
 
@@ -98,9 +90,8 @@ export async function bindRepo(
       : `bound ${name} → ${storedPath}`,
   );
 
-  const scaffolded = await offerScaffold(target, deps);
   const webhook = await ensureWebhook(url, config.ingress_url, deps);
-  return { name, path: storedPath, remote: url, scaffolded, webhook };
+  return { name, path: storedPath, remote: url, webhook };
 }
 
 async function ensureWebhook(
@@ -128,25 +119,4 @@ async function ensureWebhook(
   const outcome = await ensureRepoWebhook({ ...repoRef, ingressUrl, secret });
   deps.out(`webhook ${outcome}: ${repoRef.owner}/${repoRef.repo}`);
   return outcome;
-}
-
-async function offerScaffold(target: string, deps: BindDeps): Promise<boolean> {
-  const targetConfigPath = path.join(target, TARGET_CONFIG_FILE);
-  if (existsSync(targetConfigPath)) return false;
-  if (deps.confirm === undefined) {
-    deps.out(
-      `note: skipping ${TARGET_CONFIG_FILE} scaffold offer (non-interactive)`,
-    );
-    return false;
-  }
-  const content = generateTargetConfig(
-    detectCopyFiles(target),
-    inferPostCreate(target),
-  );
-  deps.out(`no ${TARGET_CONFIG_FILE} in the target repo — proposed content:`);
-  deps.out(content);
-  if (!(await deps.confirm(`write ${targetConfigPath}?`))) return false;
-  // "wx": the interactive confirm leaves a window for the file to appear.
-  writeFileSync(targetConfigPath, content, { flag: "wx" });
-  return true;
 }
