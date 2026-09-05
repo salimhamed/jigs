@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.16](https://github.com/salimhamed/jigs/compare/service-v0.1.15...service-v0.1.16) (2026-09-05)
+
+
+### Features
+
+* **bindings:** describe worktree provisioning on the binding, drop .jigs.yml and the seed directory ([#76](https://github.com/salimhamed/jigs/issues/76)) ([500d079](https://github.com/salimhamed/jigs/commit/500d079cf8175445ae95db611b859a69285b918c))
+
 ## [0.1.15](https://github.com/salimhamed/jigs/compare/service-v0.1.14...service-v0.1.15) (2026-09-05)
 
 
