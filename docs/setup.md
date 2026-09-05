@@ -62,14 +62,12 @@ adds a runtime dependency needs that package added to this factory's
 `ERR_MODULE_NOT_FOUND`, which names the package. `jigs init`'s
 `package.json` template carries the current set; compare it after a pull.
 
-The order those fall in matters, because the two halves upgrade at different
-moments. `@jigs/service` ships raw TypeScript, so the service side of a change
-is live as soon as the factory rebuilds; the CLI runs from
-`packages/jigs/dist/`, which is gitignored and moves only when `pnpm build`
-runs. Pull without rebuilding and an old CLI talks to a new service — which
-surfaced as `jigs: invalid jigs.yml: service: Unrecognized key:
-"dashboard_port"` the day `dashboard_port` landed, a stale CLI rejecting a field
-its own schema had never heard of. So:
+The order matters, because the two halves upgrade at different moments.
+`@jigs/service` ships raw TypeScript, so the service side of a change is live as
+soon as the factory rebuilds; the CLI runs from `packages/jigs/dist/`, which is
+gitignored and moves only when `pnpm build` runs. Pull without rebuilding and an
+old CLI talks to a new service, which surfaces as the CLI rejecting a `jigs.yml`
+field it has not learned about yet (`Unrecognized key: "dashboard_port"`). So:
 
 ```sh
 cd <jigs checkout> && git pull && pnpm build   # refresh the linked CLI first
@@ -112,11 +110,10 @@ Every step below runs **inside the factory repo**. Ports are derived from the
 factory's path, so two factories on one machine never collide; the numbers in
 your own output are the ones to use.
 
-The steps are numbered for reading, not sequenced: binding a repo (step 4)
-writes `jigs.yml`, building (step 3) compiles pipelines, and neither reads the
-other's output — the README's quick start binds first for that reason. Only the
-scaffold has to come before everything, and only the build has to come before
-the service starts.
+The steps are numbered for reading, not sequenced: only the scaffold has to come
+before everything, and only the build has to come before the service starts.
+Binding a repo (step 4) and building (step 3) do not read each other's output,
+which is why the README's quick start binds first.
 
 ### 1. Scaffold
 
@@ -167,11 +164,10 @@ docker compose up -d --wait
 pnpm exec bootstrap
 ```
 
-`bootstrap` is idempotent — re-run it freely (it applies the SDK's migrations
-and the graphile-worker schema). It loads this factory's `.env` itself, so the
-World URL that `.env.example` already carries is the one it uses; run it after
-the copy above, or pass `WORKFLOW_POSTGRES_URL=…` in front of it to bootstrap a
-World before there is an `.env` to read.
+`bootstrap` applies the SDK's migrations and the graphile-worker schema, and is
+idempotent. It loads this factory's `.env` itself, so run it after the copy
+above; pass `WORKFLOW_POSTGRES_URL=…` in front of it to bootstrap a World before
+there is an `.env` to read.
 
 `.env` is this factory's environment file: `jigs service start` loads it into
 the service process, and `PORT` comes from `jigs.yml` rather than from here.
@@ -249,11 +245,12 @@ A binding is a name in `jigs.yml` mapped to a checkout, pinned to its expected
 remote. Pipelines name bindings; the runtime provisions worktrees from them.
 
 `GITHUB_TOKEN` above is for the repo webhook, not for the binding: `jigs bind`
-records the binding either way, and says which half it skipped — the webhook
+records the binding either way and says which half it skipped — the webhook
 needs both the token and an `ingress_url` in this factory's `jigs.yml` (step 5).
-On a terminal it also offers to scaffold a `.jigs.yml` in the target repo, which
-is where that repo declares what its worktrees need before an agent can work in
-them.
+
+On a terminal, `jigs bind` also offers to scaffold a `.jigs.yml` in the target
+repo, where that repo declares what its worktrees need before an agent can work
+in them.
 
 ### 5. Webhook ingress
 
