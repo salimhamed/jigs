@@ -3,6 +3,15 @@
 > **Amended 2026-09-05 (R5).** Worktrees are cut from jigs' own bare clone of
 > the binding's remote, at
 > `jigsDataDir()/bindings/<factory-slug>/<binding-name>/{repo.git,worktrees/<branch-dirname>}`.
+> Those clones are made **when the service starts**, one per declared binding,
+> and the runtime assumes they exist — a worktree request against a binding
+> with no clone is refused, and a binding added while the service is running
+> needs `jigs service restart`. The clone itself is four idempotent steps
+> (`init --bare`, `remote add`/`set-url`, `fetch`, `remote set-head --auto`)
+> keyed on `refs/remotes/origin/HEAD` as the finished marker, so an
+> interrupted one resumes into the objects already on disk. It carries no lock
+> of its own: the startup gate is its only caller and walks the bindings
+> sequentially, so serialization is the caller's property, not the clone's.
 > The guarded fast-forward is **removed entirely** — jigs never touches
 > anyone's checkout, so there is nothing to fast-forward, and the
 > `ff_default_branch` opt-out is gone with it; the sweep now fetches

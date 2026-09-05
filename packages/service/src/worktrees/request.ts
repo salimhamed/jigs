@@ -1,7 +1,8 @@
 import {
   type Binding,
   bindingRepoDir,
-  ensureBindingClone,
+  CliError,
+  hasBindingClone,
   locateFactoryRoot,
   provisionWorktree,
   resolveBinding,
@@ -14,8 +15,8 @@ import { setWorktreeState } from "./registry";
 import { registrySql } from "./sql";
 
 // The step side of the pipeline's worktree() request: resolve the binding,
-// make sure its clone exists, acquire and register the tree, then provision it
-// as the binding describes.
+// acquire and register the tree, then provision it as the binding describes.
+// The clone is the service's to make at start, so this path only asserts it.
 
 export function factoryRoot(): string {
   const override = process.env.JIGS_FACTORY_ROOT;
@@ -42,7 +43,6 @@ export interface ProvisionRequest {
 export interface ProvisionRequestDeps {
   sql?: Sql;
   resolveBinding?: (name: string) => Binding;
-  ensureClone?: typeof ensureBindingClone;
   acquire?: typeof acquireWorktree;
   provision?: typeof provisionWorktree;
   log?: (line: string) => void;
@@ -57,7 +57,6 @@ export async function provisionRequest(
   const resolve =
     deps.resolveBinding ??
     ((name: string) => resolveBinding(factoryRoot(), name));
-  const ensureClone = deps.ensureClone ?? ensureBindingClone;
   const provision = deps.provision ?? provisionWorktree;
   const log = deps.log ?? ((line: string) => console.log(line));
 
@@ -66,9 +65,14 @@ export async function provisionRequest(
   const repoDir = bindingRepoDir(dirs);
   const target = worktreePath({ ...dirs, branch: request.branch });
 
-  // Lazily, on the first request of this binding: both the reuse check and
-  // the cut read the clone.
-  await ensureClone({ repoDir, remote: binding.remote });
+  // Only reachable when the binding was declared after this service booted:
+  // both the reuse check and the cut read a clone that is not there.
+  if (!hasBindingClone(repoDir)) {
+    throw new CliError(
+      `binding ${binding.name} has no clone at ${repoDir}`,
+      "restart the service: jigs service restart (it clones every binding on start)",
+    );
+  }
 
   const facts = await (deps.acquire ?? acquireWorktree)(
     {

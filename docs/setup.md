@@ -201,6 +201,13 @@ for the port, so a `jigs ps` or `jigs doctor` fired straight after it can still
 answer "could not reach the jigs service" while the service is booting. Re-run
 it a second later; `jigs service logs` shows how far the boot got.
 
+Part of that boot is the clones: the spawned service clones every binding
+declared in `jigs.yml` (step 4) before the World starts, logging a line per
+binding. A large repo can hold the boot for up to a minute the first time, and
+a remote it cannot reach exits the service — so a process that is gone shortly
+after `start` said "started" is a binding that could not be cloned, and
+`jigs service logs` names it.
+
 Rebuild after every pipeline change. `jigs build` warns when a run is still in
 flight: a pipeline that changed shape no longer answers to the step ids its
 parked run was memoized under.
@@ -233,9 +240,15 @@ jigs bindings
 A binding is a name in `jigs.yml` mapped to a target repo's **remote URL**.
 jigs keeps its own bare clone per binding, at
 `~/.local/share/jigs/bindings/<factory>/<binding>/repo.git`, and cuts every
-agent worktree from it — so the first run against a new binding pays for the
-clone, and your own checkout of the repo is not involved at all. Pipelines name
-bindings; the runtime provisions worktrees from them.
+agent worktree from it — your own checkout of the repo is not involved at all.
+Pipelines name bindings; the runtime provisions worktrees from them.
+
+**The clones are made when the service starts**, not when a run asks for a
+worktree, so the first `jigs service start` after a bind pays for them —
+seconds for a small repo, up to a minute for a large one, and the service logs
+a line per binding as it goes. A binding added while the service is running
+therefore needs `jigs service restart` before any run can name it; `jigs bind`
+says so, and `jigs doctor` reports a binding with no clone yet.
 
 `GITHUB_TOKEN` above is for the repo webhook, not for the binding: `jigs bind`
 records the binding either way and says which half it skipped — the webhook
@@ -272,8 +285,8 @@ files under `bindings/<name>/` and add `bindings/*/.env` to the factory's
 sit next to the pipelines that need them, on the machine that provisions the
 worktrees, without ever being committed.
 
-`jigs bindings` prints each binding's clone path, and `jigs unbind` leaves the
-clone on disk for you to `rm -rf`.
+`jigs bindings` prints each binding's clone path and whether the clone exists,
+and `jigs unbind` leaves the clone on disk for you to `rm -rf`.
 
 ### 5. Webhook ingress
 

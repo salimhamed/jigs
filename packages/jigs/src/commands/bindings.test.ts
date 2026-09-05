@@ -41,7 +41,7 @@ test("a binding with no clone yet reports where the clone will land", async () =
     name: "api",
     remote: remoteDir,
     clone: cloneDir(),
-    state: "not cloned (cloned on the first worktree)",
+    state: "not cloned (restart the service)",
   });
 });
 
@@ -62,14 +62,12 @@ test("a clone whose remote no longer matches names the url it found", async () =
   );
 });
 
-test("a clone that lost its remote HEAD says the next fetch will set it", async () => {
+test("a clone that lost its remote HEAD reports as not cloned, like doctor does", async () => {
   const repoDir = cloneDir();
   await ensureBindingClone({ repoDir, remote: remoteDir });
   git(repoDir, "symbolic-ref", "-d", "refs/remotes/origin/HEAD");
   const [row] = await listBindings(deps());
-  expect(row?.state).toBe(
-    "cloned (default: unknown — will be set on the next fetch)",
-  );
+  expect(row?.state).toBe("not cloned (restart the service)");
 });
 
 test("bindings outside a factory repo fails with guidance", async () => {

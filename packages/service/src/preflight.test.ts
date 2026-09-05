@@ -1,5 +1,6 @@
 import { chmodSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { bindingRepoDir, ensureBindingClone } from "jigs";
 import {
   afterAll,
   afterEach,
@@ -164,10 +165,17 @@ test("a green preflight lets the trigger call start()", async () => {
   // A local bare repo stands in for GitHub: the binding check is a git
   // ls-remote against the URL, and this one answers offline.
   const { remoteDir } = makeRemoteBackedRepo(workspace);
-  vi.stubEnv(
-    "JIGS_FACTORY_ROOT",
-    makeFactoryRepo(workspace, `bindings:\n  api:\n    remote: ${remoteDir}\n`),
+  const factory = makeFactoryRepo(
+    workspace,
+    `bindings:\n  api:\n    remote: ${remoteDir}\n`,
   );
+  vi.stubEnv("JIGS_FACTORY_ROOT", factory);
+  vi.stubEnv("XDG_DATA_HOME", path.join(workspace, "data"));
+  // What the service does at start: preflight refuses a binding with no clone.
+  await ensureBindingClone({
+    repoDir: bindingRepoDir({ factoryRoot: factory, bindingName: "api" }),
+    remote: remoteDir,
+  });
   vi.stubEnv("LINEAR_API_KEY", "lin_live");
   vi.stubEnv("GITHUB_TOKEN", "ghp_live");
   vi.stubEnv("LINEAR_API_URL", "http://linear.test/graphql");

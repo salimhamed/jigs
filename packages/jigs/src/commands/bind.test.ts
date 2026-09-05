@@ -35,6 +35,13 @@ test("bind writes the remote under a name derived from the repo", async () => {
   expect(jigsYml()).toContain(`remote: ${API}`);
 });
 
+test("a new binding says the restart that clones it", async () => {
+  await bindRepo(API, deps());
+  expect(lines).toContain(
+    "restart the service to clone api: jigs service restart",
+  );
+});
+
 test("a non-github remote's name comes from the last path segment", async () => {
   const result = await bindRepo("git@gitlab.com:acme/Other-Thing.git", deps());
   expect(result.name).toBe("other-thing");
@@ -45,9 +52,12 @@ test("re-bind is idempotent: no duplicate entries, comments preserved, bytes unc
   const withComment = `# keep me\n${jigsYml()}`;
   writeFileSync(path.join(factory, "jigs.yml"), withComment);
 
+  lines = [];
   await bindRepo(API, deps());
   expect(jigsYml()).toBe(withComment);
   expect(lines.some((l) => l.includes("already points at"))).toBe(true);
+  // Nothing changed, so there is nothing for a restart to pick up.
+  expect(lines.some((l) => l.includes("restart the service"))).toBe(false);
 });
 
 test("a name already bound to another remote is refused, hinting unbind", async () => {

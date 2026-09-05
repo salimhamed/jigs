@@ -6,6 +6,8 @@ import {
   readFactoryConfigText,
 } from "../config/factory-config.ts";
 import { probeRemoteAuth } from "../git.ts";
+import { hasBindingClone } from "../worktrees/clone.ts";
+import { bindingRepoDir } from "../worktrees/layout.ts";
 import {
   type Check,
   type CheckResult,
@@ -49,14 +51,16 @@ export function bindingChecks(options: BindingChecksOptions): Check[] {
   } catch (err) {
     return [factoryConfigFailure(err, factoryRoot)];
   }
+  const root = factoryRoot;
   return (options.names ?? Object.keys(bindings)).map((name) => ({
     id: `binding.${name}`,
     label: `binding ${name}`,
-    run: () => checkBinding(name, bindings[name]),
+    run: () => checkBinding(root, name, bindings[name]),
   }));
 }
 
 async function checkBinding(
+  factoryRoot: string,
   name: string,
   binding: BindingEntry | undefined,
 ): Promise<CheckResult> {
@@ -70,8 +74,18 @@ async function checkBinding(
     };
   }
 
-  // The one thing worth checking before a run exists: the clone is lazy, so
-  // without this a dead ssh agent surfaces mid-run at the first worktree.
+  // A binding declared while the service was running has no clone, and the
+  // worktree request would be the first thing to say so — mid-run.
+  if (!hasBindingClone(bindingRepoDir({ factoryRoot, bindingName: name }))) {
+    return {
+      ok: false,
+      reason: `binding ${name} has no clone yet`,
+      repair: `restart the service: ${RESTART_SERVICE} (it clones every binding on start)`,
+    };
+  }
+
+  // Cheap next to the clone, and the one thing that reports a dead ssh agent
+  // before a run burns an agent on it.
   const stderr = await probeRemoteAuth(binding.remote, PROBE_TIMEOUT_MS);
   if (stderr !== null) {
     return {

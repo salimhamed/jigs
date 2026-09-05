@@ -80,10 +80,14 @@ jigs bindings
 
 A binding is a name in `jigs.yml` mapped to a target repo's remote URL. jigs
 keeps its own bare clone per binding under
-`~/.local/share/jigs/bindings/<factory>/<binding>/repo.git`, cloned on the first
-worktree request, and cuts every worktree from it — the operator's own checkout
-is not involved. The binding also carries how its worktrees are provisioned —
-`jigs bind` writes `remote:` only, the rest is hand-edited and optional:
+`~/.local/share/jigs/bindings/<factory>/<binding>/repo.git` and cuts every
+worktree from it — the operator's own checkout is not involved. The service
+makes those clones when it starts, so the first `jigs service start` after a
+bind pays for them (seconds, up to a minute for a large repo), and a binding
+added later needs `jigs service restart` before any run can name it.
+
+The binding also carries how its worktrees are provisioned — `jigs bind` writes
+`remote:` only, the rest is hand-edited and optional:
 
 ```yaml
 bindings:
@@ -113,8 +117,11 @@ jigs service start
 jigs service status
 ```
 
-`jigs service start` prints the service URL and the dashboard URL. Both come
-from `jigs.yml`; do not guess either.
+`jigs service start` prints the service URL and the dashboard URL as soon as it
+has spawned the process; both come from `jigs.yml`, so do not guess either. The
+spawned service then clones every declared binding before the World starts,
+logging a line per binding — that happens in the service's own log, after these
+URLs print, and `jigs service logs` is where to watch it.
 
 ```
 started my-factory-2286ac2a: pid 3343834 at http://localhost:9010

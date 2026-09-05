@@ -2,8 +2,8 @@
 
 > **Amended 2026-09-05 (R5).** A binding is now a **name plus a remote URL**;
 > the operator's checkout is not part of it. jigs keeps its own bare clone per
-> binding under `jigsDataDir()`, cloned lazily on the first worktree request,
-> and cuts worktrees from that. The `path`, `workspace_dir` and
+> binding under `jigsDataDir()`, made when the service starts, and cuts
+> worktrees from that. The `path`, `workspace_dir` and
 > `ff_default_branch` keys are gone, as is the bind-time `.jigs.yml` scaffold
 > offer. This reverses the "`jigs bind <remote-url>` cloning: rejected for v0"
 > option below — auth is the operator's ssh agent, location is not

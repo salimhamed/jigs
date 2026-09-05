@@ -32,7 +32,7 @@ export interface BindResult {
 }
 
 // A pure config edit plus the webhook leg: nothing here touches the network for
-// the repo itself, and the clone is cut on the first worktree request.
+// the repo itself, and the clone is the service's to make at its next start.
 export async function bindRepo(
   remoteUrl: string,
   deps: BindDeps,
@@ -79,11 +79,14 @@ export async function bindRepo(
   if (updated !== text) {
     writeFactoryConfigText(factoryRoot, updated);
   }
-  deps.out(
-    existing !== undefined
-      ? `${name} already points at ${remoteUrl}`
-      : `bound ${name} → ${remoteUrl}`,
-  );
+  if (existing !== undefined) {
+    deps.out(`${name} already points at ${remoteUrl}`);
+  } else {
+    deps.out(`bound ${name} → ${remoteUrl}`);
+    // The running service knows nothing of this binding, and every run that
+    // names it is refused until one that does has cloned it.
+    deps.out(`restart the service to clone ${name}: jigs service restart`);
+  }
 
   const webhook = await ensureWebhook(remoteUrl, config.ingress_url, deps);
   return { name, remote: remoteUrl, webhook };
