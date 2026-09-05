@@ -53,21 +53,14 @@ test("re-upsert with identical values is byte-identical", () => {
 });
 
 test("upsertBinding re-pins the remote without touching other fields", () => {
-  const withExtras = `${SERVICE}bindings:
-  acme-api:
-    path: ~/Code/acme-api
-    remote: git@github.com:acme/api.git
-    workspace_dir: ~/Code/acme-api-worktrees
-    ff_default_branch: false
-`;
-  const text = upsertBinding(withExtras, "acme-api", {
+  const text = upsertBinding(commented, "acme-api", {
     path: "~/Code/acme-api",
     remote: "git@github.com:acme/api-moved.git",
   });
   const binding = parseFactoryConfig(text).bindings["acme-api"];
   expect(binding?.remote).toBe("git@github.com:acme/api-moved.git");
-  expect(binding?.workspace_dir).toBe("~/Code/acme-api-worktrees");
-  expect(binding?.ff_default_branch).toBe(false);
+  expect(binding?.path).toBe("~/Code/acme-api");
+  expect(text).toContain("# local checkout");
 });
 
 test("removeBinding removes one entry and preserves siblings' comments", () => {
@@ -101,11 +94,6 @@ test("parseFactoryConfig rejects a binding missing required fields", () => {
   expect(() =>
     parseFactoryConfig(`${SERVICE}bindings:\n  acme-api:\n    path: ~/x\n`),
   ).toThrow(/remote/);
-});
-
-test("ff_default_branch defaults to true", () => {
-  const config = parseFactoryConfig(commented);
-  expect(config.bindings["acme-api"]?.ff_default_branch).toBe(true);
 });
 
 test("parseFactoryConfig tolerates unknown top-level keys", () => {

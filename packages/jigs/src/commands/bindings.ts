@@ -18,7 +18,6 @@ export interface BindingRow {
   path: string;
   remote: string;
   state: string;
-  notes: string[];
 }
 
 export async function listBindings(deps: BindingsDeps): Promise<BindingRow[]> {
@@ -26,16 +25,11 @@ export async function listBindings(deps: BindingsDeps): Promise<BindingRow[]> {
   const config = parseFactoryConfig(readFactoryConfigText(factoryRoot));
   const rows: BindingRow[] = [];
   for (const [name, binding] of Object.entries(config.bindings)) {
-    const notes: string[] = [];
-    if (!binding.ff_default_branch) notes.push("ff_default_branch: off");
-    if (binding.workspace_dir !== undefined)
-      notes.push(`workspace_dir: ${binding.workspace_dir}`);
     rows.push({
       name,
       path: binding.path,
       remote: binding.remote,
       state: await resolveState(binding.path, binding.remote, deps.home),
-      notes,
     });
   }
   return rows;

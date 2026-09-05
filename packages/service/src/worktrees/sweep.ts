@@ -1,30 +1,23 @@
-import {
-  existsSync,
-  readdirSync,
-  realpathSync,
-  rmdirSync,
-  rmSync,
-} from "node:fs";
+import { existsSync, rmdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import {
   applyTeardown,
   classifySweep,
   decideTeardown,
-  describeFf,
-  fastForwardDefaultBranch,
+  fetchOriginDefault,
   isBranchMerged,
   isWorktreeDirty,
-  listWorktreePaths,
-  type ResolvedBinding,
   removeManagedCodexHome,
-  resolveBindings,
   type SweepEntry,
-  worktreeParentDir,
 } from "jigs";
 import type { Sql } from "postgres";
 import { type OwnerState, readOwner } from "./acquire";
-import { deleteWorktree, listWorktrees, setWorktreeState } from "./registry";
-import { factoryRoot } from "./request";
+import {
+  deleteWorktree,
+  listWorktrees,
+  setWorktreeState,
+  type WorktreeRow,
+} from "./registry";
 
 // The one disk-against-registry-against-run-states join, behind both `jigs
 // sweep` and the worktree table `jigs ps` renders. Nothing runs it unattended:
@@ -34,7 +27,7 @@ import { factoryRoot } from "./request";
 // operator acts, and the teardown matrix falls out of the classifier.
 
 // Remove the tree, keep both branches: what a discard with no merge behind it
-// looks like, whether the tree was dirty, unregistered, or half-provisioned.
+// looks like, whether the tree was dirty or half-provisioned.
 const DISCARD_TREE = {
   removeWorktree: true,
   force: true,
@@ -49,17 +42,12 @@ export interface SweepOptions {
   // A clean scoped to operator-approved worktrees: only entries whose path is
   // listed are acted on. Absent means every eligible entry.
   paths?: string[];
-  // Off for callers that must never act on the operator's own directories —
-  // a workspace_dir binding places worktrees directly among them.
-  includeUnregistered?: boolean;
 }
 
 export interface SweepDeps {
   sql: Sql;
   readOwner?: (runId: string) => Promise<OwnerState>;
-  bindings?: () => ResolvedBinding[];
-  factoryRoot?: () => string;
-  fastForward?: typeof fastForwardDefaultBranch;
+  fetchDefault?: typeof fetchOriginDefault;
   removeCodexHome?: (runKey: string) => void;
   log?: (line: string) => void;
 }
@@ -77,12 +65,11 @@ export async function sweepWorktrees(
   const clean = options.clean === true;
   const force = options.force === true;
   const owner = deps.readOwner ?? readOwner;
-  const ff = deps.fastForward ?? fastForwardDefaultBranch;
+  const fetchDefault = deps.fetchDefault ?? fetchOriginDefault;
   const removeCodexHome = deps.removeCodexHome ?? removeManagedCodexHome;
   const log = deps.log ?? ((line: string) => console.log(line));
 
   const rows = await listWorktrees(deps.sql);
-  const byPath = new Map(rows.map((row) => [row.path, row]));
   const owners = new Map<string, OwnerState>();
   for (const row of rows) {
     if (!owners.has(row.ownerRunId)) {
@@ -90,11 +77,12 @@ export async function sweepWorktrees(
     }
   }
 
-  const entries: SweepEntry[] = [];
+  const classified: Array<{ row: WorktreeRow; entry: SweepEntry }> = [];
   for (const row of rows) {
     const onDisk = existsSync(row.path);
-    entries.push(
-      classifySweep({
+    classified.push({
+      row,
+      entry: classifySweep({
         path: row.path,
         branch: row.branch,
         ownerRunId: row.ownerRunId,
@@ -103,52 +91,10 @@ export async function sweepWorktrees(
         state: row.state,
         onDisk,
         dirty: onDisk ? await isWorktreeDirty(row.path) : false,
-        registered: true,
       }),
-    );
+    });
   }
-
-  // Directories the registry never heard of, found by scanning where each
-  // binding's worktrees would live.
-  const bindingList = (deps.bindings ?? bindingsOrNone(deps))();
-  const parents = new Map<string, ResolvedBinding>();
-  for (const binding of bindingList) {
-    parents.set(parentDirFor(binding, deps), binding);
-  }
-  const ffEnabled = ffByCheckout(bindingList);
-  const unregisteredCheckouts = new Map<string, string>();
-  if (options.includeUnregistered !== false) {
-    const known = new Map<string, Set<string>>();
-    for (const binding of parents.values()) {
-      if (known.has(binding.checkoutRoot)) continue;
-      const paths = await listWorktreePaths(binding.checkoutRoot);
-      known.set(binding.checkoutRoot, new Set(paths.map(physicalPath)));
-    }
-    for (const [parent, binding] of parents) {
-      for (const name of readDirs(parent)) {
-        const dir = path.join(parent, name);
-        if (byPath.has(dir)) continue;
-        // A workspace_dir binding points at the operator's own directory,
-        // whose other contents are none of the sweep's business: only what
-        // git calls a worktree of this checkout is the sweep's to report.
-        if (!known.get(binding.checkoutRoot)?.has(physicalPath(dir))) continue;
-        unregisteredCheckouts.set(dir, binding.checkoutRoot);
-        entries.push(
-          classifySweep({
-            path: dir,
-            branch: name,
-            ownerRunId: null,
-            ownerTerminal: null,
-            keep: false,
-            state: "unregistered",
-            onDisk: true,
-            dirty: await isWorktreeDirty(dir),
-            registered: false,
-          }),
-        );
-      }
-    }
-  }
+  const entries = classified.map((item) => item.entry);
 
   // `removed` counts paths reconciled away — a directory deleted, a stale row
   // dropped, or both.
@@ -156,36 +102,36 @@ export async function sweepWorktrees(
   if (!clean) return { entries, removed, removedDirs: [] };
 
   const approved = options.paths === undefined ? null : new Set(options.paths);
-  const fastForwarded = new Set<string>();
-  for (const entry of entries) {
+  const fetched = new Set<string>();
+  for (const { row, entry } of classified) {
     if (!entry.eligible) continue;
     if (approved !== null && !approved.has(entry.path)) continue;
-    const row = byPath.get(entry.path);
-    const checkoutRoot =
-      row?.checkoutRoot ?? unregisteredCheckouts.get(entry.path) ?? "";
-    const status =
-      row === undefined
-        ? "unknown"
-        : (owners.get(row.ownerRunId)?.status ?? "unknown");
-    // The post-merge half of the fast-forward requirement, and it runs first:
-    // whether the branch merged is read off refs/remotes/origin/<default>,
-    // which nothing but this fetch refreshes.
+    const { checkoutRoot } = row;
+    const status = owners.get(row.ownerRunId)?.status ?? "unknown";
+    // The merge check below reads refs/remotes/origin/<default>, and nothing
+    // else refreshes it. A failure is a notice, never the end of the pass:
+    // trees earlier in the loop are already gone, and the stale ref reads
+    // unmerged, which keeps the branch as insurance.
     if (
       status === "completed" &&
       checkoutRoot !== "" &&
-      !fastForwarded.has(checkoutRoot)
+      !fetched.has(checkoutRoot)
     ) {
-      fastForwarded.add(checkoutRoot);
-      const enabled = ffEnabled.get(checkoutRoot) ?? true;
-      const result = await ff({ checkoutRoot, enabled });
-      log(`[sweep] ${describeFf(checkoutRoot, result)}`);
+      fetched.add(checkoutRoot);
+      try {
+        await fetchDefault(checkoutRoot);
+      } catch (err) {
+        log(
+          `[sweep] could not fetch the default branch of ${checkoutRoot}: ${String(err)}`,
+        );
+      }
     }
     const merged =
       status === "completed" &&
       checkoutRoot !== "" &&
       (await isBranchMerged(checkoutRoot, entry.branch));
     let plan = decideTeardown({
-      keep: row?.keep === true,
+      keep: row.keep,
       dirty: entry.state === "abandoned-dirty",
       merged,
     });
@@ -193,9 +139,7 @@ export async function sweepWorktrees(
     if (plan.preserve !== null) {
       // The marking happens on every clean pass, force or not: preserved
       // wreckage has to be visible in `ps` and `sweep`, not just on disk.
-      if (row !== undefined) {
-        await setWorktreeState(deps.sql, entry.path, plan.preserve);
-      }
+      await setWorktreeState(deps.sql, entry.path, plan.preserve);
       if (!force) continue;
       // --force is the operator overriding the preservation rule by hand; the
       // branches still stay, as they do for any unmerged run.
@@ -203,17 +147,16 @@ export async function sweepWorktrees(
     }
     // An untracked file is enough to read as dirty, so without the merged
     // exemption the matrix's headline row — done and merged — would need
-    // --force. Scoped to abandoned-dirty: a provision-failed or unregistered
-    // tree reads as merged for want of commits of its own, and it is the
-    // diagnosis evidence ADR 0007 preserves.
+    // --force. Scoped to abandoned-dirty: a provision-failed tree reads as
+    // merged for want of commits of its own, and it is the diagnosis evidence
+    // ADR 0007 preserves.
     const mergedOverride = merged && entry.state === "abandoned-dirty";
     if (entry.requiresForce && !force && !mergedOverride) continue;
 
     if (entry.state !== "missing" && checkoutRoot !== "") {
-      // Neither an unregistered directory nor a half-provisioned tree has a
-      // merged branch behind it: the tree goes, the branches stay.
-      const branchesStay =
-        entry.state === "unregistered" || entry.state === "provision-failed";
+      // A half-provisioned tree has no merged branch behind it: the tree goes,
+      // the branches stay.
+      const branchesStay = entry.state === "provision-failed";
       await applyTeardown(branchesStay ? DISCARD_TREE : plan, {
         checkoutRoot,
         worktreePath: entry.path,
@@ -222,11 +165,13 @@ export async function sweepWorktrees(
       // git refuses to remove a directory it never registered as a worktree.
       rmSync(entry.path, { recursive: true, force: true });
     }
-    if (row !== undefined) await deleteWorktree(deps.sql, entry.path);
+    await deleteWorktree(deps.sql, entry.path);
     removed.push(entry.path);
   }
 
-  const removedDirs = removeEmptyWorkspaceDirs(parents.keys());
+  const removedDirs = removeEmptyParentDirs(
+    new Set(rows.map((row) => path.dirname(row.path))),
+  );
 
   const gone = new Set(removed);
   // Known gap: a terminal run that never requested a worktree still leaks its
@@ -242,71 +187,9 @@ export async function sweepWorktrees(
   return { entries, removed, removedDirs };
 }
 
-// A checkout is frozen if any binding on it opts out of the fast-forward.
-export function ffByCheckout(
-  bindings: ResolvedBinding[],
-): Map<string, boolean> {
-  const enabled = new Map<string, boolean>();
-  for (const binding of bindings) {
-    enabled.set(
-      binding.checkoutRoot,
-      (enabled.get(binding.checkoutRoot) ?? true) && binding.ffDefaultBranch,
-    );
-  }
-  return enabled;
-}
-
-function bindingsOrNone(deps: SweepDeps): () => ResolvedBinding[] {
-  // A service with no reachable factory config still sweeps what the registry
-  // knows; only the unregistered-directory scan needs the binding list.
-  return () => {
-    try {
-      return resolveBindings((deps.factoryRoot ?? factoryRoot)());
-    } catch {
-      return [];
-    }
-  };
-}
-
-function parentDirFor(binding: ResolvedBinding, deps: SweepDeps): string {
-  // workspace_dir short-circuits before the factory root is even needed.
-  if (binding.workspaceDir !== undefined) {
-    return worktreeParentDir({
-      factoryRoot: "",
-      bindingName: binding.name,
-      workspaceDir: binding.workspaceDir,
-    });
-  }
-  return worktreeParentDir({
-    factoryRoot: (deps.factoryRoot ?? factoryRoot)(),
-    bindingName: binding.name,
-  });
-}
-
-// git reports physical toplevels, so a symlinked component has to be resolved
-// on both sides before the paths can be compared.
-function physicalPath(dir: string): string {
-  try {
-    return realpathSync(path.resolve(dir));
-  } catch {
-    return path.resolve(dir);
-  }
-}
-
-function readDirs(dir: string): string[] {
-  try {
-    return readdirSync(dir, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name);
-  } catch {
-    return [];
-  }
-}
-
-// Only the per-binding parents, never the base: an empty <binding>/ left
-// behind after the last worktree is noise, but the workspace root is the
-// operator's.
-function removeEmptyWorkspaceDirs(parents: Iterable<string>): string[] {
+// Only the directories the swept rows sat directly in, never anything above
+// them.
+function removeEmptyParentDirs(parents: Iterable<string>): string[] {
   const candidates = new Set<string>(parents);
   const gone: string[] = [];
   for (const dir of candidates) {

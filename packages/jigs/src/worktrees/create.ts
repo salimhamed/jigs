@@ -49,6 +49,13 @@ async function fetchFreshness(
   }
 }
 
+// The sweep's merge check reads refs/remotes/origin/<default>, and nothing
+// else in that pass refreshes it.
+export async function fetchOriginDefault(repoDir: string): Promise<void> {
+  const defaultBranch = await resolveDefaultBranch(repoDir);
+  await git(["fetch", "origin", defaultBranch], repoDir);
+}
+
 export interface CreateWorktreeOptions {
   checkoutRoot: string;
   worktreePath: string;
@@ -133,23 +140,6 @@ export async function createWorktree(
     headSha,
     behindDefault,
   };
-}
-
-// What git itself considers a worktree of this checkout, so a sweep of a
-// workspace_dir binding can tell its own trees from the operator's other
-// directories. Paths are git's physical toplevels.
-export async function listWorktreePaths(
-  checkoutRoot: string,
-): Promise<string[]> {
-  const listing = await tryGit(
-    ["worktree", "list", "--porcelain"],
-    checkoutRoot,
-  );
-  if (listing === null) return [];
-  return listing
-    .split("\n")
-    .filter((line) => line.startsWith("worktree "))
-    .map((line) => line.slice("worktree ".length));
 }
 
 export interface WorktreeStatus {

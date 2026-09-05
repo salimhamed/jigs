@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
@@ -43,7 +43,6 @@ test("zero-config bind writes a ~-contracted binding with the pinned remote", as
     name: "target-repo",
     path: "~/target-repo",
     remote: "git@github.com:acme/target-repo.git",
-    scaffolded: false,
   });
   expect(jigsYml()).toContain("target-repo:");
   expect(jigsYml()).toContain("path: ~/target-repo");
@@ -108,52 +107,6 @@ test("bind outside a factory repo fails with guidance", async () => {
   await expect(bindRepo(target, deps({ cwd: tmp }))).rejects.toThrow(
     "not inside a factory repo",
   );
-});
-
-test("scaffold offer writes .jigs.yml only on confirm", async () => {
-  const target = makeTargetRepo(tmp, {
-    files: { "pnpm-lock.yaml": "", ".env": "SECRET=1" },
-  });
-  const result = await bindRepo(target, deps({ confirm: async () => true }));
-  expect(result.scaffolded).toBe(true);
-  const scaffold = readFileSync(path.join(target, ".jigs.yml"), "utf8");
-  expect(scaffold).toContain("- .env");
-  expect(scaffold).toContain("- pnpm install --frozen-lockfile");
-});
-
-test("declining the scaffold writes nothing but keeps the bind", async () => {
-  const target = makeTargetRepo(tmp);
-  const result = await bindRepo(target, deps({ confirm: async () => false }));
-  expect(result.scaffolded).toBe(false);
-  expect(existsSync(path.join(target, ".jigs.yml"))).toBe(false);
-  expect(jigsYml()).toContain("target-repo:");
-});
-
-test("scaffold never overwrites an existing .jigs.yml", async () => {
-  const target = makeTargetRepo(tmp, {
-    files: { ".jigs.yml": "worktree: {}\n" },
-  });
-  let asked = false;
-  await bindRepo(
-    target,
-    deps({
-      confirm: async () => {
-        asked = true;
-        return true;
-      },
-    }),
-  );
-  expect(asked).toBe(false);
-  expect(readFileSync(path.join(target, ".jigs.yml"), "utf8")).toBe(
-    "worktree: {}\n",
-  );
-});
-
-test("non-interactive bind skips the scaffold offer with a note", async () => {
-  const target = makeTargetRepo(tmp);
-  const result = await bindRepo(target, deps());
-  expect(result.scaffolded).toBe(false);
-  expect(lines.some((l) => l.includes("non-interactive"))).toBe(true);
 });
 
 // ---- the webhook leg --------------------------------------------------------

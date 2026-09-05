@@ -8,7 +8,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { ResolvedBinding } from "jigs";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import type { OwnerState } from "./acquire";
 import type { WorktreeRow } from "./registry";
@@ -62,14 +61,6 @@ afterEach(() => {
   rmSync(tmp, { recursive: true, force: true });
 });
 
-const binding: ResolvedBinding = {
-  name: "api",
-  checkoutRoot: "",
-  remote: "git@github.com:acme/api.git",
-  workspaceDir: "",
-  ffDefaultBranch: true,
-};
-
 function addWorktree(branch: string): string {
   const target = path.join(workspace, branch);
   git(checkout, "worktree", "add", "-q", target, "-b", branch);
@@ -103,14 +94,8 @@ const owners =
 function deps(overrides: Record<string, unknown> = {}) {
   return {
     sql: makeFakeSql(store),
-    bindings: () => [
-      { ...binding, checkoutRoot: checkout, workspaceDir: workspace },
-    ],
-    factoryRoot: () => tmp,
     readOwner: owners({}),
-    fastForward: async () => ({ moved: false, skipped: "disabled" as const }),
     removeCodexHome: () => {},
-    log: () => {},
     ...overrides,
   };
 }
@@ -215,44 +200,6 @@ test("a half-provisioned tree is kept for diagnosis until --force", async () => 
   );
 });
 
-test("an unregistered directory is listed and only deleted with --clean", async () => {
-  const loose = addWorktree("loose");
-
-  const report = await sweepWorktrees({}, deps());
-  expect(report.entries[0]).toMatchObject({
-    state: "unregistered",
-    eligible: true,
-  });
-  expect(existsSync(loose)).toBe(true);
-
-  await sweepWorktrees({ clean: true }, deps());
-  expect(existsSync(loose)).toBe(false);
-});
-
-test("a directory that is not a worktree at all is never listed or deleted", async () => {
-  const notes = path.join(workspace, "human-notes");
-  mkdirSync(notes, { recursive: true });
-  writeFileSync(path.join(notes, "todo.md"), "# not yours\n");
-
-  const report = await sweepWorktrees({ clean: true }, deps());
-  expect(report.entries).toEqual([]);
-  expect(existsSync(path.join(notes, "todo.md"))).toBe(true);
-});
-
-test("the unattended pass leaves unregistered directories alone", async () => {
-  const loose = addWorktree("loose");
-
-  const report = await sweepWorktrees(
-    { clean: true, includeUnregistered: false },
-    deps(),
-  );
-  expect(report.entries).toEqual([]);
-  expect(existsSync(loose)).toBe(true);
-
-  await sweepWorktrees({ clean: true }, deps());
-  expect(existsSync(loose)).toBe(false);
-});
-
 test("a registered path missing from disk drops only its row", async () => {
   register(path.join(workspace, "ghost"), "ghost");
   const report = await sweepWorktrees({ clean: true }, deps());
@@ -260,7 +207,7 @@ test("a registered path missing from disk drops only its row", async () => {
   expect(store.size).toBe(0);
 });
 
-test("a completed owner's teardown deletes the row and fast-forwards the default branch", async () => {
+test("a completed owner's teardown deletes the row and fetches the default branch once", async () => {
   const done = addWorktree("done");
   writeFileSync(path.join(done, "shipped.txt"), "shipped\n");
   git(done, "add", "shipped.txt");
@@ -270,18 +217,17 @@ test("a completed owner's teardown deletes the row and fast-forwards the default
   git(done, "push", "-q", "origin", "done:main");
   git(checkout, "fetch", "-q", "origin");
   register(done, "done");
-  const ffCalls: string[] = [];
+  const fetches: string[] = [];
   await sweepWorktrees(
     { clean: true },
     deps({
       readOwner: owners({ run_done: { terminal: true, status: "completed" } }),
-      fastForward: async ({ checkoutRoot }: { checkoutRoot: string }) => {
-        ffCalls.push(checkoutRoot);
-        return { moved: false, skipped: "already-current" as const };
+      fetchDefault: async (repoDir: string) => {
+        fetches.push(repoDir);
       },
     }),
   );
-  expect(ffCalls).toEqual([checkout]);
+  expect(fetches).toEqual([checkout]);
   expect(store.size).toBe(0);
   // done (merged): the local branch goes with the worktree.
   expect(() =>
@@ -313,35 +259,6 @@ test("an untracked file does not cost a merged worktree its teardown", async () 
   ).toThrow();
 });
 
-test("a binding with ff_default_branch: false freezes its checkout's default", async () => {
-  const done = addWorktree("done");
-  register(done, "done");
-  const ffCalls: Array<{ checkoutRoot: string; enabled?: boolean }> = [];
-
-  await sweepWorktrees(
-    { clean: true },
-    deps({
-      bindings: () => [
-        {
-          ...binding,
-          checkoutRoot: checkout,
-          workspaceDir: workspace,
-          ffDefaultBranch: false,
-        },
-      ],
-      readOwner: owners({ run_done: { terminal: true, status: "completed" } }),
-      fastForward: async (options: {
-        checkoutRoot: string;
-        enabled?: boolean;
-      }) => {
-        ffCalls.push(options);
-        return { moved: false, skipped: "disabled" as const };
-      },
-    }),
-  );
-  expect(ffCalls).toEqual([{ checkoutRoot: checkout, enabled: false }]);
-});
-
 test("the merge check sees work pushed since the checkout last fetched", async () => {
   const done = addWorktree("done");
   writeFileSync(path.join(done, "shipped.txt"), "shipped\n");
@@ -353,21 +270,42 @@ test("the merge check sees work pushed since the checkout last fetched", async (
   git(done, "push", "-q", "origin", "done:main");
   git(checkout, "update-ref", "refs/remotes/origin/main", stale);
   register(done, "done");
+  // The sweep's own fetch of origin/<default> is the only one in the pass, so
+  // it has to run before the merge is decided.
   await sweepWorktrees(
     { clean: true },
     deps({
       readOwner: owners({ run_done: { terminal: true, status: "completed" } }),
-      // The fast-forward is the only fetch in the pass, so it has to run
-      // before the merge is decided.
-      fastForward: async ({ checkoutRoot }: { checkoutRoot: string }) => {
-        git(checkoutRoot, "fetch", "-q", "origin");
-        return { moved: false, skipped: "already-current" as const };
-      },
     }),
   );
   expect(() =>
     git(checkout, "rev-parse", "--verify", "refs/heads/done"),
   ).toThrow();
+});
+
+test("an unreachable origin costs a notice, not the pass", async () => {
+  const done = addWorktree("done");
+  writeFileSync(path.join(done, "shipped.txt"), "shipped\n");
+  git(done, "add", "shipped.txt");
+  git(done, "commit", "-q", "-m", "shipped");
+  register(done, "done");
+  git(checkout, "remote", "set-url", "origin", path.join(tmp, "nonexistent"));
+  const lines: string[] = [];
+
+  const report = await sweepWorktrees(
+    { clean: true },
+    deps({
+      readOwner: owners({ run_done: { terminal: true, status: "completed" } }),
+      log: (line: string) => lines.push(line),
+    }),
+  );
+
+  expect(report.removed).toEqual([done]);
+  expect(lines.some((line) => line.includes("could not fetch"))).toBe(true);
+  // The merge check fell back to the stale ref, which reads unmerged.
+  expect(git(checkout, "rev-parse", "--verify", "refs/heads/done")).toMatch(
+    /^[0-9a-f]{40}$/,
+  );
 });
 
 test("a completed owner whose branch never merged keeps it as insurance", async () => {

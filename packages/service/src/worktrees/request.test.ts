@@ -1,7 +1,11 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { PostCreateFailedError, type ResolvedBinding } from "jigs";
+import {
+  PostCreateFailedError,
+  type ResolvedBinding,
+  worktreePath,
+} from "jigs";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
   type AcquireWorktreeDeps,
@@ -14,19 +18,24 @@ import { makeFakeSql } from "./test-fixtures";
 
 let tmp: string;
 let checkout: string;
-let workspace: string;
+let target: string;
 let store: Map<string, WorktreeRow>;
 
 beforeEach(() => {
   tmp = mkdtempSync(path.join(tmpdir(), "jigs-request-test-"));
   checkout = path.join(tmp, "checkout");
-  workspace = path.join(tmp, "workspace");
   store = new Map();
   // An ambient dev-database URL would otherwise make this lane open a real
   // connection and read the operator's registry.
   vi.stubEnv("WORKFLOW_POSTGRES_URL", "");
   vi.stubEnv("JIGS_FACTORY_ROOT", tmp);
+  vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
   writeFileSync(path.join(tmp, "jigs.yml"), "bindings: {}\n");
+  target = worktreePath({
+    factoryRoot: tmp,
+    bindingName: "api",
+    branch: "feat",
+  });
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -37,18 +46,13 @@ const binding: ResolvedBinding = {
   name: "api",
   checkoutRoot: "",
   remote: "git@github.com:acme/api.git",
-  ffDefaultBranch: true,
 };
 
 // The acquire seam keeps the registry write real (through the fake sql) while
 // standing in for the git half; these tests are about what happens around it.
 const deps = (overrides: Record<string, unknown> = {}) => ({
   sql: makeFakeSql(store),
-  resolveBinding: () => ({
-    ...binding,
-    checkoutRoot: checkout,
-    workspaceDir: workspace,
-  }),
+  resolveBinding: () => ({ ...binding, checkoutRoot: checkout }),
   acquire: (
     request: AcquireWorktreeRequest,
     acquireDeps: AcquireWorktreeDeps,
@@ -67,7 +71,6 @@ const deps = (overrides: Record<string, unknown> = {}) => ({
         behindDefault: 0,
       }),
     }),
-  fastForward: async () => ({ moved: false, skipped: "disabled" as const }),
   log: () => {},
   ...overrides,
 });
@@ -85,8 +88,7 @@ test("a failing post_create leaves the row marked provision-failed and rethrows"
     (err: unknown) => err,
   );
   expect(failure).toBeInstanceOf(PostCreateFailedError);
-  const row = store.get(path.join(workspace, "feat"));
-  expect(row?.state).toBe("provision-failed");
+  expect(store.get(target)?.state).toBe("provision-failed");
 });
 
 test("a successful request registers the worktree as active", async () => {
@@ -94,26 +96,12 @@ test("a successful request registers the worktree as active", async () => {
     { runId: "run_a", binding: "api", branch: "feat", keep: true },
     deps({ provision: async () => {} }),
   );
-  const row = store.get(path.join(workspace, "feat"));
-  expect(row).toMatchObject({
+  expect(store.get(target)).toMatchObject({
     state: "active",
     ownerRunId: "run_a",
     checkoutRoot: checkout,
     keep: true,
   });
-});
-
-test("the fast-forward notice is logged, never thrown", async () => {
-  const lines: string[] = [];
-  await provisionRequest(
-    { runId: "run_a", binding: "api", branch: "feat" },
-    deps({
-      provision: async () => {},
-      fastForward: async () => ({ moved: false, skipped: "dirty" as const }),
-      log: (line: string) => lines.push(line),
-    }),
-  );
-  expect(lines[0]).toContain("dirty");
 });
 
 test("a provisioned worktree logs its binding, branch, and path", async () => {
@@ -126,7 +114,7 @@ test("a provisioned worktree logs its binding, branch, and path", async () => {
     }),
   );
   expect(lines).toContain(
-    `[worktree] provisioned binding=api branch=feat path=${path.join(workspace, "feat")}`,
+    `[worktree] provisioned binding=api branch=feat path=${target}`,
   );
 });
 

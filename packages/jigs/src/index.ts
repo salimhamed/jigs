@@ -50,17 +50,11 @@ export {
   type BranchResolution,
   type CreateWorktreeOptions,
   createWorktree,
-  listWorktreePaths,
+  fetchOriginDefault,
   type WorktreeFacts,
   type WorktreeStatus,
   worktreeStatus,
 } from "./worktrees/create.ts";
-export {
-  describeFf,
-  type FastForwardOptions,
-  type FfResult,
-  fastForwardDefaultBranch,
-} from "./worktrees/fast-forward.ts";
 export {
   type WorktreePathOptions,
   worktreeParentDir,

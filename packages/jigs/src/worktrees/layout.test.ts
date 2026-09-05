@@ -1,6 +1,5 @@
 import path from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
-import { expandHome } from "../paths.ts";
 import {
   branchDirname,
   factorySlug,
@@ -39,17 +38,6 @@ test("worktreePath joins base, factory slug, binding name, branch dirname", () =
   );
 });
 
-test("workspace_dir override wins over the central root", () => {
-  const p = worktreePath({
-    baseDir: "/data/worktrees",
-    factoryRoot: "/f/acme",
-    bindingName: "api",
-    branch: "salim/fix",
-    workspaceDir: "~/wt",
-  });
-  expect(p).toBe(path.join(expandHome("~/wt"), "salim-fix"));
-});
-
 test("worktreeParentDir is the branch-less half of the central path", () => {
   const options = {
     baseDir: "/data/worktrees",
@@ -62,17 +50,6 @@ test("worktreeParentDir is the branch-less half of the central path", () => {
   expect(worktreePath({ ...options, branch: "salim/fix" })).toBe(
     path.join(worktreeParentDir(options), "salim-fix"),
   );
-});
-
-test("worktreeParentDir under workspace_dir is the workspace dir itself", () => {
-  expect(
-    worktreeParentDir({
-      baseDir: "/data/worktrees",
-      factoryRoot: "/f/acme",
-      bindingName: "api",
-      workspaceDir: "~/wt",
-    }),
-  ).toBe(expandHome("~/wt"));
 });
 
 test("central root defaults to the XDG data home", () => {

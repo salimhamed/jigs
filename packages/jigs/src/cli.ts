@@ -58,14 +58,7 @@ function printBindingsTable(
 ): void {
   const lines = formatTable(
     ["NAME", "PATH", "REMOTE", "STATE"],
-    rows.map((row) => [
-      row.name,
-      row.path,
-      row.remote,
-      row.notes.length > 0
-        ? `${row.state} (${row.notes.join(", ")})`
-        : row.state,
-    ]),
+    rows.map((row) => [row.name, row.path, row.remote, row.state]),
   );
   for (const line of lines) out(line);
 }
@@ -96,11 +89,7 @@ program
   .argument("<path>", "path to an existing git checkout with a remote")
   .option("--name <name>", "binding name (default: the repo dirname)")
   .action(async (target: string, options: { name?: string }) => {
-    await bindRepo(
-      target,
-      { cwd: process.cwd(), confirm: makeConfirm(), out },
-      { name: options.name },
-    );
+    await bindRepo(target, { cwd: process.cwd(), out }, { name: options.name });
   });
 
 program

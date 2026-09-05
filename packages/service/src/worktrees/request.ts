@@ -1,6 +1,4 @@
 import {
-  describeFf,
-  fastForwardDefaultBranch,
   locateFactoryRoot,
   provisionWorktree,
   type ResolvedBinding,
@@ -15,8 +13,8 @@ import { setWorktreeState } from "./registry";
 import { registrySql } from "./sql";
 
 // The step side of the pipeline's worktree() request: resolve the binding,
-// acquire and register the tree, refresh the checkout's default branch, then
-// provision it from the target repo's .jigs.yml.
+// acquire and register the tree, then provision it from the target repo's
+// .jigs.yml.
 
 export function factoryRoot(): string {
   const override = process.env.JIGS_FACTORY_ROOT;
@@ -44,7 +42,6 @@ export interface ProvisionRequestDeps {
   sql?: Sql;
   resolveBinding?: (name: string) => ResolvedBinding;
   acquire?: typeof acquireWorktree;
-  fastForward?: typeof fastForwardDefaultBranch;
   provision?: typeof provisionWorktree;
   log?: (line: string) => void;
 }
@@ -58,7 +55,6 @@ export async function provisionRequest(
   const resolve =
     deps.resolveBinding ??
     ((name: string) => resolveBinding(factoryRoot(), name));
-  const ff = deps.fastForward ?? fastForwardDefaultBranch;
   const provision = deps.provision ?? provisionWorktree;
   const log = deps.log ?? ((line: string) => console.log(line));
 
@@ -67,9 +63,6 @@ export async function provisionRequest(
     factoryRoot: factoryRoot(),
     bindingName: binding.name,
     branch: request.branch,
-    ...(binding.workspaceDir === undefined
-      ? {}
-      : { workspaceDir: binding.workspaceDir }),
   });
 
   const facts = await (deps.acquire ?? acquireWorktree)(
@@ -82,13 +75,6 @@ export async function provisionRequest(
     },
     { sql },
   );
-
-  // Activation freshness: a notice either way, never a failure.
-  const result = await ff({
-    checkoutRoot: binding.checkoutRoot,
-    enabled: binding.ffDefaultBranch,
-  });
-  log(`[worktree] ${describeFf(binding.checkoutRoot, result)}`);
 
   try {
     await provision({

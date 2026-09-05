@@ -278,10 +278,9 @@ export function createApp(
       listRuns(factory),
       sql === null
         ? []
-        : sweepWorktrees(
-            { clean: false, includeUnregistered: false },
-            { sql },
-          ).then((report) => report.entries),
+        : sweepWorktrees({ clean: false }, { sql }).then(
+            (report) => report.entries,
+          ),
     ]);
     // The schedules ride along on the same run listing the table above
     // renders, so ps stays one round trip and the two tables can never
