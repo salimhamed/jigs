@@ -1,6 +1,6 @@
 import { rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
   commitToRemote,
   git,
@@ -20,6 +20,7 @@ beforeEach(() => {
   ({ repoDir, remoteDir, worktreesDir } = makeClonedBinding(tmp));
 });
 afterEach(() => {
+  vi.unstubAllEnvs();
   removeTmpDir(tmp);
 });
 
@@ -80,6 +81,49 @@ test("unknown branch forks from origin default, not a stale local one", async ()
   expect(facts.baseSha).toBe(advancedRemoteMain);
   expect(facts.headSha).toBe(advancedRemoteMain);
   expect(facts.behindDefault).toBe(0);
+});
+
+test("a branch the remote deleted on merge forks fresh, not off its stale tracking ref", async () => {
+  // The merged run's lineage, still in the clone as refs/remotes/origin/<b>
+  // after GitHub's delete-on-merge: forking from it re-presents commits that
+  // are already in the default branch.
+  const preSquash = commitToRemote(tmp, remoteDir, "agent/merged", {
+    "old.txt": "pre-squash",
+  });
+  git(repoDir, "fetch", "-q", "origin");
+  expect(git(repoDir, "rev-parse", "refs/remotes/origin/agent/merged")).toBe(
+    preSquash,
+  );
+  git(remoteDir, "update-ref", "-d", "refs/heads/agent/merged");
+
+  const facts = await createWorktree({
+    repoDir,
+    worktreePath: wtPath("merged"),
+    branch: "agent/merged",
+  });
+  expect(facts.resolution).toBe("new");
+  expect(facts.headSha).toBe(
+    git(repoDir, "rev-parse", "refs/remotes/origin/main"),
+  );
+  expect(() =>
+    git(repoDir, "rev-parse", "refs/remotes/origin/agent/merged"),
+  ).toThrow();
+});
+
+test("the deleted-branch case survives an operator locale that translates git", async () => {
+  // The missing-ref check reads git's message, which gettext translates: the
+  // guard is LC_ALL=C in the git env, not the developer's own locale.
+  vi.stubEnv("LANGUAGE", "de");
+  commitToRemote(tmp, remoteDir, "agent/localized", { "old.txt": "pre" });
+  git(repoDir, "fetch", "-q", "origin");
+  git(remoteDir, "update-ref", "-d", "refs/heads/agent/localized");
+
+  const facts = await createWorktree({
+    repoDir,
+    worktreePath: wtPath("localized"),
+    branch: "agent/localized",
+  });
+  expect(facts.resolution).toBe("new");
 });
 
 test("worktree creation never writes refs/heads/<default>", async () => {

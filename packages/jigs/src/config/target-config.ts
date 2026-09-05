@@ -47,26 +47,31 @@ export function readTargetConfig(dir: string): TargetConfig {
   return parseTargetConfig(readFileSync(file, "utf8"));
 }
 
-export interface ResolvedWorktreeConfig {
-  config: TargetWorktreeConfig;
-  source: "seed" | "worktree" | "defaults";
+// Copying nothing and running nothing is a valid answer, so a caller wanting
+// the defaults asks for them by name rather than reading them off a miss.
+// Frozen because one object is shared by every caller that asks.
+export const DEFAULT_WORKTREE_CONFIG: TargetWorktreeConfig = freezeConfig(
+  worktreeSchema.parse({}),
+);
+
+function freezeConfig(config: TargetWorktreeConfig): TargetWorktreeConfig {
+  Object.freeze(config.copy);
+  Object.freeze(config.post_create);
+  return Object.freeze(config);
 }
 
 // Seed first, worktree second: the seed directory is the operator's deliberate
 // answer for a target repo whose .jigs.yml is untracked, the worktree carries
-// the repo's own committed one. The source is reported so a run that found
-// neither says so in the log rather than provisioning silently.
+// the repo's own committed one. null so a run that found neither says so in
+// the log rather than provisioning silently.
 export function resolveWorktreeConfig(options: {
   seedDir: string;
   worktreePath: string;
-}): ResolvedWorktreeConfig {
-  for (const [source, dir] of [
-    ["seed", options.seedDir],
-    ["worktree", options.worktreePath],
-  ] as const) {
+}): TargetWorktreeConfig | null {
+  for (const dir of [options.seedDir, options.worktreePath]) {
     if (existsSync(path.join(dir, TARGET_CONFIG_FILE))) {
-      return { config: readTargetConfig(dir).worktree, source };
+      return readTargetConfig(dir).worktree;
     }
   }
-  return { config: targetConfigSchema.parse({}).worktree, source: "defaults" };
+  return null;
 }

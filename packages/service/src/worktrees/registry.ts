@@ -56,9 +56,10 @@ export async function ensureWorktreeRegistry(sql: ISql): Promise<void> {
   `;
   if (columns.length === 0) {
     throw new Error(
-      "jigs_worktrees predates the repo_dir column. The registry holds live " +
-        "worktrees only and the service recreates it on start, so the repair " +
-        "is to drop it: psql \"$WORKFLOW_POSTGRES_URL\" -c 'DROP TABLE jigs_worktrees'",
+      "jigs_worktrees predates the repo_dir column, so the service refuses " +
+        "to start. The registry holds live worktrees only and start recreates " +
+        "it, so the repair is to drop it: " +
+        "psql \"$WORKFLOW_POSTGRES_URL\" -c 'DROP TABLE jigs_worktrees'",
     );
   }
 }

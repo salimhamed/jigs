@@ -39,6 +39,15 @@ export async function bindRepo(
   options: BindOptions = {},
 ): Promise<BindResult> {
   const factoryRoot = locateFactoryRoot(deps.cwd);
+  // The remote is handed to git in positional slots for the life of the
+  // binding, so a leading dash is refused once, here, rather than defended
+  // against at every call site.
+  if (remoteUrl.startsWith("-")) {
+    throw new CliError(
+      `${remoteUrl} starts with a dash — bind takes a remote URL, not a git option`,
+      "jigs bind git@github.com:owner/repo.git",
+    );
+  }
   if (looksLikePath(remoteUrl)) {
     throw new CliError(
       `${remoteUrl} looks like a path — bind takes a remote URL`,

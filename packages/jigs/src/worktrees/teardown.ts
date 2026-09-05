@@ -105,6 +105,14 @@ export async function applyTeardown(
     // Idempotent by construction: git exits non-zero when the remote ref is
     // already gone, which is the normal case under GitHub delete-on-merge.
     await tryGit(["push", "origin", "--delete", branch], repoDir);
+    // That failed push leaves the tracking ref behind, and a re-run of the
+    // same ticket branch would fork from it — the pre-squash lineage, whose
+    // commits are already merged. Tolerated: a push that did delete took the
+    // ref with it.
+    await tryGit(
+      ["update-ref", "-d", `refs/remotes/origin/${branch}`],
+      repoDir,
+    );
   }
   if (plan.removeWorktree) {
     await tryGit(["worktree", "prune"], repoDir);

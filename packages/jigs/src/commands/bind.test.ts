@@ -83,6 +83,14 @@ test("a path argument is refused with the remote-URL hint", async () => {
   expect(jigsYml()).toBe(before);
 });
 
+test("a remote starting with a dash is refused before it can become a git option", async () => {
+  const before = jigsYml();
+  await expect(
+    bindRepo("--upload-pack=touch /tmp/pwned", deps()),
+  ).rejects.toThrow("starts with a dash");
+  expect(jigsYml()).toBe(before);
+});
+
 test("bind outside a factory repo fails with guidance", async () => {
   await expect(bindRepo(API, deps({ cwd: tmp }))).rejects.toThrow(
     "not inside a factory repo",

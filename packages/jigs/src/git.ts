@@ -6,27 +6,27 @@ import { CliError } from "./errors.ts";
 const execFileAsync = promisify(execFile);
 
 // What keeps a command that needs credentials from hanging forever on a
-// prompt instead of failing where the caller can report it.
-export function nonInteractiveGitEnv(): NodeJS.ProcessEnv {
+// prompt instead of failing where the caller can report it. Every git call
+// jigs makes runs unattended, so `git`/`tryGit` merge this in unconditionally.
+// LC_ALL because callers match on git's messages, which are gettext-translated
+// under the operator's locale; it also outranks LANGUAGE.
+function nonInteractiveGitEnv(): NodeJS.ProcessEnv {
   return {
     GIT_TERMINAL_PROMPT: "0",
     GIT_ASKPASS: "",
     SSH_ASKPASS: "",
     GIT_SSH_COMMAND: `${process.env.GIT_SSH_COMMAND ?? "ssh"} -oBatchMode=yes`,
+    LC_ALL: "C",
   };
 }
 
-export async function git(
-  args: string[],
-  cwd: string,
-  extraEnv?: NodeJS.ProcessEnv,
-): Promise<string> {
+export async function git(args: string[], cwd: string): Promise<string> {
   // execFile's 1MB default rejects a large diff outright; the cap is a
   // ceiling, not an allocation.
   const { stdout } = await execFileAsync("git", args, {
     cwd,
     maxBuffer: 64 * 1024 * 1024,
-    ...(extraEnv === undefined ? {} : { env: { ...process.env, ...extraEnv } }),
+    env: { ...process.env, ...nonInteractiveGitEnv() },
   });
   return stdout.trim();
 }
@@ -34,10 +34,9 @@ export async function git(
 export async function tryGit(
   args: string[],
   cwd: string,
-  extraEnv?: NodeJS.ProcessEnv,
 ): Promise<string | null> {
   try {
-    return await git(args, cwd, extraEnv);
+    return await git(args, cwd);
   } catch {
     return null;
   }
@@ -76,11 +75,18 @@ export async function probeRemoteAuth(
   timeoutMs = 15_000,
 ): Promise<string | null> {
   try {
-    await execFileAsync("git", ["ls-remote", "--heads", url, "HEAD"], {
-      cwd: tmpdir(),
-      timeout: timeoutMs,
-      env: { ...process.env, ...nonInteractiveGitEnv() },
-    });
+    // Without --end-of-options a remote of `--upload-pack=<command>` runs
+    // that command: git reads it as the option and the trailing `HEAD` as the
+    // repository.
+    await execFileAsync(
+      "git",
+      ["ls-remote", "--heads", "--end-of-options", url, "HEAD"],
+      {
+        cwd: tmpdir(),
+        timeout: timeoutMs,
+        env: { ...process.env, ...nonInteractiveGitEnv() },
+      },
+    );
     return null;
   } catch (err) {
     const stderr = (err as { stderr?: string }).stderr;

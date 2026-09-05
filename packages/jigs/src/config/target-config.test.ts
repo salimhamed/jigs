@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, test } from "vitest";
 import { CliError } from "../errors.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import {
+  DEFAULT_WORKTREE_CONFIG,
   parseTargetConfig,
   readTargetConfig,
   resolveWorktreeConfig,
@@ -96,8 +97,8 @@ test("the seed directory's .jigs.yml wins over the worktree's", () => {
     "worktree:\n  copy: []\n",
   );
   expect(resolveWorktreeConfig(dirs)).toMatchObject({
-    source: "seed",
-    config: { copy: [".env"], post_create: ["npm ci"] },
+    copy: [".env"],
+    post_create: ["npm ci"],
   });
 });
 
@@ -108,14 +109,15 @@ test("without a seeded file the worktree's own committed one is read", () => {
     "worktree:\n  post_create: [pnpm install]\n",
   );
   expect(resolveWorktreeConfig(dirs)).toMatchObject({
-    source: "worktree",
-    config: { post_create: ["pnpm install"] },
+    post_create: ["pnpm install"],
   });
 });
 
-test("neither file reports defaults, so the caller can say so", () => {
-  expect(resolveWorktreeConfig(makeDirs())).toEqual({
-    source: "defaults",
-    config: { copy: [], post_create: [], hook_timeout_minutes: 10 },
+test("neither file resolves to null, so the caller can say so", () => {
+  expect(resolveWorktreeConfig(makeDirs())).toBeNull();
+  expect(DEFAULT_WORKTREE_CONFIG).toEqual({
+    copy: [],
+    post_create: [],
+    hook_timeout_minutes: 10,
   });
 });

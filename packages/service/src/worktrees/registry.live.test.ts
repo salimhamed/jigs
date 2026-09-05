@@ -98,7 +98,7 @@ test("deleteWorktree drops the row — the registry holds live worktrees only", 
   expect(await getWorktree(sql, testPath)).toBeNull();
 });
 
-test("a table that predates repo_dir refuses to start, naming the drop", async () => {
+test("a table that predates repo_dir is refused, naming the drop", async () => {
   // Drops the real table and rebuilds it in its pre-rename shape: every other
   // test here re-ensures it, and the live lane owns the dev database.
   await sql`DROP TABLE IF EXISTS jigs_worktrees`;

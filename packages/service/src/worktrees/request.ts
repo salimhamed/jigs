@@ -2,6 +2,7 @@ import {
   type Binding,
   bindingRepoDir,
   bindingSeedDir,
+  DEFAULT_WORKTREE_CONFIG,
   ensureBindingClone,
   locateFactoryRoot,
   provisionWorktree,
@@ -84,17 +85,21 @@ export async function provisionRequest(
     { sql },
   );
 
-  const { config, source } = resolveWorktreeConfig({
+  const resolved = resolveWorktreeConfig({
     seedDir,
     worktreePath: facts.path,
   });
-  if (source === "defaults") {
+  if (resolved === null) {
     log(
       `[worktree] no .jigs.yml in ${seedDir} or the worktree — copying nothing, running nothing`,
     );
   }
   try {
-    await provision({ seedDir, worktreePath: facts.path, config });
+    await provision({
+      seedDir,
+      worktreePath: facts.path,
+      config: resolved ?? DEFAULT_WORKTREE_CONFIG,
+    });
   } catch (err) {
     // The half-provisioned tree stays on disk, marked for diagnosis: an agent
     // building in it would produce expensive garbage.
