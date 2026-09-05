@@ -7,7 +7,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { CliError } from "../errors.ts";
-import { git, nonInteractiveGitEnv, tryGit } from "../git.ts";
+import { git, tryGit } from "../git.ts";
 import { lockPathFor, withFileLock } from "./lock.ts";
 
 // jigs' own bare clone of a binding's remote, which every worktree of that
@@ -18,14 +18,16 @@ import { lockPathFor, withFileLock } from "./lock.ts";
 // three-way branch resolution reads as distinct.
 
 // A first fetch of a large monorepo outlasts the lock's 30s default, and two
-// branches' first worktree requests race on it.
+// branches' first worktree requests race on it. The bound on that fetch is
+// staleMs, 30 minutes — the 15-minute timeout is only how long a *waiter*
+// gives up after. A lock stolen at staleMs may then delete a partial the
+// original holder is still writing.
 const CLONE_LOCK_TIMEOUT_MS = 900_000;
 const CLONE_LOCK_STALE_MS = 1_800_000;
 
 export interface EnsureBindingCloneOptions {
   repoDir: string;
   remote: string;
-  lockPath?: string;
 }
 
 export async function ensureBindingClone(
@@ -34,7 +36,7 @@ export async function ensureBindingClone(
   const { repoDir, remote } = options;
   if (await repointExisting(repoDir, remote)) return;
   await withFileLock(
-    options.lockPath ?? lockPathFor(repoDir, "clone"),
+    lockPathFor(repoDir, "clone"),
     async () => {
       if (await repointExisting(repoDir, remote)) return;
       await buildClone(repoDir, remote);
@@ -53,9 +55,12 @@ async function repointExisting(
   if (!existsSync(path.join(repoDir, "HEAD"))) return false;
   const url = await tryGit(["remote", "get-url", "origin"], repoDir);
   if (url === null) {
-    await git(["remote", "add", "origin", remote], repoDir);
+    await git(["remote", "add", "--end-of-options", "origin", remote], repoDir);
   } else if (url !== remote) {
-    await git(["remote", "set-url", "origin", remote], repoDir);
+    await git(
+      ["remote", "set-url", "--end-of-options", "origin", remote],
+      repoDir,
+    );
   }
   return true;
 }
@@ -64,6 +69,15 @@ const reason = (err: unknown) =>
   err instanceof Error ? err.message : String(err);
 
 async function buildClone(repoDir: string, remote: string): Promise<void> {
+  // Past repointExisting, so a directory here has no HEAD: renameSync onto a
+  // non-empty one fails with ENOTEMPTY every time, and the operator needs to
+  // hear that rather than "could not clone". An empty one renames fine.
+  if (existsSync(repoDir) && readdirSync(repoDir).length > 0) {
+    throw new CliError(
+      `the clone at ${repoDir} is unfinished — it has no HEAD`,
+      `remove it and let the next worktree request rebuild it: rm -rf ${repoDir}`,
+    );
+  }
   const parent = path.dirname(repoDir);
   mkdirSync(parent, { recursive: true });
   const prefix = `${path.basename(repoDir)}.partial-`;
@@ -80,14 +94,11 @@ async function buildClone(repoDir: string, remote: string): Promise<void> {
   try {
     await git(["init", "--bare", "--quiet", partial], parent);
     // `remote add` writes +refs/heads/*:refs/remotes/origin/* itself, which is
-    // exactly the refspec wanted; never widen it.
-    await git(["remote", "add", "origin", remote], partial);
+    // exactly the refspec wanted; never widen it. --end-of-options because the
+    // remote is a config-supplied string in a positional slot.
+    await git(["remote", "add", "--end-of-options", "origin", remote], partial);
     try {
-      await git(
-        ["fetch", "--quiet", "origin"],
-        partial,
-        nonInteractiveGitEnv(),
-      );
+      await git(["fetch", "--quiet", "origin"], partial);
     } catch (err) {
       // The one step that can fail for a reason the operator can act on.
       throw new CliError(

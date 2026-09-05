@@ -7,12 +7,16 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { TargetWorktreeConfig } from "../config/target-config.ts";
-import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import {
+  resolveWorktreeConfig,
+  type TargetWorktreeConfig,
+} from "../config/target-config.ts";
+import { git, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { PostCreateFailedError, provisionWorktree } from "./provision.ts";
 
-// Provisioning is git-blind: a seed directory to copy from and a worktree to
-// copy into is the whole world it sees.
+// A seed directory to copy from and a worktree to copy into is nearly the
+// whole world provisioning sees; the one git question it asks is whether the
+// worktree tracks its own .jigs.yml.
 let tmp: string;
 let seedDir: string;
 let worktree: string;
@@ -102,7 +106,7 @@ test(".jigs.yml self-copies into the worktree", async () => {
   expect(read(".jigs.yml")).toBe("worktree:\n  copy: []\n");
 });
 
-test("a seeded .jigs.yml replaces the one the repo committed", async () => {
+test("a seeded .jigs.yml replaces an untracked one in the worktree", async () => {
   // The seed is what jigs provisioned with, so it must be what the worktree
   // says it was provisioned with.
   inSeed(".jigs.yml", "worktree:\n  post_create: [npm ci]\n");
@@ -210,4 +214,31 @@ test("a binding with no seed directory copies nothing and still runs post_create
   });
   expect(existsSync(path.join(worktree, ".env"))).toBe(false);
   expect(existsSync(path.join(worktree, "ran.txt"))).toBe(true);
+});
+
+test("a seeded .jigs.yml never overwrites a tracked one, so the worktree is born clean", async () => {
+  inSeed(".jigs.yml", "worktree:\n  post_create: [npm ci]\n");
+  const committed = "worktree:\n  copy: []\n";
+  git(worktree, "init", "-q", "--initial-branch", "main");
+  git(worktree, "config", "user.name", "jigs-fixture");
+  git(worktree, "config", "user.email", "fixture@jigs.test");
+  writeFileSync(path.join(worktree, ".jigs.yml"), committed);
+  git(worktree, "add", ".jigs.yml");
+  git(worktree, "commit", "-q", "-m", "track the config");
+
+  await provisionWorktree({
+    seedDir,
+    worktreePath: worktree,
+    config: config(),
+  });
+
+  expect(git(worktree, "status", "--porcelain")).toBe("");
+  expect(read(".jigs.yml")).toBe(committed);
+  // The seed is still the config jigs provisions with — it just does not
+  // land in the tree.
+  expect(resolveWorktreeConfig({ seedDir, worktreePath: worktree })).toEqual({
+    copy: [],
+    post_create: ["npm ci"],
+    hook_timeout_minutes: 10,
+  });
 });

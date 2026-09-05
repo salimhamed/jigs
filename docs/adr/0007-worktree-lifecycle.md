@@ -15,7 +15,9 @@
 > invariant, the reuse rules, the teardown matrix, and `.jigs.yml`'s
 > `copy`/`post_create`/`hook_timeout_minutes` semantics — whose `copy` source
 > is now the binding's seed directory, and whose config is read from the seed
-> directory first, then the worktree.
+> directory first, then the worktree. A parked run must not straddle the
+> rollout: its memoized worktree path points into the old layout, and its
+> teardown would find no registry row for it.
 
 Worktrees live in a central data dir —
 `~/.local/share/jigs/worktrees/<factory-slug>/<binding-name>/<branch-dirname>`
@@ -73,7 +75,8 @@ into the target repo's `.jigs.yml` `worktree:` section: `copy` patterns are
 gitignore-blind disk globs relative to the checkout root (copying `.env`-class
 files is their purpose), a directory match copies the whole tree, existing
 destinations are never overwritten, and the file self-copies into the
-worktree. `post_create` commands run in the worktree with `VIRTUAL_ENV`
+worktree unless the repo tracks its own, which the copy would only make
+dirty. `post_create` commands run in the worktree with `VIRTUAL_ENV`
 stripped and stdin `/dev/null`, **fail fast** — a failing hook fails the
 `worktree()` request, leaving the half-provisioned tree registry-marked for
 diagnosis — under a single overridable `hook_timeout_minutes` (default 10).

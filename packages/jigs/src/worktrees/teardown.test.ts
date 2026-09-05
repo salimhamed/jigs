@@ -147,6 +147,19 @@ test("the remote delete is idempotent when GitHub already deleted the branch on 
   expect(() => localBranch()).toThrow();
 });
 
+test("a merged teardown prunes the tracking ref delete-on-merge left behind", async () => {
+  // The push in beforeEach wrote refs/remotes/origin/feat; GitHub deleting
+  // the branch on merge is what leaves it with nothing behind it.
+  expect(git(repoDir, "rev-parse", "refs/remotes/origin/feat")).not.toBe("");
+  git(remoteDir, "update-ref", "-d", "refs/heads/feat");
+
+  await applyTeardown(
+    decideTeardown({ keep: false, dirty: false, merged: true }),
+    target(),
+  );
+  expect(() => git(repoDir, "rev-parse", "refs/remotes/origin/feat")).toThrow();
+});
+
 test("a failed run with a clean tree keeps both branches as insurance", async () => {
   await applyTeardown(
     decideTeardown({

@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import {
@@ -178,4 +178,14 @@ test("probeRemoteAuth returns null for a reachable remote and stderr for an unre
   );
   expect(stderr).not.toBeNull();
   expect(stderr).toContain("nonexistent.git");
+}, 20_000);
+
+test("probeRemoteAuth never lets the remote string become a git option", async () => {
+  const marker = path.join(tmp, "pwned");
+  // Positionally, this is the repository. Parsed as an option it is a command
+  // git runs against the trailing `HEAD`.
+  const stderr = await probeRemoteAuth(`--upload-pack=touch ${marker}`, 10_000);
+
+  expect(existsSync(marker)).toBe(false);
+  expect(stderr).toContain("--upload-pack=");
 }, 20_000);

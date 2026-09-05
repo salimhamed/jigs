@@ -56,8 +56,9 @@ _Avoid_: registration, registry, target, checkout
 **Binding clone**:
 The bare git clone jigs keeps for each binding of each factory, under the jigs
 data directory. Created on the first worktree request, fetched before every
-cut, and the `git -C` root for every worktree, branch and push operation of
-that binding's runs. Nobody edits it; it has no working tree.
+cut, and the `git -C` root for that binding's worktree, branch and
+branch-deletion operations — a run's push comes from the worktree itself.
+Nobody edits it; it has no working tree.
 _Avoid_: mirror, cache, bare repo
 
 **Seed directory**:

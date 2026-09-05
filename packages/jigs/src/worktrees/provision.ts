@@ -6,6 +6,7 @@ import {
   TARGET_CONFIG_FILE,
   type TargetWorktreeConfig,
 } from "../config/target-config.ts";
+import { tryGit } from "../git.ts";
 
 // Provisioning ports .worktreerc.yml semantics (ADR 0007): gitignore-blind
 // disk globs that must match dotfiles, a directory match copying its whole
@@ -123,6 +124,16 @@ async function runPostCreate(
   }
 }
 
+// Not a git repository reads as untracked: a bare directory has nothing the
+// write could dirty.
+async function isTracked(worktreePath: string): Promise<boolean> {
+  const found = await tryGit(
+    ["ls-files", "--error-unmatch", "--", TARGET_CONFIG_FILE],
+    worktreePath,
+  );
+  return found !== null;
+}
+
 export interface ProvisionWorktreeOptions {
   seedDir: string;
   worktreePath: string;
@@ -136,11 +147,13 @@ export async function provisionWorktree(
   // A binding with no seed directory copies nothing and still runs its hooks.
   if (existsSync(seedDir)) {
     copyPatterns(seedDir, worktreePath, config.copy);
-    // The file self-copies, and overwrites where a `copy:` pattern would not:
-    // a seeded .jigs.yml is the config jigs just provisioned with, so leaving
-    // the repo's committed copy in place would misdescribe the worktree.
+    // The file self-copies, and overwrites where a `copy:` pattern would not,
+    // so the worktree describes what it was provisioned with — except over a
+    // tracked one, where the write only makes the worktree born dirty and so
+    // unreusable. The seed's file is the config jigs uses either way, tracked
+    // or not; it just does not land in the tree.
     const selfSource = path.join(seedDir, TARGET_CONFIG_FILE);
-    if (existsSync(selfSource)) {
+    if (existsSync(selfSource) && !(await isTracked(worktreePath))) {
       copyOne(selfSource, path.join(worktreePath, TARGET_CONFIG_FILE), true);
     }
   }

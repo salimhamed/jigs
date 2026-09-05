@@ -35,6 +35,11 @@ async function resolveDefaultBranch(repoDir: string): Promise<string> {
   return branch;
 }
 
+const missingRemoteRef = (err: unknown): boolean =>
+  /couldn't find remote ref/i.test(
+    String((err as { stderr?: string }).stderr ?? ""),
+  );
+
 // The freshness gate is fetch, never pull: refs/heads/* holds jigs' own run
 // branches only, and new branches fork from origin/<default>.
 async function fetchFreshness(
@@ -43,9 +48,20 @@ async function fetchFreshness(
   branch: string,
 ): Promise<void> {
   await git(["fetch", "origin", defaultBranch], repoDir);
-  if (branch !== defaultBranch) {
-    // Non-fatal: the branch may not exist upstream yet.
-    await tryGit(["fetch", "origin", branch], repoDir);
+  if (branch === defaultBranch) return;
+  try {
+    await git(["fetch", "origin", branch], repoDir);
+  } catch (err) {
+    // Non-fatal: the branch may not exist upstream yet. But git leaves the
+    // tracking ref of a branch the remote has since deleted in place, and the
+    // three-way resolution would then take the remote arm and re-present the
+    // pre-squash lineage of an already-merged run. Only the missing-ref case:
+    // an unreachable remote must not cost a ref that is still real.
+    if (!missingRemoteRef(err)) return;
+    await tryGit(
+      ["update-ref", "-d", `refs/remotes/origin/${branch}`],
+      repoDir,
+    );
   }
 }
 

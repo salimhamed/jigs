@@ -23,7 +23,7 @@ export { unbindRepo } from "./commands/unbind.ts";
 export { type Binding, resolveBinding } from "./config/factory-config.ts";
 export { locateFactoryRoot } from "./config/locate-factory.ts";
 export {
-  type ResolvedWorktreeConfig,
+  DEFAULT_WORKTREE_CONFIG,
   readTargetConfig,
   resolveWorktreeConfig,
   type TargetConfig,
