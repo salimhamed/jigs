@@ -1,6 +1,9 @@
 import path from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import {
+  bindingDir,
+  bindingRepoDir,
+  bindingSeedDir,
   branchDirname,
   factorySlug,
   worktreeParentDir,
@@ -8,6 +11,12 @@ import {
 } from "./layout.ts";
 
 afterEach(() => vi.unstubAllEnvs());
+
+const options = {
+  baseDir: "/data/bindings",
+  factoryRoot: "/f/acme",
+  bindingName: "api",
+};
 
 test("factorySlug embeds the dirname and is stable for equal paths", () => {
   const slug = factorySlug("/home/x/factories/acme");
@@ -26,29 +35,36 @@ test("branchDirname maps slashes to dashes", () => {
   expect(branchDirname("main")).toBe("main");
 });
 
-test("worktreePath joins base, factory slug, binding name, branch dirname", () => {
-  const p = worktreePath({
-    baseDir: "/data/worktrees",
-    factoryRoot: "/f/acme",
-    bindingName: "api",
-    branch: "salim/fix",
-  });
-  expect(p).toBe(
-    path.join("/data/worktrees", factorySlug("/f/acme"), "api", "salim-fix"),
+test("bindingDir joins base, factory slug, and binding name", () => {
+  expect(bindingDir(options)).toBe(
+    path.join("/data/bindings", factorySlug("/f/acme"), "api"),
   );
 });
 
-test("worktreeParentDir is the branch-less half of the central path", () => {
-  const options = {
-    baseDir: "/data/worktrees",
-    factoryRoot: "/f/acme",
-    bindingName: "api",
-  };
-  expect(worktreeParentDir(options)).toBe(
-    path.join("/data/worktrees", factorySlug("/f/acme"), "api"),
+test("the clone and the seed directory sit inside the binding directory", () => {
+  expect(bindingRepoDir(options)).toBe(
+    path.join(bindingDir(options), "repo.git"),
   );
-  expect(worktreePath({ ...options, branch: "salim/fix" })).toBe(
-    path.join(worktreeParentDir(options), "salim-fix"),
+  expect(bindingSeedDir(options)).toBe(path.join(bindingDir(options), "seed"));
+});
+
+test("worktreeParentDir is the binding's worktrees directory", () => {
+  expect(worktreeParentDir(options)).toBe(
+    path.join(bindingDir(options), "worktrees"),
+  );
+});
+
+test("worktreePath joins the binding's worktrees dir and the branch dirname", () => {
+  const p = worktreePath({ ...options, branch: "salim/fix" });
+  expect(p).toBe(path.join(worktreeParentDir(options), "salim-fix"));
+  expect(p).toBe(
+    path.join(
+      "/data/bindings",
+      factorySlug("/f/acme"),
+      "api",
+      "worktrees",
+      "salim-fix",
+    ),
   );
 });
 
@@ -61,9 +77,10 @@ test("central root defaults to the XDG data home", () => {
   });
   expect(p).toBe(
     path.join(
-      "/xdg-data/jigs/worktrees",
+      "/xdg-data/jigs/bindings",
       factorySlug("/f/acme"),
       "api",
+      "worktrees",
       "main",
     ),
   );

@@ -16,58 +16,61 @@ const commented = `# Factory repo config.
 ${SERVICE}bindings:
   # The main API service.
   acme-api:
-    path: ~/Code/acme-api # local checkout
-    remote: git@github.com:acme/api.git
+    remote: git@github.com:acme/api.git # the one on GitHub
 `;
 
 test("upsertBinding creates the bindings block in a file without one", () => {
-  const text = upsertBinding(SERVICE, "acme-api", {
-    path: "~/Code/acme-api",
-    remote: "git@github.com:acme/api.git",
-  });
-  expect(parseFactoryConfig(text).bindings["acme-api"]).toMatchObject({
-    path: "~/Code/acme-api",
+  const text = upsertBinding(
+    SERVICE,
+    "acme-api",
+    "git@github.com:acme/api.git",
+  );
+  expect(parseFactoryConfig(text).bindings["acme-api"]).toEqual({
     remote: "git@github.com:acme/api.git",
   });
 });
 
 test("upsertBinding preserves comments on existing entries", () => {
-  const text = upsertBinding(commented, "acme-web", {
-    path: "~/Code/acme-web",
-    remote: "git@github.com:acme/web.git",
-  });
+  const text = upsertBinding(
+    commented,
+    "acme-web",
+    "git@github.com:acme/web.git",
+  );
   expect(text).toContain("# Factory repo config.");
   expect(text).toContain("# The main API service.");
-  expect(text).toContain("# local checkout");
+  expect(text).toContain("# the one on GitHub");
   expect(parseFactoryConfig(text).bindings["acme-web"]?.remote).toBe(
     "git@github.com:acme/web.git",
   );
 });
 
 test("re-upsert with identical values is byte-identical", () => {
-  const text = upsertBinding(commented, "acme-api", {
-    path: "~/Code/acme-api",
-    remote: "git@github.com:acme/api.git",
-  });
+  const text = upsertBinding(
+    commented,
+    "acme-api",
+    "git@github.com:acme/api.git",
+  );
   expect(text).toBe(commented);
 });
 
-test("upsertBinding re-pins the remote without touching other fields", () => {
-  const text = upsertBinding(commented, "acme-api", {
-    path: "~/Code/acme-api",
-    remote: "git@github.com:acme/api-moved.git",
-  });
-  const binding = parseFactoryConfig(text).bindings["acme-api"];
-  expect(binding?.remote).toBe("git@github.com:acme/api-moved.git");
-  expect(binding?.path).toBe("~/Code/acme-api");
-  expect(text).toContain("# local checkout");
+test("upsertBinding re-pins the remote in place, comment kept", () => {
+  const text = upsertBinding(
+    commented,
+    "acme-api",
+    "git@github.com:acme/api-moved.git",
+  );
+  expect(parseFactoryConfig(text).bindings["acme-api"]?.remote).toBe(
+    "git@github.com:acme/api-moved.git",
+  );
+  expect(text).toContain("# the one on GitHub");
 });
 
 test("removeBinding removes one entry and preserves siblings' comments", () => {
-  const two = upsertBinding(commented, "acme-web", {
-    path: "~/Code/acme-web",
-    remote: "git@github.com:acme/web.git",
-  });
+  const two = upsertBinding(
+    commented,
+    "acme-web",
+    "git@github.com:acme/web.git",
+  );
   const text = removeBinding(two, "acme-web");
   expect(text).toContain("# The main API service.");
   expect(text).toContain("acme-api");
@@ -83,16 +86,25 @@ test("removeBinding on an unknown name lists bound names", () => {
 test("parseFactoryConfig rejects unknown per-binding keys naming the key", () => {
   const text = `${SERVICE}bindings:
   acme-api:
-    path: ~/Code/acme-api
     remote: git@github.com:acme/api.git
     harness: claude
 `;
   expect(() => parseFactoryConfig(text)).toThrow(/harness/);
 });
 
-test("parseFactoryConfig rejects a binding missing required fields", () => {
+// The loud failure a factory still carrying the old binding shape wants.
+test("parseFactoryConfig rejects a binding declaring a local path", () => {
+  const text = `${SERVICE}bindings:
+  acme-api:
+    path: ~/Code/acme-api
+    remote: git@github.com:acme/api.git
+`;
+  expect(() => parseFactoryConfig(text)).toThrow(/path/);
+});
+
+test("parseFactoryConfig rejects a binding with no remote", () => {
   expect(() =>
-    parseFactoryConfig(`${SERVICE}bindings:\n  acme-api:\n    path: ~/x\n`),
+    parseFactoryConfig(`${SERVICE}bindings:\n  acme-api: {}\n`),
   ).toThrow(/remote/);
 });
 

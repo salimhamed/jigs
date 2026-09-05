@@ -1,16 +1,16 @@
 # Bindings are committed factory-repo config
 
-> **Superseded in part, 2026-09-05.** The fast-forward described below and both
-> per-binding options that governed it (`ff_default_branch`, `workspace_dir`)
-> are removed — see [ADR 0007](./0007-worktree-lifecycle.md)'s amendment. The
-> binding-path model itself is replaced in the follow-up change.
->
-> **Amended by [ADR 0007](./0007-worktree-lifecycle.md).** "Human-managed,
-> never surprised" below is sharpened to "never *unsafely* moved": jigs
-> fast-forwards a binding checkout's default branch by default — pure-ff-only,
-> clean-checkout-only, skip-on-any-doubt — with a per-binding
-> `ff_default_branch: false` opt-out. The worktree-location convention and the
-> typed `worktree:` schema deferred below are now defined there.
+> **Amended 2026-09-05 (R5).** A binding is now a **name plus a remote URL**;
+> the operator's checkout is not part of it. jigs keeps its own bare clone per
+> binding under `jigsDataDir()`, cloned lazily on the first worktree request,
+> and cuts worktrees from that. The `path`, `workspace_dir` and
+> `ff_default_branch` keys are gone, as is the bind-time `.jigs.yml` scaffold
+> offer. This reverses the "`jigs bind <remote-url>` cloning: rejected for v0"
+> option below — auth is the operator's ssh agent, location is not
+> configurable, and the disk is jigs', one object store per binding per
+> factory. `jigs bind` is now a pure config edit plus the webhook leg.
+> Non-git provisioning inputs (an `.env`, an untracked `.jigs.yml`) move to a
+> per-binding **seed directory** beside the clone.
 
 A binding is the least state that makes a name meaningful: `name → checkout
 path + expected remote`, declared in a committed `jigs.yml` at the factory

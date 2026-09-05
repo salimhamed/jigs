@@ -12,7 +12,6 @@ import {
   parseGithubRemote,
   pushBranch,
   resolveBinding,
-  resolveRemoteUrl,
 } from "jigs";
 import {
   createPullRequest,
@@ -33,11 +32,11 @@ export class RemoteNotGithubError extends Error {
   }
 }
 
+// The binding is the remote now, so this is a config read: no git subprocess.
 export async function resolveRepo(binding: string): Promise<GithubRepoRef> {
-  const resolved = resolveBinding(factoryRoot(), binding);
-  const { url } = await resolveRemoteUrl(resolved.checkoutRoot);
-  const ref = parseGithubRemote(url);
-  if (ref === null) throw new RemoteNotGithubError(binding, url);
+  const { remote } = resolveBinding(factoryRoot(), binding);
+  const ref = parseGithubRemote(remote);
+  if (ref === null) throw new RemoteNotGithubError(binding, remote);
   console.log(
     `[reviewLoop] binding ${binding} resolves to ${ref.owner}/${ref.repo}`,
   );

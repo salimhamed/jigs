@@ -106,30 +106,24 @@ export async function sweepWorktrees(
   for (const { row, entry } of classified) {
     if (!entry.eligible) continue;
     if (approved !== null && !approved.has(entry.path)) continue;
-    const { checkoutRoot } = row;
+    const { repoDir } = row;
     const status = owners.get(row.ownerRunId)?.status ?? "unknown";
     // The merge check below reads refs/remotes/origin/<default>, and nothing
     // else refreshes it. A failure is a notice, never the end of the pass:
     // trees earlier in the loop are already gone, and the stale ref reads
     // unmerged, which keeps the branch as insurance.
-    if (
-      status === "completed" &&
-      checkoutRoot !== "" &&
-      !fetched.has(checkoutRoot)
-    ) {
-      fetched.add(checkoutRoot);
+    if (status === "completed" && !fetched.has(repoDir)) {
+      fetched.add(repoDir);
       try {
-        await fetchDefault(checkoutRoot);
+        await fetchDefault(repoDir);
       } catch (err) {
         log(
-          `[sweep] could not fetch the default branch of ${checkoutRoot}: ${String(err)}`,
+          `[sweep] could not fetch the default branch of ${repoDir}: ${String(err)}`,
         );
       }
     }
     const merged =
-      status === "completed" &&
-      checkoutRoot !== "" &&
-      (await isBranchMerged(checkoutRoot, entry.branch));
+      status === "completed" && (await isBranchMerged(repoDir, entry.branch));
     let plan = decideTeardown({
       keep: row.keep,
       dirty: entry.state === "abandoned-dirty",
@@ -153,12 +147,12 @@ export async function sweepWorktrees(
     const mergedOverride = merged && entry.state === "abandoned-dirty";
     if (entry.requiresForce && !force && !mergedOverride) continue;
 
-    if (entry.state !== "missing" && checkoutRoot !== "") {
+    if (entry.state !== "missing") {
       // A half-provisioned tree has no merged branch behind it: the tree goes,
       // the branches stay.
       const branchesStay = entry.state === "provision-failed";
       await applyTeardown(branchesStay ? DISCARD_TREE : plan, {
-        checkoutRoot,
+        repoDir,
         worktreePath: entry.path,
         branch: entry.branch,
       });

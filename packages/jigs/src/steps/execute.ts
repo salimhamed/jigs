@@ -28,8 +28,8 @@ import { ensureManagedCodexHome } from "../harnesses/codex-home.ts";
 import { scrubbedEnv } from "../harnesses/env.ts";
 import { claudeCode, codexExec } from "../harnesses/index.ts";
 import {
-  checkoutLockPath,
   FileLockTimeoutError,
+  lockPathFor,
   withFileLock,
 } from "../worktrees/lock.ts";
 import type { McpServerConfig } from "./config.ts";
@@ -142,7 +142,7 @@ export async function executeAgentStep(
 ): Promise<AgentStepResult<unknown> | { resumeFailed: string }> {
   try {
     return await withFileLock(
-      checkoutLockPath(wire.cwd, "agent-step"),
+      lockPathFor(wire.cwd, "agent-step"),
       () => generateAgentStep(wire, runKey, deps),
       { timeoutMs: 0, staleMs: LOCK_STALE_MS },
     );

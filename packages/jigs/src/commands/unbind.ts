@@ -4,6 +4,7 @@ import {
   writeFactoryConfigText,
 } from "../config/factory-config.ts";
 import { locateFactoryRoot } from "../config/locate-factory.ts";
+import { bindingDir } from "../worktrees/layout.ts";
 
 export interface UnbindDeps {
   cwd: string;
@@ -15,4 +16,9 @@ export function unbindRepo(name: string, deps: UnbindDeps): void {
   const text = readFactoryConfigText(factoryRoot);
   writeFactoryConfigText(factoryRoot, removeBinding(text, name));
   deps.out(`unbound ${name}`);
+  // Offline command, no view of live runs: deleting hundreds of megabytes here
+  // would be a guess about whether a worktree still holds them.
+  deps.out(
+    `the clone stays at ${bindingDir({ factoryRoot, bindingName: name })} — rm -rf it to reclaim the disk`,
+  );
 }

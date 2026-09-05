@@ -42,15 +42,15 @@ function tail(text: string): string {
   return text.trimEnd().split("\n").slice(-STDERR_TAIL_LINES).join("\n");
 }
 
-function copyOne(src: string, dest: string): void {
-  if (existsSync(dest)) return;
+function copyOne(src: string, dest: string, overwrite = false): void {
+  if (!overwrite && existsSync(dest)) return;
   mkdirSync(path.dirname(dest), { recursive: true });
   // recursive covers the directory match: the whole tree lands at once.
   cpSync(src, dest, { recursive: true });
 }
 
 function copyPatterns(
-  checkoutRoot: string,
+  seedDir: string,
   worktreePath: string,
   patterns: string[],
 ): void {
@@ -58,7 +58,7 @@ function copyPatterns(
   // most globbers skip dotfiles by default. expandDirectories:false keeps a
   // directory a single match instead of its flattened contents.
   const matches = globSync(patterns, {
-    cwd: checkoutRoot,
+    cwd: seedDir,
     dot: true,
     onlyFiles: false,
     expandDirectories: false,
@@ -66,7 +66,7 @@ function copyPatterns(
   for (const match of matches) {
     const relative = match.replace(/\/+$/, "");
     if (relative === "") continue;
-    const src = path.join(checkoutRoot, relative);
+    const src = path.join(seedDir, relative);
     copyOne(src, path.join(worktreePath, relative));
   }
 }
@@ -114,7 +114,7 @@ async function runPostCreate(
   if (commands.length === 0) return;
   const env = { ...process.env };
   // A venv activated in the operator's shell would point the hook's tooling
-  // at the human checkout's interpreter.
+  // at an interpreter outside the worktree.
   delete env.VIRTUAL_ENV;
   // One budget across the whole list, not per command.
   const deadline = Date.now() + hookTimeoutMinutes * 60_000;
@@ -124,7 +124,7 @@ async function runPostCreate(
 }
 
 export interface ProvisionWorktreeOptions {
-  checkoutRoot: string;
+  seedDir: string;
   worktreePath: string;
   config: TargetWorktreeConfig;
 }
@@ -132,13 +132,17 @@ export interface ProvisionWorktreeOptions {
 export async function provisionWorktree(
   options: ProvisionWorktreeOptions,
 ): Promise<void> {
-  const { checkoutRoot, worktreePath, config } = options;
-  copyPatterns(checkoutRoot, worktreePath, config.copy);
-  // The file self-copies: it is gitignored in plenty of target repos, and the
-  // worktree should describe itself the same way the checkout does.
-  const selfSource = path.join(checkoutRoot, TARGET_CONFIG_FILE);
-  if (existsSync(selfSource)) {
-    copyOne(selfSource, path.join(worktreePath, TARGET_CONFIG_FILE));
+  const { seedDir, worktreePath, config } = options;
+  // A binding with no seed directory copies nothing and still runs its hooks.
+  if (existsSync(seedDir)) {
+    copyPatterns(seedDir, worktreePath, config.copy);
+    // The file self-copies, and overwrites where a `copy:` pattern would not:
+    // a seeded .jigs.yml is the config jigs just provisioned with, so leaving
+    // the repo's committed copy in place would misdescribe the worktree.
+    const selfSource = path.join(seedDir, TARGET_CONFIG_FILE);
+    if (existsSync(selfSource)) {
+      copyOne(selfSource, path.join(worktreePath, TARGET_CONFIG_FILE), true);
+    }
   }
   await runPostCreate(
     worktreePath,

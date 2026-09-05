@@ -44,7 +44,7 @@ test("concurrent acquires of one unowned path: the loser sees the winner's owner
 
   const request = (runId: string) => ({
     runId,
-    checkoutRoot: "/repos/api",
+    repoDir: "/data/bindings/acme-abc12345/api/repo.git",
     worktreePath: testPath,
     branch: "feat",
   });

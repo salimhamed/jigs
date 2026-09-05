@@ -39,10 +39,34 @@ export function parseTargetConfig(text: string): TargetConfig {
   return result.data;
 }
 
-// A target repo with no .jigs.yml provisions with schema defaults — copying
-// nothing and running nothing is a valid answer, not a misconfiguration.
-export function readTargetConfig(checkoutRoot: string): TargetConfig {
-  const file = path.join(checkoutRoot, TARGET_CONFIG_FILE);
+// A directory with no .jigs.yml reads as schema defaults — copying nothing and
+// running nothing is a valid answer, not a misconfiguration.
+export function readTargetConfig(dir: string): TargetConfig {
+  const file = path.join(dir, TARGET_CONFIG_FILE);
   if (!existsSync(file)) return targetConfigSchema.parse({});
   return parseTargetConfig(readFileSync(file, "utf8"));
+}
+
+export interface ResolvedWorktreeConfig {
+  config: TargetWorktreeConfig;
+  source: "seed" | "worktree" | "defaults";
+}
+
+// Seed first, worktree second: the seed directory is the operator's deliberate
+// answer for a target repo whose .jigs.yml is untracked, the worktree carries
+// the repo's own committed one. The source is reported so a run that found
+// neither says so in the log rather than provisioning silently.
+export function resolveWorktreeConfig(options: {
+  seedDir: string;
+  worktreePath: string;
+}): ResolvedWorktreeConfig {
+  for (const [source, dir] of [
+    ["seed", options.seedDir],
+    ["worktree", options.worktreePath],
+  ] as const) {
+    if (existsSync(path.join(dir, TARGET_CONFIG_FILE))) {
+      return { config: readTargetConfig(dir).worktree, source };
+    }
+  }
+  return { config: targetConfigSchema.parse({}).worktree, source: "defaults" };
 }

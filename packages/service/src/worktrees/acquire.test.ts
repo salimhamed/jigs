@@ -11,8 +11,8 @@ import { makeFakeSql } from "./test-fixtures";
 
 const request = {
   runId: "run_new",
-  checkoutRoot: "/repos/api",
-  worktreePath: "/data/worktrees/acme-abc12345/api/feat",
+  repoDir: "/data/bindings/acme-abc12345/api/repo.git",
+  worktreePath: "/data/bindings/acme-abc12345/api/worktrees/feat",
   branch: "feat",
 };
 
@@ -35,7 +35,7 @@ function registeredRow(ownerRunId: string): WorktreeRow {
     baseSha: "base0",
     headSha: "head0",
     behindDefault: 0,
-    checkoutRoot: "/repos/api",
+    repoDir: "/data/bindings/acme-abc12345/api/repo.git",
     keep: false,
   };
 }
@@ -107,7 +107,7 @@ test("no worktree on disk creates one and registers the requesting run", async (
   expect(facts).toEqual(createdFacts);
   expect(createCalls).toEqual([
     {
-      checkoutRoot: request.checkoutRoot,
+      repoDir: request.repoDir,
       worktreePath: request.worktreePath,
       branch: request.branch,
     },

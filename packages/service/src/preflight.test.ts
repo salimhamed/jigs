@@ -161,13 +161,12 @@ test("GET /api/doctor reports red without creating a run", async () => {
 
 test("a green preflight lets the trigger call start()", async () => {
   const workspace = makeTmpDir();
-  const { checkout, remoteDir } = makeRemoteBackedRepo(workspace);
+  // A local bare repo stands in for GitHub: the binding check is a git
+  // ls-remote against the URL, and this one answers offline.
+  const { remoteDir } = makeRemoteBackedRepo(workspace);
   vi.stubEnv(
     "JIGS_FACTORY_ROOT",
-    makeFactoryRepo(
-      workspace,
-      `bindings:\n  api:\n    path: ${checkout}\n    remote: ${remoteDir}\n`,
-    ),
+    makeFactoryRepo(workspace, `bindings:\n  api:\n    remote: ${remoteDir}\n`),
   );
   vi.stubEnv("LINEAR_API_KEY", "lin_live");
   vi.stubEnv("GITHUB_TOKEN", "ghp_live");

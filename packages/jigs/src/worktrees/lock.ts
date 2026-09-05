@@ -13,7 +13,7 @@ import { jigsDataDir } from "../paths.ts";
 
 // The advisory file lock ADR 0007 calls for, hand-rolled on O_EXCL: one
 // dependency-free primitive whose stale and retry policy is visible in place.
-// Lock files live in the jigs data dir, never inside the human checkout.
+// Lock files live in the jigs data dir, never inside a worktree.
 
 export interface FileLockOptions {
   timeoutMs?: number;
@@ -37,8 +37,8 @@ function locksDir(): string {
   return path.join(jigsDataDir(), "locks");
 }
 
-export function checkoutLockPath(checkoutRoot: string, kind: string): string {
-  const resolved = path.resolve(checkoutRoot);
+export function lockPathFor(target: string, kind: string): string {
+  const resolved = path.resolve(target);
   const hash = createHash("sha256").update(resolved).digest("hex").slice(0, 12);
   return path.join(
     locksDir(),

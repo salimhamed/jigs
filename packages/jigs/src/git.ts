@@ -1,17 +1,32 @@
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
-import path from "node:path";
 import { promisify } from "node:util";
 import { CliError } from "./errors.ts";
 
 const execFileAsync = promisify(execFile);
 
-export async function git(args: string[], cwd: string): Promise<string> {
+// What keeps a command that needs credentials from hanging forever on a
+// prompt instead of failing where the caller can report it.
+export function nonInteractiveGitEnv(): NodeJS.ProcessEnv {
+  return {
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_ASKPASS: "",
+    SSH_ASKPASS: "",
+    GIT_SSH_COMMAND: `${process.env.GIT_SSH_COMMAND ?? "ssh"} -oBatchMode=yes`,
+  };
+}
+
+export async function git(
+  args: string[],
+  cwd: string,
+  extraEnv?: NodeJS.ProcessEnv,
+): Promise<string> {
   // execFile's 1MB default rejects a large diff outright; the cap is a
   // ceiling, not an allocation.
   const { stdout } = await execFileAsync("git", args, {
     cwd,
     maxBuffer: 64 * 1024 * 1024,
+    ...(extraEnv === undefined ? {} : { env: { ...process.env, ...extraEnv } }),
   });
   return stdout.trim();
 }
@@ -19,29 +34,12 @@ export async function git(args: string[], cwd: string): Promise<string> {
 export async function tryGit(
   args: string[],
   cwd: string,
+  extraEnv?: NodeJS.ProcessEnv,
 ): Promise<string | null> {
   try {
-    return await git(args, cwd);
+    return await git(args, cwd, extraEnv);
   } catch {
     return null;
-  }
-}
-
-export async function checkoutRoot(dir: string): Promise<string | null> {
-  return tryGit(["rev-parse", "--show-toplevel"], dir);
-}
-
-export async function assertCheckoutRoot(dir: string): Promise<void> {
-  const resolved = path.resolve(dir);
-  const toplevel = await checkoutRoot(resolved);
-  if (toplevel === null) {
-    throw new CliError(`${dir} is not a git checkout`);
-  }
-  if (path.resolve(toplevel) !== resolved) {
-    throw new CliError(
-      `${dir} is inside a git checkout but is not its root`,
-      `bind the checkout root instead: ${toplevel}`,
-    );
   }
 }
 
@@ -72,9 +70,7 @@ export async function resolveRemoteUrl(dir: string): Promise<ResolvedRemote> {
   return { remote: name, url };
 }
 
-// Returns null when the remote answered, git's stderr when it did not. The
-// env is what keeps an unauthenticated probe from hanging forever on a
-// credential prompt instead of failing inside the timeout.
+// Returns null when the remote answered, git's stderr when it did not.
 export async function probeRemoteAuth(
   url: string,
   timeoutMs = 15_000,
@@ -83,13 +79,7 @@ export async function probeRemoteAuth(
     await execFileAsync("git", ["ls-remote", "--heads", url, "HEAD"], {
       cwd: tmpdir(),
       timeout: timeoutMs,
-      env: {
-        ...process.env,
-        GIT_TERMINAL_PROMPT: "0",
-        GIT_ASKPASS: "",
-        SSH_ASKPASS: "",
-        GIT_SSH_COMMAND: `${process.env.GIT_SSH_COMMAND ?? "ssh"} -oBatchMode=yes`,
-      },
+      env: { ...process.env, ...nonInteractiveGitEnv() },
     });
     return null;
   } catch (err) {

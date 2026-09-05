@@ -1,5 +1,4 @@
-import { existsSync, statSync } from "node:fs";
-import path from "node:path";
+import { existsSync } from "node:fs";
 import {
   parseFactoryConfig,
   readFactoryConfigText,
@@ -8,19 +7,17 @@ import {
 } from "../config/factory-config.ts";
 import { locateFactoryRoot } from "../config/locate-factory.ts";
 import { CliError } from "../errors.ts";
-import { assertCheckoutRoot, resolveRemoteUrl } from "../git.ts";
 import {
   ensureRepoWebhook,
   ensureWebhookSecret,
   parseGithubRemote,
 } from "../github-webhook.ts";
-import { contractHome, expandHome } from "../paths.ts";
+import { bindingDir } from "../worktrees/layout.ts";
 
 const BINDING_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 export interface BindDeps {
   cwd: string;
-  home?: string;
   out: (line: string) => void;
 }
 
@@ -30,25 +27,26 @@ export interface BindOptions {
 
 export interface BindResult {
   name: string;
-  path: string;
   remote: string;
   webhook: "created" | "verified" | "updated" | "skipped";
 }
 
+// A pure config edit plus the webhook leg: nothing here touches the network for
+// the repo itself, and the clone is cut on the first worktree request.
 export async function bindRepo(
-  targetPath: string,
+  remoteUrl: string,
   deps: BindDeps,
   options: BindOptions = {},
 ): Promise<BindResult> {
   const factoryRoot = locateFactoryRoot(deps.cwd);
-  const target = path.resolve(deps.cwd, expandHome(targetPath, deps.home));
-  if (!existsSync(target) || !statSync(target).isDirectory()) {
-    throw new CliError(`${targetPath} is not a directory`);
+  if (looksLikePath(remoteUrl)) {
+    throw new CliError(
+      `${remoteUrl} looks like a path — bind takes a remote URL`,
+      "jigs bind git@github.com:owner/repo.git — a repo on this machine is a URL too: file:///srv/git/repo.git",
+    );
   }
-  await assertCheckoutRoot(target);
-  const { url } = await resolveRemoteUrl(target);
 
-  const name = options.name ?? path.basename(target);
+  const name = options.name ?? defaultBindingName(remoteUrl);
   if (!BINDING_NAME_PATTERN.test(name)) {
     throw new CliError(
       `invalid binding name ${JSON.stringify(name)}`,
@@ -58,40 +56,46 @@ export async function bindRepo(
 
   const text = readFactoryConfigText(factoryRoot);
   const config = parseFactoryConfig(text);
-  const resolveBindingPath = (p: string) =>
-    path.resolve(expandHome(p, deps.home));
-
   const existing = config.bindings[name];
-  if (existing !== undefined && resolveBindingPath(existing.path) !== target) {
+  if (existing !== undefined && existing.remote !== remoteUrl) {
+    // Repointing silently would fetch an unrelated history into an object
+    // store that already holds another repo's.
     throw new CliError(
-      `${name} is already bound to ${existing.path}`,
-      `bind under a different name: jigs bind ${targetPath} --name <n>`,
+      `${name} is already bound to ${existing.remote}`,
+      `jigs unbind ${name}, then bind again — the clone at ${bindingDir({ factoryRoot, bindingName: name })} holds the old repo's objects`,
     );
   }
-  const duplicate = Object.entries(config.bindings).find(
-    ([boundName, binding]) =>
-      boundName !== name && resolveBindingPath(binding.path) === target,
-  );
-  if (duplicate !== undefined) {
-    deps.out(`note: ${target} is already bound as ${duplicate[0]}`);
-  }
-  if (existing !== undefined && existing.remote !== url) {
-    deps.out(`remote pin updated: ${existing.remote} → ${url}`);
-  }
 
-  const storedPath = contractHome(target, deps.home);
-  const updated = upsertBinding(text, name, { path: storedPath, remote: url });
+  const updated = upsertBinding(text, name, remoteUrl);
   if (updated !== text) {
     writeFactoryConfigText(factoryRoot, updated);
   }
   deps.out(
     existing !== undefined
-      ? `updated binding ${name} → ${storedPath}`
-      : `bound ${name} → ${storedPath}`,
+      ? `${name} already points at ${remoteUrl}`
+      : `bound ${name} → ${remoteUrl}`,
   );
 
-  const webhook = await ensureWebhook(url, config.ingress_url, deps);
-  return { name, path: storedPath, remote: url, webhook };
+  const webhook = await ensureWebhook(remoteUrl, config.ingress_url, deps);
+  return { name, remote: remoteUrl, webhook };
+}
+
+// The likeliest operator error, given that bind used to take a checkout path.
+function looksLikePath(arg: string): boolean {
+  return (
+    arg.startsWith(".") ||
+    arg.startsWith("/") ||
+    arg.startsWith("~") ||
+    existsSync(arg)
+  );
+}
+
+function defaultBindingName(remoteUrl: string): string {
+  const repoRef = parseGithubRemote(remoteUrl);
+  const last = remoteUrl.split(/[/:]/).filter(Boolean).at(-1) ?? "";
+  const repo = repoRef?.repo ?? last.replace(/\.git$/, "");
+  // Lowercased: the name is typed on a command line and written into yaml.
+  return repo.toLowerCase();
 }
 
 async function ensureWebhook(

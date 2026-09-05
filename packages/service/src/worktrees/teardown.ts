@@ -54,7 +54,7 @@ export async function teardownRun(
     }
     if (!plan.removeWorktree) continue;
     await applyTeardown(plan, {
-      checkoutRoot: row.checkoutRoot,
+      repoDir: row.repoDir,
       worktreePath: row.path,
       branch: row.branch,
     });

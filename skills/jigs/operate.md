@@ -128,4 +128,5 @@ Ask the human before:
   dirty ones included.
 - `jigs service restart` or `jigs service stop` while `jigs ps` shows a running
   or suspended run.
-- Editing the `bindings` block in `jigs.yml`.
+- Editing the `bindings` block in `jigs.yml` — changing a `remote:` repoints
+  that binding's clone.

@@ -1,5 +1,73 @@
+import { execFileSync } from "node:child_process";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import type { Sql } from "postgres";
 import type { WorktreeRow } from "./registry";
+
+export function git(cwd: string, ...args: string[]): string {
+  return execFileSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    // Isolated from the developer's git config (init.defaultBranch, signing,
+    // hooks) so fixtures behave identically on every machine.
+    env: {
+      ...process.env,
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_SYSTEM: "/dev/null",
+    },
+  }).trim();
+}
+
+export interface ClonedBinding {
+  remoteDir: string;
+  repoDir: string;
+  worktreesDir: string;
+}
+
+// Builds exactly what ensureBindingClone builds — a bare "GitHub" with one
+// commit on its default branch, and jigs' own bare clone of it — so a test's
+// clone and a service's clone cannot drift apart. Mirrors jigs'
+// src/test-fixtures.ts, which this package cannot import.
+export function makeClonedBinding(
+  parent: string,
+  defaultBranch = "main",
+): ClonedBinding {
+  const remoteDir = path.join(parent, "remote.git");
+  git(
+    parent,
+    "init",
+    "-q",
+    "--bare",
+    "--initial-branch",
+    defaultBranch,
+    remoteDir,
+  );
+
+  const seed = path.join(parent, "seed-checkout");
+  mkdirSync(seed, { recursive: true });
+  git(seed, "init", "-q", "--initial-branch", defaultBranch);
+  git(seed, "config", "user.name", "jigs-fixture");
+  git(seed, "config", "user.email", "fixture@jigs.test");
+  writeFileSync(path.join(seed, "README.md"), "# fixture\n");
+  git(seed, "add", "README.md");
+  git(seed, "commit", "-q", "-m", "initial");
+  git(seed, "remote", "add", "origin", remoteDir);
+  git(seed, "push", "-q", "origin", defaultBranch);
+  rmSync(seed, { recursive: true, force: true });
+
+  const binding = path.join(parent, "binding");
+  const repoDir = path.join(binding, "repo.git");
+  mkdirSync(binding, { recursive: true });
+  git(binding, "init", "-q", "--bare", repoDir);
+  // commit-tree and friends need an identity, and the fixture git() reads no
+  // global config.
+  git(repoDir, "config", "user.name", "jigs-fixture");
+  git(repoDir, "config", "user.email", "fixture@jigs.test");
+  git(repoDir, "remote", "add", "origin", remoteDir);
+  git(repoDir, "fetch", "-q", "origin");
+  git(repoDir, "remote", "set-head", "origin", "-a");
+  return { remoteDir, repoDir, worktreesDir: path.join(binding, "worktrees") };
+}
 
 // Fakes the postgres tagged-template client against an in-memory store,
 // discriminating exactly as registry.ts's queries do. Anything it does not
@@ -33,7 +101,7 @@ export function makeFakeSql(store: Map<string, WorktreeRow>): Sql {
         baseSha,
         headSha,
         behindDefault,
-        checkoutRoot,
+        repoDir,
         keep,
       ] = values as [
         string,
@@ -54,7 +122,7 @@ export function makeFakeSql(store: Map<string, WorktreeRow>): Sql {
         baseSha,
         headSha,
         behindDefault,
-        checkoutRoot,
+        repoDir,
         keep,
       });
       return Promise.resolve([]);

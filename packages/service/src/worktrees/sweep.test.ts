@@ -1,60 +1,26 @@
-import { execFileSync } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import type { OwnerState } from "./acquire";
 import type { WorktreeRow } from "./registry";
 import { sweepWorktrees } from "./sweep";
-import { makeFakeSql } from "./test-fixtures";
+import { git, makeClonedBinding, makeFakeSql } from "./test-fixtures";
 
 // Real git worktrees on disk against a faked registry: the classifier and the
 // teardown matrix are already covered in jigs, so what this file proves is the
 // join — what gets removed, what survives, and what the store ends up holding.
 
-function git(cwd: string, ...args: string[]): string {
-  return execFileSync("git", args, {
-    cwd,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      GIT_CONFIG_GLOBAL: "/dev/null",
-      GIT_CONFIG_SYSTEM: "/dev/null",
-    },
-  }).trim();
-}
-
 let tmp: string;
-let checkout: string;
-let workspace: string;
+let repoDir: string;
+let worktreesDir: string;
 let store: Map<string, WorktreeRow>;
 
 beforeEach(() => {
   tmp = mkdtempSync(path.join(tmpdir(), "jigs-sweep-test-"));
-  checkout = path.join(tmp, "checkout");
-  workspace = path.join(tmp, "workspace");
-  const remote = path.join(tmp, "remote.git");
-  mkdirSync(checkout, { recursive: true });
-  mkdirSync(workspace, { recursive: true });
-  mkdirSync(remote, { recursive: true });
-  // A real origin: whether a completed run's branch is merged is read off
-  // refs/remotes/origin/<default>, so the teardown matrix needs one.
-  git(remote, "init", "-q", "--bare", "--initial-branch", "main");
-  git(checkout, "init", "-q", "--initial-branch", "main");
-  git(checkout, "config", "user.name", "jigs-fixture");
-  git(checkout, "config", "user.email", "fixture@jigs.test");
-  git(checkout, "remote", "add", "origin", remote);
-  writeFileSync(path.join(checkout, "README.md"), "# fixture\n");
-  git(checkout, "add", "README.md");
-  git(checkout, "commit", "-q", "-m", "initial");
-  git(checkout, "push", "-q", "-u", "origin", "main");
-  git(checkout, "remote", "set-head", "origin", "main");
+  // A real origin behind a real clone: whether a completed run's branch is
+  // merged is read off refs/remotes/origin/<default>.
+  ({ repoDir, worktreesDir } = makeClonedBinding(tmp));
   store = new Map();
 });
 afterEach(() => {
@@ -62,8 +28,17 @@ afterEach(() => {
 });
 
 function addWorktree(branch: string): string {
-  const target = path.join(workspace, branch);
-  git(checkout, "worktree", "add", "-q", target, "-b", branch);
+  const target = path.join(worktreesDir, branch);
+  git(
+    repoDir,
+    "worktree",
+    "add",
+    "-q",
+    target,
+    "-b",
+    branch,
+    "refs/remotes/origin/main",
+  );
   return target;
 }
 
@@ -80,7 +55,7 @@ function register(
     baseSha: "base1",
     headSha: "head1",
     behindDefault: 0,
-    checkoutRoot: checkout,
+    repoDir,
     keep: false,
     ...overrides,
   });
@@ -195,13 +170,13 @@ test("a half-provisioned tree is kept for diagnosis until --force", async () => 
   await sweepWorktrees({ clean: true, force: true }, deps());
   expect(existsSync(broken)).toBe(false);
   // The branch survives: nothing was merged.
-  expect(git(checkout, "rev-parse", "--verify", "refs/heads/broken")).toMatch(
+  expect(git(repoDir, "rev-parse", "--verify", "refs/heads/broken")).toMatch(
     /^[0-9a-f]{40}$/,
   );
 });
 
 test("a registered path missing from disk drops only its row", async () => {
-  register(path.join(workspace, "ghost"), "ghost");
+  register(path.join(worktreesDir, "ghost"), "ghost");
   const report = await sweepWorktrees({ clean: true }, deps());
   expect(report.entries[0]?.state).toBe("missing");
   expect(store.size).toBe(0);
@@ -215,7 +190,7 @@ test("a completed owner's teardown deletes the row and fetches the default branc
   // Merged is what earns the branch deletion, so origin's default branch has
   // to actually contain the work.
   git(done, "push", "-q", "origin", "done:main");
-  git(checkout, "fetch", "-q", "origin");
+  git(repoDir, "fetch", "-q", "origin");
   register(done, "done");
   const fetches: string[] = [];
   await sweepWorktrees(
@@ -227,11 +202,11 @@ test("a completed owner's teardown deletes the row and fetches the default branc
       },
     }),
   );
-  expect(fetches).toEqual([checkout]);
+  expect(fetches).toEqual([repoDir]);
   expect(store.size).toBe(0);
   // done (merged): the local branch goes with the worktree.
   expect(() =>
-    git(checkout, "rev-parse", "--verify", "refs/heads/done"),
+    git(repoDir, "rev-parse", "--verify", "refs/heads/done"),
   ).toThrow();
 });
 
@@ -241,7 +216,7 @@ test("an untracked file does not cost a merged worktree its teardown", async () 
   git(done, "add", "shipped.txt");
   git(done, "commit", "-q", "-m", "shipped");
   git(done, "push", "-q", "origin", "done:main");
-  git(checkout, "fetch", "-q", "origin");
+  git(repoDir, "fetch", "-q", "origin");
   // Build output, not work: the branch is merged, so the tree still goes.
   dirty(done);
   register(done, "done");
@@ -255,20 +230,20 @@ test("an untracked file does not cost a merged worktree its teardown", async () 
   expect(existsSync(done)).toBe(false);
   expect(store.size).toBe(0);
   expect(() =>
-    git(checkout, "rev-parse", "--verify", "refs/heads/done"),
+    git(repoDir, "rev-parse", "--verify", "refs/heads/done"),
   ).toThrow();
 });
 
-test("the merge check sees work pushed since the checkout last fetched", async () => {
+test("the merge check sees work pushed since the clone last fetched", async () => {
   const done = addWorktree("done");
   writeFileSync(path.join(done, "shipped.txt"), "shipped\n");
   git(done, "add", "shipped.txt");
   git(done, "commit", "-q", "-m", "shipped");
   // The merge lands from elsewhere — a PR merged on GitHub — so rewind the
-  // tracking ref the push moved: nothing local knows about it yet.
-  const stale = git(checkout, "rev-parse", "refs/remotes/origin/main");
+  // tracking ref the push moved: nothing in the clone knows about it yet.
+  const stale = git(repoDir, "rev-parse", "refs/remotes/origin/main");
   git(done, "push", "-q", "origin", "done:main");
-  git(checkout, "update-ref", "refs/remotes/origin/main", stale);
+  git(repoDir, "update-ref", "refs/remotes/origin/main", stale);
   register(done, "done");
   // The sweep's own fetch of origin/<default> is the only one in the pass, so
   // it has to run before the merge is decided.
@@ -279,7 +254,7 @@ test("the merge check sees work pushed since the checkout last fetched", async (
     }),
   );
   expect(() =>
-    git(checkout, "rev-parse", "--verify", "refs/heads/done"),
+    git(repoDir, "rev-parse", "--verify", "refs/heads/done"),
   ).toThrow();
 });
 
@@ -289,7 +264,7 @@ test("an unreachable origin costs a notice, not the pass", async () => {
   git(done, "add", "shipped.txt");
   git(done, "commit", "-q", "-m", "shipped");
   register(done, "done");
-  git(checkout, "remote", "set-url", "origin", path.join(tmp, "nonexistent"));
+  git(repoDir, "remote", "set-url", "origin", path.join(tmp, "nonexistent"));
   const lines: string[] = [];
 
   const report = await sweepWorktrees(
@@ -303,7 +278,7 @@ test("an unreachable origin costs a notice, not the pass", async () => {
   expect(report.removed).toEqual([done]);
   expect(lines.some((line) => line.includes("could not fetch"))).toBe(true);
   // The merge check fell back to the stale ref, which reads unmerged.
-  expect(git(checkout, "rev-parse", "--verify", "refs/heads/done")).toMatch(
+  expect(git(repoDir, "rev-parse", "--verify", "refs/heads/done")).toMatch(
     /^[0-9a-f]{40}$/,
   );
 });
@@ -321,7 +296,7 @@ test("a completed owner whose branch never merged keeps it as insurance", async 
     }),
   );
   expect(existsSync(done)).toBe(false);
-  expect(git(checkout, "rev-parse", "--verify", "refs/heads/done")).toMatch(
+  expect(git(repoDir, "rev-parse", "--verify", "refs/heads/done")).toMatch(
     /^[0-9a-f]{40}$/,
   );
 });
@@ -336,7 +311,7 @@ test("a failed owner's clean teardown keeps the branch as insurance", async () =
     }),
   );
   expect(existsSync(failed)).toBe(false);
-  expect(git(checkout, "rev-parse", "--verify", "refs/heads/failed")).toMatch(
+  expect(git(repoDir, "rev-parse", "--verify", "refs/heads/failed")).toMatch(
     /^[0-9a-f]{40}$/,
   );
 });
@@ -360,10 +335,11 @@ test("the managed Codex home is removed once a run's last worktree is torn down"
   expect(removedHomes).toEqual(["run_shared"]);
 });
 
-test("empty workspace directories are removed after the last worktree goes", async () => {
+test("a binding's empty worktrees directory goes, its clone stays", async () => {
   const only = addWorktree("only");
   register(only, "only");
   const report = await sweepWorktrees({ clean: true }, deps());
-  expect(report.removedDirs).toContain(workspace);
-  expect(existsSync(workspace)).toBe(false);
+  expect(report.removedDirs).toContain(worktreesDir);
+  expect(existsSync(worktreesDir)).toBe(false);
+  expect(existsSync(repoDir)).toBe(true);
 });

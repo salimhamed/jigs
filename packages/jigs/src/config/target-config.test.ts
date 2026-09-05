@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { CliError } from "../errors.ts";
@@ -6,6 +6,7 @@ import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import {
   parseTargetConfig,
   readTargetConfig,
+  resolveWorktreeConfig,
   TARGET_CONFIG_FILE,
 } from "./target-config.ts";
 
@@ -20,7 +21,7 @@ afterEach(() => {
 const write = (text: string) =>
   writeFileSync(path.join(tmp, TARGET_CONFIG_FILE), text);
 
-test("a checkout with no .jigs.yml reads as schema defaults", () => {
+test("a directory with no .jigs.yml reads as schema defaults", () => {
   expect(readTargetConfig(tmp).worktree).toEqual({
     copy: [],
     post_create: [],
@@ -72,4 +73,49 @@ test("a non-positive hook_timeout_minutes is rejected", () => {
   expect(() =>
     parseTargetConfig("worktree:\n  hook_timeout_minutes: 0\n"),
   ).toThrow(CliError);
+});
+
+// ---- seed-first resolution -------------------------------------------------
+
+function makeDirs(): { seedDir: string; worktreePath: string } {
+  const seedDir = path.join(tmp, "seed");
+  const worktreePath = path.join(tmp, "wt");
+  for (const dir of [seedDir, worktreePath])
+    mkdirSync(dir, { recursive: true });
+  return { seedDir, worktreePath };
+}
+
+test("the seed directory's .jigs.yml wins over the worktree's", () => {
+  const dirs = makeDirs();
+  writeFileSync(
+    path.join(dirs.seedDir, TARGET_CONFIG_FILE),
+    "worktree:\n  copy: [.env]\n  post_create: [npm ci]\n",
+  );
+  writeFileSync(
+    path.join(dirs.worktreePath, TARGET_CONFIG_FILE),
+    "worktree:\n  copy: []\n",
+  );
+  expect(resolveWorktreeConfig(dirs)).toMatchObject({
+    source: "seed",
+    config: { copy: [".env"], post_create: ["npm ci"] },
+  });
+});
+
+test("without a seeded file the worktree's own committed one is read", () => {
+  const dirs = makeDirs();
+  writeFileSync(
+    path.join(dirs.worktreePath, TARGET_CONFIG_FILE),
+    "worktree:\n  post_create: [pnpm install]\n",
+  );
+  expect(resolveWorktreeConfig(dirs)).toMatchObject({
+    source: "worktree",
+    config: { post_create: ["pnpm install"] },
+  });
+});
+
+test("neither file reports defaults, so the caller can say so", () => {
+  expect(resolveWorktreeConfig(makeDirs())).toEqual({
+    source: "defaults",
+    config: { copy: [], post_create: [], hook_timeout_minutes: 10 },
+  });
 });

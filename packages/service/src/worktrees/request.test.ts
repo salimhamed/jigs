@@ -1,9 +1,12 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
+  type Binding,
+  bindingRepoDir,
+  bindingSeedDir,
   PostCreateFailedError,
-  type ResolvedBinding,
+  type ProvisionWorktreeOptions,
   worktreePath,
 } from "jigs";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -17,13 +20,13 @@ import { provisionRequest, WorktreeRegistryUnavailableError } from "./request";
 import { makeFakeSql } from "./test-fixtures";
 
 let tmp: string;
-let checkout: string;
+let repoDir: string;
+let seedDir: string;
 let target: string;
 let store: Map<string, WorktreeRow>;
 
 beforeEach(() => {
   tmp = mkdtempSync(path.join(tmpdir(), "jigs-request-test-"));
-  checkout = path.join(tmp, "checkout");
   store = new Map();
   // An ambient dev-database URL would otherwise make this lane open a real
   // connection and read the operator's registry.
@@ -31,20 +34,18 @@ beforeEach(() => {
   vi.stubEnv("JIGS_FACTORY_ROOT", tmp);
   vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
   writeFileSync(path.join(tmp, "jigs.yml"), "bindings: {}\n");
-  target = worktreePath({
-    factoryRoot: tmp,
-    bindingName: "api",
-    branch: "feat",
-  });
+  const dirs = { factoryRoot: tmp, bindingName: "api" };
+  repoDir = bindingRepoDir(dirs);
+  seedDir = bindingSeedDir(dirs);
+  target = worktreePath({ ...dirs, branch: "feat" });
 });
 afterEach(() => {
   vi.unstubAllEnvs();
   rmSync(tmp, { recursive: true, force: true });
 });
 
-const binding: ResolvedBinding = {
+const binding: Binding = {
   name: "api",
-  checkoutRoot: "",
   remote: "git@github.com:acme/api.git",
 };
 
@@ -52,7 +53,8 @@ const binding: ResolvedBinding = {
 // standing in for the git half; these tests are about what happens around it.
 const deps = (overrides: Record<string, unknown> = {}) => ({
   sql: makeFakeSql(store),
-  resolveBinding: () => ({ ...binding, checkoutRoot: checkout }),
+  resolveBinding: () => binding,
+  ensureClone: async () => {},
   acquire: (
     request: AcquireWorktreeRequest,
     acquireDeps: AcquireWorktreeDeps,
@@ -91,7 +93,7 @@ test("a failing post_create leaves the row marked provision-failed and rethrows"
   expect(store.get(target)?.state).toBe("provision-failed");
 });
 
-test("a successful request registers the worktree as active", async () => {
+test("a successful request registers the worktree as active against the clone", async () => {
   await provisionRequest(
     { runId: "run_a", binding: "api", branch: "feat", keep: true },
     deps({ provision: async () => {} }),
@@ -99,9 +101,85 @@ test("a successful request registers the worktree as active", async () => {
   expect(store.get(target)).toMatchObject({
     state: "active",
     ownerRunId: "run_a",
-    checkoutRoot: checkout,
+    repoDir,
     keep: true,
   });
+});
+
+test("the clone is ensured before the worktree is acquired", async () => {
+  const order: string[] = [];
+  await provisionRequest(
+    { runId: "run_a", binding: "api", branch: "feat" },
+    deps({
+      ensureClone: async (options: { repoDir: string; remote: string }) => {
+        order.push(`clone ${options.repoDir} ${options.remote}`);
+      },
+      acquire: async () => {
+        order.push("acquire");
+        return {
+          path: target,
+          branch: "feat",
+          resolution: "new" as const,
+          defaultBranch: "main",
+          baseSha: "base1",
+          headSha: "base1",
+          behindDefault: 0,
+        };
+      },
+      provision: async () => {},
+    }),
+  );
+  expect(order).toEqual([`clone ${repoDir} ${binding.remote}`, "acquire"]);
+});
+
+test("the seed directory's .jigs.yml is what provisions the worktree", async () => {
+  mkdirSync(seedDir, { recursive: true });
+  writeFileSync(path.join(seedDir, ".jigs.yml"), "worktree:\n  copy: [.env]\n");
+  mkdirSync(target, { recursive: true });
+  writeFileSync(path.join(target, ".jigs.yml"), "worktree:\n  copy: []\n");
+  const calls: ProvisionWorktreeOptions[] = [];
+
+  await provisionRequest(
+    { runId: "run_a", binding: "api", branch: "feat" },
+    deps({
+      provision: async (options: ProvisionWorktreeOptions) => {
+        calls.push(options);
+      },
+    }),
+  );
+  expect(calls).toEqual([
+    {
+      seedDir,
+      worktreePath: target,
+      config: { copy: [".env"], post_create: [], hook_timeout_minutes: 10 },
+    },
+  ]);
+});
+
+test("with no .jigs.yml on either side the request says so and provisions nothing", async () => {
+  const lines: string[] = [];
+  const calls: ProvisionWorktreeOptions[] = [];
+  await provisionRequest(
+    { runId: "run_a", binding: "api", branch: "feat" },
+    deps({
+      provision: async (options: ProvisionWorktreeOptions) => {
+        calls.push(options);
+      },
+      log: (line: string) => lines.push(line),
+    }),
+  );
+  expect(calls[0]?.config).toEqual({
+    copy: [],
+    post_create: [],
+    hook_timeout_minutes: 10,
+  });
+  expect(
+    lines.some(
+      (line) =>
+        line.includes("no .jigs.yml") &&
+        line.includes("copying nothing, running nothing"),
+    ),
+  ).toBe(true);
 });
 
 test("a provisioned worktree logs its binding, branch, and path", async () => {
