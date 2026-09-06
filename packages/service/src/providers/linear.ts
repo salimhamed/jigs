@@ -1,6 +1,7 @@
 // These read env and hit the network, so a caller must reach them only from
-// inside a "use step" function or the trigger-path preflight — never from a
-// workflow body, where both are forbidden. LINEAR_API_URL is a test seam.
+// inside a "use step" function or from a route handler (the trigger's ticket
+// lookup, the run-ref resolver) — never from a workflow body, where both are
+// forbidden. LINEAR_API_URL is a test seam.
 
 export interface LinearUser {
   id: string;

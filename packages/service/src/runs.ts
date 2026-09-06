@@ -6,6 +6,7 @@ import { getHookByToken, getRun } from "workflow/api";
 import { hydrateData, observabilityRevivers } from "workflow/observability";
 import { getWorld } from "workflow/runtime";
 import type { Factory } from "./factory";
+import { resolveIssueRef } from "./providers/linear";
 import { type JobRunIds, listJobRunIds, runsWithActiveStep } from "./stalls";
 import { TICKET_TOKEN_PREFIX, ticketToken } from "./suspension/tokens";
 import { registrySql } from "./worktrees/sql";
@@ -17,6 +18,11 @@ import { registrySql } from "./worktrees/sql";
 const RUN_ID_SHAPE = /^(?:wrun_)?([0-9A-HJKMNP-TV-Z]{1,26})$/i;
 const RUN_ID_PREFIX = "wrun_";
 const RUN_ID_LENGTH = RUN_ID_PREFIX.length + 26;
+
+// A Linear identifier: team key then issue number. Only this shape is worth a
+// Linear round trip — every other ticket ref is already the UUID the claim is
+// keyed on, or is nothing Linear could place.
+const TICKET_IDENTIFIER = /^[A-Za-z][A-Za-z0-9]*-\d+$/;
 
 export const TERMINAL_RUN_STATUSES: ReadonlySet<string> = new Set([
   "completed",
@@ -33,6 +39,7 @@ export interface RunLookupDeps {
   listRunIds?: () => Promise<string[]>;
   runExists?: (runId: string) => Promise<boolean>;
   hookRunId?: (token: string) => Promise<string | null>;
+  issueId?: (ref: string) => Promise<string | null>;
 }
 
 export async function resolveRunRef(
@@ -56,13 +63,16 @@ export async function resolveRunRef(
   }
   // The ticket claim is already the one-active-run-per-ticket index: it is
   // every run's first act, and the world deletes hooks at terminal state, so
-  // the token resolves exactly the run that currently holds the ticket.
+  // the token resolves exactly the run that currently holds the ticket. It is
+  // keyed on the issue's UUID, so an identifier first costs the same Linear
+  // lookup the trigger already makes to start a run — upper-cased, because
+  // Linear keys identifiers by upper-case team key.
+  const issueId = TICKET_IDENTIFIER.test(ref)
+    ? await (deps.issueId ?? linearIssueId)(ref.toUpperCase())
+    : ref;
+  if (issueId === null) return { kind: "unknown" };
   const hookRunId = deps.hookRunId ?? worldHookRunId;
-  const owner =
-    (await hookRunId(ticketToken(ref))) ??
-    (ref === ref.toUpperCase()
-      ? null
-      : await hookRunId(ticketToken(ref.toUpperCase())));
+  const owner = await hookRunId(ticketToken(issueId));
   return owner === null ? { kind: "unknown" } : { kind: "found", runId: owner };
 }
 
@@ -201,6 +211,14 @@ const worldJobRunIds = (): Promise<JobRunIds> => listJobRunIds(registrySql());
 const worldHookRunId = (token: string) =>
   getHookByToken(token).then(
     (hook) => hook.runId,
+    () => null,
+  );
+
+// A ref Linear cannot place — or cannot be asked about, with no API key
+// configured — is a ref no run holds, which is the answer either way.
+const linearIssueId = (ref: string) =>
+  resolveIssueRef(ref).then(
+    (issue) => issue.id,
     () => null,
   );
 
