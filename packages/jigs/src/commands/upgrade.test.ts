@@ -37,10 +37,7 @@ interface Manifest {
   scripts?: Record<string, string>;
 }
 
-const PUBLISHED = {
-  "@salimhamed/jigs": "0.1.18",
-  "@salimhamed/jigs-service": "0.1.18",
-};
+const PUBLISHED = { "@salimhamed/jigs": "0.1.18" };
 
 function factory(
   port: number,
@@ -112,7 +109,7 @@ const statuses = (result: Awaited<ReturnType<typeof upgradeFactory>>) =>
 const commands = (io: { exec: ReturnType<typeof fakeExec> }) =>
   io.exec.calls.map((call) => [path.basename(call.file), ...call.args]);
 
-test("bumps both packages to latest, runs every up step, then the typecheck", async () => {
+test("bumps jigs to latest, runs every up step, then the typecheck", async () => {
   const port = await fakeService();
   const root = factory(port);
   const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
@@ -134,21 +131,12 @@ test("bumps both packages to latest, runs every up step, then the typecheck", as
     "doctor:ok",
     "typecheck:ok",
   ]);
-  expect(result.before).toEqual(PUBLISHED);
-  expect(result.after).toEqual({
-    "@salimhamed/jigs": "0.1.19",
-    "@salimhamed/jigs-service": "0.1.19",
-  });
+  expect(result.before).toBe("0.1.18");
+  expect(result.after).toBe("0.1.19");
   expect(result.up?.service).toBe("started");
 
   expect(commands(io)).toEqual([
-    [
-      "pnpm",
-      "update",
-      "--latest",
-      "@salimhamed/jigs",
-      "@salimhamed/jigs-service",
-    ],
+    ["pnpm", "update", "--latest", "@salimhamed/jigs"],
     ["pnpm", "install"],
     ["docker", "compose", "up", "-d", "--wait"],
     ["bootstrap"],
@@ -158,17 +146,13 @@ test("bumps both packages to latest, runs every up step, then the typecheck", as
   for (const call of io.exec.calls) expect(call.options.cwd).toBe(root);
 
   const printed = lines.join("\n");
-  expect(printed).toMatch(
-    /^ok {3}packages \(\d+ms\) — jigs 0\.1\.18, jigs-service 0\.1\.18$/m,
-  );
-  expect(printed).toMatch(
-    /^ok {3}bump \(\d+ms\) — jigs 0\.1\.18 → 0\.1\.19, jigs-service 0\.1\.18 → 0\.1\.19$/m,
-  );
+  expect(printed).toMatch(/^ok {3}packages \(\d+ms\) — jigs 0\.1\.18$/m);
+  expect(printed).toMatch(/^ok {3}bump \(\d+ms\) — jigs 0\.1\.18 → 0\.1\.19$/m);
   expect(printed).toMatch(/^ok {3}typecheck \(\d+ms\)$/m);
   expect(lines.at(-1)).toBe("acme-factory runs jigs 0.1.19");
 });
 
-test("--to pins both packages to one version", async () => {
+test("--to pins jigs to that version instead of the latest", async () => {
   const port = await fakeService();
   const root = factory(port);
   const io = { exec: fakeRegistry("0.3.0"), procs: fakeProcesses() };
@@ -176,15 +160,9 @@ test("--to pins both packages to one version", async () => {
   const result = await upgrade(root, io, { to: "0.2.0" });
 
   expect(result.ok).toBe(true);
-  expect(commands(io)[0]).toEqual([
-    "pnpm",
-    "update",
-    "@salimhamed/jigs@0.2.0",
-    "@salimhamed/jigs-service@0.2.0",
-  ]);
+  expect(commands(io)[0]).toEqual(["pnpm", "update", "@salimhamed/jigs@0.2.0"]);
   expect(readManifest(root).dependencies).toEqual({
     "@salimhamed/jigs": "0.2.0",
-    "@salimhamed/jigs-service": "0.2.0",
   });
 });
 
@@ -207,12 +185,12 @@ test("a factory already on the latest says so and still runs up and the typechec
 
   expect(result.ok).toBe(true);
   expect(lines.join("\n")).toMatch(
-    /^ok {3}bump .* — jigs 0\.1\.18 \(unchanged\), jigs-service 0\.1\.18 \(unchanged\)$/m,
+    /^ok {3}bump .* — jigs 0\.1\.18 \(unchanged\)$/m,
   );
   expect(statuses(result).at(-1)).toBe("typecheck:ok");
 });
 
-test("a factory linked to a checkout is refused before pnpm runs, naming both published packages", async () => {
+test("a factory linked to a checkout is refused before pnpm runs, naming the published package", async () => {
   const root = factory(1, {
     dependencies: {
       "@jigs/service": "link:/home/me/jigs/packages/service",
@@ -230,17 +208,14 @@ test("a factory linked to a checkout is refused before pnpm runs, naming both pu
     "this factory installs jigs from a checkout (@jigs/service: link:/home/me/jigs/packages/service, jigs: link:/home/me/jigs/packages/jigs)",
   );
   expect(result.steps[0]?.repair).toContain(
-    "@salimhamed/jigs and @salimhamed/jigs-service",
+    "@salimhamed/jigs from GitHub Packages",
   );
   expect(io.exec.calls).toHaveLength(0);
 });
 
 test("a published name still linked by path counts as a checkout install", async () => {
   const root = factory(1, {
-    dependencies: {
-      "@salimhamed/jigs": "link:../jigs/packages/jigs",
-      "@salimhamed/jigs-service": "0.1.18",
-    },
+    dependencies: { "@salimhamed/jigs": "link:../jigs/packages/jigs" },
   });
   const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
 
@@ -266,17 +241,39 @@ test("a link: to something other than jigs is not a checkout install", async () 
   );
 });
 
-test("a factory missing one of the two packages is told which, since pnpm would silently skip it", async () => {
-  const root = factory(1, {
-    dependencies: { "@salimhamed/jigs": "0.1.18" },
-  });
+test("a factory that does not depend on jigs is told so, since pnpm would silently skip it", async () => {
+  const root = factory(1, { dependencies: { workflow: "4.8.4" } });
   const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
 
   const result = await upgrade(root, io);
 
   expect(statuses(result)).toEqual(["packages:failed"]);
   expect(result.steps[0]?.detail).toBe(
-    "@salimhamed/jigs-service not in this factory's package.json",
+    "@salimhamed/jigs not in this factory's package.json",
+  );
+  expect(io.exec.calls).toHaveLength(0);
+});
+
+// The one state an upgrade cannot repair: the factory's imports name a
+// package no release has, so pnpm would resolve nothing and the rewrite is
+// the operator's.
+test("a factory still on the two-package split is sent to the one-time migration", async () => {
+  const root = factory(1, {
+    dependencies: {
+      "@salimhamed/jigs": "0.2.0",
+      "@salimhamed/jigs-service": "0.2.0",
+    },
+  });
+  const io = { exec: fakeRegistry("0.3.0"), procs: fakeProcesses() };
+
+  const result = await upgrade(root, io);
+
+  expect(statuses(result)).toEqual(["packages:failed"]);
+  expect(result.steps[0]?.detail).toBe(
+    "this factory still depends on @salimhamed/jigs-service, which no longer releases",
+  );
+  expect(result.steps[0]?.repair).toContain(
+    "rewrite every import of @salimhamed/jigs-service/X to @salimhamed/jigs/X",
   );
   expect(io.exec.calls).toHaveLength(0);
 });
@@ -295,7 +292,7 @@ test("a peer the new release moved fails the bump and names the factory-supplied
       call.args[0] === "update"
         ? execError(
             1,
-            "ERR_PNPM_PEER_DEP_ISSUES  Unmet peer dependencies\n. └─┬ @salimhamed/jigs-service 0.1.19\n   └── ✕ unmet peer workflow@4.9.0: found 4.8.4\n",
+            "ERR_PNPM_PEER_DEP_ISSUES  Unmet peer dependencies\n. └─┬ @salimhamed/jigs 0.1.19\n   └── ✕ unmet peer workflow@4.9.0: found 4.8.4\n",
           )
         : undefined,
     ),
@@ -377,7 +374,7 @@ test("an @salimhamed scope not routed to GitHub Packages names the .npmrc line",
   );
 });
 
-test("a version neither package has is named with the --to that asked for it", async () => {
+test("a version the registry does not have is named with the --to that asked for it", async () => {
   const root = factory(1);
   const io = {
     exec: fakeRegistry("0.1.19", (call) =>

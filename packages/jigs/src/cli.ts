@@ -112,11 +112,11 @@ program
 program
   .command("upgrade")
   .description(
-    "move this factory to a newer jigs: bump both packages, then up, then the factory's typecheck",
+    "move this factory to a newer jigs: bump the package, then up, then the factory's typecheck",
   )
   .option(
     "--to <version>",
-    "pin both packages to this version instead of the latest release",
+    "pin jigs to this version instead of the latest release",
   )
   .option("--force", "restart over in-flight runs without asking")
   .option("--no-doctor", "skip the doctor pass once the service is up")
