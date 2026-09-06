@@ -1,0 +1,12 @@
+import type { ReviewLoopDeps } from "@jigs/service/review-loop/loop";
+
+// How a pull request introduces itself is this factory's voice, so jigs ships
+// no default. This one is deterministic; a real factory asks its agent here,
+// composed over the `agent` jig and the `readDiff` wrapper in ./jigs.ts —
+// no `"use step"` of its own, so nothing here can add or move a step id.
+export const describePr: ReviewLoopDeps["describePr"] = async ({
+  handoff,
+}) => ({
+  title: `${handoff.snapshot.identifier}: ${handoff.snapshot.title}`,
+  body: handoff.brief,
+});

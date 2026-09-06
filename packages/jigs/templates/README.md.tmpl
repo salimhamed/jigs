@@ -1,0 +1,106 @@
+# {{FACTORY_NAME}}
+
+A [jigs](https://github.com/salimhamed/jigs) factory: the pipelines this
+machine runs, the bindings they run against, and the service that hosts them.
+
+## Layout
+
+- `jigs.config.ts` — the pipelines this factory hosts, keyed by the name
+  `jigs run` takes. `jigs build` generates the service entry from it.
+- `pipelines/` — the pipeline bodies. Their paths are load-bearing: the
+  workflow ids the SDK records are derived from them, and a rename orphans
+  every parked run.
+- `steps/jigs.ts` — this factory's `"use step"` wrappers around the steps jigs
+  ships, and the jigs wired on top of them. Every step a pipeline calls comes
+  from here, and each step id is this path plus the function's name, so both
+  are load-bearing exactly as `pipelines/` is. `jigs init` wrote it once and
+  never rewrites it; a step jigs grows later gets its wrapper added by hand.
+- `steps/describe-pr.ts` — the one review-loop dep jigs ships no default for:
+  the title and body a pull request opens with. Deterministic as scaffolded;
+  compose it over the `agent` jig and the `readDiff` wrapper to ask an agent.
+- `jigs.config.test.ts` — what the factory declares, and the ids the last
+  build emitted.
+- `jigs.yml` — this factory's service and dashboard ports and its bindings.
+- `docker-compose.yml` — this factory's own Postgres World.
+
+## Setup
+
+```sh
+cp .env.example .env      # then fill in LINEAR_API_KEY and GITHUB_TOKEN
+jigs up                   # install, World, bootstrap, build, start, doctor
+jigs bind git@github.com:owner/repo.git
+jigs service restart      # the service clones every binding when it starts
+```
+
+The service listens on `:{{SERVICE_PORT}}`, its dashboard on
+`:{{DASHBOARD_PORT}}`, its World on `:{{POSTGRES_PORT}}`.
+
+## Pipelines
+
+- `ship` — a ticket to a merged pull request: claim the ticket, snapshot it,
+  review it into a brief, cut a worktree, then the review loop (implement ⇄
+  review → PR → gate → merge → teardown). Takes the ticket as `ABC-123` or its
+  uuid, `binding` names the repo, and `merge` is `jigs` (squash-merge on
+  approval) or `human` (a person presses merge).
+
+## Running a pipeline
+
+```sh
+jigs run ship --input ticket=ABC-123 --input binding=repo --input merge=human
+jigs ps
+jigs logs <run>
+jigs cancel <run>
+```
+
+`<run>` is a run id, a unique prefix of one, or the ticket the run claimed.
+Runs outlive the terminal that launched them: the service owns them.
+
+Every launch preflights first, so an empty `.env` refuses the run rather than
+creating one that fails later. `jigs doctor` runs the same checks without
+launching anything.
+
+## Development
+
+```sh
+pnpm typecheck
+jigs build
+pnpm test                 # jigs.config.ts's assertions, and the built ids
+```
+
+`pnpm test` reads the workflow and step ids out of the last build's
+`.output/server/index.mjs`, so build first.
+
+## Adding a pipeline
+
+New file in `pipelines/`, exporting a `<name>Inputs` zod schema and a
+`<name>Pipeline` function whose body opens with `"use workflow"`. Register it
+in `jigs.config.ts` under the name `jigs run` should take, then `jigs build`,
+and give the new `workflow//./pipelines/<file>//<fn>` id its line in
+`WORKFLOW_IDS` in `jigs.config.test.ts`.
+
+A pipeline imports its steps from `../steps/jigs.ts`, never from
+`@jigs/service`: a step taken from the package would be addressed by the
+package's version, and every jigs upgrade would rename it. A pipeline may also
+declare `"use step"` functions in its own file; their ids come out as
+`step//./pipelines/<file>//<fn>`, so those names are load-bearing too, and
+each gets its line in `STEP_IDS`.
+
+The jigs — `agent`, `ask`, `needsHuman`, `gate`, `agentOrHalt`,
+`ticketReview`, `reviewLoop` — are compositions over those steps and carry no
+id. `steps/jigs.ts` exports them already wired to this factory's steps; a
+pipeline that must swap one dep spreads `reviewLoopDeps` and overrides the
+entry.
+
+## Upgrading jigs
+
+Rebuild the jigs checkout, then this factory:
+
+```sh
+cd <jigs checkout> && git pull && pnpm build
+cd <factory> && jigs up
+```
+
+A release that grows a step needs a wrapper in `steps/jigs.ts` and a line in
+`STEP_IDS`; the typecheck names the gap. A release that adds a runtime
+dependency needs it in `package.json` too — compare against `jigs init`'s
+template.

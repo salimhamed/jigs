@@ -125,18 +125,17 @@ mkdir my-factory && cd my-factory && git init
 jigs init
 ```
 
-`jigs init` writes infrastructure only: `jigs.yml` (the service and dashboard
+`jigs init` writes the infrastructure — `jigs.yml` (the service and dashboard
 ports and, later, the ingress URL), `package.json`, `nitro.config.ts`,
 `docker-compose.yml`, `.env.example`, and the `tsconfig.json`,
-`pnpm-workspace.yaml` and `.gitignore` a factory build needs — then prints the
-commands below with this factory's ports filled in. It runs none of them:
-every one can fail in a way only a human should see.
-
-The code is yours to write: `jigs.config.ts` (this factory's pipelines, keyed
-by the name `jigs run` takes), the pipelines themselves, and `steps/jigs.ts`.
-The factory repo owns that boilerplate until the API stabilizes — jigs
-scaffolds none of it, so nothing it writes goes stale under you.
-`e2e/fixture-factory` in the jigs checkout is a worked example to copy from.
+`pnpm-workspace.yaml` and `.gitignore` a factory build needs — and the code
+the factory starts from: `jigs.config.ts` (this factory's pipelines, keyed by
+the name `jigs run` takes), `pipelines/ship.ts` (a ticket to a merged pull
+request), `steps/jigs.ts`, `steps/describe-pr.ts`, `jigs.config.test.ts` and
+a `README.md`. Then it prints the next steps and runs none of them; `jigs up`
+(step 2) is what runs them. Every file is written once: a re-run keeps what
+is there and adds only what is missing, so nothing init wrote goes stale
+under you, and from here on the code is this factory's own.
 
 `steps/jigs.ts` is the one to know about. It holds this factory's `"use step"`
 wrappers around jigs' step implementations, plus the jigs (`reviewLoop`,
@@ -146,17 +145,24 @@ ordinary committed source: commit it, edit it, and **do not rename it or its
 exported functions**. Each name compiles to a durable step id
 (`step//./steps/jigs//worktree`) that the World memoizes runs against, so a
 rename orphans every run this factory has parked — with a clean build and no
-error.
+error. `jigs.config.test.ts` pins those ids against the last build, so
+`pnpm test` in the factory is what catches a rename.
 
 Not everything in that file wraps something jigs ships. `reviewLoop`'s deps
 require a **`describePr`** the factory writes outright: given the handoff, the
 worktree path, the branch point and the builder's session, it returns the
 `{ title, body }` the pull request opens with. jigs has no implementation to
 wrap here on purpose — how a pull request introduces itself is the factory's
-voice, and the title is what the target repo's own CI and release tooling read
-(the fixture's is a plain deterministic string; a real factory can ask its
-agent). It is a required member, so a factory cannot quietly end up without
-one.
+voice, and the title is what the target repo's own CI and release tooling read.
+The scaffolded `steps/describe-pr.ts` is a plain deterministic string; a real
+factory composes it over the `agent` jig and the `readDiff` wrapper to ask its
+agent. It is a required member, so a factory cannot quietly end up without one.
+
+The starter `ship` pipeline takes its `binding` and `merge` as inputs with no
+default, because the scaffold knows neither: once step 4 has bound a repo, give
+`binding` that name as its default and list it under `requires.bindings` in
+`jigs.config.ts`, so preflight refuses a run the worktree step would otherwise
+fail.
 
 ### 2. Install, World, bootstrap
 

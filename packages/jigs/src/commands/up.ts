@@ -280,7 +280,7 @@ function locate(cwd: string): {
   if (!existsSync(path.join(factoryRoot, FACTORY_CODE))) {
     throw new CliError(
       `no ${FACTORY_CODE} in ${factoryRoot}`,
-      "write this factory's jigs.config.ts, pipelines/ and steps/jigs.ts — e2e/fixture-factory in the jigs repo is the worked example",
+      "scaffold it: jigs init writes jigs.config.ts, pipelines/ship.ts and steps/jigs.ts, and keeps every file already there",
     );
   }
   return { factoryRoot, service };

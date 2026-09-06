@@ -1,9 +1,11 @@
-# The workflow and step ids `jigs build` emits for this fixture factory.
-# Recorded by: node e2e/check-step-ids.mjs --record
+# The workflow and step ids `jigs build` emits for the factory `jigs init`
+# scaffolds. Recorded by: node e2e/check-step-ids.mjs --record
 #
 # Every line is a memoization key in the World. A change here is a change in
-# every factory's durable run state, so a diff is a finding, not a chore.
-step//./pipelines/fixture//localStep
+# every factory's durable run state, so a diff is a finding, not a chore. The
+# one line a rename may legitimately move is the workflow id, which carries
+# the starter pipeline's file name; every step id is a wrapper every factory
+# already has.
 step//./steps/jigs//checkForHumanReply
 step//./steps/jigs//commentOnPr
 step//./steps/jigs//fetchPrState
@@ -20,4 +22,4 @@ step//./steps/jigs//squashMerge
 step//./steps/jigs//teardownWorktrees
 step//./steps/jigs//worktree
 step//workflow@4.8.4//fetch
-workflow//./pipelines/fixture//fixturePipeline
+workflow//./pipelines/ship//shipPipeline

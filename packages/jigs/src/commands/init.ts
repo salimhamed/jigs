@@ -16,11 +16,11 @@ import { CliError } from "../errors.ts";
 import { interpolate } from "../prompts/interpolate.ts";
 
 // Scaffolds a factory repo: the infrastructure a factory needs to build and
-// run its own service. Nothing a pipeline is written in — jigs.config.ts, the
-// pipelines, the step wrappers — is written here; a factory owns its own code.
-// Everything that touches the machine — docker, the World schema, the build,
-// the service — is printed, never run. Those are the steps a human has to be
-// able to see fail.
+// run its own service, plus the code it starts from — the step wrappers, a
+// ship pipeline, jigs.config.ts and its ids test. Every file is written once
+// and never rewritten: from then on the factory owns it, and the wrapper file
+// in particular is half of every step id it declares. Nothing that touches
+// the machine runs here; `jigs up` is that, one step at a time.
 
 export interface InitDeps {
   cwd: string;
@@ -77,17 +77,17 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   );
   deps.out("");
   deps.out(
-    "write this factory's own jigs.config.ts, pipelines/ and steps/jigs.ts — jigs scaffolds none of them",
+    "steps/jigs.ts and pipelines/ are yours now: never rename the file or an exported wrapper — each name is half a step id parked runs replay against",
   );
   deps.out("");
-  deps.out("next, in this directory (jigs runs none of these for you):");
-  deps.out("  cp .env.example .env");
-  deps.out("  pnpm install");
-  deps.out("  docker compose up -d --wait");
-  deps.out("  # bootstrap reads the .env copied above for the World URL:");
-  deps.out("  pnpm exec bootstrap");
-  deps.out("  jigs build");
-  deps.out("  jigs service start");
+  deps.out("next, in this directory:");
+  deps.out(
+    "  cp .env.example .env    # then fill in LINEAR_API_KEY and GITHUB_TOKEN",
+  );
+  deps.out(
+    "  jigs up                 # install, World, bootstrap, build, start, doctor",
+  );
+  deps.out("  jigs bind <remote-url>  # then jigs service restart to clone it");
 
   return { created, skipped, ...ports };
 }

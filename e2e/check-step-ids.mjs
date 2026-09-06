@@ -1,4 +1,5 @@
-// The only check that can see a broken @jigs/service packaging.
+// The only check that can see a broken @jigs/service packaging, and the only
+// one that compiles the factory `jigs init` scaffolds.
 //
 // No jigs package carries a directive, so every durable step id is derived at
 // compile time from the factory-local path of the file that declares it — and
@@ -9,58 +10,94 @@
 // None of it throws — the build is clean and the ids are simply wrong, in
 // somebody else's repo, against runs already in flight.
 //
-// So: build the fixture factory the way a real factory builds, twice — first
-// with @jigs/service on a fake version, then as committed, so the tree is left
-// holding a build of the real one. Read the ids back out of each bundle and
-// diff both against the recorded list, because "the ids do not move when the
-// library is versioned" is the property this whole shape was bought for, and
-// it is the one nothing else can observe.
+// So: run `jigs init` into an empty directory outside this repo, exactly as a
+// new factory would, install it, and build it the way a real factory builds,
+// twice — first with @jigs/service on a fake version, then as committed, so
+// the tree is left holding a build of the real one. Read the ids back out of
+// each bundle and diff both against the recorded list, because "the ids do
+// not move when the library is versioned" is the property this whole shape
+// was bought for, and it is the one nothing else can observe. The scaffold
+// being what is built means the template is what is tested: the wrappers
+// every factory starts from, and the ids test that ships beside them.
 //
 // Then start the bundle once: the SDK loads the World and the dashboard by
 // name from the factory's node_modules, so they are peers a factory has to
 // install itself, and nothing says otherwise until the built service starts
 // in someone else's repo.
 import { execFileSync, spawn } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const factory = path.join(here, "fixture-factory");
-const bundle = path.join(factory, ".output", "server", "index.mjs");
-const expectedFile = path.join(factory, "expected-ids.txt");
-const servicePackage = path.join(
-  here,
-  "..",
-  "packages",
-  "service",
-  "package.json",
-);
+const repo = path.join(here, "..");
+const cli = path.join(repo, "packages", "jigs", "dist", "cli.js");
+const expectedFile = path.join(here, "expected-ids.txt");
+const servicePackage = path.join(repo, "packages", "service", "package.json");
 const FAKE_VERSION = "9.9.9-e2e";
 
-const HEADER = `# The workflow and step ids \`jigs build\` emits for this fixture factory.
-# Recorded by: node e2e/check-step-ids.mjs --record
+const HEADER = `# The workflow and step ids \`jigs build\` emits for the factory \`jigs init\`
+# scaffolds. Recorded by: node e2e/check-step-ids.mjs --record
 #
 # Every line is a memoization key in the World. A change here is a change in
-# every factory's durable run state, so a diff is a finding, not a chore.
+# every factory's durable run state, so a diff is a finding, not a chore. The
+# one line a rename may legitimately move is the workflow id, which carries
+# the starter pipeline's file name; every step id is a wrapper every factory
+# already has.
 `;
 
-// No separate "the wrappers are still there" check: the fixture's pipeline
-// imports them, so a missing steps/jigs.ts fails the build below, and a moved
-// one reports as the ids it took with it in the diff.
-function build() {
-  execFileSync(path.join(factory, "node_modules", ".bin", "jigs"), ["build"], {
+// Outside this repo on purpose: Nitro takes the furthest pnpm-workspace.yaml
+// above the build root as the workspace root and the compiler derives step
+// ids relative to it, so a factory inside the jigs checkout would record ids
+// no real factory ever emits. The temp dir is its own workspace root, the way
+// a factory repo is.
+let factory;
+let scratch;
+
+function scaffold() {
+  if (!existsSync(cli)) {
+    fail(
+      `no built CLI at ${cli}`,
+      "pnpm build first — jigs init runs from the CLI's dist, the way a factory's does",
+    );
+  }
+  scratch = mkdtempSync(path.join(tmpdir(), "jigs-e2e-"));
+  factory = path.join(scratch, "factory");
+  mkdirSync(factory);
+  execFileSync(process.execPath, [cli, "init"], {
     cwd: factory,
     stdio: "inherit",
   });
+  run("pnpm", ["install"]);
+}
+
+const bundle = () => path.join(factory, ".output", "server", "index.mjs");
+
+function run(file, args) {
+  execFileSync(file, args, { cwd: factory, stdio: "inherit" });
+}
+
+// No separate "the wrappers are still there" check: the scaffolded pipeline
+// imports them, so a missing steps/jigs.ts fails the build below, and a moved
+// one reports as the ids it took with it in the diff.
+function build() {
+  run(path.join(factory, "node_modules", ".bin", "jigs"), ["build"]);
 }
 
 function emittedIds() {
   let source;
   try {
-    source = readFileSync(bundle, "utf8");
+    source = readFileSync(bundle(), "utf8");
   } catch {
-    fail(`no bundle at ${bundle}`, "the build above did not produce one");
+    fail(`no bundle at ${bundle()}`, "the build above did not produce one");
   }
   return [...new Set(source.match(/"(?:workflow|step)\/\/[^"]+"/g) ?? [])]
     .map((quoted) => quoted.slice(1, -1))
@@ -73,7 +110,7 @@ function emittedIds() {
 // builtins out is the directive transform erasing each wrapper body — and its
 // imports — from this half. That erasure is silent when it stops working.
 function workflowBundle() {
-  const lines = readFileSync(bundle, "utf8").split("\n");
+  const lines = readFileSync(bundle(), "utf8").split("\n");
   const start = lines.findIndex((line) =>
     line.includes("workflowEntrypoint(`"),
   );
@@ -128,7 +165,7 @@ const BOOT_MARKERS = ["Listening on:", "[service] dashboard:"];
 const BOOT_UNRESOLVED = /ERR_MODULE_NOT_FOUND|Cannot find (?:module|package)/;
 
 function bootOutcome() {
-  const child = spawn(process.execPath, [bundle], {
+  const child = spawn(process.execPath, [bundle()], {
     cwd: factory,
     env: {
       ...process.env,
@@ -175,11 +212,15 @@ function reportDiff(expected, actual) {
   return { missing, unexpected };
 }
 
+console.log("\n=== scaffold: jigs init into an empty directory, then install");
+scaffold();
+
 if (process.argv[2] === "--record") {
   build();
   const ids = emittedIds();
   writeFileSync(expectedFile, `${HEADER}${ids.join("\n")}\n`);
   console.log(`recorded ${ids.length} id(s) in ${expectedFile}`);
+  cleanup();
   process.exit(0);
 }
 
@@ -225,22 +266,37 @@ if (moved.missing.length > 0 || moved.unexpected.length > 0) {
   );
 }
 
+// The scaffold's own checks, run the way a new factory runs them on day one:
+// the typecheck covers the generated entry, and the scaffolded ids test pins
+// the same ids against the same build, so the test template cannot drift from
+// the wrapper template without failing here first.
+console.log("\n=== scaffold: typecheck, then the scaffolded ids test");
+run("pnpm", ["typecheck"]);
+run("pnpm", ["test"]);
+
 console.log("\n=== boot: the built bundle resolves every import and listens");
 const boot = await bootOutcome();
 if (boot.problem !== null) {
   console.error(boot.output);
   fail(
     `the built service did not start: ${boot.problem}`,
-    "if the output above names a package it cannot find, the factory loads it by name at run time: it belongs in @jigs/service's peerDependencies, the factory package.json template and this fixture's",
+    "if the output above names a package it cannot find, the factory loads it by name at run time: it belongs in @jigs/service's peerDependencies and the factory package.json template",
   );
 }
 
 console.log(
   `\n${ids.length} step/workflow id(s) match ${expectedFile}, and are unchanged with @jigs/service at ${FAKE_VERSION}`,
 );
+cleanup();
 
+function cleanup() {
+  if (scratch !== undefined) rmSync(scratch, { recursive: true, force: true });
+}
+
+// The scaffold is left in place on failure: what went wrong is in there.
 function fail(message, hint) {
   console.error(`step-id check failed: ${message}`);
   console.error(hint);
+  if (factory !== undefined) console.error(`the scaffold is at ${factory}`);
   process.exit(1);
 }

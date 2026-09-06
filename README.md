@@ -56,24 +56,25 @@ mkdir my-factory && cd my-factory && git init
 jigs init
 ```
 
-`jigs init` writes infrastructure only — `jigs.yml`, `package.json`,
+`jigs init` writes the infrastructure — `jigs.yml`, `package.json`,
 `nitro.config.ts`, `docker-compose.yml`, `.env.example` and the rest of the
-build config — then prints the remaining steps with **your** ports filled in.
-Use its numbers, not the ones below.
+build config — and the code the factory starts from, then prints the remaining
+steps with **your** ports filled in. Use its numbers, not the ones below.
 
-### 3. Write the factory's own code
+### 3. Read the factory's own code
 
-`jigs init` scaffolds no pipeline code, and `jigs build` has nothing to compile
-without it. Three things are yours to write:
+Everything `jigs init` wrote is yours now: it never rewrites a file that
+exists. Three of them are the code `jigs build` compiles:
 
 - `jigs.config.ts` — this factory's pipelines, keyed by the name `jigs run` takes.
-- `pipelines/` — one file per pipeline.
+- `pipelines/ship.ts` — a ticket to a merged pull request, the starter pipeline.
 - `steps/jigs.ts` — this factory's `"use step"` wrappers around the steps jigs
-  ships, and the jigs wired on top of them.
+  ships, and the jigs wired on top of them. `steps/describe-pr.ts` beside it
+  is the one review-loop dep jigs has no default for.
 
-Copy the shape from `e2e/fixture-factory/` in this repo. Never rename
-`steps/jigs.ts` or its exported functions — the runtime memoizes parked runs
-against those names.
+Never rename `steps/jigs.ts` or its exported functions — the runtime memoizes
+parked runs against those names. `jigs.config.test.ts` pins the ids the last
+build emitted, so `pnpm test` in the factory catches a rename.
 
 ### 4. Environment and World
 
@@ -163,8 +164,8 @@ pnpm workspace:
 - `packages/service` — `@jigs/service`, the library a factory installs: the app
   and its routes, and the primitives pipelines are written against. It ships
   compiled, from `dist/`, like the CLI.
-- `e2e/fixture-factory` — a one-pipeline factory, and the worked example a new
-  factory copies from.
+- `packages/jigs/templates` — what `jigs init` writes: the factory's
+  infrastructure and the code it starts from, one `.tmpl` per file.
 
 ## Development
 
@@ -174,5 +175,5 @@ Requires Node 24 or newer and pnpm.
 pnpm install
 pnpm dev        # run the CLI from source
 pnpm check      # lint + typecheck + test + build (all packages)
-pnpm e2e        # build e2e/fixture-factory twice and diff its step ids
+pnpm e2e        # jigs init into a temp dir, build it twice, diff its step ids
 ```
