@@ -1,9 +1,5 @@
 import { expect, test } from "vitest";
-import {
-  decideReuse,
-  WorktreeNotReusableError,
-  WorktreeOwnedError,
-} from "./reuse";
+import { assertReusable, WorktreeNotReusableError } from "./reuse";
 
 const path = "/data/worktrees/acme-abc12345/api/salim-fix";
 
@@ -13,61 +9,17 @@ const cleanDisk = {
   diverged: false,
 };
 
-test("registered to a live run is a hard error naming the owner", () => {
+test("unowned, clean, and ff-safe is reusable", () => {
   expect(() =>
-    decideReuse({
-      path,
-      registration: { ownerRunId: "run_owner", ownerLive: true },
-      requestingRunId: "run_new",
-      disk: cleanDisk,
-    }),
-  ).toThrow(WorktreeOwnedError);
-  try {
-    decideReuse({
-      path,
-      registration: { ownerRunId: "run_owner", ownerLive: true },
-      requestingRunId: "run_new",
-      disk: cleanDisk,
-    });
-  } catch (err) {
-    expect(err).toBeInstanceOf(WorktreeOwnedError);
-    expect((err as WorktreeOwnedError).owningRunId).toBe("run_owner");
-    expect((err as WorktreeOwnedError).message).toContain("run_owner");
-    // The escape hatch the repair names has to keep existing.
-    expect((err as WorktreeOwnedError).message).toContain(
-      "jigs cancel run_owner",
-    );
-  }
-});
-
-test("unowned, clean, and ff-safe is reused", () => {
-  expect(
-    decideReuse({
-      path,
-      registration: null,
-      requestingRunId: "run_new",
-      disk: cleanDisk,
-    }),
-  ).toBe("reuse");
-});
-
-test("a terminal owner's clean worktree is reused", () => {
-  expect(
-    decideReuse({
-      path,
-      registration: { ownerRunId: "run_done", ownerLive: false },
-      requestingRunId: "run_new",
-      disk: cleanDisk,
-    }),
-  ).toBe("reuse");
+    assertReusable({ path, sameOwner: false, disk: cleanDisk }),
+  ).not.toThrow();
 });
 
 test("unowned but dirty is preserved and errors with guidance", () => {
   const attempt = () =>
-    decideReuse({
+    assertReusable({
       path,
-      registration: null,
-      requestingRunId: "run_new",
+      sameOwner: false,
       disk: { ...cleanDisk, clean: false },
     });
   expect(attempt).toThrow(WorktreeNotReusableError);
@@ -77,10 +29,9 @@ test("unowned but dirty is preserved and errors with guidance", () => {
 
 test("unowned but diverged is preserved and errors with guidance", () => {
   const attempt = () =>
-    decideReuse({
+    assertReusable({
       path,
-      registration: null,
-      requestingRunId: "run_new",
+      sameOwner: false,
       disk: { ...cleanDisk, diverged: true },
     });
   expect(attempt).toThrow(WorktreeNotReusableError);
@@ -89,45 +40,31 @@ test("unowned but diverged is preserved and errors with guidance", () => {
 
 test("a directory holding the wrong branch is preserved and errors", () => {
   const attempt = () =>
-    decideReuse({
+    assertReusable({
       path,
-      registration: null,
-      requestingRunId: "run_new",
+      sameOwner: false,
       disk: { ...cleanDisk, branchMatches: false },
     });
   expect(attempt).toThrow(WorktreeNotReusableError);
   expect(attempt).toThrow("different branch");
 });
 
-test("no worktree on disk goes through three-way resolution", () => {
-  expect(
-    decideReuse({
-      path,
-      registration: null,
-      requestingRunId: "run_new",
-      disk: null,
-    }),
-  ).toBe("create");
-});
-
-test("a registry row whose directory is gone also creates", () => {
-  expect(
-    decideReuse({
-      path,
-      registration: { ownerRunId: "run_done", ownerLive: false },
-      requestingRunId: "run_new",
-      disk: null,
-    }),
-  ).toBe("create");
-});
-
 test("the owning run re-enters its own worktree even when dirty", () => {
-  expect(
-    decideReuse({
+  expect(() =>
+    assertReusable({
       path,
-      registration: { ownerRunId: "run_owner", ownerLive: true },
-      requestingRunId: "run_owner",
-      disk: { ...cleanDisk, clean: false },
+      sameOwner: true,
+      disk: { ...cleanDisk, clean: false, diverged: true },
     }),
-  ).toBe("reuse");
+  ).not.toThrow();
+});
+
+test("the owning run still cannot re-enter a directory holding another branch", () => {
+  expect(() =>
+    assertReusable({
+      path,
+      sameOwner: true,
+      disk: { ...cleanDisk, branchMatches: false },
+    }),
+  ).toThrow(WorktreeNotReusableError);
 });
