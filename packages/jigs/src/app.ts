@@ -14,12 +14,10 @@ import {
 } from "./ingress.ts";
 import { bootPhase, isReady } from "./readiness.ts";
 import {
-  derivedRunStatus,
+  describeRun,
   listRuns,
-  parkReason,
   type RunRef,
   resolveRunRef,
-  stalledRuns,
   TERMINAL_RUN_STATUSES,
 } from "./runs.ts";
 import { listSchedules, scheduleChecks } from "./schedules.ts";
@@ -299,39 +297,27 @@ export function createApp(
     return c.json({ steps, deadJobs });
   });
 
+  // The run as `jigs logs` renders it. Everything the world did not store —
+  // suspended, stalled, which schedule fired it — is described by the one
+  // function `jigs ps` reads, or the two verbs disagree about the same run.
   app.get("/api/runs/:runId", async (c) => {
     const ref = await resolveRunRef(c.req.param("runId"));
     if (ref.kind !== "found") return refError(c, ref);
-    const run = getRun(ref.runId);
-    const status = await run.status;
+    const described = await describeRun(ref.runId);
     const body: Record<string, unknown> = {
-      runId: run.runId,
-      status,
-      logs: logsPointer(run.runId),
+      ...described,
+      logs: logsPointer(ref.runId),
     };
-    if (status === "completed") body.returnValue = await run.returnValue;
-    if (status === "failed") {
-      body.error = await run.returnValue.then(
+    // Read only where there is one: a running run's return value is a promise
+    // that settles long after this response.
+    if (described.status === "completed") {
+      body.returnValue = await getRun(ref.runId).returnValue;
+    }
+    if (described.status === "failed") {
+      body.error = await getRun(ref.runId).returnValue.then(
         () => undefined,
         (err: unknown) => String(err),
       );
-    }
-    // The SDK has neither `suspended` nor `stalled`, so jigs derives both —
-    // through the same function `jigs ps` reads, or the two verbs disagree
-    // about the same run.
-    if (status === "running") {
-      const tokens = await runHookTokens(run.runId);
-      const suspensions = tokens.flatMap((token) => {
-        const reason = parkReason(token);
-        return reason === null ? [] : [{ token, reason }];
-      });
-      const parked = suspensions.length > 0;
-      body.suspensions = suspensions;
-      body.suspended = parked;
-      body.status = derivedRunStatus(status, {
-        parked,
-        stalled: !parked && (await stalledRuns()).has(run.runId),
-      });
     }
     return c.json(body);
   });
@@ -419,18 +405,12 @@ async function deliver(
   }
 }
 
-// Both what a run is parked on and why are readings of its hook tokens, so
-// the one page of tokens answers both.
-async function runHookTokens(runId: string): Promise<string[]> {
-  const hooks = await getWorld().hooks.list({ runId });
-  return hooks.data.map((hook) => hook.token);
-}
-
 // The hooks that name an external resource: what another run can be blocked
 // on, and what a poke can wake. The needs-human marker is neither — the reply
 // that ends that halt lands on the ticket claim beside it.
 async function runResourceTokens(runId: string): Promise<string[]> {
-  return (await runHookTokens(runId)).filter(
-    (token) => !token.startsWith(NEEDS_HUMAN_TOKEN_PREFIX),
-  );
+  const hooks = await getWorld().hooks.list({ runId });
+  return hooks.data
+    .map((hook) => hook.token)
+    .filter((token) => !token.startsWith(NEEDS_HUMAN_TOKEN_PREFIX));
 }
