@@ -162,8 +162,8 @@ pnpm workspace:
 
 - `packages/jigs` — the library-first package and the `jigs` CLI.
 - `packages/service` — `@jigs/service`, the library a factory installs: the app
-  and its routes, and the primitives pipelines are written against. It ships as
-  raw TypeScript; the factory's own build compiles it.
+  and its routes, and the primitives pipelines are written against. It ships
+  compiled, from `dist/`, like the CLI.
 - `e2e/fixture-factory` — a one-pipeline factory, and the worked example a new
   factory copies from.
 

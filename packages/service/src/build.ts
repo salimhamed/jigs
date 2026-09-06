@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 // Paths only — the type import is erased, so requiring this module never
-// loads nitro. `jigs build` imports this file as raw TypeScript.
+// loads nitro.
 import {
   GENERATED_DIR,
   GENERATED_ENTRY_FILE,

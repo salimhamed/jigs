@@ -52,6 +52,21 @@ absolute path into this package (`../plugins/start-world.ts`), which under
 publishes, the trade is worth re-taking, and the experiment above is recorded
 so it does not have to be re-run.
 
+> **Amended 2026-09-06.** jigs is about to publish, so the trade was re-taken:
+> `@jigs/service` now builds to `dist/` with tsdown — one entry per `exports`
+> subpath, every entry repointed at the emitted `.js` and `.d.ts`, and
+> `"files": ["dist"]` — and the four `jigs` subpaths that still pointed at
+> `src/*.ts` (`./checks`, `./prompts`, `./steps`, `./steps/execute`) followed.
+> The plugin-path problem above was solved by moving `plugins/` to
+> `src/plugins/`, so the plugins sit beside `nitro.ts` in both layouts and it
+> derives their extension from its own URL. A published package is dist by
+> definition, and the `link:` cost this paragraph named is real but temporary:
+> until the factories install from the registry, `git pull` in the jigs
+> checkout must be followed by `pnpm build`, the same step the CLI already
+> needed. The fixture rebuild produced the same eighteen ids and the same zero
+> `node:` specifiers, and the service's own `package.test.ts` now checks every
+> exports target against the tsdown entry list instead of asserting `.ts`.
+
 ## Consequences
 
 - **The factory's `steps/jigs.ts` path and its exported function names are

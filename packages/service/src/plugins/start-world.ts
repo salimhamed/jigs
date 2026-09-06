@@ -22,7 +22,7 @@ export async function gateOnWorktreeRegistry(
     // WORKFLOW_POSTGRES_URL makes postgres() throw synchronously, and that
     // escape is the very thing this gate exists to stop.
     const resolveSql =
-      deps.sql ?? (await import("../src/worktrees/sql")).registrySql;
+      deps.sql ?? (await import("../worktrees/sql")).registrySql;
     const sql = resolveSql();
     if (sql === null) {
       log("[service] worktree registry skipped: WORKFLOW_POSTGRES_URL unset");
@@ -30,7 +30,7 @@ export async function gateOnWorktreeRegistry(
     }
     const ensure =
       deps.ensure ??
-      (await import("../src/worktrees/registry")).ensureWorktreeRegistry;
+      (await import("../worktrees/registry")).ensureWorktreeRegistry;
     await ensure(sql);
   } catch (err) {
     const error = deps.error ?? ((line: string) => console.error(line));
@@ -80,7 +80,7 @@ export async function gateOnBindingClones(
     if (deps.bindings !== undefined) {
       declared = deps.bindings();
     } else {
-      const { factoryRoot } = await import("../src/preflight");
+      const { factoryRoot } = await import("../preflight");
       declared = jigs.bindingClones(factoryRoot());
     }
   } catch (err) {
@@ -112,7 +112,7 @@ export default async function startWorld() {
   // Before the World starts polling: the queue's very first step dispatch has
   // to go out on the scoped dispatcher, not node's five-minute default.
   const { describeStepCeiling, raiseStepCeiling } = await import(
-    "../src/step-ceiling"
+    "../step-ceiling"
   );
   raiseStepCeiling();
   console.log(`[service] step ceiling: ${describeStepCeiling()}`);

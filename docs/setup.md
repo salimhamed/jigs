@@ -62,12 +62,10 @@ adds a runtime dependency needs that package added to this factory's
 `ERR_MODULE_NOT_FOUND`, which names the package. `jigs init`'s
 `package.json` template carries the current set; compare it after a pull.
 
-The order matters, because the two halves upgrade at different moments.
-`@jigs/service` ships raw TypeScript, so the service side of a change is live as
-soon as the factory rebuilds; the CLI runs from `packages/jigs/dist/`, which is
-gitignored and moves only when `pnpm build` runs. Pull without rebuilding and an
-old CLI talks to a new service, which surfaces as the CLI rejecting a `jigs.yml`
-field it has not learned about yet (`Unrecognized key: "dashboard_port"`). So:
+The order matters, because a pull alone moves nothing. Both packages run from
+their `dist/`, which is gitignored and moves only when `pnpm build` runs in the
+jigs checkout; a factory that rebuilds against a stale `dist/` compiles the
+service it had before the pull. So:
 
 ```sh
 cd <jigs checkout> && git pull && pnpm build   # refresh the linked CLI first

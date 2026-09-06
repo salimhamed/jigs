@@ -22,20 +22,20 @@
       "import": "./dist/harnesses/index.js"
     },
     "./checks": {
-      "types": "./src/checks/index.ts",
-      "default": "./src/checks/index.ts"
+      "types": "./dist/checks/index.d.ts",
+      "default": "./dist/checks/index.js"
     },
     "./prompts": {
-      "types": "./src/prompts/index.ts",
-      "default": "./src/prompts/index.ts"
+      "types": "./dist/prompts/index.d.ts",
+      "default": "./dist/prompts/index.js"
     },
     "./steps": {
-      "types": "./src/steps/index.ts",
-      "default": "./src/steps/index.ts"
+      "types": "./dist/steps/index.d.ts",
+      "default": "./dist/steps/index.js"
     },
     "./steps/execute": {
-      "types": "./src/steps/execute.ts",
-      "default": "./src/steps/execute.ts"
+      "types": "./dist/steps/execute.d.ts",
+      "default": "./dist/steps/execute.js"
     }
   },
   "files": [

@@ -3,8 +3,9 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
+import tsdownConfig from "../tsdown.config.ts";
 
-// This package is consumed by factory repos as source, and the Workflow SDK
+// A factory builds against this package's compiled dist/, and the Workflow SDK
 // derives durable step ids from the package name, version and export subpath a
 // directive-bearing file is reached through. So this package carries no
 // directives at all: the "use step" wrappers live in the factory, ids are
@@ -21,6 +22,11 @@ const exportTargets: string[] = Object.values(pkg.exports).flatMap((entry) =>
 );
 
 const directive = /^\s*["']use (step|workflow)["']/m;
+const optionalPeers = new Set(
+  Object.entries<{ optional?: boolean }>(pkg.peerDependenciesMeta ?? {})
+    .filter(([, meta]) => meta.optional === true)
+    .map(([name]) => name),
+);
 
 async function sourceFiles(dir: string): Promise<string[]> {
   const entries = await readdir(path.join(packageDir, dir), {
@@ -40,14 +46,10 @@ test("no compiled source carries a workflow directive — the factory writes its
   // The wrappers live in the factory repo, which is what keeps this package's
   // version out of every memoization key. A directive sneaking back in here
   // compiles clean and resurrects a version-bearing id, so this is the guard
-  // that has to hold. src/ and plugins/ are what this package compiles;
-  // templates/ is infrastructure only and carries no TypeScript of its own.
-  const scanned = [
-    ...(await sourceFiles("src")),
-    ...(await sourceFiles("plugins")),
-  ];
+  // that has to hold. src/ is what this package compiles; templates/ is
+  // infrastructure only and carries no TypeScript of its own.
   const directed: string[] = [];
-  for (const file of scanned) {
+  for (const file of await sourceFiles("src")) {
     const source = await readFile(path.join(packageDir, file), "utf8");
     if (directive.test(source)) directed.push(file);
   }
@@ -81,14 +83,26 @@ test("every subpath the fixture factory's wrappers reach is in the exports map",
   }
 });
 
-test("every exports target is raw TypeScript that exists on disk", () => {
-  // A factory installs this package with `link:`, which builds nothing — the
-  // checkout's own files are what its build compiles, so a target that is not
-  // .ts, or has moved, resolves to nothing at all. ADR 0013 records why source
-  // stays now that no directive requires it.
+test("every exports target is a dist file tsdown emits from a source file that exists", () => {
+  // A factory resolves this package through dist/ alone, so a target has to be
+  // something the build writes. Checked against the build's entry list rather
+  // than a built dist/, so this holds before the first build too.
+  const entries = (tsdownConfig as { entry: Record<string, string> }).entry;
   for (const target of exportTargets) {
-    expect(target).toMatch(/\.ts$/);
-    expect(existsSync(path.join(packageDir, target))).toBe(true);
+    const match = /^\.\/dist\/(.+)\.(js|d\.ts)$/.exec(target);
+    expect(match, target).not.toBeNull();
+    const source = entries[match?.[1] ?? ""];
+    expect(source, target).toBeDefined();
+    expect(existsSync(path.join(packageDir, source ?? ""))).toBe(true);
+  }
+});
+
+test("every tsdown entry is reachable through the exports map", () => {
+  // The inverse: an entry with no subpath is compiled output nothing can
+  // import, which is a subpath someone forgot to export.
+  const entries = (tsdownConfig as { entry: Record<string, string> }).entry;
+  for (const key of Object.keys(entries)) {
+    expect(exportTargets, key).toContain(`./dist/${key}.js`);
   }
 });
 
@@ -118,6 +132,12 @@ test("the factory template pins the same versions this package peers on", async 
     ).replaceAll("{{JIGS_REPO}}", "/jigs"),
   );
   for (const [name, range] of Object.entries<string>(pkg.peerDependencies)) {
-    expect(template.dependencies[name], name).toBe(range);
+    // nitro is the one optional peer: it is only here so the emitted
+    // declarations reference its types instead of inlining them, and a factory
+    // holds it as a devDependency, the way this package does.
+    const section = optionalPeers.has(name)
+      ? "devDependencies"
+      : "dependencies";
+    expect(template[section][name], name).toBe(range);
   }
 });
