@@ -8,14 +8,14 @@ import {
   interpolate,
   rebuildContextPrompt,
 } from "@salimhamed/jigs/prompts";
-import type {
-  AgentSession,
-  AgentStepResult,
-  HarnessConfig,
-} from "@salimhamed/jigs/steps";
+import type { AgentSession, HarnessConfig } from "@salimhamed/jigs/steps";
 import { z } from "zod";
 import type { ReviewThread } from "../providers/github";
-import { type AgentFn, ResumeFailedError } from "../steps";
+import {
+  type AgentFn,
+  type ResumeOrRebuildResult,
+  resumeOrRebuild,
+} from "../steps";
 import type { Handoff } from "../ticket/review";
 import { renderSnapshot } from "../ticket/snapshot";
 import type { readDiff } from "./pull-request";
@@ -80,38 +80,29 @@ function renderThreads(threads: ReviewThread[], reviewBody?: string): string {
 export async function answerAsBuilder(
   options: AnswerAsBuilderOptions,
   deps: BuilderDeps,
-): Promise<AgentStepResult<ThreadAnswers>> {
+): Promise<ResumeOrRebuildResult<ThreadAnswers>> {
   const threads = renderThreads(options.threads, options.reviewBody);
 
-  if (options.session !== undefined) {
-    try {
-      return await deps.agent({
-        harness: options.harness,
-        cwd: options.cwd,
-        resume: options.session,
-        prompt: interpolate(answerReviewPrompt, { THREADS: threads }),
-        output: threadAnswers,
-      });
-    } catch (err) {
-      if (!(err instanceof ResumeFailedError)) throw err;
-      console.log("[reviewLoop] resume failed — rebuilding context");
-    }
-  }
-
-  // Destructured, never invoked as `deps.readDiff(...)`: the SDK serializes a
-  // step call's receiver along with its arguments, and this object holds
-  // functions.
-  const { readDiff: read } = deps;
-  const diff = await read(options.cwd, options.baseSha);
-  return deps.agent({
+  return resumeOrRebuild({
+    agent: deps.agent,
+    label: "reviewLoop",
     harness: options.harness,
     cwd: options.cwd,
-    prompt: interpolate(rebuildContextPrompt, {
-      TICKET: renderSnapshot(options.handoff.snapshot),
-      BRIEF: options.handoff.brief,
-      DIFF: diff,
-      THREADS: threads,
-    }),
+    ...(options.session === undefined ? {} : { session: options.session }),
+    resumePrompt: interpolate(answerReviewPrompt, { THREADS: threads }),
+    freshPrompt: async () => {
+      // Destructured, never invoked as `deps.readDiff(...)`: the SDK
+      // serializes a step call's receiver along with its arguments, and this
+      // object holds functions.
+      const { readDiff: read } = deps;
+      const diff = await read(options.cwd, options.baseSha);
+      return interpolate(rebuildContextPrompt, {
+        TICKET: renderSnapshot(options.handoff.snapshot),
+        BRIEF: options.handoff.brief,
+        DIFF: diff,
+        THREADS: threads,
+      });
+    },
     output: threadAnswers,
   });
 }

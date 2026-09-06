@@ -140,6 +140,14 @@ export async function executeAgentStep(
   runKey: string,
   deps: ExecuteDeps = realDeps,
 ): Promise<AgentStepResult<unknown> | { resumeFailed: string }> {
+  // A pointer recorded on the other harness cannot name a session here. It
+  // reports as the same unusable-session marker a stale pointer does, so the
+  // one fresh-context fallback covers both and no caller re-checks the kind.
+  if (wire.resume !== undefined && wire.resume.harness !== wire.harness.kind) {
+    return {
+      resumeFailed: `session ${wire.resume.id} was recorded on the ${wire.resume.harness} harness and this step runs on ${wire.harness.kind}`,
+    };
+  }
   try {
     return await withFileLock(
       lockPathFor(wire.cwd, "agent-step"),
@@ -168,10 +176,9 @@ async function generateAgentStep(
     prompt: wire.prompt,
     ...(output !== undefined ? { output } : {}),
   };
-  // A pointer recorded on the other harness cannot name a session here, so it
-  // is ignored rather than refused: the step starts fresh.
-  const resume =
-    wire.resume?.harness === harness.kind ? wire.resume : undefined;
+  // Kind-checked by executeAgentStep before the lock; anything left here names
+  // this harness.
+  const resume = wire.resume;
 
   let generation: ExecutorGeneration;
   try {

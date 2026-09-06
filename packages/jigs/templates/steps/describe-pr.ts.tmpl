@@ -1,12 +1,96 @@
-import type { ReviewLoopDeps } from "@salimhamed/jigs-service/review-loop/loop";
-
 // How a pull request introduces itself is this factory's voice, so jigs ships
-// no default. This one is deterministic; a real factory asks its agent here,
-// composed over the `agent` jig and the `readDiff` wrapper in ./jigs.ts —
-// no `"use step"` of its own, so nothing here can add or move a step id.
-export const describePr: ReviewLoopDeps["describePr"] = async ({
-  handoff,
-}) => ({
-  title: `${handoff.snapshot.identifier}: ${handoff.snapshot.title}`,
-  body: handoff.brief,
+// no default — this file is the `describePr` entry of ReviewLoopDeps, and the
+// conventions below are the part you are meant to rewrite.
+//
+// No `"use step"` of its own, and none is wanted: this is a workflow-side
+// composition over the `agent` jig and the `readDiff` wrapper in ./jigs.ts, so
+// the only ids in play stay that file's and nothing here can add or move one.
+//
+// `resumeOrRebuild` owns the resume-first shape: the builder that just wrote
+// the change describes it best, so it is asked first, and an unusable session
+// pointer — stale, or recorded on a harness other than the one picked below —
+// falls through to the same job stated with the brief and the diff.
+
+import type { readDiff } from "@salimhamed/jigs-service/review-loop/pull-request";
+import { type AgentFn, resumeOrRebuild } from "@salimhamed/jigs-service/steps";
+import type { Handoff } from "@salimhamed/jigs-service/ticket/review";
+import {
+  renderSnapshot,
+  type TicketSnapshot,
+} from "@salimhamed/jigs-service/ticket/snapshot";
+import { type AgentSession, claude } from "@salimhamed/jigs/steps";
+import { z } from "zod";
+
+const prDescription = z.strictObject({
+  title: z.string().min(1),
+  body: z.string().min(1),
 });
+
+export type PrDescription = z.output<typeof prDescription>;
+
+export type DescribePrInput = {
+  handoff: Handoff;
+  worktreePath: string;
+  baseSha: string;
+  session?: AgentSession;
+};
+
+export type DescribePrDeps = {
+  agent: AgentFn;
+  readDiff: typeof readDiff;
+};
+
+// This factory's PR conventions. Rewrite them: the loop sends whatever comes
+// back to GitHub verbatim.
+function conventions(ticket: TicketSnapshot): string {
+  return [
+    "Write the title and body of the pull request for this change.",
+    "",
+    `- Title: \`${ticket.identifier}: \` then a short imperative summary.`,
+    "- Body: what changed and why, in prose a reviewer can read in a minute.",
+    `- End the body with a link to the ticket: ${ticket.url}`,
+  ].join("\n");
+}
+
+export async function describePr(
+  input: DescribePrInput,
+  deps: DescribePrDeps,
+): Promise<PrDescription> {
+  const ticket = input.handoff.snapshot;
+  // The describing agent is this factory's own choice, not the loop's: the
+  // loop runs on the implementation harness, and prose is a different job.
+  const harness = claude({ model: "opus" });
+
+  const described = await resumeOrRebuild({
+    agent: deps.agent,
+    label: "describePr",
+    harness,
+    cwd: input.worktreePath,
+    ...(input.session === undefined ? {} : { session: input.session }),
+    resumePrompt: conventions(ticket),
+    freshPrompt: async () => {
+      // Destructured, never invoked as `deps.readDiff(...)`: the SDK
+      // serializes a step call's receiver along with its arguments, and this
+      // object holds functions.
+      const { readDiff: read } = deps;
+      const diff = await read(input.worktreePath, input.baseSha);
+      return [
+        conventions(ticket),
+        "",
+        "## Ticket",
+        "",
+        renderSnapshot(ticket),
+        "",
+        "## Brief",
+        "",
+        input.handoff.brief,
+        "",
+        "## Diff",
+        "",
+        diff,
+      ].join("\n");
+    },
+    output: prDescription,
+  });
+  return described.output;
+}

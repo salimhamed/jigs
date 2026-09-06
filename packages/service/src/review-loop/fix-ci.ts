@@ -10,7 +10,7 @@ import {
 } from "@salimhamed/jigs/prompts";
 import type { AgentSession, HarnessConfig } from "@salimhamed/jigs/steps";
 import type { CheckRun } from "../providers/github";
-import { type AgentFn, ResumeFailedError } from "../steps";
+import { type AgentFn, resumeOrRebuild } from "../steps";
 import type { Handoff } from "../ticket/review";
 import { renderSnapshot } from "../ticket/snapshot";
 import type { readDiff } from "./pull-request";
@@ -30,12 +30,6 @@ export type FixCiDeps = {
   readDiff: typeof readDiff;
 };
 
-export type FixCiResult = {
-  // Set only when the resume failed and a fresh context did the fix: that
-  // session, and not the stale one, is the one now holding the change.
-  session?: AgentSession;
-};
-
 export function renderChecks(failing: CheckRun[]): string {
   return failing.length === 0
     ? "_(the provider reported a red build without naming a check)_"
@@ -49,42 +43,32 @@ export function renderChecks(failing: CheckRun[]): string {
 export async function fixCi(
   options: FixCiOptions,
   deps: FixCiDeps,
-): Promise<FixCiResult> {
+): Promise<{ session?: AgentSession }> {
   const checks = renderChecks(options.failing);
 
-  if (options.session !== undefined) {
-    try {
-      await deps.agent({
-        harness: options.harness,
-        cwd: options.cwd,
-        resume: options.session,
-        prompt: interpolate(fixCiPrompt, {
-          CHECKS: checks,
-          ATTEMPT: options.attempt,
-        }),
-      });
-      return {};
-    } catch (err) {
-      if (!(err instanceof ResumeFailedError)) throw err;
-      console.log("[reviewLoop] resume failed — rebuilding context");
-    }
-  }
-
-  // Destructured, never invoked as `deps.readDiff(...)`: the SDK serializes a
-  // step call's receiver along with its arguments, and this object holds
-  // functions.
-  const { readDiff: read } = deps;
-  const diff = await read(options.cwd, options.baseSha);
-  const fixed = await deps.agent({
+  return resumeOrRebuild({
+    agent: deps.agent,
+    label: "reviewLoop",
     harness: options.harness,
     cwd: options.cwd,
-    prompt: interpolate(fixCiFreshPrompt, {
-      TICKET: renderSnapshot(options.handoff.snapshot),
-      BRIEF: options.handoff.brief,
-      DIFF: diff,
+    ...(options.session === undefined ? {} : { session: options.session }),
+    resumePrompt: interpolate(fixCiPrompt, {
       CHECKS: checks,
       ATTEMPT: options.attempt,
     }),
+    freshPrompt: async () => {
+      // Destructured, never invoked as `deps.readDiff(...)`: the SDK
+      // serializes a step call's receiver along with its arguments, and this
+      // object holds functions.
+      const { readDiff: read } = deps;
+      const diff = await read(options.cwd, options.baseSha);
+      return interpolate(fixCiFreshPrompt, {
+        TICKET: renderSnapshot(options.handoff.snapshot),
+        BRIEF: options.handoff.brief,
+        DIFF: diff,
+        CHECKS: checks,
+        ATTEMPT: options.attempt,
+      });
+    },
   });
-  return { ...(fixed.session === undefined ? {} : { session: fixed.session }) };
 }

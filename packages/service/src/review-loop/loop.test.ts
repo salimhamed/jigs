@@ -2,7 +2,8 @@ import type { WorktreeFacts } from "@salimhamed/jigs";
 import { type AgentStepConfig, claude } from "@salimhamed/jigs/steps";
 import { beforeEach, expect, test } from "vitest";
 import type { CheckRun, ReviewThread } from "../providers/github";
-import { parseOutput, ResumeFailedError } from "../steps";
+import { parseOutput } from "../steps";
+import { resumeFailed } from "../steps/resume";
 import type { TicketClaim } from "../suspension/claim";
 import type { GateAck, GateWake } from "../suspension/pull-request-gate";
 import type { PrRef } from "../suspension/tokens";
@@ -261,7 +262,7 @@ test("a stale session commits from a fresh context rather than failing the run",
     if (stale && config.resume !== undefined) {
       stale = false;
       calls.agent.push(config as AgentStepConfig<unknown>);
-      throw new ResumeFailedError("no rollout found for thread id 0199-gone");
+      resumeFailed("no rollout found for thread id 0199-gone");
     }
     return live(config);
   }) as ReviewLoopDeps["agent"];
@@ -476,7 +477,7 @@ test("a stale session sends the CI fix into a fresh context that then holds the 
     if (stale && config.resume !== undefined) {
       stale = false;
       calls.agent.push(config as AgentStepConfig<unknown>);
-      throw new ResumeFailedError("no rollout found for thread id 0199-gone");
+      resumeFailed("no rollout found for thread id 0199-gone");
     }
     return live(config);
   }) as ReviewLoopDeps["agent"];

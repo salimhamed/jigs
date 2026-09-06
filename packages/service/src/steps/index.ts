@@ -20,6 +20,14 @@ import {
   type StepResult,
 } from "@salimhamed/jigs/steps";
 import type { z } from "zod";
+import { resumeFailed } from "./resume";
+
+export {
+  type AgentFn,
+  type ResumeOrRebuildOptions,
+  type ResumeOrRebuildResult,
+  resumeOrRebuild,
+} from "./resume";
 
 // Thrown workflow-side, never inside the step: a step's rejection is rebuilt
 // from its message alone, so a JIT failure crosses the boundary as a returned
@@ -28,15 +36,6 @@ export class JitCheckError extends Error {
   constructor(failures: string) {
     super(failures);
     this.name = "JitCheckError";
-  }
-}
-
-// Same shape, same reason: a stale session pointer crosses the boundary as a
-// returned marker so the SDK does not retry it, and becomes an error here.
-export class ResumeFailedError extends Error {
-  constructor(detail: string) {
-    super(detail);
-    this.name = "ResumeFailedError";
   }
 }
 
@@ -49,11 +48,6 @@ export type RunAgentStep = (
 
 /** The factory's `"use step"` wrapper around `runAsk` from ./run. */
 export type RunAskStep = (wire: AskWire) => Promise<StepResult>;
-
-/** {@link agent} with its step wrapper already bound — what a jig is handed. */
-export type AgentFn = <T = undefined>(
-  config: AgentStepConfig<T>,
-) => Promise<AgentStepResult<T>>;
 
 // The executor asks the harness for schema-conformant output; the real
 // validation is this workflow-side zod parse of the recorded raw output —
@@ -71,9 +65,9 @@ export function unwrapAgentStep(
   result: Awaited<ReturnType<RunAgentStep>>,
 ): AgentStepResult {
   if ("jitFailure" in result) throw new JitCheckError(result.jitFailure);
-  if ("resumeFailed" in result) {
-    throw new ResumeFailedError(result.resumeFailed);
-  }
+  // Same shape, same reason as the JIT marker, but the error it becomes is
+  // ./resume's business: only the fallback there is allowed to recognize it.
+  if ("resumeFailed" in result) resumeFailed(result.resumeFailed);
   return result;
 }
 

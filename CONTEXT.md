@@ -171,8 +171,9 @@ _Avoid_: cache, mirror
 **Builder**:
 The agent that implemented a run's change. The review loop resumes its
 persisted session so review answers come from the agent that holds the
-context, falling back to a fresh agent fed the run's record when resume
-fails.
+context, falling back to a fresh agent fed the run's record whenever the
+pointer is unusable — stale, or recorded on a different harness than the step
+runs on.
 _Avoid_: implementer, author agent
 
 **Ingress**:

@@ -60,7 +60,7 @@ import {
 import type { WorktreeFacts } from "@salimhamed/jigs";
 import type { AgentStepConfig, AskStepConfig } from "@salimhamed/jigs/steps";
 import { getWorkflowMetadata } from "workflow";
-import { describePr } from "./describe-pr.ts";
+import { describePr as describePrJig } from "./describe-pr.ts";
 
 // --- steps -----------------------------------------------------------------
 
@@ -185,9 +185,14 @@ export function ticketReview(options: TicketReviewOptions) {
   return ticketReviewJig(options, { agent, needsHuman });
 }
 
+// jigs ships no default title or body, so this entry is the factory's own:
+// ./describe-pr.ts holds the composition and the prose.
+export function describePr(input: Parameters<typeof describePrJig>[0]) {
+  return describePrJig(input, { agent, readDiff });
+}
+
 // Exported so a pipeline that must override an entry can spread the rest
-// rather than rebuild the map. `describePr` is the one entry jigs ships no
-// implementation for; ./describe-pr.ts is this factory's.
+// rather than rebuild the map.
 export const reviewLoopDeps: ReviewLoopDeps = {
   agent,
   needsHuman,

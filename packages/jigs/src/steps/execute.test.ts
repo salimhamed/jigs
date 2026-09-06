@@ -260,7 +260,7 @@ test("a codex resume rides on providerOptions['codex-app-server'].threadId", asy
   expect(captured.codexSettings?.resume).toBeUndefined();
 });
 
-test("a session pointer recorded on the other harness is ignored, not refused", async () => {
+test("a session pointer recorded on the other harness reports resumeFailed, not a silently fresh session", async () => {
   const wire = buildAgentWire({
     harness: claude({ model: "sonnet" }),
     cwd: worktree,
@@ -269,10 +269,15 @@ test("a session pointer recorded on the other harness is ignored, not refused", 
   });
   const { deps, captured } = makeDeps();
 
-  await runAgent(wire, "run-1", deps);
+  const result = await executeAgentStep(wire, "run-1", deps);
 
-  expect(claudeSettingsOf(captured).resume).toBeUndefined();
-  expect(captured.options?.providerOptions).toBeUndefined();
+  // The resume prompt was written for an agent that already holds the change,
+  // so running it against a brand-new session would be a lie. The marker sends
+  // the caller down the same rebuild path a stale pointer does.
+  expect(result).toEqual({
+    resumeFailed: expect.stringContaining("recorded on the codex harness"),
+  });
+  expect(captured.options).toBeUndefined();
 });
 
 test("Claude steps always run with bypass", async () => {
