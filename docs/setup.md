@@ -7,20 +7,26 @@ World. Nothing below is global except part 1.
 ## Part 1 — the machine (once)
 
 - **Node >= 24** and **pnpm**. If node comes from a version manager, make sure
-  the shell that runs `jigs service start` has it on `PATH` — the service is
-  spawned with the CLI's own node.
+  the shell that runs `jigs up` has it on `PATH` — the service is spawned with
+  the CLI's own node.
 - **docker**, with the daemon running. Each factory brings up its own Postgres
   container; nothing is shared between them.
-- **The jigs CLI on `PATH`.** From a checkout of this repo:
+- **A token that reads GitHub Packages.** jigs ships as `@salimhamed/jigs` and
+  `@salimhamed/jigs-service` on GitHub Packages, private like this repo, so
+  pnpm needs a scope route and a token in `~/.npmrc`:
 
-  ```sh
-  pnpm install
-  pnpm build
+  ```
+  @salimhamed:registry=https://npm.pkg.github.com
+  //npm.pkg.github.com/:_authToken=<token>
   ```
 
-  then link `packages/jigs/dist/cli.js` as `jigs` however you prefer. A
-  factory repo installs `jigs` as a dependency too, so `pnpm exec jigs` inside
-  one always works without this.
+  The token is a **classic** personal access token with `read:packages` and,
+  while this repo is private, `repo`; fine-grained tokens cannot read GitHub
+  Packages. These two lines serve `pnpm dlx @salimhamed/jigs init`, every
+  `pnpm install` and every `jigs upgrade`. A factory's own `.npmrc` carries
+  only the scope line — the token never enters a repo. There is no jigs CLI
+  to put on `PATH`: each factory installs its own, and `pnpm exec jigs` runs
+  it.
 - **The agent harness CLIs** a factory's agent steps drive: the Claude Code
   CLI (`claude` on `PATH`, or `JIGS_CLAUDE_EXECUTABLE` in a factory's `.env`)
   and `codex`, each logged in to its subscription — `claude auth login`,
@@ -34,61 +40,39 @@ World. Nothing below is global except part 1.
 - **A tunnel tool**, if any factory will receive provider webhooks:
   `tailscale` (funnel) or `cloudflared`. Installed once, run per factory.
 - **`loginctl enable-linger "$USER"`** for lights-on: services started by
-  `jigs service start` are detached from the terminal, but a user session
-  manager still reaps them at logout without lingering.
+  `jigs up` are detached from the terminal, but a user session manager still
+  reaps them at logout without lingering.
 
 There is no systemd unit and no `~/.config/jigs/service.env`. Both assumed a
 single global service; supervision is now a pidfile per factory under the jigs
 data dir, and the environment is the factory's own `.env`. A unit per factory
 would mean the CLI generating, installing and naming units, and every repair
 instruction growing a "which one" — `jigs service restart` is the whole
-answer instead.
+answer instead. The service is a host process on purpose: it drives the
+operator's `claude` and `codex` logins, the AWS SSO cache and the git clones
+([ADR 0016](adr/0016-published-packages.md)).
 
-**Upgrading.** A factory pins `@salimhamed/jigs` and
-`@salimhamed/jigs-service` to one version, installed from GitHub Packages, so
-the upgrade is moving both pins together and running `jigs up`. One thing does
-not follow on its own: each factory's own `steps/jigs.ts`, which you extend by
-hand with a wrapper for any step jigs has grown since, and with anything a
-jig's deps object has grown that is yours to write rather than to wrap (part 2,
-step 1). Typecheck the factory after an upgrade: the deps objects are typed, so
-both kinds of gap are a compile error rather than a surprise at run time.
+**Upgrading.** `jigs upgrade` in the factory: it moves both pins to the latest
+release (`--to <version>` picks one), runs `jigs up` — its `--force` and
+`--no-doctor` pass through — then the factory's own typecheck, which names any
+wrapper a release asks `steps/jigs.ts` to grow. A
+release that moves one of the four runtime peers — `workflow`,
+`@workflow/world-postgres`, `@workflow/web`, `zod` — fails the install by
+name; make the same move in the factory's `package.json` and run it again.
 
-A third does not follow either, and this one is not a compile error: the
-Workflow SDK, its Postgres World, its dashboard and zod are peer dependencies
-of the jigs packages, installed by the factory at the versions the packages
-peer on, because the SDK loads the World and the dashboard by name from the
-factory's own `node_modules` and one zod copy is what lets the two packages'
-schema types unify. A jigs release that moves a peer needs the same move in
-this factory's `package.json`; `strictPeerDependencies` in the factory's
-`pnpm-workspace.yaml` turns the mismatch into an install failure instead of a
-second copy. `jigs init`'s `package.json` template carries the current pins;
-compare it after an upgrade. Everything else the service imports is its own
-dependency and installs with it.
-
-So:
-
-```sh
-cd <factory>
-pnpm update @salimhamed/jigs@<version> @salimhamed/jigs-service@<version>
-pnpm exec jigs up                              # install, build, restart, doctor
-pnpm exec jigs service status                  # prints the service and dashboard URLs
-```
-
-Both packages carry ordinary semver from `0.1.0` on, and nothing here moves it
-by hand. A PR's title is a conventional commit — CI rejects one that is not —
-and merging it to `main` opens or updates a release-please PR carrying the next
-version and the CHANGELOG entries it earned; that PR merges itself once its own
-checks pass, and the tags and GitHub Releases follow, and the same run
-publishes both packages to GitHub Packages. `@salimhamed/jigs` and
-`@salimhamed/jigs-service` release in lockstep, so both always read the same
-number. The number is a coordinate for `pnpm update` and a signal to you, never
-an input to a run: no step id carries a jigs
-version, so a release never renames a memoization key
+**Releasing this repo (once, by whoever owns it).** Both packages carry
+ordinary semver from `0.1.0` on, and nothing here moves it by hand. A PR's
+title is a conventional commit — CI rejects one that is not — and merging it
+to `main` opens or updates a release-please PR carrying the next version and
+the CHANGELOG entries it earned; that PR merges itself once its own checks
+pass, the tags and GitHub Releases follow, and the same run publishes both
+packages to GitHub Packages. They release in lockstep, so both always read the
+same number. The number is a coordinate for `jigs upgrade` and a signal to
+you, never an input to a run: no step id carries a jigs version, so a release
+never renames a memoization key
 ([ADR 0013](adr/0013-factory-owned-steps.md)), which is what makes automating
-it safe ([ADR 0014](adr/0014-release-automation.md)).
-
-**Releasing this repo (once, by whoever owns it).** Two prerequisites live in
-GitHub's console rather than in the tree, and the release workflow is inert
+it safe ([ADR 0014](adr/0014-release-automation.md)). Two prerequisites live
+in GitHub's console rather than in the tree, and the release workflow is inert
 without either:
 
 - **A `RELEASE_PLEASE_TOKEN` repository secret.** A fine-grained PAT on this
@@ -98,7 +82,9 @@ without either:
   labels). It is a PAT rather than `GITHUB_TOKEN` because GitHub raises no
   workflow run for an event `GITHUB_TOKEN` caused: the release PR would get no
   checks to watch, and its squash would never re-run the release
-  ([ADR 0014](adr/0014-release-automation.md)).
+  ([ADR 0014](adr/0014-release-automation.md)). The publish itself uses
+  `GITHUB_TOKEN` — nothing waits on an event it raises, and the workflow's
+  `packages: write` is the exact grant.
 - **Settings → General → "Default to PR title for squash merge commits".**
   Without it a squash's subject is the branch name, every merge parses as a
   non-releasable unit, and the release PR simply never appears — with no error
@@ -106,40 +92,37 @@ without either:
 
 ## Part 2 — a factory (per repo)
 
-Every step below runs **inside the factory repo**. Ports are derived from the
-factory's path, so two factories on one machine never collide; the numbers in
-your own output are the ones to use.
-
-The steps are numbered for reading, not sequenced: only the scaffold has to come
-before everything, and only the build has to come before the service starts.
-Binding a repo (step 4) and building (step 3) do not read each other's output,
-which is why the README's quick start binds first.
+Every step below runs **inside the factory repo**, and every `jigs` is the
+factory's own — `pnpm exec jigs …`, or `pnpm jigs …`. Ports are derived from
+the factory's path, so two factories on one machine never collide; the numbers
+in your own output are the ones to use.
 
 ### 1. Scaffold
 
 ```sh
 mkdir my-factory && cd my-factory && git init
-jigs init
+pnpm dlx @salimhamed/jigs init
 ```
 
 `jigs init` writes the infrastructure — `jigs.yml` (the service and dashboard
-ports and, later, the ingress URL), `package.json`, `nitro.config.ts`,
+ports and, later, the ingress URL), `package.json` with both jigs packages
+pinned to the version that scaffolded it, `.npmrc`, `nitro.config.ts`,
 `docker-compose.yml`, `.env.example`, and the `tsconfig.json`,
 `pnpm-workspace.yaml` and `.gitignore` a factory build needs — and the code
 the factory starts from: `jigs.config.ts` (this factory's pipelines, keyed by
 the name `jigs run` takes), `pipelines/ship.ts` (a ticket to a merged pull
 request), `steps/jigs.ts`, `steps/describe-pr.ts`, `jigs.config.test.ts` and
 a `README.md`. Then it prints the next steps and runs none of them; `jigs up`
-(step 2) is what runs them. Every file is written once: a re-run keeps what
+(step 3) is what runs them. Every file is written once: a re-run keeps what
 is there and adds only what is missing, so nothing init wrote goes stale
 under you, and from here on the code is this factory's own.
 
 `steps/jigs.ts` is the one to know about. It holds this factory's `"use step"`
 wrappers around jigs' step implementations, plus the jigs (`reviewLoop`,
 `ticketReview`, `needsHuman`, …) wired on top of them — so a pipeline imports
-its steps from `../steps/jigs.ts`, never from `@salimhamed/jigs-service` directly. It is
-ordinary committed source: commit it, edit it, and **do not rename it or its
-exported functions**. Each name compiles to a durable step id
+its steps from `../steps/jigs.ts`, never from `@salimhamed/jigs-service`
+directly. It is ordinary committed source: commit it, edit it, and **do not
+rename it or its exported functions**. Each name compiles to a durable step id
 (`step//./steps/jigs//worktree`) that the World memoizes runs against, so a
 rename orphans every run this factory has parked — with a clean build and no
 error. `jigs.config.test.ts` pins those ids against the last build, so
@@ -161,68 +144,97 @@ default, because the scaffold knows neither: once step 4 has bound a repo, give
 `jigs.config.ts`, so preflight refuses a run the worktree step would otherwise
 fail.
 
-### 2. Install, World, bootstrap
+### 2. Tokens
 
 ```sh
 cp .env.example .env      # then fill in LINEAR_API_KEY / GITHUB_TOKEN
-pnpm install
-docker compose up -d --wait
-pnpm exec bootstrap
 ```
 
-`bootstrap` applies the SDK's migrations and the graphile-worker schema, and is
-idempotent. It loads this factory's `.env` itself, so run it after the copy
-above; pass `WORKFLOW_POSTGRES_URL=…` in front of it to bootstrap a World before
-there is an `.env` to read.
-
-`.env` is this factory's environment file: `jigs service start` loads it into
-the service process, and `PORT` comes from `jigs.yml` rather than from here.
-The `LINEAR_API_KEY` / `GITHUB_TOKEN` slots are consumed by the suspension
+`.env` is this factory's environment file: the service loads it when it
+starts, and `PORT` comes from `jigs.yml` rather than from here. The
+`LINEAR_API_KEY` / `GITHUB_TOKEN` slots are consumed by the suspension
 primitives (`needsHuman()` posts Linear comments, `pullRequestGate()`
 re-checks PR state), and both are validated on every trigger: preflight
 refuses to create a run when a requirement is unmet, reporting every failure
 with its repair. `jigs doctor` runs the same checks without a launch.
 
-The service must run against the Postgres World
-(`WORKFLOW_TARGET_WORLD=@workflow/world-postgres`, as `.env.example` sets), and
-refuses to start when `WORKFLOW_POSTGRES_URL` is unset: the worktree registry
-lives in that database, so there is no registry-less mode. (At `workflow@4.8.4`
-the filesystem World would not start from a production bundle anyway:
-`Invalid version string: "bundled"`.)
+`WORKFLOW_TARGET_WORLD=@workflow/world-postgres` and `WORKFLOW_POSTGRES_URL`
+come filled in; leave them. The service refuses to start when the URL is
+unset: the worktree registry lives in that database, so there is no
+registry-less mode. (At `workflow@4.8.4` the filesystem World would not start
+from a production bundle anyway: `Invalid version string: "bundled"`.)
 
-### 3. Build and start
+Skipping the copy is allowed — `jigs up` copies `.env.example` itself when
+there is no `.env` and tells you which slots are empty — but a run cannot be
+created until both tokens are in.
+
+### 3. Up
 
 ```sh
-jigs build
-jigs service start
-jigs service status
+pnpm install              # once: the factory's own jigs lands in node_modules/.bin
+pnpm exec jigs up
 ```
 
-`jigs build` compiles this factory's pipelines into `.output/server/index.mjs`
-using the factory's own nitro and its own copy of the SDK — the copy that
-compiles the step ids has to be the copy that registers them. `jigs service
-start|stop|restart|status|logs` supervises that build; `logs` prints the
-service's own stdout, which is not the same thing as a run's history (step 6).
+`jigs up` is the commands a human used to type after `jigs init`, run in
+order, each idempotent, each its own line:
 
-`start` waits until the World is up and every binding is cloned before it
-reports the pid — a minute the first time, each phase printed as it goes
-(`booting: cloning forge`) — so a `jigs ps` or `jigs doctor` fired straight
-after it reaches a working service. A service that exits during boot fails the
-start with an error naming the log; a boot still not done after five minutes
-fails it too and leaves the process running for `jigs service stop`. `stop`
-sends SIGTERM: the service stops taking work, waits up to eight seconds for
-what is in flight, and exits; the CLI escalates to SIGKILL only past ten. An
-agent step still running at that point is not cut short by the wait — the
-process exits after the backstop and the queue retries the job later.
+```
+ok   locate (3ms) — /home/you/my-factory
+ok   env (1ms) — copied .env.example to .env
+     LINEAR_API_KEY, GITHUB_TOKEN empty in .env — fill them in before a pipeline needs them
+ok   install (4.7s)
+ok   compose (2.1s)
+ok   bootstrap (1.3s)
+ok   build (1.9s)
+ok   service (12ms)
+ok   ready (1.8s)
+ok   doctor (0.4s)
+my-factory-2286ac2a is up at http://localhost:8990 — dashboard http://localhost:9090
+```
 
-Part of that boot is the clones: the spawned service clones every binding
-declared in `jigs.yml` (step 4) before the World starts, logging a line per
-binding. A remote it cannot reach exits the service, which `start` reports as
-a failed boot; `jigs service logs` names the binding.
+- **env** copies `.env.example` to `.env` if there is none and reports the
+  credential slots still empty.
+- **install** is `pnpm install`, reading `@salimhamed/*` from GitHub Packages
+  through your `~/.npmrc`.
+- **compose** is `docker compose up -d --wait`: this factory's own Postgres
+  World, on the port `jigs init` chose.
+- **bootstrap** applies the SDK's migrations and the queue schema to that
+  World, with the URL from `.env` handed to it explicitly. Idempotent.
+- **build** is `jigs build`: this factory's pipelines compiled into
+  `.output/server/index.mjs` with the factory's own nitro and its own copy of
+  the SDK — the copy that compiles the step ids has to be the copy that
+  registers them. It warns when a run is in flight.
+- **service** starts the service if none is running; if one is, it restarts
+  it only when the built bundle differs from the one the process started from
+  (`--restart` forces it). A restart over in-flight runs asks first —
+  `--force` skips the question, and without a terminal it refuses instead.
+- **ready** waits for `/health` to report the service ready, printing each
+  boot phase as it changes (`booting: cloning forge`) and watching the pid
+  alongside: the service clones every binding and opens the World before it
+  is ready — a minute the first time — and a remote it cannot reach exits the
+  process, which fails the step at once with the log that explains it. A boot
+  still not done after five minutes fails it too and leaves the process
+  running for `jigs service stop`.
+- **doctor** is `jigs doctor` against the service that just came up
+  (`--no-doctor` skips it).
 
-Rebuild after every pipeline change. `jigs build` warns when a run is still in
-flight: a pipeline that changed shape no longer answers to the step ids its
-parked run was memoized under.
+The first step that fails prints `FAIL <step>: <why>` and the repair on the
+next line, and `up` exits 1 there; fix it and run `up` again. Nothing before
+the failure is redone in any way that matters — an unchanged factory installs,
+migrates and restarts nothing, which is why **`jigs up` is also the command
+after every change**: edit a pipeline, `jigs up`, and the rebuild and restart
+happen only if the bundle moved.
+
+The pieces are still there on their own — `jigs build`, `jigs service
+start|stop|restart|status|logs` — for when you want one of them without the
+rest. `start` does the same wait `ready` does, so a `jigs ps` or `jigs doctor`
+fired straight after it reaches a working service. `stop` sends SIGTERM: the
+service stops taking work, waits up to eight seconds for what is in flight,
+and exits; the CLI escalates to SIGKILL only past ten. An agent step still
+running at that point is not cut short by the wait — the process exits after
+the backstop and the queue retries the job later. `jigs service logs` is the
+service's own stdout, which is not a run's history (step 6). `jigs service
+status` prints the service and dashboard URLs whenever you need them again.
 
 #### Step ceiling
 
@@ -247,6 +259,7 @@ A worktree admits one agent at a time: a second one is refused, not queued.
 ```sh
 GITHUB_TOKEN=… jigs bind git@github.com:owner/repo.git
 jigs bindings
+jigs service restart      # or jigs up --restart
 ```
 
 A binding is a name in `jigs.yml` mapped to a target repo's **remote URL**.
@@ -256,11 +269,13 @@ agent worktree from it — your own checkout of the repo is not involved at all.
 Pipelines name bindings; the runtime provisions worktrees from them.
 
 **The clones are made when the service starts**, not when a run asks for a
-worktree, so the first `jigs service start` after a bind pays for them —
-seconds for a small repo, up to a minute for a large one, and the service logs
-a line per binding as it goes. A binding added while the service is running
-therefore needs `jigs service restart` before any run can name it; `jigs bind`
-says so, and `jigs doctor` reports a binding with no clone yet.
+worktree, so the first start after a bind pays for them — seconds for a small
+repo, up to a minute for a large one, and the service logs a line per binding
+as it goes. A binding added while the service is running therefore needs the
+restart above before any run can name it; `jigs bind` says so, and
+`jigs doctor` reports a binding with no clone yet. (Binding before the first
+`jigs up` works too and saves the restart; the order here is only the one a
+newcomer meets.)
 
 `GITHUB_TOKEN` above is for the repo webhook, not for the binding: `jigs bind`
 records the binding either way and says which half it skipped — the webhook
@@ -420,9 +435,9 @@ export default {
 ```
 
 Five cron fields, read in the service host's local time — UTC on the host in
-this example, which is why the timestamps below carry a `Z`. `jigs build` and
-`jigs service restart` to pick the schedule up; the service's own log then
-names what it scheduled:
+this example, which is why the timestamps below carry a `Z`. `jigs up` to pick
+the schedule up (the bundle changed, so it rebuilds and restarts); the
+service's own log then names what it scheduled:
 
 ```
 [schedule] monday-report scheduled: 0 9 * * 1 → weekly-report, next 2026-09-07T09:00:00.000Z
@@ -462,8 +477,8 @@ service:
 
 `jigs init` writes both, from ranges that cannot overlap. `dashboard_port` is
 required — a factory without one refuses to parse, naming the field — and both
-are committed numbers, so either can move. `jigs service start`, `restart` and
-`status` print the address:
+are committed numbers, so either can move. `jigs up`'s last line and
+`jigs service status` print the address:
 
 ```
 started my-factory-2286ac2a: pid 91234 at http://localhost:8990

@@ -8,28 +8,33 @@ add that, set this up — go back to `SKILL.md` and take the route it belongs to
 
 ## Where to look, in this order
 
-1. **`CONTEXT.md`** in the jigs checkout, for what a word means. It is the
+1. **`CONTEXT.md`** in the jigs repo (a checkout if there is one, else
+   github.com/salimhamed/jigs), for what a word means. It is the
    glossary: pipeline, jig, step, step id, step wrapper, run, binding, factory
    repo, suspension, satisfier, gate, needs-human halt, worktree, sweep,
    harness, snapshot, preflight, service, dashboard, trigger, schedule, World.
    Each entry also lists the words the project deliberately avoids — use the
    glossary's term, not a synonym.
-2. **`docs/adr/`** in the jigs checkout, for *why* something works the way it
+2. **`docs/adr/`** in the jigs repo, for *why* something works the way it
    does. One file per decision, each with the options that were rejected and
    what it cost. Cite them as `see docs/adr/<file>`. Several carry amendments at
    the top; a later amendment wins over the body it amends.
-3. **`docs/setup.md`** in the jigs checkout, for *how* — the runbook for the
+3. **`docs/setup.md`** in the jigs repo, for *how* — the runbook for the
    machine once and a factory at a time.
 4. **`jigs --help` and `jigs <verb> --help`**, for what a command and its flags
    actually do today. Prefer running these over recalling them.
 5. **The source**, when the question is about behaviour none of the above pins
    down: `packages/jigs/src/` for the CLI and the check catalog,
    `packages/service/src/` for the service, its routes, and the step,
-   suspension and worktree primitives.
+   suspension and worktree primitives. Inside a factory the installed copies
+   are `node_modules/@salimhamed/jigs/dist/` and
+   `node_modules/@salimhamed/jigs-service/dist/` — compiled, but the exports
+   map names each module.
 
 For a question about how a factory is written rather than how jigs works, the
-worked example is what `jigs init` scaffolds: `packages/jigs/templates/` in the
-jigs checkout, one `.tmpl` per file.
+worked example is what `jigs init` scaffolds: one `.tmpl` per file under
+`node_modules/@salimhamed/jigs/templates/` in any factory, or
+`packages/jigs/templates/` in the repo.
 
 ## How to answer
 

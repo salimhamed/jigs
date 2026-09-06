@@ -106,6 +106,17 @@ so it does not have to be re-run.
   package's version at runtime and factories install both by `link:`, so the
   number is a signal to readers rather than a resolution input — but it is an
   honest one, which `0.0.0` never was.
+
+  > **Amended by [ADR 0016](./0016-published-packages.md).** Factories install
+  > both packages from GitHub Packages now, pinned to one version, so the
+  > number is a `pnpm update` coordinate as well as a signal; the `link:`
+  > era, and the "`git pull` then `pnpm build`" recipe the amendment above
+  > called temporary, are over. The wrapper file's upgrade path is
+  > `jigs upgrade`: bump both pins, `jigs up`, then the factory's typecheck,
+  > whose error on a jig's deps object names the wrapper a release added.
+  > What a release cannot do for a factory — grow `steps/jigs.ts` — is
+  > therefore reported at upgrade time rather than met as an unmemoized step
+  > at run time.
 - **The e2e fixture is the only place any of this is observable.** No pipeline
   lives in this repo, so `pnpm build` compiles no directive; a closed discovery
   gate, a collapsed namespace and a renamed id all build clean. `pnpm e2e` is
