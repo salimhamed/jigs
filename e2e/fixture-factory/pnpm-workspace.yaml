@@ -8,3 +8,7 @@ allowBuilds:
   '@swc/core': true
   cbor-extract: true
   esbuild: true
+# Mirrors the init template: the jigs packages peer on the SDK, the World, the
+# dashboard and zod, and a second copy of any of them is silent, so a mismatch
+# fails the install instead of warning.
+strictPeerDependencies: true

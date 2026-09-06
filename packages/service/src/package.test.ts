@@ -106,21 +106,49 @@ test("every tsdown entry is reachable through the exports map", () => {
   }
 });
 
+// What a factory must install itself, so it is a peer here rather than a
+// dependency: the SDK its compiled pipelines register into, the World the SDK
+// loads by name from the factory's node_modules, the dashboard the plugin
+// resolves from cwd, and the zod its own input schemas are built with. As a
+// dependency, pnpm resolves a range to the newest version, so a factory that
+// pins an older one gets a second copy — and a second copy is silent: step
+// ids nothing registers, schema types that do not unify.
+const FACTORY_SUPPLIED = [
+  "@workflow/web",
+  "@workflow/world-postgres",
+  "workflow",
+  "zod",
+];
+
 test("the runtime a factory supplies is a peer here, and still a devDependency", () => {
-  // A factory repo installs the SDK, its World, hono and zod itself: one copy
-  // of `workflow` per process is what makes a compiled step id resolve to a
-  // registered function. They stay in devDependencies so this repo's own
-  // tests and build still resolve them.
+  // They stay in devDependencies so this repo's own tests and build still
+  // resolve them. Everything else the service imports is a plain dependency:
+  // a link: or registry install resolves it from this package's own
+  // node_modules, so the factory never has to list it.
   const peers: Record<string, string> = pkg.peerDependencies;
-  expect(Object.keys(peers)).toContain("workflow");
-  for (const [name, range] of Object.entries(peers)) {
-    expect(pkg.devDependencies[name], name).toBe(range);
+  expect(Object.keys(peers).filter((name) => !optionalPeers.has(name))).toEqual(
+    FACTORY_SUPPLIED,
+  );
+  for (const name of FACTORY_SUPPLIED) {
+    expect(pkg.devDependencies[name], name).toBe(peers[name]);
     expect(pkg.dependencies[name], name).toBeUndefined();
   }
 });
 
+test("the jigs package peers on zod at the same range", async () => {
+  // Both packages build schemas the factory's pipelines pass between them, so
+  // the one zod copy has to satisfy both peers at once.
+  const jigs = JSON.parse(
+    await readFile(path.join(packageDir, "..", "jigs", "package.json"), "utf8"),
+  );
+  expect(jigs.peerDependencies.zod).toBe(pkg.peerDependencies.zod);
+  expect(jigs.devDependencies.zod).toBe(pkg.peerDependencies.zod);
+  expect(jigs.dependencies.zod).toBeUndefined();
+});
+
 test("the factory template pins the same versions this package peers on", async () => {
   // The template is what a factory installs; a peer bumped here and not there
+  // fails the factory's install under strictPeerDependencies, or without it
   // gives the factory two copies of the SDK and a manifest full of step ids
   // nothing registers.
   const template = JSON.parse(
@@ -139,5 +167,8 @@ test("the factory template pins the same versions this package peers on", async 
       ? "devDependencies"
       : "dependencies";
     expect(template[section][name], name).toBe(range);
+  }
+  for (const name of ["croner", "hono", "postgres"]) {
+    expect(template.dependencies[name], name).toBeUndefined();
   }
 });

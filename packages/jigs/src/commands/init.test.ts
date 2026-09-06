@@ -36,9 +36,13 @@ test("scaffolds a factory that can be installed and built", async () => {
     "pnpm-workspace.yaml",
     "tsconfig.json",
   ]);
-  // Spike finding 6: hono resolves as an external otherwise.
+  // The SDK, its World and its dashboard are peers of @jigs/service, loaded by
+  // name from the factory's own node_modules, so the factory has to carry them.
   const pkg = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8"));
-  expect(pkg.dependencies.hono).toBeDefined();
+  expect(pkg.dependencies.workflow).toBeDefined();
+  expect(pkg.dependencies["@workflow/world-postgres"]).toBeDefined();
+  expect(pkg.dependencies["@workflow/web"]).toBeDefined();
+  expect(pkg.dependencies.hono).toBeUndefined();
   // Until the packages publish, the factory links the checkout that built the
   // CLI scaffolding it — wherever that checkout is.
   const checkout = path.resolve(packageRoot(), "..", "..");
