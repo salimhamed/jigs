@@ -129,7 +129,6 @@ test("the implement step carries the ticket, the brief and the review findings",
   expect(first).toContain("SECRET-BRIEF-TEXT");
   expect(first).toContain("_(first pass)_");
   expect(first).not.toContain("{{REVIEW}}");
-  expect(agentCalls[0]?.permissionMode).toBe("bypassPermissions");
 
   const second = agentCalls[2]?.prompt ?? "";
   expect(second).toContain("- src/loop.ts: the CI bound is off by one");
@@ -145,8 +144,6 @@ test("the reviewer is never shown the brief and judges against the ticket", asyn
   expect(review?.prompt).toContain("base-sha-1");
   expect(review?.prompt).not.toContain("SECRET-BRIEF-TEXT");
   expect(review?.output).toBe(codeReviewVerdict);
-  // The reviewer needs Bash to read the diff it judges against.
-  expect(review?.permissionMode).toBe("bypassPermissions");
 });
 
 test("the cycle bound halts needs-human with the findings, and the human's reply drives the next round", async () => {

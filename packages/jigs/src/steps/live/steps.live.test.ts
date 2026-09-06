@@ -69,7 +69,6 @@ test("claude agent step: structured output round-trips typed, usage and session 
     harness: claude({ model: "sonnet" }),
     cwd: makeScratchRepo(tmp, "claude-agent"),
     prompt: STRUCTURED_PROMPT,
-    permissionMode: "bypassPermissions",
     output: verdict,
   });
 

@@ -15,11 +15,10 @@ jigs ships two step builders and no control-flow constructs:
 
 Plain TypeScript steps are the runtime's own `"use step"` functions (ADR 0013);
 the `fn()` wrapper that dressed one as a step result is gone. Both take `(key,
-config)`. Harness-specific options (`model`,
-`mcpServers`) are written inside the harness factory call, which jigs
-re-exports verbatim; framework-level options (`skills`, `output`,
-`permissionMode`) sit on the step. A step declaring a zod
-`output` schema returns the parsed object typed; every step returns a uniform
+config)`. Harness-specific options (`model`, `mcpServers`) are written inside
+the harness factory call, which jigs re-exports verbatim; framework-level
+options (`skills`, `output`) sit on the step. A step declaring a zod `output`
+schema returns the parsed object typed; every step returns a uniform
 `StepResult` of `{ text, output, usage }`.
 
 A run suspends through exactly two named primitives — `pullRequestGate()` and

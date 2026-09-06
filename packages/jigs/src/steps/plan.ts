@@ -2,7 +2,6 @@
 // everything here must be pure and sandbox-safe — no node imports (this code
 // is bundled into the workflow sandbox).
 
-import type { PermissionMode } from "ai-sdk-provider-claude-code";
 import { z } from "zod";
 import type { HarnessConfig } from "./config.ts";
 import type { AgentSession } from "./result.ts";
@@ -11,9 +10,6 @@ export type AgentStepConfig<T = undefined> = {
   harness: HarnessConfig;
   cwd: string;
   prompt: string;
-  // Mapped on Claude only: Codex approval/sandbox policies are jigs
-  // invariants set at hydration, not authoring surface.
-  permissionMode?: PermissionMode;
   // A session pointer a previous agent step recorded. Nothing is validated
   // here: a pointer naming another harness is resolved at hydration, where
   // the harness actually is, and simply starts a fresh session.

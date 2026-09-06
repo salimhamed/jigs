@@ -57,7 +57,6 @@ export async function fixCi(
       await deps.agent({
         harness: options.harness,
         cwd: options.cwd,
-        permissionMode: "bypassPermissions",
         resume: options.session,
         prompt: interpolate(fixCiPrompt, {
           CHECKS: checks,
@@ -79,7 +78,6 @@ export async function fixCi(
   const fixed = await deps.agent({
     harness: options.harness,
     cwd: options.cwd,
-    permissionMode: "bypassPermissions",
     prompt: interpolate(fixCiFreshPrompt, {
       TICKET: renderSnapshot(options.handoff.snapshot),
       BRIEF: options.handoff.brief,

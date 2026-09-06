@@ -48,10 +48,13 @@ test("claudeStepSettings force-merges the invariants over caller options", () =>
     cwd: "/worktree",
     strictMcpConfig: false,
     settingSources: ["user", "project", "local"],
+    permissionMode: "acceptEdits",
     pathToClaudeCodeExecutable: "/opt/claude",
   });
   expect(settings.strictMcpConfig).toBe(true);
   expect(settings.settingSources).toEqual(["project"]);
+  expect(settings.permissionMode).toBe("bypassPermissions");
+  expect(settings.allowDangerouslySkipPermissions).toBe(true);
   expect(settings.cwd).toBe("/worktree");
   expect(settings.pathToClaudeCodeExecutable).toBe("/opt/claude");
 });

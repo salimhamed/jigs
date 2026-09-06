@@ -310,7 +310,6 @@ async function commitLeftoverWork(
       const resumed = await agent({
         harness: options.harness,
         cwd: options.cwd,
-        permissionMode: "bypassPermissions",
         resume: options.session,
         prompt: commitWorkPrompt,
       });
@@ -326,7 +325,6 @@ async function commitLeftoverWork(
   const committed = await agent({
     harness: options.harness,
     cwd: options.cwd,
-    permissionMode: "bypassPermissions",
     prompt: commitWorkPrompt,
   });
   return committed.session;

@@ -183,14 +183,6 @@ async function generateAgentStep(
               claudeStepSettings({
                 cwd: wire.cwd,
                 env,
-                ...(wire.permissionMode !== undefined
-                  ? { permissionMode: wire.permissionMode }
-                  : {}),
-                // The provider gates bypassPermissions behind this paired
-                // flag; passing the mode is the consent.
-                ...(wire.permissionMode === "bypassPermissions"
-                  ? { allowDangerouslySkipPermissions: true }
-                  : {}),
                 ...(resume !== undefined ? { resume: resume.id } : {}),
                 ...(harness.mcpServers !== undefined
                   ? { mcpServers: toClaudeMcpServers(harness.mcpServers) }
