@@ -164,10 +164,17 @@ export async function teardownMergedRun(runId: string): Promise<string[]> {
 
 // The name the factories' steps/jigs.ts wrappers still import. The review
 // loop only returns merged, so `outcome` was always `{ merged: true }`; this
-// goes once the wrappers call teardownMergedRun directly.
+// goes once the wrappers call teardownMergedRun directly. The guard keeps a
+// stray `{ merged: false }` from deleting the only copy of unmerged work now
+// that the flag no longer chooses a row.
 export function teardownRunWorktrees(
   runId: string,
-  _outcome: { merged: boolean },
+  outcome: { merged: boolean },
 ): Promise<string[]> {
+  if (!outcome.merged) {
+    throw new Error(
+      "teardownRunWorktrees only tears down merged runs; unmerged worktrees are reclaimed by `jigs sweep`",
+    );
+  }
   return teardownMergedRun(runId);
 }

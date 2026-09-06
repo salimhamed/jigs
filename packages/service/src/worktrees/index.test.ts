@@ -12,6 +12,7 @@ import type { CreateWorktreeOptions, WorktreeStatus } from "./create";
 import {
   type ProvisionRunWorktreeDeps,
   provisionRunWorktree,
+  teardownRunWorktrees,
   WorktreeRegistryUnavailableError,
 } from "./index";
 import {
@@ -289,4 +290,10 @@ test("an unconfigured registry is refused before any disk work", async () => {
   await expect(
     provisionRunWorktree(request, "run_a", { resolveBinding: () => binding }),
   ).rejects.toThrow(WorktreeRegistryUnavailableError);
+});
+
+test("the teardownRunWorktrees alias refuses an unmerged outcome instead of deleting branches", () => {
+  expect(() => teardownRunWorktrees("run_1", { merged: false })).toThrow(
+    /only tears down merged runs/,
+  );
 });
