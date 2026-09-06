@@ -146,7 +146,7 @@ export async function provisionRunWorktree(
 // The per-run teardown, called by the pipeline after a merged reviewLoop
 // return. The operator's `jigs sweep` is the net for runs that never get
 // there.
-export function teardownMergedRun(runId: string): Promise<string[]> {
+export async function teardownMergedRun(runId: string): Promise<string[]> {
   return teardownMerged(runId, { sql: registrySql() });
 }
 
