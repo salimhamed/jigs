@@ -15,6 +15,7 @@ export {
 } from "./commands/ps.ts";
 export { type LaunchResult, launchRun } from "./commands/run.ts";
 export {
+  type SweepEntry,
   type SweepOptions,
   type SweepResult,
   sweepWorktrees,
@@ -23,15 +24,19 @@ export { unbindRepo } from "./commands/unbind.ts";
 export { type Binding, resolveBinding } from "./config/factory-config.ts";
 export { locateFactoryRoot } from "./config/locate-factory.ts";
 export { CliError } from "./errors.ts";
-// The review loop lives in the service package but its git and remote-parsing
-// substrate is jigs', and the service imports jigs by package name.
+// The worktree lifecycle and the review loop live in the service package but
+// their git and remote-parsing substrate is jigs', and the service imports
+// jigs by package name.
 export {
   commitsAhead,
+  deriveDefaultBranch,
   diffSince,
+  git,
   headSha,
   pushBranch,
   type ResolvedRemote,
   resolveRemoteUrl,
+  tryGit,
 } from "./git.ts";
 export { type GithubRepoRef, parseGithubRemote } from "./github-webhook.ts";
 // The service tears down a run's managed home from the worktree lifecycle,
@@ -44,15 +49,7 @@ export {
   ensureBindingClone,
   hasBindingClone,
 } from "./worktrees/clone.ts";
-export {
-  type BranchResolution,
-  type CreateWorktreeOptions,
-  createWorktree,
-  fetchOriginDefault,
-  type WorktreeFacts,
-  type WorktreeStatus,
-  worktreeStatus,
-} from "./worktrees/create.ts";
+export type { BranchResolution, WorktreeFacts } from "./worktrees/facts.ts";
 export {
   type BindingDirOptions,
   bindingDir,
@@ -60,31 +57,3 @@ export {
   type WorktreePathOptions,
   worktreePath,
 } from "./worktrees/layout.ts";
-export {
-  CopySourceMissingError,
-  PostCreateFailedError,
-  type ProvisionWorktreeOptions,
-  provisionWorktree,
-} from "./worktrees/provision.ts";
-export {
-  decideReuse,
-  type NotReusableReason,
-  type ReuseDiskFacts,
-  type ReuseInput,
-  type ReuseRegistration,
-  WorktreeNotReusableError,
-  WorktreeOwnedError,
-} from "./worktrees/reuse.ts";
-export {
-  classifySweep,
-  type SweepEntry,
-  type SweepInput,
-} from "./worktrees/sweep.ts";
-export {
-  applyTeardown,
-  decideTeardown,
-  isBranchMerged,
-  isWorktreeDirty,
-  type TeardownDecision,
-  type TeardownPlan,
-} from "./worktrees/teardown.ts";

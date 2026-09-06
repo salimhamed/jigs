@@ -8,7 +8,6 @@ import {
   diffSince,
   type GithubRepoRef,
   headSha,
-  isWorktreeDirty,
   parseGithubRemote,
   pushBranch,
   resolveBinding,
@@ -22,6 +21,7 @@ import {
 } from "../providers/github";
 import type { PrRef } from "../suspension/tokens";
 import { factoryRoot } from "../worktrees/request";
+import { isWorktreeDirty } from "../worktrees/teardown";
 
 export class RemoteNotGithubError extends Error {
   constructor(binding: string, url: string) {

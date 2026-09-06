@@ -1,14 +1,13 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { type Binding, CliError } from "jigs";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { Binding } from "../config/factory-config.ts";
-import { CliError } from "../errors.ts";
-import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import {
   CopySourceMissingError,
   PostCreateFailedError,
   provisionWorktree,
-} from "./provision.ts";
+} from "./provision";
+import { makeTmpDir, removeTmpDir } from "./test-fixtures";
 
 // The binding's own directory in the factory repo to copy from and a worktree
 // to copy into is the whole world provisioning sees; the binding is what tells

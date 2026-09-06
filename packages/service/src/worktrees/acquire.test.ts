@@ -1,12 +1,9 @@
-import type {
-  CreateWorktreeOptions,
-  WorktreeFacts,
-  WorktreeStatus,
-} from "jigs";
-import { WorktreeOwnedError } from "jigs";
+import type { WorktreeFacts } from "jigs";
 import { expect, test } from "vitest";
 import { acquireWorktree } from "./acquire";
+import type { CreateWorktreeOptions, WorktreeStatus } from "./create";
 import type { WorktreeRow } from "./registry";
+import { WorktreeOwnedError } from "./reuse";
 import { makeFakeSql } from "./test-fixtures";
 
 const request = {

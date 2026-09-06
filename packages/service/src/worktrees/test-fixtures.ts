@@ -1,8 +1,17 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Sql } from "postgres";
 import type { WorktreeRow } from "./registry";
+
+export function makeTmpDir(): string {
+  return mkdtempSync(path.join(tmpdir(), "jigs-test-"));
+}
+
+export function removeTmpDir(dir: string): void {
+  rmSync(dir, { recursive: true, force: true });
+}
 
 export function git(cwd: string, ...args: string[]): string {
   return execFileSync("git", args, {
@@ -26,8 +35,7 @@ export interface ClonedBinding {
 
 // Builds exactly what ensureBindingClone builds — a bare "GitHub" with one
 // commit on its default branch, and jigs' own bare clone of it — so a test's
-// clone and a service's clone cannot drift apart. Mirrors jigs'
-// src/test-fixtures.ts, which this package cannot import.
+// clone and a service's clone cannot drift apart.
 export function makeClonedBinding(
   parent: string,
   defaultBranch = "main",
@@ -67,6 +75,37 @@ export function makeClonedBinding(
   git(repoDir, "fetch", "-q", "origin");
   git(repoDir, "remote", "set-head", "origin", "-a");
   return { remoteDir, repoDir, worktreesDir: path.join(binding, "worktrees") };
+}
+
+// Advances a branch on the remote through a throwaway clone, so origin moves
+// without the clone under test being touched. Returns the new tip sha.
+export function commitToRemote(
+  parent: string,
+  remoteDir: string,
+  branch: string,
+  files: Record<string, string>,
+): string {
+  const clone = mkdtempSync(path.join(parent, "remote-clone-"));
+  git(clone, "clone", "-q", remoteDir, ".");
+  git(clone, "config", "user.name", "jigs-fixture");
+  git(clone, "config", "user.email", "fixture@jigs.test");
+  const onRemote = git(clone, "ls-remote", "--heads", "origin", branch) !== "";
+  if (onRemote) {
+    git(clone, "checkout", "-q", branch);
+  } else {
+    git(clone, "checkout", "-q", "-b", branch);
+  }
+  for (const [file, content] of Object.entries(files)) {
+    const filePath = path.join(clone, file);
+    mkdirSync(path.dirname(filePath), { recursive: true });
+    writeFileSync(filePath, content);
+  }
+  git(clone, "add", ".");
+  git(clone, "commit", "-q", "-m", `advance ${branch}`);
+  git(clone, "push", "-q", "origin", branch);
+  const sha = git(clone, "rev-parse", "HEAD");
+  rmSync(clone, { recursive: true, force: true });
+  return sha;
 }
 
 // Fakes the postgres tagged-template client against an in-memory store,
