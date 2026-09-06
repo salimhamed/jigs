@@ -6,6 +6,7 @@ import { getHookByToken, getRun } from "workflow/api";
 import { hydrateData, observabilityRevivers } from "workflow/observability";
 import { getWorld } from "workflow/runtime";
 import type { Factory } from "./factory";
+import { resolveIssueRef } from "./providers/linear";
 import { type JobRunIds, listJobRunIds, runsWithActiveStep } from "./stalls";
 import { TICKET_TOKEN_PREFIX, ticketToken } from "./suspension/tokens";
 import { registrySql } from "./worktrees/sql";
@@ -33,6 +34,7 @@ export interface RunLookupDeps {
   listRunIds?: () => Promise<string[]>;
   runExists?: (runId: string) => Promise<boolean>;
   hookRunId?: (token: string) => Promise<string | null>;
+  issueId?: (ref: string) => Promise<string | null>;
 }
 
 export async function resolveRunRef(
@@ -58,11 +60,17 @@ export async function resolveRunRef(
   // every run's first act, and the world deletes hooks at terminal state, so
   // the token resolves exactly the run that currently holds the ticket.
   const hookRunId = deps.hookRunId ?? worldHookRunId;
-  const owner =
-    (await hookRunId(ticketToken(ref))) ??
-    (ref === ref.toUpperCase()
-      ? null
-      : await hookRunId(ticketToken(ref.toUpperCase())));
+  const direct = await hookRunId(ticketToken(ref));
+  if (direct !== null) return { kind: "found", runId: direct };
+  // The claim is keyed on the issue's UUID, so an identifier costs the same
+  // Linear lookup the trigger already makes to start the run. Linear keys
+  // identifiers by upper-case team key, hence the second try.
+  const issueId = deps.issueId ?? linearIssueId;
+  const resolved =
+    (await issueId(ref)) ??
+    (ref === ref.toUpperCase() ? null : await issueId(ref.toUpperCase()));
+  if (resolved === null || resolved === ref) return { kind: "unknown" };
+  const owner = await hookRunId(ticketToken(resolved));
   return owner === null ? { kind: "unknown" } : { kind: "found", runId: owner };
 }
 
@@ -201,6 +209,14 @@ const worldJobRunIds = (): Promise<JobRunIds> => listJobRunIds(registrySql());
 const worldHookRunId = (token: string) =>
   getHookByToken(token).then(
     (hook) => hook.runId,
+    () => null,
+  );
+
+// A ref Linear cannot place — or cannot be asked about, with no API key
+// configured — is a ref no run holds, which is the answer either way.
+const linearIssueId = (ref: string) =>
+  resolveIssueRef(ref).then(
+    (issue) => issue.id,
     () => null,
   );
 

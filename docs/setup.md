@@ -398,7 +398,9 @@ boolean and `AGE-123` is a string; a value the pipeline's `inputs` schema
 rejects fails in the CLI, before any run is created.
 
 `<run>` is a run id, a unique id prefix, or the ticket the run claimed — an
-ambiguous prefix lists its candidates instead of guessing.
+ambiguous prefix lists its candidates instead of guessing. A ticket named by
+its identifier (`AGE-123`) is resolved against Linear first, since the claim
+itself is keyed on the issue's UUID.
 
 `jigs cancel` is the escape hatch when a run holds a resource nobody is coming
 back for: cancelling releases every hook it claimed, so the same ticket can be
