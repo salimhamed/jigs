@@ -4,13 +4,13 @@ import {
   CliError,
   hasBindingClone,
   locateFactoryRoot,
-  provisionWorktree,
   resolveBinding,
   type WorktreeFacts,
   worktreePath,
 } from "jigs";
 import type { Sql } from "postgres";
 import { acquireWorktree } from "./acquire";
+import { provisionWorktree } from "./provision";
 import { setWorktreeState } from "./registry";
 import { registrySql } from "./sql";
 

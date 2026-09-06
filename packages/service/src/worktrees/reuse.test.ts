@@ -3,7 +3,7 @@ import {
   decideReuse,
   WorktreeNotReusableError,
   WorktreeOwnedError,
-} from "./reuse.ts";
+} from "./reuse";
 
 const path = "/data/worktrees/acme-abc12345/api/salim-fix";
 

@@ -1,24 +1,18 @@
 import { mkdirSync, realpathSync } from "node:fs";
 import path from "node:path";
-import { CliError } from "../errors.ts";
-import { deriveDefaultBranch, git, tryGit } from "../git.ts";
+import {
+  type BranchResolution,
+  CliError,
+  deriveDefaultBranch,
+  git,
+  tryGit,
+  type WorktreeFacts,
+} from "jigs";
 
 // Every git call in this module passes an explicit absolute cwd — the
 // binding's bare clone for repo ops, the worktree path only to inspect an
 // existing worktree — because removing a worktree deletes the CWD of whoever
 // orchestrates (ADR 0007).
-
-export type BranchResolution = "local" | "remote" | "new";
-
-export interface WorktreeFacts {
-  path: string;
-  branch: string;
-  resolution: BranchResolution;
-  defaultBranch: string;
-  baseSha: string;
-  headSha: string;
-  behindDefault: number;
-}
 
 async function resolveDefaultBranch(repoDir: string): Promise<string> {
   let branch = await deriveDefaultBranch(repoDir);

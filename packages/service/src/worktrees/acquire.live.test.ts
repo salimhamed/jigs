@@ -1,5 +1,4 @@
 import type { WorktreeFacts } from "jigs";
-import { WorktreeOwnedError } from "jigs";
 import { afterAll, expect, test } from "vitest";
 import { acquireWorktree } from "./acquire";
 import {
@@ -7,6 +6,7 @@ import {
   ensureWorktreeRegistry,
   getWorktree,
 } from "./registry";
+import { WorktreeOwnedError } from "./reuse";
 
 // Two transactions run concurrently, so the pool needs two connections.
 const sql = connectRegistry(

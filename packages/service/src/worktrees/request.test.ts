@@ -1,19 +1,17 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import {
-  type Binding,
-  bindingRepoDir,
-  PostCreateFailedError,
-  type ProvisionWorktreeOptions,
-  worktreePath,
-} from "jigs";
+import { type Binding, bindingRepoDir, worktreePath } from "jigs";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
   type AcquireWorktreeDeps,
   type AcquireWorktreeRequest,
   acquireWorktree,
 } from "./acquire";
+import {
+  PostCreateFailedError,
+  type ProvisionWorktreeOptions,
+} from "./provision";
 import type { WorktreeRow } from "./registry";
 import { provisionRequest, WorktreeRegistryUnavailableError } from "./request";
 import { makeFakeSql } from "./test-fixtures";

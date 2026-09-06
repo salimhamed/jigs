@@ -25,56 +25,6 @@ export function git(cwd: string, ...args: string[]): string {
   }).trim();
 }
 
-export interface ClonedBinding {
-  remoteDir: string;
-  repoDir: string;
-  worktreesDir: string;
-}
-
-// Builds exactly what ensureBindingClone builds — a bare "GitHub" with one
-// commit on its default branch, and jigs' own bare clone of it — so a test's
-// clone and a service's clone cannot drift apart.
-export function makeClonedBinding(
-  parent: string,
-  defaultBranch = "main",
-): ClonedBinding {
-  const remoteDir = path.join(parent, "remote.git");
-  git(
-    parent,
-    "init",
-    "-q",
-    "--bare",
-    "--initial-branch",
-    defaultBranch,
-    remoteDir,
-  );
-
-  const bootstrap = path.join(parent, "bootstrap-checkout");
-  mkdirSync(bootstrap, { recursive: true });
-  git(bootstrap, "init", "-q", "--initial-branch", defaultBranch);
-  git(bootstrap, "config", "user.name", "jigs-fixture");
-  git(bootstrap, "config", "user.email", "fixture@jigs.test");
-  writeFileSync(path.join(bootstrap, "README.md"), "# fixture\n");
-  git(bootstrap, "add", "README.md");
-  git(bootstrap, "commit", "-q", "-m", "initial");
-  git(bootstrap, "remote", "add", "origin", remoteDir);
-  git(bootstrap, "push", "-q", "origin", defaultBranch);
-  rmSync(bootstrap, { recursive: true, force: true });
-
-  const binding = path.join(parent, "binding");
-  const repoDir = path.join(binding, "repo.git");
-  mkdirSync(binding, { recursive: true });
-  git(binding, "init", "-q", "--bare", repoDir);
-  // commit-tree and friends need an identity, and the fixture git() reads no
-  // global config.
-  git(repoDir, "config", "user.name", "jigs-fixture");
-  git(repoDir, "config", "user.email", "fixture@jigs.test");
-  git(repoDir, "remote", "add", "origin", remoteDir);
-  git(repoDir, "fetch", "-q", "origin");
-  git(repoDir, "remote", "set-head", "origin", "-a");
-  return { remoteDir, repoDir, worktreesDir: path.join(binding, "worktrees") };
-}
-
 export interface RemoteBackedRepoOptions {
   defaultBranch?: string;
 }
@@ -104,37 +54,6 @@ export function makeRemoteBackedRepo(
   git(checkout, "push", "-q", "-u", "origin", defaultBranch);
   git(checkout, "remote", "set-head", "origin", defaultBranch);
   return { remoteDir, checkout };
-}
-
-// Advances a branch on the remote through a throwaway clone, so origin moves
-// without the checkout under test being touched. Returns the new tip sha.
-export function commitToRemote(
-  parent: string,
-  remoteDir: string,
-  branch: string,
-  files: Record<string, string>,
-): string {
-  const clone = mkdtempSync(path.join(parent, "remote-clone-"));
-  git(clone, "clone", "-q", remoteDir, ".");
-  git(clone, "config", "user.name", "jigs-fixture");
-  git(clone, "config", "user.email", "fixture@jigs.test");
-  const onRemote = git(clone, "ls-remote", "--heads", "origin", branch) !== "";
-  if (onRemote) {
-    git(clone, "checkout", "-q", branch);
-  } else {
-    git(clone, "checkout", "-q", "-b", branch);
-  }
-  for (const [file, content] of Object.entries(files)) {
-    const filePath = path.join(clone, file);
-    mkdirSync(path.dirname(filePath), { recursive: true });
-    writeFileSync(filePath, content);
-  }
-  git(clone, "add", ".");
-  git(clone, "commit", "-q", "-m", `advance ${branch}`);
-  git(clone, "push", "-q", "origin", branch);
-  const sha = git(clone, "rev-parse", "HEAD");
-  rmSync(clone, { recursive: true, force: true });
-  return sha;
 }
 
 // A factory config that declares no service block does not parse — both ports

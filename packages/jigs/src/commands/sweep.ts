@@ -1,5 +1,4 @@
 import { CliError } from "../errors.ts";
-import type { SweepEntry } from "../worktrees/sweep.ts";
 import { type ServiceDeps, serviceFetch } from "./service.ts";
 
 // An HTTP client of the service (ADR 0008): the registry and the run states
@@ -15,6 +14,17 @@ export interface SweepOptions {
 
 export interface SweepDeps extends ServiceDeps {
   confirm?: (question: string) => Promise<boolean>;
+}
+
+// One entry of the service's sweep report, as this client prints it.
+export interface SweepEntry {
+  path: string;
+  branch: string;
+  state: string;
+  eligible: boolean;
+  requiresForce: boolean;
+  ownerRunId?: string;
+  reason: string;
 }
 
 export interface SweepResult {

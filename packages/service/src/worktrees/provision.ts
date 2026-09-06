@@ -1,9 +1,8 @@
 import { spawn } from "node:child_process";
 import { cpSync, existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
+import { type Binding, CliError } from "jigs";
 import { globSync } from "tinyglobby";
-import type { Binding } from "../config/factory-config.ts";
-import { CliError } from "../errors.ts";
 
 // Provisioning ports .worktreerc.yml semantics (ADR 0007): gitignore-blind
 // disk globs that must match dotfiles, a directory match copying its whole

@@ -1,13 +1,9 @@
-import {
-  createWorktree,
-  decideReuse,
-  type WorktreeFacts,
-  WorktreeOwnedError,
-  worktreeStatus,
-} from "jigs";
+import type { WorktreeFacts } from "jigs";
 import type { Sql } from "postgres";
 import { getRun } from "workflow/api";
+import { createWorktree, worktreeStatus } from "./create";
 import { getWorktree, upsertWorktree } from "./registry";
+import { decideReuse, WorktreeOwnedError } from "./reuse";
 
 // The SDK has no `suspended` status — a parked run reads `running` — so
 // non-terminal covers live and suspended owners alike (a suspended run
