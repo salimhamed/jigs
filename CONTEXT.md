@@ -227,6 +227,6 @@ _Avoid_: cron job, timer, recurring run
 **World**:
 The Workflow SDK's persistence-and-queue backend a service runs against —
 one per factory repo: its own Postgres container on its own port, holding
-only its runs. The SDK's filesystem World is for scratch development only.
-Selected by environment, never by code.
+only its runs. The service refuses to start without one: the worktree
+registry lives in the same database. Selected by environment, never by code.
 _Avoid_: backend, database, store

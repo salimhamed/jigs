@@ -1,11 +1,15 @@
 import { CliError } from "jigs";
 import type { ISql } from "postgres";
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { gateOnBindingClones, gateOnWorktreeRegistry } from "./start-world";
 
 // Nitro never awaits a plugin, so the only thing that can stop the service is
 // the plugin itself.
 const connected = () => ({}) as ISql;
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 test("a rejected ensure exits the process instead of leaving the service up", async () => {
   const exits: number[] = [];
@@ -61,17 +65,21 @@ test("a healthy registry lets the World start", async () => {
   expect(logs.join("\n")).toContain("worktree registry ensured");
 });
 
-test("no configured Postgres skips the registry and still starts", async () => {
-  const logs: string[] = [];
+test("no configured Postgres exits at the gate instead of starting a registry-less service", async () => {
+  vi.stubEnv("WORKFLOW_POSTGRES_URL", "");
+  const exits: number[] = [];
+  const errors: string[] = [];
 
   const proceed = await gateOnWorktreeRegistry({
-    sql: () => null,
-    ensure: () => Promise.reject(new Error("never called")),
-    log: (line) => logs.push(line),
+    ensure: () => Promise.reject(new Error("never reached")),
+    exit: (code) => exits.push(code),
+    error: (line) => errors.push(line),
+    log: () => {},
   });
 
-  expect(proceed).toBe(true);
-  expect(logs.join("\n")).toContain("WORKFLOW_POSTGRES_URL unset");
+  expect(proceed).toBe(false);
+  expect(exits).toEqual([1]);
+  expect(errors[0]).toContain("WORKFLOW_POSTGRES_URL is not set");
 });
 
 // The clone gate: what a run against an unreachable remote used to discover
