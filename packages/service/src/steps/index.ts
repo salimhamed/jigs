@@ -6,7 +6,7 @@
 //
 // Nothing in this package carries a "use step" directive. The wrappers live in
 // the factory repo, so the ids the SDK derives are factory-local paths and no
-// @jigs/service version is baked into a memoization key. This module is the
+// version of this package is baked into a memoization key. This module is the
 // workflow side of that split; ./run is the step side.
 
 import {
@@ -18,7 +18,7 @@ import {
   buildAgentWire,
   buildAskWire,
   type StepResult,
-} from "jigs/steps";
+} from "@salimhamed/jigs/steps";
 import type { z } from "zod";
 
 // Thrown workflow-side, never inside the step: a step's rejection is rebuilt

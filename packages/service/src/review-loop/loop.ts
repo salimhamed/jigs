@@ -8,9 +8,9 @@
 // The factory owns PR presentation: `describePr` names the pull request and
 // writes its body, and jigs carries no default for either.
 
-import type { WorktreeFacts } from "jigs";
-import { commitWorkPrompt } from "jigs/prompts";
-import type { AgentSession, HarnessConfig } from "jigs/steps";
+import type { WorktreeFacts } from "@salimhamed/jigs";
+import { commitWorkPrompt } from "@salimhamed/jigs/prompts";
+import type { AgentSession, HarnessConfig } from "@salimhamed/jigs/steps";
 import type { CheckRun } from "../providers/github";
 import { type AgentFn, ResumeFailedError } from "../steps";
 import type { TicketClaim } from "../suspension/claim";

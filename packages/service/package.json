@@ -1,16 +1,24 @@
 {
-  "name": "@jigs/service",
+  "name": "@salimhamed/jigs-service",
   "version": "0.1.20",
-  "private": true,
   "type": "module",
   "license": "MIT",
   "author": "Salim Hamed",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/salimhamed/jigs.git",
+    "directory": "packages/service"
+  },
   "engines": {
     "node": ">=24"
   },
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
   "scripts": {
     "build": "tsdown",
     "test": "vitest run",
@@ -18,7 +26,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "jigs": "workspace:*",
+    "@salimhamed/jigs": "workspace:*",
     "croner": "10.0.1",
     "hono": "^4.13.4",
     "postgres": "^3.4.7",

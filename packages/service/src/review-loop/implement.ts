@@ -2,8 +2,12 @@
 // breaker is a plain loop bound, and the halt it ends on is a pause a human
 // ends — never a terminal state, so nothing the builder produced is discarded.
 
-import { codeReviewPrompt, implementPrompt, interpolate } from "jigs/prompts";
-import type { AgentSession, HarnessConfig } from "jigs/steps";
+import {
+  codeReviewPrompt,
+  implementPrompt,
+  interpolate,
+} from "@salimhamed/jigs/prompts";
+import type { AgentSession, HarnessConfig } from "@salimhamed/jigs/steps";
 import { z } from "zod";
 import type { AgentFn } from "../steps";
 import type { TicketClaim } from "../suspension/claim";

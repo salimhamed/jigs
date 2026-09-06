@@ -6,7 +6,7 @@ import {
   bindingRepoDir,
   type WorktreeFacts,
   worktreePath,
-} from "jigs";
+} from "@salimhamed/jigs";
 import { afterAll, expect, test, vi } from "vitest";
 import { provisionRunWorktree } from "./index";
 import {

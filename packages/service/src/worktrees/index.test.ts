@@ -6,7 +6,7 @@ import {
   bindingRepoDir,
   type WorktreeFacts,
   worktreePath,
-} from "jigs";
+} from "@salimhamed/jigs";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { createWorktree, worktreeStatus } from "./create";
 import {

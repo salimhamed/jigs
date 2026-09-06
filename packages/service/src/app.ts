@@ -1,5 +1,5 @@
+import { failedChecks } from "@salimhamed/jigs/checks";
 import { type Context, Hono } from "hono";
-import { failedChecks } from "jigs/checks";
 import { getHookByToken, getRun, resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
 import { getWorld } from "workflow/runtime";
@@ -37,7 +37,7 @@ import { listWorktreesForRun } from "./worktrees/registry";
 import { registrySql } from "./worktrees/sql";
 import { sweepWorktrees } from "./worktrees/sweep";
 
-// The app is library code: a factory repo installs @jigs/service and hands in
+// The app is library code: a factory repo installs this package and hands in
 // its own pipelines, so nothing here may import a pipeline module.
 export function createApp(
   factory: Factory,

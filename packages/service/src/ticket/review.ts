@@ -2,8 +2,8 @@
 // ticket into a brief and issues a proceed / needs-human verdict. jigs core
 // still validates nothing — this jig is optional, and invocation is approval.
 
-import { interpolate, ticketReviewPrompt } from "jigs/prompts";
-import type { HarnessConfig } from "jigs/steps";
+import { interpolate, ticketReviewPrompt } from "@salimhamed/jigs/prompts";
+import type { HarnessConfig } from "@salimhamed/jigs/steps";
 import { z } from "zod";
 import type { AgentFn } from "../steps";
 import type { TicketClaim } from "../suspension/claim";

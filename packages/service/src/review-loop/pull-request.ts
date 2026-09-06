@@ -11,7 +11,7 @@ import {
   parseGithubRemote,
   pushBranch,
   resolveBinding,
-} from "jigs";
+} from "@salimhamed/jigs";
 import { factoryRoot } from "../preflight";
 import {
   createPullRequest,

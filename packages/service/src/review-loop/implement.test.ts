@@ -1,4 +1,4 @@
-import { type AgentStepConfig, claude } from "jigs/steps";
+import { type AgentStepConfig, claude } from "@salimhamed/jigs/steps";
 import { beforeEach, expect, test } from "vitest";
 import { parseOutput } from "../steps";
 import type { TicketClaim } from "../suspension/claim";

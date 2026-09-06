@@ -14,15 +14,15 @@ While a jigs version was baked into every step id, a release renamed every
 memoization key in every factory at once, which is why the version was pinned
 at `0.0.0` and why automating it would have been automating a footgun. Step ids
 are factory-local paths now (`step//./steps/jigs//worktree`), nothing reads
-either package's version at runtime, and factories install both by `link:`. The
-number is a signal to a reader, so the cost of getting one wrong is a reader
-being told the wrong thing — small enough that a machine should be the one
-choosing it.
+either package's version at runtime, and a factory pins both to one published
+version. The number is a signal to a reader and a coordinate for `pnpm update`,
+so the cost of getting one wrong is a reader being told the wrong thing — small
+enough that a machine should be the one choosing it.
 
 **The two packages release in lockstep**, through release-please's
 `linked-versions` plugin with both components in one group. They are one
-library split for packaging reasons, a factory installs both from the same
-checkout, and two independently drifting numbers would answer a question nobody
+library split for packaging reasons, a factory installs both at the same
+version, and two independently drifting numbers would answer a question nobody
 asks. One release PR covers both; a release with no commits of its own still
 bumps the quiet package to keep the pair readable as a single number.
 
@@ -34,6 +34,15 @@ step would watch a PR with no checks on it; and the squash back onto `main`
 would raise no `push`, so release-please would never run again and the tags and
 Releases would never be cut. The PR merges and nothing ships — a silent
 failure, and the reason the token appears in both steps.
+
+**The publish job authenticates as `GITHUB_TOKEN`, never the PAT.** The
+anti-loop rule that forces the PAT above does not apply to a publish: nothing
+downstream waits on an event it raises. What a publish needs is a write to this
+repo's GitHub Packages, and the workflow's `packages: write` grant is exactly
+that and nothing more — a PAT would carry `write:packages` across every
+repository the human can reach, sitting in a secret for the one job that does
+not need it. Each `package.json` names the repository, which is how GitHub
+Packages links the package to it and lets the repo-scoped token publish.
 
 ## Consequences
 
@@ -88,11 +97,17 @@ failure, and the reason the token appears in both steps.
   `service-vX.Y.Z`. A single shared `vX.Y.Z` needs a root package to hang the
   tag on and `skip-github-release` on both children; the root `package.json`
   has no version and must not grow one, since it is not a released thing.
-- **Nothing publishes.** Both packages stay `"private": true` and
-  release-please does not publish; the `node` strategy only rewrites
-  `package.json`, the CHANGELOGs, and lockfiles it finds — and `pnpm-lock.yaml`
-  is not one of them. `git pull` is still the whole upgrade
-  ([`docs/setup.md`](../setup.md)).
+- **The run that cuts the Releases also publishes both packages** to GitHub
+  Packages as `@salimhamed/jigs` and `@salimhamed/jigs-service` (`restricted`:
+  the repo is private, and so is the registry entry). release-please itself
+  publishes nothing — the `node` strategy only rewrites `package.json` and the
+  CHANGELOGs — so a `publish` job runs after it, gated on `releases_created`,
+  and skips a version the registry already holds so a re-run of the workflow
+  is idempotent rather than a conflict. No provenance attestation: npm only
+  issues those on the public registry. A factory upgrades by moving both pins
+  and running `jigs up`; a consumer needs a token with `read:packages` in
+  `~/.npmrc`, and the scaffolded `.npmrc` carries only the scope-to-registry
+  line.
 
 ## Considered options
 
@@ -119,6 +134,10 @@ failure, and the reason the token appears in both steps.
   release workflow fails loudly on the action, but a *narrower* failure is
   quieter: a token that can still open the PR but not merge it leaves the
   release PR sitting open, which looks like "no release was due".
+- **A release and its publish are two steps that can come apart.** The tags
+  and Releases exist before the publish job runs, so a failed publish leaves a
+  version that is tagged but not installable. Re-running the workflow is the
+  repair: the job skips what already landed and publishes the rest.
 - **The quiet package gets near-empty changelog entries.** Lockstep bumps it
   through a synthetic `Release-As:` commit, so `packages/service/CHANGELOG.md`
   will carry versions whose only note is the synchronization. That is the

@@ -3,8 +3,12 @@
 // agent that never saw the ticket, the brief or the diff is guessing at the
 // change it is repairing.
 
-import { fixCiFreshPrompt, fixCiPrompt, interpolate } from "jigs/prompts";
-import type { AgentSession, HarnessConfig } from "jigs/steps";
+import {
+  fixCiFreshPrompt,
+  fixCiPrompt,
+  interpolate,
+} from "@salimhamed/jigs/prompts";
+import type { AgentSession, HarnessConfig } from "@salimhamed/jigs/steps";
 import type { CheckRun } from "../providers/github";
 import { type AgentFn, ResumeFailedError } from "../steps";
 import type { Handoff } from "../ticket/review";

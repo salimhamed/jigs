@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { type Binding, CliError } from "jigs";
+import { type Binding, CliError } from "@salimhamed/jigs";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
   CopySourceMissingError,

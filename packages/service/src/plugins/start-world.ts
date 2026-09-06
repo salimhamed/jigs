@@ -1,4 +1,4 @@
-import type { BindingClone } from "jigs";
+import type { BindingClone } from "@salimhamed/jigs";
 import type { ISql } from "postgres";
 import { READY_PHASE, setBootPhase } from "../readiness";
 import { installShutdown, onShutdown, startOwningSignals } from "../shutdown";
@@ -73,7 +73,7 @@ export async function gateOnBindingClones(
   try {
     // Inside the try: reading the factory config is itself fallible, and a
     // service that cannot tell what is bound must not start.
-    const jigs = await import("jigs");
+    const jigs = await import("@salimhamed/jigs");
     ensure = deps.ensure ?? jigs.ensureBindingClone;
     if (deps.bindings !== undefined) {
       declared = deps.bindings();

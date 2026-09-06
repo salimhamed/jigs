@@ -43,7 +43,7 @@ test("scaffolds a factory that can be installed and built", async () => {
     "steps/jigs.ts",
     "tsconfig.json",
   ]);
-  // The SDK, its World and its dashboard are peers of @jigs/service, loaded by
+  // The SDK, its World and its dashboard are peers of the service, loaded by
   // name from the factory's own node_modules, so the factory has to carry them.
   const pkg = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8"));
   expect(pkg.dependencies.workflow).toBeDefined();
@@ -53,13 +53,15 @@ test("scaffolds a factory that can be installed and built", async () => {
   // The scaffolded ids test needs its runner.
   expect(pkg.devDependencies.vitest).toBeDefined();
   expect(pkg.scripts.test).toBe("vitest run");
-  // Until the packages publish, the factory links the checkout that built the
-  // CLI scaffolding it — wherever that checkout is.
-  const checkout = path.resolve(packageRoot(), "..", "..");
-  expect(pkg.dependencies["@jigs/service"]).toBe(
-    `link:${checkout}/packages/service`,
+  // Both packages pinned to the version of the CLI scaffolding it: they
+  // release in lockstep, and a range would let the pair drift apart.
+  const { version } = JSON.parse(
+    readFileSync(path.join(packageRoot(), "package.json"), "utf8"),
   );
-  expect(pkg.dependencies.jigs).toBe(`link:${checkout}/packages/jigs`);
+  expect(version).toMatch(/^\d+\.\d+\.\d+$/);
+  expect(pkg.dependencies["@salimhamed/jigs"]).toBe(version);
+  expect(pkg.dependencies["@salimhamed/jigs-service"]).toBe(version);
+  expect(JSON.stringify(pkg)).not.toContain("link:");
   // Spike finding 5: pnpm 11 reads allowBuilds only from pnpm-workspace.yaml.
   const workspace = readFileSync(path.join(dir, "pnpm-workspace.yaml"), "utf8");
   expect(workspace).toContain("@swc/core");
@@ -158,6 +160,7 @@ test("the next steps are printed, not run", async () => {
   expect(printed).toContain("never rename the file or an exported wrapper");
   expect(printed).toContain("LINEAR_API_KEY and GITHUB_TOKEN");
   expect(printed).toContain("jigs up");
+  expect(printed).toContain("read:packages");
   expect(printed).toContain("jigs bind");
   // `jigs up` owns the machine-touching commands now, one step at a time.
   expect(printed).not.toContain("docker compose");

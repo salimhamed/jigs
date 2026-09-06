@@ -1,4 +1,4 @@
-import { CliError } from "jigs";
+import { CliError } from "@salimhamed/jigs";
 import type { ISql } from "postgres";
 import { afterEach, expect, test, vi } from "vitest";
 import {

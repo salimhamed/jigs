@@ -1,5 +1,9 @@
 import { rmSync } from "node:fs";
-import { deriveDefaultBranch, removeManagedCodexHome, tryGit } from "jigs";
+import {
+  deriveDefaultBranch,
+  removeManagedCodexHome,
+  tryGit,
+} from "@salimhamed/jigs";
 import type { Sql } from "postgres";
 import { deleteWorktree, listWorktreesForRun } from "./registry";
 

@@ -1,6 +1,6 @@
 import { chmodSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { bindingRepoDir, ensureBindingClone } from "jigs";
+import { bindingRepoDir, ensureBindingClone } from "@salimhamed/jigs";
 import {
   afterAll,
   afterEach,

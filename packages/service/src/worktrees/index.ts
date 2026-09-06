@@ -17,7 +17,7 @@ import {
   resolveBinding,
   type WorktreeFacts,
   worktreePath,
-} from "jigs";
+} from "@salimhamed/jigs";
 import type { Sql } from "postgres";
 import { factoryRoot } from "../preflight";
 import { createWorktree, worktreeStatus } from "./create";

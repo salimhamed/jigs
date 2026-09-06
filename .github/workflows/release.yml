@@ -8,6 +8,8 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  # For the publish job: GITHUB_TOKEN writes this repo's GitHub Packages.
+  packages: write
   # For GITHUB_TOKEN's read of the release PR's check rollup below. `gh pr
   # checks` also resolves each check's workflowRun over GraphQL, which is an
   # Actions read — without it every node in the reply errors and the poll
@@ -23,6 +25,8 @@ concurrency:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      releases_created: ${{ steps.release.outputs.releases_created }}
     steps:
       # A PAT, not GITHUB_TOKEN, in both steps below: events raised by
       # GITHUB_TOKEN start no workflow run. With it, the release PR would get
@@ -92,3 +96,45 @@ jobs:
           gh pr checks "$pr" --watch --fail-fast --interval 15
 
           GH_TOKEN="$MERGE_TOKEN" gh pr merge "$pr" --squash --delete-branch
+
+  # Only the run that cut the Releases publishes — the one the release PR's
+  # squash triggered. Every other push to main leaves releases_created unset.
+  publish:
+    needs: release-please
+    if: ${{ !cancelled() && needs.release-please.outputs.releases_created == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+          # Writes //npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN} into
+          # the runner's npmrc; publishConfig.registry in each package.json
+          # names the same host.
+          registry-url: https://npm.pkg.github.com
+          scope: "@salimhamed"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Publish both packages to GitHub Packages
+        env:
+          # GITHUB_TOKEN, not the PAT: a publish raises no workflow event this
+          # design waits on, and `packages: write` above is exactly the grant.
+          # No provenance flag either — attestations exist only on npmjs.
+          NODE_AUTH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # A version already on the registry is a re-run of this job, not a
+          # failure: the registry refuses to publish over it, so skip it.
+          # --no-git-checks: the checkout is detached at the squash commit,
+          # which pnpm otherwise refuses as "not on a branch".
+          for dir in packages/jigs packages/service; do
+            name="$(node -p "require('./$dir/package.json').name")"
+            version="$(node -p "require('./$dir/package.json').version")"
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "$name@$version is already published — skipping"
+              continue
+            fi
+            pnpm --filter "$name" publish --no-git-checks --access restricted
+          done

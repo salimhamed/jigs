@@ -1,4 +1,4 @@
-import { claude } from "jigs/steps";
+import { claude } from "@salimhamed/jigs/steps";
 import { expect, test } from "vitest";
 import type { TicketClaim } from "../suspension/claim";
 import type { HumanReply } from "../suspension/needs-human";
