@@ -1,7 +1,6 @@
 import { mkdirSync, realpathSync } from "node:fs";
 import path from "node:path";
 import {
-  type BranchResolution,
   CliError,
   deriveDefaultBranch,
   git,
@@ -66,14 +65,14 @@ export async function fetchOriginDefault(repoDir: string): Promise<void> {
   await git(["fetch", "origin", defaultBranch], repoDir);
 }
 
-export interface CreateWorktreeOptions {
+interface CutOptions {
   repoDir: string;
   worktreePath: string;
   branch: string;
 }
 
 export async function createWorktree(
-  options: CreateWorktreeOptions,
+  options: CutOptions,
 ): Promise<WorktreeFacts> {
   const { repoDir, worktreePath, branch } = options;
   const defaultBranch = await resolveDefaultBranch(repoDir);
@@ -94,13 +93,10 @@ export async function createWorktree(
     repoDir,
   );
 
-  let resolution: BranchResolution;
   if (localRef !== null) {
     // Checked out as-is, never auto-reset — even when origin/<branch> moved.
-    resolution = "local";
     await git(["worktree", "add", worktreePath, branch], repoDir);
   } else if (remoteRef !== null) {
-    resolution = "remote";
     await git(
       [
         "worktree",
@@ -114,7 +110,6 @@ export async function createWorktree(
       repoDir,
     );
   } else {
-    resolution = "new";
     await git(
       [
         "worktree",
@@ -128,36 +123,19 @@ export async function createWorktree(
     );
   }
 
-  const headSha = await git(["rev-parse", `refs/heads/${branch}`], repoDir);
-  const behindDefault = Number(
-    await git(
-      ["rev-list", "--count", `${branch}..origin/${defaultBranch}`],
-      repoDir,
-    ),
-  );
-  return {
-    path: worktreePath,
-    branch,
-    resolution,
-    defaultBranch,
-    baseSha,
-    headSha,
-    behindDefault,
-  };
+  return { path: worktreePath, branch, defaultBranch, baseSha };
 }
 
-export interface WorktreeStatus {
+interface WorktreeStatus {
   branchMatches: boolean;
   clean: boolean;
   diverged: boolean;
-  headSha: string;
-  behindDefault: number;
   defaultBranch: string;
   baseSha: string;
 }
 
 export async function worktreeStatus(
-  options: CreateWorktreeOptions,
+  options: CutOptions,
 ): Promise<WorktreeStatus | null> {
   const { repoDir, worktreePath, branch } = options;
   const toplevel = await tryGit(["rev-parse", "--show-toplevel"], worktreePath);
@@ -189,19 +167,11 @@ export async function worktreeStatus(
     diverged = mergeBase !== headSha && mergeBase !== remoteSha;
   }
 
-  const behindDefault = Number(
-    await git(
-      ["rev-list", "--count", `${headSha}..origin/${defaultBranch}`],
-      repoDir,
-    ),
-  );
   const baseSha = await git(["rev-parse", `origin/${defaultBranch}`], repoDir);
   return {
     branchMatches: checkedOut === branch,
     clean,
     diverged,
-    headSha,
-    behindDefault,
     defaultBranch,
     baseSha,
   };

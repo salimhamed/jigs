@@ -57,9 +57,6 @@ function runWorktree(branch: string, runId = "run_1"): string {
     branch,
     ownerRunId: runId,
     state: "active",
-    baseSha: "base1",
-    headSha: "head1",
-    behindDefault: 0,
     repoDir,
   });
   return target;

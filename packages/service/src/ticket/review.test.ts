@@ -57,7 +57,6 @@ const fakeAgent: TicketReviewDeps["agent"] = async <T>(
   return {
     text: "",
     output: parseOutput(config.output, agentRaw),
-    files: [],
     usage: undefined,
   };
 };

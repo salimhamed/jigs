@@ -9,7 +9,6 @@ export {
   type McpProbe,
   type McpServerConfig,
   type McpStdioServer,
-  StructuredOutputUnsupportedError,
 } from "./config.ts";
 // execute.ts is deliberately NOT re-exported here: this surface is imported
 // by workflow-side code and must stay free of node builtins for the workflow
@@ -26,7 +25,6 @@ export {
 export type {
   AgentSession,
   AgentStepResult,
-  StepFile,
   StepResult,
   StepUsage,
 } from "./result.ts";

@@ -8,22 +8,11 @@ import {
 
 const usage = { inputTokens: 12, outputTokens: 34 } as unknown as StepUsage;
 
-test("toStepResult maps text, files, and usage into the uniform shape", () => {
-  const generation: StepGeneration = {
-    text: "done",
-    files: [
-      { mediaType: "image/png", base64: "aGk=" },
-      { mediaType: "text/plain", base64: "eW8=" },
-    ],
-    usage,
-  };
+test("toStepResult maps text and usage into the uniform shape", () => {
+  const generation: StepGeneration = { text: "done", usage };
   expect(toStepResult(generation, { parsed: true })).toEqual({
     text: "done",
     output: { parsed: true },
-    files: [
-      { mediaType: "image/png", base64: "aGk=" },
-      { mediaType: "text/plain", base64: "eW8=" },
-    ],
     usage,
   });
 });

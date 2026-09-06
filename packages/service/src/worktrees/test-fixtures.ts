@@ -132,35 +132,14 @@ export function makeFakeSql(store: Map<string, WorktreeRow>): Sql {
       return Promise.resolve(row === undefined ? [] : [row]);
     }
     if (statement.startsWith("INSERT")) {
-      const [
-        path,
-        branch,
-        ownerRunId,
-        state,
-        baseSha,
-        headSha,
-        behindDefault,
-        repoDir,
-      ] = values as [
+      const [path, branch, ownerRunId, state, repoDir] = values as [
         string,
         string,
         string,
         string,
-        string,
-        string,
-        number,
         string,
       ];
-      store.set(path, {
-        path,
-        branch,
-        ownerRunId,
-        state,
-        baseSha,
-        headSha,
-        behindDefault,
-        repoDir,
-      });
+      store.set(path, { path, branch, ownerRunId, state, repoDir });
       return Promise.resolve([]);
     }
     if (statement.startsWith("UPDATE")) {

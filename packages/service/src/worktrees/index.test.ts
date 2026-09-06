@@ -8,7 +8,7 @@ import {
   worktreePath,
 } from "jigs";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { CreateWorktreeOptions, WorktreeStatus } from "./create";
+import type { createWorktree, worktreeStatus } from "./create";
 import {
   type ProvisionRunWorktreeDeps,
   provisionRunWorktree,
@@ -61,12 +61,13 @@ const binding: Binding = {
 
 const request = { binding: "api", branch: "feat" };
 
+type CutOptions = Parameters<typeof createWorktree>[0];
+type WorktreeStatus = NonNullable<Awaited<ReturnType<typeof worktreeStatus>>>;
+
 const cleanDisk: WorktreeStatus = {
   branchMatches: true,
   clean: true,
   diverged: false,
-  headSha: "head1",
-  behindDefault: 2,
   defaultBranch: "main",
   baseSha: "base1",
 };
@@ -77,21 +78,15 @@ function registeredRow(ownerRunId: string): WorktreeRow {
     branch: "feat",
     ownerRunId,
     state: "active",
-    baseSha: "base0",
-    headSha: "head0",
-    behindDefault: 0,
     repoDir,
   };
 }
 
-const cutFacts = (options: CreateWorktreeOptions): WorktreeFacts => ({
+const cutFacts = (options: CutOptions): WorktreeFacts => ({
   path: options.worktreePath,
   branch: options.branch,
-  resolution: "new",
   defaultBranch: "main",
   baseSha: "base2",
-  headSha: "base2",
-  behindDefault: 0,
 });
 
 // The registry write stays real (through the fake sql); the git half and the
@@ -155,24 +150,22 @@ test("a terminal owner's clean worktree is reused and re-owned", async () => {
     "run_new",
     deps({ worktreeStatus: async () => cleanDisk }),
   );
-  expect(facts.headSha).toBe("head1");
+  expect(facts.baseSha).toBe("base1");
   expect(store.get(target)).toMatchObject({
     ownerRunId: "run_new",
     state: "active",
-    headSha: "head1",
-    baseSha: "base1",
-    behindDefault: 2,
   });
 });
 
 test("a registry row whose directory is gone is cut afresh and re-owned", async () => {
   store.set(target, registeredRow("run_done"));
   const facts = await provisionRunWorktree(request, "run_new", deps());
-  expect(facts.resolution).toBe("new");
+  expect(facts).toEqual(
+    cutFacts({ repoDir, worktreePath: target, branch: "feat" }),
+  );
   expect(store.get(target)).toMatchObject({
     ownerRunId: "run_new",
     state: "active",
-    baseSha: "base2",
   });
 });
 
@@ -188,12 +181,12 @@ test("the owning run re-enters its own dirty worktree without asking whether it 
       worktreeStatus: async () => ({ ...cleanDisk, clean: false }),
     }),
   );
-  expect(facts.resolution).toBe("local");
+  expect(facts.baseSha).toBe(cleanDisk.baseSha);
   expect(store.get(target)?.ownerRunId).toBe("run_owner");
 });
 
 test("no worktree on disk creates one and registers the requesting run", async () => {
-  const createCalls: CreateWorktreeOptions[] = [];
+  const createCalls: CutOptions[] = [];
   const facts = await provisionRunWorktree(
     request,
     "run_new",
@@ -213,7 +206,6 @@ test("no worktree on disk creates one and registers the requesting run", async (
   expect(store.get(target)).toMatchObject({
     ownerRunId: "run_new",
     state: "active",
-    baseSha: "base2",
   });
 });
 

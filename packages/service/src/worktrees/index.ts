@@ -103,11 +103,8 @@ export async function provisionRunWorktree(
         : {
             path: target,
             branch: request.branch,
-            resolution: "local",
             defaultBranch: disk.defaultBranch,
             baseSha: disk.baseSha,
-            headSha: disk.headSha,
-            behindDefault: disk.behindDefault,
           };
 
     await upsertWorktree(sql, {
@@ -115,9 +112,6 @@ export async function provisionRunWorktree(
       branch: facts.branch,
       ownerRunId: runId,
       state: "active",
-      baseSha: facts.baseSha,
-      headSha: facts.headSha,
-      behindDefault: facts.behindDefault,
       repoDir,
     });
     return facts;

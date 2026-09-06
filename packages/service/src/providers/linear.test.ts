@@ -39,10 +39,7 @@ const lastRequest = () => {
 };
 
 test("requests carry the API key and hit the override URL", async () => {
-  respond({
-    issue: { creator: { id: "u1", name: "salim" } },
-    viewer: { id: "bot" },
-  });
+  respond({ issue: { creator: { id: "u1", name: "salim" } } });
   await getIssueParticipants("68bc9696-35d5-442d-ab56-214c8cfefbec");
   const { url, init } = lastRequest();
   expect(url).toBe("http://mock.test/graphql");

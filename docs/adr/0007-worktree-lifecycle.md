@@ -19,9 +19,11 @@
 > the fast-forward was load-bearing for. `workspace_dir` is gone too. The sweep
 > also no longer scans for unregistered directories — every worktree it can see
 > came from a registry row — so the `unregistered` state is gone from the
-> classifier. Everything else below stands: the three-way branch resolution,
-> the `base_sha`/`head_sha`/`behind_default` triple, the explicit-cwd
-> invariant, the reuse rules, the teardown matrix, and the
+> classifier. The registry row is ownership and state only — the
+> `base_sha`/`head_sha`/`behind_default` triple is gone, nothing read it; the
+> worktree facts carry the fork point in memory for the review loop's diff.
+> Everything else below stands: the three-way branch resolution, the
+> explicit-cwd invariant, the reuse rules, the teardown matrix, and the
 > `copy`/`post_create`/`hook_timeout_minutes` semantics. Those three keys now
 > live on the binding itself, in the factory repo's committed `jigs.yml`, with
 > `copy` entries relative to the binding's own `bindings/<name>/` directory in
@@ -45,10 +47,9 @@ Freshness never touches the human checkout's local default branch: the gate is
 `git fetch`, and new worktree branches fork from `origin/<default>`. The
 ported three-way resolution (existing local ref checked out as-is and never
 auto-reset; remote-only branch tracked; otherwise a new branch off the fetched
-default) and the `base_sha`/`head_sha`/`behind_default` triple carry over from
-claude-code-flow, as does the cwd invariant: every git call passes an explicit
-main-root `cwd`, because removing a worktree deletes the CWD of whoever
-orchestrates.
+default) carries over from claude-code-flow, as does the cwd invariant: every
+git call passes an explicit main-root `cwd`, because removing a worktree
+deletes the CWD of whoever orchestrates.
 
 Fast-forwarding the binding checkout's local default branch is **default-on
 with guards** — a deliberate reversal of the map's original "explicit,

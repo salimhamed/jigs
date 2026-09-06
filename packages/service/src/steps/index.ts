@@ -94,21 +94,3 @@ export async function ask<T = undefined>(
   const result = await runStep(wire);
   return { ...result, output: parseOutput(config.output, result.output) };
 }
-
-/**
- * Wraps a step function's recorded return in the uniform StepResult. The
- * passed function must be a module-scope function in the factory repo
- * carrying its own `"use step"` directive: an inline closure or undirected
- * function executes unmemoized in the workflow sandbox and re-fires on every
- * replay — with no runtime error, because the workflow bundle replaces only
- * directive-bearing functions with stubs, and a stub carries no runtime marker
- * fn() could assert on. Reference-plus-serializable-args is the only honest
- * shape under the directive model.
- */
-export async function fn<Args extends unknown[], R>(
-  step: (...args: Args) => R | Promise<R>,
-  ...args: Args
-): Promise<StepResult<R>> {
-  const output = await step(...args);
-  return { text: "", output, files: [], usage: undefined };
-}

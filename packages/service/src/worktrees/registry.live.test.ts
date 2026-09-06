@@ -29,9 +29,6 @@ function row(overrides: Partial<WorktreeRow> = {}): WorktreeRow {
     branch: "feat",
     ownerRunId: "run_a",
     state: "active",
-    baseSha: "base1",
-    headSha: "head1",
-    behindDefault: 3,
     repoDir: "/data/bindings/acme-abc12345/api/repo.git",
     ...overrides,
   };
@@ -42,7 +39,7 @@ test("ensureWorktreeRegistry is idempotent", async () => {
   await expect(ensureWorktreeRegistry(sql)).resolves.toBeUndefined();
 });
 
-test("upsert inserts a row carrying owner, state, and the sha triple", async () => {
+test("upsert inserts a row carrying its owner and state", async () => {
   await ensureWorktreeRegistry(sql);
   await upsertWorktree(sql, row());
   expect(await getWorktree(sql, testPath)).toEqual(row());
@@ -51,12 +48,9 @@ test("upsert inserts a row carrying owner, state, and the sha triple", async () 
 test("re-upsert with a new owner updates the row in place", async () => {
   await ensureWorktreeRegistry(sql);
   await upsertWorktree(sql, row());
-  await upsertWorktree(
-    sql,
-    row({ ownerRunId: "run_b", headSha: "head2", behindDefault: 0 }),
-  );
+  await upsertWorktree(sql, row({ ownerRunId: "run_b", branch: "feat-2" }));
   expect(await getWorktree(sql, testPath)).toEqual(
-    row({ ownerRunId: "run_b", headSha: "head2", behindDefault: 0 }),
+    row({ ownerRunId: "run_b", branch: "feat-2" }),
   );
 });
 
@@ -101,9 +95,6 @@ const CURRENT_COLUMNS = `
   branch text NOT NULL,
   owner_run_id text NOT NULL,
   state text NOT NULL,
-  base_sha text NOT NULL,
-  head_sha text NOT NULL,
-  behind_default integer NOT NULL,
   repo_dir text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()`;
@@ -142,5 +133,15 @@ test("a table that still carries a retired column is refused, naming the drop", 
       "repo_dir text NOT NULL,\n  keep boolean NOT NULL DEFAULT false,",
     ),
     /unexpected keep.*DROP TABLE jigs_worktrees/s,
+  );
+});
+
+test("a table that still carries the sha triple is refused, naming the drop", async () => {
+  await expectRefused(
+    replacing(
+      "state text NOT NULL,",
+      "state text NOT NULL,\n  base_sha text NOT NULL,\n  head_sha text NOT NULL,\n  behind_default integer NOT NULL,",
+    ),
+    /unexpected base_sha, head_sha, behind_default.*DROP TABLE jigs_worktrees/s,
   );
 });

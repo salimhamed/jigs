@@ -73,18 +73,14 @@ export async function resolveIssueRef(ticket: string): Promise<LinearIssueRef> {
 
 export async function getIssueParticipants(
   issueId: string,
-): Promise<{ creator: LinearUser | null; viewerId: string }> {
-  const data = await linearGraphql<{
-    issue: { creator: LinearUser | null };
-    viewer: { id: string };
-  }>(
+): Promise<{ creator: LinearUser | null }> {
+  const data = await linearGraphql<{ issue: { creator: LinearUser | null } }>(
     `query IssueParticipants($id: String!) {
       issue(id: $id) { creator { id name } }
-      viewer { id }
     }`,
     { id: issueId },
   );
-  return { creator: data.issue.creator, viewerId: data.viewer.id };
+  return { creator: data.issue.creator };
 }
 
 interface RawIssueRef {

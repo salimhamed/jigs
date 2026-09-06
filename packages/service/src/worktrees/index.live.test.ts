@@ -56,11 +56,8 @@ function factsFor(branch: string): WorktreeFacts {
   return {
     path: testPath,
     branch,
-    resolution: "new",
     defaultBranch: "main",
     baseSha: "base1",
-    headSha: "base1",
-    behindDefault: 0,
   };
 }
 
@@ -103,7 +100,7 @@ test("concurrent requests for one unowned path: the loser sees the winner's owne
   await new Promise((resolve) => setTimeout(resolve, 100));
   releaseWinner();
 
-  await expect(winner).resolves.toMatchObject({ headSha: "base1" });
+  await expect(winner).resolves.toMatchObject({ baseSha: "base1" });
   await expect(loser).rejects.toThrow(WorktreeOwnedError);
   expect((await getWorktree(sql, testPath))?.ownerRunId).toBe("run_winner");
 });

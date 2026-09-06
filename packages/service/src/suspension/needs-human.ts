@@ -83,7 +83,7 @@ export async function postNeedsHumanComment(
   reason: string,
   payload: JsonValue | undefined,
 ) {
-  const { creator, viewerId } = await getIssueParticipants(issueId);
+  const { creator } = await getIssueParticipants(issueId);
   const lines = [`${creator !== null ? `${mention(creator)} ` : ""}${reason}`];
   if (payload !== undefined) {
     if (isFindingsPayload(payload)) {
@@ -94,7 +94,7 @@ export async function postNeedsHumanComment(
   }
   const comment = await createComment(issueId, lines.join("\n"));
   console.log(`[needsHuman] posted comment=${comment.id} issue=${issueId}`);
-  return { commentId: comment.id, postedAt: comment.createdAt, viewerId };
+  return { commentId: comment.id, postedAt: comment.createdAt };
 }
 
 function isFindingsPayload(

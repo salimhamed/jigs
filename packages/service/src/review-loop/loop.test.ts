@@ -37,11 +37,8 @@ const handoff: Handoff = { brief: "build it", snapshot };
 const worktree: WorktreeFacts = {
   path: "/tmp/worktree",
   branch: snapshot.branchName,
-  resolution: "new",
   defaultBranch: "main",
   baseSha: "base-sha-1",
-  headSha: "head-sha-1",
-  behindDefault: 0,
 };
 
 const pr: PrRef = { owner: "acme", repo: "api", number: 41 };
@@ -99,7 +96,6 @@ function makeDeps(wakes: GateWake[]): ReviewLoopDeps {
       return {
         text: "",
         output: parseOutput(config.output, raw),
-        files: [],
         usage: undefined,
         session: { harness: "claude" as const, id: `s-${calls.agent.length}` },
       };
