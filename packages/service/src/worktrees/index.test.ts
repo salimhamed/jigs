@@ -13,7 +13,6 @@ import {
   type ProvisionRunWorktreeDeps,
   provisionRunWorktree,
   teardownRunWorktrees,
-  WorktreeRegistryUnavailableError,
 } from "./index";
 import {
   PostCreateFailedError,
@@ -31,9 +30,6 @@ let store: Map<string, WorktreeRow>;
 beforeEach(() => {
   tmp = mkdtempSync(path.join(tmpdir(), "jigs-worktrees-test-"));
   store = new Map();
-  // An ambient dev-database URL would otherwise make this lane open a real
-  // connection and read the operator's registry.
-  vi.stubEnv("WORKFLOW_POSTGRES_URL", "");
   vi.stubEnv("JIGS_FACTORY_ROOT", tmp);
   vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
   writeFileSync(path.join(tmp, "jigs.yml"), "bindings: {}\n");
@@ -284,12 +280,6 @@ test("a provisioned worktree logs its binding, branch, and path", async () => {
   expect(lines).toContain(
     `[worktree] provisioned binding=api branch=feat path=${target}`,
   );
-});
-
-test("an unconfigured registry is refused before any disk work", async () => {
-  await expect(
-    provisionRunWorktree(request, "run_a", { resolveBinding: () => binding }),
-  ).rejects.toThrow(WorktreeRegistryUnavailableError);
 });
 
 test("the teardownRunWorktrees alias refuses an unmerged outcome instead of deleting branches", () => {

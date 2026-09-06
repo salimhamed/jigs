@@ -9,14 +9,17 @@ import {
   scheduleTriggerId,
   type WorldRun,
 } from "./runs";
+import * as stalls from "./stalls";
+import * as sql from "./worktrees/sql";
 
 const RUN_A = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 const RUN_B = "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ";
 
-// An ambient dev-database URL would otherwise make the dead-job read here open
-// a real connection to the operator's own World.
+// The dead-job read would otherwise open a real connection to the operator's
+// own World.
 beforeEach(() => {
-  vi.stubEnv("WORKFLOW_POSTGRES_URL", "");
+  vi.spyOn(sql, "registrySql").mockReturnValue({} as never);
+  vi.spyOn(stalls, "listJobRunIds").mockResolvedValue({ dead: [], live: [] });
 });
 
 const lookupDeps = (runIds: string[], hooks: Record<string, string> = {}) => ({

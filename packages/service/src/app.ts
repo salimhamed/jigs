@@ -130,16 +130,6 @@ export function createApp(
   app.post("/api/worktrees/sweep", async (c) => {
     type SweepBody = { clean?: boolean; force?: boolean; paths?: string[] };
     const body = await c.req.json<SweepBody>().catch(() => ({}) as SweepBody);
-    const sql = registrySql();
-    if (sql === null) {
-      return c.json(
-        {
-          error:
-            "worktree registry unavailable: WORKFLOW_POSTGRES_URL is not configured",
-        },
-        503,
-      );
-    }
     return c.json(
       await sweepWorktrees(
         {
@@ -149,7 +139,7 @@ export function createApp(
             ? { paths: body.paths.filter((p) => typeof p === "string") }
             : {}),
         },
-        { sql },
+        { sql: registrySql() },
       ),
     );
   });
@@ -257,14 +247,11 @@ export function createApp(
   // status, plus the worktrees as the sweep classifier sees them — the one
   // deriver of worktree state, so ps and sweep can never disagree.
   app.get("/api/runs", async (c) => {
-    const sql = registrySql();
     const [runs, worktrees] = await Promise.all([
       listRuns(factory),
-      sql === null
-        ? []
-        : sweepWorktrees({ clean: false }, { sql }).then(
-            (report) => report.entries,
-          ),
+      sweepWorktrees({ clean: false }, { sql: registrySql() }).then(
+        (report) => report.entries,
+      ),
     ]);
     // The schedules ride along on the same run listing the table above
     // renders, so ps stays one round trip and the two tables can never
@@ -294,11 +281,9 @@ export function createApp(
     await run.cancel();
     // Cancel never cleans up: name what stays so the operator knows where the
     // worktree is and that `jigs sweep` is the way to reclaim it.
-    const sql = registrySql();
-    const worktrees =
-      sql === null
-        ? []
-        : (await listWorktreesForRun(sql, ref.runId)).map((row) => row.path);
+    const worktrees = (await listWorktreesForRun(registrySql(), ref.runId)).map(
+      (row) => row.path,
+    );
     // A merged run's pipeline tears its own worktree down; everything else —
     // cancel included — leaves the tree on disk for the operator's `jigs
     // sweep`. A cancelled run's dirty tree is exactly the wreckage the sweep
@@ -318,10 +303,9 @@ export function createApp(
   app.get("/api/runs/:runId/steps", async (c) => {
     const ref = await resolveRunRef(c.req.param("runId"));
     if (ref.kind !== "found") return refError(c, ref);
-    const sql = registrySql();
     const [steps, deadJobs] = await Promise.all([
       listRunSteps(ref.runId),
-      sql === null ? [] : listRunDeadJobs(sql, ref.runId),
+      listRunDeadJobs(registrySql(), ref.runId),
     ]);
     return c.json({ steps, deadJobs });
   });

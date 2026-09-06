@@ -2,7 +2,7 @@ import type { BindingClone } from "jigs";
 import type { ISql } from "postgres";
 
 export interface RegistryGateDeps {
-  sql?: () => ISql | null;
+  sql?: () => ISql;
   ensure?: (sql: ISql) => Promise<void>;
   exit?: (code: number) => void;
   log?: (line: string) => void;
@@ -18,16 +18,12 @@ export async function gateOnWorktreeRegistry(
 ): Promise<boolean> {
   const log = deps.log ?? ((line: string) => console.log(line));
   try {
-    // Opening the connection belongs inside the try: a malformed
-    // WORKFLOW_POSTGRES_URL makes postgres() throw synchronously, and that
-    // escape is the very thing this gate exists to stop.
+    // Opening the connection belongs inside the try: a missing or malformed
+    // WORKFLOW_POSTGRES_URL throws synchronously, and that escape is the very
+    // thing this gate exists to stop.
     const resolveSql =
       deps.sql ?? (await import("../worktrees/sql")).registrySql;
     const sql = resolveSql();
-    if (sql === null) {
-      log("[service] worktree registry skipped: WORKFLOW_POSTGRES_URL unset");
-      return true;
-    }
     const ensure =
       deps.ensure ??
       (await import("../worktrees/registry")).ensureWorktreeRegistry;

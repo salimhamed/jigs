@@ -187,9 +187,11 @@ refuses to create a run when a requirement is unmet, reporting every failure
 with its repair. `jigs doctor` runs the same checks without a launch.
 
 The service must run against the Postgres World
-(`WORKFLOW_TARGET_WORLD=@workflow/world-postgres`, as `.env.example` sets): at
-`workflow@4.8.4` the filesystem World fails to start from a production bundle
-(`Invalid version string: "bundled"`).
+(`WORKFLOW_TARGET_WORLD=@workflow/world-postgres`, as `.env.example` sets), and
+refuses to start when `WORKFLOW_POSTGRES_URL` is unset: the worktree registry
+lives in that database, so there is no registry-less mode. (At `workflow@4.8.4`
+the filesystem World would not start from a production bundle anyway:
+`Invalid version string: "bundled"`.)
 
 ### 3. Build and start
 

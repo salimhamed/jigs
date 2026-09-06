@@ -18,6 +18,7 @@ import { createApp } from "./app";
 import { type Factory, ticketInput } from "./factory";
 import * as stalls from "./stalls";
 import * as sql from "./worktrees/sql";
+import { makeFakeSql } from "./worktrees/test-fixtures";
 
 // The routes are exercised against pipelines this file declares: what is under
 // test is the framework.
@@ -71,9 +72,11 @@ afterAll(() => {
 
 beforeEach(() => {
   vi.unstubAllEnvs();
-  // An ambient dev-database URL would otherwise make this lane open a real
-  // connection and read the operator's registry.
-  vi.stubEnv("WORKFLOW_POSTGRES_URL", "");
+  // The registry is a hard dependency now, so every route that reads it is
+  // pointed at an empty in-memory one rather than the operator's database.
+  vi.spyOn(sql, "registrySql").mockReturnValue(makeFakeSql(new Map()));
+  vi.spyOn(stalls, "listJobRunIds").mockResolvedValue({ dead: [], live: [] });
+  vi.spyOn(stalls, "listRunDeadJobs").mockResolvedValue([]);
   vi.stubEnv("WORKFLOW_LOCAL_DATA_DIR", dataDir);
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "gh-hook-secret");
   vi.stubEnv("LINEAR_WEBHOOK_SECRET", "linear-hook-secret");
@@ -397,7 +400,6 @@ test("health outside a factory reports a null root rather than failing liveness"
 });
 
 test("GET /api/runs answers with empty runs and worktrees when nothing has launched", async () => {
-  vi.stubEnv("WORKFLOW_POSTGRES_URL", "");
   const res = await app.request("/api/runs");
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({
@@ -430,8 +432,6 @@ test("GET /api/runs/:ref/steps answers with the run's steps and its dead jobs", 
   const res = await app.request(`/api/runs/${RUN}/steps`);
 
   expect(res.status).toBe(200);
-  // No World Postgres in this lane, so the queue half is empty rather than a
-  // 503: the steps are still the answer to what the run did.
   expect(await res.json()).toEqual({
     steps: [
       {
@@ -464,7 +464,6 @@ test("GET /api/runs/:ref reports a stalled run as stalled, like `jigs ps` does",
     dead: [RUN],
     live: [],
   });
-  vi.spyOn(sql, "registrySql").mockReturnValue({} as never);
 
   const res = await app.request(`/api/runs/${RUN}`);
 
@@ -504,15 +503,16 @@ test("a factory with no schedules answers an empty listing", async () => {
   expect(await res.json()).toEqual([]);
 });
 
-test("POST /api/worktrees/sweep answers 503 when the worktree registry is unconfigured", async () => {
+test("POST /api/worktrees/sweep answers an empty report when the registry holds nothing", async () => {
   const res = await app.request("/api/worktrees/sweep", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ clean: false, force: false }),
   });
-  expect(res.status).toBe(503);
+  expect(res.status).toBe(200);
   expect(await res.json()).toEqual({
-    error:
-      "worktree registry unavailable: WORKFLOW_POSTGRES_URL is not configured",
+    entries: [],
+    removed: [],
+    removedDirs: [],
   });
 });

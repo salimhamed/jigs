@@ -34,15 +34,6 @@ export interface WorktreeRequest {
   keep?: boolean;
 }
 
-export class WorktreeRegistryUnavailableError extends Error {
-  constructor() {
-    super(
-      "worktree registry unavailable: WORKFLOW_POSTGRES_URL is not configured",
-    );
-    this.name = "WorktreeRegistryUnavailableError";
-  }
-}
-
 export interface ProvisionRunWorktreeDeps {
   sql?: Sql;
   resolveBinding?: (name: string) => Binding;
@@ -64,7 +55,6 @@ export async function provisionRunWorktree(
   deps: ProvisionRunWorktreeDeps = {},
 ): Promise<WorktreeFacts> {
   const sql = deps.sql ?? registrySql();
-  if (sql === null) throw new WorktreeRegistryUnavailableError();
   const resolve =
     deps.resolveBinding ??
     ((name: string) => resolveBinding(factoryRoot(), name));
@@ -156,10 +146,8 @@ export async function provisionRunWorktree(
 // The per-run teardown, called by the pipeline after a merged reviewLoop
 // return. The operator's `jigs sweep` is the net for runs that never get
 // there.
-export async function teardownMergedRun(runId: string): Promise<string[]> {
-  const sql = registrySql();
-  if (sql === null) return [];
-  return teardownMerged(runId, { sql });
+export function teardownMergedRun(runId: string): Promise<string[]> {
+  return teardownMerged(runId, { sql: registrySql() });
 }
 
 // The name the factories' steps/jigs.ts wrappers still import. The review

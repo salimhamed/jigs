@@ -196,10 +196,7 @@ export async function listRuns(
 
 const worldRunExists = (runId: string) => getRun(runId).exists;
 
-async function worldJobRunIds(): Promise<JobRunIds> {
-  const sql = registrySql();
-  return sql === null ? { dead: [], live: [] } : await listJobRunIds(sql);
-}
+const worldJobRunIds = (): Promise<JobRunIds> => listJobRunIds(registrySql());
 
 const worldHookRunId = (token: string) =>
   getHookByToken(token).then(
