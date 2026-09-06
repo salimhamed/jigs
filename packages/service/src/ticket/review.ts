@@ -64,11 +64,6 @@ export async function ticketReview(
   const review = await deps.agent({
     harness: options.harness,
     cwd: options.cwd,
-    // The reviewer's prompt asks it to inspect the checkout, and Bash is not
-    // auto-approved below this mode — headless runs hang or degrade silently
-    // without it, exactly as the implement/review loop documents. The codex
-    // driver auto-approves at the executor regardless; this steers claude.
-    permissionMode: "bypassPermissions",
     prompt,
     output: ticketReviewVerdict,
   });

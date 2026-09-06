@@ -88,7 +88,6 @@ export async function answerAsBuilder(
       return await deps.agent({
         harness: options.harness,
         cwd: options.cwd,
-        permissionMode: "bypassPermissions",
         resume: options.session,
         prompt: interpolate(answerReviewPrompt, { THREADS: threads }),
         output: threadAnswers,
@@ -107,7 +106,6 @@ export async function answerAsBuilder(
   return deps.agent({
     harness: options.harness,
     cwd: options.cwd,
-    permissionMode: "bypassPermissions",
     prompt: interpolate(rebuildContextPrompt, {
       TICKET: renderSnapshot(options.handoff.snapshot),
       BRIEF: options.handoff.brief,

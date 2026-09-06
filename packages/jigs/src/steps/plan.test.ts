@@ -61,7 +61,6 @@ test("every builder wire survives structuredClone — builders never inject live
     }),
     cwd: "/work/tree",
     prompt: "implement it",
-    permissionMode: "bypassPermissions",
     output: verdict,
   });
   expect(structuredClone(agentWire)).toEqual(agentWire);

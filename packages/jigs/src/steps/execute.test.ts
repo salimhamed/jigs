@@ -1,10 +1,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type {
-  ClaudeCodeSettings,
-  PermissionMode,
-} from "ai-sdk-provider-claude-code";
+import type { ClaudeCodeSettings } from "ai-sdk-provider-claude-code";
 import type {
   CodexAppServerProvider,
   CodexAppServerSettings,
@@ -122,7 +119,6 @@ test("claude agent step hydrates from wire config with the harness invariants fo
     }),
     cwd: worktree,
     prompt: "implement it",
-    permissionMode: "bypassPermissions" as PermissionMode,
   });
   const { deps, captured } = makeDeps();
 
@@ -132,7 +128,6 @@ test("claude agent step hydrates from wire config with the harness invariants fo
   expect(settings.cwd).toBe(worktree);
   expect(settings.strictMcpConfig).toBe(true);
   expect(settings.settingSources).toEqual(["project"]);
-  expect(settings.permissionMode).toBe("bypassPermissions");
   expect(settings.mcpServers).toEqual({
     probe: { type: "stdio", command: "node", args: ["p.mjs"], env: { T: "1" } },
     remote: { type: "http", url: "https://mcp.example", headers: { a: "b" } },
@@ -280,29 +275,19 @@ test("a session pointer recorded on the other harness is ignored, not refused", 
   expect(captured.options?.providerOptions).toBeUndefined();
 });
 
-test("bypassPermissions pairs the provider's allowDangerouslySkipPermissions gate", async () => {
-  const bypass = buildAgentWire({
-    harness: claude({ model: "sonnet" }),
-    cwd: worktree,
-    prompt: "commit it",
-    permissionMode: "bypassPermissions" as PermissionMode,
-  });
-  const bypassed = makeDeps();
-  await runAgent(bypass, "run-1", bypassed.deps);
-  expect(
-    claudeSettingsOf(bypassed.captured).allowDangerouslySkipPermissions,
-  ).toBe(true);
-
-  const plain = buildAgentWire({
+test("Claude steps always run with bypass", async () => {
+  const wire = buildAgentWire({
     harness: claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "judge it",
   });
-  const unbypassed = makeDeps();
-  await runAgent(plain, "run-1", unbypassed.deps);
-  expect(
-    claudeSettingsOf(unbypassed.captured).allowDangerouslySkipPermissions,
-  ).toBeUndefined();
+  const { deps, captured } = makeDeps();
+
+  await runAgent(wire, "run-1", deps);
+
+  const settings = claudeSettingsOf(captured);
+  expect(settings.permissionMode).toBe("bypassPermissions");
+  expect(settings.allowDangerouslySkipPermissions).toBe(true);
 });
 
 test("a failed resume returns the resumeFailed marker instead of throwing", async () => {
