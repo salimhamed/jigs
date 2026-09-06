@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.19](https://github.com/salimhamed/jigs/compare/jigs-v0.1.18...jigs-v0.1.19) (2026-09-06)
+
+
+### Features
+
+* **jigs:** init scaffolds the factory code and e2e builds the scaffold ([#95](https://github.com/salimhamed/jigs/issues/95)) ([a8f1e1b](https://github.com/salimhamed/jigs/commit/a8f1e1b7d835c2a736a2c8d6c3161e45b0ab2d65))
+
 ## [0.1.18](https://github.com/salimhamed/jigs/compare/jigs-v0.1.17...jigs-v0.1.18) (2026-09-06)
 
 
