@@ -1,3 +1,6 @@
+import { factoryRoot } from "../config/factory-root.ts";
+import { getAuthenticatedUser } from "../providers/github.ts";
+import { getViewer } from "../providers/linear.ts";
 import type { AgentWire } from "../steps/plan.ts";
 import { awsCredentialsCheck } from "./aws.ts";
 import { bindingChecks } from "./bindings.ts";
@@ -42,38 +45,31 @@ export interface PipelineRequires {
   aws?: true;
 }
 
-export interface PreflightChecksOptions {
-  factoryRoot: () => string;
-  requires: PipelineRequires;
-  probes: CoreProbes;
-}
+// The real provider clients, so a caller of the catalog states only its own
+// requirements. Substituting a probe stays a seam on coreChecks itself.
+const coreProbes: CoreProbes = {
+  linearViewer: getViewer,
+  githubWhoami: getAuthenticatedUser,
+};
 
-export function preflightChecks(options: PreflightChecksOptions): Check[] {
+export function preflightChecks(requires: PipelineRequires): Check[] {
   return [
-    ...coreChecks(options.probes),
-    ...bindingChecks({
-      factoryRoot: options.factoryRoot,
-      names: options.requires.bindings ?? [],
-    }),
-    ...harnessChecks(options.requires.harnesses ?? []),
-    ...(options.requires.aws ? [awsCredentialsCheck()] : []),
+    ...coreChecks(coreProbes),
+    ...bindingChecks({ factoryRoot, names: requires.bindings ?? [] }),
+    ...harnessChecks(requires.harnesses ?? []),
+    ...(requires.aws ? [awsCredentialsCheck()] : []),
   ];
-}
-
-export interface DoctorChecksOptions {
-  factoryRoot: () => string;
-  probes: CoreProbes;
 }
 
 // No pipeline, so no manifest: doctor takes every declared binding and both
 // harnesses. MCP is absent on purpose — it is JIT-only (ADR 0011). AWS is
 // conditional for the same reason: with no manifest to read, a set
 // AWS_PROFILE is the only evidence this factory uses AWS at all.
-export function doctorChecks(options: DoctorChecksOptions): Check[] {
+export function doctorChecks(): Check[] {
   const profile = process.env.AWS_PROFILE;
   return [
-    ...coreChecks(options.probes),
-    ...bindingChecks({ factoryRoot: options.factoryRoot }),
+    ...coreChecks(coreProbes),
+    ...bindingChecks({ factoryRoot }),
     ...harnessChecks(["claude", "codex"]),
     ...(profile !== undefined && profile !== "" ? [awsCredentialsCheck()] : []),
   ];

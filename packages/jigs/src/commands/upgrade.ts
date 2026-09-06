@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { locateFactoryRoot } from "../config/locate-factory.ts";
+import { locateFactoryRoot } from "../config/factory-root.ts";
 import { CliError } from "../errors.ts";
 import {
   type ExecFile,

@@ -82,7 +82,7 @@ export async function gateOnBindingClones(
     if (deps.bindings !== undefined) {
       declared = deps.bindings();
     } else {
-      const { factoryRoot } = await import("../preflight.ts");
+      const { factoryRoot } = await import("../config/factory-root.ts");
       declared = jigs.bindingClones(factoryRoot());
     }
   } catch (err) {

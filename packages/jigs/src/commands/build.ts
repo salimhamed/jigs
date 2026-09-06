@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { locateFactoryRoot } from "../config/locate-factory.ts";
+import { locateFactoryRoot } from "../config/factory-root.ts";
 import { CliError } from "../errors.ts";
 import {
   type ExecFile,
@@ -113,8 +113,8 @@ async function warnAboutRunsInFlight(
  * The generated entry comes from the factory's own @salimhamed/jigs, reached
  * through two deliberate indirections:
  *
- * - dynamically, because `dist/cli.js` is a bundled artifact and a static
- *   import would pull nitro and the whole build framework into the CLI;
+ * - dynamically, because `dist/cli.js` is a bundled artifact: a static import
+ *   would inline this repo's copy of `prepare` into the CLI;
  * - resolved from the factory root, so the copy of the SDK that compiles the
  *   pipelines is the copy the built service will run.
  */

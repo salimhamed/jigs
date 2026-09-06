@@ -4,9 +4,9 @@
 // inside a step body — hence its errors thrown workflow-side live in ./loop.
 
 import { resolveBinding } from "../config/factory-config.ts";
+import { factoryRoot } from "../config/factory-root.ts";
 import { commitsAhead, diffSince, headSha, pushBranch } from "../git.ts";
 import { type GithubRepoRef, parseGithubRemote } from "../github-webhook.ts";
-import { factoryRoot } from "../preflight.ts";
 import {
   createPullRequest,
   fetchPrTitle,

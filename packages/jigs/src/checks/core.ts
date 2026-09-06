@@ -7,9 +7,8 @@ import type { Check, CheckResult } from "./catalog.ts";
 export const SERVICE_ENV_FILE = "the factory repo's .env";
 export const RESTART_SERVICE = "jigs service restart";
 
-// The probes live in the service (they are its provider clients); the
-// catalog owns the repair text, which is what makes preflight and doctor
-// say the same thing.
+// A probe is a provider client; the catalog owns the repair text, which is
+// what makes preflight and doctor say the same thing.
 export interface CoreProbes {
   linearViewer(): Promise<unknown>;
   githubWhoami(): Promise<unknown>;

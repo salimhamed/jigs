@@ -2,7 +2,7 @@ import {
   parseFactoryConfig,
   readFactoryConfigText,
 } from "../config/factory-config.ts";
-import { locateFactoryRoot } from "../config/locate-factory.ts";
+import { locateFactoryRoot } from "../config/factory-root.ts";
 import { CliError } from "../errors.ts";
 import { deriveDefaultBranch, resolveRemoteUrl } from "../git.ts";
 import { hasBindingClone } from "../worktrees/clone.ts";

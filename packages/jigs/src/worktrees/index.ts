@@ -11,8 +11,8 @@
 
 import type { Sql } from "postgres";
 import { type Binding, resolveBinding } from "../config/factory-config.ts";
+import { factoryRoot } from "../config/factory-root.ts";
 import { CliError } from "../errors.ts";
-import { factoryRoot } from "../preflight.ts";
 import { hasBindingClone } from "./clone.ts";
 import { createWorktree, worktreeStatus } from "./create.ts";
 import type { WorktreeFacts } from "./facts.ts";

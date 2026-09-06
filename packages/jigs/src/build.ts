@@ -1,12 +1,12 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-// Paths only — the type import is erased, so requiring this module never
-// loads nitro.
-import {
-  GENERATED_DIR,
-  GENERATED_ENTRY_FILE,
-  GENERATED_SCHEDULES_FILE,
-} from "./nitro.ts";
+
+/** Where `prepare()` writes the generated sources, relative to the factory
+ *  root. `nitro.ts` imports them to point its route and plugin at the same
+ *  files. */
+export const GENERATED_DIR = ".jigs";
+export const GENERATED_ENTRY_FILE = "server.ts";
+export const GENERATED_SCHEDULES_FILE = "schedules.ts";
 
 // A real entry file, never a nitro alias: the workflow builder runs its own
 // discovery pass that does not honour nitro aliases, so an alias would build

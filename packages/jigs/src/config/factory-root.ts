@@ -17,3 +17,12 @@ export function locateFactoryRoot(cwd: string): string {
     dir = parent;
   }
 }
+
+// What the running service means by "the factory": the CLI passes an explicit
+// cwd, but the service is started by a supervisor from anywhere, so the
+// override is how it is told which factory it answers for.
+export function factoryRoot(): string {
+  const override = process.env.JIGS_FACTORY_ROOT;
+  if (override !== undefined && override !== "") return override;
+  return locateFactoryRoot(process.cwd());
+}

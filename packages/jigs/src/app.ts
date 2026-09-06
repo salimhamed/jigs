@@ -3,7 +3,8 @@ import { getHookByToken, getRun, resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
 import { getWorld } from "workflow/runtime";
 import { z } from "zod";
-import { failedChecks } from "./checks/index.ts";
+import { doctorChecks, failedChecks, runChecks } from "./checks/index.ts";
+import { factoryRoot } from "./config/factory-root.ts";
 import type { Factory } from "./factory.ts";
 import {
   githubWebhookSecret,
@@ -11,7 +12,6 @@ import {
   verifyGithubSignature,
   verifyLinearSignature,
 } from "./ingress.ts";
-import { doctor, factoryRoot } from "./preflight.ts";
 import { bootPhase, isReady } from "./readiness.ts";
 import {
   derivedRunStatus,
@@ -126,7 +126,7 @@ export function createApp(
   // The same catalog engine as preflight, without a pipeline or a launch. A
   // red report is still a report, so it answers 200.
   app.get("/api/doctor", async (c) =>
-    c.json(await doctor(scheduleChecks(factory))),
+    c.json(await runChecks([...doctorChecks(), ...scheduleChecks(factory)])),
   );
 
   // `jigs sweep` is an HTTP client of this route (ADR 0008). `paths` scopes a
