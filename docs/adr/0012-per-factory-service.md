@@ -98,7 +98,10 @@ it.
   asserts that no compiled source in the package carries a directive at all
   (`templates/` was exempt as the thing that scaffolded the wrappers into the
   factory; *amended by AGE-336*: it holds infrastructure only and no TypeScript
-  at all, so the guard scans `src/` and `plugins/` and needs no exemption). The
+  at all, so the guard scans `src/` and `plugins/` and needs no exemption;
+  *amended again*: the templates now live in the `jigs` package and ship with
+  the CLI that scaffolds from them, so `jigs init` no longer needs a checkout
+  to find them and the service package carries none). The
   pin guard went with the pin ([ADR 0013](./0013-factory-owned-steps.md)).
 - **Nothing routes through the `.` export.** `src/factory.ts` is types only,
   deliberately: re-exporting a step module through `.` would change that

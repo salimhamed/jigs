@@ -1,0 +1,12 @@
+# pnpm 11 no longer reads the `pnpm` field in package.json, so the native
+# postinstalls are allowed here or not at all. Without them the workflow
+# compiler has no swc or esbuild binary and silently compiles nothing.
+allowBuilds:
+  '@swc/core': true
+  cbor-extract: true
+  esbuild: true
+# The jigs packages peer on the SDK, the World, the dashboard and zod at the
+# versions listed in package.json. A second copy of any of them is silent —
+# step ids nothing registers, schema types that do not unify — so a mismatch
+# fails the install instead of warning.
+strictPeerDependencies: true

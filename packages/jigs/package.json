@@ -39,7 +39,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "templates"
   ],
   "scripts": {
     "dev": "node src/cli.ts",

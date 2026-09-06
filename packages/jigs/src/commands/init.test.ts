@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vitest";
+import { packageRoot } from "../config/templates.ts";
 import { initFactory } from "./init.ts";
 
 const scaffold = (name: string) => {
@@ -27,6 +28,7 @@ test("scaffolds a factory that can be installed and built", async () => {
   expect(created.sort()).toEqual([
     ".env.example",
     ".gitignore",
+    ".npmrc",
     "docker-compose.yml",
     "jigs.yml",
     "nitro.config.ts",
@@ -37,11 +39,33 @@ test("scaffolds a factory that can be installed and built", async () => {
   // Spike finding 6: hono resolves as an external otherwise.
   const pkg = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8"));
   expect(pkg.dependencies.hono).toBeDefined();
-  expect(pkg.dependencies["@jigs/service"]).toMatch(/packages\/service$/);
-  // Spike finding 5: pnpm 11 reads allowBuilds only from pnpm-workspace.yaml.
-  expect(readFileSync(path.join(dir, "pnpm-workspace.yaml"), "utf8")).toContain(
-    "@swc/core",
+  // Until the packages publish, the factory links the checkout that built the
+  // CLI scaffolding it — wherever that checkout is.
+  const checkout = path.resolve(packageRoot(), "..", "..");
+  expect(pkg.dependencies["@jigs/service"]).toBe(
+    `link:${checkout}/packages/service`,
   );
+  expect(pkg.dependencies.jigs).toBe(`link:${checkout}/packages/jigs`);
+  // Spike finding 5: pnpm 11 reads allowBuilds only from pnpm-workspace.yaml.
+  const workspace = readFileSync(path.join(dir, "pnpm-workspace.yaml"), "utf8");
+  expect(workspace).toContain("@swc/core");
+  // A second copy of the SDK or the World fails the install, not the run.
+  expect(workspace).toContain("strictPeerDependencies: true");
+  // The scope→registry line only: the token stays in ~/.npmrc.
+  const npmrc = readFileSync(path.join(dir, ".npmrc"), "utf8");
+  expect(npmrc).toContain("@salimhamed:registry=https://npm.pkg.github.com");
+  expect(npmrc).not.toMatch(/^\s*[^#\n]*_authToken/m);
+});
+
+test("every placeholder a template carries is filled in", async () => {
+  const dir = scaffold("zeta");
+  const { created } = await init(dir);
+
+  for (const file of created) {
+    expect(readFileSync(path.join(dir, file), "utf8"), file).not.toMatch(
+      /\{\{\s*[A-Za-z_][A-Za-z0-9_]*\s*\}\}/,
+    );
+  }
 });
 
 test("the tsconfig compiles the code this factory will write", async () => {
