@@ -1,10 +1,9 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-// Where `prepare()` writes the generated sources, relative to the factory
-// root. They live with the writer rather than with the Nitro config that
-// serves them, so the file a reader opens to see what is generated is also
-// the file that says where it lands.
+/** Where `prepare()` writes the generated sources, relative to the factory
+ *  root. `nitro.ts` imports them to point its route and plugin at the same
+ *  files. */
 export const GENERATED_DIR = ".jigs";
 export const GENERATED_ENTRY_FILE = "server.ts";
 export const GENERATED_SCHEDULES_FILE = "schedules.ts";
