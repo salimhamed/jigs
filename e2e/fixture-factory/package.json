@@ -7,10 +7,12 @@
   },
   "dependencies": {
     "@jigs/service": "link:../../packages/service",
+    "@openrouter/ai-sdk-provider": "3.0.0",
     "@slack/socket-mode": "3.0.1",
     "@slack/web-api": "8.1.1",
     "@workflow/web": "4.1.20",
     "@workflow/world-postgres": "4.3.4",
+    "ai": "^7.0.79",
     "croner": "10.0.1",
     "hono": "^4.13.4",
     "jigs": "link:../../packages/jigs",

@@ -12,7 +12,7 @@ test("the plugins this package ships resolve to files that exist", () => {
   const shipped = (defineJigsService().plugins ?? []).filter((plugin) =>
     path.isAbsolute(plugin as string),
   );
-  expect(shipped).toHaveLength(3);
+  expect(shipped).toHaveLength(2);
   for (const plugin of shipped) {
     expect(existsSync(plugin as string)).toBe(true);
   }
@@ -26,11 +26,16 @@ test("the dashboard is started after the world it reads, and Slack after both", 
   const plugins = defineJigsService().plugins ?? [];
   expect(plugins[0]).toContain("start-world");
   expect(plugins[1]).toContain("start-dashboard");
-  expect(plugins[2]).toContain("start-slack");
+  expect(plugins[2]).toBe("./.jigs/slack.ts");
 });
 
-test("the schedules plugin is the factory's own, and comes last", () => {
-  // It imports the factory's compiled pipelines, so it is generated into the
+test("the generated plugins are the factory's own, and come last", () => {
+  // Both import the factory's compiled pipelines — the ticker to fire them,
+  // the Slack agent to answer about them — so both are generated into the
   // factory tree rather than shipped from here.
-  expect(defineJigsService().plugins?.[3]).toBe("./.jigs/schedules.ts");
+  const plugins = defineJigsService().plugins ?? [];
+  expect(plugins.slice(2)).toEqual([
+    "./.jigs/slack.ts",
+    "./.jigs/schedules.ts",
+  ]);
 });

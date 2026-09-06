@@ -19,10 +19,12 @@
     "undici": "^7.28.0"
   },
   "peerDependencies": {
+    "@openrouter/ai-sdk-provider": "3.0.0",
     "@slack/socket-mode": "3.0.1",
     "@slack/web-api": "8.1.1",
     "@workflow/web": "4.1.20",
     "@workflow/world-postgres": "4.3.4",
+    "ai": "^7.0.79",
     "croner": "10.0.1",
     "hono": "^4.13.4",
     "postgres": "^3.4.7",
@@ -30,10 +32,12 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@openrouter/ai-sdk-provider": "3.0.0",
     "@slack/socket-mode": "3.0.1",
     "@slack/web-api": "8.1.1",
     "@workflow/web": "4.1.20",
     "@workflow/world-postgres": "4.3.4",
+    "ai": "^7.0.79",
     "croner": "10.0.1",
     "hono": "^4.13.4",
     "nitro": "3.0.260610-beta",

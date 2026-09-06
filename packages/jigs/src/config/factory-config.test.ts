@@ -240,18 +240,20 @@ test("resolveService derives the service address and the slug", () => {
 const SLACK = `slack:
   channel: C0123ABCDEF
   allowed_users: [U0123ABCDEF, W0456GHIJKL]
+  model: anthropic/claude-sonnet-4.5
 `;
 
 const RESOLVED = {
   channel: "C0123ABCDEF",
   allowed_users: ["U0123ABCDEF", "W0456GHIJKL"],
+  model: "anthropic/claude-sonnet-4.5",
 };
 
 test("a factory declaring no slack block reads as Slack switched off", () => {
   expect(parseFactoryConfig(SERVICE).slack).toBeUndefined();
 });
 
-test("the slack block parses to its channel and its allowlist", () => {
+test("the slack block parses to its channel, its allowlist and its model", () => {
   expect(parseFactoryConfig(`${SERVICE}${SLACK}`).slack).toEqual(RESOLVED);
 });
 
@@ -259,6 +261,7 @@ test("a slack block with an empty allowlist refuses to parse", () => {
   const text = `${SERVICE}slack:
   channel: C0123ABCDEF
   allowed_users: []
+  model: anthropic/claude-sonnet-4.5
 `;
   expect(() => parseFactoryConfig(text)).toThrow(/slack\.allowed_users/);
 });
@@ -266,6 +269,7 @@ test("a slack block with an empty allowlist refuses to parse", () => {
 test("a slack block missing its channel refuses to parse, naming the field", () => {
   const text = `${SERVICE}slack:
   allowed_users: [U0123ABCDEF]
+  model: anthropic/claude-sonnet-4.5
 `;
   expect(() => parseFactoryConfig(text)).toThrow(/slack\.channel/);
 });
@@ -278,6 +282,7 @@ test("a channel written as a name rather than an id refuses to parse", () => {
     const text = `${SERVICE}slack:
   channel: "${channel}"
   allowed_users: [U0123ABCDEF]
+  model: anthropic/claude-sonnet-4.5
 `;
     expect(() => parseFactoryConfig(text)).toThrow(/slack\.channel/);
   }
@@ -288,9 +293,18 @@ test("an allowlist entry written as a handle rather than an id refuses to parse"
     const text = `${SERVICE}slack:
   channel: C0123ABCDEF
   allowed_users: ["${user}"]
+  model: anthropic/claude-sonnet-4.5
 `;
     expect(() => parseFactoryConfig(text)).toThrow(/slack\.allowed_users\.0/);
   }
+});
+
+test("a slack block missing its model refuses to parse — nothing answers a thread without one", () => {
+  const text = `${SERVICE}slack:
+  channel: C0123ABCDEF
+  allowed_users: [U0123ABCDEF]
+`;
+  expect(() => parseFactoryConfig(text)).toThrow(/slack\.model/);
 });
 
 test("the slack block rejects an unknown key naming it", () => {

@@ -1,8 +1,7 @@
 import { type Context, Hono } from "hono";
 import { failedChecks } from "jigs/checks";
-import { getHookByToken, getRun, resumeHook } from "workflow/api";
+import { resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
-import { getWorld } from "workflow/runtime";
 import { z } from "zod";
 import type { Factory } from "./factory";
 import {
@@ -14,27 +13,20 @@ import {
 } from "./ingress";
 import { doctor, factoryRoot } from "./preflight";
 import {
-  derivedRunStatus,
-  isParkToken,
-  listRuns,
-  type RunRef,
-  resolveRunRef,
-  stalledRuns,
-  TERMINAL_RUN_STATUSES,
-} from "./runs";
+  cancelRun,
+  logsPointer,
+  pokeRun,
+  runDetail,
+  runTimeline,
+} from "./run-actions";
+import { listRuns, type RunRef, resolveRunRef } from "./runs";
 import { listSchedules, scheduleChecks } from "./schedules";
 import { slackChecks } from "./slack/checks";
-import { listRunDeadJobs, listRunSteps } from "./stalls";
-import {
-  readSuspensionMetadata,
-  type SuspensionRecord,
-} from "./suspension/record";
 import {
   tokenFromGithubPayload,
   tokenFromLinearPayload,
 } from "./suspension/tokens";
 import { startRun } from "./trigger";
-import { listWorktreesForRun } from "./worktrees/registry";
 import { registrySql } from "./worktrees/sql";
 import { sweepWorktrees } from "./worktrees/sweep";
 
@@ -236,22 +228,10 @@ export function createApp(
   app.post("/api/runs/:runId/poke", async (c) => {
     const ref = await resolveRunRef(c.req.param("runId"));
     if (ref.kind !== "found") return refError(c, ref);
-    const run = getRun(ref.runId);
-    const { records } = await listSuspensions(run.runId);
-    const tokens = [...new Set(records.map((s) => s.satisfiedBy))];
-    if (tokens.length === 0) {
-      return c.json({ error: "run has no suspensions to poke" }, 409);
-    }
-    const poked = await Promise.all(
-      tokens.map((token) =>
-        resumeHook(token, { source: "poke" } satisfies WakeHint).then(
-          () => ({ token, resumed: true }),
-          // A hook disposed between list and resume is a report, not an error.
-          () => ({ token, resumed: false }),
-        ),
-      ),
-    );
-    return c.json({ runId: run.runId, poked });
+    const result = await pokeRun(ref.runId);
+    return result.kind === "no-suspensions"
+      ? c.json({ error: "run has no suspensions to poke" }, 409)
+      : c.json({ runId: result.runId, poked: result.poked });
   });
 
   // Everything `jigs ps` renders: the SDK's runs overlaid with jigs' suspended
@@ -282,35 +262,21 @@ export function createApp(
   app.post("/api/runs/:runId/cancel", async (c) => {
     const ref = await resolveRunRef(c.req.param("runId"));
     if (ref.kind !== "found") return refError(c, ref);
-    const run = getRun(ref.runId);
-    const status = await run.status;
-    if (TERMINAL_RUN_STATUSES.has(status)) {
-      return c.json(
-        { error: `run ${ref.runId} is already ${status}`, status },
-        409,
-      );
-    }
-    const { records } = await listSuspensions(ref.runId);
-    const releasedTokens = [...new Set(records.map((s) => s.satisfiedBy))];
-    await run.cancel();
-    // Cancel never cleans up: name what stays so the operator knows where the
-    // worktree is and that `jigs sweep` is the way to reclaim it.
-    const sql = registrySql();
-    const worktrees =
-      sql === null
-        ? []
-        : (await listWorktreesForRun(sql, ref.runId)).map((row) => row.path);
-    // A merged run's pipeline tears its own worktree down; everything else —
-    // cancel included — leaves the tree on disk for the operator's `jigs
-    // sweep`. A cancelled run's dirty tree is exactly the wreckage the sweep
-    // exists to surface, and reuse already stops naming a cancelled run as an
-    // owner.
-    return c.json({
-      runId: ref.runId,
-      cancelled: true,
-      releasedTokens,
-      worktrees,
-    });
+    const result = await cancelRun(ref.runId);
+    return result.kind === "already-terminal"
+      ? c.json(
+          {
+            error: `run ${ref.runId} is already ${result.status}`,
+            status: result.status,
+          },
+          409,
+        )
+      : c.json({
+          runId: result.runId,
+          cancelled: true,
+          releasedTokens: result.releasedTokens,
+          worktrees: result.worktrees,
+        });
   });
 
   // What the run's own status cannot say: which steps ran, and whether a queue
@@ -319,47 +285,13 @@ export function createApp(
   app.get("/api/runs/:runId/steps", async (c) => {
     const ref = await resolveRunRef(c.req.param("runId"));
     if (ref.kind !== "found") return refError(c, ref);
-    const sql = registrySql();
-    const [steps, deadJobs] = await Promise.all([
-      listRunSteps(ref.runId),
-      sql === null ? [] : listRunDeadJobs(sql, ref.runId),
-    ]);
-    return c.json({ steps, deadJobs });
+    return c.json(await runTimeline(ref.runId));
   });
 
   app.get("/api/runs/:runId", async (c) => {
     const ref = await resolveRunRef(c.req.param("runId"));
     if (ref.kind !== "found") return refError(c, ref);
-    const run = getRun(ref.runId);
-    const status = await run.status;
-    const body: Record<string, unknown> = {
-      runId: run.runId,
-      status,
-      logs: logsPointer(run.runId),
-    };
-    if (status === "completed") body.returnValue = await run.returnValue;
-    if (status === "failed") {
-      body.error = await run.returnValue.then(
-        () => undefined,
-        (err: unknown) => String(err),
-      );
-    }
-    // The SDK has neither `suspended` nor `stalled`, so jigs derives both —
-    // through the same function `jigs ps` reads, or the two verbs disagree
-    // about the same run. A hook carrying no jigs metadata still parks the
-    // run; it just has no record to explain itself with, which is why
-    // `suspended` and `suspensions` are separate answers.
-    if (status === "running") {
-      const { tokens, records } = await listSuspensions(run.runId);
-      const parked = tokens.some(isParkToken);
-      body.suspensions = records;
-      body.suspended = parked;
-      body.status = derivedRunStatus(status, {
-        parked,
-        stalled: !parked && (await stalledRuns()).has(run.runId),
-      });
-    }
-    return c.json(body);
+    return c.json(await runDetail(ref.runId));
   });
 
   function unknownPipeline(name: string) {
@@ -389,17 +321,6 @@ function refError(
   return ref.kind === "ambiguous"
     ? c.json({ error: "ambiguous run ref", candidates: ref.candidates }, 409)
     : c.json({ error: "not found" }, 404);
-}
-
-// The run's page on the dashboard this service hosts. A service started
-// without a dashboard port has none to point at, and the answer is not to name
-// a standalone `workflow web`: run against a live World it opens a second queue
-// worker and steals the jobs this run is waiting on.
-function logsPointer(runId: string): string {
-  const port = process.env.JIGS_DASHBOARD_PORT;
-  return port === undefined || port === ""
-    ? "dashboard: not configured"
-    : `http://localhost:${port}/run/${runId}`;
 }
 
 // A signed but unparseable body is unroutable, like an unknown event type.
@@ -447,29 +368,4 @@ async function deliver(
     );
     return c.json({ delivered: false }, 404);
   }
-}
-
-// Raw tokens alongside the hydrated records: parkedness is a property of the
-// token, but only a record can say why, and both come from the one listing.
-async function listSuspensions(
-  runId: string,
-): Promise<{ tokens: string[]; records: SuspensionRecord[] }> {
-  const hooks = await getWorld().hooks.list({ runId });
-  // The world's list returns metadata still serialized (binary devalue);
-  // only getHookByToken hydrates it — hence the per-hook round trip. The
-  // rejection handler absorbs a hook disposed between list and get.
-  const hydrated = await Promise.all(
-    hooks.data.map((hook) =>
-      getHookByToken(hook.token).then(
-        (full) => readSuspensionMetadata(full.metadata),
-        () => null,
-      ),
-    ),
-  );
-  return {
-    tokens: hooks.data.map((hook) => hook.token),
-    records: hydrated.filter(
-      (record): record is SuspensionRecord => record !== null,
-    ),
-  };
 }

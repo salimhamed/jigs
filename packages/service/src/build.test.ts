@@ -32,6 +32,21 @@ test("the schedules plugin is generated beside the entry, holding the ticker", (
   expect(source).toContain("startSchedules(factory)");
 });
 
+test("the slack plugin is generated beside the entry, holding the factory", () => {
+  const root = factory();
+  prepare(root);
+
+  const source = readFileSync(
+    path.join(root, GENERATED_DIR, "slack.ts"),
+    "utf8",
+  );
+  // The agent's tools are built from this factory's pipelines, so its plugin
+  // has to live where the factory's own config can be imported.
+  expect(source).toContain('from "@jigs/service/plugins/start-slack"');
+  expect(source).toContain('from "../jigs.config.ts"');
+  expect(source).toContain("startSlack(factory)");
+});
+
 test("preparing twice restores a hand-edited entry", () => {
   const root = factory();
   const entry = prepare(root);
