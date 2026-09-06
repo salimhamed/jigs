@@ -22,6 +22,7 @@ import {
 import { sweepWorktrees } from "./commands/sweep.ts";
 import { unbindRepo } from "./commands/unbind.ts";
 import { upFactory } from "./commands/up.ts";
+import { upgradeFactory } from "./commands/upgrade.ts";
 import { CliError } from "./errors.ts";
 import { formatTable } from "./table.ts";
 
@@ -101,6 +102,27 @@ program
       // Every step has already printed its own FAIL line and repair, so the
       // exit code is the only thing left to say.
       const result = await upFactory(
+        { cwd: process.cwd(), out, confirm: makeConfirm() },
+        options,
+      );
+      if (!result.ok) process.exitCode = 1;
+    },
+  );
+
+program
+  .command("upgrade")
+  .description(
+    "move this factory to a newer jigs: bump both packages, then up, then the factory's typecheck",
+  )
+  .option(
+    "--to <version>",
+    "pin both packages to this version instead of the latest release",
+  )
+  .option("--force", "restart over in-flight runs without asking")
+  .option("--no-doctor", "skip the doctor pass once the service is up")
+  .action(
+    async (options: { to?: string; force?: boolean; doctor: boolean }) => {
+      const result = await upgradeFactory(
         { cwd: process.cwd(), out, confirm: makeConfirm() },
         options,
       );
