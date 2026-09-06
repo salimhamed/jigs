@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import type { OwnerState } from "./acquire";
+import type { OwnerState } from "./owner";
 import type { WorktreeRow } from "./registry";
 import { classifySweep, type SweepInput, sweepWorktrees } from "./sweep";
 import { git, makeClonedBinding, makeFakeSql } from "./test-fixtures";
