@@ -23,6 +23,7 @@ import {
   TERMINAL_RUN_STATUSES,
 } from "./runs";
 import { listSchedules, scheduleChecks } from "./schedules";
+import { slackChecks } from "./slack/checks";
 import { listRunDeadJobs, listRunSteps } from "./stalls";
 import {
   readSuspensionMetadata,
@@ -122,7 +123,7 @@ export function createApp(
   // The same catalog engine as preflight, without a pipeline or a launch. A
   // red report is still a report, so it answers 200.
   app.get("/api/doctor", async (c) =>
-    c.json(await doctor(scheduleChecks(factory))),
+    c.json(await doctor([...scheduleChecks(factory), ...slackChecks()])),
   );
 
   // `jigs sweep` is an HTTP client of this route (ADR 0008). `paths` scopes a

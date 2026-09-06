@@ -6,6 +6,7 @@ import {
   removeBinding,
   resolveBinding,
   resolveService,
+  resolveSlack,
   upsertBinding,
 } from "./factory-config.ts";
 
@@ -233,5 +234,86 @@ test("resolveService derives the service address and the slug", () => {
     });
   } finally {
     removeTmpDir(tmp);
+  }
+});
+
+const SLACK = `slack:
+  channel: C0123ABCDEF
+  allowed_users: [U0123ABCDEF, W0456GHIJKL]
+`;
+
+const RESOLVED = {
+  channel: "C0123ABCDEF",
+  allowed_users: ["U0123ABCDEF", "W0456GHIJKL"],
+};
+
+test("a factory declaring no slack block reads as Slack switched off", () => {
+  expect(parseFactoryConfig(SERVICE).slack).toBeUndefined();
+});
+
+test("the slack block parses to its channel and its allowlist", () => {
+  expect(parseFactoryConfig(`${SERVICE}${SLACK}`).slack).toEqual(RESOLVED);
+});
+
+test("a slack block with an empty allowlist refuses to parse", () => {
+  const text = `${SERVICE}slack:
+  channel: C0123ABCDEF
+  allowed_users: []
+`;
+  expect(() => parseFactoryConfig(text)).toThrow(/slack\.allowed_users/);
+});
+
+test("a slack block missing its channel refuses to parse, naming the field", () => {
+  const text = `${SERVICE}slack:
+  allowed_users: [U0123ABCDEF]
+`;
+  expect(() => parseFactoryConfig(text)).toThrow(/slack\.channel/);
+});
+
+test("a channel written as a name rather than an id refuses to parse", () => {
+  // The mistake this exists for: `#runs` is what an operator reads off Slack,
+  // and it reaches the API as a channel_not_found long after the service
+  // started.
+  for (const channel of ["#runs", "runs", "X0123ABCDEF"]) {
+    const text = `${SERVICE}slack:
+  channel: "${channel}"
+  allowed_users: [U0123ABCDEF]
+`;
+    expect(() => parseFactoryConfig(text)).toThrow(/slack\.channel/);
+  }
+});
+
+test("an allowlist entry written as a handle rather than an id refuses to parse", () => {
+  for (const user of ["@salim", "salim", "B0123ABCDEF"]) {
+    const text = `${SERVICE}slack:
+  channel: C0123ABCDEF
+  allowed_users: ["${user}"]
+`;
+    expect(() => parseFactoryConfig(text)).toThrow(/slack\.allowed_users\.0/);
+  }
+});
+
+test("the slack block rejects an unknown key naming it", () => {
+  const text = `${SERVICE}${SLACK}  bot_token: xoxb-nope\n`;
+  expect(() => parseFactoryConfig(text)).toThrow(/bot_token/);
+});
+
+test("resolveSlack reads the block from a factory repo", () => {
+  const dir = makeTmpDir();
+  try {
+    expect(resolveSlack(makeFactoryRepo(dir, `${SERVICE}${SLACK}`))).toEqual(
+      RESOLVED,
+    );
+  } finally {
+    removeTmpDir(dir);
+  }
+});
+
+test("resolveSlack answers null for a factory with no slack block", () => {
+  const dir = makeTmpDir();
+  try {
+    expect(resolveSlack(makeFactoryRepo(dir, SERVICE))).toBeNull();
+  } finally {
+    removeTmpDir(dir);
   }
 });

@@ -23,3 +23,8 @@ Default vocabulary — the five canonical labels, names used as-is. See `docs/ag
 ### Domain docs
 
 Single-context: root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
+
+`docs/research/` is not part of that: it holds dated, point-in-time notes on
+third-party APIs, gathered to unblock one ticket. They are evidence, never
+authority — where one disagrees with `CONTEXT.md` or an ADR, the ADR wins, and
+where one disagrees with the vendor today, the vendor wins.
