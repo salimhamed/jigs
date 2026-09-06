@@ -7,7 +7,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
-import { locateTemplates, TEMPLATE_SUFFIX } from "../config/templates.ts";
+import {
+  locateTemplates,
+  packageRoot,
+  TEMPLATE_SUFFIX,
+} from "../config/templates.ts";
 import { CliError } from "../errors.ts";
 import { interpolate } from "../prompts/interpolate.ts";
 
@@ -21,7 +25,6 @@ import { interpolate } from "../prompts/interpolate.ts";
 export interface InitDeps {
   cwd: string;
   out: (line: string) => void;
-  templatesDir?: string;
 }
 
 export interface InitResult {
@@ -34,11 +37,13 @@ export interface InitResult {
 
 export async function initFactory(deps: InitDeps): Promise<InitResult> {
   const root = path.resolve(deps.cwd);
-  const templates = deps.templatesDir ?? locateTemplates();
+  const templates = locateTemplates();
   const ports = factoryPorts(root);
+  const jigs = jigsPackage();
   const values: Record<string, string> = {
     FACTORY_NAME: factoryName(root),
-    JIGS_REPO: path.resolve(templates, "..", "..", ".."),
+    JIGS_REPO: jigs.checkout,
+    JIGS_VERSION: jigs.version,
     SERVICE_PORT: String(ports.servicePort),
     DASHBOARD_PORT: String(ports.dashboardPort),
     POSTGRES_PORT: String(ports.postgresPort),
@@ -129,4 +134,18 @@ function templateFiles(dir: string, prefix = ""): string[] {
       return templateFiles(path.join(dir, entry.name), relative);
     return entry.name.endsWith(TEMPLATE_SUFFIX) ? [relative] : [];
   });
+}
+
+// Until the packages publish, a factory links the checkout this CLI was built
+// in. The version rides along so the template can pin it once they do: both
+// packages release in lockstep, and the pair is one number.
+function jigsPackage(): { checkout: string; version: string } {
+  const root = packageRoot();
+  const manifest = JSON.parse(
+    readFileSync(path.join(root, "package.json"), "utf8"),
+  ) as { version: string };
+  return {
+    checkout: path.resolve(root, "..", ".."),
+    version: manifest.version,
+  };
 }

@@ -112,7 +112,7 @@ test("the factory template pins the same versions this package peers on", async 
   const template = JSON.parse(
     (
       await readFile(
-        path.join(packageDir, "templates", "package.json.tmpl"),
+        path.join(packageDir, "..", "jigs", "templates", "package.json.tmpl"),
         "utf8",
       )
     ).replaceAll("{{JIGS_REPO}}", "/jigs"),
