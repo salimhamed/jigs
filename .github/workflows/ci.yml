@@ -30,7 +30,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # `jigs build` runs from the fixture's own install, so the CLI has to
+      # `jigs init` and `jigs build` run from the CLI's dist, so the CLI has to
       # exist as the built artifact its bin entry points at.
       - run: pnpm build
       - run: pnpm e2e

@@ -28,7 +28,8 @@ add that, set this up — go back to `SKILL.md` and take the route it belongs to
    suspension and worktree primitives.
 
 For a question about how a factory is written rather than how jigs works, the
-worked example is `e2e/fixture-factory/` in the jigs checkout.
+worked example is what `jigs init` scaffolds: `packages/jigs/templates/` in the
+jigs checkout, one `.tmpl` per file.
 
 ## How to answer
 

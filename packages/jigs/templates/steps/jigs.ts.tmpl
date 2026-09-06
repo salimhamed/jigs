@@ -8,9 +8,10 @@
 // replay simply looks up ids that no longer exist. Treat them exactly like the
 // filenames in pipelines/.
 //
-// jigs scaffolds none of this — the file is hand-written source the factory
-// owns. When a jigs release adds a step, add its wrapper here yourself; the
-// factory's typecheck is what tells you a jig's deps object is missing one.
+// `jigs init` wrote this file once and never rewrites it — from here on it is
+// source this factory owns. When a jigs release adds a step, add its wrapper
+// here yourself; the factory's typecheck is what tells you a jig's deps object
+// is missing one.
 //
 // The implementations are imported at module scope on purpose: the `"use
 // step"` transform erases each body below out of the workflow bundle, and the
@@ -53,12 +54,13 @@ import {
 import { fetchSnapshot as fetchSnapshotImpl } from "@jigs/service/ticket/snapshot";
 import {
   provisionRunWorktree,
-  teardownRunWorktrees,
+  teardownMergedRun,
   type WorktreeRequest,
 } from "@jigs/service/worktrees";
 import type { WorktreeFacts } from "jigs";
 import type { AgentStepConfig, AskStepConfig } from "jigs/steps";
 import { getWorkflowMetadata } from "workflow";
+import { describePr } from "./describe-pr.ts";
 
 // --- steps -----------------------------------------------------------------
 
@@ -69,9 +71,9 @@ export async function worktree(
   return provisionRunWorktree(request, getWorkflowMetadata().workflowRunId);
 }
 
-export async function teardownWorktrees(outcome: { merged: boolean }) {
+export async function teardownWorktrees() {
   "use step";
-  return teardownRunWorktrees(getWorkflowMetadata().workflowRunId, outcome);
+  return teardownMergedRun(getWorkflowMetadata().workflowRunId);
 }
 
 export async function runAgentStep(wire: Parameters<typeof runAgent>[0]) {
@@ -183,15 +185,9 @@ export function ticketReview(options: TicketReviewOptions) {
   return ticketReviewJig(options, { agent, needsHuman });
 }
 
-// Deterministic on purpose: this fixture exists to pin step ids, so its PR
-// presentation is a plain workflow-side function rather than an agent call.
-const describePr: ReviewLoopDeps["describePr"] = async ({ handoff }) => ({
-  title: `fixture: ${handoff.snapshot.identifier}`,
-  body: handoff.brief,
-});
-
 // Exported so a pipeline that must override an entry can spread the rest
-// rather than rebuild the map.
+// rather than rebuild the map. `describePr` is the one entry jigs ships no
+// implementation for; ./describe-pr.ts is this factory's.
 export const reviewLoopDeps: ReviewLoopDeps = {
   agent,
   needsHuman,

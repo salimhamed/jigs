@@ -36,9 +36,10 @@ _Avoid_: step key, step name, cache key
 
 **Step wrapper**:
 The `"use step"` function in a factory's own `steps/jigs.ts` that delegates to
-one of jigs' plain step implementations. Hand-written and committed — jigs
-scaffolds none of them: its file path and its name *are* the step id, so
-renaming one orphans every parked run that memoized against it.
+one of jigs' plain step implementations. Scaffolded once by `jigs init`, then
+committed source the factory owns and extends by hand: its file path and its
+name *are* the step id, so renaming one orphans every parked run that memoized
+against it.
 _Avoid_: shim, binding, adapter
 
 **Run**:

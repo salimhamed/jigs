@@ -1,0 +1,129 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import type { Factory } from "@jigs/service";
+import { expect, test } from "vitest";
+import factory from "./jigs.config.ts";
+
+// Read through the interface rather than the literal: these are assertions
+// about what this factory declares, including the fields it omits.
+const pipelines: Factory["pipelines"] = factory.pipelines;
+
+test("every entry carries a zod inputs schema and a pipeline", () => {
+  expect(Object.keys(pipelines)).toContain("ship");
+  for (const entry of Object.values(pipelines)) {
+    expect(entry.inputs.safeParse).toBeTypeOf("function");
+    expect(entry.pipeline).toBeTypeOf("function");
+  }
+});
+
+test("ship takes a ticket in either form and declares its needs", () => {
+  const entry = pipelines.ship;
+  const launch = { binding: "repo", merge: "human" };
+  expect(
+    entry?.inputs.parse({ ticket: crypto.randomUUID(), ...launch }),
+  ).toEqual({ ticket: expect.any(String), ...launch });
+  expect(entry?.inputs.parse({ ticket: "ABC-123", ...launch })).toEqual({
+    ticket: "ABC-123",
+    ...launch,
+  });
+  expect(
+    entry?.inputs.safeParse({ ticket: "not-a-ticket", ...launch }).success,
+  ).toBe(false);
+  expect(entry?.inputs.safeParse({ ticket: "ABC-123" }).success).toBe(false);
+  expect(entry?.requires).toEqual({ harnesses: ["claude", "codex"] });
+});
+
+// --- the ids the build emits ------------------------------------------------
+//
+// Every id below is a memoization key in this factory's World, so these read
+// the last build rather than the source: what a parked run replays against is
+// what the bundle says, not what the imports look like.
+
+const BUNDLE = new URL("./.output/server/index.mjs", import.meta.url);
+
+// The SDK registers this one itself. It lives under node_modules, so the
+// builder addresses it by name and version — the one id here this factory does
+// not own, and cannot make path-shaped. It tracks package.json's `workflow`
+// pin, so an SDK bump moves it and nothing else.
+const SDK_BUILTIN_STEP = `step//workflow@${workflowVersion()}//fetch`;
+
+// The ids this factory's World records. Adding a pipeline adds a line here;
+// an id that *changes* is a rename that orphans every run parked against it —
+// restore the old name rather than paste the new id in.
+const WORKFLOW_IDS = ["workflow//./pipelines/ship//shipPipeline"];
+
+// The step ids, pinned the same way and for the same reason: renaming an
+// exported wrapper (or a pipeline's own "use step" function) orphans parked
+// runs exactly as a pipeline rename does. A jigs release growing a step adds
+// a wrapper in steps/jigs.ts and a line here.
+//
+// Every wrapper in steps/jigs.ts is listed, not just the ones ship reaches:
+// the file compiles in whole, so the build emits them all.
+const STEP_IDS = [
+  "step//./steps/jigs//checkForHumanReply",
+  "step//./steps/jigs//commentOnPr",
+  "step//./steps/jigs//fetchPrState",
+  "step//./steps/jigs//fetchSnapshot",
+  "step//./steps/jigs//openPr",
+  "step//./steps/jigs//postNeedsHumanComment",
+  "step//./steps/jigs//pushWorktreeBranch",
+  "step//./steps/jigs//readDiff",
+  "step//./steps/jigs//replyInThread",
+  "step//./steps/jigs//resolveRepo",
+  "step//./steps/jigs//runAgentStep",
+  "step//./steps/jigs//runAskStep",
+  "step//./steps/jigs//squashMerge",
+  "step//./steps/jigs//teardownWorktrees",
+  "step//./steps/jigs//worktree",
+];
+
+function workflowVersion(): string {
+  const manifest = JSON.parse(
+    readFileSync(new URL("./package.json", import.meta.url), "utf8"),
+  ) as { dependencies: Record<string, string> };
+  return manifest.dependencies.workflow;
+}
+
+function emittedIds(): string[] {
+  let bundle: string;
+  try {
+    bundle = readFileSync(BUNDLE, "utf8");
+  } catch {
+    // Failing beats skipping: an id guard that quietly stops running looks
+    // exactly like one that passes, and these ids fail silently by design.
+    throw new Error(
+      `no build at ${fileURLToPath(BUNDLE)} to read ids from — run pnpm exec jigs build first`,
+    );
+  }
+  return [
+    ...new Set(bundle.match(/(?:workflow|step)\/\/[^"']+/g) ?? []),
+  ].sort();
+}
+
+test("no emitted id carries a package version, bar the SDK's own step", () => {
+  expect(emittedIds().filter((id) => id.includes("@"))).toEqual([
+    SDK_BUILTIN_STEP,
+  ]);
+});
+
+test("every id this factory owns is addressed by a path inside it", () => {
+  const owned = emittedIds().filter((id) => id !== SDK_BUILTIN_STEP);
+  expect(owned.length).toBeGreaterThan(0);
+  for (const id of owned) {
+    expect(id).toMatch(/^(?:workflow|step)\/\/\.\/(?:pipelines|steps)\//);
+  }
+});
+
+test("the pipelines' workflow ids are the ones the World records", () => {
+  expect(emittedIds().filter((id) => id.startsWith("workflow//"))).toEqual(
+    WORKFLOW_IDS,
+  );
+});
+
+test("the step ids are the ones the World records", () => {
+  expect(
+    emittedIds().filter(
+      (id) => id.startsWith("step//") && id !== SDK_BUILTIN_STEP,
+    ),
+  ).toEqual(STEP_IDS);
+});

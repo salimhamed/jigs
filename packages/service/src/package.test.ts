@@ -14,6 +14,7 @@ import tsdownConfig from "../tsdown.config.ts";
 // wrong ids, in someone else's repo.
 
 const packageDir = fileURLToPath(new URL("..", import.meta.url));
+const templatesDir = path.join(packageDir, "..", "jigs", "templates");
 const pkg = JSON.parse(
   await readFile(path.join(packageDir, "package.json"), "utf8"),
 );
@@ -46,8 +47,8 @@ test("no compiled source carries a workflow directive — the factory writes its
   // The wrappers live in the factory repo, which is what keeps this package's
   // version out of every memoization key. A directive sneaking back in here
   // compiles clean and resurrects a version-bearing id, so this is the guard
-  // that has to hold. src/ is what this package compiles; templates/ is
-  // infrastructure only and carries no TypeScript of its own.
+  // that has to hold. src/ is what this package compiles; the directives in
+  // the CLI's templates/ are .tmpl files a factory compiles, never this one.
   const directed: string[] = [];
   for (const file of await sourceFiles("src")) {
     const source = await readFile(path.join(packageDir, file), "utf8");
@@ -56,21 +57,13 @@ test("no compiled source carries a workflow directive — the factory writes its
   expect(directed).toEqual([]);
 });
 
-test("every subpath the fixture factory's wrappers reach is in the exports map", async () => {
+test("every subpath the scaffolded wrappers reach is in the exports map", async () => {
   // A factory resolves this package through the exports map alone, so a
   // subpath dropped here is a wrapper that cannot resolve in every factory
-  // that already has one. The fixture factory is the one factory in this repo,
-  // and its wrappers are the closest thing left to a worked example.
+  // that already has one. The template is where every factory's wrappers
+  // start from.
   const wrappers = await readFile(
-    path.join(
-      packageDir,
-      "..",
-      "..",
-      "e2e",
-      "fixture-factory",
-      "steps",
-      "jigs.ts",
-    ),
+    path.join(templatesDir, "steps", "jigs.ts.tmpl"),
     "utf8",
   );
   const reached = new Set(
@@ -153,10 +146,7 @@ test("the factory template pins the same versions this package peers on", async 
   // nothing registers.
   const template = JSON.parse(
     (
-      await readFile(
-        path.join(packageDir, "..", "jigs", "templates", "package.json.tmpl"),
-        "utf8",
-      )
+      await readFile(path.join(templatesDir, "package.json.tmpl"), "utf8")
     ).replaceAll("{{JIGS_REPO}}", "/jigs"),
   );
   for (const [name, range] of Object.entries<string>(pkg.peerDependencies)) {

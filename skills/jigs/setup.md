@@ -43,16 +43,18 @@ mkdir my-factory && cd my-factory && git init
 jigs init
 ```
 
-`jigs init` writes infrastructure only — `jigs.yml` (the service and dashboard
+`jigs init` writes the infrastructure — `jigs.yml` (the service and dashboard
 ports, derived from this factory's path so two factories never collide),
 `package.json`, `nitro.config.ts`, `docker-compose.yml`, `.env.example`,
-`tsconfig.json`, `pnpm-workspace.yaml`, `.gitignore` — then prints the remaining
-commands with this factory's own ports filled in. Use the numbers it prints, not
-any numbers you have seen elsewhere.
+`tsconfig.json`, `pnpm-workspace.yaml`, `.gitignore` — and the code the factory
+starts from: `jigs.config.ts`, `pipelines/ship.ts`, `steps/jigs.ts`,
+`steps/describe-pr.ts`, `jigs.config.test.ts`, `README.md`. Then it prints the
+remaining commands with this factory's own ports filled in. Use the numbers it
+prints, not any numbers you have seen elsewhere.
 
-**It scaffolds no code.** `jigs.config.ts`, `pipelines/` and `steps/jigs.ts` are
-the factory's to write, and `jigs build` fails without them. Copy the shape from
-`e2e/fixture-factory/` in the jigs checkout, then follow `author.md`.
+**It writes every file once.** A file that exists is kept, never rewritten, so
+the scaffolded code is the factory's own from the first commit; `author.md`
+covers extending it. Never rename `steps/jigs.ts` or an exported wrapper.
 
 ## 3. Install, World, bootstrap
 

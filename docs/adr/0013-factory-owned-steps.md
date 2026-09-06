@@ -80,6 +80,21 @@ so it does not have to be re-run.
   churned faster than the library while the API settles, so it lives in the
   operator's factory repo, with `e2e/fixture-factory/steps/jigs.ts` as the
   worked example (amended from the original offer-to-append design).
+
+  > **Amended 2026-09-06.** The boilerplate settled: two factories and the
+  > fixture carried a byte-identical `steps/jigs.ts` for weeks, which is the
+  > signal to promote. `jigs init` now scaffolds the file — with
+  > `steps/describe-pr.ts`, `jigs.config.ts`, a starter `pipelines/ship.ts`
+  > and the ids test — from `packages/jigs/templates/`, and **writes it once**:
+  > a file that exists is kept, never rewritten, so from the first commit on
+  > the factory owns it and extends it by hand exactly as before. The
+  > constraint above is untouched; the file only starts life from the
+  > scaffold. The fixture factory is gone: `pnpm e2e` runs `jigs init` into a
+  > temp dir outside the repo and builds *that*, so the template every factory
+  > starts from is the thing whose ids are diffed against
+  > `e2e/expected-ids.txt`, and the scaffolded ids test runs against the same
+  > build. The fifteen step ids are unchanged; the fixture pipeline's two ids
+  > were replaced by the starter pipeline's one.
 - **The exports map is an ordinary export map again.** A subpath was half an id
   while the directives lived here, so a wildcard entry — which the SDK cannot
   match by exact string — collapsed two modules into one namespace, and a

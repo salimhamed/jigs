@@ -422,7 +422,7 @@ test("without jigs.config.ts, up stops before touching the machine", async () =>
 
   expect(result.ok).toBe(false);
   expect(statuses(result)).toEqual(["locate:failed"]);
-  expect(result.steps[0]?.repair).toContain("e2e/fixture-factory");
+  expect(result.steps[0]?.repair).toContain("jigs init");
   expect(io.exec.calls).toHaveLength(0);
   expect(existsSync(path.join(root, ".env"))).toBe(false);
 });

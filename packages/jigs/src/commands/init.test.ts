@@ -23,17 +23,24 @@ test("scaffolds a factory that can be installed and built", async () => {
   const dir = scaffold("acme-factory");
   const { created } = await init(dir);
 
-  // Infrastructure only: jigs.config.ts, the pipelines and the step wrappers
-  // are this factory's own source, and nothing here writes a line of them.
+  // The infrastructure and the code a factory starts from, together: the
+  // wrappers and the ids test are what e2e builds, so a scaffold that
+  // typechecks and pins its ids is a tested property rather than a hope.
   expect(created.sort()).toEqual([
     ".env.example",
     ".gitignore",
     ".npmrc",
+    "README.md",
     "docker-compose.yml",
+    "jigs.config.test.ts",
+    "jigs.config.ts",
     "jigs.yml",
     "nitro.config.ts",
     "package.json",
+    "pipelines/ship.ts",
     "pnpm-workspace.yaml",
+    "steps/describe-pr.ts",
+    "steps/jigs.ts",
     "tsconfig.json",
   ]);
   // The SDK, its World and its dashboard are peers of @jigs/service, loaded by
@@ -43,6 +50,9 @@ test("scaffolds a factory that can be installed and built", async () => {
   expect(pkg.dependencies["@workflow/world-postgres"]).toBeDefined();
   expect(pkg.dependencies["@workflow/web"]).toBeDefined();
   expect(pkg.dependencies.hono).toBeUndefined();
+  // The scaffolded ids test needs its runner.
+  expect(pkg.devDependencies.vitest).toBeDefined();
+  expect(pkg.scripts.test).toBe("vitest run");
   // Until the packages publish, the factory links the checkout that built the
   // CLI scaffolding it — wherever that checkout is.
   const checkout = path.resolve(packageRoot(), "..", "..");
@@ -72,13 +82,38 @@ test("every placeholder a template carries is filled in", async () => {
   }
 });
 
-test("the tsconfig compiles the code this factory will write", async () => {
+test("the tsconfig compiles the code this factory starts with", async () => {
   const dir = scaffold("epsilon");
   await init(dir);
 
   const tsconfig = readFileSync(path.join(dir, "tsconfig.json"), "utf8");
   expect(tsconfig).toContain('"steps"');
   expect(tsconfig).toContain('"pipelines"');
+  expect(tsconfig).toContain('"jigs.config.test.ts"');
+});
+
+// Each exported "use step" function's name is half a durable step id, so the
+// scaffold's list is the list every factory's World records. The ids test
+// scaffolded beside it pins the same names against the build; here the two
+// templates are held to each other without a build.
+test("the wrappers scaffolded are the step ids the scaffolded test pins", async () => {
+  const dir = scaffold("theta");
+  await init(dir);
+
+  const wrappers = readFileSync(path.join(dir, "steps", "jigs.ts"), "utf8");
+  const steps = [...wrappers.matchAll(/^export async function (\w+)\(/gm)]
+    .map((match) => `step//./steps/jigs//${match[1]}`)
+    .sort();
+  expect(steps).toHaveLength(15);
+  const idsTest = readFileSync(path.join(dir, "jigs.config.test.ts"), "utf8");
+  const pinned = [...idsTest.matchAll(/"(step\/\/\.\/steps\/jigs\/\/\w+)"/g)]
+    .map((match) => match[1])
+    .sort();
+  expect(pinned).toEqual(steps);
+  // Every wrapper has its directive: one without it compiles clean and runs
+  // unmemoized.
+  expect(wrappers.match(/"use step";/g)).toHaveLength(15);
+  expect(idsTest).toContain("workflow//./pipelines/ship//shipPipeline");
 });
 
 test("the docker project and ports all carry the factory", async () => {
@@ -115,19 +150,18 @@ test("an existing file is kept, never overwritten", async () => {
   expect(readFileSync(path.join(dir, "jigs.yml"), "utf8")).toContain("9999");
 });
 
-test("the commands only a human should run are printed, not run", async () => {
+test("the next steps are printed, not run", async () => {
   const dir = scaffold("delta");
   const { lines } = await init(dir);
 
   const printed = lines.join("\n");
-  expect(printed).toContain("jigs scaffolds none of them");
-  expect(printed).toContain("docker compose up -d --wait");
-  expect(printed).toContain("pnpm exec bootstrap");
-  // bootstrap loads the .env copied a line earlier, so the World URL it used
-  // to be prefixed with was never the thing that told it where to connect.
-  expect(printed).not.toContain("WORKFLOW_POSTGRES_URL=");
-  expect(printed).toContain("jigs build");
-  expect(printed).toContain("jigs service start");
+  expect(printed).toContain("never rename the file or an exported wrapper");
+  expect(printed).toContain("LINEAR_API_KEY and GITHUB_TOKEN");
+  expect(printed).toContain("jigs up");
+  expect(printed).toContain("jigs bind");
+  // `jigs up` owns the machine-touching commands now, one step at a time.
+  expect(printed).not.toContain("docker compose");
+  expect(printed).not.toContain("pnpm exec bootstrap");
   // Printing them is the whole point: nothing was executed.
   expect(existsSync(path.join(dir, "node_modules"))).toBe(false);
   expect(existsSync(path.join(dir, ".env"))).toBe(false);

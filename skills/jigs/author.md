@@ -9,13 +9,14 @@ checkout. jigs ships steps; the factory owns every file that names them.
 - `CONTEXT.md` in the jigs checkout for the vocabulary — pipeline, jig, step,
   step id, binding, gate, needs-human halt, schedule.
 - The worked examples, by path rather than from memory:
-  - the smallest complete factory: `e2e/fixture-factory/` in the jigs checkout
-    (`jigs.config.ts`, `pipelines/fixture.ts`, `steps/jigs.ts`).
+  - the smallest complete factory: what `jigs init` scaffolds, from
+    `packages/jigs/templates/` in the jigs checkout (`jigs.config.ts.tmpl`,
+    `pipelines/ship.ts.tmpl`, `steps/jigs.ts.tmpl`).
   - if the `jigs-factory-js` factory is checked out on this machine, a real
     pipeline that needs no repo binding: its `pipelines/s3-bucket-analysis.ts`,
     with the factory-local steps in `steps/aws.ts`, the agent compositions in
     `steps/s3-diagnosis.ts`, and the prose in `prompts/`. If it is not checked
-    out, lean on the fixture above — it carries the same shape at one pipeline.
+    out, lean on the scaffold above — it carries the same shape at one pipeline.
 
 ## The three tiers, and why they matter
 
@@ -35,10 +36,10 @@ rename it. The factory's ids test is what catches this.
 
 That ids test is a `jigs.config.test.ts` in the factory root: it reads the
 emitted ids out of the last build, holds them as sorted arrays, and compares
-exactly — the e2e fixture does the same job with a checked-in
-`expected-ids.txt` and `e2e/check-step-ids.mjs`, because it has no test runner
-of its own. If the factory you are in has no such test, write one before adding
-anything: an unguarded rename is silent.
+exactly. `jigs init` scaffolds it, and the jigs repo's `e2e/check-step-ids.mjs`
+holds the scaffold to the same list in `e2e/expected-ids.txt`. If the factory
+you are in has no such test, write one before adding anything: an unguarded
+rename is silent.
 
 ## Add a pipeline
 
