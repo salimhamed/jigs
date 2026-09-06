@@ -16,7 +16,7 @@ export interface LogsResult {
   status: string;
   error?: string;
   logs: string;
-  suspensions?: Array<{ key: string; reason: string; satisfiedBy: string }>;
+  suspensions?: Array<{ token: string; reason: string }>;
 }
 
 interface StepRow {
@@ -52,8 +52,7 @@ export async function showLogs(
   deps.out(`status ${result.status}`);
   if (result.error !== undefined) deps.out(`error ${result.error}`);
   for (const suspension of result.suspensions ?? []) {
-    deps.out(`suspended on ${suspension.key}: ${suspension.reason}`);
-    deps.out(`  satisfied by ${suspension.satisfiedBy}`);
+    deps.out(`suspended on ${suspension.token}: ${suspension.reason}`);
   }
   deps.out(result.logs);
   await showTimeline(result.runId, deps);

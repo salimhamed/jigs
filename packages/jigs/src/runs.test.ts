@@ -3,13 +3,14 @@ import { z } from "zod";
 import type { Factory } from "./factory.ts";
 import {
   derivedRunStatus,
-  isParkToken,
   listRuns,
+  parkReason,
   resolveRunRef,
   scheduleTriggerId,
   type WorldRun,
 } from "./runs.ts";
 import * as stalls from "./stalls.ts";
+import { needsHumanToken, prToken, ticketToken } from "./suspension/tokens.ts";
 import * as sql from "./worktrees/sql.ts";
 
 const RUN_A = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
@@ -133,12 +134,22 @@ test("a full-length run id nobody minted falls through to unknown", async () => 
   expect(ref).toEqual({ kind: "unknown" });
 });
 
-test("a ticket claim is not a park, and a metadata-less hook still is", () => {
-  expect(isParkToken(`linear:ticket:${crypto.randomUUID()}`)).toBe(false);
-  // A pipeline that parks on createHook({ token }) with no metadata is still
-  // parked, so parkedness cannot depend on a hydratable suspension envelope.
-  expect(isParkToken(`demo:${crypto.randomUUID()}`)).toBe(true);
-  expect(isParkToken("github:pr:acme/api#41")).toBe(true);
+// Read through the minters, never through a token spelled out here: a reason
+// derived from a prefix the minters no longer produce degrades to the generic
+// one, and a test carrying its own copy of the prefix would stay green.
+test("a ticket claim is not a park, and every other hook explains itself", () => {
+  expect(parkReason(ticketToken(crypto.randomUUID()))).toBeNull();
+  expect(parkReason(prToken({ owner: "acme", repo: "api", number: 41 }))).toBe(
+    "awaiting pull request review",
+  );
+  expect(parkReason(needsHumanToken("issue-1", "comment-1"))).toBe(
+    "needs a human on the ticket",
+  );
+  // A pipeline of its own that parks on createHook({ token }) is parked too,
+  // so parkedness can never depend on jigs recognizing the token.
+  expect(parkReason(`demo:${crypto.randomUUID()}`)).toBe(
+    "awaiting an external event",
+  );
 });
 
 // Compiled pipelines carry the workflowId the world records as workflowName;

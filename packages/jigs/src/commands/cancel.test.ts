@@ -36,28 +36,14 @@ const respondCancel = (releasedTokens: string[]) =>
     ),
   );
 
-const claiming = {
-  runId: RUN,
-  status: "running",
-  suspended: false,
-  suspensions: [
-    {
-      key: "ticket-claim",
-      reason: "one active run per ticket",
-      satisfiedBy: "linear:ticket:AGE-317",
-    },
-  ],
-};
-
 const suspended = {
   runId: RUN,
   status: "running",
   suspended: true,
   suspensions: [
     {
-      key: "pr-gate:acme/api#41",
-      reason: "waiting for approval",
-      satisfiedBy: "github:pr:acme/api#41",
+      token: "github:pr:acme/api#41",
+      reason: "awaiting pull request review",
     },
   ],
 };
@@ -67,14 +53,6 @@ const failure = (promise: Promise<unknown>) =>
     () => null,
     (err: unknown) => err as CliError,
   );
-
-test("a run executing under its ticket claim still asks before cancelling", async () => {
-  respondLookup(claiming);
-  respondCancel(["linear:ticket:AGE-317"]);
-  const confirm = vi.fn().mockResolvedValue(true);
-  await cancelRun("AGE-317", deps({ confirm }));
-  expect(confirm).toHaveBeenCalledWith(`cancel in-flight run ${RUN}?`);
-});
 
 test("a suspended run cancels with no confirmation prompt", async () => {
   respondLookup(suspended);

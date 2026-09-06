@@ -1,5 +1,5 @@
 import { type Context, Hono } from "hono";
-import { getHookByToken, getRun, resumeHook } from "workflow/api";
+import { getRun, resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
 import { getWorld } from "workflow/runtime";
 import { z } from "zod";
@@ -15,8 +15,8 @@ import {
 import { bootPhase, isReady } from "./readiness.ts";
 import {
   derivedRunStatus,
-  isParkToken,
   listRuns,
+  parkReason,
   type RunRef,
   resolveRunRef,
   stalledRuns,
@@ -25,10 +25,7 @@ import {
 import { listSchedules, scheduleChecks } from "./schedules.ts";
 import { listRunDeadJobs, listRunSteps } from "./stalls.ts";
 import {
-  readSuspensionMetadata,
-  type SuspensionRecord,
-} from "./suspension/record.ts";
-import {
+  NEEDS_HUMAN_TOKEN_PREFIX,
   tokenFromGithubPayload,
   tokenFromLinearPayload,
 } from "./suspension/tokens.ts";
@@ -220,8 +217,7 @@ export function createApp(
     const ref = await resolveRunRef(c.req.param("runId"));
     if (ref.kind !== "found") return refError(c, ref);
     const run = getRun(ref.runId);
-    const { records } = await listSuspensions(run.runId);
-    const tokens = [...new Set(records.map((s) => s.satisfiedBy))];
+    const tokens = await runResourceTokens(run.runId);
     if (tokens.length === 0) {
       return c.json({ error: "run has no suspensions to poke" }, 409);
     }
@@ -270,8 +266,7 @@ export function createApp(
         409,
       );
     }
-    const { records } = await listSuspensions(ref.runId);
-    const releasedTokens = [...new Set(records.map((s) => s.satisfiedBy))];
+    const releasedTokens = await runResourceTokens(ref.runId);
     await run.cancel();
     // Cancel never cleans up: name what stays so the operator knows where the
     // worktree is and that `jigs sweep` is the way to reclaim it.
@@ -323,13 +318,15 @@ export function createApp(
     }
     // The SDK has neither `suspended` nor `stalled`, so jigs derives both —
     // through the same function `jigs ps` reads, or the two verbs disagree
-    // about the same run. A hook carrying no jigs metadata still parks the
-    // run; it just has no record to explain itself with, which is why
-    // `suspended` and `suspensions` are separate answers.
+    // about the same run.
     if (status === "running") {
-      const { tokens, records } = await listSuspensions(run.runId);
-      const parked = tokens.some(isParkToken);
-      body.suspensions = records;
+      const tokens = await runHookTokens(run.runId);
+      const suspensions = tokens.flatMap((token) => {
+        const reason = parkReason(token);
+        return reason === null ? [] : [{ token, reason }];
+      });
+      const parked = suspensions.length > 0;
+      body.suspensions = suspensions;
       body.suspended = parked;
       body.status = derivedRunStatus(status, {
         parked,
@@ -422,27 +419,18 @@ async function deliver(
   }
 }
 
-// Raw tokens alongside the hydrated records: parkedness is a property of the
-// token, but only a record can say why, and both come from the one listing.
-async function listSuspensions(
-  runId: string,
-): Promise<{ tokens: string[]; records: SuspensionRecord[] }> {
+// Both what a run is parked on and why are readings of its hook tokens, so
+// the one page of tokens answers both.
+async function runHookTokens(runId: string): Promise<string[]> {
   const hooks = await getWorld().hooks.list({ runId });
-  // The world's list returns metadata still serialized (binary devalue);
-  // only getHookByToken hydrates it — hence the per-hook round trip. The
-  // rejection handler absorbs a hook disposed between list and get.
-  const hydrated = await Promise.all(
-    hooks.data.map((hook) =>
-      getHookByToken(hook.token).then(
-        (full) => readSuspensionMetadata(full.metadata),
-        () => null,
-      ),
-    ),
+  return hooks.data.map((hook) => hook.token);
+}
+
+// The hooks that name an external resource: what another run can be blocked
+// on, and what a poke can wake. The needs-human marker is neither — the reply
+// that ends that halt lands on the ticket claim beside it.
+async function runResourceTokens(runId: string): Promise<string[]> {
+  return (await runHookTokens(runId)).filter(
+    (token) => !token.startsWith(NEEDS_HUMAN_TOKEN_PREFIX),
   );
-  return {
-    tokens: hooks.data.map((hook) => hook.token),
-    records: hydrated.filter(
-      (record): record is SuspensionRecord => record !== null,
-    ),
-  };
 }

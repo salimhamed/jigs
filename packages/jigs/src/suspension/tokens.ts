@@ -4,16 +4,24 @@
 // parse must stay in exact sync — which is why both delegate to prToken /
 // ticketToken in this file.
 
-// A type alias (implicit index signature) so a PrRef can ride along as
-// serializable hook metadata.
 export type PrRef = {
   owner: string;
   repo: string;
   number: number;
 };
 
+export const PR_TOKEN_PREFIX = "github:pr:";
+
 export function prToken(pr: PrRef): string {
-  return `github:pr:${pr.owner}/${pr.repo}#${pr.number}`;
+  return `${PR_TOKEN_PREFIX}${pr.owner}/${pr.repo}#${pr.number}`;
+}
+
+// The needs-human halt's marker hook. It names no external resource and
+// nothing resumes it: the reply that ends the halt lands on the ticket claim.
+export const NEEDS_HUMAN_TOKEN_PREFIX = "jigs:needs-human:";
+
+export function needsHumanToken(issueId: string, commentId: string): string {
+  return `${NEEDS_HUMAN_TOKEN_PREFIX}${issueId}:${commentId}`;
 }
 
 // Linear Comment webhook payloads carry issueId as a UUID, so the token does too.

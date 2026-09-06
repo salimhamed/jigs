@@ -34,9 +34,8 @@ test("logs prints the run's status, its suspensions, and the dashboard link", as
         logs: DASHBOARD,
         suspensions: [
           {
-            key: "pr-gate:acme/api#41",
-            reason: "waiting for approval",
-            satisfiedBy: "github:pr:acme/api#41",
+            token: "github:pr:acme/api#41",
+            reason: "awaiting pull request review",
           },
         ],
       }),
@@ -55,8 +54,7 @@ test("logs prints the run's status, its suspensions, and the dashboard link", as
   expect(lines).toEqual([
     `run ${RUN}`,
     "status running",
-    "suspended on pr-gate:acme/api#41: waiting for approval",
-    "  satisfied by github:pr:acme/api#41",
+    "suspended on github:pr:acme/api#41: awaiting pull request review",
     // The service hosts the dashboard, so only it can name the port.
     DASHBOARD,
   ]);

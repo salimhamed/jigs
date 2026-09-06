@@ -17,6 +17,7 @@ import { z } from "zod";
 import { createApp } from "./app.ts";
 import { type Factory, ticketInput } from "./factory.ts";
 import * as stalls from "./stalls.ts";
+import { needsHumanToken, prToken, ticketToken } from "./suspension/tokens.ts";
 import * as sql from "./worktrees/sql.ts";
 import { makeFakeSql } from "./worktrees/test-fixtures.ts";
 
@@ -477,6 +478,71 @@ test("GET /api/runs/:ref reports a stalled run as stalled, like `jigs ps` does",
     status: "stalled",
     suspended: false,
   });
+});
+
+const CLAIM = ticketToken("68bc9696-35d5-442d-ab56-214c8cfefbec");
+const MARKER = needsHumanToken("68bc9696-35d5-442d-ab56-214c8cfefbec", "c1");
+const PR = prToken({ owner: "acme", repo: "api", number: 41 });
+
+// A running run holding exactly these hooks. The routes below read no other
+// world surface, so anything they touch beyond `hooks.list` rejects and is
+// reported rather than thrown.
+const runHolding = (...tokens: string[]) =>
+  setWorld({
+    runs: { get: async () => ({ status: "running" }) },
+    steps: { list: async () => ({ data: [] }) },
+    hooks: { list: async () => ({ data: tokens.map((token) => ({ token })) }) },
+    events: { create: async () => undefined },
+  } as unknown as Parameters<typeof setWorld>[0]);
+
+test("GET /api/runs/:ref reads every park and its reason off the hook token", async () => {
+  runHolding(CLAIM, MARKER, PR);
+
+  const res = await app.request(`/api/runs/${RUN}`);
+
+  expect(res.status).toBe(200);
+  // The claim is held for the run's whole life, so it is no suspension and
+  // never appears; the other two explain themselves without a metadata read.
+  expect(await res.json()).toMatchObject({
+    status: "suspended",
+    suspended: true,
+    suspensions: [
+      { token: MARKER, reason: "needs a human on the ticket" },
+      { token: PR, reason: "awaiting pull request review" },
+    ],
+  });
+});
+
+test("a run holding only its ticket claim is running, not suspended", async () => {
+  runHolding(CLAIM);
+
+  const res = await app.request(`/api/runs/${RUN}`);
+
+  expect(await res.json()).toMatchObject({
+    status: "running",
+    suspended: false,
+    suspensions: [],
+  });
+});
+
+test("poke wakes the hooks that name a resource, never the needs-human marker", async () => {
+  runHolding(CLAIM, MARKER);
+
+  const res = await app.request(`/api/runs/${RUN}/poke`, { method: "POST" });
+
+  expect(res.status).toBe(200);
+  // The reply that ends a needs-human halt lands on the ticket claim, so the
+  // marker names no channel and resuming it would wake nothing.
+  expect(await res.json()).toMatchObject({ poked: [{ token: CLAIM }] });
+});
+
+test("cancel names the resources it released, and not the marker", async () => {
+  runHolding(CLAIM, MARKER);
+
+  const res = await app.request(`/api/runs/${RUN}/cancel`, { method: "POST" });
+
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({ releasedTokens: [CLAIM] });
 });
 
 test("GET /api/schedules answers with what the factory declared, and what is next", async () => {

@@ -1,5 +1,4 @@
 import { createHook, type Hook } from "workflow";
-import { suspensionMetadata } from "./record.ts";
 import { ticketToken } from "./tokens.ts";
 
 export class ClaimConflictError extends Error {
@@ -37,14 +36,7 @@ export async function claimTicket(
   identifier: string,
 ): Promise<TicketClaim> {
   const token = ticketToken(issueId);
-  const hook = createHook<unknown>({
-    token,
-    metadata: suspensionMetadata({
-      key: "ticket-claim",
-      reason: "one active run per ticket",
-      satisfiedBy: token,
-    }),
-  });
+  const hook = createHook<unknown>({ token });
   const conflict = await hook.getConflict();
   if (conflict !== null) {
     throw new ClaimConflictError(token, conflict.runId);
