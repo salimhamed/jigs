@@ -116,8 +116,8 @@ jigs doctor    # the check catalog, run inside the service's own environment
 jigs ps        # "no runs" is the right answer here
 ```
 
-`jigs service start` returns before the port is listening, so give it a second
-before deciding a check failed. Then:
+`jigs service start` returns once the service is fully up, so both work
+straight away. Then:
 
 ```sh
 jigs run <pipeline> --input ticket=AGE-123
@@ -176,4 +176,5 @@ pnpm install
 pnpm dev        # run the CLI from source
 pnpm check      # lint + typecheck + test + build (all packages)
 pnpm e2e        # jigs init into a temp dir, build it twice, diff its step ids
+                # (with WORKFLOW_POSTGRES_URL set: boot the service and stop it too)
 ```

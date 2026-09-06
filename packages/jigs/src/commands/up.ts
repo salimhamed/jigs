@@ -22,13 +22,13 @@ import {
 } from "./build.ts";
 import { runDoctor } from "./doctor.ts";
 import {
+  awaitServiceReady,
   builtBundleHash,
   liveServicePid,
   restartService,
   runningBundleHash,
   type ServiceLifecycleDeps,
   type ServiceProcesses,
-  serviceLogs,
   startService,
 } from "./service-lifecycle.ts";
 
@@ -77,7 +77,6 @@ export interface UpDeps {
   prepare?: Prepare;
   confirm?: (question: string) => Promise<boolean>;
   readyTimeoutMs?: number;
-  pollMs?: number;
 }
 
 export interface UpOptions {
@@ -89,9 +88,6 @@ export interface UpOptions {
 // Read by the suspension primitives; empty slots are the expected state of a
 // freshly copied .env, so they are reported, not refused.
 const CREDENTIAL_SLOTS = ["LINEAR_API_KEY", "GITHUB_TOKEN"];
-const READY_TIMEOUT_MS = 90_000;
-const READY_POLL_MS = 250;
-const HEALTH_REQUEST_TIMEOUT_MS = 5_000;
 const FACTORY_CODE = "jigs.config.ts";
 
 class StepFailed extends Error {}
@@ -174,6 +170,7 @@ export async function upFactory(
       cwd: factoryRoot,
       out: indent(deps.out),
       processes: deps.processes,
+      startTimeoutMs: deps.readyTimeoutMs,
     };
 
     const env = await runner.run("env", (note) => ensureEnv(factoryRoot, note));
@@ -212,10 +209,12 @@ export async function upFactory(
 
     // Compared against the bundle the running process started from, not the
     // one on disk before this build: a restart refused last time must still
-    // be owed this time.
+    // be owed this time. The spawn and the wait are two steps here, so each
+    // gets its own line and its own failure; the wait itself is the
+    // lifecycle module's, the one `jigs service start` does.
     result.service = await runner.run("service", async (note) => {
       if (liveServicePid(lifecycle) === undefined) {
-        startService(lifecycle);
+        await startService(lifecycle, { awaitReady: false });
         return "started";
       }
       const unchanged =
@@ -225,16 +224,11 @@ export async function upFactory(
         return "unchanged";
       }
       await confirmRestart(factoryRoot, service, deps, options);
-      await restartService(lifecycle);
+      await restartService(lifecycle, { awaitReady: false });
       return "restarted";
     });
 
-    await runner.run("ready", () =>
-      waitForReady(lifecycle, service, {
-        timeoutMs: deps.readyTimeoutMs ?? READY_TIMEOUT_MS,
-        pollMs: deps.pollMs ?? READY_POLL_MS,
-      }),
-    );
+    await runner.run("ready", () => awaitServiceReady(lifecycle));
 
     if (options.doctor === false) {
       runner.skip("doctor", "--no-doctor");
@@ -459,53 +453,5 @@ async function confirmRestart(
       "restart declined — the service still runs the previous bundle",
       "re-run jigs up when the runs finish",
     );
-  }
-}
-
-const sleep = (ms: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, ms));
-
-// "pid alive" is not "up": the service clones every binding before it
-// listens, and one it cannot reach exits the process. So the pid is watched
-// alongside the port, and a death is reported with the log that explains it.
-async function waitForReady(
-  lifecycle: ServiceLifecycleDeps,
-  service: ResolvedService,
-  timing: { timeoutMs: number; pollMs: number },
-): Promise<void> {
-  const deadline = Date.now() + timing.timeoutMs;
-  while (true) {
-    if (await healthy(service.serviceUrl)) return;
-    if (liveServicePid(lifecycle) === undefined) {
-      try {
-        serviceLogs(lifecycle);
-      } catch {
-        // No log yet: the process died before writing one.
-      }
-      throw new CliError(
-        "the service exited during boot",
-        "its last log lines are above; jigs service logs for more",
-      );
-    }
-    if (Date.now() >= deadline) {
-      throw new CliError(
-        `the service is still booting after ${Math.round(timing.timeoutMs / 1000)}s`,
-        "it clones every binding before it listens — jigs service logs to watch",
-      );
-    }
-    await sleep(timing.pollMs);
-  }
-}
-
-// Bounded so a socket that opens but never answers still lets the deadline
-// speak, instead of holding `up` past it with nothing printed.
-async function healthy(serviceUrl: string): Promise<boolean> {
-  try {
-    const res = await fetch(`${serviceUrl}/health`, {
-      signal: AbortSignal.timeout(HEALTH_REQUEST_TIMEOUT_MS),
-    });
-    return res.ok;
-  } catch {
-    return false;
   }
 }

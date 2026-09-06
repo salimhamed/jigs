@@ -12,6 +12,7 @@ import {
   verifyLinearSignature,
 } from "./ingress";
 import { doctor, factoryRoot } from "./preflight";
+import { bootPhase, isReady } from "./readiness";
 import {
   derivedRunStatus,
   isParkToken,
@@ -45,12 +46,16 @@ export function createApp(
   const app = new Hono();
   const resumeIngressHook = deps.resumeIngressHook ?? resumeHook;
 
-  // Liveness only; dependency verification is preflight's job (ADR 0010).
-  // With a service per factory repo, `factoryRoot` is the only thing that says
-  // which factory answers here; nothing else tells two running services apart.
+  // Liveness, plus how far the boot has got; dependency verification is
+  // preflight's job (ADR 0010). Nitro serves this route before the plugins
+  // have run, so `ready` — not the 200 — is what `jigs service start` waits
+  // on. With a service per factory repo, `factoryRoot` is the only thing that
+  // says which factory answers here.
   app.get("/health", (c) =>
     c.json({
       ok: true,
+      ready: isReady(),
+      phase: bootPhase(),
       world: process.env.WORKFLOW_TARGET_WORLD ?? "local (default)",
       factoryRoot: factoryRootOrNull(),
       pipelines: Object.keys(factory.pipelines),

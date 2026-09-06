@@ -139,8 +139,9 @@ jigs ps       # "no runs" is the right answer here
 ```
 
 `jigs doctor` is an HTTP call into the service, so the service has to be up for
-it to say anything at all — and `jigs service start` returns before the port is
-listening, so give it a second before deciding a start failed.
+it to say anything at all — `jigs service start` waits until the World is up
+and every binding is cloned before it returns, so a start that failed says so
+itself.
 
 ## 6. Webhook ingress, only if the factory needs it
 

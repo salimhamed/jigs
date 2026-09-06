@@ -14,6 +14,7 @@ import {
   scheduleTriggerLabel,
   TERMINAL_RUN_STATUSES,
 } from "./runs";
+import { onShutdown } from "./shutdown";
 import { type StartRunResult, startRun } from "./trigger";
 
 // Five fields, minute to day-of-week: croner's default mode would also
@@ -61,6 +62,12 @@ export function startSchedules(
       `[schedule] ${name} scheduled: ${schedule.cron} → ${schedule.pipeline}, next ${isoOrNever(job.nextRun())}`,
     );
   }
+  // A tick that lands mid-drain would trigger a run into a queue that is
+  // closing under it. One closer per call, and the generated plugin calls this
+  // once per process.
+  onShutdown(() => {
+    for (const job of jobs) job.stop();
+  });
   return jobs;
 }
 

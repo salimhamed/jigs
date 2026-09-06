@@ -207,17 +207,21 @@ compiles the step ids has to be the copy that registers them. `jigs service
 start|stop|restart|status|logs` supervises that build; `logs` prints the
 service's own stdout, which is not the same thing as a run's history (step 6).
 
-`start` reports the pid as soon as it has spawned the process and does not wait
-for the port, so a `jigs ps` or `jigs doctor` fired straight after it can still
-answer "could not reach the jigs service" while the service is booting. Re-run
-it a second later; `jigs service logs` shows how far the boot got.
+`start` waits until the World is up and every binding is cloned before it
+reports the pid — a minute the first time, each phase printed as it goes
+(`booting: cloning forge`) — so a `jigs ps` or `jigs doctor` fired straight
+after it reaches a working service. A service that exits during boot fails the
+start with an error naming the log; a boot still not done after five minutes
+fails it too and leaves the process running for `jigs service stop`. `stop`
+sends SIGTERM: the service stops taking work, waits up to eight seconds for
+what is in flight, and exits; the CLI escalates to SIGKILL only past ten. An
+agent step still running at that point is not cut short by the wait — the
+process exits after the backstop and the queue retries the job later.
 
 Part of that boot is the clones: the spawned service clones every binding
 declared in `jigs.yml` (step 4) before the World starts, logging a line per
-binding. A large repo can hold the boot for up to a minute the first time, and
-a remote it cannot reach exits the service — so a process that is gone shortly
-after `start` said "started" is a binding that could not be cloned, and
-`jigs service logs` names it.
+binding. A remote it cannot reach exits the service, which `start` reports as
+a failed boot; `jigs service logs` names the binding.
 
 Rebuild after every pipeline change. `jigs build` warns when a run is still in
 flight: a pipeline that changed shape no longer answers to the step ids its

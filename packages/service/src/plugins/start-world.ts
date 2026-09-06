@@ -1,5 +1,7 @@
 import type { BindingClone } from "jigs";
 import type { ISql } from "postgres";
+import { READY_PHASE, setBootPhase } from "../readiness";
+import { installShutdown, onShutdown, startOwningSignals } from "../shutdown";
 
 export interface RegistryGateDeps {
   sql?: () => ISql;
@@ -88,6 +90,7 @@ export async function gateOnBindingClones(
   for (const binding of declared) {
     // Before, not after: a first fetch of a large repo holds the boot for
     // minutes, and this line is the only thing that says which one.
+    setBootPhase(`cloning ${binding.name}`);
     log(
       `[service] binding ${binding.name}: ensuring clone at ${binding.repoDir}`,
     );
@@ -102,9 +105,40 @@ export async function gateOnBindingClones(
   return true;
 }
 
+export interface WorldStartGateDeps {
+  start: () => Promise<void>;
+  exit?: (code: number) => void;
+  error?: (line: string) => void;
+}
+
+// Like the other gates: a World that cannot start — a WORKFLOW_TARGET_WORLD
+// that does not resolve, a migration missing, a database gone since the
+// registry gate — would otherwise be a console.error from nitro and a process
+// that stays up with `ready` never true, so `jigs service start` waits out its
+// whole budget on it.
+export async function gateOnWorldStart(
+  deps: WorldStartGateDeps,
+): Promise<boolean> {
+  try {
+    await deps.start();
+  } catch (err) {
+    const error = deps.error ?? ((line: string) => console.error(line));
+    error(`[service] world failed to start: ${describe(err)}`);
+    (deps.exit ?? process.exit)(1);
+    return false;
+  }
+  return true;
+}
+
 // The documented defineNitroPlugin subpath doesn't exist at nitro 3.0.260610-beta;
 // a plain default export works.
 export default async function startWorld() {
+  // First of all, ahead of any gate that can hold the boot: a `jigs service
+  // stop` during a first clone or against a hanging Postgres has to end in an
+  // exit, not the CLI's SIGKILL. A clone child mid-gate is orphaned to
+  // completion; acceptable.
+  installShutdown();
+
   // Before the World starts polling: the queue's very first step dispatch has
   // to go out on the scoped dispatcher, not node's five-minute default.
   const { describeStepCeiling, raiseStepCeiling } = await import(
@@ -115,6 +149,7 @@ export default async function startWorld() {
 
   // Also before the World starts: a run that asks for a worktree against an
   // unusable registry has already burned an agent.
+  setBootPhase("registry");
   if (!(await gateOnWorktreeRegistry())) return;
 
   // And before it too: a binding whose clone does not exist yet fails every
@@ -123,12 +158,25 @@ export default async function startWorld() {
   if (!(await gateOnBindingClones())) return;
 
   const { getWorld } = await import("workflow/runtime");
-  await getWorld().start?.();
+  // The service owns its exit: on SIGTERM `world.close()` drains the queue
+  // and ends the pool, and the process leaves once that is done. The World's
+  // start is where graphile-worker would install handlers of its own, so it
+  // runs stripped of them — see startOwningSignals.
+  setBootPhase("world");
+  onShutdown(() => getWorld().close?.());
+  const started = await gateOnWorldStart({
+    start: () =>
+      startOwningSignals(async () => {
+        await getWorld().start?.();
+      }),
+  });
+  if (!started) return;
   // Startup reconciliation of suspended runs (poke every held hook) would
   // live here; fast-follow — `jigs poke <run>` covers the gap for now.
   console.log(
     `[service] world started: ${process.env.WORKFLOW_TARGET_WORLD ?? "local (default)"}`,
   );
+  setBootPhase(READY_PHASE);
 
   // No background sweep: a run that finishes cleanly tears itself down, and
   // everything else stays on disk, visible in `jigs ps`, until the operator

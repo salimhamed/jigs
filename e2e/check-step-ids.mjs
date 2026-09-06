@@ -153,55 +153,138 @@ function withFakeVersion(run) {
 // peer missing from the factory's package.json is invisible until the built
 // bundle starts, in someone else's repo, with ERR_MODULE_NOT_FOUND naming the
 // package. Booting it once here is the only place this repo can see it, so
-// this check is about module resolution and the two listeners coming up — not
-// about the World, whose URL below points at nothing on purpose.
+// this check is about module resolution and the service coming up — not
+// about the World. The boot runs on the stub in e2e-world.cjs beside this
+// file: it starts, it closes, it touches no database, and the service reaches
+// `ready` on it the way it does on Postgres. (The SDK's filesystem World
+// cannot stand in: from a bundle its start rejects, and a World that fails to
+// start exits the service.)
+//
+// The service refuses to start without a WORKFLOW_POSTGRES_URL, though: the
+// worktree registry gate creates its tables there before the World starts. So
+// the boot runs only when the runner's environment carries one — CI's
+// step-ids job brings a Postgres service container for it — and says so and
+// skips when it does not. The registry needs no bootstrap: its ensure is a
+// CREATE TABLE IF NOT EXISTS, so an empty database will do.
+//
+// Then the exit. Nothing under the service ends the process on SIGTERM —
+// nitro wires no close hook, srvx only closes its listener, and
+// graphile-worker drains and re-raises to nobody — so the service has to,
+// and only a built bundle receiving the signal can show that it does. Once
+// /health reports ready the child gets SIGTERM and must leave on its own,
+// with code 0, inside the time `jigs service stop` gives it before SIGKILL.
+// What this proves: imports, both listeners, readiness, the clean exit. What
+// it does not: the graphile path, which the shutdown live test covers.
 const BOOT_PORT = 18990;
 const BOOT_DASHBOARD_PORT = 18991;
 const BOOT_TIMEOUT_MS = 90_000;
+const SHUTDOWN_TIMEOUT_MS = 8_000;
+const READY_POLL_MS = 100;
 const BOOT_MARKERS = ["Listening on:", "[service] dashboard:"];
+const BOOT_WORLD = path.join(here, "e2e-world.cjs");
 // A top-level import that cannot resolve exits the process; one behind a
 // plugin's dynamic import is caught by nitro and only costs the dashboard, so
 // the message is what identifies it either way.
 const BOOT_UNRESOLVED = /ERR_MODULE_NOT_FOUND|Cannot find (?:module|package)/;
 
-function bootOutcome() {
-  const child = spawn(process.execPath, [bundle()], {
-    cwd: factory,
-    env: {
-      ...process.env,
-      PORT: String(BOOT_PORT),
-      JIGS_DASHBOARD_PORT: String(BOOT_DASHBOARD_PORT),
-      WORKFLOW_TARGET_WORLD: "@workflow/world-postgres",
-      WORKFLOW_POSTGRES_URL: "postgres://nobody@127.0.0.1:1/nothing",
-    },
-  });
+function bootOutcome(postgresUrl) {
+  // The World is the stub whatever the shell says; the URL is the registry's.
+  const env = {
+    ...process.env,
+    PORT: String(BOOT_PORT),
+    JIGS_DASHBOARD_PORT: String(BOOT_DASHBOARD_PORT),
+    WORKFLOW_TARGET_WORLD: BOOT_WORLD,
+    WORKFLOW_POSTGRES_URL: postgresUrl,
+  };
+  const spawnedAt = Date.now();
+  const child = spawn(process.execPath, [bundle()], { cwd: factory, env });
   return new Promise((resolve) => {
     let output = "";
     let settled = false;
-    // The kill below makes the process exit, which fires the handler that
-    // would settle a second time with a failure.
+    let listening = false;
+    let terminatedAt;
+    let readyMs;
+    let timer;
     const settle = (problem) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      child.kill("SIGKILL");
-      resolve({ output, problem });
+      // A child that left on its own is what passes; anything else still
+      // holds the ports.
+      if (child.exitCode === null && child.signalCode === null) {
+        child.kill("SIGKILL");
+      }
+      resolve({
+        output,
+        problem,
+        readyMs,
+        exitMs:
+          terminatedAt === undefined ? undefined : Date.now() - terminatedAt,
+      });
+    };
+    const terminate = () => {
+      terminatedAt = Date.now();
+      clearTimeout(timer);
+      timer = setTimeout(
+        () =>
+          settle(`it did not exit within ${SHUTDOWN_TIMEOUT_MS}ms of SIGTERM`),
+        SHUTDOWN_TIMEOUT_MS,
+      );
+      child.kill("SIGTERM");
+    };
+    // Listening is not ready: nitro answers /health before the plugins that
+    // start the World have run, and the exit under test is the one that
+    // closes a started World.
+    const terminateOnceReady = async () => {
+      while (!settled) {
+        if (await ready()) {
+          readyMs = Date.now() - spawnedAt;
+          terminate();
+          return;
+        }
+        await new Promise((r) => setTimeout(r, READY_POLL_MS));
+      }
     };
     const read = (chunk) => {
       output += chunk;
       if (BOOT_UNRESOLVED.test(output)) settle("it could not resolve a module");
-      else if (BOOT_MARKERS.every((m) => output.includes(m))) settle(null);
+      else if (!listening && BOOT_MARKERS.every((m) => output.includes(m))) {
+        listening = true;
+        void terminateOnceReady();
+      }
     };
-    const timer = setTimeout(
-      () => settle(`it did not start listening within ${BOOT_TIMEOUT_MS}ms`),
+    timer = setTimeout(
+      () => settle(`it did not become ready within ${BOOT_TIMEOUT_MS}ms`),
       BOOT_TIMEOUT_MS,
     );
     child.stdout.setEncoding("utf8").on("data", read);
     child.stderr.setEncoding("utf8").on("data", read);
-    child.on("exit", (code, signal) =>
-      settle(`it exited (code ${code}, signal ${signal}) before listening`),
-    );
+    // `close`, not `exit`: the last lines of output arrive after `exit`.
+    child.on("close", (code, signal) => {
+      if (terminatedAt === undefined) {
+        settle(
+          `it exited (code ${code}, signal ${signal}) before it was ready`,
+        );
+      } else if (code === 0) {
+        settle(null);
+      } else {
+        settle(
+          `it exited with code ${code} (signal ${signal}) after SIGTERM, not 0`,
+        );
+      }
+    });
   });
+}
+
+async function ready() {
+  try {
+    const res = await fetch(`http://127.0.0.1:${BOOT_PORT}/health`, {
+      signal: AbortSignal.timeout(1_000),
+    });
+    return res.ok && (await res.json()).ready === true;
+  } catch {
+    return false;
+  }
 }
 
 function reportDiff(expected, actual) {
@@ -274,14 +357,27 @@ console.log("\n=== scaffold: typecheck, then the scaffolded ids test");
 run("pnpm", ["typecheck"]);
 run("pnpm", ["test"]);
 
-console.log("\n=== boot: the built bundle resolves every import and listens");
-const boot = await bootOutcome();
-if (boot.problem !== null) {
-  console.error(boot.output);
-  fail(
-    `the built service did not start: ${boot.problem}`,
-    "if the output above names a package it cannot find, the factory loads it by name at run time: it belongs in @jigs/service's peerDependencies and the factory package.json template",
+const postgresUrl = process.env.WORKFLOW_POSTGRES_URL;
+if (postgresUrl === undefined || postgresUrl === "") {
+  console.log(
+    "\nboot check skipped: WORKFLOW_POSTGRES_URL unset (CI runs it against a service container)",
   );
+} else {
+  console.log(
+    "\n=== boot: the built bundle resolves every import, becomes ready, and exits on SIGTERM",
+  );
+  const boot = await bootOutcome(postgresUrl);
+  if (boot.problem === null) {
+    console.log(
+      `ready after ${boot.readyMs}ms; exited 0 ${boot.exitMs}ms after SIGTERM`,
+    );
+  } else {
+    console.error(boot.output);
+    fail(
+      `the built service did not start and stop cleanly: ${boot.problem}`,
+      "if the output above names a package it cannot find, the factory loads it by name at run time: it belongs in @jigs/service's peerDependencies and the factory package.json template",
+    );
+  }
 }
 
 console.log(

@@ -22,6 +22,24 @@ jobs:
   # e2e/check-step-ids.mjs for why nothing else can.
   step-ids:
     runs-on: ubuntu-latest
+    # The boot half of the check starts the built service, whose registry gate
+    # creates its tables in this database (CREATE TABLE IF NOT EXISTS, so a
+    # fresh one needs no bootstrap). The World itself is a stub; only the
+    # registry touches Postgres. Without the URL the check skips the boot.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: jigs
+          POSTGRES_PASSWORD: jigs
+          POSTGRES_DB: jigs
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U jigs -d jigs"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
@@ -34,3 +52,5 @@ jobs:
       # exist as the built artifact its bin entry points at.
       - run: pnpm build
       - run: pnpm e2e
+        env:
+          WORKFLOW_POSTGRES_URL: postgres://jigs:jigs@localhost:5432/jigs

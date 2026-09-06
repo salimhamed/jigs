@@ -203,7 +203,6 @@ function up(
       processes: io.procs.processes,
       prepare: vi.fn(),
       readyTimeoutMs: 500,
-      pollMs: 5,
       ...extra,
     },
     options,

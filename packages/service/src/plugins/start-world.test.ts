@@ -1,7 +1,11 @@
 import { CliError } from "jigs";
 import type { ISql } from "postgres";
 import { afterEach, expect, test, vi } from "vitest";
-import { gateOnBindingClones, gateOnWorktreeRegistry } from "./start-world";
+import {
+  gateOnBindingClones,
+  gateOnWorktreeRegistry,
+  gateOnWorldStart,
+} from "./start-world";
 
 // Nitro never awaits a plugin, so the only thing that can stop the service is
 // the plugin itself.
@@ -181,4 +185,33 @@ test("a factory with no bindings clones nothing and still starts", async () => {
 
   expect(proceed).toBe(true);
   expect(logs).toEqual([]);
+});
+
+// The World's start is the last gate: left to nitro, its rejection is a
+// console.error and a process that stays up, never ready.
+test("a World that fails to start exits the process with the reason", async () => {
+  const exits: number[] = [];
+  const errors: string[] = [];
+
+  const proceed = await gateOnWorldStart({
+    start: () => Promise.reject(new Error('Invalid version string: "bundled"')),
+    exit: (code) => exits.push(code),
+    error: (line) => errors.push(line),
+  });
+
+  expect(proceed).toBe(false);
+  expect(exits).toEqual([1]);
+  expect(errors).toEqual([
+    '[service] world failed to start: Invalid version string: "bundled"',
+  ]);
+});
+
+test("a World that starts lets the boot finish", async () => {
+  const exits: number[] = [];
+  const proceed = await gateOnWorldStart({
+    start: async () => {},
+    exit: (code) => exits.push(code),
+  });
+  expect(proceed).toBe(true);
+  expect(exits).toEqual([]);
 });
