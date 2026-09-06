@@ -63,6 +63,13 @@ factory's `package.json` and run it again. A factory still carrying the
 line and rewrite its `@salimhamed/jigs-service/X` imports to
 `@salimhamed/jigs/X` first ([ADR 0017](adr/0017-single-package.md)).
 
+pnpm verifies the whole lockfile against its `minimumReleaseAge` policy
+before it resolves anything, so a dependency is still age-checked on the very
+install that removes it. Leave a recently published package's
+`minimumReleaseAgeExclude` entry in `pnpm-workspace.yaml` until that install
+has run, then drop the entry. Both factories hit this moving off
+`@salimhamed/jigs-service`.
+
 **Releasing this repo (once, by whoever owns it).** The package carries
 ordinary semver from `0.1.0` on, and nothing here moves it by hand. A PR's
 title is a conventional commit — CI rejects one that is not — and merging it
