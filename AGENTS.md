@@ -4,7 +4,9 @@ See `README.md` for what jigs is and the dev commands (`pnpm check` runs lint,
 typecheck, test, and build). `pnpm check` covers no workflow directive — no
 pipeline lives here — so run `pnpm e2e` too: it scaffolds a factory with
 `jigs init` into a temp dir, builds it, and diffs its emitted step ids against
-`e2e/expected-ids.txt`.
+`e2e/expected-ids.txt`. With `WORKFLOW_POSTGRES_URL` set it also boots the
+built service, waits for it to be ready, and requires a clean exit on SIGTERM;
+CI provides that Postgres, and without the URL the boot is skipped.
 
 PR titles are conventional commits, enforced by CI — the squashed title is what
 release-please reads to cut a release

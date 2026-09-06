@@ -239,8 +239,8 @@ const service = program
 service
   .command("start")
   .description("start this factory's service in the background")
-  .action(() => {
-    startService({ cwd: process.cwd(), out });
+  .action(async () => {
+    await startService({ cwd: process.cwd(), out });
   });
 
 service

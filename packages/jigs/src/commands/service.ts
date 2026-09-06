@@ -6,6 +6,7 @@ import { basename } from "node:path";
 import { resolveService } from "../config/factory-config.ts";
 import { locateFactoryRoot } from "../config/locate-factory.ts";
 import { CliError } from "../errors.ts";
+import { liveServicePid } from "./service-lifecycle.ts";
 
 // Which service a verb talks to. The factory root travels with the URL only
 // so the unreachable error can name the factory whose service is down.
@@ -43,10 +44,32 @@ export async function serviceFetch(
   } catch {
     throw new CliError(
       `could not reach the jigs service at ${base}`,
-      target.factoryRoot === undefined
-        ? "is the jigs service running? pass --service or set JIGS_SERVICE_URL"
-        : `the ${basename(target.factoryRoot)} factory's service is not running — start it: jigs service start`,
+      unreachableHint(target),
     );
+  }
+}
+
+// A live pid behind a port that does not answer is a service booting or
+// wedged; "start it" would send the operator to spawn a second one.
+function unreachableHint(target: ServiceTarget): string {
+  if (target.factoryRoot === undefined) {
+    return "is the jigs service running? pass --service or set JIGS_SERVICE_URL";
+  }
+  const factory = basename(target.factoryRoot);
+  const pid = livePidOrNone(target.factoryRoot);
+  return pid === undefined
+    ? `the ${factory} factory's service is not running — start it: jigs service start`
+    : `the ${factory} factory's service is running (pid ${pid}) but not answering — still booting, or wedged: jigs service logs`;
+}
+
+// A hint must not turn into a second error: a pid the OS recycled to another
+// user answers `kill(pid, 0)` with EPERM, which the liveness check rethrows,
+// and a factory root that no longer parses throws before that.
+function livePidOrNone(factoryRoot: string): number | undefined {
+  try {
+    return liveServicePid({ cwd: factoryRoot, out: () => {} });
+  } catch {
+    return undefined;
   }
 }
 

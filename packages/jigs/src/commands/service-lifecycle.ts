@@ -32,7 +32,10 @@ import { jigsDataDir } from "../paths.ts";
 export const SERVICE_ENTRY = ".output/server/index.mjs";
 
 const STOP_TIMEOUT_MS = 10_000;
+// A boot clones every binding, and a first clone of a large repo is a minute.
+const START_TIMEOUT_MS = 300_000;
 const POLL_MS = 100;
+const START_POLL_MS = 200;
 const LOG_LINES = 50;
 
 export interface SpawnSpec {
@@ -43,27 +46,46 @@ export interface SpawnSpec {
   logPath: string;
 }
 
-// The only two things a test cannot do for real. Every file this module
-// touches is either in the factory repo under test or under `jigsDataDir()`,
-// which `XDG_DATA_HOME` already redirects.
+// With the probe below, the only things a test cannot do for real. Every file
+// this module touches is either in the factory repo under test or under
+// `jigsDataDir()`, which `XDG_DATA_HOME` already redirects.
 export interface ServiceProcesses {
   spawn(spec: SpawnSpec): number | undefined;
   // node's `kill(pid, 0)` semantics: false only when the process is gone.
   signal(pid: number, sig: NodeJS.Signals | 0): boolean;
 }
 
+// What the service's /health says about its boot; null when it does not
+// answer at all.
+export interface ServiceHealth {
+  ready: boolean;
+  phase: string;
+}
+
 export interface ServiceLifecycleDeps {
   cwd: string;
   out: (line: string) => void;
   processes?: ServiceProcesses;
+  probe?: (url: string) => Promise<ServiceHealth | null>;
+  startTimeoutMs?: number;
+  startPollMs?: number;
   stopTimeoutMs?: number;
+}
+
+export interface StartOptions {
+  // `jigs up` spawns in one step and waits in the next, so it can name them
+  // apart; everything else waits here.
+  awaitReady?: boolean;
 }
 
 interface Supervisor {
   factoryRoot: string;
   service: ResolvedService;
   processes: ServiceProcesses;
+  probe: (url: string) => Promise<ServiceHealth | null>;
   out: (line: string) => void;
+  startTimeoutMs: number;
+  startPollMs: number;
   stopTimeoutMs: number;
 }
 
@@ -105,7 +127,10 @@ function resolveSupervisor(deps: ServiceLifecycleDeps): Supervisor {
     factoryRoot,
     service: resolveService(factoryRoot),
     processes: deps.processes ?? nodeProcesses,
+    probe: deps.probe ?? healthProbe,
     out: deps.out,
+    startTimeoutMs: deps.startTimeoutMs ?? START_TIMEOUT_MS,
+    startPollMs: deps.startPollMs ?? START_POLL_MS,
     stopTimeoutMs: deps.stopTimeoutMs ?? STOP_TIMEOUT_MS,
   };
 }
@@ -149,7 +174,10 @@ function childEnv(sv: Supervisor): Record<string, string> {
   };
 }
 
-export function startService(deps: ServiceLifecycleDeps): void {
+export async function startService(
+  deps: ServiceLifecycleDeps,
+  options: StartOptions = {},
+): Promise<void> {
   const sv = resolveSupervisor(deps);
   const running = livePid(sv);
   if (running !== undefined) {
@@ -187,9 +215,82 @@ export function startService(deps: ServiceLifecycleDeps): void {
     serviceBundlePath(sv.service.slug),
     `${builtBundleHash(sv.factoryRoot)}\n`,
   );
+  if (options.awaitReady !== false) await awaitReady(sv, pid);
   sv.out(`started ${sv.service.slug}: pid ${pid} at ${sv.service.serviceUrl}`);
   sv.out(`dashboard: ${sv.service.dashboardUrl}`);
   sv.out(`logs: ${logFile}`);
+}
+
+/**
+ * Waits for the recorded service to report itself ready. What `start` does
+ * before it says "started", for a caller that spawned without waiting.
+ */
+export async function awaitServiceReady(
+  deps: ServiceLifecycleDeps,
+): Promise<void> {
+  const sv = resolveSupervisor(deps);
+  const pid = readPid(sv);
+  if (pid === undefined) {
+    throw new CliError(
+      `not running: ${sv.service.slug}`,
+      "start it: jigs service start",
+    );
+  }
+  if (!sv.processes.signal(pid, 0)) throw failedBoot(sv, pid);
+  await awaitReady(sv, pid);
+}
+
+// "started" means the World is up and every binding cloned, not that the port
+// answers: nitro serves /health before its plugins run, so a 200 says nothing
+// about a boot that a failed clone can still end a minute later.
+async function awaitReady(sv: Supervisor, pid: number): Promise<void> {
+  const deadline = Date.now() + sv.startTimeoutMs;
+  let phase: string | undefined;
+  for (;;) {
+    const health = await sv.probe(`${sv.service.serviceUrl}/health`);
+    if (health?.ready) return;
+    if (health !== null && health.phase !== phase) {
+      phase = health.phase;
+      sv.out(`booting: ${phase}`);
+    }
+    if (!sv.processes.signal(pid, 0)) throw failedBoot(sv, pid);
+    if (Date.now() >= deadline) {
+      throw new CliError(
+        `the ${sv.service.slug} service is still booting after ${sv.startTimeoutMs / 1000}s — pid ${pid} is still running${phase === undefined ? "" : ` (${phase})`}`,
+        `it clones every binding before the World starts — watch jigs service logs (${serviceLogPath(sv.service.slug)}); jigs service stop ends it`,
+      );
+    }
+    await sleep(sv.startPollMs);
+  }
+}
+
+// The gates exit the process when a clone or the registry fails, so a pid
+// gone mid-boot is the failed boot itself; its log is the explanation, and
+// the last lines of it are worth more here than a path.
+function failedBoot(sv: Supervisor, pid: number): CliError {
+  const logFile = serviceLogPath(sv.service.slug);
+  for (const line of tailLines(logFile, LOG_LINES)) sv.out(line);
+  rmSync(servicePidfilePath(sv.service.slug), { force: true });
+  return new CliError(
+    `the ${sv.service.slug} service exited during boot (pid ${pid})`,
+    `its log says why: jigs service logs (${logFile})`,
+  );
+}
+
+async function healthProbe(url: string): Promise<ServiceHealth | null> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(1_000) });
+    if (!res.ok) return null;
+    const body = (await res.json().catch(() => ({}))) as {
+      ready?: boolean;
+      phase?: string;
+    };
+    // A service built before /health reported readiness answers with neither
+    // field; answering at all was its whole readiness.
+    return { ready: body.ready ?? true, phase: body.phase ?? "up" };
+  } catch {
+    return null;
+  }
 }
 
 const sleep = (ms: number) =>
@@ -221,9 +322,10 @@ export async function stopService(deps: ServiceLifecycleDeps): Promise<void> {
 
 export async function restartService(
   deps: ServiceLifecycleDeps,
+  options: StartOptions = {},
 ): Promise<void> {
   await stopService(deps);
-  startService(deps);
+  await startService(deps, options);
 }
 
 export function serviceStatus(deps: ServiceLifecycleDeps): void {
@@ -255,10 +357,15 @@ export function serviceLogs(
       `this factory's service has not run yet: jigs service start`,
     );
   }
+  for (const line of tailLines(file, options.lines ?? LOG_LINES)) sv.out(line);
+  sv.out(`(follow: tail -f ${file})`);
+}
+
+function tailLines(file: string, count: number): string[] {
+  if (!existsSync(file)) return [];
   const lines = readFileSync(file, "utf8").split("\n");
   if (lines.at(-1) === "") lines.pop();
-  for (const line of lines.slice(-(options.lines ?? LOG_LINES))) sv.out(line);
-  sv.out(`(follow: tail -f ${file})`);
+  return lines.slice(-count);
 }
 
 const nodeProcesses: ServiceProcesses = {

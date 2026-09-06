@@ -22,12 +22,13 @@ jigs doctor           # the check catalog, in the service's own environment
 `jigs doctor` is an HTTP call into the service, not a local check — if the
 service is down it cannot answer, and starting the service is the first repair.
 Every failing check prints its own repair line; follow that rather than
-improvising. `jigs service start` returns before the port is listening — and
-the spawned service clones every binding before the World starts, which can
-take a minute the first time — so "could not reach the jigs service" seconds
-after a start means booting, not broken; re-run, and read `jigs service logs`
-if it persists. It can also mean the process exited after "started", which is
-what a binding whose clone fails does; `jigs service logs` names the binding.
+improvising. `jigs service start` returns once the World is up and every
+binding is cloned — a minute the first time, each phase printed as it goes —
+so "could not reach the jigs service" after a start that said "started" is a
+real failure; read `jigs service logs`. A start that fails because the process
+exited is what a binding whose clone fails does, and the error names the log.
+A start that gives up after five minutes leaves the process running, so check
+`jigs service status` before repairing anything.
 
 `jigs service status` is also where the dashboard URL comes from. Do not guess
 the port.
