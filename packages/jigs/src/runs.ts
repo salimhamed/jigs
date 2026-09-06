@@ -8,7 +8,12 @@ import { getWorld } from "workflow/runtime";
 import type { Factory } from "./factory.ts";
 import { resolveIssueRef } from "./providers/linear.ts";
 import { type JobRunIds, listJobRunIds, runsWithActiveStep } from "./stalls.ts";
-import { TICKET_TOKEN_PREFIX, ticketToken } from "./suspension/tokens.ts";
+import {
+  NEEDS_HUMAN_TOKEN_PREFIX,
+  PR_TOKEN_PREFIX,
+  TICKET_TOKEN_PREFIX,
+  ticketToken,
+} from "./suspension/tokens.ts";
 import { registrySql } from "./worktrees/sql.ts";
 
 // The SDK mints run ids as `wrun_` + a ULID, so a ref is run-id-shaped (with
@@ -117,12 +122,22 @@ export function triggerLabel(triggerId: string | undefined): string {
   return scheduleTriggerLabel(end === -1 ? rest : rest.slice(0, end));
 }
 
-// The ticket claim is held for the run's whole life, so it says nothing about
-// being parked; every other hook is something the run waits on, including one
-// carrying no jigs metadata to hydrate. `jigs ps` and `jigs cancel` must agree
-// on this or a run ps calls suspended is one cancel refuses to confirm.
-export const isParkToken = (token: string): boolean =>
-  !token.startsWith(TICKET_TOKEN_PREFIX);
+/**
+ * Why a run holding this hook is parked, or null when the hook is no park at
+ * all. The token is the whole answer: it names what the run is waiting on, so
+ * nothing has to be written down beside it. The ticket claim is held for the
+ * run's whole life and so says nothing about waiting; every other hook is
+ * something the run waits on, including a token jigs has never seen. `jigs ps`,
+ * `jigs logs` and `jigs cancel` all read this one function, or a run one calls
+ * suspended is one another refuses to confirm.
+ */
+export function parkReason(token: string): string | null {
+  if (token.startsWith(TICKET_TOKEN_PREFIX)) return null;
+  if (token.startsWith(PR_TOKEN_PREFIX)) return "awaiting pull request review";
+  if (token.startsWith(NEEDS_HUMAN_TOKEN_PREFIX))
+    return "needs a human on the ticket";
+  return "awaiting an external event";
+}
 
 export interface StallDeps {
   jobRunIds?: () => Promise<JobRunIds>;
@@ -176,7 +191,9 @@ export async function listRuns(
     stalledRuns(deps),
   ]);
   const parkHooks = new Set(
-    hooks.filter((hook) => isParkToken(hook.token)).map((hook) => hook.runId),
+    hooks
+      .filter((hook) => parkReason(hook.token) !== null)
+      .map((hook) => hook.runId),
   );
   // The compiler stamps each pipeline with the workflowId the world stores as
   // workflowName; untransformed (unit tests, plain imports) there is nothing to

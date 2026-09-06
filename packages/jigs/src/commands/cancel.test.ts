@@ -40,13 +40,7 @@ const claiming = {
   runId: RUN,
   status: "running",
   suspended: false,
-  suspensions: [
-    {
-      key: "ticket-claim",
-      reason: "one active run per ticket",
-      satisfiedBy: "linear:ticket:AGE-317",
-    },
-  ],
+  suspensions: [],
 };
 
 const suspended = {
@@ -55,9 +49,8 @@ const suspended = {
   suspended: true,
   suspensions: [
     {
-      key: "pr-gate:acme/api#41",
-      reason: "waiting for approval",
-      satisfiedBy: "github:pr:acme/api#41",
+      token: "github:pr:acme/api#41",
+      reason: "awaiting pull request review",
     },
   ],
 };

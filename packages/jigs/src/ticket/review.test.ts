@@ -1,8 +1,7 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import { type AgentStepConfig, claude, parseOutput } from "../steps/index.ts";
 import type { TicketClaim } from "../suspension/claim.ts";
-import type { HumanReply } from "../suspension/needs-human.ts";
-import type { JsonValue } from "../suspension/record.ts";
+import type { HumanReply, JsonValue } from "../suspension/needs-human.ts";
 import {
   type TicketReviewDeps,
   ticketReview,

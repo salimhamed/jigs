@@ -13,7 +13,6 @@ import {
   type ReviewThread,
 } from "../providers/github.ts";
 import { ClaimConflictError } from "./claim.ts";
-import { suspensionMetadata } from "./record.ts";
 import { type PrRef, prToken } from "./tokens.ts";
 
 export type GateWake =
@@ -228,15 +227,7 @@ export async function* pullRequestGate(
   fetchState: typeof fetchPrState,
 ): AsyncGenerator<GateWake, void, GateAck | undefined> {
   const token = prToken(pr);
-  const hook = createHook<unknown>({
-    token,
-    metadata: suspensionMetadata({
-      key: `pr-gate:${pr.owner}/${pr.repo}#${pr.number}`,
-      reason: "awaiting pull request review",
-      payload: pr,
-      satisfiedBy: token,
-    }),
-  });
+  const hook = createHook<unknown>({ token });
   try {
     const conflict = await hook.getConflict();
     if (conflict !== null) {

@@ -12,7 +12,18 @@ import {
   mention,
 } from "../providers/linear.ts";
 import type { TicketClaim } from "./claim.ts";
-import { type JsonValue, suspensionMetadata } from "./record.ts";
+import { needsHumanToken } from "./tokens.ts";
+
+// The shape of the extra detail a halt posts to the ticket beneath its
+// reason. An alias rather than an interface so an object literal at a call
+// site still satisfies it structurally.
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
 
 export interface HumanReply {
   commentId: string;
@@ -48,16 +59,11 @@ export async function needsHuman(
   // object holds functions.
   const { checkForReply, postComment } = deps;
   const posted = await postComment(claim.issueId, reason, payload);
-  // Marker hook: carries the needs-human record for run inspection. Never
+  // The halt's only signal: the claim hook is held for the run's whole life,
+  // so this marker is what tells `jigs ps` the run is parked on a human. Never
   // awaited — it registers when the run suspends on the claim hook below.
   const marker = createHook<never>({
-    token: `jigs:suspension:${claim.issueId}:${posted.commentId}`,
-    metadata: suspensionMetadata({
-      key: `needs-human:${posted.commentId}`,
-      reason,
-      payload,
-      satisfiedBy: claim.token,
-    }),
+    token: needsHumanToken(claim.issueId, posted.commentId),
   });
   try {
     let cursor = posted.postedAt;
