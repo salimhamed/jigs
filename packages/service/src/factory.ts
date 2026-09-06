@@ -12,7 +12,6 @@ export const ticketInput = z.union([
 export interface PipelineEntry<S extends z.ZodType = z.ZodType> {
   pipeline: (inputs: z.output<S> & { triggerId: string }) => Promise<unknown>;
   inputs: S;
-  hookToken?: (triggerId: string) => string;
   // The manifest half of preflight's computed check list (ADR 0010).
   requires?: PipelineRequires;
 }

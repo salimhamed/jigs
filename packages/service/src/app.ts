@@ -109,9 +109,6 @@ export function createApp(
             runId: result.runId,
             pipeline: name,
             logs: logsPointer(result.runId),
-            ...(result.resumeToken === undefined
-              ? {}
-              : { resumeToken: result.resumeToken }),
           },
           201,
         );
@@ -155,19 +152,6 @@ export function createApp(
         { sql },
       ),
     );
-  });
-
-  app.post("/api/hooks/resume", async (c) => {
-    const { token, payload } = await c.req.json<{
-      token: string;
-      payload: unknown;
-    }>();
-    try {
-      const result = await resumeHook(token, payload);
-      return c.json({ resumed: true, ...result });
-    } catch (err) {
-      return c.json({ resumed: false, error: String(err) }, 404);
-    }
   });
 
   // The ingress is stateless (ADR 0009): verify, reconstruct the token, resume.

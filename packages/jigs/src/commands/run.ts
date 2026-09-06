@@ -6,7 +6,6 @@ import { type ServiceDeps, serviceFetch } from "./service.ts";
 export interface LaunchResult {
   runId: string;
   pipeline: string;
-  resumeToken?: string;
   logs: string;
 }
 
@@ -155,9 +154,6 @@ export async function launchRun(
   const result = (await res.json()) as LaunchResult;
   deps.out(`run ${result.runId}`);
   deps.out(`pipeline ${result.pipeline}`);
-  if (result.resumeToken !== undefined) {
-    deps.out(`resume token ${result.resumeToken}`);
-  }
   deps.out(`logs: ${result.logs}`);
   return result;
 }

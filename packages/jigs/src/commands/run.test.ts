@@ -159,14 +159,13 @@ test("a refused launch prints every preflight failure with its repair", async ()
   );
 });
 
-test("a started run prints its id, pipeline, resume token and log pointer", async () => {
+test("a started run prints its id, pipeline and log pointer", async () => {
   respondSchema();
   fetchMock.mockResolvedValueOnce(
     new Response(
       JSON.stringify({
         runId: "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
         pipeline: "deliver-feature",
-        resumeToken: "demo:trigger-1",
         logs: "http://localhost:9090/run/wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
       }),
       { status: 201 },
@@ -176,7 +175,6 @@ test("a started run prints its id, pipeline, resume token and log pointer", asyn
   expect(lines).toEqual([
     "run wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
     "pipeline deliver-feature",
-    "resume token demo:trigger-1",
     "logs: http://localhost:9090/run/wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
   ]);
   const [, trigger] = fetchMock.mock.calls;
