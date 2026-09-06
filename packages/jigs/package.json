@@ -19,19 +19,35 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "default": "./dist/index.js"
     },
-    "./harnesses": {
-      "types": "./dist/harnesses/index.d.ts",
-      "import": "./dist/harnesses/index.js"
+    "./app": {
+      "types": "./dist/app.d.ts",
+      "default": "./dist/app.js"
+    },
+    "./build": {
+      "types": "./dist/build.d.ts",
+      "default": "./dist/build.js"
     },
     "./checks": {
       "types": "./dist/checks/index.d.ts",
       "default": "./dist/checks/index.js"
     },
+    "./harnesses": {
+      "types": "./dist/harnesses/index.d.ts",
+      "default": "./dist/harnesses/index.js"
+    },
+    "./nitro": {
+      "types": "./dist/nitro.d.ts",
+      "default": "./dist/nitro.js"
+    },
     "./prompts": {
       "types": "./dist/prompts/index.d.ts",
       "default": "./dist/prompts/index.js"
+    },
+    "./schedules": {
+      "types": "./dist/schedules.d.ts",
+      "default": "./dist/schedules.js"
     },
     "./steps": {
       "types": "./dist/steps/index.d.ts",
@@ -40,6 +56,58 @@
     "./steps/execute": {
       "types": "./dist/steps/execute.d.ts",
       "default": "./dist/steps/execute.js"
+    },
+    "./steps/jit": {
+      "types": "./dist/steps/jit.d.ts",
+      "default": "./dist/steps/jit.js"
+    },
+    "./steps/run": {
+      "types": "./dist/steps/run.d.ts",
+      "default": "./dist/steps/run.js"
+    },
+    "./suspension/claim": {
+      "types": "./dist/suspension/claim.d.ts",
+      "default": "./dist/suspension/claim.js"
+    },
+    "./suspension/needs-human": {
+      "types": "./dist/suspension/needs-human.d.ts",
+      "default": "./dist/suspension/needs-human.js"
+    },
+    "./suspension/pull-request-gate": {
+      "types": "./dist/suspension/pull-request-gate.d.ts",
+      "default": "./dist/suspension/pull-request-gate.js"
+    },
+    "./ticket/review": {
+      "types": "./dist/ticket/review.d.ts",
+      "default": "./dist/ticket/review.js"
+    },
+    "./ticket/snapshot": {
+      "types": "./dist/ticket/snapshot.d.ts",
+      "default": "./dist/ticket/snapshot.js"
+    },
+    "./review-loop/loop": {
+      "types": "./dist/review-loop/loop.d.ts",
+      "default": "./dist/review-loop/loop.js"
+    },
+    "./review-loop/pull-request": {
+      "types": "./dist/review-loop/pull-request.d.ts",
+      "default": "./dist/review-loop/pull-request.js"
+    },
+    "./worktrees": {
+      "types": "./dist/worktrees/index.d.ts",
+      "default": "./dist/worktrees/index.js"
+    },
+    "./plugins/start-dashboard": {
+      "types": "./dist/plugins/start-dashboard.d.ts",
+      "default": "./dist/plugins/start-dashboard.js"
+    },
+    "./plugins/start-world": {
+      "types": "./dist/plugins/start-world.d.ts",
+      "default": "./dist/plugins/start-world.js"
+    },
+    "./providers/linear": {
+      "types": "./dist/providers/linear.d.ts",
+      "default": "./dist/providers/linear.js"
     }
   },
   "files": [
@@ -56,8 +124,8 @@
     "gen:prompts": "node scripts/gen-prompts.ts && biome check --write src/prompts/defaults.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
-    "test:live": "vitest run --config vitest.live.config.ts"
+    "test:live": "vitest run --config vitest.live.config.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
@@ -65,14 +133,32 @@
     "ai-sdk-provider-claude-code": "4.1.1",
     "ai-sdk-provider-codex-cli": "2.1.2",
     "commander": "^15.0.0",
+    "croner": "10.0.1",
+    "hono": "^4.13.4",
+    "postgres": "^3.4.7",
     "smol-toml": "^1.8.0",
+    "tinyglobby": "^0.2.17",
+    "undici": "^7.28.0",
     "yaml": "^2.9.0"
   },
   "peerDependencies": {
-    "zod": "^4.4.3"
+    "@workflow/web": "4.1.20",
+    "@workflow/world-postgres": "4.3.4",
+    "workflow": "4.8.4",
+    "zod": "^4.4.3",
+    "nitro": "3.0.260610-beta"
+  },
+  "peerDependenciesMeta": {
+    "nitro": {
+      "optional": true
+    }
   },
   "devDependencies": {
+    "@workflow/web": "4.1.20",
+    "@workflow/world-postgres": "4.3.4",
+    "nitro": "3.0.260610-beta",
     "tsdown": "^0.22.14",
+    "workflow": "4.8.4",
     "zod": "^4.4.3"
   }
 }

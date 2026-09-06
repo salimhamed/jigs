@@ -1,0 +1,6 @@
+// Tests are excluded from the dts build: they are not part of the shipped
+// surface, and nothing in dist/ should have a declaration reaching one.
+{
+  "extends": "./tsconfig.json",
+  "exclude": ["src/**/*.test.ts", "src/**/test-fixtures.ts"]
+}
