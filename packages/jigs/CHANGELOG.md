@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.2.0](https://github.com/salimhamed/jigs/compare/jigs-v0.1.20...jigs-v0.2.0) (2026-09-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* publish as @salimhamed/jigs and @salimhamed/jigs-service ([#101](https://github.com/salimhamed/jigs/issues/101))
+
+### Features
+
+* **jigs:** add jigs upgrade to bump both packages, run up, then typecheck ([#100](https://github.com/salimhamed/jigs/issues/100)) ([c206de1](https://github.com/salimhamed/jigs/commit/c206de17feabba2c1479e392ff745575f1f7d36f))
+* publish as @salimhamed/jigs and @salimhamed/jigs-service ([#101](https://github.com/salimhamed/jigs/issues/101)) ([b3887ce](https://github.com/salimhamed/jigs/commit/b3887ceced8d4b0053be814debae90f9df304cb7))
+
+
+### Bug Fixes
+
+* green main after the publish rename (e2e lockfile, upgrade test) ([#106](https://github.com/salimhamed/jigs/issues/106)) ([f6eed04](https://github.com/salimhamed/jigs/commit/f6eed04e025efbfaec321afa459edcc19f491495))
+
 ## [0.1.20](https://github.com/salimhamed/jigs/compare/jigs-v0.1.19...jigs-v0.1.20) (2026-09-06)
 
 
