@@ -104,10 +104,11 @@ Packages links the package to it and lets the repo-scoped token publish.
   CHANGELOGs — so a `publish` job runs after it, gated on `releases_created`,
   and skips a version the registry already holds so a re-run of the workflow
   is idempotent rather than a conflict. No provenance attestation: npm only
-  issues those on the public registry. A factory upgrades by moving both pins
-  and running `jigs up`; a consumer needs a token with `read:packages` in
-  `~/.npmrc`, and the scaffolded `.npmrc` carries only the scope-to-registry
-  line.
+  issues those on the public registry. A factory upgrades with `jigs upgrade`
+  (both pins, then `jigs up`, then its typecheck); a consumer needs a token
+  with `read:packages` in `~/.npmrc`, and the scaffolded `.npmrc` carries only
+  the scope-to-registry line. The dependency shape and the consumer side are
+  [ADR 0016](./0016-published-packages.md).
 
 ## Considered options
 

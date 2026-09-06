@@ -27,10 +27,13 @@ machine runs, the bindings they run against, and the service that hosts them.
 
 ```sh
 cp .env.example .env      # then fill in LINEAR_API_KEY and GITHUB_TOKEN
-jigs up                   # install, World, bootstrap, build, start, doctor
-jigs bind git@github.com:owner/repo.git
-jigs service restart      # the service clones every binding when it starts
+pnpm install              # once: this factory's own jigs, in node_modules/.bin
+pnpm exec jigs up         # World, bootstrap, build, start, doctor
+pnpm exec jigs bind git@github.com:owner/repo.git
+pnpm exec jigs service restart   # the service clones every binding when it starts
 ```
+
+Every `jigs` below is this factory's own: `pnpm exec jigs …`.
 
 The service listens on `:{{SERVICE_PORT}}`, its dashboard on
 `:{{DASHBOARD_PORT}}`, its World on `:{{POSTGRES_PORT}}`.
@@ -93,18 +96,16 @@ entry.
 
 ## Upgrading jigs
 
-Both packages release in lockstep, so move them together, then take the
-factory back through `jigs up`:
-
 ```sh
-pnpm update @salimhamed/jigs@<version> @salimhamed/jigs-service@<version>
-jigs up
+jigs upgrade              # or: jigs upgrade --to <version>
 ```
 
-Installing needs a token that can read GitHub Packages in `~/.npmrc`; the
-`.npmrc` here only routes the scope.
+Both packages release in lockstep; `upgrade` moves them together, runs
+`jigs up`, then `pnpm typecheck`. Installing needs a token that can read
+GitHub Packages in `~/.npmrc`; the `.npmrc` here only routes the scope.
 
 A release that grows a step needs a wrapper in `steps/jigs.ts` and a line in
-`STEP_IDS`; the typecheck names the gap. A release that adds a runtime
-dependency needs it in `package.json` too — compare against `jigs init`'s
-template.
+`STEP_IDS`; the typecheck names the gap. A release that moves one of the four
+runtime packages this factory supplies — `@workflow/web`,
+`@workflow/world-postgres`, `workflow`, `zod` — fails the install by name;
+move the same pin in `package.json` and run `jigs upgrade` again.

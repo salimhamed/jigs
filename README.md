@@ -18,48 +18,49 @@ run it for you whenever you want.
 
 ## Quick start
 
-> [!NOTE]
-> Nothing is published to npm yet, so a factory links a local checkout of this
-> repo and `jigs init` runs from that checkout's build. Expect around fifteen
-> minutes.
+jigs ships as two packages on GitHub Packages, `@salimhamed/jigs` (the CLI)
+and `@salimhamed/jigs-service` (the library a factory is written against). A
+factory pins both to one version and runs its own copy of the CLI; nothing is
+installed globally and nothing is cloned. Expect around ten minutes.
 
 **Prerequisites.**
 
-- Node 24 or newer.
-- pnpm.
+- Node 24 or newer, and pnpm.
 - Docker, with the daemon running.
 - The coding-agent CLIs your pipelines will drive — `claude` and `codex` — each
   logged in to its subscription.
+- A GitHub **classic** personal access token with `read:packages` and, while
+  this repo is private, `repo`. Fine-grained tokens cannot read GitHub
+  Packages.
 - If node comes from a version manager, the shell you start the service from
   needs it on `PATH`.
 
-### 1. Clone jigs and build the CLI
+### 1. Point pnpm at GitHub Packages (once per machine)
 
 ```sh
-git clone https://github.com/salimhamed/jigs.git
-cd jigs
-pnpm install
-pnpm build
+cat >> ~/.npmrc <<'EOF'
+@salimhamed:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=ghp_your_token_here
+EOF
 ```
 
-Then put the built CLI on your `PATH` as `jigs`:
-
-```sh
-mkdir -p ~/.local/bin
-ln -s "$PWD/packages/jigs/dist/cli.js" ~/.local/bin/jigs
-```
+The first line routes the `@salimhamed` scope; the second is the token that
+reads it. The same two lines serve `pnpm dlx`, `pnpm install` and every
+`jigs upgrade` from here on. The factory's own `.npmrc` carries only the scope
+line, so the token never lands in a repo.
 
 ### 2. Scaffold a factory
 
 ```sh
 mkdir my-factory && cd my-factory && git init
-jigs init
+pnpm dlx @salimhamed/jigs init
 ```
 
-`jigs init` writes the infrastructure — `jigs.yml`, `package.json`,
-`nitro.config.ts`, `docker-compose.yml`, `.env.example` and the rest of the
-build config — and the code the factory starts from, then prints the remaining
-steps with **your** ports filled in. Use its numbers, not the ones below.
+`jigs init` writes files and runs nothing: `jigs.yml`, `package.json` pinned to
+the version that scaffolded it, `nitro.config.ts`, `docker-compose.yml`,
+`.env.example`, the build config — and the code the factory starts from. Then
+it prints the remaining steps with **your** ports filled in. Use its numbers,
+not the ones below.
 
 ### 3. Read the factory's own code
 
@@ -76,63 +77,54 @@ Never rename `steps/jigs.ts` or its exported functions — the runtime memoizes
 parked runs against those names. `jigs.config.test.ts` pins the ids the last
 build emitted, so `pnpm test` in the factory catches a rename.
 
-### 4. Environment and World
+### 4. Tokens, then up
 
 ```sh
-cp .env.example .env      # then fill in LINEAR_API_KEY and GITHUB_TOKEN
-pnpm install
-docker compose up -d --wait
-pnpm exec bootstrap
+cp .env.example .env      # fill in LINEAR_API_KEY and GITHUB_TOKEN
+pnpm install              # puts the factory's own jigs in node_modules/.bin
+pnpm exec jigs up
 ```
 
-`bootstrap` applies the database migrations and the queue schema, and is safe to
-re-run.
+`jigs up` takes the factory from whatever state it is in to a running service:
+install, Postgres World, migrations, build, start and wait until the service
+is ready, then `jigs doctor`. One line per step, and it stops at the first that
+fails with the repair on the next line. Re-run it after any change — an
+unchanged factory installs, migrates and restarts nothing.
+
+From here every `jigs` is the factory's own: `pnpm exec jigs …` (or
+`pnpm jigs …`).
 
 ### 5. Bind a target repo
 
 ```sh
-jigs bind git@github.com:owner/repo.git
-jigs bindings
+pnpm exec jigs bind git@github.com:owner/repo.git
+pnpm exec jigs service restart
 ```
 
 A **binding** maps a name to a target repo's remote URL plus how its worktrees
 are provisioned; jigs keeps its own clone per binding and cuts agent worktrees
-from it.
+from it. The service makes the clones when it starts, hence the restart.
 
-### 6. Build and start the service
-
-```sh
-jigs build
-jigs service start
-```
-
-Open the dashboard URL it prints. `jigs service status` prints it again whenever
-you need it.
-
-### 7. Check, then run
+### 6. Run
 
 ```sh
-jigs doctor    # the check catalog, run inside the service's own environment
-jigs ps        # "no runs" is the right answer here
-```
-
-`jigs service start` returns once the service is fully up, so both work
-straight away. Then:
-
-```sh
-jigs run <pipeline> --input ticket=AGE-123
-jigs ps
-jigs logs <run>
+pnpm exec jigs run <pipeline> --input ticket=AGE-123
+pnpm exec jigs ps
+pnpm exec jigs logs <run>
 ```
 
 `<run>` is a run id, a unique prefix of one, or the ticket the run claimed.
+`jigs logs` prints the run's page on the dashboard `jigs up` named.
 
 ### Upgrading later
 
-A factory pins both packages to one published version, so an upgrade moves
-both pins together and runs `jigs up`. The **Upgrading** notes in
-[the setup runbook](docs/setup.md#part-1--the-machine-once) carry the commands
-in order.
+```sh
+pnpm exec jigs upgrade
+```
+
+bumps both packages to the latest release (`--to <version>` pins one), runs
+`jigs up`, then the factory's typecheck — which names any wrapper a release
+asks `steps/jigs.ts` to grow.
 
 ## The `/jigs` skill
 
@@ -158,14 +150,19 @@ argument and routes it to one of four guides:
 
 ## Layout
 
-pnpm workspace:
+pnpm workspace, published as two packages that release in lockstep:
 
-- `packages/jigs` — the library-first package and the `jigs` CLI.
+- `packages/jigs` — `@salimhamed/jigs`: the `jigs` CLI, the library-first
+  package behind it, and under `templates/` everything `jigs init` writes —
+  the factory's infrastructure and the code it starts from, one `.tmpl` per
+  file.
 - `packages/service` — `@salimhamed/jigs-service`, the library a factory
   installs: the app and its routes, and the primitives pipelines are written
-  against. It ships compiled, from `dist/`, like the CLI.
-- `packages/jigs/templates` — what `jigs init` writes: the factory's
-  infrastructure and the code it starts from, one `.tmpl` per file.
+  against.
+
+Both ship compiled, from `dist/`. The Workflow SDK, its Postgres World, its
+dashboard and zod are peers the factory installs itself; the measurements
+behind that shape are recorded in [`docs/adr/`](docs/adr/).
 
 ## Development
 
@@ -175,6 +172,11 @@ Requires Node 24 or newer and pnpm.
 pnpm install
 pnpm dev        # run the CLI from source
 pnpm check      # lint + typecheck + test + build (all packages)
-pnpm e2e        # jigs init into a temp dir, build it twice, diff its step ids
+pnpm e2e        # jigs init into a temp dir, install from packed tarballs, build twice, diff ids
                 # (with WORKFLOW_POSTGRES_URL set: boot the service and stop it too)
 ```
+
+A merge to `main` with a releasable title opens or updates the release PR;
+its merge tags both packages and publishes them to GitHub Packages. The
+[setup runbook](docs/setup.md#part-1--the-machine-once) has the two console
+settings that make it work.

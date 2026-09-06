@@ -1,17 +1,19 @@
 # Author a pipeline
 
-Everything you write here lives in the **factory repo**, not in the jigs
-checkout. jigs ships steps; the factory owns every file that names them.
+Everything you write here lives in the **factory repo**, never in a jigs
+package. jigs ships steps; the factory owns every file that names them.
 
 ## Read first
 
 - The factory's own `steps/jigs.ts` header, then its existing `pipelines/`.
-- `CONTEXT.md` in the jigs checkout for the vocabulary — pipeline, jig, step,
-  step id, binding, gate, needs-human halt, schedule.
+- `CONTEXT.md` in the jigs repo (github.com/salimhamed/jigs) for the
+  vocabulary — pipeline, jig, step, step id, binding, gate, needs-human halt,
+  schedule.
 - The worked examples, by path rather than from memory:
   - the smallest complete factory: what `jigs init` scaffolds, from
-    `packages/jigs/templates/` in the jigs checkout (`jigs.config.ts.tmpl`,
-    `pipelines/ship.ts.tmpl`, `steps/jigs.ts.tmpl`).
+    `node_modules/@salimhamed/jigs/templates/` in this factory
+    (`jigs.config.ts.tmpl`, `pipelines/ship.ts.tmpl`, `steps/jigs.ts.tmpl`) —
+    the version the factory is pinned to, so it matches what is installed.
   - if the `jigs-factory-js` factory is checked out on this machine, a real
     pipeline that needs no repo binding: its `pipelines/s3-bucket-analysis.ts`,
     with the factory-local steps in `steps/aws.ts`, the agent compositions in

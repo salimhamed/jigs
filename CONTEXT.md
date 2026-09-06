@@ -65,8 +65,48 @@ _Avoid_: mirror, cache, bare repo
 
 **Factory repo**:
 The central git-tracked repository holding the user's pipeline definitions
-and bindings. Target repos contain no pipeline code.
+and bindings. Target repos contain no pipeline code. It pins the two jigs
+packages to one version and runs its own copy of the CLI (`pnpm exec jigs`);
+no jigs is installed globally and no checkout is linked.
 _Avoid_: pipelines repo, config repo
+
+**jigs packages**:
+`@salimhamed/jigs` (the CLI, the library-first core, and the templates
+`jigs init` writes from) and `@salimhamed/jigs-service` (the app, its routes,
+and the primitives pipelines are written against). Published compiled to
+GitHub Packages under the `@salimhamed` scope, in lockstep — one version
+number for the pair — and installed by a factory like any dependency, through
+a scope line in its `.npmrc` and a `read:packages` token in the operator's
+`~/.npmrc` (ADR 0016).
+_Avoid_: the checkout, link:, @jigs/service, the jigs repo (as a dependency)
+
+**Factory-supplied runtime**:
+The four packages a factory installs itself, at the versions the jigs
+packages peer on: `workflow`, `@workflow/world-postgres`, `@workflow/web`
+and `zod`. The SDK loads the World and the dashboard by name from the
+factory's own `node_modules`, `workflow` must be one copy per process, and
+one zod copy is what lets the factory's schemas unify with jigs' types;
+`strictPeerDependencies` in the factory turns a mismatch into an install
+failure. Everything else the service needs is its own dependency.
+_Avoid_: transitive deps, runtime deps, peer set
+
+**Scaffold**:
+What `jigs init` writes into a factory, once each and never again: the
+infrastructure (`jigs.yml`, `package.json`, `.npmrc`, `nitro.config.ts`,
+`docker-compose.yml`, `.env.example`, the build config) and the code the
+factory starts from (`jigs.config.ts`, `pipelines/ship.ts`, `steps/jigs.ts`,
+`steps/describe-pr.ts`, the ids test). `init` touches nothing on the machine;
+`jigs up` is what runs.
+_Avoid_: generated code, boilerplate, template (for the written files)
+
+**Up**:
+`jigs up` — the command that takes a factory from any state to a running
+service: env, install, World, bootstrap, build, start-or-restart, ready,
+doctor, each idempotent and each its own line, stopping at the first failure
+with its repair. Also the command after every change; an unchanged factory
+installs, migrates and restarts nothing. `jigs upgrade` is a bump of both
+jigs pins, then `up`, then the factory's typecheck.
+_Avoid_: deploy, bootstrap (for the whole), start (for the whole)
 
 **Suspension**:
 A run pausing until a named external condition satisfies it. Never open-ended:
@@ -198,8 +238,9 @@ _Avoid_: isolated home, custom home, sandbox home
 The long-lived process (one per factory repo, supervised by `jigs service`)
 that owns execution: it hosts the compiled pipelines, creates runs at the
 trigger, and resumes them on wakes. Everything else — the CLI included — is
-its HTTP client.
-_Avoid_: server, daemon, worker
+its HTTP client. A host process, not a container: it drives the operator's
+`claude` and `codex` logins, the AWS SSO cache and the git clones.
+_Avoid_: server, daemon, worker, container
 
 **Dashboard**:
 The SDK's run-history UI, hosted by the service on a second port the factory

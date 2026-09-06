@@ -9,8 +9,9 @@ Every operational verb is an HTTP client of one factory's service, and it finds
 that service by reading the `jigs.yml` of the directory you are in. So `cd` into
 the factory repo first. `--service <url>` or `JIGS_SERVICE_URL` overrides it.
 
-Read `jigs --help` and `jigs <verb> --help` for flags. `CONTEXT.md` in the jigs
-checkout is the vocabulary; `docs/setup.md` there is the runbook.
+`jigs` is the factory's own — `pnpm exec jigs` — never a global one. Read
+`jigs --help` and `jigs <verb> --help` for flags. `CONTEXT.md` in the jigs repo
+is the vocabulary; `docs/setup.md` there is the runbook.
 
 ## First two commands, always
 
@@ -31,7 +32,8 @@ A start that gives up after five minutes leaves the process running, so check
 `jigs service status` before repairing anything.
 
 `jigs service status` is also where the dashboard URL comes from. Do not guess
-the port.
+the port. A service that is down comes back with `jigs up`, which also
+rebuilds if the factory's code changed since the running bundle was built.
 
 ```
 my-factory-2286ac2a: running pid 3343834 at http://localhost:9010
@@ -130,8 +132,9 @@ Ask the human before:
 - `jigs cancel` — it releases every resource the run claims, and the run is over.
 - `jigs sweep --force` — it deletes every eligible worktree without asking,
   dirty ones included.
-- `jigs service restart` or `jigs service stop` while `jigs ps` shows a running
-  or suspended run.
+- `jigs service restart`, `jigs service stop`, `jigs up --restart` or
+  `jigs upgrade` while `jigs ps` shows a running or suspended run. `up` and
+  `upgrade` ask before restarting over one; `--force` is the human's call.
 - Editing the `bindings` block in `jigs.yml` — changing a `remote:` repoints
   that binding's clone, and a new binding is not cloned until the next
   `jigs service restart`.
