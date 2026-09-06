@@ -6,6 +6,8 @@ import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { factorySlug } from "../worktrees/layout.ts";
 import type { ServiceProcesses, SpawnSpec } from "./service-lifecycle.ts";
 import {
+  builtBundleHash,
+  runningBundleHash,
   SERVICE_ENTRY,
   serviceLogPath,
   serviceLogs,
@@ -129,6 +131,18 @@ test("start records the pid in a pidfile keyed by factory slug", () => {
   startService(deps(root, fake()));
   const pidfile = servicePidfilePath(factorySlug(root));
   expect(readFileSync(pidfile, "utf8").trim()).toBe("4242");
+});
+
+test("start records which bundle the process runs, and a dead pid runs none", () => {
+  const root = builtFactory();
+  const io = fake();
+  startService(deps(root, io));
+
+  expect(runningBundleHash(deps(root, io))).toBe(builtBundleHash(root));
+  writeFileSync(path.join(root, SERVICE_ENTRY), "rebuilt");
+  expect(runningBundleHash(deps(root, io))).not.toBe(builtBundleHash(root));
+  io.alive.clear();
+  expect(runningBundleHash(deps(root, io))).toBeUndefined();
 });
 
 test("two factories supervise independently", () => {

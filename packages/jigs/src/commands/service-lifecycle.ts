@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   closeSync,
   existsSync,
@@ -74,6 +75,28 @@ export function serviceLogPath(slug: string): string {
   return path.join(jigsDataDir(), "services", `${slug}.log`);
 }
 
+// Which bundle the running process was started from, so a later `jigs up`
+// can tell a rebuild that changed nothing from one the service has yet to
+// pick up.
+export function serviceBundlePath(slug: string): string {
+  return path.join(jigsDataDir(), "services", `${slug}.bundle`);
+}
+
+export function builtBundleHash(factoryRoot: string): string | undefined {
+  const entry = path.join(factoryRoot, SERVICE_ENTRY);
+  if (!existsSync(entry)) return undefined;
+  return createHash("sha256").update(readFileSync(entry)).digest("hex");
+}
+
+export function runningBundleHash(
+  deps: ServiceLifecycleDeps,
+): string | undefined {
+  const sv = resolveSupervisor(deps);
+  if (livePid(sv) === undefined) return undefined;
+  const file = serviceBundlePath(sv.service.slug);
+  return existsSync(file) ? readFileSync(file, "utf8").trim() : undefined;
+}
+
 // Walks for the factory repo and parses its jigs.yml, so this throws when the
 // caller is not standing in a factory.
 function resolveSupervisor(deps: ServiceLifecycleDeps): Supervisor {
@@ -98,6 +121,11 @@ function livePid(sv: Supervisor): number | undefined {
   const pid = readPid(sv);
   if (pid === undefined) return undefined;
   return sv.processes.signal(pid, 0) ? pid : undefined;
+}
+
+// For a caller deciding on liveness rather than reporting it.
+export function liveServicePid(deps: ServiceLifecycleDeps): number | undefined {
+  return livePid(resolveSupervisor(deps));
 }
 
 // The factory's own `.env` is the service's environment file, World URL and
@@ -155,6 +183,10 @@ export function startService(deps: ServiceLifecycleDeps): void {
   const pidfile = servicePidfilePath(sv.service.slug);
   mkdirSync(path.dirname(pidfile), { recursive: true });
   writeFileSync(pidfile, `${pid}\n`);
+  writeFileSync(
+    serviceBundlePath(sv.service.slug),
+    `${builtBundleHash(sv.factoryRoot)}\n`,
+  );
   sv.out(`started ${sv.service.slug}: pid ${pid} at ${sv.service.serviceUrl}`);
   sv.out(`dashboard: ${sv.service.dashboardUrl}`);
   sv.out(`logs: ${logFile}`);
