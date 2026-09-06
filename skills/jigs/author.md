@@ -31,10 +31,13 @@ package. jigs ships steps; the factory owns every file that names them.
 3. **A pure helper** is neither, carries no id, and is the easy thing to unit
    test.
 
-A pipeline imports its steps from `../steps/jigs.ts`, **never** from
-`@salimhamed/jigs` directly. A step reached through the package is addressed by
+A pipeline imports its steps from `../steps/jigs.ts`, **never** from a
+`@salimhamed/jigs` subpath. A step reached through the package is addressed by
 the package's version instead of by the factory's path, so every upgrade would
-rename it. The factory's ids test is what catches this.
+rename it. The rule is about steps alone: the scaffolded pipeline imports
+`ticketInput`, `claimTicket`, `claude` and `codex` from the package directly,
+because a jig, a harness constructor and a type carry no id. The factory's ids
+test is what catches the difference.
 
 That ids test is a `jigs.config.test.ts` in the factory root: it reads the
 emitted ids out of the last build, holds them as sorted arrays, and compares

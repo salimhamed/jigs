@@ -82,8 +82,9 @@ jigs packages (plural), the jigs repo (as a dependency)
 
 **Factory-supplied runtime**:
 The four packages a factory installs itself, at the versions jigs peers on:
-`workflow`, `@workflow/world-postgres`, `@workflow/web` and `zod`. The SDK loads the World and the dashboard by name from the
-factory's own `node_modules`, `workflow` must be one copy per process, and
+`workflow`, `@workflow/world-postgres`, `@workflow/web` and `zod`. The SDK
+loads the World and the dashboard by name from the factory's own
+`node_modules`, `workflow` must be one copy per process, and
 one zod copy is what lets the factory's schemas unify with jigs' types;
 `strictPeerDependencies` in the factory turns a mismatch into an install
 failure. Everything else the service needs is its own dependency.

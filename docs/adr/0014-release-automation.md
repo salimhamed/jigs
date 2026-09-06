@@ -33,7 +33,12 @@ bumps the quiet package to keep the pair readable as a single number.
 > case against the split — two numbers forced equal is one number with extra
 > machinery. Everything else in this ADR is unchanged: the PAT-versus-
 > `GITHUB_TOKEN` rule, the merge-the-release-PR step and its expected-checks
-> list, and the publish job gated on `releases_created`.
+> list, and the publish job gated on `releases_created`. Two details below
+> read differently now. `group-pull-request-title-pattern` is
+> `chore${scope}: release jigs` — still load-bearing, still the same
+> create-and-parse trap, but no longer dictated by a plugin's hardcoded
+> string, so the value is ours to keep stable. And "the quiet package gets
+> near-empty changelog entries" describes a package that no longer exists.
 
 **Both the action and the merge step authenticate as a PAT
 (`RELEASE_PLEASE_TOKEN`), never `GITHUB_TOKEN`.** GitHub raises no workflow run
