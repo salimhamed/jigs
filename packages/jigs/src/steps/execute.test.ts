@@ -122,7 +122,6 @@ test("claude agent step hydrates from wire config with the harness invariants fo
     }),
     cwd: worktree,
     prompt: "implement it",
-    instructions: "follow the brief",
     permissionMode: "bypassPermissions" as PermissionMode,
   });
   const { deps, captured } = makeDeps();
@@ -138,7 +137,7 @@ test("claude agent step hydrates from wire config with the harness invariants fo
     probe: { type: "stdio", command: "node", args: ["p.mjs"], env: { T: "1" } },
     remote: { type: "http", url: "https://mcp.example", headers: { a: "b" } },
   });
-  expect(captured.options?.system).toBe("follow the brief");
+  expect(captured.options?.system).toBeUndefined();
   expect(captured.homeRunKeys).toEqual([]);
 });
 

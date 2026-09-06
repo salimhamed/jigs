@@ -64,10 +64,9 @@ export interface ReviewLoopOptions {
   // "human" keeps listening after an approval and lets a person press merge;
   // the gate ends either way only when the PR closes.
   merge?: "jigs" | "human";
-  maxReviewCycles?: number;
-  maxCiAttempts?: number;
-  reviewPrompt?: string;
 }
+
+const MAX_CI_ATTEMPTS = 3;
 
 export type ReviewLoopResult = {
   pr: PrRef;
@@ -105,7 +104,6 @@ export async function reviewLoop(
   deps: ReviewLoopDeps,
 ): Promise<ReviewLoopResult> {
   const { handoff, worktree } = options;
-  const maxCiAttempts = options.maxCiAttempts ?? 3;
   // Destructured, never invoked as `deps.step(...)`: the SDK serializes a step
   // call's receiver along with its arguments, and this object holds functions.
   const {
@@ -125,12 +123,6 @@ export async function reviewLoop(
       harness: options.harness,
       cwd: worktree.path,
       baseSha: worktree.baseSha,
-      ...(options.maxReviewCycles === undefined
-        ? {}
-        : { maxCycles: options.maxReviewCycles }),
-      ...(options.reviewPrompt === undefined
-        ? {}
-        : { reviewPrompt: options.reviewPrompt }),
     },
     { agent: deps.agent, needsHuman: deps.needsHuman },
   );
@@ -241,13 +233,17 @@ export async function reviewLoop(
         }
         case "ci-red": {
           ciAttempts += 1;
-          if (ciAttempts > maxCiAttempts) {
+          if (ciAttempts > MAX_CI_ATTEMPTS) {
             // Exactly once per red streak, and on GitHub rather than through
             // needsHuman: the conversation about this PR belongs on this PR.
-            if (ciAttempts === maxCiAttempts + 1) {
+            if (ciAttempts === MAX_CI_ATTEMPTS + 1) {
               await commentOnPr(
                 pr,
-                escalation(wake.mentionLogin ?? pr.owner, wake, maxCiAttempts),
+                escalation(
+                  wake.mentionLogin ?? pr.owner,
+                  wake,
+                  MAX_CI_ATTEMPTS,
+                ),
               );
             }
             break;
@@ -261,7 +257,7 @@ export async function reviewLoop(
               cwd: worktree.path,
               ...(session === undefined ? {} : { session }),
               failing: wake.failing,
-              attempt: `${ciAttempts} of ${maxCiAttempts}`,
+              attempt: `${ciAttempts} of ${MAX_CI_ATTEMPTS}`,
               handoff,
               baseSha: worktree.baseSha,
             },
@@ -282,7 +278,7 @@ export async function reviewLoop(
               pr,
               noCommitEscalation(wake.mentionLogin ?? pr.owner, wake),
             );
-            ciAttempts = maxCiAttempts + 1;
+            ciAttempts = MAX_CI_ATTEMPTS + 1;
           }
           break;
         }

@@ -50,9 +50,6 @@ export interface TicketReviewOptions {
   snapshot: TicketSnapshot;
   harness: HarnessConfig;
   cwd: string;
-  // Interpolated with {{TICKET}} (the rendered snapshot); any other {{KEY}}
-  // is left verbatim.
-  prompt?: string;
 }
 
 export async function ticketReview(
@@ -60,7 +57,7 @@ export async function ticketReview(
   deps: TicketReviewDeps,
 ): Promise<TicketReviewResult> {
   const { claim, snapshot } = options;
-  const prompt = interpolate(options.prompt ?? ticketReviewPrompt, {
+  const prompt = interpolate(ticketReviewPrompt, {
     TICKET: renderSnapshot(snapshot),
   });
 

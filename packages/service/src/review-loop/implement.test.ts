@@ -77,7 +77,7 @@ const fakeNeedsHuman: ImplementDeps["needsHuman"] = async (
 
 const deps: ImplementDeps = { agent: fakeAgent, needsHuman: fakeNeedsHuman };
 
-const run = (maxCycles?: number) =>
+const run = () =>
   implementAndReview(
     {
       claim,
@@ -85,7 +85,6 @@ const run = (maxCycles?: number) =>
       harness: claude({ model: "sonnet" }),
       cwd: "/tmp/worktree",
       baseSha: "base-sha-1",
-      ...(maxCycles === undefined ? {} : { maxCycles }),
     },
     deps,
   );
@@ -151,30 +150,9 @@ test("the reviewer is never shown the brief and judges against the ticket", asyn
   expect(review?.permissionMode).toBe("bypassPermissions");
 });
 
-test("a caller-supplied reviewer prompt replaces the default and is interpolated", async () => {
-  verdicts = [approved];
-  await implementAndReview(
-    {
-      claim,
-      handoff,
-      harness: claude({ model: "sonnet" }),
-      cwd: "/tmp/worktree",
-      baseSha: "base-sha-1",
-      reviewPrompt: "Custom review of {{TICKET}} at {{BASE_SHA}} — {{UNKNOWN}}",
-    },
-    deps,
-  );
-
-  const review = agentCalls[1]?.prompt ?? "";
-  expect(review).toContain("Custom review of");
-  expect(review).toContain("AGE-316");
-  expect(review).toContain("base-sha-1");
-  expect(review).toContain("{{UNKNOWN}}");
-});
-
 test("the cycle bound halts needs-human with the findings, and the human's reply drives the next round", async () => {
   verdicts = [changes("one"), changes("two"), changes("three"), approved];
-  const result = await run(3);
+  const result = await run();
 
   expect(humanCalls).toHaveLength(1);
   expect(humanCalls[0]?.reason).toContain("3-cycle bound");
@@ -184,22 +162,6 @@ test("the cycle bound halts needs-human with the findings, and the human's reply
   expect(agentCalls).toHaveLength(8);
   expect(agentCalls[6]?.prompt).toContain("the reviewer is wrong, ship it");
   expect(result.cycles).toBe(4);
-});
-
-test("with no maxCycles the loop halts on the ticket's 3-cycle default", async () => {
-  verdicts = [
-    changes("one"),
-    changes("two"),
-    changes("three"),
-    changes("four"),
-    approved,
-  ];
-  await run();
-
-  expect(humanCalls).toHaveLength(1);
-  expect(humanCalls[0]?.reason).toContain("3-cycle bound");
-  // The third cycle's findings: the halt landed after cycle three, not later.
-  expect(humanCalls[0]?.payload).toEqual({ findings: ["three"] });
 });
 
 test("the builder's session pointer is the one carried out, not the reviewer's", async () => {
