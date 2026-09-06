@@ -7,12 +7,15 @@
   },
   "dependencies": {
     "@jigs/service": "link:../../packages/service",
+    "@slack/socket-mode": "3.0.1",
+    "@slack/web-api": "8.1.1",
     "@workflow/web": "4.1.20",
     "@workflow/world-postgres": "4.3.4",
     "croner": "10.0.1",
     "hono": "^4.13.4",
     "jigs": "link:../../packages/jigs",
     "postgres": "^3.4.7",
+    "undici": "^7.28.0",
     "workflow": "4.8.4",
     "zod": "^4.4.3"
   },

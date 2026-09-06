@@ -21,7 +21,13 @@ export {
   sweepWorktrees,
 } from "./commands/sweep.ts";
 export { unbindRepo } from "./commands/unbind.ts";
-export { type Binding, resolveBinding } from "./config/factory-config.ts";
+export {
+  type Binding,
+  FACTORY_CONFIG_FILE,
+  resolveBinding,
+  resolveSlack,
+  type SlackConfig,
+} from "./config/factory-config.ts";
 export { locateFactoryRoot } from "./config/locate-factory.ts";
 export { CliError } from "./errors.ts";
 // The worktree lifecycle and the review loop live in the service package but

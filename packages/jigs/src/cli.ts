@@ -19,6 +19,7 @@ import {
   startService,
   stopService,
 } from "./commands/service-lifecycle.ts";
+import { printSlackManifest } from "./commands/slack.ts";
 import { sweepWorktrees } from "./commands/sweep.ts";
 import { unbindRepo } from "./commands/unbind.ts";
 import { CliError } from "./errors.ts";
@@ -251,6 +252,15 @@ service
   })
   .action((options: { lines?: number }) => {
     serviceLogs({ cwd: process.cwd(), out }, { lines: options.lines });
+  });
+
+const slack = program.command("slack").description("this factory's Slack app");
+
+slack
+  .command("manifest")
+  .description("print the app manifest to create this factory's Slack app from")
+  .action(() => {
+    printSlackManifest(out);
   });
 
 program

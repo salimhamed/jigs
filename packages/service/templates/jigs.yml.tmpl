@@ -8,3 +8,10 @@ service:
   port: {{SERVICE_PORT}}
   # Where this factory's service hosts the SDK's run dashboard.
   dashboard_port: {{DASHBOARD_PORT}}
+# This factory's Slack app, if it has one. Absent means Slack is off; present
+# means the service refuses to start without SLACK_BOT_TOKEN and
+# SLACK_APP_TOKEN in .env. `jigs slack manifest` prints the app to create.
+# slack:
+#   channel: C0123ABCDEF          # where run threads open
+#   allowed_users: [U0123ABCDEF]  # nobody else is listened to
+#   model: anthropic/claude-sonnet-4.5  # OpenRouter id the agent answers on

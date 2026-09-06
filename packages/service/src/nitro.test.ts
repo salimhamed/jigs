@@ -12,7 +12,7 @@ test("the plugins this package ships resolve to files that exist", () => {
   const shipped = (defineJigsService().plugins ?? []).filter((plugin) =>
     path.isAbsolute(plugin as string),
   );
-  expect(shipped).toHaveLength(2);
+  expect(shipped).toHaveLength(3);
   for (const plugin of shipped) {
     expect(existsSync(plugin as string)).toBe(true);
   }
@@ -22,14 +22,15 @@ test("the route serves the entry `prepare()` generates", () => {
   expect(defineJigsService().routes?.["/**"]).toBe("./.jigs/server.ts");
 });
 
-test("the dashboard is started after the world it reads", () => {
+test("the dashboard is started after the world it reads, and Slack after both", () => {
   const plugins = defineJigsService().plugins ?? [];
   expect(plugins[0]).toContain("start-world");
   expect(plugins[1]).toContain("start-dashboard");
+  expect(plugins[2]).toContain("start-slack");
 });
 
 test("the schedules plugin is the factory's own, and comes last", () => {
   // It imports the factory's compiled pipelines, so it is generated into the
   // factory tree rather than shipped from here.
-  expect(defineJigsService().plugins?.[2]).toBe("./.jigs/schedules.ts");
+  expect(defineJigsService().plugins?.[3]).toBe("./.jigs/schedules.ts");
 });
