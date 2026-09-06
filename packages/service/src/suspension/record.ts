@@ -25,6 +25,17 @@ type SuspensionEnvelope = {
   record: SuspensionRecord;
 };
 
+// The two keys the ticket claim records itself under. The claim is held for a
+// run's whole life and says nothing about the run being parked — the same
+// thing `isParkToken` says about its token, for anything reading the records
+// instead of the tokens.
+export const CLAIM_KEY = "ticket-claim";
+export const CLAIM_ALIAS_KEY = "ticket-claim-alias";
+export const TICKET_CLAIM_KEYS: ReadonlySet<string> = new Set([
+  CLAIM_KEY,
+  CLAIM_ALIAS_KEY,
+]);
+
 export function suspensionMetadata(
   record: SuspensionRecord,
 ): SuspensionEnvelope {

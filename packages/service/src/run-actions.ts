@@ -63,10 +63,12 @@ export type CancelResult =
  * a standalone `workflow web`: run against a live World it opens a second
  * queue worker and steals the jobs this run is waiting on.
  */
+export const DASHBOARD_NOT_CONFIGURED = "dashboard: not configured";
+
 export function logsPointer(runId: string): string {
   const port = process.env.JIGS_DASHBOARD_PORT;
   return port === undefined || port === ""
-    ? "dashboard: not configured"
+    ? DASHBOARD_NOT_CONFIGURED
     : `http://localhost:${port}/run/${runId}`;
 }
 

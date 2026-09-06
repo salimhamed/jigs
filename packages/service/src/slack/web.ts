@@ -33,6 +33,10 @@ export interface SlackWeb {
     trigger: SlackMessage,
   ): Promise<SlackMessage[]>;
   post(channel: string, threadTs: string, text: string): Promise<void>;
+  /** Posts to the channel outside any thread and answers with the new
+   *  message's own ts — which is the thread id every reply to it hangs under.
+   *  Null when Slack accepted the message without naming one. */
+  open(channel: string, text: string): Promise<string | null>;
 }
 
 /** One `conversations.replies` page, as the paging below reads it. */
@@ -113,6 +117,10 @@ export function slackWeb(botToken: string): SlackWeb {
     },
     post: async (channel, threadTs, text) => {
       await client.chat.postMessage({ channel, thread_ts: threadTs, text });
+    },
+    open: async (channel, text) => {
+      const result = await client.chat.postMessage({ channel, text });
+      return typeof result.ts === "string" ? result.ts : null;
     },
   };
 }
