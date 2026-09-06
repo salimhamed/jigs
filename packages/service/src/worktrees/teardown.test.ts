@@ -8,14 +8,14 @@ import {
   decideTeardown,
   isBranchMerged,
   isWorktreeDirty,
-  teardownRun,
+  teardownMergedRun,
 } from "./teardown";
 import { git, makeClonedBinding, makeFakeSql } from "./test-fixtures";
 
 // The teardown matrix (ADR 0007) three ways: the pure decision as a table,
-// its git execution against a real worktree, then the per-run join
-// teardownRun makes against a faked registry — what a merged run removes,
-// what an unmerged one keeps.
+// its git execution against a real worktree, then the merged recipe
+// teardownMergedRun runs against a faked registry — what a merged run
+// removes, and that it never asks whether the tree is dirty.
 
 let tmp: string;
 let repoDir: string;
@@ -289,7 +289,7 @@ test("a clean worktree reads not-dirty and a missing directory does too", async 
 test("a merged run removes the worktree and both branches", async () => {
   const target = runWorktree("feature");
 
-  const removed = await teardownRun("run_1", { merged: true }, deps());
+  const removed = await teardownMergedRun("run_1", deps());
 
   expect(removed).toEqual([target]);
   expect(existsSync(target)).toBe(false);
@@ -320,53 +320,29 @@ test("a squash-merged branch is torn down even though it is not an ancestor of t
     git(repoDir, "merge-base", "--is-ancestor", "feature", "origin/main"),
   ).toThrow();
 
-  await teardownRun("run_1", { merged: true }, deps());
+  await teardownMergedRun("run_1", deps());
 
   expect(existsSync(target)).toBe(false);
   expect(localBranches().split("\n")).not.toContain("feature");
   expect(remoteBranches()).not.toContain("refs/heads/feature");
 });
 
-test("a merged run's dirty tree still goes — the matrix's forced row", async () => {
+test("a merged run's dirty tree still goes: the recipe never reads dirtiness", async () => {
   const target = runWorktree("feature");
   writeFileSync(path.join(target, "build.log"), "output\n");
 
-  await teardownRun("run_1", { merged: true }, deps());
+  await teardownMergedRun("run_1", deps());
 
   expect(existsSync(target)).toBe(false);
   expect(localBranches().split("\n")).not.toContain("feature");
 });
 
-test("an unmerged clean tree is removed and both branches survive", async () => {
-  const target = runWorktree("feature");
-
-  const removed = await teardownRun("run_1", { merged: false }, deps());
-
-  expect(removed).toEqual([target]);
-  expect(existsSync(target)).toBe(false);
-  // The branch is the only cheap copy of unmerged agent work.
-  expect(localBranches().split("\n")).toContain("feature");
-  expect(remoteBranches()).toContain("refs/heads/feature");
-  expect(store.size).toBe(0);
-});
-
-test("an unmerged dirty tree is preserved and marked abandoned-dirty", async () => {
-  const target = runWorktree("feature");
-  writeFileSync(path.join(target, "wip.txt"), "half-finished\n");
-
-  const removed = await teardownRun("run_1", { merged: false }, deps());
-
-  expect(removed).toEqual([]);
-  expect(existsSync(target)).toBe(true);
-  expect(store.get(target)?.state).toBe("abandoned-dirty");
-});
-
-test("keep: true keeps everything, merged or not", async () => {
+test("keep: true keeps a merged run's worktree and branches", async () => {
   const target = runWorktree("feature");
   const row = store.get(target);
   if (row !== undefined) store.set(target, { ...row, keep: true });
 
-  const removed = await teardownRun("run_1", { merged: true }, deps());
+  const removed = await teardownMergedRun("run_1", deps());
 
   expect(removed).toEqual([]);
   expect(existsSync(target)).toBe(true);
@@ -378,7 +354,7 @@ test("only the run's own worktrees are torn down", async () => {
   const mine = runWorktree("mine", "run_1");
   const theirs = runWorktree("theirs", "run_2");
 
-  await teardownRun("run_1", { merged: true }, deps());
+  await teardownMergedRun("run_1", deps());
 
   expect(existsSync(mine)).toBe(false);
   expect(existsSync(theirs)).toBe(true);
