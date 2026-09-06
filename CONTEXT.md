@@ -17,6 +17,15 @@ a pipeline body (e.g. implement ⇄ review until approved). Pipelines are
 composed from jigs.
 _Avoid_: segment, pattern, template
 
+**Building block**:
+A jig the package ships: one function, no options, taking the step wrappers it
+needs as plain parameters. jigs ships the blocks a wrong edit would break —
+the ones holding the builder's session, the resume fallback, the ids the gate
+cursor needs back, the code-review call the brief is kept out of. What a wrong
+edit would merely change — the order, the bounds, the merge policy, the
+escalation prose, the prompts — is a composition the factory owns.
+_Avoid_: primitive, helper, util, sub-jig
+
 **Step**:
 One recorded unit of work in a pipeline, awaited from the body and memoized
 by the runtime's deterministic replay. Three kinds: an **agent step** (a
@@ -38,8 +47,9 @@ _Avoid_: step key, step name, cache key
 The `"use step"` function in a factory's own `steps/jigs.ts` that delegates to
 one of jigs' plain step implementations. Scaffolded once by `jigs init`, then
 committed source the factory owns and extends by hand: its file path and its
-name *are* the step id, so renaming one orphans every parked run that memoized
-against it.
+name *are* the step id. Edit one freely; renaming or moving one changes its id
+and orphans every run parked against it, so that waits for a `jigs ps` with no
+parked runs.
 _Avoid_: shim, binding, adapter
 
 **Run**:
@@ -94,8 +104,9 @@ _Avoid_: transitive deps, runtime deps, peer set
 What `jigs init` writes into a factory, once each and never again: the
 infrastructure (`jigs.yml`, `package.json`, `.npmrc`, `nitro.config.ts`,
 `docker-compose.yml`, `.env.example`, the build config) and the code the
-factory starts from (`jigs.config.ts`, `pipelines/ship.ts`, `steps/jigs.ts`,
-`steps/describe-pr.ts`, the ids test). `init` touches nothing on the machine;
+factory starts from (`jigs.config.ts`, `pipelines/ship.ts`,
+`pipelines/review-loop.ts`, `steps/jigs.ts`, `steps/describe-pr.ts`, the ids
+test). `init` touches nothing on the machine;
 `jigs up` is what runs.
 _Avoid_: generated code, boilerplate, template (for the written files)
 
@@ -196,14 +207,17 @@ wake channel.
 _Avoid_: lock, lease
 
 **Ticket review**:
-The shipped head-jig that normalizes a ticket into a brief and issues a
-proceed / needs-human verdict.
+The shipped block that normalizes a ticket into a brief, parking on a
+needs-human verdict and re-reading the ticket each round until it proceeds. It
+returns a brief, never a verdict to branch on.
 _Avoid_: intake, triage
 
 **Review loop**:
-The shipped jig that carries a brief from implementation to a merged PR:
-implement ⇄ agent review, then the pull request gate, answered by the builder.
-_Avoid_: build loop, PR loop
+The factory's own composition that carries a brief from implementation to a
+merged PR: implement ⇄ agent review, then the pull request gate, answered by
+the builder. Scaffolded into `pipelines/review-loop.ts`; the blocks it calls
+come from jigs.
+_Avoid_: build loop, PR loop, the reviewLoop jig
 
 **Brief**:
 The normalized implementation plan a ticket review produces — the

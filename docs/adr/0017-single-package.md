@@ -51,6 +51,14 @@ split across two packages.
 
 ## The shape
 
+> **Amended on 2026-09-06, one release later.** One line of the subpath list
+> below has moved. `./review-loop/loop` is gone: jigs no longer exports a
+> `reviewLoop`, it exports the review loop's building blocks under
+> `./review-loop`, and the composition that calls them in order is scaffolded
+> into the factory as `pipelines/review-loop.ts`. `./review-loop/pull-request`
+> and every other subpath here are unchanged, and the union rule for `./steps`
+> still holds.
+
 **One name, the service's subpaths kept.** Every subpath keeps the name it had:
 `./app`, `./nitro`, `./build`, `./schedules`, `./steps/run`, `./steps/jit`,
 `./suspension/claim`, `./suspension/needs-human`,

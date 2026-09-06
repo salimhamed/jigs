@@ -49,13 +49,16 @@ collide), `package.json` pinned to the CLI's own version, `.npmrc` (the scope
 line only, never the token), `nitro.config.ts`, `docker-compose.yml`,
 `.env.example`, `tsconfig.json`, `pnpm-workspace.yaml`, `.gitignore` — and the
 code the factory starts from: `jigs.config.ts`, `pipelines/ship.ts`,
-`steps/jigs.ts`, `steps/describe-pr.ts`, `jigs.config.test.ts`, `README.md`.
+`pipelines/review-loop.ts`, `steps/jigs.ts`, `steps/describe-pr.ts`,
+`jigs.config.test.ts`, `README.md`.
 Then it prints the remaining commands with this factory's own ports filled in.
 Use the numbers it prints, not any numbers you have seen elsewhere.
 
 **It writes every file once.** A file that exists is kept, never rewritten, so
 the scaffolded code is the factory's own from the first commit; `author.md`
-covers extending it. Never rename `steps/jigs.ts` or an exported wrapper.
+covers extending it. Edit any of it — but renaming or moving `steps/jigs.ts`
+or one of its exported wrappers changes a durable step id, so do that only
+when `jigs ps` shows no parked runs.
 
 ## 2. Tokens
 

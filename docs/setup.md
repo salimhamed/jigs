@@ -120,37 +120,47 @@ version that scaffolded it, `.npmrc`, `nitro.config.ts`, `docker-compose.yml`,
 `pnpm-workspace.yaml` and `.gitignore` a factory build needs — and the code
 the factory starts from: `jigs.config.ts` (this factory's pipelines, keyed by
 the name `jigs run` takes), `pipelines/ship.ts` (a ticket to a merged pull
-request), `steps/jigs.ts`, `steps/describe-pr.ts`, `jigs.config.test.ts` and
-a `README.md`. Then it prints the next steps and runs none of them; `jigs up`
+request), `pipelines/review-loop.ts`, `steps/jigs.ts`,
+`steps/describe-pr.ts`, `jigs.config.test.ts` and a `README.md`. Then it prints the next steps and runs none of them; `jigs up`
 (step 3) is what runs them. Every file is written once: a re-run keeps what
 is there and adds only what is missing, so nothing init wrote goes stale
 under you, and from here on the code is this factory's own.
 
 `steps/jigs.ts` is the one to know about. It holds this factory's `"use step"`
-wrappers around jigs' step implementations, plus the jigs (`reviewLoop`,
-`ticketReview`, `needsHuman`, …) wired on top of them — so a pipeline imports
-its steps from `../steps/jigs.ts`, never from a `@salimhamed/jigs` subpath.
+wrappers around jigs' step implementations, plus the blocks (`ticketReview`,
+`needsHuman`, `gate`, …) wired on top of them — so a pipeline imports its
+steps from `../steps/jigs.ts`, never from a `@salimhamed/jigs` subpath.
 (Only its steps: the scaffolded pipeline imports `ticketInput`, `claimTicket`,
 `claude` and `codex` from the package directly, because none of those carries
-an id.) It is ordinary committed source: commit it, edit it, and **do not
-rename it or its exported functions**. Each name compiles to a durable step id
-(`step//./steps/jigs//worktree`) that the World memoizes runs against, so a
-rename orphans every run this factory has parked — with a clean build and no
-error. `jigs.config.test.ts` pins those ids against the last build, so
-`pnpm test` in the factory is what catches a rename.
+an id.) It is ordinary committed source: commit it and edit it. The one rule
+is about names — each exported wrapper's name, with this file's path, compiles
+to a durable step id (`step//./steps/jigs//worktree`) that the World memoizes
+runs against. Renaming or moving one changes that id, so do it only when
+`jigs ps` shows no parked runs; a run whose id moved under it shows up
+stalled, and the repair is to cancel it and relaunch. Bodies, comments and
+the wiring below the wrappers are free to change at any time.
 
-Not everything in that file wraps something jigs ships. `reviewLoop`'s deps
-require a **`describePr`** the factory writes outright: given the handoff, the
-worktree path, the branch point and the builder's session, it returns the
-`{ title, body }` the pull request opens with. jigs has no implementation to
-wrap here on purpose — how a pull request introduces itself is the factory's
-voice, and the title is what the target repo's own CI and release tooling read.
-The scaffolded `steps/describe-pr.ts` already asks an agent — a workflow-side
-composition over the `agent` jig and the `readDiff` wrapper, resuming the
-builder that wrote the change and falling back to a fresh context fed the brief
-and the diff — so what a factory rewrites there is the conventions, not the
-mechanics. It is a required member, so a factory cannot quietly end up without
-one.
+**The loop itself is factory code too.** jigs ships the review loop as
+building blocks — `implementAndReview`, `answerAsBuilder`, `fixCi`,
+`commitLeftoverWork`, `postAnswers`, `describePr` — and `jigs init` scaffolds
+`pipelines/review-loop.ts`, the ~200 lines that call them in order. The split
+is where a wrong edit lands: jigs owns what would break (the builder's session
+pointer, the resume fallback, the ids the gate cursor needs back, and the
+code-review call that is never handed the brief), the factory owns what would
+merely change (the order, the bounds, the merge policy, the escalation prose,
+the prompts). A team that wants no self-review round, a merge commit instead
+of a squash, or a different gate edits its own composition — and still gets
+the blocks underneath fixed by `jigs upgrade`.
+
+`steps/describe-pr.ts` is the same split at one block. jigs owns the mechanics
+— resume the builder that wrote the change, fall back to a fresh context fed
+the diff, parse a `{ title, body }` back — and the factory owns the words and
+the policy: the conventions it asks for, and what to do when the answer drifts
+out of them. The scaffold repairs a drifting title; a factory whose target
+repo gates on the title (a conventional-commit check, say) may prefer to throw
+and kill the run rather than open a pull request CI will refuse. How a pull
+request introduces itself is the factory's voice, and the title is what the
+target repo's own CI and release tooling read.
 
 The starter `ship` pipeline takes its `binding` and `merge` as inputs with no
 default, because the scaffold knows neither: once step 4 has bound a repo, give
