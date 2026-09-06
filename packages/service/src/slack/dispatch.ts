@@ -9,6 +9,7 @@
 // workspace.
 
 import type { ModelMessage } from "ai";
+import type { ThreadRunContext } from "./agent";
 import { threadToMessages } from "./threads";
 import type { BotIdentity, SlackMessage } from "./web";
 
@@ -21,6 +22,13 @@ export interface ThreadRef {
   message: SlackMessage;
 }
 
+/** What the answer is being composed about: the thread, and the run that
+ *  thread belongs to when it belongs to one. */
+export interface AnswerContext {
+  thread: ThreadRef;
+  run: ThreadRunContext | null;
+}
+
 export interface SlackDispatchDeps {
   bot: BotIdentity;
   allowedUsers: readonly string[];
@@ -29,7 +37,10 @@ export interface SlackDispatchDeps {
     threadTs: string,
     trigger: SlackMessage,
   ): Promise<SlackMessage[]>;
-  answer(messages: ModelMessage[]): Promise<string>;
+  /** Which run this thread is about, if any. Optional: a factory whose World
+   *  has no thread table answers every question without the shortcut. */
+  runContext?(thread: ThreadRef): Promise<ThreadRunContext | null>;
+  answer(messages: ModelMessage[], context: AnswerContext): Promise<string>;
   post(channel: string, threadTs: string, text: string): Promise<void>;
   error(line: string): void;
 }
@@ -64,13 +75,13 @@ async function answerOne(
   deps: SlackDispatchDeps,
 ): Promise<void> {
   try {
-    const history = await deps.fetchThread(
-      thread.channel,
-      thread.threadTs,
-      thread.message,
-    );
+    const [history, run] = await Promise.all([
+      deps.fetchThread(thread.channel, thread.threadTs, thread.message),
+      deps.runContext === undefined ? null : deps.runContext(thread),
+    ]);
     const reply = await deps.answer(
       threadToMessages(history, deps.bot, deps.allowedUsers),
+      { thread, run },
     );
     await deps.post(thread.channel, thread.threadTs, reply);
   } catch (err) {

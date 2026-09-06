@@ -1,5 +1,5 @@
 import { createHook, type Hook } from "workflow";
-import { suspensionMetadata } from "./record";
+import { CLAIM_ALIAS_KEY, CLAIM_KEY, suspensionMetadata } from "./record";
 import { ticketToken } from "./tokens";
 
 export class ClaimConflictError extends Error {
@@ -37,7 +37,7 @@ export async function claimTicket(
   const hook = createHook<unknown>({
     token,
     metadata: suspensionMetadata({
-      key: "ticket-claim",
+      key: CLAIM_KEY,
       reason: "one active run per ticket",
       satisfiedBy: token,
     }),
@@ -49,7 +49,7 @@ export async function claimTicket(
   const identifierHook = createHook<unknown>({
     token: identifierToken,
     metadata: suspensionMetadata({
-      key: "ticket-claim-alias",
+      key: CLAIM_ALIAS_KEY,
       reason: "one active run per ticket",
       satisfiedBy: identifierToken,
     }),

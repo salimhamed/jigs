@@ -9,6 +9,8 @@ import type { z } from "zod";
 import type { Factory } from "./factory";
 import { preflight } from "./preflight";
 import { resolveIssueRef } from "./providers/linear";
+import { logsPointer } from "./run-actions";
+import { notifyRunStarted, type RunOrigin } from "./run-events";
 
 export type StartRunResult =
   | { kind: "started"; runId: string }
@@ -22,6 +24,11 @@ export async function startRun(
   pipelineName: string,
   inputs: unknown,
   triggerId: string,
+  // Where the launch came from, when the caller sat somewhere a subscriber can
+  // answer in — a Slack thread. Passed at the call rather than registered
+  // beforehand: a start that never happens (unknown pipeline, failed
+  // preflight) would leave a registration behind with nobody to clear it.
+  origin?: RunOrigin,
 ): Promise<StartRunResult> {
   const entry = factory.pipelines[pipelineName];
   if (!entry) {
@@ -61,6 +68,16 @@ export async function startRun(
         : { issueId: issue.id, identifier: issue.identifier }),
     },
   ]);
+  // After the run exists, before its caller hears about it, and awaited by
+  // nobody: a subscriber that opens a Slack thread for this run needs the id,
+  // and the run must not wait on Slack to get one.
+  notifyRunStarted({
+    runId: run.runId,
+    pipeline: pipelineName,
+    triggerId,
+    logs: logsPointer(run.runId),
+    ...(origin === undefined ? {} : { origin }),
+  });
   return { kind: "started", runId: run.runId };
 }
 

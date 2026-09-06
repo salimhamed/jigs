@@ -158,3 +158,35 @@ test("the prompt forbids the four things a wrong answer would come from", () => 
   expect(prompt).toMatch(/explicitly asked/i);
   expect(prompt).toMatch(/no markdown/i);
 });
+
+test("a thread that belongs to a run says so, so 'cancel it' resolves without an id", () => {
+  const prompt = slackSystemPrompt(["ticket"], {
+    runId: "wrun_01J",
+    pipeline: "ticket",
+    status: "suspended",
+  });
+  expect(prompt).toContain(
+    "This thread belongs to run wrun_01J (pipeline ticket, status suspended)",
+  );
+  expect(prompt).toMatch(/read the run with the tools/i);
+});
+
+test("a thread that belongs to no run claims none", () => {
+  expect(slackSystemPrompt(["ticket"])).not.toContain("This thread belongs to");
+  expect(slackSystemPrompt(["ticket"], null)).not.toContain(
+    "This thread belongs to",
+  );
+});
+
+test("the run a thread belongs to reaches the model's system prompt", async () => {
+  const model = new MockLanguageModelV3({ doGenerate: [says("cancelled it")] });
+  await answerThread([{ role: "user", content: "cancel it" }], {
+    model,
+    tools: {},
+    pipelines: ["ticket"],
+    run: { runId: "wrun_01J", pipeline: "ticket", status: "running" },
+  });
+  expect(model.doGenerateCalls[0]?.prompt[0]?.content).toContain(
+    "This thread belongs to run wrun_01J",
+  );
+});

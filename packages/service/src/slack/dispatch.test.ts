@@ -1,6 +1,11 @@
 import type { ModelMessage } from "ai";
 import { expect, test } from "vitest";
-import { createSlackDispatcher, type SlackDispatchDeps } from "./dispatch";
+import type { AnswerContext } from "./dispatch";
+import {
+  createSlackDispatcher,
+  type SlackDispatchDeps,
+  type ThreadRef,
+} from "./dispatch";
 import type { SlackMessage } from "./web";
 
 const BOT = { userId: "U0JIGS", botId: "B0JIGS" };
@@ -19,14 +24,16 @@ function harness(over: Partial<SlackDispatchDeps> = {}) {
   const posted: Array<[string, string, string]> = [];
   const errors: string[] = [];
   const answered: ModelMessage[][] = [];
+  const contexts: AnswerContext[] = [];
   const deps: SlackDispatchDeps = {
     bot: BOT,
     allowedUsers: ALLOWED,
     fetchThread: async (_channel, threadTs): Promise<SlackMessage[]> => [
       { ts: threadTs, user: "U0ALLOWED", text: `question ${threadTs}` },
     ],
-    answer: async (messages) => {
+    answer: async (messages, context) => {
       answered.push(messages);
+      contexts.push(context);
       return "an answer";
     },
     post: async (channel, threadTs, text) => {
@@ -35,7 +42,13 @@ function harness(over: Partial<SlackDispatchDeps> = {}) {
     error: (line) => errors.push(line),
     ...over,
   };
-  return { posted, errors, answered, dispatch: createSlackDispatcher(deps) };
+  return {
+    posted,
+    errors,
+    answered,
+    contexts,
+    dispatch: createSlackDispatcher(deps),
+  };
 }
 
 test("a message is answered in its own thread, from that thread's history", async () => {
@@ -155,4 +168,35 @@ test("a reply Slack refuses is logged rather than thrown at the socket", async (
   });
   await expect(h.dispatch(thread("T1"))).resolves.toBeUndefined();
   expect(h.errors.at(-1)).toContain("channel_not_found");
+});
+
+test("the run a thread belongs to is looked up and handed to the answer", async () => {
+  const asked: ThreadRef[] = [];
+  const h = harness({
+    runContext: async (thread) => {
+      asked.push(thread);
+      return { runId: "wrun_01J", pipeline: "ticket", status: "suspended" };
+    },
+  });
+  await h.dispatch(thread("1757.0001"));
+  expect(asked.map((t) => t.threadTs)).toEqual(["1757.0001"]);
+  expect(h.contexts[0]?.run).toEqual({
+    runId: "wrun_01J",
+    pipeline: "ticket",
+    status: "suspended",
+  });
+  expect(h.contexts[0]?.thread.threadTs).toBe("1757.0001");
+});
+
+test("a thread belonging to no run is answered all the same", async () => {
+  const h = harness({ runContext: async () => null });
+  await h.dispatch(thread("1757.0002"));
+  expect(h.contexts[0]?.run).toBeNull();
+  expect(h.posted).toEqual([["C0RUNS", "1757.0002", "an answer"]]);
+});
+
+test("a factory that maps no threads answers with a null run", async () => {
+  const h = harness();
+  await h.dispatch(thread("1757.0003"));
+  expect(h.contexts[0]?.run).toBeNull();
 });

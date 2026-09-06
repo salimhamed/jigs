@@ -81,6 +81,19 @@ SLACK_APP_TOKEN   xapp-…  Basic Information → App-Level Tokens → Generate,
 - Non-ok responses throw `WebAPIPlatformError` with `error.data.error` as the Slack error string (`channel_not_found`, `missing_scope` with `data.needed`/`data.provided`, `invalid_auth`, `not_authed`, `token_revoked`, `account_inactive`, …). Prefer `instanceof WebAPIPlatformError` over `err.code`. `not_in_channel` comes from history/replies/postMessage, not from `conversations.info`.
 - `WebClient` emits `rate_limited` on 429s.
 
+## `chat.postMessage` (verified 2026-09-06, `@slack/web-api@8.1.1`)
+
+- `chat.postMessage({ channel, text })` answers `ChatPostMessageResponse`, whose
+  **top-level `ts`** is the new message's own timestamp (`message.ts` carries the
+  same value). That ts *is* the thread id: a later `chat.postMessage({ channel,
+  thread_ts: ts, text })` replies under it, and no separate "create a thread"
+  call exists — a thread is a root message somebody replied to.
+- Both fields are optional in the response type, so a caller that needs the ts
+  has to handle its absence rather than assert it.
+- Posting a root message needs no scope beyond the `chat:write` the app already
+  has, and the bot must be a member of the channel (`not_in_channel` otherwise)
+  — the same membership `jigs doctor` already checks.
+
 Sources: docs.slack.dev reference pages for app-manifest, using-socket-mode,
 tokens, apps.connections.open, auth.test, conversations.info, chat.postMessage,
 the scope and event reference pages listed above, and the two npm tarballs.
