@@ -9,13 +9,12 @@
 // writes its body, and jigs carries no default for either.
 
 import { commitWorkPrompt } from "../prompts/index.ts";
-import type { CheckRun } from "../providers/github.ts";
+import type { CheckRun, PrRef } from "../providers/github.ts";
 import type { AgentSession, HarnessConfig } from "../steps/index.ts";
 import { type AgentFn, resumeOrRebuild } from "../steps/index.ts";
 import type { TicketClaim } from "../suspension/claim.ts";
 import type { NeedsHumanFn } from "../suspension/needs-human.ts";
 import type { GateAck, GateFn } from "../suspension/pull-request-gate.ts";
-import type { PrRef } from "../suspension/tokens.ts";
 import type { Handoff } from "../ticket/review.ts";
 import type { WorktreeFacts } from "../worktrees/facts.ts";
 import { answerAsBuilder, type ThreadAnswers } from "./builder.ts";

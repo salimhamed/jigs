@@ -22,11 +22,9 @@ import {
 } from "./runs.ts";
 import { listSchedules, scheduleChecks } from "./schedules.ts";
 import { listRunDeadJobs, listRunSteps } from "./stalls.ts";
-import {
-  NEEDS_HUMAN_TOKEN_PREFIX,
-  tokenFromGithubPayload,
-  tokenFromLinearPayload,
-} from "./suspension/tokens.ts";
+import { tokenFromLinearPayload } from "./suspension/claim.ts";
+import { NEEDS_HUMAN_TOKEN_PREFIX } from "./suspension/needs-human.ts";
+import { tokenFromGithubPayload } from "./suspension/pull-request-gate.ts";
 import { startRun } from "./trigger.ts";
 import { listWorktreesForRun } from "./worktrees/registry.ts";
 import { registrySql } from "./worktrees/sql.ts";

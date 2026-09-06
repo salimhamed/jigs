@@ -5,6 +5,8 @@ import {
   classifyPrState,
   emptyGateCursor,
   type GateCursor,
+  prToken,
+  tokenFromGithubPayload,
 } from "./pull-request-gate.ts";
 
 const empty: GateCursor = emptyGateCursor();
@@ -308,4 +310,100 @@ test("a closed PR yields closed with the merged flag and finishes the gate", () 
     expect(result.wakes).toEqual([{ kind: "closed", merged }]);
     expect(result.done).toBe(true);
   }
+});
+
+test("pr token, including dots and dashes in names", () => {
+  expect(prToken({ owner: "acme-inc", repo: "api.v2", number: 41 })).toBe(
+    "github:pr:acme-inc/api.v2#41",
+  );
+});
+
+test("a pull_request_review payload reconstructs the exact pr token", () => {
+  const payload = {
+    action: "submitted",
+    review: { id: 7, state: "approved" },
+    pull_request: { number: 41, title: "Add ingress" },
+    repository: {
+      name: "api.v2",
+      full_name: "acme-inc/api.v2",
+      owner: { login: "acme-inc" },
+    },
+  };
+  expect(tokenFromGithubPayload(payload)).toBe(
+    prToken({ owner: "acme-inc", repo: "api.v2", number: 41 }),
+  );
+});
+
+test("an issue_comment on a pull request routes to the pr token", () => {
+  const repository = { name: "api", owner: { login: "acme" } };
+  expect(
+    tokenFromGithubPayload({
+      action: "created",
+      issue: { number: 41, pull_request: { url: "https://api/pulls/41" } },
+      comment: { id: 5, body: "one more thing" },
+      repository,
+    }),
+  ).toBe(prToken({ owner: "acme", repo: "api", number: 41 }));
+
+  // The same event shape on a plain issue names no pull request.
+  expect(
+    tokenFromGithubPayload({
+      action: "created",
+      issue: { number: 41 },
+      comment: { id: 5, body: "one more thing" },
+      repository,
+    }),
+  ).toBe(null);
+});
+
+test("check_suite and check_run route through their pull_requests list", () => {
+  const repository = { name: "api", owner: { login: "acme" } };
+  const expected = prToken({ owner: "acme", repo: "api", number: 41 });
+  expect(
+    tokenFromGithubPayload({
+      action: "completed",
+      check_suite: {
+        id: 9,
+        conclusion: "failure",
+        pull_requests: [{ number: 41 }],
+      },
+      repository,
+    }),
+  ).toBe(expected);
+  expect(
+    tokenFromGithubPayload({
+      action: "completed",
+      check_run: {
+        id: 9,
+        conclusion: "failure",
+        pull_requests: [{ number: 41 }],
+      },
+      repository,
+    }),
+  ).toBe(expected);
+});
+
+test("a check_suite belonging to no pull request is unroutable", () => {
+  expect(
+    tokenFromGithubPayload({
+      action: "completed",
+      check_suite: { id: 9, conclusion: "success", pull_requests: [] },
+      repository: { name: "api", owner: { login: "acme" } },
+    }),
+  ).toBe(null);
+});
+
+test("a github ping payload is unroutable", () => {
+  expect(
+    tokenFromGithubPayload({
+      zen: "Keep it logically awesome.",
+      hook_id: 1,
+      repository: { name: "api", owner: { login: "acme" } },
+    }),
+  ).toBe(null);
+  expect(tokenFromGithubPayload(null)).toBe(null);
+  expect(tokenFromGithubPayload("pull_request")).toBe(null);
+  expect(
+    tokenFromGithubPayload({ pull_request: { number: "41" }, repository: {} }),
+  ).toBe(null);
 });

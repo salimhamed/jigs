@@ -8,7 +8,9 @@ const { createHook, getConflict, dispose } = vi.hoisted(() => ({
 
 vi.mock("workflow", () => ({ createHook }));
 
-const { claimTicket } = await import("./claim.ts");
+const { claimTicket, ticketToken, tokenFromLinearPayload } = await import(
+  "./claim.ts"
+);
 
 beforeEach(() => {
   createHook.mockReset();
@@ -40,4 +42,32 @@ test("a conflicting claim names the owning run and mints nothing further", async
     `linear:ticket:${issueId} is already claimed by run wrun_OWNER`,
   );
   expect(createHook).toHaveBeenCalledTimes(1);
+});
+
+test("ticket token carries the UUID", () => {
+  const issueId = "68bc9696-35d5-442d-ab56-214c8cfefbec";
+  expect(ticketToken(issueId)).toBe(`linear:ticket:${issueId}`);
+});
+
+test("a linear Comment payload reconstructs the exact ticket token", () => {
+  const issueId = "68bc9696-35d5-442d-ab56-214c8cfefbec";
+  const payload = {
+    action: "create",
+    type: "Comment",
+    data: { id: "comment-1", body: "looks good", issueId },
+    webhookTimestamp: 1_756_200_000_000,
+  };
+  expect(tokenFromLinearPayload(payload)).toBe(ticketToken(issueId));
+});
+
+test("a non-Comment linear payload is unroutable", () => {
+  expect(
+    tokenFromLinearPayload({
+      action: "update",
+      type: "Issue",
+      data: { id: "issue-1" },
+    }),
+  ).toBe(null);
+  expect(tokenFromLinearPayload({ type: "Comment", data: {} })).toBe(null);
+  expect(tokenFromLinearPayload(null)).toBe(null);
 });

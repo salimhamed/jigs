@@ -10,7 +10,9 @@ import {
   type WorldRun,
 } from "./runs.ts";
 import * as stalls from "./stalls.ts";
-import { needsHumanToken, prToken, ticketToken } from "./suspension/tokens.ts";
+import { ticketToken } from "./suspension/claim.ts";
+import { needsHumanToken } from "./suspension/needs-human.ts";
+import { prToken } from "./suspension/pull-request-gate.ts";
 import * as sql from "./worktrees/sql.ts";
 
 const RUN_A = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";

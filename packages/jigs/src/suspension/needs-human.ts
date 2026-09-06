@@ -12,7 +12,14 @@ import {
   mention,
 } from "../providers/linear.ts";
 import type { TicketClaim } from "./claim.ts";
-import { needsHumanToken } from "./tokens.ts";
+
+// The halt's marker hook. It names no external resource and nothing resumes
+// it: the reply that ends the halt lands on the ticket claim.
+export const NEEDS_HUMAN_TOKEN_PREFIX = "jigs:needs-human:";
+
+export function needsHumanToken(issueId: string, commentId: string): string {
+  return `${NEEDS_HUMAN_TOKEN_PREFIX}${issueId}:${commentId}`;
+}
 
 // The extra detail a halt posts to the ticket beneath its reason.
 export type JsonValue =
