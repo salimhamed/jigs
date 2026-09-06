@@ -8,7 +8,6 @@ import { factoryRoot } from "./config/factory-root.ts";
 import type { Factory } from "./factory.ts";
 import {
   githubWebhookSecret,
-  linearTimestampFresh,
   verifyGithubSignature,
   verifyLinearSignature,
 } from "./ingress.ts";
@@ -189,14 +188,6 @@ export function createApp(
       return c.json({ ignored: true });
     }
     const event = linearEvent(payload);
-    const timestamp = (payload as { webhookTimestamp?: unknown })
-      .webhookTimestamp;
-    if (!linearTimestampFresh(timestamp, Date.now())) {
-      console.log(
-        `[ingress] linear rejected reason=timestamp${event === null ? "" : ` event=${event}`}`,
-      );
-      return c.json({ error: "stale webhookTimestamp" }, 401);
-    }
     const token = tokenFromLinearPayload(payload);
     if (token === null) {
       console.log(

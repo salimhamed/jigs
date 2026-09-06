@@ -37,23 +37,6 @@ export function verifyLinearSignature(
   return hmacMatches(rawBody, signatureHeader, secret);
 }
 
-export const LINEAR_REPLAY_WINDOW_MS = 60_000;
-
-// Linear payloads carry webhookTimestamp as epoch milliseconds; a signed
-// delivery replayed outside the window is rejected.
-export function linearTimestampFresh(
-  webhookTimestamp: unknown,
-  nowMs: number,
-): boolean {
-  if (
-    typeof webhookTimestamp !== "number" ||
-    !Number.isFinite(webhookTimestamp)
-  ) {
-    return false;
-  }
-  return Math.abs(nowMs - webhookTimestamp) <= LINEAR_REPLAY_WINDOW_MS;
-}
-
 // The env override is the test seam and the non-default deploy path; the file
 // is where `jigs bind` generates the shared per-repo webhook secret.
 export function githubWebhookSecret(): string | null {

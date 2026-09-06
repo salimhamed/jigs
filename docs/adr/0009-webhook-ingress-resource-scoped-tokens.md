@@ -86,6 +86,11 @@ close-unmerged is a terminal failed run under ADR 0007's teardown matrix.
   JSON-RPC `no rollout found for thread id` error rather than the provider's
   wrapped message, so the fresh-context fallback triggers on any resume
   failure, not on one error string.
+- The Linear timestamp replay guard named above is dropped: the ingress now
+  verifies the HMAC signature and nothing else, on both providers. Under "wakes
+  are hints, never truth" a replayed Comment delivery only re-runs the
+  satisfier, which re-suspends when the ticket has not moved, so the guard
+  bought nothing GitHub's path did not already live without.
 - This ADR's "exiting on approval or close" is amended: the gate now ends only
   when the pull request closes. `classifyPrState` sets `done` on
   `state === "closed"` and nothing else, because human-merges mode has to keep

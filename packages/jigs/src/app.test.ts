@@ -115,7 +115,6 @@ const commentPayload = () =>
     action: "create",
     type: "Comment",
     data: { id: "c1", body: "reply", issueId: crypto.randomUUID() },
-    webhookTimestamp: Date.now(),
   });
 
 test("POST /ingress/github with a forged signature is a 401", async () => {
@@ -247,24 +246,6 @@ test("POST /ingress/linear with a forged signature is a 401", async () => {
   );
 });
 
-test("POST /ingress/linear with a valid signature but a stale webhookTimestamp is a 401 (replay)", async () => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  const body = JSON.stringify({
-    action: "create",
-    type: "Comment",
-    data: { id: "c1", body: "reply", issueId: crypto.randomUUID() },
-    webhookTimestamp: Date.now() - 5 * 60_000,
-  });
-  const res = await postLinear(body, {
-    "linear-signature": sign(body, "linear-hook-secret"),
-  });
-  expect(res.status).toBe(401);
-  expect(await res.json()).toEqual({ error: "stale webhookTimestamp" });
-  expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[ingress] linear rejected reason=timestamp event=Comment",
-  );
-});
-
 test("a validly signed Comment delivery for an unclaimed issue is dropped with a 404", async () => {
   const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
   const body = commentPayload();
@@ -314,7 +295,6 @@ test("an unroutable linear resource type is acknowledged and ignored", async () 
     action: "update",
     type: "Issue",
     data: { id: "issue-1" },
-    webhookTimestamp: Date.now(),
   });
   const res = await postLinear(body, {
     "linear-signature": sign(body, "linear-hook-secret"),

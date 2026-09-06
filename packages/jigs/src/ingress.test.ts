@@ -5,8 +5,6 @@ import path from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import {
   githubWebhookSecret,
-  LINEAR_REPLAY_WINDOW_MS,
-  linearTimestampFresh,
   verifyGithubSignature,
   verifyLinearSignature,
 } from "./ingress.ts";
@@ -59,21 +57,6 @@ test("linear signature verifies and rejects the wrong secret", () => {
     false,
   );
   expect(verifyLinearSignature(body, undefined, "lin-secret")).toBe(false);
-});
-
-test("linear timestamp outside the window is stale", () => {
-  const now = 1_756_200_000_000;
-  expect(linearTimestampFresh(now, now)).toBe(true);
-  expect(linearTimestampFresh(now - LINEAR_REPLAY_WINDOW_MS, now)).toBe(true);
-  expect(linearTimestampFresh(now + LINEAR_REPLAY_WINDOW_MS, now)).toBe(true);
-  expect(linearTimestampFresh(now - LINEAR_REPLAY_WINDOW_MS - 1, now)).toBe(
-    false,
-  );
-  expect(linearTimestampFresh(now + LINEAR_REPLAY_WINDOW_MS + 1, now)).toBe(
-    false,
-  );
-  expect(linearTimestampFresh("1756200000000", now)).toBe(false);
-  expect(linearTimestampFresh(undefined, now)).toBe(false);
 });
 
 test("github secret resolver prefers env and falls back to the data-dir file", () => {
