@@ -4,21 +4,11 @@
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": true,
   "separate-pull-requests": false,
-  "group-pull-request-title-pattern": "chore${scope}: release jigs libraries",
+  "group-pull-request-title-pattern": "chore${scope}: release jigs",
   "bootstrap-sha": "6c17b41553702d0b73b71e82df95c8a8aae74b57",
   "packages": {
     "packages/jigs": {
       "component": "jigs"
-    },
-    "packages/service": {
-      "component": "service"
     }
-  },
-  "plugins": [
-    {
-      "type": "linked-versions",
-      "groupName": "jigs",
-      "components": ["jigs", "service"]
-    }
-  ]
+  }
 }

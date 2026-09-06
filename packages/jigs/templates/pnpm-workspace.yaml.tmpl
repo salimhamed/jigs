@@ -5,8 +5,8 @@ allowBuilds:
   '@swc/core': true
   cbor-extract: true
   esbuild: true
-# The jigs packages peer on the SDK, the World, the dashboard and zod at the
-# versions listed in package.json. A second copy of any of them is silent —
+# jigs peers on the SDK, the World, the dashboard and zod at the versions
+# listed in package.json. A second copy of any of them is silent —
 # step ids nothing registers, schema types that do not unify — so a mismatch
 # fails the install instead of warning.
 strictPeerDependencies: true

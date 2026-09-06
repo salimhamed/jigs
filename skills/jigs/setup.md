@@ -32,10 +32,9 @@ person can judge.
 - A tunnel tool (`tailscale` or `cloudflared`), only if the factory will receive
   provider webhooks.
 
-jigs is two packages on GitHub Packages, `@salimhamed/jigs` and
-`@salimhamed/jigs-service`, pinned by the factory to one version. Nothing is
-cloned and nothing is installed globally: inside a factory, `jigs` means
-`pnpm exec jigs`.
+jigs is one package on GitHub Packages, `@salimhamed/jigs`, pinned by the
+factory to a version. Nothing is cloned and nothing is installed globally:
+inside a factory, `jigs` means `pnpm exec jigs`.
 
 ## 1. Scaffold the factory
 
@@ -167,11 +166,14 @@ just needs `jigs poke <run>` to notice its answer.
 jigs upgrade                # or: jigs upgrade --to <version>
 ```
 
-bumps both packages to one version, runs `jigs up`, then the factory's own
-typecheck. A typecheck error on a jig's deps object is a step the release
-added: it needs a wrapper in `steps/jigs.ts` — `author.md`. An install failure
-naming `@workflow/web`, `@workflow/world-postgres`, `workflow` or `zod` is a
-release that moved a runtime peer: move the same pin in the factory's
-`package.json` and run `jigs upgrade` again. A factory still installing jigs
-from a checkout (`link:` entries, or the old `jigs` / `@jigs/service` names)
-is refused; switch it to the published packages first.
+bumps `@salimhamed/jigs`, runs `jigs up`, then the factory's own typecheck. A
+typecheck error on a jig's deps object is a step the release added: it needs a
+wrapper in `steps/jigs.ts` — `author.md`. An install failure naming
+`@workflow/web`, `@workflow/world-postgres`, `workflow` or `zod` is a release
+that moved a runtime peer: move the same pin in the factory's `package.json`
+and run `jigs upgrade` again. A factory still installing jigs from a checkout
+(`link:` entries, or the old `jigs` / `@jigs/service` names) is refused;
+switch it to the published package first. So is a factory still depending on
+`@salimhamed/jigs-service`, retired in 0.3.0: drop that line from
+`package.json` and rewrite every `@salimhamed/jigs-service/X` import to
+`@salimhamed/jigs/X` first.

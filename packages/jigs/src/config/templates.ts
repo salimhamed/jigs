@@ -26,8 +26,8 @@ export function packageRoot(): string {
   return dir;
 }
 
-// `jigs init` runs before the factory has installed anything, so the
-// templates ship inside this package rather than the service's.
+// `jigs init` runs before the factory has installed anything, so the templates
+// ship inside the package the CLI is reached from.
 export function locateTemplates(): string {
   const templates = path.join(packageRoot(), "templates");
   if (!existsSync(templates)) {

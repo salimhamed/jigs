@@ -140,8 +140,9 @@ function templateFiles(dir: string, prefix = ""): string[] {
   });
 }
 
-// The factory pins both packages to the version of the CLI scaffolding it:
-// they release in lockstep, so the pair is one number.
+// Pinned to the exact version of the CLI that scaffolded it, never a range:
+// the jigs that compiles a factory's pipelines has to be the one its service
+// runs, and only one install can be both.
 function jigsVersion(): string {
   const manifest = JSON.parse(
     readFileSync(path.join(packageRoot(), "package.json"), "utf8"),

@@ -24,12 +24,11 @@ add that, set this up — go back to `SKILL.md` and take the route it belongs to
 4. **`jigs --help` and `jigs <verb> --help`**, for what a command and its flags
    actually do today. Prefer running these over recalling them.
 5. **The source**, when the question is about behaviour none of the above pins
-   down: `packages/jigs/src/` for the CLI and the check catalog,
-   `packages/service/src/` for the service, its routes, and the step,
-   suspension and worktree primitives. Inside a factory the installed copies
-   are `node_modules/@salimhamed/jigs/dist/` and
-   `node_modules/@salimhamed/jigs-service/dist/` — compiled, but the exports
-   map names each module.
+   down: `packages/jigs/src/` — the CLI and the check catalog, and beside
+   them the service, its routes, and the step, suspension and worktree
+   primitives. Inside a factory the installed copy is
+   `node_modules/@salimhamed/jigs/dist/` — compiled, but the exports map
+   names each module.
 
 For a question about how a factory is written rather than how jigs works, the
 worked example is what `jigs init` scaffolds: one `.tmpl` per file under

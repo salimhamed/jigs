@@ -1,5 +1,5 @@
-// The only check that can see a broken @salimhamed/jigs-service packaging, and
-// the only one that compiles the factory `jigs init` scaffolds.
+// The only check that can see a broken @salimhamed/jigs packaging, and the
+// only one that compiles the factory `jigs init` scaffolds.
 //
 // No jigs package carries a directive, so every durable step id is derived at
 // compile time from the factory-local path of the file that declares it — and
@@ -11,11 +11,11 @@
 // somebody else's repo, against runs already in flight.
 //
 // So: run `jigs init` into an empty directory outside this repo, exactly as a
-// new factory would, install both packages from the tarballs `pnpm pack`
+// new factory would, install the package from the tarball `pnpm pack`
 // emits — what a registry install unpacks, files list and rewritten
 // workspace ranges included — and build it the way a real factory builds,
-// twice: first with @salimhamed/jigs-service packed at a fake version, then
-// as committed, so the tree is left holding a build of the real one. Read the
+// twice: first with @salimhamed/jigs packed at a fake version, then as
+// committed, so the tree is left holding a build of the real one. Read the
 // ids back out of each bundle and diff both against the recorded list,
 // because "the ids do not move when the library is versioned" is the property
 // this whole shape was bought for, and it is the one nothing else can
@@ -29,7 +29,6 @@
 // in someone else's repo.
 import { execFileSync, spawn } from "node:child_process";
 import {
-  appendFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -45,9 +44,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.join(here, "..");
 const cli = path.join(repo, "packages", "jigs", "dist", "cli.js");
 const expectedFile = path.join(here, "expected-ids.txt");
-const servicePackage = path.join(repo, "packages", "service", "package.json");
+const jigsPackage = path.join(repo, "packages", "jigs", "package.json");
 const JIGS = "@salimhamed/jigs";
-const SERVICE = "@salimhamed/jigs-service";
 const FAKE_VERSION = "9.9.9-e2e";
 
 const HEADER = `# The workflow and step ids \`jigs build\` emits for the factory \`jigs init\`
@@ -69,7 +67,7 @@ let factory;
 let scratch;
 let tarballs;
 
-// The tarballs stand in for the registry, so this check needs no token. pnpm
+// The tarball stands in for the registry, so this check needs no token. pnpm
 // records a file: tarball by its integrity, which changes with any source
 // change, so the scaffold installs without a lockfile rather than against a
 // committed one.
@@ -77,21 +75,14 @@ function pack() {
   const dir = path.join(scratch, "tarballs");
   mkdirSync(dir);
   const into = (name) => path.join(dir, `${name}.tgz`);
-  const packInto = (name, file) =>
-    execFileSync("pnpm", ["--filter", name, "pack", "--out", file], {
+  const packInto = (file) =>
+    execFileSync("pnpm", ["--filter", JIGS, "pack", "--out", file], {
       cwd: repo,
       stdio: "inherit",
     });
-  packInto(JIGS, into("jigs"));
-  packInto(SERVICE, into("jigs-service"));
-  withFakeVersion(() =>
-    packInto(SERVICE, into(`jigs-service-${FAKE_VERSION}`)),
-  );
-  return {
-    jigs: into("jigs"),
-    service: into("jigs-service"),
-    bumpedService: into(`jigs-service-${FAKE_VERSION}`),
-  };
+  packInto(into("jigs"));
+  withFakeVersion(() => packInto(into(`jigs-${FAKE_VERSION}`)));
+  return { jigs: into("jigs"), bumped: into(`jigs-${FAKE_VERSION}`) };
 }
 
 function scaffold() {
@@ -109,37 +100,72 @@ function scaffold() {
     cwd: factory,
     stdio: "inherit",
   });
-  // The service tarball's own dependency on @salimhamed/jigs is a version,
-  // which pnpm resolves from the registry regardless of what the factory's
-  // manifest says about the same name; the override is what points it at the
-  // tarball too.
-  appendFileSync(
-    path.join(factory, "pnpm-workspace.yaml"),
-    `overrides:\n  "${JIGS}": file:${tarballs.jigs}\n`,
-  );
 }
 
-// The scaffold pins both packages to the CLI's version; here each pin becomes
-// the tarball packed from this tree, and the service's can be swapped for the
-// one packed at the fake version.
-function installFromTarballs(serviceTarball) {
+// The scaffold pins the package to the CLI's version; here that pin becomes
+// the tarball packed from this tree, which can be the one packed at the fake
+// version instead.
+function installFromTarball(tarball) {
   const manifestPath = path.join(factory, "package.json");
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  for (const name of [JIGS, SERVICE]) {
-    if (manifest.dependencies[name] === undefined) {
-      fail(
-        `the scaffolded package.json does not depend on ${name}`,
-        "the package.json template no longer lists it — this check rewrites that entry to a tarball",
-      );
-    }
+  if (manifest.dependencies[JIGS] === undefined) {
+    fail(
+      `the scaffolded package.json does not depend on ${JIGS}`,
+      "the package.json template no longer lists it — this check rewrites that entry to a tarball",
+    );
   }
-  manifest.dependencies[JIGS] = `file:${tarballs.jigs}`;
-  manifest.dependencies[SERVICE] = `file:${serviceTarball}`;
+  manifest.dependencies[JIGS] = `file:${tarball}`;
   writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   run("pnpm", ["install", "--no-frozen-lockfile"]);
 }
 
 const bundle = () => path.join(factory, ".output", "server", "index.mjs");
+
+// The CLI half of a package that is now also the service (ADR 0017). `jigs
+// init` runs from `pnpm dlx` on a machine that has installed nothing, and the
+// four runtime peers are the factory's to supply, so `dist/cli.js` must reach
+// none of the service runtime — nitro, hono, postgres, croner, undici, the
+// SDK. Two packages used to make that the package manager's business; one
+// package makes it import discipline, and a static import that crosses the
+// line is silent: the bundle grows, and `jigs init` starts needing packages
+// that are not there yet.
+const CLI_IMPORTS = ["commander", "yaml", "zod"];
+
+function cliBundleImports() {
+  const seen = new Set();
+  const bare = new Set();
+  const visit = (file) => {
+    if (seen.has(file)) return;
+    seen.add(file);
+    for (const [, spec] of readFileSync(file, "utf8").matchAll(
+      /(?:from|import)\s*["']([^"']+)["']/g,
+    )) {
+      if (spec.startsWith(".")) visit(path.resolve(path.dirname(file), spec));
+      else if (!spec.startsWith("node:")) {
+        bare.add(
+          spec.startsWith("@")
+            ? spec.split("/").slice(0, 2).join("/")
+            : spec.split("/")[0],
+        );
+      }
+    }
+  };
+  visit(cli);
+  return [...bare].sort();
+}
+
+function checkCliBundle() {
+  const imports = cliBundleImports();
+  const crossings = imports.filter((name) => !CLI_IMPORTS.includes(name));
+  if (crossings.length > 0) {
+    for (const name of crossings) console.error(`  ${name}`);
+    fail(
+      `${path.relative(repo, cli)} imports ${crossings.length} package(s) outside the CLI's own set (${CLI_IMPORTS.join(", ")})`,
+      "a CLI path now reaches the service half — make the crossing a dynamic import resolved from the factory, the way build.ts does, or add the package here if the CLI genuinely owns it",
+    );
+  }
+  console.log(`dist/cli.js imports ${imports.join(", ")}`);
+}
 
 function run(file, args) {
   execFileSync(file, args, { cwd: factory, stdio: "inherit" });
@@ -184,8 +210,8 @@ function workflowBundle() {
   return lines.slice(start, end).join("\n");
 }
 
-function withFakeVersion(packService) {
-  const original = readFileSync(servicePackage, "utf8");
+function withFakeVersion(packJigs) {
+  const original = readFileSync(jigsPackage, "utf8");
   const { version } = JSON.parse(original);
   const bumped = original.replace(
     `"version": "${version}"`,
@@ -195,21 +221,21 @@ function withFakeVersion(packService) {
   // vacuous: two identical builds, ids "unchanged", nothing tested.
   if (bumped === original) {
     fail(
-      `could not rewrite ${SERVICE}'s version (${version}) for the bumped pack`,
-      "the version field in packages/service/package.json no longer matches this replace — retarget it",
+      `could not rewrite ${JIGS}'s version (${version}) for the bumped pack`,
+      "the version field in packages/jigs/package.json no longer matches this replace — retarget it",
     );
   }
-  writeFileSync(servicePackage, bumped);
+  writeFileSync(jigsPackage, bumped);
   try {
-    return packService();
+    return packJigs();
   } finally {
-    writeFileSync(servicePackage, original);
+    writeFileSync(jigsPackage, original);
   }
 }
 
-// The service's own dependencies resolve from its own node_modules, but its
-// peers do not: the SDK requires the World by name from the factory's
-// node_modules, and the dashboard plugin resolves @workflow/web from cwd. A
+// jigs' own dependencies resolve from its own node_modules, but its peers do
+// not: the SDK requires the World by name from the factory's node_modules,
+// and the dashboard plugin resolves @workflow/web from cwd. A
 // peer missing from the factory's package.json is invisible until the built
 // bundle starts, in someone else's repo, with ERR_MODULE_NOT_FOUND naming the
 // package. Booting it once here is the only place this repo can see it, so
@@ -356,12 +382,15 @@ function reportDiff(expected, actual) {
 }
 
 console.log(
-  "\n=== scaffold: pack both packages, jigs init into an empty directory",
+  "\n=== scaffold: pack the package, jigs init into an empty directory",
 );
 scaffold();
 
+console.log("\n=== cli: the bundle a factory installs the service from");
+checkCliBundle();
+
 if (process.argv[2] === "--record") {
-  installFromTarballs(tarballs.service);
+  installFromTarball(tarballs.jigs);
   build();
   const ids = emittedIds();
   writeFileSync(expectedFile, `${HEADER}${ids.join("\n")}\n`);
@@ -371,13 +400,13 @@ if (process.argv[2] === "--record") {
 }
 
 // Bumped first so the tree is left holding a build of the real version.
-console.log(`\n=== build 1/2: ${SERVICE} at ${FAKE_VERSION}`);
-installFromTarballs(tarballs.bumpedService);
+console.log(`\n=== build 1/2: ${JIGS} at ${FAKE_VERSION}`);
+installFromTarball(tarballs.bumped);
 build();
 const bumpedIds = emittedIds();
 
-console.log(`\n=== build 2/2: ${SERVICE} at its committed version`);
-installFromTarballs(tarballs.service);
+console.log(`\n=== build 2/2: ${JIGS} at its committed version`);
+installFromTarball(tarballs.jigs);
 build();
 const ids = emittedIds();
 
@@ -407,8 +436,8 @@ if (moved.missing.length > 0 || moved.unexpected.length > 0) {
   // Both sides of a rename, so the count is the larger side, not the sum.
   const count = Math.max(moved.missing.length, moved.unexpected.length);
   fail(
-    `versioning ${SERVICE} moved ${count} step id(s)`,
-    "a directive is back inside a jigs package: its ids carry that package's version, and bumping it orphans every parked run",
+    `versioning ${JIGS} moved ${count} step id(s)`,
+    "a directive is back inside the jigs package: its ids carry the package's version, and bumping it orphans every parked run",
   );
 }
 
@@ -438,13 +467,13 @@ if (postgresUrl === undefined || postgresUrl === "") {
     console.error(boot.output);
     fail(
       `the built service did not start and stop cleanly: ${boot.problem}`,
-      `if the output above names a package it cannot find, the factory loads it by name at run time: it belongs in ${SERVICE}'s peerDependencies and the factory package.json template`,
+      `if the output above names a package it cannot find, the factory loads it by name at run time: it belongs in ${JIGS}'s peerDependencies and the factory package.json template`,
     );
   }
 }
 
 console.log(
-  `\n${ids.length} step/workflow id(s) match ${expectedFile}, and are unchanged with ${SERVICE} at ${FAKE_VERSION}`,
+  `\n${ids.length} step/workflow id(s) match ${expectedFile}, and are unchanged with ${JIGS} at ${FAKE_VERSION}`,
 );
 cleanup();
 

@@ -11,14 +11,18 @@
 // pointer — stale, or recorded on a harness other than the one picked below —
 // falls through to the same job stated with the brief and the diff.
 
-import type { readDiff } from "@salimhamed/jigs-service/review-loop/pull-request";
-import { type AgentFn, resumeOrRebuild } from "@salimhamed/jigs-service/steps";
-import type { Handoff } from "@salimhamed/jigs-service/ticket/review";
+import type { readDiff } from "@salimhamed/jigs/review-loop/pull-request";
+import {
+  type AgentFn,
+  type AgentSession,
+  claude,
+  resumeOrRebuild,
+} from "@salimhamed/jigs/steps";
+import type { Handoff } from "@salimhamed/jigs/ticket/review";
 import {
   renderSnapshot,
   type TicketSnapshot,
-} from "@salimhamed/jigs-service/ticket/snapshot";
-import { type AgentSession, claude } from "@salimhamed/jigs/steps";
+} from "@salimhamed/jigs/ticket/snapshot";
 import { z } from "zod";
 
 const prDescription = z.strictObject({

@@ -117,7 +117,7 @@ jobs:
           scope: "@salimhamed"
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - name: Publish both packages to GitHub Packages
+      - name: Publish to GitHub Packages
         env:
           # GITHUB_TOKEN, not the PAT: a publish raises no workflow event this
           # design waits on, and `packages: write` above is exactly the grant.
@@ -129,12 +129,10 @@ jobs:
           # failure: the registry refuses to publish over it, so skip it.
           # --no-git-checks: the checkout is detached at the squash commit,
           # which pnpm otherwise refuses as "not on a branch".
-          for dir in packages/jigs packages/service; do
-            name="$(node -p "require('./$dir/package.json').name")"
-            version="$(node -p "require('./$dir/package.json').version")"
-            if npm view "$name@$version" version >/dev/null 2>&1; then
-              echo "$name@$version is already published — skipping"
-              continue
-            fi
+          name="$(node -p "require('./packages/jigs/package.json').name")"
+          version="$(node -p "require('./packages/jigs/package.json').version")"
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "$name@$version is already published — skipping"
+          else
             pnpm --filter "$name" publish --no-git-checks --access restricted
-          done
+          fi

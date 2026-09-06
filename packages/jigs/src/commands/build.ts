@@ -16,11 +16,11 @@ import { SERVICE_ENTRY } from "./service-lifecycle.ts";
 
 // Compiles a factory repo's own pipelines into its own service bundle. Both
 // halves of the work belong to the factory, not to this CLI: the generated
-// entry comes from the @salimhamed/jigs-service the factory installed, and
-// the compiler is the nitro the factory installed.
+// entry comes from the @salimhamed/jigs the factory installed, and the
+// compiler is the nitro the factory installed.
 
-// Mirrors TERMINAL_RUN_STATUSES in @salimhamed/jigs-service — the CLI reads
-// run status off the wire and has nothing to import it from.
+// Mirrors TERMINAL_RUN_STATUSES in ../runs.ts — the CLI reads run status off
+// the wire, and a static import would pull the service half into dist/cli.js.
 const TERMINAL_RUN_STATUSES: ReadonlySet<string> = new Set([
   "completed",
   "failed",
@@ -110,8 +110,8 @@ async function warnAboutRunsInFlight(
 }
 
 /**
- * The generated entry comes from the factory's own @salimhamed/jigs-service,
- * reached through two deliberate indirections:
+ * The generated entry comes from the factory's own @salimhamed/jigs, reached
+ * through two deliberate indirections:
  *
  * - dynamically, because `dist/cli.js` is a bundled artifact and a static
  *   import would pull nitro and the whole build framework into the CLI;
@@ -124,10 +124,10 @@ async function loadPrepare(factoryRoot: string): Promise<Prepare> {
   );
   let entry: string;
   try {
-    entry = resolveFromFactory.resolve("@salimhamed/jigs-service/build");
+    entry = resolveFromFactory.resolve("@salimhamed/jigs/build");
   } catch {
     throw new CliError(
-      `@salimhamed/jigs-service is not installed in ${factoryRoot}`,
+      `@salimhamed/jigs is not installed in ${factoryRoot}`,
       `run pnpm install in ${factoryRoot}`,
     );
   }

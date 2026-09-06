@@ -26,6 +26,20 @@ version, and two independently drifting numbers would answer a question nobody
 asks. One release PR covers both; a release with no commits of its own still
 bumps the quiet package to keep the pair readable as a single number.
 
+> **Amended by [ADR 0017](./0017-single-package.md) on 2026-09-06.** The
+> lockstep is gone with the second package: one component (`packages/jigs`),
+> one tag and Release per version (`jigs-vX.Y.Z`), one publish, and no
+> `linked-versions` plugin. The paragraph above turned out to be the whole
+> case against the split — two numbers forced equal is one number with extra
+> machinery. Everything else in this ADR is unchanged: the PAT-versus-
+> `GITHUB_TOKEN` rule, the merge-the-release-PR step and its expected-checks
+> list, and the publish job gated on `releases_created`. Two details below
+> read differently now. `group-pull-request-title-pattern` is
+> `chore${scope}: release jigs` — still load-bearing, still the same
+> create-and-parse trap, but no longer dictated by a plugin's hardcoded
+> string, so the value is ours to keep stable. And "the quiet package gets
+> near-empty changelog entries" describes a package that no longer exists.
+
 **Both the action and the merge step authenticate as a PAT
 (`RELEASE_PLEASE_TOKEN`), never `GITHUB_TOKEN`.** GitHub raises no workflow run
 for an event caused by `GITHUB_TOKEN`, and that rule bites this design twice.

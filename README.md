@@ -18,10 +18,10 @@ run it for you whenever you want.
 
 ## Quick start
 
-jigs ships as two packages on GitHub Packages, `@salimhamed/jigs` (the CLI)
-and `@salimhamed/jigs-service` (the library a factory is written against). A
-factory pins both to one version and runs its own copy of the CLI; nothing is
-installed globally and nothing is cloned. Expect around ten minutes.
+jigs ships as one package on GitHub Packages, `@salimhamed/jigs`: the CLI, and
+the library a factory is written against. A factory pins it to a version and
+runs its own copy of the CLI; nothing is installed globally and nothing is
+cloned. Expect around ten minutes.
 
 **Prerequisites.**
 
@@ -122,7 +122,7 @@ pnpm exec jigs logs <run>
 pnpm exec jigs upgrade
 ```
 
-bumps both packages to the latest release (`--to <version>` pins one), runs
+bumps jigs to the latest release (`--to <version>` pins it), runs
 `jigs up`, then the factory's typecheck — which names any wrapper a release
 asks `steps/jigs.ts` to grow.
 
@@ -150,19 +150,20 @@ argument and routes it to one of four guides:
 
 ## Layout
 
-pnpm workspace, published as two packages that release in lockstep:
+pnpm workspace, one published package:
 
-- `packages/jigs` — `@salimhamed/jigs`: the `jigs` CLI, the library-first
-  package behind it, and under `templates/` everything `jigs init` writes —
+- `packages/jigs` — `@salimhamed/jigs`: the `jigs` CLI; the library-first core
+  behind it (harnesses, checks, prompts, step implementations); the service a
+  factory builds and runs (the app and its routes, the Nitro config, the
+  suspension, ticket, review-loop and worktree primitives pipelines are
+  written against); and under `templates/` everything `jigs init` writes —
   the factory's infrastructure and the code it starts from, one `.tmpl` per
   file.
-- `packages/service` — `@salimhamed/jigs-service`, the library a factory
-  installs: the app and its routes, and the primitives pipelines are written
-  against.
 
-Both ship compiled, from `dist/`. The Workflow SDK, its Postgres World, its
-dashboard and zod are peers the factory installs itself; the measurements
-behind that shape are recorded in [`docs/adr/`](docs/adr/).
+It ships compiled, from `dist/`, one entry per export subpath. The Workflow
+SDK, its Postgres World, its dashboard and zod are peers the factory installs
+itself; the measurements behind that shape are recorded in
+[`docs/adr/`](docs/adr/).
 
 ## Development
 
@@ -177,6 +178,6 @@ pnpm e2e        # jigs init into a temp dir, install from packed tarballs, build
 ```
 
 A merge to `main` with a releasable title opens or updates the release PR;
-its merge tags both packages and publishes them to GitHub Packages. The
+its merge tags the release and publishes to GitHub Packages. The
 [setup runbook](docs/setup.md#part-1--the-machine-once) has the two console
 settings that make it work.

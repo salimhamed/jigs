@@ -3,7 +3,9 @@
   "compilerOptions": {
     "module": "nodenext",
     "moduleResolution": "nodenext",
-    "allowImportingTsExtensions": true
+    "lib": ["esnext"],
+    "allowImportingTsExtensions": true,
+    "plugins": [{ "name": "workflow" }]
   },
   "include": ["src", "scripts", "tsdown.config.ts"]
 }
