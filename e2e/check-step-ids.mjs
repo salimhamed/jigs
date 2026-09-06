@@ -184,7 +184,7 @@ function workflowBundle() {
   return lines.slice(start, end).join("\n");
 }
 
-function withFakeVersion(pack) {
+function withFakeVersion(packService) {
   const original = readFileSync(servicePackage, "utf8");
   const { version } = JSON.parse(original);
   const bumped = original.replace(
@@ -201,7 +201,7 @@ function withFakeVersion(pack) {
   }
   writeFileSync(servicePackage, bumped);
   try {
-    return pack();
+    return packService();
   } finally {
     writeFileSync(servicePackage, original);
   }

@@ -62,8 +62,8 @@ schema types unify. A jigs release that moves a peer needs the same move in
 this factory's `package.json`; `strictPeerDependencies` in the factory's
 `pnpm-workspace.yaml` turns the mismatch into an install failure instead of a
 second copy. `jigs init`'s `package.json` template carries the current pins;
-compare it after a pull. Everything else the service imports is its own
-dependency and resolves from the jigs checkout.
+compare it after an upgrade. Everything else the service imports is its own
+dependency and installs with it.
 
 So:
 
