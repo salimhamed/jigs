@@ -64,9 +64,10 @@ release asks of the factory's `steps/jigs.ts`.
 
 **The service stays a host process.** A container was considered and set
 aside: the service drives the operator's `claude` and `codex` logins, reads
-the operator's AWS SSO cache for the `aws` checks and the MCP server, and cuts
-git worktrees from clones it keeps under the operator's data directory using
-the operator's SSH and git credentials. Every one of those is a host fact that
+the operator's AWS SSO cache for the `aws` check (`aws sts get-caller-identity`
+under the service's `AWS_PROFILE`) and for any MCP server a step spawns with
+it, and cuts git worktrees from clones it keeps under the operator's data
+directory using the operator's SSH and git credentials. Every one of those is a host fact that
 a container would have to be handed back through mounts and env, and the
 supervision jigs already has — a pidfile per factory, `jigs service
 start|stop|restart|status|logs` ([ADR 0012](./0012-per-factory-service.md)) —
@@ -159,8 +160,8 @@ attestations on the public registry only.
   `pnpm-workspace.yaml`, and `.npmrc` routes the scope. The two existing
   factories need exactly that edit, plus the import rename
   (`@jigs/service` → `@salimhamed/jigs-service`, `jigs` → `@salimhamed/jigs`)
-  in `steps/`, `pipelines/`, `jigs.config.ts` and `nitro.config.ts`, and a
-  `~/.npmrc` token on the machine.
+  in `steps/`, `pipelines/`, `jigs.config.ts`, `jigs.config.test.ts` and
+  `nitro.config.ts`, and a `~/.npmrc` token on the machine.
 - **Every step id is unchanged by the move.** They are factory-local paths
   ([ADR 0013](./0013-factory-owned-steps.md)); the tarball e2e diffs them
   against the recorded list on every PR, and a real factory's own
