@@ -10,11 +10,13 @@ import {
   connectRegistry,
   ensureWorktreeRegistry,
   getWorktree,
+  upsertWorktree,
 } from "./registry.ts";
 
 const sql = connectRegistry(
   process.env.WORKFLOW_POSTGRES_URL ??
     "postgres://jigs:jigs@localhost:5439/jigs",
+  { max: 1 },
 );
 
 // A throwaway factory root keys a worktree path no other run of this test
@@ -55,17 +57,17 @@ function factsFor(branch: string): WorktreeFacts {
   };
 }
 
+const request = { binding: "api", branch: "feat" };
+const shared = {
+  sql,
+  resolveBinding: () => binding,
+  runIsLive: async () => false,
+  provision: async () => {},
+  log: () => {},
+};
+
 test("a relaunched ticket adopts the leftover worktree and takes over its row", async () => {
   await ensureWorktreeRegistry(sql);
-
-  const request = { binding: "api", branch: "feat" };
-  const shared = {
-    sql,
-    resolveBinding: () => binding,
-    runIsLive: async () => false,
-    provision: async () => {},
-    log: () => {},
-  };
 
   const first = await provisionRunWorktree(request, "run_first", {
     ...shared,
@@ -90,4 +92,27 @@ test("a relaunched ticket adopts the leftover worktree and takes over its row", 
   });
   expect(second).toMatchObject({ path: testPath, baseSha: "base1" });
   expect((await getWorktree(sql, testPath))?.ownerRunId).toBe("run_second");
+});
+
+test("a live owner read back from the registry refuses the second run by name", async () => {
+  await ensureWorktreeRegistry(sql);
+  await upsertWorktree(sql, {
+    path: testPath,
+    branch: "feat",
+    ownerRunId: "run_live",
+    state: "active",
+    repoDir,
+  });
+
+  await expect(
+    provisionRunWorktree(request, "run_other", {
+      ...shared,
+      runIsLive: async () => true,
+      worktreeStatus: async () => {
+        throw new Error("a live owner must be refused before disk is read");
+      },
+      createWorktree: async () => factsFor("feat"),
+    }),
+  ).rejects.toThrow(/run_live/);
+  expect((await getWorktree(sql, testPath))?.ownerRunId).toBe("run_live");
 });
