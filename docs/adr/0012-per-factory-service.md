@@ -179,10 +179,10 @@ it.
   with it: the exports-map exact-string trap (the first consequence above
   records that). The peer set stays for its other reason, one copy of
   `workflow` per process.
-- A factory installs the SDK, its World, hono and zod itself, and those pins
-  must match the ones `@jigs/service` peers on. The factory `package.json`
-  template carries the same versions, and `src/package.test.ts` fails when the
-  two drift.
+- A factory installs the SDK, its World, its dashboard and zod itself, and
+  those pins must match the ones `@jigs/service` peers on. The factory
+  `package.json` template carries the same versions, and `src/package.test.ts`
+  fails when the two drift.
 - The step-id derivation walks up to a workspace root that the build tool
   detects, not one jigs declares. A factory that is its own repo gets the right
   answer; a factory nested under another workspace does not, which is why

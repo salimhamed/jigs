@@ -129,8 +129,8 @@ test("the runtime a factory supplies is a peer here, and still a devDependency",
   expect(Object.keys(peers).filter((name) => !optionalPeers.has(name))).toEqual(
     FACTORY_SUPPLIED,
   );
-  for (const name of FACTORY_SUPPLIED) {
-    expect(pkg.devDependencies[name], name).toBe(peers[name]);
+  for (const [name, range] of Object.entries(peers)) {
+    expect(pkg.devDependencies[name], name).toBe(range);
     expect(pkg.dependencies[name], name).toBeUndefined();
   }
 });

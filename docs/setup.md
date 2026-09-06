@@ -57,15 +57,15 @@ both kinds of gap are a compile error rather than a surprise at run time.
 
 A third does not follow either, and this one is not a compile error: the
 Workflow SDK, its Postgres World, its dashboard and zod are peer dependencies
-of the jigs packages, installed by the factory at the exact versions the
-packages peer on, because the SDK loads the World and the dashboard by name
-from the factory's own `node_modules` and one zod copy is what lets the two
-packages' schema types unify. A jigs release that moves a peer needs the same
-move in this factory's `package.json`; `strictPeerDependencies` in the
-factory's `pnpm-workspace.yaml` turns the mismatch into an install failure
-instead of a second copy. `jigs init`'s `package.json` template carries the
-current pins; compare it after a pull. Everything else the service imports is
-its own dependency and resolves from the jigs checkout.
+of the jigs packages, installed by the factory at the versions the packages
+peer on, because the SDK loads the World and the dashboard by name from the
+factory's own `node_modules` and one zod copy is what lets the two packages'
+schema types unify. A jigs release that moves a peer needs the same move in
+this factory's `package.json`; `strictPeerDependencies` in the factory's
+`pnpm-workspace.yaml` turns the mismatch into an install failure instead of a
+second copy. `jigs init`'s `package.json` template carries the current pins;
+compare it after a pull. Everything else the service imports is its own
+dependency and resolves from the jigs checkout.
 
 The order matters, because a pull alone moves nothing. Both packages run from
 their `dist/`, which is gitignored and moves only when `pnpm build` runs in the
