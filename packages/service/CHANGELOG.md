@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.18](https://github.com/salimhamed/jigs/compare/service-v0.1.17...service-v0.1.18) (2026-09-06)
+
+
+### Features
+
+* **jigs:** ship templates inside the CLI and version-pin the scaffold ([#86](https://github.com/salimhamed/jigs/issues/86)) ([3d71ff0](https://github.com/salimhamed/jigs/commit/3d71ff0e6a5b374f1d318af6044cc774493fe505))
+
 ## [0.1.17](https://github.com/salimhamed/jigs/compare/service-v0.1.16...service-v0.1.17) (2026-09-05)
 
 
