@@ -134,9 +134,12 @@ worktree path, the branch point and the builder's session, it returns the
 `{ title, body }` the pull request opens with. jigs has no implementation to
 wrap here on purpose — how a pull request introduces itself is the factory's
 voice, and the title is what the target repo's own CI and release tooling read.
-The scaffolded `steps/describe-pr.ts` is a plain deterministic string; a real
-factory composes it over the `agent` jig and the `readDiff` wrapper to ask its
-agent. It is a required member, so a factory cannot quietly end up without one.
+The scaffolded `steps/describe-pr.ts` already asks an agent — a workflow-side
+composition over the `agent` jig and the `readDiff` wrapper, resuming the
+builder that wrote the change and falling back to a fresh context fed the brief
+and the diff — so what a factory rewrites there is the conventions, not the
+mechanics. It is a required member, so a factory cannot quietly end up without
+one.
 
 The starter `ship` pipeline takes its `binding` and `merge` as inputs with no
 default, because the scaffold knows neither: once step 4 has bound a repo, give

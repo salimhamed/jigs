@@ -1,23 +1,35 @@
-import { type AgentStepConfig, claude } from "@salimhamed/jigs/steps";
+import {
+  type AgentStepConfig,
+  type AgentStepResult,
+  claude,
+} from "@salimhamed/jigs/steps";
 import { expect, test } from "vitest";
 import { z } from "zod";
-import { parseOutput } from "./index";
-import { type AgentFn, resumeFailed, resumeOrRebuild } from "./resume";
+import { parseOutput, unwrapAgentStep } from "./index";
+import { type AgentFn, resumeOrRebuild } from "./resume";
 
 const verdict = z.strictObject({ note: z.string() });
 
+// A stale resume is staged the way production stages it — the step returns the
+// marker, ./index turns it into the throw — so these cases prove the whole
+// chain, not just that the fallback catches what it itself constructs.
 function recorder(options: { staleResume?: boolean } = {}) {
   const calls: AgentStepConfig<unknown>[] = [];
   const agent: AgentFn = async <T>(config: AgentStepConfig<T>) => {
     calls.push(config as AgentStepConfig<unknown>);
-    if (options.staleResume === true && config.resume !== undefined) {
-      resumeFailed("no rollout found for thread id 0199-gone");
-    }
+    const result = unwrapAgentStep(
+      options.staleResume === true && config.resume !== undefined
+        ? { resumeFailed: "no rollout found for thread id 0199-gone" }
+        : {
+            text: "",
+            output: { note: "done" },
+            session: { harness: "claude" as const, id: `s-${calls.length}` },
+          },
+    );
     return {
-      text: "",
-      output: parseOutput(config.output, { note: "done" }),
-      session: { harness: "claude" as const, id: `s-${calls.length}` },
-    };
+      ...result,
+      output: parseOutput(config.output, result.output),
+    } as AgentStepResult<T>;
   };
   return { calls, agent };
 }
