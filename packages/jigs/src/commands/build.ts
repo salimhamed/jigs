@@ -4,7 +4,13 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { locateFactoryRoot } from "../config/locate-factory.ts";
 import { CliError } from "../errors.ts";
-import { listRunsForPs } from "./ps.ts";
+import {
+  type ExecFile,
+  type ExecOutput,
+  execOutput,
+  nodeExecFile,
+} from "../exec.ts";
+import { listRunsForPs, type PsRun } from "./ps.ts";
 import { resolveServiceTarget } from "./service.ts";
 import { SERVICE_ENTRY } from "./service-lifecycle.ts";
 
@@ -21,18 +27,9 @@ const TERMINAL_RUN_STATUSES: ReadonlySet<string> = new Set([
   "cancelled",
 ]);
 
+export type { ExecFile, ExecOutput } from "../exec.ts";
+
 export type Prepare = (factoryRoot: string) => unknown;
-
-export interface ExecOutput {
-  stdout: string;
-  stderr: string;
-}
-
-export type ExecFile = (
-  file: string,
-  args: string[],
-  options: { cwd: string },
-) => Promise<ExecOutput>;
 
 export interface BuildDeps {
   cwd: string;
@@ -73,11 +70,26 @@ export async function buildFactoryService(deps: BuildDeps): Promise<void> {
 }
 
 function echo(result: Partial<ExecOutput>, out: (line: string) => void): void {
-  for (const line of `${result.stdout ?? ""}${result.stderr ?? ""}`.split(
-    "\n",
-  )) {
+  for (const line of execOutput(result).split("\n")) {
     if (line !== "") out(line);
   }
+}
+
+// Empty when the service is unreachable: that is the ordinary case for a
+// build — there is nothing running to have runs in flight.
+export async function listRunsInFlight(factoryRoot: string): Promise<PsRun[]> {
+  let runs: PsRun[];
+  try {
+    // `jigs ps` already knows how to find them; it prints, so it is handed a
+    // sink and read for its return value.
+    ({ runs } = await listRunsForPs({
+      ...resolveServiceTarget(factoryRoot),
+      out: () => {},
+    }));
+  } catch {
+    return [];
+  }
+  return runs.filter((run) => !TERMINAL_RUN_STATUSES.has(run.status));
 }
 
 // Rebuilding while a run is parked can orphan it: replay looks the step ids
@@ -88,21 +100,7 @@ async function warnAboutRunsInFlight(
   factoryRoot: string,
   out: (line: string) => void,
 ): Promise<void> {
-  let runs: Awaited<ReturnType<typeof listRunsForPs>>["runs"];
-  try {
-    // `jigs ps` already knows how to find them; it prints, so it is handed a
-    // sink and read for its return value.
-    ({ runs } = await listRunsForPs({
-      ...resolveServiceTarget(factoryRoot),
-      out: () => {},
-    }));
-  } catch {
-    // An unreachable service is the ordinary case for a build — there is
-    // nothing running to have runs in flight.
-    return;
-  }
-
-  const inFlight = runs.filter((run) => !TERMINAL_RUN_STATUSES.has(run.status));
+  const inFlight = await listRunsInFlight(factoryRoot);
   if (inFlight.length === 0) return;
   out(
     `warning: ${inFlight.length} run(s) still in flight — a rebuild can orphan one whose pipeline changed shape:`,
@@ -140,12 +138,3 @@ async function loadPrepare(factoryRoot: string): Promise<Prepare> {
   };
   return module.prepare;
 }
-
-const nodeExecFile: ExecFile = async (file, args, options) => {
-  const { execFile } = await import("node:child_process");
-  const { promisify } = await import("node:util");
-  return await promisify(execFile)(file, args, {
-    cwd: options.cwd,
-    maxBuffer: 64 * 1024 * 1024,
-  });
-};

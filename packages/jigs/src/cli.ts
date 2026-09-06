@@ -21,6 +21,7 @@ import {
 } from "./commands/service-lifecycle.ts";
 import { sweepWorktrees } from "./commands/sweep.ts";
 import { unbindRepo } from "./commands/unbind.ts";
+import { upFactory } from "./commands/up.ts";
 import { CliError } from "./errors.ts";
 import { formatTable } from "./table.ts";
 
@@ -82,6 +83,30 @@ program
   .action(async () => {
     await buildFactoryService({ cwd: process.cwd(), out });
   });
+
+program
+  .command("up")
+  .description(
+    "take this factory from any state to a running service (env, install, compose, bootstrap, build, start, doctor)",
+  )
+  .option("--restart", "restart the service even when the bundle is unchanged")
+  .option("--force", "restart over in-flight runs without asking")
+  .option("--no-doctor", "skip the doctor pass once the service is up")
+  .action(
+    async (options: {
+      restart?: boolean;
+      force?: boolean;
+      doctor: boolean;
+    }) => {
+      // Every step has already printed its own FAIL line and repair, so the
+      // exit code is the only thing left to say.
+      const result = await upFactory(
+        { cwd: process.cwd(), out, confirm: makeConfirm() },
+        options,
+      );
+      if (!result.ok) process.exitCode = 1;
+    },
+  );
 
 program
   .command("bind")
