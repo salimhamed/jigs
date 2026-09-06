@@ -1,3 +1,4 @@
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { NitroConfig } from "nitro/types";
 
@@ -8,21 +9,19 @@ export const GENERATED_SCHEDULES_FILE = "schedules.ts";
 
 // Nitro resolves a bare `plugins` entry against the build root, which is the
 // factory rather than this package, so the path has to be absolute and
-// resolved from this module.
-const startWorldPlugin = fileURLToPath(
-  new URL("../plugins/start-world.ts", import.meta.url),
-);
-const startDashboardPlugin = fileURLToPath(
-  new URL("../plugins/start-dashboard.ts", import.meta.url),
-);
+// resolved from this module. The plugins are emitted beside it with the same
+// extension, so one path works for the source under vitest and for dist/.
+const extension = path.extname(fileURLToPath(import.meta.url));
+const shippedPlugin = (name: string): string =>
+  fileURLToPath(new URL(`./plugins/${name}${extension}`, import.meta.url));
+const startWorldPlugin = shippedPlugin("start-world");
+const startDashboardPlugin = shippedPlugin("start-dashboard");
 
 /** The whole Nitro build config for a factory repo, so a factory's own
  *  nitro.config.ts is two lines. */
 export function defineJigsService(): NitroConfig {
-  // "use workflow"/"use step" directives outside this package only compile if
-  // it is consumed as source (AGE-311). Agent steps will need
-  // pathToClaudeCodeExecutable pointed at the system `claude` — bundling
-  // severs the SDK's vendored CLI.
+  // Agent steps will need pathToClaudeCodeExecutable pointed at the system
+  // `claude` — bundling severs the SDK's vendored CLI.
   return {
     modules: ["workflow/nitro"],
     // Nitro invokes plugins in order without awaiting them, so the generated

@@ -8,7 +8,11 @@
   "engines": {
     "node": ">=24"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
+    "build": "tsdown",
     "test": "vitest run",
     "test:live": "vitest run --config vitest.live.config.ts",
     "typecheck": "tsc --noEmit"
@@ -25,7 +29,13 @@
     "hono": "^4.13.4",
     "postgres": "^3.4.7",
     "workflow": "4.8.4",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "nitro": "3.0.260610-beta"
+  },
+  "peerDependenciesMeta": {
+    "nitro": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@workflow/web": "4.1.20",
@@ -34,28 +44,86 @@
     "hono": "^4.13.4",
     "nitro": "3.0.260610-beta",
     "postgres": "^3.4.7",
+    "tsdown": "^0.22.14",
     "workflow": "4.8.4",
     "zod": "^4.4.3"
   },
   "exports": {
-    ".": "./src/factory.ts",
-    "./app": "./src/app.ts",
-    "./build": "./src/build.ts",
-    "./nitro": "./src/nitro.ts",
-    "./schedules": "./src/schedules.ts",
-    "./steps": "./src/steps/index.ts",
-    "./steps/jit": "./src/steps/jit.ts",
-    "./steps/run": "./src/steps/run.ts",
-    "./suspension/claim": "./src/suspension/claim.ts",
-    "./suspension/needs-human": "./src/suspension/needs-human.ts",
-    "./suspension/pull-request-gate": "./src/suspension/pull-request-gate.ts",
-    "./ticket/review": "./src/ticket/review.ts",
-    "./ticket/snapshot": "./src/ticket/snapshot.ts",
-    "./review-loop/loop": "./src/review-loop/loop.ts",
-    "./review-loop/pull-request": "./src/review-loop/pull-request.ts",
-    "./worktrees": "./src/worktrees/index.ts",
-    "./plugins/start-dashboard": "./plugins/start-dashboard.ts",
-    "./plugins/start-world": "./plugins/start-world.ts",
-    "./providers/linear": "./src/providers/linear.ts"
+    ".": {
+      "types": "./dist/factory.d.ts",
+      "default": "./dist/factory.js"
+    },
+    "./app": {
+      "types": "./dist/app.d.ts",
+      "default": "./dist/app.js"
+    },
+    "./build": {
+      "types": "./dist/build.d.ts",
+      "default": "./dist/build.js"
+    },
+    "./nitro": {
+      "types": "./dist/nitro.d.ts",
+      "default": "./dist/nitro.js"
+    },
+    "./schedules": {
+      "types": "./dist/schedules.d.ts",
+      "default": "./dist/schedules.js"
+    },
+    "./steps": {
+      "types": "./dist/steps/index.d.ts",
+      "default": "./dist/steps/index.js"
+    },
+    "./steps/jit": {
+      "types": "./dist/steps/jit.d.ts",
+      "default": "./dist/steps/jit.js"
+    },
+    "./steps/run": {
+      "types": "./dist/steps/run.d.ts",
+      "default": "./dist/steps/run.js"
+    },
+    "./suspension/claim": {
+      "types": "./dist/suspension/claim.d.ts",
+      "default": "./dist/suspension/claim.js"
+    },
+    "./suspension/needs-human": {
+      "types": "./dist/suspension/needs-human.d.ts",
+      "default": "./dist/suspension/needs-human.js"
+    },
+    "./suspension/pull-request-gate": {
+      "types": "./dist/suspension/pull-request-gate.d.ts",
+      "default": "./dist/suspension/pull-request-gate.js"
+    },
+    "./ticket/review": {
+      "types": "./dist/ticket/review.d.ts",
+      "default": "./dist/ticket/review.js"
+    },
+    "./ticket/snapshot": {
+      "types": "./dist/ticket/snapshot.d.ts",
+      "default": "./dist/ticket/snapshot.js"
+    },
+    "./review-loop/loop": {
+      "types": "./dist/review-loop/loop.d.ts",
+      "default": "./dist/review-loop/loop.js"
+    },
+    "./review-loop/pull-request": {
+      "types": "./dist/review-loop/pull-request.d.ts",
+      "default": "./dist/review-loop/pull-request.js"
+    },
+    "./worktrees": {
+      "types": "./dist/worktrees/index.d.ts",
+      "default": "./dist/worktrees/index.js"
+    },
+    "./plugins/start-dashboard": {
+      "types": "./dist/plugins/start-dashboard.d.ts",
+      "default": "./dist/plugins/start-dashboard.js"
+    },
+    "./plugins/start-world": {
+      "types": "./dist/plugins/start-world.d.ts",
+      "default": "./dist/plugins/start-world.js"
+    },
+    "./providers/linear": {
+      "types": "./dist/providers/linear.d.ts",
+      "default": "./dist/providers/linear.js"
+    }
   }
 }

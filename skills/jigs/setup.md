@@ -152,11 +152,10 @@ just needs `jigs poke <run>` to notice its answer.
 
 ## Upgrading a factory later
 
-The CLI runs from `packages/jigs/dist/`, which is gitignored and refreshed only
-by `pnpm build`. `@jigs/service` ships source, so the service side of a change
-is live the moment you pull, while the CLI keeps running the old build until you
-rebuild it — which shows up as the CLI rejecting a `jigs.yml` field it has not
-learned about yet. So, in this order:
+Both `jigs` and `@jigs/service` run from their `dist/`, which is gitignored
+and refreshed only by `pnpm build`, so a pull alone moves nothing: a factory
+that rebuilds against a stale `dist/` compiles the service it had before the
+pull. So, in this order:
 
 ```sh
 cd <jigs checkout> && git pull && pnpm build

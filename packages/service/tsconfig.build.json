@@ -1,0 +1,11 @@
+{
+  // The dts build resolves jigs through node_modules, so it reads that
+  // package's emitted declarations instead of emitting its own beside the
+  // jigs sources the typecheck paths point at. Tests are excluded for the
+  // same reason: one reaches into the jigs sources by relative path.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {}
+  },
+  "exclude": ["src/**/*.test.ts", "src/**/test-fixtures.ts"]
+}

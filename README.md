@@ -128,11 +128,10 @@ jigs logs <run>
 
 ### Upgrading later
 
-Rebuild this checkout before the factory: the CLI runs from a build only
-`pnpm build` refreshes, while the service half ships as source and is live the
-moment you pull. The **Upgrading** notes in
-[the setup runbook](docs/setup.md#part-1--the-machine-once) carry the commands
-in order.
+Rebuild this checkout before the factory: both packages run from a `dist/`
+only `pnpm build` refreshes, so a pull alone moves nothing. The **Upgrading**
+notes in [the setup runbook](docs/setup.md#part-1--the-machine-once) carry the
+commands in order.
 
 ## The `/jigs` skill
 
@@ -162,8 +161,8 @@ pnpm workspace:
 
 - `packages/jigs` — the library-first package and the `jigs` CLI.
 - `packages/service` — `@jigs/service`, the library a factory installs: the app
-  and its routes, and the primitives pipelines are written against. It ships as
-  raw TypeScript; the factory's own build compiles it.
+  and its routes, and the primitives pipelines are written against. It ships
+  compiled, from `dist/`, like the CLI.
 - `e2e/fixture-factory` — a one-pipeline factory, and the worked example a new
   factory copies from.
 
