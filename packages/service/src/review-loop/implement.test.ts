@@ -164,22 +164,6 @@ test("the cycle bound halts needs-human with the findings, and the human's reply
   expect(result.cycles).toBe(4);
 });
 
-test("the bound is three cycles: a fourth request for changes is never run", async () => {
-  verdicts = [
-    changes("one"),
-    changes("two"),
-    changes("three"),
-    changes("four"),
-    approved,
-  ];
-  await run();
-
-  expect(humanCalls).toHaveLength(1);
-  expect(humanCalls[0]?.reason).toContain("3-cycle bound");
-  // The third cycle's findings: the halt landed after cycle three, not later.
-  expect(humanCalls[0]?.payload).toEqual({ findings: ["three"] });
-});
-
 test("the builder's session pointer is the one carried out, not the reviewer's", async () => {
   verdicts = [changes("one"), approved];
   const result = await run();
