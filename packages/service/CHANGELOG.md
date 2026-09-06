@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.20](https://github.com/salimhamed/jigs/compare/service-v0.1.19...service-v0.1.20) (2026-09-06)
+
+
+### Bug Fixes
+
+* **service:** exit cleanly on SIGTERM and wait for /health on start ([#91](https://github.com/salimhamed/jigs/issues/91)) ([257521e](https://github.com/salimhamed/jigs/commit/257521ecf8eb253abd572cd9cfe9715a110817bc))
+
 ## [0.1.19](https://github.com/salimhamed/jigs/compare/service-v0.1.18...service-v0.1.19) (2026-09-06)
 
 
