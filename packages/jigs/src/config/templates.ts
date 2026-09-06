@@ -8,9 +8,9 @@ import { CliError } from "../errors.ts";
 // compiled into a factory's own service bundle.
 export const TEMPLATE_SUFFIX = ".tmpl";
 
-// This package's root: the nearest directory above this module that holds a
-// package.json. The same walk works from src/ under vitest and from whichever
-// dist/ chunk the bundler put this code in.
+// Walked up from this module rather than fixed relative to it, so the same
+// code holds from src/ under vitest and from whichever dist/ chunk the
+// bundler put it in.
 export function packageRoot(): string {
   let dir = path.dirname(fileURLToPath(import.meta.url));
   while (!existsSync(path.join(dir, "package.json"))) {
