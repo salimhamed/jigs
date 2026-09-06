@@ -108,8 +108,8 @@ pnpm dlx @salimhamed/jigs init
 
 `jigs init` writes the infrastructure — `jigs.yml` (the service and dashboard
 ports and, later, the ingress URL), `package.json` with jigs pinned to the
-version that scaffolded it, `.npmrc`, `nitro.config.ts`,
-`docker-compose.yml`, `.env.example`, and the `tsconfig.json`,
+version that scaffolded it, `.npmrc`, `nitro.config.ts`, `docker-compose.yml`,
+`.env.example`, and the `tsconfig.json`,
 `pnpm-workspace.yaml` and `.gitignore` a factory build needs — and the code
 the factory starts from: `jigs.config.ts` (this factory's pipelines, keyed by
 the name `jigs run` takes), `pipelines/ship.ts` (a ticket to a merged pull
@@ -122,7 +122,10 @@ under you, and from here on the code is this factory's own.
 `steps/jigs.ts` is the one to know about. It holds this factory's `"use step"`
 wrappers around jigs' step implementations, plus the jigs (`reviewLoop`,
 `ticketReview`, `needsHuman`, …) wired on top of them — so a pipeline imports
-its steps from `../steps/jigs.ts`, never from `@salimhamed/jigs` directly. It is ordinary committed source: commit it, edit it, and **do not
+its steps from `../steps/jigs.ts`, never from a `@salimhamed/jigs` subpath.
+(Only its steps: the scaffolded pipeline imports `ticketInput`, `claimTicket`,
+`claude` and `codex` from the package directly, because none of those carries
+an id.) It is ordinary committed source: commit it, edit it, and **do not
 rename it or its exported functions**. Each name compiles to a durable step id
 (`step//./steps/jigs//worktree`) that the World memoizes runs against, so a
 rename orphans every run this factory has parked — with a clean build and no
