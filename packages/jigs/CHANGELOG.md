@@ -157,3 +157,23 @@
 ### Features
 
 * automate releases and hand PR presentation to factories ([#36](https://github.com/salimhamed/jigs/issues/36)) ([d2ceafd](https://github.com/salimhamed/jigs/commit/d2ceafd19c46932b72bea12f9251f3198cfdab1f))
+
+---
+
+## Folded in from @salimhamed/jigs-service
+
+The service shipped as a second package through 0.2.0, released in lockstep
+with this one, and its changelog is gone with it. Every entry the two shared
+is already above; these are the ones only the service's carried.
+
+### Features
+
+* **service:** find a Linear issue in a project by title prefix ([#63](https://github.com/salimhamed/jigs/issues/63)) ([ae59b31](https://github.com/salimhamed/jigs/commit/ae59b315ff3ff6e5ed7a99ff12b54474cddb79c3)) — 0.1.11
+* **service:** log ticket review, worktree, and snapshot milestones ([#58](https://github.com/salimhamed/jigs/issues/58)) ([4edd6e9](https://github.com/salimhamed/jigs/commit/4edd6e9ca1a789b69d5710b9bcd8253d196e6db0)) — 0.1.9
+
+### Bug Fixes
+
+* **service:** never mint a ticket token from a missing segment ([#54](https://github.com/salimhamed/jigs/issues/54)) ([6ecf98a](https://github.com/salimhamed/jigs/commit/6ecf98ae7c56098217b675fbbc1a935cc0f943ba)) — 0.1.7
+* **service:** log an outcome line for every ingress delivery ([#52](https://github.com/salimhamed/jigs/issues/52)) ([2398937](https://github.com/salimhamed/jigs/commit/2398937c7a94daf854a790187bc13284e2805c6a)) — 0.1.6
+* **service:** render needs-human comments as prose ([#51](https://github.com/salimhamed/jigs/issues/51)) ([c820ec5](https://github.com/salimhamed/jigs/commit/c820ec52f77c7dda0d8a28a567014ab7af3629b0)) — 0.1.5
+* answer the operator's review comments on personal-token factories ([#48](https://github.com/salimhamed/jigs/issues/48)) ([e6fea24](https://github.com/salimhamed/jigs/commit/e6fea2403287ba23cb132c15b5d197469138e61d)) — 0.1.5
