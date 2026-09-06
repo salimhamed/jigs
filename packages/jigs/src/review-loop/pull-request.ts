@@ -1,7 +1,8 @@
 // The step side of the review loop: thin implementations over the GitHub
 // provider and jigs' git helpers, which the factory wraps as steps and injects.
 // jigs reaches node builtins, so this module must only ever be imported from
-// inside a step body — hence its errors thrown workflow-side live in ./loop.
+// inside a step body — hence the errors these raise workflow-side live in the
+// factory's own composition, never here.
 
 import { resolveBinding } from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";

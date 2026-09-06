@@ -12,7 +12,8 @@ package. jigs ships steps; the factory owns every file that names them.
 - The worked examples, by path rather than from memory:
   - the smallest complete factory: what `jigs init` scaffolds, from
     `node_modules/@salimhamed/jigs/templates/` in this factory
-    (`jigs.config.ts.tmpl`, `pipelines/ship.ts.tmpl`, `steps/jigs.ts.tmpl`) —
+    (`jigs.config.ts.tmpl`, `pipelines/ship.ts.tmpl`,
+    `pipelines/review-loop.ts.tmpl`, `steps/jigs.ts.tmpl`) —
     the version the factory is pinned to, so it matches what is installed.
   - if the `jigs-factory-js` factory is checked out on this machine, a real
     pipeline that needs no repo binding: its `pipelines/s3-bucket-analysis.ts`,
@@ -24,12 +25,21 @@ package. jigs ships steps; the factory owns every file that names them.
 
 1. **A `"use step"` function owns a durable id** built from its file's path and
    its own name — `step//./steps/jigs//worktree`. That id is a memoization key
-   in the factory's World. Its file path and its name are permanent.
-2. **A jig is a plain composition** over those steps — `agent`, `ask`,
-   `needsHuman`, `gate`, `ticketReview`, `reviewLoop`. No directive, no id.
-   Renaming one is safe.
+   in the factory's World. Renaming or moving it changes the id, so it happens
+   only when `jigs ps` shows no parked runs.
+2. **A block is a plain composition** over those steps — `agent`, `ask`,
+   `needsHuman`, `gate`, `ticketReview`, and the review-loop blocks jigs ships
+   (`implementAndReview`, `answerAsBuilder`, `fixCi`, `commitLeftoverWork`,
+   `postAnswers`, `describePr`). No directive, no id. Renaming one is safe.
 3. **A pure helper** is neither, carries no id, and is the easy thing to unit
    test.
+
+The review loop is the factory's own composition of those blocks, scaffolded
+into `pipelines/review-loop.ts`. Read it before changing how a run behaves:
+the order, the CI bound, the merge policy and the escalation prose are all
+there, and none of it is a jigs release away. The implement ⇄ review bound is
+the exception — it lives inside `implementAndReview`, with the session and the
+brief that call keeps out of the reviewer's prompt.
 
 A pipeline imports its steps from `../steps/jigs.ts`, **never** from a
 `@salimhamed/jigs` subpath. A step reached through the package is addressed by
@@ -40,11 +50,12 @@ because a jig, a harness constructor and a type carry no id. The factory's ids
 test is what catches the difference.
 
 That ids test is a `jigs.config.test.ts` in the factory root: it reads the
-emitted ids out of the last build, holds them as sorted arrays, and compares
-exactly. `jigs init` scaffolds it, and the jigs repo's `e2e/check-step-ids.mjs`
-holds the scaffold to the same list in `e2e/expected-ids.txt`. If the factory
-you are in has no such test, write one before adding anything: an unguarded
-rename is silent.
+emitted ids out of the last build and asserts their shape — no package version
+in any of them, and every one addressed by a path inside the factory. `jigs
+init` scaffolds it, and the jigs repo's `e2e/check-step-ids.mjs` holds the
+scaffold's own ids to the list in `e2e/expected-ids.txt`. A factory that wants
+its exact ids pinned as well can add the list; whether it does or not, a
+rename is invisible at build time, so check `jigs ps` before one.
 
 ## Add a pipeline
 
@@ -73,14 +84,15 @@ keep its worktree.
 - **A step of the factory's own**: a `"use step"` function in a factory-owned
   file under `steps/`, beside the pure helpers it uses.
 
-Either way, add the `step//./steps/<file>//<fn>` line to the ids test. The
-arrays there are sorted and compared exactly, so a removed step fails until its
-line goes too. An id that *changed* rather than appeared is a rename: restore
-the old name — do not paste the new id in.
+Then `pnpm exec jigs build` and `pnpm test`. If this factory pins an exact id
+list, add the new `step//./steps/<file>//<fn>` line to it; an id that
+*changed* rather than appeared is a rename, and the fix is to restore the old
+name, not to paste the new id in.
 
-When a jig takes a deps object, destructure it before calling
-(`const { agent } = deps;`). The SDK serializes a step call's receiver along
-with its arguments, and a deps object holds functions.
+A block takes the wrappers it needs as plain parameters. Pass them as bare
+identifiers and never reach one back off an object at the call site
+(`options.readDiff(...)`): the SDK serializes a step call's receiver along
+with its arguments, and that receiver would be an object holding functions.
 
 ## The requires manifest
 
@@ -94,11 +106,18 @@ checked on every trigger whatever the manifest says: `LINEAR_API_KEY` and
 ## Prompts, and the factory's voice
 
 Agent-facing prose lives in the factory's `prompts/`, as TypeScript that
-interpolates named values. Two things jigs ships no default for and every
-factory must write: those prompts, and `describePr` — the `reviewLoop` dep that
-turns a finished change into the pull request's title and body. Whether that
-title has to satisfy the target repo's CI is a factory question; look at how the
-two real factories answer it differently before writing a third.
+interpolates named values. jigs' own prompt strings are exported from
+`@salimhamed/jigs/prompts` as plain values — read them, interpolate them, or
+ignore them; a factory that wants different words writes its own and passes
+them to the block.
+
+The one the scaffold hands over outright is `describePr`: jigs owns the
+mechanics (resume the builder, fall back to a fresh context fed the diff,
+parse a `{ title, body }` back) and `steps/describe-pr.ts` owns the
+conventions and the policy for an answer that drifts out of them — repair it,
+or throw and kill the run. Whether that title has to satisfy the target repo's
+CI is a factory question; look at how the two real factories answer it
+differently before writing a third.
 
 ## Schedules
 
@@ -127,10 +146,14 @@ no longer answers to the step ids its parked run was memoized under.
   that World starts a second queue worker, which steals the service's queue jobs
   and delivers them to a port with no workflow route. The service hosts the
   dashboard; use that.
-- Never rename, move, or delete an exported function in a factory's
+- Never rename, move, or delete an exported wrapper in a factory's
   `steps/jigs.ts`, or a file under `pipelines/`, without the human's explicit
-  instruction. Those names are the memoization keys of every parked run, and the
-  build stays green while they are orphaned.
+  instruction. Their names are half of the ids parked runs are memoized
+  against, the build stays green while they are orphaned, and an orphaned run
+  only ever shows up as stalled. Everything else in those files — bodies,
+  order, prose, the review-loop composition — is free to edit. When the human
+  does want a rename, check `jigs ps` for parked runs first; cancel and
+  relaunch the ones that would be orphaned.
 
 ## Confirm first
 

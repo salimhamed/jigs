@@ -22,7 +22,7 @@ export default defineConfig({
     "suspension/pull-request-gate": "src/suspension/pull-request-gate.ts",
     "ticket/review": "src/ticket/review.ts",
     "ticket/snapshot": "src/ticket/snapshot.ts",
-    "review-loop/loop": "src/review-loop/loop.ts",
+    "review-loop/index": "src/review-loop/index.ts",
     "review-loop/pull-request": "src/review-loop/pull-request.ts",
     "worktrees/index": "src/worktrees/index.ts",
     "plugins/start-dashboard": "src/plugins/start-dashboard.ts",

@@ -1,12 +1,17 @@
 import { beforeEach, expect, test, vi } from "vitest";
-import { type AgentStepConfig, claude, parseOutput } from "../steps/index.ts";
-import type { TicketClaim } from "../suspension/claim.ts";
-import type { HumanReply, JsonValue } from "../suspension/needs-human.ts";
 import {
-  type TicketReviewDeps,
-  ticketReview,
-  ticketReviewVerdict,
-} from "./review.ts";
+  type AgentFn,
+  type AgentStepConfig,
+  claude,
+  parseOutput,
+} from "../steps/index.ts";
+import type { TicketClaim } from "../suspension/claim.ts";
+import type {
+  HumanReply,
+  JsonValue,
+  NeedsHumanFn,
+} from "../suspension/needs-human.ts";
+import { ticketReview, ticketReviewVerdict } from "./review.ts";
 import type { TicketSnapshot } from "./snapshot.ts";
 
 const claim = {
@@ -32,12 +37,13 @@ const snapshot: TicketSnapshot = {
 };
 
 let agentCalls: AgentStepConfig<unknown>[] = [];
-let agentRaw: unknown;
+let verdicts: unknown[] = [];
 let humanCalls: Array<{
   claim: TicketClaim;
   reason: string;
   payload?: JsonValue;
 }> = [];
+let fetched: string[] = [];
 
 const reply: HumanReply = {
   commentId: "c9",
@@ -48,43 +54,45 @@ const reply: HumanReply = {
 
 // Applies parseOutput exactly as the real agent() does, so the verdict schema
 // is exercised through the production path rather than around it.
-const fakeAgent: TicketReviewDeps["agent"] = async <T>(
-  config: AgentStepConfig<T>,
-) => {
+const fakeAgent: AgentFn = async <T>(config: AgentStepConfig<T>) => {
   agentCalls.push(config as AgentStepConfig<unknown>);
   return {
     text: "",
-    output: parseOutput(config.output, agentRaw),
+    output: parseOutput(config.output, verdicts.shift()),
     usage: undefined,
   };
 };
 
-const fakeNeedsHuman: TicketReviewDeps["needsHuman"] = async (
-  humanClaim,
-  reason,
-  payload,
-) => {
+const fakeNeedsHuman: NeedsHumanFn = async (humanClaim, reason, payload) => {
   humanCalls.push({ claim: humanClaim, reason, payload });
   return reply;
 };
 
-const deps: TicketReviewDeps = { agent: fakeAgent, needsHuman: fakeNeedsHuman };
+// The reply landed on the ticket, so each re-read carries one more comment.
+const fakeFetchSnapshot = async (issueId: string): Promise<TicketSnapshot> => {
+  fetched.push(issueId);
+  return {
+    ...snapshot,
+    description: `${snapshot.description}\n\nRound ${fetched.length}: ${reply.body}`,
+  };
+};
 
 const review = () =>
-  ticketReview(
-    {
-      claim,
-      snapshot,
-      harness: claude({ model: "sonnet" }),
-      cwd: "/tmp/worktree",
-    },
-    deps,
-  );
+  ticketReview({
+    agent: fakeAgent,
+    needsHuman: fakeNeedsHuman,
+    fetchSnapshot: fakeFetchSnapshot,
+    claim,
+    snapshot,
+    harness: claude({ model: "sonnet" }),
+    cwd: "/tmp/worktree",
+  });
 
 beforeEach(() => {
   agentCalls = [];
   humanCalls = [];
-  agentRaw = undefined;
+  verdicts = [];
+  fetched = [];
 });
 
 test("a malformed verdict object fails the schema", () => {
@@ -105,36 +113,40 @@ test("a malformed verdict object fails the schema", () => {
 });
 
 test("ticketReview rejects when the agent returns a verdict the schema refuses", async () => {
-  agentRaw = { verdict: "probably", brief: "a plan of sorts", findings: [] };
+  verdicts = [{ verdict: "probably", brief: "a plan of sorts", findings: [] }];
   await expect(review()).rejects.toThrow();
   expect(humanCalls).toHaveLength(0);
 });
 
 test("a proceed verdict returns the brief with the snapshot it was reviewed against", async () => {
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
-  agentRaw = {
-    verdict: "proceed",
-    brief: "Implement the snapshot fetch, then the jig.",
-    findings: [],
-  };
+  verdicts = [
+    {
+      verdict: "proceed",
+      brief: "Implement the snapshot fetch, then the jig.",
+      findings: [],
+    },
+  ];
   const result = await review();
-  expect(result.verdict).toBe("proceed");
   expect(result.brief).toBe("Implement the snapshot fetch, then the jig.");
   expect(result.snapshot).toBe(snapshot);
   expect(humanCalls).toHaveLength(0);
+  expect(fetched).toEqual([]);
   expect(log).toHaveBeenCalledWith(
     "[ticketReview] AGE-313 verdict=proceed findings=0",
   );
 });
 
 test("a needs-human verdict routes the findings to needsHuman and never the brief", async () => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => {});
-  agentRaw = {
-    verdict: "needs-human",
-    brief: "SECRET-BRIEF-TEXT that must not reach Linear",
-    findings: ["no acceptance criteria for the resume path"],
-  };
-  const result = await review();
+  verdicts = [
+    {
+      verdict: "needs-human",
+      brief: "SECRET-BRIEF-TEXT that must not reach Linear",
+      findings: ["no acceptance criteria for the resume path"],
+    },
+    { verdict: "proceed", brief: "plan", findings: [] },
+  ];
+  await review();
 
   expect(humanCalls).toHaveLength(1);
   const call = humanCalls[0];
@@ -143,17 +155,31 @@ test("a needs-human verdict routes the findings to needsHuman and never the brie
     findings: ["no acceptance criteria for the resume path"],
   });
   expect(JSON.stringify(call?.payload)).not.toContain("SECRET-BRIEF-TEXT");
-  // One agent step, and nothing after the halt.
-  expect(agentCalls).toHaveLength(1);
-  expect(result.verdict).toBe("needs-human");
-  expect(result.brief).toContain("SECRET-BRIEF-TEXT");
-  expect(log).toHaveBeenCalledWith(
-    "[ticketReview] AGE-313 verdict=needs-human findings=1",
-  );
+});
+
+test("the needs-human round re-reads the ticket, so the human's reply is what the next review sees", async () => {
+  verdicts = [
+    { verdict: "needs-human", brief: "draft", findings: ["thin"] },
+    { verdict: "needs-human", brief: "draft", findings: ["still thin"] },
+    { verdict: "proceed", brief: "the agreed plan", findings: [] },
+  ];
+  const result = await review();
+
+  // Three reviews, two halts, one re-read per halt: the halt is a pause, and
+  // the loop is inside this block rather than in every pipeline that calls it.
+  expect(agentCalls).toHaveLength(3);
+  expect(humanCalls).toHaveLength(2);
+  expect(fetched).toEqual([snapshot.id, snapshot.id]);
+  expect(agentCalls[0]?.prompt).not.toContain("cap comments at 100");
+  expect(agentCalls[1]?.prompt).toContain("Round 1: cap comments at 100");
+  expect(agentCalls[2]?.prompt).toContain("Round 2: cap comments at 100");
+  expect(result.brief).toBe("the agreed plan");
+  // The handoff carries the snapshot the proceeding round actually read.
+  expect(result.snapshot.description).toContain("Round 2");
 });
 
 test("the prompt carries the rendered ticket", async () => {
-  agentRaw = { verdict: "proceed", brief: "plan", findings: [] };
+  verdicts = [{ verdict: "proceed", brief: "plan", findings: [] }];
   await review();
   const prompt = agentCalls[0]?.prompt ?? "";
   expect(prompt).toContain("restate, not re-decide");
@@ -163,7 +189,7 @@ test("the prompt carries the rendered ticket", async () => {
 });
 
 test("the verdict schema is declared on the agent step so the harness emits it natively", async () => {
-  agentRaw = { verdict: "proceed", brief: "plan", findings: [] };
+  verdicts = [{ verdict: "proceed", brief: "plan", findings: [] }];
   await review();
   expect(agentCalls[0]?.output).toBe(ticketReviewVerdict);
   expect(agentCalls[0]?.cwd).toBe("/tmp/worktree");

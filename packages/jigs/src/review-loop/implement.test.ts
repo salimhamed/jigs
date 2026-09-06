@@ -1,14 +1,15 @@
 import { beforeEach, expect, test } from "vitest";
+import type { AgentFn } from "../steps/index.ts";
 import { type AgentStepConfig, claude, parseOutput } from "../steps/index.ts";
 import type { TicketClaim } from "../suspension/claim.ts";
-import type { HumanReply, JsonValue } from "../suspension/needs-human.ts";
+import type {
+  HumanReply,
+  JsonValue,
+  NeedsHumanFn,
+} from "../suspension/needs-human.ts";
 import type { Handoff } from "../ticket/review.ts";
 import type { TicketSnapshot } from "../ticket/snapshot.ts";
-import {
-  codeReviewVerdict,
-  type ImplementDeps,
-  implementAndReview,
-} from "./implement.ts";
+import { codeReviewVerdict, implementAndReview } from "./implement.ts";
 
 const claim = {
   issueId: "68bc9696-35d5-442d-ab56-214c8cfefbec",
@@ -41,9 +42,7 @@ let humanReply = "the reviewer is wrong, ship it";
 
 // Applies parseOutput exactly as the real agent() does, so the verdict schema
 // is exercised through the production path rather than around it.
-const fakeAgent: ImplementDeps["agent"] = async <T>(
-  config: AgentStepConfig<T>,
-) => {
+const fakeAgent: AgentFn = async <T>(config: AgentStepConfig<T>) => {
   agentCalls.push(config as AgentStepConfig<unknown>);
   const raw = config.output === undefined ? undefined : verdicts.shift();
   return {
@@ -58,11 +57,7 @@ const fakeAgent: ImplementDeps["agent"] = async <T>(
   };
 };
 
-const fakeNeedsHuman: ImplementDeps["needsHuman"] = async (
-  _claim,
-  reason,
-  payload,
-) => {
+const fakeNeedsHuman: NeedsHumanFn = async (_claim, reason, payload) => {
   humanCalls.push({ reason, payload });
   return {
     commentId: `c${humanCalls.length}`,
@@ -72,19 +67,16 @@ const fakeNeedsHuman: ImplementDeps["needsHuman"] = async (
   } satisfies HumanReply;
 };
 
-const deps: ImplementDeps = { agent: fakeAgent, needsHuman: fakeNeedsHuman };
-
 const run = () =>
-  implementAndReview(
-    {
-      claim,
-      handoff,
-      harness: claude({ model: "sonnet" }),
-      cwd: "/tmp/worktree",
-      baseSha: "base-sha-1",
-    },
-    deps,
-  );
+  implementAndReview({
+    agent: fakeAgent,
+    needsHuman: fakeNeedsHuman,
+    claim,
+    handoff,
+    harness: claude({ model: "sonnet" }),
+    cwd: "/tmp/worktree",
+    baseSha: "base-sha-1",
+  });
 
 const approved = { verdict: "approved", findings: [] };
 const changes = (finding: string) => ({

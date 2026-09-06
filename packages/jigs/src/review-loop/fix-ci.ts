@@ -16,6 +16,8 @@ import { renderSnapshot } from "../ticket/snapshot.ts";
 import type { readDiff } from "./pull-request.ts";
 
 export interface FixCiOptions {
+  agent: AgentFn;
+  readDiff: typeof readDiff;
   harness: HarnessConfig;
   cwd: string;
   session?: AgentSession;
@@ -24,11 +26,6 @@ export interface FixCiOptions {
   handoff: Handoff;
   baseSha: string;
 }
-
-export type FixCiDeps = {
-  agent: AgentFn;
-  readDiff: typeof readDiff;
-};
 
 export function renderChecks(failing: CheckRun[]): string {
   return failing.length === 0
@@ -40,15 +37,20 @@ export function renderChecks(failing: CheckRun[]): string {
         .join("\n");
 }
 
+/**
+ * A resumed fix runs inside the builder's own session and leaves the pointer
+ * where it is; only the fresh-context rebuild reports a session, and that one
+ * is then the one holding the change.
+ */
 export async function fixCi(
   options: FixCiOptions,
-  deps: FixCiDeps,
 ): Promise<{ session?: AgentSession }> {
+  const { agent, readDiff: read } = options;
   const checks = renderChecks(options.failing);
 
   return resumeOrRebuild({
-    agent: deps.agent,
-    label: "reviewLoop",
+    agent,
+    label: "fixCi",
     harness: options.harness,
     cwd: options.cwd,
     ...(options.session === undefined ? {} : { session: options.session }),
@@ -57,10 +59,6 @@ export async function fixCi(
       ATTEMPT: options.attempt,
     }),
     freshPrompt: async () => {
-      // Destructured, never invoked as `deps.readDiff(...)`: the SDK
-      // serializes a step call's receiver along with its arguments, and this
-      // object holds functions.
-      const { readDiff: read } = deps;
       const diff = await read(options.cwd, options.baseSha);
       return interpolate(fixCiFreshPrompt, {
         TICKET: renderSnapshot(options.handoff.snapshot),

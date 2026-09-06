@@ -69,13 +69,18 @@ exists. Three of them are the code `jigs build` compiles:
 
 - `jigs.config.ts` — this factory's pipelines, keyed by the name `jigs run` takes.
 - `pipelines/ship.ts` — a ticket to a merged pull request, the starter pipeline.
+- `pipelines/review-loop.ts` — the review loop, composed from the blocks jigs
+  ships: implement ⇄ review, push, describe, open, gate, answer, fix, merge.
+  The order, the CI bound, the merge policy and the escalation prose are the
+  factory's, and this file is where they are read and changed.
 - `steps/jigs.ts` — this factory's `"use step"` wrappers around the steps jigs
-  ships, and the jigs wired on top of them. `steps/describe-pr.ts` beside it
-  is the one review-loop dep jigs has no default for.
+  ships, and the blocks wired on top of them. `steps/describe-pr.ts` beside it
+  holds the words a pull request introduces itself with.
 
-Never rename `steps/jigs.ts` or its exported functions — the runtime memoizes
-parked runs against those names. `jigs.config.test.ts` pins the ids the last
-build emitted, so `pnpm test` in the factory catches a rename.
+Edit all of it. The one rule: an exported wrapper's name and its file's path
+are its durable step id, so renaming or moving one changes that id — do it
+only when `jigs ps` shows no parked runs. A run whose id moved under it shows
+up stalled; cancel it and relaunch.
 
 ### 4. Tokens, then up
 
@@ -155,8 +160,8 @@ pnpm workspace, one published package:
 - `packages/jigs` — `@salimhamed/jigs`: the `jigs` CLI; the library-first core
   behind it (harnesses, checks, prompts, step implementations); the service a
   factory builds and runs (the app and its routes, the Nitro config, the
-  suspension, ticket, review-loop and worktree primitives pipelines are
-  written against); and under `templates/` everything `jigs init` writes —
+  suspension, ticket, review-loop and worktree building blocks pipelines are
+  composed from); and under `templates/` everything `jigs init` writes —
   the factory's infrastructure and the code it starts from, one `.tmpl` per
   file.
 

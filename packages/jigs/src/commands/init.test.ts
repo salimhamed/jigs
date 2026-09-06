@@ -37,6 +37,7 @@ test("scaffolds a factory that can be installed and built", async () => {
     "jigs.yml",
     "nitro.config.ts",
     "package.json",
+    "pipelines/review-loop.ts",
     "pipelines/ship.ts",
     "pnpm-workspace.yaml",
     "steps/describe-pr.ts",
@@ -99,10 +100,10 @@ test("the tsconfig compiles the code this factory starts with", async () => {
 });
 
 // Each exported "use step" function's name is half a durable step id, so the
-// scaffold's list is the list every factory's World records. The ids test
-// scaffolded beside it pins the same names against the build; here the two
-// templates are held to each other without a build.
-test("the wrappers scaffolded are the step ids the scaffolded test pins", async () => {
+// scaffold's wrappers are the ids every factory's World records. e2e reads
+// them back out of a real build and diffs them against e2e/expected-ids.txt;
+// here the template is held to that same recorded list without a build.
+test("the wrappers scaffolded are the step ids this repo has recorded", async () => {
   const dir = scaffold("theta");
   await init(dir);
 
@@ -111,15 +112,17 @@ test("the wrappers scaffolded are the step ids the scaffolded test pins", async 
     .map((match) => `step//./steps/jigs//${match[1]}`)
     .sort();
   expect(steps).toHaveLength(15);
-  const idsTest = readFileSync(path.join(dir, "jigs.config.test.ts"), "utf8");
-  const pinned = [...idsTest.matchAll(/"(step\/\/\.\/steps\/jigs\/\/\w+)"/g)]
-    .map((match) => match[1])
+  const recorded = readFileSync(
+    path.join(packageRoot(), "..", "..", "e2e", "expected-ids.txt"),
+    "utf8",
+  )
+    .split("\n")
+    .filter((line) => line.startsWith("step//./steps/jigs//"))
     .sort();
-  expect(pinned).toEqual(steps);
+  expect(recorded).toEqual(steps);
   // Every wrapper has its directive: one without it compiles clean and runs
   // unmemoized.
   expect(wrappers.match(/"use step";/g)).toHaveLength(15);
-  expect(idsTest).toContain("workflow//./pipelines/ship//shipPipeline");
 });
 
 test("the docker project and ports all carry the factory", async () => {
@@ -161,7 +164,9 @@ test("the next steps are printed, not run", async () => {
   const { lines } = await init(dir);
 
   const printed = lines.join("\n");
-  expect(printed).toContain("never rename the file or an exported wrapper");
+  expect(printed).toContain(
+    "renaming or moving an exported wrapper changes its step id",
+  );
   expect(printed).toContain("LINEAR_API_KEY and GITHUB_TOKEN");
   expect(printed).toContain("jigs up");
   expect(printed).toContain("read:packages");

@@ -1,10 +1,12 @@
 import { beforeEach, expect, test } from "vitest";
 import type { ReviewThread } from "../providers/github.ts";
+import type { AgentFn } from "../steps/index.ts";
 import { type AgentStepConfig, claude, parseOutput } from "../steps/index.ts";
 import { resumeFailed } from "../steps/resume.ts";
 import type { Handoff } from "../ticket/review.ts";
 import type { TicketSnapshot } from "../ticket/snapshot.ts";
-import { answerAsBuilder, type BuilderDeps } from "./builder.ts";
+import { answerAsBuilder, postAnswers } from "./builder.ts";
+import type { readDiff } from "./pull-request.ts";
 
 const snapshot: TicketSnapshot = {
   fetchedAt: "2026-08-26T13:00:00Z",
@@ -49,9 +51,7 @@ let diffCalls: Array<[string, string]> = [];
 let raw: unknown[] = [];
 let failOnResume = false;
 
-const fakeAgent: BuilderDeps["agent"] = async <T>(
-  config: AgentStepConfig<T>,
-) => {
+const fakeAgent: AgentFn = async <T>(config: AgentStepConfig<T>) => {
   agentCalls.push(config as AgentStepConfig<unknown>);
   if (failOnResume && config.resume !== undefined) {
     resumeFailed("no rollout found for thread id 0199-gone");
@@ -64,29 +64,26 @@ const fakeAgent: BuilderDeps["agent"] = async <T>(
   };
 };
 
-const fakeReadDiff: BuilderDeps["readDiff"] = async (cwd, baseSha) => {
+const fakeReadDiff: typeof readDiff = async (cwd, baseSha) => {
   diffCalls.push([cwd, baseSha]);
   return "diff --git a/src/gate.ts b/src/gate.ts\n+THE-ACTUAL-DIFF\n";
 };
-
-const deps: BuilderDeps = { agent: fakeAgent, readDiff: fakeReadDiff };
 
 const answer = (body: string) => ({
   answers: [{ threadId: 900, body }],
 });
 
 const run = (session?: { harness: "claude"; id: string }) =>
-  answerAsBuilder(
-    {
-      harness: claude({ model: "sonnet" }),
-      cwd: "/tmp/worktree",
-      ...(session === undefined ? {} : { session }),
-      threads,
-      handoff,
-      baseSha: "base-sha-1",
-    },
-    deps,
-  );
+  answerAsBuilder({
+    agent: fakeAgent,
+    readDiff: fakeReadDiff,
+    harness: claude({ model: "sonnet" }),
+    cwd: "/tmp/worktree",
+    ...(session === undefined ? {} : { session }),
+    threads,
+    handoff,
+    baseSha: "base-sha-1",
+  });
 
 beforeEach(() => {
   agentCalls = [];
@@ -141,41 +138,36 @@ test("with no session at all the fresh context is entered directly", async () =>
 });
 
 test("an error that is not a resume failure is not swallowed", async () => {
-  const exploding: BuilderDeps = {
-    ...deps,
-    agent: async () => {
-      throw new Error("the harness fell over");
-    },
+  const exploding: AgentFn = async () => {
+    throw new Error("the harness fell over");
   };
   await expect(
-    answerAsBuilder(
-      {
-        harness: claude({ model: "sonnet" }),
-        cwd: "/tmp/worktree",
-        session: { harness: "claude", id: "s-42" },
-        threads,
-        handoff,
-        baseSha: "base-sha-1",
-      },
-      exploding,
-    ),
+    answerAsBuilder({
+      agent: exploding,
+      readDiff: fakeReadDiff,
+      harness: claude({ model: "sonnet" }),
+      cwd: "/tmp/worktree",
+      session: { harness: "claude", id: "s-42" },
+      threads,
+      handoff,
+      baseSha: "base-sha-1",
+    }),
   ).rejects.toThrow("the harness fell over");
 });
 
 test("a review body with no thread of its own is answered on the conversation", async () => {
   raw = [{ answers: [{ threadId: null, body: "addressed all four" }] }];
-  const result = await answerAsBuilder(
-    {
-      harness: claude({ model: "sonnet" }),
-      cwd: "/tmp/worktree",
-      session: { harness: "claude", id: "s-42" },
-      threads: [],
-      reviewBody: "four things need fixing",
-      handoff,
-      baseSha: "base-sha-1",
-    },
-    deps,
-  );
+  const result = await answerAsBuilder({
+    agent: fakeAgent,
+    readDiff: fakeReadDiff,
+    harness: claude({ model: "sonnet" }),
+    cwd: "/tmp/worktree",
+    session: { harness: "claude", id: "s-42" },
+    threads: [],
+    reviewBody: "four things need fixing",
+    handoff,
+    baseSha: "base-sha-1",
+  });
 
   expect(agentCalls[0]?.prompt).toContain("Thread null");
   expect(agentCalls[0]?.prompt).toContain("four things need fixing");
@@ -185,4 +177,71 @@ test("a review body with no thread of its own is answered on the conversation", 
 test("a malformed answers object fails the schema", async () => {
   raw = [{ answers: [{ threadId: 900, body: "" }] }];
   await expect(run({ harness: "claude", id: "s-42" })).rejects.toThrow();
+});
+
+// --- postAnswers -------------------------------------------------------------
+
+const pr = { owner: "acme", repo: "api", number: 41 };
+
+function recorder() {
+  const replies: Array<[number, string]> = [];
+  const comments: string[] = [];
+  return {
+    replies,
+    comments,
+    replyInThread: async (_pr: typeof pr, rootId: number, body: string) => {
+      replies.push([rootId, body]);
+      return { id: 7000 + replies.length };
+    },
+    commentOnPr: async (_pr: typeof pr, body: string) => {
+      comments.push(body);
+    },
+  };
+}
+
+test("the ids of the thread replies it posts come back for the gate cursor", async () => {
+  const posted = recorder();
+  const ids = await postAnswers({
+    replyInThread: posted.replyInThread,
+    commentOnPr: posted.commentOnPr,
+    pr,
+    answers: { answers: [{ threadId: 900, body: "done" }] },
+    threads,
+  });
+
+  expect(posted.replies).toEqual([[900, "done"]]);
+  expect(posted.comments).toEqual([]);
+  expect(ids).toEqual([7001]);
+});
+
+test("an answer that lands on the conversation acks nothing", async () => {
+  const posted = recorder();
+  const ids = await postAnswers({
+    replyInThread: posted.replyInThread,
+    commentOnPr: posted.commentOnPr,
+    pr,
+    answers: { answers: [{ threadId: null, body: "addressed all four" }] },
+    threads,
+  });
+
+  expect(posted.comments).toEqual(["addressed all four"]);
+  expect(posted.replies).toEqual([]);
+  expect(ids).toEqual([]);
+});
+
+test("an answer naming a thread this wake never carried lands on the conversation", async () => {
+  const posted = recorder();
+  const ids = await postAnswers({
+    replyInThread: posted.replyInThread,
+    commentOnPr: posted.commentOnPr,
+    pr,
+    answers: { answers: [{ threadId: 4242, body: "invented" }] },
+    threads,
+  });
+
+  // Replying into a thread the wake did not carry 404s, and a 404 burns the
+  // step's three retries.
+  expect(posted.replies).toEqual([]);
+  expect(posted.comments).toEqual(["invented"]);
+  expect(ids).toEqual([]);
 });

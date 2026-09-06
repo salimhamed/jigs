@@ -120,10 +120,14 @@ see the never list.
   that World starts a second queue worker, which steals the service's queue jobs
   and delivers them to a port with no workflow route. The service hosts the
   dashboard; use that.
-- Never rename, move, or delete an exported function in a factory's
+- Never rename, move, or delete an exported wrapper in a factory's
   `steps/jigs.ts`, or a file under `pipelines/`, without the human's explicit
-  instruction. Those names are the memoization keys of every parked run, and the
-  build stays green while they are orphaned.
+  instruction. Their names are half of the ids parked runs are memoized
+  against, the build stays green while they are orphaned, and an orphaned run
+  only ever shows up as stalled. Everything else in those files — bodies,
+  order, prose, the review-loop composition — is free to edit. When the human
+  does want a rename, check `jigs ps` for parked runs first; cancel and
+  relaunch the ones that would be orphaned.
 
 ## Confirm first
 

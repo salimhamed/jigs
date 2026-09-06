@@ -1,14 +1,14 @@
 import { ticketInput } from "@salimhamed/jigs";
-import { claimTicket } from "@salimhamed/jigs/suspension/claim";
 import { claude, codex } from "@salimhamed/jigs/steps";
+import { claimTicket } from "@salimhamed/jigs/suspension/claim";
 import { z } from "zod";
 import {
   fetchSnapshot,
-  reviewLoop,
   teardownWorktrees,
   ticketReview,
   worktree,
 } from "../steps/jigs.ts";
+import { reviewLoop } from "./review-loop.ts";
 
 export const shipInputs = z.object({
   ticket: ticketInput,
@@ -30,11 +30,11 @@ type ShipInputs = z.output<typeof shipInputs> & {
   identifier: string;
 };
 
-// A ticket to a merged pull request: claim ticket → snapshot → ticketReview →
-// worktree → reviewLoop (implement ⇄ review → PR → gate → merge) → teardown.
-// Everything here is the wired jig from ../steps/jigs.ts; a pipeline that
-// needs to swap a dep spreads the exported `reviewLoopDeps` and overrides the
-// one entry rather than rebuilding the map.
+// A ticket to a merged pull request: claim ticket → snapshot → worktree →
+// ticketReview → reviewLoop (implement ⇄ review → PR → gate → merge) →
+// teardown.
+// The steps come from ../steps/jigs.ts and the loop from ./review-loop.ts,
+// which is this factory's own composition over the blocks jigs ships.
 export async function shipPipeline(inputs: ShipInputs) {
   "use workflow";
 
@@ -46,33 +46,18 @@ export async function shipPipeline(inputs: ShipInputs) {
     branch: snapshot.branchName,
   });
 
-  const reviewer = claude({ model: "opus" });
-  let review = await ticketReview({
+  // Parks inside ticketReview until a human replies on the ticket, re-reading
+  // the ticket each round, and returns only once the review proceeds.
+  const handoff = await ticketReview({
     claim,
     snapshot,
-    harness: reviewer,
+    harness: claude({ model: "opus" }),
     cwd: workspace.path,
   });
-  // A needs-human verdict parks inside ticketReview until a human replies on
-  // the ticket — but the reply lands on the ticket, not in the verdict. Each
-  // round re-snapshots so the next review reads it; without this loop the
-  // stale brief reaches the builder.
-  while (review.verdict === "needs-human") {
-    const fresh = await fetchSnapshot(inputs.issueId);
-    review = await ticketReview({
-      claim,
-      snapshot: fresh,
-      harness: reviewer,
-      cwd: workspace.path,
-    });
-  }
 
   const result = await reviewLoop({
     claim,
-    handoff: review,
-    // The loop threads one harness through its builder, code-reviewer, CI
-    // fixer and thread answerer, and the builder is the role that owns the
-    // session — so the loop runs on the implementation harness.
+    handoff,
     harness: codex({ model: "gpt-5.6-sol" }),
     worktree: workspace,
     binding: inputs.binding,

@@ -9,7 +9,7 @@ import {
   interpolate,
   rebuildContextPrompt,
 } from "../prompts/index.ts";
-import type { ReviewThread } from "../providers/github.ts";
+import type { PrRef, ReviewThread } from "../providers/github.ts";
 import type { AgentSession, HarnessConfig } from "../steps/index.ts";
 import {
   type AgentFn,
@@ -18,7 +18,7 @@ import {
 } from "../steps/index.ts";
 import type { Handoff } from "../ticket/review.ts";
 import { renderSnapshot } from "../ticket/snapshot.ts";
-import type { readDiff } from "./pull-request.ts";
+import type { commentOnPr, readDiff, replyInThread } from "./pull-request.ts";
 
 // threadId null means the pull request conversation: a review body has no
 // thread root to reply into.
@@ -34,6 +34,8 @@ export const threadAnswers = z.strictObject({
 export type ThreadAnswers = z.output<typeof threadAnswers>;
 
 export interface AnswerAsBuilderOptions {
+  agent: AgentFn;
+  readDiff: typeof readDiff;
   harness: HarnessConfig;
   cwd: string;
   session?: AgentSession;
@@ -43,11 +45,6 @@ export interface AnswerAsBuilderOptions {
   handoff: Handoff;
   baseSha: string;
 }
-
-export type BuilderDeps = {
-  agent: AgentFn;
-  readDiff: typeof readDiff;
-};
 
 function renderThreads(threads: ReviewThread[], reviewBody?: string): string {
   const blocks = threads.map((thread) => {
@@ -79,22 +76,18 @@ function renderThreads(threads: ReviewThread[], reviewBody?: string): string {
 
 export async function answerAsBuilder(
   options: AnswerAsBuilderOptions,
-  deps: BuilderDeps,
 ): Promise<ResumeOrRebuildResult<ThreadAnswers>> {
+  const { agent, readDiff: read } = options;
   const threads = renderThreads(options.threads, options.reviewBody);
 
   return resumeOrRebuild({
-    agent: deps.agent,
-    label: "reviewLoop",
+    agent,
+    label: "answerAsBuilder",
     harness: options.harness,
     cwd: options.cwd,
     ...(options.session === undefined ? {} : { session: options.session }),
     resumePrompt: interpolate(answerReviewPrompt, { THREADS: threads }),
     freshPrompt: async () => {
-      // Destructured, never invoked as `deps.readDiff(...)`: the SDK
-      // serializes a step call's receiver along with its arguments, and this
-      // object holds functions.
-      const { readDiff: read } = deps;
       const diff = await read(options.cwd, options.baseSha);
       return interpolate(rebuildContextPrompt, {
         TICKET: renderSnapshot(options.handoff.snapshot),
@@ -105,4 +98,41 @@ export async function answerAsBuilder(
     },
     output: threadAnswers,
   });
+}
+
+export interface PostAnswersOptions {
+  replyInThread: typeof replyInThread;
+  commentOnPr: typeof commentOnPr;
+  pr: PrRef;
+  answers: ThreadAnswers;
+  // The wake's own threads: anything the model names outside them is invented,
+  // and replying into it 404s, which burns the step's three retries.
+  threads: ReviewThread[];
+}
+
+/**
+ * Posts each answer where it belongs and returns the ids of the thread replies
+ * — the gate cursor needs jigs' own comment ids to tell its last word on a
+ * thread from a human's. Conversation comments are left out: they never appear
+ * among the review threads the guard filters.
+ */
+export async function postAnswers(
+  options: PostAnswersOptions,
+): Promise<number[]> {
+  const { commentOnPr: comment, replyInThread: reply, pr } = options;
+  const known = new Set(options.threads.map((thread) => thread.rootId));
+  const posted: number[] = [];
+  for (const answer of options.answers.answers) {
+    if (answer.threadId !== null && !known.has(answer.threadId)) {
+      console.log(
+        `[postAnswers] answer named unknown thread ${answer.threadId} — posting on the conversation instead`,
+      );
+    }
+    if (answer.threadId === null || !known.has(answer.threadId)) {
+      await comment(pr, answer.body);
+    } else {
+      posted.push((await reply(pr, answer.threadId, answer.body)).id);
+    }
+  }
+  return posted;
 }

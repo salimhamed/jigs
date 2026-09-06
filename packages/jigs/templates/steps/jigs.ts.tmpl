@@ -1,17 +1,17 @@
-// This factory's half of every jigs step, and the jigs wired on top of them.
+// This factory's half of every jigs step, and the blocks wired on top of them.
 //
-// LOAD-BEARING NAMES. Each `"use step"` function below compiles to a durable
-// id built from this file's path and the function's name —
-// `step//./steps/jigs//worktree`. Those ids are the memoization keys of every
-// run this factory has parked. Renaming this file, moving it, or renaming an
-// exported function silently orphans those runs: the build stays green and
-// replay simply looks up ids that no longer exist. Treat them exactly like the
-// filenames in pipelines/.
+// Edit this file freely — it is committed source this factory owns, and jigs
+// never rewrites it. One thing here is not free: each `"use step"` function
+// below compiles to a durable id built from this file's path and the function's
+// name (`step//./steps/jigs//worktree`), and those ids are the memoization keys
+// of every run this factory has parked. Renaming or moving an exported wrapper
+// — or this file — changes its id, so do that only when `jigs ps` shows no
+// parked runs. A run whose id moved under it shows up stalled: cancel it and
+// relaunch. Bodies, comments and everything under `--- blocks ---` are yours to
+// change at any time.
 //
-// `jigs init` wrote this file once and never rewrites it — from here on it is
-// source this factory owns. When a jigs release adds a step, add its wrapper
-// here yourself; the factory's typecheck is what tells you a jig's deps object
-// is missing one.
+// When a jigs release adds a step, add its wrapper here yourself; the factory's
+// typecheck is what tells you a call is missing one.
 //
 // The implementations are imported at module scope on purpose: the `"use
 // step"` transform erases each body below out of the workflow bundle, and the
@@ -19,11 +19,6 @@
 // code never crosses into the workflow sandbox.
 
 import type { WorktreeFacts } from "@salimhamed/jigs";
-import {
-  type ReviewLoopDeps,
-  type ReviewLoopOptions,
-  reviewLoop as reviewLoopJig,
-} from "@salimhamed/jigs/review-loop/loop";
 import {
   commentOnPr as commentOnPrImpl,
   openPr as openPrImpl,
@@ -54,6 +49,7 @@ import {
   pullRequestGate,
 } from "@salimhamed/jigs/suspension/pull-request-gate";
 import {
+  type Handoff,
   type TicketReviewOptions,
   ticketReview as ticketReviewJig,
 } from "@salimhamed/jigs/ticket/review";
@@ -64,7 +60,6 @@ import {
   type WorktreeRequest,
 } from "@salimhamed/jigs/worktrees";
 import { getWorkflowMetadata } from "workflow";
-import { describePr as describePrJig } from "./describe-pr.ts";
 
 // --- steps -----------------------------------------------------------------
 
@@ -157,10 +152,12 @@ export async function squashMerge(...args: Parameters<typeof squashMergeImpl>) {
   return squashMergeImpl(...args);
 }
 
-// --- jigs ------------------------------------------------------------------
+// --- blocks ----------------------------------------------------------------
 //
-// Workflow-side compositions, each holding the steps above. They carry no
-// directive and no id: only the steps they call are memoized.
+// Workflow-side compositions holding the steps above. They carry no directive
+// and no id: only the steps they call are memoized. Every jigs block takes the
+// wrappers it needs as plain parameters, so these are the two-line bindings
+// that save a caller from repeating them.
 
 export function agent<T = undefined>(config: AgentStepConfig<T>) {
   return agentJig(config, runAgentStep);
@@ -185,32 +182,13 @@ export function agentOrHalt<T = undefined>(
   return agentOrHaltJig(claim, config, { agent, needsHuman });
 }
 
-export function ticketReview(options: TicketReviewOptions) {
-  return ticketReviewJig(options, { agent, needsHuman });
-}
+type TicketReviewInput = Omit<
+  TicketReviewOptions,
+  "agent" | "needsHuman" | "fetchSnapshot"
+>;
 
-// jigs ships no default title or body, so this entry is the factory's own:
-// ./describe-pr.ts holds the composition and the prose.
-export function describePr(input: Parameters<typeof describePrJig>[0]) {
-  return describePrJig(input, { agent, readDiff });
-}
-
-// Exported so a pipeline that must override an entry can spread the rest
-// rather than rebuild the map.
-export const reviewLoopDeps: ReviewLoopDeps = {
-  agent,
-  needsHuman,
-  gate,
-  resolveRepo,
-  pushWorktreeBranch,
-  openPr,
-  replyInThread,
-  commentOnPr,
-  squashMerge,
-  readDiff,
-  describePr,
-};
-
-export function reviewLoop(options: ReviewLoopOptions) {
-  return reviewLoopJig(options, reviewLoopDeps);
+// Parks on a needs-human verdict and re-reads the ticket each round until the
+// review proceeds, so the caller gets a brief, not a verdict to branch on.
+export function ticketReview(options: TicketReviewInput): Promise<Handoff> {
+  return ticketReviewJig({ ...options, agent, needsHuman, fetchSnapshot });
 }

@@ -67,6 +67,10 @@ export function tokenFromGithubPayload(payload: unknown): string | null {
   return prToken({ owner, repo, number });
 }
 
+// Re-exported: a factory's composition names the pull request the gate listens
+// on, and this is the subpath it already reaches for the gate itself.
+export type { PrRef };
+
 export type GateWake =
   | {
       kind: "approved";
