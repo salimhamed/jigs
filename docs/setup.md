@@ -11,9 +11,9 @@ World. Nothing below is global except part 1.
   the CLI's own node.
 - **docker**, with the daemon running. Each factory brings up its own Postgres
   container; nothing is shared between them.
-- **A token that reads GitHub Packages.** jigs ships as `@salimhamed/jigs` and
-  `@salimhamed/jigs-service` on GitHub Packages, private like this repo, so
-  pnpm needs a scope route and a token in `~/.npmrc`:
+- **A token that reads GitHub Packages.** jigs ships as `@salimhamed/jigs` on
+  GitHub Packages, private like this repo, so pnpm needs a scope route and a
+  token in `~/.npmrc`:
 
   ```
   @salimhamed:registry=https://npm.pkg.github.com
@@ -52,22 +52,24 @@ answer instead. The service is a host process on purpose: it drives the
 operator's `claude` and `codex` logins, the AWS SSO cache and the git clones
 ([ADR 0016](adr/0016-published-packages.md)).
 
-**Upgrading.** `jigs upgrade` in the factory: it moves both pins to the latest
-release (`--to <version>` picks one), runs `jigs up` — its `--force` and
-`--no-doctor` pass through — then the factory's own typecheck, which names any
-wrapper a release asks `steps/jigs.ts` to grow. A
-release that moves one of the four runtime peers — `workflow`,
-`@workflow/world-postgres`, `@workflow/web`, `zod` — fails the install by
-name; make the same move in the factory's `package.json` and run it again.
+**Upgrading.** `jigs upgrade` in the factory: it moves the jigs pin to the
+latest release (`--to <version>` picks one), runs `jigs up` — its `--force`
+and `--no-doctor` pass through — then the factory's own typecheck, which names
+any wrapper a release asks `steps/jigs.ts` to grow. A release that moves one
+of the four runtime peers — `workflow`, `@workflow/world-postgres`,
+`@workflow/web`, `zod` — fails the install by name; make the same move in the
+factory's `package.json` and run it again. A factory still carrying the
+`@salimhamed/jigs-service` dependency retired in 0.3.0 is refused: drop that
+line and rewrite its `@salimhamed/jigs-service/X` imports to
+`@salimhamed/jigs/X` first ([ADR 0017](adr/0017-single-package.md)).
 
-**Releasing this repo (once, by whoever owns it).** Both packages carry
+**Releasing this repo (once, by whoever owns it).** The package carries
 ordinary semver from `0.1.0` on, and nothing here moves it by hand. A PR's
 title is a conventional commit — CI rejects one that is not — and merging it
 to `main` opens or updates a release-please PR carrying the next version and
 the CHANGELOG entries it earned; that PR merges itself once its own checks
-pass, the tags and GitHub Releases follow, and the same run publishes both
-packages to GitHub Packages. They release in lockstep, so both always read the
-same number. The number is a coordinate for `jigs upgrade` and a signal to
+pass, the tag and GitHub Release follow, and the same run publishes to GitHub
+Packages. The number is a coordinate for `jigs upgrade` and a signal to
 you, never an input to a run: no step id carries a jigs version, so a release
 never renames a memoization key
 ([ADR 0013](adr/0013-factory-owned-steps.md)), which is what makes automating
@@ -105,8 +107,8 @@ pnpm dlx @salimhamed/jigs init
 ```
 
 `jigs init` writes the infrastructure — `jigs.yml` (the service and dashboard
-ports and, later, the ingress URL), `package.json` with both jigs packages
-pinned to the version that scaffolded it, `.npmrc`, `nitro.config.ts`,
+ports and, later, the ingress URL), `package.json` with jigs pinned to the
+version that scaffolded it, `.npmrc`, `nitro.config.ts`,
 `docker-compose.yml`, `.env.example`, and the `tsconfig.json`,
 `pnpm-workspace.yaml` and `.gitignore` a factory build needs — and the code
 the factory starts from: `jigs.config.ts` (this factory's pipelines, keyed by
@@ -120,8 +122,7 @@ under you, and from here on the code is this factory's own.
 `steps/jigs.ts` is the one to know about. It holds this factory's `"use step"`
 wrappers around jigs' step implementations, plus the jigs (`reviewLoop`,
 `ticketReview`, `needsHuman`, …) wired on top of them — so a pipeline imports
-its steps from `../steps/jigs.ts`, never from `@salimhamed/jigs-service`
-directly. It is ordinary committed source: commit it, edit it, and **do not
+its steps from `../steps/jigs.ts`, never from `@salimhamed/jigs` directly. It is ordinary committed source: commit it, edit it, and **do not
 rename it or its exported functions**. Each name compiles to a durable step id
 (`step//./steps/jigs//worktree`) that the World memoizes runs against, so a
 rename orphans every run this factory has parked — with a clean build and no

@@ -32,8 +32,8 @@ package. jigs ships steps; the factory owns every file that names them.
    test.
 
 A pipeline imports its steps from `../steps/jigs.ts`, **never** from
-`@salimhamed/jigs-service` directly. A step reached through the package is addressed by
-that package's version instead of by the factory's path, so every upgrade would
+`@salimhamed/jigs` directly. A step reached through the package is addressed by
+the package's version instead of by the factory's path, so every upgrade would
 rename it. The factory's ids test is what catches this.
 
 That ids test is a `jigs.config.test.ts` in the factory root: it reads the

@@ -10,6 +10,14 @@ ordinary semver from here on, and the `"version": "0.0.0"` pin
 [ADR 0012](./0012-per-factory-service.md) accepted with eyes open is gone.
 Delivered across [#30](https://github.com/salimhamed/jigs/pull/30) and
 [#31](https://github.com/salimhamed/jigs/pull/31), with the pin removed here.
+
+> **Amended by [ADR 0017](./0017-single-package.md) on 2026-09-06.** There is
+> one jigs package now, `@salimhamed/jigs`; read `@jigs/service` below as its
+> `/steps/run`, `/suspension/*`, `/ticket/*`, `/review-loop/*` and
+> `/worktrees` subpaths. This ADR's property is what made that merge safe: no
+> jigs package carries a directive, so no step id carries a package name or
+> version and a package rename cannot address one. `pnpm e2e` still proves it,
+> now by versioning the one package.
 This takes the option ADR 0012 rejected — declaring the directives in the
 factory rather than in the package — and that ADR's amendments record why the
 trade was re-taken.

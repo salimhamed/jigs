@@ -1,5 +1,16 @@
 # jigs is installed from GitHub Packages, and a factory owns its runtime
 
+> **Amended by [ADR 0017](./0017-single-package.md) on 2026-09-06.** "Two
+> packages, the merge deferred" below deferred the merge for exactly one
+> release, on the grounds of one breaking rename at a time; the scoped rename
+> shipped in 0.2.0 and the merge is 0.3.0. Read every "both packages" here as
+> one, `@salimhamed/jigs`: a factory pins one version, `jigs upgrade` moves
+> one pin, `init` scaffolds one dependency, and the transitive-name `overrides`
+> entry the tarball e2e needed is gone with the package that required it. The
+> registry choice, the four factory-supplied peers and the reasons behind
+> them, the no-global-install rule, the host-process service and the token
+> shape are all unchanged.
+
 jigs ships as two published packages, `@salimhamed/jigs` and
 `@salimhamed/jigs-service`, on GitHub Packages under the `@salimhamed` scope,
 private like the repo. A factory pins both to one version in its own

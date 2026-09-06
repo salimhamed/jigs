@@ -6,6 +6,17 @@
 > is gone: `jigs` and `@jigs/service` are both `0.1.0` on ordinary semver. The
 > per-factory service and the library shape stand.
 
+> **Amended by [ADR 0017](./0017-single-package.md) on 2026-09-06.**
+> `@jigs/service` — by then `@salimhamed/jigs-service` — no longer exists as a
+> package. Everything below that says "the library the factory installs" is
+> now a set of subpaths of `@salimhamed/jigs`: `/app`, `/nitro`, `/build`,
+> `/steps/run`, `/suspension/*`, `/ticket/*`, `/review-loop/*`, `/worktrees`.
+> The reason this ADR wanted a separate package — a library whose directive-
+> bearing files the factory's own bundler compiles out of `node_modules` — was
+> already retired by ADR 0013 and its dist-build amendment. The per-factory
+> service, the one-install rule for the compiler and the runtime, and the
+> library shape all stand; only the second name is gone.
+
 Each factory repo builds and runs its **own** service. `@jigs/service` stops
 being an application and becomes the library that factory installs: the app
 and its routes, the step, suspension and worktree primitives its pipelines are

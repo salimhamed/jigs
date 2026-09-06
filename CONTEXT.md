@@ -28,8 +28,8 @@ _Avoid_: node, task, stage
 The name the runtime memoizes a step's result under: the step file's path
 relative to the factory root plus the function's name (an installed
 dependency's steps take name+version+subpath instead — the SDK's own
-`step//workflow@4.8.4//fetch` is the only such id today; see ADR 0013). No
-jigs package's version appears in any of them, so releasing jigs moves none.
+`step//workflow@4.8.4//fetch` is the only such id today; see ADR 0013). The
+jigs package's version appears in none of them, so releasing jigs moves none.
 Not authored, not stable across a move — a step id that changes is every
 in-flight run losing its memory.
 _Avoid_: step key, step name, cache key
@@ -65,25 +65,24 @@ _Avoid_: mirror, cache, bare repo
 
 **Factory repo**:
 The central git-tracked repository holding the user's pipeline definitions
-and bindings. Target repos contain no pipeline code. It pins the two jigs
-packages to one version and runs its own copy of the CLI (`pnpm exec jigs`);
-no jigs is installed globally and no checkout is linked.
+and bindings. Target repos contain no pipeline code. It pins jigs to a
+version and runs its own copy of the CLI (`pnpm exec jigs`); no jigs is
+installed globally and no checkout is linked.
 _Avoid_: pipelines repo, config repo
 
-**jigs packages**:
-`@salimhamed/jigs` (the CLI, the library-first core, and the templates
-`jigs init` writes from) and `@salimhamed/jigs-service` (the app, its routes,
-and the primitives pipelines are written against). Published compiled to
-GitHub Packages under the `@salimhamed` scope, in lockstep — one version
-number for the pair — and installed by a factory like any dependency, through
-a scope line in its `.npmrc` and a `read:packages` token in the operator's
-`~/.npmrc` (ADR 0016).
-_Avoid_: the checkout, link:, @jigs/service, the jigs repo (as a dependency)
+**jigs package**:
+`@salimhamed/jigs` — the CLI, the library-first core, the templates
+`jigs init` writes from, the app and its routes, and the primitives pipelines
+are written against, reached through one subpath each. Published compiled to
+GitHub Packages under the `@salimhamed` scope and installed by a factory like
+any dependency, through a scope line in its `.npmrc` and a `read:packages`
+token in the operator's `~/.npmrc` (ADR 0016, ADR 0017).
+_Avoid_: the checkout, link:, @jigs/service, @salimhamed/jigs-service, the
+jigs packages (plural), the jigs repo (as a dependency)
 
 **Factory-supplied runtime**:
-The four packages a factory installs itself, at the versions the jigs
-packages peer on: `workflow`, `@workflow/world-postgres`, `@workflow/web`
-and `zod`. The SDK loads the World and the dashboard by name from the
+The four packages a factory installs itself, at the versions jigs peers on:
+`workflow`, `@workflow/world-postgres`, `@workflow/web` and `zod`. The SDK loads the World and the dashboard by name from the
 factory's own `node_modules`, `workflow` must be one copy per process, and
 one zod copy is what lets the factory's schemas unify with jigs' types;
 `strictPeerDependencies` in the factory turns a mismatch into an install
