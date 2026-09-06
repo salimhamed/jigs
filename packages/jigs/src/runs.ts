@@ -223,10 +223,11 @@ export async function describeRun(
   if (suspensions.length > 0)
     return { ...stored, status: "suspended", suspended: true, suspensions };
 
+  // Only a running run can be stalled — nothing has been handed to the queue
+  // for a pending one — and asking costs a queue read.
+  if (run.status !== "running") return stored;
   const stalled = facts.stalled ?? (await stalledRuns()).has(runId);
-  return run.status === "running" && stalled
-    ? { ...stored, status: "stalled" }
-    : stored;
+  return stalled ? { ...stored, status: "stalled" } : stored;
 }
 
 export async function listRuns(

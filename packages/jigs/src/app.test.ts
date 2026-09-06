@@ -522,8 +522,6 @@ test("a run holding only its ticket claim is running, not suspended", async () =
     status: "running",
     suspended: false,
     suspensions: [],
-    // The same description `jigs ps` renders, so the run route names how the
-    // run was launched too; which labels which is pinned in runs.test.ts.
     trigger: "manual",
   });
 });

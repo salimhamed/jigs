@@ -297,9 +297,8 @@ export function createApp(
     return c.json({ steps, deadJobs });
   });
 
-  // The run as `jigs logs` renders it. Everything the world did not store —
-  // suspended, stalled, which schedule fired it — is described by the one
-  // function `jigs ps` reads, or the two verbs disagree about the same run.
+  // The run described by the one function `jigs ps` reads, or the two verbs
+  // answer differently about the same run.
   app.get("/api/runs/:runId", async (c) => {
     const ref = await resolveRunRef(c.req.param("runId"));
     if (ref.kind !== "found") return refError(c, ref);

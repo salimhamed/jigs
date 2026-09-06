@@ -14,6 +14,7 @@ import {
 export interface LogsResult {
   runId: string;
   status: string;
+  trigger: string;
   error?: string;
   logs: string;
   suspensions?: Array<{ token: string; reason: string }>;
@@ -50,6 +51,7 @@ export async function showLogs(
   const result = (await res.json()) as LogsResult;
   deps.out(`run ${result.runId}`);
   deps.out(`status ${result.status}`);
+  deps.out(`trigger ${result.trigger}`);
   if (result.error !== undefined) deps.out(`error ${result.error}`);
   for (const suspension of result.suspensions ?? []) {
     deps.out(`suspended on ${suspension.token}: ${suspension.reason}`);

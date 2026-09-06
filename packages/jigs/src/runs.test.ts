@@ -266,10 +266,15 @@ test("describeRun is the one thing `jigs ps` and the run route both read", async
   expect(await describe("failed", [], true)).toMatchObject({
     status: "failed",
   });
-  // Only a running run can be stalled: nothing has been handed to the queue
-  // yet for a pending one.
   expect(await describe("pending", [], true)).toMatchObject({
     status: "pending",
+  });
+  // The disagreement this replaced: the run route derived a status only for a
+  // `running` run, so a parked `pending` one read `suspended` in `jigs ps` and
+  // `pending` in `jigs logs`.
+  expect(await describe("pending", PARK, false)).toMatchObject({
+    status: "suspended",
+    suspended: true,
   });
 });
 

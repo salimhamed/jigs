@@ -514,8 +514,9 @@ dead job 4128 (jigs:workflow) after 3 attempts: Queue execution failed (404): No
   requeue: select graphile_worker.reschedule_jobs(array[4128]::bigint[], run_at := now(), attempts := 0)
 ```
 
-`jigs ps` reports such a run as `stalled` rather than `running`: it holds no
-suspension, has no step in flight, and nothing is coming to move it.
+`jigs ps` and `jigs logs` both report such a run as `stalled` rather than
+`running`: it holds no suspension, has no step in flight, and nothing is
+coming to move it.
 
 **Never run a standalone `workflow web` against a live World without
 `WORKFLOW_LOCAL_BASE_URL` pointing at that factory's service** — opening the
