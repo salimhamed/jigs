@@ -17,7 +17,7 @@ jigs ships three step builders and no control-flow constructs:
 All three take `(key, config)`. Harness-specific options (`model`,
 `mcpServers`) are written inside the harness factory call, which jigs
 re-exports verbatim; framework-level options (`skills`, `output`,
-`instructions`, `permissionMode`) sit on the step. A step declaring a zod
+`permissionMode`) sit on the step. A step declaring a zod
 `output` schema returns the parsed object typed; every step returns a uniform
 `StepResult` of `{ text, output, files, usage }`.
 

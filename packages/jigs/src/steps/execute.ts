@@ -166,7 +166,6 @@ async function generateAgentStep(
   const output = outputSpec(wire.outputSchema);
   const request = {
     prompt: wire.prompt,
-    ...(wire.instructions !== undefined ? { system: wire.instructions } : {}),
     ...(output !== undefined ? { output } : {}),
   };
   // A pointer recorded on the other harness cannot name a session here, so it

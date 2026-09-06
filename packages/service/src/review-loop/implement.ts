@@ -25,9 +25,6 @@ export interface ImplementAndReviewOptions {
   harness: HarnessConfig;
   cwd: string;
   baseSha: string;
-  maxCycles?: number;
-  // Interpolated with the same inert {{KEY}} pass as the defaults.
-  reviewPrompt?: string;
 }
 
 export type ImplementAndReviewResult = {
@@ -41,6 +38,7 @@ export type ImplementDeps = {
   needsHuman: NeedsHumanFn;
 };
 
+const MAX_REVIEW_CYCLES = 3;
 const FIRST_PASS = "_(first pass)_";
 
 function renderFindings(findings: string[]): string {
@@ -53,7 +51,6 @@ export async function implementAndReview(
   options: ImplementAndReviewOptions,
   deps: ImplementDeps,
 ): Promise<ImplementAndReviewResult> {
-  const maxCycles = options.maxCycles ?? 3;
   const ticket = renderSnapshot(options.handoff.snapshot);
   let session: AgentSession | undefined;
   let review = FIRST_PASS;
@@ -63,7 +60,7 @@ export async function implementAndReview(
   // Outer loop: the needs-human halt is a pause, so a human's reply becomes
   // the next round's findings and the run is never stranded.
   for (;;) {
-    for (let cycle = 1; cycle <= maxCycles; cycle += 1) {
+    for (let cycle = 1; cycle <= MAX_REVIEW_CYCLES; cycle += 1) {
       cycles += 1;
       const build = await deps.agent({
         harness: options.harness,
@@ -86,7 +83,7 @@ export async function implementAndReview(
         // The reviewer's whole prompt is built around running git diff, and
         // Bash is not auto-approved below this mode.
         permissionMode: "bypassPermissions",
-        prompt: interpolate(options.reviewPrompt ?? codeReviewPrompt, {
+        prompt: interpolate(codeReviewPrompt, {
           TICKET: ticket,
           BASE_SHA: options.baseSha,
         }),
@@ -94,7 +91,7 @@ export async function implementAndReview(
       });
       findings = verdict.output.findings;
       console.log(
-        `[reviewLoop] cycle ${cycle}/${maxCycles} verdict=${verdict.output.verdict} findings=${findings.length}`,
+        `[reviewLoop] cycle ${cycle}/${MAX_REVIEW_CYCLES} verdict=${verdict.output.verdict} findings=${findings.length}`,
       );
       if (verdict.output.verdict === "approved") {
         return {
@@ -107,7 +104,7 @@ export async function implementAndReview(
 
     const reply = await deps.needsHuman(
       options.claim,
-      `review loop hit its ${maxCycles}-cycle bound`,
+      `review loop hit its ${MAX_REVIEW_CYCLES}-cycle bound`,
       { findings },
     );
     review = reply.body;

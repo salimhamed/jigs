@@ -15,7 +15,6 @@ export type AgentStepConfig<T = undefined> = {
   harness: HarnessConfig;
   cwd: string;
   prompt: string;
-  instructions?: string;
   // Mapped on Claude only: Codex approval/sandbox policies are jigs
   // invariants set at hydration, not authoring surface.
   permissionMode?: PermissionMode;

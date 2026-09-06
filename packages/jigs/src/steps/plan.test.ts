@@ -81,7 +81,6 @@ test("every builder wire survives structuredClone — builders never inject live
     }),
     cwd: "/work/tree",
     prompt: "implement it",
-    instructions: "follow the brief",
     permissionMode: "bypassPermissions",
     output: verdict,
   });

@@ -73,14 +73,13 @@ const fakeNeedsHuman: TicketReviewDeps["needsHuman"] = async (
 
 const deps: TicketReviewDeps = { agent: fakeAgent, needsHuman: fakeNeedsHuman };
 
-const review = (prompt?: string) =>
+const review = () =>
   ticketReview(
     {
       claim,
       snapshot,
       harness: claude({ model: "sonnet" }),
       cwd: "/tmp/worktree",
-      ...(prompt !== undefined ? { prompt } : {}),
     },
     deps,
   );
@@ -156,7 +155,7 @@ test("a needs-human verdict routes the findings to needsHuman and never the brie
   );
 });
 
-test("the default prompt is used and carries the rendered ticket", async () => {
+test("the prompt carries the rendered ticket", async () => {
   agentRaw = { verdict: "proceed", brief: "plan", findings: [] };
   await review();
   const prompt = agentCalls[0]?.prompt ?? "";
@@ -164,16 +163,6 @@ test("the default prompt is used and carries the rendered ticket", async () => {
   expect(prompt).toContain("AGE-313");
   expect(prompt).toContain("Fetch the ticket on each activation.");
   expect(prompt).not.toContain("{{TICKET}}");
-});
-
-test("a caller-supplied prompt replaces the default and is interpolated", async () => {
-  agentRaw = { verdict: "proceed", brief: "plan", findings: [] };
-  await review("Custom review of {{TICKET}} — {{UNKNOWN}}");
-  const prompt = agentCalls[0]?.prompt ?? "";
-  expect(prompt).toContain("Custom review of");
-  expect(prompt).toContain("AGE-313");
-  expect(prompt).toContain("{{UNKNOWN}}");
-  expect(prompt).not.toContain("restate, not re-decide");
 });
 
 test("the verdict schema is declared on the agent step so the harness emits it natively", async () => {
