@@ -128,11 +128,10 @@ jigs logs <run>
 
 ### Upgrading later
 
-Rebuild this checkout before the factory: the CLI runs from a build only
-`pnpm build` refreshes, while the service half ships as source and is live the
-moment you pull. The **Upgrading** notes in
-[the setup runbook](docs/setup.md#part-1--the-machine-once) carry the commands
-in order.
+Rebuild this checkout before the factory: both packages run from a `dist/`
+only `pnpm build` refreshes, so a pull alone moves nothing. The **Upgrading**
+notes in [the setup runbook](docs/setup.md#part-1--the-machine-once) carry the
+commands in order.
 
 ## The `/jigs` skill
 

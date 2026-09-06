@@ -68,7 +68,7 @@ jigs checkout; a factory that rebuilds against a stale `dist/` compiles the
 service it had before the pull. So:
 
 ```sh
-cd <jigs checkout> && git pull && pnpm build   # refresh the linked CLI first
+cd <jigs checkout> && git pull && pnpm build   # refresh both linked packages first
 cd <factory> && git pull && pnpm install       # any new runtime dep the release names
 pnpm exec jigs build && pnpm exec jigs service restart
 pnpm exec jigs service status                  # prints the service and dashboard URLs
