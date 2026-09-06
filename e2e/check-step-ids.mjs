@@ -121,6 +121,52 @@ function installFromTarball(tarball) {
 
 const bundle = () => path.join(factory, ".output", "server", "index.mjs");
 
+// The CLI half of a package that is now also the service (ADR 0017). `jigs
+// init` runs from `pnpm dlx` on a machine that has installed nothing, and the
+// four runtime peers are the factory's to supply, so `dist/cli.js` must reach
+// none of the service runtime — nitro, hono, postgres, croner, undici, the
+// SDK. Two packages used to make that the package manager's business; one
+// package makes it import discipline, and a static import that crosses the
+// line is silent: the bundle grows, and `jigs init` starts needing packages
+// that are not there yet.
+const CLI_IMPORTS = ["commander", "yaml", "zod"];
+
+function cliBundleImports() {
+  const seen = new Set();
+  const bare = new Set();
+  const visit = (file) => {
+    if (seen.has(file)) return;
+    seen.add(file);
+    for (const [, spec] of readFileSync(file, "utf8").matchAll(
+      /(?:from|import)\s*["']([^"']+)["']/g,
+    )) {
+      if (spec.startsWith(".")) visit(path.resolve(path.dirname(file), spec));
+      else if (!spec.startsWith("node:")) {
+        bare.add(
+          spec.startsWith("@")
+            ? spec.split("/").slice(0, 2).join("/")
+            : spec.split("/")[0],
+        );
+      }
+    }
+  };
+  visit(cli);
+  return [...bare].sort();
+}
+
+function checkCliBundle() {
+  const imports = cliBundleImports();
+  const crossings = imports.filter((name) => !CLI_IMPORTS.includes(name));
+  if (crossings.length > 0) {
+    for (const name of crossings) console.error(`  ${name}`);
+    fail(
+      `${path.relative(repo, cli)} imports ${crossings.length} package(s) outside the CLI's own set (${CLI_IMPORTS.join(", ")})`,
+      "a CLI path now reaches the service half — make the crossing a dynamic import resolved from the factory, the way build.ts does, or add the package here if the CLI genuinely owns it",
+    );
+  }
+  console.log(`dist/cli.js imports ${imports.join(", ")}`);
+}
+
 function run(file, args) {
   execFileSync(file, args, { cwd: factory, stdio: "inherit" });
 }
@@ -339,6 +385,9 @@ console.log(
   "\n=== scaffold: pack the package, jigs init into an empty directory",
 );
 scaffold();
+
+console.log("\n=== cli: the bundle a factory installs the service from");
+checkCliBundle();
 
 if (process.argv[2] === "--record") {
   installFromTarball(tarballs.jigs);

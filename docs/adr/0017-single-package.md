@@ -28,7 +28,8 @@ genuinely bought, and each is either cheaper another way or already gone:
    SDK. In one package this becomes import discipline plus an assertion. It is
    an assertion now: the CLI's one crossing (`build.ts` resolving
    `@salimhamed/jigs/build` from the factory root) stays a `createRequire`
-   call, and `dist/cli.js` is checked to import none of the service runtime.
+   call, and `e2e/check-step-ids.mjs` walks the built `dist/cli.js` and fails
+   on any import outside `commander`, `yaml` and `zod`.
 2. **Peer declarations only on the service.** The peers are unchanged —
    `@workflow/web`, `@workflow/world-postgres`, `workflow` and `zod`, with
    `nitro` optional — and now sit on the one package. A factory already
@@ -69,7 +70,7 @@ under the names both already had, and no factory import needs a second edit.
 The service's `steps/index.ts` moved to `steps/builders.ts` (keeping its
 history), and the new barrel re-exports it beside the CLI's step modules.
 
-**The root export shrinks to what a consumer names.** `"."` was a 100-symbol
+**The root export shrinks to what a consumer names.** `"."` was a 55-symbol
 barrel whose only reader was the other package: every CLI command function, the
 git helpers, `CliError`, `locateFactoryRoot`, the binding and clone helpers.
 Measured by grep across both real factories and the templates, what is actually
@@ -111,9 +112,10 @@ scope, one release-please component, one publish.
   two packages, and each has an amendment block pointing here.
 - **The dependency direction is now a convention.** Nothing stops a future
   edit importing `postgres` from a file the CLI reaches. What catches it is the
-  packaging test plus the e2e's zero-`node:`-builtins assertion on the workflow
-  bundle, both of which fail loudly — but neither is the package manager, and
-  that is a real loss.
+  e2e's walk of `dist/cli.js`, its zero-`node:`-builtins assertion on the
+  workflow bundle, and the packaging test's no-directives rule — all of which
+  fail loudly — but none of them is the package manager, and that is a real
+  loss.
 
 ## Considered options
 
