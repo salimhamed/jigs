@@ -27,8 +27,6 @@ const TERMINAL_RUN_STATUSES: ReadonlySet<string> = new Set([
   "cancelled",
 ]);
 
-export type { ExecFile, ExecOutput } from "../exec.ts";
-
 export type Prepare = (factoryRoot: string) => unknown;
 
 export interface BuildDeps {

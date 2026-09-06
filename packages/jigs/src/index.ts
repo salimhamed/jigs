@@ -49,7 +49,7 @@ export {
   ensureBindingClone,
   hasBindingClone,
 } from "./worktrees/clone.ts";
-export type { BranchResolution, WorktreeFacts } from "./worktrees/facts.ts";
+export type { WorktreeFacts } from "./worktrees/facts.ts";
 export {
   type BindingDirOptions,
   bindingDir,

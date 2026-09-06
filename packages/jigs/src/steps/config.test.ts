@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { claude, codex, StructuredOutputUnsupportedError } from "./config.ts";
+import { claude, codex } from "./config.ts";
 
 test("claude() returns a tagged plain-data descriptor", () => {
   const descriptor = claude({
@@ -41,10 +41,4 @@ test("codex() returns a tagged plain-data descriptor", () => {
     },
   });
   expect(structuredClone(descriptor)).toEqual(descriptor);
-});
-
-test("StructuredOutputUnsupportedError names the offending kind", () => {
-  const error = new StructuredOutputUnsupportedError("pi");
-  expect(error.name).toBe("StructuredOutputUnsupportedError");
-  expect(error.message).toContain("'pi'");
 });

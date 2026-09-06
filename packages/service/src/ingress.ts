@@ -7,11 +7,6 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 
-export type WakeHint =
-  | { source: "github"; event: string; action?: string }
-  | { source: "linear"; type: string; action?: string }
-  | { source: "poke" };
-
 function hmacMatches(rawBody: string, signatureHex: string, secret: string) {
   const expected = createHmac("sha256", secret).update(rawBody).digest();
   // Buffer.from(_, "hex") stops at the first invalid pair, so malformed hex

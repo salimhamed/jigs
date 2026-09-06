@@ -51,7 +51,6 @@ const fakeAgent: ImplementDeps["agent"] = async <T>(
   return {
     text: "",
     output: parseOutput(config.output, raw),
-    files: [],
     usage: undefined,
     ...(config.output === undefined
       ? {

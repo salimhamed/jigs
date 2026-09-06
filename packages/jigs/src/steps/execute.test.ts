@@ -63,7 +63,7 @@ function makeDeps(
   const deps: ExecuteDeps = {
     generateText: async (options) => {
       captured.options = options;
-      return { text: "done", files: [], usage, ...generation };
+      return { text: "done", usage, ...generation };
     },
     ensureCodexHome: (runKey) => {
       captured.homeRunKeys.push(runKey);
@@ -354,7 +354,7 @@ test("a second agent in the same worktree is refused while the first is running"
     await new Promise<void>((resolve) => {
       releaseFirst = resolve;
     });
-    return { text: "done", files: [], usage };
+    return { text: "done", usage };
   };
 
   const inFlight = runAgent(wire, "run-1", first.deps);
@@ -385,7 +385,7 @@ test("a busy worktree does not block an agent in another one", async () => {
     await new Promise<void>((resolve) => {
       releaseFirst = resolve;
     });
-    return { text: "done", files: [], usage };
+    return { text: "done", usage };
   };
 
   const inFlight = runAgent(

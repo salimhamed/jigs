@@ -45,21 +45,3 @@ export function claude(options: HarnessOptions): ClaudeHarnessConfig {
 export function codex(options: HarnessOptions): CodexHarnessConfig {
   return { kind: "codex", ...options };
 }
-
-// Both v0 harnesses honor a JSON schema natively; the table exists so a
-// future capability-less harness fails loudly at build time, never by
-// silently coercing prose (ADR 0003).
-export const STRUCTURED_OUTPUT_SUPPORT: Record<HarnessConfig["kind"], boolean> =
-  {
-    claude: true,
-    codex: true,
-  };
-
-export class StructuredOutputUnsupportedError extends Error {
-  constructor(kind: string) {
-    super(
-      `harness '${kind}' cannot honor a structured output schema — remove \`output\` or use a harness with native structured output`,
-    );
-    this.name = "StructuredOutputUnsupportedError";
-  }
-}

@@ -4,11 +4,7 @@
 
 import type { PermissionMode } from "ai-sdk-provider-claude-code";
 import { z } from "zod";
-import {
-  type HarnessConfig,
-  STRUCTURED_OUTPUT_SUPPORT,
-  StructuredOutputUnsupportedError,
-} from "./config.ts";
+import type { HarnessConfig } from "./config.ts";
 import type { AgentSession } from "./result.ts";
 
 export type AgentStepConfig<T = undefined> = {
@@ -46,18 +42,6 @@ export type AskWire = Omit<AskStepConfig, "output"> & {
   outputSchema?: WireJsonSchema;
 };
 
-function checkOutputCapability(
-  harness: HarnessConfig,
-  output: z.ZodType | undefined,
-): void {
-  if (
-    output !== undefined &&
-    STRUCTURED_OUTPUT_SUPPORT[harness.kind] !== true
-  ) {
-    throw new StructuredOutputUnsupportedError(harness.kind);
-  }
-}
-
 function toWireSchema(
   output: z.ZodType | undefined,
 ): WireJsonSchema | undefined {
@@ -71,14 +55,12 @@ function toWireSchema(
 }
 
 export function buildAgentWire<T>(config: AgentStepConfig<T>): AgentWire {
-  checkOutputCapability(config.harness, config.output);
   const { output, ...wire } = config;
   const outputSchema = toWireSchema(output);
   return outputSchema === undefined ? wire : { ...wire, outputSchema };
 }
 
 export function buildAskWire<T>(config: AskStepConfig<T>): AskWire {
-  checkOutputCapability(config.harness, config.output);
   // A model step sees no MCP universe at all — declaring servers it can never
   // reach would be a silent lie, so it fails here instead.
   if (config.harness.mcpServers !== undefined) {

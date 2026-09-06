@@ -42,21 +42,19 @@ test("existing local branch is checked out as-is and never reset", async () => {
     worktreePath: wtPath("feat"),
     branch: "feat",
   });
-  expect(facts.resolution).toBe("local");
-  expect(facts.headSha).toBe(shaA);
+  expect(facts.baseSha).toBe(shaA);
   expect(git(wtPath("feat"), "rev-parse", "HEAD")).toBe(shaA);
 });
 
 test("remote-only branch is tracked", async () => {
   const remoteSha = commitToRemote(tmp, remoteDir, "feat", { "b.txt": "1" });
 
-  const facts = await createWorktree({
+  await createWorktree({
     repoDir,
     worktreePath: wtPath("feat"),
     branch: "feat",
   });
-  expect(facts.resolution).toBe("remote");
-  expect(facts.headSha).toBe(remoteSha);
+  expect(git(wtPath("feat"), "rev-parse", "HEAD")).toBe(remoteSha);
   expect(git(repoDir, "rev-parse", "--abbrev-ref", "feat@{upstream}")).toBe(
     "origin/feat",
   );
@@ -77,10 +75,8 @@ test("unknown branch forks from origin default, not a stale local one", async ()
     worktreePath: wtPath("fresh"),
     branch: "agent/fresh",
   });
-  expect(facts.resolution).toBe("new");
   expect(facts.baseSha).toBe(advancedRemoteMain);
-  expect(facts.headSha).toBe(advancedRemoteMain);
-  expect(facts.behindDefault).toBe(0);
+  expect(git(wtPath("fresh"), "rev-parse", "HEAD")).toBe(advancedRemoteMain);
 });
 
 test("a branch the remote deleted on merge forks fresh, not off its stale tracking ref", async () => {
@@ -96,13 +92,12 @@ test("a branch the remote deleted on merge forks fresh, not off its stale tracki
   );
   git(remoteDir, "update-ref", "-d", "refs/heads/agent/merged");
 
-  const facts = await createWorktree({
+  await createWorktree({
     repoDir,
     worktreePath: wtPath("merged"),
     branch: "agent/merged",
   });
-  expect(facts.resolution).toBe("new");
-  expect(facts.headSha).toBe(
+  expect(git(wtPath("merged"), "rev-parse", "HEAD")).toBe(
     git(repoDir, "rev-parse", "refs/remotes/origin/main"),
   );
   expect(() =>
@@ -118,12 +113,14 @@ test("the deleted-branch case survives an operator locale that translates git", 
   git(repoDir, "fetch", "-q", "origin");
   git(remoteDir, "update-ref", "-d", "refs/heads/agent/localized");
 
-  const facts = await createWorktree({
+  await createWorktree({
     repoDir,
     worktreePath: wtPath("localized"),
     branch: "agent/localized",
   });
-  expect(facts.resolution).toBe("new");
+  expect(git(wtPath("localized"), "rev-parse", "HEAD")).toBe(
+    git(repoDir, "rev-parse", "refs/remotes/origin/main"),
+  );
 });
 
 test("worktree creation never writes refs/heads/<default>", async () => {
@@ -153,12 +150,14 @@ test("git operations survive the orchestrator's cwd being a removed worktree", a
     rmSync(first, { recursive: true, force: true });
     git(repoDir, "worktree", "prune");
 
-    const facts = await createWorktree({
+    await createWorktree({
       repoDir,
       worktreePath: wtPath("two"),
       branch: "agent/two",
     });
-    expect(facts.resolution).toBe("new");
+    expect(git(wtPath("two"), "rev-parse", "--abbrev-ref", "HEAD")).toBe(
+      "agent/two",
+    );
   } finally {
     process.chdir(originalCwd);
   }
@@ -173,13 +172,13 @@ test("a worktree deleted without pruning can be recreated at the same path", asy
   });
   rmSync(wt, { recursive: true, force: true });
 
-  const facts = await createWorktree({
+  await createWorktree({
     repoDir,
     worktreePath: wt,
     branch: "agent/reborn",
   });
-  expect(facts.resolution).toBe("local");
   expect(git(wt, "rev-parse", "--abbrev-ref", "HEAD")).toBe("agent/reborn");
+  expect(localBranches().split("\n")).toEqual(["refs/heads/agent/reborn"]);
 });
 
 test("worktreeStatus reports a missing directory as null", async () => {
@@ -253,7 +252,7 @@ test("worktreeStatus flags divergence when local and origin both advanced", asyn
 
 test("worktreeStatus treats behind-only as ff-safe, not diverged", async () => {
   const wt = wtPath("behind");
-  const facts = await createWorktree({
+  await createWorktree({
     repoDir,
     worktreePath: wt,
     branch: "agent/behind",
@@ -269,5 +268,4 @@ test("worktreeStatus treats behind-only as ff-safe, not diverged", async () => {
   expect(status).not.toBeNull();
   expect(status?.clean).toBe(true);
   expect(status?.diverged).toBe(false);
-  expect(status?.headSha).toBe(facts.headSha);
 });

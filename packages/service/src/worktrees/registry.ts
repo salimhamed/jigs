@@ -16,9 +16,6 @@ export interface WorktreeRow {
   branch: string;
   ownerRunId: string;
   state: string;
-  baseSha: string;
-  headSha: string;
-  behindDefault: number;
   repoDir: string;
 }
 
@@ -36,9 +33,6 @@ const REGISTRY_COLUMNS = [
   "branch",
   "owner_run_id",
   "state",
-  "base_sha",
-  "head_sha",
-  "behind_default",
   "repo_dir",
   "created_at",
   "updated_at",
@@ -51,9 +45,6 @@ export async function ensureWorktreeRegistry(sql: ISql): Promise<void> {
       branch text NOT NULL,
       owner_run_id text NOT NULL,
       state text NOT NULL,
-      base_sha text NOT NULL,
-      head_sha text NOT NULL,
-      behind_default integer NOT NULL,
       repo_dir text NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
@@ -91,8 +82,7 @@ export async function getWorktree(
   path: string,
 ): Promise<WorktreeRow | null> {
   const rows = await sql<WorktreeRow[]>`
-    SELECT path, branch, owner_run_id, state, base_sha, head_sha,
-           behind_default, repo_dir
+    SELECT path, branch, owner_run_id, state, repo_dir
     FROM jigs_worktrees
     WHERE path = ${path}
   `;
@@ -101,8 +91,7 @@ export async function getWorktree(
 
 export async function listWorktrees(sql: ISql): Promise<WorktreeRow[]> {
   return sql<WorktreeRow[]>`
-    SELECT path, branch, owner_run_id, state, base_sha, head_sha,
-           behind_default, repo_dir
+    SELECT path, branch, owner_run_id, state, repo_dir
     FROM jigs_worktrees
     ORDER BY updated_at DESC
   `;
@@ -113,8 +102,7 @@ export async function listWorktreesForRun(
   runId: string,
 ): Promise<WorktreeRow[]> {
   return sql<WorktreeRow[]>`
-    SELECT path, branch, owner_run_id, state, base_sha, head_sha,
-           behind_default, repo_dir
+    SELECT path, branch, owner_run_id, state, repo_dir
     FROM jigs_worktrees
     WHERE owner_run_id = ${runId}
     ORDER BY updated_at DESC
@@ -127,19 +115,14 @@ export async function upsertWorktree(
 ): Promise<void> {
   await sql`
     INSERT INTO jigs_worktrees
-      (path, branch, owner_run_id, state, base_sha, head_sha, behind_default,
-       repo_dir)
+      (path, branch, owner_run_id, state, repo_dir)
     VALUES
       (${row.path}, ${row.branch}, ${row.ownerRunId}, ${row.state},
-       ${row.baseSha}, ${row.headSha}, ${row.behindDefault},
        ${row.repoDir})
     ON CONFLICT (path) DO UPDATE SET
       branch = EXCLUDED.branch,
       owner_run_id = EXCLUDED.owner_run_id,
       state = EXCLUDED.state,
-      base_sha = EXCLUDED.base_sha,
-      head_sha = EXCLUDED.head_sha,
-      behind_default = EXCLUDED.behind_default,
       repo_dir = EXCLUDED.repo_dir,
       updated_at = now()
   `;

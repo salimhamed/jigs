@@ -10,7 +10,6 @@ import {
   linearTimestampFresh,
   verifyGithubSignature,
   verifyLinearSignature,
-  type WakeHint,
 } from "./ingress";
 import { doctor, factoryRoot } from "./preflight";
 import {
@@ -171,12 +170,7 @@ export function createApp(
       );
       return c.json({ ignored: true });
     }
-    const hint: WakeHint = {
-      source: "github",
-      event: c.req.header("x-github-event") ?? "unknown",
-      ...optionalAction(payload),
-    };
-    return deliver(c, "github", token, hint, event, resumeIngressHook);
+    return deliver(c, "github", token, event, resumeIngressHook);
   });
 
   app.post("/ingress/linear", async (c) => {
@@ -212,12 +206,7 @@ export function createApp(
       );
       return c.json({ ignored: true });
     }
-    const hint: WakeHint = {
-      source: "linear",
-      type: "Comment",
-      ...optionalAction(payload),
-    };
-    return deliver(c, "linear", token, hint, event, resumeIngressHook);
+    return deliver(c, "linear", token, event, resumeIngressHook);
   });
 
   // Manual wake on the same code path as the ingress: resume every token the
@@ -233,7 +222,7 @@ export function createApp(
     }
     const poked = await Promise.all(
       tokens.map((token) =>
-        resumeHook(token, { source: "poke" } satisfies WakeHint).then(
+        resumeHook(token, undefined).then(
           () => ({ token, resumed: true }),
           // A hook disposed between list and resume is a report, not an error.
           () => ({ token, resumed: false }),
@@ -394,11 +383,6 @@ function parseJson(rawBody: string): unknown {
   }
 }
 
-function optionalAction(payload: unknown): { action?: string } {
-  const action = (payload as { action?: unknown } | null)?.action;
-  return typeof action === "string" ? { action } : {};
-}
-
 function ingressField(value: string): string {
   return value.replace(/[\r\n\t]/g, " ");
 }
@@ -408,17 +392,18 @@ function linearEvent(payload: unknown): string | null {
   return typeof type === "string" ? ingressField(type) : null;
 }
 
+// A wake carries no payload: the suspension primitives re-check provider
+// state on every wake, so nothing downstream reads one.
 async function deliver(
   c: Context,
-  provider: WakeHint["source"],
+  provider: "github" | "linear",
   token: string,
-  hint: WakeHint,
   event: string | null,
   resume: typeof resumeHook,
 ) {
   const correlation = `token=${ingressField(token)}${event === null ? "" : ` event=${event}`}`;
   try {
-    const result = await resume(token, hint);
+    const result = await resume(token, undefined);
     console.log(`[ingress] ${provider} accepted ${correlation}`);
     return c.json({ delivered: true, ...result });
   } catch (error) {

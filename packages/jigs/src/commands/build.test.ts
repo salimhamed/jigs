@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test, vi } from "vitest";
-import { buildFactoryService, type ExecFile } from "./build.ts";
+import { type BuildDeps, buildFactoryService } from "./build.ts";
 
 // A factory with no reachable service: the run-in-flight warning is a best
 // effort, so every test here exercises the build path itself.
@@ -18,6 +18,8 @@ function factory(port = 59321): string {
   writeFileSync(path.join(root, "node_modules", ".bin", "nitro"), "");
   return root;
 }
+
+type ExecFile = NonNullable<BuildDeps["execFile"]>;
 
 const ok: ExecFile = async () => ({ stdout: "", stderr: "" });
 

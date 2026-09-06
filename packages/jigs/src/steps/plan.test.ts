@@ -1,11 +1,6 @@
 import { expect, test } from "vitest";
 import { z } from "zod";
-import {
-  claude,
-  codex,
-  type HarnessConfig,
-  StructuredOutputUnsupportedError,
-} from "./config.ts";
+import { claude, codex } from "./config.ts";
 import { buildAgentWire, buildAskWire } from "./plan.ts";
 
 const verdict = z.object({
@@ -38,21 +33,6 @@ test("without an output schema the wire omits it", () => {
     prompt: "what changed?",
   });
   expect(wire.outputSchema).toBeUndefined();
-});
-
-test("declaring output on a harness without the capability throws before any step call", () => {
-  const incapable = { kind: "pi", model: "pi-1" } as unknown as HarnessConfig;
-  expect(() =>
-    buildAgentWire({
-      harness: incapable,
-      cwd: "/work/tree",
-      prompt: "review it",
-      output: verdict,
-    }),
-  ).toThrow(StructuredOutputUnsupportedError);
-  expect(() =>
-    buildAskWire({ harness: incapable, prompt: "hm", output: verdict }),
-  ).toThrow(StructuredOutputUnsupportedError);
 });
 
 test("ask() rejects a harness descriptor carrying mcpServers", () => {

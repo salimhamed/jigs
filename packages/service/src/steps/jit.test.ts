@@ -23,7 +23,7 @@ const reply: HumanReply = {
   createdAt: "2026-08-26T00:00:00.000Z",
 };
 
-const stepResult = { text: "done", output: undefined, files: [] };
+const stepResult = { text: "done", output: undefined };
 
 test("agentOrHalt posts the repair through needsHuman and re-runs the step after the reply", async () => {
   const reasons: string[] = [];

@@ -7,7 +7,6 @@ const { createComment, getIssueParticipants } = vi.hoisted(() => ({
   })),
   getIssueParticipants: vi.fn(async () => ({
     creator: { id: "user-1", name: "Salim" },
-    viewerId: "viewer-1",
   })),
 }));
 

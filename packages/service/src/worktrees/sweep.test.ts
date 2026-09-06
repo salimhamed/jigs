@@ -113,9 +113,6 @@ function register(
     branch,
     ownerRunId: `run_${branch}`,
     state: "active",
-    baseSha: "base1",
-    headSha: "head1",
-    behindDefault: 0,
     repoDir,
     ...overrides,
   });

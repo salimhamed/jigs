@@ -8,18 +8,19 @@ running again, so no agent invocation ever repeats. Control flow is therefore
 plain TypeScript: branching is `if`, a review cycle is `for`, and a circuit
 breaker is that loop's bound.
 
-jigs ships three step builders and no control-flow constructs:
+jigs ships two step builders and no control-flow constructs:
 
 - **`agent()`** — a harness-backed coding agent. Requires a worktree.
 - **`ask()`** — a plain AI SDK model call. No worktree, no repo binding.
-- **`fn()`** — plain TypeScript, memoized like any other step.
 
-All three take `(key, config)`. Harness-specific options (`model`,
+Plain TypeScript steps are the runtime's own `"use step"` functions (ADR 0013);
+the `fn()` wrapper that dressed one as a step result is gone. Both take `(key,
+config)`. Harness-specific options (`model`,
 `mcpServers`) are written inside the harness factory call, which jigs
 re-exports verbatim; framework-level options (`skills`, `output`,
 `permissionMode`) sit on the step. A step declaring a zod
 `output` schema returns the parsed object typed; every step returns a uniform
-`StepResult` of `{ text, output, files, usage }`.
+`StepResult` of `{ text, output, usage }`.
 
 A run suspends through exactly two named primitives — `pullRequestGate()` and
 `needsHuman()` — which share one run-state record of `{ key, reason, payload,

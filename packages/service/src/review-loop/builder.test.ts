@@ -59,7 +59,6 @@ const fakeAgent: BuilderDeps["agent"] = async <T>(
   return {
     text: "",
     output: parseOutput(config.output, raw.shift()),
-    files: [],
     usage: undefined,
     session: { harness: "claude" as const, id: `s-${agentCalls.length}` },
   };
