@@ -44,6 +44,10 @@ const slackSchema = z.strictObject({
   allowed_users: z
     .array(z.string().regex(/^[UW][A-Z0-9]+$/, "must be a Slack user id"))
     .min(1),
+  // The model the agent answers with, as an OpenRouter model id. No default:
+  // which model reads this factory's runs is the operator's choice, and it is
+  // the operator's bill.
+  model: z.string().min(1),
 });
 
 const factoryConfigSchema = z.looseObject({

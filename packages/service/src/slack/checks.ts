@@ -4,9 +4,9 @@
 // translates, so `jigs doctor` says one thing about a misinstalled app.
 //
 // Every check here runs in a service that is already up, and a service with a
-// slack block cannot be up without both tokens set — the startup gate exits
-// on that. So what is left to catch is a token of the wrong kind, an app
-// missing a scope, and a channel the bot cannot use.
+// slack block cannot be up without its two tokens and its model key set — the
+// startup gate exits on that. So what is left to catch is a credential of the
+// wrong kind, an app missing a scope, and a channel the bot cannot use.
 
 // Static, not a dynamic import: see the note in connection.ts — the e2e boot
 // stage is what proves a `link:`-installed factory resolves this package.
@@ -25,6 +25,7 @@ import {
   SLACK_APP_TOKEN,
   SLACK_BOT_TOKEN,
 } from "./env";
+import { listSlackModelIds, SLACK_MODEL_CREDENTIAL } from "./model";
 
 /** What doctor reads back off `conversations.info`: an ok answer is not the
  *  same as a usable channel. */
@@ -37,12 +38,15 @@ export interface ConversationInfo {
 export interface SlackProbes {
   authTest(token: string): Promise<unknown>;
   conversationsInfo(token: string, channel: string): Promise<ConversationInfo>;
+  /** Every model id the configured provider will serve. */
+  modelIds(apiKey: string): Promise<string[]>;
 }
 
 const webApiProbes: SlackProbes = {
   authTest: (token) => new WebClient(token).auth.test(),
   conversationsInfo: (token, channel) =>
     new WebClient(token).conversations.info({ channel }),
+  modelIds: listSlackModelIds,
 };
 
 export interface SlackChecksOptions {
@@ -78,7 +82,7 @@ export function slackChecks(options: SlackChecksOptions = {}): Check[] {
           return wrongKind(
             SLACK_BOT_TOKEN,
             BOT_TOKEN_PREFIX,
-            "OAuth & Permissions → Bot User OAuth Token",
+            "the app's OAuth & Permissions → Bot User OAuth Token — the two Slack tokens are easy to swap",
           );
         }
         try {
@@ -102,8 +106,52 @@ export function slackChecks(options: SlackChecksOptions = {}): Check[] {
           : wrongKind(
               SLACK_APP_TOKEN,
               APP_TOKEN_PREFIX,
-              "Basic Information → App-Level Tokens, scope connections:write",
+              "the app's Basic Information → App-Level Tokens, scope connections:write — the two Slack tokens are easy to swap",
             ),
+    },
+    {
+      // Presence alone would say nothing — the startup gate already refuses
+      // to run without this key, the same invariant that leaves the app token
+      // with only its shape to check. What is left is a key from somewhere
+      // else pasted in, and the prefix is what catches it.
+      id: "slack.model-key",
+      label: `${SLACK_MODEL_CREDENTIAL.provider} API key`,
+      run: async (): Promise<CheckResult> =>
+        (env[SLACK_MODEL_CREDENTIAL.env] ?? "").startsWith(
+          SLACK_MODEL_CREDENTIAL.prefix,
+        )
+          ? { ok: true }
+          : wrongKind(
+              SLACK_MODEL_CREDENTIAL.env,
+              SLACK_MODEL_CREDENTIAL.prefix,
+              `${SLACK_MODEL_CREDENTIAL.provider} (${SLACK_MODEL_CREDENTIAL.where})`,
+            ),
+    },
+    {
+      // A model id nothing serves is invisible until an operator asks a
+      // question and gets an error instead of an answer — the config parses,
+      // the service starts, the socket opens. Asking the provider is the only
+      // way to know before that.
+      id: "slack.model",
+      label: `Slack model ${slack.model}`,
+      run: async (): Promise<CheckResult> => {
+        let known: string[];
+        try {
+          known = await probes.modelIds(env[SLACK_MODEL_CREDENTIAL.env] ?? "");
+        } catch (err) {
+          return {
+            ok: false,
+            reason: `could not read ${SLACK_MODEL_CREDENTIAL.provider}'s model list: ${describe(err)}`,
+            repair: `check this machine can reach ${SLACK_MODEL_CREDENTIAL.provider} and that ${SLACK_MODEL_CREDENTIAL.env} in ${SERVICE_ENV_FILE} is valid, then: ${RESTART_SERVICE}`,
+          };
+        }
+        if (known.includes(slack.model)) return { ok: true };
+        return {
+          ok: false,
+          reason: `${SLACK_MODEL_CREDENTIAL.provider} serves no model called ${slack.model}`,
+          repair: `set slack.model in ${FACTORY_CONFIG_FILE} to a model id ${SLACK_MODEL_CREDENTIAL.provider} lists${nearest(slack.model, known)}, then: ${RESTART_SERVICE}`,
+        };
+      },
     },
     {
       id: "slack.channel",
@@ -140,6 +188,21 @@ export function slackChecks(options: SlackChecksOptions = {}): Check[] {
   ];
 }
 
+// A typo'd model id is nearly always right about the vendor, so the vendor's
+// own catalogue is the shortest way back to the id that was meant.
+function nearest(modelId: string, known: readonly string[]): string {
+  const vendor = modelId.split("/")[0];
+  const siblings =
+    vendor === undefined || vendor === ""
+      ? []
+      : known.filter((id) => id.startsWith(`${vendor}/`)).slice(0, 5);
+  return siblings.length === 0 ? "" : ` (it has ${siblings.join(", ")})`;
+}
+
+function describe(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 function wrongKind(
   variable: string,
   prefix: string,
@@ -148,7 +211,7 @@ function wrongKind(
   return {
     ok: false,
     reason: `${variable} is not a ${prefix}… token`,
-    repair: `set ${variable} in ${SERVICE_ENV_FILE} from the app's ${where} — the two Slack tokens are easy to swap — then: ${RESTART_SERVICE}`,
+    repair: `set ${variable} in ${SERVICE_ENV_FILE} from ${where}, then: ${RESTART_SERVICE}`,
   };
 }
 

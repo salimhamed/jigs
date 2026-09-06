@@ -43,12 +43,13 @@ test("the scopes cover reading history, resolving channels, and posting", () => 
   expect(bot).not.toContain("app_mentions:read");
 });
 
-test("what is printed carries both token instructions after the manifest", () => {
+test("what is printed carries every credential instruction after the manifest", () => {
   const lines: string[] = [];
   printSlackManifest((line) => lines.push(line));
   const printed = lines.join("\n");
   expect(printed.startsWith("_metadata:")).toBe(true);
-  expect(printed).toContain("SLACK_BOT_TOKEN   xoxb-");
-  expect(printed).toContain("SLACK_APP_TOKEN   xapp-");
+  expect(printed).toContain("SLACK_BOT_TOKEN     xoxb-");
+  expect(printed).toContain("SLACK_APP_TOKEN     xapp-");
+  expect(printed).toContain("OPENROUTER_API_KEY  sk-or-");
   expect(printed).toContain("connections:write");
 });

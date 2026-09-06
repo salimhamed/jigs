@@ -5,6 +5,7 @@ import type { NitroConfig } from "nitro/types";
 export const GENERATED_DIR = ".jigs";
 export const GENERATED_ENTRY_FILE = "server.ts";
 export const GENERATED_SCHEDULES_FILE = "schedules.ts";
+export const GENERATED_SLACK_FILE = "slack.ts";
 
 // Nitro resolves a bare `plugins` entry against the build root, which is the
 // factory rather than this package, so the path has to be absolute and
@@ -14,9 +15,6 @@ const startWorldPlugin = fileURLToPath(
 );
 const startDashboardPlugin = fileURLToPath(
   new URL("../plugins/start-dashboard.ts", import.meta.url),
-);
-const startSlackPlugin = fileURLToPath(
-  new URL("../plugins/start-slack.ts", import.meta.url),
 );
 
 /** The whole Nitro build config for a factory repo, so a factory's own
@@ -34,9 +32,12 @@ export function defineJigsService(): NitroConfig {
     plugins: [
       startWorldPlugin,
       startDashboardPlugin,
-      // After the World's gates: a factory whose Slack app is half configured
-      // should fail on that, not on a registry it never reached.
-      startSlackPlugin,
+      // Generated, like the ticker and for the same reason: the agent's tools
+      // are built from this factory's pipelines, and only a module in the
+      // factory's own tree can import them. After the World's gates — a
+      // factory whose Slack app is half configured should fail on that, not
+      // on a registry it never reached.
+      `./${GENERATED_DIR}/${GENERATED_SLACK_FILE}`,
       `./${GENERATED_DIR}/${GENERATED_SCHEDULES_FILE}`,
     ],
     // The workflow builder's scan directory stays at its default (the whole
