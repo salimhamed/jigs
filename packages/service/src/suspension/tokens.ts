@@ -20,17 +20,6 @@ export function prToken(pr: PrRef): string {
 export const TICKET_TOKEN_PREFIX = "linear:ticket:";
 
 export function ticketToken(issueId: string): string {
-  if (typeof issueId !== "string" || issueId === "") {
-    const kind =
-      issueId === null
-        ? "null"
-        : issueId === ""
-          ? "an empty string"
-          : typeof issueId;
-    throw new TypeError(
-      `ticketToken requires a non-empty string; received ${kind}`,
-    );
-  }
   return `${TICKET_TOKEN_PREFIX}${issueId}`;
 }
 
