@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0](https://github.com/salimhamed/jigs/compare/service-v0.1.20...service-v0.2.0) (2026-09-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* publish as @salimhamed/jigs and @salimhamed/jigs-service ([#101](https://github.com/salimhamed/jigs/issues/101))
+
+### Features
+
+* publish as @salimhamed/jigs and @salimhamed/jigs-service ([#101](https://github.com/salimhamed/jigs/issues/101)) ([b3887ce](https://github.com/salimhamed/jigs/commit/b3887ceced8d4b0053be814debae90f9df304cb7))
+
 ## [0.1.20](https://github.com/salimhamed/jigs/compare/service-v0.1.19...service-v0.1.20) (2026-09-06)
 
 
