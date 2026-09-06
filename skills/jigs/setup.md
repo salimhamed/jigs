@@ -177,3 +177,10 @@ switch it to the published package first. So is a factory still depending on
 `@salimhamed/jigs-service`, retired in 0.3.0: drop that line from
 `package.json` and rewrite every `@salimhamed/jigs-service/X` import to
 `@salimhamed/jigs/X` first.
+
+pnpm verifies the whole lockfile against its `minimumReleaseAge` policy before
+it resolves anything, so a dependency is still age-checked on the very install
+that removes it. Leave a recently published package's
+`minimumReleaseAgeExclude` entry in `pnpm-workspace.yaml` until that install
+has run, then drop the entry. Both factories hit this moving off
+`@salimhamed/jigs-service`.
