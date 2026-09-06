@@ -1,17 +1,21 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { createServer, type Server } from "node:http";
-import type { AddressInfo } from "node:net";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { ExecFile, ExecOptions } from "../exec.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
-import type { ServiceProcesses, SpawnSpec } from "./service-lifecycle.ts";
-import { SERVICE_ENTRY } from "./service-lifecycle.ts";
 import { type UpDeps, type UpOptions, upFactory } from "./up.ts";
+import {
+  closedPort,
+  closeFakeServices,
+  execError,
+  type FakeProcesses,
+  fakeExec,
+  fakeProcesses,
+  fakeService,
+  factory as scaffold,
+} from "./up-test-fixtures.ts";
 
 let tmp: string;
 let lines: string[];
-const servers: Server[] = [];
 
 beforeEach(() => {
   tmp = makeTmpDir();
@@ -20,178 +24,15 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.unstubAllEnvs();
-  for (const server of servers.splice(0)) server.close();
+  closeFakeServices();
   removeTmpDir(tmp);
 });
 
-// A factory the way `jigs init` leaves it, plus the code the operator wrote.
-interface FactoryShape {
-  port: number;
-  example?: boolean;
-  env?: string;
-  compose?: boolean;
-  config?: boolean;
-  bins?: string[];
-}
-
-function factory(shape: FactoryShape): string {
-  const root = path.join(tmp, "acme-factory");
-  mkdirSync(root, { recursive: true });
-  writeFileSync(
-    path.join(root, "jigs.yml"),
-    `service:\n  port: ${shape.port}\n  dashboard_port: 9200\n`,
-  );
-  if (shape.example !== false) {
-    writeFileSync(
-      path.join(root, ".env.example"),
-      "WORKFLOW_TARGET_WORLD=@workflow/world-postgres\nWORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\nLINEAR_API_KEY=\nGITHUB_TOKEN=\n",
-    );
-  }
-  if (shape.env !== undefined)
-    writeFileSync(path.join(root, ".env"), shape.env);
-  if (shape.compose !== false) {
-    writeFileSync(
-      path.join(root, "docker-compose.yml"),
-      'services:\n  postgres:\n    ports:\n      - "5555:5432"\n',
-    );
-  }
-  if (shape.config !== false) {
-    writeFileSync(path.join(root, "jigs.config.ts"), "export default {};\n");
-  }
-  const bin = path.join(root, "node_modules", ".bin");
-  mkdirSync(bin, { recursive: true });
-  for (const name of shape.bins ?? ["nitro", "bootstrap"]) {
-    writeFileSync(path.join(bin, name), "");
-  }
-  return root;
-}
-
-interface Call {
-  file: string;
-  args: string[];
-  options: ExecOptions;
-}
-
-// Stands in for pnpm, docker, bootstrap and nitro. The fake nitro writes the
-// bundle, so a test controls whether a build changes it.
-function fakeExec(fail?: (call: Call) => Error | undefined) {
-  const state = {
-    calls: [] as Call[],
-    bundle: "bundle v1",
-    execFile: undefined as unknown as ExecFile,
-  };
-  state.execFile = async (file, args, options) => {
-    const call = { file, args, options };
-    state.calls.push(call);
-    const err = fail?.(call);
-    if (err !== undefined) throw err;
-    if (path.basename(file) === "nitro") {
-      const entry = path.join(options.cwd, SERVICE_ENTRY);
-      mkdirSync(path.dirname(entry), { recursive: true });
-      writeFileSync(entry, state.bundle);
-    }
-    return { stdout: "", stderr: "" };
-  };
-  return state;
-}
-
-const execError = (code: number | string, stderr = "") =>
-  Object.assign(new Error(`exit ${code}`), { code, stdout: "", stderr });
-
-interface Fake {
-  processes: ServiceProcesses;
-  spawns: SpawnSpec[];
-  signals: Array<{ pid: number; sig: NodeJS.Signals | 0 }>;
-  alive: Set<number>;
-  dieOnSpawn: boolean;
-}
-
-function fakeProcesses(): Fake {
-  let nextPid = 4242;
-  const state: Fake = {
-    spawns: [],
-    signals: [],
-    alive: new Set(),
-    dieOnSpawn: false,
-    processes: undefined as unknown as ServiceProcesses,
-  };
-  state.processes = {
-    spawn(spec) {
-      state.spawns.push(spec);
-      const pid = nextPid++;
-      if (state.dieOnSpawn) {
-        mkdirSync(path.dirname(spec.logPath), { recursive: true });
-        writeFileSync(spec.logPath, "cloning binding api\nfatal: repo gone\n");
-      } else {
-        state.alive.add(pid);
-      }
-      return pid;
-    },
-    signal(pid, sig) {
-      state.signals.push({ pid, sig });
-      if (sig === "SIGTERM") state.alive.delete(pid);
-      return state.alive.has(pid);
-    },
-  };
-  return state;
-}
-
-interface ServiceRoutes {
-  health?: number;
-  runs?: Array<{ runId: string; pipeline: string; status: string }>;
-  doctor?: { ok: boolean; checks: unknown[] };
-}
-
-// The running service, as far as `up` can tell: /health, /api/runs and
-// /api/doctor answer whatever the test declares.
-async function fakeService(routes: ServiceRoutes = {}): Promise<number> {
-  const server = createServer((req, res) => {
-    res.setHeader("content-type", "application/json");
-    if (req.url === "/health") {
-      res.statusCode = routes.health ?? 200;
-      res.end(JSON.stringify({ ok: true }));
-    } else if (req.url === "/api/runs") {
-      res.end(
-        JSON.stringify({
-          runs: (routes.runs ?? []).map((run) => ({
-            ...run,
-            trigger: "manual",
-            createdAt: new Date().toISOString(),
-          })),
-          worktrees: [],
-          schedules: [],
-        }),
-      );
-    } else if (req.url === "/api/doctor") {
-      res.end(
-        JSON.stringify(
-          routes.doctor ?? {
-            ok: true,
-            checks: [{ id: "core.claude", label: "claude", ok: true }],
-          },
-        ),
-      );
-    } else {
-      res.statusCode = 404;
-      res.end("{}");
-    }
-  });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  servers.push(server);
-  return (server.address() as AddressInfo).port;
-}
-
-async function closedPort(): Promise<number> {
-  const server = createServer();
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const { port } = server.address() as AddressInfo;
-  await new Promise<void>((resolve) => server.close(() => resolve()));
-  return port;
-}
+const factory = (shape: Parameters<typeof scaffold>[1]) => scaffold(tmp, shape);
 
 function up(
   root: string,
-  io: { exec: ReturnType<typeof fakeExec>; procs: Fake },
+  io: { exec: ReturnType<typeof fakeExec>; procs: FakeProcesses },
   extra: Partial<UpDeps> = {},
   options: UpOptions = {},
 ) {

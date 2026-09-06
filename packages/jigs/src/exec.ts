@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import type { CliError } from "./errors.ts";
 
 // One seam for every child process a verb runs on the operator's behalf, so
 // a test can stand in for pnpm, docker, nitro or bootstrap with one function.
@@ -34,4 +35,32 @@ export const nodeExecFile: ExecFile = async (file, args, options) =>
 
 export function execOutput(result: Partial<ExecOutput>): string {
   return `${result.stdout ?? ""}${result.stderr ?? ""}`;
+}
+
+export interface ExecErrors {
+  missing: CliError;
+  failed: (err: ExecError) => CliError;
+}
+
+// Runs a child on the operator's behalf and turns its two failure shapes into
+// the operator's words: a binary that is not there, and one that ran and
+// failed — whose output is echoed first, because the CliError only names it.
+export async function execOrExplain(
+  execFile: ExecFile,
+  file: string,
+  args: string[],
+  options: ExecOptions,
+  out: (line: string) => void,
+  errors: ExecErrors,
+): Promise<void> {
+  try {
+    await execFile(file, args, options);
+  } catch (err) {
+    const failure = err as ExecError;
+    if (failure.code === "ENOENT") throw errors.missing;
+    for (const line of execOutput(failure).split("\n")) {
+      if (line !== "") out(`  ${line}`);
+    }
+    throw errors.failed(failure);
+  }
 }

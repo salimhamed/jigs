@@ -8,9 +8,8 @@ import {
 import { locateFactoryRoot } from "../config/locate-factory.ts";
 import { CliError } from "../errors.ts";
 import {
-  type ExecError,
   type ExecFile,
-  type ExecOptions,
+  execOrExplain,
   execOutput,
   nodeExecFile,
 } from "../exec.ts";
@@ -31,13 +30,18 @@ import {
   type ServiceProcesses,
   startService,
 } from "./service-lifecycle.ts";
+import {
+  indent,
+  type Note,
+  type Step,
+  StepFailed,
+  stepRunner,
+} from "./step-runner.ts";
 
 // Takes a factory from any state to a running service: the commands a human
 // used to type after `jigs init`, run in order. Each step is idempotent, so a
 // second `up` on an unchanged factory copies, installs, migrates and restarts
-// nothing. What `init` bought by printing the commands instead of running
-// them — a failure the human can see and name — is kept by giving every step
-// its own line and stopping at the first one that fails.
+// nothing.
 
 export type UpStepName =
   | "locate"
@@ -50,13 +54,7 @@ export type UpStepName =
   | "ready"
   | "doctor";
 
-export interface UpStep {
-  name: UpStepName;
-  status: "ok" | "failed" | "skipped";
-  durationMs: number;
-  detail?: string;
-  repair?: string;
-}
+export type UpStep = Step<UpStepName>;
 
 export type ServiceOutcome = "started" | "restarted" | "unchanged";
 
@@ -90,71 +88,12 @@ export interface UpOptions {
 const CREDENTIAL_SLOTS = ["LINEAR_API_KEY", "GITHUB_TOKEN"];
 const FACTORY_CODE = "jigs.config.ts";
 
-class StepFailed extends Error {}
-
-type Note = (detail: string) => void;
-
-interface Runner {
-  steps: UpStep[];
-  run<T>(name: UpStepName, fn: (note: Note) => Promise<T> | T): Promise<T>;
-  skip(name: UpStepName, detail: string): void;
-}
-
-function stepRunner(out: (line: string) => void): Runner {
-  const steps: UpStep[] = [];
-  return {
-    steps,
-    async run(name, fn) {
-      const started = Date.now();
-      let detail: string | undefined;
-      try {
-        const value = await fn((text) => {
-          detail = text;
-        });
-        const durationMs = Date.now() - started;
-        steps.push({ name, status: "ok", durationMs, detail });
-        out(
-          `ok   ${name} (${formatDuration(durationMs)})${detail === undefined ? "" : ` — ${detail}`}`,
-        );
-        return value;
-      } catch (err) {
-        const durationMs = Date.now() - started;
-        const message = err instanceof Error ? err.message : String(err);
-        const repair = err instanceof CliError ? err.hint : undefined;
-        steps.push({
-          name,
-          status: "failed",
-          durationMs,
-          detail: message,
-          repair,
-        });
-        out(`FAIL ${name}: ${message.split("\n")[0]}`);
-        if (repair !== undefined) out(`  → ${repair}`);
-        throw new StepFailed(message);
-      }
-    },
-    skip(name, detail) {
-      steps.push({ name, status: "skipped", durationMs: 0, detail });
-      out(`skip ${name} — ${detail}`);
-    },
-  };
-}
-
-function formatDuration(ms: number): string {
-  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
-}
-
-const indent =
-  (out: (line: string) => void) =>
-  (line: string): void =>
-    out(`  ${line}`);
-
 export async function upFactory(
   deps: UpDeps,
   options: UpOptions = {},
 ): Promise<UpResult> {
   const execFile = deps.execFile ?? nodeExecFile;
-  const runner = stepRunner(deps.out);
+  const runner = stepRunner<UpStepName>(deps.out);
   const result: UpResult = { ok: false, steps: runner.steps };
 
   try {
@@ -177,17 +116,24 @@ export async function upFactory(
     reportEmptyCredentials(env, deps.out);
 
     await runner.run("install", () =>
-      exec(execFile, "pnpm", ["install"], { cwd: factoryRoot }, deps.out, {
-        missing: new CliError(
-          "pnpm is not on PATH",
-          "install pnpm: https://pnpm.io/installation",
-        ),
-        failed: () =>
-          new CliError(
-            `pnpm install failed in ${factoryRoot}`,
-            "the output above is pnpm's",
+      execOrExplain(
+        execFile,
+        "pnpm",
+        ["install"],
+        { cwd: factoryRoot },
+        deps.out,
+        {
+          missing: new CliError(
+            "pnpm is not on PATH",
+            "install pnpm: https://pnpm.io/installation",
           ),
-      }),
+          failed: () =>
+            new CliError(
+              `pnpm install failed in ${factoryRoot}`,
+              "the output above is pnpm's",
+            ),
+        },
+      ),
     );
 
     await runner.run("compose", () =>
@@ -307,31 +253,6 @@ function reportEmptyCredentials(
   );
 }
 
-interface ExecErrors {
-  missing: CliError;
-  failed: (err: ExecError) => CliError;
-}
-
-async function exec(
-  execFile: ExecFile,
-  file: string,
-  args: string[],
-  options: ExecOptions,
-  out: (line: string) => void,
-  errors: ExecErrors,
-): Promise<void> {
-  try {
-    await execFile(file, args, options);
-  } catch (err) {
-    const failure = err as ExecError;
-    if (failure.code === "ENOENT") throw errors.missing;
-    for (const line of execOutput(failure).split("\n")) {
-      if (line !== "") out(`  ${line}`);
-    }
-    throw errors.failed(failure);
-  }
-}
-
 async function composeUp(
   execFile: ExecFile,
   factoryRoot: string,
@@ -343,7 +264,7 @@ async function composeUp(
       "scaffold one: jigs init",
     );
   }
-  await exec(
+  await execOrExplain(
     execFile,
     "docker",
     ["compose", "up", "-d", "--wait"],
@@ -388,7 +309,7 @@ async function bootstrapWorld(
       "pnpm install did not install @workflow/world-postgres — add it to this factory's package.json",
     );
   }
-  await exec(
+  await execOrExplain(
     execFile,
     bin,
     [],

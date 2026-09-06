@@ -55,6 +55,7 @@ jigs --help
 ```
 
 Nothing that changes state. Not `jigs run`, `cancel`, `poke`, `sweep`, `bind`,
-`unbind`, `build`, `up`, or any `jigs service` verb other than `status`. No edits to
-`jigs.yml`, `.env`, or any file. If the answer would require one of those, say
-what you would need to do and let the human ask for it.
+`unbind`, `build`, `up`, `upgrade`, or any `jigs service` verb other than
+`status`. No edits to `jigs.yml`, `.env`, or any file. If the answer would
+require one of those, say what you would need to do and let the human ask for
+it.
