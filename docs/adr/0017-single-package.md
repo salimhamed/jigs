@@ -61,6 +61,15 @@ beside the CLI's `./checks`, `./prompts`, `./harnesses` and `./steps/execute`.
 A factory's import rename is therefore one substitution on the package name and
 nothing else — which is what keeps the migration a `sed`.
 
+> **Amended by [ADR 0018](./0018-building-blocks-not-compositions.md) on
+> 2026-09-06.** `./review-loop/loop` leaves this list. The review loop's
+> composition moves to the `jigs init` scaffold as factory code, jigs stops
+> exporting `reviewLoop`, and what stays in the library is the building blocks
+> that composition calls. `./review-loop/pull-request` is unaffected — it is
+> step implementations, not composition. Every other subpath above stands, and
+> so does the property this section is about: no step id moves, because none of
+> them was ever a subpath ([ADR 0013](./0013-factory-owned-steps.md)).
+
 **`./steps` is the union.** The one collision the spike predicted: both
 packages exported `./steps`. Checked symbol by symbol, the two sets are
 disjoint — the CLI side is `claude`, `codex`, the harness and wire types, the
