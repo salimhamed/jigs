@@ -55,7 +55,6 @@ test("a linear Comment payload reconstructs the exact ticket token", () => {
     action: "create",
     type: "Comment",
     data: { id: "comment-1", body: "looks good", issueId },
-    webhookTimestamp: 1_756_200_000_000,
   };
   expect(tokenFromLinearPayload(payload)).toBe(ticketToken(issueId));
 });
