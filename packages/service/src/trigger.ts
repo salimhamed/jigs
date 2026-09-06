@@ -11,7 +11,7 @@ import { preflight } from "./preflight";
 import { resolveIssueRef } from "./providers/linear";
 
 export type StartRunResult =
-  | { kind: "started"; runId: string; resumeToken?: string }
+  | { kind: "started"; runId: string }
   | { kind: "unknown-pipeline"; knownPipelines: string[] }
   | { kind: "invalid-inputs"; issues: z.core.$ZodIssue[] }
   | { kind: "invalid-ticket"; reason: string }
@@ -61,11 +61,7 @@ export async function startRun(
         : { issueId: issue.id, identifier: issue.identifier }),
     },
   ]);
-  return {
-    kind: "started",
-    runId: run.runId,
-    ...(entry.hookToken ? { resumeToken: entry.hookToken(triggerId) } : {}),
-  };
+  return { kind: "started", runId: run.runId };
 }
 
 function hasTicket(value: unknown): value is { ticket: string } {
