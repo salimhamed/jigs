@@ -1,5 +1,5 @@
-import type { WorktreeFacts } from "jigs";
-import { type AgentStepConfig, claude } from "jigs/steps";
+import type { WorktreeFacts } from "@salimhamed/jigs";
+import { type AgentStepConfig, claude } from "@salimhamed/jigs/steps";
 import { beforeEach, expect, test } from "vitest";
 import type { CheckRun, ReviewThread } from "../providers/github";
 import { parseOutput, ResumeFailedError } from "../steps";

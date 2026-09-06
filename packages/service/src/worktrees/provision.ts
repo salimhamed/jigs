@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { cpSync, existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
-import { type Binding, CliError } from "jigs";
+import { type Binding, CliError } from "@salimhamed/jigs";
 import { globSync } from "tinyglobby";
 
 // Provisioning ports .worktreerc.yml semantics (ADR 0007): gitignore-blind

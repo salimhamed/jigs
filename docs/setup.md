@@ -44,15 +44,13 @@ would mean the CLI generating, installing and naming units, and every repair
 instruction growing a "which one" — `jigs service restart` is the whole
 answer instead.
 
-**Upgrading.** A factory installs `jigs` and `@jigs/service` with `link:`,
-pointed at your checkout of this repo, so the upgrade is `git pull` here — no
-version range to move in any factory's `package.json`. Two things do not
-follow on their own: `pnpm build` again in this checkout — `link:` builds
-nothing, so every factory's `jigs` binary and `jigs` type imports are whatever
-it last emitted — and each factory's own `steps/jigs.ts`, which you extend by
+**Upgrading.** A factory pins `@salimhamed/jigs` and
+`@salimhamed/jigs-service` to one version, installed from GitHub Packages, so
+the upgrade is moving both pins together and running `jigs up`. One thing does
+not follow on its own: each factory's own `steps/jigs.ts`, which you extend by
 hand with a wrapper for any step jigs has grown since, and with anything a
 jig's deps object has grown that is yours to write rather than to wrap (part 2,
-step 1). Typecheck the factory after a pull: the deps objects are typed, so
+step 1). Typecheck the factory after an upgrade: the deps objects are typed, so
 both kinds of gap are a compile error rather than a surprise at run time.
 
 A third does not follow either, and this one is not a compile error: the
@@ -64,18 +62,15 @@ schema types unify. A jigs release that moves a peer needs the same move in
 this factory's `package.json`; `strictPeerDependencies` in the factory's
 `pnpm-workspace.yaml` turns the mismatch into an install failure instead of a
 second copy. `jigs init`'s `package.json` template carries the current pins;
-compare it after a pull. Everything else the service imports is its own
-dependency and resolves from the jigs checkout.
+compare it after an upgrade. Everything else the service imports is its own
+dependency and installs with it.
 
-The order matters, because a pull alone moves nothing. Both packages run from
-their `dist/`, which is gitignored and moves only when `pnpm build` runs in the
-jigs checkout; a factory that rebuilds against a stale `dist/` compiles the
-service it had before the pull. So:
+So:
 
 ```sh
-cd <jigs checkout> && git pull && pnpm build   # refresh both linked packages first
-cd <factory> && git pull && pnpm install       # any new runtime dep the release names
-pnpm exec jigs build && pnpm exec jigs service restart
+cd <factory>
+pnpm update @salimhamed/jigs@<version> @salimhamed/jigs-service@<version>
+pnpm exec jigs up                              # install, build, restart, doctor
 pnpm exec jigs service status                  # prints the service and dashboard URLs
 ```
 
@@ -83,9 +78,11 @@ Both packages carry ordinary semver from `0.1.0` on, and nothing here moves it
 by hand. A PR's title is a conventional commit — CI rejects one that is not —
 and merging it to `main` opens or updates a release-please PR carrying the next
 version and the CHANGELOG entries it earned; that PR merges itself once its own
-checks pass, and the tags and GitHub Releases follow. `jigs` and `@jigs/service`
-release in lockstep, so both always read the same number. The number is still a
-signal to you rather than an input to anything: no step id carries a jigs
+checks pass, and the tags and GitHub Releases follow, and the same run
+publishes both packages to GitHub Packages. `@salimhamed/jigs` and
+`@salimhamed/jigs-service` release in lockstep, so both always read the same
+number. The number is a coordinate for `pnpm update` and a signal to you, never
+an input to a run: no step id carries a jigs
 version, so a release never renames a memoization key
 ([ADR 0013](adr/0013-factory-owned-steps.md)), which is what makes automating
 it safe ([ADR 0014](adr/0014-release-automation.md)).
@@ -140,7 +137,7 @@ under you, and from here on the code is this factory's own.
 `steps/jigs.ts` is the one to know about. It holds this factory's `"use step"`
 wrappers around jigs' step implementations, plus the jigs (`reviewLoop`,
 `ticketReview`, `needsHuman`, …) wired on top of them — so a pipeline imports
-its steps from `../steps/jigs.ts`, never from `@jigs/service` directly. It is
+its steps from `../steps/jigs.ts`, never from `@salimhamed/jigs-service` directly. It is
 ordinary committed source: commit it, edit it, and **do not rename it or its
 exported functions**. Each name compiles to a durable step id
 (`step//./steps/jigs//worktree`) that the World memoizes runs against, so a

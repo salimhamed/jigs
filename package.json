@@ -9,7 +9,7 @@
   },
   "packageManager": "pnpm@11.21.0",
   "scripts": {
-    "dev": "pnpm --filter jigs dev",
+    "dev": "pnpm --filter @salimhamed/jigs dev",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "typecheck": "pnpm -r run typecheck",

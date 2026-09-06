@@ -67,7 +67,7 @@ test("every subpath the scaffolded wrappers reach is in the exports map", async 
     "utf8",
   );
   const reached = new Set(
-    [...wrappers.matchAll(/from "@jigs\/service(\/[^"]*)?"/g)].map(
+    [...wrappers.matchAll(/from "@salimhamed\/jigs-service(\/[^"]*)?"/g)].map(
       (match) => `.${match[1] ?? ""}`,
     ),
   );
@@ -147,7 +147,7 @@ test("the factory template pins the same versions this package peers on", async 
   const template = JSON.parse(
     (
       await readFile(path.join(templatesDir, "package.json.tmpl"), "utf8")
-    ).replaceAll("{{JIGS_REPO}}", "/jigs"),
+    ).replaceAll("{{JIGS_VERSION}}", pkg.version),
   );
   for (const [name, range] of Object.entries<string>(pkg.peerDependencies)) {
     // nitro is the one optional peer: it is only here so the emitted
@@ -161,4 +161,8 @@ test("the factory template pins the same versions this package peers on", async 
   for (const name of ["croner", "hono", "postgres"]) {
     expect(template.dependencies[name], name).toBeUndefined();
   }
+  // Pinned to the scaffolding CLI's exact version, never a range or a link:
+  // the two release in lockstep and a factory holds them as one number.
+  expect(template.dependencies["@salimhamed/jigs"]).toBe(pkg.version);
+  expect(template.dependencies["@salimhamed/jigs-service"]).toBe(pkg.version);
 });

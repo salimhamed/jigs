@@ -1,7 +1,7 @@
 // The "." export. It must never re-export a module carrying a "use step"/"use
 // workflow" directive: routing the workflow surface through one specifier
 // changes the step ids the SDK derives from the export subpath.
-import type { PipelineRequires } from "jigs/checks";
+import type { PipelineRequires } from "@salimhamed/jigs/checks";
 import { z } from "zod";
 
 export const ticketInput = z.union([

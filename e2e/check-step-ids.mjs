@@ -1,5 +1,5 @@
-// The only check that can see a broken @jigs/service packaging, and the only
-// one that compiles the factory `jigs init` scaffolds.
+// The only check that can see a broken @salimhamed/jigs-service packaging, and
+// the only one that compiles the factory `jigs init` scaffolds.
 //
 // No jigs package carries a directive, so every durable step id is derived at
 // compile time from the factory-local path of the file that declares it — and
@@ -11,14 +11,17 @@
 // somebody else's repo, against runs already in flight.
 //
 // So: run `jigs init` into an empty directory outside this repo, exactly as a
-// new factory would, install it, and build it the way a real factory builds,
-// twice — first with @jigs/service on a fake version, then as committed, so
-// the tree is left holding a build of the real one. Read the ids back out of
-// each bundle and diff both against the recorded list, because "the ids do
-// not move when the library is versioned" is the property this whole shape
-// was bought for, and it is the one nothing else can observe. The scaffold
-// being what is built means the template is what is tested: the wrappers
-// every factory starts from, and the ids test that ships beside them.
+// new factory would, install both packages from the tarballs `pnpm pack`
+// emits — what a registry install unpacks, files list and rewritten
+// workspace ranges included — and build it the way a real factory builds,
+// twice: first with @salimhamed/jigs-service packed at a fake version, then
+// as committed, so the tree is left holding a build of the real one. Read the
+// ids back out of each bundle and diff both against the recorded list,
+// because "the ids do not move when the library is versioned" is the property
+// this whole shape was bought for, and it is the one nothing else can
+// observe. The scaffold being what is built means the template is what is
+// tested: the wrappers every factory starts from, and the ids test that ships
+// beside them.
 //
 // Then start the bundle once: the SDK loads the World and the dashboard by
 // name from the factory's node_modules, so they are peers a factory has to
@@ -26,6 +29,7 @@
 // in someone else's repo.
 import { execFileSync, spawn } from "node:child_process";
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -42,6 +46,8 @@ const repo = path.join(here, "..");
 const cli = path.join(repo, "packages", "jigs", "dist", "cli.js");
 const expectedFile = path.join(here, "expected-ids.txt");
 const servicePackage = path.join(repo, "packages", "service", "package.json");
+const JIGS = "@salimhamed/jigs";
+const SERVICE = "@salimhamed/jigs-service";
 const FAKE_VERSION = "9.9.9-e2e";
 
 const HEADER = `# The workflow and step ids \`jigs build\` emits for the factory \`jigs init\`
@@ -61,6 +67,32 @@ const HEADER = `# The workflow and step ids \`jigs build\` emits for the factory
 // a factory repo is.
 let factory;
 let scratch;
+let tarballs;
+
+// The tarballs stand in for the registry, so this check needs no token. pnpm
+// records a file: tarball by its integrity, which changes with any source
+// change, so the scaffold installs without a lockfile rather than against a
+// committed one.
+function pack() {
+  const dir = path.join(scratch, "tarballs");
+  mkdirSync(dir);
+  const into = (name) => path.join(dir, `${name}.tgz`);
+  const packInto = (name, file) =>
+    execFileSync("pnpm", ["--filter", name, "pack", "--out", file], {
+      cwd: repo,
+      stdio: "inherit",
+    });
+  packInto(JIGS, into("jigs"));
+  packInto(SERVICE, into("jigs-service"));
+  withFakeVersion(() =>
+    packInto(SERVICE, into(`jigs-service-${FAKE_VERSION}`)),
+  );
+  return {
+    jigs: into("jigs"),
+    service: into("jigs-service"),
+    bumpedService: into(`jigs-service-${FAKE_VERSION}`),
+  };
+}
 
 function scaffold() {
   if (!existsSync(cli)) {
@@ -70,12 +102,40 @@ function scaffold() {
     );
   }
   scratch = mkdtempSync(path.join(tmpdir(), "jigs-e2e-"));
+  tarballs = pack();
   factory = path.join(scratch, "factory");
   mkdirSync(factory);
   execFileSync(process.execPath, [cli, "init"], {
     cwd: factory,
     stdio: "inherit",
   });
+  // The service tarball's own dependency on @salimhamed/jigs is a version,
+  // which pnpm resolves from the registry regardless of what the factory's
+  // manifest says about the same name; the override is what points it at the
+  // tarball too.
+  appendFileSync(
+    path.join(factory, "pnpm-workspace.yaml"),
+    `overrides:\n  "${JIGS}": file:${tarballs.jigs}\n`,
+  );
+}
+
+// The scaffold pins both packages to the CLI's version; here each pin becomes
+// the tarball packed from this tree, and the service's can be swapped for the
+// one packed at the fake version.
+function installFromTarballs(serviceTarball) {
+  const manifestPath = path.join(factory, "package.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  for (const name of [JIGS, SERVICE]) {
+    if (manifest.dependencies[name] === undefined) {
+      fail(
+        `the scaffolded package.json does not depend on ${name}`,
+        "the package.json template no longer lists it — this check rewrites that entry to a tarball",
+      );
+    }
+  }
+  manifest.dependencies[JIGS] = `file:${tarballs.jigs}`;
+  manifest.dependencies[SERVICE] = `file:${serviceTarball}`;
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   run("pnpm", ["install"]);
 }
 
@@ -124,7 +184,7 @@ function workflowBundle() {
   return lines.slice(start, end).join("\n");
 }
 
-function withFakeVersion(run) {
+function withFakeVersion(packService) {
   const original = readFileSync(servicePackage, "utf8");
   const { version } = JSON.parse(original);
   const bumped = original.replace(
@@ -135,13 +195,13 @@ function withFakeVersion(run) {
   // vacuous: two identical builds, ids "unchanged", nothing tested.
   if (bumped === original) {
     fail(
-      `could not rewrite @jigs/service's version (${version}) for the bumped build`,
+      `could not rewrite ${SERVICE}'s version (${version}) for the bumped pack`,
       "the version field in packages/service/package.json no longer matches this replace — retarget it",
     );
   }
   writeFileSync(servicePackage, bumped);
   try {
-    return run();
+    return packService();
   } finally {
     writeFileSync(servicePackage, original);
   }
@@ -295,10 +355,13 @@ function reportDiff(expected, actual) {
   return { missing, unexpected };
 }
 
-console.log("\n=== scaffold: jigs init into an empty directory, then install");
+console.log(
+  "\n=== scaffold: pack both packages, jigs init into an empty directory",
+);
 scaffold();
 
 if (process.argv[2] === "--record") {
+  installFromTarballs(tarballs.service);
   build();
   const ids = emittedIds();
   writeFileSync(expectedFile, `${HEADER}${ids.join("\n")}\n`);
@@ -308,13 +371,13 @@ if (process.argv[2] === "--record") {
 }
 
 // Bumped first so the tree is left holding a build of the real version.
-console.log(`\n=== build 1/2: @jigs/service at ${FAKE_VERSION}`);
-const bumpedIds = withFakeVersion(() => {
-  build();
-  return emittedIds();
-});
+console.log(`\n=== build 1/2: ${SERVICE} at ${FAKE_VERSION}`);
+installFromTarballs(tarballs.bumpedService);
+build();
+const bumpedIds = emittedIds();
 
-console.log("\n=== build 2/2: @jigs/service at its committed version");
+console.log(`\n=== build 2/2: ${SERVICE} at its committed version`);
+installFromTarballs(tarballs.service);
 build();
 const ids = emittedIds();
 
@@ -344,7 +407,7 @@ if (moved.missing.length > 0 || moved.unexpected.length > 0) {
   // Both sides of a rename, so the count is the larger side, not the sum.
   const count = Math.max(moved.missing.length, moved.unexpected.length);
   fail(
-    `versioning @jigs/service moved ${count} step id(s)`,
+    `versioning ${SERVICE} moved ${count} step id(s)`,
     "a directive is back inside a jigs package: its ids carry that package's version, and bumping it orphans every parked run",
   );
 }
@@ -375,13 +438,13 @@ if (postgresUrl === undefined || postgresUrl === "") {
     console.error(boot.output);
     fail(
       `the built service did not start and stop cleanly: ${boot.problem}`,
-      "if the output above names a package it cannot find, the factory loads it by name at run time: it belongs in @jigs/service's peerDependencies and the factory package.json template",
+      `if the output above names a package it cannot find, the factory loads it by name at run time: it belongs in ${SERVICE}'s peerDependencies and the factory package.json template`,
     );
   }
 }
 
 console.log(
-  `\n${ids.length} step/workflow id(s) match ${expectedFile}, and are unchanged with @jigs/service at ${FAKE_VERSION}`,
+  `\n${ids.length} step/workflow id(s) match ${expectedFile}, and are unchanged with ${SERVICE} at ${FAKE_VERSION}`,
 );
 cleanup();
 

@@ -79,9 +79,9 @@ and give the new `workflow//./pipelines/<file>//<fn>` id its line in
 `WORKFLOW_IDS` in `jigs.config.test.ts`.
 
 A pipeline imports its steps from `../steps/jigs.ts`, never from
-`@jigs/service`: a step taken from the package would be addressed by the
-package's version, and every jigs upgrade would rename it. A pipeline may also
-declare `"use step"` functions in its own file; their ids come out as
+`@salimhamed/jigs-service`: a step taken from the package would be addressed
+by the package's version, and every jigs upgrade would rename it. A pipeline
+may also declare `"use step"` functions in its own file; their ids come out as
 `step//./pipelines/<file>//<fn>`, so those names are load-bearing too, and
 each gets its line in `STEP_IDS`.
 
@@ -93,12 +93,16 @@ entry.
 
 ## Upgrading jigs
 
-Rebuild the jigs checkout, then this factory:
+Both packages release in lockstep, so move them together, then take the
+factory back through `jigs up`:
 
 ```sh
-cd <jigs checkout> && git pull && pnpm build
-cd <factory> && jigs up
+pnpm update @salimhamed/jigs@<version> @salimhamed/jigs-service@<version>
+jigs up
 ```
+
+Installing needs a token that can read GitHub Packages in `~/.npmrc`; the
+`.npmrc` here only routes the scope.
 
 A release that grows a step needs a wrapper in `steps/jigs.ts` and a line in
 `STEP_IDS`; the typecheck names the gap. A release that adds a runtime

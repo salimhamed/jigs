@@ -3,7 +3,7 @@
 // route and the schedule ticker both go through here, so a scheduled fire is
 // an ordinary run and neither caller can drift from the other's checks.
 
-import type { CheckReport } from "jigs/checks";
+import type { CheckReport } from "@salimhamed/jigs/checks";
 import { start } from "workflow/api";
 import type { z } from "zod";
 import type { Factory } from "./factory";

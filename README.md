@@ -129,10 +129,10 @@ jigs logs <run>
 
 ### Upgrading later
 
-Rebuild this checkout before the factory: both packages run from a `dist/`
-only `pnpm build` refreshes, so a pull alone moves nothing. The **Upgrading**
-notes in [the setup runbook](docs/setup.md#part-1--the-machine-once) carry the
-commands in order.
+A factory pins both packages to one published version, so an upgrade moves
+both pins together and runs `jigs up`. The **Upgrading** notes in
+[the setup runbook](docs/setup.md#part-1--the-machine-once) carry the commands
+in order.
 
 ## The `/jigs` skill
 
@@ -161,9 +161,9 @@ argument and routes it to one of four guides:
 pnpm workspace:
 
 - `packages/jigs` — the library-first package and the `jigs` CLI.
-- `packages/service` — `@jigs/service`, the library a factory installs: the app
-  and its routes, and the primitives pipelines are written against. It ships
-  compiled, from `dist/`, like the CLI.
+- `packages/service` — `@salimhamed/jigs-service`, the library a factory
+  installs: the app and its routes, and the primitives pipelines are written
+  against. It ships compiled, from `dist/`, like the CLI.
 - `packages/jigs/templates` — what `jigs init` writes: the factory's
   infrastructure and the code it starts from, one `.tmpl` per file.
 

@@ -7,8 +7,12 @@ import {
   answerReviewPrompt,
   interpolate,
   rebuildContextPrompt,
-} from "jigs/prompts";
-import type { AgentSession, AgentStepResult, HarnessConfig } from "jigs/steps";
+} from "@salimhamed/jigs/prompts";
+import type {
+  AgentSession,
+  AgentStepResult,
+  HarnessConfig,
+} from "@salimhamed/jigs/steps";
 import { z } from "zod";
 import type { ReviewThread } from "../providers/github";
 import { type AgentFn, ResumeFailedError } from "../steps";

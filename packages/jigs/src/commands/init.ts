@@ -39,11 +39,9 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   const root = path.resolve(deps.cwd);
   const templates = locateTemplates();
   const ports = factoryPorts(root);
-  const jigs = jigsPackage();
   const values: Record<string, string> = {
     FACTORY_NAME: factoryName(root),
-    JIGS_REPO: jigs.checkout,
-    JIGS_VERSION: jigs.version,
+    JIGS_VERSION: jigsVersion(),
     SERVICE_PORT: String(ports.servicePort),
     DASHBOARD_PORT: String(ports.dashboardPort),
     POSTGRES_PORT: String(ports.postgresPort),
@@ -83,6 +81,12 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   deps.out("next, in this directory:");
   deps.out(
     "  cp .env.example .env    # then fill in LINEAR_API_KEY and GITHUB_TOKEN",
+  );
+  deps.out(
+    "  # the install reads @salimhamed/* from GitHub Packages — ~/.npmrc needs",
+  );
+  deps.out(
+    "  #   //npm.pkg.github.com/:_authToken=<a token with read:packages>",
   );
   deps.out(
     "  jigs up                 # install, World, bootstrap, build, start, doctor",
@@ -136,16 +140,11 @@ function templateFiles(dir: string, prefix = ""): string[] {
   });
 }
 
-// Until the packages publish, a factory links the checkout this CLI was built
-// in. The version rides along so the template can pin it once they do: both
-// packages release in lockstep, and the pair is one number.
-function jigsPackage(): { checkout: string; version: string } {
-  const root = packageRoot();
+// The factory pins both packages to the version of the CLI scaffolding it:
+// they release in lockstep, so the pair is one number.
+function jigsVersion(): string {
   const manifest = JSON.parse(
-    readFileSync(path.join(root, "package.json"), "utf8"),
+    readFileSync(path.join(packageRoot(), "package.json"), "utf8"),
   ) as { version: string };
-  return {
-    checkout: path.resolve(root, "..", ".."),
-    version: manifest.version,
-  };
+  return manifest.version;
 }

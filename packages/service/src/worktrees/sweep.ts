@@ -1,6 +1,6 @@
 import { existsSync, rmdirSync, rmSync } from "node:fs";
 import path from "node:path";
-import { removeManagedCodexHome } from "jigs";
+import { removeManagedCodexHome } from "@salimhamed/jigs";
 import type { Sql } from "postgres";
 import { fetchOriginDefault } from "./create";
 import { type OwnerState, readOwner } from "./owner";

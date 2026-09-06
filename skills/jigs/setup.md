@@ -155,19 +155,18 @@ just needs `jigs poke <run>` to notice its answer.
 
 ## Upgrading a factory later
 
-Both `jigs` and `@jigs/service` run from their `dist/`, which is gitignored
-and refreshed only by `pnpm build`, so a pull alone moves nothing: a factory
-that rebuilds against a stale `dist/` compiles the service it had before the
-pull. So, in this order:
+A factory pins `@salimhamed/jigs` and `@salimhamed/jigs-service` to one
+version, so an upgrade moves both pins together and takes the factory back
+through `jigs up`:
 
 ```sh
-cd <jigs checkout> && git pull && pnpm build
-cd <factory> && git pull && pnpm install
-pnpm exec jigs build && pnpm exec jigs service restart
+cd <factory>
+pnpm update @salimhamed/jigs@<version> @salimhamed/jigs-service@<version>
+pnpm exec jigs up
 pnpm exec jigs service status
 ```
 
-Two things a pull does not do on its own: install a new runtime dependency the
-release added (compare against `jigs init`'s `package.json` template), and
+Two things an upgrade does not do on its own: install a new runtime dependency
+the release added (compare against `jigs init`'s `package.json` template), and
 extend this factory's `steps/jigs.ts` with a wrapper for a step jigs has grown.
 The factory's own typecheck is what reports the second.

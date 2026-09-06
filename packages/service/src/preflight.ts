@@ -2,7 +2,7 @@
 // steps themselves execute in, and every failure is reported at once. There
 // is no skip flag — a wrong block is a bug to fix, not a flag to add.
 
-import { locateFactoryRoot } from "jigs";
+import { locateFactoryRoot } from "@salimhamed/jigs";
 import {
   type Check,
   type CheckReport,
@@ -11,7 +11,7 @@ import {
   type PipelineRequires,
   preflightChecks,
   runChecks,
-} from "jigs/checks";
+} from "@salimhamed/jigs/checks";
 import { getAuthenticatedUser } from "./providers/github";
 import { getViewer } from "./providers/linear";
 

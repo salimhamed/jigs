@@ -54,15 +54,15 @@ importers:
 
   packages/service:
     dependencies:
+      '@salimhamed/jigs':
+        specifier: workspace:*
+        version: link:../jigs
       croner:
         specifier: 10.0.1
         version: 10.0.1
       hono:
         specifier: ^4.13.4
         version: 4.13.4
-      jigs:
-        specifier: workspace:*
-        version: link:../jigs
       postgres:
         specifier: ^3.4.7
         version: 3.4.9

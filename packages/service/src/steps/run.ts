@@ -9,9 +9,12 @@ import {
   JIT_TIMEOUT_MS,
   jitChecks,
   runChecks,
-} from "jigs/checks";
-import type { AgentWire, AskWire, StepResult } from "jigs/steps";
-import { executeAgentStep, executeAskStep } from "jigs/steps/execute";
+} from "@salimhamed/jigs/checks";
+import type { AgentWire, AskWire, StepResult } from "@salimhamed/jigs/steps";
+import {
+  executeAgentStep,
+  executeAskStep,
+} from "@salimhamed/jigs/steps/execute";
 // Type-only, so it is erased and no workflow-side module is pulled in here.
 // The wrapper type is the one declaration of what crosses the step boundary.
 import type { RunAgentStep } from "./index";

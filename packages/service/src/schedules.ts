@@ -3,8 +3,12 @@
 // next occurrence from now, so a tick missed while the service was down is
 // skipped by construction — there is no catch-up.
 
+import {
+  type Check,
+  failedCheck,
+  formatFailures,
+} from "@salimhamed/jigs/checks";
 import { Cron } from "croner";
-import { type Check, failedCheck, formatFailures } from "jigs/checks";
 import type { z } from "zod";
 import type { Factory, Schedule } from "./factory";
 import {

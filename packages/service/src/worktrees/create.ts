@@ -6,7 +6,7 @@ import {
   git,
   tryGit,
   type WorktreeFacts,
-} from "jigs";
+} from "@salimhamed/jigs";
 
 // Every git call in this module passes an explicit absolute cwd — the
 // binding's bare clone for repo ops, the worktree path only to inspect an

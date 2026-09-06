@@ -9,31 +9,31 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: /^jigs$/,
+        find: /^@salimhamed\/jigs$/,
         replacement: fileURLToPath(
           new URL("../jigs/src/index.ts", import.meta.url),
         ),
       },
       {
-        find: /^jigs\/checks$/,
+        find: /^@salimhamed\/jigs\/checks$/,
         replacement: fileURLToPath(
           new URL("../jigs/src/checks/index.ts", import.meta.url),
         ),
       },
       {
-        find: /^jigs\/prompts$/,
+        find: /^@salimhamed\/jigs\/prompts$/,
         replacement: fileURLToPath(
           new URL("../jigs/src/prompts/index.ts", import.meta.url),
         ),
       },
       {
-        find: /^jigs\/steps$/,
+        find: /^@salimhamed\/jigs\/steps$/,
         replacement: fileURLToPath(
           new URL("../jigs/src/steps/index.ts", import.meta.url),
         ),
       },
       {
-        find: /^jigs\/steps\/execute$/,
+        find: /^@salimhamed\/jigs\/steps\/execute$/,
         replacement: fileURLToPath(
           new URL("../jigs/src/steps/execute.ts", import.meta.url),
         ),

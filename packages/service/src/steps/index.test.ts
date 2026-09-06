@@ -1,4 +1,4 @@
-import { buildAgentWire, claude } from "jigs/steps";
+import { buildAgentWire, claude } from "@salimhamed/jigs/steps";
 import { expect, test } from "vitest";
 import { z } from "zod";
 import {
