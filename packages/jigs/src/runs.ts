@@ -8,12 +8,9 @@ import { getWorld } from "workflow/runtime";
 import type { Factory } from "./factory.ts";
 import { resolveIssueRef } from "./providers/linear.ts";
 import { type JobRunIds, listJobRunIds, runsWithActiveStep } from "./stalls.ts";
-import {
-  NEEDS_HUMAN_TOKEN_PREFIX,
-  PR_TOKEN_PREFIX,
-  TICKET_TOKEN_PREFIX,
-  ticketToken,
-} from "./suspension/tokens.ts";
+import { TICKET_TOKEN_PREFIX, ticketToken } from "./suspension/claim.ts";
+import { NEEDS_HUMAN_TOKEN_PREFIX } from "./suspension/needs-human.ts";
+import { PR_TOKEN_PREFIX } from "./suspension/pull-request-gate.ts";
 import { registrySql } from "./worktrees/sql.ts";
 
 // The SDK mints run ids as `wrun_` + a ULID, so a ref is run-id-shaped (with

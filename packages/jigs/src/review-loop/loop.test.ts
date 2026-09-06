@@ -1,10 +1,9 @@
 import { beforeEach, expect, test } from "vitest";
-import type { CheckRun, ReviewThread } from "../providers/github.ts";
+import type { CheckRun, PrRef, ReviewThread } from "../providers/github.ts";
 import { type AgentStepConfig, claude, parseOutput } from "../steps/index.ts";
 import { resumeFailed } from "../steps/resume.ts";
 import type { TicketClaim } from "../suspension/claim.ts";
 import type { GateAck, GateWake } from "../suspension/pull-request-gate.ts";
-import type { PrRef } from "../suspension/tokens.ts";
 import type { Handoff } from "../ticket/review.ts";
 import type { TicketSnapshot } from "../ticket/snapshot.ts";
 import type { WorktreeFacts } from "../worktrees/facts.ts";

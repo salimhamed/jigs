@@ -17,7 +17,9 @@ import { z } from "zod";
 import { createApp } from "./app.ts";
 import { type Factory, ticketInput } from "./factory.ts";
 import * as stalls from "./stalls.ts";
-import { needsHumanToken, prToken, ticketToken } from "./suspension/tokens.ts";
+import { ticketToken } from "./suspension/claim.ts";
+import { needsHumanToken } from "./suspension/needs-human.ts";
+import { prToken } from "./suspension/pull-request-gate.ts";
 import * as sql from "./worktrees/sql.ts";
 import { makeFakeSql } from "./worktrees/test-fixtures.ts";
 

@@ -9,11 +9,63 @@ import { createHook } from "workflow";
 import {
   type CheckRun,
   fetchPrSnapshot,
+  type PrRef,
   type PrSnapshot,
   type ReviewThread,
 } from "../providers/github.ts";
 import { ClaimConflictError } from "./claim.ts";
-import { type PrRef, prToken } from "./tokens.ts";
+
+// The gate's hook token names the pull request, never the run: owning it is
+// the exclusivity lock. The ingress has only a webhook payload to go on, so it
+// reconstructs the token through prToken below — build and parse cannot drift
+// while they share the one constructor.
+export const PR_TOKEN_PREFIX = "github:pr:";
+
+export function prToken(pr: PrRef): string {
+  return `${PR_TOKEN_PREFIX}${pr.owner}/${pr.repo}#${pr.number}`;
+}
+
+type GithubPayload = {
+  pull_request?: { number?: unknown };
+  // issue_comment fires for issues too; only a PR carries issue.pull_request.
+  issue?: { number?: unknown; pull_request?: unknown };
+  check_suite?: { pull_requests?: Array<{ number?: unknown }> };
+  check_run?: { pull_requests?: Array<{ number?: unknown }> };
+  repository?: { name?: unknown; owner?: { login?: unknown } };
+};
+
+function prNumber(payload: GithubPayload): number | null {
+  const candidates = [
+    payload.pull_request?.number,
+    payload.issue?.pull_request === undefined
+      ? undefined
+      : payload.issue?.number,
+    payload.check_suite?.pull_requests?.[0]?.number,
+    payload.check_run?.pull_requests?.[0]?.number,
+  ];
+  const number = candidates.find((value) => typeof value === "number");
+  return number ?? null;
+}
+
+// Any GitHub event that names a pull request and a repository is routable:
+// pull_request and pull_request_review carry it directly, issue_comment
+// carries it only on a PR, and the check events carry it in a list. Everything
+// else (ping included) is not.
+export function tokenFromGithubPayload(payload: unknown): string | null {
+  if (typeof payload !== "object" || payload === null) return null;
+  const { repository } = payload as GithubPayload;
+  const repo = repository?.name;
+  const owner = repository?.owner?.login;
+  const number = prNumber(payload as GithubPayload);
+  if (
+    number === null ||
+    typeof repo !== "string" ||
+    typeof owner !== "string"
+  ) {
+    return null;
+  }
+  return prToken({ owner, repo, number });
+}
 
 export type GateWake =
   | {

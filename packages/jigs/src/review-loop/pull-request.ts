@@ -10,11 +10,11 @@ import { type GithubRepoRef, parseGithubRemote } from "../github-webhook.ts";
 import {
   createPullRequest,
   fetchPrTitle,
+  type PrRef,
   postPrComment,
   replyToReviewThread,
   squashMergePr,
 } from "../providers/github.ts";
-import type { PrRef } from "../suspension/tokens.ts";
 import { isWorktreeDirty } from "../worktrees/teardown.ts";
 
 // The binding is the remote now, so this is a config read: no git subprocess.

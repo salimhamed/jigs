@@ -1,5 +1,27 @@
 import { createHook, type Hook } from "workflow";
-import { ticketToken } from "./tokens.ts";
+
+// The claim's hook token names the ticket, never the run: owning it is the
+// exclusivity lock. The ingress has only a webhook payload to go on, so it
+// reconstructs the token through ticketToken below — build and parse cannot
+// drift while they share the one constructor. Linear Comment payloads carry
+// issueId as a UUID, so the token does too.
+export const TICKET_TOKEN_PREFIX = "linear:ticket:";
+
+export function ticketToken(issueId: string): string {
+  return `${TICKET_TOKEN_PREFIX}${issueId}`;
+}
+
+export function tokenFromLinearPayload(payload: unknown): string | null {
+  if (typeof payload !== "object" || payload === null) return null;
+  const { type, data } = payload as {
+    type?: unknown;
+    data?: { issueId?: unknown };
+  };
+  if (type !== "Comment") return null;
+  const issueId = data?.issueId;
+  if (typeof issueId !== "string" || issueId === "") return null;
+  return ticketToken(issueId);
+}
 
 export class ClaimConflictError extends Error {
   readonly resource: string;
