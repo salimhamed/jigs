@@ -91,6 +91,7 @@ export interface UpOptions {
 const CREDENTIAL_SLOTS = ["LINEAR_API_KEY", "GITHUB_TOKEN"];
 const READY_TIMEOUT_MS = 90_000;
 const READY_POLL_MS = 250;
+const HEALTH_REQUEST_TIMEOUT_MS = 5_000;
 const FACTORY_CODE = "jigs.config.ts";
 
 class StepFailed extends Error {}
@@ -496,9 +497,13 @@ async function waitForReady(
   }
 }
 
+// Bounded so a socket that opens but never answers still lets the deadline
+// speak, instead of holding `up` past it with nothing printed.
 async function healthy(serviceUrl: string): Promise<boolean> {
   try {
-    const res = await fetch(`${serviceUrl}/health`);
+    const res = await fetch(`${serviceUrl}/health`, {
+      signal: AbortSignal.timeout(HEALTH_REQUEST_TIMEOUT_MS),
+    });
     return res.ok;
   } catch {
     return false;

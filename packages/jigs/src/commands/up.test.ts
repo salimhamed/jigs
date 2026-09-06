@@ -1,10 +1,4 @@
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
@@ -588,5 +582,4 @@ test("a failing build is nitro's failure, echoed, and nothing starts", async () 
   expect(statuses(result).at(-1)).toBe("build:failed");
   expect(lines).toContain("  ERROR could not resolve ./jigs.config");
   expect(io.procs.spawns).toHaveLength(0);
-  rmSync(root, { recursive: true, force: true });
 });
