@@ -4,7 +4,7 @@
 
 import { basename } from "node:path";
 import { resolveService } from "../config/factory-config.ts";
-import { locateFactoryRoot } from "../config/locate-factory.ts";
+import { locateFactoryRoot } from "../config/factory-root.ts";
 import { CliError } from "../errors.ts";
 import { liveServicePid } from "./service-lifecycle.ts";
 

@@ -3,7 +3,7 @@ import {
   removeBinding,
   writeFactoryConfigText,
 } from "../config/factory-config.ts";
-import { locateFactoryRoot } from "../config/locate-factory.ts";
+import { locateFactoryRoot } from "../config/factory-root.ts";
 import { bindingDir } from "../worktrees/layout.ts";
 
 export interface UnbindDeps {

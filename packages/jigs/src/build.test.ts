@@ -2,8 +2,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vitest";
-import { prepare } from "./build.ts";
-import { GENERATED_DIR } from "./nitro.ts";
+import { GENERATED_DIR, prepare } from "./build.ts";
 
 const factory = () => mkdtempSync(path.join(tmpdir(), "jigs-factory-"));
 

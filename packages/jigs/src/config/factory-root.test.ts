@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
-import { locateFactoryRoot } from "./locate-factory.ts";
+import { locateFactoryRoot } from "./factory-root.ts";
 
 let tmp: string;
 beforeEach(() => {

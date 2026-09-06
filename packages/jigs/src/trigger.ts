@@ -5,9 +5,12 @@
 
 import { start } from "workflow/api";
 import type { z } from "zod";
-import type { CheckReport } from "./checks/index.ts";
+import {
+  type CheckReport,
+  preflightChecks,
+  runChecks,
+} from "./checks/index.ts";
 import type { Factory } from "./factory.ts";
-import { preflight } from "./preflight.ts";
 import { resolveIssueRef } from "./providers/linear.ts";
 
 export type StartRunResult =
@@ -40,7 +43,9 @@ export async function startRun(
 
   // Before the run exists: every failure at once, each carrying its repair,
   // and no run created. There is no skip flag.
-  const report = await preflight(entry.requires ?? {});
+  const report = await runChecks(
+    preflightChecks({ requires: entry.requires ?? {} }),
+  );
   if (!report.ok) return { kind: "preflight-failed", report };
 
   let issue: { id: string; identifier: string } | undefined;
