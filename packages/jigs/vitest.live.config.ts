@@ -1,12 +1,15 @@
 import { defineConfig } from "vitest/config";
 
-// Live harness tests: require a claude.ai login and a ChatGPT-authed
-// ~/.codex/auth.json; the tests strip every API-key env var themselves.
-// Serial on purpose — they mutate process.env and share subscription
+// Two kinds of live test, one run: the harness tests need a claude.ai login
+// and a ChatGPT-authed ~/.codex/auth.json (they strip every API-key env var
+// themselves), and the registry tests need the Postgres on :5439 that
+// test/docker-compose.yml brings up (`docker compose -f test/docker-compose.yml
+// up -d --wait`) — not a factory's World, a container of their own. Serial on
+// purpose: they mutate process.env, share one table, and share subscription
 // rate limits.
 export default defineConfig({
   test: {
-    include: ["src/**/live/**/*.live.test.ts"],
+    include: ["src/**/*.live.test.ts"],
     testTimeout: 600_000,
     hookTimeout: 120_000,
     fileParallelism: false,

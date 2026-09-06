@@ -14,7 +14,7 @@ import tsdownConfig from "../tsdown.config.ts";
 // wrong ids, in someone else's repo.
 
 const packageDir = fileURLToPath(new URL("..", import.meta.url));
-const templatesDir = path.join(packageDir, "..", "jigs", "templates");
+const templatesDir = path.join(packageDir, "templates");
 const pkg = JSON.parse(
   await readFile(path.join(packageDir, "package.json"), "utf8"),
 );
@@ -48,7 +48,7 @@ test("no compiled source carries a workflow directive — the factory writes its
   // version out of every memoization key. A directive sneaking back in here
   // compiles clean and resurrects a version-bearing id, so this is the guard
   // that has to hold. src/ is what this package compiles; the directives in
-  // the CLI's templates/ are .tmpl files a factory compiles, never this one.
+  // templates/ are .tmpl files a factory compiles, never this one.
   const directed: string[] = [];
   for (const file of await sourceFiles("src")) {
     const source = await readFile(path.join(packageDir, file), "utf8");
@@ -67,7 +67,7 @@ test("every subpath the scaffolded wrappers reach is in the exports map", async 
     "utf8",
   );
   const reached = new Set(
-    [...wrappers.matchAll(/from "@salimhamed\/jigs-service(\/[^"]*)?"/g)].map(
+    [...wrappers.matchAll(/from "@salimhamed\/jigs(\/[^"]*)?"/g)].map(
       (match) => `.${match[1] ?? ""}`,
     ),
   );
@@ -90,12 +90,14 @@ test("every exports target is a dist file tsdown emits from a source file that e
   }
 });
 
-test("every tsdown entry is reachable through the exports map", () => {
+test("every tsdown entry is reachable through the exports map or the bin", () => {
   // The inverse: an entry with no subpath is compiled output nothing can
-  // import, which is a subpath someone forgot to export.
+  // import, which is a subpath someone forgot to export. The bin is the one
+  // entry reached by path instead.
   const entries = (tsdownConfig as { entry: Record<string, string> }).entry;
+  const reachable = [...exportTargets, ...Object.values<string>(pkg.bin)];
   for (const key of Object.keys(entries)) {
-    expect(exportTargets, key).toContain(`./dist/${key}.js`);
+    expect(reachable, key).toContain(`./dist/${key}.js`);
   }
 });
 
@@ -115,9 +117,9 @@ const FACTORY_SUPPLIED = [
 
 test("the runtime a factory supplies is a peer here, and still a devDependency", () => {
   // They stay in devDependencies so this repo's own tests and build still
-  // resolve them. Everything else the service imports is a plain dependency:
-  // a link: or registry install resolves it from this package's own
-  // node_modules, so the factory never has to list it.
+  // resolve them. Everything else this package imports is a plain dependency:
+  // an install resolves it from this package's own node_modules, so the
+  // factory never has to list it.
   const peers: Record<string, string> = pkg.peerDependencies;
   expect(Object.keys(peers).filter((name) => !optionalPeers.has(name))).toEqual(
     FACTORY_SUPPLIED,
@@ -126,17 +128,6 @@ test("the runtime a factory supplies is a peer here, and still a devDependency",
     expect(pkg.devDependencies[name], name).toBe(range);
     expect(pkg.dependencies[name], name).toBeUndefined();
   }
-});
-
-test("the jigs package peers on zod at the same range", async () => {
-  // Both packages build schemas the factory's pipelines pass between them, so
-  // the one zod copy has to satisfy both peers at once.
-  const jigs = JSON.parse(
-    await readFile(path.join(packageDir, "..", "jigs", "package.json"), "utf8"),
-  );
-  expect(jigs.peerDependencies.zod).toBe(pkg.peerDependencies.zod);
-  expect(jigs.devDependencies.zod).toBe(pkg.peerDependencies.zod);
-  expect(jigs.dependencies.zod).toBeUndefined();
 });
 
 test("the factory template pins the same versions this package peers on", async () => {
@@ -161,8 +152,7 @@ test("the factory template pins the same versions this package peers on", async 
   for (const name of ["croner", "hono", "postgres"]) {
     expect(template.dependencies[name], name).toBeUndefined();
   }
-  // Pinned to the scaffolding CLI's exact version, never a range or a link:
-  // the two release in lockstep and a factory holds them as one number.
+  // Pinned to the exact version of the CLI that scaffolded it, never a range
+  // or a link: the compiler and the runtime have to be one install.
   expect(template.dependencies["@salimhamed/jigs"]).toBe(pkg.version);
-  expect(template.dependencies["@salimhamed/jigs-service"]).toBe(pkg.version);
 });
