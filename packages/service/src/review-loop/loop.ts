@@ -31,30 +31,6 @@ import type {
   squashMerge,
 } from "./pull-request";
 
-export class PrClosedUnmergedError extends Error {
-  constructor(pr: PrRef) {
-    super(
-      `pull request ${pr.owner}/${pr.repo}#${pr.number} was closed without merging`,
-    );
-    this.name = "PrClosedUnmergedError";
-  }
-}
-
-// Here rather than beside pushWorktreeBranch, which reports the empty branch:
-// ./pull-request imports node builtins at module scope, so nothing
-// workflow-side can import a value from it. The loop is what turns an empty
-// push into a failure anyway.
-export class EmptyBranchError extends Error {
-  constructor(branch: string, baseSha: string, recovered = false) {
-    super(
-      `${branch} holds no commits since ${baseSha} — the builder finished without committing, so there is nothing to open a pull request for${
-        recovered ? ", and a commit-recovery round did not change that" : ""
-      }`,
-    );
-    this.name = "EmptyBranchError";
-  }
-}
-
 export interface ReviewLoopOptions {
   claim: TicketClaim;
   handoff: Handoff;
@@ -138,12 +114,11 @@ export async function reviewLoop(
   // the loop never tears down (the pipeline calls teardownWorktrees after a
   // merged return; nothing cleans up a failure except the operator).
   if (pushed.commits === 0) {
+    const emptyBranch = `${worktree.branch} holds no commits since ${worktree.baseSha} — the builder finished without committing, so there is nothing to open a pull request for`;
     // A dirty tree is a complete implementation the builder forgot to commit —
     // an approved one, by the time the push runs — so it gets exactly one
     // bounded round to save it. A clean tree has nothing to save.
-    if (!pushed.dirty) {
-      throw new EmptyBranchError(worktree.branch, worktree.baseSha);
-    }
+    if (!pushed.dirty) throw new Error(emptyBranch);
     console.log(
       "[reviewLoop] empty push with dirty worktree — sending builder back to commit",
     );
@@ -159,7 +134,9 @@ export async function reviewLoop(
       worktree.baseSha,
     );
     if (pushed.commits === 0) {
-      throw new EmptyBranchError(worktree.branch, worktree.baseSha, true);
+      throw new Error(
+        `${emptyBranch}, and a commit-recovery round did not change that`,
+      );
     }
   }
 
@@ -306,7 +283,9 @@ export async function reviewLoop(
         }
         case "closed": {
           if (wake.merged) return { pr, cycles: built.cycles };
-          throw new PrClosedUnmergedError(pr);
+          throw new Error(
+            `pull request ${pr.owner}/${pr.repo}#${pr.number} was closed without merging`,
+          );
         }
       }
     }

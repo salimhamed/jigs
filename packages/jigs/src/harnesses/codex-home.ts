@@ -32,13 +32,6 @@ export interface CodexHomeOptions {
   realAuthPath?: string;
 }
 
-export class CodexAuthMissingError extends Error {
-  constructor(realAuthPath: string) {
-    super(`no Codex login found at ${realAuthPath} — run: codex login`);
-    this.name = "CodexAuthMissingError";
-  }
-}
-
 export function managedCodexHomePath(
   runKey: string,
   options: CodexHomeOptions = {},
@@ -59,7 +52,9 @@ export function ensureManagedCodexHome(
   const home = managedCodexHomePath(runKey, options);
   const realAuthPath = options.realAuthPath ?? realCodexAuthPath();
   if (!existsSync(realAuthPath)) {
-    throw new CodexAuthMissingError(realAuthPath);
+    throw new Error(
+      `no Codex login found at ${realAuthPath} — run: codex login`,
+    );
   }
   mkdirSync(home, { recursive: true });
   writeFileSync(path.join(home, "config.toml"), CURATED_CONFIG_TOML);
