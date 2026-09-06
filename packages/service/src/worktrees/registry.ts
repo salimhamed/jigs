@@ -55,6 +55,7 @@ export async function ensureWorktreeRegistry(sql: ISql): Promise<void> {
   const columns = await sql<{ columnName: string }[]>`
     SELECT column_name FROM information_schema.columns
     WHERE table_name = 'jigs_worktrees'
+    ORDER BY ordinal_position
   `;
   const actual = new Set(columns.map((column) => column.columnName));
   const missing = REGISTRY_COLUMNS.filter((column) => !actual.has(column));
