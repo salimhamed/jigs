@@ -35,9 +35,14 @@ test("ship takes a ticket in either form and declares its needs", () => {
 
 // --- the ids the build emits ------------------------------------------------
 //
-// Every id below is a memoization key in this factory's World, so these read
-// the last build rather than the source: what a parked run replays against is
-// what the bundle says, not what the imports look like.
+// Every id the build emits is a memoization key in this factory's World, so
+// these read the last build rather than the source: what a parked run replays
+// against is what the bundle says, not what the imports look like. They assert
+// the shape of an id, not a list of them — a list would have to be edited
+// every time a pipeline or a wrapper is added, and an id that *moved* looks
+// exactly like one that was added. Renaming an exported wrapper or a pipeline
+// file changes its id and orphans the runs parked against it, so do that only
+// when `jigs ps` shows none.
 
 const BUNDLE = new URL("./.output/server/index.mjs", import.meta.url);
 
@@ -46,36 +51,6 @@ const BUNDLE = new URL("./.output/server/index.mjs", import.meta.url);
 // not own, and cannot make path-shaped. It tracks package.json's `workflow`
 // pin, so an SDK bump moves it and nothing else.
 const SDK_BUILTIN_STEP = `step//workflow@${workflowVersion()}//fetch`;
-
-// The ids this factory's World records. Adding a pipeline adds a line here;
-// an id that *changes* is a rename that orphans every run parked against it —
-// restore the old name rather than paste the new id in.
-const WORKFLOW_IDS = ["workflow//./pipelines/ship//shipPipeline"];
-
-// The step ids, pinned the same way and for the same reason: renaming an
-// exported wrapper (or a pipeline's own "use step" function) orphans parked
-// runs exactly as a pipeline rename does. A jigs release growing a step adds
-// a wrapper in steps/jigs.ts and a line here.
-//
-// Every wrapper in steps/jigs.ts is listed, not just the ones ship reaches:
-// the file compiles in whole, so the build emits them all.
-const STEP_IDS = [
-  "step//./steps/jigs//checkForHumanReply",
-  "step//./steps/jigs//commentOnPr",
-  "step//./steps/jigs//fetchPrState",
-  "step//./steps/jigs//fetchSnapshot",
-  "step//./steps/jigs//openPr",
-  "step//./steps/jigs//postNeedsHumanComment",
-  "step//./steps/jigs//pushWorktreeBranch",
-  "step//./steps/jigs//readDiff",
-  "step//./steps/jigs//replyInThread",
-  "step//./steps/jigs//resolveRepo",
-  "step//./steps/jigs//runAgentStep",
-  "step//./steps/jigs//runAskStep",
-  "step//./steps/jigs//squashMerge",
-  "step//./steps/jigs//teardownWorktrees",
-  "step//./steps/jigs//worktree",
-];
 
 function workflowVersion(): string {
   const manifest = JSON.parse(
@@ -114,16 +89,17 @@ test("every id this factory owns is addressed by a path inside it", () => {
   }
 });
 
-test("the pipelines' workflow ids are the ones the World records", () => {
-  expect(emittedIds().filter((id) => id.startsWith("workflow//"))).toEqual(
-    WORKFLOW_IDS,
-  );
+test("every pipeline this factory registers emitted a workflow id", () => {
+  const emitted = emittedIds().filter((id) => id.startsWith("workflow//"));
+  expect(emitted).toHaveLength(Object.keys(pipelines).length);
 });
 
-test("the step ids are the ones the World records", () => {
-  expect(
-    emittedIds().filter(
-      (id) => id.startsWith("step//") && id !== SDK_BUILTIN_STEP,
-    ),
-  ).toEqual(STEP_IDS);
+test("every step id is declared under pipelines/ or steps/", () => {
+  const steps = emittedIds().filter(
+    (id) => id.startsWith("step//") && id !== SDK_BUILTIN_STEP,
+  );
+  expect(steps.length).toBeGreaterThan(0);
+  for (const id of steps) {
+    expect(id).toMatch(/^step\/\/\.\/(?:pipelines|steps)\/[^/]+\/\/\w+$/);
+  }
 });

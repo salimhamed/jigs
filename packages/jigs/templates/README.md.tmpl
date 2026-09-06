@@ -7,18 +7,18 @@ machine runs, the bindings they run against, and the service that hosts them.
 
 - `jigs.config.ts` — the pipelines this factory hosts, keyed by the name
   `jigs run` takes. `jigs build` generates the service entry from it.
-- `pipelines/` — the pipeline bodies. Their paths are load-bearing: the
-  workflow ids the SDK records are derived from them, and a rename orphans
-  every parked run.
+- `pipelines/` — the pipeline bodies, and beside them `review-loop.ts`, this
+  factory's own composition of the review loop over the blocks jigs ships.
+  Edit either freely; a pipeline file's path is half of its workflow id, so
+  renaming or moving one changes that id.
 - `steps/jigs.ts` — this factory's `"use step"` wrappers around the steps jigs
-  ships, and the jigs wired on top of them. Every step a pipeline calls comes
-  from here, and each step id is this path plus the function's name, so both
-  are load-bearing exactly as `pipelines/` is. `jigs init` wrote it once and
-  never rewrites it; a step jigs grows later gets its wrapper added by hand.
-- `steps/describe-pr.ts` — the one review-loop dep jigs ships no default for:
-  the title and body a pull request opens with. Scaffolded as a real agent
-  call over the `agent` jig and the `readDiff` wrapper; the PR conventions in
-  it are the part to rewrite.
+  ships, and the blocks wired on top of them. Every step a pipeline calls comes
+  from here, and each step id is this path plus the function's name. `jigs
+  init` wrote it once and never rewrites it; a step jigs grows later gets its
+  wrapper added by hand.
+- `steps/describe-pr.ts` — the title and body a pull request opens with. jigs
+  owns the mechanics; the conventions here, and the repair applied when an
+  answer drifts out of them, are this factory's voice and the part to rewrite.
 - `jigs.config.test.ts` — what the factory declares, and the ids the last
   build emitted.
 - `jigs.yml` — this factory's service and dashboard ports and its bindings.
@@ -38,6 +38,10 @@ Every `jigs` below is this factory's own: `pnpm exec jigs …`.
 
 The service listens on `:{{SERVICE_PORT}}`, its dashboard on
 `:{{DASHBOARD_PORT}}`, its World on `:{{POSTGRES_PORT}}`.
+
+Renaming or moving an exported wrapper in `steps/jigs.ts`, or a file under
+`pipelines/`, changes a durable id: do it only when `jigs ps` shows no parked
+runs. A run whose id moved under it shows up stalled — cancel it and relaunch.
 
 ## Pipelines
 
@@ -78,9 +82,8 @@ pnpm test                 # jigs.config.ts's assertions, and the built ids
 
 New file in `pipelines/`, exporting a `<name>Inputs` zod schema and a
 `<name>Pipeline` function whose body opens with `"use workflow"`. Register it
-in `jigs.config.ts` under the name `jigs run` should take, then `jigs build`,
-and give the new `workflow//./pipelines/<file>//<fn>` id its line in
-`WORKFLOW_IDS` in `jigs.config.test.ts`.
+in `jigs.config.ts` under the name `jigs run` should take, then `jigs build`
+and `pnpm test`.
 
 A pipeline imports its steps from `../steps/jigs.ts`, never from a
 `@salimhamed/jigs` subpath: a step taken from the package would be addressed by
@@ -89,14 +92,15 @@ the package's version, and every jigs upgrade would rename it. Steps alone —
 from the package directly, because none of those carries an id. A pipeline may
 also
 declare `"use step"` functions in its own file; their ids come out as
-`step//./pipelines/<file>//<fn>`, so those names are load-bearing too, and
-each gets its line in `STEP_IDS`.
+`step//./pipelines/<file>//<fn>`, so the same rename rule applies to those
+names.
 
-The jigs — `agent`, `ask`, `needsHuman`, `gate`, `agentOrHalt`,
-`ticketReview`, `reviewLoop` — are compositions over those steps and carry no
-id. `steps/jigs.ts` exports them already wired to this factory's steps; a
-pipeline that must swap one dep spreads `reviewLoopDeps` and overrides the
-entry.
+`agent`, `ask`, `needsHuman`, `gate`, `agentOrHalt` and `ticketReview` are
+compositions over those steps and carry no id; `steps/jigs.ts` exports them
+already wired. The review loop is one more composition, except that this
+factory writes it: `pipelines/review-loop.ts` calls the blocks jigs ships —
+`implementAndReview`, `answerAsBuilder`, `fixCi`, `commitLeftoverWork`,
+`postAnswers`, `describePr` — in the order and with the policy it chooses.
 
 ## Upgrading jigs
 
@@ -108,8 +112,8 @@ jigs upgrade              # or: jigs upgrade --to <version>
 Installing needs a token that can read GitHub Packages in `~/.npmrc`; the
 `.npmrc` here only routes the scope.
 
-A release that grows a step needs a wrapper in `steps/jigs.ts` and a line in
-`STEP_IDS`; the typecheck names the gap. A release that moves one of the four
+A release that grows a step needs a wrapper in `steps/jigs.ts`; the typecheck
+names the gap. A release that moves one of the four
 runtime packages this factory supplies — `@workflow/web`,
 `@workflow/world-postgres`, `workflow`, `zod` — fails the install by name;
 move the same pin in `package.json` and run `jigs upgrade` again.

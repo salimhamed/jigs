@@ -75,7 +75,7 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   );
   deps.out("");
   deps.out(
-    "steps/jigs.ts and pipelines/ are yours now: never rename the file or an exported wrapper — each name is half a step id parked runs replay against",
+    "steps/jigs.ts and pipelines/ are yours now: edit freely, but renaming or moving an exported wrapper changes its step id — do that only when jigs ps shows no parked runs",
   );
   deps.out("");
   deps.out("next, in this directory:");

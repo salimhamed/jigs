@@ -1,0 +1,259 @@
+// The review loop, as this factory composes it: implement ⇄ agent review until
+// approved, then a pull request whose human review the builder answers, whose
+// red CI the builder fixes under a bound, and whose close ends the run. It
+// returns only when the PR merged — every other ending throws — and it never
+// cleans up: the pipeline calls teardownWorktrees after a merged return, and a
+// thrown ending leaves the worktree for `jigs sweep`.
+//
+// This file is yours. The blocks it calls come from jigs and keep arriving
+// fixed by `jigs upgrade`; the order they run in, the bounds, the merge policy
+// and the escalation prose are decisions this factory makes, so they live
+// here where you can read them top to bottom and change them.
+//
+// It carries no `"use step"` and no `"use workflow"`, so it owns no durable id:
+// the only ids in play are the wrappers in ../steps/jigs.ts.
+
+import type { WorktreeFacts } from "@salimhamed/jigs";
+import {
+  answerAsBuilder,
+  commitLeftoverWork,
+  fixCi,
+  implementAndReview,
+  postAnswers,
+  renderChecks,
+} from "@salimhamed/jigs/review-loop";
+import type { HarnessConfig } from "@salimhamed/jigs/steps";
+import type { TicketClaim } from "@salimhamed/jigs/suspension/claim";
+import type {
+  GateAck,
+  GateWake,
+  PrRef,
+} from "@salimhamed/jigs/suspension/pull-request-gate";
+import type { Handoff } from "@salimhamed/jigs/ticket/review";
+import { describePr } from "../steps/describe-pr.ts";
+import {
+  agent,
+  commentOnPr,
+  gate,
+  needsHuman,
+  openPr,
+  pushWorktreeBranch,
+  readDiff,
+  replyInThread,
+  resolveRepo,
+  squashMerge,
+} from "../steps/jigs.ts";
+
+export interface ReviewLoopOptions {
+  claim: TicketClaim;
+  handoff: Handoff;
+  // One harness for the builder, the CI fixer and the thread answerer: they
+  // share the builder's session pointer, and a session is harness-specific.
+  harness: HarnessConfig;
+  worktree: WorktreeFacts;
+  binding: string;
+  // "human" keeps listening after an approval and lets a person press merge;
+  // the gate ends either way only when the PR closes.
+  merge: "jigs" | "human";
+}
+
+export type ReviewLoopResult = { pr: PrRef; cycles: number };
+
+const MAX_CI_ATTEMPTS = 3;
+
+export async function reviewLoop(
+  options: ReviewLoopOptions,
+): Promise<ReviewLoopResult> {
+  const { handoff, harness, worktree } = options;
+  const cwd = worktree.path;
+  const baseSha = worktree.baseSha;
+
+  const built = await implementAndReview({
+    agent,
+    needsHuman,
+    claim: options.claim,
+    handoff,
+    harness,
+    cwd,
+    baseSha,
+  });
+  let session = built.session;
+
+  let pushed = await pushWorktreeBranch(cwd, worktree.branch, baseSha);
+  if (pushed.commits === 0) {
+    // Thrown workflow-side so the SDK does not retry an empty push three
+    // times. A dirty tree is a complete implementation the builder forgot to
+    // commit, so it gets exactly one bounded round to save it; a clean tree
+    // has nothing to save.
+    const empty = `${worktree.branch} holds no commits since ${baseSha} — the builder finished without committing, so there is nothing to open a pull request for`;
+    if (!pushed.dirty) throw new Error(empty);
+    session =
+      (await commitLeftoverWork({
+        agent,
+        harness,
+        cwd,
+        ...(session === undefined ? {} : { session }),
+      })) ?? session;
+    pushed = await pushWorktreeBranch(cwd, worktree.branch, baseSha);
+    if (pushed.commits === 0) {
+      throw new Error(
+        `${empty}, and a commit-recovery round did not change that`,
+      );
+    }
+  }
+
+  // After the push, so nothing writes a description for a branch that turned
+  // out to have nothing on it.
+  const described = await describePr({
+    handoff,
+    worktreePath: cwd,
+    baseSha,
+    ...(session === undefined ? {} : { session }),
+  });
+
+  const repo = await resolveRepo(options.binding);
+  const pr = await openPr(
+    repo,
+    worktree.branch,
+    worktree.defaultBranch,
+    described.title,
+    described.body,
+  );
+
+  let ciAttempts = 0;
+  // Driven by hand rather than `for await`: the gate has to be told the ids of
+  // the replies this loop posts, and only `next(ack)` can carry them back. The
+  // finally is what `for await` did for free — ending the gate on an early
+  // return disposes its hook.
+  const wakes = gate(pr);
+  let ack: GateAck | undefined;
+  try {
+    for (;;) {
+      const next = await wakes.next(ack);
+      if (next.done === true) break;
+      ack = undefined;
+      const wake = next.value;
+      switch (wake.kind) {
+        case "review-comments":
+        case "changes-requested": {
+          const threads = wake.kind === "review-comments" ? wake.threads : [];
+          const answered = await answerAsBuilder({
+            agent,
+            readDiff,
+            harness,
+            cwd,
+            ...(session === undefined ? {} : { session }),
+            threads,
+            ...(wake.body === undefined ? {} : { reviewBody: wake.body }),
+            handoff,
+            baseSha,
+          });
+          session = answered.session ?? session;
+          // The answer prompts tell the builder to commit its fix before
+          // replying, so the reply is only true once the branch carries it.
+          await pushWorktreeBranch(cwd, worktree.branch, baseSha);
+          const posted = await postAnswers({
+            replyInThread,
+            commentOnPr,
+            pr,
+            answers: answered.output,
+            threads,
+          });
+          if (posted.length > 0) ack = { selfCommentIds: posted };
+          break;
+        }
+        case "ci-red": {
+          ciAttempts += 1;
+          if (ciAttempts > MAX_CI_ATTEMPTS) {
+            // Exactly once per red streak, and on GitHub rather than through
+            // needsHuman: the conversation about this PR belongs on this PR.
+            if (ciAttempts === MAX_CI_ATTEMPTS + 1) {
+              await commentOnPr(pr, ciExhausted(wake, pr.owner));
+            }
+            break;
+          }
+          const fixed = await fixCi({
+            agent,
+            readDiff,
+            harness,
+            cwd,
+            ...(session === undefined ? {} : { session }),
+            failing: wake.failing,
+            attempt: `${ciAttempts} of ${MAX_CI_ATTEMPTS}`,
+            handoff,
+            baseSha,
+          });
+          session = fixed.session ?? session;
+          const after = await pushWorktreeBranch(cwd, worktree.branch, baseSha);
+          // A fix that committed nothing pushes no new head, so CI never runs
+          // again and no further wake can arrive: escalate now rather than
+          // wait on a wake that cannot come, and spend the bound so a later
+          // red in the same streak stays quiet.
+          if (after.headSha === wake.headSha) {
+            await commentOnPr(pr, ciMadeNoCommit(wake, pr.owner));
+            ciAttempts = MAX_CI_ATTEMPTS + 1;
+          }
+          break;
+        }
+        case "ci-green":
+          ciAttempts = 0;
+          break;
+        case "approved": {
+          if (options.merge === "human") {
+            console.log(
+              `[reviewLoop] approved by ${wake.reviewer} — human-merges mode, waiting for the merge`,
+            );
+            break;
+          }
+          try {
+            await squashMerge(pr);
+          } catch (error) {
+            // GitHub answers 405 for a PR that is not mergeable, and this arm
+            // merges on approval without checking CI. Letting that escape
+            // would fail the run on a recoverable state; breaking keeps the
+            // gate listening so the eventual close still ends the run.
+            await commentOnPr(pr, mergeRefused(wake.reviewer, error));
+            break;
+          }
+          return { pr, cycles: built.cycles };
+        }
+        case "closed": {
+          if (wake.merged) return { pr, cycles: built.cycles };
+          throw new Error(
+            `pull request ${pr.owner}/${pr.repo}#${pr.number} was closed without merging`,
+          );
+        }
+      }
+    }
+  } finally {
+    await wakes.return();
+  }
+  throw new Error(
+    `the pull request gate for ${pr.owner}/${pr.repo}#${pr.number} stopped delivering wakes before the PR closed`,
+  );
+}
+
+// --- what this factory says when it stands down -----------------------------
+
+type CiRed = Extract<GateWake, { kind: "ci-red" }>;
+
+function ciExhausted(wake: CiRed, owner: string): string {
+  return [
+    `@${wake.mentionLogin ?? owner} CI is still red on \`${wake.headSha.slice(0, 8)}\` after ${MAX_CI_ATTEMPTS} fix attempts, so I am standing down rather than guessing again.`,
+    "",
+    renderChecks(wake.failing),
+  ].join("\n");
+}
+
+function ciMadeNoCommit(wake: CiRed, owner: string): string {
+  return [
+    `@${wake.mentionLogin ?? owner} my CI fix attempt produced no new commit on \`${wake.headSha.slice(0, 8)}\`, so nothing will re-run and I am standing down.`,
+    "",
+    renderChecks(wake.failing),
+  ].join("\n");
+}
+
+function mergeRefused(login: string, error: unknown): string {
+  const reason = error instanceof Error ? error.message : String(error);
+  return `@${login} I could not squash-merge this pull request: ${reason}. I am leaving it open and still listening — merge or close it yourself and I will follow.`;
+}

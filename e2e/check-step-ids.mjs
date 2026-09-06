@@ -442,9 +442,9 @@ if (moved.missing.length > 0 || moved.unexpected.length > 0) {
 }
 
 // The scaffold's own checks, run the way a new factory runs them on day one:
-// the typecheck covers the generated entry, and the scaffolded ids test pins
-// the same ids against the same build, so the test template cannot drift from
-// the wrapper template without failing here first.
+// the typecheck covers the generated entry and the review-loop composition
+// scaffolded beside it, and the scaffolded ids test asserts the shape of every
+// id the same build emitted. The exact list is this file's business, above.
 console.log("\n=== scaffold: typecheck, then the scaffolded ids test");
 run("pnpm", ["typecheck"]);
 run("pnpm", ["test"]);
