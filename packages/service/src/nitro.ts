@@ -15,6 +15,9 @@ const startWorldPlugin = fileURLToPath(
 const startDashboardPlugin = fileURLToPath(
   new URL("../plugins/start-dashboard.ts", import.meta.url),
 );
+const startSlackPlugin = fileURLToPath(
+  new URL("../plugins/start-slack.ts", import.meta.url),
+);
 
 /** The whole Nitro build config for a factory repo, so a factory's own
  *  nitro.config.ts is two lines. */
@@ -31,6 +34,9 @@ export function defineJigsService(): NitroConfig {
     plugins: [
       startWorldPlugin,
       startDashboardPlugin,
+      // After the World's gates: a factory whose Slack app is half configured
+      // should fail on that, not on a registry it never reached.
+      startSlackPlugin,
       `./${GENERATED_DIR}/${GENERATED_SCHEDULES_FILE}`,
     ],
     // The workflow builder's scan directory stays at its default (the whole

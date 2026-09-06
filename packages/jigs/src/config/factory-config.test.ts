@@ -6,6 +6,7 @@ import {
   removeBinding,
   resolveBinding,
   resolveService,
+  resolveSlack,
   upsertBinding,
 } from "./factory-config.ts";
 
@@ -233,5 +234,67 @@ test("resolveService derives the service address and the slug", () => {
     });
   } finally {
     removeTmpDir(tmp);
+  }
+});
+
+const SLACK = `slack:
+  channel: C0123ABCDEF
+  allowed_users: [U0123ABCDEF, U0456GHIJKL]
+  model: anthropic/claude-sonnet-4.5
+`;
+
+test("a factory declaring no slack block reads as Slack switched off", () => {
+  expect(parseFactoryConfig(SERVICE).slack).toBeUndefined();
+});
+
+test("the slack block parses to its channel, allowlist and model", () => {
+  expect(parseFactoryConfig(`${SERVICE}${SLACK}`).slack).toEqual({
+    channel: "C0123ABCDEF",
+    allowed_users: ["U0123ABCDEF", "U0456GHIJKL"],
+    model: "anthropic/claude-sonnet-4.5",
+  });
+});
+
+test("a slack block with an empty allowlist refuses to parse", () => {
+  const text = `${SERVICE}slack:
+  channel: C0123ABCDEF
+  allowed_users: []
+  model: anthropic/claude-sonnet-4.5
+`;
+  expect(() => parseFactoryConfig(text)).toThrow(/slack\.allowed_users/);
+});
+
+test("a slack block missing its channel refuses to parse, naming the field", () => {
+  const text = `${SERVICE}slack:
+  allowed_users: [U0123ABCDEF]
+  model: anthropic/claude-sonnet-4.5
+`;
+  expect(() => parseFactoryConfig(text)).toThrow(/slack\.channel/);
+});
+
+test("a slack block missing its model refuses to parse, naming the field", () => {
+  const text = `${SERVICE}slack:
+  channel: C0123ABCDEF
+  allowed_users: [U0123ABCDEF]
+`;
+  expect(() => parseFactoryConfig(text)).toThrow(/slack\.model/);
+});
+
+test("the slack block rejects an unknown key naming it", () => {
+  const text = `${SERVICE}${SLACK}  bot_token: xoxb-nope\n`;
+  expect(() => parseFactoryConfig(text)).toThrow(/bot_token/);
+});
+
+test("resolveSlack reads the block from a factory repo, and null without one", () => {
+  const dir = makeTmpDir();
+  try {
+    const root = makeFactoryRepo(dir, `${SERVICE}${SLACK}`);
+    expect(resolveSlack(root)).toEqual({
+      channel: "C0123ABCDEF",
+      allowed_users: ["U0123ABCDEF", "U0456GHIJKL"],
+      model: "anthropic/claude-sonnet-4.5",
+    });
+  } finally {
+    removeTmpDir(dir);
   }
 });

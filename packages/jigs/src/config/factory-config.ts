@@ -31,6 +31,17 @@ const serviceSchema = z.strictObject({
   dashboard_port: portSchema,
 });
 
+// The non-secret half of this factory's Slack app; both tokens are
+// credentials and stay in the factory's .env. Nothing here has a default — an
+// absent block is Slack switched off, and a channel or an allowlist nobody
+// chose is worse than no Slack at all.
+const slackSchema = z.strictObject({
+  channel: z.string().min(1),
+  allowed_users: z.array(z.string().min(1)).min(1),
+  // An OpenRouter model id; the agent that answers on it arrives in a later PR.
+  model: z.string().min(1),
+});
+
 const factoryConfigSchema = z.looseObject({
   bindings: z.record(z.string(), bindingSchema).default({}),
   // Where provider webhooks reach this factory's service (the tunnel URL);
@@ -42,9 +53,11 @@ const factoryConfigSchema = z.looseObject({
   // the factory's own .env. An absent block is read as an empty one, so what
   // it is missing reports itself by name.
   service: z.preprocess((block) => block ?? {}, serviceSchema),
+  slack: slackSchema.optional(),
 });
 
 export type BindingEntry = z.output<typeof bindingSchema>;
+export type SlackConfig = z.output<typeof slackSchema>;
 export type FactoryConfig = z.output<typeof factoryConfigSchema>;
 
 export function parseFactoryConfig(text: string): FactoryConfig {
@@ -103,6 +116,12 @@ export function resolveService(factoryRoot: string): ResolvedService {
     dashboardPort: service.dashboard_port,
     dashboardUrl: `http://localhost:${service.dashboard_port}`,
   };
+}
+
+/** This factory's Slack block, or null when it declares none. Null is the
+ *  answer for a factory with no Slack app, not an error. */
+export function resolveSlack(factoryRoot: string): SlackConfig | null {
+  return parseFactoryConfig(readFactoryConfigText(factoryRoot)).slack ?? null;
 }
 
 // Writes `remote` and nothing else — the provisioning keys are the operator's
