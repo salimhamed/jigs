@@ -108,36 +108,39 @@ const CURRENT_COLUMNS = `
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()`;
 
-// Drops the real table and rebuilds it in an older shape: every other test
-// here re-ensures it, and the live lane owns the dev database.
-async function rebuildAs(columns: string): Promise<void> {
+// Drops the real table and rebuilds it in an older shape, asserts the probe
+// refuses it naming the drop, then restores the current shape so a filtered
+// run of this file leaves the dev database as it found it.
+async function expectRefused(columns: string, message: RegExp): Promise<void> {
   await sql`DROP TABLE IF EXISTS jigs_worktrees`;
   await sql.unsafe(`CREATE TABLE jigs_worktrees (${columns})`);
+  await expect(ensureWorktreeRegistry(sql)).rejects.toThrow(message);
+
+  await sql`DROP TABLE jigs_worktrees`;
+  await expect(ensureWorktreeRegistry(sql)).resolves.toBeUndefined();
+}
+
+function replacing(from: string, to: string): string {
+  if (!CURRENT_COLUMNS.includes(from)) throw new Error(`no ${from} to replace`);
+  return CURRENT_COLUMNS.replace(from, to);
 }
 
 test("a table that predates repo_dir is refused, naming the drop", async () => {
-  await rebuildAs(
-    CURRENT_COLUMNS.replace(
+  await expectRefused(
+    replacing(
       "repo_dir text NOT NULL",
       "checkout_root text NOT NULL DEFAULT ''",
     ),
-  );
-  await expect(ensureWorktreeRegistry(sql)).rejects.toThrow(
     /missing repo_dir.*DROP TABLE jigs_worktrees/s,
   );
 });
 
 test("a table that still carries a retired column is refused, naming the drop", async () => {
-  await rebuildAs(
-    CURRENT_COLUMNS.replace(
+  await expectRefused(
+    replacing(
       "repo_dir text NOT NULL,",
       "repo_dir text NOT NULL,\n  keep boolean NOT NULL DEFAULT false,",
     ),
-  );
-  await expect(ensureWorktreeRegistry(sql)).rejects.toThrow(
     /unexpected keep.*DROP TABLE jigs_worktrees/s,
   );
-
-  await sql`DROP TABLE jigs_worktrees`;
-  await expect(ensureWorktreeRegistry(sql)).resolves.toBeUndefined();
 });
