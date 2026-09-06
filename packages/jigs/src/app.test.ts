@@ -522,6 +522,7 @@ test("a run holding only its ticket claim is running, not suspended", async () =
     status: "running",
     suspended: false,
     suspensions: [],
+    trigger: "manual",
   });
 });
 

@@ -156,7 +156,7 @@ export interface RunListDeps extends StallDeps {
  * reconciliation each add a job beside it, and a healed run would otherwise
  * read stalled in every gap between its steps.
  */
-export async function stalledRuns(deps: StallDeps = {}): Promise<Set<string>> {
+async function stalledRuns(deps: StallDeps = {}): Promise<Set<string>> {
   const jobs = await (deps.jobRunIds ?? worldJobRunIds)();
   const live = new Set(jobs.live);
   const stranded = [...new Set(jobs.dead)].filter((id) => !live.has(id));
@@ -167,18 +167,67 @@ export async function stalledRuns(deps: StallDeps = {}): Promise<Set<string>> {
   return new Set(stranded.filter((runId) => !busy.has(runId)));
 }
 
+export interface RunSuspension {
+  token: string;
+  reason: string;
+}
+
+export interface RunDescription {
+  runId: string;
+  status: string;
+  trigger: string;
+  suspended: boolean;
+  suspensions: RunSuspension[];
+}
+
+/** Facts a caller already holds. The listing has all of them for every run;
+ *  a single run has none, and each is read here. */
+export interface RunFacts {
+  run?: WorldRun;
+  tokens?: readonly string[];
+  stalled?: boolean;
+}
+
 /**
- * The one status derivation `jigs ps` and `jigs logs` both read. Suspended
- * first: a run parked on a hook is waiting on the world, not on a job nobody
- * is going to deliver.
+ * What this run is, past what the world stored: the SDK has neither
+ * `suspended` nor `stalled`, so a run parked on a hook other than its ticket
+ * claim reads `running` while it waits, and one whose resume job died reads
+ * `running` forever. `jigs ps` and `jigs logs` ask this one function, or the
+ * two verbs answer differently about the same run.
+ *
+ * Suspended wins over stalled: a parked run is waiting on the world, not on a
+ * job nobody is going to deliver.
  */
-export function derivedRunStatus(
-  status: string,
-  run: { parked: boolean; stalled: boolean },
-): string {
-  if (TERMINAL_RUN_STATUSES.has(status)) return status;
-  if (run.parked) return "suspended";
-  return status === "running" && run.stalled ? "stalled" : status;
+export async function describeRun(
+  runId: string,
+  facts: RunFacts = {},
+): Promise<RunDescription> {
+  const run = facts.run ?? (await worldRun(runId));
+  const stored: RunDescription = {
+    runId,
+    status: run.status,
+    trigger: triggerLabel(run.triggerId),
+    suspended: false,
+    suspensions: [],
+  };
+  // A terminal run's hooks are already deleted, and a dead job it left behind
+  // does not restate its status, so neither is worth reading.
+  if (TERMINAL_RUN_STATUSES.has(run.status)) return stored;
+
+  const suspensions = (facts.tokens ?? (await worldRunTokens(runId))).flatMap(
+    (token) => {
+      const reason = parkReason(token);
+      return reason === null ? [] : [{ token, reason }];
+    },
+  );
+  if (suspensions.length > 0)
+    return { ...stored, status: "suspended", suspended: true, suspensions };
+
+  // Only a running run can be stalled — nothing has been handed to the queue
+  // for a pending one — and asking costs a queue read.
+  if (run.status !== "running") return stored;
+  const stalled = facts.stalled ?? (await stalledRuns()).has(runId);
+  return stalled ? { ...stored, status: "stalled" } : stored;
 }
 
 export async function listRuns(
@@ -190,11 +239,7 @@ export async function listRuns(
     (deps.listHooks ?? worldHooks)(),
     stalledRuns(deps),
   ]);
-  const parkHooks = new Set(
-    hooks
-      .filter((hook) => parkReason(hook.token) !== null)
-      .map((hook) => hook.runId),
-  );
+  const tokensByRun = Map.groupBy(hooks, (hook) => hook.runId);
   // The compiler stamps each pipeline with the workflowId the world stores as
   // workflowName; untransformed (unit tests, plain imports) there is nothing to
   // map and the raw name below is the honest answer.
@@ -204,21 +249,25 @@ export async function listRuns(
       return id === undefined ? [] : [[id, name] as [string, string]];
     }),
   );
-  return runs
-    .map((run) => ({
-      runId: run.runId,
-      pipeline: pipelineByWorkflowId.get(run.workflowName) ?? run.workflowName,
-      // The SDK has neither status: a non-terminal run holding a hook other
-      // than its ticket claim is parked, and a run whose resume job died
-      // reads `running` forever.
-      status: derivedRunStatus(run.status, {
-        parked: parkHooks.has(run.runId),
+  // Every fact is already in hand, so no description reaches back to the world.
+  const rows = await Promise.all(
+    runs.map(async (run) => {
+      const described = await describeRun(run.runId, {
+        run,
+        tokens: (tokensByRun.get(run.runId) ?? []).map((hook) => hook.token),
         stalled: stalled.has(run.runId),
-      }),
-      trigger: triggerLabel(run.triggerId),
-      createdAt: run.createdAt.toISOString(),
-    }))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      });
+      return {
+        runId: run.runId,
+        pipeline:
+          pipelineByWorkflowId.get(run.workflowName) ?? run.workflowName,
+        status: described.status,
+        trigger: described.trigger,
+        createdAt: run.createdAt.toISOString(),
+      };
+    }),
+  );
+  return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 const worldRunExists = (runId: string) => getRun(runId).exists;
@@ -241,19 +290,29 @@ const linearIssueId = (ref: string) =>
 
 // One page, deliberately: both the prefix scan and `jigs ps` are
 // conveniences over a developer-scale run table, not indexes to page through.
-// `resolveData: "all"` is what makes the trigger readable at all — a run's
-// triggerId lives in its stored inputs and the world has no index on it. It
-// costs nothing extra: world-postgres selects every column either way and
-// only strips the data fields after the query.
 async function worldRuns(): Promise<WorldRun[]> {
   const page = await getWorld().runs.list({
     resolveData: "all",
     pagination: { limit: 1000 },
   });
-  return page.data.map((run) => {
-    const triggerId = triggerIdOf(run.input);
-    return { ...run, ...(triggerId === undefined ? {} : { triggerId }) };
-  });
+  return page.data.map(withTriggerId);
+}
+
+const worldRun = async (runId: string): Promise<WorldRun> =>
+  withTriggerId(await getWorld().runs.get(runId, { resolveData: "all" }));
+
+// `resolveData: "all"` above is what makes the trigger readable at all — a
+// run's triggerId lives in its stored inputs and the world has no index on
+// it. It costs nothing extra: world-postgres selects every column either way
+// and only strips the data fields after the query.
+function withTriggerId(run: WorldRun & { input?: unknown }): WorldRun {
+  const triggerId = triggerIdOf(run.input);
+  return { ...run, ...(triggerId === undefined ? {} : { triggerId }) };
+}
+
+async function worldRunTokens(runId: string): Promise<string[]> {
+  const page = await getWorld().hooks.list({ runId });
+  return page.data.map((hook) => hook.token);
 }
 
 // Run inputs come back in the world's serialized form; the SDK's

@@ -2,7 +2,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
 import type { Factory } from "./factory.ts";
 import {
-  derivedRunStatus,
+  describeRun,
   listRuns,
   parkReason,
   resolveRunRef,
@@ -247,19 +247,35 @@ test("a dead job left behind by a terminal run does not restate its status", asy
   expect(rows[0]?.status).toBe("completed");
 });
 
-test("derivedRunStatus is the one thing `jigs ps` and the run route both read", () => {
-  expect(derivedRunStatus("running", { parked: false, stalled: true })).toBe(
-    "stalled",
-  );
-  expect(derivedRunStatus("running", { parked: true, stalled: true })).toBe(
-    "suspended",
-  );
-  expect(derivedRunStatus("failed", { parked: false, stalled: true })).toBe(
-    "failed",
-  );
-  expect(derivedRunStatus("pending", { parked: false, stalled: true })).toBe(
-    "pending",
-  );
+// The run route reads describeRun for one run and lets it fetch; the listing
+// above reads it for every run off facts it already holds. Same answers.
+test("describeRun is the one thing `jigs ps` and the run route both read", async () => {
+  const describe = (status: string, tokens: string[], stalled: boolean) =>
+    describeRun(RUN_A, { run: worldRun({ status }), tokens, stalled });
+  const PARK = ["github:pr:acme/api#41"];
+
+  expect(await describe("running", [], true)).toMatchObject({
+    status: "stalled",
+    suspended: false,
+  });
+  expect(await describe("running", PARK, true)).toMatchObject({
+    status: "suspended",
+    suspended: true,
+    suspensions: [{ token: PARK[0], reason: "awaiting pull request review" }],
+  });
+  expect(await describe("failed", [], true)).toMatchObject({
+    status: "failed",
+  });
+  expect(await describe("pending", [], true)).toMatchObject({
+    status: "pending",
+  });
+  // The disagreement this replaced: the run route derived a status only for a
+  // `running` run, so a parked `pending` one read `suspended` in `jigs ps` and
+  // `pending` in `jigs logs`.
+  expect(await describe("pending", PARK, false)).toMatchObject({
+    status: "suspended",
+    suspended: true,
+  });
 });
 
 test("a run holding only its ticket claim is still running, not suspended", async () => {

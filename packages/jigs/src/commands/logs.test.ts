@@ -31,6 +31,7 @@ test("logs prints the run's status, its suspensions, and the dashboard link", as
       JSON.stringify({
         runId: RUN,
         status: "running",
+        trigger: "manual",
         logs: DASHBOARD,
         suspensions: [
           {
@@ -54,10 +55,27 @@ test("logs prints the run's status, its suspensions, and the dashboard link", as
   expect(lines).toEqual([
     `run ${RUN}`,
     "status running",
+    "trigger manual",
     "suspended on github:pr:acme/api#41: awaiting pull request review",
     // The service hosts the dashboard, so only it can name the port.
     DASHBOARD,
   ]);
+});
+
+test("a scheduled run names the schedule that fired it", async () => {
+  fetchMock.mockResolvedValueOnce(
+    new Response(
+      JSON.stringify({
+        runId: RUN,
+        status: "running",
+        trigger: "schedule:nightly-audit",
+        logs: "",
+      }),
+    ),
+  );
+  timeline({ steps: [], deadJobs: [] });
+  await showLogs(RUN, deps());
+  expect(lines[2]).toBe("trigger schedule:nightly-audit");
 });
 
 test("a failed run's error is printed above the log pointer", async () => {
@@ -66,6 +84,7 @@ test("a failed run's error is printed above the log pointer", async () => {
       JSON.stringify({
         runId: RUN,
         status: "failed",
+        trigger: "manual",
         error: "ClaimConflictError: linear:ticket:… is already claimed",
         logs: DASHBOARD,
       }),
@@ -76,6 +95,7 @@ test("a failed run's error is printed above the log pointer", async () => {
   expect(lines).toEqual([
     `run ${RUN}`,
     "status failed",
+    "trigger manual",
     "error ClaimConflictError: linear:ticket:… is already claimed",
     DASHBOARD,
   ]);
@@ -83,7 +103,14 @@ test("a failed run's error is printed above the log pointer", async () => {
 
 test("the step timeline reports a duration, a step still running, and its error", async () => {
   fetchMock.mockResolvedValueOnce(
-    new Response(JSON.stringify({ runId: RUN, status: "running", logs: "" })),
+    new Response(
+      JSON.stringify({
+        runId: RUN,
+        status: "running",
+        trigger: "manual",
+        logs: "",
+      }),
+    ),
   );
   timeline({
     steps: [
@@ -107,7 +134,7 @@ test("the step timeline reports a duration, a step still running, and its error"
     deadJobs: [],
   });
   await showLogs(RUN, deps());
-  expect(lines.slice(3)).toEqual([
+  expect(lines.slice(4)).toEqual([
     "",
     "STEP                             STATUS     ATTEMPT  STARTED                   TOOK     ERROR",
     "step//./steps/jigs//claimTicket  completed  1        2026-09-04T10:00:00.000Z  2.5s     ",
@@ -117,7 +144,14 @@ test("the step timeline reports a duration, a step still running, and its error"
 
 test("a dead job is printed with its error's first line and a copy-pasteable requeue", async () => {
   fetchMock.mockResolvedValueOnce(
-    new Response(JSON.stringify({ runId: RUN, status: "running", logs: "" })),
+    new Response(
+      JSON.stringify({
+        runId: RUN,
+        status: "running",
+        trigger: "manual",
+        logs: "",
+      }),
+    ),
   );
   timeline({
     steps: [],
@@ -133,7 +167,7 @@ test("a dead job is printed with its error's first line and a copy-pasteable req
     ],
   });
   await showLogs(RUN, deps());
-  expect(lines.slice(3)).toEqual([
+  expect(lines.slice(4)).toEqual([
     "",
     "dead job 4128 (jigs:workflow) after 3 attempts: Queue execution failed (404): Not Found",
     "  requeue: select graphile_worker.reschedule_jobs(array[4128]::bigint[], run_at := now(), attempts := 0)",
@@ -142,13 +176,21 @@ test("a dead job is printed with its error's first line and a copy-pasteable req
 
 test("a timeline the service cannot read says so rather than reading as no steps", async () => {
   fetchMock.mockResolvedValueOnce(
-    new Response(JSON.stringify({ runId: RUN, status: "running", logs: "" })),
+    new Response(
+      JSON.stringify({
+        runId: RUN,
+        status: "running",
+        trigger: "manual",
+        logs: "",
+      }),
+    ),
   );
   fetchMock.mockResolvedValueOnce(new Response("nope", { status: 503 }));
   await showLogs(RUN, deps());
   expect(lines).toEqual([
     `run ${RUN}`,
     "status running",
+    "trigger manual",
     "",
     "timeline unavailable: HTTP 503",
   ]);
