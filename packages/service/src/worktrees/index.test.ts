@@ -81,7 +81,6 @@ function registeredRow(ownerRunId: string): WorktreeRow {
     headSha: "head0",
     behindDefault: 0,
     repoDir,
-    keep: false,
   };
 }
 
@@ -236,12 +235,11 @@ test("a failing post_create leaves the row marked provision-failed and rethrows"
 });
 
 test("a successful request registers the worktree as active against the clone", async () => {
-  await provisionRunWorktree({ ...request, keep: true }, "run_a", deps());
+  await provisionRunWorktree(request, "run_a", deps());
   expect(store.get(target)).toMatchObject({
     state: "active",
     ownerRunId: "run_a",
     repoDir,
-    keep: true,
   });
 });
 

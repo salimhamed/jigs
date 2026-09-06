@@ -81,7 +81,7 @@ review reply behind a 40-minute implement step.
 - `jigs cancel`: SIGTERM via the lock pid → the worker aborts the in-flight
   provider turn, marks cancelled, tears down, releases; `--force` escalates
   to SIGKILL with CLI-side cleanup. A suspended run cancels with no process
-  involved. Cancelled is terminal; `keep: true` worktrees are honored.
+  involved. Cancelled is terminal.
 - Stored statuses are `running / suspended / done / failed / cancelled`;
   `interrupted` is derived, never stored. Step keys are constrained to
   `[a-z0-9.-]`, ≤64 chars, enforced at call time like duplicate keys.

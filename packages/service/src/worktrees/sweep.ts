@@ -30,7 +30,6 @@ import {
 
 export type SweepState =
   | "held"
-  | "kept"
   | "abandoned"
   | "abandoned-dirty"
   | "provision-failed"
@@ -41,7 +40,6 @@ export interface SweepInput {
   branch: string;
   ownerRunId: string;
   ownerTerminal: boolean;
-  keep: boolean;
   state: string;
   onDisk: boolean;
   dirty: boolean;
@@ -71,15 +69,6 @@ export function classifySweep(input: SweepInput): SweepEntry {
       eligible: true,
       requiresForce: false,
       reason: "registered but gone from disk — the row is stale",
-    };
-  }
-  if (input.keep) {
-    return {
-      ...base,
-      state: "kept",
-      eligible: false,
-      requiresForce: false,
-      reason: "keep: true was requested",
     };
   }
   // The SDK reads a parked run as `running`, so non-terminal covers live and
@@ -186,7 +175,6 @@ export async function sweepWorktrees(
         branch: row.branch,
         ownerRunId: row.ownerRunId,
         ownerTerminal: owners.get(row.ownerRunId)?.terminal ?? true,
-        keep: row.keep,
         state: row.state,
         onDisk,
         dirty: onDisk ? await isWorktreeDirty(row.path) : false,
@@ -224,7 +212,6 @@ export async function sweepWorktrees(
     const merged =
       status === "completed" && (await isBranchMerged(repoDir, entry.branch));
     let plan = decideTeardown({
-      keep: row.keep,
       dirty: entry.state === "abandoned-dirty",
       merged,
     });

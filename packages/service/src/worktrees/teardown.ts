@@ -16,18 +16,9 @@ export interface TeardownPlan {
 }
 
 export interface TeardownDecision {
-  keep: boolean;
   dirty: boolean;
   merged: boolean;
 }
-
-const KEEP_EVERYTHING: TeardownPlan = {
-  removeWorktree: false,
-  force: false,
-  deleteLocalBranch: false,
-  deleteRemoteBranch: false,
-  preserve: null,
-};
 
 // Forced: a finished worktree normally holds untracked build output that
 // plain `worktree remove` refuses, and the work itself is already merged.
@@ -40,12 +31,17 @@ const MERGED: TeardownPlan = {
 };
 
 export function decideTeardown(decision: TeardownDecision): TeardownPlan {
-  if (decision.keep) return { ...KEEP_EVERYTHING };
   // "Done" is the merged row, not merely the finished one: a run that
   // completed without merging still holds the only copy of its work.
   if (decision.merged) return { ...MERGED };
   if (decision.dirty) {
-    return { ...KEEP_EVERYTHING, preserve: "abandoned-dirty" };
+    return {
+      removeWorktree: false,
+      force: false,
+      deleteLocalBranch: false,
+      deleteRemoteBranch: false,
+      preserve: "abandoned-dirty",
+    };
   }
   // Branches stay as the only cheap copy of unmerged agent work.
   return {
@@ -151,7 +147,6 @@ export async function teardownMergedRun(
   const rows = await listWorktreesForRun(deps.sql, runId);
   const removed: string[] = [];
   for (const row of rows) {
-    if (row.keep) continue;
     await applyTeardown(MERGED, {
       repoDir: row.repoDir,
       worktreePath: row.path,
