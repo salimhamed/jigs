@@ -16,10 +16,10 @@
 // library is versioned" is the property this whole shape was bought for, and
 // it is the one nothing else can observe.
 //
-// Then start the bundle once: a factory installs @jigs/service by `link:`, so
-// an import this package adds resolves only if the factory declares it too,
-// and nothing says otherwise until the built service starts in someone else's
-// repo.
+// Then start the bundle once: the SDK loads the World and the dashboard by
+// name from the factory's node_modules, so they are peers a factory has to
+// install itself, and nothing says otherwise until the built service starts
+// in someone else's repo.
 import { execFileSync, spawn } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -110,14 +110,14 @@ function withFakeVersion(run) {
   }
 }
 
-// A factory installs @jigs/service with `link:`, which installs none of that
-// package's own dependencies — so every runtime import it adds resolves only
-// if the factory's package.json lists the package too. Nothing about that is
-// visible until the built bundle starts, in someone else's repo, with
-// ERR_MODULE_NOT_FOUND naming the package. Booting it once here is the only
-// place this repo can see it, so this check is about module resolution and
-// the two listeners coming up — not about the World, whose URL below points
-// at nothing on purpose.
+// The service's own dependencies resolve from its own node_modules, but its
+// peers do not: the SDK requires the World by name from the factory's
+// node_modules, and the dashboard plugin resolves @workflow/web from cwd. A
+// peer missing from the factory's package.json is invisible until the built
+// bundle starts, in someone else's repo, with ERR_MODULE_NOT_FOUND naming the
+// package. Booting it once here is the only place this repo can see it, so
+// this check is about module resolution and the two listeners coming up — not
+// about the World, whose URL below points at nothing on purpose.
 const BOOT_PORT = 18990;
 const BOOT_DASHBOARD_PORT = 18991;
 const BOOT_TIMEOUT_MS = 90_000;
@@ -231,7 +231,7 @@ if (boot.problem !== null) {
   console.error(boot.output);
   fail(
     `the built service did not start: ${boot.problem}`,
-    "if the output above names a package it cannot find, @jigs/service imports it at run time and the factory package.json template (and this fixture's) must list it too",
+    "if the output above names a package it cannot find, the factory loads it by name at run time: it belongs in @jigs/service's peerDependencies, the factory package.json template and this fixture's",
   );
 }
 

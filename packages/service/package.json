@@ -19,15 +19,15 @@
   },
   "dependencies": {
     "jigs": "workspace:*",
+    "croner": "10.0.1",
+    "hono": "^4.13.4",
+    "postgres": "^3.4.7",
     "tinyglobby": "^0.2.17",
     "undici": "^7.28.0"
   },
   "peerDependencies": {
     "@workflow/web": "4.1.20",
     "@workflow/world-postgres": "4.3.4",
-    "croner": "10.0.1",
-    "hono": "^4.13.4",
-    "postgres": "^3.4.7",
     "workflow": "4.8.4",
     "zod": "^4.4.3",
     "nitro": "3.0.260610-beta"
@@ -40,10 +40,7 @@
   "devDependencies": {
     "@workflow/web": "4.1.20",
     "@workflow/world-postgres": "4.3.4",
-    "croner": "10.0.1",
-    "hono": "^4.13.4",
     "nitro": "3.0.260610-beta",
-    "postgres": "^3.4.7",
     "tsdown": "^0.22.14",
     "workflow": "4.8.4",
     "zod": "^4.4.3"

@@ -44,19 +44,28 @@ importers:
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
     devDependencies:
       tsdown:
         specifier: ^0.22.14
         version: 0.22.14(typescript@7.0.2)
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
   packages/service:
     dependencies:
+      croner:
+        specifier: 10.0.1
+        version: 10.0.1
+      hono:
+        specifier: ^4.13.4
+        version: 4.13.4
       jigs:
         specifier: workspace:*
         version: link:../jigs
+      postgres:
+        specifier: ^3.4.7
+        version: 3.4.9
       tinyglobby:
         specifier: ^0.2.17
         version: 0.2.17
@@ -70,18 +79,9 @@ importers:
       '@workflow/world-postgres':
         specifier: 4.3.4
         version: 4.3.4(@types/pg@8.23.1)(postgres@3.4.9)(supports-color@8.1.1)(typescript@7.0.2)
-      croner:
-        specifier: 10.0.1
-        version: 10.0.1
-      hono:
-        specifier: ^4.13.4
-        version: 4.13.4
       nitro:
         specifier: 3.0.260610-beta
         version: 3.0.260610-beta(@vercel/functions@3.9.5(@aws-sdk/credential-provider-web-identity@3.972.49))(@vercel/queue@0.3.1)(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@types/pg@8.23.1)(pg@8.20.0)(postgres@3.4.9))(giget@3.3.1)(jiti@2.7.0)(rollup@4.63.0)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))
-      postgres:
-        specifier: ^3.4.7
-        version: 3.4.9
       tsdown:
         specifier: ^0.22.14
         version: 0.22.14(typescript@7.0.2)
