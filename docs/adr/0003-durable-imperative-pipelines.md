@@ -22,10 +22,11 @@ schema returns the parsed object typed; every step returns a uniform
 `StepResult` of `{ text, output, usage }`.
 
 A run suspends through exactly two named primitives — `pullRequestGate()` and
-`needsHuman()` — which share one run-state record of `{ key, reason, payload,
-satisfiedBy }` and differ only in what satisfies them. There is no generic
-gate: **no suspension without a satisfier**, because a run that idles with
-nothing able to wake it is the worst failure a detachable runtime has. A
+`needsHuman()` — which differ only in what satisfies them. Nothing is recorded
+beside a suspension to explain it: the hook token names the thing the run is
+waiting on, so why a run is parked is read back off the token. There is no
+generic gate: **no suspension without a satisfier**, because a run that idles
+with nothing able to wake it is the worst failure a detachable runtime has. A
 suspended run is not terminal, so it holds its worktree.
 
 Worktrees are **requested**, not owned: `worktree()` asks the runtime to make

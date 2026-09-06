@@ -14,9 +14,7 @@ import {
 import type { TicketClaim } from "./claim.ts";
 import { needsHumanToken } from "./tokens.ts";
 
-// The shape of the extra detail a halt posts to the ticket beneath its
-// reason. An alias rather than an interface so an object literal at a call
-// site still satisfies it structurally.
+// The extra detail a halt posts to the ticket beneath its reason.
 export type JsonValue =
   | string
   | number

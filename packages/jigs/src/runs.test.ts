@@ -10,6 +10,7 @@ import {
   type WorldRun,
 } from "./runs.ts";
 import * as stalls from "./stalls.ts";
+import { needsHumanToken, prToken, ticketToken } from "./suspension/tokens.ts";
 import * as sql from "./worktrees/sql.ts";
 
 const RUN_A = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
@@ -133,12 +134,15 @@ test("a full-length run id nobody minted falls through to unknown", async () => 
   expect(ref).toEqual({ kind: "unknown" });
 });
 
+// Read through the minters, never through a token spelled out here: a reason
+// derived from a prefix the minters no longer produce degrades to the generic
+// one, and a test carrying its own copy of the prefix would stay green.
 test("a ticket claim is not a park, and every other hook explains itself", () => {
-  expect(parkReason(`linear:ticket:${crypto.randomUUID()}`)).toBeNull();
-  expect(parkReason("github:pr:acme/api#41")).toBe(
+  expect(parkReason(ticketToken(crypto.randomUUID()))).toBeNull();
+  expect(parkReason(prToken({ owner: "acme", repo: "api", number: 41 }))).toBe(
     "awaiting pull request review",
   );
-  expect(parkReason("jigs:needs-human:issue-1:comment-1")).toBe(
+  expect(parkReason(needsHumanToken("issue-1", "comment-1"))).toBe(
     "needs a human on the ticket",
   );
   // A pipeline of its own that parks on createHook({ token }) is parked too,
