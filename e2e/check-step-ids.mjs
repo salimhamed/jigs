@@ -136,7 +136,7 @@ function installFromTarballs(serviceTarball) {
   manifest.dependencies[JIGS] = `file:${tarballs.jigs}`;
   manifest.dependencies[SERVICE] = `file:${serviceTarball}`;
   writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-  run("pnpm", ["install"]);
+  run("pnpm", ["install", "--no-frozen-lockfile"]);
 }
 
 const bundle = () => path.join(factory, ".output", "server", "index.mjs");
