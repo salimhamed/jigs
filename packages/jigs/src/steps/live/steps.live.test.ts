@@ -9,14 +9,14 @@ import {
 } from "../../harnesses/live/fixtures/live-env.ts";
 import { makeTmpDir, removeTmpDir } from "../../harnesses/test-fixtures.ts";
 import { claude, codex } from "../config.ts";
-import {
-  type ExecuteDeps,
-  executeAgentStep,
-  executeAskStep,
-  realDeps,
-} from "../execute.ts";
 import { type AgentWire, buildAgentWire, buildAskWire } from "../plan.ts";
 import type { AgentStepResult, StepUsage } from "../result.ts";
+import {
+  type ExecuteDeps,
+  realDeps,
+  runAgent as runAgentStep,
+  runAsk,
+} from "../run.ts";
 
 let tmp: string;
 let deps: ExecuteDeps;
@@ -50,13 +50,16 @@ function assertUsage(usage: StepUsage | undefined): void {
   expect(usage?.outputTokens ?? 0).toBeGreaterThan(0);
 }
 
-// executeAgentStep answers a union; a step carrying no resume pointer can
-// only take the successful arm.
+// runAgent answers a union; a step that declares no MCP servers and carries
+// no resume pointer can only take the successful arm.
 async function runAgent(
   wire: AgentWire,
   runKey: string,
 ): Promise<AgentStepResult<unknown>> {
-  const result = await executeAgentStep(wire, runKey, deps);
+  const result = await runAgentStep(wire, runKey, deps);
+  if ("jitFailure" in result) {
+    throw new Error(`unexpected JIT failure: ${result.jitFailure}`);
+  }
   if ("resumeFailed" in result) {
     throw new Error(`unexpected resume failure: ${result.resumeFailed}`);
   }
@@ -107,7 +110,7 @@ test("claude ask step: structured output round-trips typed with usage", async ()
     output: verdict,
   });
 
-  const result = await executeAskStep(wire, runKey, deps);
+  const result = await runAsk(wire, runKey, deps);
 
   expect(verdict.parse(result.output)).toEqual({ ok: true, word: "sky" });
   assertUsage(result.usage);
@@ -121,7 +124,7 @@ test("codex ask step: structured output round-trips typed with usage", async () 
     output: verdict,
   });
 
-  const result = await executeAskStep(wire, runKey, deps);
+  const result = await runAsk(wire, runKey, deps);
 
   expect(verdict.parse(result.output)).toEqual({ ok: true, word: "sky" });
   assertUsage(result.usage);

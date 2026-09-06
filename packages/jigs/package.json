@@ -53,10 +53,6 @@
       "types": "./dist/steps/index.d.ts",
       "default": "./dist/steps/index.js"
     },
-    "./steps/execute": {
-      "types": "./dist/steps/execute.d.ts",
-      "default": "./dist/steps/execute.js"
-    },
     "./steps/jit": {
       "types": "./dist/steps/jit.d.ts",
       "default": "./dist/steps/jit.js"

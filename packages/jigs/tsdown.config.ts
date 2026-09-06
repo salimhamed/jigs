@@ -15,7 +15,6 @@ export default defineConfig({
     "prompts/index": "src/prompts/index.ts",
     schedules: "src/schedules.ts",
     "steps/index": "src/steps/index.ts",
-    "steps/execute": "src/steps/execute.ts",
     "steps/jit": "src/steps/jit.ts",
     "steps/run": "src/steps/run.ts",
     "suspension/claim": "src/suspension/claim.ts",

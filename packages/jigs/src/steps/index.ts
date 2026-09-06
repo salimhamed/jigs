@@ -6,7 +6,7 @@
 // Nothing reachable from here carries a "use step" directive or a node
 // builtin: the wrappers live in the factory repo, so the ids the SDK derives
 // are factory-local paths and no version of this package is a memoization key.
-// ./run and ./execute are the step side and are deliberately not re-exported.
+// ./run is the step side and is deliberately not re-exported.
 export {
   type AgentFn,
   agent,

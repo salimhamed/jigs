@@ -1,12 +1,8 @@
 import path from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { claude, codex } from "../../steps/config.ts";
-import {
-  type ExecuteDeps,
-  executeAgentStep,
-  realDeps,
-} from "../../steps/execute.ts";
 import { buildAgentWire } from "../../steps/plan.ts";
+import { type ExecuteDeps, realDeps, runAgent } from "../../steps/run.ts";
 import { ensureManagedCodexHome } from "../codex-home.ts";
 import { stripApiCredentials } from "../env.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
@@ -46,7 +42,7 @@ test("a codex thread id with no rollout behind it reports resumeFailed", async (
     resume: { harness: "codex", id: `0199${crypto.randomUUID().slice(4)}` },
   });
 
-  const result = await executeAgentStep(wire, "live-codex-resume", deps);
+  const result = await runAgent(wire, "live-codex-resume", deps);
 
   expect(result).toHaveProperty("resumeFailed");
   // The finding ADR 0004's amendment records: codex 0.149.1 raises a raw
@@ -64,7 +60,7 @@ test("a claude session id with no transcript behind it reports resumeFailed", as
     resume: { harness: "claude", id: crypto.randomUUID() },
   });
 
-  const result = await executeAgentStep(wire, "live-claude-resume", deps);
+  const result = await runAgent(wire, "live-claude-resume", deps);
 
   expect(result).toHaveProperty("resumeFailed");
 });
