@@ -19,6 +19,11 @@ const RUN_ID_SHAPE = /^(?:wrun_)?([0-9A-HJKMNP-TV-Z]{1,26})$/i;
 const RUN_ID_PREFIX = "wrun_";
 const RUN_ID_LENGTH = RUN_ID_PREFIX.length + 26;
 
+// A Linear identifier: team key then issue number. Only this shape is worth a
+// Linear round trip — every other ticket ref is already the UUID the claim is
+// keyed on, or is nothing Linear could place.
+const TICKET_IDENTIFIER = /^[A-Za-z][A-Za-z0-9]*-\d+$/;
+
 export const TERMINAL_RUN_STATUSES: ReadonlySet<string> = new Set([
   "completed",
   "failed",
@@ -58,19 +63,16 @@ export async function resolveRunRef(
   }
   // The ticket claim is already the one-active-run-per-ticket index: it is
   // every run's first act, and the world deletes hooks at terminal state, so
-  // the token resolves exactly the run that currently holds the ticket.
+  // the token resolves exactly the run that currently holds the ticket. It is
+  // keyed on the issue's UUID, so an identifier first costs the same Linear
+  // lookup the trigger already makes to start a run — upper-cased, because
+  // Linear keys identifiers by upper-case team key.
+  const issueId = TICKET_IDENTIFIER.test(ref)
+    ? await (deps.issueId ?? linearIssueId)(ref.toUpperCase())
+    : ref;
+  if (issueId === null) return { kind: "unknown" };
   const hookRunId = deps.hookRunId ?? worldHookRunId;
-  const direct = await hookRunId(ticketToken(ref));
-  if (direct !== null) return { kind: "found", runId: direct };
-  // The claim is keyed on the issue's UUID, so an identifier costs the same
-  // Linear lookup the trigger already makes to start the run. Linear keys
-  // identifiers by upper-case team key, hence the second try.
-  const issueId = deps.issueId ?? linearIssueId;
-  const resolved =
-    (await issueId(ref)) ??
-    (ref === ref.toUpperCase() ? null : await issueId(ref.toUpperCase()));
-  if (resolved === null || resolved === ref) return { kind: "unknown" };
-  const owner = await hookRunId(ticketToken(resolved));
+  const owner = await hookRunId(ticketToken(issueId));
   return owner === null ? { kind: "unknown" } : { kind: "found", runId: owner };
 }
 

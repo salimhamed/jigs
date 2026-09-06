@@ -29,9 +29,9 @@ export interface TicketClaim {
 // run's whole life (the SDK auto-disposes it at terminal state) and doubles
 // as needsHuman()'s wake channel.
 //
-// One hook, on the issue's UUID. The identifier rides along on the claim for
-// the callers that render it; an operator naming a run by its identifier is
-// resolved against Linear by the CLI verb instead of by a second claim.
+// One hook, on the issue's UUID: an operator naming a run by its ticket
+// identifier is resolved through Linear by the run-ref resolver, so a second
+// hook keyed on the identifier would index nothing.
 export async function claimTicket(
   issueId: string,
   identifier: string,

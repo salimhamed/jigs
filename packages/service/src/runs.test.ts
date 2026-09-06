@@ -24,7 +24,11 @@ beforeEach(() => {
 
 // `issues` stands in for the Linear lookup the ticket branch makes: the
 // identifiers the workspace can place, mapped to the issue UUID the claim
-// hook is keyed on.
+// hook is keyed on. Refusing the lookup is how a test asserts that a ref
+// never left the machine.
+const NO_LINEAR = () =>
+  Promise.reject(new Error("Linear must not be asked about this ref"));
+
 const lookupDeps = (
   runIds: string[],
   hooks: Record<string, string> = {},
@@ -91,16 +95,32 @@ test("an identifier Linear places on a ticket no run holds is unknown", async ()
   expect(ref).toEqual({ kind: "unknown" });
 });
 
-test("a ticket UUID — what the claim hook is keyed on — needs no Linear call", async () => {
+test("a ticket UUID — what the claim hook is keyed on — makes no Linear call", async () => {
   const issueId = crypto.randomUUID();
-  const ref = await resolveRunRef(
-    issueId,
-    lookupDeps([RUN_B], { [`linear:ticket:${issueId}`]: RUN_B }),
-  );
+  const ref = await resolveRunRef(issueId, {
+    ...lookupDeps([RUN_B], { [`linear:ticket:${issueId}`]: RUN_B }),
+    issueId: NO_LINEAR,
+  });
   expect(ref).toEqual({ kind: "found", runId: RUN_B });
 });
 
-test("a ref nothing holds is unknown", async () => {
+test("a ticket UUID no run holds is unknown, still without a Linear call", async () => {
+  const ref = await resolveRunRef(crypto.randomUUID(), {
+    ...lookupDeps([RUN_B]),
+    issueId: NO_LINEAR,
+  });
+  expect(ref).toEqual({ kind: "unknown" });
+});
+
+test("a ref shaped like neither a run nor an identifier asks Linear nothing", async () => {
+  const ref = await resolveRunRef("not-a-ticket-at-all", {
+    ...lookupDeps([RUN_A]),
+    issueId: NO_LINEAR,
+  });
+  expect(ref).toEqual({ kind: "unknown" });
+});
+
+test("an identifier Linear cannot place is unknown", async () => {
   const ref = await resolveRunRef("AGE-999", lookupDeps([RUN_A]));
   expect(ref).toEqual({ kind: "unknown" });
 });
