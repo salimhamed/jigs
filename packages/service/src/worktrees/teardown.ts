@@ -1,11 +1,7 @@
 import { rmSync } from "node:fs";
 import { deriveDefaultBranch, removeManagedCodexHome, tryGit } from "jigs";
 import type { Sql } from "postgres";
-import {
-  deleteWorktree,
-  listWorktreesForRun,
-  setWorktreeState,
-} from "./registry";
+import { deleteWorktree, listWorktreesForRun } from "./registry";
 
 // The teardown matrix (ADR 0007), split into a pure decision and its git
 // execution so every row is a table test. Teardown is runtime-owned: authors
@@ -33,21 +29,21 @@ const KEEP_EVERYTHING: TeardownPlan = {
   preserve: null,
 };
 
+// Forced: a finished worktree normally holds untracked build output that
+// plain `worktree remove` refuses, and the work itself is already merged.
+const MERGED: TeardownPlan = {
+  removeWorktree: true,
+  force: true,
+  deleteLocalBranch: true,
+  deleteRemoteBranch: true,
+  preserve: null,
+};
+
 export function decideTeardown(decision: TeardownDecision): TeardownPlan {
   if (decision.keep) return { ...KEEP_EVERYTHING };
   // "Done" is the merged row, not merely the finished one: a run that
   // completed without merging still holds the only copy of its work.
-  if (decision.merged) {
-    // Forced: a finished worktree normally holds untracked build output that
-    // plain `worktree remove` refuses, and the work itself is already merged.
-    return {
-      removeWorktree: true,
-      force: true,
-      deleteLocalBranch: true,
-      deleteRemoteBranch: true,
-      preserve: null,
-    };
-  }
+  if (decision.merged) return { ...MERGED };
   if (decision.dirty) {
     return { ...KEEP_EVERYTHING, preserve: "abandoned-dirty" };
   }
@@ -126,17 +122,18 @@ export async function applyTeardown(
   }
 }
 
-// The per-run teardown a jig calls on its own completion path. `merged` is
-// passed in and never derived: a squash merge leaves the branch tip
-// un-ancestored, so isBranchMerged's `merge-base --is-ancestor` answers false
-// and the done row would silently degrade to the failed one — GitHub's
-// `merged: true` is the only honest evidence.
+// The per-run teardown a pipeline calls after a merged reviewLoop return.
+// The loop only returns merged, so this is the matrix's merged row as a fixed
+// recipe rather than a decision: no dirtiness read (the forced remove takes
+// build output with it), and "merged" never derived — a squash merge leaves
+// the branch tip un-ancestored, so isBranchMerged's `merge-base --is-ancestor`
+// would answer false and the done row would silently degrade to the failed
+// one. The full matrix stays with the sweep, where the outcome is unknown.
 //
 // Deliberately not a filtered `sweepWorktrees`: the sweep's classifier answers
 // "is somebody else's leftover reclaimable", and it answers `held` for a run
-// still executing its own body. Both paths share the one matrix above, which
-// is what ADR 0007 requires; the operator's `jigs sweep` is the net for runs
-// that never reach here — nothing reclaims a worktree unattended.
+// still executing its own body. The operator's `jigs sweep` is the net for
+// runs that never reach here — nothing reclaims a worktree unattended.
 
 export interface TeardownRunDeps {
   sql: Sql;
@@ -144,9 +141,8 @@ export interface TeardownRunDeps {
   log?: (line: string) => void;
 }
 
-export async function teardownRun(
+export async function teardownMergedRun(
   runId: string,
-  outcome: { merged: boolean },
   deps: TeardownRunDeps,
 ): Promise<string[]> {
   const removeCodexHome = deps.removeCodexHome ?? removeManagedCodexHome;
@@ -155,18 +151,8 @@ export async function teardownRun(
   const rows = await listWorktreesForRun(deps.sql, runId);
   const removed: string[] = [];
   for (const row of rows) {
-    const plan = decideTeardown({
-      keep: row.keep,
-      dirty: await isWorktreeDirty(row.path),
-      merged: outcome.merged,
-    });
-    if (plan.preserve !== null) {
-      await setWorktreeState(deps.sql, row.path, plan.preserve);
-      log(`[teardown] preserved ${row.path} as ${plan.preserve}`);
-      continue;
-    }
-    if (!plan.removeWorktree) continue;
-    await applyTeardown(plan, {
+    if (row.keep) continue;
+    await applyTeardown(MERGED, {
       repoDir: row.repoDir,
       worktreePath: row.path,
       branch: row.branch,
@@ -175,7 +161,7 @@ export async function teardownRun(
     rmSync(row.path, { recursive: true, force: true });
     await deleteWorktree(deps.sql, row.path);
     removed.push(row.path);
-    log(`[teardown] removed ${row.path} merged=${outcome.merged}`);
+    log(`[teardown] removed ${row.path}`);
   }
 
   // The run is finishing: nothing will resume its Codex threads.

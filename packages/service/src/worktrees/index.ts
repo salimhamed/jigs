@@ -26,7 +26,7 @@ import { provisionWorktree } from "./provision";
 import { getWorktree, setWorktreeState, upsertWorktree } from "./registry";
 import { assertReusable, WorktreeOwnedError } from "./reuse";
 import { registrySql } from "./sql";
-import { teardownRun } from "./teardown";
+import { teardownMergedRun as teardownMerged } from "./teardown";
 
 export interface WorktreeRequest {
   binding: string;
@@ -153,14 +153,21 @@ export async function provisionRunWorktree(
   return facts;
 }
 
-// The per-run half of the teardown matrix, called by the pipeline after a
-// merged reviewLoop return. The operator's `jigs sweep` is the net for runs
-// that never get there.
-export async function teardownRunWorktrees(
-  runId: string,
-  outcome: { merged: boolean },
-): Promise<string[]> {
+// The per-run teardown, called by the pipeline after a merged reviewLoop
+// return. The operator's `jigs sweep` is the net for runs that never get
+// there.
+export async function teardownMergedRun(runId: string): Promise<string[]> {
   const sql = registrySql();
   if (sql === null) return [];
-  return teardownRun(runId, outcome, { sql });
+  return teardownMerged(runId, { sql });
+}
+
+// The name the factories' steps/jigs.ts wrappers still import. The review
+// loop only returns merged, so `outcome` was always `{ merged: true }`; this
+// goes once the wrappers call teardownMergedRun directly.
+export function teardownRunWorktrees(
+  runId: string,
+  _outcome: { merged: boolean },
+): Promise<string[]> {
+  return teardownMergedRun(runId);
 }
