@@ -11,13 +11,10 @@ import {
   ensureWorktreeRegistry,
   getWorktree,
 } from "./registry.ts";
-import { WorktreeOwnedError } from "./reuse.ts";
 
-// Two transactions run concurrently, so the pool needs two connections.
 const sql = connectRegistry(
   process.env.WORKFLOW_POSTGRES_URL ??
     "postgres://jigs:jigs@localhost:5439/jigs",
-  { max: 2 },
 );
 
 // A throwaway factory root keys a worktree path no other run of this test
@@ -58,46 +55,39 @@ function factsFor(branch: string): WorktreeFacts {
   };
 }
 
-test("concurrent requests for one unowned path: the loser sees the winner's ownership", async () => {
+test("a relaunched ticket adopts the leftover worktree and takes over its row", async () => {
   await ensureWorktreeRegistry(sql);
-
-  let releaseWinner: () => void = () => {};
-  const gate = new Promise<void>((resolve) => {
-    releaseWinner = resolve;
-  });
 
   const request = { binding: "api", branch: "feat" };
   const shared = {
     sql,
     resolveBinding: () => binding,
-    runIsLive: async (runId: string) => runId === "run_winner",
+    runIsLive: async () => false,
     provision: async () => {},
     log: () => {},
   };
 
-  // The winner holds the advisory lock across a slow worktreeStatus — the
-  // window the unlocked implementation lost ownership in.
-  const winner = provisionRunWorktree(request, "run_winner", {
-    ...shared,
-    worktreeStatus: async () => {
-      await gate;
-      return null;
-    },
-    createWorktree: async () => factsFor("feat"),
-  });
-
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  const loser = provisionRunWorktree(request, "run_loser", {
+  const first = await provisionRunWorktree(request, "run_first", {
     ...shared,
     worktreeStatus: async () => null,
+    createWorktree: async () => factsFor("feat"),
+  });
+  expect(first).toMatchObject({ path: testPath, baseSha: "base1" });
+  expect((await getWorktree(sql, testPath))?.ownerRunId).toBe("run_first");
+
+  const second = await provisionRunWorktree(request, "run_second", {
+    ...shared,
+    worktreeStatus: async () => ({
+      branchMatches: true,
+      clean: true,
+      diverged: false,
+      defaultBranch: "main",
+      baseSha: "base1",
+    }),
     createWorktree: async () => {
-      throw new Error("the loser must never create over the winner's worktree");
+      throw new Error("a reusable worktree must not be cut again");
     },
   });
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  releaseWinner();
-
-  await expect(winner).resolves.toMatchObject({ baseSha: "base1" });
-  await expect(loser).rejects.toThrow(WorktreeOwnedError);
-  expect((await getWorktree(sql, testPath))?.ownerRunId).toBe("run_winner");
+  expect(second).toMatchObject({ path: testPath, baseSha: "base1" });
+  expect((await getWorktree(sql, testPath))?.ownerRunId).toBe("run_second");
 });

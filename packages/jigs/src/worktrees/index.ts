@@ -73,44 +73,38 @@ export async function provisionRunWorktree(
     );
   }
 
-  // Per-path advisory lock: without it, two concurrent requests for the same
-  // unowned path both read no live owner during the (fetch-long) window
-  // between getWorktree and upsertWorktree, and the loser silently steals
-  // ownership. The loser now blocks here, then sees the winner's row.
-  const facts = await sql.begin(async (sql): Promise<WorktreeFacts> => {
-    await sql`SELECT pg_advisory_xact_lock(hashtext(${target}))`;
+  // Unserialized on purpose: the ticket claim admits one active run per
+  // ticket and this path derives from that ticket's branch, so no second run
+  // can be requesting it.
+  const row = await getWorktree(sql, target);
+  const sameOwner = row?.ownerRunId === runId;
+  // Refuse before touching disk: worktreeStatus fetches, and a foreign live
+  // owner should never surface as a network error or pay for the fetch.
+  if (row !== null && !sameOwner && (await isLive(row.ownerRunId))) {
+    throw new WorktreeOwnedError(target, row.ownerRunId);
+  }
 
-    const row = await getWorktree(sql, target);
-    const sameOwner = row?.ownerRunId === runId;
-    // Refuse before touching disk: worktreeStatus fetches, and a foreign live
-    // owner should never surface as a network error or pay for the fetch.
-    if (row !== null && !sameOwner && (await isLive(row.ownerRunId))) {
-      throw new WorktreeOwnedError(target, row.ownerRunId);
-    }
+  const cut = { repoDir, worktreePath: target, branch: request.branch };
+  const disk = await status(cut);
+  // A registry row with no directory is just a branch with no worktree —
+  // fall through to three-way resolution.
+  if (disk !== null) assertReusable({ path: target, sameOwner, disk });
+  const facts: WorktreeFacts =
+    disk === null
+      ? await create(cut)
+      : {
+          path: target,
+          branch: request.branch,
+          defaultBranch: disk.defaultBranch,
+          baseSha: disk.baseSha,
+        };
 
-    const cut = { repoDir, worktreePath: target, branch: request.branch };
-    const disk = await status(cut);
-    // A registry row with no directory is just a branch with no worktree —
-    // fall through to three-way resolution.
-    if (disk !== null) assertReusable({ path: target, sameOwner, disk });
-    const facts: WorktreeFacts =
-      disk === null
-        ? await create(cut)
-        : {
-            path: target,
-            branch: request.branch,
-            defaultBranch: disk.defaultBranch,
-            baseSha: disk.baseSha,
-          };
-
-    await upsertWorktree(sql, {
-      path: facts.path,
-      branch: facts.branch,
-      ownerRunId: runId,
-      state: "active",
-      repoDir,
-    });
-    return facts;
+  await upsertWorktree(sql, {
+    path: facts.path,
+    branch: facts.branch,
+    ownerRunId: runId,
+    state: "active",
+    repoDir,
   });
 
   try {
