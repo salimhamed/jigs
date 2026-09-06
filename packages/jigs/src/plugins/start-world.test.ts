@@ -1,11 +1,11 @@
-import { CliError } from "@salimhamed/jigs";
 import type { ISql } from "postgres";
 import { afterEach, expect, test, vi } from "vitest";
+import { CliError } from "../errors.ts";
 import {
   gateOnBindingClones,
   gateOnWorktreeRegistry,
   gateOnWorldStart,
-} from "./start-world";
+} from "./start-world.ts";
 
 // Nitro never awaits a plugin, so the only thing that can stop the service is
 // the plugin itself.

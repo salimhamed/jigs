@@ -4,8 +4,8 @@
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import path from "node:path";
+import { jigsDataDir } from "./paths.ts";
 
 function hmacMatches(rawBody: string, signatureHex: string, secret: string) {
   const expected = createHmac("sha256", secret).update(rawBody).digest();
@@ -55,17 +55,11 @@ export function linearTimestampFresh(
 }
 
 // The env override is the test seam and the non-default deploy path; the file
-// is where `jigs bind` generates the shared per-repo webhook secret. The XDG
-// join is deliberately duplicated from the jigs package — the service does
-// not depend on it.
+// is where `jigs bind` generates the shared per-repo webhook secret.
 export function githubWebhookSecret(): string | null {
   const env = process.env.GITHUB_WEBHOOK_SECRET;
   if (env !== undefined && env !== "") return env;
-  const file = path.join(
-    process.env.XDG_DATA_HOME ?? path.join(homedir(), ".local", "share"),
-    "jigs",
-    "github-webhook-secret",
-  );
+  const file = path.join(jigsDataDir(), "github-webhook-secret");
   try {
     const secret = readFileSync(file, "utf8").trim();
     return secret === "" ? null : secret;

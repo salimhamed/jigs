@@ -4,7 +4,7 @@ import {
   createShutdown,
   SHUTDOWN_BACKSTOP_MS,
   startOwningSignals,
-} from "./shutdown";
+} from "./shutdown.ts";
 
 afterEach(() => {
   vi.useRealTimers();

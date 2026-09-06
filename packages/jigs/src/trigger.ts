@@ -3,12 +3,12 @@
 // route and the schedule ticker both go through here, so a scheduled fire is
 // an ordinary run and neither caller can drift from the other's checks.
 
-import type { CheckReport } from "@salimhamed/jigs/checks";
 import { start } from "workflow/api";
 import type { z } from "zod";
-import type { Factory } from "./factory";
-import { preflight } from "./preflight";
-import { resolveIssueRef } from "./providers/linear";
+import type { CheckReport } from "./checks/index.ts";
+import type { Factory } from "./factory.ts";
+import { preflight } from "./preflight.ts";
+import { resolveIssueRef } from "./providers/linear.ts";
 
 export type StartRunResult =
   | { kind: "started"; runId: string }

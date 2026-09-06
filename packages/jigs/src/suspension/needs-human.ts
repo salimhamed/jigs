@@ -10,9 +10,9 @@ import {
   getIssueParticipants,
   listCommentsSince,
   mention,
-} from "../providers/linear";
-import type { TicketClaim } from "./claim";
-import { type JsonValue, suspensionMetadata } from "./record";
+} from "../providers/linear.ts";
+import type { TicketClaim } from "./claim.ts";
+import { type JsonValue, suspensionMetadata } from "./record.ts";
 
 export interface HumanReply {
   commentId: string;

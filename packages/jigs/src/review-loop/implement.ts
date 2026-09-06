@@ -2,18 +2,17 @@
 // breaker is a plain loop bound, and the halt it ends on is a pause a human
 // ends — never a terminal state, so nothing the builder produced is discarded.
 
+import { z } from "zod";
 import {
   codeReviewPrompt,
   implementPrompt,
   interpolate,
-} from "@salimhamed/jigs/prompts";
-import type { AgentSession, HarnessConfig } from "@salimhamed/jigs/steps";
-import { z } from "zod";
-import type { AgentFn } from "../steps";
-import type { TicketClaim } from "../suspension/claim";
-import type { NeedsHumanFn } from "../suspension/needs-human";
-import type { Handoff } from "../ticket/review";
-import { renderSnapshot } from "../ticket/snapshot";
+} from "../prompts/index.ts";
+import type { AgentFn, AgentSession, HarnessConfig } from "../steps/index.ts";
+import type { TicketClaim } from "../suspension/claim.ts";
+import type { NeedsHumanFn } from "../suspension/needs-human.ts";
+import type { Handoff } from "../ticket/review.ts";
+import { renderSnapshot } from "../ticket/snapshot.ts";
 
 // strictObject for the same reason ticketReviewVerdict is: the harness's
 // native structured output carries additionalProperties:false, and a malformed

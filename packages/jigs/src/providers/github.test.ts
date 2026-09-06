@@ -6,7 +6,7 @@ import {
   postPrComment,
   replyToReviewThread,
   squashMergePr,
-} from "./github";
+} from "./github.ts";
 
 const fetchMock = vi.fn();
 

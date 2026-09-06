@@ -1,11 +1,8 @@
 import { rmSync } from "node:fs";
-import {
-  deriveDefaultBranch,
-  removeManagedCodexHome,
-  tryGit,
-} from "@salimhamed/jigs";
 import type { Sql } from "postgres";
-import { deleteWorktree, listWorktreesForRun } from "./registry";
+import { deriveDefaultBranch, tryGit } from "../git.ts";
+import { removeManagedCodexHome } from "../harnesses/codex-home.ts";
+import { deleteWorktree, listWorktreesForRun } from "./registry.ts";
 
 // The teardown matrix (ADR 0007), split into a pure decision and its git
 // execution so every row is a table test. Teardown is runtime-owned: authors

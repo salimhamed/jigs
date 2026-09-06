@@ -1,21 +1,21 @@
 import { existsSync, rmdirSync, rmSync } from "node:fs";
 import path from "node:path";
-import { removeManagedCodexHome } from "@salimhamed/jigs";
 import type { Sql } from "postgres";
-import { fetchOriginDefault } from "./create";
-import { type OwnerState, readOwner } from "./owner";
+import { removeManagedCodexHome } from "../harnesses/codex-home.ts";
+import { fetchOriginDefault } from "./create.ts";
+import { type OwnerState, readOwner } from "./owner.ts";
 import {
   deleteWorktree,
   listWorktrees,
   setWorktreeState,
   type WorktreeRow,
-} from "./registry";
+} from "./registry.ts";
 import {
   applyTeardown,
   decideTeardown,
   isBranchMerged,
   isWorktreeDirty,
-} from "./teardown";
+} from "./teardown.ts";
 
 // The one disk-against-registry-against-run-states join, behind both `jigs
 // sweep` and the worktree table `jigs ps` renders. Nothing runs it unattended:

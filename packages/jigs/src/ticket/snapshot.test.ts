@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { RawIssueSnapshot } from "../providers/linear";
-import { fetchSnapshot, renderSnapshot, toSnapshot } from "./snapshot";
+import type { RawIssueSnapshot } from "../providers/linear.ts";
+import { fetchSnapshot, renderSnapshot, toSnapshot } from "./snapshot.ts";
 
 const fetchMock = vi.fn();
 

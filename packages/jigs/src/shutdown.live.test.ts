@@ -1,7 +1,7 @@
 import { type AddressInfo, createServer } from "node:net";
 import { createWorld } from "@workflow/world-postgres";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { startOwningSignals } from "./shutdown";
+import { startOwningSignals } from "./shutdown.ts";
 
 // Its own database, bootstrapped with @workflow/world-postgres's `bootstrap`:
 // starting this World creates the workflow schema and graphile's tables, which

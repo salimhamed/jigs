@@ -4,7 +4,7 @@ import {
   ticketToken,
   tokenFromGithubPayload,
   tokenFromLinearPayload,
-} from "./tokens";
+} from "./tokens.ts";
 
 test("pr token, including dots and dashes in names", () => {
   expect(prToken({ owner: "acme-inc", repo: "api.v2", number: 41 })).toBe(

@@ -2,7 +2,7 @@
 // preflight — never from a workflow body, where env reads and network are
 // forbidden. GITHUB_API_URL override is a test seam.
 
-import type { PrRef } from "../suspension/tokens";
+import type { PrRef } from "../suspension/tokens.ts";
 
 export interface PrReview {
   id: number;

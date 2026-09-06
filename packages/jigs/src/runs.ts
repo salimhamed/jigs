@@ -5,11 +5,11 @@
 import { getHookByToken, getRun } from "workflow/api";
 import { hydrateData, observabilityRevivers } from "workflow/observability";
 import { getWorld } from "workflow/runtime";
-import type { Factory } from "./factory";
-import { resolveIssueRef } from "./providers/linear";
-import { type JobRunIds, listJobRunIds, runsWithActiveStep } from "./stalls";
-import { TICKET_TOKEN_PREFIX, ticketToken } from "./suspension/tokens";
-import { registrySql } from "./worktrees/sql";
+import type { Factory } from "./factory.ts";
+import { resolveIssueRef } from "./providers/linear.ts";
+import { type JobRunIds, listJobRunIds, runsWithActiveStep } from "./stalls.ts";
+import { TICKET_TOKEN_PREFIX, ticketToken } from "./suspension/tokens.ts";
+import { registrySql } from "./worktrees/sql.ts";
 
 // The SDK mints run ids as `wrun_` + a ULID, so a ref is run-id-shaped (with
 // or without the prefix, full or truncated) or it is a ticket ref. Crockford

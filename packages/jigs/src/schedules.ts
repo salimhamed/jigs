@@ -3,23 +3,19 @@
 // next occurrence from now, so a tick missed while the service was down is
 // skipped by construction — there is no catch-up.
 
-import {
-  type Check,
-  failedCheck,
-  formatFailures,
-} from "@salimhamed/jigs/checks";
 import { Cron } from "croner";
 import type { z } from "zod";
-import type { Factory, Schedule } from "./factory";
+import { type Check, failedCheck, formatFailures } from "./checks/index.ts";
+import type { Factory, Schedule } from "./factory.ts";
 import {
   listRuns,
   type RunRow,
   scheduleTriggerId,
   scheduleTriggerLabel,
   TERMINAL_RUN_STATUSES,
-} from "./runs";
-import { onShutdown } from "./shutdown";
-import { type StartRunResult, startRun } from "./trigger";
+} from "./runs.ts";
+import { onShutdown } from "./shutdown.ts";
+import { type StartRunResult, startRun } from "./trigger.ts";
 
 // Five fields, minute to day-of-week: croner's default mode would also
 // accept a seconds field, and a schedule that fires sixty times an hour

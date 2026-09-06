@@ -1,23 +1,20 @@
 // The step side of agent() and ask(): what the factory's "use step" wrappers
-// delegate to. Everything here reaches node builtins through jigs, so this
-// module must only ever be imported from inside a step body — a workflow-side
-// import of it fails the build loudly, which is the point of keeping it apart
-// from ./index.
+// delegate to. Everything here reaches node builtins, so this module must only
+// ever be imported from inside a step body — a workflow-side import of it
+// fails the build loudly, which is the point of keeping it out of ./index.
 
 import {
   formatFailures,
   JIT_TIMEOUT_MS,
   jitChecks,
   runChecks,
-} from "@salimhamed/jigs/checks";
-import type { AgentWire, AskWire, StepResult } from "@salimhamed/jigs/steps";
-import {
-  executeAgentStep,
-  executeAskStep,
-} from "@salimhamed/jigs/steps/execute";
+} from "../checks/index.ts";
 // Type-only, so it is erased and no workflow-side module is pulled in here.
 // The wrapper type is the one declaration of what crosses the step boundary.
-import type { RunAgentStep } from "./index";
+import type { RunAgentStep } from "./builders.ts";
+import { executeAgentStep, executeAskStep } from "./execute.ts";
+import type { AgentWire, AskWire } from "./plan.ts";
+import type { StepResult } from "./result.ts";
 
 export async function runAgent(
   wire: AgentWire,

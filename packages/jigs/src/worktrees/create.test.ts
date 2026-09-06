@@ -1,14 +1,14 @@
 import { rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { createWorktree, worktreeStatus } from "./create";
+import { createWorktree, worktreeStatus } from "./create.ts";
 import {
   commitToRemote,
   git,
   makeClonedBinding,
   makeTmpDir,
   removeTmpDir,
-} from "./test-fixtures";
+} from "./test-fixtures.ts";
 
 let tmp: string;
 let repoDir: string;

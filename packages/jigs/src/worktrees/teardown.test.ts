@@ -2,15 +2,15 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import type { WorktreeRow } from "./registry";
+import type { WorktreeRow } from "./registry.ts";
 import {
   applyTeardown,
   decideTeardown,
   isBranchMerged,
   isWorktreeDirty,
   teardownMergedRun,
-} from "./teardown";
-import { git, makeClonedBinding, makeFakeSql } from "./test-fixtures";
+} from "./teardown.ts";
+import { git, makeClonedBinding, makeFakeSql } from "./test-fixtures.ts";
 
 // The teardown matrix (ADR 0007) three ways: the pure decision as a table,
 // its git execution against a real worktree, then the merged recipe

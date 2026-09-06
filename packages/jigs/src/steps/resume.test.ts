@@ -1,12 +1,13 @@
+import { expect, test } from "vitest";
+import { z } from "zod";
 import {
   type AgentStepConfig,
   type AgentStepResult,
   claude,
-} from "@salimhamed/jigs/steps";
-import { expect, test } from "vitest";
-import { z } from "zod";
-import { parseOutput, unwrapAgentStep } from "./index";
-import { type AgentFn, resumeOrRebuild } from "./resume";
+  parseOutput,
+  unwrapAgentStep,
+} from "./index.ts";
+import { type AgentFn, resumeOrRebuild } from "./resume.ts";
 
 const verdict = z.strictObject({ note: z.string() });
 

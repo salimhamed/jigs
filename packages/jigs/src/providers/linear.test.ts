@@ -8,7 +8,7 @@ import {
   listCommentsSince,
   mention,
   resolveIssueRef,
-} from "./linear";
+} from "./linear.ts";
 
 const fetchMock = vi.fn();
 

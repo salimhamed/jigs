@@ -1,5 +1,5 @@
 import type { Sql } from "postgres";
-import { connectRegistry } from "./registry";
+import { connectRegistry } from "./registry.ts";
 
 // One lazily-opened registry connection for the process: the plugin's
 // startup ensure, the step-side provision, and the sweep all share it, so

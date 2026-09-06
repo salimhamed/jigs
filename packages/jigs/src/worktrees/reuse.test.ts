@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { assertReusable, WorktreeNotReusableError } from "./reuse";
+import { assertReusable, WorktreeNotReusableError } from "./reuse.ts";
 
 const path = "/data/worktrees/acme-abc12345/api/salim-fix";
 

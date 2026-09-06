@@ -1,15 +1,14 @@
-import type { WorktreeFacts } from "@salimhamed/jigs";
-import { type AgentStepConfig, claude } from "@salimhamed/jigs/steps";
 import { beforeEach, expect, test } from "vitest";
-import type { CheckRun, ReviewThread } from "../providers/github";
-import { parseOutput } from "../steps";
-import { resumeFailed } from "../steps/resume";
-import type { TicketClaim } from "../suspension/claim";
-import type { GateAck, GateWake } from "../suspension/pull-request-gate";
-import type { PrRef } from "../suspension/tokens";
-import type { Handoff } from "../ticket/review";
-import type { TicketSnapshot } from "../ticket/snapshot";
-import { type ReviewLoopDeps, reviewLoop } from "./loop";
+import type { CheckRun, ReviewThread } from "../providers/github.ts";
+import { type AgentStepConfig, claude, parseOutput } from "../steps/index.ts";
+import { resumeFailed } from "../steps/resume.ts";
+import type { TicketClaim } from "../suspension/claim.ts";
+import type { GateAck, GateWake } from "../suspension/pull-request-gate.ts";
+import type { PrRef } from "../suspension/tokens.ts";
+import type { Handoff } from "../ticket/review.ts";
+import type { TicketSnapshot } from "../ticket/snapshot.ts";
+import type { WorktreeFacts } from "../worktrees/facts.ts";
+import { type ReviewLoopDeps, reviewLoop } from "./loop.ts";
 
 const claim = {
   issueId: "68bc9696-35d5-442d-ab56-214c8cfefbec",

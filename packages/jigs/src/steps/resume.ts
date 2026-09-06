@@ -5,13 +5,10 @@
 // the other harness arrives as the same marker as a stale one, so no caller
 // owns a mismatch check of its own.
 
-import type {
-  AgentSession,
-  AgentStepConfig,
-  AgentStepResult,
-  HarnessConfig,
-} from "@salimhamed/jigs/steps";
 import type { z } from "zod";
+import type { HarnessConfig } from "./config.ts";
+import type { AgentStepConfig } from "./plan.ts";
+import type { AgentSession, AgentStepResult } from "./result.ts";
 
 // Private on purpose: `instanceof` only means something on this side of the
 // step boundary, and only to the fallback below.

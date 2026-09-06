@@ -7,13 +7,13 @@ import {
   fixCiFreshPrompt,
   fixCiPrompt,
   interpolate,
-} from "@salimhamed/jigs/prompts";
-import type { AgentSession, HarnessConfig } from "@salimhamed/jigs/steps";
-import type { CheckRun } from "../providers/github";
-import { type AgentFn, resumeOrRebuild } from "../steps";
-import type { Handoff } from "../ticket/review";
-import { renderSnapshot } from "../ticket/snapshot";
-import type { readDiff } from "./pull-request";
+} from "../prompts/index.ts";
+import type { CheckRun } from "../providers/github.ts";
+import type { AgentSession, HarnessConfig } from "../steps/index.ts";
+import { type AgentFn, resumeOrRebuild } from "../steps/index.ts";
+import type { Handoff } from "../ticket/review.ts";
+import { renderSnapshot } from "../ticket/snapshot.ts";
+import type { readDiff } from "./pull-request.ts";
 
 export interface FixCiOptions {
   harness: HarnessConfig;

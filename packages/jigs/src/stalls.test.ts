@@ -6,7 +6,7 @@ import {
   listRunDeadJobs,
   listRunSteps,
   runsWithActiveStep,
-} from "./stalls";
+} from "./stalls.ts";
 
 const RUN_A = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 const RUN_B = "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ";

@@ -1,11 +1,11 @@
 import { expect, test } from "vitest";
-import type { PrSnapshot, ReviewThread } from "../providers/github";
+import type { PrSnapshot, ReviewThread } from "../providers/github.ts";
 import {
   ackGateCursor,
   classifyPrState,
   emptyGateCursor,
   type GateCursor,
-} from "./pull-request-gate";
+} from "./pull-request-gate.ts";
 
 const empty: GateCursor = emptyGateCursor();
 

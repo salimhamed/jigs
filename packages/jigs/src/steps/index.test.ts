@@ -1,15 +1,16 @@
-import { buildAgentWire, claude } from "@salimhamed/jigs/steps";
 import { expect, test } from "vitest";
 import { z } from "zod";
 import {
   agent,
   ask,
+  buildAgentWire,
+  claude,
   JitCheckError,
   parseOutput,
   type RunAgentStep,
   unwrapAgentStep,
-} from "./index";
-import { runAgent } from "./run";
+} from "./index.ts";
+import { runAgent } from "./run.ts";
 
 // Stands in for a factory's wrapper, minus the directive: it delegates to
 // runAgent the way a factory's own does.

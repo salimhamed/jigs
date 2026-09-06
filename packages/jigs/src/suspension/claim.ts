@@ -1,6 +1,6 @@
 import { createHook, type Hook } from "workflow";
-import { suspensionMetadata } from "./record";
-import { ticketToken } from "./tokens";
+import { suspensionMetadata } from "./record.ts";
+import { ticketToken } from "./tokens.ts";
 
 export class ClaimConflictError extends Error {
   readonly resource: string;

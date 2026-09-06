@@ -5,7 +5,10 @@
 // `branchName` is Linear's gitBranchName, the worktree branch default. Every
 // step in one activation reads the same snapshot value.
 
-import { fetchIssueSnapshot, type RawIssueSnapshot } from "../providers/linear";
+import {
+  fetchIssueSnapshot,
+  type RawIssueSnapshot,
+} from "../providers/linear.ts";
 
 // Type aliases, not interfaces: aliases carry an implicit index signature,
 // which keeps step returns assignable to the SDK's Serializable types.

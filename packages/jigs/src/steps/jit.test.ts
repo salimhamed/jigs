@@ -1,9 +1,8 @@
-import { claude } from "@salimhamed/jigs/steps";
 import { expect, test } from "vitest";
-import type { TicketClaim } from "../suspension/claim";
-import type { HumanReply } from "../suspension/needs-human";
-import { JitCheckError } from "./index";
-import { type AgentOrHaltDeps, agentOrHalt } from "./jit";
+import type { TicketClaim } from "../suspension/claim.ts";
+import type { HumanReply } from "../suspension/needs-human.ts";
+import { claude, JitCheckError } from "./index.ts";
+import { type AgentOrHaltDeps, agentOrHalt } from "./jit.ts";
 
 const claim = {
   issueId: "issue-1",

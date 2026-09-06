@@ -1,18 +1,18 @@
-import { failedChecks } from "@salimhamed/jigs/checks";
 import { type Context, Hono } from "hono";
 import { getHookByToken, getRun, resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
 import { getWorld } from "workflow/runtime";
 import { z } from "zod";
-import type { Factory } from "./factory";
+import { failedChecks } from "./checks/index.ts";
+import type { Factory } from "./factory.ts";
 import {
   githubWebhookSecret,
   linearTimestampFresh,
   verifyGithubSignature,
   verifyLinearSignature,
-} from "./ingress";
-import { doctor, factoryRoot } from "./preflight";
-import { bootPhase, isReady } from "./readiness";
+} from "./ingress.ts";
+import { doctor, factoryRoot } from "./preflight.ts";
+import { bootPhase, isReady } from "./readiness.ts";
 import {
   derivedRunStatus,
   isParkToken,
@@ -21,21 +21,21 @@ import {
   resolveRunRef,
   stalledRuns,
   TERMINAL_RUN_STATUSES,
-} from "./runs";
-import { listSchedules, scheduleChecks } from "./schedules";
-import { listRunDeadJobs, listRunSteps } from "./stalls";
+} from "./runs.ts";
+import { listSchedules, scheduleChecks } from "./schedules.ts";
+import { listRunDeadJobs, listRunSteps } from "./stalls.ts";
 import {
   readSuspensionMetadata,
   type SuspensionRecord,
-} from "./suspension/record";
+} from "./suspension/record.ts";
 import {
   tokenFromGithubPayload,
   tokenFromLinearPayload,
-} from "./suspension/tokens";
-import { startRun } from "./trigger";
-import { listWorktreesForRun } from "./worktrees/registry";
-import { registrySql } from "./worktrees/sql";
-import { sweepWorktrees } from "./worktrees/sweep";
+} from "./suspension/tokens.ts";
+import { startRun } from "./trigger.ts";
+import { listWorktreesForRun } from "./worktrees/registry.ts";
+import { registrySql } from "./worktrees/sql.ts";
+import { sweepWorktrees } from "./worktrees/sweep.ts";
 
 // The app is library code: a factory repo installs this package and hands in
 // its own pipelines, so nothing here may import a pipeline module.

@@ -2,13 +2,12 @@
 // ticket into a brief and issues a proceed / needs-human verdict. jigs core
 // still validates nothing — this jig is optional, and invocation is approval.
 
-import { interpolate, ticketReviewPrompt } from "@salimhamed/jigs/prompts";
-import type { HarnessConfig } from "@salimhamed/jigs/steps";
 import { z } from "zod";
-import type { AgentFn } from "../steps";
-import type { TicketClaim } from "../suspension/claim";
-import type { NeedsHumanFn } from "../suspension/needs-human";
-import { renderSnapshot, type TicketSnapshot } from "./snapshot";
+import { interpolate, ticketReviewPrompt } from "../prompts/index.ts";
+import type { AgentFn, HarnessConfig } from "../steps/index.ts";
+import type { TicketClaim } from "../suspension/claim.ts";
+import type { NeedsHumanFn } from "../suspension/needs-human.ts";
+import { renderSnapshot, type TicketSnapshot } from "./snapshot.ts";
 
 // strictObject so the harness's native structured output carries
 // additionalProperties:false and a malformed verdict throws at the

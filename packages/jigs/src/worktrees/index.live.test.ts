@@ -1,20 +1,17 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import {
-  type Binding,
-  bindingRepoDir,
-  type WorktreeFacts,
-  worktreePath,
-} from "@salimhamed/jigs";
 import { afterAll, expect, test, vi } from "vitest";
-import { provisionRunWorktree } from "./index";
+import type { Binding } from "../config/factory-config.ts";
+import type { WorktreeFacts } from "./facts.ts";
+import { provisionRunWorktree } from "./index.ts";
+import { bindingRepoDir, worktreePath } from "./layout.ts";
 import {
   connectRegistry,
   ensureWorktreeRegistry,
   getWorktree,
-} from "./registry";
-import { WorktreeOwnedError } from "./reuse";
+} from "./registry.ts";
+import { WorktreeOwnedError } from "./reuse.ts";
 
 // Two transactions run concurrently, so the pool needs two connections.
 const sql = connectRegistry(

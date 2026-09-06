@@ -3,22 +3,22 @@
 // Both paths produce the same answers object, which is what makes the
 // fallback testable as an equal rather than as a consolation.
 
+import { z } from "zod";
 import {
   answerReviewPrompt,
   interpolate,
   rebuildContextPrompt,
-} from "@salimhamed/jigs/prompts";
-import type { AgentSession, HarnessConfig } from "@salimhamed/jigs/steps";
-import { z } from "zod";
-import type { ReviewThread } from "../providers/github";
+} from "../prompts/index.ts";
+import type { ReviewThread } from "../providers/github.ts";
+import type { AgentSession, HarnessConfig } from "../steps/index.ts";
 import {
   type AgentFn,
   type ResumeOrRebuildResult,
   resumeOrRebuild,
-} from "../steps";
-import type { Handoff } from "../ticket/review";
-import { renderSnapshot } from "../ticket/snapshot";
-import type { readDiff } from "./pull-request";
+} from "../steps/index.ts";
+import type { Handoff } from "../ticket/review.ts";
+import { renderSnapshot } from "../ticket/snapshot.ts";
+import type { readDiff } from "./pull-request.ts";
 
 // threadId null means the pull request conversation: a review body has no
 // thread root to reply into.

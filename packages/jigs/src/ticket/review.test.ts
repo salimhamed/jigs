@@ -1,15 +1,14 @@
-import { type AgentStepConfig, claude } from "@salimhamed/jigs/steps";
 import { beforeEach, expect, test, vi } from "vitest";
-import { parseOutput } from "../steps";
-import type { TicketClaim } from "../suspension/claim";
-import type { HumanReply } from "../suspension/needs-human";
-import type { JsonValue } from "../suspension/record";
+import { type AgentStepConfig, claude, parseOutput } from "../steps/index.ts";
+import type { TicketClaim } from "../suspension/claim.ts";
+import type { HumanReply } from "../suspension/needs-human.ts";
+import type { JsonValue } from "../suspension/record.ts";
 import {
   type TicketReviewDeps,
   ticketReview,
   ticketReviewVerdict,
-} from "./review";
-import type { TicketSnapshot } from "./snapshot";
+} from "./review.ts";
+import type { TicketSnapshot } from "./snapshot.ts";
 
 const claim = {
   issueId: "68bc9696-35d5-442d-ab56-214c8cfefbec",

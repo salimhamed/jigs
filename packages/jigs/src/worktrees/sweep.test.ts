@@ -2,10 +2,10 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import type { OwnerState } from "./owner";
-import type { WorktreeRow } from "./registry";
-import { classifySweep, type SweepInput, sweepWorktrees } from "./sweep";
-import { git, makeClonedBinding, makeFakeSql } from "./test-fixtures";
+import type { OwnerState } from "./owner.ts";
+import type { WorktreeRow } from "./registry.ts";
+import { classifySweep, type SweepInput, sweepWorktrees } from "./sweep.ts";
+import { git, makeClonedBinding, makeFakeSql } from "./test-fixtures.ts";
 
 // The classifier's rules as a table, then real git worktrees on disk against
 // a faked registry for the join — what gets removed, what survives, and what

@@ -1,6 +1,6 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
-import type { Factory } from "./factory";
+import type { Factory } from "./factory.ts";
 import {
   derivedRunStatus,
   isParkToken,
@@ -8,9 +8,9 @@ import {
   resolveRunRef,
   scheduleTriggerId,
   type WorldRun,
-} from "./runs";
-import * as stalls from "./stalls";
-import * as sql from "./worktrees/sql";
+} from "./runs.ts";
+import * as stalls from "./stalls.ts";
+import * as sql from "./worktrees/sql.ts";
 
 const RUN_A = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 const RUN_B = "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ";

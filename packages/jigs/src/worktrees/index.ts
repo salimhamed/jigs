@@ -9,24 +9,20 @@
 // imported from inside a step body. `WorktreeRequest` is a type, so a
 // workflow-side `import type` of it is erased and stays safe.
 
-import {
-  type Binding,
-  bindingRepoDir,
-  CliError,
-  hasBindingClone,
-  resolveBinding,
-  type WorktreeFacts,
-  worktreePath,
-} from "@salimhamed/jigs";
 import type { Sql } from "postgres";
-import { factoryRoot } from "../preflight";
-import { createWorktree, worktreeStatus } from "./create";
-import { readOwner } from "./owner";
-import { provisionWorktree } from "./provision";
-import { getWorktree, setWorktreeState, upsertWorktree } from "./registry";
-import { assertReusable, WorktreeOwnedError } from "./reuse";
-import { registrySql } from "./sql";
-import { teardownMergedRun as teardownMerged } from "./teardown";
+import { type Binding, resolveBinding } from "../config/factory-config.ts";
+import { CliError } from "../errors.ts";
+import { factoryRoot } from "../preflight.ts";
+import { hasBindingClone } from "./clone.ts";
+import { createWorktree, worktreeStatus } from "./create.ts";
+import type { WorktreeFacts } from "./facts.ts";
+import { bindingRepoDir, worktreePath } from "./layout.ts";
+import { readOwner } from "./owner.ts";
+import { provisionWorktree } from "./provision.ts";
+import { getWorktree, setWorktreeState, upsertWorktree } from "./registry.ts";
+import { assertReusable, WorktreeOwnedError } from "./reuse.ts";
+import { registrySql } from "./sql.ts";
+import { teardownMergedRun as teardownMerged } from "./teardown.ts";
 
 export interface WorktreeRequest {
   binding: string;

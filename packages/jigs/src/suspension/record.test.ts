@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { readSuspensionMetadata, suspensionMetadata } from "./record";
+import { readSuspensionMetadata, suspensionMetadata } from "./record.ts";
 
 test("envelope round-trips a suspension record", () => {
   const record = {

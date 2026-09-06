@@ -2,7 +2,6 @@
 // steps themselves execute in, and every failure is reported at once. There
 // is no skip flag — a wrong block is a bug to fix, not a flag to add.
 
-import { locateFactoryRoot } from "@salimhamed/jigs";
 import {
   type Check,
   type CheckReport,
@@ -11,9 +10,10 @@ import {
   type PipelineRequires,
   preflightChecks,
   runChecks,
-} from "@salimhamed/jigs/checks";
-import { getAuthenticatedUser } from "./providers/github";
-import { getViewer } from "./providers/linear";
+} from "./checks/index.ts";
+import { locateFactoryRoot } from "./config/locate-factory.ts";
+import { getAuthenticatedUser } from "./providers/github.ts";
+import { getViewer } from "./providers/linear.ts";
 
 export function factoryRoot(): string {
   const override = process.env.JIGS_FACTORY_ROOT;

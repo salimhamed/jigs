@@ -11,10 +11,10 @@ import {
   fetchPrSnapshot,
   type PrSnapshot,
   type ReviewThread,
-} from "../providers/github";
-import { ClaimConflictError } from "./claim";
-import { suspensionMetadata } from "./record";
-import { type PrRef, prToken } from "./tokens";
+} from "../providers/github.ts";
+import { ClaimConflictError } from "./claim.ts";
+import { suspensionMetadata } from "./record.ts";
+import { type PrRef, prToken } from "./tokens.ts";
 
 export type GateWake =
   | {

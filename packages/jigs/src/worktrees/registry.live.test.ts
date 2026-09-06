@@ -8,7 +8,7 @@ import {
   setWorktreeState,
   upsertWorktree,
   type WorktreeRow,
-} from "./registry";
+} from "./registry.ts";
 
 const sql = connectRegistry(
   process.env.WORKFLOW_POSTGRES_URL ??

@@ -9,7 +9,7 @@ import {
   linearTimestampFresh,
   verifyGithubSignature,
   verifyLinearSignature,
-} from "./ingress";
+} from "./ingress.ts";
 
 afterEach(() => {
   vi.unstubAllEnvs();

@@ -8,19 +8,19 @@
 // The factory owns PR presentation: `describePr` names the pull request and
 // writes its body, and jigs carries no default for either.
 
-import type { WorktreeFacts } from "@salimhamed/jigs";
-import { commitWorkPrompt } from "@salimhamed/jigs/prompts";
-import type { AgentSession, HarnessConfig } from "@salimhamed/jigs/steps";
-import type { CheckRun } from "../providers/github";
-import { type AgentFn, resumeOrRebuild } from "../steps";
-import type { TicketClaim } from "../suspension/claim";
-import type { NeedsHumanFn } from "../suspension/needs-human";
-import type { GateAck, GateFn } from "../suspension/pull-request-gate";
-import type { PrRef } from "../suspension/tokens";
-import type { Handoff } from "../ticket/review";
-import { answerAsBuilder, type ThreadAnswers } from "./builder";
-import { fixCi, renderChecks } from "./fix-ci";
-import { implementAndReview } from "./implement";
+import { commitWorkPrompt } from "../prompts/index.ts";
+import type { CheckRun } from "../providers/github.ts";
+import type { AgentSession, HarnessConfig } from "../steps/index.ts";
+import { type AgentFn, resumeOrRebuild } from "../steps/index.ts";
+import type { TicketClaim } from "../suspension/claim.ts";
+import type { NeedsHumanFn } from "../suspension/needs-human.ts";
+import type { GateAck, GateFn } from "../suspension/pull-request-gate.ts";
+import type { PrRef } from "../suspension/tokens.ts";
+import type { Handoff } from "../ticket/review.ts";
+import type { WorktreeFacts } from "../worktrees/facts.ts";
+import { answerAsBuilder, type ThreadAnswers } from "./builder.ts";
+import { fixCi, renderChecks } from "./fix-ci.ts";
+import { implementAndReview } from "./implement.ts";
 import type {
   commentOnPr,
   openPr,
@@ -29,7 +29,7 @@ import type {
   replyInThread,
   resolveRepo,
   squashMerge,
-} from "./pull-request";
+} from "./pull-request.ts";
 
 export interface ReviewLoopOptions {
   claim: TicketClaim;

@@ -1,11 +1,10 @@
-import { type AgentStepConfig, claude } from "@salimhamed/jigs/steps";
 import { beforeEach, expect, test } from "vitest";
-import type { ReviewThread } from "../providers/github";
-import { parseOutput } from "../steps";
-import { resumeFailed } from "../steps/resume";
-import type { Handoff } from "../ticket/review";
-import type { TicketSnapshot } from "../ticket/snapshot";
-import { answerAsBuilder, type BuilderDeps } from "./builder";
+import type { ReviewThread } from "../providers/github.ts";
+import { type AgentStepConfig, claude, parseOutput } from "../steps/index.ts";
+import { resumeFailed } from "../steps/resume.ts";
+import type { Handoff } from "../ticket/review.ts";
+import type { TicketSnapshot } from "../ticket/snapshot.ts";
+import { answerAsBuilder, type BuilderDeps } from "./builder.ts";
 
 const snapshot: TicketSnapshot = {
   fetchedAt: "2026-08-26T13:00:00Z",

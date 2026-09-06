@@ -1,6 +1,5 @@
 import { chmodSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { bindingRepoDir, ensureBindingClone } from "@salimhamed/jigs";
 import {
   afterAll,
   afterEach,
@@ -12,13 +11,15 @@ import {
 } from "vitest";
 import { z } from "zod";
 // Real git fixtures, reached by path: they are test-only, so they stay out
-// of the jigs package's export map.
+// of the package's export map.
 import {
   makeFactoryRepo,
   makeRemoteBackedRepo,
   makeTmpDir,
   removeTmpDir,
-} from "../../jigs/src/test-fixtures.ts";
+} from "./test-fixtures.ts";
+import { ensureBindingClone } from "./worktrees/clone.ts";
+import { bindingRepoDir } from "./worktrees/layout.ts";
 
 // File-scoped so it cannot disturb app.test.ts: the whole point of AC1 is
 // that a refused trigger never reaches start().
@@ -32,7 +33,7 @@ vi.mock("workflow/api", () => ({
   resumeHook: async () => ({}),
 }));
 
-const { createApp } = await import("./app");
+const { createApp } = await import("./app.ts");
 
 // A fixture rather than a demo: what preflight owes the trigger path is the
 // same whatever pipelines a factory declares, and this one declares exactly

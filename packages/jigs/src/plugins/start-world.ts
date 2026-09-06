@@ -1,7 +1,11 @@
-import type { BindingClone } from "@salimhamed/jigs";
 import type { ISql } from "postgres";
-import { READY_PHASE, setBootPhase } from "../readiness";
-import { installShutdown, onShutdown, startOwningSignals } from "../shutdown";
+import { READY_PHASE, setBootPhase } from "../readiness.ts";
+import {
+  installShutdown,
+  onShutdown,
+  startOwningSignals,
+} from "../shutdown.ts";
+import type { BindingClone } from "../worktrees/clone.ts";
 
 export interface RegistryGateDeps {
   sql?: () => ISql;
@@ -24,11 +28,11 @@ export async function gateOnWorktreeRegistry(
     // WORKFLOW_POSTGRES_URL throws synchronously, and that escape is the very
     // thing this gate exists to stop.
     const resolveSql =
-      deps.sql ?? (await import("../worktrees/sql")).registrySql;
+      deps.sql ?? (await import("../worktrees/sql.ts")).registrySql;
     const sql = resolveSql();
     const ensure =
       deps.ensure ??
-      (await import("../worktrees/registry")).ensureWorktreeRegistry;
+      (await import("../worktrees/registry.ts")).ensureWorktreeRegistry;
     await ensure(sql);
   } catch (err) {
     const error = deps.error ?? ((line: string) => console.error(line));
@@ -73,12 +77,12 @@ export async function gateOnBindingClones(
   try {
     // Inside the try: reading the factory config is itself fallible, and a
     // service that cannot tell what is bound must not start.
-    const jigs = await import("@salimhamed/jigs");
+    const jigs = await import("../worktrees/clone.ts");
     ensure = deps.ensure ?? jigs.ensureBindingClone;
     if (deps.bindings !== undefined) {
       declared = deps.bindings();
     } else {
-      const { factoryRoot } = await import("../preflight");
+      const { factoryRoot } = await import("../preflight.ts");
       declared = jigs.bindingClones(factoryRoot());
     }
   } catch (err) {
@@ -142,7 +146,7 @@ export default async function startWorld() {
   // Before the World starts polling: the queue's very first step dispatch has
   // to go out on the scoped dispatcher, not node's five-minute default.
   const { describeStepCeiling, raiseStepCeiling } = await import(
-    "../step-ceiling"
+    "../step-ceiling.ts"
   );
   raiseStepCeiling();
   console.log(`[service] step ceiling: ${describeStepCeiling()}`);

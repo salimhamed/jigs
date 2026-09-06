@@ -3,25 +3,19 @@
 // jigs reaches node builtins, so this module must only ever be imported from
 // inside a step body — hence its errors thrown workflow-side live in ./loop.
 
-import {
-  commitsAhead,
-  diffSince,
-  type GithubRepoRef,
-  headSha,
-  parseGithubRemote,
-  pushBranch,
-  resolveBinding,
-} from "@salimhamed/jigs";
-import { factoryRoot } from "../preflight";
+import { resolveBinding } from "../config/factory-config.ts";
+import { commitsAhead, diffSince, headSha, pushBranch } from "../git.ts";
+import { type GithubRepoRef, parseGithubRemote } from "../github-webhook.ts";
+import { factoryRoot } from "../preflight.ts";
 import {
   createPullRequest,
   fetchPrTitle,
   postPrComment,
   replyToReviewThread,
   squashMergePr,
-} from "../providers/github";
-import type { PrRef } from "../suspension/tokens";
-import { isWorktreeDirty } from "../worktrees/teardown";
+} from "../providers/github.ts";
+import type { PrRef } from "../suspension/tokens.ts";
+import { isWorktreeDirty } from "../worktrees/teardown.ts";
 
 // The binding is the remote now, so this is a config read: no git subprocess.
 export async function resolveRepo(binding: string): Promise<GithubRepoRef> {

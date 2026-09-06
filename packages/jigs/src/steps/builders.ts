@@ -4,30 +4,26 @@
 // back into the typed StepResult. Memoization is the SDK's positional replay —
 // no author-supplied keys anywhere.
 //
-// Nothing in this package carries a "use step" directive. The wrappers live in
-// the factory repo, so the ids the SDK derives are factory-local paths and no
-// version of this package is baked into a memoization key. This module is the
-// workflow side of that split; ./run is the step side.
+// This module is the workflow side of that split; ./run is the step side.
 
+import type { z } from "zod";
 import {
   type AgentStepConfig,
-  type AgentStepResult,
   type AgentWire,
   type AskStepConfig,
   type AskWire,
   buildAgentWire,
   buildAskWire,
-  type StepResult,
-} from "@salimhamed/jigs/steps";
-import type { z } from "zod";
-import { resumeFailed } from "./resume";
+} from "./plan.ts";
+import type { AgentStepResult, StepResult } from "./result.ts";
+import { resumeFailed } from "./resume.ts";
 
 export {
   type AgentFn,
   type ResumeOrRebuildOptions,
   type ResumeOrRebuildResult,
   resumeOrRebuild,
-} from "./resume";
+} from "./resume.ts";
 
 // Thrown workflow-side, never inside the step: a step's rejection is rebuilt
 // from its message alone, so a JIT failure crosses the boundary as a returned

@@ -2,7 +2,7 @@ import type { Server } from "node:http";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { onShutdown } from "../shutdown";
+import { onShutdown } from "../shutdown.ts";
 
 // Hosted here rather than run standalone: a second process opening this World
 // runs a second queue worker, which steals the service's jobs.

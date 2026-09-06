@@ -1,26 +1,23 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import {
-  type Binding,
-  bindingRepoDir,
-  type WorktreeFacts,
-  worktreePath,
-} from "@salimhamed/jigs";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { createWorktree, worktreeStatus } from "./create";
+import type { Binding } from "../config/factory-config.ts";
+import type { createWorktree, worktreeStatus } from "./create.ts";
+import type { WorktreeFacts } from "./facts.ts";
 import {
   type ProvisionRunWorktreeDeps,
   provisionRunWorktree,
   teardownRunWorktrees,
-} from "./index";
+} from "./index.ts";
+import { bindingRepoDir, worktreePath } from "./layout.ts";
 import {
   PostCreateFailedError,
   type ProvisionWorktreeOptions,
-} from "./provision";
-import type { WorktreeRow } from "./registry";
-import { WorktreeOwnedError } from "./reuse";
-import { makeFakeSql } from "./test-fixtures";
+} from "./provision.ts";
+import type { WorktreeRow } from "./registry.ts";
+import { WorktreeOwnedError } from "./reuse.ts";
+import { makeFakeSql } from "./test-fixtures.ts";
 
 let tmp: string;
 let repoDir: string;

@@ -14,11 +14,11 @@ import {
 import { HookNotFoundError } from "workflow/errors";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
-import { createApp } from "./app";
-import { type Factory, ticketInput } from "./factory";
-import * as stalls from "./stalls";
-import * as sql from "./worktrees/sql";
-import { makeFakeSql } from "./worktrees/test-fixtures";
+import { createApp } from "./app.ts";
+import { type Factory, ticketInput } from "./factory.ts";
+import * as stalls from "./stalls.ts";
+import * as sql from "./worktrees/sql.ts";
+import { makeFakeSql } from "./worktrees/test-fixtures.ts";
 
 // The routes are exercised against pipelines this file declares: what is under
 // test is the framework.

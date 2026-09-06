@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Sql } from "postgres";
-import type { WorktreeRow } from "./registry";
+import type { WorktreeRow } from "./registry.ts";
 
 export function makeTmpDir(): string {
   return mkdtempSync(path.join(tmpdir(), "jigs-test-"));

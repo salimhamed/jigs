@@ -1,14 +1,14 @@
 import { expect, test } from "vitest";
 import { z } from "zod";
-import type { Factory, Schedule } from "./factory";
-import type { RunRow } from "./runs";
+import type { Factory, Schedule } from "./factory.ts";
+import type { RunRow } from "./runs.ts";
 import {
   fireSchedule,
   listSchedules,
   scheduleChecks,
   startSchedules,
-} from "./schedules";
-import type { StartRunResult } from "./trigger";
+} from "./schedules.ts";
+import type { StartRunResult } from "./trigger.ts";
 
 const RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 
