@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.0](https://github.com/salimhamed/jigs/compare/jigs-v0.2.0...jigs-v0.3.0) (2026-09-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* ship jigs as a single package ([#110](https://github.com/salimhamed/jigs/issues/110))
+
+### Features
+
+* ship jigs as a single package ([#110](https://github.com/salimhamed/jigs/issues/110)) ([e84c6c7](https://github.com/salimhamed/jigs/commit/e84c6c7507d36ed663ccd72a4f1981ee9ebf79c3))
+
 ## [0.2.0](https://github.com/salimhamed/jigs/compare/jigs-v0.1.20...jigs-v0.2.0) (2026-09-06)
 
 
