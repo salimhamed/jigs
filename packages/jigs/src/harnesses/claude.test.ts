@@ -1,11 +1,7 @@
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import {
-  ClaudeExecutableMissingError,
-  claudeStepSettings,
-  resolveClaudeExecutable,
-} from "./claude.ts";
+import { claudeStepSettings, resolveClaudeExecutable } from "./claude.ts";
 import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
 let tmp: string;
@@ -38,10 +34,10 @@ test("PATH scan finds an executable claude, skipping non-executable dirs", () =>
   expect(resolveClaudeExecutable(env)).toBe(path.join(fakeBin, "claude"));
 });
 
-test("no claude anywhere throws the typed repair error", () => {
+test("no claude anywhere throws a repair error", () => {
   expect(() =>
     resolveClaudeExecutable({ PATH: path.join(tmp, "empty2") }),
-  ).toThrow(ClaudeExecutableMissingError);
+  ).toThrow("no `claude` executable found on PATH");
   expect(() => resolveClaudeExecutable({ PATH: "" })).toThrow(
     "JIGS_CLAUDE_EXECUTABLE",
   );

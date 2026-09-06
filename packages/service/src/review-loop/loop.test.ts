@@ -8,7 +8,7 @@ import type { GateAck, GateWake } from "../suspension/pull-request-gate";
 import type { PrRef } from "../suspension/tokens";
 import type { Handoff } from "../ticket/review";
 import type { TicketSnapshot } from "../ticket/snapshot";
-import { PrClosedUnmergedError, type ReviewLoopDeps, reviewLoop } from "./loop";
+import { type ReviewLoopDeps, reviewLoop } from "./loop";
 
 const claim = {
   issueId: "68bc9696-35d5-442d-ab56-214c8cfefbec",
@@ -573,7 +573,7 @@ test("a merge GitHub refuses leaves the PR open and the run listening", async ()
     throw new Error("405 Pull Request is not mergeable");
   };
 
-  await expect(run(deps)).rejects.toThrow(PrClosedUnmergedError);
+  await expect(run(deps)).rejects.toThrow("closed without merging");
   expect(calls.comments).toHaveLength(1);
   expect(calls.comments[0]).toContain("@salim");
   expect(calls.comments[0]).toContain("not mergeable");
@@ -599,7 +599,7 @@ test("in human-merges mode an approval merges nothing and keeps listening", asyn
 test("a PR closed unmerged fails the run and leaves the worktree for sweep", async () => {
   const deps = makeDeps([{ kind: "closed", merged: false }]);
 
-  await expect(run(deps)).rejects.toThrow(PrClosedUnmergedError);
+  await expect(run(deps)).rejects.toThrow("closed without merging");
   // Teardown ran before the throw, on the failed-run rows.
 });
 

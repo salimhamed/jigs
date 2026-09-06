@@ -2,7 +2,6 @@ import { lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import {
-  CodexAuthMissingError,
   CURATED_CONFIG_TOML,
   ensureManagedCodexHome,
   managedCodexHomePath,
@@ -87,13 +86,13 @@ test("a symlink to the wrong target is re-pointed", () => {
   expect(home).toBe(relinked);
 });
 
-test("a missing real login throws the typed repair error", () => {
+test("a missing real login throws a repair error", () => {
   expect(() =>
     ensureManagedCodexHome("run-1", {
       ...opts,
       realAuthPath: path.join(tmp, "nope.json"),
     }),
-  ).toThrow(CodexAuthMissingError);
+  ).toThrow("no Codex login found");
   expect(() =>
     ensureManagedCodexHome("run-1", {
       ...opts,

@@ -2,15 +2,6 @@ import { accessSync, constants } from "node:fs";
 import path from "node:path";
 import type { ClaudeCodeSettings } from "ai-sdk-provider-claude-code";
 
-export class ClaudeExecutableMissingError extends Error {
-  constructor() {
-    super(
-      "no `claude` executable found on PATH — install the Claude Code CLI, or set JIGS_CLAUDE_EXECUTABLE",
-    );
-    this.name = "ClaudeExecutableMissingError";
-  }
-}
-
 // Always resolved explicitly: the Nitro build severs the provider's vendored
 // binary, and pointing at the system `claude` keeps dev and the built service
 // behaving identically.
@@ -29,7 +20,9 @@ export function resolveClaudeExecutable(
       // keep scanning
     }
   }
-  throw new ClaudeExecutableMissingError();
+  throw new Error(
+    "no `claude` executable found on PATH — install the Claude Code CLI, or set JIGS_CLAUDE_EXECUTABLE",
+  );
 }
 
 export type ClaudeStepOptions = ClaudeCodeSettings & { cwd: string };

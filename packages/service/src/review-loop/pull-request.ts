@@ -23,20 +23,15 @@ import {
 import type { PrRef } from "../suspension/tokens";
 import { isWorktreeDirty } from "../worktrees/teardown";
 
-export class RemoteNotGithubError extends Error {
-  constructor(binding: string, url: string) {
-    super(
-      `binding ${binding} points at ${url}, which is not a github.com remote — the review loop opens its pull requests on GitHub`,
-    );
-    this.name = "RemoteNotGithubError";
-  }
-}
-
 // The binding is the remote now, so this is a config read: no git subprocess.
 export async function resolveRepo(binding: string): Promise<GithubRepoRef> {
   const { remote } = resolveBinding(factoryRoot(), binding);
   const ref = parseGithubRemote(remote);
-  if (ref === null) throw new RemoteNotGithubError(binding, remote);
+  if (ref === null) {
+    throw new Error(
+      `binding ${binding} points at ${remote}, which is not a github.com remote — the review loop opens its pull requests on GitHub`,
+    );
+  }
   console.log(
     `[reviewLoop] binding ${binding} resolves to ${ref.owner}/${ref.repo}`,
   );
