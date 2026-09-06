@@ -43,8 +43,8 @@ test("scaffolds a factory that can be installed and built", async () => {
     "steps/jigs.ts",
     "tsconfig.json",
   ]);
-  // The SDK, its World and its dashboard are peers of the service, loaded by
-  // name from the factory's own node_modules, so the factory has to carry them.
+  // The SDK, its World and its dashboard are peers of jigs, loaded by name
+  // from the factory's own node_modules, so the factory has to carry them.
   const pkg = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8"));
   expect(pkg.dependencies.workflow).toBeDefined();
   expect(pkg.dependencies["@workflow/world-postgres"]).toBeDefined();
@@ -53,14 +53,18 @@ test("scaffolds a factory that can be installed and built", async () => {
   // The scaffolded ids test needs its runner.
   expect(pkg.devDependencies.vitest).toBeDefined();
   expect(pkg.scripts.test).toBe("vitest run");
-  // Both packages pinned to the version of the CLI scaffolding it: they
-  // release in lockstep, and a range would let the pair drift apart.
+  // Pinned to the version of the CLI scaffolding it: a range would let the
+  // scaffold's wrappers and the package they import from drift apart.
   const { version } = JSON.parse(
     readFileSync(path.join(packageRoot(), "package.json"), "utf8"),
   );
   expect(version).toMatch(/^\d+\.\d+\.\d+$/);
   expect(pkg.dependencies["@salimhamed/jigs"]).toBe(version);
-  expect(pkg.dependencies["@salimhamed/jigs-service"]).toBe(version);
+  expect(
+    Object.keys(pkg.dependencies).filter((name) =>
+      name.startsWith("@salimhamed/"),
+    ),
+  ).toEqual(["@salimhamed/jigs"]);
   expect(JSON.stringify(pkg)).not.toContain("link:");
   // Spike finding 5: pnpm 11 reads allowBuilds only from pnpm-workspace.yaml.
   const workspace = readFileSync(path.join(dir, "pnpm-workspace.yaml"), "utf8");

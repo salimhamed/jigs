@@ -29,6 +29,17 @@ const optionalPeers = new Set(
     .map(([name]) => name),
 );
 
+async function templateFiles(dir: string): Promise<string[]> {
+  const entries = await readdir(dir, { withFileTypes: true });
+  const files = await Promise.all(
+    entries.map((entry) => {
+      const file = path.join(dir, entry.name);
+      return entry.isDirectory() ? templateFiles(file) : [file];
+    }),
+  );
+  return files.flat().filter((file) => file.endsWith(".tmpl"));
+}
+
 async function sourceFiles(dir: string): Promise<string[]> {
   const entries = await readdir(path.join(packageDir, dir), {
     withFileTypes: true,
@@ -57,20 +68,18 @@ test("no compiled source carries a workflow directive — the factory writes its
   expect(directed).toEqual([]);
 });
 
-test("every subpath the scaffolded wrappers reach is in the exports map", async () => {
+test("every subpath the scaffold reaches is in the exports map", async () => {
   // A factory resolves this package through the exports map alone, so a
   // subpath dropped here is a wrapper that cannot resolve in every factory
-  // that already has one. The template is where every factory's wrappers
-  // start from.
-  const wrappers = await readFile(
-    path.join(templatesDir, "steps", "jigs.ts.tmpl"),
-    "utf8",
-  );
-  const reached = new Set(
-    [...wrappers.matchAll(/from "@salimhamed\/jigs(\/[^"]*)?"/g)].map(
-      (match) => `.${match[1] ?? ""}`,
-    ),
-  );
+  // that already has one. The templates are where every factory's code starts.
+  const reached = new Set<string>();
+  for (const file of await templateFiles(templatesDir)) {
+    const source = await readFile(file, "utf8");
+    for (const match of source.matchAll(/"@salimhamed\/jigs(\/[^"]*)?"/g)) {
+      reached.add(`.${match[1] ?? ""}`);
+    }
+  }
+  expect(reached.size).toBeGreaterThan(1);
   for (const subpath of reached) {
     expect(Object.keys(pkg.exports), subpath).toContain(subpath);
   }

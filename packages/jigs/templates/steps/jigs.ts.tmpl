@@ -18,11 +18,12 @@
 // imports only those bodies reach go with it, so the service's node-builtin
 // code never crosses into the workflow sandbox.
 
+import type { WorktreeFacts } from "@salimhamed/jigs";
 import {
   type ReviewLoopDeps,
   type ReviewLoopOptions,
   reviewLoop as reviewLoopJig,
-} from "@salimhamed/jigs-service/review-loop/loop";
+} from "@salimhamed/jigs/review-loop/loop";
 import {
   commentOnPr as commentOnPrImpl,
   openPr as openPrImpl,
@@ -31,34 +32,37 @@ import {
   replyInThread as replyInThreadImpl,
   resolveRepo as resolveRepoImpl,
   squashMerge as squashMergeImpl,
-} from "@salimhamed/jigs-service/review-loop/pull-request";
-import { agent as agentJig, ask as askJig } from "@salimhamed/jigs-service/steps";
-import { agentOrHalt as agentOrHaltJig } from "@salimhamed/jigs-service/steps/jit";
-import { runAgent, runAsk } from "@salimhamed/jigs-service/steps/run";
-import type { TicketClaim } from "@salimhamed/jigs-service/suspension/claim";
+} from "@salimhamed/jigs/review-loop/pull-request";
+import {
+  agent as agentJig,
+  type AgentStepConfig,
+  ask as askJig,
+  type AskStepConfig,
+} from "@salimhamed/jigs/steps";
+import { agentOrHalt as agentOrHaltJig } from "@salimhamed/jigs/steps/jit";
+import { runAgent, runAsk } from "@salimhamed/jigs/steps/run";
+import type { TicketClaim } from "@salimhamed/jigs/suspension/claim";
 import {
   checkForHumanReply as checkForHumanReplyImpl,
   type NeedsHumanFn,
   needsHuman as needsHumanJig,
   postNeedsHumanComment as postNeedsHumanCommentImpl,
-} from "@salimhamed/jigs-service/suspension/needs-human";
+} from "@salimhamed/jigs/suspension/needs-human";
 import {
   fetchPrState as fetchPrStateImpl,
   type GateFn,
   pullRequestGate,
-} from "@salimhamed/jigs-service/suspension/pull-request-gate";
+} from "@salimhamed/jigs/suspension/pull-request-gate";
 import {
   type TicketReviewOptions,
   ticketReview as ticketReviewJig,
-} from "@salimhamed/jigs-service/ticket/review";
-import { fetchSnapshot as fetchSnapshotImpl } from "@salimhamed/jigs-service/ticket/snapshot";
+} from "@salimhamed/jigs/ticket/review";
+import { fetchSnapshot as fetchSnapshotImpl } from "@salimhamed/jigs/ticket/snapshot";
 import {
   provisionRunWorktree,
   teardownMergedRun,
   type WorktreeRequest,
-} from "@salimhamed/jigs-service/worktrees";
-import type { WorktreeFacts } from "@salimhamed/jigs";
-import type { AgentStepConfig, AskStepConfig } from "@salimhamed/jigs/steps";
+} from "@salimhamed/jigs/worktrees";
 import { getWorkflowMetadata } from "workflow";
 import { describePr as describePrJig } from "./describe-pr.ts";
 
