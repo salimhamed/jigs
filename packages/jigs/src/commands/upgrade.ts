@@ -32,6 +32,7 @@ export const JIGS_PACKAGES = [
 // What a factory scaffolded before jigs was published depends on: the
 // checkout's packages, by their pre-publish names, linked by path.
 const CHECKOUT_PACKAGES = ["jigs", "@jigs/service"];
+const PUBLISHED_NAMES: readonly string[] = JIGS_PACKAGES;
 
 export type UpgradeStepName = "packages" | "bump" | "typecheck";
 
@@ -141,7 +142,8 @@ function publishedVersions(factoryRoot: string): Versions {
   const fromCheckout = Object.entries(declared)
     .filter(
       ([name, spec]) =>
-        CHECKOUT_PACKAGES.includes(name) || spec.startsWith("link:"),
+        CHECKOUT_PACKAGES.includes(name) ||
+        (PUBLISHED_NAMES.includes(name) && spec.startsWith("link:")),
     )
     .map(([name, spec]) => `${name}: ${spec}`);
   if (fromCheckout.length > 0) {
@@ -206,15 +208,21 @@ async function bump(
           "the factory supplies @workflow/web, @workflow/world-postgres, workflow and zod — move each to the version pnpm names above, then jigs upgrade again",
         );
       }
-      if (/ERR_PNPM_FETCH_40[13]|E40[13]\b/.test(output)) {
+      if (/registry\.npmjs\.org\/@salimhamed%2F/.test(output)) {
         return new CliError(
-          "GitHub Packages refused the request",
-          "~/.npmrc needs a token with read:packages for the @salimhamed scope",
+          "the @salimhamed scope is not routed to GitHub Packages, so pnpm asked npmjs.org",
+          "add @salimhamed:registry=https://npm.pkg.github.com to this factory's .npmrc or ~/.npmrc",
         );
       }
-      if (
-        /ERR_PNPM_NO_MATCHING_VERSION|ERR_PNPM_FETCH_404|E404\b/.test(output)
-      ) {
+      // GitHub Packages answers 404, not 401, for a private package the token
+      // cannot see; a version that does not exist is NO_MATCHING_VERSION.
+      if (/ERR_PNPM_FETCH_40[134]|E40[134]\b/.test(output)) {
+        return new CliError(
+          "GitHub Packages refused the request",
+          "~/.npmrc needs //npm.pkg.github.com/:_authToken=<classic PAT with read:packages, and repo while the jigs repo is private>",
+        );
+      }
+      if (/ERR_PNPM_NO_MATCHING_VERSION/.test(output)) {
         return new CliError(
           `no such release of ${JIGS_PACKAGES.join(" and ")}${to === undefined ? "" : ` at ${to}`}`,
           "both packages release together — pick a version both have",

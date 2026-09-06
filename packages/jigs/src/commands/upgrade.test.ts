@@ -11,7 +11,7 @@ import {
   fakeProcesses,
   fakeService,
   factory as scaffold,
-} from "./up-test-fixtures.ts";
+} from "./test-fixtures.ts";
 import {
   type UpgradeDeps,
   type UpgradeOptions,
@@ -251,6 +251,22 @@ test("a published name still linked by path counts as a checkout install", async
   expect(result.steps[0]?.detail).toContain("@salimhamed/jigs: link:");
 });
 
+test("a link: to something other than jigs is not a checkout install", async () => {
+  const port = await fakeService();
+  const root = factory(port, {
+    dependencies: { ...PUBLISHED, "acme-tools": "link:../acme-tools" },
+    scripts: { typecheck: "tsc --noEmit" },
+  });
+  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+
+  const result = await upgrade(root, io);
+
+  expect(result.ok).toBe(true);
+  expect(readManifest(root).dependencies["acme-tools"]).toBe(
+    "link:../acme-tools",
+  );
+});
+
 test("a factory missing one of the two packages is told which, since pnpm would silently skip it", async () => {
   const root = factory(1, {
     dependencies: { "@salimhamed/jigs": "0.1.18" },
@@ -315,6 +331,51 @@ test("a registry that refuses the token points at ~/.npmrc", async () => {
 
   expect(statuses(result).at(-1)).toBe("bump:failed");
   expect(result.steps.at(-1)?.repair).toContain("read:packages");
+});
+
+test("GitHub Packages answering 404 is a token problem, not a missing release", async () => {
+  const root = factory(1);
+  const io = {
+    exec: fakeRegistry("0.1.19", (call) =>
+      call.args[0] === "update"
+        ? execError(
+            1,
+            "ERR_PNPM_FETCH_404  GET https://npm.pkg.github.com/@salimhamed%2Fjigs: Not Found - 404\n",
+          )
+        : undefined,
+    ),
+    procs: fakeProcesses(),
+  };
+
+  const result = await upgrade(root, io);
+
+  expect(statuses(result).at(-1)).toBe("bump:failed");
+  expect(result.steps.at(-1)?.detail).toBe(
+    "GitHub Packages refused the request",
+  );
+  expect(result.steps.at(-1)?.repair).toContain("read:packages");
+});
+
+test("an @salimhamed scope not routed to GitHub Packages names the .npmrc line", async () => {
+  const root = factory(1);
+  const io = {
+    exec: fakeRegistry("0.1.19", (call) =>
+      call.args[0] === "update"
+        ? execError(
+            1,
+            "ERR_PNPM_FETCH_404  GET https://registry.npmjs.org/@salimhamed%2Fjigs: Not Found - 404\n",
+          )
+        : undefined,
+    ),
+    procs: fakeProcesses(),
+  };
+
+  const result = await upgrade(root, io);
+
+  expect(statuses(result).at(-1)).toBe("bump:failed");
+  expect(result.steps.at(-1)?.repair).toContain(
+    "@salimhamed:registry=https://npm.pkg.github.com",
+  );
 });
 
 test("a version neither package has is named with the --to that asked for it", async () => {

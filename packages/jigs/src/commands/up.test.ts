@@ -2,7 +2,6 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
-import { type UpDeps, type UpOptions, upFactory } from "./up.ts";
 import {
   closedPort,
   closeFakeServices,
@@ -12,7 +11,8 @@ import {
   fakeProcesses,
   fakeService,
   factory as scaffold,
-} from "./up-test-fixtures.ts";
+} from "./test-fixtures.ts";
+import { type UpDeps, type UpOptions, upFactory } from "./up.ts";
 
 let tmp: string;
 let lines: string[];
