@@ -77,13 +77,12 @@ cancelled with a clean tree** removes the worktree but keeps local and remote
 branches as the insurance copy of unmerged work; **failed or cancelled with a
 dirty tree** preserves the worktree, marks it abandoned-dirty in the registry,
 and surfaces it in `ps`/`sweep` — never an automatic WIP commit, which would
-push half-states onto the Linear/GitHub-keyed branch name. `keep: true` keeps
-worktree and branch unconditionally. `jigs sweep` is the net for paths that
-never executed: it joins disk against the registry and run states, holds
-suspended, marks abandoned (terminal or interrupted owner) eligible, lists
-unregistered directories as orphans, and reports by default — `--clean`
-deletes eligible entries, dirty ones only with `--force` — then GCs empty
-workspace directories.
+push half-states onto the Linear/GitHub-keyed branch name. `jigs sweep` is
+the net for paths that never executed: it joins disk against the registry and
+run states, holds suspended, marks abandoned (terminal or interrupted owner)
+eligible, lists unregistered directories as orphans, and reports by default —
+`--clean` deletes eligible entries, dirty ones only with `--force` — then GCs
+empty workspace directories.
 
 Provisioning ports claude-code-flow's `.worktreerc.yml` semantics verbatim
 into the target repo's `.jigs.yml` `worktree:` section: `copy` patterns are

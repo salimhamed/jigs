@@ -33,7 +33,6 @@ function row(overrides: Partial<WorktreeRow> = {}): WorktreeRow {
     headSha: "head1",
     behindDefault: 3,
     repoDir: "/data/bindings/acme-abc12345/api/repo.git",
-    keep: false,
     ...overrides,
   };
 }
@@ -66,12 +65,11 @@ test("getWorktree misses cleanly on an unregistered path", async () => {
   expect(await getWorktree(sql, "/nowhere/never-registered")).toBeNull();
 });
 
-test("the row carries its repo dir and keep flag", async () => {
+test("the row carries its repo dir", async () => {
   await ensureWorktreeRegistry(sql);
-  await upsertWorktree(sql, row({ keep: true }));
+  await upsertWorktree(sql, row());
   expect(await getWorktree(sql, testPath)).toMatchObject({
     repoDir: "/data/bindings/acme-abc12345/api/repo.git",
-    keep: true,
   });
 });
 
@@ -98,27 +96,46 @@ test("deleteWorktree drops the row — the registry holds live worktrees only", 
   expect(await getWorktree(sql, testPath)).toBeNull();
 });
 
-test("a table that predates repo_dir is refused, naming the drop", async () => {
-  // Drops the real table and rebuilds it in its pre-rename shape: every other
-  // test here re-ensures it, and the live lane owns the dev database.
+const CURRENT_COLUMNS = `
+  path text PRIMARY KEY,
+  branch text NOT NULL,
+  owner_run_id text NOT NULL,
+  state text NOT NULL,
+  base_sha text NOT NULL,
+  head_sha text NOT NULL,
+  behind_default integer NOT NULL,
+  repo_dir text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()`;
+
+// Drops the real table and rebuilds it in an older shape: every other test
+// here re-ensures it, and the live lane owns the dev database.
+async function rebuildAs(columns: string): Promise<void> {
   await sql`DROP TABLE IF EXISTS jigs_worktrees`;
-  await sql`
-    CREATE TABLE jigs_worktrees (
-      path text PRIMARY KEY,
-      branch text NOT NULL,
-      owner_run_id text NOT NULL,
-      state text NOT NULL,
-      base_sha text NOT NULL,
-      head_sha text NOT NULL,
-      behind_default integer NOT NULL,
-      checkout_root text NOT NULL DEFAULT '',
-      keep boolean NOT NULL DEFAULT false,
-      created_at timestamptz NOT NULL DEFAULT now(),
-      updated_at timestamptz NOT NULL DEFAULT now()
-    )
-  `;
+  await sql.unsafe(`CREATE TABLE jigs_worktrees (${columns})`);
+}
+
+test("a table that predates repo_dir is refused, naming the drop", async () => {
+  await rebuildAs(
+    CURRENT_COLUMNS.replace(
+      "repo_dir text NOT NULL",
+      "checkout_root text NOT NULL DEFAULT ''",
+    ),
+  );
   await expect(ensureWorktreeRegistry(sql)).rejects.toThrow(
-    /DROP TABLE jigs_worktrees/,
+    /missing repo_dir.*DROP TABLE jigs_worktrees/s,
+  );
+});
+
+test("a table that still carries a retired column is refused, naming the drop", async () => {
+  await rebuildAs(
+    CURRENT_COLUMNS.replace(
+      "repo_dir text NOT NULL,",
+      "repo_dir text NOT NULL,\n  keep boolean NOT NULL DEFAULT false,",
+    ),
+  );
+  await expect(ensureWorktreeRegistry(sql)).rejects.toThrow(
+    /unexpected keep.*DROP TABLE jigs_worktrees/s,
   );
 
   await sql`DROP TABLE jigs_worktrees`;

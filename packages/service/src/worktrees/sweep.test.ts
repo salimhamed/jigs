@@ -17,7 +17,6 @@ function input(overrides: Partial<SweepInput> = {}): SweepInput {
     branch: "feat",
     ownerRunId: "run_a",
     ownerTerminal: true,
-    keep: false,
     state: "active",
     onDisk: true,
     dirty: false,
@@ -36,12 +35,6 @@ test("a suspended run reads as running and is therefore held", () => {
   expect(
     classifySweep(input({ ownerTerminal: false, dirty: true })).state,
   ).toBe("held");
-});
-
-test("keep: true is never eligible, even for a terminal owner", () => {
-  const entry = classifySweep(input({ keep: true }));
-  expect(entry.state).toBe("kept");
-  expect(entry.eligible).toBe(false);
 });
 
 test("a terminal owner with a clean tree is abandoned and eligible", () => {
@@ -70,12 +63,6 @@ test("a live owner holds its worktree even in provision-failed", () => {
     classifySweep(input({ state: "provision-failed", ownerTerminal: false }))
       .state,
   ).toBe("held");
-});
-
-test("keep: true wins over provision-failed", () => {
-  expect(
-    classifySweep(input({ state: "provision-failed", keep: true })).state,
-  ).toBe("kept");
 });
 
 test("a registered path missing from disk is a stale row", () => {
@@ -130,7 +117,6 @@ function register(
     headSha: "head1",
     behindDefault: 0,
     repoDir,
-    keep: false,
     ...overrides,
   });
 }
@@ -223,15 +209,6 @@ test("a suspended run's worktree is held in every mode", async () => {
     expect(report.removed).toEqual([]);
     expect(existsSync(held)).toBe(true);
   }
-});
-
-test("keep: true survives --clean --force", async () => {
-  const kept = addWorktree("kept");
-  register(kept, "kept", { keep: true });
-  const report = await sweepWorktrees({ clean: true, force: true }, deps());
-  expect(report.entries[0]?.state).toBe("kept");
-  expect(existsSync(kept)).toBe(true);
-  expect(store.size).toBe(1);
 });
 
 test("a half-provisioned tree is kept for diagnosis until --force", async () => {

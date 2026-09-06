@@ -31,7 +31,6 @@ import { teardownMergedRun as teardownMerged } from "./teardown";
 export interface WorktreeRequest {
   binding: string;
   branch: string;
-  keep?: boolean;
 }
 
 export interface ProvisionRunWorktreeDeps {
@@ -120,7 +119,6 @@ export async function provisionRunWorktree(
       headSha: facts.headSha,
       behindDefault: facts.behindDefault,
       repoDir,
-      keep: request.keep === true,
     });
     return facts;
   });

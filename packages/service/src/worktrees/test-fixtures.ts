@@ -141,7 +141,6 @@ export function makeFakeSql(store: Map<string, WorktreeRow>): Sql {
         headSha,
         behindDefault,
         repoDir,
-        keep,
       ] = values as [
         string,
         string,
@@ -151,7 +150,6 @@ export function makeFakeSql(store: Map<string, WorktreeRow>): Sql {
         string,
         number,
         string,
-        boolean,
       ];
       store.set(path, {
         path,
@@ -162,7 +160,6 @@ export function makeFakeSql(store: Map<string, WorktreeRow>): Sql {
         headSha,
         behindDefault,
         repoDir,
-        keep,
       });
       return Promise.resolve([]);
     }

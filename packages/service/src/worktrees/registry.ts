@@ -20,7 +20,6 @@ export interface WorktreeRow {
   headSha: string;
   behindDefault: number;
   repoDir: string;
-  keep: boolean;
 }
 
 // Single construction point: the camel transform is what lets queries return
@@ -31,6 +30,19 @@ export function connectRegistry(
 ): Sql {
   return postgres(url, { transform: postgres.camel, ...options });
 }
+
+const REGISTRY_COLUMNS = [
+  "path",
+  "branch",
+  "owner_run_id",
+  "state",
+  "base_sha",
+  "head_sha",
+  "behind_default",
+  "repo_dir",
+  "created_at",
+  "updated_at",
+];
 
 export async function ensureWorktreeRegistry(sql: ISql): Promise<void> {
   await sql`
@@ -43,20 +55,30 @@ export async function ensureWorktreeRegistry(sql: ISql): Promise<void> {
       head_sha text NOT NULL,
       behind_default integer NOT NULL,
       repo_dir text NOT NULL,
-      keep boolean NOT NULL DEFAULT false,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )
   `;
-  // CREATE TABLE IF NOT EXISTS is silent about a table that predates the
-  // column, and every insert would then fail one layer deeper, mid-run.
+  // CREATE TABLE IF NOT EXISTS is silent about a table of an older shape, and
+  // every query would then fail one layer deeper, mid-run.
   const columns = await sql<{ columnName: string }[]>`
     SELECT column_name FROM information_schema.columns
-    WHERE table_name = 'jigs_worktrees' AND column_name = 'repo_dir'
+    WHERE table_name = 'jigs_worktrees'
   `;
-  if (columns.length === 0) {
+  const actual = new Set(columns.map((column) => column.columnName));
+  const missing = REGISTRY_COLUMNS.filter((column) => !actual.has(column));
+  const extra = [...actual].filter(
+    (column) => !REGISTRY_COLUMNS.includes(column),
+  );
+  if (missing.length > 0 || extra.length > 0) {
+    const diff = [
+      missing.length > 0 ? `missing ${missing.join(", ")}` : null,
+      extra.length > 0 ? `unexpected ${extra.join(", ")}` : null,
+    ]
+      .filter((part) => part !== null)
+      .join("; ");
     throw new Error(
-      "jigs_worktrees predates the repo_dir column, so the service refuses " +
+      `jigs_worktrees has an older shape (${diff}), so the service refuses ` +
         "to start. The registry holds live worktrees only and start recreates " +
         "it, so the repair is to drop it: " +
         "psql \"$WORKFLOW_POSTGRES_URL\" -c 'DROP TABLE jigs_worktrees'",
@@ -70,7 +92,7 @@ export async function getWorktree(
 ): Promise<WorktreeRow | null> {
   const rows = await sql<WorktreeRow[]>`
     SELECT path, branch, owner_run_id, state, base_sha, head_sha,
-           behind_default, repo_dir, keep
+           behind_default, repo_dir
     FROM jigs_worktrees
     WHERE path = ${path}
   `;
@@ -80,7 +102,7 @@ export async function getWorktree(
 export async function listWorktrees(sql: ISql): Promise<WorktreeRow[]> {
   return sql<WorktreeRow[]>`
     SELECT path, branch, owner_run_id, state, base_sha, head_sha,
-           behind_default, repo_dir, keep
+           behind_default, repo_dir
     FROM jigs_worktrees
     ORDER BY updated_at DESC
   `;
@@ -92,7 +114,7 @@ export async function listWorktreesForRun(
 ): Promise<WorktreeRow[]> {
   return sql<WorktreeRow[]>`
     SELECT path, branch, owner_run_id, state, base_sha, head_sha,
-           behind_default, repo_dir, keep
+           behind_default, repo_dir
     FROM jigs_worktrees
     WHERE owner_run_id = ${runId}
     ORDER BY updated_at DESC
@@ -106,11 +128,11 @@ export async function upsertWorktree(
   await sql`
     INSERT INTO jigs_worktrees
       (path, branch, owner_run_id, state, base_sha, head_sha, behind_default,
-       repo_dir, keep)
+       repo_dir)
     VALUES
       (${row.path}, ${row.branch}, ${row.ownerRunId}, ${row.state},
        ${row.baseSha}, ${row.headSha}, ${row.behindDefault},
-       ${row.repoDir}, ${row.keep})
+       ${row.repoDir})
     ON CONFLICT (path) DO UPDATE SET
       branch = EXCLUDED.branch,
       owner_run_id = EXCLUDED.owner_run_id,
@@ -119,7 +141,6 @@ export async function upsertWorktree(
       head_sha = EXCLUDED.head_sha,
       behind_default = EXCLUDED.behind_default,
       repo_dir = EXCLUDED.repo_dir,
-      keep = EXCLUDED.keep,
       updated_at = now()
   `;
 }
