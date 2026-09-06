@@ -12,7 +12,7 @@ export type AgentStepConfig<T = undefined> = {
   prompt: string;
   // A session pointer a previous agent step recorded. Nothing is validated
   // here: a pointer naming another harness is resolved at hydration, where
-  // the harness actually is, and simply starts a fresh session.
+  // the harness actually is, and reports there as an unusable session.
   resume?: AgentSession;
   output?: z.ZodType<T>;
 };

@@ -12,7 +12,7 @@ import type { WorktreeFacts } from "@salimhamed/jigs";
 import { commitWorkPrompt } from "@salimhamed/jigs/prompts";
 import type { AgentSession, HarnessConfig } from "@salimhamed/jigs/steps";
 import type { CheckRun } from "../providers/github";
-import { type AgentFn, ResumeFailedError } from "../steps";
+import { type AgentFn, resumeOrRebuild } from "../steps";
 import type { TicketClaim } from "../suspension/claim";
 import type { NeedsHumanFn } from "../suspension/needs-human";
 import type { GateAck, GateFn } from "../suspension/pull-request-gate";
@@ -297,35 +297,22 @@ export async function reviewLoop(
   );
 }
 
-// Resume-first with the first-class fresh-context fallback the CI fix and the
-// review answers have (ADR 0009), and no rebuilt context to go with it: the
-// work this round commits is on disk in the cwd, so a fresh builder reading the
-// worktree has everything the resumed one would have had.
+// The same resume-first shape as the CI fix and the review answers (ADR 0009),
+// with the same prompt on both arms: the work this round commits is on disk in
+// the cwd, so a fresh builder reading the worktree has everything the resumed
+// one would have had.
 async function commitLeftoverWork(
   agent: AgentFn,
   options: { harness: HarnessConfig; cwd: string; session?: AgentSession },
 ): Promise<AgentSession | undefined> {
-  if (options.session !== undefined) {
-    try {
-      const resumed = await agent({
-        harness: options.harness,
-        cwd: options.cwd,
-        resume: options.session,
-        prompt: commitWorkPrompt,
-      });
-      return resumed.session;
-    } catch (err) {
-      if (!(err instanceof ResumeFailedError)) throw err;
-      console.log(
-        "[reviewLoop] resume failed — committing from a fresh context",
-      );
-    }
-  }
-
-  const committed = await agent({
+  const committed = await resumeOrRebuild({
+    agent,
+    label: "reviewLoop",
     harness: options.harness,
     cwd: options.cwd,
-    prompt: commitWorkPrompt,
+    ...(options.session === undefined ? {} : { session: options.session }),
+    resumePrompt: commitWorkPrompt,
+    freshPrompt: commitWorkPrompt,
   });
   return committed.session;
 }

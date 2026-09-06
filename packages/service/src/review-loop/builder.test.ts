@@ -1,7 +1,8 @@
 import { type AgentStepConfig, claude } from "@salimhamed/jigs/steps";
 import { beforeEach, expect, test } from "vitest";
 import type { ReviewThread } from "../providers/github";
-import { parseOutput, ResumeFailedError } from "../steps";
+import { parseOutput } from "../steps";
+import { resumeFailed } from "../steps/resume";
 import type { Handoff } from "../ticket/review";
 import type { TicketSnapshot } from "../ticket/snapshot";
 import { answerAsBuilder, type BuilderDeps } from "./builder";
@@ -54,7 +55,7 @@ const fakeAgent: BuilderDeps["agent"] = async <T>(
 ) => {
   agentCalls.push(config as AgentStepConfig<unknown>);
   if (failOnResume && config.resume !== undefined) {
-    throw new ResumeFailedError("no rollout found for thread id 0199-gone");
+    resumeFailed("no rollout found for thread id 0199-gone");
   }
   return {
     text: "",

@@ -6,7 +6,6 @@ import {
   ask,
   JitCheckError,
   parseOutput,
-  ResumeFailedError,
   type RunAgentStep,
   unwrapAgentStep,
 } from "./index";
@@ -77,11 +76,8 @@ test("an agent step whose declared MCP server cannot start returns the JIT failu
   });
 });
 
-test("the resumeFailed marker becomes a ResumeFailedError carrying the provider's own words", () => {
+test("the resumeFailed marker becomes a throw carrying the provider's own words", () => {
   const detail = "no rollout found for thread id 0199-gone";
-  expect(() => unwrapAgentStep({ resumeFailed: detail })).toThrow(
-    ResumeFailedError,
-  );
   expect(() => unwrapAgentStep({ resumeFailed: detail })).toThrow(detail);
 });
 

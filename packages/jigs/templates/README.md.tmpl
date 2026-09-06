@@ -16,8 +16,9 @@ machine runs, the bindings they run against, and the service that hosts them.
   are load-bearing exactly as `pipelines/` is. `jigs init` wrote it once and
   never rewrites it; a step jigs grows later gets its wrapper added by hand.
 - `steps/describe-pr.ts` — the one review-loop dep jigs ships no default for:
-  the title and body a pull request opens with. Deterministic as scaffolded;
-  compose it over the `agent` jig and the `readDiff` wrapper to ask an agent.
+  the title and body a pull request opens with. Scaffolded as a real agent
+  call over the `agent` jig and the `readDiff` wrapper; the PR conventions in
+  it are the part to rewrite.
 - `jigs.config.test.ts` — what the factory declares, and the ids the last
   build emitted.
 - `jigs.yml` — this factory's service and dashboard ports and its bindings.
