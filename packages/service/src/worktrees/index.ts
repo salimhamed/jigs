@@ -14,12 +14,12 @@ import {
   bindingRepoDir,
   CliError,
   hasBindingClone,
-  locateFactoryRoot,
   resolveBinding,
   type WorktreeFacts,
   worktreePath,
 } from "jigs";
 import type { Sql } from "postgres";
+import { factoryRoot } from "../preflight";
 import { createWorktree, worktreeStatus } from "./create";
 import { readOwner } from "./owner";
 import { provisionWorktree } from "./provision";
@@ -32,12 +32,6 @@ export interface WorktreeRequest {
   binding: string;
   branch: string;
   keep?: boolean;
-}
-
-export function factoryRoot(): string {
-  const override = process.env.JIGS_FACTORY_ROOT;
-  if (override !== undefined && override !== "") return override;
-  return locateFactoryRoot(process.cwd());
 }
 
 export class WorktreeRegistryUnavailableError extends Error {
@@ -63,10 +57,7 @@ async function runIsLive(runId: string): Promise<boolean> {
   return !(await readOwner(runId)).terminal;
 }
 
-// The pipeline's worktree() request, top to bottom: resolve the binding,
-// take the path lock, refuse a live foreign owner, reuse or cut the tree,
-// register it to this run, then provision it as the binding describes. The
-// clone is the service's to make at start, so this path only asserts it.
+// The clone is the service's to make at start, so this path only asserts it.
 export async function provisionRunWorktree(
   request: WorktreeRequest,
   runId: string,

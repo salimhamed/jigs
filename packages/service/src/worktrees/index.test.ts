@@ -169,6 +169,17 @@ test("a terminal owner's clean worktree is reused and re-owned", async () => {
   });
 });
 
+test("a registry row whose directory is gone is cut afresh and re-owned", async () => {
+  store.set(target, registeredRow("run_done"));
+  const facts = await provisionRunWorktree(request, "run_new", deps());
+  expect(facts.resolution).toBe("new");
+  expect(store.get(target)).toMatchObject({
+    ownerRunId: "run_new",
+    state: "active",
+    baseSha: "base2",
+  });
+});
+
 test("the owning run re-enters its own dirty worktree without asking whether it is live", async () => {
   store.set(target, registeredRow("run_owner"));
   const facts = await provisionRunWorktree(

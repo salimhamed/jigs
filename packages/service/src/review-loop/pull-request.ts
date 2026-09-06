@@ -12,6 +12,7 @@ import {
   pushBranch,
   resolveBinding,
 } from "jigs";
+import { factoryRoot } from "../preflight";
 import {
   createPullRequest,
   fetchPrTitle,
@@ -20,7 +21,6 @@ import {
   squashMergePr,
 } from "../providers/github";
 import type { PrRef } from "../suspension/tokens";
-import { factoryRoot } from "../worktrees";
 import { isWorktreeDirty } from "../worktrees/teardown";
 
 export class RemoteNotGithubError extends Error {
