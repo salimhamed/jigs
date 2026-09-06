@@ -110,8 +110,7 @@ export function commitToRemote(
 
 // Fakes the postgres tagged-template client against an in-memory store,
 // discriminating exactly as registry.ts's queries do. Anything it does not
-// recognise — notably the advisory-lock SELECT, which must not read as a
-// registry query — resolves empty.
+// recognise resolves empty.
 export function makeFakeSql(store: Map<string, WorktreeRow>): Sql {
   const sql = (strings: TemplateStringsArray, ...values: unknown[]) => {
     const statement = strings.join("$").trimStart();
@@ -154,6 +153,5 @@ export function makeFakeSql(store: Map<string, WorktreeRow>): Sql {
     }
     return Promise.resolve([]);
   };
-  sql.begin = (fn: (sql: unknown) => unknown) => Promise.resolve(fn(sql));
   return sql as unknown as Sql;
 }
