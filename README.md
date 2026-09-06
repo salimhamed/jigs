@@ -71,7 +71,7 @@ exists. Three of them are the code `jigs build` compiles:
 - `pipelines/ship.ts` — a ticket to a merged pull request, the starter pipeline.
 - `pipelines/review-loop.ts` — the review loop, composed from the blocks jigs
   ships: implement ⇄ review, push, describe, open, gate, answer, fix, merge.
-  The order, the bounds, the merge policy and the escalation prose are the
+  The order, the CI bound, the merge policy and the escalation prose are the
   factory's, and this file is where they are read and changed.
 - `steps/jigs.ts` — this factory's `"use step"` wrappers around the steps jigs
   ships, and the blocks wired on top of them. `steps/describe-pr.ts` beside it

@@ -170,8 +170,9 @@ jigs upgrade                # or: jigs upgrade --to <version>
 ```
 
 bumps `@salimhamed/jigs`, runs `jigs up`, then the factory's own typecheck. A
-typecheck error on a jig's deps object is a step the release added: it needs a
-wrapper in `steps/jigs.ts` — `author.md`. An install failure naming
+typecheck error in `steps/jigs.ts` — a block call missing an argument, or an
+import with no such member — is a step the release added: it needs a wrapper
+there, and `author.md` covers writing one. An install failure naming
 `@workflow/web`, `@workflow/world-postgres`, `workflow` or `zod` is a release
 that moved a runtime peer: move the same pin in the factory's `package.json`
 and run `jigs upgrade` again. A factory still installing jigs from a checkout

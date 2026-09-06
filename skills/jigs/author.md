@@ -36,8 +36,10 @@ package. jigs ships steps; the factory owns every file that names them.
 
 The review loop is the factory's own composition of those blocks, scaffolded
 into `pipelines/review-loop.ts`. Read it before changing how a run behaves:
-the order, the bounds, the merge policy and the escalation prose are all
-there, and none of it is a jigs release away.
+the order, the CI bound, the merge policy and the escalation prose are all
+there, and none of it is a jigs release away. The implement ⇄ review bound is
+the exception — it lives inside `implementAndReview`, with the session and the
+brief that call keeps out of the reviewer's prompt.
 
 A pipeline imports its steps from `../steps/jigs.ts`, **never** from a
 `@salimhamed/jigs` subpath. A step reached through the package is addressed by

@@ -1,8 +1,8 @@
-// The review-loop building blocks: one function each, no options bag, no
-// composition. The order they run in, the merge policy, the escalation prose
-// and the prompts are the factory's — `jigs init` scaffolds the composition
-// that calls these into `pipelines/review-loop.ts`, and the factory edits it
-// (ADR 0009).
+// The review-loop building blocks (ADR 0009): one function each, no options
+// bag, no composition. The order they run in, the merge policy, the escalation
+// prose and the prompts are the factory's — `jigs init` scaffolds the
+// composition that calls these into `pipelines/review-loop.ts`, and the
+// factory edits it.
 //
 // What stays here is what a wrong edit would break rather than merely change:
 // the builder's session pointer, the resume-first fallback, the ids the gate

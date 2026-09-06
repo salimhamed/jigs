@@ -22,7 +22,7 @@ A jig the package ships: one function, no options, taking the step wrappers it
 needs as plain parameters. jigs ships the blocks a wrong edit would break —
 the ones holding the builder's session, the resume fallback, the ids the gate
 cursor needs back, the code-review call the brief is kept out of. What a wrong
-edit would merely change — the order, the bounds, the merge policy, the
+edit would merely change — the order, the CI bound, the merge policy, the
 escalation prose, the prompts — is a composition the factory owns.
 _Avoid_: primitive, helper, util, sub-jig
 

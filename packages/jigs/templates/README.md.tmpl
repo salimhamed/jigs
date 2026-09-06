@@ -9,13 +9,14 @@ machine runs, the bindings they run against, and the service that hosts them.
   `jigs run` takes. `jigs build` generates the service entry from it.
 - `pipelines/` — the pipeline bodies, and beside them `review-loop.ts`, this
   factory's own composition of the review loop over the blocks jigs ships.
-  Edit either freely; a pipeline file's path is half of its workflow id, so
-  renaming or moving one changes that id.
+  Edit either freely. A file's path is half of the workflow id its
+  `"use workflow"` body owns, so renaming or moving a pipeline changes that
+  id; `review-loop.ts` carries no directive and owns no id at all.
 - `steps/jigs.ts` — this factory's `"use step"` wrappers around the steps jigs
-  ships, and the blocks wired on top of them. Every step a pipeline calls comes
-  from here, and each step id is this path plus the function's name. `jigs
-  init` wrote it once and never rewrites it; a step jigs grows later gets its
-  wrapper added by hand.
+  ships, and the blocks wired on top of them. Every step a pipeline calls
+  comes from here, and each step id is this path plus the function's name.
+  `jigs init` wrote it once and never rewrites it; a step jigs grows later
+  gets its wrapper added by hand.
 - `steps/describe-pr.ts` — the title and body a pull request opens with. jigs
   owns the mechanics; the conventions here, and the repair applied when an
   answer drifts out of them, are this factory's voice and the part to rewrite.
@@ -39,9 +40,10 @@ Every `jigs` below is this factory's own: `pnpm exec jigs …`.
 The service listens on `:{{SERVICE_PORT}}`, its dashboard on
 `:{{DASHBOARD_PORT}}`, its World on `:{{POSTGRES_PORT}}`.
 
-Renaming or moving an exported wrapper in `steps/jigs.ts`, or a file under
-`pipelines/`, changes a durable id: do it only when `jigs ps` shows no parked
-runs. A run whose id moved under it shows up stalled — cancel it and relaunch.
+Renaming or moving an exported wrapper in `steps/jigs.ts`, or a pipeline file
+under `pipelines/`, changes a durable id: do it only when `jigs ps` shows no
+parked runs. A run whose id moved under it shows up stalled — cancel it and
+relaunch.
 
 ## Pipelines
 
@@ -90,8 +92,7 @@ A pipeline imports its steps from `../steps/jigs.ts`, never from a
 the package's version, and every jigs upgrade would rename it. Steps alone —
 `pipelines/ship.ts` imports `ticketInput`, `claimTicket`, `claude` and `codex`
 from the package directly, because none of those carries an id. A pipeline may
-also
-declare `"use step"` functions in its own file; their ids come out as
+also declare `"use step"` functions in its own file; their ids come out as
 `step//./pipelines/<file>//<fn>`, so the same rename rule applies to those
 names.
 
@@ -113,7 +114,7 @@ Installing needs a token that can read GitHub Packages in `~/.npmrc`; the
 `.npmrc` here only routes the scope.
 
 A release that grows a step needs a wrapper in `steps/jigs.ts`; the typecheck
-names the gap. A release that moves one of the four
-runtime packages this factory supplies — `@workflow/web`,
-`@workflow/world-postgres`, `workflow`, `zod` — fails the install by name;
-move the same pin in `package.json` and run `jigs upgrade` again.
+names the gap. A release that moves one of the four runtime packages this
+factory supplies — `@workflow/web`, `@workflow/world-postgres`, `workflow`,
+`zod` — fails the install by name; move the same pin in `package.json` and run
+`jigs upgrade` again.

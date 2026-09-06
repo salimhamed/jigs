@@ -6,9 +6,12 @@
 // thrown ending leaves the worktree for `jigs sweep`.
 //
 // This file is yours. The blocks it calls come from jigs and keep arriving
-// fixed by `jigs upgrade`; the order they run in, the bounds, the merge policy
-// and the escalation prose are decisions this factory makes, so they live
-// here where you can read them top to bottom and change them.
+// fixed by `jigs upgrade`; the order they run in, the CI bound, the merge
+// policy and the escalation prose are decisions this factory makes, so they
+// live here where you can read them top to bottom and change them. The one
+// bound that is not here is implementAndReview's three implement ⇄ review
+// cycles, which jigs holds along with the session and the brief it keeps out
+// of the reviewer's prompt.
 //
 // It carries no `"use step"` and no `"use workflow"`, so it owns no durable id:
 // the only ids in play are the wrappers in ../steps/jigs.ts.
@@ -87,6 +90,9 @@ export async function reviewLoop(
     // has nothing to save.
     const empty = `${worktree.branch} holds no commits since ${baseSha} — the builder finished without committing, so there is nothing to open a pull request for`;
     if (!pushed.dirty) throw new Error(empty);
+    console.log(
+      "[reviewLoop] empty push with dirty worktree — sending builder back to commit",
+    );
     session =
       (await commitLeftoverWork({
         agent,

@@ -116,15 +116,17 @@ pnpm dlx @salimhamed/jigs init
 `jigs init` writes the infrastructure — `jigs.yml` (the service and dashboard
 ports and, later, the ingress URL), `package.json` with jigs pinned to the
 version that scaffolded it, `.npmrc`, `nitro.config.ts`, `docker-compose.yml`,
-`.env.example`, and the `tsconfig.json`,
-`pnpm-workspace.yaml` and `.gitignore` a factory build needs — and the code
+`.env.example`, and the `tsconfig.json`, `pnpm-workspace.yaml` and
+`.gitignore` a factory build needs — and the code
 the factory starts from: `jigs.config.ts` (this factory's pipelines, keyed by
 the name `jigs run` takes), `pipelines/ship.ts` (a ticket to a merged pull
-request), `pipelines/review-loop.ts`, `steps/jigs.ts`,
-`steps/describe-pr.ts`, `jigs.config.test.ts` and a `README.md`. Then it prints the next steps and runs none of them; `jigs up`
-(step 3) is what runs them. Every file is written once: a re-run keeps what
-is there and adds only what is missing, so nothing init wrote goes stale
-under you, and from here on the code is this factory's own.
+request), `pipelines/review-loop.ts` (that pipeline's review loop, composed
+here rather than shipped), `steps/jigs.ts`, `steps/describe-pr.ts`,
+`jigs.config.test.ts` and a `README.md`. Then it prints the next steps and
+runs none of them; `jigs up` (step 3) is what runs them. Every file is written
+once: a re-run keeps what is there and adds only what is missing, so nothing
+init wrote goes stale under you, and from here on the code is this factory's
+own.
 
 `steps/jigs.ts` is the one to know about. It holds this factory's `"use step"`
 wrappers around jigs' step implementations, plus the blocks (`ticketReview`,
@@ -145,12 +147,13 @@ building blocks — `implementAndReview`, `answerAsBuilder`, `fixCi`,
 `commitLeftoverWork`, `postAnswers`, `describePr` — and `jigs init` scaffolds
 `pipelines/review-loop.ts`, the ~200 lines that call them in order. The split
 is where a wrong edit lands: jigs owns what would break (the builder's session
-pointer, the resume fallback, the ids the gate cursor needs back, and the
-code-review call that is never handed the brief), the factory owns what would
-merely change (the order, the bounds, the merge policy, the escalation prose,
-the prompts). A team that wants no self-review round, a merge commit instead
-of a squash, or a different gate edits its own composition — and still gets
-the blocks underneath fixed by `jigs upgrade`.
+pointer, the resume fallback, the ids the gate cursor needs back, the
+implement ⇄ review bound, and the code-review call that is never handed the
+brief), the factory owns what would merely change (the order, the CI bound,
+the merge policy, the escalation prose, the prompts). A team that wants no
+self-review round, a merge commit instead of a squash, or a different gate
+edits its own composition — and still gets the blocks underneath fixed by
+`jigs upgrade`.
 
 `steps/describe-pr.ts` is the same split at one block. jigs owns the mechanics
 — resume the builder that wrote the change, fall back to a fresh context fed

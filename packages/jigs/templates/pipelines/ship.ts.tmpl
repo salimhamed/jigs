@@ -30,8 +30,9 @@ type ShipInputs = z.output<typeof shipInputs> & {
   identifier: string;
 };
 
-// A ticket to a merged pull request: claim ticket → snapshot → ticketReview →
-// worktree → reviewLoop (implement ⇄ review → PR → gate → merge) → teardown.
+// A ticket to a merged pull request: claim ticket → snapshot → worktree →
+// ticketReview → reviewLoop (implement ⇄ review → PR → gate → merge) →
+// teardown.
 // The steps come from ../steps/jigs.ts and the loop from ./review-loop.ts,
 // which is this factory's own composition over the blocks jigs ships.
 export async function shipPipeline(inputs: ShipInputs) {
