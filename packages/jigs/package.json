@@ -81,9 +81,9 @@
       "types": "./dist/ticket/snapshot.d.ts",
       "default": "./dist/ticket/snapshot.js"
     },
-    "./review-loop/loop": {
-      "types": "./dist/review-loop/loop.d.ts",
-      "default": "./dist/review-loop/loop.js"
+    "./review-loop": {
+      "types": "./dist/review-loop/index.d.ts",
+      "default": "./dist/review-loop/index.js"
     },
     "./review-loop/pull-request": {
       "types": "./dist/review-loop/pull-request.d.ts",

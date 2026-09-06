@@ -445,7 +445,7 @@ test("a red typecheck is the final failing line, with tsc's errors above and ste
       call.args[0] === "run" && call.args[1] === "typecheck"
         ? execError(
             2,
-            "steps/jigs.ts(12,3): error TS2741: Property 'newStep' is missing in type '{ agent: ... }' but required in type 'ReviewLoopDeps'.\n",
+            "steps/jigs.ts(12,3): error TS2305: Module '@salimhamed/jigs/review-loop/pull-request' has no exported member 'readDiff'.\n",
           )
         : undefined,
     ),
@@ -457,7 +457,7 @@ test("a red typecheck is the final failing line, with tsc's errors above and ste
   expect(result.ok).toBe(false);
   expect(statuses(result).at(-1)).toBe("typecheck:failed");
   expect(result.steps.at(-1)?.repair).toContain("steps/jigs.ts");
-  expect(lines.join("\n")).toContain("error TS2741");
+  expect(lines.join("\n")).toContain("error TS2305");
   expect(lines.at(-2)).toBe(`FAIL typecheck: typecheck failed in ${root}`);
   // The service already runs the new bundle; that is what the red line is for.
   expect(result.up?.ok).toBe(true);

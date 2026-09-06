@@ -1,6 +1,11 @@
-// The implement ⇄ review half of the review loop (ADR 0003): the circuit
-// breaker is a plain loop bound, and the halt it ends on is a pause a human
-// ends — never a terminal state, so nothing the builder produced is discarded.
+// The implement ⇄ review block (ADR 0003): the circuit breaker is a plain loop
+// bound, and the halt it ends on is a pause a human ends — never a terminal
+// state, so nothing the builder produced is discarded.
+//
+// The code-review call interpolates the ticket and the branch point and
+// nothing else. The reviewer judges the change against the ticket's acceptance
+// criteria, so the brief a re-planning agent wrote is deliberately out of its
+// scope — the prompt says so, and this call site is what makes it true.
 
 import { z } from "zod";
 import {
@@ -23,6 +28,8 @@ export const codeReviewVerdict = z.strictObject({
 });
 
 export interface ImplementAndReviewOptions {
+  agent: AgentFn;
+  needsHuman: NeedsHumanFn;
   claim: TicketClaim;
   handoff: Handoff;
   harness: HarnessConfig;
@@ -33,12 +40,6 @@ export interface ImplementAndReviewOptions {
 export type ImplementAndReviewResult = {
   session?: AgentSession;
   cycles: number;
-};
-
-// Workflow-side only: these never cross the step serialization boundary.
-export type ImplementDeps = {
-  agent: AgentFn;
-  needsHuman: NeedsHumanFn;
 };
 
 const MAX_REVIEW_CYCLES = 3;
@@ -52,8 +53,8 @@ function renderFindings(findings: string[]): string {
 
 export async function implementAndReview(
   options: ImplementAndReviewOptions,
-  deps: ImplementDeps,
 ): Promise<ImplementAndReviewResult> {
+  const { agent, needsHuman } = options;
   const ticket = renderSnapshot(options.handoff.snapshot);
   let session: AgentSession | undefined;
   let review = FIRST_PASS;
@@ -65,7 +66,7 @@ export async function implementAndReview(
   for (;;) {
     for (let cycle = 1; cycle <= MAX_REVIEW_CYCLES; cycle += 1) {
       cycles += 1;
-      const build = await deps.agent({
+      const build = await agent({
         harness: options.harness,
         cwd: options.cwd,
         prompt: interpolate(implementPrompt, {
@@ -77,7 +78,7 @@ export async function implementAndReview(
       // The builder's session pointer, captured where the builder ran.
       session = build.session ?? session;
 
-      const verdict = await deps.agent({
+      const verdict = await agent({
         harness: options.harness,
         cwd: options.cwd,
         prompt: interpolate(codeReviewPrompt, {
@@ -88,7 +89,7 @@ export async function implementAndReview(
       });
       findings = verdict.output.findings;
       console.log(
-        `[reviewLoop] cycle ${cycle}/${MAX_REVIEW_CYCLES} verdict=${verdict.output.verdict} findings=${findings.length}`,
+        `[implementAndReview] cycle ${cycle}/${MAX_REVIEW_CYCLES} verdict=${verdict.output.verdict} findings=${findings.length}`,
       );
       if (verdict.output.verdict === "approved") {
         return {
@@ -99,7 +100,7 @@ export async function implementAndReview(
       review = renderFindings(findings);
     }
 
-    const reply = await deps.needsHuman(
+    const reply = await needsHuman(
       options.claim,
       `review loop hit its ${MAX_REVIEW_CYCLES}-cycle bound`,
       { findings },
