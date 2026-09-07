@@ -1,10 +1,10 @@
 import { copyFileSync, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { parseEnv } from "node:util";
 import {
   type ResolvedService,
   resolveService,
 } from "../config/factory-config.ts";
+import { readFactoryEnv } from "../config/factory-env.ts";
 import { locateFactoryRoot } from "../config/factory-root.ts";
 import { JigsError } from "../errors.ts";
 import {
@@ -237,7 +237,7 @@ function ensureEnv(factoryRoot: string, note: Note): Record<string, string> {
     copyFileSync(example, dotenv);
     note("copied .env.example to .env");
   }
-  return parseEnv(readFileSync(dotenv, "utf8")) as Record<string, string>;
+  return readFactoryEnv(factoryRoot);
 }
 
 function reportEmptyCredentials(

@@ -179,12 +179,13 @@ cp .env.example .env      # then fill in LINEAR_API_KEY / GITHUB_TOKEN
 ```
 
 `.env` is this factory's environment file: the service loads it when it
-starts, and `PORT` comes from `jigs.yml` rather than from here. The
-`LINEAR_API_KEY` / `GITHUB_TOKEN` slots are consumed by the suspension
-primitives (`needsHuman()` posts Linear comments, `pullRequestGate()`
-re-checks PR state), and both are validated on every trigger: preflight
-refuses to create a run when a requirement is unmet, reporting every failure
-with its repair. `jigs doctor` runs the same checks without a launch.
+starts, `jigs bind` reads `GITHUB_TOKEN` out of it, and `PORT` comes from
+`jigs.yml` rather than from here. The `LINEAR_API_KEY` / `GITHUB_TOKEN` slots
+are consumed by the suspension primitives (`needsHuman()` posts Linear
+comments, `pullRequestGate()` re-checks PR state), and both are validated on
+every trigger: preflight refuses to create a run when a requirement is unmet,
+reporting every failure with its repair. `jigs doctor` runs the same checks
+without a launch.
 
 `WORKFLOW_TARGET_WORLD=@workflow/world-postgres` and `WORKFLOW_POSTGRES_URL`
 come filled in; leave them. The service refuses to start when the URL is
@@ -285,7 +286,7 @@ A worktree admits one agent at a time: a second one is refused, not queued.
 ### 4. Bind target repos
 
 ```sh
-GITHUB_TOKEN=… jigs bind git@github.com:owner/repo.git
+jigs bind git@github.com:owner/repo.git
 jigs bindings
 jigs service restart      # or jigs up --restart
 ```
@@ -305,9 +306,19 @@ restart above before any run can name it; `jigs bind` says so, and
 `jigs up` works too and saves the restart; the order here is only the one a
 newcomer meets.)
 
-`GITHUB_TOKEN` above is for the repo webhook, not for the binding: `jigs bind`
-records the binding either way and says which half it skipped — the webhook
-needs both the token and an `ingress_url` in this factory's `jigs.yml` (step 5).
+`jigs bind` also creates the repo's webhook, which needs `GITHUB_TOKEN`. Bind
+reads it from this factory's `.env`, and an exported one wins for that one
+command — a convenience of bind's, not the factory's rule: the service reads
+`.env` alone, so a token that only ever lives in your shell leaves the running
+factory without one, and bind notes it. The token is for the webhook, not for the binding.
+
+A factory with an `ingress_url` in its `jigs.yml` (step 5) and no usable token
+is half configured — an ingress nothing posts to, a PR gate that never wakes —
+so `jigs bind` **fails** there rather than noting a skip, and says the repair.
+GitHub rejecting the token fails the same way. Fix the token and run the same
+`jigs bind` again: the binding it already recorded stands, and the webhook
+registration is create-or-verify, so re-running is how you repair. A factory
+with no `ingress_url` receives no webhooks at all and binds without a token.
 
 The binding also declares what its worktrees need before an agent can work in
 them — files to copy in, commands to run:
@@ -373,11 +384,13 @@ ingress_url: https://<machine>.<tailnet>.ts.net
 
 #### GitHub (per target repo)
 
-(Re-)bind each target repo with `GITHUB_TOKEN` set — `jigs bind` creates the
-repo webhook from `ingress_url`, verifies it on later binds, and repairs
-drift. The signing secret is the one thing here that is not per factory: one
-file per machine at `~/.local/share/jigs/github-webhook-secret`, generated on
-the first bind and shared by every factory's repo webhooks. The service reads
+(Re-)bind each target repo — `jigs bind` creates the repo webhook from
+`ingress_url`, verifies it on later binds, and repairs drift. It needs
+`GITHUB_TOKEN` (a classic PAT with `admin:repo_hook`) in this factory's `.env`
+or exported in the shell, and fails without one. The signing secret is the one
+thing here that is not per factory: one file per machine at
+`~/.local/share/jigs/github-webhook-secret`, generated on the first bind and
+shared by every factory's repo webhooks. The service reads
 the same file, or `GITHUB_WEBHOOK_SECRET` from `.env` if set.
 
 Manual alternative: one org-level webhook (org settings → Webhooks) pointed at

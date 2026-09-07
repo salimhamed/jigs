@@ -56,6 +56,20 @@ export function ensureWebhookSecret(dataDir: string = jigsDataDir()): string {
 export interface EnsureRepoWebhookOptions extends GithubRepoRef {
   ingressUrl: string;
   secret: string;
+  token: string;
+}
+
+// Carries the status and body so a caller can tell a rejected token from an
+// unreachable repo or a rate limit.
+export class GithubApiError extends JigsError {
+  readonly status: number;
+  readonly body: string;
+
+  constructor(status: number, apiPath: string, body: string) {
+    super(`GitHub API ${status} on ${apiPath}: ${body}`);
+    this.status = status;
+    this.body = body;
+  }
 }
 
 interface RepoHook {
@@ -66,14 +80,11 @@ interface RepoHook {
 }
 
 async function githubRequest<T>(
+  token: string,
   method: string,
   apiPath: string,
   body?: unknown,
 ): Promise<T> {
-  const token = process.env.GITHUB_TOKEN;
-  if (token === undefined || token === "") {
-    throw new JigsError("GITHUB_TOKEN is not set");
-  }
   const base = process.env.GITHUB_API_URL ?? "https://api.github.com";
   const res = await fetch(`${base}${apiPath}`, {
     method,
@@ -86,9 +97,7 @@ async function githubRequest<T>(
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
-    throw new JigsError(
-      `GitHub API ${res.status} on ${apiPath}: ${await res.text()}`,
-    );
+    throw new GithubApiError(res.status, apiPath, await res.text());
   }
   return (await res.json()) as T;
 }
@@ -101,10 +110,12 @@ export async function ensureRepoWebhook({
   repo,
   ingressUrl,
   secret,
+  token,
 }: EnsureRepoWebhookOptions): Promise<"created" | "verified" | "updated"> {
   const hookUrl = `${ingressUrl.replace(/\/+$/, "")}/ingress/github`;
   const hooksPath = `/repos/${owner}/${repo}/hooks`;
   const hooks = await githubRequest<RepoHook[]>(
+    token,
     "GET",
     `${hooksPath}?per_page=100`,
   );
@@ -123,7 +134,7 @@ export async function ensureRepoWebhook({
     active: true,
   };
   if (existing === undefined) {
-    await githubRequest("POST", hooksPath, desired);
+    await githubRequest(token, "POST", hooksPath, desired);
     return "created";
   }
   if (
@@ -136,6 +147,6 @@ export async function ensureRepoWebhook({
   }
   // Full-config PATCH: GitHub never returns the secret, so re-sending it
   // reconverges a drifted or rotated one along with the events.
-  await githubRequest("PATCH", `${hooksPath}/${existing.id}`, desired);
+  await githubRequest(token, "PATCH", `${hooksPath}/${existing.id}`, desired);
   return "updated";
 }
