@@ -1,4 +1,4 @@
-# Fix CI
+export const fixCiPrompt = `# Fix CI
 
 CI is red on your pull request's head commit. This is attempt {{ATTEMPT}}.
 
@@ -16,3 +16,4 @@ CI is red on your pull request's head commit. This is attempt {{ATTEMPT}}.
   fix it anyway if it is cheap; leave it alone if it is not yours to touch.
 - **Commit your fix before you finish.** The push that follows reports the
   commits on the branch, and an uncommitted fix never reaches CI.
+`;
