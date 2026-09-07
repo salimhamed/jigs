@@ -107,10 +107,6 @@ const STATUS_CONCLUSIONS = new Map<string, string | null>([
   ["pending", null],
 ]);
 
-// Ranked so the worse of two reports of one name is the one that survives.
-const severity = (conclusion: string | null) =>
-  conclusion === null ? 1 : RED_CONCLUSIONS.has(conclusion) ? 2 : 0;
-
 function classifyChecks(runs: CheckRun[], anyPending: boolean) {
   const failing = runs.filter(
     (run) => run.conclusion !== null && RED_CONCLUSIONS.has(run.conclusion),
@@ -196,7 +192,6 @@ export async function fetchPrSnapshot(pr: PrRef): Promise<PrSnapshot> {
   const checks = await githubGet<{
     check_runs: Array<{
       name: string;
-      status: string;
       conclusion: string | null;
       html_url: string | null;
     }>;
@@ -210,29 +205,25 @@ export async function fetchPrSnapshot(pr: PrRef): Promise<PrSnapshot> {
   }>(`${repoPath}/commits/${pull.head.sha}/status?per_page=100`); // unpaginated cap, accepted for v0
   const viewer = await getAuthenticatedUser();
 
-  const byName = new Map<string, CheckRun>(
-    checks.check_runs.map((run) => [
-      run.name,
-      { name: run.name, conclusion: run.conclusion, url: run.html_url ?? "" },
-    ]),
-  );
-  // A name on both surfaces is one build reported twice, and the check run is
-  // the richer report — but it only wins where it is at least as bad, so a
-  // green run cannot bury a status that failed or is still running.
-  for (const status of combined.statuses) {
-    const conclusion = STATUS_CONCLUSIONS.get(status.state) ?? null;
-    const run = byName.get(status.context);
-    if (run !== undefined && severity(run.conclusion) >= severity(conclusion)) {
-      continue;
-    }
-    byName.set(status.context, {
-      name: status.context,
-      conclusion,
-      url: status.target_url ?? "",
-    });
-  }
-
-  const reported = [...byName.values()];
+  const runs: CheckRun[] = checks.check_runs.map((run) => ({
+    name: run.name,
+    conclusion: run.conclusion,
+    url: run.html_url ?? "",
+  }));
+  // A context on both surfaces is one build reported twice, and the check run
+  // is the richer report. Two check runs of one name are two builds, and both
+  // stay: a red one must not vanish behind a green namesake.
+  const alsoACheckRun = new Set(runs.map((run) => run.name));
+  const reported = [
+    ...runs,
+    ...combined.statuses
+      .filter((status) => !alsoACheckRun.has(status.context))
+      .map((status) => ({
+        name: status.context,
+        conclusion: STATUS_CONCLUSIONS.get(status.state) ?? null,
+        url: status.target_url ?? "",
+      })),
+  ];
   const { ci, failing } = classifyChecks(
     reported,
     reported.some((run) => run.conclusion === null),
