@@ -126,24 +126,46 @@ test("the wrappers scaffolded are the step ids this repo has recorded", async ()
 });
 
 test("the docker project and ports all carry the factory", async () => {
-  const first = scaffold("alpha");
-  const second = scaffold("beta");
-  const a = await init(first);
-  const b = await init(second);
+  const dir = scaffold("alpha");
+  const a = await init(dir);
 
-  const compose = readFileSync(path.join(first, "docker-compose.yml"), "utf8");
+  const compose = readFileSync(path.join(dir, "docker-compose.yml"), "utf8");
   expect(compose).toContain("name: alpha");
   expect(compose).toContain(`"${a.postgresPort}:5432"`);
-  expect(a.postgresPort).not.toBe(b.postgresPort);
-  expect(a.servicePort).not.toBe(b.servicePort);
-  const yml = readFileSync(path.join(first, "jigs.yml"), "utf8");
+  const yml = readFileSync(path.join(dir, "jigs.yml"), "utf8");
   expect(yml).toContain(`port: ${a.servicePort}`);
   expect(yml).toContain(`dashboard_port: ${a.dashboardPort}`);
-  expect(a.dashboardPort).not.toBe(b.dashboardPort);
-  // Disjoint ranges: one factory's dashboard is never another's service.
+
+  // One offset under 100 shared by three ranges 100 apart, so no factory's
+  // service port can be another's dashboard or World port. Two scaffolds
+  // landing on different offsets is not the property: the offset is a hash
+  // bucket of the path, and any two paths share one about 1% of the time.
+  const offset = a.servicePort - 8990;
+  expect(offset).toBeGreaterThanOrEqual(0);
+  expect(offset).toBeLessThan(100);
+  expect(a.dashboardPort).toBe(9090 + offset);
+  expect(a.postgresPort).toBe(5440 + offset);
+
+  // Derived from the path, never drawn fresh: jigs up, jigs bind and the
+  // committed jigs.yml all have to agree with what init printed.
+  const again = await init(dir);
+  expect(again.created).toEqual([]);
+  expect(again.servicePort).toBe(a.servicePort);
+  expect(again.dashboardPort).toBe(a.dashboardPort);
+  expect(again.postgresPort).toBe(a.postgresPort);
+
+  // A different path is a different derivation, and the project name follows
+  // the directory rather than the ports.
+  const other = scaffold("beta");
+  const b = await init(other);
+  expect(
+    readFileSync(path.join(other, "docker-compose.yml"), "utf8"),
+  ).toContain("name: beta");
   for (const port of [a.servicePort, b.servicePort]) {
     expect(a.dashboardPort).not.toBe(port);
     expect(b.dashboardPort).not.toBe(port);
+    expect(a.postgresPort).not.toBe(port);
+    expect(b.postgresPort).not.toBe(port);
   }
 });
 
