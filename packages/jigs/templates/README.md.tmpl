@@ -12,6 +12,9 @@ machine runs, the bindings they run against, and the service that hosts them.
   Edit either freely. A file's path is half of the workflow id its
   `"use workflow"` body owns, so renaming or moving a pipeline changes that
   id; `review-loop.ts` carries no directive and owns no id at all.
+  `review-loop.test.ts` beside it holds that composition to its sequence —
+  the order, the CI bound, the merge policy and the endings — with the step
+  wrappers faked and the blocks themselves running for real.
 - `steps/jigs.ts` — this factory's `"use step"` wrappers around the steps jigs
   ships, and the blocks wired on top of them. Every step a pipeline calls
   comes from here, and each step id is this path plus the function's name.
