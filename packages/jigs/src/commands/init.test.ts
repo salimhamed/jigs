@@ -37,6 +37,7 @@ test("scaffolds a factory that can be installed and built", async () => {
     "jigs.yml",
     "nitro.config.ts",
     "package.json",
+    "pipelines/review-loop.test.ts",
     "pipelines/review-loop.ts",
     "pipelines/ship.ts",
     "pnpm-workspace.yaml",
