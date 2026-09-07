@@ -10,22 +10,12 @@ import {
   execOutput,
   nodeExecFile,
 } from "../exec.ts";
-import { listRunsForPs, type PsRun } from "./ps.ts";
-import { resolveServiceUrl } from "./service.ts";
 import { SERVICE_ENTRY } from "./service-lifecycle.ts";
 
 // Compiles a factory repo's own pipelines into its own service bundle. Both
 // halves of the work belong to the factory, not to this CLI: the generated
 // entry comes from the @salimhamed/jigs the factory installed, and the
 // compiler is the nitro the factory installed.
-
-// Mirrors TERMINAL_RUN_STATUSES in ../runs.ts — the CLI reads run status off
-// the wire, and a static import would pull the service half into dist/cli.js.
-const TERMINAL_RUN_STATUSES: ReadonlySet<string> = new Set([
-  "completed",
-  "failed",
-  "cancelled",
-]);
 
 export type Prepare = (factoryRoot: string) => unknown;
 
@@ -38,7 +28,6 @@ export interface BuildDeps {
 
 export async function buildFactoryService(deps: BuildDeps): Promise<void> {
   const factoryRoot = locateFactoryRoot(deps.cwd);
-  await warnAboutRunsInFlight(factoryRoot, deps.out);
 
   const prepare = deps.prepare ?? (await loadPrepare(factoryRoot));
   await prepare(factoryRoot);
@@ -71,42 +60,6 @@ function echo(result: Partial<ExecOutput>, out: (line: string) => void): void {
   for (const line of execOutput(result).split("\n")) {
     if (line !== "") out(line);
   }
-}
-
-// Empty when the service is unreachable: that is the ordinary case for a
-// build — there is nothing running to have runs in flight.
-export async function listRunsInFlight(factoryRoot: string): Promise<PsRun[]> {
-  let runs: PsRun[];
-  try {
-    // `jigs ps` already knows how to find them; it prints, so it is handed a
-    // sink and read for its return value.
-    ({ runs } = await listRunsForPs({
-      serviceUrl: resolveServiceUrl(factoryRoot),
-      out: () => {},
-    }));
-  } catch {
-    return [];
-  }
-  return runs.filter((run) => !TERMINAL_RUN_STATUSES.has(run.status));
-}
-
-// Rebuilding while a run is parked can orphan it: replay looks the step ids
-// up by name, and a pipeline whose shape changed no longer answers to them.
-// A warning, not a refusal — only the human knows whether the parked run
-// still matters.
-async function warnAboutRunsInFlight(
-  factoryRoot: string,
-  out: (line: string) => void,
-): Promise<void> {
-  const inFlight = await listRunsInFlight(factoryRoot);
-  if (inFlight.length === 0) return;
-  out(
-    `warning: ${inFlight.length} run(s) still in flight — a rebuild can orphan one whose pipeline changed shape:`,
-  );
-  for (const run of inFlight) {
-    out(`  ${run.runId}  ${run.pipeline}  ${run.status}`);
-  }
-  out("  jigs ps to look, jigs cancel <run> to release one");
 }
 
 /**

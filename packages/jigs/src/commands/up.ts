@@ -14,12 +14,10 @@ import {
   nodeExecFile,
 } from "../exec.ts";
 import { stringEnv } from "../harnesses/env.ts";
-import {
-  buildFactoryService,
-  listRunsInFlight,
-  type Prepare,
-} from "./build.ts";
+import { buildFactoryService, type Prepare } from "./build.ts";
 import { runDoctor } from "./doctor.ts";
+import { listRunsForPs, type PsRun } from "./ps.ts";
+import { resolveServiceUrl } from "./service.ts";
 import {
   awaitServiceReady,
   builtBundleHash,
@@ -87,6 +85,14 @@ export interface UpOptions {
 // freshly copied .env, so they are reported, not refused.
 const CREDENTIAL_SLOTS = ["LINEAR_API_KEY", "GITHUB_TOKEN"];
 const FACTORY_CODE = "jigs.config.ts";
+
+// Mirrors TERMINAL_RUN_STATUSES in ../runs.ts — the CLI reads run status off
+// the wire, and a static import would pull the service half into dist/cli.js.
+const TERMINAL_RUN_STATUSES: ReadonlySet<string> = new Set([
+  "completed",
+  "failed",
+  "cancelled",
+]);
 
 export async function upFactory(
   deps: UpDeps,
@@ -346,8 +352,6 @@ function publishedPostgresPorts(factoryRoot: string): string {
   return ports.length === 0 ? "no port for 5432" : `:${ports.join(", :")}`;
 }
 
-// `jigs build` warns about runs in flight and proceeds; the restart is what
-// actually cuts one off, so this is where the human is asked.
 async function confirmRestart(
   factoryRoot: string,
   service: ResolvedService,
@@ -374,4 +378,21 @@ async function confirmRestart(
       "re-run jigs up when the runs finish",
     );
   }
+}
+
+// Empty when the service is unreachable: a service nobody can reach is
+// holding no run this restart could cut off.
+async function listRunsInFlight(factoryRoot: string): Promise<PsRun[]> {
+  let runs: PsRun[];
+  try {
+    // `jigs ps` already knows how to find them; it prints, so it is handed a
+    // sink and read for its return value.
+    ({ runs } = await listRunsForPs({
+      serviceUrl: resolveServiceUrl(factoryRoot),
+      out: () => {},
+    }));
+  } catch {
+    return [];
+  }
+  return runs.filter((run) => !TERMINAL_RUN_STATUSES.has(run.status));
 }

@@ -230,7 +230,7 @@ my-factory-2286ac2a is up at http://localhost:8990 — dashboard http://localhos
 - **build** is `jigs build`: this factory's pipelines compiled into
   `.output/server/index.mjs` with the factory's own nitro and its own copy of
   the SDK — the copy that compiles the step ids has to be the copy that
-  registers them. It warns when a run is in flight.
+  registers them.
 - **service** starts the service if none is running; if one is, it restarts
   it only when the built bundle differs from the one the process started from
   (`--restart` forces it). A restart over in-flight runs asks first —
