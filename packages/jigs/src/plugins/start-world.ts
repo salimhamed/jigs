@@ -7,6 +7,12 @@ import {
 } from "../shutdown.ts";
 import type { BindingClone } from "../worktrees/clone.ts";
 
+// Why every import below is dynamic: nitro loads this plugin before the
+// service can report anything, so nothing fallible — the registry connection,
+// the factory config, the World — is resolved until installShutdown() is in
+// place and the gate that owns its failure is wrapped around it. An injected
+// dep skips the import outright, which is what keeps the tests off Postgres.
+
 export interface RegistryGateDeps {
   sql?: () => ISql;
   ensure?: (sql: ISql) => Promise<void>;

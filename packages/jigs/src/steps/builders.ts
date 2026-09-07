@@ -1,8 +1,8 @@
-// The three step builders (ADR 0003) on the Workflow SDK (ADR 0008): plain
-// workflow-side functions that plan a fully-serializable wire, hand it to the
-// step function the factory injects, and zod-parse the recorded raw output
-// back into the typed StepResult. Memoization is the SDK's positional replay —
-// no author-supplied keys anywhere.
+// The three step builders on the Workflow SDK: plain workflow-side functions
+// that plan a fully-serializable wire, hand it to the step function the
+// factory injects, and zod-parse the recorded raw output back into the typed
+// StepResult. Memoization is the SDK's positional replay — no author-supplied
+// keys anywhere.
 //
 // This module is the workflow side of that split; ./run is the step side.
 

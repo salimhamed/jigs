@@ -1,7 +1,7 @@
 // The step side of agent() and ask(): what the factory's "use step" wrappers
 // delegate to. Runs the JIT checks, hydrates live providers from wire config
-// (ADR 0008 — nothing live crossed the boundary), and normalizes the
-// generation into the uniform StepResult.
+// (nothing live crossed the boundary), and normalizes the generation into the
+// uniform StepResult.
 //
 // Everything here reaches node builtins, so this module must only ever be
 // imported from inside a step body — a workflow-side import of it fails the
@@ -238,11 +238,11 @@ async function generateAgentStep(
                   codexHome: deps.ensureCodexHome(runId),
                   env,
                   approvalPolicy: "never",
-                  // Unsandboxed on purpose (AGE-359): a jigs worktree's real
-                  // git dir lives in the main checkout's
-                  // .git/worktrees/<name>/, outside the workspace, so
-                  // workspace-write fails every commit on a read-only index
-                  // lock. Same trust level the claude path already runs at.
+                  // Unsandboxed on purpose: a jigs worktree's real git dir
+                  // lives in the main checkout's .git/worktrees/<name>/,
+                  // outside the workspace, so workspace-write fails every
+                  // commit on a read-only index lock. Same trust level the
+                  // claude path already runs at.
                   sandboxPolicy: "danger-full-access",
                   autoApprove: true,
                   ...(harness.mcpServers !== undefined
@@ -251,9 +251,8 @@ async function generateAgentStep(
                 }),
               ),
               ...request,
-              // ADR 0004's amendment names this field, and the provider
-              // prefers it over settings.resume — an explicit id takes the
-              // resume path.
+              // The provider prefers this field over settings.resume — an
+              // explicit id takes the resume path.
               ...(resume !== undefined
                 ? {
                     providerOptions: {

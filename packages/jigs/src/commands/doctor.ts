@@ -2,9 +2,9 @@ import type { CheckReport } from "../checks/catalog.ts";
 import { JigsError } from "../errors.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 
-// An HTTP client of the service (ADR 0008), deliberately not a local run of
-// the catalog: the checks must execute in the environment steps run in, and
-// the interactive shell's env is not the service process's.
+// An HTTP client of the service, deliberately not a local run of the catalog:
+// the checks must execute in the environment steps run in, and the interactive
+// shell's env is not the service process's.
 
 export async function runDoctor(deps: ServiceDeps): Promise<CheckReport> {
   const res = await serviceFetch(deps.serviceUrl, "/api/doctor");

@@ -1,7 +1,7 @@
-// Answering review as the builder (ADR 0009): resume-first, with a
-// fresh-context rebuild that is a first-class path, never a degraded one.
-// Both paths produce the same answers object, which is what makes the
-// fallback testable as an equal rather than as a consolation.
+// Answering review as the builder: resume-first, with a fresh-context rebuild
+// that is a first-class path, never a degraded one. Both paths produce the
+// same answers object, which is what makes the fallback testable as an equal
+// rather than as a consolation.
 
 import { z } from "zod";
 import {

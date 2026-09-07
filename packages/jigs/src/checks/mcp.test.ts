@@ -8,7 +8,7 @@ import { runChecks } from "./catalog.ts";
 import { codexWorktreeConfigCheck, mcpServerChecks } from "./mcp.ts";
 
 // A real stdio MCP server child process, not a mock: the whole point of the
-// JIT check is that only a real tool call is evidence (ADR 0011).
+// JIT check is that only a real tool call is evidence.
 const PROBE_SERVER = fileURLToPath(
   new URL("../harnesses/live/fixtures/mcp-probe-server.mjs", import.meta.url),
 );

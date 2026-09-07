@@ -1,11 +1,11 @@
-// Harness descriptors are tagged plain data (ADR 0008): nothing live crosses
-// the workflow/step boundary, so a factory call returns options + a kind tag
-// and the step hydrates the real provider from it.
+// Harness descriptors are tagged plain data: nothing live crosses the
+// workflow/step boundary, so a factory call returns options + a kind tag and
+// the step hydrates the real provider from it.
 
-// A real tool call is the only honest availability evidence (ADR 0011 —
-// agents misreport their own server list), and no tool is universally
-// side-effect-free, so the step declares which one the JIT check may call.
-// Required: TypeScript is the enforcement, not plan-time validation code.
+// A real tool call is the only honest availability evidence — agents misreport
+// their own server list — and no tool is universally side-effect-free, so the
+// step declares which one the JIT check may call. Required: TypeScript is the
+// enforcement, not plan-time validation code.
 export type McpProbe = {
   tool: string;
   arguments?: Record<string, unknown>;

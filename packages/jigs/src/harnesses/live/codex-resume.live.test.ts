@@ -45,9 +45,9 @@ test("a codex thread id with no rollout behind it reports resumeFailed", async (
   const result = await runAgent(wire, "live-codex-resume", deps);
 
   expect(result).toHaveProperty("resumeFailed");
-  // The finding ADR 0004's amendment records: codex 0.149.1 raises a raw
-  // JSON-RPC error that does not match the provider's /thread.*not found/i
-  // wrapper, so nothing in jigs may key off an error string.
+  // codex 0.149.1 raises a raw JSON-RPC error that does not match the
+  // provider's /thread.*not found/i wrapper, so nothing in jigs may key off an
+  // error string.
   const { resumeFailed } = result as { resumeFailed: string };
   expect(resumeFailed).not.toMatch(/thread.*not found/i);
 });

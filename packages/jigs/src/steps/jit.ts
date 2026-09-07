@@ -1,7 +1,7 @@
-// A JIT check failure is a needs-human halt, never a terminal failure (ADR
-// 0010): the repair goes to the ticket through the claim channel, the run
-// suspends keeping its worktree, and the step re-runs from zero once a human
-// replies. Late discovery costs a pause, never a relaunch.
+// A JIT check failure is a needs-human halt, never a terminal failure: the
+// repair goes to the ticket through the claim channel, the run suspends
+// keeping its worktree, and the step re-runs from zero once a human replies.
+// Late discovery costs a pause, never a relaunch.
 
 import type { TicketClaim } from "../suspension/claim.ts";
 import type { NeedsHumanFn } from "../suspension/needs-human.ts";

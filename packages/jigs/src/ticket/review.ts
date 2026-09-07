@@ -1,6 +1,6 @@
-// The shipped ticket-review block (ADR 0002): one agent step that restates the
-// ticket into a brief and issues a proceed / needs-human verdict, looping until
-// it proceeds. jigs core still validates nothing — this block is optional, and
+// The shipped ticket-review block: one agent step that restates the ticket
+// into a brief and issues a proceed / needs-human verdict, looping until it
+// proceeds. jigs core still validates nothing — this block is optional, and
 // invocation is approval.
 
 import { z } from "zod";
@@ -12,7 +12,7 @@ import { renderSnapshot, type TicketSnapshot } from "./snapshot.ts";
 
 // strictObject so the harness's native structured output carries
 // additionalProperties:false and a malformed verdict throws at the
-// workflow-side parse rather than degrading into a guess (ADR 0003).
+// workflow-side parse rather than degrading into a guess.
 export const ticketReviewVerdict = z.strictObject({
   verdict: z.enum(["proceed", "needs-human"]),
   brief: z.string().min(1),

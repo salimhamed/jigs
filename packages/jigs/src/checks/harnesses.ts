@@ -26,10 +26,10 @@ type ClaudeAuthStatus = {
   apiKeySource?: unknown;
 };
 
-// Heuristic, never a model call (ADR 0010). The probe runs under the
-// unscrubbed env: the Claude provider re-inherits every ANTHROPIC_*/CLAUDE_*
-// key from process.env regardless of the env a step hands it, so a probe that
-// scrubbed them would report a green the step will not honor.
+// Heuristic, never a model call. The probe runs under the unscrubbed env: the
+// Claude provider re-inherits every ANTHROPIC_*/CLAUDE_* key from process.env
+// regardless of the env a step hands it, so a probe that scrubbed them would
+// report a green the step will not honor.
 export function claudeAuthCheck(deps: ClaudeAuthDeps = {}): Check {
   const exec = deps.exec ?? execFileAsync;
   const env = deps.env ?? process.env;
@@ -130,7 +130,7 @@ export function codexAuthCheck(authPath = realCodexAuthPath()): Check {
         };
       }
       // Deliberately no expiry gating: codex refreshes its JWT lazily, so a
-      // stale-looking token is still a valid login (ADR 0010).
+      // stale-looking token is still a valid login.
       if (auth.auth_mode !== "chatgpt") {
         return {
           ok: false,

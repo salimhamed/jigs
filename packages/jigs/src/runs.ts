@@ -16,7 +16,7 @@ import { registrySql } from "./worktrees/sql.ts";
 
 // The SDK mints run ids as `wrun_` + a ULID, so a ref is run-id-shaped (with
 // or without the prefix, full or truncated) or it is a ticket ref. Crockford
-// base32 excludes I/L/O/U, and both ticket ref shapes we accept — AGE-317 and
+// base32 excludes I/L/O/U, and both ticket ref shapes we accept — AGE-123 and
 // a UUID — carry a `-`, so the two branches can never claim the same string.
 const RUN_ID_SHAPE = /^(?:wrun_)?([0-9A-HJKMNP-TV-Z]{1,26})$/i;
 const RUN_ID_PREFIX = "wrun_";

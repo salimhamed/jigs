@@ -45,7 +45,7 @@ export interface PrSnapshot {
   headSha: string;
   // The authenticated login. Never proof of authorship: a factory on its
   // operator's personal token has the operator as the viewer, so nothing may
-  // read "the viewer wrote it" as "jigs wrote it" (AGE-363).
+  // read "the viewer wrote it" as "jigs wrote it".
   viewer: string;
   reviews: PrReview[];
   reviewThreads: ReviewThread[];

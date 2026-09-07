@@ -7,8 +7,8 @@ import { scrubbedEnv } from "../harnesses/env.ts";
 import type { McpProbe, McpServerConfig } from "../steps/config.ts";
 import { CHECK_TIMEOUT_MS, type Check, type CheckResult } from "./catalog.ts";
 
-// MCP checks are JIT-only by design (ADR 0011): a step's servers are built
-// inside the pipeline body, so there is nothing to preflight — and an agent's
+// MCP checks are JIT-only by design: a step's servers are built inside the
+// pipeline body, so there is nothing to preflight — and an agent's
 // self-enumeration is not evidence, hence the real tool call below.
 
 const DECLARED_PER_STEP =

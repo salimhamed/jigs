@@ -1,8 +1,8 @@
-// Naming a pull request and writing its body (ADR 0009). The mechanics live
-// here — resume the builder that wrote the change, fall back to a fresh
-// context fed the diff, parse a `{ title, body }` back — and the prose does
-// not: the caller passes both prompts, and whether a drifting title is
-// repaired or refused is the factory's policy, applied to what comes back.
+// Naming a pull request and writing its body. The mechanics live here — resume
+// the builder that wrote the change, fall back to a fresh context fed the
+// diff, parse a `{ title, body }` back — and the prose does not: the caller
+// passes both prompts, and whether a drifting title is repaired or refused is
+// the factory's policy, applied to what comes back.
 //
 // The fresh prompt is a function of the diff so the read that feeds it costs
 // nothing when the resume is taken.

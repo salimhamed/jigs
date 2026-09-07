@@ -1,7 +1,7 @@
-// Fixing red CI as the builder (ADR 0009): the same resume-first shape the
-// review answers use, with the same first-class fresh-context rebuild. A fix
-// agent that never saw the ticket, the brief or the diff is guessing at the
-// change it is repairing.
+// Fixing red CI as the builder: the same resume-first shape the review answers
+// use, with the same first-class fresh-context rebuild. A fix agent that never
+// saw the ticket, the brief or the diff is guessing at the change it is
+// repairing.
 
 import {
   fixCiFreshPrompt,

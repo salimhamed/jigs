@@ -11,9 +11,9 @@ import {
 import path from "node:path";
 import { jigsDataDir } from "../paths.ts";
 
-// The advisory file lock ADR 0007 calls for, hand-rolled on O_EXCL: one
-// dependency-free primitive whose stale and retry policy is visible in place.
-// Lock files live in the jigs data dir, never inside a worktree.
+// The worktree advisory lock, hand-rolled on O_EXCL: one dependency-free
+// primitive whose stale and retry policy is visible in place. Lock files live
+// in the jigs data dir, never inside a worktree.
 
 export interface FileLockOptions {
   timeoutMs?: number;

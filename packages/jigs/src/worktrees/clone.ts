@@ -9,11 +9,11 @@ import { git, tryGit } from "../git.ts";
 import { bindingRepoDir } from "./layout.ts";
 
 // jigs' own bare clone of a binding's remote, which every worktree of that
-// binding is cut from (ADR 0006). Built with `init --bare` + `remote add` +
-// `fetch` rather than `clone --bare` or `--mirror`, because only that route
-// leaves `refs/remotes/origin/*` as the mirror of the remote while
-// `refs/heads/*` stays jigs' own run-branch namespace — the two namespaces the
-// three-way branch resolution reads as distinct.
+// binding is cut from. Built with `init --bare` + `remote add` + `fetch`
+// rather than `clone --bare` or `--mirror`, because only that route leaves
+// `refs/remotes/origin/*` as the mirror of the remote while `refs/heads/*`
+// stays jigs' own run-branch namespace — the two namespaces the three-way
+// branch resolution reads as distinct.
 
 export interface EnsureBindingCloneOptions {
   repoDir: string;
