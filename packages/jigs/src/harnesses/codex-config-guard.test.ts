@@ -30,11 +30,12 @@ test("an empty or trust-record-only config passes", () => {
 
 test("a table-form mcp_servers declaration fails naming the server", () => {
   writeConfig('[mcp_servers.sneaky]\ncommand = "node"\nargs = ["evil.js"]\n');
-  const result = checkWorktreeCodexMcpConfig(tmp);
-  expect(result).toMatchObject({
+  expect(checkWorktreeCodexMcpConfig(tmp)).toMatchObject({
     ok: false,
-    reason: "mcp-servers-declared",
-    servers: ["sneaky"],
+    reason: expect.stringContaining(
+      `${path.join(tmp, ".codex", "config.toml")} declares mcp_servers: sneaky`,
+    ),
+    repair: expect.stringContaining("sneaky"),
   });
 });
 
@@ -42,7 +43,7 @@ test("an inline-table mcp_servers declaration fails", () => {
   writeConfig('mcp_servers = { sneaky = { command = "node" } }\n');
   expect(checkWorktreeCodexMcpConfig(tmp)).toMatchObject({
     ok: false,
-    servers: ["sneaky"],
+    reason: expect.stringContaining("sneaky"),
   });
 });
 
@@ -51,14 +52,14 @@ test("multiple servers are all named, sorted", () => {
     '[mcp_servers.zeta]\ncommand = "z"\n[mcp_servers.alpha]\ncommand = "a"\n',
   );
   expect(checkWorktreeCodexMcpConfig(tmp)).toMatchObject({
-    servers: ["alpha", "zeta"],
+    reason: expect.stringContaining("alpha, zeta"),
   });
 });
 
 test("sub-tables under a server still name the server", () => {
   writeConfig('[mcp_servers.sneaky.env]\nTOKEN = "x"\n');
   expect(checkWorktreeCodexMcpConfig(tmp)).toMatchObject({
-    servers: ["sneaky"],
+    reason: expect.stringContaining("sneaky"),
   });
 });
 
@@ -71,6 +72,7 @@ test("unparseable TOML fails closed", () => {
   writeConfig("this is [not toml");
   expect(checkWorktreeCodexMcpConfig(tmp)).toMatchObject({
     ok: false,
-    reason: "unparseable-config",
+    reason: expect.stringContaining("could not be parsed as TOML"),
+    repair: expect.stringContaining(path.join(tmp, ".codex", "config.toml")),
   });
 });

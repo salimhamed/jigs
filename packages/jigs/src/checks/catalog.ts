@@ -1,8 +1,6 @@
 // The check catalog engine (ADR 0010): one shared shape for every
 // requirement check and its repair instruction, so preflight, JIT checks and
-// `jigs doctor` render the same text at launch and mid-run. The result shape
-// generalizes the codex config guard's GuardResult — that guard registers
-// here unchanged.
+// `jigs doctor` render the same text at launch and mid-run.
 
 export type CheckResult =
   | { ok: true }

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { parse } from "smol-toml";
+import type { CheckResult } from "../checks/catalog.ts";
 
 // The load-bearing JIT guard from ADR 0011: codex auto-trusts a writable cwd
 // (thread/start persists a trust record) — and since AGE-359 agent steps run
@@ -11,23 +12,7 @@ import { parse } from "smol-toml";
 // JIT check. A real TOML parse, not a regex — TOML admits too many spellings
 // and a false negative here defeats deny-by-default entirely.
 
-export type GuardResult =
-  | { ok: true }
-  | {
-      ok: false;
-      reason: "mcp-servers-declared";
-      configPath: string;
-      servers: string[];
-      repair: string;
-    }
-  | {
-      ok: false;
-      reason: "unparseable-config";
-      configPath: string;
-      repair: string;
-    };
-
-export function checkWorktreeCodexMcpConfig(worktreeDir: string): GuardResult {
+export function checkWorktreeCodexMcpConfig(worktreeDir: string): CheckResult {
   const configPath = path.join(worktreeDir, ".codex", "config.toml");
   if (!existsSync(configPath)) return { ok: true };
 
@@ -38,9 +23,8 @@ export function checkWorktreeCodexMcpConfig(worktreeDir: string): GuardResult {
     // Fail closed: a config we can't read is a config we can't clear.
     return {
       ok: false,
-      reason: "unparseable-config",
-      configPath,
-      repair: `fix or remove ${configPath} — it could not be parsed as TOML`,
+      reason: `${configPath} could not be parsed as TOML`,
+      repair: `fix or remove ${configPath}`,
     };
   }
 
@@ -50,9 +34,7 @@ export function checkWorktreeCodexMcpConfig(worktreeDir: string): GuardResult {
     if (servers.length > 0) {
       return {
         ok: false,
-        reason: "mcp-servers-declared",
-        configPath,
-        servers,
+        reason: `${configPath} declares mcp_servers: ${servers.join(", ")}`,
         repair: `remove the mcp_servers table (${servers.join(", ")}) from ${configPath} — MCP servers are declared per step, never repo-owned (ADR 0011)`,
       };
     }
