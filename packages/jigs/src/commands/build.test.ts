@@ -6,10 +6,7 @@ import { type BuildDeps, buildFactoryService } from "./build.ts";
 
 function factory(): string {
   const root = mkdtempSync(path.join(tmpdir(), "jigs-build-"));
-  writeFileSync(
-    path.join(root, "jigs.yml"),
-    "service:\n  port: 59321\n  dashboard_port: 9090\n",
-  );
+  writeFileSync(path.join(root, "jigs.yml"), "service:\n  port: 59321\n");
   mkdirSync(path.join(root, "node_modules", ".bin"), { recursive: true });
   writeFileSync(path.join(root, "node_modules", ".bin", "nitro"), "");
   return root;
