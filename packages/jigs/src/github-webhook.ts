@@ -55,18 +55,19 @@ export function ensureWebhookSecret(dataDir: string = jigsDataDir()): string {
 export interface EnsureRepoWebhookOptions extends GithubRepoRef {
   ingressUrl: string;
   secret: string;
-  // Resolved by the caller, not read from the environment here.
   token: string;
 }
 
-// Carries the status so a caller can tell a rejected token from an
+// Carries the status and body so a caller can tell a rejected token from an
 // unreachable repo or a rate limit.
 export class GithubApiError extends JigsError {
   readonly status: number;
+  readonly body: string;
 
   constructor(status: number, apiPath: string, body: string) {
     super(`GitHub API ${status} on ${apiPath}: ${body}`);
     this.status = status;
+    this.body = body;
   }
 }
 

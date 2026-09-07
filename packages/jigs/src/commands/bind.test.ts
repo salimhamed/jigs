@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { bindingRepoDir } from "../worktrees/layout.ts";
 import { type BindDeps, bindRepo } from "./bind.ts";
+import { unbindRepo } from "./unbind.ts";
 
 let tmp: string;
 let factory: string;
@@ -59,19 +60,36 @@ test("re-bind is idempotent: no duplicate entries, comments preserved, bytes unc
   expect(lines.some((l) => l.includes("already points at"))).toBe(true);
 });
 
-test("a binding whose clone is already on disk needs no restart", async () => {
-  vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
-  await bindRepo(API, deps());
+function markCloned(bindingName: string): void {
   const originRefs = path.join(
-    bindingRepoDir({ factoryRoot: factory, bindingName: "api" }),
+    bindingRepoDir({ factoryRoot: factory, bindingName }),
     "refs/remotes/origin",
   );
   mkdirSync(originRefs, { recursive: true });
   writeFileSync(path.join(originRefs, "HEAD"), "ref: refs/heads/main\n");
+}
+
+test("a binding whose clone is already on disk needs no restart", async () => {
+  vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
+  await bindRepo(API, deps());
+  markCloned("api");
 
   lines = [];
   await bindRepo(API, deps());
   expect(lines.some((l) => l.includes("restart the service"))).toBe(false);
+});
+
+test("a name re-bound after an unbind says the restart the old clone hides", async () => {
+  vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
+  await bindRepo(API, deps());
+  markCloned("api");
+  unbindRepo("api", deps());
+
+  lines = [];
+  await bindRepo("git@github.com:acme/api-moved.git", deps(), { name: "api" });
+  expect(lines).toContain(
+    "restart the service to clone api: jigs service restart",
+  );
 });
 
 test("a name already bound to another remote is refused, hinting unbind", async () => {
@@ -285,6 +303,68 @@ test("an exported GITHUB_TOKEN wins over the factory's .env", async () => {
     .mockResolvedValueOnce(new Response(JSON.stringify({ id: 9 })));
   await bindRepo(API, deps());
   expect(bearerOf(0)).toBe("Bearer gh_test_token");
+});
+
+test("a rate-limited 403 does not send the operator after a new token", async () => {
+  stubWebhookEnv();
+  makeIngressFactory();
+  fetchMock.mockResolvedValueOnce(
+    new Response("You have exceeded a secondary rate limit", { status: 403 }),
+  );
+  const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
+  const { hint } = failure as { hint?: string };
+  expect(hint).not.toContain("GITHUB_TOKEN");
+  expect(hint).toContain(`once that clears, re-run: jigs bind ${API}`);
+});
+
+test("a 403 on the token's scopes asks for a token that carries them", async () => {
+  stubWebhookEnv();
+  makeIngressFactory();
+  fetchMock.mockResolvedValueOnce(
+    new Response("Resource not accessible by personal access token", {
+      status: 403,
+    }),
+  );
+  const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
+  expect((failure as { hint?: string }).hint).toContain("admin:repo_hook");
+});
+
+test("a 404 sends the operator to the remote, not to a new token", async () => {
+  stubWebhookEnv();
+  makeIngressFactory();
+  fetchMock.mockResolvedValueOnce(new Response("Not Found", { status: 404 }));
+  const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
+  const { hint } = failure as { hint?: string };
+  expect(hint).not.toContain("admin:repo_hook");
+  expect(hint).toContain("check the remote");
+  expect(hint).toContain("acme/Api");
+});
+
+test("a token this shell alone has is noted, since the service reads .env", async () => {
+  stubWebhookEnv();
+  makeIngressFactory();
+  writeFileSync(path.join(factory, ".env"), "GITHUB_TOKEN=\n");
+  fetchMock
+    .mockResolvedValueOnce(new Response("[]"))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 9 })));
+  await bindRepo(API, deps());
+  expect(
+    lines.some(
+      (l) =>
+        l.includes("this shell's") && l.includes(path.join(factory, ".env")),
+    ),
+  ).toBe(true);
+});
+
+test("a token the factory's .env carries is not flagged as this shell's", async () => {
+  stubWebhookEnv();
+  makeIngressFactory();
+  writeFileSync(path.join(factory, ".env"), "GITHUB_TOKEN=from_dotenv\n");
+  fetchMock
+    .mockResolvedValueOnce(new Response("[]"))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 9 })));
+  await bindRepo(API, deps());
+  expect(lines.some((l) => l.includes("this shell's"))).toBe(false);
 });
 
 test("bind with a non-github remote skips the webhook leg", async () => {

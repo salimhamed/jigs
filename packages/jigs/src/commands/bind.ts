@@ -6,7 +6,7 @@ import {
   upsertBinding,
   writeFactoryConfigText,
 } from "../config/factory-config.ts";
-import { factoryEnvValue } from "../config/factory-env.ts";
+import { factoryEnvValue, readFactoryEnv } from "../config/factory-env.ts";
 import { locateFactoryRoot } from "../config/factory-root.ts";
 import { JigsError } from "../errors.ts";
 import {
@@ -88,10 +88,13 @@ export async function bindRepo(
       ? `bound ${name} → ${remoteUrl}`
       : `${name} already points at ${remoteUrl}`,
   );
-  // Missing clone, not new entry: a bind whose webhook leg failed has already
-  // written the binding, so the re-run that repairs it must still say the
-  // clone every run naming this binding waits on.
-  if (!hasBindingClone(bindingRepoDir({ factoryRoot, bindingName: name }))) {
+  // A new entry has nothing cloned yet, or — after the unbind a repoint takes
+  // — the old repo's objects sitting where its clone goes. An entry a failed
+  // webhook leg already wrote owes the clone as much on the re-run.
+  if (
+    existing === undefined ||
+    !hasBindingClone(bindingRepoDir({ factoryRoot, bindingName: name }))
+  ) {
     deps.out(`restart the service to clone ${name}: jigs service restart`);
   }
 
@@ -104,7 +107,7 @@ export async function bindRepo(
     ingressUrl: config.ingress_url,
     // The repair it prints has to land on this binding, not on the one the
     // remote alone would derive.
-    reBind:
+    reBindCommand:
       options.name === undefined
         ? `jigs bind ${remoteUrl}`
         : `jigs bind ${remoteUrl} --name ${name}`,
@@ -135,13 +138,13 @@ async function ensureWebhook({
   remoteUrl,
   factoryRoot,
   ingressUrl,
-  reBind,
+  reBindCommand,
   deps,
 }: {
   remoteUrl: string;
   factoryRoot: string;
   ingressUrl: string | undefined;
-  reBind: string;
+  reBindCommand: string;
   deps: BindDeps;
 }): Promise<BindResult["webhook"]> {
   if (ingressUrl === undefined) {
@@ -156,7 +159,9 @@ async function ensureWebhook({
     return "skipped";
   }
   const slug = `${repoRef.owner}/${repoRef.repo}`;
-  const tokenRepair = `set GITHUB_TOKEN in ${path.join(factoryRoot, ".env")} to a classic PAT with admin:repo_hook on ${slug} (an exported GITHUB_TOKEN wins over the file), then re-run: ${reBind}`;
+  const envFile = path.join(factoryRoot, ".env");
+  const tokenRepair = `set GITHUB_TOKEN in ${envFile} to a classic PAT with admin:repo_hook on ${slug} (an exported GITHUB_TOKEN wins over the file), then re-run: ${reBindCommand}`;
+  const declaredToken = readFactoryEnv(factoryRoot).GITHUB_TOKEN ?? "";
   const token = factoryEnvValue(factoryRoot, "GITHUB_TOKEN");
   if (token === undefined) {
     // An ingress with no webhook is a factory whose PR gate never wakes.
@@ -165,6 +170,14 @@ async function ensureWebhook({
       tokenRepair,
     );
   }
+  const repairFor = (err: unknown): string => {
+    if (tokenWasRejected(err)) return tokenRepair;
+    // A 404 is as often a typo in the remote as a token that cannot see a
+    // private repo, and neither clears on its own.
+    if (err instanceof GithubApiError && err.status === 404)
+      return `check the remote, and that this token can see ${slug}, then re-run: ${reBindCommand}`;
+    return `once that clears, re-run: ${reBindCommand}`;
+  };
   const secret = ensureWebhookSecret();
   const outcome = await ensureRepoWebhook({
     ...repoRef,
@@ -174,16 +187,25 @@ async function ensureWebhook({
   }).catch((err: unknown) => {
     throw new JigsError(
       `${slug}'s webhook could not be ensured: ${err instanceof Error ? err.message : String(err)}`,
-      rejectedToken(err) ? tokenRepair : `once that clears, re-run: ${reBind}`,
+      repairFor(err),
     );
   });
   deps.out(`webhook ${outcome}: ${slug}`);
+  if (declaredToken === "") {
+    // The webhook now posts to a service that reads the file alone, so a token
+    // living in this shell only leaves the gate it wakes without one.
+    deps.out(
+      `note: that GITHUB_TOKEN is this shell's — the service reads ${envFile}, so set it there too`,
+    );
+  }
   return outcome;
 }
 
-// Everything else GitHub can fail with — a network error, a rate limit, an
-// outage — is not the token's fault, and telling the operator to re-issue one
-// sends them past the real failure.
-function rejectedToken(err: unknown): boolean {
-  return err instanceof GithubApiError && [401, 403, 404].includes(err.status);
+// GitHub lays a token it will not take on 401, and one whose scopes fall short
+// on 403 — but a rate limit is a 403 too, and no re-issued token clears one.
+function tokenWasRejected(err: unknown): boolean {
+  if (!(err instanceof GithubApiError)) return false;
+  return (
+    err.status === 401 || (err.status === 403 && !/rate limit/i.test(err.body))
+  );
 }

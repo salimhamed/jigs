@@ -310,7 +310,7 @@ newcomer meets.)
 reads it from this factory's `.env`, and an exported one wins for that one
 command — a convenience of bind's, not the factory's rule: the service reads
 `.env` alone, so a token that only ever lives in your shell leaves the running
-factory without one. The token is for the webhook, not for the binding.
+factory without one, and bind notes it. The token is for the webhook, not for the binding.
 
 A factory with an `ingress_url` in its `jigs.yml` (step 5) and no usable token
 is half configured — an ingress nothing posts to, a PR gate that never wakes —
