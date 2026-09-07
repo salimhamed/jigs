@@ -1,4 +1,4 @@
-import { ticketInput } from "@salimhamed/jigs";
+import { type TicketPipelineInputs, ticketInput } from "@salimhamed/jigs";
 import { claude, codex } from "@salimhamed/jigs/steps";
 import { claimTicket } from "@salimhamed/jigs/suspension/claim";
 import { z } from "zod";
@@ -21,14 +21,10 @@ export const shipInputs = z.object({
   merge: z.enum(["jigs", "human"]),
 });
 
-// `issueId` and `identifier` are not launch inputs: the trigger resolves
-// `ticket` (either form) against Linear and injects both alongside triggerId,
-// so the body reads the resolved pair rather than re-resolving it.
-type ShipInputs = z.output<typeof shipInputs> & {
-  triggerId: string;
-  issueId: string;
-  identifier: string;
-};
+// TicketPipelineInputs is the schema's output plus what the trigger injects:
+// `triggerId`, and the `issueId` and `identifier` it resolved `ticket` (either
+// form) to, so the body reads the resolved pair rather than re-resolving it.
+type ShipInputs = TicketPipelineInputs<typeof shipInputs>;
 
 // A ticket to a merged pull request: claim ticket → snapshot → worktree →
 // ticketReview → reviewLoop (implement ⇄ review → PR → gate → merge) →

@@ -10,7 +10,7 @@ import {
   preflightChecks,
   runChecks,
 } from "./checks/index.ts";
-import type { Factory } from "./factory.ts";
+import type { Factory, Injected, TicketInjected } from "./factory.ts";
 import { resolveIssueRef } from "./providers/linear.ts";
 
 export type StartRunResult =
@@ -55,15 +55,19 @@ export async function startRun(
     }
   }
 
-  const run = await start(entry.pipeline, [
-    {
-      ...parsed.data,
-      triggerId,
-      ...(issue === undefined
-        ? {}
-        : { issueId: issue.id, identifier: issue.identifier }),
-    },
-  ]);
+  // The entry is schema-agnostic, so `start` infers `any` for its args and
+  // checks nothing: these two `satisfies` are what hold what is injected here
+  // to what `PipelineInputs` and `TicketPipelineInputs` promise a body.
+  const injection =
+    issue === undefined
+      ? ({ triggerId } satisfies Injected)
+      : ({
+          triggerId,
+          issueId: issue.id,
+          identifier: issue.identifier,
+        } satisfies TicketInjected);
+
+  const run = await start(entry.pipeline, [{ ...parsed.data, ...injection }]);
   return { kind: "started", runId: run.runId };
 }
 

@@ -7,7 +7,7 @@
 // part this file owns: the order, the CI bound, the merge policy and the
 // endings.
 
-import type { WorktreeFacts } from "@salimhamed/jigs";
+import type { ReviewThread, WorktreeFacts } from "@salimhamed/jigs";
 import {
   type AgentStepConfig,
   type AgentStepResult,
@@ -30,10 +30,6 @@ import { reviewLoop } from "./review-loop.ts";
 type PushResult = { commits: number; headSha: string; dirty: boolean };
 type RepoRef = { owner: string; repo: string };
 type CiRed = Extract<GateWake, { kind: "ci-red" }>;
-type ReviewThread = Extract<
-  GateWake,
-  { kind: "review-comments" }
->["threads"][number];
 
 // Hoisted above the imports: the mock factories below run while
 // ./review-loop.ts is being imported, which is before this module's own body
