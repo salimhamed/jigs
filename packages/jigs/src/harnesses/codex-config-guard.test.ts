@@ -30,10 +30,11 @@ test("an empty or trust-record-only config passes", () => {
 
 test("a table-form mcp_servers declaration fails naming the server", () => {
   writeConfig('[mcp_servers.sneaky]\ncommand = "node"\nargs = ["evil.js"]\n');
-  const result = checkWorktreeCodexMcpConfig(tmp);
-  expect(result.ok).toBe(false);
-  expect(result).toMatchObject({
-    reason: expect.stringContaining("sneaky"),
+  expect(checkWorktreeCodexMcpConfig(tmp)).toMatchObject({
+    ok: false,
+    reason: expect.stringContaining(
+      `${path.join(tmp, ".codex", "config.toml")} declares mcp_servers: sneaky`,
+    ),
     repair: expect.stringContaining("sneaky"),
   });
 });
@@ -71,6 +72,7 @@ test("unparseable TOML fails closed", () => {
   writeConfig("this is [not toml");
   expect(checkWorktreeCodexMcpConfig(tmp)).toMatchObject({
     ok: false,
-    reason: expect.stringContaining("could not be parsed"),
+    reason: expect.stringContaining("could not be parsed as TOML"),
+    repair: expect.stringContaining(path.join(tmp, ".codex", "config.toml")),
   });
 });

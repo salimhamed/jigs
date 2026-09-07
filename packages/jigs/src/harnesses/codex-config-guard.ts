@@ -24,7 +24,7 @@ export function checkWorktreeCodexMcpConfig(worktreeDir: string): CheckResult {
     return {
       ok: false,
       reason: `${configPath} could not be parsed as TOML`,
-      repair: `fix or remove ${configPath} — it could not be parsed as TOML`,
+      repair: `fix or remove ${configPath}`,
     };
   }
 
