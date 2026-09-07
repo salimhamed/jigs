@@ -1,4 +1,4 @@
-# Commit your work
+export const commitWorkPrompt = `# Commit your work
 
 You are the builder for this change, and you finished without committing. The
 branch carries no commits, so the uncommitted work in your current directory is
@@ -14,3 +14,4 @@ your implementation — and nothing else has it.
   for committing the work you already did, not for continuing it.
 - **Commit before you finish.** The push that follows reports the commits on
   the branch, and this is the last chance the work gets.
+`;

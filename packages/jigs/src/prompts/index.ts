@@ -1,11 +1,9 @@
-export {
-  answerReviewPrompt,
-  codeReviewPrompt,
-  commitWorkPrompt,
-  fixCiFreshPrompt,
-  fixCiPrompt,
-  implementPrompt,
-  rebuildContextPrompt,
-  ticketReviewPrompt,
-} from "./defaults.ts";
+export { answerReviewPrompt } from "./answer-review.ts";
+export { codeReviewPrompt } from "./code-review.ts";
+export { commitWorkPrompt } from "./commit-work.ts";
+export { fixCiPrompt } from "./fix-ci.ts";
+export { fixCiFreshPrompt } from "./fix-ci-fresh.ts";
+export { implementPrompt } from "./implement.ts";
 export { interpolate } from "./interpolate.ts";
+export { rebuildContextPrompt } from "./rebuild-context.ts";
+export { ticketReviewPrompt } from "./ticket-review.ts";

@@ -1,4 +1,4 @@
-# Fix CI from a rebuilt context
+export const fixCiFreshPrompt = `# Fix CI from a rebuilt context
 
 You are the builder for this change, picking it up from its record. CI is red
 on your pull request's head commit, and this is attempt {{ATTEMPT}}. Everything
@@ -15,9 +15,9 @@ from, the diff it consists of, and the checks that are failing.
 
 ## The change under review
 
-```diff
+\`\`\`diff
 {{DIFF}}
-```
+\`\`\`
 
 ## The failing checks
 
@@ -35,3 +35,4 @@ from, the diff it consists of, and the checks that are failing.
   fix it anyway if it is cheap; leave it alone if it is not yours to touch.
 - **Commit your fix before you finish.** The push that follows reports the
   commits on the branch, and an uncommitted fix never reaches CI.
+`;

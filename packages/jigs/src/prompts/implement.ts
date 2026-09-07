@@ -1,4 +1,4 @@
-# Implement
+export const implementPrompt = `# Implement
 
 You are the builder. Implement this ticket in the repository you are already
 running in — your working directory is the worktree, on the ticket's branch.
@@ -30,3 +30,4 @@ running in — your working directory is the worktree, on the ticket's branch.
 - **Commit your work before you finish.** The push step reports the commits on
   the branch and fails loudly on an empty diff, so uncommitted work is lost
   work.
+`;
