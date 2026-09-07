@@ -267,9 +267,12 @@ _Avoid_: observability UI, web, console
 
 **Trigger**:
 The service route that creates a run: it validates a named pipeline's zod
-`inputs` against plain JSON and calls the runtime's start. Distinct from a
-wake, which resumes a run that already exists. Preflight lives in the
-trigger path.
+`inputs` against plain JSON and calls the runtime's start. It injects
+`triggerId` on every run, and for a pipeline taking a `ticket` the `issueId`
+and `identifier` it resolved the ref to — `PipelineInputs` and
+`TicketPipelineInputs` are the two shapes a body declares, so the injection
+and the type cannot drift. Distinct from a wake, which resumes a run that
+already exists. Preflight lives in the trigger path.
 _Avoid_: launch endpoint, kickoff, start route
 
 **Schedule**:

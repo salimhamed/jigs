@@ -8,8 +8,22 @@ export const ticketInput = z.union([
   z.string().regex(/^[A-Z][A-Z0-9]*-\d+$/),
 ]);
 
+/** What a pipeline body is handed: its own parsed inputs plus the `triggerId`
+ *  the trigger injects on every run. */
+export type PipelineInputs<S extends z.ZodType> = z.output<S> & {
+  triggerId: string;
+};
+
+/** The same for a pipeline whose inputs carry a `ticket`: the trigger resolves
+ *  the ref against Linear and injects the resolved pair, so the body reads it
+ *  rather than resolving the ticket again. */
+export type TicketPipelineInputs<S extends z.ZodType> = PipelineInputs<S> & {
+  issueId: string;
+  identifier: string;
+};
+
 export interface PipelineEntry<S extends z.ZodType = z.ZodType> {
-  pipeline: (inputs: z.output<S> & { triggerId: string }) => Promise<unknown>;
+  pipeline: (inputs: PipelineInputs<S>) => Promise<unknown>;
   inputs: S;
   // The manifest half of preflight's computed check list.
   requires?: PipelineRequires;

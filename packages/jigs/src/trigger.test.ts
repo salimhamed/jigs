@@ -1,0 +1,90 @@
+// What the trigger injects, held to the types a factory declares its pipeline
+// bodies with: the bodies below name PipelineInputs and TicketPipelineInputs
+// and read every injected field, so a field the runtime adds without the type
+// stating it fails the typecheck, and a field the type states without the
+// runtime injecting it fails these assertions.
+
+import { expect, test, vi } from "vitest";
+import { z } from "zod";
+import type {
+  Factory,
+  PipelineInputs,
+  TicketPipelineInputs,
+} from "./factory.ts";
+import { ticketInput } from "./factory.ts";
+
+const ISSUE_ID = "68bc9696-35d5-442d-ab56-214c8cfefbec";
+
+const { start } = vi.hoisted(() => ({
+  start: vi.fn(async (_pipeline: unknown, _args: unknown[]) => ({
+    runId: "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
+  })),
+}));
+vi.mock("workflow/api", () => ({ start }));
+
+// Preflight and the Linear lookup are the trigger's other two halves, tested
+// where they live; here they stand aside so the run is always created.
+vi.mock("./checks/index.ts", () => ({
+  preflightChecks: () => [],
+  runChecks: async () => ({ ok: true, results: [] }),
+}));
+vi.mock("./providers/linear.ts", () => ({
+  resolveIssueRef: async () => ({ id: ISSUE_ID, identifier: "AGE-342" }),
+}));
+
+const { startRun } = await import("./trigger.ts");
+
+const shipInputs = z.object({ ticket: ticketInput, binding: z.string() });
+const sweepInputs = z.object({ olderThanDays: z.number().default(7) });
+
+const factory = {
+  pipelines: {
+    ship: {
+      pipeline: async (inputs: TicketPipelineInputs<typeof shipInputs>) => [
+        inputs.triggerId,
+        inputs.issueId,
+        inputs.identifier,
+        inputs.binding,
+      ],
+      inputs: shipInputs,
+    },
+    sweep: {
+      pipeline: async (inputs: PipelineInputs<typeof sweepInputs>) => [
+        inputs.triggerId,
+        inputs.olderThanDays,
+      ],
+      inputs: sweepInputs,
+    },
+  },
+} satisfies Factory;
+
+test("a ticket pipeline is handed triggerId and the resolved pair", async () => {
+  start.mockClear();
+  const result = await startRun(
+    factory,
+    "ship",
+    { ticket: "AGE-342", binding: "api" },
+    "trig_manual",
+  );
+
+  expect(result.kind).toBe("started");
+  expect(start.mock.calls[0]?.[1]).toEqual([
+    {
+      ticket: "AGE-342",
+      binding: "api",
+      triggerId: "trig_manual",
+      issueId: ISSUE_ID,
+      identifier: "AGE-342",
+    },
+  ]);
+});
+
+test("a pipeline with no ticket input is handed triggerId alone", async () => {
+  start.mockClear();
+  const result = await startRun(factory, "sweep", {}, "trig_sched");
+
+  expect(result.kind).toBe("started");
+  expect(start.mock.calls[0]?.[1]).toEqual([
+    { olderThanDays: 7, triggerId: "trig_sched" },
+  ]);
+});
