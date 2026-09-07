@@ -153,6 +153,14 @@ Packages links the package to it and lets the repo-scoped token publish.
   and Releases exist before the publish job runs, so a failed publish leaves a
   version that is tagged but not installable. Re-running the workflow is the
   repair: the job skips what already landed and publishes the rest.
+
+  > **Amended 2026-09-07.** The publish job checks out the released tag, not
+  > the commit that triggered the run, and verifies the version is on the
+  > registry before it exits. release-please decides from GitHub's state, so a
+  > run triggered by an earlier push could cut the tag and then build the
+  > *older* checkout — whose version the registry already held, which the
+  > idempotent skip above reported as success while 0.4.2 never shipped. A
+  > fixed `concurrency` group keeps overlapping pushes from racing at all.
 - **The quiet package gets near-empty changelog entries.** Lockstep bumps it
   through a synthetic `Release-As:` commit, so `packages/service/CHANGELOG.md`
   will carry versions whose only note is the synchronization. That is the

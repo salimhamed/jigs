@@ -18,8 +18,10 @@ permissions:
   statuses: read
   actions: read
 
+# A fixed group, so two pushes landing close together queue instead of racing
+# release-please, which decides from GitHub's state rather than the checkout.
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 jobs:
@@ -27,6 +29,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       releases_created: ${{ steps.release.outputs.releases_created }}
+      # Prefixed by the component's path: the action only drops the prefix for
+      # a root component, and this manifest has one package at packages/jigs.
+      tag_name: ${{ steps.release.outputs['packages/jigs--tag_name'] }}
     steps:
       # A PAT, not GITHUB_TOKEN, in both steps below: events raised by
       # GITHUB_TOKEN start no workflow run. With it, the release PR would get
@@ -104,7 +109,11 @@ jobs:
     if: ${{ !cancelled() && needs.release-please.outputs.releases_created == 'true' }}
     runs-on: ubuntu-latest
     steps:
+      # The tag, not the triggering push: release-please reads main over the
+      # API, so the run that cuts a tag can be checked out at an older commit.
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
         with:
@@ -136,3 +145,17 @@ jobs:
           else
             pnpm --filter "$name" publish --no-git-checks --access restricted
           fi
+
+      - name: Verify the released version reached the registry
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          name="$(node -p "require('./packages/jigs/package.json').name")"
+          version="$(node -p "require('./packages/jigs/package.json').version")"
+          if [ "$TAG" != "jigs-v$version" ]; then
+            echo "checked out $version but release-please tagged '$TAG'" >&2
+            exit 1
+          fi
+          npm view "$name@$version" version
