@@ -97,6 +97,16 @@ const RED_CONCLUSIONS = new Set([
   "startup_failure",
 ]);
 
+// Some CI reports only through the legacy commit status API — AWS CodeBuild
+// among them. An unrecognised state stays pending: a build jigs cannot read
+// must never pass for green.
+const STATUS_CONCLUSIONS = new Map<string, string | null>([
+  ["success", "success"],
+  ["failure", "failure"],
+  ["error", "failure"],
+  ["pending", null],
+]);
+
 function classifyChecks(runs: CheckRun[], anyPending: boolean) {
   const failing = runs.filter(
     (run) => run.conclusion !== null && RED_CONCLUSIONS.has(run.conclusion),
@@ -182,11 +192,17 @@ export async function fetchPrSnapshot(pr: PrRef): Promise<PrSnapshot> {
   const checks = await githubGet<{
     check_runs: Array<{
       name: string;
-      status: string;
       conclusion: string | null;
       html_url: string | null;
     }>;
   }>(`${repoPath}/commits/${pull.head.sha}/check-runs?per_page=100`); // unpaginated cap, accepted for v0
+  const combined = await githubGet<{
+    statuses: Array<{
+      context: string;
+      state: string;
+      target_url: string | null;
+    }>;
+  }>(`${repoPath}/commits/${pull.head.sha}/status?per_page=100`); // unpaginated cap, accepted for v0
   const viewer = await getAuthenticatedUser();
 
   const runs: CheckRun[] = checks.check_runs.map((run) => ({
@@ -194,9 +210,23 @@ export async function fetchPrSnapshot(pr: PrRef): Promise<PrSnapshot> {
     conclusion: run.conclusion,
     url: run.html_url ?? "",
   }));
+  // A context on both surfaces is one build reported twice, and the check run
+  // is the richer report. Two check runs of one name are two builds, and both
+  // stay: a red one must not vanish behind a green namesake.
+  const alsoACheckRun = new Set(runs.map((run) => run.name));
+  const reported = [
+    ...runs,
+    ...combined.statuses
+      .filter((status) => !alsoACheckRun.has(status.context))
+      .map((status) => ({
+        name: status.context,
+        conclusion: STATUS_CONCLUSIONS.get(status.state) ?? null,
+        url: status.target_url ?? "",
+      })),
+  ];
   const { ci, failing } = classifyChecks(
-    runs,
-    checks.check_runs.some((run) => run.status !== "completed"),
+    reported,
+    reported.some((run) => run.conclusion === null),
   );
 
   return {

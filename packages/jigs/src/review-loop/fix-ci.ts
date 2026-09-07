@@ -31,9 +31,12 @@ export function renderChecks(failing: CheckRun[]): string {
   return failing.length === 0
     ? "_(the provider reported a red build without naming a check)_"
     : failing
-        .map(
-          (check) => `- **${check.name}** — ${check.conclusion} — ${check.url}`,
-        )
+        .map((check) => {
+          // A commit status may carry no target_url at all, and a line
+          // trailing off into an empty link reads as a broken one.
+          const named = `- **${check.name}** — ${check.conclusion}`;
+          return check.url === "" ? named : `${named} — ${check.url}`;
+        })
         .join("\n");
 }
 

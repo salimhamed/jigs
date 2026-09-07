@@ -131,4 +131,8 @@ test("an error that is not a resume failure is not swallowed", async () => {
 test("a red build the provider named no check for still renders something", () => {
   expect(renderChecks([])).toContain("without naming a check");
   expect(renderChecks(failing)).toBe("- **test** — failure — http://ci.test/1");
+  // A commit status need not link anywhere.
+  expect(renderChecks([{ name: "test", conclusion: "failure", url: "" }])).toBe(
+    "- **test** — failure",
+  );
 });
