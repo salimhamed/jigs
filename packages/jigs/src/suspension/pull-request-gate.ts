@@ -232,8 +232,7 @@ export type GateFn = (
 
 // One hook per PR, held across the whole review until the PR closes — the
 // token is never released mid-review. The satisfier re-check lives inside the
-// iterator:
-// consumers only ever see satisfied wakes, and an unsatisfied wake
+// iterator: consumers only ever see satisfied wakes, and an unsatisfied wake
 // re-suspends without burning an agent turn. The first round runs before the
 // hook is ever awaited, so a PR already approved before the gate started is
 // caught without needing a webhook.
@@ -264,8 +263,8 @@ export async function* pullRequestGate(
       cursor = round.cursor;
       for (const wake of round.wakes) {
         const ack = yield wake;
-        // The ack lands between wakes, so it folds into the cursor this round
-        // produced rather than the one the round was handed.
+        // An ack arrives between wakes, so it folds into the cursor this
+        // round produced, never the one the round was classified against.
         if (ack !== undefined) {
           cursor = {
             ...cursor,
