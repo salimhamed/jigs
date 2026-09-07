@@ -18,7 +18,6 @@ export function branchDirname(branch: string): string {
 export interface BindingDirOptions {
   factoryRoot: string;
   bindingName: string;
-  baseDir?: string;
 }
 
 export interface WorktreePathOptions extends BindingDirOptions {
@@ -28,8 +27,12 @@ export interface WorktreePathOptions extends BindingDirOptions {
 // Everything a binding owns is co-located, so "where does this binding live"
 // has one answer that `du -sh` prices and `rm -rf` resets.
 export function bindingDir(options: BindingDirOptions): string {
-  const base = options.baseDir ?? path.join(jigsDataDir(), "bindings");
-  return path.join(base, factorySlug(options.factoryRoot), options.bindingName);
+  return path.join(
+    jigsDataDir(),
+    "bindings",
+    factorySlug(options.factoryRoot),
+    options.bindingName,
+  );
 }
 
 export function bindingRepoDir(options: BindingDirOptions): string {

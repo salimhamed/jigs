@@ -31,12 +31,8 @@ import { sweepWorktrees } from "./worktrees/sweep.ts";
 
 // The app is library code: a factory repo installs this package and hands in
 // its own pipelines, so nothing here may import a pipeline module.
-export function createApp(
-  factory: Factory,
-  deps: { resumeIngressHook?: typeof resumeHook } = {},
-): Hono {
+export function createApp(factory: Factory): Hono {
   const app = new Hono();
-  const resumeIngressHook = deps.resumeIngressHook ?? resumeHook;
 
   // Liveness, plus how far the boot has got; dependency verification is
   // preflight's job (ADR 0010). Nitro serves this route before the plugins
@@ -167,7 +163,7 @@ export function createApp(
       );
       return c.json({ ignored: true });
     }
-    return deliver(c, "github", token, event, resumeIngressHook);
+    return deliver(c, "github", token, event, resumeHook);
   });
 
   app.post("/ingress/linear", async (c) => {
@@ -195,7 +191,7 @@ export function createApp(
       );
       return c.json({ ignored: true });
     }
-    return deliver(c, "linear", token, event, resumeIngressHook);
+    return deliver(c, "linear", token, event, resumeHook);
   });
 
   // Manual wake on the same code path as the ingress: resume every token the

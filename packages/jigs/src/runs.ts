@@ -37,26 +37,14 @@ export type RunRef =
   | { kind: "unknown" }
   | { kind: "ambiguous"; candidates: string[] };
 
-export interface RunLookupDeps {
-  listRunIds?: () => Promise<string[]>;
-  runExists?: (runId: string) => Promise<boolean>;
-  hookRunId?: (token: string) => Promise<string | null>;
-  issueId?: (ref: string) => Promise<string | null>;
-}
-
-export async function resolveRunRef(
-  ref: string,
-  deps: RunLookupDeps = {},
-): Promise<RunRef> {
+export async function resolveRunRef(ref: string): Promise<RunRef> {
   const shaped = RUN_ID_SHAPE.exec(ref);
   if (shaped?.[1] !== undefined) {
     const prefix = RUN_ID_PREFIX + shaped[1].toUpperCase();
-    const runExists = deps.runExists ?? worldRunExists;
-    if (prefix.length === RUN_ID_LENGTH && (await runExists(prefix))) {
+    if (prefix.length === RUN_ID_LENGTH && (await worldRunExists(prefix))) {
       return { kind: "found", runId: prefix };
     }
-    const listRunIds = deps.listRunIds ?? worldRunIds;
-    const matches = (await listRunIds()).filter((id) => id.startsWith(prefix));
+    const matches = (await worldRunIds()).filter((id) => id.startsWith(prefix));
     const only = matches[0];
     if (matches.length === 1 && only !== undefined) {
       return { kind: "found", runId: only };
@@ -70,11 +58,10 @@ export async function resolveRunRef(
   // lookup the trigger already makes to start a run — upper-cased, because
   // Linear keys identifiers by upper-case team key.
   const issueId = TICKET_IDENTIFIER.test(ref)
-    ? await (deps.issueId ?? linearIssueId)(ref.toUpperCase())
+    ? await linearIssueId(ref.toUpperCase())
     : ref;
   if (issueId === null) return { kind: "unknown" };
-  const hookRunId = deps.hookRunId ?? worldHookRunId;
-  const owner = await hookRunId(ticketToken(issueId));
+  const owner = await worldHookRunId(ticketToken(issueId));
   return owner === null ? { kind: "unknown" } : { kind: "found", runId: owner };
 }
 
@@ -136,16 +123,6 @@ export function parkReason(token: string): string | null {
   return "awaiting an external event";
 }
 
-export interface StallDeps {
-  jobRunIds?: () => Promise<JobRunIds>;
-  runsWithActiveStep?: (runIds: string[]) => Promise<string[]>;
-}
-
-export interface RunListDeps extends StallDeps {
-  listRuns?: () => Promise<WorldRun[]>;
-  listHooks?: () => Promise<Array<{ runId: string; token: string }>>;
-}
-
 /**
  * The runs nothing is coming back for: the queue gave up on a job of theirs,
  * holds no live one to replace it, and no step is in flight. All three,
@@ -153,14 +130,12 @@ export interface RunListDeps extends StallDeps {
  * reconciliation each add a job beside it, and a healed run would otherwise
  * read stalled in every gap between its steps.
  */
-async function stalledRuns(deps: StallDeps = {}): Promise<Set<string>> {
-  const jobs = await (deps.jobRunIds ?? worldJobRunIds)();
+async function stalledRuns(): Promise<Set<string>> {
+  const jobs = await worldJobRunIds();
   const live = new Set(jobs.live);
   const stranded = [...new Set(jobs.dead)].filter((id) => !live.has(id));
   if (stranded.length === 0) return new Set();
-  const busy = new Set(
-    await (deps.runsWithActiveStep ?? runsWithActiveStep)(stranded),
-  );
+  const busy = new Set(await runsWithActiveStep(stranded));
   return new Set(stranded.filter((runId) => !busy.has(runId)));
 }
 
@@ -227,14 +202,11 @@ export async function describeRun(
   return stalled ? { ...stored, status: "stalled" } : stored;
 }
 
-export async function listRuns(
-  factory: Factory,
-  deps: RunListDeps = {},
-): Promise<RunRow[]> {
+export async function listRuns(factory: Factory): Promise<RunRow[]> {
   const [runs, hooks, stalled] = await Promise.all([
-    (deps.listRuns ?? worldRuns)(),
-    (deps.listHooks ?? worldHooks)(),
-    stalledRuns(deps),
+    worldRuns(),
+    worldHooks(),
+    stalledRuns(),
   ]);
   const tokensByRun = Map.groupBy(hooks, (hook) => hook.runId);
   // The compiler stamps each pipeline with the workflowId the world stores as

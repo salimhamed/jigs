@@ -35,11 +35,13 @@ export interface ClonedBinding {
 
 // Builds exactly what ensureBindingClone builds — a bare "GitHub" with one
 // commit on its default branch, and jigs' own bare clone of it — so a test's
-// clone and a service's clone cannot drift apart.
+// clone and a service's clone cannot drift apart. `bindingDir` is where the
+// clone lands, for a test that has to put it where the layout says it lives.
 export function makeClonedBinding(
   parent: string,
-  defaultBranch = "main",
+  bindingDir: string = path.join(parent, "binding"),
 ): ClonedBinding {
+  const defaultBranch = "main";
   const remoteDir = path.join(parent, "remote.git");
   git(
     parent,
@@ -63,10 +65,9 @@ export function makeClonedBinding(
   git(bootstrap, "push", "-q", "origin", defaultBranch);
   rmSync(bootstrap, { recursive: true, force: true });
 
-  const binding = path.join(parent, "binding");
-  const repoDir = path.join(binding, "repo.git");
-  mkdirSync(binding, { recursive: true });
-  git(binding, "init", "-q", "--bare", repoDir);
+  const repoDir = path.join(bindingDir, "repo.git");
+  mkdirSync(bindingDir, { recursive: true });
+  git(bindingDir, "init", "-q", "--bare", repoDir);
   // commit-tree and friends need an identity, and the fixture git() reads no
   // global config.
   git(repoDir, "config", "user.name", "jigs-fixture");
@@ -74,7 +75,11 @@ export function makeClonedBinding(
   git(repoDir, "remote", "add", "origin", remoteDir);
   git(repoDir, "fetch", "-q", "origin");
   git(repoDir, "remote", "set-head", "origin", "-a");
-  return { remoteDir, repoDir, worktreesDir: path.join(binding, "worktrees") };
+  return {
+    remoteDir,
+    repoDir,
+    worktreesDir: path.join(bindingDir, "worktrees"),
+  };
 }
 
 // Advances a branch on the remote through a throwaway clone, so origin moves

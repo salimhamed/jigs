@@ -69,10 +69,12 @@ export async function resolveRemoteUrl(dir: string): Promise<ResolvedRemote> {
   return { remote: name, url };
 }
 
-// Returns null when the remote answered, git's stderr when it did not.
+// Returns null when the remote answered, git's stderr when it did not. The
+// timeout is the caller's to state: the binding check that probes has a
+// deadline of its own, and this call has to finish inside it.
 export async function probeRemoteAuth(
   url: string,
-  timeoutMs = 15_000,
+  timeoutMs: number,
 ): Promise<string | null> {
   try {
     // Without --end-of-options a remote of `--upload-pack=<command>` runs
@@ -116,15 +118,18 @@ export async function commitsAhead(
   );
 }
 
+// Big enough for a run's whole change, small enough that a runaway diff does
+// not blow the prompt it is interpolated into.
+const MAX_DIFF_CHARS = 200_000;
+
 export async function diffSince(
   worktreePath: string,
   baseSha: string,
-  maxChars = 200_000,
 ): Promise<string> {
   const diff = await git(["diff", `${baseSha}...HEAD`], worktreePath);
-  return diff.length <= maxChars
+  return diff.length <= MAX_DIFF_CHARS
     ? diff
-    : `${diff.slice(0, maxChars)}\n… (diff truncated)`;
+    : `${diff.slice(0, MAX_DIFF_CHARS)}\n… (diff truncated)`;
 }
 
 export async function deriveDefaultBranch(
