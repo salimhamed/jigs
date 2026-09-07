@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/salimhamed/jigs/compare/jigs-v0.4.0...jigs-v0.4.1) (2026-09-07)
+
+
+### Bug Fixes
+
+* **init:** ports are a starting point the operator can change ([#134](https://github.com/salimhamed/jigs/issues/134)) ([67b3dbc](https://github.com/salimhamed/jigs/commit/67b3dbcf9f51d786d86e7cc35a65c2cc5efff7f3))
+
 ## [0.4.0](https://github.com/salimhamed/jigs/compare/jigs-v0.3.0...jigs-v0.4.0) (2026-09-07)
 
 
