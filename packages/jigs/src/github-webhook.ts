@@ -7,8 +7,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { JigsError } from "./errors.ts";
 import { githubWebhookSecretFile, jigsDataDir } from "./paths.ts";
 
-// Complete for the review loop: reviews, inline review comments, and CI. The
-// drift PATCH picks up a change on re-bind.
+// Reviews, inline review comments, and the check-run half of CI. Commit
+// statuses are read on every gate poll but not subscribed to: a `status`
+// payload names no pull request, so routing one needs a sha lookup jigs does
+// not do yet. The drift PATCH picks up a change on re-bind.
 export const WEBHOOK_EVENTS = [
   "pull_request",
   "pull_request_review",

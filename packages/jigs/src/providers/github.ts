@@ -98,15 +98,18 @@ const RED_CONCLUSIONS = new Set([
 ]);
 
 // Some CI reports only through the legacy commit status API — AWS CodeBuild
-// among them — so its states are translated into check-run conclusions and
-// read by the same classifier. An unrecognised state stays pending: a build
-// jigs cannot read must never pass for green.
-const STATUS_CONCLUSIONS: Record<string, string | null> = {
-  success: "success",
-  failure: "failure",
-  error: "failure",
-  pending: null,
-};
+// among them. An unrecognised state stays pending: a build jigs cannot read
+// must never pass for green.
+const STATUS_CONCLUSIONS = new Map<string, string | null>([
+  ["success", "success"],
+  ["failure", "failure"],
+  ["error", "failure"],
+  ["pending", null],
+]);
+
+// Ranked so the worse of two reports of one name is the one that survives.
+const severity = (conclusion: string | null) =>
+  conclusion === null ? 1 : RED_CONCLUSIONS.has(conclusion) ? 2 : 0;
 
 function classifyChecks(runs: CheckRun[], anyPending: boolean) {
   const failing = runs.filter(
@@ -207,26 +210,32 @@ export async function fetchPrSnapshot(pr: PrRef): Promise<PrSnapshot> {
   }>(`${repoPath}/commits/${pull.head.sha}/status?per_page=100`); // unpaginated cap, accepted for v0
   const viewer = await getAuthenticatedUser();
 
-  const runs: CheckRun[] = checks.check_runs.map((run) => ({
-    name: run.name,
-    conclusion: run.conclusion,
-    url: run.html_url ?? "",
-  }));
-  // A context on both surfaces is one build reported twice; the check run is
-  // the richer of the two.
-  const named = new Set(runs.map((run) => run.name));
-  const contexts: CheckRun[] = combined.statuses
-    .filter((status) => !named.has(status.context))
-    .map((status) => ({
+  const byName = new Map<string, CheckRun>(
+    checks.check_runs.map((run) => [
+      run.name,
+      { name: run.name, conclusion: run.conclusion, url: run.html_url ?? "" },
+    ]),
+  );
+  // A name on both surfaces is one build reported twice, and the check run is
+  // the richer report — but it only wins where it is at least as bad, so a
+  // green run cannot bury a status that failed or is still running.
+  for (const status of combined.statuses) {
+    const conclusion = STATUS_CONCLUSIONS.get(status.state) ?? null;
+    const run = byName.get(status.context);
+    if (run !== undefined && severity(run.conclusion) >= severity(conclusion)) {
+      continue;
+    }
+    byName.set(status.context, {
       name: status.context,
-      conclusion: STATUS_CONCLUSIONS[status.state] ?? null,
+      conclusion,
       url: status.target_url ?? "",
-    }));
+    });
+  }
 
+  const reported = [...byName.values()];
   const { ci, failing } = classifyChecks(
-    [...runs, ...contexts],
-    checks.check_runs.some((run) => run.status !== "completed") ||
-      contexts.some((context) => context.conclusion === null),
+    reported,
+    reported.some((run) => run.conclusion === null),
   );
 
   return {

@@ -220,6 +220,16 @@ test("commit statuses join the check runs the gate and fixCi read", async () => 
   fetchMock.mockReset();
   stubSnapshot({ statuses: [status({ state: "queued" })] });
   expect((await fetchPrSnapshot(pr)).ci).toBe("pending");
+
+  fetchMock.mockReset();
+  stubSnapshot({ statuses: [status({ state: "failure", target_url: null })] });
+  expect((await fetchPrSnapshot(pr)).failingChecks).toEqual([
+    {
+      name: "AWS CodeBuild us-west-2 (Forge-CI-Beta)",
+      conclusion: "failure",
+      url: "",
+    },
+  ]);
 });
 
 test("a green check run does not hide a red status, or the reverse", async () => {
@@ -261,26 +271,50 @@ test("a green check run does not hide a red status, or the reverse", async () =>
   ]);
 });
 
-test("a context reported on both surfaces counts once, as its check run", async () => {
+test("one name on both surfaces counts once, as the worse of the two", async () => {
+  const run = (overrides: Record<string, unknown>) => ({
+    name: "build",
+    status: "completed",
+    conclusion: "success",
+    html_url: "http://ci.test/1",
+    ...overrides,
+  });
+
   stubSnapshot({
-    checkRuns: [
-      {
-        name: "build",
-        status: "completed",
-        conclusion: "failure",
-        html_url: "http://ci.test/1",
-      },
-    ],
+    checkRuns: [run({ conclusion: "failure" })],
     statuses: [
       { context: "build", state: "success", target_url: "http://cb.test/1" },
     ],
   });
-
-  const snapshot = await fetchPrSnapshot(pr);
-  expect(snapshot.ci).toBe("red");
-  expect(snapshot.failingChecks).toEqual([
+  const runRed = await fetchPrSnapshot(pr);
+  expect(runRed.ci).toBe("red");
+  expect(runRed.failingChecks).toEqual([
     { name: "build", conclusion: "failure", url: "http://ci.test/1" },
   ]);
+
+  // The inverse: a green check run must not bury the status that failed.
+  fetchMock.mockReset();
+  stubSnapshot({
+    checkRuns: [run({})],
+    statuses: [
+      { context: "build", state: "failure", target_url: "http://cb.test/1" },
+    ],
+  });
+  const statusRed = await fetchPrSnapshot(pr);
+  expect(statusRed.ci).toBe("red");
+  expect(statusRed.failingChecks).toEqual([
+    { name: "build", conclusion: "failure", url: "http://cb.test/1" },
+  ]);
+
+  // Nor the one still running.
+  fetchMock.mockReset();
+  stubSnapshot({
+    checkRuns: [run({})],
+    statuses: [
+      { context: "build", state: "pending", target_url: "http://cb.test/1" },
+    ],
+  });
+  expect((await fetchPrSnapshot(pr)).ci).toBe("pending");
 });
 
 test("a non-2xx response throws with the path named", async () => {
