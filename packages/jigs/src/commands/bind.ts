@@ -1,10 +1,12 @@
 import { existsSync } from "node:fs";
+import path from "node:path";
 import {
   parseFactoryConfig,
   readFactoryConfigText,
   upsertBinding,
   writeFactoryConfigText,
 } from "../config/factory-config.ts";
+import { factoryEnvValue } from "../config/factory-env.ts";
 import { locateFactoryRoot } from "../config/factory-root.ts";
 import { JigsError } from "../errors.ts";
 import {
@@ -88,7 +90,15 @@ export async function bindRepo(
     deps.out(`restart the service to clone ${name}: jigs service restart`);
   }
 
-  const webhook = await ensureWebhook(remoteUrl, config.ingress_url, deps);
+  // Last, so a webhook that cannot be ensured leaves the binding recorded and
+  // the whole verb re-runnable: the config edit above is idempotent and so is
+  // the registration below.
+  const webhook = await ensureWebhook({
+    remoteUrl,
+    factoryRoot,
+    ingressUrl: config.ingress_url,
+    deps,
+  });
   return { name, remote: remoteUrl, webhook };
 }
 
@@ -110,18 +120,19 @@ function defaultBindingName(remoteUrl: string): string {
   return repo.toLowerCase();
 }
 
-async function ensureWebhook(
-  remoteUrl: string,
-  ingressUrl: string | undefined,
-  deps: BindDeps,
-): Promise<BindResult["webhook"]> {
+async function ensureWebhook({
+  remoteUrl,
+  factoryRoot,
+  ingressUrl,
+  deps,
+}: {
+  remoteUrl: string;
+  factoryRoot: string;
+  ingressUrl: string | undefined;
+  deps: BindDeps;
+}): Promise<BindResult["webhook"]> {
   if (ingressUrl === undefined) {
     deps.out("note: skipping webhook (no ingress_url in jigs.yml)");
-    return "skipped";
-  }
-  const token = process.env.GITHUB_TOKEN;
-  if (token === undefined || token === "") {
-    deps.out("note: skipping webhook (GITHUB_TOKEN is not set)");
     return "skipped";
   }
   const repoRef = parseGithubRemote(remoteUrl);
@@ -131,8 +142,29 @@ async function ensureWebhook(
     );
     return "skipped";
   }
+  const slug = `${repoRef.owner}/${repoRef.repo}`;
+  const repair = `set GITHUB_TOKEN in ${path.join(factoryRoot, ".env")} to a classic PAT with admin:repo_hook on ${slug} (an exported GITHUB_TOKEN wins over the file), then re-run: jigs bind ${remoteUrl}`;
+  const token = factoryEnvValue(factoryRoot, "GITHUB_TOKEN");
+  if (token === undefined) {
+    // An ingress with no webhook is a factory whose PR gate never wakes, and
+    // the note this replaced read as a pass on the very first real bind.
+    throw new JigsError(
+      `jigs.yml declares ingress_url but GITHUB_TOKEN is not set, so ${slug}'s webhook cannot be created`,
+      repair,
+    );
+  }
   const secret = ensureWebhookSecret();
-  const outcome = await ensureRepoWebhook({ ...repoRef, ingressUrl, secret });
-  deps.out(`webhook ${outcome}: ${repoRef.owner}/${repoRef.repo}`);
+  const outcome = await ensureRepoWebhook({
+    ...repoRef,
+    ingressUrl,
+    secret,
+    token,
+  }).catch((err: unknown) => {
+    throw new JigsError(
+      `${slug}'s webhook could not be ensured: ${err instanceof Error ? err.message : String(err)}`,
+      repair,
+    );
+  });
+  deps.out(`webhook ${outcome}: ${slug}`);
   return outcome;
 }

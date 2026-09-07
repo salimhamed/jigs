@@ -15,7 +15,6 @@ let tmp: string;
 beforeEach(() => {
   tmp = makeTmpDir();
   vi.stubGlobal("fetch", fetchMock);
-  vi.stubEnv("GITHUB_TOKEN", "gh_test_token");
   vi.stubEnv("GITHUB_API_URL", "http://mock.test/github");
   fetchMock.mockReset();
 });
@@ -61,6 +60,7 @@ const opts = {
   repo: "api",
   ingressUrl: "https://factory.example.ts.net",
   secret: "hook-secret",
+  token: "gh_test_token",
 };
 
 test("creates the webhook when none matches", async () => {

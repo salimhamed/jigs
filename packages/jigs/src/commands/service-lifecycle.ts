@@ -10,11 +10,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
-import { parseEnv } from "node:util";
 import {
   type ResolvedService,
   resolveService,
 } from "../config/factory-config.ts";
+import { readFactoryEnv } from "../config/factory-env.ts";
 import { locateFactoryRoot } from "../config/factory-root.ts";
 import { JigsError } from "../errors.ts";
 import { stringEnv } from "../harnesses/env.ts";
@@ -144,12 +144,9 @@ function childEnv(
   factoryRoot: string,
   service: ResolvedService,
 ): Record<string, string> {
-  const dotenvPath = path.join(factoryRoot, ".env");
   return {
     ...stringEnv(process.env),
-    ...(existsSync(dotenvPath)
-      ? (parseEnv(readFileSync(dotenvPath, "utf8")) as Record<string, string>)
-      : {}),
+    ...readFactoryEnv(factoryRoot),
     PORT: String(service.port),
     JIGS_DASHBOARD_PORT: String(service.dashboardPort),
     WORKFLOW_LOCAL_BASE_URL: service.serviceUrl,

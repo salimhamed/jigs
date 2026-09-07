@@ -285,7 +285,7 @@ A worktree admits one agent at a time: a second one is refused, not queued.
 ### 4. Bind target repos
 
 ```sh
-GITHUB_TOKEN=… jigs bind git@github.com:owner/repo.git
+jigs bind git@github.com:owner/repo.git
 jigs bindings
 jigs service restart      # or jigs up --restart
 ```
@@ -305,9 +305,17 @@ restart above before any run can name it; `jigs bind` says so, and
 `jigs up` works too and saves the restart; the order here is only the one a
 newcomer meets.)
 
-`GITHUB_TOKEN` above is for the repo webhook, not for the binding: `jigs bind`
-records the binding either way and says which half it skipped — the webhook
-needs both the token and an `ingress_url` in this factory's `jigs.yml` (step 5).
+`jigs bind` also creates the repo's webhook, which needs `GITHUB_TOKEN` —
+read from this factory's `.env`, or from the shell when you export one there,
+which wins. The token is for the webhook, not for the binding.
+
+A factory with an `ingress_url` in its `jigs.yml` (step 5) and no usable token
+is half configured — an ingress nothing posts to, a PR gate that never wakes —
+so `jigs bind` **fails** there rather than noting a skip, and says the repair.
+GitHub rejecting the token fails the same way. Fix the token and run the same
+`jigs bind` again: the binding it already recorded stands, and the webhook
+registration is create-or-verify, so re-running is how you repair. A factory
+with no `ingress_url` receives no webhooks at all and binds without a token.
 
 The binding also declares what its worktrees need before an agent can work in
 them — files to copy in, commands to run:
@@ -373,11 +381,13 @@ ingress_url: https://<machine>.<tailnet>.ts.net
 
 #### GitHub (per target repo)
 
-(Re-)bind each target repo with `GITHUB_TOKEN` set — `jigs bind` creates the
-repo webhook from `ingress_url`, verifies it on later binds, and repairs
-drift. The signing secret is the one thing here that is not per factory: one
-file per machine at `~/.local/share/jigs/github-webhook-secret`, generated on
-the first bind and shared by every factory's repo webhooks. The service reads
+(Re-)bind each target repo — `jigs bind` creates the repo webhook from
+`ingress_url`, verifies it on later binds, and repairs drift. It needs
+`GITHUB_TOKEN` (a classic PAT with `admin:repo_hook`) in this factory's `.env`
+or exported in the shell, and fails without one. The signing secret is the one
+thing here that is not per factory: one file per machine at
+`~/.local/share/jigs/github-webhook-secret`, generated on the first bind and
+shared by every factory's repo webhooks. The service reads
 the same file, or `GITHUB_WEBHOOK_SECRET` from `.env` if set.
 
 Manual alternative: one org-level webhook (org settings → Webhooks) pointed at

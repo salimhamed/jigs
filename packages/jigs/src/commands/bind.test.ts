@@ -123,6 +123,11 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+function bearerOf(call: number): string | null {
+  const [, init] = fetchMock.mock.calls[call] as [string, RequestInit];
+  return new Headers(init.headers).get("authorization");
+}
+
 function makeIngressFactory(): void {
   writeFileSync(
     path.join(factory, "jigs.yml"),
@@ -178,14 +183,66 @@ test("bind without ingress_url skips the webhook leg with a note", async () => {
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-test("bind without GITHUB_TOKEN skips the webhook leg with a note", async () => {
+test("no GITHUB_TOKEN anywhere fails with the repair, and the retry ensures the webhook", async () => {
   stubWebhookEnv();
   vi.stubEnv("GITHUB_TOKEN", "");
   makeIngressFactory();
-  const result = await bindRepo(API, deps());
-  expect(result.webhook).toBe("skipped");
-  expect(lines.some((l) => l.includes("GITHUB_TOKEN"))).toBe(true);
+  const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
+  expect(String(failure)).toContain("GITHUB_TOKEN is not set");
+  expect((failure as { hint?: string }).hint).toContain("admin:repo_hook");
   expect(fetchMock).not.toHaveBeenCalled();
+  // The binding is already recorded, so the retry is the same command again.
+  expect(jigsYml()).toContain(`remote: ${API}`);
+
+  vi.stubEnv("GITHUB_TOKEN", "gh_test_token");
+  fetchMock
+    .mockResolvedValueOnce(new Response("[]"))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 9 })));
+  const retry = await bindRepo(API, deps());
+  expect(retry.webhook).toBe("created");
+});
+
+test("a token GitHub rejects fails with the repair, and the retry ensures the webhook", async () => {
+  stubWebhookEnv();
+  makeIngressFactory();
+  fetchMock.mockResolvedValueOnce(
+    new Response("Bad credentials", { status: 401 }),
+  );
+  const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
+  expect(String(failure)).toContain("401");
+  expect((failure as { hint?: string }).hint).toContain(
+    `re-run: jigs bind ${API}`,
+  );
+  expect(jigsYml()).toContain(`remote: ${API}`);
+
+  fetchMock
+    .mockResolvedValueOnce(new Response("[]"))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 9 })));
+  const retry = await bindRepo(API, deps());
+  expect(retry.webhook).toBe("created");
+});
+
+test("the webhook token comes from the factory's .env when the shell has none", async () => {
+  stubWebhookEnv();
+  vi.stubEnv("GITHUB_TOKEN", "");
+  makeIngressFactory();
+  writeFileSync(path.join(factory, ".env"), "GITHUB_TOKEN=from_dotenv\n");
+  fetchMock
+    .mockResolvedValueOnce(new Response("[]"))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 9 })));
+  await bindRepo(API, deps());
+  expect(bearerOf(0)).toBe("Bearer from_dotenv");
+});
+
+test("an exported GITHUB_TOKEN wins over the factory's .env", async () => {
+  stubWebhookEnv();
+  makeIngressFactory();
+  writeFileSync(path.join(factory, ".env"), "GITHUB_TOKEN=from_dotenv\n");
+  fetchMock
+    .mockResolvedValueOnce(new Response("[]"))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 9 })));
+  await bindRepo(API, deps());
+  expect(bearerOf(0)).toBe("Bearer gh_test_token");
 });
 
 test("bind with a non-github remote skips the webhook leg", async () => {

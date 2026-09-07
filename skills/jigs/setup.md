@@ -148,17 +148,23 @@ worktree — `bindings/forge/.env` above arrives as `.env` at the worktree root.
 An entry that matches nothing, or that reaches outside that directory, fails
 the worktree request by name. `.env`-class files therefore belong in the
 factory repo under `bindings/<name>/`, gitignored as `bindings/*/.env`, never
-in the target repo. `jigs bind` also creates the repo's GitHub webhook, but
-only when the factory has an `ingress_url` in `jigs.yml` and `GITHUB_TOKEN` is
-set in the environment — it says which one it skipped and why. `jigs unbind`
-edits the config only; the clone stays on disk.
+in the target repo.
+
+`jigs bind` also creates the repo's GitHub webhook when the factory has an
+`ingress_url` in `jigs.yml`, taking `GITHUB_TOKEN` from the factory's `.env`
+or from the shell, which wins. Without a usable token it fails and says the
+repair — an ingress with no webhook is a gate that never wakes — and the
+retry is the same `jigs bind`: the binding already recorded stands and the
+webhook is create-or-verify. A factory with no `ingress_url` skips the webhook
+with a note and needs no token. `jigs unbind` edits the config only; the clone
+stays on disk.
 
 ## 5. Webhook ingress, only if the factory needs it
 
 The service's `/ingress/github` and `/ingress/linear` routes must be reachable
 from the public internet on this factory's service port for a suspended run to
 wake on its own. Run a tunnel, put the URL in `jigs.yml` as `ingress_url`,
-re-bind each target repo with `GITHUB_TOKEN` set, and create a Linear webhook
+re-bind each target repo (`GITHUB_TOKEN` required), and create a Linear webhook
 for `Comment` resources. `docs/setup.md` has the exact commands and the
 org-level alternative. Without ingress everything still works; a suspended run
 just needs `jigs poke <run>` to notice its answer.
