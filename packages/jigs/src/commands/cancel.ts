@@ -26,7 +26,7 @@ export async function cancelRun(
   deps: CancelDeps,
 ): Promise<CancelResult | null> {
   const runPath = `/api/runs/${encodeURIComponent(ref)}`;
-  const lookup = await serviceFetch(deps, runPath);
+  const lookup = await serviceFetch(deps.serviceUrl, runPath);
   if (lookup.status === 404 || lookup.status === 409) {
     throw runRefError(ref, await readErrorBody(lookup));
   }
@@ -61,7 +61,7 @@ export async function cancelRun(
   }
 
   const res = await serviceFetch(
-    deps,
+    deps.serviceUrl,
     `/api/runs/${encodeURIComponent(run.runId)}/cancel`,
     { method: "POST" },
   );

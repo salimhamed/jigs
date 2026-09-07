@@ -41,7 +41,10 @@ export async function showLogs(
   ref: string,
   deps: ServiceDeps,
 ): Promise<LogsResult> {
-  const res = await serviceFetch(deps, `/api/runs/${encodeURIComponent(ref)}`);
+  const res = await serviceFetch(
+    deps.serviceUrl,
+    `/api/runs/${encodeURIComponent(ref)}`,
+  );
   if (res.status === 404 || res.status === 409) {
     throw runRefError(ref, await readErrorBody(res));
   }
@@ -65,7 +68,7 @@ export async function showLogs(
 // which is the answer to "what is this run doing" — but say so rather than
 // let the missing table read as a run with no steps.
 async function showTimeline(runId: string, deps: ServiceDeps): Promise<void> {
-  const res = await serviceFetch(deps, `/api/runs/${runId}/steps`);
+  const res = await serviceFetch(deps.serviceUrl, `/api/runs/${runId}/steps`);
   if (!res.ok) {
     deps.out(`timeline unavailable: HTTP ${res.status}`);
     return;

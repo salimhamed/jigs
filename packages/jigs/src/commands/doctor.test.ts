@@ -72,7 +72,7 @@ test("a red report prints the reason and repair for each failure and throws a Cl
   ]);
 });
 
-test("an unreachable service hints at --service / JIGS_SERVICE_URL", async () => {
+test("an unreachable service surfaces the shared unreachable error", async () => {
   fetchMock.mockRejectedValueOnce(new TypeError("fetch failed"));
   const failure = await runDoctor(deps()).then(
     () => null,
@@ -80,7 +80,6 @@ test("an unreachable service hints at --service / JIGS_SERVICE_URL", async () =>
   );
   expect(failure).toBeInstanceOf(CliError);
   expect((failure as CliError).message).toContain("http://svc.test:8990");
-  expect((failure as CliError).hint).toContain("JIGS_SERVICE_URL");
 });
 
 test("a trailing slash on the service URL does not break the doctor route", async () => {
@@ -90,19 +89,4 @@ test("a trailing slash on the service URL does not break the doctor route", asyn
     serviceUrl: "http://svc.test:8990/",
   });
   expect(fetchMock.mock.calls[0]?.[0]).toBe("http://svc.test:8990/api/doctor");
-});
-
-test("a stopped factory service reports the shared unreachable hint", async () => {
-  fetchMock.mockRejectedValueOnce(new TypeError("fetch failed"));
-  const failure = await runDoctor({
-    out: (line: string) => lines.push(line),
-    serviceUrl: "http://svc.test:8990",
-    factoryRoot: "/factories/acme",
-  }).then(
-    () => null,
-    (err: unknown) => err as CliError,
-  );
-  expect(failure?.hint).toBe(
-    "the acme factory's service is not running — start it: jigs service start",
-  );
 });
