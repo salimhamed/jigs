@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { CliError } from "../errors.ts";
+import { JigsError } from "../errors.ts";
 
 // Every template file is stored as `<destination name>.tmpl` so nothing in
 // there is a live file of this repo — an example pipeline named `.ts` would be
@@ -16,7 +16,7 @@ export function packageRoot(): string {
   while (!existsSync(path.join(dir, "package.json"))) {
     const parent = path.dirname(dir);
     if (parent === dir) {
-      throw new CliError(
+      throw new JigsError(
         "could not find the jigs package root",
         "jigs is installed in a way that lost its package.json",
       );
@@ -31,7 +31,7 @@ export function packageRoot(): string {
 export function locateTemplates(): string {
   const templates = path.join(packageRoot(), "templates");
   if (!existsSync(templates)) {
-    throw new CliError(
+    throw new JigsError(
       `could not find the factory templates (${templates})`,
       "the installed jigs package is missing its templates/ directory",
     );

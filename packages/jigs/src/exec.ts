@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { CliError } from "./errors.ts";
+import type { JigsError } from "./errors.ts";
 
 // One seam for every child process a verb runs on the operator's behalf, so
 // a test can stand in for pnpm, docker, nitro or bootstrap with one function.
@@ -38,13 +38,13 @@ export function execOutput(result: Partial<ExecOutput>): string {
 }
 
 export interface ExecErrors {
-  missing: CliError;
-  failed: (err: ExecError) => CliError;
+  missing: JigsError;
+  failed: (err: ExecError) => JigsError;
 }
 
 // Runs a child on the operator's behalf and turns its two failure shapes into
 // the operator's words: a binary that is not there, and one that ran and
-// failed — whose output is echoed first, because the CliError only names it.
+// failed — whose output is echoed first, because the JigsError only names it.
 export async function execOrExplain(
   execFile: ExecFile,
   file: string,

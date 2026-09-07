@@ -12,7 +12,7 @@
 import type { Sql } from "postgres";
 import { resolveBinding } from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";
-import { CliError } from "../errors.ts";
+import { JigsError } from "../errors.ts";
 import { hasBindingClone } from "./clone.ts";
 import { createWorktree, worktreeStatus } from "./create.ts";
 import type { WorktreeFacts } from "./facts.ts";
@@ -53,7 +53,7 @@ export async function provisionRunWorktree(
   // Only reachable when the binding was declared after this service booted:
   // both the reuse check and the cut read a clone that is not there.
   if (!hasBindingClone(repoDir)) {
-    throw new CliError(
+    throw new JigsError(
       `binding ${binding.name} has no clone at ${repoDir}`,
       "restart the service: jigs service restart (it clones every binding on start)",
     );

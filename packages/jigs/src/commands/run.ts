@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { type CheckReport, formatFailures } from "../checks/catalog.ts";
-import { CliError } from "../errors.ts";
-import { type ServiceDeps, serviceFetch } from "./service.ts";
+import { JigsError } from "../errors.ts";
+import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 export interface LaunchResult {
   runId: string;
@@ -16,7 +16,7 @@ export function parseInputs(pairs: string[]): Record<string, unknown> {
   for (const pair of pairs) {
     const split = pair.indexOf("=");
     if (split <= 0) {
-      throw new CliError(
+      throw new JigsError(
         "--input must be key=value",
         "example: --input ticket=AGE-123",
       );
@@ -47,7 +47,7 @@ export function validateInputs(
 ): void {
   const result = z.fromJSONSchema(schema).safeParse(inputs);
   if (!result.success) {
-    throw new CliError(z.prettifyError(result.error), SCHEMA_HINT);
+    throw new JigsError(z.prettifyError(result.error), SCHEMA_HINT);
   }
   rejectUnknownKeys(schema, inputs);
 }
@@ -68,7 +68,7 @@ function rejectUnknownKeys(
   const known = Object.keys(properties);
   const unknown = Object.keys(inputs).filter((key) => !known.includes(key));
   if (unknown.length > 0) {
-    throw new CliError(
+    throw new JigsError(
       `unknown --input: ${unknown.join(", ")}`,
       `this pipeline accepts: ${known.join(", ")}`,
     );
@@ -109,13 +109,13 @@ export async function launchRun(
     const body = (await schemaRes.json().catch(() => ({}))) as {
       knownPipelines?: string[];
     };
-    throw new CliError(
+    throw new JigsError(
       `unknown pipeline: ${pipeline}`,
       `known pipelines: ${(body.knownPipelines ?? []).join(", ")}`,
     );
   }
   if (!schemaRes.ok) {
-    throw new CliError(
+    throw new JigsError(
       `could not read the inputs schema: HTTP ${schemaRes.status} ${await schemaRes.text()}`,
     );
   }
@@ -136,20 +136,20 @@ export async function launchRun(
   if (res.status === 424) {
     const body = (await res.json()) as { failures: CheckReport["checks"] };
     deps.out(formatFailures({ ok: false, checks: body.failures }));
-    throw new CliError("preflight failed — no run created");
+    throw new JigsError("preflight failed — no run created");
   }
   if (!res.ok) {
     const raw = await res.text();
     const issues = schemaIssues(raw);
     if (issues !== null) {
-      throw new CliError(
+      throw new JigsError(
         issues
           .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
           .join("\n"),
         SCHEMA_HINT,
       );
     }
-    throw new CliError(`launch failed: HTTP ${res.status} ${raw}`);
+    throw new JigsError(`launch failed: HTTP ${res.status} ${raw}`);
   }
   const result = (await res.json()) as LaunchResult;
   deps.out(`run ${result.runId}`);

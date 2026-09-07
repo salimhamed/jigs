@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { sweepWorktrees } from "./sweep.ts";
+import { runSweep } from "./sweep.ts";
 
 const fetchMock = vi.fn();
 let lines: string[];
@@ -47,7 +47,7 @@ test("--force posts one yes-to-everything clean and prints the summary", async (
     removed: ["/data/wt/feat"],
     removedDirs: [],
   });
-  const result = await sweepWorktrees(deps(), { force: true });
+  const result = await runSweep(deps(), { force: true });
   expect(fetchMock).toHaveBeenCalledWith(
     "http://svc.test:8990/api/worktrees/sweep",
     {
@@ -68,7 +68,7 @@ test("a bare sweep with no terminal reports and points at the removal paths", as
     removed: [],
     removedDirs: [],
   });
-  await sweepWorktrees(deps());
+  await runSweep(deps());
   expect(fetchMock.mock.calls[0]?.[1].body).toBe(
     JSON.stringify({ clean: false, force: false }),
   );
@@ -79,7 +79,7 @@ test("a bare sweep with no terminal reports and points at the removal paths", as
 
 test("a bare sweep with nothing eligible stays a plain report", async () => {
   respond({ entries: [], removed: [], removedDirs: [] });
-  await sweepWorktrees(deps());
+  await runSweep(deps());
   expect(lines).toEqual(["no worktrees", "0 removed, 0 held"]);
 });
 
@@ -108,7 +108,7 @@ test("interactive sweep cleans exactly the approved paths, with force", async ()
     questions.push(question);
     return question.includes("/data/wt/feat");
   };
-  const result = await sweepWorktrees(deps(confirm), {});
+  const result = await runSweep(deps(confirm), {});
   expect(questions).toHaveLength(2);
   expect(questions[1]).toContain("HOLDS UNCOMMITTED WORK");
   expect(fetchMock.mock.calls[1]?.[1].body).toBe(
@@ -123,7 +123,7 @@ test("interactive sweep with every answer no removes nothing", async () => {
     removed: [],
     removedDirs: [],
   });
-  await sweepWorktrees(
+  await runSweep(
     deps(async () => false),
     {},
   );

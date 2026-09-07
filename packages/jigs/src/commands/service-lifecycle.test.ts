@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { CliError } from "../errors.ts";
+import type { JigsError } from "../errors.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { factorySlug } from "../worktrees/layout.ts";
 import type {
@@ -109,7 +109,7 @@ const deps = (
 const failure = (run: Promise<void>) =>
   run.then(
     () => undefined,
-    (caught: unknown) => caught as CliError,
+    (caught: unknown) => caught as JigsError,
   );
 
 // SIGTERM ends the fake process, the way a service that owns its exit does.
@@ -416,7 +416,7 @@ test("service logs before a first start point at jigs service start", () => {
     try {
       serviceLogs(deps(root, fake()));
     } catch (caught) {
-      return caught as CliError;
+      return caught as JigsError;
     }
     return undefined;
   })();

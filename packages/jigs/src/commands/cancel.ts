@@ -1,10 +1,10 @@
-import { CliError } from "../errors.ts";
+import { JigsError } from "../errors.ts";
 import {
   readErrorBody,
   runRefError,
   type ServiceDeps,
   serviceFetch,
-} from "./service.ts";
+} from "./service-client.ts";
 
 // The escape hatch for a zombie claim owner: cancelling releases every
 // resource the run holds, so the next run on the same ticket can start.
@@ -31,7 +31,7 @@ export async function cancelRun(
     throw runRefError(ref, await readErrorBody(lookup));
   }
   if (!lookup.ok) {
-    throw new CliError(
+    throw new JigsError(
       `cancel failed: HTTP ${lookup.status} ${await lookup.text()}`,
     );
   }
@@ -49,7 +49,7 @@ export async function cancelRun(
     deps.force !== true
   ) {
     if (deps.confirm === undefined) {
-      throw new CliError(
+      throw new JigsError(
         "refusing to cancel an in-flight run without confirmation",
         "re-run with --force",
       );
@@ -67,7 +67,7 @@ export async function cancelRun(
   );
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new CliError(body.error ?? `cancel failed: HTTP ${res.status}`);
+    throw new JigsError(body.error ?? `cancel failed: HTTP ${res.status}`);
   }
   const result = (await res.json()) as CancelResult;
   deps.out(`cancelled ${result.runId}`);

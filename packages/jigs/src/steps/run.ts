@@ -72,7 +72,7 @@ export interface ExecuteDeps {
     // thread id.
     providerOptions?: Record<string, Record<string, string>>;
   }): Promise<ExecutorGeneration>;
-  ensureCodexHome(runKey: string): string;
+  ensureCodexHome(runId: string): string;
   withCodexAppServer: typeof withCodexAppServer;
   // Seamed like the harness calls beside it: a test hydrating a wire that
   // declares MCP servers must not spawn them.
@@ -81,7 +81,7 @@ export interface ExecuteDeps {
 
 export const realDeps: ExecuteDeps = {
   generateText: (options) => generateText(options),
-  ensureCodexHome: (runKey) => ensureManagedCodexHome(runKey),
+  ensureCodexHome: (runId) => ensureManagedCodexHome(runId),
   withCodexAppServer,
   jitFailures: async (wire) => {
     const report = await runChecks(jitChecks(wire), JIT_TIMEOUT_MS);
@@ -151,7 +151,7 @@ const LOCK_STALE_MS = 4 * 60 * 60_000 + 60_000;
 
 export async function runAgent(
   wire: AgentWire,
-  runKey: string,
+  runId: string,
   deps: ExecuteDeps = realDeps,
 ): ReturnType<RunAgentStep> {
   // JIT checks first — this is the last honest moment before agent turns
@@ -179,7 +179,7 @@ export async function runAgent(
   try {
     return await withFileLock(
       lockPathFor(wire.cwd, "agent-step"),
-      () => generateAgentStep(wire, runKey, deps),
+      () => generateAgentStep(wire, runId, deps),
       { timeoutMs: 0, staleMs: LOCK_STALE_MS },
     );
   } catch (err) {
@@ -194,7 +194,7 @@ export async function runAgent(
 
 async function generateAgentStep(
   wire: AgentWire,
-  runKey: string,
+  runId: string,
   deps: ExecuteDeps,
 ): Promise<AgentStepResult<unknown> | { resumeFailed: string }> {
   const harness = wire.harness;
@@ -235,7 +235,7 @@ async function generateAgentStep(
                 // builder needs.
                 codexAppServerStepSettings({
                   cwd: wire.cwd,
-                  codexHome: deps.ensureCodexHome(runKey),
+                  codexHome: deps.ensureCodexHome(runId),
                   env,
                   approvalPolicy: "never",
                   // Unsandboxed on purpose (AGE-359): a jigs worktree's real
@@ -289,7 +289,7 @@ async function generateAgentStep(
 
 export async function runAsk(
   wire: AskWire,
-  runKey: string,
+  runId: string,
   deps: ExecuteDeps = realDeps,
 ): Promise<StepResult> {
   const harness = wire.harness;
@@ -325,7 +325,7 @@ export async function runAsk(
           harness.model,
           codexExecStepSettings({
             cwd: scratch,
-            codexHome: deps.ensureCodexHome(runKey),
+            codexHome: deps.ensureCodexHome(runId),
             env,
             approvalMode: "never",
             sandboxMode: "read-only",

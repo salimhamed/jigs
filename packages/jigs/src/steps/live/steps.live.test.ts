@@ -27,8 +27,8 @@ beforeAll(() => {
   deps = {
     ...realDeps,
     // Managed homes under the test tmp dir, not ~/.local/share.
-    ensureCodexHome: (runKey) =>
-      ensureManagedCodexHome(runKey, {
+    ensureCodexHome: (runId) =>
+      ensureManagedCodexHome(runId, {
         baseDir: path.join(tmp, "codex-homes"),
       }),
   };
@@ -54,9 +54,9 @@ function assertUsage(usage: StepUsage | undefined): void {
 // no resume pointer can only take the successful arm.
 async function runAgent(
   wire: AgentWire,
-  runKey: string,
+  runId: string,
 ): Promise<AgentStepResult<unknown>> {
-  const result = await runAgentStep(wire, runKey, deps);
+  const result = await runAgentStep(wire, runId, deps);
   if ("jitFailure" in result) {
     throw new Error(`unexpected JIT failure: ${result.jitFailure}`);
   }
@@ -67,7 +67,7 @@ async function runAgent(
 }
 
 test("claude agent step: structured output round-trips typed, usage and session captured", async () => {
-  const runKey = `live-steps-claude-${crypto.randomUUID().slice(0, 8)}`;
+  const runId = `live-steps-claude-${crypto.randomUUID().slice(0, 8)}`;
   const wire = buildAgentWire({
     harness: claude({ model: "sonnet" }),
     cwd: makeScratchRepo(tmp, "claude-agent"),
@@ -75,7 +75,7 @@ test("claude agent step: structured output round-trips typed, usage and session 
     output: verdict,
   });
 
-  const result = await runAgent(wire, runKey);
+  const result = await runAgent(wire, runId);
   const parsed = verdict.parse(result.output);
 
   expect(parsed).toEqual({ ok: true, word: "sky" });
@@ -85,7 +85,7 @@ test("claude agent step: structured output round-trips typed, usage and session 
 });
 
 test("codex agent step: structured output round-trips typed, usage and threadId captured", async () => {
-  const runKey = `live-steps-codex-${crypto.randomUUID().slice(0, 8)}`;
+  const runId = `live-steps-codex-${crypto.randomUUID().slice(0, 8)}`;
   const wire = buildAgentWire({
     harness: codex({ model: "gpt-5.5" }),
     cwd: makeScratchRepo(tmp, "codex-agent"),
@@ -93,7 +93,7 @@ test("codex agent step: structured output round-trips typed, usage and threadId 
     output: verdict,
   });
 
-  const result = await runAgent(wire, runKey);
+  const result = await runAgent(wire, runId);
   const parsed = verdict.parse(result.output);
 
   expect(parsed).toEqual({ ok: true, word: "sky" });
@@ -103,28 +103,28 @@ test("codex agent step: structured output round-trips typed, usage and threadId 
 });
 
 test("claude ask step: structured output round-trips typed with usage", async () => {
-  const runKey = `live-steps-ask-claude-${crypto.randomUUID().slice(0, 8)}`;
+  const runId = `live-steps-ask-claude-${crypto.randomUUID().slice(0, 8)}`;
   const wire = buildAskWire({
     harness: claude({ model: "sonnet" }),
     prompt: STRUCTURED_PROMPT,
     output: verdict,
   });
 
-  const result = await runAsk(wire, runKey, deps);
+  const result = await runAsk(wire, runId, deps);
 
   expect(verdict.parse(result.output)).toEqual({ ok: true, word: "sky" });
   assertUsage(result.usage);
 });
 
 test("codex ask step: structured output round-trips typed with usage", async () => {
-  const runKey = `live-steps-ask-codex-${crypto.randomUUID().slice(0, 8)}`;
+  const runId = `live-steps-ask-codex-${crypto.randomUUID().slice(0, 8)}`;
   const wire = buildAskWire({
     harness: codex({ model: "gpt-5.5" }),
     prompt: STRUCTURED_PROMPT,
     output: verdict,
   });
 
-  const result = await runAsk(wire, runKey, deps);
+  const result = await runAsk(wire, runId, deps);
 
   expect(verdict.parse(result.output)).toEqual({ ok: true, word: "sky" });
   assertUsage(result.usage);

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { CliError } from "../errors.ts";
+import { JigsError } from "../errors.ts";
 import { pokeRun } from "./poke.ts";
 
 const fetchMock = vi.fn();
@@ -43,7 +43,7 @@ test("poke posts to the run's poke route and prints the resumed tokens", async (
   ]);
 });
 
-test("a 404 becomes a CliError naming the run", async () => {
+test("a 404 becomes a JigsError naming the run", async () => {
   fetchMock.mockResolvedValueOnce(
     new Response(JSON.stringify({ error: "not found" }), { status: 404 }),
   );
@@ -52,7 +52,7 @@ test("a 404 becomes a CliError naming the run", async () => {
   );
 });
 
-test("a 409 becomes a CliError with an inspection hint", async () => {
+test("a 409 becomes a JigsError with an inspection hint", async () => {
   fetchMock.mockResolvedValueOnce(
     new Response(JSON.stringify({ error: "no suspensions" }), { status: 409 }),
   );
@@ -60,9 +60,9 @@ test("a 409 becomes a CliError with an inspection hint", async () => {
     () => null,
     (err: unknown) => err,
   );
-  expect(failure).toBeInstanceOf(CliError);
-  expect((failure as CliError).message).toBe("run has no suspensions to poke");
-  expect((failure as CliError).hint).toContain("jigs logs wr_done");
+  expect(failure).toBeInstanceOf(JigsError);
+  expect((failure as JigsError).message).toBe("run has no suspensions to poke");
+  expect((failure as JigsError).hint).toContain("jigs logs wr_done");
 });
 
 test("a connection failure surfaces the shared unreachable error", async () => {
@@ -71,8 +71,8 @@ test("a connection failure surfaces the shared unreachable error", async () => {
     () => null,
     (err: unknown) => err,
   );
-  expect(failure).toBeInstanceOf(CliError);
-  expect((failure as CliError).message).toContain("http://svc.test:8990");
+  expect(failure).toBeInstanceOf(JigsError);
+  expect((failure as JigsError).message).toContain("http://svc.test:8990");
 });
 
 test("a trailing slash on the service URL does not break the poke route", async () => {

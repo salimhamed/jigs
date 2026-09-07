@@ -1,4 +1,4 @@
-import { CliError } from "../errors.ts";
+import { JigsError } from "../errors.ts";
 
 // One line per step, stopping at the first that fails: what `init` bought by
 // printing the commands instead of running them — a failure the human can
@@ -44,7 +44,7 @@ export function stepRunner<Name extends string>(
       } catch (err) {
         const durationMs = Date.now() - started;
         const message = err instanceof Error ? err.message : String(err);
-        const repair = err instanceof CliError ? err.hint : undefined;
+        const repair = err instanceof JigsError ? err.hint : undefined;
         steps.push({
           name,
           status: "failed",

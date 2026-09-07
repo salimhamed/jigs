@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { Binding } from "../config/factory-config.ts";
-import { CliError } from "../errors.ts";
+import { JigsError } from "../errors.ts";
 import {
   CopySourceMissingError,
   PostCreateFailedError,
@@ -111,8 +111,8 @@ test("an entry climbing out of the binding's directory is refused", async () => 
     () => null,
     (err: unknown) => err,
   );
-  expect(failure).toBeInstanceOf(CliError);
-  expect((failure as CliError).message).toBe(
+  expect(failure).toBeInstanceOf(JigsError);
+  expect((failure as JigsError).message).toBe(
     "binding api: copy entry ../elsewhere/.env must be a relative path inside bindings/api/",
   );
   expect(existsSync(path.join(worktree, ".env"))).toBe(false);
@@ -123,8 +123,8 @@ test("an absolute entry is refused rather than silently matching nothing", async
     () => null,
     (err: unknown) => err,
   );
-  expect(failure).toBeInstanceOf(CliError);
-  expect((failure as CliError).message).toBe(
+  expect(failure).toBeInstanceOf(JigsError);
+  expect((failure as JigsError).message).toBe(
     "binding api: copy entry /etc/hostname must be a relative path inside bindings/api/",
   );
 });

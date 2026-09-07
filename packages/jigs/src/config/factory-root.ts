@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { CliError } from "../errors.ts";
+import { JigsError } from "../errors.ts";
 import { FACTORY_CONFIG_FILE } from "./factory-config.ts";
 
 export function locateFactoryRoot(cwd: string): string {
@@ -9,7 +9,7 @@ export function locateFactoryRoot(cwd: string): string {
     if (existsSync(path.join(dir, FACTORY_CONFIG_FILE))) return dir;
     const parent = path.dirname(dir);
     if (parent === dir) {
-      throw new CliError(
+      throw new JigsError(
         `not inside a factory repo (no ${FACTORY_CONFIG_FILE} found from ${cwd} upward)`,
         `cd into your factory repo, or create one: git init && touch ${FACTORY_CONFIG_FILE}`,
       );

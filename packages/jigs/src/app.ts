@@ -136,7 +136,7 @@ export function createApp(factory: Factory): Hono {
   // tables or persisted deliveries. Wakes are hints; consumers re-check the
   // provider.
   app.post("/ingress/github", async (c) => {
-    const event = ingressField(c.req.header("x-github-event") ?? "unknown");
+    const event = sanitizeForLog(c.req.header("x-github-event") ?? "unknown");
     const secret = githubWebhookSecret();
     if (secret === null) {
       console.log(
@@ -158,7 +158,7 @@ export function createApp(factory: Factory): Hono {
       );
       return c.json({ ignored: true });
     }
-    return deliver(c, "github", token, event, resumeHook);
+    return resumeAndLog(c, "github", token, event, resumeHook);
   });
 
   app.post("/ingress/linear", async (c) => {
@@ -186,14 +186,14 @@ export function createApp(factory: Factory): Hono {
       );
       return c.json({ ignored: true });
     }
-    return deliver(c, "linear", token, event, resumeHook);
+    return resumeAndLog(c, "linear", token, event, resumeHook);
   });
 
   // Manual wake on the same code path as the ingress: resume every token the
   // run's suspensions are satisfied by. The fallback when a delivery was missed.
   app.post("/api/runs/:runId/poke", async (c) => {
     const ref = await resolveRunRef(c.req.param("runId"));
-    if (ref.kind !== "found") return refError(c, ref);
+    if (ref.kind !== "found") return unresolvedRunResponse(c, ref);
     const run = getRun(ref.runId);
     const tokens = await runResourceTokens(run.runId);
     if (tokens.length === 0) {
@@ -235,7 +235,7 @@ export function createApp(factory: Factory): Hono {
   // captured before the cancel, not after.
   app.post("/api/runs/:runId/cancel", async (c) => {
     const ref = await resolveRunRef(c.req.param("runId"));
-    if (ref.kind !== "found") return refError(c, ref);
+    if (ref.kind !== "found") return unresolvedRunResponse(c, ref);
     const run = getRun(ref.runId);
     const status = await run.status;
     if (TERMINAL_RUN_STATUSES.has(status)) {
@@ -269,7 +269,7 @@ export function createApp(factory: Factory): Hono {
   // timeline, and the second is the only sign of a stall.
   app.get("/api/runs/:runId/steps", async (c) => {
     const ref = await resolveRunRef(c.req.param("runId"));
-    if (ref.kind !== "found") return refError(c, ref);
+    if (ref.kind !== "found") return unresolvedRunResponse(c, ref);
     const [steps, deadJobs] = await Promise.all([
       listRunSteps(ref.runId),
       listRunDeadJobs(registrySql(), ref.runId),
@@ -281,7 +281,7 @@ export function createApp(factory: Factory): Hono {
   // answer differently about the same run.
   app.get("/api/runs/:runId", async (c) => {
     const ref = await resolveRunRef(c.req.param("runId"));
-    if (ref.kind !== "found") return refError(c, ref);
+    if (ref.kind !== "found") return unresolvedRunResponse(c, ref);
     const described = await describeRun(ref.runId);
     const body: Record<string, unknown> = {
       ...described,
@@ -321,7 +321,7 @@ function factoryRootOrNull(): string | null {
   }
 }
 
-function refError(
+function unresolvedRunResponse(
   c: Context,
   ref: Exclude<RunRef, { kind: "found" }>,
 ): Response {
@@ -350,25 +350,25 @@ function parseJson(rawBody: string): unknown {
   }
 }
 
-function ingressField(value: string): string {
+function sanitizeForLog(value: string): string {
   return value.replace(/[\r\n\t]/g, " ");
 }
 
 function linearEvent(payload: unknown): string | null {
   const type = (payload as { type?: unknown }).type;
-  return typeof type === "string" ? ingressField(type) : null;
+  return typeof type === "string" ? sanitizeForLog(type) : null;
 }
 
 // A wake carries no payload: the suspension primitives re-check provider
 // state on every wake, so nothing downstream reads one.
-async function deliver(
+async function resumeAndLog(
   c: Context,
   provider: "github" | "linear",
   token: string,
   event: string | null,
   resume: typeof resumeHook,
 ) {
-  const correlation = `token=${ingressField(token)}${event === null ? "" : ` event=${event}`}`;
+  const correlation = `token=${sanitizeForLog(token)}${event === null ? "" : ` event=${event}`}`;
   try {
     const result = await resume(token, undefined);
     console.log(`[ingress] ${provider} accepted ${correlation}`);

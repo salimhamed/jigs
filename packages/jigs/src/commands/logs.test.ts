@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { CliError } from "../errors.ts";
+import type { JigsError } from "../errors.ts";
 import { showLogs } from "./logs.ts";
 
 const fetchMock = vi.fn();
@@ -202,7 +202,7 @@ test("an unresolvable ref fails before the pointer is printed", async () => {
   );
   const err = await showLogs("AGE-999", deps()).then(
     () => null,
-    (thrown: unknown) => thrown as CliError,
+    (thrown: unknown) => thrown as JigsError,
   );
   expect(err?.message).toBe("run AGE-999 not found");
   expect(lines).toEqual([]);

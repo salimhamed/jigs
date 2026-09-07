@@ -4,7 +4,7 @@
 
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { CliError } from "./errors.ts";
+import { JigsError } from "./errors.ts";
 import { githubWebhookSecretFile, jigsDataDir } from "./paths.ts";
 
 // Complete for the review loop: reviews, inline review comments, and CI. The
@@ -71,7 +71,7 @@ async function githubRequest<T>(
 ): Promise<T> {
   const token = process.env.GITHUB_TOKEN;
   if (token === undefined || token === "") {
-    throw new CliError("GITHUB_TOKEN is not set");
+    throw new JigsError("GITHUB_TOKEN is not set");
   }
   const base = process.env.GITHUB_API_URL ?? "https://api.github.com";
   const res = await fetch(`${base}${apiPath}`, {
@@ -85,7 +85,7 @@ async function githubRequest<T>(
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
-    throw new CliError(
+    throw new JigsError(
       `GitHub API ${res.status} on ${apiPath}: ${await res.text()}`,
     );
   }

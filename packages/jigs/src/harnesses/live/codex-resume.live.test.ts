@@ -24,8 +24,8 @@ beforeAll(() => {
   tmp = makeTmpDir();
   deps = {
     ...realDeps,
-    ensureCodexHome: (runKey) =>
-      ensureManagedCodexHome(runKey, {
+    ensureCodexHome: (runId) =>
+      ensureManagedCodexHome(runId, {
         baseDir: path.join(tmp, "codex-homes"),
       }),
   };

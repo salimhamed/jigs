@@ -4,7 +4,7 @@ import {
   parseFactoryConfig,
   readFactoryConfigText,
 } from "../config/factory-config.ts";
-import { CliError } from "../errors.ts";
+import { JigsError } from "../errors.ts";
 import { git, tryGit } from "../git.ts";
 import { bindingRepoDir } from "./layout.ts";
 
@@ -70,8 +70,8 @@ export async function ensureBindingClone(
   } catch (err) {
     // The fetch has already said the one thing an operator can act on;
     // everything else fails for a reason no credential fixes.
-    if (err instanceof CliError) throw err;
-    throw new CliError(
+    if (err instanceof JigsError) throw err;
+    throw new JigsError(
       `could not prepare the clone of ${remote} at ${repoDir}: ${reason(err)}`,
     );
   }
@@ -81,7 +81,7 @@ async function fetchOrigin(repoDir: string, remote: string): Promise<void> {
   try {
     await git(["fetch", "--quiet", "origin"], repoDir);
   } catch (err) {
-    throw new CliError(
+    throw new JigsError(
       `could not fetch ${remote}: ${reason(err)}`,
       `give git credentials for ${remote} — an ssh key the service can read, or GITHUB_TOKEN for an https remote`,
     );

@@ -1,6 +1,6 @@
 import type { ISql } from "postgres";
 import { afterEach, expect, test, vi } from "vitest";
-import { CliError } from "../errors.ts";
+import { JigsError } from "../errors.ts";
 import {
   gateOnBindingClones,
   gateOnWorktreeRegistry,
@@ -136,14 +136,14 @@ test("a clone that fails names the binding and exits instead of starting", async
   ]);
 });
 
-test("a CliError's repair reaches the log beside the reason", async () => {
+test("a JigsError's repair reaches the log beside the reason", async () => {
   const errors: string[] = [];
 
   await gateOnBindingClones({
     bindings: () => [forge],
     ensure: () =>
       Promise.reject(
-        new CliError("could not fetch acme/forge", "give git credentials"),
+        new JigsError("could not fetch acme/forge", "give git credentials"),
       ),
     exit: () => {},
     error: (line) => errors.push(line),

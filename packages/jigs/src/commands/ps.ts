@@ -1,6 +1,6 @@
-import { CliError } from "../errors.ts";
+import { JigsError } from "../errors.ts";
 import { formatTable } from "../table.ts";
-import { type ServiceDeps, serviceFetch } from "./service.ts";
+import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 export interface PsRun {
   runId: string;
@@ -31,13 +31,13 @@ export interface PsResult {
   schedules: PsSchedule[];
 }
 
-export async function listRunsForPs(
+export async function showRuns(
   deps: ServiceDeps,
   now: Date = new Date(),
 ): Promise<PsResult> {
   const res = await serviceFetch(deps.serviceUrl, "/api/runs");
   if (!res.ok) {
-    throw new CliError(`ps failed: HTTP ${res.status} ${await res.text()}`);
+    throw new JigsError(`ps failed: HTTP ${res.status} ${await res.text()}`);
   }
   const result = (await res.json()) as PsResult;
 

@@ -1,11 +1,11 @@
-import { CliError } from "../errors.ts";
+import { JigsError } from "../errors.ts";
 import { formatTable } from "../table.ts";
 import {
   readErrorBody,
   runRefError,
   type ServiceDeps,
   serviceFetch,
-} from "./service.ts";
+} from "./service-client.ts";
 
 // jigs contributes the two things the dashboard cannot — resolving a ticket id
 // or a ULID prefix to a run, and the queue jobs that died holding its resume —
@@ -49,7 +49,7 @@ export async function showLogs(
     throw runRefError(ref, await readErrorBody(res));
   }
   if (!res.ok) {
-    throw new CliError(`logs failed: HTTP ${res.status} ${await res.text()}`);
+    throw new JigsError(`logs failed: HTTP ${res.status} ${await res.text()}`);
   }
   const result = (await res.json()) as LogsResult;
   deps.out(`run ${result.runId}`);

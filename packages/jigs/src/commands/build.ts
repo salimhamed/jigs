@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { locateFactoryRoot } from "../config/factory-root.ts";
-import { CliError } from "../errors.ts";
+import { JigsError } from "../errors.ts";
 import {
   type ExecFile,
   type ExecOutput,
@@ -37,7 +37,7 @@ export async function buildFactoryService(deps: BuildDeps): Promise<void> {
   // step ids in the manifest are not the ones the service registers.
   const nitro = path.join(factoryRoot, "node_modules", ".bin", "nitro");
   if (!existsSync(nitro)) {
-    throw new CliError(
+    throw new JigsError(
       `no nitro in ${factoryRoot}`,
       `install this factory's dependencies first: pnpm install in ${factoryRoot}`,
     );
@@ -48,7 +48,7 @@ export async function buildFactoryService(deps: BuildDeps): Promise<void> {
     echo(await execFile(nitro, ["build"], { cwd: factoryRoot }), deps.out);
   } catch (err) {
     echo(err as Partial<ExecOutput>, deps.out);
-    throw new CliError(
+    throw new JigsError(
       `nitro build failed in ${factoryRoot}`,
       "the output above is nitro's",
     );
@@ -79,7 +79,7 @@ async function loadPrepare(factoryRoot: string): Promise<Prepare> {
   try {
     entry = resolveFromFactory.resolve("@salimhamed/jigs/build");
   } catch {
-    throw new CliError(
+    throw new JigsError(
       `@salimhamed/jigs is not installed in ${factoryRoot}`,
       `run pnpm install in ${factoryRoot}`,
     );
