@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/salimhamed/jigs/compare/jigs-v0.4.1...jigs-v0.4.2) (2026-09-07)
+
+
+### Bug Fixes
+
+* **providers:** see CI that reports commit statuses, not just checks ([#139](https://github.com/salimhamed/jigs/issues/139)) ([15b114a](https://github.com/salimhamed/jigs/commit/15b114a5dd8ffcc960975e0724186bca9e1443e4))
+
 ## [0.4.1](https://github.com/salimhamed/jigs/compare/jigs-v0.4.0...jigs-v0.4.1) (2026-09-07)
 
 
