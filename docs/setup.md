@@ -103,8 +103,9 @@ without either:
 
 Every step below runs **inside the factory repo**, and every `jigs` is the
 factory's own — `pnpm exec jigs …`, or `pnpm jigs …`. Ports are derived from
-the factory's path, so two factories on one machine never collide; the numbers
-in your own output are the ones to use.
+the factory's path, so two factories on one machine usually differ; if a
+number is already in use, edit it in `jigs.yml`, `docker-compose.yml` and
+`.env` before `jigs up`. The numbers in your own output are the ones to use.
 
 ### 1. Scaffold
 

@@ -4,7 +4,7 @@
 # A binding may also carry `post_create`, `hook_timeout_minutes`, and:
 # copy: [.env]  # from bindings/<name>/ in this repo, into the worktree
 service:
-  # Derived from this factory's path so two factories never fight over a port.
+  # Derived from this factory's path, so factories usually differ. Edit freely.
   port: {{SERVICE_PORT}}
   # Where this factory's service hosts the SDK's run dashboard.
   dashboard_port: {{DASHBOARD_PORT}}
