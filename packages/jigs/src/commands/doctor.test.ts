@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { CliError } from "../errors.ts";
+import { JigsError } from "../errors.ts";
 import { runDoctor } from "./doctor.ts";
 
 const fetchMock = vi.fn();
@@ -36,7 +36,7 @@ test("a green report prints one ok line per check and does not throw", async () 
   expect(lines).toEqual(["ok   Linear API key", "ok   binding api"]);
 });
 
-test("a red report prints the reason and repair for each failure and throws a CliError", async () => {
+test("a red report prints the reason and repair for each failure and throws a JigsError", async () => {
   respond({
     ok: false,
     checks: [
@@ -61,8 +61,8 @@ test("a red report prints the reason and repair for each failure and throws a Cl
     () => null,
     (err: unknown) => err,
   );
-  expect(failure).toBeInstanceOf(CliError);
-  expect((failure as CliError).message).toBe("doctor found 2 problem(s)");
+  expect(failure).toBeInstanceOf(JigsError);
+  expect((failure as JigsError).message).toBe("doctor found 2 problem(s)");
   expect(lines).toEqual([
     "ok   Linear API key",
     "FAIL binding api: no binding named 'api'",
@@ -78,8 +78,8 @@ test("an unreachable service surfaces the shared unreachable error", async () =>
     () => null,
     (err: unknown) => err,
   );
-  expect(failure).toBeInstanceOf(CliError);
-  expect((failure as CliError).message).toContain("http://svc.test:8990");
+  expect(failure).toBeInstanceOf(JigsError);
+  expect((failure as JigsError).message).toContain("http://svc.test:8990");
 });
 
 test("a trailing slash on the service URL does not break the doctor route", async () => {

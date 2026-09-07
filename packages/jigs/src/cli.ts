@@ -9,9 +9,9 @@ import { runDoctor } from "./commands/doctor.ts";
 import { initFactory } from "./commands/init.ts";
 import { showLogs } from "./commands/logs.ts";
 import { pokeRun } from "./commands/poke.ts";
-import { listRunsForPs } from "./commands/ps.ts";
+import { showRuns } from "./commands/ps.ts";
 import { launchRun } from "./commands/run.ts";
-import { resolveServiceUrl } from "./commands/service.ts";
+import { resolveServiceUrl } from "./commands/service-client.ts";
 import {
   restartService,
   serviceLogs,
@@ -19,11 +19,11 @@ import {
   startService,
   stopService,
 } from "./commands/service-lifecycle.ts";
-import { sweepWorktrees } from "./commands/sweep.ts";
+import { runSweep } from "./commands/sweep.ts";
 import { unbindRepo } from "./commands/unbind.ts";
 import { upFactory } from "./commands/up.ts";
 import { upgradeFactory } from "./commands/upgrade.ts";
-import { CliError } from "./errors.ts";
+import { JigsError } from "./errors.ts";
 
 // No `.default()`: commander evaluates defaults eagerly, so resolving the
 // factory's service URL here would walk the filesystem on `jigs --help`.
@@ -170,7 +170,7 @@ program
   .description("list runs and the worktrees the registry holds")
   .addOption(serviceOption())
   .action(async (options: { service?: string }) => {
-    await listRunsForPs({ out, serviceUrl: serviceUrl(options.service) });
+    await showRuns({ out, serviceUrl: serviceUrl(options.service) });
   });
 
 program
@@ -236,7 +236,7 @@ program
   )
   .addOption(serviceOption())
   .action(async (options: { force?: boolean; service?: string }) => {
-    await sweepWorktrees(
+    await runSweep(
       { out, confirm: makeConfirm(), serviceUrl: serviceUrl(options.service) },
       { force: options.force },
     );
@@ -280,7 +280,7 @@ service
   .option("--lines <n>", "how many lines to print (default: 50)", (raw) => {
     const lines = Number(raw);
     if (!Number.isInteger(lines) || lines < 1) {
-      throw new CliError(`--lines must be a positive integer, got ${raw}`);
+      throw new JigsError(`--lines must be a positive integer, got ${raw}`);
     }
     return lines;
   })
@@ -298,7 +298,7 @@ program
 // Commander exits itself on its own parse errors; this catch sees only
 // action-handler failures (parseAsync wraps even synchronous throws).
 program.parseAsync().catch((err: unknown) => {
-  if (err instanceof CliError) {
+  if (err instanceof JigsError) {
     console.error(`jigs: ${err.message}`);
     if (err.hint !== undefined) console.error(`  ${err.hint}`);
   } else {

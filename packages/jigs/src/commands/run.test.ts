@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
-import { CliError } from "../errors.ts";
+import { JigsError } from "../errors.ts";
 import { launchRun, parseInputs, validateInputs } from "./run.ts";
 
 const fetchMock = vi.fn();
@@ -38,7 +38,7 @@ const respondSchema = () =>
 const failure = (promise: Promise<unknown>) =>
   promise.then(
     () => null,
-    (err: unknown) => err as CliError,
+    (err: unknown) => err as JigsError,
   );
 
 test("a value the pipeline's schema rejects fails with the schema's own error", () => {
@@ -46,11 +46,11 @@ test("a value the pipeline's schema rejects fails with the schema's own error", 
     try {
       validateInputs(inputsSchema, { ticket: "not-a-ticket" });
     } catch (err) {
-      return err as CliError;
+      return err as JigsError;
     }
     return null;
   })();
-  expect(thrown).toBeInstanceOf(CliError);
+  expect(thrown).toBeInstanceOf(JigsError);
   expect(thrown?.message).toContain("Invalid input");
   expect(thrown?.hint).toContain("inputs schema");
   expect(fetchMock).not.toHaveBeenCalled();
@@ -61,7 +61,7 @@ test("a schema violation never reaches the trigger route", async () => {
   const err = await failure(
     launchRun("deliver-feature", ["ticket=not-a-ticket"], deps()),
   );
-  expect(err).toBeInstanceOf(CliError);
+  expect(err).toBeInstanceOf(JigsError);
   expect(fetchMock).toHaveBeenCalledTimes(1);
   expect(fetchMock.mock.calls[0]?.[0]).toBe(
     "http://svc.test:8990/api/pipelines/deliver-feature/inputs",
@@ -95,11 +95,11 @@ test("an --input without = fails with an example", () => {
     try {
       parseInputs(["ticket"]);
     } catch (err) {
-      return err as CliError;
+      return err as JigsError;
     }
     return null;
   })();
-  expect(thrown).toBeInstanceOf(CliError);
+  expect(thrown).toBeInstanceOf(JigsError);
   expect(thrown?.message).toBe("--input must be key=value");
   expect(thrown?.hint).toContain("--input ticket=AGE-123");
 });
@@ -191,7 +191,7 @@ test("a misspelled --input key is refused before the launch is paid for", async 
   const err = await failure(
     launchRun("deliver-feature", ["ticket=AGE-346", "askhuman=true"], deps()),
   );
-  expect(err).toBeInstanceOf(CliError);
+  expect(err).toBeInstanceOf(JigsError);
   expect(err?.message).toBe("unknown --input: askhuman");
   expect(err?.hint).toContain("askHuman");
   expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -221,7 +221,7 @@ test("a refinement only the service can see renders as a schema error", async ()
   const err = await failure(
     launchRun("deliver-feature", ["ticket=AGE-346"], deps()),
   );
-  expect(err).toBeInstanceOf(CliError);
+  expect(err).toBeInstanceOf(JigsError);
   expect(err?.message).toBe(
     ["ticket: issue is closed", "(root): askHuman requires a reviewer"].join(
       "\n",

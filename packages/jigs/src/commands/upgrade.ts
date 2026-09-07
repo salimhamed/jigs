@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { locateFactoryRoot } from "../config/factory-root.ts";
-import { CliError } from "../errors.ts";
+import { JigsError } from "../errors.ts";
 import {
   type ExecFile,
   execOrExplain,
@@ -67,7 +67,7 @@ export async function upgradeFactory(
   options: UpgradeOptions = {},
 ): Promise<UpgradeResult> {
   if (options.to !== undefined && !VERSION.test(options.to)) {
-    throw new CliError(
+    throw new JigsError(
       `--to takes an exact version, got ${options.to}`,
       "e.g. --to 0.3.0",
     );
@@ -126,7 +126,7 @@ export async function upgradeFactory(
 function readManifest(factoryRoot: string): Manifest {
   const file = path.join(factoryRoot, "package.json");
   if (!existsSync(file)) {
-    throw new CliError(
+    throw new JigsError(
       `no package.json in ${factoryRoot}`,
       "scaffold one: jigs init",
     );
@@ -150,20 +150,20 @@ function publishedVersion(factoryRoot: string): string {
     )
     .map(([name, spec]) => `${name}: ${spec}`);
   if (fromCheckout.length > 0) {
-    throw new CliError(
+    throw new JigsError(
       `this factory installs jigs from a checkout (${fromCheckout.join(", ")})`,
       `switch it to the published package first — ${JIGS_PACKAGE} from GitHub Packages, pinned to a version — then jigs upgrade`,
     );
   }
   if (declared[RETIRED_PACKAGE] !== undefined) {
-    throw new CliError(
+    throw new JigsError(
       `this factory still depends on ${RETIRED_PACKAGE}, which no longer releases`,
       `jigs is one package now, and the move is a one-time edit no upgrade can make for you: drop the ${RETIRED_PACKAGE} line from package.json, rewrite every import of ${RETIRED_PACKAGE}/X to ${JIGS_PACKAGE}/X, then jigs upgrade`,
     );
   }
   const version = declared[JIGS_PACKAGE];
   if (version === undefined) {
-    throw new CliError(
+    throw new JigsError(
       `${JIGS_PACKAGE} not in this factory's package.json`,
       "a factory depends on it by version — scaffold one with jigs init to see the shape",
     );
@@ -186,20 +186,20 @@ async function bump(
       ? ["update", "--latest", JIGS_PACKAGE]
       : ["update", `${JIGS_PACKAGE}@${to}`];
   await execOrExplain(execFile, "pnpm", args, { cwd: factoryRoot }, out, {
-    missing: new CliError(
+    missing: new JigsError(
       "pnpm is not on PATH",
       "install pnpm: https://pnpm.io/installation",
     ),
     failed: (err) => {
       const output = execOutput(err);
       if (/ERR_PNPM_PEER_DEP_ISSUES/.test(output)) {
-        return new CliError(
+        return new JigsError(
           "the new jigs peers on a runtime version this factory does not install",
           "the factory supplies @workflow/web, @workflow/world-postgres, workflow and zod — move each to the version pnpm names above, then jigs upgrade again",
         );
       }
       if (/registry\.npmjs\.org\/@salimhamed%2F/.test(output)) {
-        return new CliError(
+        return new JigsError(
           "the @salimhamed scope is not routed to GitHub Packages, so pnpm asked npmjs.org",
           "add @salimhamed:registry=https://npm.pkg.github.com to this factory's .npmrc or ~/.npmrc",
         );
@@ -207,18 +207,18 @@ async function bump(
       // GitHub Packages answers 404, not 401, for a private package the token
       // cannot see; a version that does not exist is NO_MATCHING_VERSION.
       if (/ERR_PNPM_FETCH_40[134]|E40[134]\b/.test(output)) {
-        return new CliError(
+        return new JigsError(
           "GitHub Packages refused the request",
           "~/.npmrc needs //npm.pkg.github.com/:_authToken=<classic PAT with read:packages, and repo while the jigs repo is private>",
         );
       }
       if (/ERR_PNPM_NO_MATCHING_VERSION/.test(output)) {
-        return new CliError(
+        return new JigsError(
           `no such release of ${JIGS_PACKAGE}${to === undefined ? "" : ` at ${to}`}`,
           "pick a version the registry has",
         );
       }
-      return new CliError(
+      return new JigsError(
         `pnpm update failed in ${factoryRoot}`,
         "the output above is pnpm's",
       );
@@ -238,12 +238,12 @@ async function typecheck(
     { cwd: factoryRoot },
     out,
     {
-      missing: new CliError(
+      missing: new JigsError(
         "pnpm is not on PATH",
         "install pnpm: https://pnpm.io/installation",
       ),
       failed: () =>
-        new CliError(
+        new JigsError(
           `typecheck failed in ${factoryRoot}`,
           "a release that adds a step needs its wrapper in steps/jigs.ts — an error on a jig's deps object names the one missing",
         ),

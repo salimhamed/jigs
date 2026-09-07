@@ -3,7 +3,7 @@ import {
   readFactoryConfigText,
 } from "../config/factory-config.ts";
 import { locateFactoryRoot } from "../config/factory-root.ts";
-import { CliError } from "../errors.ts";
+import { JigsError } from "../errors.ts";
 import { deriveDefaultBranch, resolveRemoteUrl } from "../git.ts";
 import { formatTable } from "../table.ts";
 import { hasBindingClone } from "../worktrees/clone.ts";
@@ -52,11 +52,11 @@ async function resolveState(
     if (branch === null) {
       // Past the marker, which is origin/HEAD itself — so this is a ref git
       // wrote and no longer reads as a branch.
-      throw new CliError(`${repoDir} has an origin/HEAD naming no branch`);
+      throw new JigsError(`${repoDir} has an origin/HEAD naming no branch`);
     }
     return `cloned (default: ${branch})`;
   } catch (err) {
-    if (err instanceof CliError) return err.message;
+    if (err instanceof JigsError) return err.message;
     throw err;
   }
 }

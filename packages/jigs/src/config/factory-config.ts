@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { type Document, parseDocument } from "yaml";
 import { z } from "zod";
-import { CliError } from "../errors.ts";
+import { JigsError } from "../errors.ts";
 import { factorySlug } from "../worktrees/layout.ts";
 
 export const FACTORY_CONFIG_FILE = "jigs.yml";
@@ -51,14 +51,16 @@ export function parseFactoryConfig(text: string): FactoryConfig {
   const doc = parseDocument(text);
   const firstError = doc.errors[0];
   if (firstError !== undefined) {
-    throw new CliError(`invalid ${FACTORY_CONFIG_FILE}: ${firstError.message}`);
+    throw new JigsError(
+      `invalid ${FACTORY_CONFIG_FILE}: ${firstError.message}`,
+    );
   }
   const result = factoryConfigSchema.safeParse(doc.toJS() ?? {});
   if (!result.success) {
     const lines = result.error.issues.map(
       (issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`,
     );
-    throw new CliError(
+    throw new JigsError(
       `invalid ${FACTORY_CONFIG_FILE}:\n  ${lines.join("\n  ")}`,
     );
   }
@@ -76,7 +78,7 @@ export function resolveBinding(factoryRoot: string, name: string): Binding {
   const binding = bindings[name];
   if (binding === undefined) {
     const bound = Object.keys(bindings);
-    throw new CliError(
+    throw new JigsError(
       `no binding named ${name} in ${FACTORY_CONFIG_FILE}`,
       bound.length > 0 ? `bound: ${bound.join(", ")}` : "nothing is bound yet",
     );
@@ -123,7 +125,7 @@ export function removeBinding(text: string, name: string): string {
   const doc = parseDocument(text);
   if (!doc.hasIn(["bindings", name])) {
     const bound = Object.keys(parseFactoryConfig(text).bindings);
-    throw new CliError(
+    throw new JigsError(
       `no binding named ${name}`,
       bound.length > 0 ? `bound: ${bound.join(", ")}` : "nothing is bound yet",
     );

@@ -21,7 +21,7 @@ export const CURATED_CONFIG_TOML = `# jigs managed CODEX_HOME — curated by jig
 `;
 
 // The real login every Codex surface shares: the managed home symlinks to
-// it, and the preflight harness check reads it (there is no runKey before a
+// it, and the preflight harness check reads it (there is no runId before a
 // run exists, so a managed home is not the place to look).
 export function realCodexAuthPath(home: string = homedir()): string {
   return path.join(home, ".codex", "auth.json");
@@ -33,11 +33,11 @@ export interface CodexHomeOptions {
 }
 
 export function managedCodexHomePath(
-  runKey: string,
+  runId: string,
   options: CodexHomeOptions = {},
 ): string {
   const base = options.baseDir ?? path.join(jigsDataDir(), "codex-homes");
-  return path.join(base, runKey);
+  return path.join(base, runId);
 }
 
 // Idempotent ensure, never a wipe: rollouts under <home>/sessions are the
@@ -46,10 +46,10 @@ export function managedCodexHomePath(
 // [projects."<cwd>"] trust records into it (the managed home is codex-mutable
 // state), and re-curation restores the zero-server invariant.
 export function ensureManagedCodexHome(
-  runKey: string,
+  runId: string,
   options: CodexHomeOptions = {},
 ): string {
-  const home = managedCodexHomePath(runKey, options);
+  const home = managedCodexHomePath(runId, options);
   const realAuthPath = options.realAuthPath ?? realCodexAuthPath();
   if (!existsSync(realAuthPath)) {
     throw new Error(
@@ -81,10 +81,10 @@ export function ensureManagedCodexHome(
 
 // Explicit teardown for the run-end path (wired by the worktree lifecycle).
 export function removeManagedCodexHome(
-  runKey: string,
+  runId: string,
   options: CodexHomeOptions = {},
 ): void {
-  rmSync(managedCodexHomePath(runKey, options), {
+  rmSync(managedCodexHomePath(runId, options), {
     recursive: true,
     force: true,
   });

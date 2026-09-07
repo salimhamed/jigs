@@ -89,7 +89,7 @@ history), and the new barrel re-exports it beside the CLI's step modules.
 
 **The root export shrinks to what a consumer names.** `"."` was a 55-symbol
 barrel whose only reader was the other package: every CLI command function, the
-git helpers, `CliError`, `locateFactoryRoot`, the binding and clone helpers.
+git helpers, `JigsError`, `locateFactoryRoot`, the binding and clone helpers.
 Measured by grep across both real factories and the templates, what is actually
 imported from either root is `ticketInput`, `type Factory` and
 `type WorktreeFacts`. The root is now those, plus the three type names

@@ -6,7 +6,7 @@ import {
   writeFactoryConfigText,
 } from "../config/factory-config.ts";
 import { locateFactoryRoot } from "../config/factory-root.ts";
-import { CliError } from "../errors.ts";
+import { JigsError } from "../errors.ts";
 import {
   ensureRepoWebhook,
   ensureWebhookSecret,
@@ -43,13 +43,13 @@ export async function bindRepo(
   // binding, so a leading dash is refused once, here, rather than defended
   // against at every call site.
   if (remoteUrl.startsWith("-")) {
-    throw new CliError(
+    throw new JigsError(
       `${remoteUrl} starts with a dash — bind takes a remote URL, not a git option`,
       "jigs bind git@github.com:owner/repo.git",
     );
   }
   if (looksLikePath(remoteUrl)) {
-    throw new CliError(
+    throw new JigsError(
       `${remoteUrl} looks like a path — bind takes a remote URL`,
       "jigs bind git@github.com:owner/repo.git — a repo on this machine is a URL too: file:///srv/git/repo.git",
     );
@@ -57,7 +57,7 @@ export async function bindRepo(
 
   const name = options.name ?? defaultBindingName(remoteUrl);
   if (!BINDING_NAME_PATTERN.test(name)) {
-    throw new CliError(
+    throw new JigsError(
       `invalid binding name ${JSON.stringify(name)}`,
       "names must match [A-Za-z0-9][A-Za-z0-9._-]* — pass --name to choose one",
     );
@@ -69,7 +69,7 @@ export async function bindRepo(
   if (existing !== undefined && existing.remote !== remoteUrl) {
     // Repointing silently would fetch an unrelated history into an object
     // store that already holds another repo's.
-    throw new CliError(
+    throw new JigsError(
       `${name} is already bound to ${existing.remote}`,
       `jigs unbind ${name}, then bind again — the clone at ${bindingDir({ factoryRoot, bindingName: name })} holds the old repo's objects`,
     );

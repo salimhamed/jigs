@@ -185,7 +185,7 @@ test("patches a webhook whose content_type drifted from json", async () => {
   expect(await ensureRepoWebhook(opts)).toBe("updated");
 });
 
-test("a non-2xx response surfaces as a CliError naming the path", async () => {
+test("a non-2xx response surfaces as a JigsError naming the path", async () => {
   fetchMock.mockResolvedValueOnce(new Response("forbidden", { status: 403 }));
   await expect(ensureRepoWebhook(opts)).rejects.toThrow(
     "/repos/acme/api/hooks",

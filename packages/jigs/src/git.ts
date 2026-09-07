@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
 import { promisify } from "node:util";
-import { CliError } from "./errors.ts";
+import { JigsError } from "./errors.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -55,12 +55,12 @@ export async function resolveRemoteUrl(dir: string): Promise<ResolvedRemote> {
   } else if (names.length === 1 && names[0] !== undefined) {
     name = names[0];
   } else if (names.length === 0) {
-    throw new CliError(
+    throw new JigsError(
       `${dir} has no git remote`,
       "add one: git remote add origin <url>",
     );
   } else {
-    throw new CliError(
+    throw new JigsError(
       `${dir} has ${names.length} remotes and none is origin (${names.join(", ")})`,
       "designate one by renaming it to origin",
     );

@@ -46,21 +46,21 @@ type Captured = {
   options?: Parameters<ExecuteDeps["generateText"]>[0];
   codexModel?: string;
   codexSettings?: CodexAppServerSettings;
-  homeRunKeys: string[];
+  homeRunIds: string[];
 };
 
 function makeDeps(
   generation: Partial<Awaited<ReturnType<ExecuteDeps["generateText"]>>> = {},
 ): { deps: ExecuteDeps; captured: Captured } {
-  const captured: Captured = { homeRunKeys: [] };
+  const captured: Captured = { homeRunIds: [] };
   const deps: ExecuteDeps = {
     generateText: async (options) => {
       captured.options = options;
       return { text: "done", usage, ...generation };
     },
-    ensureCodexHome: (runKey) => {
-      captured.homeRunKeys.push(runKey);
-      return path.join(tmp, "codex-home", runKey);
+    ensureCodexHome: (runId) => {
+      captured.homeRunIds.push(runId);
+      return path.join(tmp, "codex-home", runId);
     },
     // The probe itself is covered in index.test.ts, against a server that
     // really cannot start.
@@ -135,7 +135,7 @@ test("claude agent step hydrates from wire config with the harness invariants fo
     remote: { type: "http", url: "https://mcp.example", headers: { a: "b" } },
   });
   expect(captured.options?.system).toBeUndefined();
-  expect(captured.homeRunKeys).toEqual([]);
+  expect(captured.homeRunIds).toEqual([]);
 });
 
 test("codex agent step runs on the app-server under the managed home with fixed policies", async () => {
@@ -162,7 +162,7 @@ test("codex agent step runs on the app-server under the managed home with fixed 
   expect(settings?.mcpServers).toEqual({
     probe: { transport: "stdio", command: "node" },
   });
-  expect(captured.homeRunKeys).toEqual(["run-7"]);
+  expect(captured.homeRunIds).toEqual(["run-7"]);
 });
 
 test("a declared output schema becomes an AI SDK output spec and the raw output is returned", async () => {

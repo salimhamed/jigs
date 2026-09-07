@@ -1,6 +1,6 @@
 import { mkdirSync, realpathSync } from "node:fs";
 import path from "node:path";
-import { CliError } from "../errors.ts";
+import { JigsError } from "../errors.ts";
 import { deriveDefaultBranch, git, tryGit } from "../git.ts";
 import type { WorktreeFacts } from "./facts.ts";
 
@@ -16,7 +16,7 @@ async function resolveDefaultBranch(repoDir: string): Promise<string> {
     branch = await deriveDefaultBranch(repoDir);
   }
   if (branch === null) {
-    throw new CliError(
+    throw new JigsError(
       `cannot determine the default branch of ${repoDir}`,
       "set it: git remote set-head origin --auto",
     );

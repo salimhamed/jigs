@@ -12,7 +12,7 @@ import {
   packageRoot,
   TEMPLATE_SUFFIX,
 } from "../config/templates.ts";
-import { CliError } from "../errors.ts";
+import { JigsError } from "../errors.ts";
 import { interpolate } from "../prompts/interpolate.ts";
 
 // Scaffolds a factory repo: the infrastructure a factory needs to build and
@@ -123,7 +123,7 @@ function factoryName(factoryRoot: string): string {
     .replace(/[^a-z0-9-]+/g, "-")
     .replace(/^-+|-+$/g, "");
   if (name === "") {
-    throw new CliError(
+    throw new JigsError(
       `${factoryRoot} has no usable name for a docker project`,
       `run jigs init from a directory named in [a-z0-9-]`,
     );

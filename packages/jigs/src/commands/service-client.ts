@@ -4,7 +4,7 @@
 
 import { resolveService } from "../config/factory-config.ts";
 import { locateFactoryRoot } from "../config/factory-root.ts";
-import { CliError } from "../errors.ts";
+import { JigsError } from "../errors.ts";
 
 export interface ServiceDeps {
   serviceUrl: string;
@@ -29,7 +29,7 @@ export async function serviceFetch(
   try {
     return await fetch(`${base}${path}`, init);
   } catch {
-    throw new CliError(
+    throw new JigsError(
       `could not reach the jigs service at ${base}`,
       "jigs service status says whether it is running; jigs service start starts it",
     );
@@ -47,10 +47,10 @@ export async function readErrorBody(res: Response): Promise<RunRefErrorBody> {
 // The service resolves run refs (ULID, unique prefix, ticket id); these are
 // the two ways it can answer that no single run was named. The candidate
 // list, not the status, is what tells them apart.
-export function runRefError(ref: string, body: RunRefErrorBody): CliError {
+export function runRefError(ref: string, body: RunRefErrorBody): JigsError {
   return body.candidates === undefined
-    ? new CliError(`run ${ref} not found`)
-    : new CliError(
+    ? new JigsError(`run ${ref} not found`)
+    : new JigsError(
         `run ref ${ref} is ambiguous`,
         `matches: ${body.candidates.join(", ")} — use more characters`,
       );

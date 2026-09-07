@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { CliError } from "../errors.ts";
+import type { JigsError } from "../errors.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
-import { resolveServiceUrl, serviceFetch } from "./service.ts";
+import { resolveServiceUrl, serviceFetch } from "./service-client.ts";
 
 let tmp: string;
 
@@ -52,7 +52,7 @@ test("an unreachable service names the url and the lifecycle verbs", async () =>
     "/api/doctor",
   ).then(
     () => null,
-    (err: unknown) => err as CliError,
+    (err: unknown) => err as JigsError,
   );
   expect(failure?.message).toContain("http://svc.test:9100");
   expect(failure?.hint).toBe(

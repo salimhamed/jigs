@@ -6,7 +6,7 @@ import {
   resolveService,
 } from "../config/factory-config.ts";
 import { locateFactoryRoot } from "../config/factory-root.ts";
-import { CliError } from "../errors.ts";
+import { JigsError } from "../errors.ts";
 import {
   type ExecFile,
   execOrExplain,
@@ -17,8 +17,8 @@ import { stringEnv } from "../harnesses/env.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import { buildFactoryService, type Prepare } from "./build.ts";
 import { runDoctor } from "./doctor.ts";
-import { listRunsForPs, type PsRun } from "./ps.ts";
-import { resolveServiceUrl } from "./service.ts";
+import { type PsRun, showRuns } from "./ps.ts";
+import { resolveServiceUrl } from "./service-client.ts";
 import {
   awaitServiceReady,
   builtBundleHash,
@@ -122,12 +122,12 @@ export async function upFactory(
         { cwd: factoryRoot },
         deps.out,
         {
-          missing: new CliError(
+          missing: new JigsError(
             "pnpm is not on PATH",
             "install pnpm: https://pnpm.io/installation",
           ),
           failed: () =>
-            new CliError(
+            new JigsError(
               `pnpm install failed in ${factoryRoot}`,
               "the output above is pnpm's",
             ),
@@ -185,8 +185,8 @@ export async function upFactory(
             out: indent(deps.out),
           });
         } catch (err) {
-          if (err instanceof CliError && err.hint === undefined) {
-            throw new CliError(
+          if (err instanceof JigsError && err.hint === undefined) {
+            throw new JigsError(
               err.message,
               "each failing check above names its own repair",
             );
@@ -216,7 +216,7 @@ function locate(cwd: string): {
   // The build's failure without it is nitro's, several steps and a pnpm
   // install later; naming the missing file here is cheaper for everyone.
   if (!existsSync(path.join(factoryRoot, FACTORY_CODE))) {
-    throw new CliError(
+    throw new JigsError(
       `no ${FACTORY_CODE} in ${factoryRoot}`,
       "scaffold it: jigs init writes jigs.config.ts, pipelines/ship.ts and steps/jigs.ts, and keeps every file already there",
     );
@@ -229,7 +229,7 @@ function ensureEnv(factoryRoot: string, note: Note): Record<string, string> {
   if (!existsSync(dotenv)) {
     const example = path.join(factoryRoot, ".env.example");
     if (!existsSync(example)) {
-      throw new CliError(
+      throw new JigsError(
         `no .env or .env.example in ${factoryRoot}`,
         "scaffold one: jigs init",
       );
@@ -257,7 +257,7 @@ async function composeUp(
   out: (line: string) => void,
 ): Promise<void> {
   if (!existsSync(path.join(factoryRoot, "docker-compose.yml"))) {
-    throw new CliError(
+    throw new JigsError(
       `no docker-compose.yml in ${factoryRoot}`,
       "scaffold one: jigs init",
     );
@@ -269,14 +269,14 @@ async function composeUp(
     { cwd: factoryRoot },
     out,
     {
-      missing: new CliError(
+      missing: new JigsError(
         "docker is not on PATH",
         "install docker and start its daemon",
       ),
       failed: (err) =>
         /Cannot connect to the Docker daemon/i.test(execOutput(err))
-          ? new CliError("the docker daemon is not running", "start docker")
-          : new CliError(
+          ? new JigsError("the docker daemon is not running", "start docker")
+          : new JigsError(
               `docker compose up failed in ${factoryRoot}`,
               "the output above is docker compose's",
             ),
@@ -295,14 +295,14 @@ async function bootstrapWorld(
 ): Promise<void> {
   const url = env.WORKFLOW_POSTGRES_URL;
   if (url === undefined || url === "") {
-    throw new CliError(
+    throw new JigsError(
       "WORKFLOW_POSTGRES_URL is not set in .env",
       "set it to this factory's World — .env.example carries the shape",
     );
   }
   const bin = path.join(factoryRoot, "node_modules", ".bin", "bootstrap");
   if (!existsSync(bin)) {
-    throw new CliError(
+    throw new JigsError(
       `no bootstrap in ${path.dirname(bin)}`,
       "pnpm install did not install @workflow/world-postgres — add it to this factory's package.json",
     );
@@ -317,14 +317,14 @@ async function bootstrapWorld(
     },
     out,
     {
-      missing: new CliError(`${bin} is not executable`, "pnpm install again"),
+      missing: new JigsError(`${bin} is not executable`, "pnpm install again"),
       failed: (err) =>
         /ECONNREFUSED/.test(execOutput(err))
-          ? new CliError(
+          ? new JigsError(
               `bootstrap could not reach the World at ${redactPassword(url)}`,
               `docker-compose.yml publishes ${publishedPostgresPorts(factoryRoot)} — the two have to agree`,
             )
-          : new CliError(
+          : new JigsError(
               "bootstrap failed",
               "the output above is @workflow/world-postgres's",
             ),
@@ -359,14 +359,14 @@ async function confirmRestart(
     deps.out(`    ${run.runId}  ${run.pipeline}  ${run.status}`);
   }
   if (deps.confirm === undefined) {
-    throw new CliError(
+    throw new JigsError(
       `refusing to restart ${service.slug} over ${inFlight.length} run(s) in flight without confirmation`,
       "re-run with --force, or jigs cancel <run> first",
     );
   }
   const question = `restart ${service.slug} over ${inFlight.length} in-flight run(s)?`;
   if (!(await deps.confirm(question))) {
-    throw new CliError(
+    throw new JigsError(
       "restart declined — the service still runs the previous bundle",
       "re-run jigs up when the runs finish",
     );
@@ -380,7 +380,7 @@ async function listRunsInFlight(factoryRoot: string): Promise<PsRun[]> {
   try {
     // `jigs ps` already knows how to find them; it prints, so it is handed a
     // sink and read for its return value.
-    ({ runs } = await listRunsForPs({
+    ({ runs } = await showRuns({
       serviceUrl: resolveServiceUrl(factoryRoot),
       out: () => {},
     }));

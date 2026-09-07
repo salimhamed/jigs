@@ -1,5 +1,5 @@
-import { CliError } from "../errors.ts";
-import { type ServiceDeps, serviceFetch } from "./service.ts";
+import { JigsError } from "../errors.ts";
+import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 // An HTTP client of the service (ADR 0008): the registry and the run states
 // the sweep joins against live in the service's process, not the shell's.
@@ -33,7 +33,7 @@ export interface SweepResult {
   removedDirs: string[];
 }
 
-export async function sweepWorktrees(
+export async function runSweep(
   deps: SweepDeps,
   options: SweepOptions = {},
 ): Promise<SweepResult> {
@@ -98,7 +98,7 @@ async function postSweep(
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    throw new CliError(`sweep failed: HTTP ${res.status} ${await res.text()}`);
+    throw new JigsError(`sweep failed: HTTP ${res.status} ${await res.text()}`);
   }
   return (await res.json()) as SweepResult;
 }

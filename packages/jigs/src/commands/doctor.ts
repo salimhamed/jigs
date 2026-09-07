@@ -1,6 +1,6 @@
 import type { CheckReport } from "../checks/catalog.ts";
-import { CliError } from "../errors.ts";
-import { type ServiceDeps, serviceFetch } from "./service.ts";
+import { JigsError } from "../errors.ts";
+import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 // An HTTP client of the service (ADR 0008), deliberately not a local run of
 // the catalog: the checks must execute in the environment steps run in, and
@@ -9,7 +9,9 @@ import { type ServiceDeps, serviceFetch } from "./service.ts";
 export async function runDoctor(deps: ServiceDeps): Promise<CheckReport> {
   const res = await serviceFetch(deps.serviceUrl, "/api/doctor");
   if (!res.ok) {
-    throw new CliError(`doctor failed: HTTP ${res.status} ${await res.text()}`);
+    throw new JigsError(
+      `doctor failed: HTTP ${res.status} ${await res.text()}`,
+    );
   }
   const report = (await res.json()) as CheckReport;
 
@@ -24,7 +26,7 @@ export async function runDoctor(deps: ServiceDeps): Promise<CheckReport> {
     deps.out(`  → ${check.repair}`);
   }
   if (failures > 0) {
-    throw new CliError(`doctor found ${failures} problem(s)`);
+    throw new JigsError(`doctor found ${failures} problem(s)`);
   }
   return report;
 }

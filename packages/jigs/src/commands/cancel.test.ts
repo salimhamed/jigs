@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { CliError } from "../errors.ts";
+import type { JigsError } from "../errors.ts";
 import { cancelRun } from "./cancel.ts";
 
 const fetchMock = vi.fn();
@@ -51,7 +51,7 @@ const suspended = {
 const failure = (promise: Promise<unknown>) =>
   promise.then(
     () => null,
-    (err: unknown) => err as CliError,
+    (err: unknown) => err as JigsError,
   );
 
 test("a suspended run cancels with no confirmation prompt", async () => {

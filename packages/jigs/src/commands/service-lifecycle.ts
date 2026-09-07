@@ -16,7 +16,7 @@ import {
   resolveService,
 } from "../config/factory-config.ts";
 import { locateFactoryRoot } from "../config/factory-root.ts";
-import { CliError } from "../errors.ts";
+import { JigsError } from "../errors.ts";
 import { stringEnv } from "../harnesses/env.ts";
 import { jigsDataDir } from "../paths.ts";
 
@@ -173,7 +173,7 @@ export async function startService(
 
   const entry = path.join(factoryRoot, SERVICE_ENTRY);
   if (!existsSync(entry)) {
-    throw new CliError(
+    throw new JigsError(
       `no built service at ${entry}`,
       `build this factory's service first: jigs build in ${factoryRoot}`,
     );
@@ -188,7 +188,7 @@ export async function startService(
     logPath: logFile,
   });
   if (pid === undefined) {
-    throw new CliError(
+    throw new JigsError(
       `the service process for ${slug} did not start`,
       `check ${logFile}`,
     );
@@ -216,7 +216,7 @@ export async function awaitServiceReady(
   const { slug, serviceUrl } = resolveService(locateFactoryRoot(deps.cwd));
   const pid = readPid(slug);
   if (pid === undefined) {
-    throw new CliError(`not running: ${slug}`, "start it: jigs service start");
+    throw new JigsError(`not running: ${slug}`, "start it: jigs service start");
   }
   if (!processes.signal(pid, 0)) throw failedBoot(slug, pid, out);
   await awaitReady(deps, slug, serviceUrl, pid);
@@ -249,7 +249,7 @@ async function awaitReady(
     }
     if (!processes.signal(pid, 0)) throw failedBoot(slug, pid, out);
     if (Date.now() >= deadline) {
-      throw new CliError(
+      throw new JigsError(
         `the ${slug} service is still booting after ${startTimeoutMs / 1000}s — pid ${pid} is still running${phase === undefined ? "" : ` (${phase})`}`,
         `it clones every binding before the World starts — watch jigs service logs (${serviceLogPath(slug)}); jigs service stop ends it`,
       );
@@ -265,11 +265,11 @@ function failedBoot(
   slug: string,
   pid: number,
   out: (line: string) => void,
-): CliError {
+): JigsError {
   const logFile = serviceLogPath(slug);
   for (const line of tailLines(logFile, LOG_LINES)) out(line);
   rmSync(servicePidfilePath(slug), { force: true });
-  return new CliError(
+  return new JigsError(
     `the ${slug} service exited during boot (pid ${pid})`,
     `its log says why: jigs service logs (${logFile})`,
   );
@@ -358,7 +358,7 @@ export function serviceLogs(
   const { slug } = resolveService(locateFactoryRoot(deps.cwd));
   const file = serviceLogPath(slug);
   if (!existsSync(file)) {
-    throw new CliError(
+    throw new JigsError(
       `no service log at ${file}`,
       `this factory's service has not run yet: jigs service start`,
     );

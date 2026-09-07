@@ -3,7 +3,7 @@ import { cpSync, existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { globSync } from "tinyglobby";
 import type { Binding } from "../config/factory-config.ts";
-import { CliError } from "../errors.ts";
+import { JigsError } from "../errors.ts";
 
 // Provisioning ports .worktreerc.yml semantics (ADR 0007): gitignore-blind
 // disk globs that must match dotfiles, a directory match copying its whole
@@ -87,7 +87,7 @@ function assertInsideCopyDir(
     !isInside(sourceDir, relative) ||
     !isInside(worktreePath, relative)
   ) {
-    throw new CliError(
+    throw new JigsError(
       `binding ${bindingName}: copy entry ${entry} must be a relative path inside ${copyDir}/`,
       `copy entries are relative to ${copyDir}/ in the factory repo and land at the same path in the worktree`,
     );
