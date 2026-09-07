@@ -96,9 +96,9 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   return { created, skipped, ...ports };
 }
 
-// Two factories on one machine must not fight over a port or a container. The
-// offset is derived from the factory's path, so a factory always gets the
-// same pair back.
+// A starting point a factory always gets back, since the offset is derived
+// from its path. Two factories can still land on the same offset, and the
+// operator edits the ports from there.
 function factoryPorts(factoryRoot: string): {
   servicePort: number;
   dashboardPort: number;
