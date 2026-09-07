@@ -1,4 +1,11 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { JigsError } from "../errors.ts";
@@ -15,10 +22,12 @@ import {
   restartService,
   runningBundleHash,
   SERVICE_ENTRY,
+  serviceBehindSources,
   serviceLogPath,
   serviceLogs,
   servicePidfilePath,
   serviceStatus,
+  stalePipelineSources,
   startService,
   stopService,
 } from "./service-lifecycle.ts";
@@ -184,6 +193,105 @@ test("start records which bundle the process runs, and a dead pid runs none", as
   expect(runningBundleHash(deps(root, io))).not.toBe(builtBundleHash(root));
   io.alive.clear();
   expect(runningBundleHash(deps(root, io))).toBeUndefined();
+});
+
+// Mtimes are set outright rather than by write order: a whole test's writes
+// can land in one filesystem tick, and the question here is strictly which
+// side of the build a source falls on. `touchFile` is a plain edit; `touch`
+// puts the containing directories on the same side, the way creating a file
+// there would.
+function touchFile(root: string, relative: string, offsetMs: number): void {
+  const file = path.join(root, relative);
+  mkdirSync(path.dirname(file), { recursive: true });
+  if (!existsSync(file)) writeFileSync(file, "");
+  const when = new Date(Date.now() + offsetMs);
+  utimesSync(file, when, when);
+}
+
+function touch(root: string, relative: string, offsetMs: number): void {
+  touchFile(root, relative, offsetMs);
+  const when = new Date(Date.now() + offsetMs);
+  for (
+    let dir = path.dirname(path.join(root, relative));
+    dir !== root;
+    dir = path.dirname(dir)
+  ) {
+    utimesSync(dir, when, when);
+  }
+}
+
+test("only the sources edited since the build are named stale", () => {
+  const root = builtFactory();
+  touch(root, SERVICE_ENTRY, 0);
+  touch(root, "steps/jigs.ts", -60_000);
+  touch(root, "jigs.config.ts", 60_000);
+  touch(root, "pipelines/nested/ship.ts", 60_000);
+
+  expect(stalePipelineSources(root)).toEqual(["jigs.config.ts", "pipelines"]);
+});
+
+test("a build newer than every source is stale in nothing", () => {
+  const root = builtFactory();
+  touch(root, "jigs.config.ts", -60_000);
+  touch(root, "pipelines/ship.ts", -60_000);
+  touch(root, SERVICE_ENTRY, 0);
+
+  expect(stalePipelineSources(root)).toEqual([]);
+});
+
+test("a factory with no build at all is not stale — it is unbuilt", () => {
+  const root = makeFactoryRepo(tmp, "");
+  touch(root, "jigs.config.ts", 60_000);
+
+  expect(stalePipelineSources(root)).toEqual([]);
+});
+
+test("a test file beside a pipeline is in no bundle, so editing one stales nothing", () => {
+  const root = builtFactory();
+  touch(root, "pipelines/ship.test.ts", -60_000);
+  touch(root, SERVICE_ENTRY, 0);
+  touchFile(root, "pipelines/ship.test.ts", 60_000);
+
+  expect(stalePipelineSources(root)).toEqual([]);
+});
+
+test("a rename that carries the old mtime along is stale by its directory", () => {
+  const root = builtFactory();
+  touch(root, "pipelines/ship.ts", -60_000);
+  touch(root, SERVICE_ENTRY, -30_000);
+  renameSync(
+    path.join(root, "pipelines/ship.ts"),
+    path.join(root, "pipelines/deliver.ts"),
+  );
+
+  expect(stalePipelineSources(root)).toEqual(["pipelines"]);
+});
+
+test("a build the running service never picked up is behind the sources too", async () => {
+  const root = builtFactory();
+  const io = fake();
+  await startService(deps(root, io));
+  expect(serviceBehindSources(deps(root, io))).toBeUndefined();
+
+  writeFileSync(path.join(root, SERVICE_ENTRY), "rebuilt");
+
+  expect(serviceBehindSources(deps(root, io))).toContain("earlier bundle");
+});
+
+test("an edit nobody built outranks the bundle the service booted from", async () => {
+  const root = builtFactory();
+  const io = fake();
+  await startService(deps(root, io));
+  touch(root, "jigs.config.ts", 60_000);
+
+  expect(serviceBehindSources(deps(root, io))).toContain("jigs.config.ts");
+});
+
+test("an unbuilt factory is behind nothing — there is no bundle to be behind", () => {
+  const root = makeFactoryRepo(tmp, "");
+  touch(root, "jigs.config.ts", 60_000);
+
+  expect(serviceBehindSources(deps(root, fake()))).toBeUndefined();
 });
 
 test("two factories supervise independently", async () => {

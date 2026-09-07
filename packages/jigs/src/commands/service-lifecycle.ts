@@ -5,8 +5,10 @@ import {
   existsSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
@@ -99,14 +101,66 @@ export function builtBundleHash(factoryRoot: string): string | undefined {
   return createHash("sha256").update(readFileSync(entry)).digest("hex");
 }
 
-export function runningBundleHash(
-  deps: ServiceLifecycleDeps,
-): string | undefined {
+// What `jigs build` compiles into the bundle. An edit to one of them that was
+// never built is invisible at run time: the service keeps executing the bundle
+// it booted from.
+const PIPELINE_SOURCES = ["jigs.config.ts", "pipelines", "steps"];
+
+// A test file beside a pipeline is compiled into no bundle, so editing one
+// leaves the build current.
+const NOT_COMPILED = /\.(test|spec)\.[cm]?tsx?$/;
+
+// Empty when the factory has no bundle at all — an unbuilt factory, not a
+// build gone stale.
+export function stalePipelineSources(factoryRoot: string): string[] {
+  const entry = path.join(factoryRoot, SERVICE_ENTRY);
+  if (!existsSync(entry)) return [];
+  const builtAt = statSync(entry).mtimeMs;
+  return PIPELINE_SOURCES.filter((source) =>
+    newerThan(path.join(factoryRoot, source), builtAt),
+  );
+}
+
+function newerThan(target: string, builtAt: number): boolean {
+  if (!existsSync(target)) return false;
+  const stat = statSync(target);
+  if (!stat.isDirectory()) return stat.mtimeMs > builtAt;
+  // The directory's own mtime counts too: a delete, or a rename that carries
+  // the old file's mtime along, leaves no newer file behind.
+  if (stat.mtimeMs > builtAt) return true;
+  return readdirSync(target, { recursive: true, withFileTypes: true }).some(
+    (entry) =>
+      (entry.isFile() || entry.isDirectory()) &&
+      !NOT_COMPILED.test(entry.name) &&
+      statSync(path.join(entry.parentPath, entry.name)).mtimeMs > builtAt,
+  );
+}
+
+type BundleDeps = Pick<ServiceLifecycleDeps, "cwd" | "processes">;
+
+export function runningBundleHash(deps: BundleDeps): string | undefined {
   const { processes = nodeProcesses } = deps;
   const { slug } = resolveService(locateFactoryRoot(deps.cwd));
   if (livePid(slug, processes) === undefined) return undefined;
   const file = serviceBundlePath(slug);
   return existsSync(file) ? readFileSync(file, "utf8").trim() : undefined;
+}
+
+// Why a run launched now would not execute the sources on disk: the bundle is
+// behind them, or the running process is behind the bundle — a build nobody
+// restarted onto. Undefined for an unbuilt factory.
+export function serviceBehindSources(deps: BundleDeps): string | undefined {
+  const factoryRoot = locateFactoryRoot(deps.cwd);
+  if (!existsSync(path.join(factoryRoot, SERVICE_ENTRY))) return undefined;
+  const stale = stalePipelineSources(factoryRoot);
+  if (stale.length > 0) {
+    return `${stale.join(", ")} newer than the built service`;
+  }
+  const running = runningBundleHash(deps);
+  if (running !== undefined && running !== builtBundleHash(factoryRoot)) {
+    return "the service is running an earlier bundle than the one built";
+  }
+  return undefined;
 }
 
 function readPid(slug: string): number | undefined {

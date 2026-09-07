@@ -103,12 +103,14 @@ From here every `jigs` is the factory's own: `pnpm exec jigs …` (or
 
 ```sh
 pnpm exec jigs bind git@github.com:owner/repo.git
-pnpm exec jigs service restart
+pnpm exec jigs up --restart
 ```
 
 A **binding** maps a name to a target repo's remote URL plus how its worktrees
 are provisioned; jigs keeps its own clone per binding and cuts agent worktrees
-from it. The service makes the clones when it starts, hence the restart.
+from it. The service makes the clones when it starts, and a binding is no
+change to the bundle, so `--restart` is what asks `jigs up` for the restart it
+would otherwise skip.
 
 ### 6. Run
 

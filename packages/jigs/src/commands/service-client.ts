@@ -11,12 +11,20 @@ export interface ServiceDeps {
   out: (line: string) => void;
 }
 
+// `JIGS_SERVICE_URL=` reaches commander as an empty string, which names no
+// service at all: the factory the user is standing in owns the run either way.
+export function usesFactoryService(
+  explicit?: string,
+): explicit is undefined | "" {
+  return explicit === undefined || explicit === "";
+}
+
 // An explicit --service / JIGS_SERVICE_URL wins; otherwise the factory the
 // user is standing in names its own service. Call this from inside a command
 // action, never from a commander `.default()` — the filesystem walk here
 // would then run on `jigs --help`, outside any factory repo.
 export function resolveServiceUrl(cwd: string, explicit?: string): string {
-  if (explicit !== undefined && explicit !== "") return explicit;
+  if (!usesFactoryService(explicit)) return explicit;
   return resolveService(locateFactoryRoot(cwd)).serviceUrl;
 }
 

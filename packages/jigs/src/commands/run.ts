@@ -2,6 +2,15 @@ import { z } from "zod";
 import { type CheckReport, formatFailures } from "../checks/catalog.ts";
 import { JigsError } from "../errors.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
+import { serviceBehindSources } from "./service-lifecycle.ts";
+
+export interface LaunchDeps extends ServiceDeps {
+  // Set only when the run goes to the local factory's own service, so the
+  // freshness warning speaks about the sources that service was built from.
+  // An explicit --service is some other factory's, and this factory's sources
+  // say nothing about it.
+  factoryCwd?: string;
+}
 
 export interface LaunchResult {
   runId: string;
@@ -95,9 +104,13 @@ function schemaIssues(raw: string): SchemaIssue[] | null {
 export async function launchRun(
   pipeline: string,
   pairs: string[],
-  deps: ServiceDeps,
+  deps: LaunchDeps,
 ): Promise<LaunchResult> {
   const inputs = parseInputs(pairs);
+  // Ahead of the schema fetch: a pipeline the bundle does not have and an
+  // input its schema does not have are the loudest symptoms of a stale build,
+  // and both are fatal below.
+  reportStaleBundle(deps);
 
   // Client-side first: a schema violation must cost no run. The factory owns
   // the schema, so the CLI fetches it rather than keeping a second copy.
@@ -156,4 +169,21 @@ export async function launchRun(
   deps.out(`pipeline ${result.pipeline}`);
   deps.out(`logs: ${result.logs}`);
   return result;
+}
+
+// A warning, not a refusal: the previous bundle is still a pipeline, and the
+// operator may well mean to run it.
+function reportStaleBundle(deps: LaunchDeps): void {
+  if (deps.factoryCwd === undefined) return;
+  let behind: string | undefined;
+  try {
+    behind = serviceBehindSources({ cwd: deps.factoryCwd });
+  } catch {
+    // A file that moved while the sources were being read is no reason to
+    // lose the launch.
+    return;
+  }
+  if (behind === undefined) return;
+  deps.out(`warning: ${behind} — this run executes the previous bundle`);
+  deps.out("bring the service up to the sources first: jigs up");
 }

@@ -11,7 +11,10 @@ import { showLogs } from "./commands/logs.ts";
 import { pokeRun } from "./commands/poke.ts";
 import { showRuns } from "./commands/ps.ts";
 import { launchRun } from "./commands/run.ts";
-import { resolveServiceUrl } from "./commands/service-client.ts";
+import {
+  resolveServiceUrl,
+  usesFactoryService,
+} from "./commands/service-client.ts";
 import {
   restartService,
   serviceLogs,
@@ -160,6 +163,9 @@ program
     ) => {
       await launchRun(pipeline, options.input, {
         out,
+        factoryCwd: usesFactoryService(options.service)
+          ? process.cwd()
+          : undefined,
         serviceUrl: serviceUrl(options.service),
       });
     },
