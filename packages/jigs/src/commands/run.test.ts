@@ -1,18 +1,25 @@
+import { mkdirSync, utimesSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { JigsError } from "../errors.ts";
+import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { launchRun, parseInputs, validateInputs } from "./run.ts";
+import { SERVICE_ENTRY } from "./service-lifecycle.ts";
 
 const fetchMock = vi.fn();
 let lines: string[];
+let tmp: string;
 
 beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
   fetchMock.mockReset();
   lines = [];
+  tmp = makeTmpDir();
 });
 afterEach(() => {
   vi.unstubAllGlobals();
+  removeTmpDir(tmp);
 });
 
 const deps = () => ({
@@ -34,6 +41,31 @@ const respondSchema = () =>
       JSON.stringify({ name: "deliver-feature", inputs: inputsSchema }),
     ),
   );
+
+const respondStarted = () =>
+  fetchMock.mockResolvedValueOnce(
+    new Response(
+      JSON.stringify({
+        runId: "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
+        pipeline: "deliver-feature",
+        logs: "http://localhost:9090/run/wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
+      }),
+      { status: 201 },
+    ),
+  );
+
+// A factory whose build lands `offsetMs` after its sources: negative for the
+// edit `jigs up` has yet to pick up.
+function factoryBuilt(offsetMs: number): string {
+  const root = makeFactoryRepo(tmp);
+  writeFileSync(path.join(root, "jigs.config.ts"), "");
+  const entry = path.join(root, SERVICE_ENTRY);
+  mkdirSync(path.dirname(entry), { recursive: true });
+  writeFileSync(entry, "");
+  const built = new Date(Date.now() + offsetMs);
+  utimesSync(entry, built, built);
+  return root;
+}
 
 const failure = (promise: Promise<unknown>) =>
   promise.then(
@@ -243,4 +275,42 @@ test("an unreachable service surfaces the shared unreachable error", async () =>
   fetchMock.mockRejectedValueOnce(new TypeError("fetch failed"));
   const err = await failure(launchRun("deliver-feature", [], deps()));
   expect(err?.message).toContain("http://svc.test:8990");
+});
+
+test("a run launched over sources newer than the build says so, and still launches", async () => {
+  respondSchema();
+  respondStarted();
+
+  await launchRun("deliver-feature", ["ticket=AGE-346"], {
+    ...deps(),
+    cwd: factoryBuilt(-60_000),
+  });
+
+  expect(lines[0]).toContain("jigs.config.ts newer than the built service");
+  expect(lines[1]).toContain("jigs up");
+  expect(lines).toContain("run wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM");
+});
+
+test("a build newer than the sources launches without a word about it", async () => {
+  respondSchema();
+  respondStarted();
+
+  await launchRun("deliver-feature", ["ticket=AGE-346"], {
+    ...deps(),
+    cwd: factoryBuilt(60_000),
+  });
+
+  expect(lines[0]).toBe("run wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM");
+});
+
+test("a launch from outside any factory has no sources to be stale", async () => {
+  respondSchema();
+  respondStarted();
+
+  await launchRun("deliver-feature", ["ticket=AGE-346"], {
+    ...deps(),
+    cwd: tmp,
+  });
+
+  expect(lines[0]).toBe("run wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM");
 });

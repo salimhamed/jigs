@@ -5,8 +5,10 @@ import {
   existsSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
@@ -97,6 +99,33 @@ export function builtBundleHash(factoryRoot: string): string | undefined {
   const entry = path.join(factoryRoot, SERVICE_ENTRY);
   if (!existsSync(entry)) return undefined;
   return createHash("sha256").update(readFileSync(entry)).digest("hex");
+}
+
+// What `jigs build` compiles into the bundle. An edit to one of them that was
+// never built is invisible at run time: the service keeps executing the bundle
+// it booted from.
+const PIPELINE_SOURCES = ["jigs.config.ts", "pipelines", "steps"];
+
+// Empty when the factory has no bundle at all — that is the unbuilt factory
+// startService refuses over, not a build gone stale.
+export function stalePipelineSources(factoryRoot: string): string[] {
+  const entry = path.join(factoryRoot, SERVICE_ENTRY);
+  if (!existsSync(entry)) return [];
+  const builtAt = statSync(entry).mtimeMs;
+  return PIPELINE_SOURCES.filter((source) =>
+    newerThan(path.join(factoryRoot, source), builtAt),
+  );
+}
+
+function newerThan(target: string, builtAt: number): boolean {
+  if (!existsSync(target)) return false;
+  const stat = statSync(target);
+  if (!stat.isDirectory()) return stat.mtimeMs > builtAt;
+  return readdirSync(target, { recursive: true, withFileTypes: true }).some(
+    (entry) =>
+      entry.isFile() &&
+      statSync(path.join(entry.parentPath, entry.name)).mtimeMs > builtAt,
+  );
 }
 
 export function runningBundleHash(

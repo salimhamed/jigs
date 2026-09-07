@@ -160,6 +160,7 @@ program
     ) => {
       await launchRun(pipeline, options.input, {
         out,
+        cwd: process.cwd(),
         serviceUrl: serviceUrl(options.service),
       });
     },

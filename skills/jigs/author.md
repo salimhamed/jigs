@@ -126,8 +126,8 @@ own name: the pipeline it fires, a five-field cron read in the service host's
 local time, and the static inputs to fire it with. Those inputs are typed
 against the pipeline's schema, so a wrong field is a compile error. A tick whose
 last run is still active is skipped; a tick missed while the service was down is
-not made up. `pnpm exec jigs build` then `jigs service restart` to pick it up,
-and `jigs ps` then lists it.
+not made up. `pnpm exec jigs up` builds it and restarts the service onto what
+it built, and `jigs ps` then lists it.
 
 ## After every change
 

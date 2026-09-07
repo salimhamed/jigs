@@ -1,4 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { JigsError } from "../errors.ts";
@@ -19,6 +25,7 @@ import {
   serviceLogs,
   servicePidfilePath,
   serviceStatus,
+  stalePipelineSources,
   startService,
   stopService,
 } from "./service-lifecycle.ts";
@@ -184,6 +191,43 @@ test("start records which bundle the process runs, and a dead pid runs none", as
   expect(runningBundleHash(deps(root, io))).not.toBe(builtBundleHash(root));
   io.alive.clear();
   expect(runningBundleHash(deps(root, io))).toBeUndefined();
+});
+
+// Mtimes are set outright rather than by write order: a whole test's writes
+// can land in one filesystem tick, and the question here is strictly which
+// side of the build a source falls on.
+function touch(root: string, relative: string, offsetMs: number): void {
+  const file = path.join(root, relative);
+  mkdirSync(path.dirname(file), { recursive: true });
+  if (!existsSync(file)) writeFileSync(file, "");
+  const when = new Date(Date.now() + offsetMs);
+  utimesSync(file, when, when);
+}
+
+test("only the sources edited since the build are named stale", () => {
+  const root = builtFactory();
+  touch(root, SERVICE_ENTRY, 0);
+  touch(root, "jigs.config.ts", 60_000);
+  touch(root, "pipelines/nested/ship.ts", 60_000);
+  touch(root, "steps/jigs.ts", -60_000);
+
+  expect(stalePipelineSources(root)).toEqual(["jigs.config.ts", "pipelines"]);
+});
+
+test("a build newer than every source is stale in nothing", () => {
+  const root = builtFactory();
+  touch(root, "jigs.config.ts", -60_000);
+  touch(root, "pipelines/ship.ts", -60_000);
+  touch(root, SERVICE_ENTRY, 0);
+
+  expect(stalePipelineSources(root)).toEqual([]);
+});
+
+test("a factory with no build at all is not stale — it is unbuilt", () => {
+  const root = makeFactoryRepo(tmp, "");
+  touch(root, "jigs.config.ts", 60_000);
+
+  expect(stalePipelineSources(root)).toEqual([]);
 });
 
 test("two factories supervise independently", async () => {

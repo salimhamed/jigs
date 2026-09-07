@@ -1,7 +1,15 @@
 import { z } from "zod";
 import { type CheckReport, formatFailures } from "../checks/catalog.ts";
+import { locateFactoryRoot } from "../config/factory-root.ts";
 import { JigsError } from "../errors.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
+import { stalePipelineSources } from "./service-lifecycle.ts";
+
+export interface LaunchDeps extends ServiceDeps {
+  // Where the launch was typed, so a run against a bundle older than the
+  // sources can say so. Omitted when the caller is not standing in a factory.
+  cwd?: string;
+}
 
 export interface LaunchResult {
   runId: string;
@@ -95,7 +103,7 @@ function schemaIssues(raw: string): SchemaIssue[] | null {
 export async function launchRun(
   pipeline: string,
   pairs: string[],
-  deps: ServiceDeps,
+  deps: LaunchDeps,
 ): Promise<LaunchResult> {
   const inputs = parseInputs(pairs);
 
@@ -123,6 +131,7 @@ export async function launchRun(
     inputs: z.core.JSONSchema.BaseSchema;
   };
   validateInputs(schema, inputs);
+  reportStaleBundle(deps);
 
   const res = await serviceFetch(
     deps.serviceUrl,
@@ -156,4 +165,24 @@ export async function launchRun(
   deps.out(`pipeline ${result.pipeline}`);
   deps.out(`logs: ${result.logs}`);
   return result;
+}
+
+// A warning, not a refusal: the previous bundle is still a pipeline, and the
+// operator may well mean to run it. `jigs up` is both halves of the fix — it
+// rebuilds, and restarts the service onto what it built.
+function reportStaleBundle(deps: LaunchDeps): void {
+  if (deps.cwd === undefined) return;
+  let stale: string[];
+  try {
+    stale = stalePipelineSources(locateFactoryRoot(deps.cwd));
+  } catch {
+    // Launching against a --service from outside any factory: no sources here
+    // to be newer than anything.
+    return;
+  }
+  if (stale.length === 0) return;
+  deps.out(
+    `warning: ${stale.join(", ")} newer than the built service — this run executes the previous bundle`,
+  );
+  deps.out("bring the service up to the sources first: jigs up");
 }
