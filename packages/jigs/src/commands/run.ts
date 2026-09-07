@@ -107,6 +107,10 @@ export async function launchRun(
   deps: LaunchDeps,
 ): Promise<LaunchResult> {
   const inputs = parseInputs(pairs);
+  // Ahead of the schema fetch: a pipeline the bundle does not have and an
+  // input its schema does not have are the loudest symptoms of a stale build,
+  // and both are fatal below.
+  reportStaleBundle(deps);
 
   // Client-side first: a schema violation must cost no run. The factory owns
   // the schema, so the CLI fetches it rather than keeping a second copy.
@@ -132,7 +136,6 @@ export async function launchRun(
     inputs: z.core.JSONSchema.BaseSchema;
   };
   validateInputs(schema, inputs);
-  reportStaleBundle(deps);
 
   const res = await serviceFetch(
     deps.serviceUrl,
@@ -172,10 +175,14 @@ export async function launchRun(
 // operator may well mean to run it.
 function reportStaleBundle(deps: LaunchDeps): void {
   if (deps.factoryCwd === undefined) return;
-  const behind = serviceBehindSources({
-    cwd: deps.factoryCwd,
-    out: () => {},
-  });
+  let behind: string | undefined;
+  try {
+    behind = serviceBehindSources({ cwd: deps.factoryCwd });
+  } catch {
+    // A file that moved while the sources were being read is no reason to
+    // lose the launch.
+    return;
+  }
   if (behind === undefined) return;
   deps.out(`warning: ${behind} — this run executes the previous bundle`);
   deps.out("bring the service up to the sources first: jigs up");

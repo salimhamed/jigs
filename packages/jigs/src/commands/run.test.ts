@@ -314,3 +314,28 @@ test("a run aimed at another factory's service is silent about this one's source
 
   expect(lines[0]).toBe("run wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM");
 });
+
+test("a pipeline the bundle does not have yet hears about the stale build first", async () => {
+  fetchMock.mockResolvedValueOnce(
+    new Response(JSON.stringify({ knownPipelines: ["ship"] }), { status: 404 }),
+  );
+
+  const err = await failure(
+    launchRun("triage", [], { ...deps(), factoryCwd: factoryBuilt(-60_000) }),
+  );
+
+  expect(lines[0]).toContain("jigs.config.ts newer than the built service");
+  expect(err?.message).toContain("unknown pipeline: triage");
+});
+
+test("a freshness check that cannot read the factory costs no run", async () => {
+  respondSchema();
+  respondStarted();
+
+  await launchRun("deliver-feature", ["ticket=AGE-346"], {
+    ...deps(),
+    factoryCwd: tmp,
+  });
+
+  expect(lines[0]).toBe("run wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM");
+});

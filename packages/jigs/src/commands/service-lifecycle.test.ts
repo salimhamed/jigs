@@ -2,6 +2,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  renameSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
@@ -196,8 +197,10 @@ test("start records which bundle the process runs, and a dead pid runs none", as
 
 // Mtimes are set outright rather than by write order: a whole test's writes
 // can land in one filesystem tick, and the question here is strictly which
-// side of the build a source falls on.
-function touch(root: string, relative: string, offsetMs: number): void {
+// side of the build a source falls on. `touchFile` is a plain edit; `touch`
+// puts the containing directories on the same side, the way creating a file
+// there would.
+function touchFile(root: string, relative: string, offsetMs: number): void {
   const file = path.join(root, relative);
   mkdirSync(path.dirname(file), { recursive: true });
   if (!existsSync(file)) writeFileSync(file, "");
@@ -205,12 +208,24 @@ function touch(root: string, relative: string, offsetMs: number): void {
   utimesSync(file, when, when);
 }
 
+function touch(root: string, relative: string, offsetMs: number): void {
+  touchFile(root, relative, offsetMs);
+  const when = new Date(Date.now() + offsetMs);
+  for (
+    let dir = path.dirname(path.join(root, relative));
+    dir !== root;
+    dir = path.dirname(dir)
+  ) {
+    utimesSync(dir, when, when);
+  }
+}
+
 test("only the sources edited since the build are named stale", () => {
   const root = builtFactory();
   touch(root, SERVICE_ENTRY, 0);
+  touch(root, "steps/jigs.ts", -60_000);
   touch(root, "jigs.config.ts", 60_000);
   touch(root, "pipelines/nested/ship.ts", 60_000);
-  touch(root, "steps/jigs.ts", -60_000);
 
   expect(stalePipelineSources(root)).toEqual(["jigs.config.ts", "pipelines"]);
 });
@@ -233,10 +248,23 @@ test("a factory with no build at all is not stale — it is unbuilt", () => {
 
 test("a test file beside a pipeline is in no bundle, so editing one stales nothing", () => {
   const root = builtFactory();
+  touch(root, "pipelines/ship.test.ts", -60_000);
   touch(root, SERVICE_ENTRY, 0);
-  touch(root, "pipelines/ship.test.ts", 60_000);
+  touchFile(root, "pipelines/ship.test.ts", 60_000);
 
   expect(stalePipelineSources(root)).toEqual([]);
+});
+
+test("a rename that carries the old mtime along is stale by its directory", () => {
+  const root = builtFactory();
+  touch(root, "pipelines/ship.ts", -60_000);
+  touch(root, SERVICE_ENTRY, -30_000);
+  renameSync(
+    path.join(root, "pipelines/ship.ts"),
+    path.join(root, "pipelines/deliver.ts"),
+  );
+
+  expect(stalePipelineSources(root)).toEqual(["pipelines"]);
 });
 
 test("a build the running service never picked up is behind the sources too", async () => {

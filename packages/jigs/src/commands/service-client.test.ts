@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { JigsError } from "../errors.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
-import { resolveServiceUrl, serviceFetch } from "./service-client.ts";
+import {
+  resolveServiceUrl,
+  serviceFetch,
+  usesFactoryService,
+} from "./service-client.ts";
 
 let tmp: string;
 
@@ -31,6 +35,17 @@ test("without an explicit url the factory the user stands in names its service",
     "service:\n  port: 9100\n  dashboard_port: 9200\n",
   );
   expect(resolveServiceUrl(factory)).toBe("http://localhost:9100");
+});
+
+// One rule decides both where the run goes and whose sources the freshness
+// warning speaks about, so `JIGS_SERVICE_URL=` has to read as unset in both.
+test("an empty --service / JIGS_SERVICE_URL names no service at all", () => {
+  const factory = makeFactoryRepo(
+    tmp,
+    "service:\n  port: 9100\n  dashboard_port: 9200\n",
+  );
+  expect(usesFactoryService("")).toBe(true);
+  expect(resolveServiceUrl(factory, "")).toBe("http://localhost:9100");
 });
 
 test("a factory with no service block keeps the historic port", () => {

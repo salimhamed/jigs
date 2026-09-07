@@ -135,6 +135,7 @@ it built, and `jigs ps` then lists it.
 pnpm typecheck
 pnpm exec jigs build     # the ids test reads the build output, not the source
 pnpm test
+pnpm exec jigs up        # until this, the service still serves the old bundle
 ```
 
 ## Never

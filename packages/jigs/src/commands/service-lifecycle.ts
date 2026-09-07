@@ -125,17 +125,20 @@ function newerThan(target: string, builtAt: number): boolean {
   if (!existsSync(target)) return false;
   const stat = statSync(target);
   if (!stat.isDirectory()) return stat.mtimeMs > builtAt;
+  // The directory's own mtime counts too: a delete, or a rename that carries
+  // the old file's mtime along, leaves no newer file behind.
+  if (stat.mtimeMs > builtAt) return true;
   return readdirSync(target, { recursive: true, withFileTypes: true }).some(
     (entry) =>
-      entry.isFile() &&
+      (entry.isFile() || entry.isDirectory()) &&
       !NOT_COMPILED.test(entry.name) &&
       statSync(path.join(entry.parentPath, entry.name)).mtimeMs > builtAt,
   );
 }
 
-export function runningBundleHash(
-  deps: ServiceLifecycleDeps,
-): string | undefined {
+type BundleDeps = Pick<ServiceLifecycleDeps, "cwd" | "processes">;
+
+export function runningBundleHash(deps: BundleDeps): string | undefined {
   const { processes = nodeProcesses } = deps;
   const { slug } = resolveService(locateFactoryRoot(deps.cwd));
   if (livePid(slug, processes) === undefined) return undefined;
@@ -145,20 +148,16 @@ export function runningBundleHash(
 
 // Why a run launched now would not execute the sources on disk: the bundle is
 // behind them, or the running process is behind the bundle — a build nobody
-// restarted onto. Undefined for an unbuilt factory, which startService
-// reports in its own words.
-export function serviceBehindSources(
-  deps: ServiceLifecycleDeps,
-): string | undefined {
+// restarted onto. Undefined for an unbuilt factory.
+export function serviceBehindSources(deps: BundleDeps): string | undefined {
   const factoryRoot = locateFactoryRoot(deps.cwd);
-  const built = builtBundleHash(factoryRoot);
-  if (built === undefined) return undefined;
+  if (!existsSync(path.join(factoryRoot, SERVICE_ENTRY))) return undefined;
   const stale = stalePipelineSources(factoryRoot);
   if (stale.length > 0) {
     return `${stale.join(", ")} newer than the built service`;
   }
   const running = runningBundleHash(deps);
-  if (running !== undefined && running !== built) {
+  if (running !== undefined && running !== builtBundleHash(factoryRoot)) {
     return "the service is running an earlier bundle than the one built";
   }
   return undefined;
