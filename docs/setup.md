@@ -458,6 +458,9 @@ pipeline's last line); every other ending leaves the tree on disk, visible in
 a louder warning for trees holding uncommitted work; without a terminal it
 only reports, and `jigs sweep --force` removes everything eligible without
 asking — dirty trees included, so it is the flag for cron, not for habit.
+Each removed line says what became of the branch: deleted when the default
+branch already contains it, kept — with the commit count it holds — when it is
+the only copy of unmerged work.
 
 **Recurring runs.** A pipeline can also fire on a schedule this factory
 declares beside its pipelines, in `jigs.config.ts`:

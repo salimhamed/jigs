@@ -155,3 +155,37 @@ reclaims it through `jigs sweep` — interactive per worktree on a terminal,
 report-only otherwise, `--force` as the explicit unattended yes (the old
 `--clean`/`--force` pair collapsed into it). `jigs cancel` names the worktrees
 it leaves behind. The matrix (decide/apply) is unchanged.
+
+## Amendment (2026-09-07, AGE-354)
+
+The sweep asks its `merge-base --is-ancestor` question of **every terminal
+run**, not only a completed one. The insurance rule was written for unmerged
+work, and a run cancelled before its first commit leaves a branch whose tip is
+still the fork point — a copy of nothing, one dead branch per cancellation.
+So a clean tree whose branch origin's default branch already contains now
+takes its local branch with it whether the run completed, failed, or was
+cancelled.
+
+Three limits on that:
+
+- **The remote branch stays** outside the done row. A cancelled or failed
+  run's pushed branch is somebody's open PR whatever its ancestry, and an
+  empty branch was never pushed at all.
+- **Dirty trees are unchanged.** The merged exemption that lets an untracked
+  build artifact not cost a completed run its teardown stays scoped to
+  completed; anywhere else a dirty tree is still preserved, marked
+  abandoned-dirty, and reclaimable only with `--force`.
+- **No answer means unmerged.** A failed fetch of `origin/<default>`, an
+  unresolvable default branch, or a run the World no longer knows about all
+  keep the branch: deletion needs positive evidence.
+
+Because the branch is now at stake on every ending, the sweep reports the
+outcome rather than leaving it to be discovered: each removed worktree's line
+says `branch deleted` or `branch kept` with the commits it holds, and the
+summary counts the kept ones.
+
+The decide/apply matrix itself is untouched — only which runs get asked. The
+known limitation stands unchanged: a squash-merged branch is not an ancestor
+of the default branch, so it does not pass this check and its local branch
+survives the sweep. `teardownMergedRun`, which a merged run's own pipeline
+calls, applies the merged row as a fixed recipe for exactly that reason.
