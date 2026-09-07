@@ -14,6 +14,7 @@ import {
   nodeExecFile,
 } from "../exec.ts";
 import { stringEnv } from "../harnesses/env.ts";
+import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import { buildFactoryService, type Prepare } from "./build.ts";
 import { runDoctor } from "./doctor.ts";
 import { listRunsForPs, type PsRun } from "./ps.ts";
@@ -85,14 +86,6 @@ export interface UpOptions {
 // freshly copied .env, so they are reported, not refused.
 const CREDENTIAL_SLOTS = ["LINEAR_API_KEY", "GITHUB_TOKEN"];
 const FACTORY_CODE = "jigs.config.ts";
-
-// Mirrors TERMINAL_RUN_STATUSES in ../runs.ts — the CLI reads run status off
-// the wire, and a static import would pull the service half into dist/cli.js.
-const TERMINAL_RUN_STATUSES: ReadonlySet<string> = new Set([
-  "completed",
-  "failed",
-  "cancelled",
-]);
 
 export async function upFactory(
   deps: UpDeps,

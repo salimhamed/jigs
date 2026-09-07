@@ -7,6 +7,7 @@ import { hydrateData, observabilityRevivers } from "workflow/observability";
 import { getWorld } from "workflow/runtime";
 import type { Factory } from "./factory.ts";
 import { resolveIssueRef } from "./providers/linear.ts";
+import { TERMINAL_RUN_STATUSES } from "./run-status.ts";
 import { type JobRunIds, listJobRunIds, runsWithActiveStep } from "./stalls.ts";
 import { TICKET_TOKEN_PREFIX, ticketToken } from "./suspension/claim.ts";
 import { NEEDS_HUMAN_TOKEN_PREFIX } from "./suspension/needs-human.ts";
@@ -25,12 +26,6 @@ const RUN_ID_LENGTH = RUN_ID_PREFIX.length + 26;
 // Linear round trip — every other ticket ref is already the UUID the claim is
 // keyed on, or is nothing Linear could place.
 const TICKET_IDENTIFIER = /^[A-Za-z][A-Za-z0-9]*-\d+$/;
-
-export const TERMINAL_RUN_STATUSES: ReadonlySet<string> = new Set([
-  "completed",
-  "failed",
-  "cancelled",
-]);
 
 export type RunRef =
   | { kind: "found"; runId: string }

@@ -1,13 +1,5 @@
 import { getRun } from "workflow/api";
-
-// The SDK has no `suspended` status — a parked run reads `running` — so
-// non-terminal covers live and suspended owners alike (a suspended run
-// holds its worktree).
-const TERMINAL_RUN_STATUSES: ReadonlySet<string> = new Set([
-  "completed",
-  "failed",
-  "cancelled",
-]);
+import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 
 export interface OwnerState {
   terminal: boolean;

@@ -4,9 +4,8 @@
 
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import path from "node:path";
 import { CliError } from "./errors.ts";
+import { githubWebhookSecretFile, jigsDataDir } from "./paths.ts";
 
 // Complete for the review loop: reviews, inline review comments, and CI. The
 // drift PATCH picks up a change on re-bind.
@@ -39,19 +38,10 @@ export function parseGithubRemote(url: string): GithubRepoRef | null {
   return null;
 }
 
-function defaultJigsDataDir(): string {
-  return path.join(
-    process.env.XDG_DATA_HOME ?? path.join(homedir(), ".local", "share"),
-    "jigs",
-  );
-}
-
 // One shared secret for all repo webhooks, generated on first need. The
 // service reads the same file (or its GITHUB_WEBHOOK_SECRET override).
-export function ensureWebhookSecret(
-  dataDir: string = defaultJigsDataDir(),
-): string {
-  const file = path.join(dataDir, "github-webhook-secret");
+export function ensureWebhookSecret(dataDir: string = jigsDataDir()): string {
+  const file = githubWebhookSecretFile(dataDir);
   if (existsSync(file)) {
     const existing = readFileSync(file, "utf8").trim();
     if (existing !== "") return existing;
