@@ -12,13 +12,8 @@ import {
   verifyLinearSignature,
 } from "./ingress.ts";
 import { bootPhase, isReady } from "./readiness.ts";
-import {
-  describeRun,
-  listRuns,
-  type RunRef,
-  resolveRunRef,
-  TERMINAL_RUN_STATUSES,
-} from "./runs.ts";
+import { TERMINAL_RUN_STATUSES } from "./run-status.ts";
+import { describeRun, listRuns, type RunRef, resolveRunRef } from "./runs.ts";
 import { listSchedules, scheduleChecks } from "./schedules.ts";
 import { listRunDeadJobs, listRunSteps } from "./stalls.ts";
 import { tokenFromLinearPayload } from "./suspension/claim.ts";

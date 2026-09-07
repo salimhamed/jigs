@@ -36,7 +36,6 @@ const row = (over: Partial<RunRow> = {}): RunRow => ({
   runId: RUN,
   pipeline: "sweep",
   status: "running",
-  terminal: false,
   trigger: "schedule:nightly",
   createdAt: "2026-08-26T03:00:00.000Z",
   ...over,
@@ -191,7 +190,7 @@ test("a terminal run of the same schedule does not block the next fire", async (
   const triggerIds: string[] = [];
   await fireSchedule(nightly, "nightly", nightlySchedule, {
     listRuns: async () => [
-      row({ status: "completed", terminal: true }),
+      row({ status: "completed" }),
       // Another schedule's run in flight is not this schedule's business.
       row({ trigger: "schedule:weekly" }),
       row({ trigger: "manual" }),

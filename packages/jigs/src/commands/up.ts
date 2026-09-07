@@ -14,6 +14,7 @@ import {
   nodeExecFile,
 } from "../exec.ts";
 import { stringEnv } from "../harnesses/env.ts";
+import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import { buildFactoryService, type Prepare } from "./build.ts";
 import { runDoctor } from "./doctor.ts";
 import { listRunsForPs, type PsRun } from "./ps.ts";
@@ -386,5 +387,5 @@ async function listRunsInFlight(factoryRoot: string): Promise<PsRun[]> {
   } catch {
     return [];
   }
-  return runs.filter((run) => !run.terminal);
+  return runs.filter((run) => !TERMINAL_RUN_STATUSES.has(run.status));
 }

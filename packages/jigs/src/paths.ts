@@ -9,6 +9,8 @@ export function jigsDataDir(): string {
 }
 
 // `jigs bind` writes it, the ingress reads it; both name the file from here.
-export function githubWebhookSecretFile(dataDir: string = jigsDataDir()) {
+export function githubWebhookSecretFile(
+  dataDir: string = jigsDataDir(),
+): string {
   return path.join(dataDir, "github-webhook-secret");
 }

@@ -482,14 +482,7 @@ test("without a typecheck script the step is skipped and says so", async () => {
 
 test("--force and --no-doctor reach up", async () => {
   const port = await fakeService({
-    runs: [
-      {
-        runId: "wrun_01",
-        pipeline: "ship",
-        status: "suspended",
-        terminal: false,
-      },
-    ],
+    runs: [{ runId: "wrun_01", pipeline: "ship", status: "suspended" }],
   });
   const root = factory(port);
   const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };

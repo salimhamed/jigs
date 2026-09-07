@@ -3,7 +3,6 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 import type { ExecFile, ExecOptions } from "../exec.ts";
-import type { PsRun } from "./ps.ts";
 import {
   SERVICE_ENTRY,
   type ServiceProcesses,
@@ -134,7 +133,7 @@ export function fakeProcesses(): FakeProcesses {
 
 export interface ServiceRoutes {
   health?: number;
-  runs?: Array<Pick<PsRun, "runId" | "pipeline" | "status" | "terminal">>;
+  runs?: Array<{ runId: string; pipeline: string; status: string }>;
   doctor?: { ok: boolean; checks: unknown[] };
 }
 

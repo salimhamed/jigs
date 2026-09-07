@@ -6,7 +6,6 @@ export interface PsRun {
   runId: string;
   pipeline: string;
   status: string;
-  terminal: boolean;
   trigger: string;
   createdAt: string;
 }
