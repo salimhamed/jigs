@@ -11,7 +11,7 @@ import {
   nodeExecFile,
 } from "../exec.ts";
 import { listRunsForPs, type PsRun } from "./ps.ts";
-import { resolveServiceTarget } from "./service.ts";
+import { resolveServiceUrl } from "./service.ts";
 import { SERVICE_ENTRY } from "./service-lifecycle.ts";
 
 // Compiles a factory repo's own pipelines into its own service bundle. Both
@@ -81,7 +81,7 @@ export async function listRunsInFlight(factoryRoot: string): Promise<PsRun[]> {
     // `jigs ps` already knows how to find them; it prints, so it is handed a
     // sink and read for its return value.
     ({ runs } = await listRunsForPs({
-      ...resolveServiceTarget(factoryRoot),
+      serviceUrl: resolveServiceUrl(factoryRoot),
       out: () => {},
     }));
   } catch {

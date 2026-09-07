@@ -102,7 +102,7 @@ export async function launchRun(
   // Client-side first: a schema violation must cost no run. The factory owns
   // the schema, so the CLI fetches it rather than keeping a second copy.
   const schemaRes = await serviceFetch(
-    deps,
+    deps.serviceUrl,
     `/api/pipelines/${encodeURIComponent(pipeline)}/inputs`,
   );
   if (schemaRes.status === 404) {
@@ -125,7 +125,7 @@ export async function launchRun(
   validateInputs(schema, inputs);
 
   const res = await serviceFetch(
-    deps,
+    deps.serviceUrl,
     `/api/pipelines/${encodeURIComponent(pipeline)}/runs`,
     {
       method: "POST",

@@ -92,7 +92,7 @@ async function postSweep(
   deps: SweepDeps,
   body: { clean: boolean; force: boolean; paths?: string[] },
 ): Promise<SweepResult> {
-  const res = await serviceFetch(deps, "/api/worktrees/sweep", {
+  const res = await serviceFetch(deps.serviceUrl, "/api/worktrees/sweep", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),

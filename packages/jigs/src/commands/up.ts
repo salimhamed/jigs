@@ -183,7 +183,6 @@ export async function upFactory(
         try {
           await runDoctor({
             serviceUrl: service.serviceUrl,
-            factoryRoot,
             out: indent(deps.out),
           });
         } catch (err) {

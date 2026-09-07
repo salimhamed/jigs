@@ -11,7 +11,7 @@ import { showLogs } from "./commands/logs.ts";
 import { pokeRun } from "./commands/poke.ts";
 import { listRunsForPs } from "./commands/ps.ts";
 import { launchRun } from "./commands/run.ts";
-import { resolveServiceTarget } from "./commands/service.ts";
+import { resolveServiceUrl } from "./commands/service.ts";
 import {
   restartService,
   serviceLogs,
@@ -35,8 +35,8 @@ const serviceOption = () =>
     "jigs service URL (default: this factory's service.port in jigs.yml)",
   ).env("JIGS_SERVICE_URL");
 
-const serviceTarget = (explicit?: string) =>
-  resolveServiceTarget(process.cwd(), explicit);
+const serviceUrl = (explicit?: string) =>
+  resolveServiceUrl(process.cwd(), explicit);
 
 function makeConfirm(): ((question: string) => Promise<boolean>) | undefined {
   if (!process.stdin.isTTY || !process.stdout.isTTY) return undefined;
@@ -172,7 +172,7 @@ program
     ) => {
       await launchRun(pipeline, options.input, {
         out,
-        ...serviceTarget(options.service),
+        serviceUrl: serviceUrl(options.service),
       });
     },
   );
@@ -182,7 +182,7 @@ program
   .description("list runs and the worktrees the registry holds")
   .addOption(serviceOption())
   .action(async (options: { service?: string }) => {
-    await listRunsForPs({ out, ...serviceTarget(options.service) });
+    await listRunsForPs({ out, serviceUrl: serviceUrl(options.service) });
   });
 
 program
@@ -198,7 +198,7 @@ program
     async (run: string, options: { force?: boolean; service?: string }) => {
       await cancelRun(run, {
         out,
-        ...serviceTarget(options.service),
+        serviceUrl: serviceUrl(options.service),
         confirm: makeConfirm(),
         force: options.force,
       });
@@ -214,7 +214,7 @@ program
   )
   .addOption(serviceOption())
   .action(async (run: string, options: { service?: string }) => {
-    await showLogs(run, { out, ...serviceTarget(options.service) });
+    await showLogs(run, { out, serviceUrl: serviceUrl(options.service) });
   });
 
 program
@@ -226,7 +226,7 @@ program
   )
   .addOption(serviceOption())
   .action(async (runId: string, options: { service?: string }) => {
-    await pokeRun(runId, { out, ...serviceTarget(options.service) });
+    await pokeRun(runId, { out, serviceUrl: serviceUrl(options.service) });
   });
 
 program
@@ -234,7 +234,7 @@ program
   .description("run the check catalog against the service, without launching")
   .addOption(serviceOption())
   .action(async (options: { service?: string }) => {
-    await runDoctor({ out, ...serviceTarget(options.service) });
+    await runDoctor({ out, serviceUrl: serviceUrl(options.service) });
   });
 
 program
@@ -249,7 +249,7 @@ program
   .addOption(serviceOption())
   .action(async (options: { force?: boolean; service?: string }) => {
     await sweepWorktrees(
-      { out, confirm: makeConfirm(), ...serviceTarget(options.service) },
+      { out, confirm: makeConfirm(), serviceUrl: serviceUrl(options.service) },
       { force: options.force },
     );
   });

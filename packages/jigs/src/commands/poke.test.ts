@@ -65,7 +65,7 @@ test("a 409 becomes a CliError with an inspection hint", async () => {
   expect((failure as CliError).hint).toContain("jigs logs wr_done");
 });
 
-test("a connection failure hints that the service may be down", async () => {
+test("a connection failure surfaces the shared unreachable error", async () => {
   fetchMock.mockRejectedValueOnce(new TypeError("fetch failed"));
   const failure = await pokeRun("wr_abc", deps()).then(
     () => null,
@@ -73,7 +73,7 @@ test("a connection failure hints that the service may be down", async () => {
   );
   expect(failure).toBeInstanceOf(CliError);
   expect((failure as CliError).message).toContain("http://svc.test:8990");
-  expect((failure as CliError).hint).toContain("is the jigs service running?");
+  expect((failure as CliError).hint).toContain("jigs service start");
 });
 
 test("a trailing slash on the service URL does not break the poke route", async () => {

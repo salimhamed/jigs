@@ -78,17 +78,6 @@ export interface StartOptions {
   awaitReady?: boolean;
 }
 
-interface Supervisor {
-  factoryRoot: string;
-  service: ResolvedService;
-  processes: ServiceProcesses;
-  probe: (url: string) => Promise<ServiceHealth | null>;
-  out: (line: string) => void;
-  startTimeoutMs: number;
-  startPollMs: number;
-  stopTimeoutMs: number;
-}
-
 export function servicePidfilePath(slug: string): string {
   return path.join(jigsDataDir(), "services", `${slug}.pid`);
 }
@@ -113,44 +102,34 @@ export function builtBundleHash(factoryRoot: string): string | undefined {
 export function runningBundleHash(
   deps: ServiceLifecycleDeps,
 ): string | undefined {
-  const sv = resolveSupervisor(deps);
-  if (livePid(sv) === undefined) return undefined;
-  const file = serviceBundlePath(sv.service.slug);
+  const { processes = nodeProcesses } = deps;
+  const { slug } = resolveService(locateFactoryRoot(deps.cwd));
+  if (livePid(slug, processes) === undefined) return undefined;
+  const file = serviceBundlePath(slug);
   return existsSync(file) ? readFileSync(file, "utf8").trim() : undefined;
 }
 
-// Walks for the factory repo and parses its jigs.yml, so this throws when the
-// caller is not standing in a factory.
-function resolveSupervisor(deps: ServiceLifecycleDeps): Supervisor {
-  const factoryRoot = locateFactoryRoot(deps.cwd);
-  return {
-    factoryRoot,
-    service: resolveService(factoryRoot),
-    processes: deps.processes ?? nodeProcesses,
-    probe: deps.probe ?? healthProbe,
-    out: deps.out,
-    startTimeoutMs: deps.startTimeoutMs ?? START_TIMEOUT_MS,
-    startPollMs: deps.startPollMs ?? START_POLL_MS,
-    stopTimeoutMs: deps.stopTimeoutMs ?? STOP_TIMEOUT_MS,
-  };
-}
-
-function readPid(sv: Supervisor): number | undefined {
-  const file = servicePidfilePath(sv.service.slug);
+function readPid(slug: string): number | undefined {
+  const file = servicePidfilePath(slug);
   if (!existsSync(file)) return undefined;
   const pid = Number(readFileSync(file, "utf8").trim());
   return Number.isInteger(pid) && pid > 0 ? pid : undefined;
 }
 
-function livePid(sv: Supervisor): number | undefined {
-  const pid = readPid(sv);
+function livePid(
+  slug: string,
+  processes: ServiceProcesses,
+): number | undefined {
+  const pid = readPid(slug);
   if (pid === undefined) return undefined;
-  return sv.processes.signal(pid, 0) ? pid : undefined;
+  return processes.signal(pid, 0) ? pid : undefined;
 }
 
 // For a caller deciding on liveness rather than reporting it.
 export function liveServicePid(deps: ServiceLifecycleDeps): number | undefined {
-  return livePid(resolveSupervisor(deps));
+  const { processes = nodeProcesses } = deps;
+  const { slug } = resolveService(locateFactoryRoot(deps.cwd));
+  return livePid(slug, processes);
 }
 
 // The factory's own `.env` is the service's environment file, World URL and
@@ -161,16 +140,19 @@ export function liveServicePid(deps: ServiceLifecycleDeps): number | undefined {
 // dashboard's included — to the service's own workflow routes. Left unset the
 // World guesses a port the process happens to listen on, and a queue job
 // delivered to a port with no workflow route dies after three 404s.
-function childEnv(sv: Supervisor): Record<string, string> {
-  const dotenvPath = path.join(sv.factoryRoot, ".env");
+function childEnv(
+  factoryRoot: string,
+  service: ResolvedService,
+): Record<string, string> {
+  const dotenvPath = path.join(factoryRoot, ".env");
   return {
     ...stringEnv(process.env),
     ...(existsSync(dotenvPath)
       ? (parseEnv(readFileSync(dotenvPath, "utf8")) as Record<string, string>)
       : {}),
-    PORT: String(sv.service.port),
-    JIGS_DASHBOARD_PORT: String(sv.service.dashboardPort),
-    WORKFLOW_LOCAL_BASE_URL: sv.service.serviceUrl,
+    PORT: String(service.port),
+    JIGS_DASHBOARD_PORT: String(service.dashboardPort),
+    WORKFLOW_LOCAL_BASE_URL: service.serviceUrl,
   };
 }
 
@@ -178,47 +160,49 @@ export async function startService(
   deps: ServiceLifecycleDeps,
   options: StartOptions = {},
 ): Promise<void> {
-  const sv = resolveSupervisor(deps);
-  const running = livePid(sv);
+  const { out, processes = nodeProcesses } = deps;
+  const factoryRoot = locateFactoryRoot(deps.cwd);
+  const service = resolveService(factoryRoot);
+  const { slug, serviceUrl, dashboardUrl } = service;
+
+  const running = livePid(slug, processes);
   if (running !== undefined) {
-    sv.out(`already running: pid ${running} at ${sv.service.serviceUrl}`);
+    out(`already running: pid ${running} at ${serviceUrl}`);
     return;
   }
 
-  const entry = path.join(sv.factoryRoot, SERVICE_ENTRY);
+  const entry = path.join(factoryRoot, SERVICE_ENTRY);
   if (!existsSync(entry)) {
     throw new CliError(
       `no built service at ${entry}`,
-      `build this factory's service first: jigs build in ${sv.factoryRoot}`,
+      `build this factory's service first: jigs build in ${factoryRoot}`,
     );
   }
 
-  const logFile = serviceLogPath(sv.service.slug);
-  const pid = sv.processes.spawn({
+  const logFile = serviceLogPath(slug);
+  const pid = processes.spawn({
     command: process.execPath,
     args: [SERVICE_ENTRY],
-    cwd: sv.factoryRoot,
-    env: childEnv(sv),
+    cwd: factoryRoot,
+    env: childEnv(factoryRoot, service),
     logPath: logFile,
   });
   if (pid === undefined) {
     throw new CliError(
-      `the service process for ${sv.service.slug} did not start`,
+      `the service process for ${slug} did not start`,
       `check ${logFile}`,
     );
   }
 
-  const pidfile = servicePidfilePath(sv.service.slug);
+  const pidfile = servicePidfilePath(slug);
   mkdirSync(path.dirname(pidfile), { recursive: true });
   writeFileSync(pidfile, `${pid}\n`);
-  writeFileSync(
-    serviceBundlePath(sv.service.slug),
-    `${builtBundleHash(sv.factoryRoot)}\n`,
-  );
-  if (options.awaitReady !== false) await awaitReady(sv, pid);
-  sv.out(`started ${sv.service.slug}: pid ${pid} at ${sv.service.serviceUrl}`);
-  sv.out(`dashboard: ${sv.service.dashboardUrl}`);
-  sv.out(`logs: ${logFile}`);
+  writeFileSync(serviceBundlePath(slug), `${builtBundleHash(factoryRoot)}\n`);
+  if (options.awaitReady !== false)
+    await awaitReady(deps, slug, serviceUrl, pid);
+  out(`started ${slug}: pid ${pid} at ${serviceUrl}`);
+  out(`dashboard: ${dashboardUrl}`);
+  out(`logs: ${logFile}`);
 }
 
 /**
@@ -228,51 +212,65 @@ export async function startService(
 export async function awaitServiceReady(
   deps: ServiceLifecycleDeps,
 ): Promise<void> {
-  const sv = resolveSupervisor(deps);
-  const pid = readPid(sv);
+  const { out, processes = nodeProcesses } = deps;
+  const { slug, serviceUrl } = resolveService(locateFactoryRoot(deps.cwd));
+  const pid = readPid(slug);
   if (pid === undefined) {
-    throw new CliError(
-      `not running: ${sv.service.slug}`,
-      "start it: jigs service start",
-    );
+    throw new CliError(`not running: ${slug}`, "start it: jigs service start");
   }
-  if (!sv.processes.signal(pid, 0)) throw failedBoot(sv, pid);
-  await awaitReady(sv, pid);
+  if (!processes.signal(pid, 0)) throw failedBoot(slug, pid, out);
+  await awaitReady(deps, slug, serviceUrl, pid);
 }
 
 // "started" means the World is up and every binding cloned, not that the port
 // answers: nitro serves /health before its plugins run, so a 200 says nothing
 // about a boot that a failed clone can still end a minute later.
-async function awaitReady(sv: Supervisor, pid: number): Promise<void> {
-  const deadline = Date.now() + sv.startTimeoutMs;
+async function awaitReady(
+  deps: ServiceLifecycleDeps,
+  slug: string,
+  serviceUrl: string,
+  pid: number,
+): Promise<void> {
+  const {
+    out,
+    probe = healthProbe,
+    processes = nodeProcesses,
+    startTimeoutMs = START_TIMEOUT_MS,
+    startPollMs = START_POLL_MS,
+  } = deps;
+  const deadline = Date.now() + startTimeoutMs;
   let phase: string | undefined;
   for (;;) {
-    const health = await sv.probe(`${sv.service.serviceUrl}/health`);
+    const health = await probe(`${serviceUrl}/health`);
     if (health?.ready) return;
     if (health !== null && health.phase !== phase) {
       phase = health.phase;
-      sv.out(`booting: ${phase}`);
+      out(`booting: ${phase}`);
     }
-    if (!sv.processes.signal(pid, 0)) throw failedBoot(sv, pid);
+    if (!processes.signal(pid, 0)) throw failedBoot(slug, pid, out);
     if (Date.now() >= deadline) {
       throw new CliError(
-        `the ${sv.service.slug} service is still booting after ${sv.startTimeoutMs / 1000}s — pid ${pid} is still running${phase === undefined ? "" : ` (${phase})`}`,
-        `it clones every binding before the World starts — watch jigs service logs (${serviceLogPath(sv.service.slug)}); jigs service stop ends it`,
+        `the ${slug} service is still booting after ${startTimeoutMs / 1000}s — pid ${pid} is still running${phase === undefined ? "" : ` (${phase})`}`,
+        `it clones every binding before the World starts — watch jigs service logs (${serviceLogPath(slug)}); jigs service stop ends it`,
       );
     }
-    await sleep(sv.startPollMs);
+    await sleep(startPollMs);
   }
 }
 
 // The gates exit the process when a clone or the registry fails, so a pid
 // gone mid-boot is the failed boot itself; its log is the explanation, and
 // the last lines of it are worth more here than a path.
-function failedBoot(sv: Supervisor, pid: number): CliError {
-  const logFile = serviceLogPath(sv.service.slug);
-  for (const line of tailLines(logFile, LOG_LINES)) sv.out(line);
-  rmSync(servicePidfilePath(sv.service.slug), { force: true });
+function failedBoot(
+  slug: string,
+  pid: number,
+  out: (line: string) => void,
+): CliError {
+  const logFile = serviceLogPath(slug);
+  for (const line of tailLines(logFile, LOG_LINES)) out(line);
+  rmSync(servicePidfilePath(slug), { force: true });
   return new CliError(
-    `the ${sv.service.slug} service exited during boot (pid ${pid})`,
+    `the ${slug} service exited during boot (pid ${pid})`,
     `its log says why: jigs service logs (${logFile})`,
   );
 }
@@ -297,27 +295,32 @@ const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export async function stopService(deps: ServiceLifecycleDeps): Promise<void> {
-  const sv = resolveSupervisor(deps);
-  const pid = readPid(sv);
-  const pidfile = servicePidfilePath(sv.service.slug);
-  if (pid === undefined || !sv.processes.signal(pid, 0)) {
+  const {
+    out,
+    processes = nodeProcesses,
+    stopTimeoutMs = STOP_TIMEOUT_MS,
+  } = deps;
+  const { slug } = resolveService(locateFactoryRoot(deps.cwd));
+  const pid = readPid(slug);
+  const pidfile = servicePidfilePath(slug);
+  if (pid === undefined || !processes.signal(pid, 0)) {
     if (pid !== undefined) rmSync(pidfile, { force: true });
-    sv.out(`not running: ${sv.service.slug}`);
+    out(`not running: ${slug}`);
     return;
   }
 
-  sv.processes.signal(pid, "SIGTERM");
-  const deadline = Date.now() + sv.stopTimeoutMs;
-  while (sv.processes.signal(pid, 0)) {
+  processes.signal(pid, "SIGTERM");
+  const deadline = Date.now() + stopTimeoutMs;
+  while (processes.signal(pid, 0)) {
     if (Date.now() >= deadline) {
-      sv.processes.signal(pid, "SIGKILL");
-      sv.out(`pid ${pid} ignored SIGTERM — killed`);
+      processes.signal(pid, "SIGKILL");
+      out(`pid ${pid} ignored SIGTERM — killed`);
       break;
     }
     await sleep(POLL_MS);
   }
   rmSync(pidfile, { force: true });
-  sv.out(`stopped ${sv.service.slug}: pid ${pid}`);
+  out(`stopped ${slug}: pid ${pid}`);
 }
 
 export async function restartService(
@@ -329,15 +332,17 @@ export async function restartService(
 }
 
 export function serviceStatus(deps: ServiceLifecycleDeps): void {
-  const sv = resolveSupervisor(deps);
-  const pid = livePid(sv);
-  sv.out(
+  const { out, processes = nodeProcesses } = deps;
+  const factoryRoot = locateFactoryRoot(deps.cwd);
+  const { slug, serviceUrl, dashboardUrl } = resolveService(factoryRoot);
+  const pid = livePid(slug, processes);
+  out(
     pid === undefined
-      ? `${sv.service.slug}: not running (${sv.service.serviceUrl})`
-      : `${sv.service.slug}: running pid ${pid} at ${sv.service.serviceUrl}`,
+      ? `${slug}: not running (${serviceUrl})`
+      : `${slug}: running pid ${pid} at ${serviceUrl}`,
   );
-  sv.out(`dashboard: ${sv.service.dashboardUrl}`);
-  sv.out(`factory ${sv.factoryRoot}`);
+  out(`dashboard: ${dashboardUrl}`);
+  out(`factory ${factoryRoot}`);
 }
 
 // `jigs logs <run>` is about a run — it resolves the ref and points at the
@@ -349,16 +354,17 @@ export function serviceLogs(
   deps: ServiceLifecycleDeps,
   options: { lines?: number } = {},
 ): void {
-  const sv = resolveSupervisor(deps);
-  const file = serviceLogPath(sv.service.slug);
+  const { out } = deps;
+  const { slug } = resolveService(locateFactoryRoot(deps.cwd));
+  const file = serviceLogPath(slug);
   if (!existsSync(file)) {
     throw new CliError(
       `no service log at ${file}`,
       `this factory's service has not run yet: jigs service start`,
     );
   }
-  for (const line of tailLines(file, options.lines ?? LOG_LINES)) sv.out(line);
-  sv.out(`(follow: tail -f ${file})`);
+  for (const line of tailLines(file, options.lines ?? LOG_LINES)) out(line);
+  out(`(follow: tail -f ${file})`);
 }
 
 function tailLines(file: string, count: number): string[] {
