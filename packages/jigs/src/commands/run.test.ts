@@ -243,5 +243,4 @@ test("an unreachable service surfaces the shared unreachable error", async () =>
   fetchMock.mockRejectedValueOnce(new TypeError("fetch failed"));
   const err = await failure(launchRun("deliver-feature", [], deps()));
   expect(err?.message).toContain("http://svc.test:8990");
-  expect(err?.hint).toContain("jigs service start");
 });

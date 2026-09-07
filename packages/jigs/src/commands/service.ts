@@ -1,6 +1,6 @@
-// Shared plumbing for the verbs that are HTTP clients of the service (ADR
-// 0008). One place for the unreachable-service and run-ref errors, so every
-// verb renders them identically.
+// Shared plumbing for the verbs that are HTTP clients of the service. One
+// place for the unreachable-service and run-ref errors, so every verb renders
+// them identically.
 
 import { resolveService } from "../config/factory-config.ts";
 import { locateFactoryRoot } from "../config/factory-root.ts";
@@ -31,7 +31,7 @@ export async function serviceFetch(
   } catch {
     throw new CliError(
       `could not reach the jigs service at ${base}`,
-      "jigs service status says whether it is running, jigs service start starts it",
+      "jigs service status says whether it is running; jigs service start starts it",
     );
   }
 }

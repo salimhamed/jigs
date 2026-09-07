@@ -80,7 +80,6 @@ test("an unreachable service surfaces the shared unreachable error", async () =>
   );
   expect(failure).toBeInstanceOf(CliError);
   expect((failure as CliError).message).toContain("http://svc.test:8990");
-  expect((failure as CliError).hint).toContain("jigs service start");
 });
 
 test("a trailing slash on the service URL does not break the doctor route", async () => {

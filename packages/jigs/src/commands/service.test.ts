@@ -56,6 +56,6 @@ test("an unreachable service names the url and the lifecycle verbs", async () =>
   );
   expect(failure?.message).toContain("http://svc.test:9100");
   expect(failure?.hint).toBe(
-    "jigs service status says whether it is running, jigs service start starts it",
+    "jigs service status says whether it is running; jigs service start starts it",
   );
 });
