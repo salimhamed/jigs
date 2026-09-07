@@ -1,10 +1,11 @@
 // The sequence review-loop.ts runs, held to through the real jigs blocks.
-// Only the step wrappers in ../steps/jigs.ts and the description in
-// ../steps/describe-pr.ts are faked, because those are the two places the loop
-// would otherwise reach a network, a git remote or an agent. The blocks
-// themselves run for real, resume-first fallbacks and prompts included, so
-// what these tests pin is the part this file owns: the order, the CI bound,
-// the merge policy and the endings.
+// The wrappers in ../steps/jigs.ts are faked because they are where the loop
+// reaches a network, a git remote and an agent; ../steps/describe-pr.ts is
+// faked to keep this factory's title and body prose, and the repair policy
+// applied to it, out of these assertions. The blocks themselves run for real,
+// resume-first fallbacks and prompts included, so what these tests pin is the
+// part this file owns: the order, the CI bound, the merge policy and the
+// endings.
 
 import type { WorktreeFacts } from "@salimhamed/jigs";
 import {
@@ -27,6 +28,7 @@ import type { DescribePrInput } from "../steps/describe-pr.ts";
 import { reviewLoop } from "./review-loop.ts";
 
 type PushResult = { commits: number; headSha: string; dirty: boolean };
+type RepoRef = { owner: string; repo: string };
 type CiRed = Extract<GateWake, { kind: "ci-red" }>;
 type ReviewThread = Extract<
   GateWake,
@@ -38,15 +40,15 @@ type ReviewThread = Extract<
 // has evaluated anything.
 const shared = vi.hoisted(() => ({
   calls: {
-    // Every wrapper call and every wake, in the order they happened.
     trail: [] as string[],
     agent: [] as AgentStepConfig<unknown>[],
+    bindings: [] as string[],
     pushes: [] as Array<[string, string, string]>,
     replies: [] as Array<[number, string]>,
     comments: [] as string[],
     merges: [] as number[],
     describes: [] as DescribePrInput[],
-    opens: [] as Array<[string, string]>,
+    opens: [] as Array<[RepoRef, string, string, string, string]>,
     acks: [] as GateAck[],
     needsHuman: 0,
     gateFinished: false,
@@ -72,12 +74,18 @@ vi.mock("../steps/jigs.ts", () => {
     void,
     GateAck | undefined
   > {
-    for (const wake of script.wakes) {
-      calls.trail.push(`wake ${wake.kind}`);
-      const ack = yield wake;
-      if (ack !== undefined) calls.acks.push(ack);
+    try {
+      for (const wake of script.wakes) {
+        calls.trail.push(`wake ${wake.kind}`);
+        const ack = yield wake;
+        if (ack !== undefined) calls.acks.push(ack);
+      }
+      calls.gateFinished = true;
+    } finally {
+      // What the composition's own finally does: an early return disposes the
+      // gate's hook rather than leaving it held.
+      calls.trail.push("gate closed");
     }
-    calls.gateFinished = true;
   }
   return {
     agent: async <T>(
@@ -114,8 +122,9 @@ vi.mock("../steps/jigs.ts", () => {
       calls.trail.push("gate");
       return deliver();
     },
-    resolveRepo: async (_binding: string) => {
+    resolveRepo: async (binding: string) => {
       calls.trail.push("resolveRepo");
+      calls.bindings.push(binding);
       return { owner: pr.owner, repo: pr.repo };
     },
     pushWorktreeBranch: async (
@@ -132,14 +141,14 @@ vi.mock("../steps/jigs.ts", () => {
       return "THE-DIFF";
     },
     openPr: async (
-      _repo: { owner: string; repo: string },
-      _head: string,
-      _base: string,
+      repo: RepoRef,
+      head: string,
+      base: string,
       title: string,
       body: string,
     ) => {
       calls.trail.push("openPr");
-      calls.opens.push([title, body]);
+      calls.opens.push([repo, head, base, title, body]);
       return pr;
     },
     replyInThread: async (_target: PrRef, rootId: number, body: string) => {
@@ -272,9 +281,12 @@ const run = (merge: "jigs" | "human" = "jigs") =>
   });
 
 beforeEach(() => {
+  // Assigned into rather than rebound: the mock factories closed over these
+  // two objects while ./review-loop.ts was being imported.
   Object.assign(calls, {
     trail: [],
     agent: [],
+    bindings: [],
     pushes: [],
     replies: [],
     comments: [],
@@ -312,10 +324,12 @@ test("the loop implements, pushes the ticket branch and opens the PR before the 
     "openPr",
     "gate",
     "wake closed",
+    "gate closed",
   ]);
   expect(calls.pushes).toEqual([
     ["/tmp/worktree", snapshot.branchName, "base-sha-1"],
   ]);
+  expect(calls.bindings).toEqual(["scratch"]);
   expect(result).toEqual({ pr, cycles: 1 });
 });
 
@@ -382,7 +396,15 @@ test("the factory's description is what the PR is opened with", async () => {
   // The loop holds no title or body of its own: whatever describePr returned
   // is verbatim what GitHub gets.
   expect(calls.describes).toHaveLength(1);
-  expect(calls.opens).toEqual([["described title", "described body"]]);
+  expect(calls.opens).toEqual([
+    [
+      { owner: pr.owner, repo: pr.repo },
+      snapshot.branchName,
+      worktree.defaultBranch,
+      "described title",
+      "described body",
+    ],
+  ]);
 });
 
 test("describePr sees the builder's session and the branch point", async () => {
@@ -412,6 +434,10 @@ test("a review-comments wake answers every thread in place", async () => {
   expect(calls.comments).toEqual([]);
   // The answer prompts have the builder commit its fix, so the branch has to
   // carry it before the reply claims it does.
+  expect(calls.pushes).toEqual([
+    ["/tmp/worktree", snapshot.branchName, "base-sha-1"],
+    ["/tmp/worktree", snapshot.branchName, "base-sha-1"],
+  ]);
   expect(calls.trail).toEqual([
     "agent",
     "agent",
@@ -426,6 +452,7 @@ test("a review-comments wake answers every thread in place", async () => {
     "reply",
     "reply",
     "wake closed",
+    "gate closed",
   ]);
 });
 
@@ -523,6 +550,7 @@ test("the fourth consecutive red escalates as an @-mention instead of a fix", as
     "wake ci-red",
     "comment",
     "wake closed",
+    "gate closed",
   ]);
   const fixes = ciFixes();
   expect(fixes).toHaveLength(3);
@@ -532,12 +560,15 @@ test("the fourth consecutive red escalates as an @-mention instead of a fix", as
   expect(calls.comments).toHaveLength(1);
   expect(calls.comments[0]?.startsWith("@salim")).toBe(true);
   expect(calls.comments[0]).toContain("3 fix attempts");
+  expect(calls.comments[0]).toContain("**test** — failure");
   // Never needsHuman: the channel for this conversation is GitHub.
   expect(calls.needsHuman).toBe(0);
 });
 
 test("a fix that commits nothing escalates instead of waiting for a wake that cannot come", async () => {
-  script.wakes = [ciRed("sha-1"), closedMerged];
+  // The second red is the same streak on the same head: the escalation spent
+  // the bound, so it draws neither a fix nor a second comment.
+  script.wakes = [ciRed("sha-1"), ciRed("sha-1"), closedMerged];
   // No new head means no new CI event, so the gate would never wake again.
   script.push = () => ({ commits: 1, headSha: "sha-1", dirty: false });
   await run();
@@ -643,7 +674,10 @@ test("an approval squash-merges and returns the merged PR", async () => {
   // reviewer corrected after the PR opened is the one that ships.
   expect(calls.merges).toEqual([pr.number]);
   expect(result.pr).toEqual(pr);
+  // The gate never ran out of wakes, so only the composition's finally can
+  // have closed it.
   expect(calls.gateFinished).toBe(false);
+  expect(calls.trail.at(-1)).toBe("gate closed");
 });
 
 test("a merge GitHub refuses leaves the PR open and the run listening", async () => {
@@ -662,7 +696,7 @@ test("in human-merges mode an approval merges nothing and keeps listening", asyn
 
   expect(calls.merges).toEqual([]);
   expect(result.pr).toEqual(pr);
-  expect(calls.trail.at(-1)).toBe("wake closed");
+  expect(calls.trail.slice(-2)).toEqual(["wake closed", "gate closed"]);
 });
 
 test("a PR closed unmerged fails the run and leaves the worktree for sweep", async () => {

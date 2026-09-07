@@ -443,9 +443,10 @@ if (moved.missing.length > 0 || moved.unexpected.length > 0) {
 
 // The scaffold's own checks, run the way a new factory runs them on day one:
 // the typecheck covers the generated entry and the review-loop composition
-// scaffolded beside it, and the scaffolded ids test asserts the shape of every
-// id the same build emitted. The exact list is this file's business, above.
-console.log("\n=== scaffold: typecheck, then the scaffolded ids test");
+// scaffolded beside it, and the two scaffolded tests cover the shape of every
+// id the same build emitted (the exact list is this file's business, above)
+// and the sequence that composition runs.
+console.log("\n=== scaffold: typecheck, then the scaffolded tests");
 run("pnpm", ["typecheck"]);
 run("pnpm", ["test"]);
 
