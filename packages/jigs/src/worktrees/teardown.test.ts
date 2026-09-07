@@ -1,7 +1,14 @@
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { managedCodexHomePath } from "../harnesses/codex-home.ts";
 import type { WorktreeRow } from "./registry.ts";
 import {
   applyTeardown,
@@ -22,15 +29,18 @@ let repoDir: string;
 let remoteDir: string;
 let worktreesDir: string;
 let store: Map<string, WorktreeRow>;
-let removedHomes: string[];
 
 beforeEach(() => {
   tmp = mkdtempSync(path.join(tmpdir(), "jigs-teardown-test-"));
+  // The managed Codex homes the teardown removes hang off the data home.
+  vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
+  vi.spyOn(console, "log").mockImplementation(() => undefined);
   ({ repoDir, remoteDir, worktreesDir } = makeClonedBinding(tmp));
   store = new Map();
-  removedHomes = [];
 });
 afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
   rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -62,12 +72,13 @@ function runWorktree(branch: string, runId = "run_1"): string {
   return target;
 }
 
-const deps = (overrides: Record<string, unknown> = {}) => ({
-  sql: makeFakeSql(store),
-  removeCodexHome: (runKey: string) => removedHomes.push(runKey),
-  log: () => {},
-  ...overrides,
-});
+const registry = () => makeFakeSql(store);
+
+function codexHome(runId: string): string {
+  const home = managedCodexHomePath(runId);
+  mkdirSync(home, { recursive: true });
+  return home;
+}
 
 const localBranches = () =>
   git(repoDir, "branch", "--list", "--format=%(refname:short)");
@@ -245,17 +256,19 @@ test("a clean worktree reads not-dirty and a missing directory does too", async 
   expect(await isWorktreeDirty(path.join(tmp, "nowhere"))).toBe(false);
 });
 
-test("a merged run removes the worktree and both branches", async () => {
+test("a merged run removes the worktree, both branches, and its Codex home", async () => {
   const target = runWorktree("feature");
+  const home = codexHome("run_1");
 
-  const removed = await teardownMergedRun("run_1", deps());
+  const removed = await teardownMergedRun("run_1", registry());
 
   expect(removed).toEqual([target]);
   expect(existsSync(target)).toBe(false);
   expect(localBranches().split("\n")).not.toContain("feature");
   expect(remoteBranches()).not.toContain("refs/heads/feature");
   expect(store.size).toBe(0);
-  expect(removedHomes).toEqual(["run_1"]);
+  // The run is finishing: nothing will resume its Codex threads.
+  expect(existsSync(home)).toBe(false);
 });
 
 test("a squash-merged branch is torn down even though it is not an ancestor of the default branch", async () => {
@@ -279,7 +292,7 @@ test("a squash-merged branch is torn down even though it is not an ancestor of t
     git(repoDir, "merge-base", "--is-ancestor", "feature", "origin/main"),
   ).toThrow();
 
-  await teardownMergedRun("run_1", deps());
+  await teardownMergedRun("run_1", registry());
 
   expect(existsSync(target)).toBe(false);
   expect(localBranches().split("\n")).not.toContain("feature");
@@ -290,7 +303,7 @@ test("a merged run's dirty tree still goes: the recipe never reads dirtiness", a
   const target = runWorktree("feature");
   writeFileSync(path.join(target, "build.log"), "output\n");
 
-  await teardownMergedRun("run_1", deps());
+  await teardownMergedRun("run_1", registry());
 
   expect(existsSync(target)).toBe(false);
   expect(localBranches().split("\n")).not.toContain("feature");
@@ -300,7 +313,7 @@ test("only the run's own worktrees are torn down", async () => {
   const mine = runWorktree("mine", "run_1");
   const theirs = runWorktree("theirs", "run_2");
 
-  await teardownMergedRun("run_1", deps());
+  await teardownMergedRun("run_1", registry());
 
   expect(existsSync(mine)).toBe(false);
   expect(existsSync(theirs)).toBe(true);

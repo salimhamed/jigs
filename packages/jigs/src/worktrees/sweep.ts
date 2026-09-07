@@ -132,12 +132,11 @@ export interface SweepOptions {
   paths?: string[];
 }
 
+// `readOwner` reaches the World, the one external system this pass consults
+// that a test cannot stand up on disk.
 export interface SweepDeps {
   sql: Sql;
   readOwner?: (runId: string) => Promise<OwnerState>;
-  fetchDefault?: typeof fetchOriginDefault;
-  removeCodexHome?: (runKey: string) => void;
-  log?: (line: string) => void;
 }
 
 export interface SweepReport {
@@ -153,9 +152,6 @@ export async function sweepWorktrees(
   const clean = options.clean === true;
   const force = options.force === true;
   const owner = deps.readOwner ?? readOwner;
-  const fetchDefault = deps.fetchDefault ?? fetchOriginDefault;
-  const removeCodexHome = deps.removeCodexHome ?? removeManagedCodexHome;
-  const log = deps.log ?? ((line: string) => console.log(line));
 
   const rows = await listWorktrees(deps.sql);
   const owners = new Map<string, OwnerState>();
@@ -202,9 +198,9 @@ export async function sweepWorktrees(
     if (status === "completed" && !fetched.has(repoDir)) {
       fetched.add(repoDir);
       try {
-        await fetchDefault(repoDir);
+        await fetchOriginDefault(repoDir);
       } catch (err) {
-        log(
+        console.log(
           `[sweep] could not fetch the default branch of ${repoDir}: ${String(err)}`,
         );
       }
@@ -261,7 +257,7 @@ export async function sweepWorktrees(
     const held = rows.some(
       (row) => row.ownerRunId === runId && !gone.has(row.path),
     );
-    if (!held) removeCodexHome(runId);
+    if (!held) removeManagedCodexHome(runId);
   }
 
   return { entries, removed, removedDirs };

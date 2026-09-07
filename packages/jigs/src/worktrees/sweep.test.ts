@@ -1,7 +1,15 @@
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { managedCodexHomePath } from "../harnesses/codex-home.ts";
+import * as create from "./create.ts";
 import type { OwnerState } from "./owner.ts";
 import type { WorktreeRow } from "./registry.ts";
 import { classifySweep, type SweepInput, sweepWorktrees } from "./sweep.ts";
@@ -76,15 +84,24 @@ let tmp: string;
 let repoDir: string;
 let worktreesDir: string;
 let store: Map<string, WorktreeRow>;
+let log: string[];
 
 beforeEach(() => {
   tmp = mkdtempSync(path.join(tmpdir(), "jigs-sweep-test-"));
+  // The managed Codex homes the pass reclaims hang off the data home.
+  vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
+  log = [];
+  vi.spyOn(console, "log").mockImplementation((line: string) => {
+    log.push(line);
+  });
   // A real origin behind a real clone: whether a completed run's branch is
   // merged is read off refs/remotes/origin/<default>.
   ({ repoDir, worktreesDir } = makeClonedBinding(tmp));
   store = new Map();
 });
 afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
   rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -123,13 +140,14 @@ const owners =
   async (runId: string): Promise<OwnerState> =>
     states[runId] ?? { terminal: true, status: "unknown" };
 
-function deps(overrides: Record<string, unknown> = {}) {
-  return {
-    sql: makeFakeSql(store),
-    readOwner: owners({}),
-    removeCodexHome: () => {},
-    ...overrides,
-  };
+function deps(states: Record<string, OwnerState> = {}) {
+  return { sql: makeFakeSql(store), readOwner: owners(states) };
+}
+
+function codexHome(runId: string): string {
+  const home = managedCodexHomePath(runId);
+  mkdirSync(home, { recursive: true });
+  return home;
 }
 
 const dirty = (target: string) =>
@@ -196,9 +214,7 @@ test("a suspended run's worktree is held in every mode", async () => {
   const held = addWorktree("held");
   dirty(held);
   register(held, "held");
-  const running = deps({
-    readOwner: owners({ run_held: { terminal: false, status: "running" } }),
-  });
+  const running = deps({ run_held: { terminal: false, status: "running" } });
 
   for (const options of [{}, { clean: true }, { clean: true, force: true }]) {
     const report = await sweepWorktrees(options, running);
@@ -230,7 +246,7 @@ test("a registered path missing from disk drops only its row", async () => {
   expect(store.size).toBe(0);
 });
 
-test("a completed owner's teardown deletes the row and fetches the default branch once", async () => {
+test("a completed owner's merged teardown deletes the row and the branch", async () => {
   const done = addWorktree("done");
   writeFileSync(path.join(done, "shipped.txt"), "shipped\n");
   git(done, "add", "shipped.txt");
@@ -240,22 +256,34 @@ test("a completed owner's teardown deletes the row and fetches the default branc
   git(done, "push", "-q", "origin", "done:main");
   git(repoDir, "fetch", "-q", "origin");
   register(done, "done");
-  const fetches: string[] = [];
   await sweepWorktrees(
     { clean: true },
-    deps({
-      readOwner: owners({ run_done: { terminal: true, status: "completed" } }),
-      fetchDefault: async (repoDir: string) => {
-        fetches.push(repoDir);
-      },
-    }),
+    deps({ run_done: { terminal: true, status: "completed" } }),
   );
-  expect(fetches).toEqual([repoDir]);
   expect(store.size).toBe(0);
   // done (merged): the local branch goes with the worktree.
   expect(() =>
     git(repoDir, "rev-parse", "--verify", "refs/heads/done"),
   ).toThrow();
+});
+
+test("one fetch serves every completed run sharing a clone", async () => {
+  // The merge check reads a ref only fetch refreshes, and a pass can hold
+  // dozens of rows: refetching per row would cost a round trip each.
+  const fetches = vi.spyOn(create, "fetchOriginDefault");
+  for (const branch of ["first", "second"]) {
+    register(addWorktree(branch), branch);
+  }
+
+  await sweepWorktrees(
+    { clean: true },
+    deps({
+      run_first: { terminal: true, status: "completed" },
+      run_second: { terminal: true, status: "completed" },
+    }),
+  );
+
+  expect(fetches.mock.calls).toEqual([[repoDir]]);
 });
 
 test("an untracked file does not cost a merged worktree its teardown", async () => {
@@ -271,9 +299,7 @@ test("an untracked file does not cost a merged worktree its teardown", async () 
 
   await sweepWorktrees(
     { clean: true },
-    deps({
-      readOwner: owners({ run_done: { terminal: true, status: "completed" } }),
-    }),
+    deps({ run_done: { terminal: true, status: "completed" } }),
   );
   expect(existsSync(done)).toBe(false);
   expect(store.size).toBe(0);
@@ -297,9 +323,7 @@ test("the merge check sees work pushed since the clone last fetched", async () =
   // it has to run before the merge is decided.
   await sweepWorktrees(
     { clean: true },
-    deps({
-      readOwner: owners({ run_done: { terminal: true, status: "completed" } }),
-    }),
+    deps({ run_done: { terminal: true, status: "completed" } }),
   );
   expect(() =>
     git(repoDir, "rev-parse", "--verify", "refs/heads/done"),
@@ -313,18 +337,14 @@ test("an unreachable origin costs a notice, not the pass", async () => {
   git(done, "commit", "-q", "-m", "shipped");
   register(done, "done");
   git(repoDir, "remote", "set-url", "origin", path.join(tmp, "nonexistent"));
-  const lines: string[] = [];
 
   const report = await sweepWorktrees(
     { clean: true },
-    deps({
-      readOwner: owners({ run_done: { terminal: true, status: "completed" } }),
-      log: (line: string) => lines.push(line),
-    }),
+    deps({ run_done: { terminal: true, status: "completed" } }),
   );
 
   expect(report.removed).toEqual([done]);
-  expect(lines.some((line) => line.includes("could not fetch"))).toBe(true);
+  expect(log.some((line) => line.includes("could not fetch"))).toBe(true);
   // The merge check fell back to the stale ref, which reads unmerged.
   expect(git(repoDir, "rev-parse", "--verify", "refs/heads/done")).toMatch(
     /^[0-9a-f]{40}$/,
@@ -339,9 +359,7 @@ test("a completed owner whose branch never merged keeps it as insurance", async 
   register(done, "done");
   await sweepWorktrees(
     { clean: true },
-    deps({
-      readOwner: owners({ run_done: { terminal: true, status: "completed" } }),
-    }),
+    deps({ run_done: { terminal: true, status: "completed" } }),
   );
   expect(existsSync(done)).toBe(false);
   expect(git(repoDir, "rev-parse", "--verify", "refs/heads/done")).toMatch(
@@ -354,9 +372,7 @@ test("a failed owner's clean teardown keeps the branch as insurance", async () =
   register(failed, "failed");
   await sweepWorktrees(
     { clean: true },
-    deps({
-      readOwner: owners({ run_failed: { terminal: true, status: "failed" } }),
-    }),
+    deps({ run_failed: { terminal: true, status: "failed" } }),
   );
   expect(existsSync(failed)).toBe(false);
   expect(git(repoDir, "rev-parse", "--verify", "refs/heads/failed")).toMatch(
@@ -370,17 +386,14 @@ test("the managed Codex home is removed once a run's last worktree is torn down"
   register(one, "one", { ownerRunId: "run_shared" });
   register(two, "two", { ownerRunId: "run_shared" });
   dirty(two);
-  const removedHomes: string[] = [];
-  const spy = {
-    removeCodexHome: (runKey: string) => removedHomes.push(runKey),
-  };
+  const home = codexHome("run_shared");
 
   // The dirty second tree survives, so the home is still in use.
-  await sweepWorktrees({ clean: true }, deps(spy));
-  expect(removedHomes).toEqual([]);
+  await sweepWorktrees({ clean: true }, deps());
+  expect(existsSync(home)).toBe(true);
 
-  await sweepWorktrees({ clean: true, force: true }, deps(spy));
-  expect(removedHomes).toEqual(["run_shared"]);
+  await sweepWorktrees({ clean: true, force: true }, deps());
+  expect(existsSync(home)).toBe(false);
 });
 
 test("a binding's empty worktrees directory goes, its clone stays", async () => {

@@ -11,6 +11,7 @@ import {
   test,
   vi,
 } from "vitest";
+import { resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
@@ -43,8 +44,18 @@ const fixture = {
 
 const RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 
-const resumeHookMock = vi.fn();
-const app = createApp(fixture, { resumeIngressHook: resumeHookMock });
+// The ingress hands every accepted delivery to the SDK's own resumeHook, and
+// what a delivery is worth is what that call answers — so the SDK is what a
+// test stands in for here, never a seam of the app's.
+vi.mock("workflow/api", async (importActual) => ({
+  ...(await importActual<typeof import("workflow/api")>()),
+  resumeHook: vi.fn(),
+}));
+const resumeHookMock = vi.mocked(resumeHook);
+// The ingress reads only whether the resume landed, never the hook it returns.
+const delivers = () => resumeHookMock.mockResolvedValueOnce({} as never);
+
+const app = createApp(fixture);
 
 // A second factory, because what the schedule routes answer is a property of
 // the config handed in. Nothing ticks here: the ticker is started by the
@@ -171,7 +182,7 @@ test("a validly signed PR review delivery nobody is listening to is dropped with
 
 test("a GitHub delivery matching a hook logs acceptance with its token", async () => {
   const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  resumeHookMock.mockResolvedValueOnce({});
+  delivers();
   const res = await postGithub(reviewPayload, {
     "x-hub-signature-256": `sha256=${sign(reviewPayload, "gh-hook-secret")}`,
     "x-github-event": "pull_request_review",
@@ -263,7 +274,7 @@ test("a validly signed Comment delivery for an unclaimed issue is dropped with a
 
 test("a Linear delivery matching a hook logs acceptance with its token", async () => {
   const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  resumeHookMock.mockResolvedValueOnce({});
+  delivers();
   const body = commentPayload();
   const issueId = (JSON.parse(body) as { data: { issueId: string } }).data
     .issueId;

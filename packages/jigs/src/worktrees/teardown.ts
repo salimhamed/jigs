@@ -132,20 +132,11 @@ export async function applyTeardown(
 // still executing its own body. The operator's `jigs sweep` is the net for
 // runs that never reach here — nothing reclaims a worktree unattended.
 
-export interface TeardownRunDeps {
-  sql: Sql;
-  removeCodexHome?: (runKey: string) => void;
-  log?: (line: string) => void;
-}
-
 export async function teardownMergedRun(
   runId: string,
-  deps: TeardownRunDeps,
+  sql: Sql,
 ): Promise<string[]> {
-  const removeCodexHome = deps.removeCodexHome ?? removeManagedCodexHome;
-  const log = deps.log ?? ((line: string) => console.log(line));
-
-  const rows = await listWorktreesForRun(deps.sql, runId);
+  const rows = await listWorktreesForRun(sql, runId);
   const removed: string[] = [];
   for (const row of rows) {
     await applyTeardown(MERGED, {
@@ -155,12 +146,12 @@ export async function teardownMergedRun(
     });
     // git refuses to remove a directory it never registered as a worktree.
     rmSync(row.path, { recursive: true, force: true });
-    await deleteWorktree(deps.sql, row.path);
+    await deleteWorktree(sql, row.path);
     removed.push(row.path);
-    log(`[teardown] removed ${row.path}`);
+    console.log(`[teardown] removed ${row.path}`);
   }
 
   // The run is finishing: nothing will resume its Codex threads.
-  removeCodexHome(runId);
+  removeManagedCodexHome(runId);
   return removed;
 }

@@ -1,5 +1,5 @@
 import path from "node:path";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
   bindingDir,
   bindingRepoDir,
@@ -9,13 +9,14 @@ import {
   worktreePath,
 } from "./layout.ts";
 
+// Every path below hangs off the XDG data home, so the whole file is read
+// against one the test names.
+const BINDINGS = "/xdg-data/jigs/bindings";
+
+beforeEach(() => vi.stubEnv("XDG_DATA_HOME", "/xdg-data"));
 afterEach(() => vi.unstubAllEnvs());
 
-const options = {
-  baseDir: "/data/bindings",
-  factoryRoot: "/f/acme",
-  bindingName: "api",
-};
+const options = { factoryRoot: "/f/acme", bindingName: "api" };
 
 test("factorySlug embeds the dirname and is stable for equal paths", () => {
   const slug = factorySlug("/home/x/factories/acme");
@@ -34,9 +35,9 @@ test("branchDirname maps slashes to dashes", () => {
   expect(branchDirname("main")).toBe("main");
 });
 
-test("bindingDir joins base, factory slug, and binding name", () => {
+test("bindingDir joins the data home, factory slug, and binding name", () => {
   expect(bindingDir(options)).toBe(
-    path.join("/data/bindings", factorySlug("/f/acme"), "api"),
+    path.join(BINDINGS, factorySlug("/f/acme"), "api"),
   );
 });
 
@@ -57,7 +58,7 @@ test("worktreePath joins the binding's worktrees dir and the branch dirname", ()
   expect(p).toBe(path.join(worktreeParentDir(options), "salim-fix"));
   expect(p).toBe(
     path.join(
-      "/data/bindings",
+      BINDINGS,
       factorySlug("/f/acme"),
       "api",
       "worktrees",
@@ -66,16 +67,11 @@ test("worktreePath joins the binding's worktrees dir and the branch dirname", ()
   );
 });
 
-test("central root defaults to the XDG data home", () => {
-  vi.stubEnv("XDG_DATA_HOME", "/xdg-data");
-  const p = worktreePath({
-    factoryRoot: "/f/acme",
-    bindingName: "api",
-    branch: "main",
-  });
-  expect(p).toBe(
+test("the central root is the XDG data home, wherever it moves", () => {
+  vi.stubEnv("XDG_DATA_HOME", "/elsewhere");
+  expect(worktreePath({ ...options, branch: "main" })).toBe(
     path.join(
-      "/xdg-data/jigs/bindings",
+      "/elsewhere/jigs/bindings",
       factorySlug("/f/acme"),
       "api",
       "worktrees",

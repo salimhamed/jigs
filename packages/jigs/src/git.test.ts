@@ -151,7 +151,7 @@ test("commitsAhead counts the work on the branch and is 0 on an untouched one", 
   expect(await commitsAhead(idle, baseSha)).toBe(0);
 });
 
-test("diffSince returns the branch diff and truncates at the cap", async () => {
+test("diffSince returns the branch diff whole", async () => {
   const { checkout } = makeRemoteBackedRepo(tmp);
   const { tree, baseSha } = branchWithWork(tmp, checkout, "feature", {
     "shipped.txt": `${"line\n".repeat(500)}`,
@@ -160,15 +160,24 @@ test("diffSince returns the branch diff and truncates at the cap", async () => {
   const full = await diffSince(tree, baseSha);
   expect(full).toContain("+++ b/shipped.txt");
   expect(full).not.toContain("diff truncated");
+});
 
-  const clipped = await diffSince(tree, baseSha, 100);
-  expect(clipped).toHaveLength(100 + "\n… (diff truncated)".length);
+test("a runaway diff is truncated rather than handed to a prompt whole", async () => {
+  const { checkout } = makeRemoteBackedRepo(tmp);
+  // Past the cap the prompt interpolation can carry, with the marker line the
+  // reader is left with.
+  const { tree, baseSha } = branchWithWork(tmp, checkout, "feature", {
+    "generated.txt": `${"a".repeat(80)}\n`.repeat(4_000),
+  });
+
+  const clipped = await diffSince(tree, baseSha);
   expect(clipped.endsWith("\n… (diff truncated)")).toBe(true);
+  expect(clipped).toHaveLength(200_000 + "\n… (diff truncated)".length);
 });
 
 test("probeRemoteAuth returns null for a reachable remote and stderr for an unreachable one", async () => {
   const { remoteDir } = makeRemoteBackedRepo(tmp);
-  expect(await probeRemoteAuth(remoteDir)).toBeNull();
+  expect(await probeRemoteAuth(remoteDir, 10_000)).toBeNull();
 
   // The regression guard for GIT_TERMINAL_PROMPT=0: an unreachable remote
   // must fail inside the timeout, not hang on a credential prompt.

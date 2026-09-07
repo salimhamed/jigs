@@ -10,14 +10,14 @@
 // workflow-side `import type` of it is erased and stays safe.
 
 import type { Sql } from "postgres";
-import { type Binding, resolveBinding } from "../config/factory-config.ts";
+import { resolveBinding } from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";
 import { CliError } from "../errors.ts";
 import { hasBindingClone } from "./clone.ts";
 import { createWorktree, worktreeStatus } from "./create.ts";
 import type { WorktreeFacts } from "./facts.ts";
 import { bindingRepoDir, worktreePath } from "./layout.ts";
-import { readOwner } from "./owner.ts";
+import { type OwnerState, readOwner } from "./owner.ts";
 import { provisionWorktree } from "./provision.ts";
 import { getWorktree, setWorktreeState, upsertWorktree } from "./registry.ts";
 import { assertReusable, WorktreeOwnedError } from "./reuse.ts";
@@ -29,18 +29,11 @@ export interface WorktreeRequest {
   branch: string;
 }
 
+// `sql` and `readOwner` wrap the two external systems this path consults —
+// the registry and the World — and nothing else here is an option.
 export interface ProvisionRunWorktreeDeps {
   sql?: Sql;
-  resolveBinding?: (name: string) => Binding;
-  runIsLive?: (runId: string) => Promise<boolean>;
-  worktreeStatus?: typeof worktreeStatus;
-  createWorktree?: typeof createWorktree;
-  provision?: typeof provisionWorktree;
-  log?: (line: string) => void;
-}
-
-async function runIsLive(runId: string): Promise<boolean> {
-  return !(await readOwner(runId)).terminal;
+  readOwner?: (runId: string) => Promise<OwnerState>;
 }
 
 // The clone is the service's to make at start, so this path only asserts it.
@@ -50,16 +43,9 @@ export async function provisionRunWorktree(
   deps: ProvisionRunWorktreeDeps = {},
 ): Promise<WorktreeFacts> {
   const sql = deps.sql ?? registrySql();
-  const resolve =
-    deps.resolveBinding ??
-    ((name: string) => resolveBinding(factoryRoot(), name));
-  const isLive = deps.runIsLive ?? runIsLive;
-  const status = deps.worktreeStatus ?? worktreeStatus;
-  const create = deps.createWorktree ?? createWorktree;
-  const provision = deps.provision ?? provisionWorktree;
-  const log = deps.log ?? ((line: string) => console.log(line));
+  const owner = deps.readOwner ?? readOwner;
 
-  const binding = resolve(request.binding);
+  const binding = resolveBinding(factoryRoot(), request.binding);
   const dirs = { factoryRoot: factoryRoot(), bindingName: binding.name };
   const repoDir = bindingRepoDir(dirs);
   const target = worktreePath({ ...dirs, branch: request.branch });
@@ -80,18 +66,18 @@ export async function provisionRunWorktree(
   const sameOwner = row?.ownerRunId === runId;
   // Refuse before touching disk: worktreeStatus fetches, and a foreign live
   // owner should never surface as a network error or pay for the fetch.
-  if (row !== null && !sameOwner && (await isLive(row.ownerRunId))) {
+  if (row !== null && !sameOwner && !(await owner(row.ownerRunId)).terminal) {
     throw new WorktreeOwnedError(target, row.ownerRunId);
   }
 
   const cut = { repoDir, worktreePath: target, branch: request.branch };
-  const disk = await status(cut);
+  const disk = await worktreeStatus(cut);
   // A registry row with no directory is just a branch with no worktree —
   // fall through to three-way resolution.
   if (disk !== null) assertReusable({ path: target, sameOwner, disk });
   const facts: WorktreeFacts =
     disk === null
-      ? await create(cut)
+      ? await createWorktree(cut)
       : {
           path: target,
           branch: request.branch,
@@ -108,7 +94,7 @@ export async function provisionRunWorktree(
   });
 
   try {
-    await provision({
+    await provisionWorktree({
       binding,
       factoryRoot: dirs.factoryRoot,
       worktreePath: facts.path,
@@ -119,7 +105,7 @@ export async function provisionRunWorktree(
     await setWorktreeState(sql, facts.path, "provision-failed");
     throw err;
   }
-  log(
+  console.log(
     `[worktree] provisioned binding=${binding.name} branch=${facts.branch} path=${facts.path}`,
   );
   return facts;
@@ -129,7 +115,7 @@ export async function provisionRunWorktree(
 // return. The operator's `jigs sweep` is the net for runs that never get
 // there.
 export async function teardownMergedRun(runId: string): Promise<string[]> {
-  return teardownMerged(runId, { sql: registrySql() });
+  return teardownMerged(runId, registrySql());
 }
 
 // The name the factories' steps/jigs.ts wrappers still import. The review
