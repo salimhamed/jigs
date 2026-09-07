@@ -17,6 +17,14 @@ const shippedPlugin = (name: string): string =>
 const startWorldPlugin = shippedPlugin("start-world");
 const startDashboardPlugin = shippedPlugin("start-dashboard");
 
+// Both Worlds the SDK can load reach for `@opentelemetry/api` behind a
+// `.catch(() => null)` — telemetry is optional and no factory installs it —
+// so rolldown cannot resolve it and prints a boxed warning per World on every
+// green build. Declared external it stays the runtime import the catch
+// already handles. Named rather than filtered: a filter over the diagnostic
+// would swallow the unresolved imports that are real.
+const OPTIONAL_TELEMETRY = "@opentelemetry/api";
+
 /** The whole Nitro build config for a factory repo, so a factory's own
  *  nitro.config.ts is two lines. */
 export function defineJigsService(): NitroConfig {
@@ -35,6 +43,7 @@ export function defineJigsService(): NitroConfig {
     // The workflow builder's scan directory stays at its default (the whole
     // root): bounding it to pipelines/ would make a misfiled pipeline
     // silently invisible, which is worse than scanning a little extra.
+    rolldownConfig: { external: [OPTIONAL_TELEMETRY] },
     routes: { "/**": `./${GENERATED_DIR}/${GENERATED_ENTRY_FILE}` },
   };
 }
