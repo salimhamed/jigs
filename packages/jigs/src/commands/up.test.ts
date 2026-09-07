@@ -153,8 +153,18 @@ test("a changed bundle restarts the service; --restart forces one", async () => 
 test("a restart over in-flight runs asks first, refuses without a TTY, and stays owed", async () => {
   const port = await fakeService({
     runs: [
-      { runId: "wrun_01", pipeline: "example", status: "suspended" },
-      { runId: "wrun_02", pipeline: "example", status: "completed" },
+      {
+        runId: "wrun_01",
+        pipeline: "example",
+        status: "suspended",
+        terminal: false,
+      },
+      {
+        runId: "wrun_02",
+        pipeline: "example",
+        status: "completed",
+        terminal: true,
+      },
     ],
   });
   const root = factory({ port });
@@ -192,7 +202,14 @@ test("a restart over in-flight runs asks first, refuses without a TTY, and stays
 
 test("a restart whose service answers nothing is not asked about", async () => {
   const port = await fakeService({
-    runs: [{ runId: "wrun_01", pipeline: "example", status: "suspended" }],
+    runs: [
+      {
+        runId: "wrun_01",
+        pipeline: "example",
+        status: "suspended",
+        terminal: false,
+      },
+    ],
   });
   const root = factory({ port });
   const io = { exec: fakeExec(), procs: fakeProcesses() };

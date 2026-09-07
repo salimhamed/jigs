@@ -12,7 +12,6 @@ import {
   type RunRow,
   scheduleTriggerId,
   scheduleTriggerLabel,
-  TERMINAL_RUN_STATUSES,
 } from "./runs.ts";
 import { onShutdown } from "./shutdown.ts";
 import { type StartRunResult, startRun } from "./trigger.ts";
@@ -191,9 +190,7 @@ function scheduleProblem(
 
 function activeRunId(rows: RunRow[], name: string): string | null {
   const trigger = scheduleTriggerLabel(name);
-  const active = rows.find(
-    (row) => row.trigger === trigger && !TERMINAL_RUN_STATUSES.has(row.status),
-  );
+  const active = rows.find((row) => row.trigger === trigger && !row.terminal);
   return active?.runId ?? null;
 }
 

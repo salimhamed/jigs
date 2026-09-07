@@ -86,14 +86,6 @@ export interface UpOptions {
 const CREDENTIAL_SLOTS = ["LINEAR_API_KEY", "GITHUB_TOKEN"];
 const FACTORY_CODE = "jigs.config.ts";
 
-// Mirrors TERMINAL_RUN_STATUSES in ../runs.ts — the CLI reads run status off
-// the wire, and a static import would pull the service half into dist/cli.js.
-const TERMINAL_RUN_STATUSES: ReadonlySet<string> = new Set([
-  "completed",
-  "failed",
-  "cancelled",
-]);
-
 export async function upFactory(
   deps: UpDeps,
   options: UpOptions = {},
@@ -394,5 +386,5 @@ async function listRunsInFlight(factoryRoot: string): Promise<PsRun[]> {
   } catch {
     return [];
   }
-  return runs.filter((run) => !TERMINAL_RUN_STATUSES.has(run.status));
+  return runs.filter((run) => !run.terminal);
 }

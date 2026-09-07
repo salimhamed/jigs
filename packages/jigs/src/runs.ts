@@ -69,6 +69,9 @@ export interface RunRow {
   runId: string;
   pipeline: string;
   status: string;
+  // Carried on the wire so the CLI reads terminality off the row instead of
+  // keeping its own copy of the status set.
+  terminal: boolean;
   trigger: string;
   createdAt: string;
 }
@@ -231,6 +234,7 @@ export async function listRuns(factory: Factory): Promise<RunRow[]> {
         pipeline:
           pipelineByWorkflowId.get(run.workflowName) ?? run.workflowName,
         status: described.status,
+        terminal: TERMINAL_RUN_STATUSES.has(run.status),
         trigger: described.trigger,
         createdAt: run.createdAt.toISOString(),
       };
