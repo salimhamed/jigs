@@ -1,6 +1,6 @@
-// The implement ⇄ review block (ADR 0003): the circuit breaker is a plain loop
-// bound, and the halt it ends on is a pause a human ends — never a terminal
-// state, so nothing the builder produced is discarded.
+// The implement ⇄ review block: the circuit breaker is a plain loop bound, and
+// the halt it ends on is a pause a human ends — never a terminal state, so
+// nothing the builder produced is discarded.
 //
 // The code-review call interpolates the ticket and the branch point and
 // nothing else. The reviewer judges the change against the ticket's acceptance

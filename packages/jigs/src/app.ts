@@ -30,10 +30,10 @@ export function createApp(factory: Factory): Hono {
   const app = new Hono();
 
   // Liveness, plus how far the boot has got; dependency verification is
-  // preflight's job (ADR 0010). Nitro serves this route before the plugins
-  // have run, so `ready` — not the 200 — is what `jigs service start` waits
-  // on. With a service per factory repo, `factoryRoot` is the only thing that
-  // says which factory answers here.
+  // preflight's job. Nitro serves this route before the plugins have run, so
+  // `ready` — not the 200 — is what `jigs service start` waits on. With a
+  // service per factory repo, `factoryRoot` is the only thing that says which
+  // factory answers here.
   app.get("/health", (c) =>
     c.json({
       ok: true,
@@ -112,8 +112,8 @@ export function createApp(factory: Factory): Hono {
     c.json(await runChecks([...doctorChecks(), ...scheduleChecks(factory)])),
   );
 
-  // `jigs sweep` is an HTTP client of this route (ADR 0008). `paths` scopes a
-  // clean to the worktrees an operator approved one by one.
+  // `jigs sweep` is an HTTP client of this route. `paths` scopes a clean to
+  // the worktrees an operator approved one by one.
   app.post("/api/worktrees/sweep", async (c) => {
     type SweepBody = { clean?: boolean; force?: boolean; paths?: string[] };
     const body = await c.req.json<SweepBody>().catch(() => ({}) as SweepBody);
@@ -131,10 +131,9 @@ export function createApp(factory: Factory): Hono {
     );
   });
 
-  // The ingress is stateless (ADR 0009): verify, reconstruct the token, resume.
-  // A delivery nobody is listening to is dropped with a 404 — no mapping
-  // tables or persisted deliveries. Wakes are hints; consumers re-check the
-  // provider.
+  // The ingress is stateless: verify, reconstruct the token, resume. A
+  // delivery nobody is listening to is dropped with a 404 — no mapping tables
+  // or persisted deliveries. Wakes are hints; consumers re-check the provider.
   app.post("/ingress/github", async (c) => {
     const event = sanitizeForLog(c.req.header("x-github-event") ?? "unknown");
     const secret = githubWebhookSecret();

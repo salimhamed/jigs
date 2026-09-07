@@ -1,9 +1,9 @@
-// jigs/harnesses — the single pin/wrap point (ADR 0004): verbatim re-exports
-// of the exact-pinned community providers, nothing else. Explicit names, not
-// `export *`: the two packages export colliding helpers (tool, Logger,
+// jigs/harnesses — the single pin/wrap point: verbatim re-exports of the
+// exact-pinned community providers, nothing else. Explicit names, not `export
+// *`: the two packages export colliding helpers (tool, Logger,
 // isAuthenticationError), and a future collision should break the build
-// loudly. Anything not re-exported here is importable from the pinned
-// package directly; if a wrapper dies, this file becomes the shim.
+// loudly. Anything not re-exported here is importable from the pinned package
+// directly; if a wrapper dies, this file becomes the shim.
 
 export {
   type ClaudeCodeModelId,

@@ -7,6 +7,12 @@ import {
 } from "../shutdown.ts";
 import type { BindingClone } from "../worktrees/clone.ts";
 
+// Why every import below is dynamic: this module's top level has to stay free
+// of postgres, the factory config and the workflow runtime — the gate tests
+// import these functions directly, and a static import would stand all three
+// up to do it. Inside the plugin the deferral also orders the boot: nothing
+// fallible resolves until installShutdown() can turn its failure into an exit.
+
 export interface RegistryGateDeps {
   sql?: () => ISql;
   ensure?: (sql: ISql) => Promise<void>;

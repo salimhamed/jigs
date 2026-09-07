@@ -1,7 +1,7 @@
 // The workflow-side step surface: the harness configs a pipeline declares, the
-// wire those configs plan into, and the builders (ADR 0003) that hand a wire
-// to the step function the factory injects and zod-parse what comes back.
-// Memoization is the SDK's positional replay — no author-supplied keys.
+// wire those configs plan into, and the builders that hand a wire to the step
+// function the factory injects and zod-parse what comes back. Memoization is
+// the SDK's positional replay — no author-supplied keys.
 //
 // Nothing reachable from here carries a "use step" directive or a node
 // builtin: the wrappers live in the factory repo, so the ids the SDK derives

@@ -7,7 +7,7 @@ import type { WorktreeFacts } from "./facts.ts";
 // Every git call in this module passes an explicit absolute cwd — the
 // binding's bare clone for repo ops, the worktree path only to inspect an
 // existing worktree — because removing a worktree deletes the CWD of whoever
-// orchestrates (ADR 0007).
+// orchestrates.
 
 async function resolveDefaultBranch(repoDir: string): Promise<string> {
   let branch = await deriveDefaultBranch(repoDir);

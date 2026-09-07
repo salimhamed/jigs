@@ -24,9 +24,9 @@ import {
 // timer was rejected as a surprise — so leftovers stay visible until an
 // operator acts, and the teardown matrix falls out of the classifier.
 
-// The classifier is pure, zero IO, so every rule in ADR 0007's reconciliation
-// is a table test; sweepWorktrees below gathers the facts (registry rows, run
-// states, disk) and acts on the verdict.
+// The classifier is pure, zero IO, so every reconciliation rule is a table
+// test; sweepWorktrees below gathers the facts (registry rows, run states,
+// disk) and acts on the verdict.
 
 export type SweepState =
   | "held"
@@ -85,9 +85,9 @@ export function classifySweep(input: SweepInput): SweepEntry {
     };
   }
   if (input.state === "provision-failed") {
-    // The half-provisioned tree is the diagnosis evidence ADR 0007 preserves;
-    // its owning run failed immediately, so without this the automatic pass
-    // would delete the evidence within a minute.
+    // The half-provisioned tree is diagnosis evidence: its owning run failed
+    // immediately, so without this the automatic pass would delete the
+    // evidence within a minute.
     return {
       ...base,
       state: "provision-failed",
@@ -225,7 +225,7 @@ export async function sweepWorktrees(
     // exemption the matrix's headline row — done and merged — would need
     // --force. Scoped to abandoned-dirty: a provision-failed tree reads as
     // merged for want of commits of its own, and it is the diagnosis evidence
-    // ADR 0007 preserves.
+    // the provision-failed rule keeps.
     const mergedOverride = merged && entry.state === "abandoned-dirty";
     if (entry.requiresForce && !force && !mergedOverride) continue;
 

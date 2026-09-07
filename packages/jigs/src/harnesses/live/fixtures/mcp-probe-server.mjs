@@ -1,7 +1,6 @@
 // Minimal stdio MCP server: one tool that returns a fixed token, so tests can
-// observe whether MCP registration actually happened — model self-report
-// alone is not evidence (verified on AGE-305). Ported from
-// prototype/codex-app-server-resume.
+// observe whether MCP registration actually happened — model self-report alone
+// is not evidence. Ported from prototype/codex-app-server-resume.
 import { createInterface } from "node:readline";
 
 const TOKEN = process.env.PROBE_TOKEN ?? "PROBE-TOKEN-UNSET";

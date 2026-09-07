@@ -21,10 +21,10 @@ import {
   PROBE_PROMPT,
 } from "./fixtures/live-env.ts";
 
-// The isolation acceptance criterion, with a LIVE CONTROL and a REAL tool
-// call as the observable — agent self-enumeration misreports (AGE-305).
-// Control home declares the probe server with an unguessable token; the
-// managed home is curated. Both surfaces run against both homes.
+// The isolation acceptance criterion, with a LIVE CONTROL and a REAL tool call
+// as the observable — agent self-enumeration misreports. Control home declares
+// the probe server with an unguessable token; the managed home is curated.
+// Both surfaces run against both homes.
 
 let tmp: string;
 let scratch: string;

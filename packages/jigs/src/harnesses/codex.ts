@@ -6,8 +6,8 @@ import {
 } from "ai-sdk-provider-codex-cli";
 
 // Both surfaces force-merge env.CODEX_HOME AFTER caller options: every Codex
-// step runs under the managed home (ADR 0011) — that is the deny-by-default
-// mechanism on a harness with no strict-config flag.
+// step runs under the managed home — that is the deny-by-default mechanism on
+// a harness with no strict-config flag.
 
 export type CodexExecStepOptions = CodexExecSettings & {
   cwd: string;

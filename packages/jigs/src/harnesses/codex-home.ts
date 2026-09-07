@@ -11,13 +11,13 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { jigsDataDir } from "../paths.ts";
 
-// The managed Codex home (ADR 0011): codex has no strict-config flag, so
-// deny-by-default is enforced by pointing CODEX_HOME at a jigs-owned
-// directory holding a curated zero-server config.toml and the real login.
+// The managed Codex home: codex has no strict-config flag, so deny-by-default
+// is enforced by pointing CODEX_HOME at a jigs-owned directory holding a
+// curated zero-server config.toml and the real login.
 
 export const CURATED_CONFIG_TOML = `# jigs managed CODEX_HOME — curated by jigs on every ensure.
 # Deliberately declares zero mcp_servers: a step's explicit mcpServers config
-# is the entire MCP universe the agent sees (ADR 0011).
+# is the entire MCP universe the agent sees.
 `;
 
 // The real login every Codex surface shares: the managed home symlinks to

@@ -19,10 +19,10 @@ import {
 } from "./teardown.ts";
 import { git, makeClonedBinding, makeFakeSql } from "./test-fixtures.ts";
 
-// The teardown matrix (ADR 0007) three ways: the pure decision as a table,
-// its git execution against a real worktree, then the merged recipe
-// teardownMergedRun runs against a faked registry — what a merged run
-// removes, and that it never asks whether the tree is dirty.
+// The teardown matrix three ways: the pure decision as a table, its git
+// execution against a real worktree, then the merged recipe teardownMergedRun
+// runs against a faked registry — what a merged run removes, and that it never
+// asks whether the tree is dirty.
 
 let tmp: string;
 let repoDir: string;

@@ -4,9 +4,9 @@ import { deriveDefaultBranch, tryGit } from "../git.ts";
 import { removeManagedCodexHome } from "../harnesses/codex-home.ts";
 import { deleteWorktree, listWorktreesForRun } from "./registry.ts";
 
-// The teardown matrix (ADR 0007), split into a pure decision and its git
-// execution so every row is a table test. Teardown is runtime-owned: authors
-// never write cleanup, because an author `finally` would fire on suspension.
+// The teardown matrix, split into a pure decision and its git execution so
+// every row is a table test. Teardown is runtime-owned: authors never write
+// cleanup, because an author `finally` would fire on suspension.
 
 export interface TeardownPlan {
   removeWorktree: boolean;

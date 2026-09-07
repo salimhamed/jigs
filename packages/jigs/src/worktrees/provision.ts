@@ -5,11 +5,11 @@ import { globSync } from "tinyglobby";
 import type { Binding } from "../config/factory-config.ts";
 import { JigsError } from "../errors.ts";
 
-// Provisioning ports .worktreerc.yml semantics (ADR 0007): gitignore-blind
-// disk globs that must match dotfiles, a directory match copying its whole
-// tree, existing destinations never overwritten, fail-fast post_create. The
-// binding says what to copy and run; its own directory in the factory repo,
-// `bindings/<name>/`, is the root both ends of a copy are relative to.
+// Provisioning ports .worktreerc.yml semantics: gitignore-blind disk globs
+// that must match dotfiles, a directory match copying its whole tree, existing
+// destinations never overwritten, fail-fast post_create. The binding says what
+// to copy and run; its own directory in the factory repo, `bindings/<name>/`,
+// is the root both ends of a copy are relative to.
 
 export class PostCreateFailedError extends Error {
   readonly command: string;

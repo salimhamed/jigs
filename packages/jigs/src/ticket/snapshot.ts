@@ -1,7 +1,7 @@
-// The per-activation copy of a Linear ticket (ADR 0002). Contents are fixed:
-// title, description, labels, comments, blocker/blocking relations, attached
-// links, sub-issue ids/titles — no file attachments, and deep or live reads
-// are opt-in through a per-step Linear MCP server rather than widened here.
+// The per-activation copy of a Linear ticket. Contents are fixed: title,
+// description, labels, comments, blocker/blocking relations, attached links,
+// sub-issue ids/titles — no file attachments, and deep or live reads are
+// opt-in through a per-step Linear MCP server rather than widened here.
 // `branchName` is Linear's gitBranchName, the worktree branch default. Every
 // step in one activation reads the same snapshot value.
 
@@ -9,9 +9,6 @@ import {
   fetchIssueSnapshot,
   type RawIssueSnapshot,
 } from "../providers/linear.ts";
-
-// Type aliases, not interfaces: aliases carry an implicit index signature,
-// which keeps step returns assignable to the SDK's Serializable types.
 
 export type TicketRef = {
   id: string;

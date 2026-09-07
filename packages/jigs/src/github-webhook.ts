@@ -1,6 +1,6 @@
-// The per-repo GitHub webhook leg of `jigs bind` (ADR 0009): one shared
-// secret in the jigs data dir, idempotent create/verify/repair against the
-// repo's hook list. GITHUB_API_URL override is a test seam.
+// The per-repo GitHub webhook leg of `jigs bind`: one shared secret in the
+// jigs data dir, idempotent create/verify/repair against the repo's hook list.
+// GITHUB_API_URL override is a test seam.
 
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";

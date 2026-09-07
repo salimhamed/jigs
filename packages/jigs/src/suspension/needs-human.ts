@@ -131,9 +131,9 @@ export async function checkForHumanReply(
     (max, comment) => (comment.createdAt > max ? comment.createdAt : max),
     sinceIso,
   );
-  // A factory may run on its operator's own API key, so author identity
-  // cannot tell the run's comment from the human's (AGE-349): exclude
-  // exactly the comment this suspension posted instead.
+  // A factory may run on its operator's own API key, so author identity cannot
+  // tell the run's comment from the human's: exclude exactly the comment this
+  // suspension posted instead.
   const human = comments.find(
     (comment) => comment.user !== null && comment.id !== postedCommentId,
   );

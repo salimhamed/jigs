@@ -198,7 +198,7 @@ test("an unanswered thread since the cursor yields review-comments", () => {
 
 // The whole point of the self guard being id-based: on a factory running the
 // operator's own token the viewer IS the reviewer, and filtering by author
-// swallowed every human review comment (AGE-363).
+// swallowed every human review comment.
 test("a comment by the viewer's own login still yields review-comments", () => {
   const threads = [thread(900, [[900, "salim"]])];
   const result = classifyPrState(

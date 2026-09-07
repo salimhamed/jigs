@@ -1,8 +1,8 @@
 import { JigsError } from "../errors.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 
-// An HTTP client of the service (ADR 0008): the registry and the run states
-// the sweep joins against live in the service's process, not the shell's.
+// An HTTP client of the service: the registry and the run states the sweep
+// joins against live in the service's process, not the shell's.
 //
 // Nothing here runs unattended: a bare sweep reports and, on a terminal, asks
 // per worktree; --force is the explicit yes-to-everything. There is no

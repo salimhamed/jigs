@@ -36,9 +36,8 @@ export {
 } from "./harnesses.ts";
 export { codexWorktreeConfigCheck, mcpServerChecks } from "./mcp.ts";
 
-// A pipeline's declared requirements — the manifest side of the computed
-// check list (ADR 0010). Hand-maintaining the list is the drift trap this
-// exists to avoid.
+// A pipeline's declared requirements — the manifest side of the computed check
+// list. Hand-maintaining the list is the drift trap this exists to avoid.
 export interface PipelineRequires {
   bindings?: string[];
   harnesses?: HarnessKind[];
@@ -62,9 +61,9 @@ export function preflightChecks(requires: PipelineRequires): Check[] {
 }
 
 // No pipeline, so no manifest: doctor takes every declared binding and both
-// harnesses. MCP is absent on purpose — it is JIT-only (ADR 0011). AWS is
-// conditional for the same reason: with no manifest to read, a set
-// AWS_PROFILE is the only evidence this factory uses AWS at all.
+// harnesses. MCP is absent on purpose — it is JIT-only. AWS is conditional for
+// the same reason: with no manifest to read, a set AWS_PROFILE is the only
+// evidence this factory uses AWS at all.
 export function doctorChecks(): Check[] {
   const profile = process.env.AWS_PROFILE;
   return [
@@ -81,8 +80,9 @@ export function doctorChecks(): Check[] {
 // "did not answer".
 export const JIT_TIMEOUT_MS = 3 * CHECK_TIMEOUT_MS + 5_000;
 
-// Everything a step can only learn at hydration, once the body has built its
-// harness config (ADR 0010's backstop half).
+// Preflight's backstop: everything a step can only learn at hydration, once
+// the body has built its harness config — which no manifest could declare
+// ahead of the run.
 export function jitChecks(wire: AgentWire): Check[] {
   const harness = wire.harness;
   return [

@@ -3,14 +3,12 @@ import path from "node:path";
 import { parse } from "smol-toml";
 import type { CheckResult } from "../checks/catalog.ts";
 
-// The load-bearing JIT guard from ADR 0011: codex auto-trusts a writable cwd
-// (thread/start persists a trust record) — and since AGE-359 agent steps run
-// under danger-full-access, so that is every step — and a worktree's
-// .codex/config.toml can declare mcp_servers even under the managed home,
-// which no sandbox policy prevents. This callable check is
-// what makes deny-by-default hold; it is registered in the check catalog as a
-// JIT check. A real TOML parse, not a regex — TOML admits too many spellings
-// and a false negative here defeats deny-by-default entirely.
+// The load-bearing JIT guard. Codex auto-trusts a writable cwd — thread/start
+// persists a trust record, and agent steps all run under danger-full-access —
+// so a worktree's .codex/config.toml can declare mcp_servers even under the
+// managed home, which no sandbox policy prevents. This callable check is what
+// makes deny-by-default hold. A real TOML parse, not a regex: TOML admits too
+// many spellings and a false negative here defeats deny-by-default entirely.
 
 export function checkWorktreeCodexMcpConfig(worktreeDir: string): CheckResult {
   const configPath = path.join(worktreeDir, ".codex", "config.toml");
@@ -35,7 +33,7 @@ export function checkWorktreeCodexMcpConfig(worktreeDir: string): CheckResult {
       return {
         ok: false,
         reason: `${configPath} declares mcp_servers: ${servers.join(", ")}`,
-        repair: `remove the mcp_servers table (${servers.join(", ")}) from ${configPath} — MCP servers are declared per step, never repo-owned (ADR 0011)`,
+        repair: `remove the mcp_servers table (${servers.join(", ")}) from ${configPath} — MCP servers are declared per step, never repo-owned`,
       };
     }
   }

@@ -1,6 +1,6 @@
-// Ingress verification (ADR 0009): every inbound delivery is HMAC-verified
-// against the raw body before anything is parsed, and wakes are hints only —
-// the suspension primitives re-check provider state on every wake.
+// Ingress verification: every inbound delivery is HMAC-verified against the
+// raw body before anything is parsed, and wakes are hints only — the
+// suspension primitives re-check provider state on every wake.
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
