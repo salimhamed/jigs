@@ -1,8 +1,9 @@
 // What the trigger injects, held to the types a factory declares its pipeline
-// bodies with: the bodies below name PipelineInputs and TicketPipelineInputs
-// and read every injected field, so a field the runtime adds without the type
-// stating it fails the typecheck, and a field the type states without the
-// runtime injecting it fails these assertions.
+// bodies with. The shape is the typecheck's to guard: trigger.ts declares each
+// injected object `satisfies Injected`/`TicketInjected`, the two types
+// PipelineInputs and TicketPipelineInputs are built from, so a field on one
+// side and not the other fails to compile. These assertions guard the values —
+// which of the two shapes each pipeline is handed, and what lands in it.
 
 import { expect, test, vi } from "vitest";
 import { z } from "zod";

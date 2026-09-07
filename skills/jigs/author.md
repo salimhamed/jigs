@@ -65,9 +65,10 @@ rename is invisible at build time, so check `jigs ps` before one.
 2. The body's parameter type comes from jigs, never hand-rolled:
    `PipelineInputs<typeof inputs>` is the schema's output plus the `triggerId`
    the trigger injects, and `TicketPipelineInputs<typeof inputs>` adds the
-   `issueId` and `identifier` it resolved a `ticket` input to. Both are on the
-   `@salimhamed/jigs` root. Read the resolved pair; do not re-resolve the
-   ticket in the body.
+   `issueId` and `identifier` it resolved a `ticket` input to — it takes only a
+   schema with a required `ticket`, because that is the only case the trigger
+   resolves. Both are on the `@salimhamed/jigs` root. Read the resolved pair;
+   do not re-resolve the ticket in the body.
 3. Register it in `jigs.config.ts` under the name `jigs run` will take, with its
    `requires` manifest.
 4. Add its `workflow//./pipelines/<file>//<fn>` line to the factory's ids test.

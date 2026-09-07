@@ -8,19 +8,26 @@ export const ticketInput = z.union([
   z.string().regex(/^[A-Z][A-Z0-9]*-\d+$/),
 ]);
 
-/** What a pipeline body is handed: its own parsed inputs plus the `triggerId`
- *  the trigger injects on every run. */
-export type PipelineInputs<S extends z.ZodType> = z.output<S> & {
-  triggerId: string;
-};
-
-/** The same for a pipeline whose inputs carry a `ticket`: the trigger resolves
- *  the ref against Linear and injects the resolved pair, so the body reads it
- *  rather than resolving the ticket again. */
-export type TicketPipelineInputs<S extends z.ZodType> = PipelineInputs<S> & {
+/** What the trigger injects beside a pipeline's own parsed inputs. Exported
+ *  for the trigger to `satisfies` its injected object against: the pipeline
+ *  types below are built from these two, so a field on one side and not the
+ *  other fails to compile. */
+export type Injected = { triggerId: string };
+export type TicketInjected = Injected & {
   issueId: string;
   identifier: string;
 };
+
+/** What a pipeline body is handed: its own parsed inputs plus the `triggerId`
+ *  the trigger injects on every run. */
+export type PipelineInputs<S extends z.ZodType> = z.output<S> & Injected;
+
+/** The same for a pipeline whose inputs carry a `ticket`: the trigger resolves
+ *  the ref against Linear and injects the resolved pair, so the body reads it
+ *  rather than resolving the ticket again. The constraint is the honest half —
+ *  a schema with no required `ticket` gets nothing resolved. */
+export type TicketPipelineInputs<S extends z.ZodType<{ ticket: string }>> =
+  z.output<S> & TicketInjected;
 
 export interface PipelineEntry<S extends z.ZodType = z.ZodType> {
   pipeline: (inputs: PipelineInputs<S>) => Promise<unknown>;

@@ -97,6 +97,11 @@ imported from either root is `ticketInput`, `type Factory` and
 `Schedule`); everything else became a relative import. That is refactor audit
 item **C9**, landed as a consequence of the merge rather than as its own PR.
 
+> _Note (AGE-342):_ that list is the surface on the day of this ADR, not the
+> rule. `PipelineInputs`, `TicketPipelineInputs` and `ReviewThread` joined it
+> since, each because factory code names it. What holds is the principle: the
+> root carries what a consumer names, and nothing else.
+
 **One of everything else.** One `package.json` (the service's plain
 dependencies — `croner`, `hono`, `postgres`, `tinyglobby`, `undici` — are now
 plain dependencies of jigs), one tsdown config with one entry per export
