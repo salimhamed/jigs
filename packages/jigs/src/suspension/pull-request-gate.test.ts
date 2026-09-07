@@ -1,15 +1,58 @@
-import { expect, test } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 import type { PrSnapshot, ReviewThread } from "../providers/github.ts";
 import {
-  ackGateCursor,
   classifyPrState,
-  emptyGateCursor,
   type GateCursor,
   prToken,
+  pullRequestGate,
   tokenFromGithubPayload,
 } from "./pull-request-gate.ts";
 
-const empty: GateCursor = emptyGateCursor();
+// The gate reaches the SDK through this one hook, so a stand-in that counts
+// awaits and hands back a resolver is enough to drive the loop.
+const { createHook, hook } = vi.hoisted(() => ({
+  createHook: vi.fn(),
+  hook: {
+    awaited: 0,
+    disposed: 0,
+    conflict: null as { runId: string } | null,
+    wake: null as (() => void) | null,
+  },
+}));
+
+vi.mock("workflow", () => ({ createHook }));
+
+beforeEach(() => {
+  hook.awaited = 0;
+  hook.disposed = 0;
+  hook.conflict = null;
+  hook.wake = null;
+  createHook.mockReset();
+  createHook.mockImplementation(() => ({
+    token: "github:pr:acme/app#7",
+    getConflict: async () => hook.conflict,
+    // biome-ignore lint/suspicious/noThenProperty: the SDK's Hook is a thenable
+    then: (
+      onfulfilled: (value: unknown) => unknown,
+      onrejected?: (reason: unknown) => unknown,
+    ) => {
+      hook.awaited += 1;
+      return new Promise<unknown>((resolve) => {
+        hook.wake = () => resolve(undefined);
+      }).then(onfulfilled, onrejected);
+    },
+    dispose: () => {
+      hook.disposed += 1;
+    },
+  }));
+});
+
+const empty: GateCursor = {
+  seenReviewIds: [],
+  seenCommentIds: [],
+  selfCommentIds: [],
+  lastRedSha: null,
+};
 
 const snapshot = (overrides: Partial<PrSnapshot> = {}): PrSnapshot => ({
   state: "open",
@@ -48,6 +91,8 @@ const thread = (
     createdAt: "2026-08-26T12:00:00Z",
   })),
 });
+
+const pr = { owner: "acme", repo: "app", number: 7 };
 
 const check = (name: string) => ({
   name,
@@ -177,7 +222,7 @@ test("a thread whose only new comment is our own acked reply yields nothing", ()
   ];
   const second = classifyPrState(
     snapshot({ viewer: "salim", reviewThreads: answered }),
-    ackGateCursor(first.cursor, { selfCommentIds: [901] }),
+    { ...first.cursor, selfCommentIds: [901] },
   );
 
   expect(second.wakes).toEqual([]);
@@ -197,7 +242,7 @@ test("a human's follow-up on a thread we answered re-opens it", () => {
   ];
   const second = classifyPrState(
     snapshot({ viewer: "salim", reviewThreads: answered }),
-    ackGateCursor(first.cursor, { selfCommentIds: [901] }),
+    { ...first.cursor, selfCommentIds: [901] },
   );
 
   // The operator, on their own token: same login as our reply above.
@@ -310,6 +355,79 @@ test("a closed PR yields closed with the merged flag and finishes the gate", () 
     expect(result.wakes).toEqual([{ kind: "closed", merged }]);
     expect(result.done).toBe(true);
   }
+});
+
+test("the gate classifies a first snapshot before it ever awaits the hook", async () => {
+  const fetchState = vi.fn(async () =>
+    snapshot({ state: "closed", merged: true }),
+  );
+  const gate = pullRequestGate(pr, fetchState);
+
+  expect(await gate.next()).toEqual({
+    done: false,
+    value: { kind: "closed", merged: true },
+  });
+  expect(await gate.next()).toEqual({ done: true, value: undefined });
+  expect(fetchState).toHaveBeenCalledTimes(1);
+  expect(hook.awaited).toBe(0);
+  expect(hook.disposed).toBe(1);
+});
+
+test("an ack handed back between wakes reaches the next round's cursor", async () => {
+  const asked = thread(900, [[900, "reviewer"]]);
+  const answered = thread(900, [
+    [900, "reviewer"],
+    [901, "salim"],
+  ]);
+  const states = [
+    snapshot({ viewer: "salim", reviewThreads: [asked] }),
+    snapshot({ viewer: "salim", reviewThreads: [answered] }),
+    snapshot({
+      viewer: "salim",
+      reviewThreads: [answered],
+      state: "closed",
+      merged: true,
+    }),
+  ];
+  let round = 0;
+  const fetchState = vi.fn(async () => {
+    const staged = states[round++];
+    if (staged === undefined) throw new Error("the gate fetched a fourth time");
+    return staged;
+  });
+  const gate = pullRequestGate(pr, fetchState);
+
+  expect(await gate.next()).toEqual({
+    done: false,
+    value: { kind: "review-comments", threads: [asked] },
+  });
+
+  const closed = gate.next({ selfCommentIds: [901] });
+  await vi.waitFor(() => expect(hook.awaited).toBe(1));
+  hook.wake?.();
+  // Round two sees nothing but the acked reply, so it wakes no one and parks.
+  await vi.waitFor(() => expect(hook.awaited).toBe(2));
+  hook.wake?.();
+
+  expect(await closed).toEqual({
+    done: false,
+    value: { kind: "closed", merged: true },
+  });
+  expect(fetchState).toHaveBeenCalledTimes(3);
+  expect(hook.disposed).toBe(0);
+  await gate.next();
+  expect(hook.disposed).toBe(1);
+});
+
+test("a pr another run already holds is a claim conflict, never fetched", async () => {
+  hook.conflict = { runId: "wrun_OWNER" };
+  const fetchState = vi.fn(async () => snapshot());
+
+  await expect(pullRequestGate(pr, fetchState).next()).rejects.toThrow(
+    "is already claimed by run wrun_OWNER",
+  );
+  expect(fetchState).not.toHaveBeenCalled();
+  expect(hook.disposed).toBe(1);
 });
 
 test("pr token, including dots and dashes in names", () => {

@@ -116,23 +116,6 @@ export interface GateAck {
   selfCommentIds: number[];
 }
 
-export const emptyGateCursor = (): GateCursor => ({
-  seenReviewIds: [],
-  seenCommentIds: [],
-  selfCommentIds: [],
-  lastRedSha: null,
-});
-
-export const ackGateCursor = (
-  cursor: GateCursor,
-  ack: GateAck,
-): GateCursor => ({
-  ...cursor,
-  selfCommentIds: [
-    ...new Set([...cursor.selfCommentIds, ...ack.selfCommentIds]),
-  ],
-});
-
 function lastHumanReviewer(snapshot: PrSnapshot): string | null {
   return (
     snapshot.reviews.findLast((review) => review.user !== snapshot.viewer)
@@ -247,37 +230,12 @@ export type GateFn = (
   pr: PrRef,
 ) => AsyncGenerator<GateWake, void, GateAck | undefined>;
 
-// One fetch-classify-deliver round. The acks arrive between wakes, so they
-// fold into the cursor the round returns rather than the one it was handed.
-async function* gateRound(
-  pr: PrRef,
-  fetchState: typeof fetchPrState,
-  cursor: GateCursor,
-): AsyncGenerator<
-  GateWake,
-  { cursor: GateCursor; done: boolean },
-  GateAck | undefined
-> {
-  const result = classifyPrState(await fetchState(pr), cursor);
-  if (result.skippedSelfThreads > 0) {
-    console.log(
-      `[prGate] ${pr.owner}/${pr.repo}#${pr.number} skipped ${result.skippedSelfThreads} thread(s) whose only new comments were jigs' own replies`,
-    );
-  }
-  let next = result.cursor;
-  for (const wake of result.wakes) {
-    const ack = yield wake;
-    if (ack !== undefined) next = ackGateCursor(next, ack);
-  }
-  return { cursor: next, done: result.done };
-}
-
 // One hook per PR, held across the whole review until the PR closes — the
 // token is never released mid-review. The satisfier re-check lives inside the
-// iterator:
-// consumers only ever see satisfied wakes, and an unsatisfied wake
-// re-suspends without burning an agent turn. The initial fetch catches a PR
-// already approved before the gate started, without needing a webhook.
+// iterator: consumers only ever see satisfied wakes, and an unsatisfied wake
+// re-suspends without burning an agent turn. The first round runs before the
+// hook is ever awaited, so a PR already approved before the gate started is
+// caught without needing a webhook.
 export async function* pullRequestGate(
   pr: PrRef,
   fetchState: typeof fetchPrState,
@@ -289,14 +247,36 @@ export async function* pullRequestGate(
     if (conflict !== null) {
       throw new ClaimConflictError(token, conflict.runId);
     }
-    let cursor: GateCursor = emptyGateCursor();
-    let round = yield* gateRound(pr, fetchState, cursor);
-    cursor = round.cursor;
-    if (round.done) return;
-    for await (const _hint of hook) {
-      round = yield* gateRound(pr, fetchState, cursor);
+    let cursor: GateCursor = {
+      seenReviewIds: [],
+      seenCommentIds: [],
+      selfCommentIds: [],
+      lastRedSha: null,
+    };
+    while (true) {
+      const round = classifyPrState(await fetchState(pr), cursor);
+      if (round.skippedSelfThreads > 0) {
+        console.log(
+          `[prGate] ${pr.owner}/${pr.repo}#${pr.number} skipped ${round.skippedSelfThreads} thread(s) whose only new comments were jigs' own replies`,
+        );
+      }
       cursor = round.cursor;
+      for (const wake of round.wakes) {
+        const ack = yield wake;
+        // An ack arrives between wakes, so it folds into the cursor this
+        // round produced, never the one the round was classified against.
+        if (ack !== undefined) {
+          cursor = {
+            ...cursor,
+            selfCommentIds: [
+              ...new Set([...cursor.selfCommentIds, ...ack.selfCommentIds]),
+            ],
+          };
+        }
+      }
       if (round.done) return;
+      // Suspend until GitHub reports activity on this PR.
+      await hook;
     }
   } finally {
     hook.dispose();
