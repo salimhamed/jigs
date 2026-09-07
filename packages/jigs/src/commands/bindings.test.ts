@@ -45,8 +45,13 @@ const apiRow = (state: string) => `api   ${remoteDir}  ${cloneDir()}  ${state}`;
 
 test("a binding with no clone yet reports where the clone will land", async () => {
   const lines = await printed();
-  expect(lines[0]).toMatch(/^NAME {2}REMOTE {2}/);
-  expect(lines[1]).toBe(apiRow("not cloned (restart the service)"));
+  expect(lines[0]?.split(/ {2,}/)).toEqual([
+    "NAME",
+    "REMOTE",
+    "CLONE",
+    "STATE",
+  ]);
+  expect(lines.slice(1)).toEqual([apiRow("not cloned (restart the service)")]);
 });
 
 test("a cloned binding reports the default branch it derived", async () => {
