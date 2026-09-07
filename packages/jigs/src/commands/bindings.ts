@@ -5,36 +5,37 @@ import {
 import { locateFactoryRoot } from "../config/factory-root.ts";
 import { CliError } from "../errors.ts";
 import { deriveDefaultBranch, resolveRemoteUrl } from "../git.ts";
+import { formatTable } from "../table.ts";
 import { hasBindingClone } from "../worktrees/clone.ts";
 import { bindingRepoDir } from "../worktrees/layout.ts";
 
 export interface BindingsDeps {
   cwd: string;
-}
-
-export interface BindingRow {
-  name: string;
-  remote: string;
-  clone: string;
-  state: string;
+  out: (line: string) => void;
 }
 
 // Offline by decree: what a binding is, where its clone would be, and what the
 // clone on disk says — never the network.
-export async function listBindings(deps: BindingsDeps): Promise<BindingRow[]> {
+export async function listBindings(deps: BindingsDeps): Promise<void> {
   const factoryRoot = locateFactoryRoot(deps.cwd);
   const config = parseFactoryConfig(readFactoryConfigText(factoryRoot));
-  const rows: BindingRow[] = [];
+  const rows: string[][] = [];
   for (const [name, binding] of Object.entries(config.bindings)) {
     const clone = bindingRepoDir({ factoryRoot, bindingName: name });
-    rows.push({
+    rows.push([
       name,
-      remote: binding.remote,
+      binding.remote,
       clone,
-      state: await resolveState(clone, binding.remote),
-    });
+      await resolveState(clone, binding.remote),
+    ]);
   }
-  return rows;
+  if (rows.length === 0) {
+    deps.out("no bindings");
+    return;
+  }
+  for (const line of formatTable(["NAME", "REMOTE", "CLONE", "STATE"], rows)) {
+    deps.out(line);
+  }
 }
 
 async function resolveState(

@@ -2,7 +2,7 @@
 import readline from "node:readline/promises";
 import { Command, Option } from "commander";
 import { bindRepo } from "./commands/bind.ts";
-import { type BindingRow, listBindings } from "./commands/bindings.ts";
+import { listBindings } from "./commands/bindings.ts";
 import { buildFactoryService } from "./commands/build.ts";
 import { cancelRun } from "./commands/cancel.ts";
 import { runDoctor } from "./commands/doctor.ts";
@@ -24,7 +24,6 @@ import { unbindRepo } from "./commands/unbind.ts";
 import { upFactory } from "./commands/up.ts";
 import { upgradeFactory } from "./commands/upgrade.ts";
 import { CliError } from "./errors.ts";
-import { formatTable } from "./table.ts";
 
 // No `.default()`: commander evaluates defaults eagerly, so resolving the
 // factory's service URL here would walk the filesystem on `jigs --help`.
@@ -52,17 +51,6 @@ function makeConfirm(): ((question: string) => Promise<boolean>) | undefined {
       rl.close();
     }
   };
-}
-
-function printBindingsTable(
-  rows: BindingRow[],
-  out: (line: string) => void,
-): void {
-  const lines = formatTable(
-    ["NAME", "REMOTE", "CLONE", "STATE"],
-    rows.map((row) => [row.name, row.remote, row.clone, row.state]),
-  );
-  for (const line of lines) out(line);
 }
 
 const out = (line: string) => console.log(line);
@@ -304,12 +292,7 @@ program
   .command("bindings")
   .description("list bindings with their clone state")
   .action(async () => {
-    const rows = await listBindings({ cwd: process.cwd() });
-    if (rows.length === 0) {
-      out("no bindings");
-      return;
-    }
-    printBindingsTable(rows, out);
+    await listBindings({ cwd: process.cwd(), out });
   });
 
 // Commander exits itself on its own parse errors; this catch sees only
