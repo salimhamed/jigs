@@ -13,8 +13,8 @@ import {
 } from "./registry.ts";
 import {
   applyTeardown,
+  countUnmergedCommits,
   decideTeardown,
-  isBranchMerged,
   isWorktreeDirty,
 } from "./teardown.ts";
 
@@ -46,6 +46,15 @@ export interface SweepInput {
   dirty: boolean;
 }
 
+// What became of the branch of a worktree this pass removed. Absent until a
+// removal decides: a held entry, a report-only pass, and a stale row whose
+// branch nothing touched all leave it unset.
+export interface BranchOutcome {
+  deleted: boolean;
+  // Absent when the ancestry question went unasked or unanswered.
+  unmergedCommits?: number;
+}
+
 export interface SweepEntry {
   path: string;
   branch: string;
@@ -54,6 +63,7 @@ export interface SweepEntry {
   requiresForce: boolean;
   ownerRunId?: string;
   reason: string;
+  branchOutcome?: BranchOutcome;
 }
 
 export function classifySweep(input: SweepInput): SweepEntry {
@@ -218,7 +228,10 @@ export async function sweepWorktrees(
         );
       }
     }
-    const merged = askMerged && (await isBranchMerged(repoDir, entry.branch));
+    const unmerged = askMerged
+      ? await countUnmergedCommits(repoDir, entry.branch)
+      : null;
+    const merged = unmerged === 0;
     let plan = decideTeardown({ dirty: dirtyTree, merged });
     // Only a completed run's teardown reaches the remote. A cancelled or
     // failed run's pushed branch is somebody's open PR whatever its ancestry,
@@ -246,13 +259,18 @@ export async function sweepWorktrees(
       // A half-provisioned tree has no merged branch behind it: the tree goes,
       // the branches stay.
       const branchesStay = entry.state === "provision-failed";
-      await applyTeardown(branchesStay ? DISCARD_TREE : plan, {
+      const applied = branchesStay ? DISCARD_TREE : plan;
+      await applyTeardown(applied, {
         repoDir,
         worktreePath: entry.path,
         branch: entry.branch,
       });
       // git refuses to remove a directory it never registered as a worktree.
       rmSync(entry.path, { recursive: true, force: true });
+      entry.branchOutcome = {
+        deleted: applied.deleteLocalBranch,
+        ...(unmerged === null ? {} : { unmergedCommits: unmerged }),
+      };
     }
     await deleteWorktree(deps.sql, entry.path);
     removed.push(entry.path);

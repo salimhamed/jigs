@@ -35,7 +35,7 @@ const entry = (overrides: Record<string, unknown>) => ({
 test("--force posts one yes-to-everything clean and prints the summary", async () => {
   respond({
     entries: [
-      entry({ ownerRunId: "run_a" }),
+      entry({ ownerRunId: "run_a", branchOutcome: { deleted: true } }),
       entry({
         path: "/data/wt/held",
         state: "held",
@@ -58,8 +58,32 @@ test("--force posts one yes-to-everything clean and prints the summary", async (
   );
   expect(result.removed).toEqual(["/data/wt/feat"]);
   expect(lines[0]).toContain("abandoned");
+  expect(lines[0]).toContain("branch deleted");
   expect(lines[1]).toContain("held");
+  expect(lines[1]).not.toContain("branch");
   expect(lines.at(-1)).toBe("1 removed, 1 held");
+});
+
+test("a kept branch is named on its line and counted in the summary", async () => {
+  respond({
+    entries: [
+      entry({
+        ownerRunId: "run_a",
+        branchOutcome: { deleted: false, unmergedCommits: 2 },
+      }),
+      entry({
+        path: "/data/wt/empty",
+        ownerRunId: "run_b",
+        branchOutcome: { deleted: true, unmergedCommits: 0 },
+      }),
+    ],
+    removed: ["/data/wt/feat", "/data/wt/empty"],
+    removedDirs: [],
+  });
+  await runSweep(deps(), { force: true });
+  expect(lines[0]).toContain("branch kept: 2 unmerged commits");
+  expect(lines[1]).toContain("branch deleted");
+  expect(lines.at(-1)).toBe("2 removed (1 branch kept), 0 held");
 });
 
 test("a bare sweep with no terminal reports and points at the removal paths", async () => {
@@ -99,7 +123,12 @@ test("interactive sweep cleans exactly the approved paths, with force", async ()
     removedDirs: [],
   });
   respond({
-    entries: [entry({ ownerRunId: "run_a" })],
+    entries: [
+      entry({
+        ownerRunId: "run_a",
+        branchOutcome: { deleted: false, unmergedCommits: 1 },
+      }),
+    ],
     removed: ["/data/wt/feat"],
     removedDirs: [],
   });
@@ -115,6 +144,9 @@ test("interactive sweep cleans exactly the approved paths, with force", async ()
     JSON.stringify({ clean: true, force: true, paths: ["/data/wt/feat"] }),
   );
   expect(result.removed).toEqual(["/data/wt/feat"]);
+  // The approved worktree is reprinted once the branch outcome exists.
+  expect(lines.at(-2)).toContain("branch kept: 1 unmerged commit");
+  expect(lines.at(-1)).toBe("1 removed (1 branch kept), 0 held");
 });
 
 test("interactive sweep with every answer no removes nothing", async () => {

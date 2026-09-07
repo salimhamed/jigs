@@ -60,24 +60,23 @@ export interface ApplyTeardownTarget {
   branch: string;
 }
 
-// Unresolvable default branch or remote ref reads as not merged: the whole
-// point of the flag is that branch deletion needs positive evidence.
-export async function isBranchMerged(
+// Commits the branch holds that origin's default branch does not: zero is the
+// merged answer, and null is no answer at all — an unresolvable default branch
+// or ref, which callers read as unmerged because branch deletion needs
+// positive evidence.
+export async function countUnmergedCommits(
   repoDir: string,
   branch: string,
-): Promise<boolean> {
+): Promise<number | null> {
   const defaultBranch = await deriveDefaultBranch(repoDir);
-  if (defaultBranch === null) return false;
-  const merged = await tryGit(
-    [
-      "merge-base",
-      "--is-ancestor",
-      branch,
-      `refs/remotes/origin/${defaultBranch}`,
-    ],
+  if (defaultBranch === null) return null;
+  const count = await tryGit(
+    ["rev-list", "--count", branch, `^refs/remotes/origin/${defaultBranch}`],
     repoDir,
   );
-  return merged !== null;
+  if (count === null) return null;
+  const commits = Number(count);
+  return Number.isInteger(commits) ? commits : null;
 }
 
 export async function isWorktreeDirty(worktreePath: string): Promise<boolean> {
@@ -123,9 +122,9 @@ export async function applyTeardown(
 // The loop only returns merged, so this is the matrix's merged row as a fixed
 // recipe rather than a decision: no dirtiness read (the forced remove takes
 // build output with it), and "merged" never derived — a squash merge leaves
-// the branch tip un-ancestored, so isBranchMerged's `merge-base --is-ancestor`
-// would answer false and the done row would silently degrade to the failed
-// one. The full matrix stays with the sweep, where the outcome is unknown.
+// the branch tip outside the default branch's history, so
+// countUnmergedCommits would count its commits as unmerged and the done row
+// would silently degrade to the failed one. The full matrix stays with the sweep, where the outcome is unknown.
 //
 // Deliberately not a filtered `sweepWorktrees`: the sweep's classifier answers
 // "is somebody else's leftover reclaimable", and it answers `held` for a run

@@ -12,8 +12,8 @@ import { managedCodexHomePath } from "../harnesses/codex-home.ts";
 import type { WorktreeRow } from "./registry.ts";
 import {
   applyTeardown,
+  countUnmergedCommits,
   decideTeardown,
-  isBranchMerged,
   isWorktreeDirty,
   teardownMergedRun,
 } from "./teardown.ts";
@@ -240,15 +240,15 @@ test("removing a worktree prunes the admin entry so the same path can be re-adde
   ).not.toThrow();
 });
 
-test("a branch origin's default branch does not contain reads unmerged", async () => {
+test("a branch origin's default branch does not contain counts its commits", async () => {
   runWorktree("feat");
-  expect(await isBranchMerged(repoDir, "feat")).toBe(false);
+  expect(await countUnmergedCommits(repoDir, "feat")).toBe(1);
   git(repoDir, "push", "-q", "origin", "feat:main");
   git(repoDir, "fetch", "-q", "origin");
-  expect(await isBranchMerged(repoDir, "feat")).toBe(true);
+  expect(await countUnmergedCommits(repoDir, "feat")).toBe(0);
 });
 
-test("a clone with no resolvable default branch reads unmerged", async () => {
+test("a clone with no resolvable default branch answers nothing", async () => {
   runWorktree("feat");
   git(repoDir, "push", "-q", "origin", "feat:main");
   git(repoDir, "fetch", "-q", "origin");
@@ -256,7 +256,7 @@ test("a clone with no resolvable default branch reads unmerged", async () => {
   // is merged, but with no default branch to compare against it cannot be
   // proven, and branch deletion needs positive evidence.
   git(repoDir, "symbolic-ref", "-d", "refs/remotes/origin/HEAD");
-  expect(await isBranchMerged(repoDir, "feat")).toBe(false);
+  expect(await countUnmergedCommits(repoDir, "feat")).toBeNull();
 });
 
 test("a clean worktree reads not-dirty and a missing directory does too", async () => {

@@ -16,7 +16,9 @@ export interface SweepDeps extends ServiceDeps {
   confirm?: (question: string) => Promise<boolean>;
 }
 
-// One entry of the service's sweep report, as this client prints it.
+// One entry of the service's sweep report, as this client prints it. The
+// branch outcome rides along on the entry the pass removed — what happened to
+// a branch is the service's decision, never re-derived here.
 export interface SweepEntry {
   path: string;
   branch: string;
@@ -25,6 +27,7 @@ export interface SweepEntry {
   requiresForce: boolean;
   ownerRunId?: string;
   reason: string;
+  branchOutcome?: { deleted: boolean; unmergedCommits?: number };
 }
 
 export interface SweepResult {
@@ -84,6 +87,13 @@ export async function runSweep(
     force: true,
     paths: approved,
   });
+  // The lines above were printed to be answered, before any branch outcome
+  // existed; these say what the approvals came to.
+  const removed = new Set(result.removed);
+  printEntries(
+    result.entries.filter((entry) => removed.has(entry.path)),
+    deps.out,
+  );
   printSummary(result, deps.out);
   return result;
 }
@@ -109,9 +119,19 @@ function printEntries(entries: SweepEntry[], out: (line: string) => void) {
   for (const entry of entries) {
     const owner = entry.ownerRunId ?? "-";
     out(
-      `${entry.state.padEnd(width)}  ${entry.path}  ${owner}  ${entry.reason}`,
+      `${entry.state.padEnd(width)}  ${entry.path}  ${owner}  ${entry.reason}${describeBranch(entry)}`,
     );
   }
+}
+
+function describeBranch(entry: SweepEntry): string {
+  const outcome = entry.branchOutcome;
+  if (outcome === undefined) return "";
+  if (outcome.deleted) return " — branch deleted";
+  const commits = outcome.unmergedCommits;
+  if (commits === undefined || commits === 0) return " — branch kept";
+  const plural = commits === 1 ? "" : "s";
+  return ` — branch kept: ${commits} unmerged commit${plural}`;
 }
 
 function printSummary(result: SweepResult, out: (line: string) => void) {
@@ -119,9 +139,14 @@ function printSummary(result: SweepResult, out: (line: string) => void) {
     out("no worktrees");
   }
   const held = result.entries.filter((entry) => !entry.eligible).length;
+  const kept = result.entries.filter(
+    (entry) => entry.branchOutcome?.deleted === false,
+  ).length;
+  const branches =
+    kept === 0 ? "" : ` (${kept} branch${kept === 1 ? "" : "es"} kept)`;
   const dirs =
     result.removedDirs.length === 0
       ? ""
       : `, ${result.removedDirs.length} empty dir(s) removed`;
-  out(`${result.removed.length} removed, ${held} held${dirs}`);
+  out(`${result.removed.length} removed${branches}, ${held} held${dirs}`);
 }

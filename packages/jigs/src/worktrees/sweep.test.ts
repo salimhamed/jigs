@@ -170,6 +170,11 @@ test("a dry run deletes nothing", async () => {
   const report = await sweepWorktrees({}, deps());
   expect(report.entries).toHaveLength(2);
   expect(report.removed).toEqual([]);
+  // Nothing was decided, so no entry claims a branch outcome.
+  expect(report.entries.map((entry) => entry.branchOutcome)).toEqual([
+    undefined,
+    undefined,
+  ]);
   expect(existsSync(clean)).toBe(true);
   expect(existsSync(messy)).toBe(true);
   expect(store.size).toBe(2);
@@ -251,6 +256,8 @@ test("a registered path missing from disk drops only its row", async () => {
   const report = await sweepWorktrees({ clean: true }, deps());
   expect(report.entries[0]?.state).toBe("missing");
   expect(store.size).toBe(0);
+  // A stale row's branch is nobody's decision.
+  expect(report.entries[0]?.branchOutcome).toBeUndefined();
 });
 
 test("a completed owner's merged teardown deletes the row and the branch", async () => {
@@ -261,7 +268,7 @@ test("a completed owner's merged teardown deletes the row and the branch", async
   git(done, "push", "-q", "origin", "done:main");
   git(repoDir, "fetch", "-q", "origin");
   register(done, "done");
-  await sweepWorktrees(
+  const report = await sweepWorktrees(
     { clean: true },
     deps({ run_done: { terminal: true, status: "completed" } }),
   );
@@ -270,6 +277,10 @@ test("a completed owner's merged teardown deletes the row and the branch", async
   expect(() =>
     git(repoDir, "rev-parse", "--verify", "refs/heads/done"),
   ).toThrow();
+  expect(report.entries[0]?.branchOutcome).toEqual({
+    deleted: true,
+    unmergedCommits: 0,
+  });
 });
 
 test("one fetch serves every completed run sharing a clone", async () => {
@@ -353,8 +364,9 @@ test("an unreachable origin costs a notice, not the pass", async () => {
 test("a completed owner whose branch never merged keeps it as insurance", async () => {
   const done = addWorktree("done");
   commit(done, "unshipped.txt");
+  commit(done, "unshipped-too.txt");
   register(done, "done");
-  await sweepWorktrees(
+  const report = await sweepWorktrees(
     { clean: true },
     deps({ run_done: { terminal: true, status: "completed" } }),
   );
@@ -362,6 +374,11 @@ test("a completed owner whose branch never merged keeps it as insurance", async 
   expect(git(repoDir, "rev-parse", "--verify", "refs/heads/done")).toMatch(
     /^[0-9a-f]{40}$/,
   );
+  // The count is what the removed line reports the branch was kept for.
+  expect(report.entries[0]?.branchOutcome).toEqual({
+    deleted: false,
+    unmergedCommits: 2,
+  });
 });
 
 test("a failed owner's unmerged branch stays as insurance", async () => {
@@ -454,6 +471,8 @@ test("a cancelled run's branch stays when the ancestry cannot be proven", async 
   expect(git(repoDir, "rev-parse", "--verify", "refs/heads/stopped")).toMatch(
     /^[0-9a-f]{40}$/,
   );
+  // No count either: nothing answered the ancestry question.
+  expect(report.entries[0]?.branchOutcome).toEqual({ deleted: false });
 });
 
 test("the managed Codex home is removed once a run's last worktree is torn down", async () => {

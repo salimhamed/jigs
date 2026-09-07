@@ -179,6 +179,11 @@ Three limits on that:
   unresolvable default branch, or a run the World no longer knows about all
   keep the branch: deletion needs positive evidence.
 
+Because the branch is now at stake on every ending, the sweep reports the
+outcome rather than leaving it to be discovered: each removed worktree's line
+says `branch deleted` or `branch kept` with the commits it holds, and the
+summary counts the kept ones.
+
 The decide/apply matrix itself is untouched — only which runs get asked. The
 known limitation stands unchanged: a squash-merged branch is not an ancestor
 of the default branch, so it does not pass this check and its local branch
