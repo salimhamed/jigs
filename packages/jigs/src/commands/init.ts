@@ -91,7 +91,7 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   deps.out(
     "  jigs up                 # install, World, bootstrap, build, start, doctor",
   );
-  deps.out("  jigs bind <remote-url>  # then jigs service restart to clone it");
+  deps.out("  jigs bind <remote-url>  # then jigs up --restart to clone it");
 
   return { created, skipped, ...ports };
 }

@@ -160,7 +160,9 @@ program
     ) => {
       await launchRun(pipeline, options.input, {
         out,
-        cwd: process.cwd(),
+        // An explicit --service (or JIGS_SERVICE_URL) aims the run at another
+        // factory's service, which this factory's sources say nothing about.
+        factoryCwd: options.service === undefined ? process.cwd() : undefined,
         serviceUrl: serviceUrl(options.service),
       });
     },

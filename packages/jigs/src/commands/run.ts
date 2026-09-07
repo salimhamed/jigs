@@ -1,14 +1,15 @@
 import { z } from "zod";
 import { type CheckReport, formatFailures } from "../checks/catalog.ts";
-import { locateFactoryRoot } from "../config/factory-root.ts";
 import { JigsError } from "../errors.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
-import { stalePipelineSources } from "./service-lifecycle.ts";
+import { serviceBehindSources } from "./service-lifecycle.ts";
 
 export interface LaunchDeps extends ServiceDeps {
-  // Where the launch was typed, so a run against a bundle older than the
-  // sources can say so. Omitted when the caller is not standing in a factory.
-  cwd?: string;
+  // Set only when the run goes to the local factory's own service, so the
+  // freshness warning speaks about the sources that service was built from.
+  // An explicit --service is some other factory's, and this factory's sources
+  // say nothing about it.
+  factoryCwd?: string;
 }
 
 export interface LaunchResult {
@@ -168,21 +169,14 @@ export async function launchRun(
 }
 
 // A warning, not a refusal: the previous bundle is still a pipeline, and the
-// operator may well mean to run it. `jigs up` is both halves of the fix — it
-// rebuilds, and restarts the service onto what it built.
+// operator may well mean to run it.
 function reportStaleBundle(deps: LaunchDeps): void {
-  if (deps.cwd === undefined) return;
-  let stale: string[];
-  try {
-    stale = stalePipelineSources(locateFactoryRoot(deps.cwd));
-  } catch {
-    // Launching against a --service from outside any factory: no sources here
-    // to be newer than anything.
-    return;
-  }
-  if (stale.length === 0) return;
-  deps.out(
-    `warning: ${stale.join(", ")} newer than the built service — this run executes the previous bundle`,
-  );
+  if (deps.factoryCwd === undefined) return;
+  const behind = serviceBehindSources({
+    cwd: deps.factoryCwd,
+    out: () => {},
+  });
+  if (behind === undefined) return;
+  deps.out(`warning: ${behind} — this run executes the previous bundle`);
   deps.out("bring the service up to the sources first: jigs up");
 }

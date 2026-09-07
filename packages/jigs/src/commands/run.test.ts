@@ -16,9 +16,11 @@ beforeEach(() => {
   fetchMock.mockReset();
   lines = [];
   tmp = makeTmpDir();
+  vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
 });
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   removeTmpDir(tmp);
 });
 
@@ -283,7 +285,7 @@ test("a run launched over sources newer than the build says so, and still launch
 
   await launchRun("deliver-feature", ["ticket=AGE-346"], {
     ...deps(),
-    cwd: factoryBuilt(-60_000),
+    factoryCwd: factoryBuilt(-60_000),
   });
 
   expect(lines[0]).toContain("jigs.config.ts newer than the built service");
@@ -297,20 +299,18 @@ test("a build newer than the sources launches without a word about it", async ()
 
   await launchRun("deliver-feature", ["ticket=AGE-346"], {
     ...deps(),
-    cwd: factoryBuilt(60_000),
+    factoryCwd: factoryBuilt(60_000),
   });
 
   expect(lines[0]).toBe("run wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM");
 });
 
-test("a launch from outside any factory has no sources to be stale", async () => {
+test("a run aimed at another factory's service is silent about this one's sources", async () => {
   respondSchema();
   respondStarted();
+  factoryBuilt(-60_000);
 
-  await launchRun("deliver-feature", ["ticket=AGE-346"], {
-    ...deps(),
-    cwd: tmp,
-  });
+  await launchRun("deliver-feature", ["ticket=AGE-346"], deps());
 
   expect(lines[0]).toBe("run wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM");
 });

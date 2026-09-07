@@ -35,7 +35,7 @@ cp .env.example .env      # then fill in LINEAR_API_KEY and GITHUB_TOKEN
 pnpm install              # once: this factory's own jigs, in node_modules/.bin
 pnpm exec jigs up         # World, bootstrap, build, start, doctor
 pnpm exec jigs bind git@github.com:owner/repo.git
-pnpm exec jigs service restart   # the service clones every binding when it starts
+pnpm exec jigs up --restart      # the service clones every binding when it starts
 ```
 
 Every `jigs` below is this factory's own: `pnpm exec jigs …`.

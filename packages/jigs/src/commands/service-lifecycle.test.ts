@@ -21,6 +21,7 @@ import {
   restartService,
   runningBundleHash,
   SERVICE_ENTRY,
+  serviceBehindSources,
   serviceLogPath,
   serviceLogs,
   servicePidfilePath,
@@ -228,6 +229,41 @@ test("a factory with no build at all is not stale — it is unbuilt", () => {
   touch(root, "jigs.config.ts", 60_000);
 
   expect(stalePipelineSources(root)).toEqual([]);
+});
+
+test("a test file beside a pipeline is in no bundle, so editing one stales nothing", () => {
+  const root = builtFactory();
+  touch(root, SERVICE_ENTRY, 0);
+  touch(root, "pipelines/ship.test.ts", 60_000);
+
+  expect(stalePipelineSources(root)).toEqual([]);
+});
+
+test("a build the running service never picked up is behind the sources too", async () => {
+  const root = builtFactory();
+  const io = fake();
+  await startService(deps(root, io));
+  expect(serviceBehindSources(deps(root, io))).toBeUndefined();
+
+  writeFileSync(path.join(root, SERVICE_ENTRY), "rebuilt");
+
+  expect(serviceBehindSources(deps(root, io))).toContain("earlier bundle");
+});
+
+test("an edit nobody built outranks the bundle the service booted from", async () => {
+  const root = builtFactory();
+  const io = fake();
+  await startService(deps(root, io));
+  touch(root, "jigs.config.ts", 60_000);
+
+  expect(serviceBehindSources(deps(root, io))).toContain("jigs.config.ts");
+});
+
+test("an unbuilt factory is behind nothing — there is no bundle to be behind", () => {
+  const root = makeFactoryRepo(tmp, "");
+  touch(root, "jigs.config.ts", 60_000);
+
+  expect(serviceBehindSources(deps(root, fake()))).toBeUndefined();
 });
 
 test("two factories supervise independently", async () => {

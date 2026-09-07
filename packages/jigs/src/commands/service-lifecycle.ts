@@ -106,8 +106,12 @@ export function builtBundleHash(factoryRoot: string): string | undefined {
 // it booted from.
 const PIPELINE_SOURCES = ["jigs.config.ts", "pipelines", "steps"];
 
-// Empty when the factory has no bundle at all — that is the unbuilt factory
-// startService refuses over, not a build gone stale.
+// A test file beside a pipeline is compiled into no bundle, so editing one
+// leaves the build current.
+const NOT_COMPILED = /\.(test|spec)\.[cm]?tsx?$/;
+
+// Empty when the factory has no bundle at all — an unbuilt factory, not a
+// build gone stale.
 export function stalePipelineSources(factoryRoot: string): string[] {
   const entry = path.join(factoryRoot, SERVICE_ENTRY);
   if (!existsSync(entry)) return [];
@@ -124,6 +128,7 @@ function newerThan(target: string, builtAt: number): boolean {
   return readdirSync(target, { recursive: true, withFileTypes: true }).some(
     (entry) =>
       entry.isFile() &&
+      !NOT_COMPILED.test(entry.name) &&
       statSync(path.join(entry.parentPath, entry.name)).mtimeMs > builtAt,
   );
 }
@@ -136,6 +141,27 @@ export function runningBundleHash(
   if (livePid(slug, processes) === undefined) return undefined;
   const file = serviceBundlePath(slug);
   return existsSync(file) ? readFileSync(file, "utf8").trim() : undefined;
+}
+
+// Why a run launched now would not execute the sources on disk: the bundle is
+// behind them, or the running process is behind the bundle — a build nobody
+// restarted onto. Undefined for an unbuilt factory, which startService
+// reports in its own words.
+export function serviceBehindSources(
+  deps: ServiceLifecycleDeps,
+): string | undefined {
+  const factoryRoot = locateFactoryRoot(deps.cwd);
+  const built = builtBundleHash(factoryRoot);
+  if (built === undefined) return undefined;
+  const stale = stalePipelineSources(factoryRoot);
+  if (stale.length > 0) {
+    return `${stale.join(", ")} newer than the built service`;
+  }
+  const running = runningBundleHash(deps);
+  if (running !== undefined && running !== built) {
+    return "the service is running an earlier bundle than the one built";
+  }
+  return undefined;
 }
 
 function readPid(slug: string): number | undefined {
