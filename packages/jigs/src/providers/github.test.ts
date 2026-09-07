@@ -30,9 +30,10 @@ interface SnapshotFixture {
   reviews?: unknown[];
   comments?: unknown[];
   checkRuns?: unknown[];
+  statuses?: unknown[];
 }
 
-// The five calls fetchPrSnapshot makes, in order.
+// The six calls fetchPrSnapshot makes, in order.
 function stubSnapshot(fixture: SnapshotFixture = {}): void {
   fetchMock
     .mockResolvedValueOnce(
@@ -46,6 +47,7 @@ function stubSnapshot(fixture: SnapshotFixture = {}): void {
     .mockResolvedValueOnce(json(fixture.reviews ?? []))
     .mockResolvedValueOnce(json(fixture.comments ?? []))
     .mockResolvedValueOnce(json({ check_runs: fixture.checkRuns ?? [] }))
+    .mockResolvedValueOnce(json({ statuses: fixture.statuses ?? [] }))
     .mockResolvedValueOnce(json({ login: "jigs-bot" }));
 }
 
@@ -85,6 +87,7 @@ test("fetchPrSnapshot shapes the PR, its reviews, the head sha and the viewer", 
     "http://mock.test/github/repos/acme/api/pulls/41/reviews?per_page=100",
     "http://mock.test/github/repos/acme/api/pulls/41/comments?per_page=100",
     "http://mock.test/github/repos/acme/api/commits/head-sha-1/check-runs?per_page=100",
+    "http://mock.test/github/repos/acme/api/commits/head-sha-1/status?per_page=100",
     "http://mock.test/github/user",
   ]);
   const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -179,6 +182,105 @@ test("check runs collapse to red, green, pending, and pending again with no CI a
   const none = await fetchPrSnapshot(pr);
   expect(none.ci).toBe("pending");
   expect(none.failingChecks).toEqual([]);
+});
+
+test("commit statuses join the check runs the gate and fixCi read", async () => {
+  const status = (overrides: Record<string, unknown>) => ({
+    context: "AWS CodeBuild us-west-2 (Forge-CI-Beta)",
+    state: "success",
+    target_url: "http://codebuild.test/1",
+    ...overrides,
+  });
+
+  stubSnapshot({ statuses: [status({}), status({ context: "e2e" })] });
+  expect((await fetchPrSnapshot(pr)).ci).toBe("green");
+
+  fetchMock.mockReset();
+  stubSnapshot({ statuses: [status({}), status({ state: "failure" })] });
+  const failed = await fetchPrSnapshot(pr);
+  expect(failed.ci).toBe("red");
+  expect(failed.failingChecks).toEqual([
+    {
+      name: "AWS CodeBuild us-west-2 (Forge-CI-Beta)",
+      conclusion: "failure",
+      url: "http://codebuild.test/1",
+    },
+  ]);
+
+  // An errored status is as red as a failed one.
+  fetchMock.mockReset();
+  stubSnapshot({ statuses: [status({ state: "error" })] });
+  expect((await fetchPrSnapshot(pr)).ci).toBe("red");
+
+  fetchMock.mockReset();
+  stubSnapshot({ statuses: [status({ state: "pending" })] });
+  expect((await fetchPrSnapshot(pr)).ci).toBe("pending");
+
+  // A state jigs cannot read must never pass for green.
+  fetchMock.mockReset();
+  stubSnapshot({ statuses: [status({ state: "queued" })] });
+  expect((await fetchPrSnapshot(pr)).ci).toBe("pending");
+});
+
+test("a green check run does not hide a red status, or the reverse", async () => {
+  stubSnapshot({
+    checkRuns: [
+      {
+        name: "lint",
+        status: "completed",
+        conclusion: "success",
+        html_url: "http://ci.test/1",
+      },
+    ],
+    statuses: [
+      { context: "build", state: "failure", target_url: "http://cb.test/1" },
+    ],
+  });
+  const statusRed = await fetchPrSnapshot(pr);
+  expect(statusRed.ci).toBe("red");
+  expect(statusRed.failingChecks).toEqual([
+    { name: "build", conclusion: "failure", url: "http://cb.test/1" },
+  ]);
+
+  fetchMock.mockReset();
+  stubSnapshot({
+    checkRuns: [
+      {
+        name: "lint",
+        status: "completed",
+        conclusion: "failure",
+        html_url: "http://ci.test/1",
+      },
+    ],
+    statuses: [
+      { context: "build", state: "success", target_url: "http://cb.test/1" },
+    ],
+  });
+  expect((await fetchPrSnapshot(pr)).failingChecks).toEqual([
+    { name: "lint", conclusion: "failure", url: "http://ci.test/1" },
+  ]);
+});
+
+test("a context reported on both surfaces counts once, as its check run", async () => {
+  stubSnapshot({
+    checkRuns: [
+      {
+        name: "build",
+        status: "completed",
+        conclusion: "failure",
+        html_url: "http://ci.test/1",
+      },
+    ],
+    statuses: [
+      { context: "build", state: "success", target_url: "http://cb.test/1" },
+    ],
+  });
+
+  const snapshot = await fetchPrSnapshot(pr);
+  expect(snapshot.ci).toBe("red");
+  expect(snapshot.failingChecks).toEqual([
+    { name: "build", conclusion: "failure", url: "http://ci.test/1" },
+  ]);
 });
 
 test("a non-2xx response throws with the path named", async () => {

@@ -97,6 +97,17 @@ const RED_CONCLUSIONS = new Set([
   "startup_failure",
 ]);
 
+// Some CI reports only through the legacy commit status API — AWS CodeBuild
+// among them — so its states are translated into check-run conclusions and
+// read by the same classifier. An unrecognised state stays pending: a build
+// jigs cannot read must never pass for green.
+const STATUS_CONCLUSIONS: Record<string, string | null> = {
+  success: "success",
+  failure: "failure",
+  error: "failure",
+  pending: null,
+};
+
 function classifyChecks(runs: CheckRun[], anyPending: boolean) {
   const failing = runs.filter(
     (run) => run.conclusion !== null && RED_CONCLUSIONS.has(run.conclusion),
@@ -187,6 +198,13 @@ export async function fetchPrSnapshot(pr: PrRef): Promise<PrSnapshot> {
       html_url: string | null;
     }>;
   }>(`${repoPath}/commits/${pull.head.sha}/check-runs?per_page=100`); // unpaginated cap, accepted for v0
+  const combined = await githubGet<{
+    statuses: Array<{
+      context: string;
+      state: string;
+      target_url: string | null;
+    }>;
+  }>(`${repoPath}/commits/${pull.head.sha}/status?per_page=100`); // unpaginated cap, accepted for v0
   const viewer = await getAuthenticatedUser();
 
   const runs: CheckRun[] = checks.check_runs.map((run) => ({
@@ -194,9 +212,21 @@ export async function fetchPrSnapshot(pr: PrRef): Promise<PrSnapshot> {
     conclusion: run.conclusion,
     url: run.html_url ?? "",
   }));
+  // A context on both surfaces is one build reported twice; the check run is
+  // the richer of the two.
+  const named = new Set(runs.map((run) => run.name));
+  const contexts: CheckRun[] = combined.statuses
+    .filter((status) => !named.has(status.context))
+    .map((status) => ({
+      name: status.context,
+      conclusion: STATUS_CONCLUSIONS[status.state] ?? null,
+      url: status.target_url ?? "",
+    }));
+
   const { ci, failing } = classifyChecks(
-    runs,
-    checks.check_runs.some((run) => run.status !== "completed"),
+    [...runs, ...contexts],
+    checks.check_runs.some((run) => run.status !== "completed") ||
+      contexts.some((context) => context.conclusion === null),
   );
 
   return {
