@@ -80,8 +80,9 @@ export function doctorChecks(): Check[] {
 // "did not answer".
 export const JIT_TIMEOUT_MS = 3 * CHECK_TIMEOUT_MS + 5_000;
 
-// Everything a step can only learn at hydration, once the body has built its
-// harness config.
+// Preflight's backstop: everything a step can only learn at hydration, once
+// the body has built its harness config — which no manifest could declare
+// ahead of the run.
 export function jitChecks(wire: AgentWire): Check[] {
   const harness = wire.harness;
   return [
