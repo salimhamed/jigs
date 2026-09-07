@@ -54,13 +54,18 @@ test("a relaunched ticket adopts the leftover worktree and takes over its row", 
   const first = await provisionRunWorktree(request, "run_first", { sql });
   expect(first).toMatchObject({ path: testPath });
   expect((await getWorktree(sql, testPath))?.ownerRunId).toBe("run_first");
+  // Committed, so the tree stays clean while its HEAD moves off the default
+  // branch — which is the only place a re-cut could land it.
+  writeFileSync(path.join(testPath, "shipped.txt"), "shipped\n");
+  git(testPath, "add", "shipped.txt");
+  git(testPath, "commit", "-q", "-m", "shipped");
   const head = git(testPath, "rev-parse", "HEAD");
 
   const second = await provisionRunWorktree(request, "run_second", {
     sql,
     readOwner: async () => ({ terminal: true, status: "completed" }),
   });
-  // Adopted, not re-cut: the tree the first run left is still the one here.
+  // Adopted, not re-cut: the work the first run left is still checked out.
   expect(second).toMatchObject({ path: testPath });
   expect(git(testPath, "rev-parse", "HEAD")).toBe(head);
   expect((await getWorktree(sql, testPath))?.ownerRunId).toBe("run_second");

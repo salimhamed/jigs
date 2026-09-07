@@ -123,7 +123,13 @@ test("a live foreign owner is refused before disk is ever inspected", async () =
 
 test("a terminal owner's clean worktree is reused and re-owned", async () => {
   await existingWorktree("run_done");
+  // Committed, so the tree stays clean while its HEAD moves off the default
+  // branch — which is the only place a re-cut could land it.
+  writeFileSync(path.join(target, "shipped.txt"), "shipped\n");
+  git(target, "add", "shipped.txt");
+  git(target, "commit", "-q", "-m", "shipped");
   const head = git(target, "rev-parse", "HEAD");
+  expect(head).not.toBe(originMain());
 
   const facts = await provisionRunWorktree(
     request,
@@ -132,7 +138,7 @@ test("a terminal owner's clean worktree is reused and re-owned", async () => {
   );
 
   expect(facts).toMatchObject({ path: target, baseSha: originMain() });
-  // Reused, not re-cut: the tree the previous run left is still the one here.
+  // Reused, not re-cut: the work the previous run left is still checked out.
   expect(git(target, "rev-parse", "HEAD")).toBe(head);
   expect(store.get(target)).toMatchObject({
     ownerRunId: "run_new",

@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { managedCodexHomePath } from "../harnesses/codex-home.ts";
+import * as create from "./create.ts";
 import type { OwnerState } from "./owner.ts";
 import type { WorktreeRow } from "./registry.ts";
 import { classifySweep, type SweepInput, sweepWorktrees } from "./sweep.ts";
@@ -264,6 +265,25 @@ test("a completed owner's merged teardown deletes the row and the branch", async
   expect(() =>
     git(repoDir, "rev-parse", "--verify", "refs/heads/done"),
   ).toThrow();
+});
+
+test("one fetch serves every completed run sharing a clone", async () => {
+  // The merge check reads a ref only fetch refreshes, and a pass can hold
+  // dozens of rows: refetching per row would cost a round trip each.
+  const fetches = vi.spyOn(create, "fetchOriginDefault");
+  for (const branch of ["first", "second"]) {
+    register(addWorktree(branch), branch);
+  }
+
+  await sweepWorktrees(
+    { clean: true },
+    deps({
+      run_first: { terminal: true, status: "completed" },
+      run_second: { terminal: true, status: "completed" },
+    }),
+  );
+
+  expect(fetches.mock.calls).toEqual([[repoDir]]);
 });
 
 test("an untracked file does not cost a merged worktree its teardown", async () => {
