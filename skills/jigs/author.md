@@ -137,9 +137,6 @@ pnpm exec jigs build     # the ids test reads the build output, not the source
 pnpm test
 ```
 
-`jigs build` warns when a run is still in flight: a pipeline that changed shape
-no longer answers to the step ids its parked run was memoized under.
-
 ## Never
 
 - Never run a standalone `npx workflow web` against a factory World. Opening

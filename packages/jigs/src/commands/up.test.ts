@@ -190,6 +190,27 @@ test("a restart over in-flight runs asks first, refuses without a TTY, and stays
   expect(io.procs.spawns).toHaveLength(3);
 });
 
+test("a restart whose service answers nothing is not asked about", async () => {
+  const port = await fakeService({
+    runs: [{ runId: "wrun_01", pipeline: "example", status: "suspended" }],
+  });
+  const root = factory({ port });
+  const io = { exec: fakeExec(), procs: fakeProcesses() };
+  await up(root, io);
+
+  // The pid is alive but the port is silent — the boot window. No run list
+  // can be had, and nothing is holding a run this restart could cut off.
+  closeFakeServices();
+  io.exec.bundle = "bundle v2";
+  const confirm = vi.fn(async () => true);
+
+  const result = await up(root, io, { confirm, readyTimeoutMs: 30 });
+
+  expect(confirm).not.toHaveBeenCalled();
+  expect(io.procs.spawns).toHaveLength(2);
+  expect(result.service).toBe("restarted");
+});
+
 test("--no-doctor skips the last step and says so", async () => {
   const port = await fakeService();
   const root = factory({ port });
