@@ -82,6 +82,7 @@ test("a registered path missing from disk is a stale row", () => {
 
 let tmp: string;
 let repoDir: string;
+let remoteDir: string;
 let worktreesDir: string;
 let store: Map<string, WorktreeRow>;
 let log: string[];
@@ -94,9 +95,9 @@ beforeEach(() => {
   vi.spyOn(console, "log").mockImplementation((line: string) => {
     log.push(line);
   });
-  // A real origin behind a real clone: whether a completed run's branch is
+  // A real origin behind a real clone: whether a terminal run's branch is
   // merged is read off refs/remotes/origin/<default>.
-  ({ repoDir, worktreesDir } = makeClonedBinding(tmp));
+  ({ repoDir, remoteDir, worktreesDir } = makeClonedBinding(tmp));
   store = new Map();
 });
 afterEach(() => {
@@ -152,6 +153,12 @@ function codexHome(runId: string): string {
 
 const dirty = (target: string) =>
   writeFileSync(path.join(target, "wip.txt"), "half-finished\n");
+
+function commit(target: string, file: string): void {
+  writeFileSync(path.join(target, file), `${file}\n`);
+  git(target, "add", file);
+  git(target, "commit", "-q", "-m", file);
+}
 
 test("a dry run deletes nothing", async () => {
   const clean = addWorktree("clean");
@@ -248,9 +255,7 @@ test("a registered path missing from disk drops only its row", async () => {
 
 test("a completed owner's merged teardown deletes the row and the branch", async () => {
   const done = addWorktree("done");
-  writeFileSync(path.join(done, "shipped.txt"), "shipped\n");
-  git(done, "add", "shipped.txt");
-  git(done, "commit", "-q", "-m", "shipped");
+  commit(done, "shipped.txt");
   // Merged is what earns the branch deletion, so origin's default branch has
   // to actually contain the work.
   git(done, "push", "-q", "origin", "done:main");
@@ -288,9 +293,7 @@ test("one fetch serves every completed run sharing a clone", async () => {
 
 test("an untracked file does not cost a merged worktree its teardown", async () => {
   const done = addWorktree("done");
-  writeFileSync(path.join(done, "shipped.txt"), "shipped\n");
-  git(done, "add", "shipped.txt");
-  git(done, "commit", "-q", "-m", "shipped");
+  commit(done, "shipped.txt");
   git(done, "push", "-q", "origin", "done:main");
   git(repoDir, "fetch", "-q", "origin");
   // Build output, not work: the branch is merged, so the tree still goes.
@@ -310,9 +313,7 @@ test("an untracked file does not cost a merged worktree its teardown", async () 
 
 test("the merge check sees work pushed since the clone last fetched", async () => {
   const done = addWorktree("done");
-  writeFileSync(path.join(done, "shipped.txt"), "shipped\n");
-  git(done, "add", "shipped.txt");
-  git(done, "commit", "-q", "-m", "shipped");
+  commit(done, "shipped.txt");
   // The merge lands from elsewhere — a PR merged on GitHub — so rewind the
   // tracking ref the push moved: nothing in the clone knows about it yet.
   const stale = git(repoDir, "rev-parse", "refs/remotes/origin/main");
@@ -332,9 +333,7 @@ test("the merge check sees work pushed since the clone last fetched", async () =
 
 test("an unreachable origin costs a notice, not the pass", async () => {
   const done = addWorktree("done");
-  writeFileSync(path.join(done, "shipped.txt"), "shipped\n");
-  git(done, "add", "shipped.txt");
-  git(done, "commit", "-q", "-m", "shipped");
+  commit(done, "shipped.txt");
   register(done, "done");
   git(repoDir, "remote", "set-url", "origin", path.join(tmp, "nonexistent"));
 
@@ -353,9 +352,7 @@ test("an unreachable origin costs a notice, not the pass", async () => {
 
 test("a completed owner whose branch never merged keeps it as insurance", async () => {
   const done = addWorktree("done");
-  writeFileSync(path.join(done, "unshipped.txt"), "unshipped\n");
-  git(done, "add", "unshipped.txt");
-  git(done, "commit", "-q", "-m", "unshipped");
+  commit(done, "unshipped.txt");
   register(done, "done");
   await sweepWorktrees(
     { clean: true },
@@ -367,8 +364,9 @@ test("a completed owner whose branch never merged keeps it as insurance", async 
   );
 });
 
-test("a failed owner's clean teardown keeps the branch as insurance", async () => {
+test("a failed owner's unmerged branch stays as insurance", async () => {
   const failed = addWorktree("failed");
+  commit(failed, "unshipped.txt");
   register(failed, "failed");
   await sweepWorktrees(
     { clean: true },
@@ -376,6 +374,84 @@ test("a failed owner's clean teardown keeps the branch as insurance", async () =
   );
   expect(existsSync(failed)).toBe(false);
   expect(git(repoDir, "rev-parse", "--verify", "refs/heads/failed")).toMatch(
+    /^[0-9a-f]{40}$/,
+  );
+});
+
+test("a cancelled run's empty branch goes with its worktree", async () => {
+  // Cancelled before the first commit: the tip is still the fork point, so
+  // the branch is a copy of nothing.
+  const stopped = addWorktree("stopped");
+  register(stopped, "stopped");
+
+  await sweepWorktrees(
+    { clean: true },
+    deps({ run_stopped: { terminal: true, status: "cancelled" } }),
+  );
+
+  expect(existsSync(stopped)).toBe(false);
+  expect(() =>
+    git(repoDir, "rev-parse", "--verify", "refs/heads/stopped"),
+  ).toThrow();
+});
+
+test("a cancelled run's redundant branch keeps its remote", async () => {
+  const stopped = addWorktree("stopped");
+  commit(stopped, "shipped.txt");
+  git(stopped, "push", "-q", "origin", "stopped");
+  git(stopped, "push", "-q", "origin", "stopped:main");
+  git(repoDir, "fetch", "-q", "origin");
+  register(stopped, "stopped");
+
+  await sweepWorktrees(
+    { clean: true },
+    deps({ run_stopped: { terminal: true, status: "cancelled" } }),
+  );
+
+  expect(() =>
+    git(repoDir, "rev-parse", "--verify", "refs/heads/stopped"),
+  ).toThrow();
+  // The pushed branch is somebody's open PR: only the done row deletes it.
+  expect(git(remoteDir, "rev-parse", "--verify", "refs/heads/stopped")).toMatch(
+    /^[0-9a-f]{40}$/,
+  );
+});
+
+test("a cancelled run's dirty tree survives its empty branch", async () => {
+  const stopped = addWorktree("stopped");
+  dirty(stopped);
+  register(stopped, "stopped");
+
+  await sweepWorktrees(
+    { clean: true },
+    deps({ run_stopped: { terminal: true, status: "cancelled" } }),
+  );
+
+  expect(existsSync(stopped)).toBe(true);
+  expect(store.get(stopped)?.state).toBe("abandoned-dirty");
+  expect(git(repoDir, "rev-parse", "--verify", "refs/heads/stopped")).toMatch(
+    /^[0-9a-f]{40}$/,
+  );
+});
+
+test("a cancelled run's branch stays when the ancestry cannot be proven", async () => {
+  const stopped = addWorktree("stopped");
+  register(stopped, "stopped");
+  // An unreachable origin with no default branch recorded: neither the fetch
+  // nor the ancestor check can answer, and branch deletion needs positive
+  // evidence.
+  git(repoDir, "remote", "set-url", "origin", path.join(tmp, "nonexistent"));
+  git(repoDir, "symbolic-ref", "-d", "refs/remotes/origin/HEAD");
+
+  const report = await sweepWorktrees(
+    { clean: true },
+    deps({ run_stopped: { terminal: true, status: "cancelled" } }),
+  );
+
+  expect(report.removed).toEqual([stopped]);
+  expect(log.some((line) => line.includes("could not fetch"))).toBe(true);
+  expect(existsSync(stopped)).toBe(false);
+  expect(git(repoDir, "rev-parse", "--verify", "refs/heads/stopped")).toMatch(
     /^[0-9a-f]{40}$/,
   );
 });

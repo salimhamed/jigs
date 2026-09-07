@@ -2,6 +2,7 @@ import { existsSync, rmdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import type { Sql } from "postgres";
 import { removeManagedCodexHome } from "../harnesses/codex-home.ts";
+import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import { fetchOriginDefault } from "./create.ts";
 import { type OwnerState, readOwner } from "./owner.ts";
 import {
@@ -191,11 +192,23 @@ export async function sweepWorktrees(
     if (approved !== null && !approved.has(entry.path)) continue;
     const { repoDir } = row;
     const status = owners.get(row.ownerRunId)?.status ?? "unknown";
+    const dirtyTree = entry.state === "abandoned-dirty";
+    // A branch origin's default branch already contains is a copy of nothing
+    // however the run ended, so the ancestry question is asked of every
+    // terminal status — including the empty branch of a run cancelled before
+    // its first commit, whose tip is still the fork point. A status the World
+    // no longer knows is not one of them: branch deletion needs positive
+    // evidence. A dirty tree is asked only when the run completed, where the
+    // merged exemption below is the done row's; elsewhere the uncommitted
+    // work is what the dirty guard is holding.
+    const askMerged =
+      TERMINAL_RUN_STATUSES.has(status) &&
+      (status === "completed" || !dirtyTree);
     // The merge check below reads refs/remotes/origin/<default>, and nothing
     // else refreshes it. A failure is a notice, never the end of the pass:
     // trees earlier in the loop are already gone, and the stale ref reads
     // unmerged, which keeps the branch as insurance.
-    if (status === "completed" && !fetched.has(repoDir)) {
+    if (askMerged && !fetched.has(repoDir)) {
       fetched.add(repoDir);
       try {
         await fetchOriginDefault(repoDir);
@@ -205,12 +218,12 @@ export async function sweepWorktrees(
         );
       }
     }
-    const merged =
-      status === "completed" && (await isBranchMerged(repoDir, entry.branch));
-    let plan = decideTeardown({
-      dirty: entry.state === "abandoned-dirty",
-      merged,
-    });
+    const merged = askMerged && (await isBranchMerged(repoDir, entry.branch));
+    let plan = decideTeardown({ dirty: dirtyTree, merged });
+    // Only a completed run's teardown reaches the remote. A cancelled or
+    // failed run's pushed branch is somebody's open PR whatever its ancestry,
+    // and an empty branch was never pushed at all.
+    if (status !== "completed") plan = { ...plan, deleteRemoteBranch: false };
 
     if (plan.preserve !== null) {
       // The marking happens on every clean pass, force or not: preserved

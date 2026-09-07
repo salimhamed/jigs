@@ -84,7 +84,10 @@ const localBranches = () =>
   git(repoDir, "branch", "--list", "--format=%(refname:short)");
 const remoteBranches = () => git(repoDir, "ls-remote", "--heads", "origin");
 
-test("done (merged) removes the worktree and deletes both branches", () => {
+// Merged, not completed: the sweep asks the ancestry question of every
+// terminal run, so a cancelled run's empty branch reaches this row too — with
+// the remote delete suppressed there, which is the sweep's to withhold.
+test("a merged branch removes the worktree and deletes both branches", () => {
   expect(
     decideTeardown({
       dirty: false,
@@ -97,6 +100,12 @@ test("done (merged) removes the worktree and deletes both branches", () => {
     deleteRemoteBranch: true,
     preserve: null,
   });
+});
+
+test("the merged row outranks dirtiness", () => {
+  expect(decideTeardown({ dirty: true, merged: true })).toEqual(
+    decideTeardown({ dirty: false, merged: true }),
+  );
 });
 
 test("an unmerged clean tree removes the worktree and keeps the branches", () => {
