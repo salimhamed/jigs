@@ -1,7 +1,8 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import { bindingRepoDir } from "../worktrees/layout.ts";
 import { type BindDeps, bindRepo } from "./bind.ts";
 
 let tmp: string;
@@ -56,7 +57,20 @@ test("re-bind is idempotent: no duplicate entries, comments preserved, bytes unc
   await bindRepo(API, deps());
   expect(jigsYml()).toBe(withComment);
   expect(lines.some((l) => l.includes("already points at"))).toBe(true);
-  // Nothing changed, so there is nothing for a restart to pick up.
+});
+
+test("a binding whose clone is already on disk needs no restart", async () => {
+  vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
+  await bindRepo(API, deps());
+  const originRefs = path.join(
+    bindingRepoDir({ factoryRoot: factory, bindingName: "api" }),
+    "refs/remotes/origin",
+  );
+  mkdirSync(originRefs, { recursive: true });
+  writeFileSync(path.join(originRefs, "HEAD"), "ref: refs/heads/main\n");
+
+  lines = [];
+  await bindRepo(API, deps());
   expect(lines.some((l) => l.includes("restart the service"))).toBe(false);
 });
 
@@ -195,11 +209,39 @@ test("no GITHUB_TOKEN anywhere fails with the repair, and the retry ensures the 
   expect(jigsYml()).toContain(`remote: ${API}`);
 
   vi.stubEnv("GITHUB_TOKEN", "gh_test_token");
+  lines = [];
   fetchMock
     .mockResolvedValueOnce(new Response("[]"))
     .mockResolvedValueOnce(new Response(JSON.stringify({ id: 9 })));
   const retry = await bindRepo(API, deps());
   expect(retry.webhook).toBe("created");
+  // The failed run wrote the binding but nothing cloned it.
+  expect(lines).toContain(
+    "restart the service to clone api: jigs service restart",
+  );
+});
+
+test("the repair carries --name, so the retry lands on the same binding", async () => {
+  stubWebhookEnv();
+  vi.stubEnv("GITHUB_TOKEN", "");
+  makeIngressFactory();
+  const failure = await bindRepo(API, deps(), { name: "forge" }).catch(
+    (err: unknown) => err,
+  );
+  expect((failure as { hint?: string }).hint).toContain(
+    `re-run: jigs bind ${API} --name forge`,
+  );
+});
+
+test("a failure GitHub did not lay on the token does not send the operator after one", async () => {
+  stubWebhookEnv();
+  makeIngressFactory();
+  fetchMock.mockRejectedValueOnce(new Error("fetch failed"));
+  const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
+  expect(String(failure)).toContain("fetch failed");
+  const { hint } = failure as { hint?: string };
+  expect(hint).not.toContain("GITHUB_TOKEN");
+  expect(hint).toContain(`jigs bind ${API}`);
 });
 
 test("a token GitHub rejects fails with the repair, and the retry ensures the webhook", async () => {

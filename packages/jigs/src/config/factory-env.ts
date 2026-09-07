@@ -2,10 +2,6 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { parseEnv } from "node:util";
 
-// The factory repo's `.env`: the one file setup tells the operator to fill in.
-// It is the service child's environment, and the CLI verbs that need a
-// credential of their own read it from here rather than from the shell alone.
-// Absent is empty — which slot matters is the caller's to say.
 export function readFactoryEnv(factoryRoot: string): Record<string, string> {
   const file = path.join(factoryRoot, ".env");
   if (!existsSync(file)) return {};
@@ -13,7 +9,8 @@ export function readFactoryEnv(factoryRoot: string): Record<string, string> {
 }
 
 // The shell wins: exporting a value for a single command is how an operator
-// overrides the factory's own. Empty counts as unset on either side.
+// overrides the factory's own. The scaffolded `.env` declares every slot it
+// knows about and leaves it empty, so empty is unset on either side.
 export function factoryEnvValue(
   factoryRoot: string,
   key: string,

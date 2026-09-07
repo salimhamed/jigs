@@ -10,6 +10,9 @@ let factory: string;
 beforeEach(() => {
   tmp = makeTmpDir();
   factory = makeFactoryRepo(tmp);
+  // Otherwise the shell-wins branch reads whatever the developer exports.
+  vi.stubEnv("GITHUB_TOKEN", "");
+  vi.stubEnv("LINEAR_API_KEY", "");
 });
 afterEach(() => {
   vi.unstubAllEnvs();

@@ -152,8 +152,9 @@ in the target repo.
 
 `jigs bind` also creates the repo's GitHub webhook when the factory has an
 `ingress_url` in `jigs.yml`, taking `GITHUB_TOKEN` from the factory's `.env`
-or from the shell, which wins. Without a usable token it fails and says the
-repair — an ingress with no webhook is a gate that never wakes — and the
+— or from the shell for that one command, which wins there and only there
+(the service reads `.env` alone). Without a usable token it fails and says
+the repair — an ingress with no webhook is a gate that never wakes — and the
 retry is the same `jigs bind`: the binding already recorded stands and the
 webhook is create-or-verify. A factory with no `ingress_url` skips the webhook
 with a note and needs no token. `jigs unbind` edits the config only; the clone

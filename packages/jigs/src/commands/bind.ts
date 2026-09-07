@@ -12,9 +12,11 @@ import { JigsError } from "../errors.ts";
 import {
   ensureRepoWebhook,
   ensureWebhookSecret,
+  GithubApiError,
   parseGithubRemote,
 } from "../github-webhook.ts";
-import { bindingDir } from "../worktrees/layout.ts";
+import { hasBindingClone } from "../worktrees/clone.ts";
+import { bindingDir, bindingRepoDir } from "../worktrees/layout.ts";
 
 const BINDING_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
@@ -81,12 +83,15 @@ export async function bindRepo(
   if (updated !== text) {
     writeFactoryConfigText(factoryRoot, updated);
   }
-  if (existing !== undefined) {
-    deps.out(`${name} already points at ${remoteUrl}`);
-  } else {
-    deps.out(`bound ${name} → ${remoteUrl}`);
-    // The running service knows nothing of this binding, and every run that
-    // names it is refused until one that does has cloned it.
+  deps.out(
+    existing === undefined
+      ? `bound ${name} → ${remoteUrl}`
+      : `${name} already points at ${remoteUrl}`,
+  );
+  // Missing clone, not new entry: a bind whose webhook leg failed has already
+  // written the binding, so the re-run that repairs it must still say the
+  // clone every run naming this binding waits on.
+  if (!hasBindingClone(bindingRepoDir({ factoryRoot, bindingName: name }))) {
     deps.out(`restart the service to clone ${name}: jigs service restart`);
   }
 
@@ -97,6 +102,12 @@ export async function bindRepo(
     remoteUrl,
     factoryRoot,
     ingressUrl: config.ingress_url,
+    // The repair it prints has to land on this binding, not on the one the
+    // remote alone would derive.
+    reBind:
+      options.name === undefined
+        ? `jigs bind ${remoteUrl}`
+        : `jigs bind ${remoteUrl} --name ${name}`,
     deps,
   });
   return { name, remote: remoteUrl, webhook };
@@ -124,11 +135,13 @@ async function ensureWebhook({
   remoteUrl,
   factoryRoot,
   ingressUrl,
+  reBind,
   deps,
 }: {
   remoteUrl: string;
   factoryRoot: string;
   ingressUrl: string | undefined;
+  reBind: string;
   deps: BindDeps;
 }): Promise<BindResult["webhook"]> {
   if (ingressUrl === undefined) {
@@ -143,14 +156,13 @@ async function ensureWebhook({
     return "skipped";
   }
   const slug = `${repoRef.owner}/${repoRef.repo}`;
-  const repair = `set GITHUB_TOKEN in ${path.join(factoryRoot, ".env")} to a classic PAT with admin:repo_hook on ${slug} (an exported GITHUB_TOKEN wins over the file), then re-run: jigs bind ${remoteUrl}`;
+  const tokenRepair = `set GITHUB_TOKEN in ${path.join(factoryRoot, ".env")} to a classic PAT with admin:repo_hook on ${slug} (an exported GITHUB_TOKEN wins over the file), then re-run: ${reBind}`;
   const token = factoryEnvValue(factoryRoot, "GITHUB_TOKEN");
   if (token === undefined) {
-    // An ingress with no webhook is a factory whose PR gate never wakes, and
-    // the note this replaced read as a pass on the very first real bind.
+    // An ingress with no webhook is a factory whose PR gate never wakes.
     throw new JigsError(
       `jigs.yml declares ingress_url but GITHUB_TOKEN is not set, so ${slug}'s webhook cannot be created`,
-      repair,
+      tokenRepair,
     );
   }
   const secret = ensureWebhookSecret();
@@ -162,9 +174,16 @@ async function ensureWebhook({
   }).catch((err: unknown) => {
     throw new JigsError(
       `${slug}'s webhook could not be ensured: ${err instanceof Error ? err.message : String(err)}`,
-      repair,
+      rejectedToken(err) ? tokenRepair : `once that clears, re-run: ${reBind}`,
     );
   });
   deps.out(`webhook ${outcome}: ${slug}`);
   return outcome;
+}
+
+// Everything else GitHub can fail with — a network error, a rate limit, an
+// outage — is not the token's fault, and telling the operator to re-issue one
+// sends them past the real failure.
+function rejectedToken(err: unknown): boolean {
+  return err instanceof GithubApiError && [401, 403, 404].includes(err.status);
 }

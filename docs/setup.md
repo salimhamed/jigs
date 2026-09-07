@@ -179,12 +179,13 @@ cp .env.example .env      # then fill in LINEAR_API_KEY / GITHUB_TOKEN
 ```
 
 `.env` is this factory's environment file: the service loads it when it
-starts, and `PORT` comes from `jigs.yml` rather than from here. The
-`LINEAR_API_KEY` / `GITHUB_TOKEN` slots are consumed by the suspension
-primitives (`needsHuman()` posts Linear comments, `pullRequestGate()`
-re-checks PR state), and both are validated on every trigger: preflight
-refuses to create a run when a requirement is unmet, reporting every failure
-with its repair. `jigs doctor` runs the same checks without a launch.
+starts, `jigs bind` reads `GITHUB_TOKEN` out of it, and `PORT` comes from
+`jigs.yml` rather than from here. The `LINEAR_API_KEY` / `GITHUB_TOKEN` slots
+are consumed by the suspension primitives (`needsHuman()` posts Linear
+comments, `pullRequestGate()` re-checks PR state), and both are validated on
+every trigger: preflight refuses to create a run when a requirement is unmet,
+reporting every failure with its repair. `jigs doctor` runs the same checks
+without a launch.
 
 `WORKFLOW_TARGET_WORLD=@workflow/world-postgres` and `WORKFLOW_POSTGRES_URL`
 come filled in; leave them. The service refuses to start when the URL is
@@ -305,9 +306,11 @@ restart above before any run can name it; `jigs bind` says so, and
 `jigs up` works too and saves the restart; the order here is only the one a
 newcomer meets.)
 
-`jigs bind` also creates the repo's webhook, which needs `GITHUB_TOKEN` —
-read from this factory's `.env`, or from the shell when you export one there,
-which wins. The token is for the webhook, not for the binding.
+`jigs bind` also creates the repo's webhook, which needs `GITHUB_TOKEN`. Bind
+reads it from this factory's `.env`, and an exported one wins for that one
+command — a convenience of bind's, not the factory's rule: the service reads
+`.env` alone, so a token that only ever lives in your shell leaves the running
+factory without one. The token is for the webhook, not for the binding.
 
 A factory with an `ingress_url` in its `jigs.yml` (step 5) and no usable token
 is half configured — an ingress nothing posts to, a PR gate that never wakes —
