@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.3](https://github.com/salimhamed/jigs/compare/jigs-v0.4.2...jigs-v0.4.3) (2026-09-07)
+
+
+### Bug Fixes
+
+* **sweep:** delete a redundant branch however the run ended ([#138](https://github.com/salimhamed/jigs/issues/138)) ([3d92c96](https://github.com/salimhamed/jigs/commit/3d92c96cd845db48cff4f9cbc90a3b84ab3a090b))
+
 ## [0.4.2](https://github.com/salimhamed/jigs/compare/jigs-v0.4.1...jigs-v0.4.2) (2026-09-07)
 
 
