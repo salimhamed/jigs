@@ -1,15 +1,18 @@
 import { expect, test } from "vitest";
 import type { PrSnapshot, ReviewThread } from "../providers/github.ts";
 import {
-  ackGateCursor,
   classifyPrState,
-  emptyGateCursor,
   type GateCursor,
   prToken,
   tokenFromGithubPayload,
 } from "./pull-request-gate.ts";
 
-const empty: GateCursor = emptyGateCursor();
+const empty: GateCursor = {
+  seenReviewIds: [],
+  seenCommentIds: [],
+  selfCommentIds: [],
+  lastRedSha: null,
+};
 
 const snapshot = (overrides: Partial<PrSnapshot> = {}): PrSnapshot => ({
   state: "open",
@@ -177,7 +180,7 @@ test("a thread whose only new comment is our own acked reply yields nothing", ()
   ];
   const second = classifyPrState(
     snapshot({ viewer: "salim", reviewThreads: answered }),
-    ackGateCursor(first.cursor, { selfCommentIds: [901] }),
+    { ...first.cursor, selfCommentIds: [901] },
   );
 
   expect(second.wakes).toEqual([]);
@@ -197,7 +200,7 @@ test("a human's follow-up on a thread we answered re-opens it", () => {
   ];
   const second = classifyPrState(
     snapshot({ viewer: "salim", reviewThreads: answered }),
-    ackGateCursor(first.cursor, { selfCommentIds: [901] }),
+    { ...first.cursor, selfCommentIds: [901] },
   );
 
   // The operator, on their own token: same login as our reply above.
