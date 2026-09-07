@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.0](https://github.com/salimhamed/jigs/compare/jigs-v0.3.0...jigs-v0.4.0) (2026-09-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* ship building blocks, not compositions ([#121](https://github.com/salimhamed/jigs/issues/121))
+
+### Features
+
+* ship building blocks, not compositions ([#121](https://github.com/salimhamed/jigs/issues/121)) ([3411238](https://github.com/salimhamed/jigs/commit/34112389ca75d3dba99bf64409dfb80989c58971))
+
 ## [0.3.0](https://github.com/salimhamed/jigs/compare/jigs-v0.2.0...jigs-v0.3.0) (2026-09-06)
 
 
