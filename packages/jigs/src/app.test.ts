@@ -160,7 +160,7 @@ test("POST /ingress/github without a configured secret is a 503", async () => {
   );
 });
 
-test("a validly signed PR review delivery nobody is listening to is dropped with a 404", async () => {
+test("a validly signed PR review delivery nobody is listening to is acknowledged", async () => {
   const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
   const send = () =>
     postGithub(reviewPayload, {
@@ -168,14 +168,14 @@ test("a validly signed PR review delivery nobody is listening to is dropped with
       "x-github-event": "pull_request_review",
     });
   const res = await send();
-  expect(res.status).toBe(404);
+  expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ delivered: false });
   expect(log).toHaveBeenLastCalledWith(
     "[ingress] github dropped reason=no-matching-hook token=github:pr:acme/api#41 event=pull_request_review",
   );
   // Nothing accumulated: the identical delivery drops the same way again.
   const again = await send();
-  expect(again.status).toBe(404);
+  expect(again.status).toBe(200);
   expect(await again.json()).toEqual({ delivered: false });
   expect(log).toHaveBeenCalledTimes(2);
 });
@@ -221,9 +221,9 @@ test("a signed check_suite delivery is routed to the PR it belongs to", async ()
     "x-hub-signature-256": `sha256=${sign(body, "gh-hook-secret")}`,
     "x-github-event": "check_suite",
   });
-  // Nobody is listening in this lane, so the delivery drops — what matters is
-  // that it was routed at all rather than acknowledged as unroutable.
-  expect(res.status).toBe(404);
+  // Nobody is listening in this lane, so the delivery is acknowledged and
+  // dropped — what matters is that it was routed rather than ignored.
+  expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ delivered: false });
 });
 
@@ -257,7 +257,7 @@ test("POST /ingress/linear with a forged signature is a 401", async () => {
   );
 });
 
-test("a validly signed Comment delivery for an unclaimed issue is dropped with a 404", async () => {
+test("a validly signed Comment delivery for an unclaimed issue is acknowledged", async () => {
   const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
   const body = commentPayload();
   const issueId = (JSON.parse(body) as { data: { issueId: string } }).data
@@ -265,7 +265,7 @@ test("a validly signed Comment delivery for an unclaimed issue is dropped with a
   const res = await postLinear(body, {
     "linear-signature": sign(body, "linear-hook-secret"),
   });
-  expect(res.status).toBe(404);
+  expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ delivered: false });
   expect(log).toHaveBeenCalledExactlyOnceWith(
     `[ingress] linear dropped reason=no-matching-hook token=linear:ticket:${issueId} event=Comment`,

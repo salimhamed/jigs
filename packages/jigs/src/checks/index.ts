@@ -7,6 +7,7 @@ import { bindingChecks } from "./bindings.ts";
 import { CHECK_TIMEOUT_MS, type Check } from "./catalog.ts";
 import { type CoreProbes, coreChecks } from "./core.ts";
 import { type HarnessKind, harnessChecks } from "./harnesses.ts";
+import { linearWebhookChecks } from "./linear-webhook.ts";
 import { codexWorktreeConfigCheck, mcpServerChecks } from "./mcp.ts";
 import { webhookChecks } from "./webhooks.ts";
 
@@ -70,6 +71,7 @@ export function doctorChecks(): Check[] {
   const profile = process.env.AWS_PROFILE;
   return [
     ...coreChecks(coreProbes),
+    ...linearWebhookChecks({ factoryRoot }),
     ...bindingChecks({ factoryRoot }),
     ...webhookChecks({ factoryRoot }),
     ...harnessChecks(["claude", "codex"]),

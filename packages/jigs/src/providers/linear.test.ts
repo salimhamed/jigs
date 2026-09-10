@@ -6,6 +6,7 @@ import {
   findIssueInProject,
   getIssueParticipants,
   listCommentsSince,
+  listWebhooks,
   mention,
   resolveIssueRef,
 } from "./linear.ts";
@@ -44,6 +45,34 @@ test("requests carry the API key and hit the override URL", async () => {
   const { url, init } = lastRequest();
   expect(url).toBe("http://mock.test/graphql");
   expect(new Headers(init.headers).get("authorization")).toBe("lin_test_key");
+});
+
+test("listWebhooks traverses every page", async () => {
+  respond({
+    webhooks: {
+      nodes: [{ url: "https://first.test/hook", enabled: true }],
+      pageInfo: { hasNextPage: true, endCursor: "page-2" },
+    },
+  });
+  respond({
+    webhooks: {
+      nodes: [
+        { url: "https://old.test/ingress/linear", enabled: true },
+        { url: "https://factory.test/ingress/linear", enabled: false },
+      ],
+      pageInfo: { hasNextPage: false, endCursor: "page-2" },
+    },
+  });
+
+  await expect(listWebhooks()).resolves.toEqual([
+    { url: "https://first.test/hook", enabled: true },
+    { url: "https://old.test/ingress/linear", enabled: true },
+    { url: "https://factory.test/ingress/linear", enabled: false },
+  ]);
+  expect(requestBodies().map((body) => body.variables)).toEqual([
+    { after: null },
+    { after: "page-2" },
+  ]);
 });
 
 test("fetchIssueSnapshot asks for the snapshot fields in one round trip", async () => {
