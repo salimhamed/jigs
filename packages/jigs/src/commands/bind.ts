@@ -179,7 +179,7 @@ async function ensureWebhook({
     return `once that clears, re-run: ${reBindCommand}`;
   };
   const secret = ensureWebhookSecret();
-  const outcome = await ensureRepoWebhook({
+  const ensured = await ensureRepoWebhook({
     ...repoRef,
     ingressUrl,
     secret,
@@ -190,7 +190,12 @@ async function ensureWebhook({
       repairFor(err),
     );
   });
-  deps.out(`webhook ${outcome}: ${slug}`);
+  deps.out(`webhook ${ensured.outcome}: ${slug}`);
+  if (ensured.otherHosts.length > 0) {
+    deps.out(
+      `other jigs hooks on this repo: ${ensured.otherHosts.join(", ")} — delete one by hand if it was this factory's before a hostname change`,
+    );
+  }
   if (declaredToken === "") {
     // The webhook now posts to a service that reads the file alone, so a token
     // living in this shell only leaves the gate it wakes without one.
@@ -198,7 +203,7 @@ async function ensureWebhook({
       `note: that GITHUB_TOKEN is this shell's — the service reads ${envFile}, so set it there too`,
     );
   }
-  return outcome;
+  return ensured.outcome;
 }
 
 // GitHub lays a token it will not take on 401, and one whose scopes fall short

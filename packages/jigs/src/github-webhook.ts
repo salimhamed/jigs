@@ -79,6 +79,22 @@ interface RepoHook {
   config: { url?: string; content_type?: string };
 }
 
+export function githubWebhookUrl(ingressUrl: string): string {
+  return `${ingressUrl.replace(/\/+$/, "")}/ingress/github`;
+}
+
+function isJigsHookAtAnotherUrl(hook: RepoHook, desiredUrl: string): boolean {
+  try {
+    const url = new URL(hook.config.url ?? "");
+    return (
+      url.pathname === "/ingress/github" &&
+      url.host !== new URL(desiredUrl).host
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function githubRequest<T>(
   token: string,
   method: string,
@@ -105,29 +121,33 @@ async function githubRequest<T>(
 const sameEvents = (a: string[], b: string[]) =>
   a.length === b.length && [...a].sort().join(",") === [...b].sort().join(",");
 
+export interface EnsureRepoWebhookResult {
+  outcome: "created" | "verified" | "updated";
+  otherHosts: string[];
+}
+
 export async function ensureRepoWebhook({
   owner,
   repo,
   ingressUrl,
   secret,
   token,
-}: EnsureRepoWebhookOptions): Promise<"created" | "verified" | "updated"> {
-  const hookUrl = `${ingressUrl.replace(/\/+$/, "")}/ingress/github`;
+}: EnsureRepoWebhookOptions): Promise<EnsureRepoWebhookResult> {
+  const hookUrl = githubWebhookUrl(ingressUrl);
   const hooksPath = `/repos/${owner}/${repo}/hooks`;
   const hooks = await githubRequest<RepoHook[]>(
     token,
     "GET",
     `${hooksPath}?per_page=100`,
   );
-  // Match by ingress pathname, not full URL: a changed ingress_url (new
-  // tunnel hostname) is drift on the existing hook, not a second hook.
-  const existing = hooks.find((hook) => {
-    try {
-      return new URL(hook.config.url ?? "").pathname === "/ingress/github";
-    } catch {
-      return false;
-    }
-  });
+  const existing = hooks.find((hook) => hook.config.url === hookUrl);
+  const otherHosts = [
+    ...new Set(
+      hooks
+        .filter((hook) => isJigsHookAtAnotherUrl(hook, hookUrl))
+        .map((hook) => new URL(hook.config.url ?? "").host),
+    ),
+  ];
   const desired = {
     config: { url: hookUrl, content_type: "json", secret },
     events: WEBHOOK_EVENTS,
@@ -135,7 +155,7 @@ export async function ensureRepoWebhook({
   };
   if (existing === undefined) {
     await githubRequest(token, "POST", hooksPath, desired);
-    return "created";
+    return { outcome: "created", otherHosts };
   }
   if (
     existing.active &&
@@ -143,10 +163,30 @@ export async function ensureRepoWebhook({
     existing.config.url === hookUrl &&
     existing.config.content_type === "json"
   ) {
-    return "verified";
+    return { outcome: "verified", otherHosts };
   }
   // Full-config PATCH: GitHub never returns the secret, so re-sending it
   // reconverges a drifted or rotated one along with the events.
   await githubRequest(token, "PATCH", `${hooksPath}/${existing.id}`, desired);
-  return "updated";
+  return { outcome: "updated", otherHosts };
+}
+
+export async function verifyRepoWebhook({
+  owner,
+  repo,
+  ingressUrl,
+  token,
+}: Omit<EnsureRepoWebhookOptions, "secret">): Promise<boolean> {
+  const hooks = await githubRequest<RepoHook[]>(
+    token,
+    "GET",
+    `/repos/${owner}/${repo}/hooks?per_page=100`,
+  );
+  const hookUrl = githubWebhookUrl(ingressUrl);
+  return hooks.some(
+    (hook) =>
+      hook.config.url === hookUrl &&
+      hook.active &&
+      sameEvents(hook.events, WEBHOOK_EVENTS),
+  );
 }
