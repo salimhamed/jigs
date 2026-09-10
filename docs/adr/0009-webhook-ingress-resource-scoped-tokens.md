@@ -3,9 +3,10 @@
 The GitHub review leg (and the Linear needs-human wake with it) runs
 webhook-first: the Workflow SDK service exposes static ingress routes
 (`/ingress/github`, `/ingress/linear`) that verify the provider's HMAC
-signature (plus Linear's timestamp replay guard), reconstruct a hook token
-from the payload, and call `resumeHook(token, typedPayload)` — a 404 means no
-run is listening, and the delivery is dropped. The ingress is stateless: no
+signature, reconstruct a hook token from the payload, and call
+`resumeHook(token, typedPayload)`. A verified
+delivery with no listening run is acknowledged with 200 and dropped; a 404 is
+reserved for a matching run whose resume failed. The ingress is stateless: no
 mapping tables, no delivery log. Decided in
 [AGE-293](https://linear.app/salboogie/issue/AGE-293/github-review-loop);
 the ticket's resolution comment holds the full question-by-question record.
@@ -58,8 +59,11 @@ close-unmerged is a terminal failed run under ADR 0007's teardown matrix.
 - GitHub: `jigs bind` creates/verifies the per-repo webhook idempotently
   (secret generated into the jigs data dir). Org-level webhooks are a
   documented manual alternative.
-- Linear: one org-level webhook (`resourceTypes: ["Comment"]`), manual
-  one-time setup like the tunnel; secret into service config.
+- Linear: one workspace-wide webhook per factory
+  (`resourceTypes: ["Comment"]`), manually pointed at that factory's exact
+  `<ingress_url>/ingress/linear`; secret into service config. `jigs doctor`
+  verifies that exact webhook exists and remains enabled. Webhooks at the same
+  path on other hosts belong to other factories or are stale and do not count.
 
 ## Considered options
 
@@ -84,6 +88,15 @@ formerly matched only `/ingress/github`, but that let one teammate's factory
 overwrite another's hook and secret when both used the same repository. A
 hostname change now creates a new hook; the old hook is left for manual
 deletion rather than repaired across hostnames.
+
+- AGE-393 amends the original delivery response: verified events with no
+  matching suspended run return 200 with `{ delivered: false }`, because they
+  are successfully received events jigs does not care about. Resume failures
+  remain 404 so providers still record genuine delivery failures.
+- AGE-393 also amends the original single-Linear-webhook onboarding model:
+  Linear webhooks are workspace-wide, but each self-hosted factory needs its
+   own exact ingress URL. Doctor diagnoses a missing or disabled exact match and
+   reports other `/ingress/linear` hosts only as possible stale configuration.
 
 - ADR 0008's "scope tokens by run ULID, never by ticket id alone" is
   superseded (amendment note there). The rule is now: *a token names the
