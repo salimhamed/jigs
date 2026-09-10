@@ -56,6 +56,18 @@ export async function getViewer(): Promise<LinearUser> {
   return data.viewer;
 }
 
+export interface LinearWebhook {
+  url: string;
+  enabled: boolean;
+}
+
+export async function listWebhooks(): Promise<LinearWebhook[]> {
+  const data = await linearGraphql<{
+    webhooks: { nodes: LinearWebhook[] };
+  }>("query { webhooks { nodes { url enabled } } }", {});
+  return data.webhooks.nodes;
+}
+
 export interface LinearIssueRef {
   id: string;
   identifier: string;

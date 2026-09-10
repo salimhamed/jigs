@@ -132,8 +132,9 @@ export function createApp(factory: Factory): Hono {
   });
 
   // The ingress is stateless: verify, reconstruct the token, resume. A
-  // delivery nobody is listening to is dropped with a 404 — no mapping tables
-  // or persisted deliveries. Wakes are hints; consumers re-check the provider.
+  // delivery nobody is listening to is acknowledged and dropped — no mapping
+  // tables or persisted deliveries. Wakes are hints; consumers re-check the
+  // provider.
   app.post("/ingress/github", async (c) => {
     const event = sanitizeForLog(c.req.header("x-github-event") ?? "unknown");
     const secret = githubWebhookSecret();
@@ -379,7 +380,10 @@ async function resumeAndLog(
     console.log(
       `[ingress] ${provider} dropped reason=${reason} ${correlation}`,
     );
-    return c.json({ delivered: false }, 404);
+    return c.json(
+      { delivered: false },
+      reason === "no-matching-hook" ? 200 : 404,
+    );
   }
 }
 

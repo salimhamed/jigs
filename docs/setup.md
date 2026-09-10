@@ -408,6 +408,7 @@ Create a webhook in Linear (Settings → API → Webhooks) pointed at
 `<ingress_url>/ingress/linear` with resource types `Comment` only. Put its
 signing secret in this factory's `.env` as `LINEAR_WEBHOOK_SECRET` and
 `jigs service restart`.
+`jigs doctor` verifies that this exact webhook exists and is enabled.
 
 #### Missed deliveries
 
