@@ -77,6 +77,14 @@ close-unmerged is a terminal failed run under ADR 0007's teardown matrix.
 
 ## Consequences
 
+### Addendum: exact-URL ownership (2026-09-09)
+
+Each factory owns the repository hook at its exact ingress URL. Hook discovery
+formerly matched only `/ingress/github`, but that let one teammate's factory
+overwrite another's hook and secret when both used the same repository. A
+hostname change now creates a new hook; the old hook is left for manual
+deletion rather than repaired across hostnames.
+
 - ADR 0008's "scope tokens by run ULID, never by ticket id alone" is
   superseded (amendment note there). The rule is now: *a token names the
   external thing being listened to; owning it is the exclusivity lock.*

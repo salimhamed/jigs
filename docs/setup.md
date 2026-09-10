@@ -391,7 +391,9 @@ or exported in the shell, and fails without one. The signing secret is the one
 thing here that is not per factory: one file per machine at
 `~/.local/share/jigs/github-webhook-secret`, generated on the first bind and
 shared by every factory's repo webhooks. The service reads
-the same file, or `GITHUB_WEBHOOK_SECRET` from `.env` if set.
+the same file, or `GITHUB_WEBHOOK_SECRET` from `.env` if set. Each factory owns
+the hook at its exact URL; changing its hostname creates a new hook and leaves
+the old one for you to delete by hand.
 
 Manual alternative: one org-level webhook (org settings → Webhooks) pointed at
 `<ingress_url>/ingress/github`, content type `application/json`, events

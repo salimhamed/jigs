@@ -8,6 +8,7 @@ import { CHECK_TIMEOUT_MS, type Check } from "./catalog.ts";
 import { type CoreProbes, coreChecks } from "./core.ts";
 import { type HarnessKind, harnessChecks } from "./harnesses.ts";
 import { codexWorktreeConfigCheck, mcpServerChecks } from "./mcp.ts";
+import { webhookChecks } from "./webhooks.ts";
 
 export { type BindingChecksOptions, bindingChecks } from "./bindings.ts";
 export {
@@ -35,6 +36,7 @@ export {
   harnessChecks,
 } from "./harnesses.ts";
 export { codexWorktreeConfigCheck, mcpServerChecks } from "./mcp.ts";
+export { type WebhookChecksOptions, webhookChecks } from "./webhooks.ts";
 
 // A pipeline's declared requirements — the manifest side of the computed check
 // list. Hand-maintaining the list is the drift trap this exists to avoid.
@@ -69,6 +71,7 @@ export function doctorChecks(): Check[] {
   return [
     ...coreChecks(coreProbes),
     ...bindingChecks({ factoryRoot }),
+    ...webhookChecks({ factoryRoot }),
     ...harnessChecks(["claude", "codex"]),
     ...(profile !== undefined && profile !== "" ? [awsCredentialsCheck()] : []),
   ];

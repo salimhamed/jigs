@@ -207,6 +207,35 @@ test("re-bind with ingress_url configured performs no webhook writes the second 
   expect(readFileSync(secretFile)).toEqual(secretBytes);
 });
 
+test("bind names other jigs hook hosts after its result", async () => {
+  stubWebhookEnv();
+  makeIngressFactory();
+  fetchMock
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          {
+            id: 8,
+            active: true,
+            events: [],
+            config: { url: "https://old.example.test/ingress/github" },
+          },
+          {
+            id: 9,
+            active: true,
+            events: [],
+            config: { url: "https://teammate.example.test/ingress/github" },
+          },
+        ]),
+      ),
+    )
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 10 })));
+  await bindRepo(API, deps());
+  expect(lines).toContain(
+    "other jigs hooks on this repo: old.example.test, teammate.example.test — delete one by hand if it was this factory's before a hostname change",
+  );
+});
+
 test("bind without ingress_url skips the webhook leg with a note", async () => {
   stubWebhookEnv();
   const result = await bindRepo(API, deps());
