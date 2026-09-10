@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.4](https://github.com/salimhamed/jigs/compare/jigs-v0.4.3...jigs-v0.4.4) (2026-09-10)
+
+
+### Bug Fixes
+
+* match github webhooks by exact url and check them in doctor ([#146](https://github.com/salimhamed/jigs/issues/146)) ([b5544fc](https://github.com/salimhamed/jigs/commit/b5544fc5da864c54a5ba1d72532230fdfe26187a))
+
 ## [0.4.3](https://github.com/salimhamed/jigs/compare/jigs-v0.4.2...jigs-v0.4.3) (2026-09-07)
 
 
