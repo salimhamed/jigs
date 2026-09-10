@@ -39,6 +39,14 @@ test("an enabled webhook at the exact ingress URL passes", async () => {
   ).resolves.toEqual({ ok: true });
 });
 
+test("all trailing slashes are removed from ingress_url", async () => {
+  const result = await checks(
+    [{ url: "https://factory.example.test/ingress/linear", enabled: true }],
+    "https://factory.example.test///",
+  )[0]?.run();
+  expect(result).toEqual({ ok: true });
+});
+
 test("a disabled webhook fails and names its URL in the repair", async () => {
   const result = await run([
     { url: "https://factory.example.test/ingress/linear", enabled: false },

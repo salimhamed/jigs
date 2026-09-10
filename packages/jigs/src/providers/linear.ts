@@ -62,10 +62,32 @@ export interface LinearWebhook {
 }
 
 export async function listWebhooks(): Promise<LinearWebhook[]> {
-  const data = await linearGraphql<{
-    webhooks: { nodes: LinearWebhook[] };
-  }>("query { webhooks { nodes { url enabled } } }", {});
-  return data.webhooks.nodes;
+  const webhooks: LinearWebhook[] = [];
+  let after: string | null = null;
+  do {
+    const data: {
+      webhooks: {
+        nodes: LinearWebhook[];
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+      };
+    } = await linearGraphql(
+      `query Webhooks($after: String) {
+        webhooks(after: $after) {
+          nodes { url enabled }
+          pageInfo { hasNextPage endCursor }
+        }
+      }`,
+      { after },
+    );
+    webhooks.push(...data.webhooks.nodes);
+    after = data.webhooks.pageInfo.hasNextPage
+      ? data.webhooks.pageInfo.endCursor
+      : null;
+    if (data.webhooks.pageInfo.hasNextPage && after === null) {
+      throw new Error("Linear GraphQL: webhooks page has no end cursor");
+    }
+  } while (after !== null);
+  return webhooks;
 }
 
 export interface LinearIssueRef {

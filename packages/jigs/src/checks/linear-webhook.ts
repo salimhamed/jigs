@@ -23,7 +23,7 @@ export function linearWebhookChecks(
   }
   if (ingressUrl === undefined) return [];
 
-  const url = `${ingressUrl.replace(/\/$/, "")}/ingress/linear`;
+  const url = `${ingressUrl.replace(/\/+$/, "")}/ingress/linear`;
   return [
     {
       id: "linear.webhook",
