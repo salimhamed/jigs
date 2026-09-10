@@ -52,6 +52,19 @@ test("an active exact-url hook with current events passes", async () => {
   expect(await check().run()).toEqual({ ok: true });
 });
 
+test("a valid exact-url hook passes after a stale duplicate", async () => {
+  configure();
+  fetchMock.mockResolvedValueOnce(
+    new Response(
+      JSON.stringify([
+        hook({ id: 8, active: false }),
+        hook({ id: 9, active: true }),
+      ]),
+    ),
+  );
+  expect(await check().run()).toEqual({ ok: true });
+});
+
 test("a missing hook fails with the exact bind repair", async () => {
   configure();
   fetchMock.mockResolvedValueOnce(new Response("[]"));

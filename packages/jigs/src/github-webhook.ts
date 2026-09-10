@@ -183,6 +183,10 @@ export async function verifyRepoWebhook({
     `/repos/${owner}/${repo}/hooks?per_page=100`,
   );
   const hookUrl = githubWebhookUrl(ingressUrl);
-  const hook = hooks.find((candidate) => candidate.config.url === hookUrl);
-  return Boolean(hook?.active && sameEvents(hook.events, WEBHOOK_EVENTS));
+  return hooks.some(
+    (hook) =>
+      hook.config.url === hookUrl &&
+      hook.active &&
+      sameEvents(hook.events, WEBHOOK_EVENTS),
+  );
 }
