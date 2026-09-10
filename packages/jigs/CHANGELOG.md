@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.5](https://github.com/salimhamed/jigs/compare/jigs-v0.4.4...jigs-v0.4.5) (2026-09-10)
+
+
+### Bug Fixes
+
+* acknowledge unmatched deliveries, check the Linear webhook ([#147](https://github.com/salimhamed/jigs/issues/147)) ([37092a9](https://github.com/salimhamed/jigs/commit/37092a9486dfc466134f13490a203be17fb7ad4c))
+
 ## [0.4.4](https://github.com/salimhamed/jigs/compare/jigs-v0.4.3...jigs-v0.4.4) (2026-09-10)
 
 
