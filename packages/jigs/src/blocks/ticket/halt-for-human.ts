@@ -26,7 +26,7 @@ export type JsonValue =
   | { [key: string]: JsonValue };
 
 // Declared as zod rather than as a bare type so a model step can emit a
-// question directly — ticket review and the review-loop reply reading both do.
+// question directly, as ticket review does.
 export const haltOption = z.strictObject({
   label: z.string().min(1),
   recommended: z.boolean().optional(),
