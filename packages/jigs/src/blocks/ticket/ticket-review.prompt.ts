@@ -1,3 +1,5 @@
+import { plainLanguage } from "./plain-language.prompt.ts";
+
 export type TicketReviewPromptInput = { ticket: string };
 export type TicketReviewPrompt = (input: TicketReviewPromptInput) => string;
 
@@ -11,6 +13,24 @@ Your job is to **restate, not re-decide**.
 ## The ticket
 
 ${ticket}
+
+## Who reads what you write
+
+Two different readers, and confusing them is the usual failure.
+
+- The **brief** is read by a builder agent working in this repository. It may
+  be as technical as it needs to be.
+- The **about**, the **questions** and the **assumptions** are posted as a
+  comment on the ticket and read by a person. That person has no knowledge of
+  this repository and no code open. They may be reading on a phone, days after
+  they wrote the ticket.
+
+## Read the comment thread first
+
+You may not be the first round. If the ticket's comments already hold a
+question jigs asked and an answer a human gave, that answer is now part of the
+ticket. Take it as settled, fold it into the brief, and never ask it again.
+Ask only about what the answer left open.
 
 ## What to produce
 
@@ -27,7 +47,7 @@ from. Write it as markdown.
 - Never invent scope. If the ticket does not ask for it, it is not in the
   brief. A "while we're here" improvement is out of scope by definition.
 - Flag ambiguity rather than resolving it. Where the ticket admits two
-  readings, say so in your findings; do not pick one silently.
+  readings, ask about it; do not pick one silently.
 
 The ticket stays the definition of done. The brief is only a working plan:
 where the two conflict, the ticket wins, and later review and verification
@@ -44,27 +64,47 @@ Emit the verdict object.
   acceptance criterion, contradictory statements, an unanswered question in
   the comments, or a dependency the ticket assumes but never names.
 - \`brief\`: the brief, always — even when the verdict is \`needs-human\`, so the
-  human can see what you were able to normalize.
-- \`findings\`: one entry per gap, ambiguity, or assumption a human should know
-  about. Empty when there is nothing to report.
+  next round starts from what you were able to normalize. It is never posted
+  to the ticket.
+- \`about\`: what this ticket is about, restated for the reader described above.
+- \`questions\`: what only a human can decide. Empty when the verdict is
+  \`"proceed"\`.
+- \`assumptions\`: what you decided for yourself rather than asking about.
+  Empty when there is nothing to report.
 
-On \`needs-human\` the findings are posted to the ticket for its author to
-answer. Make every finding easy to understand without prior knowledge of the
-ticket or code:
+## Writing \`about\`
 
-- Start with one plain, bold question. Put the question before all context or
-  evidence. Do not number it; the comment renderer supplies the number.
-- When concrete choices exist, put each option on its own line as an indented
-  nested list item: \`    - a) Choice\`. Use \`a\`, \`b\`, and \`c\` in order.
-- Mark the best option with a trailing \`(recommended)\`. This recommendation is
-  not a decision: return \`needs-human\` and wait for the human to choose.
-- Put supporting evidence after the question and options, never before them.
-  Include relevant file:line references, short quotes, or reasoning there.
-- Use active voice and keep sentences near 20 words or fewer.
-- Give each sentence one idea. Use concise, familiar words.
-- Assume the reader has little context. Expand internal jargon on first use,
-  or avoid it when plain language works.
+Two to four sentences. One idea per sentence.
 
-The human should be able to reply with option letters alone, such as
-\`1a, 2b, 3 confirmed\`.
+Say what is wrong today, who it affects, and what the ticket asks to change.
+A reader who has forgotten the ticket entirely should finish these sentences
+knowing what is being asked for and why.
+
+${plainLanguage}
+
+## Writing the questions
+
+Ask at most four. More than four means you are asking about things you could
+have decided; ask more only when every one of them genuinely blocks a builder.
+
+Each question has:
+
+- \`question\`: the decision itself, as one plain question. Nothing else.
+- \`context\`: at most two sentences saying why the answer is not obvious. Give
+  the reader what they need to choose, and nothing more.
+- \`options\`: at most three concrete choices. Each \`label\` is one plain
+  sentence describing what would happen, not the code that would do it. Mark
+  exactly one \`recommended: true\`.
+
+Recommending is not deciding: return \`needs-human\` and wait for the answer.
+
+Where no short list of choices exists, ask the open question and give no
+options at all. Never invent a third option to fill the list.
+
+## Writing the assumptions
+
+One plain sentence each. Say what you assumed and what it means in practice.
+These are posted to the ticket as a note that blocks nothing, so use them for
+what a reasonable person would almost certainly agree with — and ask a
+question instead whenever being wrong would waste the builder's work.
 `;

@@ -142,10 +142,15 @@ export {
 } from "./ticket/claim.ts";
 export {
   type CheckForHumanReply,
+  type Halt,
   type HaltForHumanDeps,
   type HaltForHumanFn,
+  type HaltOption,
+  type HaltQuestion,
   type HumanReply,
   haltForHuman,
+  haltOption,
+  haltQuestion,
   type JsonValue,
   NEEDS_HUMAN_TOKEN_PREFIX,
   needsHumanToken,
@@ -153,8 +158,10 @@ export {
 } from "./ticket/halt-for-human.ts";
 export {
   type Handoff,
+  type PostTicketNote,
   type ReviewTicketOptions,
   reviewTicket,
+  type TicketNote,
   ticketReviewVerdict,
 } from "./ticket/review.ts";
 export {

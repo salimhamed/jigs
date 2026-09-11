@@ -65,7 +65,9 @@ async function runAgent(
 ): Promise<AgentStepResult<unknown>> {
   const result = await runAgentStep(wire, runId, deps);
   if ("jitFailure" in result) {
-    throw new Error(`unexpected JIT failure: ${result.jitFailure}`);
+    throw new Error(
+      `unexpected JIT failure: ${JSON.stringify(result.jitFailure)}`,
+    );
   }
   if ("resumeFailed" in result) {
     throw new Error(`unexpected resume failure: ${result.resumeFailed}`);

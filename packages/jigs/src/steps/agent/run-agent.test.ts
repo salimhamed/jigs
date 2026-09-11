@@ -85,7 +85,9 @@ async function agentStep(
 ): Promise<AgentStepResult<unknown>> {
   const result = await runAgent(...args);
   if ("jitFailure" in result) {
-    throw new Error(`unexpected JIT failure: ${result.jitFailure}`);
+    throw new Error(
+      `unexpected JIT failure: ${JSON.stringify(result.jitFailure)}`,
+    );
   }
   if ("resumeFailed" in result) {
     throw new Error(`unexpected resume failure: ${result.resumeFailed}`);
@@ -435,12 +437,22 @@ test("a failed JIT check returns the marker before the harness is reached", asyn
   });
   const { deps, captured } = makeDeps();
 
+  const failures = [
+    {
+      ok: false as const,
+      id: "mcp:linear",
+      label: "MCP server 'linear'",
+      reason: "it did not start",
+      repair: "check the command",
+    },
+  ];
+
   const result = await runAgent(wire, "run-1", {
     ...deps,
-    jitFailures: async () => "MCP server 'linear' did not start",
+    jitFailures: async () => failures,
   });
 
-  expect(result).toEqual({ jitFailure: "MCP server 'linear' did not start" });
+  expect(result).toEqual({ jitFailure: failures });
   expect(captured.options).toBeUndefined();
 });
 

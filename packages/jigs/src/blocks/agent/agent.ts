@@ -6,6 +6,7 @@
 //
 // ../../steps/agent/run-agent.ts is the step side of the same split.
 
+import type { FailedCheck } from "../../checks/catalog.ts";
 import {
   type AgentStepConfig,
   type AgentWire,
@@ -18,10 +19,19 @@ import { resumeFailed } from "./resume-or-rebuild.ts";
 // Thrown workflow-side, never inside the step: a step's rejection is rebuilt
 // from its message alone, so a JIT failure crosses the boundary as a returned
 // value and becomes an error here, where `instanceof` still means something.
+//
+// The failures travel as the catalog's own records. A caller that has to write
+// them for a human reads the fields; only the message is a rendering, and it
+// exists because an Error has to have one.
 export class JitCheckError extends Error {
-  constructor(failures: string) {
-    super(failures);
+  readonly failures: FailedCheck[];
+
+  constructor(failures: FailedCheck[]) {
+    super(
+      failures.map(({ label, reason }) => `${label}: ${reason}`).join("\n"),
+    );
     this.name = "JitCheckError";
+    this.failures = failures;
   }
 }
 
@@ -29,7 +39,7 @@ export class JitCheckError extends Error {
 export type RunAgentStep = (
   wire: AgentWire,
 ) => Promise<
-  AgentStepResult | { jitFailure: string } | { resumeFailed: string }
+  AgentStepResult | { jitFailure: FailedCheck[] } | { resumeFailed: string }
 >;
 
 // Where the step's returned markers become errors: workflow-side, so no
