@@ -42,10 +42,17 @@ export {
 } from "./ticket/issues.ts";
 export {
   checkForHumanReply,
-  type NeedsHumanContext,
   postNeedsHumanComment,
   postTicketNote,
 } from "./ticket/needs-human-comments.ts";
+export {
+  type NeedsHumanContext,
+  type RenderNeedsHumanComment,
+  type RenderProceedingNote,
+  renderNeedsHumanComment,
+  renderProceedingNote,
+  type TicketParticipants,
+} from "./ticket/render-comment.ts";
 export {
   type ProvisionRunWorktreeDeps,
   provisionRunWorktree,

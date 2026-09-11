@@ -27,11 +27,6 @@ export const jigsPromptSources: Record<string, PromptSource> = {
   "fix-ci": shipped("blocks/builder-agent/fix-ci.prompt.md"),
   "fix-ci-fresh": shipped("blocks/builder-agent/fix-ci-fresh.prompt.md"),
   implement: shipped("blocks/builder-agent/implement.prompt.md"),
-  // Not a prompt: the two Linear comments jigs writes. They are registered
-  // here so a factory restyles a comment the same way it replaces a prompt —
-  // by name — and so `jigs doctor` renders them with everything else.
-  "needs-human-comment": shipped("steps/ticket/needs-human-comment.md"),
-  "proceeding-note": shipped("steps/ticket/proceeding-note.md"),
   "read-reply": shipped("blocks/builder-agent/read-reply.prompt.md"),
   "rebuild-context": shipped("blocks/agent/rebuild-context.prompt.md"),
   "ticket-review": shipped("blocks/ticket/ticket-review.prompt.md"),

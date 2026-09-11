@@ -195,12 +195,13 @@ If one of these is wrong, reply here now, or comment on the pull request when it
   );
 });
 
-test("a factory's own template replaces the comment without replacing the step", async () => {
-  const { withPrompts } = await import("../prompts/jigs-prompts.ts");
-  const prompts = withPrompts({
-    "needs-human-comment": { template: "just: <%= it.HEADLINE %>" },
-  });
-  await postNeedsHumanComment("issue-1", questions, context, prompts);
+test("a factory's own renderer replaces the comment without replacing the step", async () => {
+  await postNeedsHumanComment(
+    "issue-1",
+    questions,
+    context,
+    (halt) => `just: ${halt.headline}`,
+  );
   expect(body()).toBe(
     "just: jigs paused work on **AI-659** and needs your answers before it writes any code.",
   );

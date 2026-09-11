@@ -150,9 +150,10 @@ A suspension raised from a step's verdict rather than planned, satisfied by a
 human's reply on the Linear ticket. What it posts is written for a reader with
 no knowledge of the repository: a headline saying what paused and why, what the
 ticket is about, numbered questions with lettered options, and what replying
-does. The block supplies those words; a template rendered step-side supplies
-every piece of the formatting, so a factory restyles the comment by
-registering its own `needs-human-comment`.
+does. The block supplies those words; a step-side renderer supplies every piece
+of the formatting — Linear renumbers nothing, so the numbers and letters are
+written out — and a factory restyles the comment by passing its own renderer to
+the step.
 _Avoid_: failure, abort
 
 **Worktree**:

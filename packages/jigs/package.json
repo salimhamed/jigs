@@ -57,7 +57,7 @@
   "files": [
     "dist",
     "templates",
-    "src/**/*.md"
+    "src/**/*.prompt.md"
   ],
   "publishConfig": {
     "registry": "https://npm.pkg.github.com",

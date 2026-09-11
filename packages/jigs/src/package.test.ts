@@ -244,6 +244,8 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "pushBranch",
     "readDiff",
     "realDeps",
+    "renderNeedsHumanComment",
+    "renderProceedingNote",
     "replyInThread",
     "resolveRepo",
     "runAgent",
