@@ -4,16 +4,13 @@ import { type AgentStepConfig, parseOutput } from "../agent/plan.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import { promptRef } from "../agent/testing.ts";
 import type { TicketClaim } from "./claim.ts";
-import type {
-  HaltForHumanFn,
-  HumanReply,
-  JsonValue,
-} from "./halt-for-human.ts";
+import type { Halt, HaltForHumanFn, HumanReply } from "./halt-for-human.ts";
 import { reviewTicket, ticketReviewVerdict } from "./review.ts";
 import type { TicketSnapshot } from "./snapshot.ts";
 
 const claim = {
   issueId: "68bc9696-35d5-442d-ab56-214c8cfefbec",
+  identifier: "AGE-313",
   token: "linear:ticket:68bc9696-35d5-442d-ab56-214c8cfefbec",
 } as TicketClaim;
 
@@ -36,10 +33,11 @@ const snapshot: TicketSnapshot = {
 
 let agentCalls: AgentStepConfig<unknown>[] = [];
 let verdicts: unknown[] = [];
-let humanCalls: Array<{
-  claim: TicketClaim;
-  reason: string;
-  payload?: JsonValue;
+let humanCalls: Array<{ claim: TicketClaim; halt: Halt }> = [];
+let noteCalls: Array<{
+  issueId: string;
+  identifier: string;
+  assumptions: string[];
 }> = [];
 let fetched: string[] = [];
 
@@ -61,13 +59,16 @@ const fakeAgent: AgentFn = async <T>(config: AgentStepConfig<T>) => {
   };
 };
 
-const fakeHaltForHuman: HaltForHumanFn = async (
-  humanClaim,
-  reason,
-  payload,
-) => {
-  humanCalls.push({ claim: humanClaim, reason, payload });
+const fakeHaltForHuman: HaltForHumanFn = async (humanClaim, halt) => {
+  humanCalls.push({ claim: humanClaim, halt });
   return reply;
+};
+
+const fakePostNote = async (
+  issueId: string,
+  note: { identifier: string; assumptions: string[] },
+): Promise<void> => {
+  noteCalls.push({ issueId, ...note });
 };
 
 // The reply landed on the ticket, so each re-read carries one more comment.
@@ -83,6 +84,7 @@ const review = () =>
   reviewTicket({
     agent: fakeAgent,
     haltForHuman: fakeHaltForHuman,
+    postNote: fakePostNote,
     fetchSnapshot: fakeFetchSnapshot,
     claim,
     snapshot,
@@ -93,29 +95,56 @@ const review = () =>
 beforeEach(() => {
   agentCalls = [];
   humanCalls = [];
+  noteCalls = [];
   verdicts = [];
   fetched = [];
 });
 
 test("a malformed verdict object fails the schema", () => {
+  const good = {
+    verdict: "proceed",
+    brief: "x",
+    about: "a",
+    questions: [],
+    assumptions: [],
+  };
+  expect(() => ticketReviewVerdict.parse(good)).not.toThrow();
   expect(() =>
-    ticketReviewVerdict.parse({ verdict: "maybe", brief: "x", findings: [] }),
+    ticketReviewVerdict.parse({ ...good, verdict: "maybe" }),
   ).toThrow();
+  expect(() => ticketReviewVerdict.parse({ ...good, brief: "" })).toThrow();
   expect(() =>
-    ticketReviewVerdict.parse({ verdict: "proceed", brief: "", findings: [] }),
+    ticketReviewVerdict.parse({ ...good, confidence: 0.8 }),
   ).toThrow();
+  // A question is a question and up to three plain choices — nothing else.
   expect(() =>
     ticketReviewVerdict.parse({
-      verdict: "proceed",
-      brief: "x",
-      findings: [],
-      confidence: 0.8,
+      ...good,
+      questions: [{ question: "which?", options: [{ label: "a", why: "no" }] }],
     }),
   ).toThrow();
 });
 
+const proceed = (over: Record<string, unknown> = {}) => ({
+  verdict: "proceed",
+  brief: "plan",
+  about: "what the ticket is about",
+  questions: [],
+  assumptions: [],
+  ...over,
+});
+
+const needsHuman = (over: Record<string, unknown> = {}) => ({
+  verdict: "needs-human",
+  brief: "draft",
+  about: "what the ticket is about",
+  questions: [{ question: "which one?" }],
+  assumptions: [],
+  ...over,
+});
+
 test("reviewTicket rejects when the agent returns a verdict the schema refuses", async () => {
-  verdicts = [{ verdict: "probably", brief: "a plan of sorts", findings: [] }];
+  verdicts = [proceed({ verdict: "probably" })];
   await expect(review()).rejects.toThrow();
   expect(humanCalls).toHaveLength(0);
 });
@@ -123,11 +152,7 @@ test("reviewTicket rejects when the agent returns a verdict the schema refuses",
 test("a proceed verdict returns the brief with the snapshot it was reviewed against", async () => {
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
   verdicts = [
-    {
-      verdict: "proceed",
-      brief: "Implement the snapshot fetch, then the jig.",
-      findings: [],
-    },
+    proceed({ brief: "Implement the snapshot fetch, then the jig." }),
   ];
   const result = await review();
   expect(result.brief).toBe("Implement the snapshot fetch, then the jig.");
@@ -135,35 +160,85 @@ test("a proceed verdict returns the brief with the snapshot it was reviewed agai
   expect(humanCalls).toHaveLength(0);
   expect(fetched).toEqual([]);
   expect(log).toHaveBeenCalledWith(
-    "[reviewTicket] AGE-313 verdict=proceed findings=0",
+    "[reviewTicket] AGE-313 verdict=proceed questions=0 assumptions=0",
   );
 });
 
-test("a needs-human verdict routes the findings to haltForHuman and never the brief", async () => {
-  verdicts = [
+test("a proceed verdict with assumptions posts them as a note that blocks nothing", async () => {
+  verdicts = [proceed({ assumptions: ["Only the validate script changes."] })];
+  const result = await review();
+
+  expect(noteCalls).toEqual([
     {
-      verdict: "needs-human",
-      brief: "SECRET-BRIEF-TEXT that must not reach Linear",
-      findings: ["no acceptance criteria for the resume path"],
+      issueId: snapshot.id,
+      identifier: "AGE-313",
+      assumptions: ["Only the validate script changes."],
     },
-    { verdict: "proceed", brief: "plan", findings: [] },
+  ]);
+  // Posted, not suspended on: the handoff comes straight back.
+  expect(humanCalls).toHaveLength(0);
+  expect(result.assumptions).toEqual(["Only the validate script changes."]);
+});
+
+test("a proceed verdict with nothing assumed posts no note at all", async () => {
+  verdicts = [proceed()];
+  await review();
+  expect(noteCalls).toEqual([]);
+});
+
+test("a needs-human verdict routes the questions and the about to haltForHuman, never the brief", async () => {
+  verdicts = [
+    needsHuman({
+      brief: "SECRET-BRIEF-TEXT that must not reach Linear",
+      about: "The tests leave files nobody can delete.",
+      questions: [
+        {
+          question: "Which of the two fixes should we use?",
+          context: "The ticket offers two, but they behave differently.",
+          options: [
+            { label: "Run as whoever launched the tests.", recommended: true },
+            { label: "Build one fixed user into the image." },
+          ],
+        },
+      ],
+    }),
+    proceed(),
   ];
   await review();
 
   expect(humanCalls).toHaveLength(1);
   const call = humanCalls[0];
   expect(call?.claim).toBe(claim);
-  expect(call?.payload).toEqual({
-    findings: ["no acceptance criteria for the resume path"],
+  expect(call?.halt).toEqual({
+    headline:
+      "jigs paused work on **AGE-313** and needs your answers before it writes any code.",
+    about: "The tests leave files nobody can delete.",
+    questions: [
+      {
+        question: "Which of the two fixes should we use?",
+        context: "The ticket offers two, but they behave differently.",
+        options: [
+          { label: "Run as whoever launched the tests.", recommended: true },
+          { label: "Build one fixed user into the image." },
+        ],
+      },
+    ],
+    onReply: "continue",
   });
-  expect(JSON.stringify(call?.payload)).not.toContain("SECRET-BRIEF-TEXT");
+  expect(JSON.stringify(call?.halt)).not.toContain("SECRET-BRIEF-TEXT");
+});
+
+test("a needs-human verdict with nothing to say about the ticket carries no about", async () => {
+  verdicts = [needsHuman({ about: "" }), proceed()];
+  await review();
+  expect(humanCalls[0]?.halt.about).toBeUndefined();
 });
 
 test("the needs-human round re-reads the ticket, so the human's reply is what the next review sees", async () => {
   verdicts = [
-    { verdict: "needs-human", brief: "draft", findings: ["thin"] },
-    { verdict: "needs-human", brief: "draft", findings: ["still thin"] },
-    { verdict: "proceed", brief: "the agreed plan", findings: [] },
+    needsHuman(),
+    needsHuman(),
+    proceed({ brief: "the agreed plan" }),
   ];
   const result = await review();
 
@@ -187,7 +262,7 @@ test("the needs-human round re-reads the ticket, so the human's reply is what th
 });
 
 test("the prompt names the shipped template and carries the rendered ticket", async () => {
-  verdicts = [{ verdict: "proceed", brief: "plan", findings: [] }];
+  verdicts = [proceed()];
   await review();
   const ref = promptRef(agentCalls[0]);
   expect(ref.name).toBe("ticket-review");
@@ -196,7 +271,7 @@ test("the prompt names the shipped template and carries the rendered ticket", as
 });
 
 test("the verdict schema is declared on the agent step so the harness emits it natively", async () => {
-  verdicts = [{ verdict: "proceed", brief: "plan", findings: [] }];
+  verdicts = [proceed()];
   await review();
   expect(agentCalls[0]?.output).toBe(ticketReviewVerdict);
   expect(agentCalls[0]?.cwd).toBe("/tmp/worktree");

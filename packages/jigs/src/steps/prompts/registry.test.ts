@@ -105,6 +105,9 @@ test("every prompt jigs ships parses and renders", () => {
     "fix-ci",
     "fix-ci-fresh",
     "implement",
+    "needs-human-comment",
+    "proceeding-note",
+    "read-reply",
     "rebuild-context",
     "ticket-review",
   ]);

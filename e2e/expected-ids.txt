@@ -13,6 +13,7 @@ step//./steps/jigs//fetchPrState
 step//./steps/jigs//fetchTicketSnapshot
 step//./steps/jigs//openPr
 step//./steps/jigs//postNeedsHumanComment
+step//./steps/jigs//postTicketNote
 step//./steps/jigs//provisionWorktree
 step//./steps/jigs//pushBranch
 step//./steps/jigs//readDiff

@@ -15,6 +15,24 @@ export interface AgentOrHaltDeps {
   haltForHuman: HaltForHumanFn;
 }
 
+// The catalog writes a failure as "label: reason" and its repair on an
+// arrow-prefixed second line. That reads as a console message, and the comment
+// is not a console: one failure becomes one plain line, repair included.
+export function checkFailureNotes(failures: string): string[] {
+  const notes: string[] = [];
+  for (const line of failures.split("\n")) {
+    const repair = line.match(/^\s*→\s*(.*)$/);
+    const previous = notes.at(-1);
+    if (repair !== null && previous !== undefined) {
+      notes[notes.length - 1] = `${previous} — ${repair[1]}`;
+      continue;
+    }
+    const text = line.trim();
+    if (text !== "") notes.push(text);
+  }
+  return notes;
+}
+
 // Unbounded on purpose: the halt is a pause the human ends, and each loop
 // iteration is a fresh step slot, which is what makes the retry a re-run
 // from zero rather than a replay of the memoized failure.
@@ -28,7 +46,11 @@ export async function agentOrHalt<T = undefined>(
       return await deps.agent(config);
     } catch (err) {
       if (!(err instanceof JitCheckError)) throw err;
-      await deps.haltForHuman(claim, err.message);
+      await deps.haltForHuman(claim, {
+        headline: `jigs could not start a step on **${claim.identifier}** because a check failed.`,
+        notes: checkFailureNotes(err.message),
+        onReply: "retry",
+      });
     }
   }
 }

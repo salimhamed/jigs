@@ -1,12 +1,8 @@
-- Start with one plain, bold question. Put the question before all context or
-  evidence. Do not number it; the comment renderer supplies the number.
-- When concrete choices exist, put each option on its own line as an indented
-  nested list item: `    - a) Choice`. Use `a`, `b`, and `c` in order.
-- Mark the best option with a trailing `(recommended)`. This recommendation is
-  not a decision: return `needs-human` and wait for the human to choose.
-- Put supporting evidence after the question and options, never before them.
-  Include relevant file:line references, short quotes, or reasoning there.
+- Write for someone who has never seen this repository and has no code open in
+  front of them. They know the product, not the codebase.
 - Use active voice and keep sentences near 20 words or fewer.
 - Give each sentence one idea. Use concise, familiar words.
-- Assume the reader has little context. Expand internal jargon on first use,
-  or avoid it when plain language works.
+- Expand internal jargon on first use, or avoid it when plain language works.
+- Name a file, a command or an identifier only when the reader has to see it
+  to decide. Otherwise say what it does, in words.
+- Never assume the reader has read the ticket recently, or at all.

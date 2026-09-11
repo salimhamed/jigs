@@ -26,7 +26,7 @@ const snapshot: TicketSnapshot = {
   subIssues: [],
 };
 
-const handoff: Handoff = { brief: "THE-BRIEF", snapshot };
+const handoff: Handoff = { brief: "THE-BRIEF", snapshot, assumptions: [] };
 
 const failing: CheckRun[] = [
   { name: "test", conclusion: "failure", url: "http://ci.test/1" },

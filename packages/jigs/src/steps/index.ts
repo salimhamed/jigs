@@ -32,6 +32,7 @@ export {
   resolveRepo,
   squashMerge,
 } from "./pull-request/pr.ts";
+export { dashboardRunUrl } from "./run-context.ts";
 export { fetchSnapshot } from "./ticket/fetch-snapshot.ts";
 export {
   createComment,
@@ -41,7 +42,9 @@ export {
 } from "./ticket/issues.ts";
 export {
   checkForHumanReply,
+  type NeedsHumanContext,
   postNeedsHumanComment,
+  postTicketNote,
 } from "./ticket/needs-human-comments.ts";
 export {
   type ProvisionRunWorktreeDeps,

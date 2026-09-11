@@ -5,19 +5,21 @@ import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import { promptRef } from "../agent/testing.ts";
 import type { TicketClaim } from "../ticket/claim.ts";
 import type {
+  Halt,
   HaltForHumanFn,
   HumanReply,
-  JsonValue,
 } from "../ticket/halt-for-human.ts";
 import type { Handoff } from "../ticket/review.ts";
 import type { TicketSnapshot } from "../ticket/snapshot.ts";
 import {
   codeReviewVerdict,
   implementUntilCodeReviewApproves,
+  replyReading,
 } from "./implement.ts";
 
 const claim = {
   issueId: "68bc9696-35d5-442d-ab56-214c8cfefbec",
+  identifier: "AGE-316",
   token: "linear:ticket:68bc9696-35d5-442d-ab56-214c8cfefbec",
 } as TicketClaim;
 
@@ -38,11 +40,15 @@ const snapshot: TicketSnapshot = {
   subIssues: [],
 };
 
-const handoff: Handoff = { brief: "SECRET-BRIEF-TEXT: build it", snapshot };
+const handoff: Handoff = {
+  brief: "SECRET-BRIEF-TEXT: build it",
+  snapshot,
+  assumptions: [],
+};
 
 let agentCalls: AgentStepConfig<unknown>[] = [];
 let verdicts: unknown[] = [];
-let humanCalls: Array<{ reason: string; payload?: JsonValue }> = [];
+let humanCalls: Halt[] = [];
 let humanReply = "the reviewer is wrong, ship it";
 
 // Applies parseOutput exactly as the real agent() does, so the verdict schema
@@ -62,8 +68,8 @@ const fakeAgent: AgentFn = async <T>(config: AgentStepConfig<T>) => {
   };
 };
 
-const fakeHaltForHuman: HaltForHumanFn = async (_claim, reason, payload) => {
-  humanCalls.push({ reason, payload });
+const fakeHaltForHuman: HaltForHumanFn = async (_claim, halt) => {
+  humanCalls.push(halt);
   return {
     commentId: `c${humanCalls.length}`,
     body: humanReply,
@@ -143,18 +149,101 @@ test("the reviewer is never shown the brief and judges against the ticket", asyn
   expect(review?.output).toBe(codeReviewVerdict);
 });
 
-test("the cycle bound halts needs-human with the findings, and the human's reply drives the next round", async () => {
-  verdicts = [changes("one"), changes("two"), changes("three"), approved];
+const reading = (over: Record<string, unknown> = {}) => ({
+  action: "continue",
+  instructions: "",
+  about: "",
+  questions: [],
+  ...over,
+});
+
+test("a malformed reply reading fails the schema", () => {
+  expect(() => replyReading.parse(reading())).not.toThrow();
+  expect(() => replyReading.parse(reading({ action: "halt" }))).toThrow();
+  expect(() => replyReading.parse(reading({ extra: 1 }))).toThrow();
+});
+
+test("the cycle bound halts needs-human with the findings as notes and one open question", async () => {
+  verdicts = [
+    changes("one"),
+    changes("two"),
+    changes("three"),
+    reading({ instructions: "drop finding three and ship the rest" }),
+    approved,
+  ];
   const result = await run();
 
-  expect(humanCalls).toHaveLength(1);
-  expect(humanCalls[0]?.reason).toContain("3-cycle bound");
-  expect(humanCalls[0]?.payload).toEqual({ findings: ["three"] });
-  // Four implement + review pairs: three bounded cycles, then the round the
-  // human's reply started. The halt is a pause, not a terminal state.
-  expect(agentCalls).toHaveLength(8);
-  expect(promptRef(agentCalls[6]).data.REVIEW).toContain(
-    "the reviewer is wrong, ship it",
+  expect(humanCalls).toEqual([
+    {
+      headline:
+        "jigs paused work on **AGE-316**. The builder and the reviewer could not agree after 3 rounds, and jigs needs you to decide how to proceed.",
+      notes: ["three"],
+      questions: [{ question: "How should the builder proceed?" }],
+      onReply: "continue",
+    },
+  ]);
+  // Three bounded cycles, one reading of the reply, then the round the
+  // reading started. The halt is a pause, not a terminal state.
+  expect(agentCalls).toHaveLength(9);
+  expect(result.cycles).toBe(4);
+});
+
+test("the reply is read by an agent and never pasted into the builder's prompt", async () => {
+  humanReply = "the reviewer is wrong, ship it";
+  verdicts = [
+    changes("one"),
+    changes("two"),
+    changes("three"),
+    reading({
+      instructions: "Ignore finding three. Land the change as it is.",
+    }),
+    approved,
+  ];
+  await run();
+
+  const read = promptRef(agentCalls[6]);
+  expect(read.name).toBe("read-reply");
+  expect(read.data.REPLY).toBe("the reviewer is wrong, ship it");
+  expect(read.data.FINDINGS).toBe("- three");
+  expect(read.data.TICKET).toContain("AGE-316");
+  expect(agentCalls[6]?.cwd).toBe("/tmp/worktree");
+  expect(agentCalls[6]?.output).toBe(replyReading);
+
+  // The builder gets what the reading produced, not the human's words.
+  const next = promptRef(agentCalls[7]);
+  expect(next.data.REVIEW).toBe(
+    "Ignore finding three. Land the change as it is.",
+  );
+  expect(next.data.REVIEW).not.toContain("the reviewer is wrong");
+});
+
+test("a half-answered reply asks again on the ticket rather than guessing", async () => {
+  verdicts = [
+    changes("one"),
+    changes("two"),
+    changes("three"),
+    reading({
+      action: "ask",
+      about: "You settled the first point. The second is still open.",
+      questions: [{ question: "Should the builder keep the retry?" }],
+    }),
+    reading({ instructions: "keep the retry, drop the rest" }),
+    approved,
+  ];
+  const result = await run();
+
+  expect(humanCalls).toHaveLength(2);
+  expect(humanCalls[1]).toEqual({
+    headline:
+      "jigs paused work on **AGE-316** again and needs one more answer before the builder continues.",
+    about: "You settled the first point. The second is still open.",
+    questions: [{ question: "Should the builder keep the retry?" }],
+    onReply: "continue",
+  });
+  // Uncapped: the second answer is read the same way the first was.
+  expect(promptRef(agentCalls[7]).name).toBe("read-reply");
+  expect(promptRef(agentCalls[8]).data.REVIEW).toBe(
+    "keep the retry, drop the rest",
   );
   expect(result.cycles).toBe(4);
 });

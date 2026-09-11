@@ -106,16 +106,19 @@ export async function resolveIssueRef(ticket: string): Promise<LinearIssueRef> {
   return data.issue;
 }
 
-export async function getIssueParticipants(
-  issueId: string,
-): Promise<{ creator: LinearUser | null }> {
-  const data = await linearGraphql<{ issue: { creator: LinearUser | null } }>(
+export async function getIssueParticipants(issueId: string): Promise<{
+  creator: LinearUser | null;
+  assignee: LinearUser | null;
+}> {
+  const data = await linearGraphql<{
+    issue: { creator: LinearUser | null; assignee: LinearUser | null };
+  }>(
     `query IssueParticipants($id: String!) {
-      issue(id: $id) { creator { id name } }
+      issue(id: $id) { creator { id name } assignee { id name } }
     }`,
     { id: issueId },
   );
-  return { creator: data.issue.creator };
+  return { creator: data.issue.creator, assignee: data.issue.assignee };
 }
 
 interface RawIssueRef {

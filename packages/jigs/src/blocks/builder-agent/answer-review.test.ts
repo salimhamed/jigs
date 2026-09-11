@@ -27,7 +27,11 @@ const snapshot: TicketSnapshot = {
   subIssues: [],
 };
 
-const handoff: Handoff = { brief: "BRIEF-TEXT: build the gate", snapshot };
+const handoff: Handoff = {
+  brief: "BRIEF-TEXT: build the gate",
+  snapshot,
+  assumptions: [],
+};
 
 const thread = (rootId: number, body: string): ReviewThread => ({
   rootId,
