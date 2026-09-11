@@ -95,6 +95,14 @@ nature, and they are still exported so a factory can read one or pass its own
 ([ADR 0018](./0018-blocks-not-loops.md)). The old `src/prompts/` folder is
 gone.
 
+> **Amended 2026-09-11.** Prompts are `<name>.prompt.md` now, still beside the
+> code that uses them but rendered on the steps side: a block passes a name
+> and its data, and the agent step renders the markdown through the registry
+> in `steps/prompts/`. The file placement this paragraph decided is unchanged;
+> what moved is the rendering, because a template is a file and the workflow
+> sandbox has no filesystem. The blocks barrel exports no prompt strings any
+> more — `interpolate` stays, for a factory's own strings.
+
 **Where `github-webhook.ts` went.** It stayed in `providers/`. It combines the
 GitHub API with jigs' own paths and config, so it could have gone to
 `steps/pull-request/` instead. It is in `providers/` because only the service

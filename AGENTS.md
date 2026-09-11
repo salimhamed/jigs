@@ -33,6 +33,9 @@ to keep:
 - A type used by one module stays in that module. A type used on both sides of
   the blocks/steps line lives in `blocks/`, under the same topic. There is no
   shared types folder.
+- A prompt is a `<name>.prompt.md` file beside the block that names it, and the
+  registry in `steps/prompts/` is what reads and renders it. `blocks/` may name
+  a prompt; only `steps/` may render one.
 
 No file here carries a `"use workflow"` or `"use step"` directive; both live in
 a factory ([ADR 0013](docs/adr/0013-factory-owned-steps.md)). `pnpm e2e` is

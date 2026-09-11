@@ -123,7 +123,8 @@ the factory starts from: `jigs.config.ts` (this factory's pipelines, keyed by
 the name `jigs run` takes), `pipelines/ship.ts` (a ticket to a merged pull
 request), `steps/jigs.ts`, `blocks/jigs.ts`, `blocks/review-loop/` (that
 pipeline's review loop, written here rather than shipped),
-`prompts/describe-pr.ts`, `jigs.config.test.ts` and a `README.md`. Then it
+`prompts/` (this factory's own prompt markdown, registered over jigs'),
+`jigs.config.test.ts` and a `README.md`. Then it
 prints the next steps and runs none of them; `jigs up` (step 3) is what runs them. Every file is written
 once: a re-run keeps what is there and adds only what is missing, so nothing
 init wrote goes stale under you, and from here on the code is this factory's
@@ -158,7 +159,7 @@ that wants no self-review round, a merge commit instead of a squash, or a
 different gate edits its own blocks — and still gets the jigs blocks
 underneath fixed by `jigs upgrade`.
 
-`prompts/describe-pr.ts` is the same split at one block. jigs owns the
+`prompts/describe-pr.prompt.md` is the same split at one block. jigs owns the
 mechanics — resume the builder that wrote the change, fall back to a fresh context fed
 the diff, parse a `{ title, body }` back — and the factory owns the words and
 the policy: the conventions it asks for, and what to do when the answer drifts

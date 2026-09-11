@@ -19,10 +19,11 @@ _Avoid_: jig as a code term, sub-jig
 
 **Block**:
 Pipeline-side reusable code that calls steps in a fixed way. A block is one
-async TypeScript function, with no options, taking the step wrappers it needs
-as plain parameters. It carries no directive, so it owns no step id and
-renaming one is safe. jigs ships blocks and a factory writes its own; both are
-the same kind of thing.
+async TypeScript function taking the step wrappers it needs as plain
+parameters, plus whatever options name the choices the caller owns — which
+prompt to use is the one every block carries. It carries no directive, so it
+owns no step id and renaming one is safe. jigs ships blocks and a factory
+writes its own; both are the same kind of thing.
 jigs ships the blocks a wrong edit would break: the ones holding the builder's
 session, the resume fallback, the ids the gate cursor needs back, the
 code-review call the brief is kept out of. What a wrong edit would merely
@@ -213,6 +214,17 @@ active run per resource — claiming an owned token fails loudly, naming the
 owner. The ticket claim is a run's first act and doubles as the needs-human
 wake channel.
 _Avoid_: lock, lease
+
+**Prompt**:
+A named markdown template the agent step renders, from a **prompt registry**
+mapping short names to files. A block never renders one — it runs in the
+workflow sandbox, where no file can be read — so it passes the name and the
+values the template reads, and the step turns the pair into the words the
+agent gets. jigs ships nine under names like `ticket-review` and `fix-ci`, and
+a factory layers its own over them, adding a name or replacing one. Templates
+come only from jigs or the factory; the data a block passes is interpolated,
+never compiled.
+_Avoid_: template (for the rendered text), system prompt, instructions
 
 **Ticket review**:
 The jigs block that normalizes a ticket into a brief, parking on a

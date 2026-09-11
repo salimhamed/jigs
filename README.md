@@ -78,8 +78,9 @@ exists. These are the code `jigs build` compiles:
 - `blocks/review-loop/` is this factory's own review loop, one decision per
   file: the story in `review-loop.ts`, and beside it the push, the
   description, the answer to a review, the CI bound and the merge policy.
-- `prompts/describe-pr.ts` holds the words a pull request introduces itself
-  with.
+- `prompts/describe-pr.prompt.md` holds the words a pull request introduces
+  itself with, and `prompts/index.ts` registers it — along with anything else
+  this factory writes — over the prompts jigs ships.
 
 Edit all of it. The one rule: an exported wrapper's name and its file's path
 are its durable step id, so renaming or moving one changes that id — do it
@@ -258,8 +259,10 @@ One rule decides where a type goes: a type used by one module stays in that
 module, and a type used on both sides of the blocks/steps line lives in
 `blocks/`, under the same topic. There is no shared types folder.
 
-Prompts sit beside the code that uses them, as `<name>.prompt.ts`. They are
-still exported, so a factory can read one or pass its own instead.
+Prompts sit beside the code that uses them, as `<name>.prompt.md`, and ship
+with the package. A block names one; the agent step renders it, because a
+block runs in the workflow sandbox where no file can be read. A factory
+registers its own the same way and can replace any of jigs' by name.
 
 ### The two import paths
 
