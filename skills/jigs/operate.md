@@ -86,13 +86,17 @@ A run that is suspended is not stuck; a run that is stalled is.
 ## Needs-human halts
 
 A step can raise a halt instead of proceeding. The run then suspends and jigs
-posts the reason as a comment on the Linear ticket, mentioning the ticket's
-creator. `jigs ps` shows the run as `suspended`; `jigs logs <run>` names the
-hook the run is parked on and why.
+comments on the Linear ticket, mentioning its creator and its assignee. The
+comment says in plain words what paused and why, what the ticket is about, and
+either numbered questions to choose between or what to repair before retrying;
+its footer names the run, where it paused, and links its dashboard page.
+`jigs ps` shows the run as `suspended`; `jigs logs <run>` names the hook the
+run is parked on and why.
 
-The human answers **on the ticket**, in that comment thread. You do not answer
-for them, and you do not resume the run by hand. Once they reply, the webhook
-wakes the run, the reply is re-checked against Linear, and the run continues.
+The human answers **on the ticket**, in that comment thread — with option
+letters like `1a, 2b`, or in plain words. You do not answer for them, and you
+do not resume the run by hand. Once they reply, the webhook wakes the run, the
+reply is re-checked against Linear, and the run continues.
 
 If the reply is there and the run has not moved, the delivery was missed:
 

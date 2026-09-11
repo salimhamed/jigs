@@ -4,9 +4,9 @@ import { type AgentStepConfig, parseOutput } from "../agent/plan.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import type { TicketClaim } from "../ticket/claim.ts";
 import type {
+  Halt,
   HaltForHumanFn,
   HumanReply,
-  JsonValue,
 } from "../ticket/halt-for-human.ts";
 import type { Handoff } from "../ticket/review.ts";
 import type { TicketSnapshot } from "../ticket/snapshot.ts";
@@ -17,6 +17,7 @@ import {
 
 const claim = {
   issueId: "68bc9696-35d5-442d-ab56-214c8cfefbec",
+  identifier: "AGE-316",
   token: "linear:ticket:68bc9696-35d5-442d-ab56-214c8cfefbec",
 } as TicketClaim;
 
@@ -37,11 +38,15 @@ const snapshot: TicketSnapshot = {
   subIssues: [],
 };
 
-const handoff: Handoff = { brief: "SECRET-BRIEF-TEXT: build it", snapshot };
+const handoff: Handoff = {
+  brief: "SECRET-BRIEF-TEXT: build it",
+  snapshot,
+  assumptions: [],
+};
 
 let agentCalls: AgentStepConfig<unknown>[] = [];
 let verdicts: unknown[] = [];
-let humanCalls: Array<{ reason: string; payload?: JsonValue }> = [];
+let humanCalls: Halt[] = [];
 let humanReply = "the reviewer is wrong, ship it";
 
 // Applies parseOutput exactly as the real agent() does, so the verdict schema
@@ -61,8 +66,8 @@ const fakeAgent: AgentFn = async <T>(config: AgentStepConfig<T>) => {
   };
 };
 
-const fakeHaltForHuman: HaltForHumanFn = async (_claim, reason, payload) => {
-  humanCalls.push({ reason, payload });
+const fakeHaltForHuman: HaltForHumanFn = async (_claim, halt) => {
+  humanCalls.push(halt);
   return {
     commentId: `c${humanCalls.length}`,
     body: humanReply,
@@ -140,24 +145,38 @@ test("the reviewer is never shown the brief and judges against the ticket", asyn
   expect(review?.output).toBe(codeReviewVerdict);
 });
 
-test("the cycle bound halts needs-human with the findings, and the human's reply drives the next round", async () => {
+test("the cycle bound halts needs-human with the findings as notes and one plain question", async () => {
   verdicts = [changes("one"), changes("two"), changes("three"), approved];
   const result = await run();
 
-  expect(humanCalls).toHaveLength(1);
-  expect(humanCalls[0]?.reason).toContain("3-cycle bound");
-  expect(humanCalls[0]?.payload).toEqual({ findings: ["three"] });
-  // Four implement + review pairs: three bounded cycles, then the round the
-  // human's reply started. The halt is a pause, not a terminal state.
+  expect(humanCalls).toEqual([
+    {
+      headline:
+        "jigs paused work on **AGE-316**. The builder and the reviewer could not agree after 3 rounds, and jigs needs you to decide how to proceed.",
+      where: "code review",
+      notes: ["three"],
+      questions: [
+        {
+          question: "How should the builder proceed?",
+          context:
+            "Reply with what the builder should change or do next. The builder will follow your words as written, so give it direction rather than a question.",
+        },
+      ],
+      onReply: "continue",
+    },
+  ]);
+  // Three bounded cycles, then the round the reply started. The halt is a
+  // pause, not a terminal state.
   expect(agentCalls).toHaveLength(8);
-  expect(agentCalls[6]?.prompt).toContain("the reviewer is wrong, ship it");
   expect(result.cycles).toBe(4);
 });
 
-test("the builder's session pointer is the one carried out, not the reviewer's", async () => {
-  verdicts = [changes("one"), approved];
-  const result = await run();
-  // s-1 and s-3 are the implement steps; the reviewer declares an output
-  // schema and this fake records no session for it.
-  expect(result.session).toEqual({ harness: "claude", id: "s-3" });
+test("the human's reply is what the builder is told to do next", async () => {
+  humanReply = "Ignore finding three. Land the change as it is.";
+  verdicts = [changes("one"), changes("two"), changes("three"), approved];
+  await run();
+
+  const next = agentCalls[6]?.prompt ?? "";
+  expect(next).toContain("Ignore finding three. Land the change as it is.");
+  expect(next).not.toContain("- three");
 });

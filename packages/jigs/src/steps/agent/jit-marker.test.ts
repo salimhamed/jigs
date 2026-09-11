@@ -27,10 +27,12 @@ test("an agent step whose declared MCP server cannot start returns the JIT failu
   const result = await runStep(wire);
 
   expect(result).toMatchObject({
-    jitFailure: expect.stringContaining("MCP server linear"),
-  });
-  expect(result).toMatchObject({
-    jitFailure: expect.stringContaining("→ fix the 'linear' server"),
+    jitFailure: [
+      expect.objectContaining({
+        label: expect.stringContaining("MCP server linear"),
+        repair: expect.stringContaining("fix the 'linear' server"),
+      }),
+    ],
   });
 });
 
@@ -53,5 +55,13 @@ test("agent() turns a failed JIT check into a thrown JitCheckError carrying the 
   );
   await expect(failing).rejects.toThrow(JitCheckError);
   await expect(failing).rejects.toThrow(/MCP server linear/);
-  await expect(failing).rejects.toThrow(/→ fix the 'linear' server/);
+  // The repair travels as a field, so the caller writing it for a human never
+  // parses it back out of the message.
+  await expect(failing).rejects.toMatchObject({
+    failures: [
+      expect.objectContaining({
+        repair: expect.stringContaining("fix the 'linear' server"),
+      }),
+    ],
+  });
 });

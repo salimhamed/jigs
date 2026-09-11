@@ -18,10 +18,12 @@ import {
   branchState as branchStateImpl,
   checkForHumanReply as checkForHumanReplyImpl,
   commentOnPr as commentOnPrImpl,
+  dashboardRunUrl,
   fetchPrState as fetchPrStateImpl,
   fetchSnapshot as fetchSnapshotImpl,
   openPr as openPrImpl,
   postNeedsHumanComment as postNeedsHumanCommentImpl,
+  postTicketNote as postTicketNoteImpl,
   provisionRunWorktree,
   pushBranch as pushBranchImpl,
   readDiff as readDiffImpl,
@@ -57,11 +59,30 @@ export async function runAskStep(wire: Parameters<typeof runAsk>[0]) {
   return runAsk(wire, getWorkflowMetadata().workflowRunId);
 }
 
+// The only wrapper that adds to its arguments rather than passing them
+// through: what the comment's footer says about the run — the run id, the
+// pipeline name and where to watch it — is knowable here and nowhere
+// block-side. To change how the comment reads, pass this factory's own
+// renderer as the fourth argument; `renderNeedsHumanComment` is the default.
 export async function postNeedsHumanComment(
-  ...args: Parameters<typeof postNeedsHumanCommentImpl>
+  issueId: string,
+  halt: Parameters<typeof postNeedsHumanCommentImpl>[1],
 ) {
   "use step";
-  return postNeedsHumanCommentImpl(...args);
+  const metadata = getWorkflowMetadata();
+  return postNeedsHumanCommentImpl(issueId, halt, {
+    runId: metadata.workflowRunId,
+    pipeline: metadata.workflowName,
+    dashboardUrl: dashboardRunUrl(metadata.workflowRunId),
+  });
+}
+
+export async function postTicketNote(
+  issueId: string,
+  note: Parameters<typeof postTicketNoteImpl>[1],
+) {
+  "use step";
+  return postTicketNoteImpl(issueId, note);
 }
 
 export async function checkForHumanReply(

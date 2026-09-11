@@ -36,8 +36,11 @@ import type {
   GateCursor,
   GateFn,
   GateWake,
+  Halt,
   HaltForHumanDeps,
   HaltForHumanFn,
+  HaltOption,
+  HaltQuestion,
   Handoff,
   HarnessConfig,
   HarnessOptions,
@@ -53,6 +56,7 @@ import type {
   McpStdioServer,
   PostNeedsHumanComment,
   PostReviewAnswersOptions,
+  PostTicketNote,
   PrDescription,
   PrRef,
   RebuildContextPrompt,
@@ -68,6 +72,7 @@ import type {
   ThreadAnswers,
   TicketClaim,
   TicketLink,
+  TicketNote,
   TicketRef,
   TicketReviewPrompt,
   TicketReviewPromptInput,
@@ -77,7 +82,11 @@ import type {
 import type {
   ExecuteDeps,
   LinearIssueMatch,
+  NeedsHumanContext,
   ProvisionRunWorktreeDeps,
+  RenderNeedsHumanComment,
+  RenderProceedingNote,
+  TicketParticipants,
   WorktreeRequest,
 } from "./steps/index.ts";
 
@@ -116,6 +125,9 @@ type BlocksTypeSurface = {
   haltForHumanFn: HaltForHumanFn;
   handoff: Handoff;
   harnessConfig: HarnessConfig;
+  halt: Halt;
+  haltOption: HaltOption;
+  haltQuestion: HaltQuestion;
   harnessOptions: HarnessOptions;
   humanReply: HumanReply;
   implementOptions: ImplementOptions;
@@ -130,6 +142,7 @@ type BlocksTypeSurface = {
   postNeedsHumanComment: PostNeedsHumanComment;
   postReviewAnswersOptions: PostReviewAnswersOptions;
   prDescription: PrDescription;
+  postTicketNote: PostTicketNote;
   prRef: PrRef;
   rebuildContextPrompt: RebuildContextPrompt;
   rebuildContextPromptInput: RebuildContextPromptInput;
@@ -144,6 +157,7 @@ type BlocksTypeSurface = {
   threadAnswers: ThreadAnswers;
   ticketClaim: TicketClaim;
   ticketLink: TicketLink;
+  ticketNote: TicketNote;
   ticketRef: TicketRef;
   ticketReviewPrompt: TicketReviewPrompt;
   ticketReviewPromptInput: TicketReviewPromptInput;
@@ -154,7 +168,11 @@ type BlocksTypeSurface = {
 type StepsTypeSurface = {
   executeDeps: ExecuteDeps;
   linearIssueMatch: LinearIssueMatch;
+  needsHumanContext: NeedsHumanContext;
   provisionRunWorktreeDeps: ProvisionRunWorktreeDeps;
+  renderNeedsHumanComment: RenderNeedsHumanComment;
+  renderProceedingNote: RenderProceedingNote;
+  ticketParticipants: TicketParticipants;
   worktreeRequest: WorktreeRequest;
 };
 

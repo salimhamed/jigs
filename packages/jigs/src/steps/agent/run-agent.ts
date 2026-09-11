@@ -28,7 +28,8 @@ import {
   toStepResult,
 } from "../../blocks/agent/result.ts";
 import {
-  formatFailures,
+  type FailedCheck,
+  failedChecks,
   JIT_TIMEOUT_MS,
   jitChecks,
   runChecks,
@@ -66,7 +67,7 @@ export interface ExecuteDeps {
   withCodexAppServer: typeof withCodexAppServer;
   // Seamed like the harness calls beside it: a test hydrating a wire that
   // declares MCP servers must not spawn them.
-  jitFailures(wire: AgentWire): Promise<string | undefined>;
+  jitFailures(wire: AgentWire): Promise<FailedCheck[] | undefined>;
 }
 
 export const realDeps: ExecuteDeps = {
@@ -75,7 +76,7 @@ export const realDeps: ExecuteDeps = {
   withCodexAppServer,
   jitFailures: async (wire) => {
     const report = await runChecks(jitChecks(wire), JIT_TIMEOUT_MS);
-    return report.ok ? undefined : formatFailures(report);
+    return report.ok ? undefined : failedChecks(report);
   },
 };
 

@@ -23,6 +23,7 @@ import {
   fetchPrState,
   fetchTicketSnapshot,
   postNeedsHumanComment,
+  postTicketNote,
   runAgentStep,
   runAskStep,
 } from "../steps/jigs.ts";
@@ -35,8 +36,8 @@ export function ask<T = undefined>(config: AskStepConfig<T>) {
   return askBlock(config, runAskStep);
 }
 
-export const haltForHuman: HaltForHumanFn = (claim, reason, payload) =>
-  haltForHumanBlock(claim, reason, payload, {
+export const haltForHuman: HaltForHumanFn = (claim, halt) =>
+  haltForHumanBlock(claim, halt, {
     postComment: postNeedsHumanComment,
     checkForReply: checkForHumanReply,
   });
@@ -53,7 +54,7 @@ export function agentOrHalt<T = undefined>(
 
 type ReviewTicketInput = Omit<
   ReviewTicketOptions,
-  "agent" | "haltForHuman" | "fetchSnapshot"
+  "agent" | "haltForHuman" | "fetchSnapshot" | "postNote"
 >;
 
 // Parks on a needs-human verdict and re-reads the ticket each round until the
@@ -63,6 +64,7 @@ export function reviewTicket(options: ReviewTicketInput): Promise<Handoff> {
     ...options,
     agent,
     haltForHuman,
+    postNote: postTicketNote,
     fetchSnapshot: fetchTicketSnapshot,
   });
 }

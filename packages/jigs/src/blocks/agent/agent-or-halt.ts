@@ -28,7 +28,15 @@ export async function agentOrHalt<T = undefined>(
       return await deps.agent(config);
     } catch (err) {
       if (!(err instanceof JitCheckError)) throw err;
-      await deps.haltForHuman(claim, err.message);
+      await deps.haltForHuman(claim, {
+        headline: `jigs could not start a step on **${claim.identifier}** because a check failed.`,
+        where: "starting a step",
+        // The comment is not a console: one failure, one plain line.
+        notes: err.failures.map(
+          ({ label, reason, repair }) => `${label}: ${reason}. ${repair}`,
+        ),
+        onReply: "retry",
+      });
     }
   }
 }

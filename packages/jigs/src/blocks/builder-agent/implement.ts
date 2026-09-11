@@ -2,6 +2,10 @@
 // the halt it ends on is a pause a human ends — never a terminal state, so
 // nothing the builder produced is discarded.
 //
+// The human's reply becomes the builder's next round of instructions verbatim,
+// which is why the question says so: a person who knows the builder reads their
+// words as written writes direction rather than a question back.
+//
 // The code-review call renders the ticket and the branch point and nothing
 // else. The reviewer judges the change against the ticket's acceptance
 // criteria, so the brief a re-planning agent wrote is deliberately out of its
@@ -12,7 +16,7 @@ import type { HarnessConfig } from "../agent/harness-config.ts";
 import type { AgentSession } from "../agent/result.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import type { TicketClaim } from "../ticket/claim.ts";
-import type { HaltForHumanFn } from "../ticket/halt-for-human.ts";
+import type { Halt, HaltForHumanFn } from "../ticket/halt-for-human.ts";
 import type { Handoff } from "../ticket/review.ts";
 import { renderSnapshot } from "../ticket/snapshot.ts";
 import {
@@ -63,6 +67,7 @@ export async function implementUntilCodeReviewApproves(
   const { agent, haltForHuman } = options;
   const renderImplement = options.implementPrompt ?? implementPrompt;
   const renderCodeReview = options.codeReviewPrompt ?? codeReviewPrompt;
+  const { identifier } = options.handoff.snapshot;
   const ticket = renderSnapshot(options.handoff.snapshot);
   let session: AgentSession | undefined;
   let review = FIRST_PASS;
@@ -70,7 +75,7 @@ export async function implementUntilCodeReviewApproves(
   let cycles = 0;
 
   // Outer loop: the needs-human halt is a pause, so a human's reply becomes
-  // the next round's findings and the run is never stranded.
+  // the next round's instructions and the run is never stranded.
   for (;;) {
     for (let cycle = 1; cycle <= MAX_REVIEW_CYCLES; cycle += 1) {
       cycles += 1;
@@ -105,11 +110,21 @@ export async function implementUntilCodeReviewApproves(
       review = renderFindings(findings);
     }
 
-    const reply = await haltForHuman(
-      options.claim,
-      `review loop hit its ${MAX_REVIEW_CYCLES}-cycle bound`,
-      { findings },
-    );
+    const halt: Halt = {
+      headline: `jigs paused work on **${identifier}**. The builder and the reviewer could not agree after ${MAX_REVIEW_CYCLES} rounds, and jigs needs you to decide how to proceed.`,
+      where: "code review",
+      notes: findings,
+      questions: [
+        {
+          question: "How should the builder proceed?",
+          context:
+            "Reply with what the builder should change or do next. The builder will follow your words as written, so give it direction rather than a question.",
+        },
+      ],
+      onReply: "continue",
+    };
+
+    const reply = await haltForHuman(options.claim, halt);
     review = reply.body;
   }
 }
