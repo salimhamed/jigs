@@ -63,8 +63,8 @@ function makeDeps(
       captured.homeRunIds.push(runId);
       return path.join(tmp, "codex-home", runId);
     },
-    // The probe itself is covered in index.test.ts, against a server that
-    // really cannot start.
+    // The probe itself is covered in ./jit-marker.test.ts, against a server
+    // that really cannot start.
     jitFailures: async () => undefined,
     withCodexAppServer: async (fn) => {
       const provider = ((modelId: string, settings: CodexAppServerSettings) => {

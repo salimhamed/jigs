@@ -31,9 +31,9 @@ export interface HumanReply {
   createdAt: string;
 }
 
-// Declared here rather than written as `typeof postNeedsHumanComment`: the
-// implementation lives under steps/ and reaches Linear, and a block naming it
-// even in a type position is an import edge this side may not have.
+// Declared here rather than written as `typeof postNeedsHumanComment`:
+// declaring the contract block-side typechecks the step against the block and
+// keeps this side free of any value import into steps/.
 export type PostNeedsHumanComment = (
   issueId: string,
   reason: string,

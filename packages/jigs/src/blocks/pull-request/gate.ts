@@ -224,9 +224,9 @@ export function classifyPrState(
   };
 }
 
-// Declared here rather than written as `typeof fetchPrState`: the fetch lives
-// under steps/ and reaches GitHub, and a block naming it even in a type
-// position is an import edge this side may not have.
+// Declared here rather than written as `typeof fetchPrState`: declaring the
+// contract block-side typechecks the step against the block and keeps this
+// side free of any value import into steps/.
 export type FetchPrState = (pr: PrRef) => Promise<PrSnapshot>;
 
 /** {@link pullRequestGate} with its step already bound. */

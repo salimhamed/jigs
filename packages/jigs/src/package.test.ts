@@ -170,8 +170,8 @@ test("the factory template pins the same versions this package peers on", async 
 // is what keeps those surfaces identical while blocks/ and steps/ hold the
 // content, and the scaffold reaches only 12 of the 22 subpaths — so ./prompts,
 // ./checks, ./harnesses and ./providers/linear have no e2e cover at all, and
-// the test above checks only that an entry's source file exists, never what it
-// exports. A name dropped from one of these lists is a silent break in a
+// the exports-target test checks only that an entry's source file exists,
+// never what it exports. A name dropped from one of these lists is a silent break in a
 // factory that already imports it.
 const COMPAT_EXPORTS: Record<string, string[]> = {
   "compat/prompts.ts": [

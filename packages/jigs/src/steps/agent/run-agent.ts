@@ -43,8 +43,8 @@ import { scrubbedEnv } from "./harnesses/env.ts";
 import { claudeCode } from "./harnesses/index.ts";
 import { FileLockTimeoutError, lockPathFor, withFileLock } from "./lock.ts";
 
-// Exported for ../agent/run-ask.ts, which shares the executor seam; not part
-// of the ./steps/run subpath.
+// Exported for ./run-ask.ts, which shares the executor seam; not part of the
+// ./steps/run subpath.
 export type ExecutorGeneration = StepGeneration & { output?: unknown };
 
 // The provider declares but does not export its MCP config type.
