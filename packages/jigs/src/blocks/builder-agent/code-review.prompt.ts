@@ -1,18 +1,24 @@
-export const codeReviewPrompt = `# Code review
+export type CodeReviewPromptInput = { ticket: string; baseSha: string };
+export type CodeReviewPrompt = (input: CodeReviewPromptInput) => string;
+
+export const codeReviewPrompt: CodeReviewPrompt = ({
+  ticket,
+  baseSha,
+}) => `# Code review
 
 You are reviewing a builder agent's change before it becomes a pull request.
 Your working directory is the worktree holding that change.
 
 ## The ticket
 
-{{TICKET}}
+${ticket}
 
 ## What to review
 
 Read the diff of the work under review:
 
 \`\`\`
-git diff {{BASE_SHA}}...HEAD
+git diff ${baseSha}...HEAD
 \`\`\`
 
 Read the files it touches, and their neighbours, before judging any of it.

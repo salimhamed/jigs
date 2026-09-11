@@ -1,38 +1,49 @@
-export const fixCiFreshPrompt = `# Fix CI from a rebuilt context
+import { fixCiHowToWork } from "./fix-ci-how-to-work.prompt.ts";
+
+export type FixCiFreshPromptInput = {
+  ticket: string;
+  brief: string;
+  diff: string;
+  checks: string;
+  attempt: string;
+};
+export type FixCiFreshPrompt = (input: FixCiFreshPromptInput) => string;
+
+export const fixCiFreshPrompt: FixCiFreshPrompt = ({
+  ticket,
+  brief,
+  diff,
+  checks,
+  attempt,
+}) => `# Fix CI from a rebuilt context
 
 You are the builder for this change, picking it up from its record. CI is red
-on your pull request's head commit, and this is attempt {{ATTEMPT}}. Everything
+on your pull request's head commit, and this is attempt ${attempt}. Everything
 you need is below: the ticket the change implements, the brief it was built
 from, the diff it consists of, and the checks that are failing.
 
 ## The ticket
 
-{{TICKET}}
+${ticket}
 
 ## The brief
 
-{{BRIEF}}
+${brief}
 
 ## The change under review
 
 \`\`\`diff
-{{DIFF}}
+${diff}
 \`\`\`
 
 ## The failing checks
 
-{{CHECKS}}
+${checks}
 
 ## How to work
 
 - Work in the current directory — the worktree your change is on. Read the
   files the diff touches before you change any of them: the diff above is the
   summary, the worktree is the truth.
-- Read the check output before you change anything. Fix the cause, never the
-  symptom: deleting or skipping the failing assertion is not a fix.
-- Reproduce the failure locally where the repo gives you a way to.
-- If the failure is unrelated to your change, say so in the commit message and
-  fix it anyway if it is cheap; leave it alone if it is not yours to touch.
-- **Commit your fix before you finish.** The push that follows reports the
-  commits on the branch, and an uncommitted fix never reaches CI.
+${fixCiHowToWork}
 `;

@@ -13,15 +13,25 @@ import type {
   AgentStepResult,
   AgentWire,
   AnswerReviewOptions,
+  AnswerReviewPrompt,
+  AnswerReviewPromptInput,
   AskStepConfig,
   AskWire,
   Attend,
   CheckForHumanReply,
   ClaudeHarnessConfig,
+  CodeReviewPrompt,
+  CodeReviewPromptInput,
   CodexHarnessConfig,
   CommitWorkOptions,
+  CommitWorkPrompt,
+  CommitWorkPromptInput,
   DescribePrOptions,
+  FixCiFreshPrompt,
+  FixCiFreshPromptInput,
   FixCiOptions,
+  FixCiPrompt,
+  FixCiPromptInput,
   GateAck,
   GateCursor,
   GateFn,
@@ -33,6 +43,8 @@ import type {
   HarnessOptions,
   HumanReply,
   ImplementOptions,
+  ImplementPrompt,
+  ImplementPromptInput,
   ImplementResult,
   JsonValue,
   McpHttpServer,
@@ -43,6 +55,8 @@ import type {
   PostReviewAnswersOptions,
   PrDescription,
   PrRef,
+  RebuildContextPrompt,
+  RebuildContextPromptInput,
   ResumeOrRebuildOptions,
   ResumeOrRebuildResult,
   ReviewTicketOptions,
@@ -55,6 +69,8 @@ import type {
   TicketClaim,
   TicketLink,
   TicketRef,
+  TicketReviewPrompt,
+  TicketReviewPromptInput,
   TicketSnapshot,
   WireJsonSchema,
 } from "./blocks/index.ts";
@@ -73,15 +89,25 @@ type BlocksTypeSurface = {
   agentStepResult: AgentStepResult;
   agentWire: AgentWire;
   answerReviewOptions: AnswerReviewOptions;
+  answerReviewPrompt: AnswerReviewPrompt;
+  answerReviewPromptInput: AnswerReviewPromptInput;
   askStepConfig: AskStepConfig;
   askWire: AskWire;
   attend: Attend<number>;
   checkForHumanReply: CheckForHumanReply;
   claudeHarnessConfig: ClaudeHarnessConfig;
+  codeReviewPrompt: CodeReviewPrompt;
+  codeReviewPromptInput: CodeReviewPromptInput;
   codexHarnessConfig: CodexHarnessConfig;
   commitWorkOptions: CommitWorkOptions;
+  commitWorkPrompt: CommitWorkPrompt;
+  commitWorkPromptInput: CommitWorkPromptInput;
   describePrOptions: DescribePrOptions;
+  fixCiFreshPrompt: FixCiFreshPrompt;
+  fixCiFreshPromptInput: FixCiFreshPromptInput;
   fixCiOptions: FixCiOptions;
+  fixCiPrompt: FixCiPrompt;
+  fixCiPromptInput: FixCiPromptInput;
   gateAck: GateAck;
   gateCursor: GateCursor;
   gateFn: GateFn;
@@ -93,6 +119,8 @@ type BlocksTypeSurface = {
   harnessOptions: HarnessOptions;
   humanReply: HumanReply;
   implementOptions: ImplementOptions;
+  implementPrompt: ImplementPrompt;
+  implementPromptInput: ImplementPromptInput;
   implementResult: ImplementResult;
   jsonValue: JsonValue;
   mcpHttpServer: McpHttpServer;
@@ -103,6 +131,8 @@ type BlocksTypeSurface = {
   postReviewAnswersOptions: PostReviewAnswersOptions;
   prDescription: PrDescription;
   prRef: PrRef;
+  rebuildContextPrompt: RebuildContextPrompt;
+  rebuildContextPromptInput: RebuildContextPromptInput;
   resumeOrRebuildOptions: ResumeOrRebuildOptions<undefined>;
   resumeOrRebuildResult: ResumeOrRebuildResult<undefined>;
   reviewTicketOptions: ReviewTicketOptions;
@@ -115,6 +145,8 @@ type BlocksTypeSurface = {
   ticketClaim: TicketClaim;
   ticketLink: TicketLink;
   ticketRef: TicketRef;
+  ticketReviewPrompt: TicketReviewPrompt;
+  ticketReviewPromptInput: TicketReviewPromptInput;
   ticketSnapshot: TicketSnapshot;
   wireJsonSchema: WireJsonSchema;
 };

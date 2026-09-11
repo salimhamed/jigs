@@ -10,6 +10,7 @@ import type {
 } from "./halt-for-human.ts";
 import { reviewTicket, ticketReviewVerdict } from "./review.ts";
 import type { TicketSnapshot } from "./snapshot.ts";
+import type { TicketReviewPrompt } from "./ticket-review.prompt.ts";
 
 const claim = {
   issueId: "68bc9696-35d5-442d-ab56-214c8cfefbec",
@@ -187,6 +188,27 @@ test("the prompt carries the rendered ticket", async () => {
   expect(prompt).toContain("AGE-313");
   expect(prompt).toContain("Fetch the ticket on each activation.");
   expect(prompt).not.toContain("{{TICKET}}");
+});
+
+test("a caller-supplied prompt replaces the one shipped beside the block", async () => {
+  verdicts = [{ verdict: "proceed", brief: "plan", findings: [] }];
+  const factoryPrompt: TicketReviewPrompt = ({ ticket }) =>
+    `# Infra ticket review\n\n${ticket}`;
+  await reviewTicket({
+    agent: fakeAgent,
+    haltForHuman: fakeHaltForHuman,
+    fetchSnapshot: fakeFetchSnapshot,
+    claim,
+    snapshot,
+    harness: claude({ model: "sonnet" }),
+    cwd: "/tmp/worktree",
+    prompt: factoryPrompt,
+  });
+
+  const prompt = agentCalls[0]?.prompt ?? "";
+  expect(prompt).toContain("# Infra ticket review");
+  expect(prompt).toContain("AGE-313");
+  expect(prompt).not.toContain("restate, not re-decide");
 });
 
 test("the verdict schema is declared on the agent step so the harness emits it natively", async () => {
