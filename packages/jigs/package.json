@@ -56,7 +56,8 @@
   },
   "files": [
     "dist",
-    "templates"
+    "templates",
+    "src/**/*.prompt.md"
   ],
   "publishConfig": {
     "registry": "https://npm.pkg.github.com",
@@ -77,6 +78,7 @@
     "ai-sdk-provider-codex-cli": "2.1.2",
     "commander": "^15.0.0",
     "croner": "10.0.1",
+    "eta": "4.6.0",
     "hono": "^4.13.4",
     "postgres": "^3.4.7",
     "smol-toml": "^1.8.0",
@@ -87,9 +89,9 @@
   "peerDependencies": {
     "@workflow/web": "4.1.20",
     "@workflow/world-postgres": "4.3.4",
+    "nitro": "3.0.260610-beta",
     "workflow": "4.8.4",
-    "zod": "^4.4.3",
-    "nitro": "3.0.260610-beta"
+    "zod": "^4.4.3"
   },
   "peerDependenciesMeta": {
     "nitro": {

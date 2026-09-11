@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { packageRoot } from "../config/package-root.ts";
 import { JigsError } from "../errors.ts";
 
 // Every template file is stored as `<destination name>.tmpl` so nothing in
@@ -8,23 +8,7 @@ import { JigsError } from "../errors.ts";
 // compiled into a factory's own service bundle.
 export const TEMPLATE_SUFFIX = ".tmpl";
 
-// Walked up from this module rather than fixed relative to it, so the same
-// code holds from src/ under vitest and from whichever dist/ chunk the
-// bundler put it in.
-export function packageRoot(): string {
-  let dir = path.dirname(fileURLToPath(import.meta.url));
-  while (!existsSync(path.join(dir, "package.json"))) {
-    const parent = path.dirname(dir);
-    if (parent === dir) {
-      throw new JigsError(
-        "could not find the jigs package root",
-        "jigs is installed in a way that lost its package.json",
-      );
-    }
-    dir = parent;
-  }
-  return dir;
-}
+export { packageRoot };
 
 // `jigs init` runs before the factory has installed anything, so the templates
 // ship inside the package the CLI is reached from.
