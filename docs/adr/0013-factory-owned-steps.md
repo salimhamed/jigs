@@ -6,8 +6,8 @@ functions and carries no workflow directive at all, so every jigs step id is a
 factory-local address — `step//./steps/jigs//worktree` — with no package name
 and no version anywhere in it. That is what lets the jigs packages finally
 carry real versions: `jigs` and `@jigs/service` are both `0.1.0` and take
-ordinary semver from here on, and the `"version": "0.0.0"` pin
-[ADR 0012](./0012-per-factory-service.md) accepted with eyes open is gone.
+ordinary semver from here on, and the `"version": "0.0.0"` pin the
+per-factory-service design accepted with eyes open is gone.
 Delivered across [#30](https://github.com/salimhamed/jigs/pull/30) and
 [#31](https://github.com/salimhamed/jigs/pull/31), with the pin removed here.
 
@@ -19,9 +19,8 @@ Delivered across [#30](https://github.com/salimhamed/jigs/pull/30) and
 > jigs package carries a directive, so no step id carries a package name or
 > version and a package rename cannot address one. `pnpm e2e` still proves it,
 > now by versioning the one package.
-This takes the option ADR 0012 rejected — declaring the directives in the
-factory rather than in the package — and that ADR's amendments record why the
-trade was re-taken.
+This takes the option the per-factory-service design rejected — declaring the
+directives in the factory rather than in the package — and re-takes the trade.
 
 **A step id is an address, and the SDK picks the addressing scheme from where
 the file sits.** `resolveModuleSpecifier` in `@workflow/builders` has exactly
@@ -45,8 +44,8 @@ way it can be proved: it builds `e2e/fixture-factory` twice, once with
 each other and against the checked-in list.
 
 **`@jigs/service` still ships as raw TypeScript, and that is now a choice
-rather than a constraint.** ADR 0012 required it — directives do not survive a
-compile, and a stripped directive is silent — and with no directives left, the
+rather than a constraint.** The per-factory-service build required it —
+directives do not survive a compile, and a stripped directive is silent — and with no directives left, the
 requirement lapsed. The replacement was measured, not assumed: building the
 package to `dist/` with tsdown, repointing every `exports` entry at the
 emitted `.js`, and patching `src/nitro.ts`'s plugin path — the first thing
@@ -148,8 +147,8 @@ so it does not have to be re-run.
   dependency on its fastest-moving surface, carried into every factory install,
   to change a derivation whose two answers are each correct for what they
   address. The boundary was the thing to move, not the SDK.
-- **Keep the pin and never version the library.** The status quo ADR 0012
-  chose. Rejected once the wrappers moved: the pin's only justification was
+- **Keep the pin and never version the library.** The status quo before this
+  ADR. Rejected once the wrappers moved: the pin's only justification was
   ids that no longer exist, and a version field that must stay `0.0.0` is a
   landmine dressed as a convention — nothing enforces it but a test, and its
   failure mode is other people's parked runs.
@@ -166,5 +165,6 @@ so it does not have to be re-run.
   and drift warning gone (amended — boilerplate lives in the factory repo for
   now), the fixture and the factory's own id tests are the remaining guard.
 - The step-id derivation still walks up to a workspace root the build tool
-  detects rather than one jigs declares — untouched by this, and recorded in
-  [ADR 0012](./0012-per-factory-service.md)'s known costs.
+  detects rather than one jigs declares — untouched by this. A factory that is
+  its own repo gets the right answer; a factory nested under another workspace
+  does not, which is why `pnpm e2e` scaffolds its factory outside this repo.

@@ -19,26 +19,9 @@ version. The number is a signal to a reader and a coordinate for `pnpm update`,
 so the cost of getting one wrong is a reader being told the wrong thing — small
 enough that a machine should be the one choosing it.
 
-**The two packages release in lockstep**, through release-please's
-`linked-versions` plugin with both components in one group. They are one
-library split for packaging reasons, a factory installs both at the same
-version, and two independently drifting numbers would answer a question nobody
-asks. One release PR covers both; a release with no commits of its own still
-bumps the quiet package to keep the pair readable as a single number.
-
-> **Amended by [ADR 0017](./0017-single-package.md) on 2026-09-06.** The
-> lockstep is gone with the second package: one component (`packages/jigs`),
-> one tag and Release per version (`jigs-vX.Y.Z`), one publish, and no
-> `linked-versions` plugin. The paragraph above turned out to be the whole
-> case against the split — two numbers forced equal is one number with extra
-> machinery. Everything else in this ADR is unchanged: the PAT-versus-
-> `GITHUB_TOKEN` rule, the merge-the-release-PR step and its expected-checks
-> list, and the publish job gated on `releases_created`. Two details below
-> read differently now. `group-pull-request-title-pattern` is
-> `chore${scope}: release jigs` — still load-bearing, still the same
-> create-and-parse trap, but no longer dictated by a plugin's hardcoded
-> string, so the value is ours to keep stable. And "the quiet package gets
-> near-empty changelog entries" describes a package that no longer exists.
+**One component, one number.** `packages/jigs` is the only release-please
+component, so a version is one release PR, one tag and Release
+(`jigs-vX.Y.Z`), and one publish ([ADR 0017](./0017-single-package.md)).
 
 **Both the action and the merge step authenticate as a PAT
 (`RELEASE_PLEASE_TOKEN`), never `GITHUB_TOKEN`.** GitHub raises no workflow run
@@ -78,11 +61,11 @@ Packages links the package to it and lets the repo-scoped token publish.
   it the subject is the branch name, every merge parses as a non-releasable
   unit, and the release PR simply never appears — no error anywhere.
 - **`group-pull-request-title-pattern` is load-bearing, not cosmetic.** It is
-  set to `chore${scope}: release jigs libraries`, which is exactly what the
-  `linked-versions` plugin hardcodes when it *creates* the PR. The default
-  pattern is what release-please uses to *parse* its own merged PR on the next
-  run, and the two do not match — leaving it unset gets a working first release
-  and then `Bad pull request title` forever
+  set to `chore${scope}: release jigs`, and the same string has to serve twice:
+  release-please writes the PR title with it and then *parses* its own merged
+  PR with it on the next run. Leaving it unset, or changing it between those
+  two moments, gets a working first release and then `Bad pull request title`
+  forever
   ([release-please#2306](https://github.com/googleapis/release-please/issues/2306)).
 - **The merge step polls, because `--auto` cannot work here.** GitHub offers
   auto-merge only on a PR that cannot merge immediately, which means a branch
@@ -107,19 +90,19 @@ Packages links the package to it and lets the repo-scoped token publish.
   remote. It never reads the runner's `GITHUB_REPOSITORY`, so without
   `GH_REPO` every call aborts on "not a git repository" before reaching the
   network.
-- **Two tags and two Releases per version**, `jigs-vX.Y.Z` and
-  `service-vX.Y.Z`. A single shared `vX.Y.Z` needs a root package to hang the
-  tag on and `skip-github-release` on both children; the root `package.json`
-  has no version and must not grow one, since it is not a released thing.
-- **The run that cuts the Releases also publishes both packages** to GitHub
-  Packages as `@salimhamed/jigs` and `@salimhamed/jigs-service` (`restricted`:
-  the repo is private, and so is the registry entry). release-please itself
+- **The tag is the component's, not the repo's**: `jigs-vX.Y.Z`. A bare
+  `vX.Y.Z` needs a root package to hang the tag on, and the root
+  `package.json` has no version and must not grow one, since it is not a
+  released thing.
+- **The run that cuts the Release also publishes the package** to GitHub
+  Packages as `@salimhamed/jigs` (`restricted`: the repo is private, and so is
+  the registry entry). release-please itself
   publishes nothing — the `node` strategy only rewrites `package.json` and the
   CHANGELOGs — so a `publish` job runs after it, gated on `releases_created`,
   and skips a version the registry already holds so a re-run of the workflow
   is idempotent rather than a conflict. No provenance attestation: npm only
   issues those on the public registry. A factory upgrades with `jigs upgrade`
-  (both pins, then `jigs up`, then its typecheck); a consumer needs a token
+  (the pin, then `jigs up`, then its typecheck); a consumer needs a token
   with `read:packages` in `~/.npmrc`, and the scaffolded `.npmrc` carries only
   the scope-to-registry line. The dependency shape and the consumer side are
   [ADR 0017](./0017-single-package.md).
@@ -134,9 +117,6 @@ Packages links the package to it and lets the repo-scoped token publish.
   batch several PRs into one version deliberately. Rejected for the opposite
   reason it is usually chosen: it adds a file to every PR, and the intent it
   captures is already in the title this repo enforces anyway.
-- **Separate release PRs per package** (`separate-pull-requests: true`).
-  Rejected with lockstep — two PRs, two merges and two versions for one
-  library, and the pair's whole value is being one number.
 - **Batch releases behind a label or `workflow_dispatch`** instead of merging
   on `prs_created`. A real option later: `prs_created` is true when the release
   PR is *updated*, not only created, so today every releasable merge to `main`
@@ -149,22 +129,17 @@ Packages links the package to it and lets the repo-scoped token publish.
   release workflow fails loudly on the action, but a *narrower* failure is
   quieter: a token that can still open the PR but not merge it leaves the
   release PR sitting open, which looks like "no release was due".
-- **A release and its publish are two steps that can come apart.** The tags
-  and Releases exist before the publish job runs, so a failed publish leaves a
+- **A release and its publish are two steps that can come apart.** The tag and
+  Release exist before the publish job runs, so a failed publish leaves a
   version that is tagged but not installable. Re-running the workflow is the
-  repair: the job skips what already landed and publishes the rest.
-
-  > **Amended 2026-09-07.** The publish job checks out the released tag, not
-  > the commit that triggered the run, and verifies the version is on the
-  > registry before it exits. release-please decides from GitHub's state, so a
-  > run triggered by an earlier push could cut the tag and then build the
-  > *older* checkout — whose version the registry already held, which the
-  > idempotent skip above reported as success while 0.4.2 never shipped. A
-  > fixed `concurrency` group keeps overlapping pushes from racing at all.
-- **The quiet package gets near-empty changelog entries.** Lockstep bumps it
-  through a synthetic `Release-As:` commit, so `packages/service/CHANGELOG.md`
-  will carry versions whose only note is the synchronization. That is the
-  shape of lockstep, not a bug to fix.
+  repair: the job skips what already landed and publishes the rest. To make
+  that honest, the publish job checks out the released tag rather than the
+  commit that triggered the run, and verifies the version is on the registry
+  before it exits — release-please decides from GitHub's state, so a run
+  triggered by an earlier push could cut the tag and then build the *older*
+  checkout, whose version the registry already held, which the idempotent skip
+  reported as success while 0.4.2 never shipped. A fixed `concurrency` group
+  keeps overlapping pushes from racing at all.
 - **The merge step's expected-checks list is a second copy of the job ids.**
   There is no "wait for the checks to exist" flag, so the wait has to name
   what it is waiting for, and nothing enforces that the list and

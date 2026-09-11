@@ -1,23 +1,19 @@
 # Preflight in the trigger path, JIT as the backstop
 
-> **Amended by [ADR 0012](./0012-per-factory-service.md).** The two service
-> credentials are read from the factory repo's own `.env`, loaded by
-> `jigs service start`, not from a systemd unit's `EnvironmentFile`. The
-> reasoning below — including why CLI-side checks are the wrong place — is
-> unchanged: the service's environment is still not the shell's.
-
 Before a run exists, the service's trigger path verifies the run's
 requirements and refuses to call `start()` on any failure. The check list is
 computed, not hand-maintained: the pipeline's `requires: { bindings,
-harnesses }` manifest (per binding — checkout exists, is a git repo, remote
-matches the pin, concurrent `git ls-remote` auth probe; per harness — the
-subscription login asserted via `claude auth status --json` requiring
+harnesses, aws }` manifest (per binding — the name is declared, jigs' own
+clone of its remote exists, concurrent `git ls-remote` auth probe; per harness
+— the subscription login asserted via `claude auth status --json` requiring
 `authMethod == "claude.ai"`, and the managed Codex home's `auth.json`
 requiring `auth_mode == "chatgpt"`, deliberately not gating on Codex's
-stale-while-valid JWT expiry) united with a fixed core set every run needs:
-jigs' two service credentials, `LINEAR_API_KEY` and `GITHUB_TOKEN`, plain env
-vars in the service unit's `EnvironmentFile`, checked with a viewer query and
-a whoami call. Checks run concurrently in the service process — the
+stale-while-valid JWT expiry; `aws` — `aws sts get-caller-identity` under the
+service's `AWS_PROFILE`) united with a fixed core set every run needs: jigs'
+two service credentials, `LINEAR_API_KEY` and `GITHUB_TOKEN`, read from the
+factory repo's own `.env` that `jigs service start` loads, checked with a
+viewer query and a whoami call. Checks run concurrently in the service
+process — the
 environment steps actually execute in, which the CLI's shell is not — are
 heuristic (no model calls burned), and fail aggregated: every failure
 reported at once, each line carrying a repair instruction, no run created, no
@@ -50,9 +46,9 @@ skip flag. Decided in
 
 - **First step of every pipeline**: a failure creates a failed run as
   debris, and memoized replay means it never re-runs on resume anyway.
-- **CLI-side checks**: the interactive shell's env is not the systemd unit's
-  env (an exported `ANTHROPIC_API_KEY` flips Claude's auth mode in one and
-  not the other), and it breaks the day the CLI and service hosts diverge.
+- **CLI-side checks**: the interactive shell's env is not the service's env
+  (an exported `ANTHROPIC_API_KEY` flips Claude's auth mode in one and not the
+  other), and it breaks the day the CLI and service hosts diverge.
 - **Proof-strength harness checks** (a real model call per launch): taxes
   every run to catch the rare server-side revocation JIT catches anyway.
 - **Wake-path rechecks**: bloats the resume hot path and has no terminal to

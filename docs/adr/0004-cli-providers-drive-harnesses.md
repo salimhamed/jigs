@@ -3,7 +3,7 @@
 jigs v0 drives coding-agent steps through the community AI SDK providers —
 `ai-sdk-provider-claude-code` (wrapping Anthropic's official Claude Agent SDK)
 and `ai-sdk-provider-codex-cli` (wrapping the official `codex` CLI) — not the
-`@ai-sdk/harness` family that ADR 0001 assumed.
+`@ai-sdk/harness` family the original harness choice assumed.
 
 The deciding question was subscription auth (Claude on a claude.ai login,
 Codex on a ChatGPT login — a hard requirement, since API-metered agent steps
@@ -19,8 +19,8 @@ didn't discriminate, and the rest of the ledger is lopsided:
   pnpm policy during the probes), and HOME/credential juggling to use
   framework skills without either polluting the real home directory or losing
   the on-disk logins. All of that buys cross-process live-session resume —
-  which ADR 0003's model (steps memoized by key; suspensions only between
-  steps) never uses. The harness's subscription auth is also fallback-by-
+  which jigs' model (memoized step
+  replay; suspensions only between steps) never uses. The harness's subscription auth is also fallback-by-
   accident, not a designed mode, so any adapter release that fails fast on
   missing credentials would break it.
 - The CLI providers take a plain `cwd`, need no sandbox provider and no
@@ -32,7 +32,7 @@ didn't discriminate, and the rest of the ledger is lopsided:
 
 ## Consequences
 
-- `jigs/harnesses` stays the single pin/wrap point (ADR 0001), now
+- `jigs/harnesses` stays the single pin/wrap point, now
   re-exporting the community providers. Both are single-maintainer
   (ben-vargas); exact pinning and the re-export seam contain that risk, and
   each is a thin wrapper over an official vendor runtime, which is the
