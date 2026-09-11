@@ -74,7 +74,7 @@ operator's data directory using the operator's SSH and git credentials. Every
 one of those is a host fact a container would have to be handed back through
 mounts and environment variables, and the supervision jigs already has costs
 nothing more: a pidfile per factory, and `jigs service
-start|stop|restart|status|logs` ([ADR 0012](./0012-per-factory-service.md)).
+start|stop|restart|status|logs`.
 Only the World is a container.
 
 **The public surface is small and named by kind.** As of 0.5.0 the exports map

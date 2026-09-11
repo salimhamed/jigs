@@ -27,8 +27,8 @@ anyway. Code that does real work has to be a step, so the SDK can run it once
 and record the answer.
 
 The service is neither. It is the process that hosts the compiled pipelines,
-receives webhooks, fires schedules and serves the dashboard
-([ADR 0012](./0012-per-factory-service.md)).
+receives webhooks, fires schedules and serves the dashboard — one per factory
+repo.
 
 Before 0.5.0 jigs mixed all three kinds in the same folders and held the line
 with header comments on three files: `src/index.ts`, `src/steps/index.ts` and
@@ -89,11 +89,8 @@ used on both sides of the blocks/steps line lives in `blocks/`, under the same
 topic. `WorktreeFacts` is the example that already existed. There is no shared
 types folder, because a shared types folder is where the rule goes to die.
 
-**Where a prompt goes.** Beside the code that uses it, as
-`<name>.prompt.ts`. Prompts are pure strings, so they are pipeline-side by
-nature, and they are still exported so a factory can read one or pass its own
-([ADR 0018](./0018-blocks-not-loops.md)). The old `src/prompts/` folder is
-gone.
+**Where a prompt goes.** Beside the block that speaks it, rendered by the
+agent step. The old `src/prompts/` folder is gone.
 
 **Where `github-webhook.ts` went.** It stayed in `providers/`. It combines the
 GitHub API with jigs' own paths and config, so it could have gone to
