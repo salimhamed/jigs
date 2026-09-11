@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.7.0](https://github.com/salimhamed/jigs/compare/jigs-v0.6.0...jigs-v0.7.0) (2026-09-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* post plain-language needs-human comments ([#158](https://github.com/salimhamed/jigs/issues/158))
+
+### Features
+
+* post plain-language needs-human comments ([#158](https://github.com/salimhamed/jigs/issues/158)) ([113dbc4](https://github.com/salimhamed/jigs/commit/113dbc436825a13265a98360ef44926a9d3180ad))
+
 ## [0.6.0](https://github.com/salimhamed/jigs/compare/jigs-v0.5.0...jigs-v0.6.0) (2026-09-11)
 
 
