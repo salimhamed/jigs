@@ -1,0 +1,112 @@
+// The review loop, as this factory composes it: implement ⇄ code review until
+// approved, then a pull request whose human review the builder answers, whose
+// red CI the builder fixes under a bound, and whose close ends the run. It
+// returns only when the PR merged — every other ending throws — and it never
+// cleans up: the pipeline calls teardownWorktrees after a merged return, and a
+// thrown ending leaves the worktree for `jigs sweep`.
+//
+// This file is the story; each decision it names lives in the file beside it.
+// The one bound that is not here at all is the three implement ⇄ review cycles
+// jigs holds, along with the session and the brief it keeps out of the code
+// reviewer's prompt.
+
+import type { WorktreeFacts } from "@salimhamed/jigs";
+import {
+  attend,
+  finished,
+  type Handoff,
+  type HarnessConfig,
+  implementUntilCodeReviewApproves,
+  type PrRef,
+  type TicketClaim,
+  unreachable,
+} from "@salimhamed/jigs/blocks";
+import { agent, haltForHuman, pullRequestGate } from "../jigs.ts";
+import type { Builder } from "./builder.ts";
+import { describeAndOpenPr } from "./describe-and-open-pr.ts";
+import { ciFixer } from "./fix-red-ci.ts";
+import {
+  squashMergeOnApproval,
+  waitForHumanMerge,
+} from "./merge-on-approval.ts";
+import { pushImplementation } from "./push-implementation.ts";
+import { respondToReview } from "./respond-to-review.ts";
+
+export interface ReviewLoopOptions {
+  claim: TicketClaim;
+  handoff: Handoff;
+  // One harness for the builder, the CI fixer and the thread answerer: they
+  // share the builder's session pointer, and a session is harness-specific.
+  harness: HarnessConfig;
+  worktree: WorktreeFacts;
+  binding: string;
+  // "human" keeps listening after an approval and lets a person press merge;
+  // the gate ends either way only when the PR closes.
+  merge: "jigs" | "human";
+}
+
+export type ReviewLoopResult = { pr: PrRef; cycles: number };
+
+export async function reviewLoop(
+  options: ReviewLoopOptions,
+): Promise<ReviewLoopResult> {
+  const { handoff, worktree } = options;
+
+  const built = await implementUntilCodeReviewApproves({
+    agent,
+    haltForHuman,
+    claim: options.claim,
+    handoff,
+    harness: options.harness,
+    cwd: worktree.path,
+    baseSha: worktree.baseSha,
+  });
+  const builder: Builder = {
+    harness: options.harness,
+    cwd: worktree.path,
+    ...(built.session === undefined ? {} : { session: built.session }),
+  };
+
+  await pushImplementation(builder, worktree);
+  // After the push, so nothing writes a description for a branch that turned
+  // out to have nothing on it.
+  const pr = await describeAndOpenPr(
+    builder,
+    worktree,
+    handoff,
+    options.binding,
+  );
+  const ci = ciFixer(pr, builder, worktree, handoff);
+
+  // The type argument is explicit because most arms return Attend<never>: left
+  // to inference the result could resolve to never.
+  return attend<ReviewLoopResult>(
+    pullRequestGate(pr),
+    async (wake) => {
+      switch (wake.kind) {
+        case "review-comments":
+        case "changes-requested":
+          return respondToReview(wake, pr, builder, worktree, handoff);
+        case "ci-red":
+          return ci.onRed(wake);
+        case "ci-green":
+          return ci.onGreen();
+        case "approved":
+          return options.merge === "human"
+            ? waitForHumanMerge(wake)
+            : squashMergeOnApproval(pr, wake, built.cycles);
+        case "closed":
+          if (wake.merged) return finished({ pr, cycles: built.cycles });
+          throw new Error(
+            `pull request ${pr.owner}/${pr.repo}#${pr.number} was closed without merging`,
+          );
+        // A jigs release that adds a wake kind fails this line's typecheck,
+        // which `jigs upgrade` runs — the gap is named at upgrade time rather
+        // than swallowed at run time.
+        default:
+          return unreachable(wake);
+      }
+    },
+    `${pr.owner}/${pr.repo}#${pr.number}`,
+  );
+}

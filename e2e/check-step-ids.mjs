@@ -54,8 +54,8 @@ const HEADER = `# The workflow and step ids \`jigs build\` emits for the factory
 # Every line is a memoization key in the World. A change here is a change in
 # every factory's durable run state, so a diff is a finding, not a chore. The
 # one line a rename may legitimately move is the workflow id, which carries
-# the starter pipeline's file name; every step id is a wrapper every factory
-# already has.
+# the starter pipeline's file name. 0.5.0 renamed three wrappers and split a
+# fourth, which is why this list moved once and why a diff here is a finding.
 `;
 
 // Outside this repo on purpose: Nitro takes the furthest pnpm-workspace.yaml
@@ -419,6 +419,20 @@ if (leaked.length > 0) {
   );
 }
 
+// The other half of the same property: pipeline-side code cannot read the
+// environment either. Reported with line context because, unlike a `"node:fs"`
+// specifier, a bare `process.env` says nothing about which module it came from.
+const envReads = workflowBundle()
+  .split("\n")
+  .filter((line) => line.includes("process.env"));
+if (envReads.length > 0) {
+  for (const line of envReads.slice(0, 5)) console.error(`  ${line.trim()}`);
+  fail(
+    `the workflow bundle reads process.env in ${envReads.length} place(s)`,
+    "pipeline-side code cannot read the environment — the read belongs in a step, or a step-side module crossed into a block",
+  );
+}
+
 const expected = readFileSync(expectedFile, "utf8")
   .split("\n")
   .filter((line) => line !== "" && !line.startsWith("#"));
@@ -442,10 +456,10 @@ if (moved.missing.length > 0 || moved.unexpected.length > 0) {
 }
 
 // The scaffold's own checks, run the way a new factory runs them on day one:
-// the typecheck covers the generated entry and the review-loop composition
-// scaffolded beside it, and the two scaffolded tests cover the shape of every
-// id the same build emitted (the exact list is this file's business, above)
-// and the sequence that composition runs.
+// the typecheck covers the generated entry, the pipeline, and the blocks and
+// prompts scaffolded beside them, and the two scaffolded tests cover the shape
+// of every id the same build emitted (the exact list is this file's business,
+// above) and the sequence the review loop runs.
 console.log("\n=== scaffold: typecheck, then the scaffolded tests");
 run("pnpm", ["typecheck"]);
 run("pnpm", ["test"]);

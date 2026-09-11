@@ -4,12 +4,8 @@
 // rather than as a consolation.
 
 import { z } from "zod";
-import type { PrRef, ReviewThread } from "../../providers/github.ts";
+import type { ReviewThread } from "../../providers/github.ts";
 import type { readDiff } from "../../steps/pull-request/branch.ts";
-import type {
-  commentOnPr,
-  replyInThread,
-} from "../../steps/pull-request/pr.ts";
 import type { HarnessConfig } from "../agent/harness-config.ts";
 import { rebuildContextPrompt } from "../agent/rebuild-context.prompt.ts";
 import type { AgentSession } from "../agent/result.ts";
@@ -36,7 +32,7 @@ export const threadAnswers = z.strictObject({
 
 export type ThreadAnswers = z.output<typeof threadAnswers>;
 
-export interface AnswerAsBuilderOptions {
+export interface AnswerReviewOptions {
   agent: AgentFn;
   readDiff: typeof readDiff;
   harness: HarnessConfig;
@@ -77,15 +73,15 @@ function renderThreads(threads: ReviewThread[], reviewBody?: string): string {
   return blocks.length === 0 ? "_(no threads)_" : blocks.join("\n\n");
 }
 
-export async function answerAsBuilder(
-  options: AnswerAsBuilderOptions,
+export async function answerReview(
+  options: AnswerReviewOptions,
 ): Promise<ResumeOrRebuildResult<ThreadAnswers>> {
   const { agent, readDiff: read } = options;
   const threads = renderThreads(options.threads, options.reviewBody);
 
   return resumeOrRebuild({
     agent,
-    label: "answerAsBuilder",
+    label: "answerReview",
     harness: options.harness,
     cwd: options.cwd,
     ...(options.session === undefined ? {} : { session: options.session }),
@@ -101,41 +97,4 @@ export async function answerAsBuilder(
     },
     output: threadAnswers,
   });
-}
-
-export interface PostAnswersOptions {
-  replyInThread: typeof replyInThread;
-  commentOnPr: typeof commentOnPr;
-  pr: PrRef;
-  answers: ThreadAnswers;
-  // The wake's own threads: anything the model names outside them is invented,
-  // and replying into it 404s, which burns the step's three retries.
-  threads: ReviewThread[];
-}
-
-/**
- * Posts each answer where it belongs and returns the ids of the thread replies
- * — the gate cursor needs jigs' own comment ids to tell its last word on a
- * thread from a human's. Conversation comments are left out: they never appear
- * among the review threads the guard filters.
- */
-export async function postAnswers(
-  options: PostAnswersOptions,
-): Promise<number[]> {
-  const { commentOnPr: comment, replyInThread: reply, pr } = options;
-  const known = new Set(options.threads.map((thread) => thread.rootId));
-  const posted: number[] = [];
-  for (const answer of options.answers.answers) {
-    if (answer.threadId !== null && !known.has(answer.threadId)) {
-      console.log(
-        `[postAnswers] answer named unknown thread ${answer.threadId} — posting on the conversation instead`,
-      );
-    }
-    if (answer.threadId === null || !known.has(answer.threadId)) {
-      await comment(pr, answer.body);
-    } else {
-      posted.push((await reply(pr, answer.threadId, answer.body)).id);
-    }
-  }
-  return posted;
 }

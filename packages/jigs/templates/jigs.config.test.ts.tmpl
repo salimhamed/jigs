@@ -33,8 +33,6 @@ test("ship takes a ticket in either form and declares its needs", () => {
   expect(entry?.requires).toEqual({ harnesses: ["claude", "codex"] });
 });
 
-// --- the ids the build emits ------------------------------------------------
-//
 // Every id the build emits is a memoization key in this factory's World, so
 // these read the last build rather than the source: what a parked run replays
 // against is what the bundle says, not what the imports look like. They assert
@@ -42,7 +40,9 @@ test("ship takes a ticket in either form and declares its needs", () => {
 // every time a pipeline or a wrapper is added, and an id that *moved* looks
 // exactly like one that was added. Renaming an exported wrapper or a pipeline
 // file changes its id and orphans the runs parked against it, so do that only
-// when `jigs ps` shows none.
+// when `jigs ps` shows none. blocks/ is deliberately absent from the shapes
+// below: nothing under it carries a directive, so an id addressed there would
+// mean a factory wrote `"use step"` on the pipeline side of the line.
 
 const BUNDLE = new URL("./.output/server/index.mjs", import.meta.url);
 

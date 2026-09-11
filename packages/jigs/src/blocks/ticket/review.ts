@@ -8,7 +8,7 @@ import type { HarnessConfig } from "../agent/harness-config.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import { interpolate } from "../interpolate.ts";
 import type { TicketClaim } from "./claim.ts";
-import type { NeedsHumanFn } from "./halt-for-human.ts";
+import type { HaltForHumanFn } from "./halt-for-human.ts";
 import { renderSnapshot, type TicketSnapshot } from "./snapshot.ts";
 import { ticketReviewPrompt } from "./ticket-review.prompt.ts";
 
@@ -33,9 +33,9 @@ export type Handoff = {
   snapshot: TicketSnapshot;
 };
 
-export interface TicketReviewOptions {
+export interface ReviewTicketOptions {
   agent: AgentFn;
-  needsHuman: NeedsHumanFn;
+  haltForHuman: HaltForHumanFn;
   // Re-read between rounds: a human's reply lands on the ticket, not in the
   // verdict, so a round that does not re-snapshot reviews the same words again.
   fetchSnapshot: (issueId: string) => Promise<TicketSnapshot>;
@@ -48,10 +48,10 @@ export interface TicketReviewOptions {
   cwd: string;
 }
 
-export async function ticketReview(
-  options: TicketReviewOptions,
+export async function reviewTicket(
+  options: ReviewTicketOptions,
 ): Promise<Handoff> {
-  const { agent, needsHuman, fetchSnapshot } = options;
+  const { agent, haltForHuman, fetchSnapshot } = options;
   let snapshot = options.snapshot;
 
   for (;;) {
@@ -65,13 +65,13 @@ export async function ticketReview(
     });
     const { verdict, brief, findings } = review.output;
     console.log(
-      `[ticketReview] ${snapshot.identifier} verdict=${verdict} findings=${findings.length}`,
+      `[reviewTicket] ${snapshot.identifier} verdict=${verdict} findings=${findings.length}`,
     );
     if (verdict === "proceed") return { brief, snapshot };
 
     // findings only: the comment is for the human and the record, never the
     // data path — the brief the next round writes is what reaches the builder.
-    await needsHuman(options.claim, "ticket review needs a human", {
+    await haltForHuman(options.claim, "ticket review needs a human", {
       findings,
     });
     snapshot = await fetchSnapshot(snapshot.id);

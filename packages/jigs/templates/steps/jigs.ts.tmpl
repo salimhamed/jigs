@@ -1,69 +1,41 @@
-// This factory's half of every jigs step, and the blocks wired on top of them.
+// This factory's half of every jigs step.
 //
-// Edit this file freely — it is committed source this factory owns, and jigs
-// never rewrites it. One thing here is not free: each `"use step"` function
-// below compiles to a durable id built from this file's path and the function's
-// name (`step//./steps/jigs//worktree`), and those ids are the memoization keys
-// of every run this factory has parked. Renaming or moving an exported wrapper
-// — or this file — changes its id, so do that only when `jigs ps` shows no
-// parked runs. A run whose id moved under it shows up stalled: cancel it and
-// relaunch. Bodies, comments and everything under `--- blocks ---` are yours to
-// change at any time.
+// Each `"use step"` function below compiles to a durable id built from this
+// file's path and the function's name (`step//./steps/jigs//provisionWorktree`),
+// and every id is a memoization key of every run this factory has parked. So
+// renaming or moving an exported wrapper — or this file — only when `jigs ps`
+// shows no parked runs; a run whose id moved under it shows up stalled. When a
+// jigs release grows a step, add its wrapper here yourself: the typecheck is
+// what names the gap.
 //
-// When a jigs release adds a step, add its wrapper here yourself; the factory's
-// typecheck is what tells you a call is missing one.
-//
-// The implementations are imported at module scope on purpose: the `"use
-// step"` transform erases each body below out of the workflow bundle, and the
-// imports only those bodies reach go with it, so the service's node-builtin
-// code never crosses into the workflow sandbox.
+// The implementations are imported at module scope on purpose: the `"use step"`
+// transform erases each body below out of the workflow bundle, and the imports
+// only those bodies reach go with it, so the service's node-builtin code never
+// crosses into the workflow sandbox.
 
 import type { WorktreeFacts } from "@salimhamed/jigs";
 import {
+  branchState as branchStateImpl,
+  checkForHumanReply as checkForHumanReplyImpl,
   commentOnPr as commentOnPrImpl,
+  fetchPrState as fetchPrStateImpl,
+  fetchSnapshot as fetchSnapshotImpl,
   openPr as openPrImpl,
-  pushWorktreeBranch as pushWorktreeBranchImpl,
+  postNeedsHumanComment as postNeedsHumanCommentImpl,
+  provisionRunWorktree,
+  pushBranch as pushBranchImpl,
   readDiff as readDiffImpl,
   replyInThread as replyInThreadImpl,
   resolveRepo as resolveRepoImpl,
+  runAgent,
+  runAsk,
   squashMerge as squashMergeImpl,
-} from "@salimhamed/jigs/review-loop/pull-request";
-import {
-  agent as agentJig,
-  type AgentStepConfig,
-  ask as askJig,
-  type AskStepConfig,
-} from "@salimhamed/jigs/steps";
-import { agentOrHalt as agentOrHaltJig } from "@salimhamed/jigs/steps/jit";
-import { runAgent, runAsk } from "@salimhamed/jigs/steps/run";
-import type { TicketClaim } from "@salimhamed/jigs/suspension/claim";
-import {
-  checkForHumanReply as checkForHumanReplyImpl,
-  type NeedsHumanFn,
-  needsHuman as needsHumanJig,
-  postNeedsHumanComment as postNeedsHumanCommentImpl,
-} from "@salimhamed/jigs/suspension/needs-human";
-import {
-  fetchPrState as fetchPrStateImpl,
-  type GateFn,
-  pullRequestGate,
-} from "@salimhamed/jigs/suspension/pull-request-gate";
-import {
-  type Handoff,
-  type TicketReviewOptions,
-  ticketReview as ticketReviewJig,
-} from "@salimhamed/jigs/ticket/review";
-import { fetchSnapshot as fetchSnapshotImpl } from "@salimhamed/jigs/ticket/snapshot";
-import {
-  provisionRunWorktree,
   teardownMergedRun,
   type WorktreeRequest,
-} from "@salimhamed/jigs/worktrees";
+} from "@salimhamed/jigs/steps";
 import { getWorkflowMetadata } from "workflow";
 
-// --- steps -----------------------------------------------------------------
-
-export async function worktree(
+export async function provisionWorktree(
   request: WorktreeRequest,
 ): Promise<WorktreeFacts> {
   "use step";
@@ -106,7 +78,7 @@ export async function fetchPrState(
   return fetchPrStateImpl(...args);
 }
 
-export async function fetchSnapshot(
+export async function fetchTicketSnapshot(
   ...args: Parameters<typeof fetchSnapshotImpl>
 ) {
   "use step";
@@ -118,11 +90,14 @@ export async function resolveRepo(...args: Parameters<typeof resolveRepoImpl>) {
   return resolveRepoImpl(...args);
 }
 
-export async function pushWorktreeBranch(
-  ...args: Parameters<typeof pushWorktreeBranchImpl>
-) {
+export async function branchState(...args: Parameters<typeof branchStateImpl>) {
   "use step";
-  return pushWorktreeBranchImpl(...args);
+  return branchStateImpl(...args);
+}
+
+export async function pushBranch(...args: Parameters<typeof pushBranchImpl>) {
+  "use step";
+  return pushBranchImpl(...args);
 }
 
 export async function readDiff(...args: Parameters<typeof readDiffImpl>) {
@@ -150,45 +125,4 @@ export async function commentOnPr(...args: Parameters<typeof commentOnPrImpl>) {
 export async function squashMerge(...args: Parameters<typeof squashMergeImpl>) {
   "use step";
   return squashMergeImpl(...args);
-}
-
-// --- blocks ----------------------------------------------------------------
-//
-// Workflow-side compositions holding the steps above. They carry no directive
-// and no id: only the steps they call are memoized. Every jigs block takes the
-// wrappers it needs as plain parameters, so these are the two-line bindings
-// that save a caller from repeating them.
-
-export function agent<T = undefined>(config: AgentStepConfig<T>) {
-  return agentJig(config, runAgentStep);
-}
-
-export function ask<T = undefined>(config: AskStepConfig<T>) {
-  return askJig(config, runAskStep);
-}
-
-export const needsHuman: NeedsHumanFn = (claim, reason, payload) =>
-  needsHumanJig(claim, reason, payload, {
-    postComment: postNeedsHumanComment,
-    checkForReply: checkForHumanReply,
-  });
-
-export const gate: GateFn = (pr) => pullRequestGate(pr, fetchPrState);
-
-export function agentOrHalt<T = undefined>(
-  claim: TicketClaim,
-  config: AgentStepConfig<T>,
-) {
-  return agentOrHaltJig(claim, config, { agent, needsHuman });
-}
-
-type TicketReviewInput = Omit<
-  TicketReviewOptions,
-  "agent" | "needsHuman" | "fetchSnapshot"
->;
-
-// Parks on a needs-human verdict and re-reads the ticket each round until the
-// review proceeds, so the caller gets a brief, not a verdict to branch on.
-export function ticketReview(options: TicketReviewInput): Promise<Handoff> {
-  return ticketReviewJig({ ...options, agent, needsHuman, fetchSnapshot });
 }

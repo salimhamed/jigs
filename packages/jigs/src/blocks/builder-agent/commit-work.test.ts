@@ -3,7 +3,7 @@ import { claude } from "../agent/harness-config.ts";
 import type { AgentStepConfig } from "../agent/plan.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import { resumeFailed } from "../agent/resume-or-rebuild.ts";
-import { commitLeftoverWork } from "./commit-work.ts";
+import { commitWork } from "./commit-work.ts";
 
 let agentCalls: AgentStepConfig<unknown>[] = [];
 let failOnResume = false;
@@ -22,7 +22,7 @@ const fakeAgent: AgentFn = async <T>(config: AgentStepConfig<T>) => {
 };
 
 const run = (session?: { harness: "claude"; id: string }) =>
-  commitLeftoverWork({
+  commitWork({
     agent: fakeAgent,
     harness: claude({ model: "sonnet" }),
     cwd: "/tmp/worktree",

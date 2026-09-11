@@ -8,20 +8,20 @@ import type { AgentSession } from "../agent/result.ts";
 import { type AgentFn, resumeOrRebuild } from "../agent/resume-or-rebuild.ts";
 import { commitWorkPrompt } from "./commit-work.prompt.ts";
 
-export interface CommitLeftoverWorkOptions {
+export interface CommitWorkOptions {
   agent: AgentFn;
   harness: HarnessConfig;
   cwd: string;
   session?: AgentSession;
 }
 
-export async function commitLeftoverWork(
-  options: CommitLeftoverWorkOptions,
+export async function commitWork(
+  options: CommitWorkOptions,
 ): Promise<AgentSession | undefined> {
   const { agent } = options;
   const committed = await resumeOrRebuild({
     agent,
-    label: "commitLeftoverWork",
+    label: "commitWork",
     harness: options.harness,
     cwd: options.cwd,
     ...(options.session === undefined ? {} : { session: options.session }),

@@ -6,7 +6,7 @@ import type { AgentStepConfig } from "../agent/plan.ts";
 import { type AgentFn, resumeFailed } from "../agent/resume-or-rebuild.ts";
 import type { Handoff } from "../ticket/review.ts";
 import type { TicketSnapshot } from "../ticket/snapshot.ts";
-import { fixCi, renderChecks } from "./fix-ci.ts";
+import { fixCi } from "./fix-ci.ts";
 
 const snapshot: TicketSnapshot = {
   fetchedAt: "2026-08-26T13:00:00Z",
@@ -127,13 +127,4 @@ test("an error that is not a resume failure is not swallowed", async () => {
       baseSha: "base-sha-1",
     }),
   ).rejects.toThrow("harness exploded");
-});
-
-test("a red build the provider named no check for still renders something", () => {
-  expect(renderChecks([])).toContain("without naming a check");
-  expect(renderChecks(failing)).toBe("- **test** — failure — http://ci.test/1");
-  // A commit status need not link anywhere.
-  expect(renderChecks([{ name: "test", conclusion: "failure", url: "" }])).toBe(
-    "- **test** — failure",
-  );
 });

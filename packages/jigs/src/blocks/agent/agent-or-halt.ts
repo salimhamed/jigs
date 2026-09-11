@@ -4,7 +4,7 @@
 // Late discovery costs a pause, never a relaunch.
 
 import type { TicketClaim } from "../ticket/claim.ts";
-import type { NeedsHumanFn } from "../ticket/halt-for-human.ts";
+import type { HaltForHumanFn } from "../ticket/halt-for-human.ts";
 import { JitCheckError } from "./agent.ts";
 import type { AgentStepConfig } from "./plan.ts";
 import type { AgentStepResult } from "./result.ts";
@@ -12,7 +12,7 @@ import type { AgentFn } from "./resume-or-rebuild.ts";
 
 export interface AgentOrHaltDeps {
   agent: AgentFn;
-  needsHuman: NeedsHumanFn;
+  haltForHuman: HaltForHumanFn;
 }
 
 // Unbounded on purpose: the halt is a pause the human ends, and each loop
@@ -28,7 +28,7 @@ export async function agentOrHalt<T = undefined>(
       return await deps.agent(config);
     } catch (err) {
       if (!(err instanceof JitCheckError)) throw err;
-      await deps.needsHuman(claim, err.message);
+      await deps.haltForHuman(claim, err.message);
     }
   }
 }

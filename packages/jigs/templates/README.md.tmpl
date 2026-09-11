@@ -7,21 +7,24 @@ machine runs, the bindings they run against, and the service that hosts them.
 
 - `jigs.config.ts` — the pipelines this factory hosts, keyed by the name
   `jigs run` takes. `jigs build` generates the service entry from it.
-- `pipelines/` — the pipeline bodies, and beside them `review-loop.ts`, this
-  factory's own composition of the review loop over the blocks jigs ships.
-  Edit either freely. A file's path is half of the workflow id its
-  `"use workflow"` body owns, so renaming or moving a pipeline changes that
-  id; `review-loop.ts` carries no directive and owns no id at all.
-  `review-loop.test.ts` beside it holds that composition to its sequence —
-  the order, the CI bound, the merge policy and the endings — with the step
-  wrappers faked and the blocks themselves running for real.
+- `pipelines/` — the pipeline bodies. A file's path is half of the workflow id
+  its `"use workflow"` body owns, so renaming or moving a pipeline changes
+  that id.
 - `steps/jigs.ts` — this factory's `"use step"` wrappers around the steps jigs
-  ships, and the blocks wired on top of them. Every step a pipeline calls
-  comes from here, and each step id is this path plus the function's name.
-  `jigs init` wrote it once and never rewrites it; a step jigs grows later
-  gets its wrapper added by hand.
-- `steps/describe-pr.ts` — the title and body a pull request opens with. jigs
-  owns the mechanics; the conventions here, and the repair applied when an
+  ships, and nothing else. Every step a pipeline reaches comes from here, and
+  each step id is this path plus the function's name. `jigs init` wrote it
+  once and never rewrites it; a step jigs grows later gets its wrapper added
+  by hand.
+- `blocks/jigs.ts` — the blocks jigs ships, bound to those wrappers. Nothing
+  under `blocks/` carries a directive, so nothing under it owns an id.
+- `blocks/review-loop/` — this factory's own review loop, one decision per
+  file: the story in `review-loop.ts`, and beside it the push, the
+  description, the answer to a review, the CI bound and the merge policy.
+  `review-loop.test.ts` holds the composition to its sequence — the order,
+  the CI bound, the merge policy and the endings — with the step wrappers
+  faked and the jigs blocks themselves running for real.
+- `prompts/describe-pr.ts` — the title and body a pull request opens with.
+  jigs owns the mechanics; these conventions, and the repair applied when an
   answer drifts out of them, are this factory's voice and the part to rewrite.
 - `jigs.config.test.ts` — what the factory declares, and the ids the last
   build emitted.
@@ -90,21 +93,22 @@ New file in `pipelines/`, exporting a `<name>Inputs` zod schema and a
 in `jigs.config.ts` under the name `jigs run` should take, then `jigs build`
 and `pnpm test`.
 
-A pipeline imports its steps from `../steps/jigs.ts`, never from a
-`@salimhamed/jigs` subpath: a step taken from the package would be addressed by
-the package's version, and every jigs upgrade would rename it. Steps alone —
-`pipelines/ship.ts` imports `ticketInput`, `claimTicket`, `claude` and `codex`
-from the package directly, because none of those carries an id. A pipeline may
-also declare `"use step"` functions in its own file; their ids come out as
-`step//./pipelines/<file>//<fn>`, so the same rename rule applies to those
-names.
+A pipeline imports its steps from `../steps/jigs.ts`, never from
+`@salimhamed/jigs/steps`: a step taken straight from the package would be
+addressed by the package's version, and every jigs upgrade would rename it.
+Steps alone — `pipelines/ship.ts` imports `ticketInput`, `claimTicket`,
+`claude` and `codex` from the package directly, because none of those carries
+an id. A pipeline may also declare `"use step"` functions in its own file;
+their ids come out as `step//./pipelines/<file>//<fn>`, so the same rename rule
+applies to those names.
 
-`agent`, `ask`, `needsHuman`, `gate`, `agentOrHalt` and `ticketReview` are
-compositions over those steps and carry no id; `steps/jigs.ts` exports them
-already wired. The review loop is one more composition, except that this
-factory writes it: `pipelines/review-loop.ts` calls the blocks jigs ships —
-`implementAndReview`, `answerAsBuilder`, `fixCi`, `commitLeftoverWork`,
-`postAnswers`, `describePr` — in the order and with the policy it chooses.
+`agent`, `ask`, `haltForHuman`, `pullRequestGate`, `agentOrHalt` and
+`reviewTicket` are compositions over those wrappers and carry no id;
+`blocks/jigs.ts` exports them already wired. The review loop is one more
+composition, except that this factory writes it: `blocks/review-loop/` calls
+the blocks jigs ships — `implementUntilCodeReviewApproves`, `answerReview`,
+`fixCi`, `commitWork`, `postReviewAnswers`, `describePr`, `attend` — in the
+order and with the policy it chooses.
 
 ## Upgrading jigs
 

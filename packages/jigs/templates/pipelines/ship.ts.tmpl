@@ -1,14 +1,13 @@
 import { type TicketPipelineInputs, ticketInput } from "@salimhamed/jigs";
-import { claude, codex } from "@salimhamed/jigs/steps";
-import { claimTicket } from "@salimhamed/jigs/suspension/claim";
+import { claimTicket, claude, codex } from "@salimhamed/jigs/blocks";
 import { z } from "zod";
+import { reviewTicket } from "../blocks/jigs.ts";
+import { reviewLoop } from "../blocks/review-loop/index.ts";
 import {
-  fetchSnapshot,
+  fetchTicketSnapshot,
+  provisionWorktree,
   teardownWorktrees,
-  ticketReview,
-  worktree,
 } from "../steps/jigs.ts";
-import { reviewLoop } from "./review-loop.ts";
 
 export const shipInputs = z.object({
   ticket: ticketInput,
@@ -27,24 +26,25 @@ export const shipInputs = z.object({
 type ShipInputs = TicketPipelineInputs<typeof shipInputs>;
 
 // A ticket to a merged pull request: claim ticket → snapshot → worktree →
-// ticketReview → reviewLoop (implement ⇄ review → PR → gate → merge) →
+// reviewTicket → reviewLoop (implement ⇄ review → PR → gate → merge) →
 // teardown.
-// The steps come from ../steps/jigs.ts and the loop from ./review-loop.ts,
-// which is this factory's own composition over the blocks jigs ships.
+// The wrappers come from ../steps/jigs.ts, the bound jigs blocks from
+// ../blocks/jigs.ts, and the loop from ../blocks/review-loop/, which is this
+// factory's own composition over the blocks jigs ships.
 export async function shipPipeline(inputs: ShipInputs) {
   "use workflow";
 
   const claim = await claimTicket(inputs.issueId, inputs.identifier);
-  const snapshot = await fetchSnapshot(inputs.issueId);
+  const snapshot = await fetchTicketSnapshot(inputs.issueId);
 
-  const workspace = await worktree({
+  const workspace = await provisionWorktree({
     binding: inputs.binding,
     branch: snapshot.branchName,
   });
 
-  // Parks inside ticketReview until a human replies on the ticket, re-reading
+  // Parks inside reviewTicket until a human replies on the ticket, re-reading
   // the ticket each round, and returns only once the review proceeds.
-  const handoff = await ticketReview({
+  const handoff = await reviewTicket({
     claim,
     snapshot,
     harness: claude({ model: "opus" }),

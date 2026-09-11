@@ -4,15 +4,17 @@
 # Every line is a memoization key in the World. A change here is a change in
 # every factory's durable run state, so a diff is a finding, not a chore. The
 # one line a rename may legitimately move is the workflow id, which carries
-# the starter pipeline's file name; every step id is a wrapper every factory
-# already has.
+# the starter pipeline's file name. 0.5.0 renamed three wrappers and split a
+# fourth, which is why this list moved once and why a diff here is a finding.
+step//./steps/jigs//branchState
 step//./steps/jigs//checkForHumanReply
 step//./steps/jigs//commentOnPr
 step//./steps/jigs//fetchPrState
-step//./steps/jigs//fetchSnapshot
+step//./steps/jigs//fetchTicketSnapshot
 step//./steps/jigs//openPr
 step//./steps/jigs//postNeedsHumanComment
-step//./steps/jigs//pushWorktreeBranch
+step//./steps/jigs//provisionWorktree
+step//./steps/jigs//pushBranch
 step//./steps/jigs//readDiff
 step//./steps/jigs//replyInThread
 step//./steps/jigs//resolveRepo
@@ -20,6 +22,5 @@ step//./steps/jigs//runAgentStep
 step//./steps/jigs//runAskStep
 step//./steps/jigs//squashMerge
 step//./steps/jigs//teardownWorktrees
-step//./steps/jigs//worktree
 step//workflow@4.8.4//fetch
 workflow//./pipelines/ship//shipPipeline

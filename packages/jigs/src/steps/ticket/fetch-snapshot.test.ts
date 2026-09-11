@@ -31,7 +31,7 @@ function rawIssue(overrides: Partial<RawIssueSnapshot> = {}): RawIssueSnapshot {
   return {
     id: "68bc9696-35d5-442d-ab56-214c8cfefbec",
     identifier: "AGE-313",
-    title: "Ticket snapshot and the ticketReview jig",
+    title: "Ticket snapshot and the reviewTicket jig",
     description: "## Scope\n\nFetch the ticket on each activation.",
     url: "https://linear.app/x/issue/AGE-313",
     branchName: "salimhamed/age-313-ticket-snapshot",

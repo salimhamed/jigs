@@ -4,13 +4,16 @@ import { type AgentStepConfig, parseOutput } from "../agent/plan.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import type { TicketClaim } from "../ticket/claim.ts";
 import type {
+  HaltForHumanFn,
   HumanReply,
   JsonValue,
-  NeedsHumanFn,
 } from "../ticket/halt-for-human.ts";
 import type { Handoff } from "../ticket/review.ts";
 import type { TicketSnapshot } from "../ticket/snapshot.ts";
-import { codeReviewVerdict, implementAndReview } from "./implement.ts";
+import {
+  codeReviewVerdict,
+  implementUntilCodeReviewApproves,
+} from "./implement.ts";
 
 const claim = {
   issueId: "68bc9696-35d5-442d-ab56-214c8cfefbec",
@@ -58,7 +61,7 @@ const fakeAgent: AgentFn = async <T>(config: AgentStepConfig<T>) => {
   };
 };
 
-const fakeNeedsHuman: NeedsHumanFn = async (_claim, reason, payload) => {
+const fakeHaltForHuman: HaltForHumanFn = async (_claim, reason, payload) => {
   humanCalls.push({ reason, payload });
   return {
     commentId: `c${humanCalls.length}`,
@@ -69,9 +72,9 @@ const fakeNeedsHuman: NeedsHumanFn = async (_claim, reason, payload) => {
 };
 
 const run = () =>
-  implementAndReview({
+  implementUntilCodeReviewApproves({
     agent: fakeAgent,
-    needsHuman: fakeNeedsHuman,
+    haltForHuman: fakeHaltForHuman,
     claim,
     handoff,
     harness: claude({ model: "sonnet" }),

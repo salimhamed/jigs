@@ -13,7 +13,7 @@ import type { AgentSession } from "../agent/result.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import { interpolate } from "../interpolate.ts";
 import type { TicketClaim } from "../ticket/claim.ts";
-import type { NeedsHumanFn } from "../ticket/halt-for-human.ts";
+import type { HaltForHumanFn } from "../ticket/halt-for-human.ts";
 import type { Handoff } from "../ticket/review.ts";
 import { renderSnapshot } from "../ticket/snapshot.ts";
 import { codeReviewPrompt } from "./code-review.prompt.ts";
@@ -27,9 +27,9 @@ export const codeReviewVerdict = z.strictObject({
   findings: z.array(z.string()),
 });
 
-export interface ImplementAndReviewOptions {
+export interface ImplementOptions {
   agent: AgentFn;
-  needsHuman: NeedsHumanFn;
+  haltForHuman: HaltForHumanFn;
   claim: TicketClaim;
   handoff: Handoff;
   harness: HarnessConfig;
@@ -37,7 +37,7 @@ export interface ImplementAndReviewOptions {
   baseSha: string;
 }
 
-export type ImplementAndReviewResult = {
+export type ImplementResult = {
   session?: AgentSession;
   cycles: number;
 };
@@ -51,10 +51,10 @@ function renderFindings(findings: string[]): string {
     : findings.map((finding) => `- ${finding}`).join("\n");
 }
 
-export async function implementAndReview(
-  options: ImplementAndReviewOptions,
-): Promise<ImplementAndReviewResult> {
-  const { agent, needsHuman } = options;
+export async function implementUntilCodeReviewApproves(
+  options: ImplementOptions,
+): Promise<ImplementResult> {
+  const { agent, haltForHuman } = options;
   const ticket = renderSnapshot(options.handoff.snapshot);
   let session: AgentSession | undefined;
   let review = FIRST_PASS;
@@ -89,7 +89,7 @@ export async function implementAndReview(
       });
       findings = verdict.output.findings;
       console.log(
-        `[implementAndReview] cycle ${cycle}/${MAX_REVIEW_CYCLES} verdict=${verdict.output.verdict} findings=${findings.length}`,
+        `[implementUntilCodeReviewApproves] cycle ${cycle}/${MAX_REVIEW_CYCLES} verdict=${verdict.output.verdict} findings=${findings.length}`,
       );
       if (verdict.output.verdict === "approved") {
         return {
@@ -100,7 +100,7 @@ export async function implementAndReview(
       review = renderFindings(findings);
     }
 
-    const reply = await needsHuman(
+    const reply = await haltForHuman(
       options.claim,
       `review loop hit its ${MAX_REVIEW_CYCLES}-cycle bound`,
       { findings },

@@ -25,7 +25,7 @@ const reply: HumanReply = {
 
 const stepResult = { text: "done", output: undefined };
 
-test("agentOrHalt posts the repair through needsHuman and re-runs the step after the reply", async () => {
+test("agentOrHalt posts the repair through haltForHuman and re-runs the step after the reply", async () => {
   const reasons: string[] = [];
   let attempts = 0;
   const deps = {
@@ -38,7 +38,7 @@ test("agentOrHalt posts the repair through needsHuman and re-runs the step after
       }
       return stepResult;
     },
-    needsHuman: async (_claim: TicketClaim, reason: string) => {
+    haltForHuman: async (_claim: TicketClaim, reason: string) => {
       reasons.push(reason);
       return reply;
     },
@@ -59,7 +59,7 @@ test("agentOrHalt rethrows a non-JIT step failure instead of halting", async () 
     agent: async () => {
       throw new Error("the agent could not build the project");
     },
-    needsHuman: async () => {
+    haltForHuman: async () => {
       halts += 1;
       return reply;
     },

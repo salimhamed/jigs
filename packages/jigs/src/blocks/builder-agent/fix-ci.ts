@@ -9,6 +9,7 @@ import type { HarnessConfig } from "../agent/harness-config.ts";
 import type { AgentSession } from "../agent/result.ts";
 import { type AgentFn, resumeOrRebuild } from "../agent/resume-or-rebuild.ts";
 import { interpolate } from "../interpolate.ts";
+import { renderChecks } from "../pull-request/answers.ts";
 import type { Handoff } from "../ticket/review.ts";
 import { renderSnapshot } from "../ticket/snapshot.ts";
 import { fixCiPrompt } from "./fix-ci.prompt.ts";
@@ -24,19 +25,6 @@ export interface FixCiOptions {
   attempt: string;
   handoff: Handoff;
   baseSha: string;
-}
-
-export function renderChecks(failing: CheckRun[]): string {
-  return failing.length === 0
-    ? "_(the provider reported a red build without naming a check)_"
-    : failing
-        .map((check) => {
-          // A commit status may carry no target_url at all, and a line
-          // trailing off into an empty link reads as a broken one.
-          const named = `- **${check.name}** — ${check.conclusion}`;
-          return check.url === "" ? named : `${named} — ${check.url}`;
-        })
-        .join("\n");
 }
 
 /**

@@ -3,8 +3,12 @@ import { claude } from "../agent/harness-config.ts";
 import { type AgentStepConfig, parseOutput } from "../agent/plan.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import type { TicketClaim } from "./claim.ts";
-import type { HumanReply, JsonValue, NeedsHumanFn } from "./halt-for-human.ts";
-import { ticketReview, ticketReviewVerdict } from "./review.ts";
+import type {
+  HaltForHumanFn,
+  HumanReply,
+  JsonValue,
+} from "./halt-for-human.ts";
+import { reviewTicket, ticketReviewVerdict } from "./review.ts";
 import type { TicketSnapshot } from "./snapshot.ts";
 
 const claim = {
@@ -16,7 +20,7 @@ const snapshot: TicketSnapshot = {
   fetchedAt: "2026-08-26T13:00:00Z",
   id: claim.issueId,
   identifier: "AGE-313",
-  title: "Ticket snapshot and the ticketReview jig",
+  title: "Ticket snapshot and the reviewTicket jig",
   description: "## Scope\n\nFetch the ticket on each activation.",
   url: "https://linear.app/x/issue/AGE-313",
   branchName: "salimhamed/age-313-ticket-snapshot",
@@ -56,7 +60,11 @@ const fakeAgent: AgentFn = async <T>(config: AgentStepConfig<T>) => {
   };
 };
 
-const fakeNeedsHuman: NeedsHumanFn = async (humanClaim, reason, payload) => {
+const fakeHaltForHuman: HaltForHumanFn = async (
+  humanClaim,
+  reason,
+  payload,
+) => {
   humanCalls.push({ claim: humanClaim, reason, payload });
   return reply;
 };
@@ -71,9 +79,9 @@ const fakeFetchSnapshot = async (issueId: string): Promise<TicketSnapshot> => {
 };
 
 const review = () =>
-  ticketReview({
+  reviewTicket({
     agent: fakeAgent,
-    needsHuman: fakeNeedsHuman,
+    haltForHuman: fakeHaltForHuman,
     fetchSnapshot: fakeFetchSnapshot,
     claim,
     snapshot,
@@ -105,7 +113,7 @@ test("a malformed verdict object fails the schema", () => {
   ).toThrow();
 });
 
-test("ticketReview rejects when the agent returns a verdict the schema refuses", async () => {
+test("reviewTicket rejects when the agent returns a verdict the schema refuses", async () => {
   verdicts = [{ verdict: "probably", brief: "a plan of sorts", findings: [] }];
   await expect(review()).rejects.toThrow();
   expect(humanCalls).toHaveLength(0);
@@ -126,11 +134,11 @@ test("a proceed verdict returns the brief with the snapshot it was reviewed agai
   expect(humanCalls).toHaveLength(0);
   expect(fetched).toEqual([]);
   expect(log).toHaveBeenCalledWith(
-    "[ticketReview] AGE-313 verdict=proceed findings=0",
+    "[reviewTicket] AGE-313 verdict=proceed findings=0",
   );
 });
 
-test("a needs-human verdict routes the findings to needsHuman and never the brief", async () => {
+test("a needs-human verdict routes the findings to haltForHuman and never the brief", async () => {
   verdicts = [
     {
       verdict: "needs-human",
