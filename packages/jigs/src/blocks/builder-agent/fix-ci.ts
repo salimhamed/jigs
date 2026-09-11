@@ -8,12 +8,14 @@ import type { readDiff } from "../../steps/pull-request/branch.ts";
 import type { HarnessConfig } from "../agent/harness-config.ts";
 import type { AgentSession } from "../agent/result.ts";
 import { type AgentFn, resumeOrRebuild } from "../agent/resume-or-rebuild.ts";
-import { interpolate } from "../interpolate.ts";
 import { renderChecks } from "../pull-request/answers.ts";
 import type { Handoff } from "../ticket/review.ts";
 import { renderSnapshot } from "../ticket/snapshot.ts";
-import { fixCiPrompt } from "./fix-ci.prompt.ts";
-import { fixCiFreshPrompt } from "./fix-ci-fresh.prompt.ts";
+import { type FixCiPrompt, fixCiPrompt } from "./fix-ci.prompt.ts";
+import {
+  type FixCiFreshPrompt,
+  fixCiFreshPrompt,
+} from "./fix-ci-fresh.prompt.ts";
 
 export interface FixCiOptions {
   agent: AgentFn;
@@ -25,6 +27,10 @@ export interface FixCiOptions {
   attempt: string;
   handoff: Handoff;
   baseSha: string;
+  // The words on each arm, which the factory owns: its own functions in place
+  // of the ones shipped beside this block.
+  resumePrompt?: FixCiPrompt;
+  freshPrompt?: FixCiFreshPrompt;
 }
 
 /**
@@ -37,6 +43,8 @@ export async function fixCi(
 ): Promise<{ session?: AgentSession }> {
   const { agent, readDiff: read } = options;
   const checks = renderChecks(options.failing);
+  const renderResume = options.resumePrompt ?? fixCiPrompt;
+  const renderFresh = options.freshPrompt ?? fixCiFreshPrompt;
 
   return resumeOrRebuild({
     agent,
@@ -44,18 +52,15 @@ export async function fixCi(
     harness: options.harness,
     cwd: options.cwd,
     ...(options.session === undefined ? {} : { session: options.session }),
-    resumePrompt: interpolate(fixCiPrompt, {
-      CHECKS: checks,
-      ATTEMPT: options.attempt,
-    }),
+    resumePrompt: renderResume({ checks, attempt: options.attempt }),
     freshPrompt: async () => {
       const diff = await read(options.cwd, options.baseSha);
-      return interpolate(fixCiFreshPrompt, {
-        TICKET: renderSnapshot(options.handoff.snapshot),
-        BRIEF: options.handoff.brief,
-        DIFF: diff,
-        CHECKS: checks,
-        ATTEMPT: options.attempt,
+      return renderFresh({
+        ticket: renderSnapshot(options.handoff.snapshot),
+        brief: options.handoff.brief,
+        diff,
+        checks,
+        attempt: options.attempt,
       });
     },
   });

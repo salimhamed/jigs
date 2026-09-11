@@ -6,11 +6,13 @@
 import { z } from "zod";
 import type { HarnessConfig } from "../agent/harness-config.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
-import { interpolate } from "../interpolate.ts";
 import type { TicketClaim } from "./claim.ts";
 import type { HaltForHumanFn } from "./halt-for-human.ts";
 import { renderSnapshot, type TicketSnapshot } from "./snapshot.ts";
-import { ticketReviewPrompt } from "./ticket-review.prompt.ts";
+import {
+  type TicketReviewPrompt,
+  ticketReviewPrompt,
+} from "./ticket-review.prompt.ts";
 
 // strictObject so the harness's native structured output carries
 // additionalProperties:false and a malformed verdict throws at the
@@ -46,6 +48,9 @@ export interface ReviewTicketOptions {
   snapshot: TicketSnapshot;
   harness: HarnessConfig;
   cwd: string;
+  // The words, which the factory owns: its own function in place of the one
+  // shipped beside this block.
+  prompt?: TicketReviewPrompt;
 }
 
 export async function reviewTicket(
@@ -58,8 +63,8 @@ export async function reviewTicket(
     const review = await agent({
       harness: options.harness,
       cwd: options.cwd,
-      prompt: interpolate(ticketReviewPrompt, {
-        TICKET: renderSnapshot(snapshot),
+      prompt: (options.prompt ?? ticketReviewPrompt)({
+        ticket: renderSnapshot(snapshot),
       }),
       output: ticketReviewVerdict,
     });

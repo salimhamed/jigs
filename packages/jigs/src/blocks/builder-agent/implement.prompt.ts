@@ -1,19 +1,30 @@
-export const implementPrompt = `# Implement
+export type ImplementPromptInput = {
+  ticket: string;
+  brief: string;
+  review: string;
+};
+export type ImplementPrompt = (input: ImplementPromptInput) => string;
+
+export const implementPrompt: ImplementPrompt = ({
+  ticket,
+  brief,
+  review,
+}) => `# Implement
 
 You are the builder. Implement this ticket in the repository you are already
 running in — your working directory is the worktree, on the ticket's branch.
 
 ## The ticket
 
-{{TICKET}}
+${ticket}
 
 ## The brief
 
-{{BRIEF}}
+${brief}
 
 ## Review findings to address
 
-{{REVIEW}}
+${review}
 
 ## How to work
 

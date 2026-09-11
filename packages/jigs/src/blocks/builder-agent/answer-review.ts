@@ -7,17 +7,22 @@ import { z } from "zod";
 import type { ReviewThread } from "../../providers/github.ts";
 import type { readDiff } from "../../steps/pull-request/branch.ts";
 import type { HarnessConfig } from "../agent/harness-config.ts";
-import { rebuildContextPrompt } from "../agent/rebuild-context.prompt.ts";
+import {
+  type RebuildContextPrompt,
+  rebuildContextPrompt,
+} from "../agent/rebuild-context.prompt.ts";
 import type { AgentSession } from "../agent/result.ts";
 import {
   type AgentFn,
   type ResumeOrRebuildResult,
   resumeOrRebuild,
 } from "../agent/resume-or-rebuild.ts";
-import { interpolate } from "../interpolate.ts";
 import type { Handoff } from "../ticket/review.ts";
 import { renderSnapshot } from "../ticket/snapshot.ts";
-import { answerReviewPrompt } from "./answer-review.prompt.ts";
+import {
+  type AnswerReviewPrompt,
+  answerReviewPrompt,
+} from "./answer-review.prompt.ts";
 
 // threadId null means the pull request conversation: a review body has no
 // thread root to reply into.
@@ -43,6 +48,10 @@ export interface AnswerReviewOptions {
   reviewBody?: string;
   handoff: Handoff;
   baseSha: string;
+  // The words on each arm, which the factory owns: its own functions in place
+  // of the ones shipped beside this block.
+  resumePrompt?: AnswerReviewPrompt;
+  freshPrompt?: RebuildContextPrompt;
 }
 
 function renderThreads(threads: ReviewThread[], reviewBody?: string): string {
@@ -78,6 +87,8 @@ export async function answerReview(
 ): Promise<ResumeOrRebuildResult<ThreadAnswers>> {
   const { agent, readDiff: read } = options;
   const threads = renderThreads(options.threads, options.reviewBody);
+  const renderResume = options.resumePrompt ?? answerReviewPrompt;
+  const renderFresh = options.freshPrompt ?? rebuildContextPrompt;
 
   return resumeOrRebuild({
     agent,
@@ -85,14 +96,14 @@ export async function answerReview(
     harness: options.harness,
     cwd: options.cwd,
     ...(options.session === undefined ? {} : { session: options.session }),
-    resumePrompt: interpolate(answerReviewPrompt, { THREADS: threads }),
+    resumePrompt: renderResume({ threads }),
     freshPrompt: async () => {
       const diff = await read(options.cwd, options.baseSha);
-      return interpolate(rebuildContextPrompt, {
-        TICKET: renderSnapshot(options.handoff.snapshot),
-        BRIEF: options.handoff.brief,
-        DIFF: diff,
-        THREADS: threads,
+      return renderFresh({
+        ticket: renderSnapshot(options.handoff.snapshot),
+        brief: options.handoff.brief,
+        diff,
+        threads,
       });
     },
     output: threadAnswers,

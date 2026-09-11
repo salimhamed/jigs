@@ -1,11 +1,16 @@
-export const ticketReviewPrompt = `# Ticket review
+export type TicketReviewPromptInput = { ticket: string };
+export type TicketReviewPrompt = (input: TicketReviewPromptInput) => string;
+
+export const ticketReviewPrompt: TicketReviewPrompt = ({
+  ticket,
+}) => `# Ticket review
 
 You are reviewing a Linear ticket before a builder agent starts on it.
 Your job is to **restate, not re-decide**.
 
 ## The ticket
 
-{{TICKET}}
+${ticket}
 
 ## What to produce
 

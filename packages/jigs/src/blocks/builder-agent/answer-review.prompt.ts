@@ -1,10 +1,15 @@
-export const answerReviewPrompt = `# Answer review
+export type AnswerReviewPromptInput = { threads: string };
+export type AnswerReviewPrompt = (input: AnswerReviewPromptInput) => string;
+
+export const answerReviewPrompt: AnswerReviewPrompt = ({
+  threads,
+}) => `# Answer review
 
 Your pull request came back with review comments. Answer them.
 
 ## The threads
 
-{{THREADS}}
+${threads}
 
 ## What to produce
 

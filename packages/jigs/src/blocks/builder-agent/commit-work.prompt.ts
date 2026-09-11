@@ -1,4 +1,7 @@
-export const commitWorkPrompt = `# Commit your work
+export type CommitWorkPromptInput = Record<string, never>;
+export type CommitWorkPrompt = (input: CommitWorkPromptInput) => string;
+
+export const commitWorkPrompt: CommitWorkPrompt = () => `# Commit your work
 
 You are the builder for this change, and you finished without committing. The
 branch carries no commits, so the uncommitted work in your current directory is

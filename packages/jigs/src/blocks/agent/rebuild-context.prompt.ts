@@ -1,4 +1,17 @@
-export const rebuildContextPrompt = `# Rebuild context
+export type RebuildContextPromptInput = {
+  ticket: string;
+  brief: string;
+  diff: string;
+  threads: string;
+};
+export type RebuildContextPrompt = (input: RebuildContextPromptInput) => string;
+
+export const rebuildContextPrompt: RebuildContextPrompt = ({
+  ticket,
+  brief,
+  diff,
+  threads,
+}) => `# Rebuild context
 
 You are the builder for this change, picking it up from its record. Everything
 you need is below: the ticket it implements, the brief it was built from, the
@@ -6,21 +19,21 @@ diff you are answering for, and the review threads waiting on you.
 
 ## The ticket
 
-{{TICKET}}
+${ticket}
 
 ## The brief
 
-{{BRIEF}}
+${brief}
 
 ## The change under review
 
 \`\`\`diff
-{{DIFF}}
+${diff}
 \`\`\`
 
 ## The threads
 
-{{THREADS}}
+${threads}
 
 ## What to produce
 

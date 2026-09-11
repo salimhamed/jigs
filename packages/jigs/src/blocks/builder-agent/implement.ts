@@ -2,8 +2,8 @@
 // the halt it ends on is a pause a human ends — never a terminal state, so
 // nothing the builder produced is discarded.
 //
-// The code-review call interpolates the ticket and the branch point and
-// nothing else. The reviewer judges the change against the ticket's acceptance
+// The code-review call renders the ticket and the branch point and nothing
+// else. The reviewer judges the change against the ticket's acceptance
 // criteria, so the brief a re-planning agent wrote is deliberately out of its
 // scope — the prompt says so, and this call site is what makes it true.
 
@@ -11,13 +11,15 @@ import { z } from "zod";
 import type { HarnessConfig } from "../agent/harness-config.ts";
 import type { AgentSession } from "../agent/result.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
-import { interpolate } from "../interpolate.ts";
 import type { TicketClaim } from "../ticket/claim.ts";
 import type { HaltForHumanFn } from "../ticket/halt-for-human.ts";
 import type { Handoff } from "../ticket/review.ts";
 import { renderSnapshot } from "../ticket/snapshot.ts";
-import { codeReviewPrompt } from "./code-review.prompt.ts";
-import { implementPrompt } from "./implement.prompt.ts";
+import {
+  type CodeReviewPrompt,
+  codeReviewPrompt,
+} from "./code-review.prompt.ts";
+import { type ImplementPrompt, implementPrompt } from "./implement.prompt.ts";
 
 // strictObject for the same reason ticketReviewVerdict is: the harness's
 // native structured output carries additionalProperties:false, and a malformed
@@ -35,6 +37,10 @@ export interface ImplementOptions {
   harness: HarnessConfig;
   cwd: string;
   baseSha: string;
+  // The two sets of words this block speaks, which the factory owns: its own
+  // functions in place of the ones shipped beside this block.
+  implementPrompt?: ImplementPrompt;
+  codeReviewPrompt?: CodeReviewPrompt;
 }
 
 export type ImplementResult = {
@@ -55,6 +61,8 @@ export async function implementUntilCodeReviewApproves(
   options: ImplementOptions,
 ): Promise<ImplementResult> {
   const { agent, haltForHuman } = options;
+  const renderImplement = options.implementPrompt ?? implementPrompt;
+  const renderCodeReview = options.codeReviewPrompt ?? codeReviewPrompt;
   const ticket = renderSnapshot(options.handoff.snapshot);
   let session: AgentSession | undefined;
   let review = FIRST_PASS;
@@ -69,10 +77,10 @@ export async function implementUntilCodeReviewApproves(
       const build = await agent({
         harness: options.harness,
         cwd: options.cwd,
-        prompt: interpolate(implementPrompt, {
-          TICKET: ticket,
-          BRIEF: options.handoff.brief,
-          REVIEW: review,
+        prompt: renderImplement({
+          ticket,
+          brief: options.handoff.brief,
+          review,
         }),
       });
       // The builder's session pointer, captured where the builder ran.
@@ -81,10 +89,7 @@ export async function implementUntilCodeReviewApproves(
       const verdict = await agent({
         harness: options.harness,
         cwd: options.cwd,
-        prompt: interpolate(codeReviewPrompt, {
-          TICKET: ticket,
-          BASE_SHA: options.baseSha,
-        }),
+        prompt: renderCodeReview({ ticket, baseSha: options.baseSha }),
         output: codeReviewVerdict,
       });
       findings = verdict.output.findings;

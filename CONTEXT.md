@@ -19,17 +19,25 @@ _Avoid_: jig as a code term, sub-jig
 
 **Block**:
 Pipeline-side reusable code that calls steps in a fixed way. A block is one
-async TypeScript function taking the step wrappers it needs as plain
-parameters. It carries no directive, so it owns no step id and
-renaming one is safe. jigs ships blocks and a factory writes its own; both are
+async TypeScript function taking the step wrappers it needs, and the options
+that vary it — its prompts included — as plain parameters. It carries no
+directive, so it owns no step id and renaming one is safe. jigs ships blocks and a factory writes its own; both are
 the same kind of thing.
 jigs ships the blocks a wrong edit would break: the ones holding the builder's
 session, the resume fallback, the ids the gate cursor needs back, the
 code-review call the brief is kept out of. What a wrong edit would merely
-change, such as the order, the CI bound, the merge policy, the escalation
-prose and the prompts, the factory writes as blocks of its own.
+change, such as the order, the CI bound, the merge policy and the escalation
+prose, the factory writes as blocks of its own — and the prompts it passes in.
 _Avoid_: building block, composition, flow, sub-pipeline, primitive, helper,
 util
+
+**Prompt**:
+A function beside a block that turns typed inputs into the text an agent is
+told. jigs ships one next to every block that speaks to an agent; the block
+takes it as an optional parameter and defaults to the shipped one, so a
+factory passes its own — at the call site, or once in the binding in its
+`blocks/jigs.ts`. The mechanics are the block's, the words are the factory's.
+_Avoid_: template
 
 **Step**:
 One recorded unit of work in a pipeline, awaited from the body and memoized
