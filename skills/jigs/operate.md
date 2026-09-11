@@ -125,7 +125,7 @@ see the never list.
   instruction. Their names are half of the ids parked runs are memoized
   against, the build stays green while they are orphaned, and an orphaned run
   only ever shows up as stalled. Everything else in those files — bodies,
-  order, prose, the review-loop composition — is free to edit. When the human
+  order, prose, the factory's own blocks — is free to edit. When the human
   does want a rename, check `jigs ps` for parked runs first; cancel and
   relaunch the ones that would be orphaned.
 

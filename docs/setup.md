@@ -50,7 +50,7 @@ would mean the CLI generating, installing and naming units, and every repair
 instruction growing a "which one" — `jigs service restart` is the whole
 answer instead. The service is a host process on purpose: it drives the
 operator's `claude` and `codex` logins, the AWS SSO cache and the git clones
-([ADR 0016](adr/0016-published-packages.md)).
+([ADR 0017](adr/0017-single-package.md)).
 
 **Upgrading.** `jigs upgrade` in the factory: it moves the jigs pin to the
 latest release (`--to <version>` picks one), runs `jigs up` — its `--force`
@@ -121,21 +121,22 @@ version that scaffolded it, `.npmrc`, `nitro.config.ts`, `docker-compose.yml`,
 `.gitignore` a factory build needs — and the code
 the factory starts from: `jigs.config.ts` (this factory's pipelines, keyed by
 the name `jigs run` takes), `pipelines/ship.ts` (a ticket to a merged pull
-request), `pipelines/review-loop.ts` (that pipeline's review loop, composed
-here rather than shipped), `steps/jigs.ts`, `steps/describe-pr.ts`,
-`jigs.config.test.ts` and a `README.md`. Then it prints the next steps and
+request), `steps/jigs.ts`, `blocks/jigs.ts`, `blocks/review-loop/` (that
+pipeline's review loop, written here rather than shipped),
+`prompts/describe-pr.ts`, `jigs.config.test.ts` and a `README.md`. Then it prints the next steps and
 runs none of them; `jigs up` (step 3) is what runs them. Every file is written
 once: a re-run keeps what is there and adds only what is missing, so nothing
 init wrote goes stale under you, and from here on the code is this factory's
 own.
 
 `steps/jigs.ts` is the one to know about. It holds this factory's `"use step"`
-wrappers around jigs' step implementations, plus the blocks (`ticketReview`,
-`needsHuman`, `gate`, …) wired on top of them — so a pipeline imports its
-steps from `../steps/jigs.ts`, never from a `@salimhamed/jigs` subpath.
-(Only its steps: the scaffolded pipeline imports `ticketInput`, `claimTicket`,
-`claude` and `codex` from the package directly, because none of those carries
-an id.) It is ordinary committed source: commit it and edit it. The one rule
+wrappers around jigs' step implementations and nothing else, so a pipeline
+imports its steps from `../steps/jigs.ts`, never from
+`@salimhamed/jigs/steps`. `blocks/jigs.ts` beside it holds the jigs blocks
+(`reviewTicket`, `haltForHuman`, `pullRequestGate`, …) bound to those
+wrappers. (Only the steps are bound by the rule: the scaffolded pipeline
+imports `ticketInput`, `claimTicket`, `claude` and `codex` from the package
+directly, because none of those carries an id.) It is ordinary committed source: commit it and edit it. The one rule
 is about names — each exported wrapper's name, with this file's path, compiles
 to a durable step id (`step//./steps/jigs//worktree`) that the World memoizes
 runs against. Renaming or moving one changes that id, so do it only when
@@ -143,20 +144,20 @@ runs against. Renaming or moving one changes that id, so do it only when
 stalled, and the repair is to cancel it and relaunch. Bodies, comments and
 the wiring below the wrappers are free to change at any time.
 
-**The loop itself is factory code too.** jigs ships the review loop as
-building blocks — `implementAndReview`, `answerAsBuilder`, `fixCi`,
-`commitLeftoverWork`, `postAnswers`, `describePr` — and `jigs init` scaffolds
-`pipelines/review-loop.ts`, the ~200 lines that call them in order. The split
-is where a wrong edit lands: jigs owns what would break (the builder's session
-pointer, the resume fallback, the ids the gate cursor needs back, the
-implement ⇄ review bound, and the code-review call that is never handed the
-brief), the factory owns what would merely change (the order, the CI bound,
-the merge policy, the escalation prose, the prompts). A team that wants no
-self-review round, a merge commit instead of a squash, or a different gate
-edits its own composition — and still gets the blocks underneath fixed by
-`jigs upgrade`.
+**The loop itself is factory code too.** jigs ships the review loop's pieces
+as blocks — `implementUntilCodeReviewApproves`, `answerReview`, `fixCi`,
+`commitWork`, `postReviewAnswers`, `describePr`, `attend` — and `jigs init`
+scaffolds `blocks/review-loop/`, one decision per file, calling them in order.
+The split is where a wrong edit lands: jigs owns what would break (the
+builder's session pointer, the resume fallback, the ids the gate cursor needs
+back, the implement-against-review bound, and the code-review call that is
+never handed the brief), the factory owns what would merely change (the order,
+the CI bound, the merge policy, the escalation prose, the prompts). A team
+that wants no self-review round, a merge commit instead of a squash, or a
+different gate edits its own blocks — and still gets the jigs blocks
+underneath fixed by `jigs upgrade`.
 
-`steps/describe-pr.ts` is the same split at one block. jigs owns the mechanics
+`prompts/describe-pr.ts` is the same split at one block. jigs owns the mechanics
 — resume the builder that wrote the change, fall back to a fresh context fed
 the diff, parse a `{ title, body }` back — and the factory owns the words and
 the policy: the conventions it asks for, and what to do when the answer drifts
@@ -181,7 +182,7 @@ cp .env.example .env      # then fill in LINEAR_API_KEY / GITHUB_TOKEN
 `.env` is this factory's environment file: the service loads it when it
 starts, `jigs bind` reads `GITHUB_TOKEN` out of it, and `PORT` comes from
 `jigs.yml` rather than from here. The `LINEAR_API_KEY` / `GITHUB_TOKEN` slots
-are consumed by the suspension primitives (`needsHuman()` posts Linear
+are consumed by the suspension blocks (`haltForHuman()` posts Linear
 comments, `pullRequestGate()` re-checks PR state), and both are validated on
 every trigger: preflight refuses to create a run when a requirement is unmet,
 reporting every failure with its repair. `jigs doctor` runs the same checks

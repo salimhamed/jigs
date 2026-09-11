@@ -10,9 +10,10 @@ add that, set this up — go back to `SKILL.md` and take the route it belongs to
 
 1. **`CONTEXT.md`** in the jigs repo (a checkout if there is one, else
    github.com/salimhamed/jigs), for what a word means. It is the
-   glossary: pipeline, jig, step, step id, step wrapper, run, binding, factory
-   repo, suspension, satisfier, gate, needs-human halt, worktree, sweep,
-   harness, snapshot, preflight, service, dashboard, trigger, schedule, World.
+   glossary: pipeline, block, step, step id, step wrapper, run, binding,
+   factory repo, suspension, satisfier, gate, needs-human halt, worktree,
+   sweep, harness, snapshot, preflight, service, dashboard, trigger, schedule,
+   World.
    Each entry also lists the words the project deliberately avoids — use the
    glossary's term, not a synonym.
 2. **`docs/adr/`** in the jigs repo, for *why* something works the way it
@@ -24,11 +25,12 @@ add that, set this up — go back to `SKILL.md` and take the route it belongs to
 4. **`jigs --help` and `jigs <verb> --help`**, for what a command and its flags
    actually do today. Prefer running these over recalling them.
 5. **The source**, when the question is about behaviour none of the above pins
-   down: `packages/jigs/src/` — the CLI and the check catalog, and beside
-   them the service, its routes, and the step, suspension and worktree
-   primitives. Inside a factory the installed copy is
-   `node_modules/@salimhamed/jigs/dist/` — compiled, but the exports map
-   names each module.
+   down: `packages/jigs/src/`, split by kind of code. `blocks/` is what a
+   pipeline calls, `steps/` is the work those calls do, `service/` is the
+   long-running process, and beside them sit `cli/`, `checks/`, `providers/`
+   and `config/`. The README's Layout section explains the split. Inside a
+   factory the installed copy is `node_modules/@salimhamed/jigs/dist/` —
+   compiled, but the exports map names each module.
 
 For a question about how a factory is written rather than how jigs works, the
 worked example is what `jigs init` scaffolds: one `.tmpl` per file under

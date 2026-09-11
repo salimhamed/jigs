@@ -22,7 +22,7 @@ branch, remotes, freshness — is derived fresh from git at each activation,
 carrying claude-code-flow's "derive, don't store" precedent as far as it
 goes; the remote pin is an assertion against bind rot (a moved or replaced
 checkout fails loudly), not a cache. jigs keeps no user-level configuration
-anywhere: the sqlite store (ADR 0005) holds state, never config, and
+anywhere: the run store holds state, never config, and
 `jigs.yml` doubles as the factory-repo marker — `bind`/`unbind`/`bindings`
 resolve the factory repo by walking up from cwd and error with guidance
 outside one.

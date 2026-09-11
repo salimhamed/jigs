@@ -12,19 +12,25 @@ across many runs.
 _Avoid_: workflow, flow, DAG
 
 **Jig**:
-A reusable stretch of a pipeline — an async TypeScript function you call from
-a pipeline body (e.g. implement ⇄ review until approved). Pipelines are
-composed from jigs.
-_Avoid_: segment, pattern, template
+The name of the project, from the manufacturing fixture that guides a tool
+through a repeatable operation. It is not a name for any kind of code. A
+reusable stretch of pipeline-side code is a **block**.
+_Avoid_: jig as a code term, sub-jig
 
-**Building block**:
-A jig the package ships: one function, no options, taking the step wrappers it
-needs as plain parameters. jigs ships the blocks a wrong edit would break —
-the ones holding the builder's session, the resume fallback, the ids the gate
-cursor needs back, the code-review call the brief is kept out of. What a wrong
-edit would merely change — the order, the CI bound, the merge policy, the
-escalation prose, the prompts — is a composition the factory owns.
-_Avoid_: primitive, helper, util, sub-jig
+**Block**:
+Pipeline-side reusable code that calls steps in a fixed way. A block is one
+async TypeScript function, with no options, taking the step wrappers it needs
+as plain parameters. It carries no directive, so it owns no step id and
+renaming one is safe. jigs ships blocks and a factory writes its own; both are
+the same kind of thing.
+jigs ships the blocks a wrong edit would break: the ones holding the builder's
+session, the resume fallback, the ids the gate cursor needs back, the
+code-review call the brief is kept out of. What a wrong edit would merely
+change, such as the order, the CI bound, the merge policy, the escalation
+prose and the prompts, the factory writes as blocks of its own
+(ADR 0018).
+_Avoid_: building block, composition, flow, sub-pipeline, primitive, helper,
+util
 
 **Step**:
 One recorded unit of work in a pipeline, awaited from the body and memoized
@@ -81,12 +87,14 @@ installed globally and no checkout is linked.
 _Avoid_: pipelines repo, config repo
 
 **jigs package**:
-`@salimhamed/jigs` — the CLI, the library-first core, the templates
-`jigs init` writes from, the app and its routes, and the primitives pipelines
-are written against, reached through one subpath each. Published compiled to
-GitHub Packages under the `@salimhamed` scope and installed by a factory like
-any dependency, through a scope line in its `.npmrc` and a `read:packages`
-token in the operator's `~/.npmrc` (ADR 0016, ADR 0017).
+`@salimhamed/jigs` — the CLI, the blocks, the step implementations, the
+service, and the templates `jigs init` writes from. A factory reaches the
+blocks through `@salimhamed/jigs/blocks` and the step implementations through
+`@salimhamed/jigs/steps`; the root carries the types a factory names and
+`ticketInput`, and the service subpaths belong to the build. Published
+compiled to GitHub Packages under the `@salimhamed` scope and installed by a
+factory like any dependency, through a scope line in its `.npmrc` and a
+`read:packages` token in the operator's `~/.npmrc` (ADR 0017).
 _Avoid_: the checkout, link:, @jigs/service, @salimhamed/jigs-service, the
 jigs packages (plural), the jigs repo (as a dependency)
 
@@ -105,8 +113,8 @@ What `jigs init` writes into a factory, once each and never again: the
 infrastructure (`jigs.yml`, `package.json`, `.npmrc`, `nitro.config.ts`,
 `docker-compose.yml`, `.env.example`, the build config) and the code the
 factory starts from (`jigs.config.ts`, `pipelines/ship.ts`,
-`pipelines/review-loop.ts`, `steps/jigs.ts`, `steps/describe-pr.ts`, the ids
-test). `init` touches nothing on the machine;
+`steps/jigs.ts`, `blocks/jigs.ts`, `blocks/review-loop/`,
+`prompts/describe-pr.ts`, the ids test). `init` touches nothing on the machine;
 `jigs up` is what runs.
 _Avoid_: generated code, boilerplate, template (for the written files)
 
@@ -207,22 +215,30 @@ wake channel.
 _Avoid_: lock, lease
 
 **Ticket review**:
-The shipped block that normalizes a ticket into a brief, parking on a
+The jigs block that normalizes a ticket into a brief, parking on a
 needs-human verdict and re-reading the ticket each round until it proceeds. It
-returns a brief, never a verdict to branch on.
+returns a handoff, never a verdict to branch on.
 _Avoid_: intake, triage
 
 **Review loop**:
-The factory's own composition that carries a brief from implementation to a
-merged PR: implement ⇄ agent review, then the pull request gate, answered by
-the builder. Scaffolded into `pipelines/review-loop.ts`; the blocks it calls
-come from jigs.
+The factory's own blocks that carry a handoff from implementation to a merged
+PR: implement against code review, then the pull request gate, answered by the
+builder. Scaffolded into `blocks/review-loop/`, one decision per file; the
+jigs blocks it calls come from `@salimhamed/jigs/blocks`.
 _Avoid_: build loop, PR loop, the reviewLoop jig
 
 **Brief**:
 The normalized implementation plan a ticket review produces — the
 implementer's working plan. The ticket stays the definition of done.
 _Avoid_: plan, spec
+
+**Handoff**:
+What a ticket review returns and every builder block takes: the brief plus the
+ticket snapshot it was written from. The two travel together on purpose. The
+ticket is authoritative wherever they conflict, and a review step judges the
+work against the snapshot's acceptance criteria rather than against the brief,
+so a re-planning agent cannot move the goalposts.
+_Avoid_: context, payload, the brief (for the pair)
 
 **Preflight**:
 The trigger-path verification, before a run is created, that its
