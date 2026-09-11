@@ -30,7 +30,9 @@ export const postNeedsHumanComment: PostNeedsHumanComment = async (
     }
   }
   const comment = await createComment(issueId, lines.join("\n"));
-  console.log(`[needsHuman] posted comment=${comment.id} issue=${issueId}`);
+  console.log(
+    `[postNeedsHumanComment] posted comment=${comment.id} issue=${issueId}`,
+  );
   return { commentId: comment.id, postedAt: comment.createdAt };
 };
 
@@ -64,7 +66,7 @@ export const checkForHumanReply: CheckForHumanReply = async (
     (comment) => comment.user !== null && comment.id !== postedCommentId,
   );
   console.log(
-    `[needsHuman] re-check issue=${issueId} since=${sinceIso} found=${human !== undefined}`,
+    `[checkForHumanReply] re-check issue=${issueId} since=${sinceIso} found=${human !== undefined}`,
   );
   if (human === undefined || human.user === null)
     return { reply: null, cursor };

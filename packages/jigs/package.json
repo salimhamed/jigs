@@ -21,89 +21,37 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./app": {
-      "types": "./dist/app.d.ts",
-      "default": "./dist/app.js"
-    },
-    "./build": {
-      "types": "./dist/build.d.ts",
-      "default": "./dist/build.js"
-    },
-    "./checks": {
-      "types": "./dist/checks/index.d.ts",
-      "default": "./dist/checks/index.js"
-    },
-    "./harnesses": {
-      "types": "./dist/harnesses/index.d.ts",
-      "default": "./dist/harnesses/index.js"
-    },
-    "./nitro": {
-      "types": "./dist/nitro.d.ts",
-      "default": "./dist/nitro.js"
-    },
-    "./prompts": {
-      "types": "./dist/prompts/index.d.ts",
-      "default": "./dist/prompts/index.js"
-    },
-    "./schedules": {
-      "types": "./dist/schedules.d.ts",
-      "default": "./dist/schedules.js"
+    "./blocks": {
+      "types": "./dist/blocks/index.d.ts",
+      "default": "./dist/blocks/index.js"
     },
     "./steps": {
       "types": "./dist/steps/index.d.ts",
       "default": "./dist/steps/index.js"
     },
-    "./steps/jit": {
-      "types": "./dist/steps/jit.d.ts",
-      "default": "./dist/steps/jit.js"
+    "./app": {
+      "types": "./dist/app.d.ts",
+      "default": "./dist/app.js"
     },
-    "./steps/run": {
-      "types": "./dist/steps/run.d.ts",
-      "default": "./dist/steps/run.js"
+    "./nitro": {
+      "types": "./dist/nitro.d.ts",
+      "default": "./dist/nitro.js"
     },
-    "./suspension/claim": {
-      "types": "./dist/suspension/claim.d.ts",
-      "default": "./dist/suspension/claim.js"
+    "./schedules": {
+      "types": "./dist/schedules.d.ts",
+      "default": "./dist/schedules.js"
     },
-    "./suspension/needs-human": {
-      "types": "./dist/suspension/needs-human.d.ts",
-      "default": "./dist/suspension/needs-human.js"
-    },
-    "./suspension/pull-request-gate": {
-      "types": "./dist/suspension/pull-request-gate.d.ts",
-      "default": "./dist/suspension/pull-request-gate.js"
-    },
-    "./ticket/review": {
-      "types": "./dist/ticket/review.d.ts",
-      "default": "./dist/ticket/review.js"
-    },
-    "./ticket/snapshot": {
-      "types": "./dist/ticket/snapshot.d.ts",
-      "default": "./dist/ticket/snapshot.js"
-    },
-    "./review-loop": {
-      "types": "./dist/review-loop/index.d.ts",
-      "default": "./dist/review-loop/index.js"
-    },
-    "./review-loop/pull-request": {
-      "types": "./dist/review-loop/pull-request.d.ts",
-      "default": "./dist/review-loop/pull-request.js"
-    },
-    "./worktrees": {
-      "types": "./dist/worktrees/index.d.ts",
-      "default": "./dist/worktrees/index.js"
-    },
-    "./plugins/start-dashboard": {
-      "types": "./dist/plugins/start-dashboard.d.ts",
-      "default": "./dist/plugins/start-dashboard.js"
+    "./build": {
+      "types": "./dist/build.d.ts",
+      "default": "./dist/build.js"
     },
     "./plugins/start-world": {
       "types": "./dist/plugins/start-world.d.ts",
       "default": "./dist/plugins/start-world.js"
     },
-    "./providers/linear": {
-      "types": "./dist/providers/linear.d.ts",
-      "default": "./dist/providers/linear.js"
+    "./plugins/start-dashboard": {
+      "types": "./dist/plugins/start-dashboard.d.ts",
+      "default": "./dist/plugins/start-dashboard.js"
     }
   },
   "files": [

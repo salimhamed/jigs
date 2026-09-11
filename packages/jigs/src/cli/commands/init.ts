@@ -71,7 +71,7 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   );
   deps.out("");
   deps.out(
-    "steps/jigs.ts and pipelines/ are yours now: edit freely, but renaming or moving an exported wrapper changes its step id — do that only when jigs ps shows no parked runs",
+    "pipelines/, steps/jigs.ts, blocks/ and prompts/ are yours now: edit freely, but renaming or moving an exported wrapper changes its step id — do that only when jigs ps shows no parked runs",
   );
   deps.out("");
   deps.out("next, in this directory:");

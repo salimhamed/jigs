@@ -1,0 +1,61 @@
+import type { WorktreeFacts } from "@salimhamed/jigs";
+import {
+  answerReview,
+  type Attend,
+  type GateWake,
+  type Handoff,
+  listen,
+  postReviewAnswers,
+  type PrRef,
+} from "@salimhamed/jigs/blocks";
+import {
+  commentOnPr,
+  pushBranch,
+  readDiff,
+  replyInThread,
+} from "../../steps/jigs.ts";
+import { agent } from "../jigs.ts";
+import type { Builder } from "./builder.ts";
+
+type ReviewWake = Extract<
+  GateWake,
+  { kind: "review-comments" | "changes-requested" }
+>;
+
+export async function respondToReview(
+  wake: ReviewWake,
+  pr: PrRef,
+  builder: Builder,
+  worktree: WorktreeFacts,
+  handoff: Handoff,
+): Promise<Attend<never>> {
+  const threads = wake.kind === "review-comments" ? wake.threads : [];
+
+  const answered = await answerReview({
+    agent,
+    readDiff,
+    harness: builder.harness,
+    cwd: builder.cwd,
+    ...(builder.session === undefined ? {} : { session: builder.session }),
+    threads,
+    ...(wake.body === undefined ? {} : { reviewBody: wake.body }),
+    handoff,
+    baseSha: worktree.baseSha,
+  });
+  builder.session = answered.session ?? builder.session;
+
+  // The answer prompts tell the builder to commit its fix before replying, so
+  // the reply is only true once the branch carries it.
+  await pushBranch(builder.cwd, worktree.branch);
+
+  const posted = await postReviewAnswers({
+    replyInThread,
+    commentOnPr,
+    pr,
+    answers: answered.output,
+    threads,
+  });
+  // An empty ack is not the same as no ack: the gate folds whatever arrives
+  // into its cursor, and there is nothing to fold when nothing was replied to.
+  return posted.length > 0 ? listen({ selfCommentIds: posted }) : listen();
+}

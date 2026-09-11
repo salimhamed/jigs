@@ -1,33 +1,29 @@
-// The sequence review-loop.ts runs, held to through the real jigs blocks.
-// The wrappers in ../steps/jigs.ts are faked because they are where the loop
-// reaches a network, a git remote and an agent; ../steps/describe-pr.ts is
-// faked to keep this factory's title and body prose, and the repair policy
-// applied to it, out of these assertions. The blocks themselves run for real,
-// resume-first fallbacks and prompts included, so what these tests pin is the
-// part this file owns: the order, the CI bound, the merge policy and the
-// endings.
+// The sequence ./review-loop.ts runs, held to through the real jigs blocks.
+// The wrappers in ../../steps/jigs.ts are faked because they are where the loop
+// reaches a network, a git remote and an agent, and ../jigs.ts because it binds
+// those wrappers into the blocks. Everything under this folder runs for real —
+// the resume-first fallbacks, the prompts, this factory's PR conventions and
+// the repair applied to them — so what these tests pin is the part this factory
+// owns: the order, the CI bound, the merge policy and the endings.
 
 import type { ReviewThread, WorktreeFacts } from "@salimhamed/jigs";
 import {
   type AgentStepConfig,
   type AgentStepResult,
   claude,
+  type GateAck,
+  type GateWake,
+  type Handoff,
   parseOutput,
+  type PrRef,
+  type TicketClaim,
+  type TicketSnapshot,
   unwrapAgentStep,
-} from "@salimhamed/jigs/steps";
-import type { TicketClaim } from "@salimhamed/jigs/suspension/claim";
-import type {
-  GateAck,
-  GateWake,
-  PrRef,
-} from "@salimhamed/jigs/suspension/pull-request-gate";
-import type { Handoff } from "@salimhamed/jigs/ticket/review";
-import type { TicketSnapshot } from "@salimhamed/jigs/ticket/snapshot";
+} from "@salimhamed/jigs/blocks";
 import { beforeEach, expect, test, vi } from "vitest";
-import type { DescribePrInput } from "../steps/describe-pr.ts";
 import { reviewLoop } from "./review-loop.ts";
 
-type PushResult = { commits: number; headSha: string; dirty: boolean };
+type BranchState = { commits: number; headSha: string; dirty: boolean };
 type RepoRef = { owner: string; repo: string };
 type CiRed = Extract<GateWake, { kind: "ci-red" }>;
 
@@ -39,32 +35,38 @@ const shared = vi.hoisted(() => ({
     trail: [] as string[],
     agent: [] as AgentStepConfig<unknown>[],
     bindings: [] as string[],
-    pushes: [] as Array<[string, string, string]>,
+    branchStates: [] as Array<[string, string]>,
+    pushes: [] as Array<[string, string]>,
     replies: [] as Array<[number, string]>,
     comments: [] as string[],
     merges: [] as number[],
-    describes: [] as DescribePrInput[],
     opens: [] as Array<[RepoRef, string, string, string, string]>,
     acks: [] as GateAck[],
-    needsHuman: 0,
+    haltForHuman: 0,
     gateFinished: false,
   },
   script: {
     wakes: [] as GateWake[],
     outputs: [] as unknown[],
-    push: (() => ({
+    branch: (() => ({
       commits: 1,
-      headSha: "pushed",
+      headSha: "head-1",
       dirty: false,
-    })) as (nth: number) => PushResult,
-    staleResumes: 0,
+    })) as (nth: number) => BranchState,
+    pushHead: ((nth: number) => ({ headSha: `pushed-${nth}` })) as (
+      nth: number,
+    ) => { headSha: string },
+    // Names the one resuming agent call a test wants to fail, by its prompt: a
+    // positional count would silently re-aim itself onto whichever resuming
+    // call happens to come first.
+    staleResume: (() => false) as (config: AgentStepConfig<unknown>) => boolean,
     mergeError: null as Error | null,
   },
   pr: { owner: "acme", repo: "api", number: 41 } as PrRef,
 }));
 
-vi.mock("../steps/jigs.ts", () => {
-  const { calls, script, pr } = shared;
+vi.mock("../jigs.ts", () => {
+  const { calls, script } = shared;
   async function* deliver(): AsyncGenerator<
     GateWake,
     void,
@@ -78,8 +80,8 @@ vi.mock("../steps/jigs.ts", () => {
       }
       calls.gateFinished = true;
     } finally {
-      // What the composition's own finally does: an early return disposes the
-      // gate's hook rather than leaving it held.
+      // What attend's own finally does: an early return disposes the gate's
+      // hook rather than leaving it held.
       calls.trail.push("gate closed");
     }
   }
@@ -89,8 +91,10 @@ vi.mock("../steps/jigs.ts", () => {
     ): Promise<AgentStepResult<T>> => {
       calls.trail.push("agent");
       calls.agent.push(config as AgentStepConfig<unknown>);
-      if (config.resume !== undefined && script.staleResumes > 0) {
-        script.staleResumes -= 1;
+      if (
+        config.resume !== undefined &&
+        script.staleResume(config as AgentStepConfig<unknown>)
+      ) {
         // What the real wrapper does with the step's marker: a session the
         // harness no longer holds becomes the one throw resumeOrRebuild
         // catches.
@@ -104,9 +108,9 @@ vi.mock("../steps/jigs.ts", () => {
         session: { harness: "claude", id: `s-${calls.agent.length}` },
       };
     },
-    needsHuman: async () => {
-      calls.trail.push("needsHuman");
-      calls.needsHuman += 1;
+    haltForHuman: async () => {
+      calls.trail.push("haltForHuman");
+      calls.haltForHuman += 1;
       return {
         commentId: "c1",
         body: "carry on",
@@ -114,23 +118,30 @@ vi.mock("../steps/jigs.ts", () => {
         createdAt: "2026-08-26T14:00:00Z",
       };
     },
-    gate: (_target: PrRef) => {
+    pullRequestGate: (_target: PrRef) => {
       calls.trail.push("gate");
       return deliver();
     },
+  };
+});
+
+vi.mock("../../steps/jigs.ts", () => {
+  const { calls, script, pr } = shared;
+  return {
     resolveRepo: async (binding: string) => {
       calls.trail.push("resolveRepo");
       calls.bindings.push(binding);
       return { owner: pr.owner, repo: pr.repo };
     },
-    pushWorktreeBranch: async (
-      path: string,
-      branch: string,
-      baseSha: string,
-    ) => {
+    branchState: async (path: string, baseSha: string) => {
+      calls.trail.push("branchState");
+      calls.branchStates.push([path, baseSha]);
+      return script.branch(calls.branchStates.length);
+    },
+    pushBranch: async (path: string, branch: string) => {
       calls.trail.push("push");
-      calls.pushes.push([path, branch, baseSha]);
-      return script.push(calls.pushes.length);
+      calls.pushes.push([path, branch]);
+      return script.pushHead(calls.pushes.length);
     },
     readDiff: async (_path: string, _baseSha: string) => {
       calls.trail.push("readDiff");
@@ -164,14 +175,6 @@ vi.mock("../steps/jigs.ts", () => {
     },
   };
 });
-
-vi.mock("../steps/describe-pr.ts", () => ({
-  describePr: async (input: DescribePrInput) => {
-    shared.calls.trail.push("describePr");
-    shared.calls.describes.push(input);
-    return { title: "described title", body: "described body" };
-  },
-}));
 
 const { calls, script, pr } = shared;
 
@@ -244,6 +247,10 @@ const approval: GateWake = {
 
 const approved = { verdict: "approved", findings: [] };
 
+// The description every run needs before the PR is opened. Both fields are
+// non-empty because prDescription refuses anything else.
+const description = { title: "described title", body: "described body" };
+
 const answerFor = (rootIds: number[]) => ({
   answers: rootIds.map((threadId) => ({
     threadId,
@@ -251,13 +258,13 @@ const answerFor = (rootIds: number[]) => ({
   })),
 });
 
-// The first `empty` pushes report a dirty worktree and no commits; every push
-// after them carries one.
-const emptyPushes =
+// The first `empty` branch reads report a dirty worktree and no commits; every
+// read after them carries one.
+const emptyBranches =
   (empty: number) =>
-  (nth: number): PushResult =>
+  (nth: number): BranchState =>
     nth > empty
-      ? { commits: 1, headSha: `pushed-${nth}`, dirty: false }
+      ? { commits: 1, headSha: `head-${nth}`, dirty: false }
       : { commits: 0, headSha: "base-sha-1", dirty: true };
 
 const commitRounds = () =>
@@ -283,26 +290,28 @@ beforeEach(() => {
     trail: [],
     agent: [],
     bindings: [],
+    branchStates: [],
     pushes: [],
     replies: [],
     comments: [],
     merges: [],
-    describes: [],
     opens: [],
     acks: [],
-    needsHuman: 0,
+    haltForHuman: 0,
     gateFinished: false,
   });
   Object.assign(script, {
     wakes: [],
-    // The first review verdict every test needs before the PR is opened.
-    outputs: [approved],
-    push: (nth: number) => ({
+    // The code-review verdict and the PR description every test needs before
+    // the gate is reached.
+    outputs: [approved, description],
+    branch: (nth: number) => ({
       commits: 1,
-      headSha: `pushed-${nth}`,
+      headSha: `head-${nth}`,
       dirty: false,
     }),
-    staleResumes: 0,
+    pushHead: (nth: number) => ({ headSha: `pushed-${nth}` }),
+    staleResume: () => false,
     mergeError: null,
   });
 });
@@ -314,35 +323,36 @@ test("the loop implements, pushes the ticket branch and opens the PR before the 
   expect(calls.trail).toEqual([
     "agent",
     "agent",
+    "branchState",
     "push",
-    "describePr",
+    "agent",
     "resolveRepo",
     "openPr",
     "gate",
     "wake closed",
     "gate closed",
   ]);
-  expect(calls.pushes).toEqual([
-    ["/tmp/worktree", snapshot.branchName, "base-sha-1"],
-  ]);
+  expect(calls.branchStates).toEqual([["/tmp/worktree", "base-sha-1"]]);
+  expect(calls.pushes).toEqual([["/tmp/worktree", snapshot.branchName]]);
   expect(calls.bindings).toEqual(["scratch"]);
   expect(result).toEqual({ pr, cycles: 1 });
 });
 
 test("an empty branch with a clean tree fails loudly instead of opening an empty PR", async () => {
-  script.push = () => ({ commits: 0, headSha: "base-sha-1", dirty: false });
+  script.branch = () => ({ commits: 0, headSha: "base-sha-1", dirty: false });
 
   await expect(run()).rejects.toThrow(snapshot.branchName);
-  // Nothing describes a branch that turned out to carry nothing.
-  expect(calls.describes).toEqual([]);
-  // Nothing to recover, so no commit round is spent and no second push runs.
+  // Nothing describes or opens a branch that turned out to carry nothing.
+  expect(calls.opens).toEqual([]);
+  // Nothing to recover, so no commit round is spent and nothing is pushed.
   expect(commitRounds()).toEqual([]);
-  expect(calls.pushes).toHaveLength(1);
+  expect(calls.branchStates).toHaveLength(1);
+  expect(calls.pushes).toEqual([]);
 });
 
-test("an empty push with a dirty worktree sends the builder back to commit", async () => {
+test("an empty branch with a dirty worktree sends the builder back to commit", async () => {
   script.wakes = [closedMerged];
-  script.push = emptyPushes(1);
+  script.branch = emptyBranches(1);
   const result = await run();
 
   const rounds = commitRounds();
@@ -351,16 +361,19 @@ test("an empty push with a dirty worktree sends the builder back to commit", asy
   // uncommitted.
   expect(rounds[0]?.resume).toEqual({ harness: "claude", id: "s-1" });
   expect(rounds[0]?.cwd).toBe("/tmp/worktree");
-  // The second push carries the commit, so the run continues into the PR.
-  expect(calls.pushes).toHaveLength(2);
-  expect(calls.describes).toHaveLength(1);
+  // The second read sees the commit, so the branch is pushed once and the run
+  // continues into the PR.
+  expect(calls.branchStates).toHaveLength(2);
+  expect(calls.pushes).toHaveLength(1);
+  expect(calls.opens).toHaveLength(1);
   expect(result).toEqual({ pr, cycles: 1 });
 });
 
 test("a stale session commits from a fresh context rather than failing the run", async () => {
   script.wakes = [closedMerged];
-  script.push = emptyPushes(1);
-  script.staleResumes = 1;
+  script.branch = emptyBranches(1);
+  script.staleResume = (config) =>
+    config.prompt.startsWith("# Commit your work");
   const result = await run();
 
   // The same prompt either way: the work is on disk, so the fresh round needs
@@ -369,54 +382,57 @@ test("a stale session commits from a fresh context rather than failing the run",
   expect(rounds).toHaveLength(2);
   expect(rounds[0]?.resume).toEqual({ harness: "claude", id: "s-1" });
   expect(rounds[1]?.resume).toBeUndefined();
-  // The throwing resume records no session, so the fresh round is s-4, and
-  // that is the one now holding the change.
-  expect(calls.describes[0]?.session).toEqual({ harness: "claude", id: "s-4" });
+  // The throwing resume records no session, so the fresh round is s-4 — and
+  // the describing call after it is the one that resumes it.
+  expect(calls.agent[4]?.resume).toEqual({ harness: "claude", id: "s-4" });
   expect(result).toEqual({ pr, cycles: 1 });
 });
 
 test("a commit round that still commits nothing fails the run", async () => {
-  script.push = emptyPushes(2);
+  script.branch = emptyBranches(2);
 
   await expect(run()).rejects.toThrow("commit-recovery round");
   // Exactly one round: the recovery is bounded, not a loop.
   expect(commitRounds()).toHaveLength(1);
-  expect(calls.pushes).toHaveLength(2);
-  expect(calls.describes).toEqual([]);
+  expect(calls.branchStates).toHaveLength(2);
+  expect(calls.pushes).toEqual([]);
+  expect(calls.opens).toEqual([]);
 });
 
-test("the factory's description is what the PR is opened with", async () => {
+test("the description this factory writes is what the PR is opened with", async () => {
   script.wakes = [closedMerged];
   await run();
 
-  // The loop holds no title or body of its own: whatever describePr returned
-  // is verbatim what GitHub gets.
-  expect(calls.describes).toHaveLength(1);
+  // The loop holds no title or body of its own, and the repair is this
+  // factory's: the ticket is prefixed onto the title and its link appended to
+  // a body that carries none.
   expect(calls.opens).toEqual([
     [
       { owner: pr.owner, repo: pr.repo },
       snapshot.branchName,
       worktree.defaultBranch,
-      "described title",
-      "described body",
+      "AGE-316: described title",
+      `described body\n\n[AGE-316](${snapshot.url})`,
     ],
   ]);
 });
 
-test("describePr sees the builder's session and the branch point", async () => {
+test("the description resumes the builder's session on this factory's own harness", async () => {
   script.wakes = [closedMerged];
   await run();
 
-  // s-1 is the implement call, so a description agent can resume the context
-  // that wrote the change rather than reading the diff cold.
-  expect(calls.describes[0]?.session).toEqual({ harness: "claude", id: "s-1" });
-  expect(calls.describes[0]?.baseSha).toBe("base-sha-1");
-  expect(calls.describes[0]?.worktreePath).toBe("/tmp/worktree");
-  expect(calls.describes[0]?.handoff).toEqual(handoff);
+  // s-1 is the implement call, so the describing agent can resume the context
+  // that wrote the change rather than reading the diff cold — on the harness
+  // this factory picked for prose, not the loop's.
+  const describing = calls.agent[2];
+  expect(describing?.resume).toEqual({ harness: "claude", id: "s-1" });
+  expect(describing?.cwd).toBe("/tmp/worktree");
+  expect(describing?.harness).toEqual({ kind: "claude", model: "opus" });
+  expect(describing?.prompt).toContain("AGE-316: ");
 });
 
 test("a review-comments wake answers every thread in place", async () => {
-  script.outputs = [approved, answerFor([900, 910])];
+  script.outputs = [approved, description, answerFor([900, 910])];
   script.wakes = [
     { kind: "review-comments", threads: [thread(900), thread(910)] },
     closedMerged,
@@ -431,14 +447,15 @@ test("a review-comments wake answers every thread in place", async () => {
   // The answer prompts have the builder commit its fix, so the branch has to
   // carry it before the reply claims it does.
   expect(calls.pushes).toEqual([
-    ["/tmp/worktree", snapshot.branchName, "base-sha-1"],
-    ["/tmp/worktree", snapshot.branchName, "base-sha-1"],
+    ["/tmp/worktree", snapshot.branchName],
+    ["/tmp/worktree", snapshot.branchName],
   ]);
   expect(calls.trail).toEqual([
     "agent",
     "agent",
+    "branchState",
     "push",
-    "describePr",
+    "agent",
     "resolveRepo",
     "openPr",
     "gate",
@@ -453,7 +470,7 @@ test("a review-comments wake answers every thread in place", async () => {
 });
 
 test("the ids of the replies it posts ride back into the gate", async () => {
-  script.outputs = [approved, answerFor([900, 910])];
+  script.outputs = [approved, description, answerFor([900, 910])];
   script.wakes = [
     { kind: "review-comments", threads: [thread(900), thread(910)] },
     closedMerged,
@@ -468,6 +485,7 @@ test("the ids of the replies it posts ride back into the gate", async () => {
 test("answers that land on the conversation ack nothing", async () => {
   script.outputs = [
     approved,
+    description,
     { answers: [{ threadId: null, body: "addressed it" }] },
   ];
   script.wakes = [
@@ -481,7 +499,7 @@ test("answers that land on the conversation ack nothing", async () => {
 });
 
 test("an answer naming a thread the wake never carried lands on the conversation", async () => {
-  script.outputs = [approved, answerFor([900, 4242])];
+  script.outputs = [approved, description, answerFor([900, 4242])];
   script.wakes = [
     { kind: "review-comments", threads: [thread(900)] },
     closedMerged,
@@ -495,6 +513,7 @@ test("an answer naming a thread the wake never carried lands on the conversation
 test("a changes-requested review body is answered on the PR conversation", async () => {
   script.outputs = [
     approved,
+    description,
     { answers: [{ threadId: null, body: "addressed all four" }] },
   ];
   script.wakes = [
@@ -524,24 +543,28 @@ test("the fourth consecutive red escalates as an @-mention instead of a fix", as
   ];
   await run();
 
-  // Three bounded fix attempts, each followed by a push, then the escalation
-  // in place of a fourth.
+  // Three bounded fix attempts, each reading the branch and pushing what it
+  // committed, then the escalation in place of a fourth.
   expect(calls.trail).toEqual([
     "agent",
     "agent",
+    "branchState",
     "push",
-    "describePr",
+    "agent",
     "resolveRepo",
     "openPr",
     "gate",
     "wake ci-red",
     "agent",
+    "branchState",
     "push",
     "wake ci-red",
     "agent",
+    "branchState",
     "push",
     "wake ci-red",
     "agent",
+    "branchState",
     "push",
     "wake ci-red",
     "comment",
@@ -557,19 +580,21 @@ test("the fourth consecutive red escalates as an @-mention instead of a fix", as
   expect(calls.comments[0]?.startsWith("@salim")).toBe(true);
   expect(calls.comments[0]).toContain("3 fix attempts");
   expect(calls.comments[0]).toContain("**test** — failure");
-  // Never needsHuman: the channel for this conversation is GitHub.
-  expect(calls.needsHuman).toBe(0);
+  // Never haltForHuman: the channel for this conversation is GitHub.
+  expect(calls.haltForHuman).toBe(0);
 });
 
 test("a fix that commits nothing escalates instead of waiting for a wake that cannot come", async () => {
-  // The second red is the same streak on the same head: the escalation spent
-  // the bound, so it draws neither a fix nor a second comment.
+  // The second red is the same streak: the stand-down already spent it, so it
+  // draws neither a fix nor a second comment.
   script.wakes = [ciRed("sha-1"), ciRed("sha-1"), closedMerged];
   // No new head means no new CI event, so the gate would never wake again.
-  script.push = () => ({ commits: 1, headSha: "sha-1", dirty: false });
+  script.branch = () => ({ commits: 1, headSha: "sha-1", dirty: false });
   await run();
 
   expect(ciFixes()).toHaveLength(1);
+  // And nothing is pushed on that wake: there is no new commit to push.
+  expect(calls.pushes).toHaveLength(1);
   expect(calls.comments).toHaveLength(1);
   expect(calls.comments[0]?.startsWith("@salim")).toBe(true);
   // Its own reason, not the exhausted-bound one: no attempt count was spent.
@@ -585,7 +610,7 @@ test("the CI fix runs inside the builder's session rather than context-free", as
 });
 
 test("the CI fix does not take over the builder's session pointer", async () => {
-  script.outputs = [approved, answerFor([900])];
+  script.outputs = [approved, description, answerFor([900])];
   script.wakes = [
     ciRed("sha-1"),
     { kind: "review-comments", threads: [thread(900)] },
@@ -593,14 +618,15 @@ test("the CI fix does not take over the builder's session pointer", async () => 
   ];
   await run();
 
-  // s-1 is the implement step: the reviewer, the CI fix and the answer all ran
-  // after it, and only the implement session holds the ticket and the change.
+  // s-1 is the implement step: the code reviewer, the description, the CI fix
+  // and the answer all ran after it, and only the implement session holds the
+  // ticket and the change.
   expect(calls.agent.at(-1)?.resume).toEqual({ harness: "claude", id: "s-1" });
 });
 
 test("a stale session sends the CI fix into a fresh context that then holds the change", async () => {
-  script.outputs = [approved, answerFor([900])];
-  script.staleResumes = 1;
+  script.outputs = [approved, description, answerFor([900])];
+  script.staleResume = (config) => config.prompt.startsWith("# Fix CI");
   script.wakes = [
     ciRed("sha-1"),
     { kind: "review-comments", threads: [thread(900)] },
@@ -608,13 +634,14 @@ test("a stale session sends the CI fix into a fresh context that then holds the 
   ];
   await run();
 
-  // s-1 and s-2 are implement and review, and the throwing resume records no
-  // session, so the rebuilt fix is s-4. The answer resumes that.
-  const fresh = calls.agent[3];
+  // s-1, s-2 and s-3 are implement, code review and the description, and the
+  // throwing resume records no session, so the rebuilt fix is s-5. The answer
+  // resumes that.
+  const fresh = calls.agent[4];
   expect(fresh?.resume).toBeUndefined();
   expect(fresh?.prompt).toContain("AGE-316");
   expect(fresh?.prompt).toContain("THE-DIFF");
-  expect(calls.agent.at(-1)?.resume).toEqual({ harness: "claude", id: "s-4" });
+  expect(calls.agent.at(-1)?.resume).toEqual({ harness: "claude", id: "s-5" });
 });
 
 test("a fifth red neither fixes nor escalates a second time", async () => {
@@ -670,8 +697,8 @@ test("an approval squash-merges and returns the merged PR", async () => {
   // reviewer corrected after the PR opened is the one that ships.
   expect(calls.merges).toEqual([pr.number]);
   expect(result.pr).toEqual(pr);
-  // The gate never ran out of wakes, so only the composition's finally can
-  // have closed it.
+  // The gate never ran out of wakes, so only attend's finally can have closed
+  // it.
   expect(calls.gateFinished).toBe(false);
   expect(calls.trail.at(-1)).toBe("gate closed");
 });

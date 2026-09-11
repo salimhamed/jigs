@@ -104,7 +104,7 @@ export interface GateCursor {
   // Review-thread replies jigs posted itself. Author identity cannot stand in
   // for this: a factory running on its operator's own token has the operator
   // as `snapshot.viewer`, so filtering by viewer swallows the very review
-  // comments the loop exists to answer — the same collision needsHuman avoids
+  // comments the loop exists to answer — the same collision haltForHuman avoids
   // by id on the Linear side.
   selfCommentIds: number[];
   lastRedSha: string | null;

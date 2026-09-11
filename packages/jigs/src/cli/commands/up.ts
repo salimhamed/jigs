@@ -218,7 +218,7 @@ function locate(cwd: string): {
   if (!existsSync(path.join(factoryRoot, FACTORY_CODE))) {
     throw new JigsError(
       `no ${FACTORY_CODE} in ${factoryRoot}`,
-      "scaffold it: jigs init writes jigs.config.ts, pipelines/ship.ts and steps/jigs.ts, and keeps every file already there",
+      "scaffold it: jigs init writes jigs.config.ts, pipelines/ship.ts, steps/jigs.ts, blocks/ and prompts/, and keeps every file already there",
     );
   }
   return { factoryRoot, service };

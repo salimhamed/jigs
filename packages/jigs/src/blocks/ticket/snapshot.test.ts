@@ -13,7 +13,7 @@ function rawIssue(overrides: Partial<RawIssueSnapshot> = {}): RawIssueSnapshot {
   return {
     id: "68bc9696-35d5-442d-ab56-214c8cfefbec",
     identifier: "AGE-313",
-    title: "Ticket snapshot and the ticketReview jig",
+    title: "Ticket snapshot and the reviewTicket jig",
     description: "## Scope\n\nFetch the ticket on each activation.",
     url: "https://linear.app/x/issue/AGE-313",
     branchName: "salimhamed/age-313-ticket-snapshot",
@@ -86,7 +86,7 @@ test("renderSnapshot includes every section a reviewing agent needs", () => {
     toSnapshot(rawIssue(), "2026-08-26T13:00:00Z"),
   );
   expect(rendered).toContain(
-    "AGE-313 Ticket snapshot and the ticketReview jig",
+    "AGE-313 Ticket snapshot and the reviewTicket jig",
   );
   expect(rendered).toContain("Fetch the ticket on each activation.");
   expect(rendered).toContain("ready-for-agent");

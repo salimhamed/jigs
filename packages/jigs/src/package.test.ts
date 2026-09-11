@@ -166,83 +166,94 @@ test("the factory template pins the same versions this package peers on", async 
   expect(template.dependencies["@salimhamed/jigs"]).toBe(pkg.version);
 });
 
-// What each exports-map subpath exported before the folder move. src/compat/
-// is what keeps those surfaces identical while blocks/ and steps/ hold the
-// content, and the scaffold reaches only 12 of the 22 subpaths — so ./prompts,
-// ./checks, ./harnesses and ./providers/linear have no e2e cover at all, and
-// the exports-target test checks only that an entry's source file exists,
-// never what it exports. A name dropped from one of these lists is a silent break in a
-// factory that already imports it.
-const COMPAT_EXPORTS: Record<string, string[]> = {
-  "compat/prompts.ts": [
-    "answerReviewPrompt",
-    "codeReviewPrompt",
-    "commitWorkPrompt",
-    "fixCiFreshPrompt",
-    "fixCiPrompt",
-    "implementPrompt",
-    "interpolate",
-    "rebuildContextPrompt",
-    "ticketReviewPrompt",
-  ],
-  "compat/review-loop-pull-request.ts": [
-    "commentOnPr",
-    "openPr",
-    "pushWorktreeBranch",
-    "readDiff",
-    "replyInThread",
-    "resolveRepo",
-    "squashMerge",
-  ],
-  "compat/review-loop.ts": [
-    "answerAsBuilder",
-    "codeReviewVerdict",
-    "commitLeftoverWork",
-    "describePr",
-    "fixCi",
-    "implementAndReview",
-    "postAnswers",
-    "prDescription",
-    "renderChecks",
-    "threadAnswers",
-  ],
-  "compat/steps-run.ts": ["realDeps", "runAgent", "runAsk"],
-  "compat/steps.ts": [
+// The two barrels are the whole public code surface now: nine subpaths, of
+// which four are reachable from the scaffold — `.`, ./blocks, ./steps and
+// ./nitro — so the exports-map test above covers under half of them, and the
+// exports-target test checks only that an entry's source file exists, never
+// what it exports. Value names only: this test reads them back through a
+// runtime import, which cannot see a type at all. The type surface of both
+// barrels is guarded next door, by tsc, in barrels.types.test.ts.
+const BARREL_EXPORTS: Record<string, string[]> = {
+  "blocks/index.ts": [
     "agent",
+    "agentOrHalt",
+    "answerReview",
+    "answerReviewPrompt",
     "ask",
+    "attend",
     "buildAgentWire",
     "buildAskWire",
-    "claude",
-    "codex",
-    "JitCheckError",
-    "parseOutput",
-    "resumeOrRebuild",
-    "unwrapAgentStep",
-  ],
-  "compat/suspension-needs-human.ts": [
-    "checkForHumanReply",
-    "NEEDS_HUMAN_TOKEN_PREFIX",
-    "needsHuman",
-    "needsHumanToken",
-    "postNeedsHumanComment",
-  ],
-  "compat/suspension-pull-request-gate.ts": [
+    "ClaimConflictError",
+    "claimTicket",
     "classifyPrState",
-    "fetchPrState",
+    "claude",
+    "codeReviewPrompt",
+    "codeReviewVerdict",
+    "codex",
+    "commitWork",
+    "commitWorkPrompt",
+    "describePr",
+    "finished",
+    "fixCi",
+    "fixCiFreshPrompt",
+    "fixCiPrompt",
+    "haltForHuman",
+    "implementPrompt",
+    "implementUntilCodeReviewApproves",
+    "interpolate",
+    "JitCheckError",
+    "listen",
+    "NEEDS_HUMAN_TOKEN_PREFIX",
+    "needsHumanToken",
+    "parseOutput",
+    "postReviewAnswers",
     "PR_TOKEN_PREFIX",
+    "prDescription",
     "prToken",
     "pullRequestGate",
-    "tokenFromGithubPayload",
-  ],
-  "compat/ticket-snapshot.ts": [
-    "fetchSnapshot",
+    "rebuildContextPrompt",
+    "renderChecks",
     "renderSnapshot",
+    "resumeOrRebuild",
+    "reviewTicket",
+    "threadAnswers",
+    "TICKET_TOKEN_PREFIX",
+    "ticketReviewPrompt",
+    "ticketReviewVerdict",
+    "ticketToken",
+    "tokenFromGithubPayload",
+    "tokenFromLinearPayload",
     "toSnapshot",
+    "unreachable",
+    "unwrapAgentStep",
+  ],
+  "steps/index.ts": [
+    "branchState",
+    "checkForHumanReply",
+    "commentOnPr",
+    "createComment",
+    "createIssueInProject",
+    "fetchPrState",
+    "fetchSnapshot",
+    "findIssueInProject",
+    "openPr",
+    "postNeedsHumanComment",
+    "provisionRunWorktree",
+    "pushBranch",
+    "readDiff",
+    "realDeps",
+    "replyInThread",
+    "resolveRepo",
+    "runAgent",
+    "runAsk",
+    "squashMerge",
+    "teardownMergedRun",
+    "teardownRunWorktrees",
   ],
 };
 
-test("every compat barrel still exports the names its subpath exported before the move", async () => {
-  for (const [file, names] of Object.entries(COMPAT_EXPORTS)) {
+test("every barrel exports exactly the values its subpath promises", async () => {
+  for (const [file, names] of Object.entries(BARREL_EXPORTS)) {
     const module = await import(path.join(packageDir, "src", file));
     expect(Object.keys(module).sort(), file).toEqual(names.sort());
   }

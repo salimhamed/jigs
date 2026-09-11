@@ -48,7 +48,7 @@ export interface TicketClaim {
 // the hook registration, so a duplicate run fails in seconds, before any paid
 // step. The hook is deliberately not `using`-scoped — it is held for the
 // run's whole life (the SDK auto-disposes it at terminal state) and doubles
-// as needsHuman()'s wake channel.
+// as haltForHuman()'s wake channel.
 //
 // One hook, on the issue's UUID: an operator naming a run by its ticket
 // identifier is resolved through Linear by the run-ref resolver, so a second

@@ -46,13 +46,13 @@ export type CheckForHumanReply = (
   postedCommentId: string,
 ) => Promise<{ reply: HumanReply | null; cursor: string }>;
 
-export type NeedsHumanDeps = {
+export type HaltForHumanDeps = {
   postComment: PostNeedsHumanComment;
   checkForReply: CheckForHumanReply;
 };
 
-/** {@link needsHuman} with its steps already bound — what a jig is handed. */
-export type NeedsHumanFn = (
+/** {@link haltForHuman} with its steps already bound — what a jig is handed. */
+export type HaltForHumanFn = (
   claim: TicketClaim,
   reason: string,
   payload?: JsonValue,
@@ -62,11 +62,11 @@ export type NeedsHumanFn = (
 // suspends on the claim hook. Wakes are hints: each one re-checks the actual
 // comment thread and re-suspends when no human has replied — no agent step
 // executes on an unsatisfied wake.
-export async function needsHuman(
+export async function haltForHuman(
   claim: TicketClaim,
   reason: string,
   payload: JsonValue | undefined,
-  deps: NeedsHumanDeps,
+  deps: HaltForHumanDeps,
 ): Promise<HumanReply> {
   // Destructured, never invoked as `deps.postComment(...)`: the SDK
   // serializes a step call's receiver along with its arguments, and this
