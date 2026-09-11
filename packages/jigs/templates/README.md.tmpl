@@ -106,10 +106,9 @@ applies to those names.
 `reviewTicket` are blocks over those wrappers and carry no id;
 `blocks/jigs.ts` exports them already wired. The review loop is more blocks of
 the same kind, except that this factory writes them: `blocks/review-loop/`
-calls
-the blocks jigs ships — `implementUntilCodeReviewApproves`, `answerReview`,
-`fixCi`, `commitWork`, `postReviewAnswers`, `describePr`, `attend` — in the
-order and with the policy it chooses.
+calls the blocks jigs ships — `implementUntilCodeReviewApproves`,
+`answerReview`, `fixCi`, `commitWork`, `postReviewAnswers`, `describePr`,
+`attend` — in the order and with the policy it chooses.
 
 ## Upgrading jigs
 

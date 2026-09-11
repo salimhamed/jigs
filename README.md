@@ -166,21 +166,37 @@ publishes as `@salimhamed/jigs`. Under `packages/jigs/templates/` sits
 everything `jigs init` writes into a new factory, one `.tmpl` file per
 scaffolded file.
 
+### Four words
+
+The rest of this section is written in four terms, so they come first.
+
+- **Pipeline**: a whole process, one file, started by `jigs run`.
+- **Block**: reusable code that runs inside a pipeline and calls steps in a
+  fixed way. jigs ships blocks and a factory writes its own; both are plain
+  code with no directive and no id.
+- **Step wrapper**: the factory's `"use step"` function around a step. Its
+  file path and its name are the step's durable id.
+- **Step**: the function that does the work.
+
+They chain in one direction. A pipeline calls blocks and wrappers. A block
+calls wrappers. A wrapper calls a step.
+
 ### The three kinds of code, and why the runtime forces the split
 
-A **pipeline** is one whole process written as one function, and the Workflow
-SDK runs it by **replay**. Replay means this: every time a run wakes up, the
-SDK calls the pipeline function again from its first line. Any step that
-already has a recorded result does not run again; the SDK returns the record.
-So the pipeline function itself runs many times over the life of one run, and
-the steps inside it run once each.
+A pipeline is one whole process written as one function, and the Workflow SDK
+runs it by **replay**. Replay means this: every time a run wakes up, the SDK
+calls the pipeline function again from its first line. Any step that already
+has a recorded result does not run again; the SDK returns the record. So the
+pipeline function itself runs many times over the life of one run, and the
+steps inside it run once each.
 
 Two consequences follow, and they are the whole reason for the folder layout.
 
-1. Code that runs inside a pipeline must do nothing on its own. No git, no
-   network, no filesystem, no reading `process.env`. If it did, it would do it
-   again on every wake. It is also bundled into a sandbox with no Node
-   built-ins, so those calls would not resolve anyway.
+1. Code that runs inside a pipeline — the pipeline and every block it calls —
+   must do nothing on its own. No git, no network, no filesystem, no reading
+   `process.env`. If it did, it would do it again on every wake. It is also
+   bundled into a sandbox with no Node built-ins, so those calls would not
+   resolve anyway.
 2. Code that does real work has to be a step, so that the SDK runs it once and
    records what it returned.
 
@@ -188,9 +204,17 @@ There is a third kind that is neither. The **service** is the long-running
 process a factory builds and starts: the webhook routes, the scheduler, the
 run endpoints and the dashboard. It never runs inside a pipeline at all.
 
-jigs used to mix all three in the same folders and hold the line with header
-comments on three files. Since 0.5.0 the folders are the line, and the folders
-are the public import paths.
+What goes into that sandboxed bundle is decided by the two Workflow SDK
+markers, and both live only in the factory: `"use workflow"` on each pipeline,
+`"use step"` on each wrapper. No file in this repo carries either
+([ADR 0013](docs/adr/0013-factory-owned-steps.md)). Everything between the two
+markers, jigs blocks and factory blocks alike, is plain code that gets pulled
+into the bundle because the pipeline imports it — which is why a single stray
+`node:` import in a block would land there.
+
+jigs used to mix all three kinds in the same folders and hold the line with
+header comments on three files. Since 0.5.0 the folders are the line, and the
+folders are the public import paths.
 
 ### The src tree
 
@@ -204,14 +228,18 @@ packages/jigs/src/
     agent/          how a pipeline calls an agent
     builder-agent/  the moves the builder agent makes: implement, answer a
                     review, fix CI, commit work, describe a PR
-    ticket/         claim, ticket review, snapshot shaping, the needs-human halt
-    pull-request/   the pull request gate, attend, review answers
+    ticket/         claim a ticket, review it, shape its snapshot, and halt
+                    the run for a human
+    pull-request/   the pull request gate, waiting on it, and the answers
+                    posted back to it
     factory.ts      the types a factory declares its pipelines with
     worktree.ts     the WorktreeFacts type a pipeline passes around
   steps/       step implementations: the real work. May import providers/,
                config/, checks/ and errors.ts, and types from blocks/.
-    agent/          run an agent or a plain model call, and the worktree lock
-    ticket/         fetch a snapshot, post and read Linear comments, issues
+    agent/          run an agent or a plain model call, and take the worktree
+                    lock
+    ticket/         fetch a ticket snapshot, post and read Linear comments,
+                    create and find Linear issues
     pull-request/   branch state, push, open, comment, reply, squash merge
     worktree/       provision, create, clone, tear down, registry, sweep
   service/     the long-running process: app, routes, ingress, schedules,
@@ -222,6 +250,8 @@ packages/jigs/src/
   providers/   raw clients with no jigs knowledge: git, GitHub, Linear.
   config/      the factory's config file, root, environment and paths.
   errors.ts
+  run-status.ts  which run statuses are terminal; cli/, service/ and steps/
+                 all read it.
 ```
 
 One rule decides where a type goes: a type used by one module stays in that
@@ -255,25 +285,6 @@ The package ships compiled, from `dist/`, one entry per export subpath. The
 Workflow SDK, its Postgres World, its dashboard and zod are peers the factory
 installs itself; the measurements behind that shape are in
 [ADR 0017](docs/adr/0017-single-package.md).
-
-### Four words
-
-- **Pipeline**: a whole process, one file, started by `jigs run`.
-- **Block**: pipeline-side reusable code that calls steps in a fixed way.
-  jigs ships blocks and a factory writes its own; both are plain code with no
-  directive and no id.
-- **Step wrapper**: the factory's `"use step"` function around a step. Its
-  file path and its name are the step's durable id.
-- **Step**: the function that does the work.
-
-They chain in one direction. A pipeline calls blocks and wrappers. A block
-calls wrappers. A wrapper calls a step.
-
-The two Workflow SDK markers live only in the factory: `"use workflow"` on
-each pipeline, `"use step"` on each wrapper. No file in this repo carries
-either ([ADR 0013](docs/adr/0013-factory-owned-steps.md)). Everything between
-the two markers, jigs blocks and factory blocks alike, is plain code that gets
-pulled into the pipeline bundle because the pipeline imports it.
 
 ## Development
 

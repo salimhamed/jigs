@@ -32,7 +32,7 @@ receives webhooks, fires schedules and serves the dashboard
 
 Before 0.5.0 jigs mixed all three kinds in the same folders and held the line
 with header comments on three files: `src/index.ts`, `src/steps/index.ts` and
-`src/worktrees/facts.ts`. A comment is not a boundary. Six files held both a
+`src/worktrees/facts.ts`. A comment is not a boundary. Three files held both a
 pipeline-side half and a step half in one module, so the only thing stopping a
 `node:` import from reaching the pipeline bundle was whoever read the comment
 last.
@@ -58,6 +58,8 @@ checks/      requirement checks, shared by preflight, doctor and steps
 providers/   raw clients with no jigs knowledge: git, GitHub, Linear
 config/      the factory's config file, root, environment and paths
 errors.ts
+run-status.ts   which run statuses are terminal; cli/, service/ and steps/
+                all read it
 ```
 
 The import rules are one sentence each.
@@ -73,10 +75,12 @@ The import rules are one sentence each.
   types from `blocks/`.
 - `service/` may import `steps/`, `providers/`, `config/` and `checks/`.
 
-Six mixed files were split along that line. The three that mattered were the
-needs-human halt, the pull request gate and the ticket snapshot: each had a
-block half that decides and a step half that talks to Linear or GitHub, and
-each is now two files in two folders.
+Three files were split along that line: the needs-human halt, the pull request
+gate and the ticket snapshot. Each had a block half that decides and a step
+half that talks to Linear or GitHub, and each is now two files in two folders.
+Three more were candidates and turned out not to be — the checks barrel, the
+worktree sweep and the worktree teardown each fell on one side and moved
+whole.
 
 **Where a type goes.** A type used by one module stays in that module. A type
 used on both sides of the blocks/steps line lives in `blocks/`, under the same
@@ -144,18 +148,18 @@ sandbox, and it catches it whatever route the import took.
   one decision per file.
 - **No step id moved for a layout reason.** Ids are factory local paths
   ([ADR 0013](./0013-factory-owned-steps.md)), so moving a file inside this
-  package cannot address one. 0.5.0 did move ids, but because it renamed three
-  wrappers and split a fourth, which is a separate decision recorded in
+  package cannot address one. 0.5.0 did move ids, but because it renamed two
+  wrappers and split a third, which is a separate decision recorded in
   `e2e/expected-ids.txt`.
 - **A file that wants to be in two folders is a file that wants to be split.**
-  That is the rule the six mixed files produced, and it is the one to apply
-  next time.
+  That is the rule those three files produced, and it is the one to apply next
+  time.
 
 ## Considered options
 
 - **Split by feature**, keeping `ticket/`, `worktrees/`, `review-loop/` as top
   level folders and marking the kind some other way. Rejected: that is the
-  layout that produced the six mixed files. Feature is the second axis here,
+  layout that produced the mixed files. Feature is the second axis here,
   and it is where it belongs, one level down inside `blocks/` and `steps/`.
 - **A lint rule on `blocks/` imports.** Deferred rather than rejected. It would
   catch a wrong import earlier than the e2e does, and it is worth adding when

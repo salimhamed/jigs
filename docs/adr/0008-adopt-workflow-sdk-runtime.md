@@ -20,9 +20,10 @@ evidence ledger).
 Every acceptance criterion passed: kill-mid-suspension → restart →
 `resumeHook` → completion with memoized replay (the pre-kill step result
 survived verbatim); kill mid-step recovers via startup rescue by re-running
-the step from zero, which is exactly the crash model jigs had planned to
-build for itself, delivered instead of built; a 600-second in-process step with no timeout; the workflow/step
-serialization boundary enforced with precise errors; a subscription-authed
+the step from zero, which is exactly the crash model jigs had planned to build
+for itself, delivered instead of built; a 600-second in-process step with no
+timeout; the workflow/step serialization boundary enforced with precise
+errors; a subscription-authed
 Claude Code agent step (no API key in the environment) writing to a cwd-scoped
 workspace with per-step token usage captured in the durable run result; and
 `npx workflow web` closing the run-observability gap off the shelf.

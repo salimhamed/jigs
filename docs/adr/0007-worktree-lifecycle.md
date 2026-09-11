@@ -40,8 +40,8 @@ Worktrees live in a central data dir —
 `~/.local/share/jigs/worktrees/<factory-slug>/<binding-name>/<branch-dirname>`
 — never beside the human's checkout unless a binding's `workspace_dir` says so.
 The factory slug (dirname + short path-hash) mirrors the run store's factory
-tagging: binding names are unique only per factory repo, so the
-path needs factory identity to keep two factories' same-named bindings apart.
+tagging: binding names are unique only per factory repo, so the path needs
+factory identity to keep two factories' same-named bindings apart.
 
 Freshness never touches the human checkout's local default branch: the gate is
 `git fetch`, and new worktree branches fork from `origin/<default>`. The

@@ -54,8 +54,8 @@ const HEADER = `# The workflow and step ids \`jigs build\` emits for the factory
 # Every line is a memoization key in the World. A change here is a change in
 # every factory's durable run state, so a diff is a finding, not a chore. The
 # one line a rename may legitimately move is the workflow id, which carries
-# the starter pipeline's file name. 0.5.0 renamed three wrappers and split a
-# fourth, which is why this list moved once and why a diff here is a finding.
+# the starter pipeline's file name. 0.5.0 renamed two wrappers and split a
+# third, which is why this list moved once and why a diff here is a finding.
 `;
 
 // Outside this repo on purpose: Nitro takes the furthest pnpm-workspace.yaml

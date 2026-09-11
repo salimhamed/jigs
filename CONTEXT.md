@@ -222,8 +222,8 @@ _Avoid_: intake, triage
 
 **Review loop**:
 The factory's own blocks that carry a handoff from implementation to a merged
-PR: implement against code review, then the pull request gate, answered by the
-builder. Scaffolded into `blocks/review-loop/`, one decision per file; the
+PR: implement until the code review approves, then the pull request gate,
+answered by the builder. Scaffolded into `blocks/review-loop/`, one decision per file; the
 jigs blocks it calls come from `@salimhamed/jigs/blocks`.
 _Avoid_: build loop, PR loop, the reviewLoop jig
 

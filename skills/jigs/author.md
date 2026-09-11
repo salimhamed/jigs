@@ -17,14 +17,15 @@ package. jigs ships steps; the factory owns every file that names them.
     the version the factory is pinned to, so it matches what is installed.
   - if the `jigs-factory-js` factory is checked out on this machine, a real
     pipeline that needs no repo binding: its `pipelines/s3-bucket-analysis.ts`,
-    with the factory-local steps in `steps/aws.ts`, the agent compositions in
+    with the factory-local steps in `steps/aws.ts`, the agent calls in
     `steps/s3-diagnosis.ts`, and the prose in `prompts/`. If it is not checked
     out, lean on the scaffold above — it carries the same shape at one pipeline.
 
 ## The three tiers, and why they matter
 
 1. **A `"use step"` function owns a durable id** built from its file's path and
-   its own name — `step//./steps/jigs//worktree`. That id is a memoization key
+   its own name — `step//./steps/jigs//provisionWorktree`. That id is a
+   memoization key
    in the factory's World. Renaming or moving it changes the id, so it happens
    only when `jigs ps` shows no parked runs.
 2. **A block is pipeline-side code** that calls those wrappers in a fixed way.
@@ -39,9 +40,10 @@ package. jigs ships steps; the factory owns every file that names them.
 The review loop is the factory's own blocks over the jigs ones, scaffolded into
 `blocks/review-loop/`, one decision per file. Read it before changing how a run
 behaves: the order, the CI bound, the merge policy and the escalation prose are
-all there, and none of it is a jigs release away. The implement-against-review
-bound is the exception. It lives inside `implementUntilCodeReviewApproves`,
-with the session and the brief that call keeps out of the reviewer's prompt.
+all there, and none of it is a jigs release away. The cap on
+implement-and-review rounds is the exception. It lives inside
+`implementUntilCodeReviewApproves`, with the session and the brief that call
+keeps out of the reviewer's prompt.
 
 A pipeline imports its steps from `../steps/jigs.ts`, **never** from
 `@salimhamed/jigs/steps`. A step reached through the package is addressed by
