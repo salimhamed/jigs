@@ -1,27 +1,25 @@
 # The workflow and step ids `jigs build` emits for the factory `jigs init`
 # scaffolds. Recorded by: node e2e/check-step-ids.mjs --record
 #
-# Every line is a memoization key in the World. A change here is a change in
-# every factory's durable run state, so a diff is a finding, not a chore. The
-# one line a rename may legitimately move is the workflow id, which carries
-# the starter pipeline's file name. 0.5.0 renamed two wrappers and split a
-# third, which is why this list moved once and why a diff here is a finding.
-step//./steps/jigs//branchState
-step//./steps/jigs//checkForHumanReply
-step//./steps/jigs//commentOnPr
-step//./steps/jigs//fetchPrState
-step//./steps/jigs//fetchTicketSnapshot
-step//./steps/jigs//openPr
-step//./steps/jigs//postNeedsHumanComment
-step//./steps/jigs//postTicketNote
-step//./steps/jigs//provisionWorktree
-step//./steps/jigs//pushBranch
-step//./steps/jigs//readDiff
-step//./steps/jigs//replyInThread
-step//./steps/jigs//resolveRepo
-step//./steps/jigs//runAgentStep
-step//./steps/jigs//runAskStep
-step//./steps/jigs//squashMerge
-step//./steps/jigs//teardownWorktrees
+# These addresses come from the factory's named workflow and step functions.
+# Renaming a factory file or function deliberately changes its address; merely
+# upgrading the jigs library must not. Review intended renames before recording.
+step//./jigs//askModel
+step//./jigs//checkForHumanReply
+step//./jigs//commentOnPullRequest
+step//./jigs//fetchPullRequestState
+step//./jigs//fetchTicketSnapshot
+step//./jigs//openPullRequest
+step//./jigs//postNeedsHumanComment
+step//./jigs//postTicketNote
+step//./jigs//provisionWorktree
+step//./jigs//pushBranch
+step//./jigs//readBranchState
+step//./jigs//readWorktreeDiff
+step//./jigs//replyInThread
+step//./jigs//resolveRepository
+step//./jigs//runAgent
+step//./jigs//squashMerge
+step//./jigs//teardownRunWorktrees
 step//workflow@4.8.4//fetch
-workflow//./pipelines/ship//shipPipeline
+workflow//./workflows/ship//shipWorkflow

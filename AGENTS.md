@@ -2,7 +2,7 @@
 
 See `README.md` for what jigs is and the dev commands (`pnpm check` runs lint,
 typecheck, test, and build). `pnpm check` covers no workflow directive — no
-pipeline lives here — so run `pnpm e2e` too: it scaffolds a factory with
+workflow lives here — so run `pnpm e2e` too: it scaffolds a factory with
 `jigs init` into a temp dir, builds it, and diffs its emitted step ids against
 `e2e/expected-ids.txt`. With `WORKFLOW_POSTGRES_URL` set it also boots the
 built service, waits for it to be ready, and requires a clean exit on SIGTERM;
@@ -14,11 +14,11 @@ release-please reads to cut a release
 
 ## Where code goes
 
-`packages/jigs/src` is split by what the Workflow SDK does with the code. The
+`src` is split by what the Workflow SDK does with the code. The
 README's Layout section has the tree and the reasoning. The rules a change has
 to keep:
 
-- `blocks/` is pipeline-side. It may import other `blocks/` files, zod, the
+- `blocks/` is workflow-side. It may import other `blocks/` files, zod, the
   `workflow` SDK, and `import type` from anywhere. It may not import a *value*
   from a node built-in, read `process.env`, reach the network, or import a
   value from `steps/`, `service/`, `cli/`, `checks/`, `config/` or

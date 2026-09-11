@@ -10,7 +10,7 @@ add that, set this up — go back to `SKILL.md` and take the route it belongs to
 
 1. **`CONTEXT.md`** in the jigs repo (a checkout if there is one, else
    github.com/salimhamed/jigs), for what a word means. It is the
-   glossary: pipeline, block, step, step id, step wrapper, run, binding,
+   glossary: workflow, block, step, step id, step wrapper, run, binding,
    factory repo, suspension, satisfier, gate, needs-human halt, worktree,
    sweep, harness, snapshot, preflight, service, dashboard, trigger, schedule,
    World.
@@ -25,8 +25,8 @@ add that, set this up — go back to `SKILL.md` and take the route it belongs to
 4. **`jigs --help` and `jigs <verb> --help`**, for what a command and its flags
    actually do today. Prefer running these over recalling them.
 5. **The source**, when the question is about behaviour none of the above pins
-   down: `packages/jigs/src/`, split by kind of code. `blocks/` is what a
-   pipeline calls, `steps/` is the work those calls do, `service/` is the
+   down: `src/`, split by kind of code. `blocks/` is what a
+   workflow calls, `steps/` is the work those calls do, `service/` is the
    long-running process, and beside them sit `cli/`, `checks/`, `providers/`
    and `config/`. The README's Layout section explains the split. Inside a
    factory the installed copy is `node_modules/@salimhamed/jigs/dist/` —
@@ -35,7 +35,7 @@ add that, set this up — go back to `SKILL.md` and take the route it belongs to
 For a question about how a factory is written rather than how jigs works, the
 worked example is what `jigs init` scaffolds: one `.tmpl` per file under
 `node_modules/@salimhamed/jigs/templates/` in any factory, or
-`packages/jigs/templates/` in the repo.
+`templates/` in the repo.
 
 ## How to answer
 
@@ -61,7 +61,7 @@ jigs --help
 ```
 
 Nothing that changes state. Not `jigs run`, `cancel`, `poke`, `sweep`, `bind`,
-`unbind`, `build`, `up`, `upgrade`, or any `jigs service` verb other than
-`status`. No edits to `jigs.yml`, `.env`, or any file. If the answer would
+`unbind`, `generate`, `build`, `up`, `upgrade`, or any `jigs service` verb other than
+`status`. No edits to `jigs.config.ts`, `.env`, or any file. If the answer would
 require one of those, say what you would need to do and let the human ask for
 it.

@@ -1,5 +1,3 @@
-packages:
-  - packages/jigs
 allowBuilds:
   '@swc/core': true
   cbor-extract: true

@@ -26,9 +26,9 @@ person can judge.
   Fine-grained tokens cannot read GitHub Packages. A 404 from
   `npm.pkg.github.com` during an install is this token missing or wrong, not a
   missing package.
-- The agent harness CLIs the factory's pipelines will drive — `claude` and
+- The agent harness CLIs the factory's workflows will drive — `claude` and
   `codex` — each logged in to its subscription.
-- The AWS CLI, only if a pipeline will declare `aws: true`.
+- The AWS CLI, only if a workflow will declare `aws: true`.
 - A tunnel tool (`tailscale` or `cloudflared`), only if the factory will receive
   provider webhooks.
 
@@ -43,22 +43,18 @@ mkdir my-factory && cd my-factory && git init
 pnpm dlx @salimhamed/jigs init
 ```
 
-`jigs init` writes files and runs nothing: `jigs.yml` (the service and
-dashboard ports, derived from this factory's path so two factories never
-collide), `package.json` pinned to the CLI's own version, `.npmrc` (the scope
-line only, never the token), `nitro.config.ts`, `docker-compose.yml`,
-`.env.example`, `tsconfig.json`, `pnpm-workspace.yaml`, `.gitignore` — and the
-code the factory starts from: `jigs.config.ts`, `pipelines/ship.ts`,
-`steps/jigs.ts`, `blocks/jigs.ts`, `blocks/review-loop/`,
-`prompts/describe-pr.ts`, `jigs.config.test.ts`, `README.md`.
-Then it prints the remaining commands with this factory's own ports filled in.
-Use the numbers it prints, not any numbers you have seen elsewhere.
+`jigs init` writes `jigs.config.ts`, a package manifest pinned to the CLI's
+version, build settings, Docker Compose, `.env.example`, and the factory's
+starter workflow and review-loop blocks. Prompts live beside their callers.
+It also writes the committed generated integration, `jigs.ts`.
 
-**It writes every file once.** A file that exists is kept, never rewritten, so
-the scaffolded code is the factory's own from the first commit; `author.md`
-covers extending it. Edit any of it — but renaming or moving `steps/jigs.ts`
-or one of its exported wrappers changes a durable step id, so do that only
-when `jigs ps` shows no parked runs.
+The printed ports are derived from the factory path. Two factories can still
+collide; use the printed numbers and adjust them if already occupied.
+
+Existing files are preserved. Custom workflows, blocks and steps belong to
+the factory; `author.md` covers extending them. Keep custom code outside
+`jigs.ts`: `jigs generate` refreshes that entire file, and builds refuse drift.
+Finish or cancel affected runs before deploying workflow or step renames.
 
 ## 2. Tokens
 
@@ -68,7 +64,7 @@ cp .env.example .env
 
 Fill in `LINEAR_API_KEY` and `GITHUB_TOKEN` before the first run: both are
 validated on **every** trigger, so a run cannot be created without them, even
-for a pipeline that touches neither. `WORKFLOW_TARGET_WORLD` and
+for a workflow that touches neither. `WORKFLOW_TARGET_WORLD` and
 `WORKFLOW_POSTGRES_URL` come filled in and should be left alone.
 
 ## 3. Up
@@ -119,10 +115,10 @@ jigs ps       # "no runs" is the right answer here
 ```sh
 jigs bind git@github.com:owner/repo.git
 jigs bindings
-jigs service restart     # or jigs up --restart
+jigs up                  # rebuild and restart for the changed configuration
 ```
 
-A binding is a name in `jigs.yml` mapped to a target repo's remote URL. jigs
+A binding is a name in `jigs.config.ts` mapped to a target repo's remote URL. jigs
 keeps its own bare clone per binding under
 `~/.local/share/jigs/bindings/<factory>/<binding>/repo.git` and cuts every
 worktree from it — the operator's own checkout is not involved. The service
@@ -130,16 +126,23 @@ makes those clones when it starts, so the restart above is what makes a new
 binding usable (seconds, up to a minute for a large repo); `jigs doctor`
 reports a binding with no clone yet.
 
+Binding commands edit the TypeScript syntax tree. They require an unambiguous
+literal `bindings` object for automatic edits. Unsupported syntax produces a
+clear repair message before any configuration or webhook writes; edit computed
+configurations manually.
+
 The binding also carries how its worktrees are provisioned — `jigs bind` writes
 `remote:` only, the rest is hand-edited and optional:
 
-```yaml
-bindings:
-  forge:
-    remote: git@github.com:owner/Forge.git
-    copy: [.env]
-    post_create: [npm ci]
-    hook_timeout_minutes: 20
+```ts
+bindings: {
+  forge: {
+    remote: "git@github.com:owner/Forge.git",
+    copy: [".env"],
+    postCreate: ["npm ci"],
+    hookTimeoutMinutes: 20,
+  },
+},
 ```
 
 A `copy:` entry is a path relative to the binding's own `bindings/<name>/`
@@ -151,12 +154,12 @@ factory repo under `bindings/<name>/`, gitignored as `bindings/*/.env`, never
 in the target repo.
 
 `jigs bind` also creates the repo's GitHub webhook when the factory has an
-`ingress_url` in `jigs.yml`, taking `GITHUB_TOKEN` from the factory's `.env`
+`ingressUrl` in `jigs.config.ts`, taking `GITHUB_TOKEN` from the factory's `.env`
 — or from the shell for that one command, which wins there and only there
 (the service reads `.env` alone). Without a usable token it fails and says
 the repair — an ingress with no webhook is a gate that never wakes — and the
 retry is the same `jigs bind`: the binding already recorded stands and the
-webhook is create-or-verify. A factory with no `ingress_url` skips the webhook
+webhook is create-or-verify. A factory with no `ingressUrl` skips the webhook
 with a note and needs no token. `jigs unbind` edits the config only; the clone
 stays on disk.
 
@@ -164,7 +167,7 @@ stays on disk.
 
 The service's `/ingress/github` and `/ingress/linear` routes must be reachable
 from the public internet on this factory's service port for a suspended run to
-wake on its own. Run a tunnel, put the URL in `jigs.yml` as `ingress_url`,
+wake on its own. Run a tunnel, put the URL in `jigs.config.ts` as `ingressUrl`,
 re-bind each target repo (`GITHUB_TOKEN` required), and create a Linear webhook
 for `Comment` resources. `docs/setup.md` has the exact commands and the
 org-level alternative. Without ingress everything still works; a suspended run
@@ -176,11 +179,11 @@ just needs `jigs poke <run>` to notice its answer.
 jigs upgrade                # or: jigs upgrade --to <version>
 ```
 
-bumps `@salimhamed/jigs`, runs `jigs up`, then the factory's own typecheck. A
-typecheck error in `steps/jigs.ts` — a block call missing an argument, or an
-import with no such member — is a step the release added: it needs a wrapper
-there, and `author.md` covers writing one. An install failure naming
-`@workflow/web`, `@workflow/world-postgres`, `workflow` or `zod` is a release
+bumps `@salimhamed/jigs`, regenerates `jigs.ts` using the newly installed
+package, runs `jigs up`, then checks the factory's custom code. Review and
+commit the regenerated integration. Fix API errors in custom code outside
+`jigs.ts`; refresh generated wrappers with `jigs generate`. An install failure
+naming `@workflow/web`, `@workflow/world-postgres`, `workflow` or `zod` is a release
 that moved a runtime peer: move the same pin in the factory's `package.json`
 and run `jigs upgrade` again. A factory still installing jigs from a checkout
 (`link:` entries, or the old `jigs` / `@jigs/service` names) is refused;

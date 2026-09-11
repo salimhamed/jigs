@@ -5,8 +5,8 @@ jigs when you are asked to, and nothing else.
 
 ## Where you stand
 
-Every operational verb is an HTTP client of one factory's service, and it finds
-that service by reading the `jigs.yml` of the directory you are in. So `cd` into
+Run commands address one factory's service, located through the nearest
+`jigs.config.ts`. Lifecycle and binding commands also operate on local files. So `cd` into
 the factory repo first. `--service <url>` or `JIGS_SERVICE_URL` overrides it.
 
 `jigs` is the factory's own — `pnpm exec jigs` — never a global one. Read
@@ -53,7 +53,7 @@ candidates instead of guessing; pass a longer one.
 jigs ps
 ```
 
-Runs first (`RUN PIPELINE STATUS TRIGGER AGE`), then the worktrees the registry
+Runs first (`RUN WORKFLOW STATUS TRIGGER AGE`), then the worktrees the registry
 holds, then a schedule table if the factory declares any. `TRIGGER` says how
 each run started; a scheduled fire reads `schedule:<name>`.
 
@@ -66,7 +66,7 @@ jigs service logs  # the service process's own stdout, which is a different thin
 ```
 
 `jigs logs` prints the run's page on the dashboard
-(`http://localhost:<dashboard_port>/run/<runId>`), then the step timeline
+(`http://localhost:<dashboardPort>/run/<runId>`), then the step timeline
 (`STEP STATUS ATTEMPT STARTED TOOK ERROR`), then any queue job that died holding
 the run's resume, each with the SQL that puts it back on the queue. Print the
 SQL to the human; do not run it for them.
@@ -109,13 +109,12 @@ simply re-suspends, so a poke is safe to repeat.
 
 ## Parked runs and worktrees
 
-A suspended run holds its worktree, on purpose — it is coming back to it. Every
-other ending leaves the tree on disk, where `jigs ps` shows it as `abandoned`.
-`jigs sweep` is the only thing that ever removes one; nothing runs in the
-background. On a terminal it asks per worktree, louder for a tree holding
+A suspended run holds its worktree because it will return to it. The starter
+workflow removes worktrees after merge; other endings leave them for
+`jigs sweep`. Nothing cleans up those leftovers in the background. On a terminal it asks per worktree, louder for a tree holding
 uncommitted work.
 
-Parked runs are also why the names in `steps/jigs.ts` and `pipelines/` matter —
+Parked runs are also why the names in `jigs.ts` and `workflows/` matter —
 see the never list.
 
 ## Never
@@ -124,18 +123,14 @@ see the never list.
   that World starts a second queue worker, which steals the service's queue jobs
   and delivers them to a port with no workflow route. The service hosts the
   dashboard; use that.
-- Never rename, move, or delete an exported wrapper in a factory's
-  `steps/jigs.ts`, or a file under `pipelines/`, without the human's explicit
-  instruction. Their names are half of the ids parked runs are memoized
-  against, the build stays green while they are orphaned, and an orphaned run
-  only ever shows up as stalled. Everything else in those files — bodies,
-  order, prose, the factory's own blocks — is free to edit. When the human
-  does want a rename, check `jigs ps` for parked runs first; cancel and
-  relaunch the ones that would be orphaned.
+- Keep custom code outside generated `jigs.ts`. Refresh it with `jigs generate`
+  and review the diff. When an authorized change renames or moves a workflow
+  or step, check active and suspended runs before deployment: finish or cancel
+  affected runs so they do not resume against different durable addresses.
 
 ## Confirm first
 
-Ask the human before:
+Confirm these actions when the current request has not already authorized them:
 
 - `jigs cancel` — it releases every resource the run claims, and the run is over.
 - `jigs sweep --force` — it deletes every eligible worktree without asking,
@@ -143,6 +138,6 @@ Ask the human before:
 - `jigs service restart`, `jigs service stop`, `jigs up --restart` or
   `jigs upgrade` while `jigs ps` shows a running or suspended run. `up` and
   `upgrade` ask before restarting over one; `--force` is the human's call.
-- Editing the `bindings` block in `jigs.yml` — changing a `remote:` repoints
+- Editing the `bindings` block in `jigs.config.ts` — changing a `remote:` repoints
   that binding's clone, and a new binding is not cloned until the next
-  `jigs service restart`.
+  `jigs up`.

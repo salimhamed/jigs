@@ -42,20 +42,18 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.join(here, "..");
-const cli = path.join(repo, "packages", "jigs", "dist", "cli.js");
+const cli = path.join(repo, "dist", "cli.js");
 const expectedFile = path.join(here, "expected-ids.txt");
-const jigsPackage = path.join(repo, "packages", "jigs", "package.json");
+const jigsPackage = path.join(repo, "package.json");
 const JIGS = "@salimhamed/jigs";
 const FAKE_VERSION = "9.9.9-e2e";
 
 const HEADER = `# The workflow and step ids \`jigs build\` emits for the factory \`jigs init\`
 # scaffolds. Recorded by: node e2e/check-step-ids.mjs --record
 #
-# Every line is a memoization key in the World. A change here is a change in
-# every factory's durable run state, so a diff is a finding, not a chore. The
-# one line a rename may legitimately move is the workflow id, which carries
-# the starter pipeline's file name. 0.5.0 renamed two wrappers and split a
-# third, which is why this list moved once and why a diff here is a finding.
+# These addresses come from the factory's named workflow and step functions.
+# Renaming a factory file or function deliberately changes its address; merely
+# upgrading the jigs library must not. Review intended renames before recording.
 `;
 
 // Outside this repo on purpose: Nitro takes the furthest pnpm-workspace.yaml
@@ -76,7 +74,7 @@ function pack() {
   mkdirSync(dir);
   const into = (name) => path.join(dir, `${name}.tgz`);
   const packInto = (file) =>
-    execFileSync("pnpm", ["--filter", JIGS, "pack", "--out", file], {
+    execFileSync("pnpm", ["pack", "--out", file], {
       cwd: repo,
       stdio: "inherit",
     });
@@ -129,7 +127,7 @@ const bundle = () => path.join(factory, ".output", "server", "index.mjs");
 // package makes it import discipline, and a static import that crosses the
 // line is silent: the bundle grows, and `jigs init` starts needing packages
 // that are not there yet.
-const CLI_IMPORTS = ["commander", "yaml", "zod"];
+const CLI_IMPORTS = ["commander", "jiti", "ts-morph", "yaml", "zod"];
 
 function cliBundleImports() {
   const seen = new Set();
@@ -171,8 +169,8 @@ function run(file, args) {
   execFileSync(file, args, { cwd: factory, stdio: "inherit" });
 }
 
-// No separate "the wrappers are still there" check: the scaffolded pipeline
-// imports them, so a missing steps/jigs.ts fails the build below, and a moved
+// No separate "the wrappers are still there" check: the scaffolded workflow
+// imports them, so a missing jigs.ts fails the build below, and a moved
 // one reports as the ids it took with it in the diff.
 function build() {
   run(path.join(factory, "node_modules", ".bin", "jigs"), ["build"]);
@@ -222,7 +220,7 @@ function withFakeVersion(packJigs) {
   if (bumped === original) {
     fail(
       `could not rewrite ${JIGS}'s version (${version}) for the bumped pack`,
-      "the version field in packages/jigs/package.json no longer matches this replace — retarget it",
+      "the version field in package.json no longer matches this replace — retarget it",
     );
   }
   writeFileSync(jigsPackage, bumped);
@@ -367,7 +365,19 @@ async function ready() {
     const res = await fetch(`http://127.0.0.1:${BOOT_PORT}/health`, {
       signal: AbortSignal.timeout(1_000),
     });
-    return res.ok && (await res.json()).ready === true;
+    if (!res.ok) return false;
+    const health = await res.json();
+    if (health.ready !== true || !health.workflows.includes("ship"))
+      return false;
+    // The deferred module must have resolved into the compiled service's
+    // registration, including its input schema; readiness alone cannot prove it.
+    const inputs = await fetch(
+      `http://127.0.0.1:${BOOT_PORT}/api/workflows/ship/inputs`,
+      {
+        signal: AbortSignal.timeout(1_000),
+      },
+    );
+    return inputs.ok;
   } catch {
     return false;
   }
@@ -419,7 +429,7 @@ if (leaked.length > 0) {
   );
 }
 
-// The other half of the same property: pipeline-side code cannot read the
+// The other half of the same property: workflow-side code cannot read the
 // environment either. Reported with line context because, unlike a `"node:fs"`
 // specifier, a bare `process.env` says nothing about which module it came from.
 const envReads = workflowBundle()
@@ -429,7 +439,7 @@ if (envReads.length > 0) {
   for (const line of envReads.slice(0, 5)) console.error(`  ${line.trim()}`);
   fail(
     `the workflow bundle reads process.env in ${envReads.length} place(s)`,
-    "pipeline-side code cannot read the environment — the read belongs in a step, or a step-side module crossed into a block",
+    "workflow-side code cannot read the environment — the read belongs in a step, or a step-side module crossed into a block",
   );
 }
 
@@ -456,7 +466,7 @@ if (moved.missing.length > 0 || moved.unexpected.length > 0) {
 }
 
 // The scaffold's own checks, run the way a new factory runs them on day one:
-// the typecheck covers the generated entry, the pipeline, and the blocks and
+// the typecheck covers the generated entry, the workflow, and the blocks and
 // prompts scaffolded beside them, and the two scaffolded tests cover the shape
 // of every id the same build emitted (the exact list is this file's business,
 // above) and the sequence the review loop runs.

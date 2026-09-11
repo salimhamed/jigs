@@ -8,13 +8,13 @@ run it for you whenever you want.
 
 ## How it fits together
 
-- Your pipelines live in a **factory repo**, one per person, scaffolded by `jigs init`.
-- `jigs build` compiles that factory's pipelines into a **service** of its own,
+- Your workflows live in a **factory repo**, one per person, scaffolded by `jigs init`.
+- `jigs build` compiles that factory's workflows into a **service** of its own,
   backed by its own Postgres **World** on its own port.
 - `jigs run` creates a run, and the service executes it with coding agents in git
   worktrees **cut from jigs' own clone of the target repo**.
 - The **dashboard** the service hosts shows every run's full step history.
-- **Schedules** declared in the factory fire pipelines on a cron tick.
+- **Schedules** declared in the factory fire workflows on a cron tick.
 
 ## Quick start
 
@@ -27,7 +27,7 @@ cloned. Expect around ten minutes.
 
 - Node 24 or newer, and pnpm.
 - Docker, with the daemon running.
-- The coding-agent CLIs your pipelines will drive — `claude` and `codex` — each
+- The coding-agent CLIs your workflows will drive — `claude` and `codex` — each
   logged in to its subscription.
 - A GitHub **classic** personal access token with `read:packages` and, while
   this repo is private, `repo`. Fine-grained tokens cannot read GitHub
@@ -56,7 +56,7 @@ mkdir my-factory && cd my-factory && git init
 pnpm dlx @salimhamed/jigs init
 ```
 
-`jigs init` writes files and runs nothing: `jigs.yml`, `package.json` pinned to
+`jigs init` writes files and runs nothing: `jigs.config.ts`, `package.json` pinned to
 the version that scaffolded it, `nitro.config.ts`, `docker-compose.yml`,
 `.env.example`, the build config — and the code the factory starts from. Then
 it prints the remaining steps with **your** ports filled in. Use its numbers,
@@ -64,27 +64,22 @@ not the ones below.
 
 ### 3. Read the factory's own code
 
-Everything `jigs init` wrote is yours now: it never rewrites a file that
-exists. These are the code `jigs build` compiles:
+The factory separates its configuration, generated integration, and custom code:
 
-- `jigs.config.ts` is this factory's pipelines, keyed by the name `jigs run`
-  takes.
-- `pipelines/ship.ts` is the starter pipeline: a ticket to a merged pull
-  request.
-- `steps/jigs.ts` holds this factory's `"use step"` wrappers around the steps
-  jigs ships, and nothing else.
-- `blocks/jigs.ts` holds the jigs blocks this factory uses, bound to those
-  wrappers.
-- `blocks/review-loop/` is this factory's own review loop, one decision per
-  file: the story in `review-loop.ts`, and beside it the push, the
-  description, the answer to a review, the CI bound and the merge policy.
-- `prompts/describe-pr.ts` holds the words a pull request introduces itself
-  with.
+- `jigs.config.ts` declares service ports, bindings, deferred workflow imports,
+  and schedules. Workflow modules export their function, inputs and requirements together.
+- `jigs.ts` is generated, committed integration code: named durable step wrappers
+  and ready-to-call jigs blocks. Never put custom code here. `jigs generate`
+  refreshes it from the installed library; `jigs build` reports stale code.
+- `workflows/ship.ts` is the starter workflow: a ticket to a merged pull request.
+- `blocks/review-loop/` holds the factory's review policy and composition.
+- `steps/` holds any custom durable operations a factory adds.
+- Prompts are typed functions beside the code that uses them. Pass a prompt
+  override to a block; keep shared factory defaults in a custom block.
 
-Edit all of it. The one rule: an exported wrapper's name and its file's path
-are its durable step id, so renaming or moving one changes that id — do it
-only when `jigs ps` shows no parked runs. A run whose id moved under it shows
-up stalled; cancel it and relaunch.
+Both workflow and step function paths and names contribute to durable IDs.
+Renames are supported breaking changes: finish or cancel affected active runs
+before deploying them. Ordinary library version bumps do not change these IDs.
 
 ### 4. Tokens, then up
 
@@ -110,16 +105,20 @@ pnpm exec jigs bind git@github.com:owner/repo.git
 pnpm exec jigs up --restart
 ```
 
-A **binding** maps a name to a target repo's remote URL plus how its worktrees
-are provisioned; jigs keeps its own clone per binding and cuts agent worktrees
-from it. The service makes the clones when it starts, and a binding is no
-change to the bundle, so `--restart` is what asks `jigs up` for the restart it
-would otherwise skip.
+A **binding** maps a name to a target repo's remote URL and worktree provisioning
+settings. jigs keeps a clone per binding and creates agent worktrees from it.
+The service prepares those clones when it starts. Run `jigs up` after editing
+configuration; it rebuilds and restarts when the configuration changes.
+`--restart` can explicitly request a restart.
+
+`jigs bind` edits a literal `bindings` object in `jigs.config.ts` using the
+TypeScript syntax tree. Unsupported expressions produce a clear error before
+any file or webhook changes; those configurations can be edited manually.
 
 ### 6. Run
 
 ```sh
-pnpm exec jigs run <pipeline> --input ticket=AGE-123
+pnpm exec jigs run <workflow> --input ticket=AGE-123
 pnpm exec jigs ps
 pnpm exec jigs logs <run>
 ```
@@ -133,9 +132,9 @@ pnpm exec jigs logs <run>
 pnpm exec jigs upgrade
 ```
 
-bumps jigs to the latest release (`--to <version>` pins it), runs
-`jigs up`, then the factory's typecheck — which names any wrapper a release
-asks `steps/jigs.ts` to grow.
+bumps jigs to the latest release (`--to <version>` pins it), refreshes
+`jigs.ts` using the newly installed library, runs `jigs up`, then typechecks
+the factory. Custom code is never generated.
 
 ## The `/jigs` skill
 
@@ -148,7 +147,7 @@ argument and routes it to one of four guides:
 
 - **operate** — run, watch, diagnose, cancel or sweep; answer a halt waiting on a
   human.
-- **author** — write a pipeline, a step, a prompt, a schedule, or a `requires`
+- **author** — write a workflow, a step, a prompt, a schedule, or a `requires`
   manifest.
 - **setup** — from nothing to a first run.
 - **ask** — answer a question about jigs, and change nothing.
@@ -161,55 +160,56 @@ argument and routes it to one of four guides:
 
 ## Layout
 
-jigs is a pnpm workspace with one published package, `packages/jigs`, which
-publishes as `@salimhamed/jigs`. Under `packages/jigs/templates/` sits
-everything `jigs init` writes into a new factory, one `.tmpl` file per
-scaffolded file.
+jigs is one root package, published as `@salimhamed/jigs`. `src/` contains
+its implementation and `templates/` contains the factory scaffold.
+`pnpm-workspace.yaml` holds dependency build permissions; there are no workspace members.
 
 ### Four words
 
 The rest of this section is written in four terms, so they come first.
 
-- **Pipeline**: a whole process, one file, started by `jigs run`.
-- **Block**: reusable code that runs inside a pipeline and calls steps in a
+- **Workflow**: a whole process, one file, started by `jigs run`.
+- **Block**: reusable code that runs inside a workflow and calls steps in a
   fixed way. jigs ships blocks and a factory writes its own; both are plain
   code with no directive and no id.
 - **Step wrapper**: the factory's `"use step"` function around a step. Its
   file path and its name are the step's durable id.
-- **Step**: the function that does the work.
+- **Step**: a durable operation whose result the SDK records. The library
+  supplies its implementation; the factory wrapper gives it a durable address.
 
-They chain in one direction. A pipeline calls blocks and wrappers. A block
-calls wrappers. A wrapper calls a step.
+A workflow calls blocks and durable step wrappers. A wrapper delegates to the
+operation’s implementation; custom factory steps can implement that work directly.
 
 ### The three kinds of code, and why the runtime forces the split
 
-A pipeline is one whole process written as one function, and the Workflow SDK
+A workflow is one whole process written as one function, and the Workflow SDK
 runs it by **replay**. Replay means this: every time a run wakes up, the SDK
-calls the pipeline function again from its first line. Any step that already
+calls the workflow function again from its first line. Any step that already
 has a recorded result does not run again; the SDK returns the record. So the
-pipeline function itself runs many times over the life of one run, and the
-steps inside it run once each.
+workflow function itself runs many times over the life of one run, and the
+completed step calls return their recorded results. Failed attempts can be
+retried, so external operations must still account for retries.
 
 Two consequences follow, and they are the whole reason for the folder layout.
 
-1. Code that runs inside a pipeline — the pipeline and every block it calls —
-   must do nothing on its own. No git, no network, no filesystem, no reading
+1. Code that runs inside a workflow — the workflow and every block it calls —
+   must keep its own operations replay-safe. No git, network, filesystem or reading
    `process.env`. If it did, it would do it again on every wake. It is also
    bundled into a sandbox with no Node built-ins, so those calls would not
    resolve anyway.
-2. Code that does real work has to be a step, so that the SDK runs it once and
-   records what it returned.
+2. Code that does real work has to be a step, so that the SDK can track attempts and
+   record its result.
 
 There is a third kind that is neither. The **service** is the long-running
 process a factory builds and starts: the webhook routes, the scheduler, the
-run endpoints and the dashboard. It never runs inside a pipeline at all.
+run endpoints and the dashboard. It never runs inside a workflow at all.
 
 What goes into that sandboxed bundle is decided by the two Workflow SDK
-markers, and both live only in the factory: `"use workflow"` on each pipeline,
+markers, and both live only in the factory: `"use workflow"` on each workflow,
 `"use step"` on each wrapper. No file in this repo carries either
 ([ADR 0013](docs/adr/0013-factory-owned-steps.md)). Everything between the two
 markers, jigs blocks and factory blocks alike, is plain code that gets pulled
-into the bundle because the pipeline imports it — which is why a single stray
+into the bundle because the workflow imports it — which is why a single stray
 `node:` import in a block would land there.
 
 jigs used to mix all three kinds in the same folders and hold the line with
@@ -219,23 +219,23 @@ folders are the public import paths.
 ### The src tree
 
 ```
-packages/jigs/src/
-  blocks/      pipeline-side code: the blocks a pipeline calls.
+src/
+  blocks/      workflow-side code: the blocks a workflow calls.
                May import other blocks, zod, the workflow SDK, and `import
                type` from anywhere. May not import a value from a node
                built-in, the environment, the network, or steps/, service/,
                cli/, checks/, config/ or providers/.
-    agent/          how a pipeline calls an agent
+    agent/          how a workflow calls an agent
     builder-agent/  the moves the builder agent makes: implement, answer a
                     review, fix CI, commit work, describe a PR
     ticket/         claim a ticket, review it, shape its snapshot, and halt
                     the run for a human
     pull-request/   the pull request gate, waiting on it, and the answers
                     posted back to it
-    factory.ts      the types a factory declares its pipelines with
-    worktree.ts     the WorktreeFacts type a pipeline passes around
+    factory.ts      the types a factory declares its workflows with
+    worktree.ts     the WorktreeFacts type a workflow passes around
   steps/       step implementations: the real work. May import providers/,
-               config/, checks/ and errors.ts, and types from blocks/.
+               config/, checks/, errors.ts and blocks/.
     agent/          run an agent or a plain model call, and take the worktree
                     lock
     ticket/         fetch a ticket snapshot, post and read Linear comments,
@@ -265,15 +265,15 @@ still exported, so a factory can read one or pass its own instead.
 
 A factory imports jigs code from two subpaths:
 
-- `@salimhamed/jigs/blocks` is everything a pipeline or a factory's own block
+- `@salimhamed/jigs/blocks` is everything a workflow or a factory's own block
   may call. Nothing behind it touches a node built-in, the environment or the
   network.
 - `@salimhamed/jigs/steps` is the implementations a factory wraps in its own
   `"use step"` functions. Every one of them does touch one of those three,
-  which is why it is a step. A pipeline never imports this path.
+  which is why it is a step. A workflow never imports this path.
 
 The package root, `@salimhamed/jigs`, carries the handful of types a factory
-names in its own code plus `ticketInput`.
+names in its own code plus `ticketInput` and `defineFactory`.
 
 The remaining subpaths belong to the service the factory builds:
 `@salimhamed/jigs/app`, `/nitro`, `/schedules`, `/build`,
@@ -293,7 +293,7 @@ Requires Node 24 or newer and pnpm.
 ```sh
 pnpm install
 pnpm dev        # run the CLI from source
-pnpm check      # lint + typecheck + test + build (all packages)
+pnpm check      # lint + typecheck + test + build
 pnpm e2e        # jigs init into a temp dir, install from packed tarballs, build twice, diff ids
                 # (with WORKFLOW_POSTGRES_URL set: boot the service and stop it too)
 ```
