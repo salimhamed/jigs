@@ -3,10 +3,10 @@
 // Each `"use step"` function below compiles to a durable id built from this
 // file's path and the function's name (`step//./steps/jigs//provisionWorktree`),
 // and every id is a memoization key of every run this factory has parked. So
-// renaming or moving an exported wrapper — or this file — only when `jigs ps`
-// shows no parked runs; a run whose id moved under it shows up stalled. When a
-// jigs release grows a step, add its wrapper here yourself: the typecheck is
-// what names the gap.
+// rename or move an exported wrapper — or this file — only when `jigs ps`
+// shows no parked runs; a run whose id moved under it shows up stalled, and
+// the way back is to cancel it and relaunch. When a jigs release grows a step,
+// add its wrapper here yourself: the typecheck is what names the gap.
 //
 // The implementations are imported at module scope on purpose: the `"use step"`
 // transform erases each body below out of the workflow bundle, and the imports
