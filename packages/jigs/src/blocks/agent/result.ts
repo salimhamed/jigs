@@ -19,6 +19,9 @@ export type StepResult<T = unknown> = {
 
 export type AgentStepResult<T = unknown> = StepResult<T> & {
   session?: AgentSession;
+  // What the agent was actually told, recorded only when the wire named a
+  // prompt instead of carrying one: the dashboard has the string either way.
+  renderedPrompt?: string;
 };
 
 type ProviderMetadataLike = Record<string, Record<string, unknown>> | null;

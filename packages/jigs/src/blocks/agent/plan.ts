@@ -3,13 +3,32 @@
 // is bundled into the workflow sandbox).
 
 import { z } from "zod";
+import type { JsonValue } from "../ticket/halt-for-human.ts";
 import type { HarnessConfig } from "./harness-config.ts";
 import type { AgentSession } from "./result.ts";
+
+/**
+ * A prompt by name, with the values its template reads. Blocks cannot render
+ * one — a template is a file, and the workflow sandbox has no filesystem — so
+ * the reference travels on the wire and the agent step renders it against the
+ * registry the factory's wrapper passes in.
+ */
+export type PromptRef = {
+  name: string;
+  data: Record<string, JsonValue>;
+};
+
+/** What an agent step is told: a literal string, or a prompt to render. */
+export type Prompt = string | PromptRef;
+
+export function isPromptRef(prompt: Prompt): prompt is PromptRef {
+  return typeof prompt !== "string";
+}
 
 export type AgentStepConfig<T = undefined> = {
   harness: HarnessConfig;
   cwd: string;
-  prompt: string;
+  prompt: Prompt;
   // A session pointer a previous agent step recorded. Nothing is validated
   // here: a pointer naming another harness is resolved at hydration, where
   // the harness actually is, and reports there as an unusable session.

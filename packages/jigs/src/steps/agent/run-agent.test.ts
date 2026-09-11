@@ -12,11 +12,18 @@ import { z } from "zod";
 import { claude, codex } from "../../blocks/agent/harness-config.ts";
 import { buildAgentWire, buildAskWire } from "../../blocks/agent/plan.ts";
 import type { AgentStepResult, StepUsage } from "../../blocks/agent/result.ts";
+import { createPromptRegistry } from "../prompts/registry.ts";
 import { makeTmpDir, removeTmpDir } from "./harnesses/test-fixtures.ts";
 import { type ExecuteDeps, runAgent } from "./run-agent.ts";
 import { runAsk } from "./run-ask.ts";
 
 const usage = { inputTokens: 12, outputTokens: 34 } as unknown as StepUsage;
+
+// The prompts these tests send are literal strings, so the registry is only
+// here to be the one the wire never reaches — except in the two that name one.
+const prompts = createPromptRegistry({
+  greeting: { template: "hello <%= it.WHO %>" },
+});
 
 let tmp: string;
 // The claude provider validates cwd existence at model construction.
@@ -125,7 +132,7 @@ test("claude agent step hydrates from wire config with the harness invariants fo
   });
   const { deps, captured } = makeDeps();
 
-  await agentStep(wire, "run-1", deps);
+  await agentStep(wire, "run-1", prompts, deps);
 
   const settings = claudeSettingsOf(captured);
   expect(settings.cwd).toBe(worktree);
@@ -150,7 +157,7 @@ test("codex agent step runs on the app-server under the managed home with fixed 
   });
   const { deps, captured } = makeDeps();
 
-  await agentStep(wire, "run-7", deps);
+  await agentStep(wire, "run-7", prompts, deps);
 
   expect(captured.codexModel).toBe("gpt-5.5");
   const settings = captured.codexSettings;
@@ -166,6 +173,49 @@ test("codex agent step runs on the app-server under the managed home with fixed 
   expect(captured.homeRunIds).toEqual(["run-7"]);
 });
 
+test("a prompt reference is rendered against the registry before the agent runs", async () => {
+  const wire = buildAgentWire({
+    harness: claude({ model: "sonnet" }),
+    cwd: worktree,
+    prompt: { name: "greeting", data: { WHO: "salim" } },
+  });
+  const { deps, captured } = makeDeps();
+
+  const result = await agentStep(wire, "run-1", prompts, deps);
+
+  expect(captured.options?.prompt).toBe("hello salim");
+  // Recorded on the result, so the dashboard shows what the agent was told.
+  expect(result.renderedPrompt).toBe("hello salim");
+});
+
+test("a literal prompt reaches the harness unchanged and records no rendering", async () => {
+  const wire = buildAgentWire({
+    harness: claude({ model: "sonnet" }),
+    cwd: worktree,
+    prompt: "hello salim",
+  });
+  const { deps, captured } = makeDeps();
+
+  const result = await agentStep(wire, "run-1", prompts, deps);
+
+  expect(captured.options?.prompt).toBe("hello salim");
+  expect("renderedPrompt" in result).toBe(false);
+});
+
+test("a prompt reference the registry cannot render fails the step before the harness", async () => {
+  const wire = buildAgentWire({
+    harness: claude({ model: "sonnet" }),
+    cwd: worktree,
+    prompt: { name: "greeting", data: {} },
+  });
+  const { deps, captured } = makeDeps();
+
+  await expect(runAgent(wire, "run-1", prompts, deps)).rejects.toThrow(
+    'prompt "greeting" reads WHO',
+  );
+  expect(captured.options).toBeUndefined();
+});
+
 test("a declared output schema becomes an AI SDK output spec and the raw output is returned", async () => {
   const wire = buildAgentWire({
     harness: claude({ model: "sonnet" }),
@@ -175,7 +225,7 @@ test("a declared output schema becomes an AI SDK output spec and the raw output 
   });
   const { deps, captured } = makeDeps({ output: { ok: true } });
 
-  const result = await agentStep(wire, "run-1", deps);
+  const result = await agentStep(wire, "run-1", prompts, deps);
 
   expect(captured.options?.output).toBeDefined();
   expect(result.output).toEqual({ ok: true });
@@ -189,7 +239,7 @@ test("without an output schema no output spec is passed and output is undefined"
   });
   const { deps, captured } = makeDeps({ output: "should not surface" });
 
-  const result = await agentStep(wire, "run-1", deps);
+  const result = await agentStep(wire, "run-1", prompts, deps);
 
   expect(captured.options?.output).toBeUndefined();
   expect(result.output).toBeUndefined();
@@ -205,7 +255,7 @@ test("usage passes through and the Claude session pointer is captured", async ()
     providerMetadata: { "claude-code": { sessionId: "s-42" } },
   });
 
-  const result = await agentStep(wire, "run-1", deps);
+  const result = await agentStep(wire, "run-1", prompts, deps);
 
   expect(result.usage).toEqual(usage);
   expect(result.session).toEqual({ harness: "claude", id: "s-42" });
@@ -221,11 +271,16 @@ test("the Codex threadId is captured, and a missing pointer is omitted, never an
   const withThread = makeDeps({
     providerMetadata: { "codex-app-server": { threadId: "t-7" } },
   });
-  const threaded = await agentStep(codexWire, "run-1", withThread.deps);
+  const threaded = await agentStep(
+    codexWire,
+    "run-1",
+    prompts,
+    withThread.deps,
+  );
   expect(threaded.session).toEqual({ harness: "codex", id: "t-7" });
 
   const bare = makeDeps();
-  const sessionless = await agentStep(codexWire, "run-1", bare.deps);
+  const sessionless = await agentStep(codexWire, "run-1", prompts, bare.deps);
   expect(sessionless.session).toBeUndefined();
   expect("session" in sessionless).toBe(false);
 });
@@ -239,7 +294,7 @@ test("a claude resume rides on the settings' resume field", async () => {
   });
   const { deps, captured } = makeDeps();
 
-  await agentStep(wire, "run-1", deps);
+  await agentStep(wire, "run-1", prompts, deps);
 
   expect(claudeSettingsOf(captured).resume).toBe("s-42");
   expect(captured.options?.providerOptions).toBeUndefined();
@@ -254,7 +309,7 @@ test("a codex resume rides on providerOptions['codex-app-server'].threadId", asy
   });
   const { deps, captured } = makeDeps();
 
-  await agentStep(wire, "run-1", deps);
+  await agentStep(wire, "run-1", prompts, deps);
 
   expect(captured.options?.providerOptions).toEqual({
     "codex-app-server": { threadId: "0199-thread" },
@@ -272,7 +327,7 @@ test("a session pointer recorded on the other harness reports resumeFailed, not 
   });
   const { deps, captured } = makeDeps();
 
-  const result = await runAgent(wire, "run-1", deps);
+  const result = await runAgent(wire, "run-1", prompts, deps);
 
   // The resume prompt was written for an agent that already holds the change,
   // so running it against a brand-new session would be a lie. The marker sends
@@ -291,7 +346,7 @@ test("Claude steps always run with bypass", async () => {
   });
   const { deps, captured } = makeDeps();
 
-  await agentStep(wire, "run-1", deps);
+  await agentStep(wire, "run-1", prompts, deps);
 
   const settings = claudeSettingsOf(captured);
   expect(settings.permissionMode).toBe("bypassPermissions");
@@ -312,7 +367,7 @@ test("a failed resume returns the resumeFailed marker instead of throwing", asyn
     throw new Error("no rollout found for thread id 0199-gone");
   };
 
-  const result = await runAgent(wire, "run-1", deps);
+  const result = await runAgent(wire, "run-1", prompts, deps);
 
   expect(result).toEqual({
     resumeFailed: expect.stringContaining("no rollout found for thread id"),
@@ -330,7 +385,7 @@ test("a failure with no resume to blame still throws", async () => {
     throw new Error("the harness fell over");
   };
 
-  await expect(runAgent(wire, "run-1", deps)).rejects.toThrow(
+  await expect(runAgent(wire, "run-1", prompts, deps)).rejects.toThrow(
     "the harness fell over",
   );
 });
@@ -350,12 +405,12 @@ test("a second agent in the same worktree is refused while the first is running"
     return { text: "done", usage };
   };
 
-  const inFlight = agentStep(wire, "run-1", first.deps);
+  const inFlight = agentStep(wire, "run-1", prompts, first.deps);
   // Yield so the first call is inside the lock before the second tries.
   await new Promise((resolve) => setTimeout(resolve, 20));
 
   const second = makeDeps();
-  await expect(runAgent(wire, "run-1", second.deps)).rejects.toThrow(
+  await expect(runAgent(wire, "run-1", prompts, second.deps)).rejects.toThrow(
     /an agent is already running in .* refusing to start a second one/,
   );
   expect(second.captured.options).toBeUndefined();
@@ -365,7 +420,7 @@ test("a second agent in the same worktree is refused while the first is running"
 
   // Released, so the worktree takes the next agent step normally.
   const after = makeDeps();
-  await agentStep(wire, "run-1", after.deps);
+  await agentStep(wire, "run-1", prompts, after.deps);
   expect(after.captured.options?.prompt).toBe("implement it");
 });
 
@@ -388,6 +443,7 @@ test("a busy worktree does not block an agent in another one", async () => {
       prompt: "implement it",
     }),
     "run-1",
+    prompts,
     first.deps,
   );
   await new Promise((resolve) => setTimeout(resolve, 20));
@@ -400,6 +456,7 @@ test("a busy worktree does not block an agent in another one", async () => {
       prompt: "implement it elsewhere",
     }),
     "run-1",
+    prompts,
     elsewhere.deps,
   );
   expect(elsewhere.captured.options?.prompt).toBe("implement it elsewhere");
@@ -418,7 +475,7 @@ test("the step env is a scrubbed copy: no API credentials, process.env untouched
     });
     const { deps, captured } = makeDeps();
 
-    await agentStep(wire, "run-1", deps);
+    await agentStep(wire, "run-1", prompts, deps);
 
     expect(claudeSettingsOf(captured).env?.ANTHROPIC_API_KEY).toBeUndefined();
     expect(process.env.ANTHROPIC_API_KEY).toBe("sk-test-scrub");
@@ -435,7 +492,7 @@ test("a failed JIT check returns the marker before the harness is reached", asyn
   });
   const { deps, captured } = makeDeps();
 
-  const result = await runAgent(wire, "run-1", {
+  const result = await runAgent(wire, "run-1", prompts, {
     ...deps,
     jitFailures: async () => "MCP server 'linear' did not start",
   });

@@ -1,4 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { createPromptRegistry } from "../steps/prompts/registry.ts";
 import {
   type Check,
   failedCheck,
@@ -9,6 +10,7 @@ import {
   doctorChecks,
   type PipelineRequires,
   preflightChecks,
+  promptsCheck,
 } from "./index.ts";
 
 const passing = (id: string): Check => ({
@@ -134,4 +136,16 @@ test("doctor checks aws only when a profile is set, having no manifest to read",
   expect(doctorChecks().map((c) => c.id)).not.toContain("aws.credentials");
   vi.stubEnv("AWS_PROFILE", "some-profile");
   expect(doctorChecks().map((c) => c.id)).toContain("aws.credentials");
+});
+
+test("doctor renders every prompt the registry it is handed carries", async () => {
+  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  const ok = createPromptRegistry({ greet: { template: "hi <%= it.WHO %>" } });
+  expect(doctorChecks().map((c) => c.id)).not.toContain("prompts.render");
+  expect(await promptsCheck(ok).run()).toEqual({ ok: true });
+
+  const broken = createPromptRegistry({ greet: { template: "<%= it.OOPS" } });
+  const outcome = await promptsCheck(broken).run();
+  expect(outcome.ok).toBe(false);
+  expect(doctorChecks(broken).map((c) => c.id)).toContain("prompts.render");
 });

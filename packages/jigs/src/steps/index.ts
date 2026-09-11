@@ -10,6 +10,19 @@ export {
   runAgent,
 } from "./agent/run-agent.ts";
 export { runAsk } from "./agent/run-ask.ts";
+export {
+  jigsPromptSources,
+  jigsPrompts,
+  withPrompts,
+} from "./prompts/jigs-prompts.ts";
+export {
+  createPromptRegistry,
+  type PromptCheckFailure,
+  type PromptData,
+  type PromptRegistry,
+  type PromptRegistryOptions,
+  type PromptSource,
+} from "./prompts/registry.ts";
 export { branchState, pushBranch, readDiff } from "./pull-request/branch.ts";
 export { fetchPrState } from "./pull-request/fetch-state.ts";
 export {

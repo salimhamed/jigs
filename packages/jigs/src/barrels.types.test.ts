@@ -42,6 +42,8 @@ import type {
   PostNeedsHumanComment,
   PostReviewAnswersOptions,
   PrDescription,
+  Prompt,
+  PromptRef,
   PrRef,
   ResumeOrRebuildOptions,
   ResumeOrRebuildResult,
@@ -61,6 +63,11 @@ import type {
 import type {
   ExecuteDeps,
   LinearIssueMatch,
+  PromptCheckFailure,
+  PromptData,
+  PromptRegistry,
+  PromptRegistryOptions,
+  PromptSource,
   ProvisionRunWorktreeDeps,
   WorktreeRequest,
 } from "./steps/index.ts";
@@ -102,6 +109,8 @@ type BlocksTypeSurface = {
   postNeedsHumanComment: PostNeedsHumanComment;
   postReviewAnswersOptions: PostReviewAnswersOptions;
   prDescription: PrDescription;
+  prompt: Prompt;
+  promptRef: PromptRef;
   prRef: PrRef;
   resumeOrRebuildOptions: ResumeOrRebuildOptions<undefined>;
   resumeOrRebuildResult: ResumeOrRebuildResult<undefined>;
@@ -122,6 +131,11 @@ type BlocksTypeSurface = {
 type StepsTypeSurface = {
   executeDeps: ExecuteDeps;
   linearIssueMatch: LinearIssueMatch;
+  promptCheckFailure: PromptCheckFailure;
+  promptData: PromptData;
+  promptRegistry: PromptRegistry;
+  promptRegistryOptions: PromptRegistryOptions;
+  promptSource: PromptSource;
   provisionRunWorktreeDeps: ProvisionRunWorktreeDeps;
   worktreeRequest: WorktreeRequest;
 };

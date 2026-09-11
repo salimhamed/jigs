@@ -20,7 +20,7 @@ import type { CodexExecSettings } from "ai-sdk-provider-codex-cli";
 // The wrapper type is the one declaration of what crosses the step boundary.
 import type { RunAgentStep } from "../../blocks/agent/agent.ts";
 import type { McpServerConfig } from "../../blocks/agent/harness-config.ts";
-import type { AgentWire } from "../../blocks/agent/plan.ts";
+import { type AgentWire, isPromptRef } from "../../blocks/agent/plan.ts";
 import {
   type AgentStepResult,
   extractAgentSession,
@@ -33,6 +33,8 @@ import {
   jitChecks,
   runChecks,
 } from "../../checks/index.ts";
+import { jigsPrompts } from "../prompts/jigs-prompts.ts";
+import type { PromptRegistry } from "../prompts/registry.ts";
 import { claudeStepSettings } from "./harnesses/claude.ts";
 import {
   codexAppServerStepSettings,
@@ -144,6 +146,7 @@ const LOCK_STALE_MS = 4 * 60 * 60_000 + 60_000;
 export async function runAgent(
   wire: AgentWire,
   runId: string,
+  prompts: PromptRegistry = jigsPrompts,
   deps: ExecuteDeps = realDeps,
 ): ReturnType<RunAgentStep> {
   // JIT checks first — this is the last honest moment before agent turns
@@ -168,10 +171,17 @@ export async function runAgent(
   // two agents in one worktree is a state its data model permits. This advisory
   // lock is what forbids it. Fail-fast rather than queue: a second agent that
   // waited its turn would only corrupt the worktree later.
+  // Rendered before the lock: a prompt that names a variable its block never
+  // passed is a programming error, and it costs nothing to find out here
+  // rather than after a worktree has been held.
+  const prompt = isPromptRef(wire.prompt)
+    ? prompts.render(wire.prompt.name, wire.prompt.data)
+    : wire.prompt;
+
   try {
     return await withFileLock(
       lockPathFor(wire.cwd, "agent-step"),
-      () => generateAgentStep(wire, runId, deps),
+      () => generateAgentStep(wire, runId, prompt, deps),
       { timeoutMs: 0, staleMs: LOCK_STALE_MS },
     );
   } catch (err) {
@@ -187,13 +197,14 @@ export async function runAgent(
 async function generateAgentStep(
   wire: AgentWire,
   runId: string,
+  prompt: string,
   deps: ExecuteDeps,
 ): Promise<AgentStepResult<unknown> | { resumeFailed: string }> {
   const harness = wire.harness;
   const env = scrubbedEnv();
   const output = outputSpec(wire.outputSchema);
   const request = {
-    prompt: wire.prompt,
+    prompt,
     ...(output !== undefined ? { output } : {}),
   };
   // Kind-checked by runAgent before the lock; anything left here names this
@@ -275,5 +286,8 @@ async function generateAgentStep(
       wire.outputSchema !== undefined ? generation.output : undefined,
     ),
     ...(session !== undefined ? { session } : {}),
+    // Only when the wire named a prompt: for a literal the wire already is
+    // the record of what the agent was told.
+    ...(isPromptRef(wire.prompt) ? { renderedPrompt: prompt } : {}),
   };
 }

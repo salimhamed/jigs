@@ -11,6 +11,7 @@ import type {
   AgentStepResult,
   StepUsage,
 } from "../../../blocks/agent/result.ts";
+import { jigsPrompts } from "../../prompts/jigs-prompts.ts";
 import { ensureManagedCodexHome } from "../harnesses/codex-home.ts";
 import { stripApiCredentials } from "../harnesses/env.ts";
 import {
@@ -63,7 +64,7 @@ async function runAgent(
   wire: AgentWire,
   runId: string,
 ): Promise<AgentStepResult<unknown>> {
-  const result = await runAgentStep(wire, runId, deps);
+  const result = await runAgentStep(wire, runId, jigsPrompts, deps);
   if ("jitFailure" in result) {
     throw new Error(`unexpected JIT failure: ${result.jitFailure}`);
   }

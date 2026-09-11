@@ -2,6 +2,7 @@ import type { AgentWire } from "../blocks/agent/plan.ts";
 import { factoryRoot } from "../config/factory-root.ts";
 import { getAuthenticatedUser } from "../providers/github.ts";
 import { getViewer } from "../providers/linear.ts";
+import type { PromptRegistry } from "../steps/prompts/registry.ts";
 import { awsCredentialsCheck } from "./aws.ts";
 import { bindingChecks } from "./bindings.ts";
 import { CHECK_TIMEOUT_MS, type Check } from "./catalog.ts";
@@ -9,6 +10,7 @@ import { type CoreProbes, coreChecks } from "./core.ts";
 import { type HarnessKind, harnessChecks } from "./harnesses.ts";
 import { linearWebhookChecks } from "./linear-webhook.ts";
 import { codexWorktreeConfigCheck, mcpServerChecks } from "./mcp.ts";
+import { promptsCheck } from "./prompts.ts";
 import { webhookChecks } from "./webhooks.ts";
 
 export { type BindingChecksOptions, bindingChecks } from "./bindings.ts";
@@ -37,6 +39,7 @@ export {
   harnessChecks,
 } from "./harnesses.ts";
 export { codexWorktreeConfigCheck, mcpServerChecks } from "./mcp.ts";
+export { promptsCheck } from "./prompts.ts";
 export { type WebhookChecksOptions, webhookChecks } from "./webhooks.ts";
 
 // A pipeline's declared requirements — the manifest side of the computed check
@@ -67,10 +70,13 @@ export function preflightChecks(requires: PipelineRequires): Check[] {
 // harnesses. MCP is absent on purpose — it is JIT-only. AWS is conditional for
 // the same reason: with no manifest to read, a set AWS_PROFILE is the only
 // evidence this factory uses AWS at all.
-export function doctorChecks(): Check[] {
+export function doctorChecks(prompts?: PromptRegistry): Check[] {
   const profile = process.env.AWS_PROFILE;
   return [
     ...coreChecks(coreProbes),
+    // Passed in rather than imported: the registry doctor should report on is
+    // the factory's own, which is the one its step wrappers render from.
+    ...(prompts === undefined ? [] : [promptsCheck(prompts)]),
     ...linearWebhookChecks({ factoryRoot }),
     ...bindingChecks({ factoryRoot }),
     ...webhookChecks({ factoryRoot }),

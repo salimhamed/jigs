@@ -2,6 +2,7 @@ import path from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { claude, codex } from "../../../../blocks/agent/harness-config.ts";
 import { buildAgentWire } from "../../../../blocks/agent/plan.ts";
+import { jigsPrompts } from "../../../prompts/jigs-prompts.ts";
 import { type ExecuteDeps, realDeps, runAgent } from "../../run-agent.ts";
 import { ensureManagedCodexHome } from "../codex-home.ts";
 import { stripApiCredentials } from "../env.ts";
@@ -42,7 +43,7 @@ test("a codex thread id with no rollout behind it reports resumeFailed", async (
     resume: { harness: "codex", id: `0199${crypto.randomUUID().slice(4)}` },
   });
 
-  const result = await runAgent(wire, "live-codex-resume", deps);
+  const result = await runAgent(wire, "live-codex-resume", jigsPrompts, deps);
 
   expect(result).toHaveProperty("resumeFailed");
   // codex 0.149.1 raises a raw JSON-RPC error that does not match the
@@ -60,7 +61,7 @@ test("a claude session id with no transcript behind it reports resumeFailed", as
     resume: { harness: "claude", id: crypto.randomUUID() },
   });
 
-  const result = await runAgent(wire, "live-claude-resume", deps);
+  const result = await runAgent(wire, "live-claude-resume", jigsPrompts, deps);
 
   expect(result).toHaveProperty("resumeFailed");
 });

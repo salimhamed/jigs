@@ -10,6 +10,7 @@
 import { z } from "zod";
 import type { readDiff } from "../../steps/pull-request/branch.ts";
 import type { HarnessConfig } from "../agent/harness-config.ts";
+import type { Prompt } from "../agent/plan.ts";
 import type { AgentSession } from "../agent/result.ts";
 import { type AgentFn, resumeOrRebuild } from "../agent/resume-or-rebuild.ts";
 
@@ -27,8 +28,8 @@ export interface DescribePrOptions {
   cwd: string;
   baseSha: string;
   session?: AgentSession;
-  resumePrompt: string;
-  freshPrompt: (diff: string) => string;
+  resumePrompt: Prompt;
+  freshPrompt: (diff: string) => Prompt;
 }
 
 export async function describePr(

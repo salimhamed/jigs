@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import type { PipelineRequires } from "../checks/index.ts";
+import type { PromptRegistry } from "../steps/prompts/registry.ts";
 
 export const ticketInput = z.union([
   z.uuid(),
@@ -57,4 +58,10 @@ export interface Schedule {
 export interface Factory {
   pipelines: Record<string, AnyPipelineEntry>;
   schedules?: Record<string, Schedule>;
+  /**
+   * The prompts this factory's agent steps render, so `jigs doctor` reports on
+   * the same registry the steps use. A type import only — the registry is a
+   * step-side value the service hands to nothing pipeline-side.
+   */
+  prompts?: PromptRegistry;
 }

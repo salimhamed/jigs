@@ -11,13 +11,13 @@ import { z } from "zod";
 import type { HarnessConfig } from "../agent/harness-config.ts";
 import type { AgentSession } from "../agent/result.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
-import { interpolate } from "../interpolate.ts";
 import type { TicketClaim } from "../ticket/claim.ts";
 import type { HaltForHumanFn } from "../ticket/halt-for-human.ts";
 import type { Handoff } from "../ticket/review.ts";
 import { renderSnapshot } from "../ticket/snapshot.ts";
-import { codeReviewPrompt } from "./code-review.prompt.ts";
-import { implementPrompt } from "./implement.prompt.ts";
+
+const IMPLEMENT = "implement";
+const CODE_REVIEW = "code-review";
 
 // strictObject for the same reason ticketReviewVerdict is: the harness's
 // native structured output carries additionalProperties:false, and a malformed
@@ -35,6 +35,9 @@ export interface ImplementOptions {
   harness: HarnessConfig;
   cwd: string;
   baseSha: string;
+  // Each names a registered prompt; both default to the ones jigs ships.
+  implementPrompt?: string;
+  codeReviewPrompt?: string;
 }
 
 export type ImplementResult = {
@@ -69,11 +72,14 @@ export async function implementUntilCodeReviewApproves(
       const build = await agent({
         harness: options.harness,
         cwd: options.cwd,
-        prompt: interpolate(implementPrompt, {
-          TICKET: ticket,
-          BRIEF: options.handoff.brief,
-          REVIEW: review,
-        }),
+        prompt: {
+          name: options.implementPrompt ?? IMPLEMENT,
+          data: {
+            TICKET: ticket,
+            BRIEF: options.handoff.brief,
+            REVIEW: review,
+          },
+        },
       });
       // The builder's session pointer, captured where the builder ran.
       session = build.session ?? session;
@@ -81,10 +87,10 @@ export async function implementUntilCodeReviewApproves(
       const verdict = await agent({
         harness: options.harness,
         cwd: options.cwd,
-        prompt: interpolate(codeReviewPrompt, {
-          TICKET: ticket,
-          BASE_SHA: options.baseSha,
-        }),
+        prompt: {
+          name: options.codeReviewPrompt ?? CODE_REVIEW,
+          data: { TICKET: ticket, BASE_SHA: options.baseSha },
+        },
         output: codeReviewVerdict,
       });
       findings = verdict.output.findings;

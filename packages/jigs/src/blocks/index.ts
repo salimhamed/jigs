@@ -35,10 +35,12 @@ export {
   type AskWire,
   buildAgentWire,
   buildAskWire,
+  isPromptRef,
+  type Prompt,
+  type PromptRef,
   parseOutput,
   type WireJsonSchema,
 } from "./agent/plan.ts";
-export { rebuildContextPrompt } from "./agent/rebuild-context.prompt.ts";
 export type {
   AgentSession,
   AgentStepResult,
@@ -51,15 +53,12 @@ export {
   type ResumeOrRebuildResult,
   resumeOrRebuild,
 } from "./agent/resume-or-rebuild.ts";
-export { answerReviewPrompt } from "./builder-agent/answer-review.prompt.ts";
 export {
   type AnswerReviewOptions,
   answerReview,
   type ThreadAnswers,
   threadAnswers,
 } from "./builder-agent/answer-review.ts";
-export { codeReviewPrompt } from "./builder-agent/code-review.prompt.ts";
-export { commitWorkPrompt } from "./builder-agent/commit-work.prompt.ts";
 export {
   type CommitWorkOptions,
   commitWork,
@@ -70,10 +69,7 @@ export {
   type PrDescription,
   prDescription,
 } from "./builder-agent/describe-pr.ts";
-export { fixCiPrompt } from "./builder-agent/fix-ci.prompt.ts";
 export { type FixCiOptions, fixCi } from "./builder-agent/fix-ci.ts";
-export { fixCiFreshPrompt } from "./builder-agent/fix-ci-fresh.prompt.ts";
-export { implementPrompt } from "./builder-agent/implement.prompt.ts";
 export {
   codeReviewVerdict,
   type ImplementOptions,
@@ -137,5 +133,4 @@ export {
   type TicketSnapshot,
   toSnapshot,
 } from "./ticket/snapshot.ts";
-export { ticketReviewPrompt } from "./ticket/ticket-review.prompt.ts";
 export { unreachable } from "./unreachable.ts";

@@ -2,6 +2,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 import { claude } from "../agent/harness-config.ts";
 import { type AgentStepConfig, parseOutput } from "../agent/plan.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
+import { promptRef } from "../agent/testing.ts";
 import type { TicketClaim } from "./claim.ts";
 import type {
   HaltForHumanFn,
@@ -171,22 +172,27 @@ test("the needs-human round re-reads the ticket, so the human's reply is what th
   expect(agentCalls).toHaveLength(3);
   expect(humanCalls).toHaveLength(2);
   expect(fetched).toEqual([snapshot.id, snapshot.id]);
-  expect(agentCalls[0]?.prompt).not.toContain("cap comments at 100");
-  expect(agentCalls[1]?.prompt).toContain("Round 1: cap comments at 100");
-  expect(agentCalls[2]?.prompt).toContain("Round 2: cap comments at 100");
+  expect(promptRef(agentCalls[0]).data.TICKET).not.toContain(
+    "cap comments at 100",
+  );
+  expect(promptRef(agentCalls[1]).data.TICKET).toContain(
+    "Round 1: cap comments at 100",
+  );
+  expect(promptRef(agentCalls[2]).data.TICKET).toContain(
+    "Round 2: cap comments at 100",
+  );
   expect(result.brief).toBe("the agreed plan");
   // The handoff carries the snapshot the proceeding round actually read.
   expect(result.snapshot.description).toContain("Round 2");
 });
 
-test("the prompt carries the rendered ticket", async () => {
+test("the prompt names the shipped template and carries the rendered ticket", async () => {
   verdicts = [{ verdict: "proceed", brief: "plan", findings: [] }];
   await review();
-  const prompt = agentCalls[0]?.prompt ?? "";
-  expect(prompt).toContain("restate, not re-decide");
-  expect(prompt).toContain("AGE-313");
-  expect(prompt).toContain("Fetch the ticket on each activation.");
-  expect(prompt).not.toContain("{{TICKET}}");
+  const ref = promptRef(agentCalls[0]);
+  expect(ref.name).toBe("ticket-review");
+  expect(ref.data.TICKET).toContain("AGE-313");
+  expect(ref.data.TICKET).toContain("Fetch the ticket on each activation.");
 });
 
 test("the verdict schema is declared on the agent step so the harness emits it natively", async () => {

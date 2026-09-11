@@ -3,6 +3,7 @@ import { claude } from "../agent/harness-config.ts";
 import type { AgentStepConfig } from "../agent/plan.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import { resumeFailed } from "../agent/resume-or-rebuild.ts";
+import { promptRef } from "../agent/testing.ts";
 import { commitWork } from "./commit-work.ts";
 
 let agentCalls: AgentStepConfig<unknown>[] = [];
@@ -39,7 +40,7 @@ test("the builder that left the work uncommitted is resumed to commit it", async
 
   expect(agentCalls).toHaveLength(1);
   expect(agentCalls[0]?.resume).toEqual({ harness: "claude", id: "s-42" });
-  expect(agentCalls[0]?.prompt).toContain("commit");
+  expect(promptRef(agentCalls[0])).toEqual({ name: "commit-work", data: {} });
   // A resumed agent works inside the pointer it was handed, so it reports none.
   expect(session).toBeUndefined();
 });

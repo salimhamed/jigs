@@ -49,7 +49,8 @@ test("scaffolds a factory that can be installed and built", async () => {
     "package.json",
     "pipelines/ship.ts",
     "pnpm-workspace.yaml",
-    "prompts/describe-pr.ts",
+    "prompts/describe-pr.prompt.md",
+    "prompts/index.ts",
     "steps/jigs.ts",
     "tsconfig.json",
   ]);

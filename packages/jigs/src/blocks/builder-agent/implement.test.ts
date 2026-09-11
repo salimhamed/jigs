@@ -2,6 +2,7 @@ import { beforeEach, expect, test } from "vitest";
 import { claude } from "../agent/harness-config.ts";
 import { type AgentStepConfig, parseOutput } from "../agent/plan.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
+import { promptRef } from "../agent/testing.ts";
 import type { TicketClaim } from "../ticket/claim.ts";
 import type {
   HaltForHumanFn,
@@ -118,15 +119,14 @@ test("the implement step carries the ticket, the brief and the review findings",
   verdicts = [changes("src/loop.ts: the CI bound is off by one"), approved];
   await run();
 
-  const first = agentCalls[0]?.prompt ?? "";
-  expect(first).toContain("AGE-316");
-  expect(first).toContain("SECRET-BRIEF-TEXT");
-  expect(first).toContain("_(first pass)_");
-  expect(first).not.toContain("{{REVIEW}}");
+  const first = promptRef(agentCalls[0]);
+  expect(first.name).toBe("implement");
+  expect(first.data.TICKET).toContain("AGE-316");
+  expect(first.data.BRIEF).toContain("SECRET-BRIEF-TEXT");
+  expect(first.data.REVIEW).toBe("_(first pass)_");
 
-  const second = agentCalls[2]?.prompt ?? "";
-  expect(second).toContain("- src/loop.ts: the CI bound is off by one");
-  expect(second).not.toContain("_(first pass)_");
+  const second = promptRef(agentCalls[2]);
+  expect(second.data.REVIEW).toBe("- src/loop.ts: the CI bound is off by one");
 });
 
 test("the reviewer is never shown the brief and judges against the ticket", async () => {
@@ -134,9 +134,12 @@ test("the reviewer is never shown the brief and judges against the ticket", asyn
   await run();
 
   const review = agentCalls[1];
-  expect(review?.prompt).toContain("AGE-316");
-  expect(review?.prompt).toContain("base-sha-1");
-  expect(review?.prompt).not.toContain("SECRET-BRIEF-TEXT");
+  const ref = promptRef(review);
+  expect(ref.name).toBe("code-review");
+  expect(ref.data.TICKET).toContain("AGE-316");
+  expect(ref.data.BASE_SHA).toBe("base-sha-1");
+  // No slot for the brief at all, so nothing can leak it into the reviewer.
+  expect(Object.keys(ref.data).sort()).toEqual(["BASE_SHA", "TICKET"]);
   expect(review?.output).toBe(codeReviewVerdict);
 });
 
@@ -150,7 +153,9 @@ test("the cycle bound halts needs-human with the findings, and the human's reply
   // Four implement + review pairs: three bounded cycles, then the round the
   // human's reply started. The halt is a pause, not a terminal state.
   expect(agentCalls).toHaveLength(8);
-  expect(agentCalls[6]?.prompt).toContain("the reviewer is wrong, ship it");
+  expect(promptRef(agentCalls[6]).data.REVIEW).toContain(
+    "the reviewer is wrong, ship it",
+  );
   expect(result.cycles).toBe(4);
 });
 

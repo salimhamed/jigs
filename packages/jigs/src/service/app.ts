@@ -109,7 +109,12 @@ export function createApp(factory: Factory): Hono {
   // The same catalog engine as preflight, without a pipeline or a launch. A
   // red report is still a report, so it answers 200.
   app.get("/api/doctor", async (c) =>
-    c.json(await runChecks([...doctorChecks(), ...scheduleChecks(factory)])),
+    c.json(
+      await runChecks([
+        ...doctorChecks(factory.prompts),
+        ...scheduleChecks(factory),
+      ]),
+    ),
   );
 
   // `jigs sweep` is an HTTP client of this route. `paths` scopes a clean to

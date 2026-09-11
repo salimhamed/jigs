@@ -7,7 +7,7 @@
 
 import type { z } from "zod";
 import type { HarnessConfig } from "./harness-config.ts";
-import type { AgentStepConfig } from "./plan.ts";
+import type { AgentStepConfig, Prompt } from "./plan.ts";
 import type { AgentSession, AgentStepResult } from "./result.ts";
 
 // Private on purpose: `instanceof` only means something on this side of the
@@ -35,13 +35,13 @@ export interface ResumeOrRebuildOptions<T> {
   cwd: string;
   session?: AgentSession;
   /** For an agent that already holds the change: no context is re-sent. */
-  resumePrompt: string;
+  resumePrompt: Prompt;
   /**
    * The same job stated to an agent that holds nothing. Deferred so that
    * gathering what it needs — a diff read is a step call — costs nothing when
    * the resume is taken.
    */
-  freshPrompt: string | (() => Promise<string>);
+  freshPrompt: Prompt | (() => Promise<Prompt>);
   output?: z.ZodType<T>;
   /** Prefixes the one log line the fallback writes. */
   label: string;
@@ -88,9 +88,9 @@ export async function resumeOrRebuild<T = undefined>(
   }
 
   const prompt =
-    typeof options.freshPrompt === "string"
-      ? options.freshPrompt
-      : await options.freshPrompt();
+    typeof options.freshPrompt === "function"
+      ? await options.freshPrompt()
+      : options.freshPrompt;
   const rebuilt = await options.agent<T>({ ...base, prompt });
   return {
     output: rebuilt.output,

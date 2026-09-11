@@ -5,6 +5,7 @@ import { claude } from "../agent/harness-config.ts";
 import { type AgentStepConfig, parseOutput } from "../agent/plan.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import { resumeFailed } from "../agent/resume-or-rebuild.ts";
+import { promptRef } from "../agent/testing.ts";
 import type { Handoff } from "../ticket/review.ts";
 import type { TicketSnapshot } from "../ticket/snapshot.ts";
 import { answerReview } from "./answer-review.ts";
@@ -99,12 +100,12 @@ test("a recorded session is resumed rather than rebuilt", async () => {
 
   expect(agentCalls).toHaveLength(1);
   expect(agentCalls[0]?.resume).toEqual({ harness: "claude", id: "s-42" });
-  const prompt = agentCalls[0]?.prompt ?? "";
-  expect(prompt).toContain("Your pull request came back with review comments");
-  expect(prompt).toContain("Thread 900");
-  expect(prompt).toContain("why not a set here?");
+  const ref = promptRef(agentCalls[0]);
+  expect(ref.name).toBe("answer-review");
+  expect(ref.data.THREADS).toContain("Thread 900");
+  expect(ref.data.THREADS).toContain("why not a set here?");
   // The resumed builder holds the context; nothing is re-sent to it.
-  expect(prompt).not.toContain("BRIEF-TEXT");
+  expect(Object.keys(ref.data)).toEqual(["THREADS"]);
   expect(diffCalls).toEqual([]);
   expect(result.output).toEqual(answer("fixed in a2b3c4d"));
 });
@@ -117,12 +118,13 @@ test("a stale session falls back to a fresh context that still answers", async (
   expect(agentCalls).toHaveLength(2);
   const fresh = agentCalls[1];
   expect(fresh?.resume).toBeUndefined();
-  const prompt = fresh?.prompt ?? "";
-  expect(prompt).toContain("AGE-316");
-  expect(prompt).toContain("BRIEF-TEXT: build the gate");
-  expect(prompt).toContain("THE-ACTUAL-DIFF");
-  expect(prompt).toContain("why not a set here?");
-  expect(prompt).toContain("typo");
+  const ref = promptRef(fresh);
+  expect(ref.name).toBe("rebuild-context");
+  expect(ref.data.TICKET).toContain("AGE-316");
+  expect(ref.data.BRIEF).toContain("BRIEF-TEXT: build the gate");
+  expect(ref.data.DIFF).toContain("THE-ACTUAL-DIFF");
+  expect(ref.data.THREADS).toContain("why not a set here?");
+  expect(ref.data.THREADS).toContain("typo");
   expect(diffCalls).toEqual([["/tmp/worktree", "base-sha-1"]]);
   expect(result.output).toEqual(answer("fixed in a2b3c4d"));
 });
@@ -133,7 +135,7 @@ test("with no session at all the fresh context is entered directly", async () =>
 
   expect(agentCalls).toHaveLength(1);
   expect(agentCalls[0]?.resume).toBeUndefined();
-  expect(agentCalls[0]?.prompt).toContain("THE-ACTUAL-DIFF");
+  expect(promptRef(agentCalls[0]).data.DIFF).toContain("THE-ACTUAL-DIFF");
   // The same schema on both paths is what makes the fallback an equal.
   expect(result.output).toEqual(answer("fixed in a2b3c4d"));
 });
@@ -170,8 +172,10 @@ test("a review body with no thread of its own is answered on the conversation", 
     baseSha: "base-sha-1",
   });
 
-  expect(agentCalls[0]?.prompt).toContain("Thread null");
-  expect(agentCalls[0]?.prompt).toContain("four things need fixing");
+  expect(promptRef(agentCalls[0]).data.THREADS).toContain("Thread null");
+  expect(promptRef(agentCalls[0]).data.THREADS).toContain(
+    "four things need fixing",
+  );
   expect(result.output.answers[0]?.threadId).toBeNull();
 });
 

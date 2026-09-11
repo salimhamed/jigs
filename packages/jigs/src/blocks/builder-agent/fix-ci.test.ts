@@ -4,6 +4,7 @@ import type { readDiff } from "../../steps/pull-request/branch.ts";
 import { claude } from "../agent/harness-config.ts";
 import type { AgentStepConfig } from "../agent/plan.ts";
 import { type AgentFn, resumeFailed } from "../agent/resume-or-rebuild.ts";
+import { promptRef } from "../agent/testing.ts";
 import type { Handoff } from "../ticket/review.ts";
 import type { TicketSnapshot } from "../ticket/snapshot.ts";
 import { fixCi } from "./fix-ci.ts";
@@ -77,9 +78,10 @@ test("the fix runs inside the builder's session rather than context-free", async
 
   expect(agentCalls).toHaveLength(1);
   expect(agentCalls[0]?.resume).toEqual({ harness: "claude", id: "s-42" });
-  expect(agentCalls[0]?.prompt).toContain("# Fix CI");
-  expect(agentCalls[0]?.prompt).toContain("attempt 2 of 3");
-  expect(agentCalls[0]?.prompt).toContain("http://ci.test/1");
+  const ref = promptRef(agentCalls[0]);
+  expect(ref.name).toBe("fix-ci");
+  expect(ref.data.ATTEMPT).toBe("2 of 3");
+  expect(ref.data.CHECKS).toContain("http://ci.test/1");
   // The diff read is a step call; the resumed arm must not pay for it.
   expect(diffCalls).toEqual([]);
   // A resumed fix leaves the builder's pointer where it is.
@@ -93,10 +95,12 @@ test("a stale session sends the fix into a fresh context that then holds the cha
   expect(agentCalls).toHaveLength(2);
   const fresh = agentCalls[1];
   expect(fresh?.resume).toBeUndefined();
-  expect(fresh?.prompt).toContain("AGE-316");
-  expect(fresh?.prompt).toContain("THE-BRIEF");
-  expect(fresh?.prompt).toContain("THE-ACTUAL-DIFF");
-  expect(fresh?.prompt).toContain("attempt 2 of 3");
+  const ref = promptRef(fresh);
+  expect(ref.name).toBe("fix-ci-fresh");
+  expect(ref.data.TICKET).toContain("AGE-316");
+  expect(ref.data.BRIEF).toContain("THE-BRIEF");
+  expect(ref.data.DIFF).toContain("THE-ACTUAL-DIFF");
+  expect(ref.data.ATTEMPT).toBe("2 of 3");
   expect(diffCalls).toEqual([["/tmp/worktree", "base-sha-1"]]);
   expect(fixed.session).toEqual({ harness: "claude", id: "s-2" });
 });
@@ -106,7 +110,7 @@ test("with no session at all the fresh context is entered directly", async () =>
 
   expect(agentCalls).toHaveLength(1);
   expect(agentCalls[0]?.resume).toBeUndefined();
-  expect(agentCalls[0]?.prompt).toContain("THE-ACTUAL-DIFF");
+  expect(promptRef(agentCalls[0]).data.DIFF).toContain("THE-ACTUAL-DIFF");
   expect(fixed.session).toEqual({ harness: "claude", id: "s-1" });
 });
 
