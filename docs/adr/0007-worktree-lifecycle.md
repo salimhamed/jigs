@@ -39,9 +39,9 @@
 Worktrees live in a central data dir —
 `~/.local/share/jigs/worktrees/<factory-slug>/<binding-name>/<branch-dirname>`
 — never beside the human's checkout unless a binding's `workspace_dir` says so.
-The factory slug (dirname + short path-hash) mirrors the store's factory
-tagging (ADR 0005): binding names are unique only per factory repo, so the
-path needs factory identity to keep two factories' same-named bindings apart.
+The factory slug (dirname + short path-hash) mirrors the run store's factory
+tagging: binding names are unique only per factory repo, so the path needs
+factory identity to keep two factories' same-named bindings apart.
 
 Freshness never touches the human checkout's local default branch: the gate is
 `git fetch`, and new worktree branches fork from `origin/<default>`. The
@@ -59,7 +59,7 @@ teardown, and only ever performs a pure fast-forward on a clean checkout
 `git fetch origin <default>:<default>`); anything else skips with a logged
 notice, never an error. Per-binding `ff_default_branch: false` opts out. A
 per-checkout advisory file lock serializes concurrent runs' ff attempts (the
-shared-mutable hazard ADR 0005 forwarded here); the loser re-checks and
+one shared-mutable hazard two active runs have); the loser re-checks and
 no-ops. ADR 0006's "never surprised" is thereby sharpened to "never unsafely
 moved".
 

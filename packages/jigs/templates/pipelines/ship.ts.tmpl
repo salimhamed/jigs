@@ -30,7 +30,7 @@ type ShipInputs = TicketPipelineInputs<typeof shipInputs>;
 // teardown.
 // The wrappers come from ../steps/jigs.ts, the bound jigs blocks from
 // ../blocks/jigs.ts, and the loop from ../blocks/review-loop/, which is this
-// factory's own composition over the blocks jigs ships.
+// factory's own blocks over the ones jigs ships.
 export async function shipPipeline(inputs: ShipInputs) {
   "use workflow";
 

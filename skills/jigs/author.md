@@ -7,47 +7,51 @@ package. jigs ships steps; the factory owns every file that names them.
 
 - The factory's own `steps/jigs.ts` header, then its existing `pipelines/`.
 - `CONTEXT.md` in the jigs repo (github.com/salimhamed/jigs) for the
-  vocabulary — pipeline, jig, step, step id, binding, gate, needs-human halt,
-  schedule.
+  vocabulary — pipeline, block, step, step id, step wrapper, binding, gate,
+  needs-human halt, schedule.
 - The worked examples, by path rather than from memory:
   - the smallest complete factory: what `jigs init` scaffolds, from
     `node_modules/@salimhamed/jigs/templates/` in this factory
-    (`jigs.config.ts.tmpl`, `pipelines/ship.ts.tmpl`,
-    `pipelines/review-loop.ts.tmpl`, `steps/jigs.ts.tmpl`) —
+    (`jigs.config.ts.tmpl`, `pipelines/ship.ts.tmpl`, `steps/jigs.ts.tmpl`,
+    `blocks/jigs.ts.tmpl`, `blocks/review-loop/`) —
     the version the factory is pinned to, so it matches what is installed.
   - if the `jigs-factory-js` factory is checked out on this machine, a real
     pipeline that needs no repo binding: its `pipelines/s3-bucket-analysis.ts`,
-    with the factory-local steps in `steps/aws.ts`, the agent compositions in
+    with the factory-local steps in `steps/aws.ts`, the agent calls in
     `steps/s3-diagnosis.ts`, and the prose in `prompts/`. If it is not checked
     out, lean on the scaffold above — it carries the same shape at one pipeline.
 
 ## The three tiers, and why they matter
 
 1. **A `"use step"` function owns a durable id** built from its file's path and
-   its own name — `step//./steps/jigs//worktree`. That id is a memoization key
+   its own name — `step//./steps/jigs//provisionWorktree`. That id is a
+   memoization key
    in the factory's World. Renaming or moving it changes the id, so it happens
    only when `jigs ps` shows no parked runs.
-2. **A block is a plain composition** over those steps — `agent`, `ask`,
-   `needsHuman`, `gate`, `ticketReview`, and the review-loop blocks jigs ships
-   (`implementAndReview`, `answerAsBuilder`, `fixCi`, `commitLeftoverWork`,
-   `postAnswers`, `describePr`). No directive, no id. Renaming one is safe.
+2. **A block is pipeline-side code** that calls those wrappers in a fixed way.
+   jigs ships blocks from `@salimhamed/jigs/blocks`: `agent`, `ask`,
+   `haltForHuman`, `pullRequestGate`, `agentOrHalt`, `reviewTicket`,
+   `implementUntilCodeReviewApproves`, `answerReview`, `fixCi`, `commitWork`,
+   `postReviewAnswers`, `describePr`, `attend`. A factory writes its own
+   blocks too. No directive, no id. Renaming one is safe.
 3. **A pure helper** is neither, carries no id, and is the easy thing to unit
    test.
 
-The review loop is the factory's own composition of those blocks, scaffolded
-into `pipelines/review-loop.ts`. Read it before changing how a run behaves:
-the order, the CI bound, the merge policy and the escalation prose are all
-there, and none of it is a jigs release away. The implement ⇄ review bound is
-the exception — it lives inside `implementAndReview`, with the session and the
-brief that call keeps out of the reviewer's prompt.
+The review loop is the factory's own blocks over the jigs ones, scaffolded into
+`blocks/review-loop/`, one decision per file. Read it before changing how a run
+behaves: the order, the CI bound, the merge policy and the escalation prose are
+all there, and none of it is a jigs release away. The cap on
+implement-and-review rounds is the exception. It lives inside
+`implementUntilCodeReviewApproves`, with the session and the brief that call
+keeps out of the reviewer's prompt.
 
-A pipeline imports its steps from `../steps/jigs.ts`, **never** from a
-`@salimhamed/jigs` subpath. A step reached through the package is addressed by
+A pipeline imports its steps from `../steps/jigs.ts`, **never** from
+`@salimhamed/jigs/steps`. A step reached through the package is addressed by
 the package's version instead of by the factory's path, so every upgrade would
-rename it. The rule is about steps alone: the scaffolded pipeline imports
-`ticketInput`, `claimTicket`, `claude` and `codex` from the package directly,
-because a jig, a harness constructor and a type carry no id. The factory's ids
-test is what catches the difference.
+rename it. The rule is about steps alone: a pipeline imports blocks from
+`../blocks/jigs.ts`, and imports `ticketInput`, `claimTicket`, `claude` and
+`codex` from the package directly, because a block, a harness constructor and
+a type carry no id. The factory's ids test is what catches the difference.
 
 That ids test is a `jigs.config.test.ts` in the factory root: it reads the
 emitted ids out of the last build and asserts their shape — no package version
@@ -83,7 +87,8 @@ keep its worktree.
 
 - **Wrapping something jigs ships**: a new `"use step"` function in the
   factory's `steps/jigs.ts` that delegates to the implementation, imported at
-  module scope. Follow the shape already in that file.
+  module scope from `@salimhamed/jigs/steps`. Follow the shape already in that
+  file.
 - **A step of the factory's own**: a `"use step"` function in a factory-owned
   file under `steps/`, beside the pure helpers it uses.
 
@@ -110,15 +115,16 @@ checked on every trigger whatever the manifest says: `LINEAR_API_KEY` and
 
 Agent-facing prose lives in the factory's `prompts/`, as TypeScript that
 interpolates named values. jigs' own prompt strings are exported from
-`@salimhamed/jigs/prompts` as plain values — read them, interpolate them, or
+`@salimhamed/jigs/blocks` as plain values — read them, interpolate them, or
 ignore them; a factory that wants different words writes its own and passes
 them to the block.
 
 The one the scaffold hands over outright is `describePr`: jigs owns the
 mechanics (resume the builder, fall back to a fresh context fed the diff,
-parse a `{ title, body }` back) and `steps/describe-pr.ts` owns the
-conventions and the policy for an answer that drifts out of them — repair it,
-or throw and kill the run. Whether that title has to satisfy the target repo's
+parse a `{ title, body }` back) and `prompts/describe-pr.ts` owns the
+conventions, with `blocks/review-loop/describe-and-open-pr.ts` owning the
+policy for an answer that drifts out of them — repair it, or throw and kill
+the run. Whether that title has to satisfy the target repo's
 CI is a factory question; look at how the two real factories answer it
 differently before writing a third.
 
@@ -152,7 +158,7 @@ pnpm exec jigs up        # until this, the service still serves the old bundle
   instruction. Their names are half of the ids parked runs are memoized
   against, the build stays green while they are orphaned, and an orphaned run
   only ever shows up as stalled. Everything else in those files — bodies,
-  order, prose, the review-loop composition — is free to edit. When the human
+  order, prose, the factory's own blocks — is free to edit. When the human
   does want a rename, check `jigs ps` for parked runs first; cancel and
   relaunch the ones that would be orphaned.
 

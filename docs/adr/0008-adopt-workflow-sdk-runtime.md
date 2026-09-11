@@ -20,21 +20,21 @@ evidence ledger).
 Every acceptance criterion passed: kill-mid-suspension → restart →
 `resumeHook` → completion with memoized replay (the pre-kill step result
 survived verbatim); kill mid-step recovers via startup rescue by re-running
-the step from zero — exactly ADR 0005's crash model, delivered instead of
-built; a 600-second in-process step with no timeout; the workflow/step
-serialization boundary enforced with precise errors; a subscription-authed
+the step from zero, which is exactly the crash model jigs had planned to build
+for itself, delivered instead of built; a 600-second in-process step with no
+timeout; the workflow/step serialization boundary enforced with precise
+errors; a subscription-authed
 Claude Code agent step (no API key in the environment) writing to a cwd-scoped
 workspace with per-step token usage captured in the durable run result; and
 `npx workflow web` closing the run-observability gap off the shelf.
 
 ## Consequences
 
-- **Supersedes ADR 0005's runtime.** No jigs-owned sqlite store,
-  process-per-activation worker, or stateless poller. The goals stand —
-  detachable runs, idle-run-as-pure-disk-state, crash = re-run the step from
-  zero — now delivered by the SDK. A long-lived server (systemd user unit,
-  converging with ADR 0005's own blessed always-on watch mode) hosts
-  execution; Postgres in docker is standing infrastructure.
+- **Replaces the runtime jigs was going to build for itself.** No jigs-owned
+  sqlite store, process-per-activation worker, or stateless poller. The goals
+  stand — detachable runs, idle-run-as-pure-disk-state, crash = re-run the
+  step from zero — now delivered by the SDK. A long-lived server (systemd user
+  unit) hosts execution; Postgres in docker is standing infrastructure.
 - **Amends ADR 0001.** The CLI is no longer the execution owner: a service
   owns execution and the CLI becomes its HTTP client. Pipelines are compiled
   artifacts (Nitro build) rather than modules invoked by path.
@@ -53,7 +53,7 @@ workspace with per-step token usage captured in the durable run result; and
 
 ## Considered options
 
-- **Build per ADR 0005** (sqlite + Drizzle, process-per-activation, poller):
+- **Build the runtime** (sqlite + Drizzle, process-per-activation, poller):
   rejected after the prototype. It re-implements memoization, event-log
   persistence, crash rescue, retries, cancellation, and an observability UI
   the SDK ships tested — to save one docker container and a build system.

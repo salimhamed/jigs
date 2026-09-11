@@ -122,7 +122,7 @@ Packages links the package to it and lets the repo-scoped token publish.
   (both pins, then `jigs up`, then its typecheck); a consumer needs a token
   with `read:packages` in `~/.npmrc`, and the scaffolded `.npmrc` carries only
   the scope-to-registry line. The dependency shape and the consumer side are
-  [ADR 0016](./0016-published-packages.md).
+  [ADR 0017](./0017-single-package.md).
 
 ## Considered options
 

@@ -14,7 +14,8 @@ Delivered across [#30](https://github.com/salimhamed/jigs/pull/30) and
 > **Amended by [ADR 0017](./0017-single-package.md) on 2026-09-06.** There is
 > one jigs package now, `@salimhamed/jigs`; read `@jigs/service` below as its
 > `/steps/run`, `/suspension/*`, `/ticket/*`, `/review-loop/*` and
-> `/worktrees` subpaths. This ADR's property is what made that merge safe: no
+> `/worktrees` subpaths, all of which 0.5.0 folded into `./blocks` and
+> `./steps` ([ADR 0019](./0019-layout-by-code-kind.md)). This ADR's property is what made that merge safe: no
 > jigs package carries a directive, so no step id carries a package name or
 > version and a package rename cannot address one. `pnpm e2e` still proves it,
 > now by versioning the one package.
@@ -115,8 +116,8 @@ so it does not have to be re-run.
   number is a signal to readers rather than a resolution input — but it is an
   honest one, which `0.0.0` never was.
 
-  > **Amended by [ADR 0016](./0016-published-packages.md).** Factories install
-  > both packages from GitHub Packages now, pinned to one version, so the
+  > **Amended by [ADR 0017](./0017-single-package.md).** Factories install
+  > jigs from GitHub Packages now, pinned to one version, so the
   > number is a `pnpm update` coordinate as well as a signal; the `link:`
   > era, and the "`git pull` then `pnpm build`" recipe the amendment above
   > called temporary, are over. The wrapper file's upgrade path is

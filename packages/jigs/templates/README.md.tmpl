@@ -20,7 +20,7 @@ machine runs, the bindings they run against, and the service that hosts them.
 - `blocks/review-loop/` — this factory's own review loop, one decision per
   file: the story in `review-loop.ts`, and beside it the push, the
   description, the answer to a review, the CI bound and the merge policy.
-  `review-loop.test.ts` holds the composition to its sequence — the order,
+  `review-loop.test.ts` holds those blocks to their sequence — the order,
   the CI bound, the merge policy and the endings — with the step wrappers
   faked and the jigs blocks themselves running for real.
 - `prompts/describe-pr.ts` — the title and body a pull request opens with.
@@ -103,12 +103,12 @@ their ids come out as `step//./pipelines/<file>//<fn>`, so the same rename rule
 applies to those names.
 
 `agent`, `ask`, `haltForHuman`, `pullRequestGate`, `agentOrHalt` and
-`reviewTicket` are compositions over those wrappers and carry no id;
-`blocks/jigs.ts` exports them already wired. The review loop is one more
-composition, except that this factory writes it: `blocks/review-loop/` calls
-the blocks jigs ships — `implementUntilCodeReviewApproves`, `answerReview`,
-`fixCi`, `commitWork`, `postReviewAnswers`, `describePr`, `attend` — in the
-order and with the policy it chooses.
+`reviewTicket` are blocks over those wrappers and carry no id;
+`blocks/jigs.ts` exports them already wired. The review loop is more blocks of
+the same kind, except that this factory writes them: `blocks/review-loop/`
+calls the blocks jigs ships — `implementUntilCodeReviewApproves`,
+`answerReview`, `fixCi`, `commitWork`, `postReviewAnswers`, `describePr`,
+`attend` — in the order and with the policy it chooses.
 
 ## Upgrading jigs
 

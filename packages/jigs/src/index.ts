@@ -4,12 +4,13 @@
 // else this package does is reached through a subpath, and everything the CLI
 // does is reached by relative import.
 //
-// It must never re-export a *value* from a module carrying a "use step"/"use
-// workflow" directive, a node builtin, or an env read or network call: this
-// specifier is imported workflow-side, where the latter two cannot run, and
-// routing the workflow surface through one specifier changes the step ids the
-// SDK derives from the export subpath. A type from such a module is fine — it
-// erases, which is how `ReviewThread` is named below.
+// It must never re-export a *value* from a module that reaches a node builtin,
+// reads the environment, or calls the network: this specifier is imported
+// workflow-side, where none of the three exists. A type from such a module is
+// fine, because a type erases; that is how `ReviewThread` is named below.
+// Which subpath a value is reached through does not affect any step id: no
+// file here carries a directive, so every id is a factory-local path
+// (ADR 0013).
 export {
   type AnyPipelineEntry,
   type Factory,

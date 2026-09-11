@@ -49,8 +49,8 @@ collide), `package.json` pinned to the CLI's own version, `.npmrc` (the scope
 line only, never the token), `nitro.config.ts`, `docker-compose.yml`,
 `.env.example`, `tsconfig.json`, `pnpm-workspace.yaml`, `.gitignore` — and the
 code the factory starts from: `jigs.config.ts`, `pipelines/ship.ts`,
-`pipelines/review-loop.ts`, `steps/jigs.ts`, `steps/describe-pr.ts`,
-`jigs.config.test.ts`, `README.md`.
+`steps/jigs.ts`, `blocks/jigs.ts`, `blocks/review-loop/`,
+`prompts/describe-pr.ts`, `jigs.config.test.ts`, `README.md`.
 Then it prints the remaining commands with this factory's own ports filled in.
 Use the numbers it prints, not any numbers you have seen elsewhere.
 
