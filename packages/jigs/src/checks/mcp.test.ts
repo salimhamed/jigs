@@ -2,7 +2,7 @@ import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { McpServerConfig } from "../steps/config.ts";
+import type { McpServerConfig } from "../blocks/agent/harness-config.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { runChecks } from "./catalog.ts";
 import { codexWorktreeConfigCheck, mcpServerChecks } from "./mcp.ts";
@@ -10,7 +10,10 @@ import { codexWorktreeConfigCheck, mcpServerChecks } from "./mcp.ts";
 // A real stdio MCP server child process, not a mock: the whole point of the
 // JIT check is that only a real tool call is evidence.
 const PROBE_SERVER = fileURLToPath(
-  new URL("../harnesses/live/fixtures/mcp-probe-server.mjs", import.meta.url),
+  new URL(
+    "../steps/agent/harnesses/live/fixtures/mcp-probe-server.mjs",
+    import.meta.url,
+  ),
 );
 
 let tmp: string;

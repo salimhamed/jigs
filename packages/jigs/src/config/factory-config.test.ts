@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
+import { factorySlug } from "../steps/worktree/layout.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
-import { factorySlug } from "../worktrees/layout.ts";
 import {
   parseFactoryConfig,
   removeBinding,

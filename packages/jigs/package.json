@@ -115,7 +115,7 @@
     "access": "restricted"
   },
   "scripts": {
-    "dev": "node src/cli.ts",
+    "dev": "node src/cli/cli.ts",
     "build": "tsdown",
     "test": "vitest run",
     "test:watch": "vitest",

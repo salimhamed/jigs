@@ -3,7 +3,7 @@ import path from "node:path";
 import { type Document, parseDocument } from "yaml";
 import { z } from "zod";
 import { JigsError } from "../errors.ts";
-import { factorySlug } from "../worktrees/layout.ts";
+import { factorySlug } from "../steps/worktree/layout.ts";
 
 export const FACTORY_CONFIG_FILE = "jigs.yml";
 

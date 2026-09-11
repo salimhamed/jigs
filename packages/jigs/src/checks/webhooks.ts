@@ -8,7 +8,7 @@ import {
   GithubApiError,
   parseGithubRemote,
   verifyRepoWebhook,
-} from "../github-webhook.ts";
+} from "../providers/github-webhook.ts";
 import type { Check, CheckResult } from "./catalog.ts";
 
 export interface WebhookChecksOptions {

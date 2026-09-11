@@ -18,8 +18,8 @@ export {
   type Schedule,
   type TicketPipelineInputs,
   ticketInput,
-} from "./factory.ts";
+} from "./blocks/factory.ts";
+export type { WorktreeFacts } from "./blocks/worktree.ts";
 // The threads the pull request gate delivers and the builder answers. Named
 // here rather than on either subpath because both carry it.
 export type { ReviewThread } from "./providers/github.ts";
-export type { WorktreeFacts } from "./worktrees/facts.ts";
