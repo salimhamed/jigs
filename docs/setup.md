@@ -168,6 +168,72 @@ and kill the run rather than open a pull request CI will refuse. How a pull
 request introduces itself is the factory's voice, and the title is what the
 target repo's own CI and release tooling read.
 
+#### Prompts
+
+The words a block speaks are a parameter too. Every jigs block that talks to an
+agent ships a **prompt** beside it — a function from a typed input to the text
+the agent is told — and takes it as an optional parameter, defaulting to the
+one it ships with. A factory that wants different words writes a function of
+the same type and passes it in; the block's mechanics do not change.
+`reviewTicket` takes `prompt`, `implementUntilCodeReviewApproves` takes
+`implementPrompt` and `codeReviewPrompt`, `answerReview` and `fixCi` take
+`resumePrompt` and `freshPrompt`, and `commitWork` takes `prompt`.
+(`describePr` is the one with no default: its two prompts are
+`prompts/describe-pr.ts`, and the caller always passes them.)
+
+Per call site — a prompt of this factory's own, in `prompts/infra-ticket-review.ts`:
+
+```ts
+import type { TicketReviewPrompt } from "@salimhamed/jigs/blocks";
+
+export const infraTicketReview: TicketReviewPrompt = ({ ticket }) => `# Ticket review
+
+You are reviewing a ticket for this team's infrastructure repo, where a change
+that is wrong is a change that pages someone. Restate the ticket into a brief;
+never re-decide it.
+
+## The ticket
+
+${ticket}
+
+...
+`;
+```
+
+passed where `pipelines/ship.ts` calls the block:
+
+```ts
+import { infraTicketReview } from "../prompts/infra-ticket-review.ts";
+
+const handoff = await reviewTicket({
+  claim,
+  snapshot,
+  prompt: infraTicketReview,
+  harness: claude({ model: "opus" }),
+  cwd: workspace.path,
+});
+```
+
+Factory-wide — set it once in the `reviewTicket` binding in `blocks/jigs.ts`,
+and every pipeline in the factory gets it:
+
+```ts
+export function reviewTicket(options: ReviewTicketInput): Promise<Handoff> {
+  return reviewTicketBlock({
+    prompt: infraTicketReview,
+    ...options,
+    agent,
+    haltForHuman,
+    fetchSnapshot: fetchTicketSnapshot,
+  });
+}
+```
+
+The `prompt` goes before the spread, so a call site that passes its own still
+wins. Nothing about this is wired: the input is a plain object, the prompt is a
+plain function, and `tsc` is what tells you a field the words need is missing.
+
+
 The starter `ship` pipeline takes its `binding` and `merge` as inputs with no
 default, because the scaffold knows neither: once step 4 has bound a repo, give
 `binding` that name as its default and list it under `requires.bindings` in
