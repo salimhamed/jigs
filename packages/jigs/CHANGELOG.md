@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.6.0](https://github.com/salimhamed/jigs/compare/jigs-v0.5.0...jigs-v0.6.0) (2026-09-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* prompts are typed functions a factory can pass to a block ([#157](https://github.com/salimhamed/jigs/issues/157))
+
+### Features
+
+* prompts are typed functions a factory can pass to a block ([#157](https://github.com/salimhamed/jigs/issues/157)) ([c63eee9](https://github.com/salimhamed/jigs/commit/c63eee9d2d3e523313aa7b95997c552d4847632d))
+
 ## [0.5.0](https://github.com/salimhamed/jigs/compare/jigs-v0.4.5...jigs-v0.5.0) (2026-09-11)
 
 
