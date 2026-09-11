@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.5.0](https://github.com/salimhamed/jigs/compare/jigs-v0.4.5...jigs-v0.5.0) (2026-09-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* publish two import paths, blocks and steps ([#151](https://github.com/salimhamed/jigs/issues/151))
+
+### Features
+
+* publish two import paths, blocks and steps ([#151](https://github.com/salimhamed/jigs/issues/151)) ([2e8c5a3](https://github.com/salimhamed/jigs/commit/2e8c5a3dc54a67952b999fc1a97180cbad7e9dc9))
+
 ## [0.4.5](https://github.com/salimhamed/jigs/compare/jigs-v0.4.4...jigs-v0.4.5) (2026-09-10)
 
 
