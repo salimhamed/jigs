@@ -71,9 +71,11 @@ The import rules are one sentence each.
   erases at compile time, so a type import crosses no boundary; `gate.ts`
   naming GitHub's `ReviewThread` and `answers.ts` naming the step signatures
   it is handed are both that.
-- `steps/` may import `providers/`, `config/`, `checks/`, `errors.ts`, and
-  types from `blocks/`.
-- `service/` may import `steps/`, `providers/`, `config/` and `checks/`.
+- `steps/` may import `providers/`, `config/`, `checks/`, `errors.ts`, and `blocks/`. A step may call a block as a value because
+  `blocks/` is pure by construction; the snapshot and step-result normalizers
+  are called that way.
+- `service/` may import `steps/`, `providers/`, `config/`, `checks/` and
+  `blocks/`; the webhook ingress parses hook tokens that `blocks/` defines.
 
 Three files were split along that line: the needs-human halt, the pull request
 gate and the ticket snapshot. Each had a block half that decides and a step
