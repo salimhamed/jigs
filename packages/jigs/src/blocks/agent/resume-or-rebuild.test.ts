@@ -1,18 +1,15 @@
 import { expect, test } from "vitest";
 import { z } from "zod";
-import {
-  type AgentStepConfig,
-  type AgentStepResult,
-  claude,
-  parseOutput,
-  unwrapAgentStep,
-} from "./index.ts";
-import { type AgentFn, resumeOrRebuild } from "./resume.ts";
+import { unwrapAgentStep } from "./agent.ts";
+import { claude } from "./harness-config.ts";
+import { type AgentStepConfig, parseOutput } from "./plan.ts";
+import type { AgentStepResult } from "./result.ts";
+import { type AgentFn, resumeOrRebuild } from "./resume-or-rebuild.ts";
 
 const verdict = z.strictObject({ note: z.string() });
 
 // A stale resume is staged the way production stages it — the step returns the
-// marker, ./index turns it into the throw — so these cases prove the whole
+// marker, ./agent.ts turns it into the throw — so these cases prove the whole
 // chain, not just that the fallback catches what it itself constructs.
 function recorder(options: { staleResume?: boolean } = {}) {
   const calls: AgentStepConfig<unknown>[] = [];

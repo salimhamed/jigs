@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vitest";
-import { packageRoot } from "../config/templates.ts";
+import { packageRoot } from "../templates.ts";
 import { initFactory } from "./init.ts";
 
 const scaffold = (name: string) => {

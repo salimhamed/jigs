@@ -1,7 +1,7 @@
 import { rmSync } from "node:fs";
 import type { Sql } from "postgres";
-import { deriveDefaultBranch, tryGit } from "../git.ts";
-import { removeManagedCodexHome } from "../harnesses/codex-home.ts";
+import { deriveDefaultBranch, tryGit } from "../../providers/git.ts";
+import { removeManagedCodexHome } from "../agent/harnesses/codex-home.ts";
 import { deleteWorktree, listWorktreesForRun } from "./registry.ts";
 
 // The teardown matrix, split into a pure decision and its git execution so

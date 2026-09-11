@@ -2,8 +2,8 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { locateFactoryRoot } from "../config/factory-root.ts";
-import { JigsError } from "../errors.ts";
+import { locateFactoryRoot } from "../../config/factory-root.ts";
+import { JigsError } from "../../errors.ts";
 import {
   type ExecFile,
   type ExecOutput,

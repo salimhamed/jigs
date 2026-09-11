@@ -1,8 +1,8 @@
 import { existsSync, rmdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import type { Sql } from "postgres";
-import { removeManagedCodexHome } from "../harnesses/codex-home.ts";
-import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
+import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
+import { removeManagedCodexHome } from "../agent/harnesses/codex-home.ts";
 import { fetchOriginDefault } from "./create.ts";
 import { type OwnerState, readOwner } from "./owner.ts";
 import {

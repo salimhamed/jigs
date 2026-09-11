@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { parse } from "smol-toml";
-import type { CheckResult } from "../checks/catalog.ts";
+import type { CheckResult } from "../../../checks/catalog.ts";
 
 // The load-bearing JIT guard. Codex auto-trusts a writable cwd — thread/start
 // persists a trust record, and agent steps all run under danger-full-access —

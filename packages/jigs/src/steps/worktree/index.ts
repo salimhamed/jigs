@@ -10,12 +10,12 @@
 // workflow-side `import type` of it is erased and stays safe.
 
 import type { Sql } from "postgres";
-import { resolveBinding } from "../config/factory-config.ts";
-import { factoryRoot } from "../config/factory-root.ts";
-import { JigsError } from "../errors.ts";
+import type { WorktreeFacts } from "../../blocks/worktree.ts";
+import { resolveBinding } from "../../config/factory-config.ts";
+import { factoryRoot } from "../../config/factory-root.ts";
+import { JigsError } from "../../errors.ts";
 import { hasBindingClone } from "./clone.ts";
 import { createWorktree, worktreeStatus } from "./create.ts";
-import type { WorktreeFacts } from "./facts.ts";
 import { bindingRepoDir, worktreePath } from "./layout.ts";
 import { type OwnerState, readOwner } from "./owner.ts";
 import { provisionWorktree } from "./provision.ts";

@@ -1,8 +1,9 @@
 import { expect, test } from "vitest";
-import type { TicketClaim } from "../suspension/claim.ts";
-import type { HumanReply } from "../suspension/needs-human.ts";
-import { claude, JitCheckError } from "./index.ts";
-import { type AgentOrHaltDeps, agentOrHalt } from "./jit.ts";
+import type { TicketClaim } from "../ticket/claim.ts";
+import type { HumanReply } from "../ticket/halt-for-human.ts";
+import { JitCheckError } from "./agent.ts";
+import { type AgentOrHaltDeps, agentOrHalt } from "./agent-or-halt.ts";
+import { claude } from "./harness-config.ts";
 
 const claim = {
   issueId: "issue-1",

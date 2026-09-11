@@ -1,19 +1,9 @@
-// The review-loop building blocks: one function each, no options bag, no
-// composition. The order they run in, the merge policy, the escalation prose
-// and the prompts are the factory's — `jigs init` scaffolds the composition
-// that calls these into `pipelines/review-loop.ts`, and the factory edits it.
-//
-// What stays here is what a wrong edit would break rather than merely change:
-// the builder's session pointer, the resume-first fallback, the ids the gate
-// cursor needs back, and the code-review call that is never handed the brief.
-//
-// Every block takes the wrapper functions it needs as plain parameters and
-// destructures them once, before calling: a `"use step"` wrapper reached as
-// `options.readDiff(...)` is a step call whose receiver the SDK serializes
-// along with its arguments, and that receiver is an object holding functions.
-// `pull-request.ts` is not re-exported here — it reaches node builtins and is
-// reached through `@salimhamed/jigs/review-loop/pull-request` from a step
-// wrapper, never from the workflow side.
+// Temporary. This folder exists only so the folder move ships with no public
+// API change: each file re-exports, by explicit name, exactly what one
+// exports-map subpath exported before the move, from the blocks/ and steps/
+// modules that content now lives in. Nothing inside src/ imports this folder —
+// only tsdown's entry list points at it. The next PR replaces every subpath
+// here with blocks/index.ts and steps/index.ts and deletes the folder whole.
 
 export {
   type AnswerAsBuilderOptions,
@@ -22,21 +12,25 @@ export {
   postAnswers,
   type ThreadAnswers,
   threadAnswers,
-} from "./builder.ts";
+} from "../blocks/builder-agent/answer-review.ts";
 export {
   type CommitLeftoverWorkOptions,
   commitLeftoverWork,
-} from "./commit.ts";
+} from "../blocks/builder-agent/commit-work.ts";
 export {
   type DescribePrOptions,
   describePr,
   type PrDescription,
   prDescription,
-} from "./describe-pr.ts";
-export { type FixCiOptions, fixCi, renderChecks } from "./fix-ci.ts";
+} from "../blocks/builder-agent/describe-pr.ts";
+export {
+  type FixCiOptions,
+  fixCi,
+  renderChecks,
+} from "../blocks/builder-agent/fix-ci.ts";
 export {
   codeReviewVerdict,
   type ImplementAndReviewOptions,
   type ImplementAndReviewResult,
   implementAndReview,
-} from "./implement.ts";
+} from "../blocks/builder-agent/implement.ts";

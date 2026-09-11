@@ -1,13 +1,13 @@
 import {
   parseFactoryConfig,
   readFactoryConfigText,
-} from "../config/factory-config.ts";
-import { locateFactoryRoot } from "../config/factory-root.ts";
-import { JigsError } from "../errors.ts";
-import { deriveDefaultBranch, resolveRemoteUrl } from "../git.ts";
+} from "../../config/factory-config.ts";
+import { locateFactoryRoot } from "../../config/factory-root.ts";
+import { JigsError } from "../../errors.ts";
+import { deriveDefaultBranch, resolveRemoteUrl } from "../../providers/git.ts";
+import { hasBindingClone } from "../../steps/worktree/clone.ts";
+import { bindingRepoDir } from "../../steps/worktree/layout.ts";
 import { formatTable } from "../table.ts";
-import { hasBindingClone } from "../worktrees/clone.ts";
-import { bindingRepoDir } from "../worktrees/layout.ts";
 
 export interface BindingsDeps {
   cwd: string;

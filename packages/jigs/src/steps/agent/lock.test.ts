@@ -1,7 +1,7 @@
 import { existsSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import { withFileLock } from "./lock.ts";
 
 let tmp: string;

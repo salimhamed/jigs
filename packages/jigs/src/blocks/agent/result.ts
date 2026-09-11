@@ -1,5 +1,5 @@
 import type { LanguageModelUsage } from "ai";
-import type { HarnessConfig } from "./config.ts";
+import type { HarnessConfig } from "./harness-config.ts";
 
 // Type aliases, not interfaces: aliases carry an implicit index signature,
 // which keeps step returns assignable to the SDK's Serializable types.

@@ -1,7 +1,7 @@
+import type { AgentWire } from "../blocks/agent/plan.ts";
 import { factoryRoot } from "../config/factory-root.ts";
 import { getAuthenticatedUser } from "../providers/github.ts";
 import { getViewer } from "../providers/linear.ts";
-import type { AgentWire } from "../steps/plan.ts";
 import { awsCredentialsCheck } from "./aws.ts";
 import { bindingChecks } from "./bindings.ts";
 import { CHECK_TIMEOUT_MS, type Check } from "./catalog.ts";

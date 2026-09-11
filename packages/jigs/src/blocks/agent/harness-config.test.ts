@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { claude, codex } from "./config.ts";
+import { claude, codex } from "./harness-config.ts";
 
 test("claude() returns a tagged plain-data descriptor", () => {
   const descriptor = claude({

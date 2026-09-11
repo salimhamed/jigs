@@ -1,8 +1,9 @@
 import { beforeEach, expect, test } from "vitest";
-import type { AgentFn } from "../steps/index.ts";
-import { type AgentStepConfig, claude } from "../steps/index.ts";
-import { resumeFailed } from "../steps/resume.ts";
-import { commitLeftoverWork } from "./commit.ts";
+import { claude } from "../agent/harness-config.ts";
+import type { AgentStepConfig } from "../agent/plan.ts";
+import type { AgentFn } from "../agent/resume-or-rebuild.ts";
+import { resumeFailed } from "../agent/resume-or-rebuild.ts";
+import { commitLeftoverWork } from "./commit-work.ts";
 
 let agentCalls: AgentStepConfig<unknown>[] = [];
 let failOnResume = false;

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { codeReviewPrompt } from "./code-review.ts";
+import { codeReviewPrompt } from "./code-review.prompt.ts";
 
 test("the code review prompt has no slot for the brief", () => {
   expect(codeReviewPrompt).toContain("{{TICKET}}");

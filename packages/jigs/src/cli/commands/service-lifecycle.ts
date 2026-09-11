@@ -15,12 +15,12 @@ import path from "node:path";
 import {
   type ResolvedService,
   resolveService,
-} from "../config/factory-config.ts";
-import { readFactoryEnv } from "../config/factory-env.ts";
-import { locateFactoryRoot } from "../config/factory-root.ts";
-import { JigsError } from "../errors.ts";
-import { stringEnv } from "../harnesses/env.ts";
-import { jigsDataDir } from "../paths.ts";
+} from "../../config/factory-config.ts";
+import { readFactoryEnv } from "../../config/factory-env.ts";
+import { locateFactoryRoot } from "../../config/factory-root.ts";
+import { jigsDataDir } from "../../config/paths.ts";
+import { JigsError } from "../../errors.ts";
+import { stringEnv } from "../../steps/agent/harnesses/env.ts";
 
 // Supervision is a pidfile under the jigs data dir, keyed by factory slug —
 // not a systemd unit. A service per factory repo would otherwise need a unit

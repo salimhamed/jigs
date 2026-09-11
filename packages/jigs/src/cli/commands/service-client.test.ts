@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { JigsError } from "../errors.ts";
-import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import type { JigsError } from "../../errors.ts";
+import {
+  makeFactoryRepo,
+  makeTmpDir,
+  removeTmpDir,
+} from "../../test-fixtures.ts";
 import {
   resolveServiceUrl,
   serviceFetch,

@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { JigsError } from "./errors.ts";
+import type { JigsError } from "../errors.ts";
 
 // One seam for every child process a verb runs on the operator's behalf, so
 // a test can stand in for pnpm, docker, nitro or bootstrap with one function.

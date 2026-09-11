@@ -1,5 +1,5 @@
-import type { CheckReport } from "../checks/catalog.ts";
-import { JigsError } from "../errors.ts";
+import type { CheckReport } from "../../checks/catalog.ts";
+import { JigsError } from "../../errors.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 // An HTTP client of the service, deliberately not a local run of the catalog:

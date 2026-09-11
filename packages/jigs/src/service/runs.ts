@@ -5,14 +5,14 @@
 import { getHookByToken, getRun } from "workflow/api";
 import { hydrateData, observabilityRevivers } from "workflow/observability";
 import { getWorld } from "workflow/runtime";
-import type { Factory } from "./factory.ts";
-import { resolveIssueRef } from "./providers/linear.ts";
-import { TERMINAL_RUN_STATUSES } from "./run-status.ts";
+import type { Factory } from "../blocks/factory.ts";
+import { PR_TOKEN_PREFIX } from "../blocks/pull-request/gate.ts";
+import { TICKET_TOKEN_PREFIX, ticketToken } from "../blocks/ticket/claim.ts";
+import { NEEDS_HUMAN_TOKEN_PREFIX } from "../blocks/ticket/halt-for-human.ts";
+import { resolveIssueRef } from "../providers/linear.ts";
+import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
+import { registrySql } from "../steps/worktree/sql.ts";
 import { type JobRunIds, listJobRunIds, runsWithActiveStep } from "./stalls.ts";
-import { TICKET_TOKEN_PREFIX, ticketToken } from "./suspension/claim.ts";
-import { NEEDS_HUMAN_TOKEN_PREFIX } from "./suspension/needs-human.ts";
-import { PR_TOKEN_PREFIX } from "./suspension/pull-request-gate.ts";
-import { registrySql } from "./worktrees/sql.ts";
 
 // The SDK mints run ids as `wrun_` + a ULID, so a ref is run-id-shaped (with
 // or without the prefix, full or truncated) or it is a ticket ref. Crockford

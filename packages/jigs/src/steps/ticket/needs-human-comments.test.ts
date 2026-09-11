@@ -10,13 +10,13 @@ const { createComment, getIssueParticipants } = vi.hoisted(() => ({
   })),
 }));
 
-vi.mock("../providers/linear.ts", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../providers/linear.ts")>()),
+vi.mock("../../providers/linear.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../providers/linear.ts")>()),
   createComment,
   getIssueParticipants,
 }));
 
-const { postNeedsHumanComment } = await import("./needs-human.ts");
+const { postNeedsHumanComment } = await import("./needs-human-comments.ts");
 
 beforeEach(() => {
   createComment.mockClear();

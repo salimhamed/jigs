@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { type CheckReport, formatFailures } from "../checks/catalog.ts";
-import { JigsError } from "../errors.ts";
+import { type CheckReport, formatFailures } from "../../checks/catalog.ts";
+import { JigsError } from "../../errors.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 import { serviceBehindSources } from "./service-lifecycle.ts";
 

@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { WEBHOOK_EVENTS } from "../github-webhook.ts";
+import { WEBHOOK_EVENTS } from "../providers/github-webhook.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { webhookChecks } from "./webhooks.ts";
 

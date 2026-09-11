@@ -1,6 +1,6 @@
 import type { ISql } from "postgres";
 import { afterEach, expect, test, vi } from "vitest";
-import { JigsError } from "../errors.ts";
+import { JigsError } from "../../errors.ts";
 import {
   gateOnBindingClones,
   gateOnWorktreeRegistry,

@@ -3,18 +3,18 @@ import path from "node:path";
 import {
   type ResolvedService,
   resolveService,
-} from "../config/factory-config.ts";
-import { readFactoryEnv } from "../config/factory-env.ts";
-import { locateFactoryRoot } from "../config/factory-root.ts";
-import { JigsError } from "../errors.ts";
+} from "../../config/factory-config.ts";
+import { readFactoryEnv } from "../../config/factory-env.ts";
+import { locateFactoryRoot } from "../../config/factory-root.ts";
+import { JigsError } from "../../errors.ts";
+import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
+import { stringEnv } from "../../steps/agent/harnesses/env.ts";
 import {
   type ExecFile,
   execOrExplain,
   execOutput,
   nodeExecFile,
 } from "../exec.ts";
-import { stringEnv } from "../harnesses/env.ts";
-import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import { buildFactoryService, type Prepare } from "./build.ts";
 import { runDoctor } from "./doctor.ts";
 import { type PsRun, showRuns } from "./ps.ts";

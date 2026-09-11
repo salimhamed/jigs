@@ -15,14 +15,14 @@ import { resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
+import { type Factory, ticketInput } from "../blocks/factory.ts";
+import { prToken } from "../blocks/pull-request/gate.ts";
+import { ticketToken } from "../blocks/ticket/claim.ts";
+import { needsHumanToken } from "../blocks/ticket/halt-for-human.ts";
+import * as sql from "../steps/worktree/sql.ts";
+import { makeFakeSql } from "../steps/worktree/test-fixtures.ts";
 import { createApp } from "./app.ts";
-import { type Factory, ticketInput } from "./factory.ts";
 import * as stalls from "./stalls.ts";
-import { ticketToken } from "./suspension/claim.ts";
-import { needsHumanToken } from "./suspension/needs-human.ts";
-import { prToken } from "./suspension/pull-request-gate.ts";
-import * as sql from "./worktrees/sql.ts";
-import { makeFakeSql } from "./worktrees/test-fixtures.ts";
 
 // The routes are exercised against pipelines this file declares: what is under
 // test is the framework.

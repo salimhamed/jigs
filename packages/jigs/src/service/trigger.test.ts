@@ -11,8 +11,8 @@ import type {
   Factory,
   PipelineInputs,
   TicketPipelineInputs,
-} from "./factory.ts";
-import { ticketInput } from "./factory.ts";
+} from "../blocks/factory.ts";
+import { ticketInput } from "../blocks/factory.ts";
 
 const ISSUE_ID = "68bc9696-35d5-442d-ab56-214c8cfefbec";
 
@@ -25,11 +25,11 @@ vi.mock("workflow/api", () => ({ start }));
 
 // Preflight and the Linear lookup are the trigger's other two halves, tested
 // where they live; here they stand aside so the run is always created.
-vi.mock("./checks/index.ts", () => ({
+vi.mock("../checks/index.ts", () => ({
   preflightChecks: () => [],
   runChecks: async () => ({ ok: true, results: [] }),
 }));
-vi.mock("./providers/linear.ts", () => ({
+vi.mock("../providers/linear.ts", () => ({
   resolveIssueRef: async () => ({ id: ISSUE_ID, identifier: "AGE-342" }),
 }));
 

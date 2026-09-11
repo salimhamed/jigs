@@ -1,4 +1,4 @@
-import { JigsError } from "../errors.ts";
+import { JigsError } from "../../errors.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 // An HTTP client of the service: the registry and the run states the sweep

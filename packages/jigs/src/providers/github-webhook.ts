@@ -4,8 +4,8 @@
 
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { JigsError } from "./errors.ts";
-import { githubWebhookSecretFile, jigsDataDir } from "./paths.ts";
+import { githubWebhookSecretFile, jigsDataDir } from "../config/paths.ts";
+import { JigsError } from "../errors.ts";
 
 // Reviews, inline review comments, and the check-run half of CI. No `status`:
 // that payload names no pull request, so routing one needs a sha lookup jigs

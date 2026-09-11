@@ -1,4 +1,4 @@
-import { JigsError } from "../errors.ts";
+import { JigsError } from "../../errors.ts";
 
 // One line per step, stopping at the first that fails: what `init` bought by
 // printing the commands instead of running them — a failure the human can

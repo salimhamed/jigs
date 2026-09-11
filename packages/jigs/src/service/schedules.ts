@@ -5,9 +5,9 @@
 
 import { Cron } from "croner";
 import type { z } from "zod";
-import { type Check, failedCheck, formatFailures } from "./checks/index.ts";
-import type { Factory, Schedule } from "./factory.ts";
-import { TERMINAL_RUN_STATUSES } from "./run-status.ts";
+import type { Factory, Schedule } from "../blocks/factory.ts";
+import { type Check, failedCheck, formatFailures } from "../checks/index.ts";
+import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import {
   listRuns,
   type RunRow,

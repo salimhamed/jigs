@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { JigsError } from "../errors.ts";
+import { JigsError } from "../../errors.ts";
 import { runDoctor } from "./doctor.ts";
 
 const fetchMock = vi.fn();

@@ -3,26 +3,26 @@ import { getRun, resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
 import { getWorld } from "workflow/runtime";
 import { z } from "zod";
-import { doctorChecks, failedChecks, runChecks } from "./checks/index.ts";
-import { factoryRoot } from "./config/factory-root.ts";
-import type { Factory } from "./factory.ts";
+import type { Factory } from "../blocks/factory.ts";
+import { tokenFromGithubPayload } from "../blocks/pull-request/gate.ts";
+import { tokenFromLinearPayload } from "../blocks/ticket/claim.ts";
+import { NEEDS_HUMAN_TOKEN_PREFIX } from "../blocks/ticket/halt-for-human.ts";
+import { doctorChecks, failedChecks, runChecks } from "../checks/index.ts";
+import { factoryRoot } from "../config/factory-root.ts";
+import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
+import { listWorktreesForRun } from "../steps/worktree/registry.ts";
+import { registrySql } from "../steps/worktree/sql.ts";
+import { sweepWorktrees } from "../steps/worktree/sweep.ts";
 import {
   githubWebhookSecret,
   verifyGithubSignature,
   verifyLinearSignature,
 } from "./ingress.ts";
 import { bootPhase, isReady } from "./readiness.ts";
-import { TERMINAL_RUN_STATUSES } from "./run-status.ts";
 import { describeRun, listRuns, type RunRef, resolveRunRef } from "./runs.ts";
 import { listSchedules, scheduleChecks } from "./schedules.ts";
 import { listRunDeadJobs, listRunSteps } from "./stalls.ts";
-import { tokenFromLinearPayload } from "./suspension/claim.ts";
-import { NEEDS_HUMAN_TOKEN_PREFIX } from "./suspension/needs-human.ts";
-import { tokenFromGithubPayload } from "./suspension/pull-request-gate.ts";
 import { startRun } from "./trigger.ts";
-import { listWorktreesForRun } from "./worktrees/registry.ts";
-import { registrySql } from "./worktrees/sql.ts";
-import { sweepWorktrees } from "./worktrees/sweep.ts";
 
 // The app is library code: a factory repo installs this package and hands in
 // its own pipelines, so nothing here may import a pipeline module.

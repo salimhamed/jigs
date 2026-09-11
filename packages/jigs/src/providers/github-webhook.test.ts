@@ -1,13 +1,13 @@
 import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import {
   ensureRepoWebhook,
   ensureWebhookSecret,
   parseGithubRemote,
   WEBHOOK_EVENTS,
 } from "./github-webhook.ts";
-import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
 const fetchMock = vi.fn();
 let tmp: string;

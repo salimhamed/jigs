@@ -2,6 +2,12 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import {
+  git,
+  makeRemoteBackedRepo,
+  makeTmpDir,
+  removeTmpDir,
+} from "../test-fixtures.ts";
+import {
   commitsAhead,
   deriveDefaultBranch,
   diffSince,
@@ -9,12 +15,6 @@ import {
   pushBranch,
   resolveRemoteUrl,
 } from "./git.ts";
-import {
-  git,
-  makeRemoteBackedRepo,
-  makeTmpDir,
-  removeTmpDir,
-} from "./test-fixtures.ts";
 
 let tmp: string;
 beforeEach(() => {

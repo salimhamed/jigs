@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { Binding } from "../config/factory-config.ts";
-import { JigsError } from "../errors.ts";
+import type { Binding } from "../../config/factory-config.ts";
+import { JigsError } from "../../errors.ts";
 import {
   CopySourceMissingError,
   PostCreateFailedError,

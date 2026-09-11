@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
 import { promisify } from "node:util";
-import { JigsError } from "./errors.ts";
+import { JigsError } from "../errors.ts";
 
 const execFileAsync = promisify(execFile);
 

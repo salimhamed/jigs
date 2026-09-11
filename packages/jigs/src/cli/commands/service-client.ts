@@ -2,9 +2,9 @@
 // place for the unreachable-service and run-ref errors, so every verb renders
 // them identically.
 
-import { resolveService } from "../config/factory-config.ts";
-import { locateFactoryRoot } from "../config/factory-root.ts";
-import { JigsError } from "../errors.ts";
+import { resolveService } from "../../config/factory-config.ts";
+import { locateFactoryRoot } from "../../config/factory-root.ts";
+import { JigsError } from "../../errors.ts";
 
 export interface ServiceDeps {
   serviceUrl: string;

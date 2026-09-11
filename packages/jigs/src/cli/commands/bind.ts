@@ -5,18 +5,18 @@ import {
   readFactoryConfigText,
   upsertBinding,
   writeFactoryConfigText,
-} from "../config/factory-config.ts";
-import { factoryEnvValue, readFactoryEnv } from "../config/factory-env.ts";
-import { locateFactoryRoot } from "../config/factory-root.ts";
-import { JigsError } from "../errors.ts";
+} from "../../config/factory-config.ts";
+import { factoryEnvValue, readFactoryEnv } from "../../config/factory-env.ts";
+import { locateFactoryRoot } from "../../config/factory-root.ts";
+import { JigsError } from "../../errors.ts";
 import {
   ensureRepoWebhook,
   ensureWebhookSecret,
   GithubApiError,
   parseGithubRemote,
-} from "../github-webhook.ts";
-import { hasBindingClone } from "../worktrees/clone.ts";
-import { bindingDir, bindingRepoDir } from "../worktrees/layout.ts";
+} from "../../providers/github-webhook.ts";
+import { hasBindingClone } from "../../steps/worktree/clone.ts";
+import { bindingDir, bindingRepoDir } from "../../steps/worktree/layout.ts";
 
 const BINDING_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 

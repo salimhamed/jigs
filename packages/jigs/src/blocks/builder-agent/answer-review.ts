@@ -4,21 +4,24 @@
 // rather than as a consolation.
 
 import { z } from "zod";
-import {
-  answerReviewPrompt,
-  interpolate,
-  rebuildContextPrompt,
-} from "../prompts/index.ts";
-import type { PrRef, ReviewThread } from "../providers/github.ts";
-import type { AgentSession, HarnessConfig } from "../steps/index.ts";
+import type { PrRef, ReviewThread } from "../../providers/github.ts";
+import type { readDiff } from "../../steps/pull-request/branch.ts";
+import type {
+  commentOnPr,
+  replyInThread,
+} from "../../steps/pull-request/pr.ts";
+import type { HarnessConfig } from "../agent/harness-config.ts";
+import { rebuildContextPrompt } from "../agent/rebuild-context.prompt.ts";
+import type { AgentSession } from "../agent/result.ts";
 import {
   type AgentFn,
   type ResumeOrRebuildResult,
   resumeOrRebuild,
-} from "../steps/index.ts";
+} from "../agent/resume-or-rebuild.ts";
+import { interpolate } from "../interpolate.ts";
 import type { Handoff } from "../ticket/review.ts";
 import { renderSnapshot } from "../ticket/snapshot.ts";
-import type { commentOnPr, readDiff, replyInThread } from "./pull-request.ts";
+import { answerReviewPrompt } from "./answer-review.prompt.ts";
 
 // threadId null means the pull request conversation: a review body has no
 // thread root to reply into.

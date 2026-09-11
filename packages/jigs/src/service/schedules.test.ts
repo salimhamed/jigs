@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { z } from "zod";
-import type { Factory, Schedule } from "./factory.ts";
+import type { Factory, Schedule } from "../blocks/factory.ts";
 import type { RunRow } from "./runs.ts";
 import {
   fireSchedule,

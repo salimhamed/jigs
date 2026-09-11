@@ -1,4 +1,4 @@
-import { JigsError } from "../errors.ts";
+import { JigsError } from "../../errors.ts";
 import { formatTable } from "../table.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 

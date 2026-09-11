@@ -1,4 +1,4 @@
-import { JigsError } from "../errors.ts";
+import { JigsError } from "../../errors.ts";
 import {
   readErrorBody,
   runRefError,

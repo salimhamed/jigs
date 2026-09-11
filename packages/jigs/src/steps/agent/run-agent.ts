@@ -1,15 +1,12 @@
-// The step side of agent() and ask(): what the factory's "use step" wrappers
-// delegate to. Runs the JIT checks, hydrates live providers from wire config
-// (nothing live crossed the boundary), and normalizes the generation into the
-// uniform StepResult.
+// The step side of agent(): what the factory's "use step" wrapper delegates
+// to. Runs the JIT checks, hydrates live providers from wire config (nothing
+// live crossed the boundary), and normalizes the generation into the uniform
+// AgentStepResult.
 //
 // Everything here reaches node builtins, so this module must only ever be
 // imported from inside a step body — a workflow-side import of it fails the
-// build loudly, which is the point of keeping it out of ./index.
+// build loudly, which is the point of keeping it out of blocks/.
 
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import {
   generateText,
   jsonSchema,
@@ -19,43 +16,36 @@ import {
 } from "ai";
 import type { McpServerConfig as ClaudeMcpServerConfig } from "ai-sdk-provider-claude-code";
 import type { CodexExecSettings } from "ai-sdk-provider-codex-cli";
+// Type-only, so it is erased and no workflow-side module is pulled in here.
+// The wrapper type is the one declaration of what crosses the step boundary.
+import type { RunAgentStep } from "../../blocks/agent/agent.ts";
+import type { McpServerConfig } from "../../blocks/agent/harness-config.ts";
+import type { AgentWire } from "../../blocks/agent/plan.ts";
+import {
+  type AgentStepResult,
+  extractAgentSession,
+  type StepGeneration,
+  toStepResult,
+} from "../../blocks/agent/result.ts";
 import {
   formatFailures,
   JIT_TIMEOUT_MS,
   jitChecks,
   runChecks,
-} from "../checks/index.ts";
-import {
-  claudeStepSettings,
-  resolveClaudeExecutable,
-} from "../harnesses/claude.ts";
+} from "../../checks/index.ts";
+import { claudeStepSettings } from "./harnesses/claude.ts";
 import {
   codexAppServerStepSettings,
-  codexExecStepSettings,
   withCodexAppServer,
-} from "../harnesses/codex.ts";
-import { ensureManagedCodexHome } from "../harnesses/codex-home.ts";
-import { scrubbedEnv } from "../harnesses/env.ts";
-import { claudeCode, codexExec } from "../harnesses/index.ts";
-import {
-  FileLockTimeoutError,
-  lockPathFor,
-  withFileLock,
-} from "../worktrees/lock.ts";
-// Type-only, so it is erased and no workflow-side module is pulled in here.
-// The wrapper type is the one declaration of what crosses the step boundary.
-import type { RunAgentStep } from "./builders.ts";
-import type { McpServerConfig } from "./config.ts";
-import type { AgentWire, AskWire } from "./plan.ts";
-import {
-  type AgentStepResult,
-  extractAgentSession,
-  type StepGeneration,
-  type StepResult,
-  toStepResult,
-} from "./result.ts";
+} from "./harnesses/codex.ts";
+import { ensureManagedCodexHome } from "./harnesses/codex-home.ts";
+import { scrubbedEnv } from "./harnesses/env.ts";
+import { claudeCode } from "./harnesses/index.ts";
+import { FileLockTimeoutError, lockPathFor, withFileLock } from "./lock.ts";
 
-type ExecutorGeneration = StepGeneration & { output?: unknown };
+// Exported for ../agent/run-ask.ts, which shares the executor seam; not part
+// of the ./steps/run subpath.
+export type ExecutorGeneration = StepGeneration & { output?: unknown };
 
 // The provider declares but does not export its MCP config type.
 type CodexMcpServerConfig = NonNullable<
@@ -137,7 +127,9 @@ function toCodexMcpServers(
   return mapped;
 }
 
-function outputSpec(
+// Exported for ./run-ask.ts, which builds the same output spec; not part of
+// the ./steps/run subpath.
+export function outputSpec(
   schema: Record<string, unknown> | undefined,
 ): OutputInterface<unknown, unknown, never> | undefined {
   return schema === undefined
@@ -284,61 +276,4 @@ async function generateAgentStep(
     ),
     ...(session !== undefined ? { session } : {}),
   };
-}
-
-export async function runAsk(
-  wire: AskWire,
-  runId: string,
-  deps: ExecuteDeps = realDeps,
-): Promise<StepResult> {
-  const harness = wire.harness;
-  const env = scrubbedEnv();
-  const output = outputSpec(wire.outputSchema);
-  const request = {
-    prompt: wire.prompt,
-    ...(wire.system !== undefined ? { system: wire.system } : {}),
-    ...(output !== undefined ? { output } : {}),
-  };
-
-  let generation: ExecutorGeneration;
-  if (harness.kind === "claude") {
-    generation = await deps.generateText({
-      // Not claudeStepSettings: a plain model call loads no worktree
-      // settings and sees no MCP universe at all.
-      model: claudeCode(harness.model, {
-        strictMcpConfig: true,
-        mcpServers: {},
-        settingSources: [],
-        env,
-        pathToClaudeCodeExecutable: resolveClaudeExecutable(),
-      }),
-      ...request,
-    });
-  } else {
-    // codex exec needs a cwd even for a pure model call; a scratch tmp dir
-    // keeps a read-only sandbox pointed away from anything real.
-    const scratch = mkdtempSync(path.join(tmpdir(), "jigs-ask-"));
-    try {
-      generation = await deps.generateText({
-        model: codexExec(
-          harness.model,
-          codexExecStepSettings({
-            cwd: scratch,
-            codexHome: deps.ensureCodexHome(runId),
-            env,
-            approvalMode: "never",
-            sandboxMode: "read-only",
-          }),
-        ),
-        ...request,
-      });
-    } finally {
-      rmSync(scratch, { recursive: true, force: true });
-    }
-  }
-
-  return toStepResult(
-    generation,
-    wire.outputSchema !== undefined ? generation.output : undefined,
-  );
 }

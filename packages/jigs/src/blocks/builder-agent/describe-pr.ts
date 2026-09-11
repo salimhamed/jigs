@@ -8,9 +8,10 @@
 // nothing when the resume is taken.
 
 import { z } from "zod";
-import type { AgentSession, HarnessConfig } from "../steps/index.ts";
-import { type AgentFn, resumeOrRebuild } from "../steps/index.ts";
-import type { readDiff } from "./pull-request.ts";
+import type { readDiff } from "../../steps/pull-request/branch.ts";
+import type { HarnessConfig } from "../agent/harness-config.ts";
+import type { AgentSession } from "../agent/result.ts";
+import { type AgentFn, resumeOrRebuild } from "../agent/resume-or-rebuild.ts";
 
 export const prDescription = z.strictObject({
   title: z.string().min(1),

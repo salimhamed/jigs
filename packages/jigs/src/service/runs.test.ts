@@ -2,8 +2,12 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { HookNotFoundError, WorkflowRunNotFoundError } from "workflow/errors";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
-import type { Factory } from "./factory.ts";
-import * as linear from "./providers/linear.ts";
+import type { Factory } from "../blocks/factory.ts";
+import { prToken } from "../blocks/pull-request/gate.ts";
+import { ticketToken } from "../blocks/ticket/claim.ts";
+import { needsHumanToken } from "../blocks/ticket/halt-for-human.ts";
+import * as linear from "../providers/linear.ts";
+import * as sql from "../steps/worktree/sql.ts";
 import {
   describeRun,
   listRuns,
@@ -13,10 +17,6 @@ import {
   type WorldRun,
 } from "./runs.ts";
 import * as stalls from "./stalls.ts";
-import { ticketToken } from "./suspension/claim.ts";
-import { needsHumanToken } from "./suspension/needs-human.ts";
-import { prToken } from "./suspension/pull-request-gate.ts";
-import * as sql from "./worktrees/sql.ts";
 
 const RUN_A = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 const RUN_B = "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ";

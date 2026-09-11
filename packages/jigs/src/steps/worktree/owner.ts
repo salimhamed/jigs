@@ -1,5 +1,5 @@
 import { getRun } from "workflow/api";
-import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
+import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 
 export interface OwnerState {
   terminal: boolean;

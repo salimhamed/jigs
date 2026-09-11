@@ -8,7 +8,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { managedCodexHomePath } from "../harnesses/codex-home.ts";
+import { managedCodexHomePath } from "../agent/harnesses/codex-home.ts";
 import * as create from "./create.ts";
 import type { OwnerState } from "./owner.ts";
 import type { WorktreeRow } from "./registry.ts";

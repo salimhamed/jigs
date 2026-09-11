@@ -1,8 +1,8 @@
 import { mkdirSync, realpathSync } from "node:fs";
 import path from "node:path";
-import { JigsError } from "../errors.ts";
-import { deriveDefaultBranch, git, tryGit } from "../git.ts";
-import type { WorktreeFacts } from "./facts.ts";
+import type { WorktreeFacts } from "../../blocks/worktree.ts";
+import { JigsError } from "../../errors.ts";
+import { deriveDefaultBranch, git, tryGit } from "../../providers/git.ts";
 
 // Every git call in this module passes an explicit absolute cwd — the
 // binding's bare clone for repo ops, the worktree path only to inspect an

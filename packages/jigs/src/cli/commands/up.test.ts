@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import {
   closedPort,
   closeFakeServices,

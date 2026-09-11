@@ -1,11 +1,12 @@
 import { beforeEach, expect, test } from "vitest";
-import type { CheckRun } from "../providers/github.ts";
-import { type AgentFn, type AgentStepConfig, claude } from "../steps/index.ts";
-import { resumeFailed } from "../steps/resume.ts";
+import type { CheckRun } from "../../providers/github.ts";
+import type { readDiff } from "../../steps/pull-request/branch.ts";
+import { claude } from "../agent/harness-config.ts";
+import type { AgentStepConfig } from "../agent/plan.ts";
+import { type AgentFn, resumeFailed } from "../agent/resume-or-rebuild.ts";
 import type { Handoff } from "../ticket/review.ts";
 import type { TicketSnapshot } from "../ticket/snapshot.ts";
 import { fixCi, renderChecks } from "./fix-ci.ts";
-import type { readDiff } from "./pull-request.ts";
 
 const snapshot: TicketSnapshot = {
   fetchedAt: "2026-08-26T13:00:00Z",

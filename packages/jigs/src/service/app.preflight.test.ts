@@ -10,6 +10,8 @@ import {
   vi,
 } from "vitest";
 import { z } from "zod";
+import { ensureBindingClone } from "../steps/worktree/clone.ts";
+import { bindingRepoDir } from "../steps/worktree/layout.ts";
 // Real git fixtures, reached by path: they are test-only, so they stay out
 // of the package's export map.
 import {
@@ -17,9 +19,7 @@ import {
   makeRemoteBackedRepo,
   makeTmpDir,
   removeTmpDir,
-} from "./test-fixtures.ts";
-import { ensureBindingClone } from "./worktrees/clone.ts";
-import { bindingRepoDir } from "./worktrees/layout.ts";
+} from "../test-fixtures.ts";
 
 // File-scoped so it cannot disturb app.test.ts: the whole point of AC1 is
 // that a refused trigger never reaches start().

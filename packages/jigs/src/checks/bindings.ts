@@ -5,9 +5,9 @@ import {
   parseFactoryConfig,
   readFactoryConfigText,
 } from "../config/factory-config.ts";
-import { probeRemoteAuth } from "../git.ts";
-import { hasBindingClone } from "../worktrees/clone.ts";
-import { bindingRepoDir } from "../worktrees/layout.ts";
+import { probeRemoteAuth } from "../providers/git.ts";
+import { hasBindingClone } from "../steps/worktree/clone.ts";
+import { bindingRepoDir } from "../steps/worktree/layout.ts";
 import {
   type Check,
   type CheckResult,

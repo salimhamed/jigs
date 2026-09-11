@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { z } from "zod";
-import { claude, codex } from "./config.ts";
-import { buildAgentWire, buildAskWire } from "./plan.ts";
+import { claude, codex } from "./harness-config.ts";
+import { buildAgentWire, buildAskWire, parseOutput } from "./plan.ts";
 
 const verdict = z.object({
   approved: z.boolean(),
@@ -72,4 +72,19 @@ test("every builder wire survives structuredClone — builders never inject live
     output: verdict,
   });
   expect(structuredClone(askWire)).toEqual(askWire);
+});
+
+test("parseOutput returns undefined when no output schema is declared", () => {
+  expect(parseOutput(undefined, { anything: true })).toBeUndefined();
+});
+
+test("parseOutput returns the typed parsed object for conforming recorded raw output", () => {
+  expect(parseOutput(verdict, { approved: true, note: "ship it" })).toEqual({
+    approved: true,
+    note: "ship it",
+  });
+});
+
+test("parseOutput throws for non-conforming recorded raw output", () => {
+  expect(() => parseOutput(verdict, { approved: "yes" })).toThrow();
 });

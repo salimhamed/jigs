@@ -2,8 +2,12 @@ import { mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
-import { JigsError } from "../errors.ts";
-import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import { JigsError } from "../../errors.ts";
+import {
+  makeFactoryRepo,
+  makeTmpDir,
+  removeTmpDir,
+} from "../../test-fixtures.ts";
 import { launchRun, parseInputs, validateInputs } from "./run.ts";
 import { SERVICE_ENTRY } from "./service-lifecycle.ts";
 

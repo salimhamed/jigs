@@ -7,13 +7,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
-import {
-  locateTemplates,
-  packageRoot,
-  TEMPLATE_SUFFIX,
-} from "../config/templates.ts";
-import { JigsError } from "../errors.ts";
-import { interpolate } from "../prompts/interpolate.ts";
+import { interpolate } from "../../blocks/interpolate.ts";
+import { JigsError } from "../../errors.ts";
+import { locateTemplates, packageRoot, TEMPLATE_SUFFIX } from "../templates.ts";
 
 // Scaffolds a factory repo: the infrastructure a factory needs to build and
 // run its own service, plus the code it starts from — the step wrappers, a

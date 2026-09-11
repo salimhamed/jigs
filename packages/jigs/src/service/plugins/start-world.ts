@@ -1,11 +1,11 @@
 import type { ISql } from "postgres";
+import type { BindingClone } from "../../steps/worktree/clone.ts";
 import { READY_PHASE, setBootPhase } from "../readiness.ts";
 import {
   installShutdown,
   onShutdown,
   startOwningSignals,
 } from "../shutdown.ts";
-import type { BindingClone } from "../worktrees/clone.ts";
 
 // Why every import below is dynamic: this module's top level has to stay free
 // of postgres, the factory config and the workflow runtime — the gate tests
@@ -34,11 +34,11 @@ export async function gateOnWorktreeRegistry(
     // WORKFLOW_POSTGRES_URL throws synchronously, and that escape is the very
     // thing this gate exists to stop.
     const resolveSql =
-      deps.sql ?? (await import("../worktrees/sql.ts")).registrySql;
+      deps.sql ?? (await import("../../steps/worktree/sql.ts")).registrySql;
     const sql = resolveSql();
     const ensure =
       deps.ensure ??
-      (await import("../worktrees/registry.ts")).ensureWorktreeRegistry;
+      (await import("../../steps/worktree/registry.ts")).ensureWorktreeRegistry;
     await ensure(sql);
   } catch (err) {
     const error = deps.error ?? ((line: string) => console.error(line));
@@ -83,12 +83,12 @@ export async function gateOnBindingClones(
   try {
     // Inside the try: reading the factory config is itself fallible, and a
     // service that cannot tell what is bound must not start.
-    const jigs = await import("../worktrees/clone.ts");
+    const jigs = await import("../../steps/worktree/clone.ts");
     ensure = deps.ensure ?? jigs.ensureBindingClone;
     if (deps.bindings !== undefined) {
       declared = deps.bindings();
     } else {
-      const { factoryRoot } = await import("../config/factory-root.ts");
+      const { factoryRoot } = await import("../../config/factory-root.ts");
       declared = jigs.bindingClones(factoryRoot());
     }
   } catch (err) {

@@ -1,13 +1,9 @@
 import { beforeEach, expect, test } from "vitest";
-import {
-  type AgentFn,
-  type AgentStepConfig,
-  claude,
-  parseOutput,
-} from "../steps/index.ts";
-import { resumeFailed } from "../steps/resume.ts";
+import type { readDiff } from "../../steps/pull-request/branch.ts";
+import { claude } from "../agent/harness-config.ts";
+import { type AgentStepConfig, parseOutput } from "../agent/plan.ts";
+import { type AgentFn, resumeFailed } from "../agent/resume-or-rebuild.ts";
 import { describePr } from "./describe-pr.ts";
-import type { readDiff } from "./pull-request.ts";
 
 let agentCalls: AgentStepConfig<unknown>[] = [];
 let diffCalls: Array<[string, string]> = [];

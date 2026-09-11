@@ -1,25 +1,17 @@
-// The workflow-side step surface: the harness configs a pipeline declares, the
-// wire those configs plan into, and the builders that hand a wire to the step
-// function the factory injects and zod-parse what comes back. Memoization is
-// the SDK's positional replay — no author-supplied keys.
-//
-// Nothing reachable from here carries a "use step" directive or a node
-// builtin: the wrappers live in the factory repo, so the ids the SDK derives
-// are factory-local paths and no version of this package is a memoization key.
-// ./run is the step side and is deliberately not re-exported.
+// Temporary. This folder exists only so the folder move ships with no public
+// API change: each file re-exports, by explicit name, exactly what one
+// exports-map subpath exported before the move, from the blocks/ and steps/
+// modules that content now lives in. Nothing inside src/ imports this folder —
+// only tsdown's entry list points at it. The next PR replaces every subpath
+// here with blocks/index.ts and steps/index.ts and deletes the folder whole.
+
 export {
-  type AgentFn,
   agent,
-  ask,
   JitCheckError,
-  parseOutput,
-  type ResumeOrRebuildOptions,
-  type ResumeOrRebuildResult,
   type RunAgentStep,
-  type RunAskStep,
-  resumeOrRebuild,
   unwrapAgentStep,
-} from "./builders.ts";
+} from "../blocks/agent/agent.ts";
+export { ask, type RunAskStep } from "../blocks/agent/ask.ts";
 export {
   type ClaudeHarnessConfig,
   type CodexHarnessConfig,
@@ -31,7 +23,7 @@ export {
   type McpProbe,
   type McpServerConfig,
   type McpStdioServer,
-} from "./config.ts";
+} from "../blocks/agent/harness-config.ts";
 export {
   type AgentStepConfig,
   type AgentWire,
@@ -39,11 +31,18 @@ export {
   type AskWire,
   buildAgentWire,
   buildAskWire,
+  parseOutput,
   type WireJsonSchema,
-} from "./plan.ts";
+} from "../blocks/agent/plan.ts";
 export type {
   AgentSession,
   AgentStepResult,
   StepResult,
   StepUsage,
-} from "./result.ts";
+} from "../blocks/agent/result.ts";
+export {
+  type AgentFn,
+  type ResumeOrRebuildOptions,
+  type ResumeOrRebuildResult,
+  resumeOrRebuild,
+} from "../blocks/agent/resume-or-rebuild.ts";

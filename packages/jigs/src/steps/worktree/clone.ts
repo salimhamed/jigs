@@ -3,9 +3,9 @@ import path from "node:path";
 import {
   parseFactoryConfig,
   readFactoryConfigText,
-} from "../config/factory-config.ts";
-import { JigsError } from "../errors.ts";
-import { git, tryGit } from "../git.ts";
+} from "../../config/factory-config.ts";
+import { JigsError } from "../../errors.ts";
+import { git, tryGit } from "../../providers/git.ts";
 import { bindingRepoDir } from "./layout.ts";
 
 // jigs' own bare clone of a binding's remote, which every worktree of that

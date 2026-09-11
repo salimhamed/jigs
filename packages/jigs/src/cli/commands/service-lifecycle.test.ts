@@ -8,9 +8,13 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { JigsError } from "../errors.ts";
-import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
-import { factorySlug } from "../worktrees/layout.ts";
+import type { JigsError } from "../../errors.ts";
+import { factorySlug } from "../../steps/worktree/layout.ts";
+import {
+  makeFactoryRepo,
+  makeTmpDir,
+  removeTmpDir,
+} from "../../test-fixtures.ts";
 import type {
   ServiceHealth,
   ServiceProcesses,

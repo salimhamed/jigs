@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
-import { jigsDataDir } from "../paths.ts";
+import { jigsDataDir } from "../../config/paths.ts";
 
 // Binding names are unique only per factory repo, so the path needs factory
 // identity — dirname alone would collide two factories named the same, and it

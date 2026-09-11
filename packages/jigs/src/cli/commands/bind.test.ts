@@ -1,8 +1,12 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
-import { bindingRepoDir } from "../worktrees/layout.ts";
+import { bindingRepoDir } from "../../steps/worktree/layout.ts";
+import {
+  makeFactoryRepo,
+  makeTmpDir,
+  removeTmpDir,
+} from "../../test-fixtures.ts";
 import { type BindDeps, bindRepo } from "./bind.ts";
 import { unbindRepo } from "./unbind.ts";
 

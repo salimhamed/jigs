@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
-import { jigsDataDir } from "../paths.ts";
+import { jigsDataDir } from "../../../config/paths.ts";
 
 // The managed Codex home: codex has no strict-config flag, so deny-by-default
 // is enforced by pointing CODEX_HOME at a jigs-owned directory holding a

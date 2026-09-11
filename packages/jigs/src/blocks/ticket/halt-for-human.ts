@@ -1,16 +1,10 @@
-// Determinism rule for this module: every provider call, env read, and time
-// read lives in one of the two implementation functions below, which the
-// factory wraps as steps and injects. The workflow body only sequences
-// memoized step results — cursors and ids come from step returns, never from
-// Date.now() or process.env in the body.
+// The halt block: post the reason to the ticket, then suspend until a human
+// answers. Every provider call, env read and time read lives in the two step
+// implementations this block is handed — ../../steps/ticket/needs-human-comments.ts —
+// so the body here only sequences memoized step results. Cursors and ids come
+// from step returns, never from Date.now() or process.env.
 
 import { createHook } from "workflow";
-import {
-  createComment,
-  getIssueParticipants,
-  listCommentsSince,
-  mention,
-} from "../providers/linear.ts";
 import type { TicketClaim } from "./claim.ts";
 
 // The halt's marker hook. It names no external resource and nothing resumes
@@ -37,9 +31,24 @@ export interface HumanReply {
   createdAt: string;
 }
 
+// Declared here rather than written as `typeof postNeedsHumanComment`: the
+// implementation lives under steps/ and reaches Linear, and a block naming it
+// even in a type position is an import edge this side may not have.
+export type PostNeedsHumanComment = (
+  issueId: string,
+  reason: string,
+  payload: JsonValue | undefined,
+) => Promise<{ commentId: string; postedAt: string }>;
+
+export type CheckForHumanReply = (
+  issueId: string,
+  sinceIso: string,
+  postedCommentId: string,
+) => Promise<{ reply: HumanReply | null; cursor: string }>;
+
 export type NeedsHumanDeps = {
-  postComment: typeof postNeedsHumanComment;
-  checkForReply: typeof checkForHumanReply;
+  postComment: PostNeedsHumanComment;
+  checkForReply: CheckForHumanReply;
 };
 
 /** {@link needsHuman} with its steps already bound — what a jig is handed. */
@@ -87,68 +96,4 @@ export async function needsHuman(
   } finally {
     marker.dispose();
   }
-}
-
-export async function postNeedsHumanComment(
-  issueId: string,
-  reason: string,
-  payload: JsonValue | undefined,
-) {
-  const { creator } = await getIssueParticipants(issueId);
-  const lines = [`${creator !== null ? `${mention(creator)} ` : ""}${reason}`];
-  if (payload !== undefined) {
-    if (isFindingsPayload(payload)) {
-      lines.push("", ...payload.findings.map((finding) => `1. ${finding}`));
-    } else {
-      lines.push("", "```json", JSON.stringify(payload, null, 2), "```");
-    }
-  }
-  const comment = await createComment(issueId, lines.join("\n"));
-  console.log(`[needsHuman] posted comment=${comment.id} issue=${issueId}`);
-  return { commentId: comment.id, postedAt: comment.createdAt };
-}
-
-function isFindingsPayload(
-  payload: JsonValue,
-): payload is { findings: string[] } {
-  return (
-    typeof payload === "object" &&
-    payload !== null &&
-    !Array.isArray(payload) &&
-    Object.keys(payload).length === 1 &&
-    Array.isArray(payload.findings) &&
-    payload.findings.every((finding) => typeof finding === "string")
-  );
-}
-
-export async function checkForHumanReply(
-  issueId: string,
-  sinceIso: string,
-  postedCommentId: string,
-): Promise<{ reply: HumanReply | null; cursor: string }> {
-  const comments = await listCommentsSince(issueId, sinceIso);
-  const cursor = comments.reduce(
-    (max, comment) => (comment.createdAt > max ? comment.createdAt : max),
-    sinceIso,
-  );
-  // A factory may run on its operator's own API key, so author identity cannot
-  // tell the run's comment from the human's: exclude exactly the comment this
-  // suspension posted instead.
-  const human = comments.find(
-    (comment) => comment.user !== null && comment.id !== postedCommentId,
-  );
-  console.log(
-    `[needsHuman] re-check issue=${issueId} since=${sinceIso} found=${human !== undefined}`,
-  );
-  if (human === undefined || human.user === null)
-    return { reply: null, cursor };
-  return {
-    reply: {
-      commentId: human.id,
-      body: human.body,
-      author: human.user,
-      createdAt: human.createdAt,
-    },
-    cursor,
-  };
 }

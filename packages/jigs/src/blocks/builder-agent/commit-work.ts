@@ -3,9 +3,10 @@
 // arms — the work is on disk in the cwd, so a fresh builder reading the
 // worktree has everything the resumed one would have had.
 
-import { commitWorkPrompt } from "../prompts/index.ts";
-import type { AgentSession, HarnessConfig } from "../steps/index.ts";
-import { type AgentFn, resumeOrRebuild } from "../steps/index.ts";
+import type { HarnessConfig } from "../agent/harness-config.ts";
+import type { AgentSession } from "../agent/result.ts";
+import { type AgentFn, resumeOrRebuild } from "../agent/resume-or-rebuild.ts";
+import { commitWorkPrompt } from "./commit-work.prompt.ts";
 
 export interface CommitLeftoverWorkOptions {
   agent: AgentFn;

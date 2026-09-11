@@ -3,7 +3,7 @@
 // is bundled into the workflow sandbox).
 
 import { z } from "zod";
-import type { HarnessConfig } from "./config.ts";
+import type { HarnessConfig } from "./harness-config.ts";
 import type { AgentSession } from "./result.ts";
 
 export type AgentStepConfig<T = undefined> = {
@@ -67,4 +67,14 @@ export function buildAskWire<T>(config: AskStepConfig<T>): AskWire {
   const { output, ...wire } = config;
   const outputSchema = toWireSchema(output);
   return outputSchema === undefined ? wire : { ...wire, outputSchema };
+}
+
+// The executor asks the harness for schema-conformant output; the real
+// validation is this workflow-side zod parse of the recorded raw output —
+// deterministic on replay, and where the result gets its `T`.
+export function parseOutput<T>(
+  schema: z.ZodType<T> | undefined,
+  raw: unknown,
+): T {
+  return schema === undefined ? (undefined as T) : schema.parse(raw);
 }

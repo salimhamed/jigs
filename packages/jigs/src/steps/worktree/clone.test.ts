@@ -6,7 +6,7 @@ import {
   makeFactoryRepo,
   makeTmpDir,
   removeTmpDir,
-} from "../test-fixtures.ts";
+} from "../../test-fixtures.ts";
 import { bindingClones, ensureBindingClone, hasBindingClone } from "./clone.ts";
 import { bindingRepoDir } from "./layout.ts";
 

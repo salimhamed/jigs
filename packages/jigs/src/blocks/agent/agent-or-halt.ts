@@ -3,11 +3,12 @@
 // keeping its worktree, and the step re-runs from zero once a human replies.
 // Late discovery costs a pause, never a relaunch.
 
-import type { TicketClaim } from "../suspension/claim.ts";
-import type { NeedsHumanFn } from "../suspension/needs-human.ts";
-import { type AgentFn, JitCheckError } from "./builders.ts";
+import type { TicketClaim } from "../ticket/claim.ts";
+import type { NeedsHumanFn } from "../ticket/halt-for-human.ts";
+import { JitCheckError } from "./agent.ts";
 import type { AgentStepConfig } from "./plan.ts";
 import type { AgentStepResult } from "./result.ts";
+import type { AgentFn } from "./resume-or-rebuild.ts";
 
 export interface AgentOrHaltDeps {
   agent: AgentFn;

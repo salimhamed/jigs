@@ -4,11 +4,13 @@
 // invocation is approval.
 
 import { z } from "zod";
-import { interpolate, ticketReviewPrompt } from "../prompts/index.ts";
-import type { AgentFn, HarnessConfig } from "../steps/index.ts";
-import type { TicketClaim } from "../suspension/claim.ts";
-import type { NeedsHumanFn } from "../suspension/needs-human.ts";
+import type { HarnessConfig } from "../agent/harness-config.ts";
+import type { AgentFn } from "../agent/resume-or-rebuild.ts";
+import { interpolate } from "../interpolate.ts";
+import type { TicketClaim } from "./claim.ts";
+import type { NeedsHumanFn } from "./halt-for-human.ts";
 import { renderSnapshot, type TicketSnapshot } from "./snapshot.ts";
+import { ticketReviewPrompt } from "./ticket-review.prompt.ts";
 
 // strictObject so the harness's native structured output carries
 // additionalProperties:false and a malformed verdict throws at the

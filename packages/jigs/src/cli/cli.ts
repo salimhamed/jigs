@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import readline from "node:readline/promises";
 import { Command, Option } from "commander";
+import { JigsError } from "../errors.ts";
 import { bindRepo } from "./commands/bind.ts";
 import { listBindings } from "./commands/bindings.ts";
 import { buildFactoryService } from "./commands/build.ts";
@@ -26,7 +27,6 @@ import { runSweep } from "./commands/sweep.ts";
 import { unbindRepo } from "./commands/unbind.ts";
 import { upFactory } from "./commands/up.ts";
 import { upgradeFactory } from "./commands/upgrade.ts";
-import { JigsError } from "./errors.ts";
 
 // No `.default()`: commander evaluates defaults eagerly, so resolving the
 // factory's service URL here would walk the filesystem on `jigs --help`.

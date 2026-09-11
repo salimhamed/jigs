@@ -4,7 +4,7 @@
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { githubWebhookSecretFile } from "./paths.ts";
+import { githubWebhookSecretFile } from "../config/paths.ts";
 
 function hmacMatches(rawBody: string, signatureHex: string, secret: string) {
   const expected = createHmac("sha256", secret).update(rawBody).digest();

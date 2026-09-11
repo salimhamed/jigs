@@ -1,12 +1,12 @@
 import { beforeEach, expect, test, vi } from "vitest";
-import type { PrSnapshot, ReviewThread } from "../providers/github.ts";
+import type { PrSnapshot, ReviewThread } from "../../providers/github.ts";
 import {
   classifyPrState,
   type GateCursor,
   prToken,
   pullRequestGate,
   tokenFromGithubPayload,
-} from "./pull-request-gate.ts";
+} from "./gate.ts";
 
 // The gate reaches the SDK through this one hook, so a stand-in that counts
 // awaits and hands back a resolver is enough to drive the loop.

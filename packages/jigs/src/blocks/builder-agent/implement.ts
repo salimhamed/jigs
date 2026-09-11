@@ -8,16 +8,16 @@
 // scope — the prompt says so, and this call site is what makes it true.
 
 import { z } from "zod";
-import {
-  codeReviewPrompt,
-  implementPrompt,
-  interpolate,
-} from "../prompts/index.ts";
-import type { AgentFn, AgentSession, HarnessConfig } from "../steps/index.ts";
-import type { TicketClaim } from "../suspension/claim.ts";
-import type { NeedsHumanFn } from "../suspension/needs-human.ts";
+import type { HarnessConfig } from "../agent/harness-config.ts";
+import type { AgentSession } from "../agent/result.ts";
+import type { AgentFn } from "../agent/resume-or-rebuild.ts";
+import { interpolate } from "../interpolate.ts";
+import type { TicketClaim } from "../ticket/claim.ts";
+import type { NeedsHumanFn } from "../ticket/halt-for-human.ts";
 import type { Handoff } from "../ticket/review.ts";
 import { renderSnapshot } from "../ticket/snapshot.ts";
+import { codeReviewPrompt } from "./code-review.prompt.ts";
+import { implementPrompt } from "./implement.prompt.ts";
 
 // strictObject for the same reason ticketReviewVerdict is: the harness's
 // native structured output carries additionalProperties:false, and a malformed

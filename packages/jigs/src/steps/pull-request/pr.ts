@@ -1,13 +1,11 @@
-// The step side of the review loop: thin implementations over the GitHub
-// provider and jigs' git helpers, which the factory wraps as steps and injects.
-// jigs reaches node builtins, so this module must only ever be imported from
-// inside a step body — hence the errors these raise workflow-side live in the
+// The pull-request side of the review loop's step surface: thin
+// implementations over the GitHub provider, which the factory wraps as steps
+// and injects. This module reaches the network, so it is only ever imported
+// from inside a step body — the errors these raise workflow-side live in the
 // factory's own composition, never here.
 
-import { resolveBinding } from "../config/factory-config.ts";
-import { factoryRoot } from "../config/factory-root.ts";
-import { commitsAhead, diffSince, headSha, pushBranch } from "../git.ts";
-import { type GithubRepoRef, parseGithubRemote } from "../github-webhook.ts";
+import { resolveBinding } from "../../config/factory-config.ts";
+import { factoryRoot } from "../../config/factory-root.ts";
 import {
   createPullRequest,
   fetchPrTitle,
@@ -15,8 +13,11 @@ import {
   postPrComment,
   replyToReviewThread,
   squashMergePr,
-} from "../providers/github.ts";
-import { isWorktreeDirty } from "../worktrees/teardown.ts";
+} from "../../providers/github.ts";
+import {
+  type GithubRepoRef,
+  parseGithubRemote,
+} from "../../providers/github-webhook.ts";
 
 // The binding is the remote now, so this is a config read: no git subprocess.
 export async function resolveRepo(binding: string): Promise<GithubRepoRef> {
@@ -28,28 +29,6 @@ export async function resolveRepo(binding: string): Promise<GithubRepoRef> {
     );
   }
   return ref;
-}
-
-export async function pushWorktreeBranch(
-  worktreePath: string,
-  branch: string,
-  baseSha: string,
-): Promise<{ commits: number; headSha: string; dirty: boolean }> {
-  const commits = await commitsAhead(worktreePath, baseSha);
-  if (commits > 0) await pushBranch(worktreePath, branch);
-  const head = await headSha(worktreePath);
-  // Returned alongside the commit count because the two together are what tell
-  // an empty push apart: no commits and a clean tree is a builder that did
-  // nothing, no commits and a dirty tree is work that can still be saved.
-  const dirty = await isWorktreeDirty(worktreePath);
-  return { commits, headSha: head, dirty };
-}
-
-export async function readDiff(
-  worktreePath: string,
-  baseSha: string,
-): Promise<string> {
-  return diffSince(worktreePath, baseSha);
 }
 
 export async function openPr(

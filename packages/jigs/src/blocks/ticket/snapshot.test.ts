@@ -1,24 +1,6 @@
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { RawIssueSnapshot } from "../providers/linear.ts";
-import { fetchSnapshot, renderSnapshot, toSnapshot } from "./snapshot.ts";
-
-const fetchMock = vi.fn();
-
-beforeEach(() => {
-  vi.stubGlobal("fetch", fetchMock);
-  vi.stubEnv("LINEAR_API_KEY", "lin_test_key");
-  vi.stubEnv("LINEAR_API_URL", "http://mock.test/graphql");
-  fetchMock.mockReset();
-});
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.unstubAllEnvs();
-});
-
-const respond = (data: unknown) =>
-  fetchMock.mockResolvedValueOnce(
-    new Response(JSON.stringify({ data }), { status: 200 }),
-  );
+import { expect, test } from "vitest";
+import type { RawIssueSnapshot } from "../../providers/linear.ts";
+import { renderSnapshot, toSnapshot } from "./snapshot.ts";
 
 const comment = (id: string, body: string) => ({
   id,
@@ -115,33 +97,4 @@ test("renderSnapshot includes every section a reviewing agent needs", () => {
   expect(rendered).toContain("[design doc](https://doc.test)");
   expect(rendered).toContain("## Sub-issues");
   expect(rendered).toContain("AGE-400 sub");
-});
-
-test("a later fetch carries the new comment while the earlier copy keeps its own", async () => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => {});
-  respond({ issue: rawIssue() });
-  respond({
-    issue: rawIssue({
-      comments: {
-        nodes: [
-          comment("c1", "first pass looks right"),
-          comment("c2", "answering: yes, cap comments at 100"),
-        ],
-      },
-    }),
-  });
-
-  const launch = await fetchSnapshot("68bc9696-35d5-442d-ab56-214c8cfefbec");
-  const later = await fetchSnapshot("68bc9696-35d5-442d-ab56-214c8cfefbec");
-
-  expect(launch.comments.map((c) => c.id)).toEqual(["c1"]);
-  expect(later.comments.map((c) => c.id)).toEqual(["c1", "c2"]);
-  expect(log).toHaveBeenNthCalledWith(
-    1,
-    "[snapshot] fetched issue=68bc9696-35d5-442d-ab56-214c8cfefbec identifier=AGE-313 state=Todo labels=ready-for-agent comments=1",
-  );
-  expect(log).toHaveBeenNthCalledWith(
-    2,
-    "[snapshot] fetched issue=68bc9696-35d5-442d-ab56-214c8cfefbec identifier=AGE-313 state=Todo labels=ready-for-agent comments=2",
-  );
 });

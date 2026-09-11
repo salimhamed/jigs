@@ -1,7 +1,7 @@
 // What a factory declares its pipelines with, re-exported from the "." export.
 
 import { z } from "zod";
-import type { PipelineRequires } from "./checks/index.ts";
+import type { PipelineRequires } from "../checks/index.ts";
 
 export const ticketInput = z.union([
   z.uuid(),

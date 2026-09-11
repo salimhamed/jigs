@@ -3,17 +3,16 @@
 // saw the ticket, the brief or the diff is guessing at the change it is
 // repairing.
 
-import {
-  fixCiFreshPrompt,
-  fixCiPrompt,
-  interpolate,
-} from "../prompts/index.ts";
-import type { CheckRun } from "../providers/github.ts";
-import type { AgentSession, HarnessConfig } from "../steps/index.ts";
-import { type AgentFn, resumeOrRebuild } from "../steps/index.ts";
+import type { CheckRun } from "../../providers/github.ts";
+import type { readDiff } from "../../steps/pull-request/branch.ts";
+import type { HarnessConfig } from "../agent/harness-config.ts";
+import type { AgentSession } from "../agent/result.ts";
+import { type AgentFn, resumeOrRebuild } from "../agent/resume-or-rebuild.ts";
+import { interpolate } from "../interpolate.ts";
 import type { Handoff } from "../ticket/review.ts";
 import { renderSnapshot } from "../ticket/snapshot.ts";
-import type { readDiff } from "./pull-request.ts";
+import { fixCiPrompt } from "./fix-ci.prompt.ts";
+import { fixCiFreshPrompt } from "./fix-ci-fresh.prompt.ts";
 
 export interface FixCiOptions {
   agent: AgentFn;

@@ -6,7 +6,7 @@
 // owns a mismatch check of its own.
 
 import type { z } from "zod";
-import type { HarnessConfig } from "./config.ts";
+import type { HarnessConfig } from "./harness-config.ts";
 import type { AgentStepConfig } from "./plan.ts";
 import type { AgentSession, AgentStepResult } from "./result.ts";
 

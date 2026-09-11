@@ -1,19 +1,18 @@
-// Determinism rule for this module: the provider fetch lives in fetchPrState,
-// which the factory wraps as a step and injects; the generator body only
-// sequences memoized snapshots through the pure classifier, so the cursor
-// replays identically across restarts. The acks the consumer hands back are
-// memoized step results too (the ids GitHub gave its replies), so they replay
-// with it.
+// Determinism rule for this module: the provider fetch lives in
+// ../../steps/pull-request/fetch-state.ts, which the factory wraps as a step
+// and injects; the generator body only sequences memoized snapshots through
+// the pure classifier, so the cursor replays identically across restarts. The
+// acks the consumer hands back are memoized step results too (the ids GitHub
+// gave its replies), so they replay with it.
 
 import { createHook } from "workflow";
-import {
-  type CheckRun,
-  fetchPrSnapshot,
-  type PrRef,
-  type PrSnapshot,
-  type ReviewThread,
-} from "../providers/github.ts";
-import { ClaimConflictError } from "./claim.ts";
+import type {
+  CheckRun,
+  PrRef,
+  PrSnapshot,
+  ReviewThread,
+} from "../../providers/github.ts";
+import { ClaimConflictError } from "../ticket/claim.ts";
 
 // The gate's hook token names the pull request, never the run: owning it is
 // the exclusivity lock. The ingress has only a webhook payload to go on, so it
@@ -225,6 +224,11 @@ export function classifyPrState(
   };
 }
 
+// Declared here rather than written as `typeof fetchPrState`: the fetch lives
+// under steps/ and reaches GitHub, and a block naming it even in a type
+// position is an import edge this side may not have.
+export type FetchPrState = (pr: PrRef) => Promise<PrSnapshot>;
+
 /** {@link pullRequestGate} with its step already bound. */
 export type GateFn = (
   pr: PrRef,
@@ -238,7 +242,7 @@ export type GateFn = (
 // caught without needing a webhook.
 export async function* pullRequestGate(
   pr: PrRef,
-  fetchState: typeof fetchPrState,
+  fetchState: FetchPrState,
 ): AsyncGenerator<GateWake, void, GateAck | undefined> {
   const token = prToken(pr);
   const hook = createHook<unknown>({ token });
@@ -281,12 +285,4 @@ export async function* pullRequestGate(
   } finally {
     hook.dispose();
   }
-}
-
-export async function fetchPrState(pr: PrRef): Promise<PrSnapshot> {
-  const snapshot = await fetchPrSnapshot(pr);
-  console.log(
-    `[prGate] fetched ${pr.owner}/${pr.repo}#${pr.number} state=${snapshot.state} merged=${snapshot.merged} reviews=${snapshot.reviews.length} threads=${snapshot.reviewThreads.length} ci=${snapshot.ci}`,
-  );
-  return snapshot;
 }

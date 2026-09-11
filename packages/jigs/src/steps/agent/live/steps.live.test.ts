@@ -1,22 +1,29 @@
 import path from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { z } from "zod";
-import { ensureManagedCodexHome } from "../../harnesses/codex-home.ts";
-import { stripApiCredentials } from "../../harnesses/env.ts";
+import { claude, codex } from "../../../blocks/agent/harness-config.ts";
+import {
+  type AgentWire,
+  buildAgentWire,
+  buildAskWire,
+} from "../../../blocks/agent/plan.ts";
+import type {
+  AgentStepResult,
+  StepUsage,
+} from "../../../blocks/agent/result.ts";
+import { ensureManagedCodexHome } from "../harnesses/codex-home.ts";
+import { stripApiCredentials } from "../harnesses/env.ts";
 import {
   assertLivePreconditions,
   makeScratchRepo,
-} from "../../harnesses/live/fixtures/live-env.ts";
-import { makeTmpDir, removeTmpDir } from "../../harnesses/test-fixtures.ts";
-import { claude, codex } from "../config.ts";
-import { type AgentWire, buildAgentWire, buildAskWire } from "../plan.ts";
-import type { AgentStepResult, StepUsage } from "../result.ts";
+} from "../harnesses/live/fixtures/live-env.ts";
+import { makeTmpDir, removeTmpDir } from "../harnesses/test-fixtures.ts";
 import {
   type ExecuteDeps,
   realDeps,
   runAgent as runAgentStep,
-  runAsk,
-} from "../run.ts";
+} from "../run-agent.ts";
+import { runAsk } from "../run-ask.ts";
 
 let tmp: string;
 let deps: ExecuteDeps;

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { JigsError } from "../errors.ts";
+import type { JigsError } from "../../errors.ts";
 import { cancelRun } from "./cancel.ts";
 
 const fetchMock = vi.fn();

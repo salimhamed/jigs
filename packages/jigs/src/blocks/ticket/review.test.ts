@@ -1,16 +1,9 @@
 import { beforeEach, expect, test, vi } from "vitest";
-import {
-  type AgentFn,
-  type AgentStepConfig,
-  claude,
-  parseOutput,
-} from "../steps/index.ts";
-import type { TicketClaim } from "../suspension/claim.ts";
-import type {
-  HumanReply,
-  JsonValue,
-  NeedsHumanFn,
-} from "../suspension/needs-human.ts";
+import { claude } from "../agent/harness-config.ts";
+import { type AgentStepConfig, parseOutput } from "../agent/plan.ts";
+import type { AgentFn } from "../agent/resume-or-rebuild.ts";
+import type { TicketClaim } from "./claim.ts";
+import type { HumanReply, JsonValue, NeedsHumanFn } from "./halt-for-human.ts";
 import { ticketReview, ticketReviewVerdict } from "./review.ts";
 import type { TicketSnapshot } from "./snapshot.ts";
 
