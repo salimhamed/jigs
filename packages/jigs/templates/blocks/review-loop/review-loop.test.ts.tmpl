@@ -16,6 +16,7 @@ import {
   type Handoff,
   parseOutput,
   type PrRef,
+  type PromptRef,
   type TicketClaim,
   type TicketSnapshot,
   unwrapAgentStep,
@@ -56,7 +57,7 @@ const shared = vi.hoisted(() => ({
     pushHead: ((nth: number) => ({ headSha: `pushed-${nth}` })) as (
       nth: number,
     ) => { headSha: string },
-    // Names the one resuming agent call a test wants to fail, by its prompt: a
+    // Names the one resuming agent call a test wants to fail, by prompt name:
     // positional count would silently re-aim itself onto whichever resuming
     // call happens to come first.
     staleResume: (() => false) as (config: AgentStepConfig<unknown>) => boolean,
@@ -267,11 +268,20 @@ const emptyBranches =
       ? { commits: 1, headSha: `head-${nth}`, dirty: false }
       : { commits: 0, headSha: "base-sha-1", dirty: true };
 
-const commitRounds = () =>
-  calls.agent.filter((call) => call.prompt.startsWith("# Commit your work"));
+// Every prompt the loop sends is a reference now — a registered name plus the
+// data the agent step renders it with — so a call is identified by its name
+// and its wording is the template's business, not this file's.
+const ref = (call: AgentStepConfig<unknown>): PromptRef =>
+  typeof call.prompt === "string"
+    ? { name: "(literal)", data: {} }
+    : call.prompt;
 
-const ciFixes = () =>
-  calls.agent.filter((call) => call.prompt.startsWith("# Fix CI"));
+const named = (name: string) => (call: AgentStepConfig<unknown>) =>
+  ref(call).name === name;
+
+const commitRounds = () => calls.agent.filter(named("commit-work"));
+
+const ciFixes = () => calls.agent.filter(named("fix-ci"));
 
 const run = (merge: "jigs" | "human" = "jigs") =>
   reviewLoop({
@@ -372,8 +382,7 @@ test("an empty branch with a dirty worktree sends the builder back to commit", a
 test("a stale session commits from a fresh context rather than failing the run", async () => {
   script.wakes = [closedMerged];
   script.branch = emptyBranches(1);
-  script.staleResume = (config) =>
-    config.prompt.startsWith("# Commit your work");
+  script.staleResume = named("commit-work");
   const result = await run();
 
   // The same prompt either way: the work is on disk, so the fresh round needs
@@ -428,7 +437,17 @@ test("the description resumes the builder's session on this factory's own harnes
   expect(describing?.resume).toEqual({ harness: "claude", id: "s-1" });
   expect(describing?.cwd).toBe("/tmp/worktree");
   expect(describing?.harness).toEqual({ kind: "claude", model: "opus" });
-  expect(describing?.prompt).toContain("AGE-316: ");
+  // The conventions this factory hands the template, not the rendered words.
+  expect(ref(describing as AgentStepConfig<unknown>)).toEqual({
+    name: "describe-pr",
+    data: {
+      IDENTIFIER: "AGE-316",
+      TICKET_URL: snapshot.url,
+      TICKET: null,
+      BRIEF: null,
+      DIFF: null,
+    },
+  });
 });
 
 test("a review-comments wake answers every thread in place", async () => {
@@ -530,7 +549,9 @@ test("a changes-requested review body is answered on the PR conversation", async
 
   expect(calls.replies).toEqual([]);
   expect(calls.comments).toEqual(["addressed all four"]);
-  expect(calls.agent.at(-1)?.prompt).toContain("four things need fixing");
+  const answering = ref(calls.agent.at(-1) as AgentStepConfig<unknown>);
+  expect(answering.name).toBe("answer-review");
+  expect(answering.data.THREADS).toContain("four things need fixing");
 });
 
 test("the fourth consecutive red escalates as an @-mention instead of a fix", async () => {
@@ -573,8 +594,9 @@ test("the fourth consecutive red escalates as an @-mention instead of a fix", as
   ]);
   const fixes = ciFixes();
   expect(fixes).toHaveLength(3);
-  expect(fixes[0]?.prompt).toContain("attempt 1 of 3");
-  expect(fixes[0]?.prompt).toContain("**test** — failure");
+  const fixData = ref(fixes[0] as AgentStepConfig<unknown>).data;
+  expect(fixData.ATTEMPT).toBe("1 of 3");
+  expect(fixData.CHECKS).toContain("**test** — failure");
 
   expect(calls.comments).toHaveLength(1);
   expect(calls.comments[0]?.startsWith("@salim")).toBe(true);
@@ -626,7 +648,7 @@ test("the CI fix does not take over the builder's session pointer", async () => 
 
 test("a stale session sends the CI fix into a fresh context that then holds the change", async () => {
   script.outputs = [approved, description, answerFor([900])];
-  script.staleResume = (config) => config.prompt.startsWith("# Fix CI");
+  script.staleResume = named("fix-ci");
   script.wakes = [
     ciRed("sha-1"),
     { kind: "review-comments", threads: [thread(900)] },
@@ -639,8 +661,10 @@ test("a stale session sends the CI fix into a fresh context that then holds the 
   // resumes that.
   const fresh = calls.agent[4];
   expect(fresh?.resume).toBeUndefined();
-  expect(fresh?.prompt).toContain("AGE-316");
-  expect(fresh?.prompt).toContain("THE-DIFF");
+  const freshRef = ref(fresh as AgentStepConfig<unknown>);
+  expect(freshRef.name).toBe("fix-ci-fresh");
+  expect(freshRef.data.TICKET).toContain("AGE-316");
+  expect(freshRef.data.DIFF).toBe("THE-DIFF");
   expect(calls.agent.at(-1)?.resume).toEqual({ harness: "claude", id: "s-5" });
 });
 

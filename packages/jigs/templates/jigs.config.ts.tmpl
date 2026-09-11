@@ -1,5 +1,6 @@
 import type { Factory } from "@salimhamed/jigs";
 import { shipInputs, shipPipeline } from "./pipelines/ship.ts";
+import { prompts } from "./prompts/index.ts";
 
 // This factory's pipelines, keyed by the name `jigs run` takes. `jigs build`
 // generates the service entry from this file.
@@ -13,4 +14,7 @@ export default {
       requires: { harnesses: ["claude", "codex"] },
     },
   },
+  // Declared so `jigs doctor` renders every prompt this factory's steps use
+  // and reports a template that no longer parses.
+  prompts,
 } satisfies Factory;

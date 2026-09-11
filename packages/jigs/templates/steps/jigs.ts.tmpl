@@ -34,6 +34,7 @@ import {
   type WorktreeRequest,
 } from "@salimhamed/jigs/steps";
 import { getWorkflowMetadata } from "workflow";
+import { prompts } from "../prompts/index.ts";
 
 export async function provisionWorktree(
   request: WorktreeRequest,
@@ -49,7 +50,9 @@ export async function teardownWorktrees() {
 
 export async function runAgentStep(wire: Parameters<typeof runAgent>[0]) {
   "use step";
-  return runAgent(wire, getWorkflowMetadata().workflowRunId);
+  // The registry is what turns a prompt name on the wire into the words the
+  // agent reads, so this factory's own prompts reach the agent from here.
+  return runAgent(wire, getWorkflowMetadata().workflowRunId, prompts);
 }
 
 export async function runAskStep(wire: Parameters<typeof runAsk>[0]) {

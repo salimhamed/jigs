@@ -23,9 +23,12 @@ machine runs, the bindings they run against, and the service that hosts them.
   `review-loop.test.ts` holds those blocks to their sequence — the order,
   the CI bound, the merge policy and the endings — with the step wrappers
   faked and the jigs blocks themselves running for real.
-- `prompts/describe-pr.ts` — the title and body a pull request opens with.
-  jigs owns the mechanics; these conventions, and the repair applied when an
-  answer drifts out of them, are this factory's voice and the part to rewrite.
+- `prompts/` — this factory's own prompts. `describe-pr.prompt.md` is the
+  title and body a pull request opens with; `index.ts` registers it over the
+  prompts jigs ships, and is where another one goes. jigs owns the mechanics;
+  these words, and the repair applied when an answer drifts out of them, are
+  this factory's voice and the part to rewrite. Registering a name jigs also
+  ships — `implement`, `code-review`, `fix-ci`, `ticket-review` — replaces it.
 - `jigs.config.test.ts` — what the factory declares, and the ids the last
   build emitted.
 - `jigs.yml` — this factory's service and dashboard ports and its bindings.

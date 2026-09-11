@@ -1,0 +1,14 @@
+// This factory's prompts, layered over the ones jigs ships: a name jigs also
+// registers is replaced by the one here, a name it does not is added. The
+// agent step renders them, so the words live in markdown beside this file
+// rather than in a TypeScript string — rewrite the markdown and the next run
+// says the new thing.
+//
+// A relative `file` resolves against the factory root, which is what makes one
+// path hold both under `pnpm test` and inside the bundle `jigs build` emits.
+
+import { withPrompts } from "@salimhamed/jigs/steps";
+
+export const prompts = withPrompts({
+  "describe-pr": { file: "prompts/describe-pr.prompt.md" },
+});

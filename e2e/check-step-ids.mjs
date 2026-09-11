@@ -288,6 +288,7 @@ function bootOutcome(postgresUrl) {
     let output = "";
     let settled = false;
     let listening = false;
+    let promptProblem;
     let terminatedAt;
     let readyMs;
     let timer;
@@ -302,7 +303,7 @@ function bootOutcome(postgresUrl) {
       }
       resolve({
         output,
-        problem,
+        problem: problem ?? promptProblem ?? null,
         readyMs,
         exitMs:
           terminatedAt === undefined ? undefined : Date.now() - terminatedAt,
@@ -325,6 +326,7 @@ function bootOutcome(postgresUrl) {
       while (!settled) {
         if (await ready()) {
           readyMs = Date.now() - spawnedAt;
+          promptProblem = await promptsRender();
           terminate();
           return;
         }
@@ -371,6 +373,32 @@ async function ready() {
   } catch {
     return false;
   }
+}
+
+// The only place the prompt files can be checked where they are read the way a
+// run reads them: from the built bundle, whose own `import.meta.url` points at
+// Nitro's output rather than at the installed package. Doctor's other checks
+// need Linear and GitHub credentials this job has none of, so the report is
+// read for this one check and the rest are ignored.
+async function promptsRender() {
+  let report;
+  try {
+    const res = await fetch(`http://127.0.0.1:${BOOT_PORT}/api/doctor`, {
+      signal: AbortSignal.timeout(30_000),
+    });
+    report = await res.json();
+  } catch (err) {
+    return `the doctor route did not answer: ${err}`;
+  }
+  const check = (report.checks ?? []).find((c) => c.id === "prompts.render");
+  if (check === undefined) {
+    return "the doctor report carries no prompts.render check — the scaffolded jigs.config.ts no longer declares its prompts";
+  }
+  if (!check.ok) {
+    return `the prompts this factory ships do not render: ${check.reason}`;
+  }
+  console.log("doctor: prompts render ok");
+  return undefined;
 }
 
 function reportDiff(expected, actual) {
@@ -471,7 +499,7 @@ if (postgresUrl === undefined || postgresUrl === "") {
   );
 } else {
   console.log(
-    "\n=== boot: the built bundle resolves every import, becomes ready, and exits on SIGTERM",
+    "\n=== boot: the built bundle resolves every import, becomes ready, renders its prompts, and exits on SIGTERM",
   );
   const boot = await bootOutcome(postgresUrl);
   if (boot.problem === null) {

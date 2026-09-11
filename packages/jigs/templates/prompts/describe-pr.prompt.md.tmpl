@@ -1,0 +1,19 @@
+Write the title and body of the pull request for this change.
+
+- Title: `<%= it.IDENTIFIER %>: ` then a short imperative summary.
+- Body: what changed and why, in prose a reviewer can read in a minute.
+- End the body with a link to the ticket: <%= it.TICKET_URL %>
+<% if (it.DIFF !== null) { -%>
+
+## Ticket
+
+<%= it.TICKET %>
+
+## Brief
+
+<%= it.BRIEF %>
+
+## Diff
+
+<%= it.DIFF %>
+<% } -%>

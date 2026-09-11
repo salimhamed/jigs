@@ -1,6 +1,11 @@
 // How a pull request introduces itself is this factory's voice: jigs ships the
-// mechanics, ../../prompts/describe-pr.ts ships the words, and what is left
-// here is what to do when the answer drifts out of this factory's conventions.
+// mechanics, ../../prompts/describe-pr.prompt.md ships the words, and what is
+// left here is what to do when the answer drifts out of this factory's
+// conventions.
+//
+// Both arms name the one template, so a resumed description and a rebuilt one
+// cannot come back to different rules. `DIFF: null` is what the template reads
+// to tell them apart: the resuming agent already holds the change.
 
 import type { WorktreeFacts } from "@salimhamed/jigs";
 import {
@@ -8,12 +13,14 @@ import {
   describePr,
   type Handoff,
   type PrRef,
+  renderSnapshot,
   type TicketSnapshot,
 } from "@salimhamed/jigs/blocks";
-import { prDescriptionPrompts } from "../../prompts/describe-pr.ts";
 import { openPr, readDiff, resolveRepo } from "../../steps/jigs.ts";
 import { agent } from "../jigs.ts";
 import type { Builder } from "./builder.ts";
+
+const DESCRIBE_PR = "describe-pr";
 
 export async function describeAndOpenPr(
   builder: Builder,
@@ -22,7 +29,10 @@ export async function describeAndOpenPr(
   binding: string,
 ): Promise<PrRef> {
   const ticket = handoff.snapshot;
-  const prompts = prDescriptionPrompts(handoff);
+  const conventions = {
+    IDENTIFIER: ticket.identifier,
+    TICKET_URL: ticket.url,
+  };
 
   const described = await describePr({
     agent,
@@ -35,8 +45,19 @@ export async function describeAndOpenPr(
     cwd: builder.cwd,
     baseSha: worktree.baseSha,
     ...(builder.session === undefined ? {} : { session: builder.session }),
-    resumePrompt: prompts.resumePrompt,
-    freshPrompt: prompts.freshPrompt,
+    resumePrompt: {
+      name: DESCRIBE_PR,
+      data: { ...conventions, TICKET: null, BRIEF: null, DIFF: null },
+    },
+    freshPrompt: (diff: string) => ({
+      name: DESCRIBE_PR,
+      data: {
+        ...conventions,
+        TICKET: renderSnapshot(ticket),
+        BRIEF: handoff.brief,
+        DIFF: diff,
+      },
+    }),
   });
 
   const { title, body } = repaired(described, ticket);
