@@ -19,9 +19,10 @@ README's Layout section has the tree and the reasoning. The rules a change has
 to keep:
 
 - `blocks/` is pipeline-side. It may import other `blocks/` files, zod, the
-  `workflow` SDK, and types from anywhere. It may not import a node built-in,
-  read `process.env`, reach the network, or import anything under `steps/`,
-  `service/`, `cli/`, `checks/`, `config/` or `providers/`.
+  `workflow` SDK, and `import type` from anywhere. It may not import a *value*
+  from a node built-in, read `process.env`, reach the network, or import a
+  value from `steps/`, `service/`, `cli/`, `checks/`, `config/` or
+  `providers/`.
 - `steps/` is the real work. It may import `providers/`, `config/`, `checks/`,
   `errors.ts`, and types from `blocks/`.
 - `service/` is the long-running process. It may import `steps/`,

@@ -197,10 +197,10 @@ are the public import paths.
 ```
 packages/jigs/src/
   blocks/      pipeline-side code: the blocks a pipeline calls.
-               May import other blocks, zod, the workflow SDK, and types from
-               anywhere. May not import node built-ins, the environment, the
-               network, or steps/, service/, cli/, checks/, config/ or
-               providers/.
+               May import other blocks, zod, the workflow SDK, and `import
+               type` from anywhere. May not import a value from a node
+               built-in, the environment, the network, or steps/, service/,
+               cli/, checks/, config/ or providers/.
     agent/          how a pipeline calls an agent
     builder-agent/  the moves the builder agent makes: implement, answer a
                     review, fix CI, commit work, describe a PR

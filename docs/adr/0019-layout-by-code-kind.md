@@ -63,9 +63,12 @@ errors.ts
 The import rules are one sentence each.
 
 - `blocks/` may import other `blocks/` files, zod, the `workflow` SDK, and
-  types from anywhere. It may not import a node built-in, read the
-  environment, reach the network, or import `steps/`, `service/`, `cli/`,
-  `checks/`, `config/` or `providers/`.
+  `import type` from anywhere. It may not import a **value** from a node
+  built-in, read the environment, reach the network, or import a value from
+  `steps/`, `service/`, `cli/`, `checks/`, `config/` or `providers/`. A type
+  erases at compile time, so a type import crosses no boundary; `gate.ts`
+  naming GitHub's `ReviewThread` and `answers.ts` naming the step signatures
+  it is handed are both that.
 - `steps/` may import `providers/`, `config/`, `checks/`, `errors.ts`, and
   types from `blocks/`.
 - `service/` may import `steps/`, `providers/`, `config/` and `checks/`.
