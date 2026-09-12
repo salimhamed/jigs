@@ -114,6 +114,18 @@ test("the scaffold's imports map mirrors its layout with plain .ts targets", asy
   expect(existsSync(path.join(dir, "steps"))).toBe(false);
 });
 
+// Both spellings of a relative parent import: `from "../x"` and the dynamic
+// `import("../x")` the one deliberate exception in jigs.config.ts uses. A
+// pattern matching only the first passes the scaffold for the wrong reason.
+const RELATIVE_PARENT_IMPORT = /(?:from|import\s*\()\s*["']\.\.\//;
+
+test("the relative-import guard catches both import spellings", () => {
+  expect('import { a } from "../jigs.ts";').toMatch(RELATIVE_PARENT_IMPORT);
+  expect('const a = await import("../jigs.ts");').toMatch(RELATIVE_PARENT_IMPORT);
+  expect('import { a } from "#jigs";').not.toMatch(RELATIVE_PARENT_IMPORT);
+  expect('const a = await import("./workflows/ship.ts");').not.toMatch(RELATIVE_PARENT_IMPORT);
+});
+
 // The factory code scaffolded beside the map has to be written in it, or the
 // e2e build is the only factory in existence never resolving a # specifier.
 test("the scaffolded factory code imports through the root-anchored map", async () => {
@@ -123,7 +135,7 @@ test("the scaffolded factory code imports through the root-anchored map", async 
   const authored = ["workflows/ship.ts", "workflows/ship.test.ts", "blocks/tickets/linear.ts"];
   for (const file of authored) {
     const source = readFileSync(path.join(dir, file), "utf8");
-    expect(source, file).not.toMatch(/from "\.\.\//);
+    expect(source, file).not.toMatch(RELATIVE_PARENT_IMPORT);
     expect(source, file).toMatch(/["']#(?:jigs|blocks|steps)/);
   }
   // The deferred loaders are registrations rather than import sites, and stay

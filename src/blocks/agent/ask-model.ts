@@ -1,5 +1,5 @@
 // The workflow side of a plain model request: one model call with no worktree
-// and no MCP universe. ../../steps/agent/run-ask.ts is the step side.
+// and no MCP universe. ../../steps/agent/execute-model-request.ts is the step side.
 
 import { type AskStepConfig, type AskWire, buildAskWire, parseOutput } from "./plan.ts";
 import type { StepResult } from "./result.ts";

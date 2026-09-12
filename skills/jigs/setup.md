@@ -45,7 +45,7 @@ pnpm dlx @salimhamed/jigs init
 
 `jigs init` writes `jigs.config.ts`, a package manifest pinned to the CLI's
 version, build settings, Docker Compose, `.env.example`, and the factory's
-starter workflow and review-loop blocks. Prompts live beside their callers.
+starter workflow and ticket-source block. Prompts live beside their callers.
 It also writes the committed generated integration, `jigs.ts`.
 
 The printed ports are derived from the factory path. Two factories can still

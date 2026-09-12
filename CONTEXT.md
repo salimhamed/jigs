@@ -197,8 +197,12 @@ of pull-request feedback answered. Counts against that phase's budget.
 _Avoid_: iteration, loop, pass
 
 **Attempt**:
-One try of a phase's agent, counted cumulatively for the life of the delivery.
-A change's `attempts` are tallied under the same names as the budgets.
+One try of a phase's agent. It is the unit only where a round is a single try —
+CI repair. A change's `attempts` are tallied under the same names as the
+budgets, so `attempts.implementationReviewRounds` and
+`attempts.pullRequestRevisionRounds` count rounds and
+`attempts.ciFixAttempts` counts attempts, each cumulatively for the life of
+the delivery.
 _Avoid_: retry (for the first try), run
 
 **Brief**:

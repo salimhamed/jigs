@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { type ExecuteAgentStep, JitCheckError, runAgent } from "../../blocks/agent/agent.ts";
 import { claude } from "../../blocks/agent/harness-config.ts";
 import { buildAgentWire } from "../../blocks/agent/plan.ts";
-import { executeAgent } from "./run-agent.ts";
+import { executeAgent } from "./execute-agent.ts";
 
 // Stands in for a factory's wrapper, minus the directive: it delegates to
 // executeAgent the way a factory's own does.

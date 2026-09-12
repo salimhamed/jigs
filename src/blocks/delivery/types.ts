@@ -8,11 +8,18 @@ import type { PullRequestDescription } from "../builder-agent/describe-pr.ts";
 import type { GateAck, GateWake } from "../pull-request/gate.ts";
 import type { WorktreeFacts } from "../worktree.ts";
 
-/** The requirements to deliver, independent of where they were recorded. */
+/**
+ * The requirements to deliver, independent of where they were recorded. A
+ * factory's own task type extends this, and its extra fields reach every
+ * prompt context, `onLimit` and the result without a cast.
+ */
 export interface WorkItem {
+  /** Short human-facing identifier, as the prompts name the task. */
   key: string;
   title: string;
+  /** What to build, in full: the only statement of the requirements an agent is given. */
   instructions: string;
+  /** Where a reader can see the work item itself, when it has an address. */
   url?: string;
 }
 
@@ -126,42 +133,89 @@ export interface DescriptionAgent<TTask extends WorkItem = WorkItem>
   transform?: (description: PullRequestDescription, task: TTask) => PullRequestDescription;
 }
 
-/** The budgets a delivery runs under. Each phase counts cumulatively and alone. */
+/**
+ * The budgets a delivery runs under. Each phase spends its own and no other,
+ * each counts cumulatively for the life of the delivery, and an `onLimit`
+ * continuation raises the exhausted one within the same durable run.
+ */
 export interface DeliveryLimits {
-  /** One round is one implementation attempt plus one review of what it committed. */
+  /**
+   * Rounds before implementation stops. One round is one implementation
+   * attempt plus one review of what that attempt committed.
+   */
   implementationReviewRounds: number;
-  /** Repair attempts against failing checks, over the pull request's whole life. */
+  /**
+   * Repair attempts against failing checks, spent after publication over the
+   * pull request's whole life. A red head already repaired is not charged again.
+   */
   ciFixAttempts: number;
-  /** Rounds spent answering pull-request review feedback; one batch of threads is one round. */
+  /**
+   * Rounds spent answering pull-request review feedback after publication. One
+   * batch of threads, or one changes-requested review, is one round.
+   */
   pullRequestRevisionRounds: number;
 }
 
-/** What a delivery has spent, counted under the same names as its budgets. */
+/**
+ * What a delivery has spent, under the same names as its budgets. These count
+ * what actually ran; `DeliveryLimits` bounds what may. A granted continuation
+ * raises the bound and leaves these untouched, so they only ever go up.
+ */
 export interface DeliveryAttempts {
+  /** Implementation attempts made, each with its review. */
   implementationReviewRounds: number;
+  /** CI repair attempts made against the published pull request. */
   ciFixAttempts: number;
+  /** Batches of pull-request review feedback answered. */
   pullRequestRevisionRounds: number;
 }
-export interface DeliveryLimit<TTask extends WorkItem = WorkItem> {
+
+/** A phase that has spent its budget, handed to `onLimit` to decide what follows. */
+export interface LimitReached<TTask extends WorkItem = WorkItem> {
+  /** Which budget ran out; only this one a continuation can raise. */
   phase: DeliveryPhase;
+  /** Attempts already spent in that phase, never reset. */
   attempts: number;
+  /** Why the phase is still unfinished: review findings, failing checks, or the review summary. */
   findings: string[];
   task: TTask;
   worktree: WorktreeFacts;
+  /** Present once the change is published, so the two post-publication phases carry it. */
   pr?: PrRef;
 }
+
+/** What `onLimit` returns: keep going on stated direction, or end the delivery here. */
 export type LimitDecision =
-  | { action: "continue"; instructions: string; additionalAttempts: number }
+  | {
+      action: "continue";
+      /** Reaches the next attempt as its `instructions`, and every attempt after it. */
+      instructions: string;
+      /** Added to the exhausted phase's budget. At least 1. */
+      additionalAttempts: number;
+    }
   | { action: "stop" };
+
+/**
+ * Workflow-side, so it may suspend: asking a human on the ticket and awaiting
+ * the reply is the intended shape. Never pass it through a durable step argument.
+ */
 export type OnDeliveryLimit<TTask extends WorkItem = WorkItem> = (
-  limit: DeliveryLimit<TTask>,
+  limit: LimitReached<TTask>,
 ) => Promise<LimitDecision>;
 
-/** The work performed so far. Use onLimit to continue within the same durable run. */
+/**
+ * The work performed so far. It is a record, not a checkpoint: a returned
+ * change cannot restart an interrupted phase in a new run, and `onLimit` is
+ * what continues one within the same durable run.
+ */
 export interface DeliveryChange<TTask extends WorkItem = WorkItem> {
   task: TTask;
   worktree: WorktreeFacts;
   attempts: DeliveryAttempts;
+  /**
+   * Each role's live agent session, kept so the next attempt resumes rather
+   * than rebuilds. Dropped for a role whose harness configuration changed.
+   */
   sessions: Partial<Record<AgentRoleName, { harness: HarnessConfig; session: AgentSession }>>;
 }
 /** An approved change, carrying the commit the reviewer judged. */
@@ -174,22 +228,32 @@ export interface ApprovedChange<TTask extends WorkItem = WorkItem> extends Deliv
     reviewedCommit: string;
   };
 }
+/** A delivery that ended without a merge or a closure. The worktree is retained. */
 export interface DeliveryStopped<TTask extends WorkItem = WorkItem> {
+  /**
+   * `limit-reached` when a budget ran out with no `onLimit`, `stopped` when
+   * `onLimit` declined or a repair produced nothing usable, and
+   * `uncommitted-work` when an implementation attempt left nothing reviewable.
+   */
   status: "limit-reached" | "stopped" | "uncommitted-work";
   phase: DeliveryPhase;
   attempts: number;
+  /** Why it stopped here: findings, failing checks, or the reason nothing was reviewable. */
   findings: string[];
   change: DeliveryChange<TTask>;
   pr?: PrRef;
 }
+/** Approved carries the reviewed commit; nothing else is publishable. */
 export type ImplementAndReviewResult<TTask extends WorkItem = WorkItem> =
   | { status: "approved"; change: ApprovedChange<TTask> }
   | DeliveryStopped<TTask>;
+/** Remove the worktree only on `merged`; every other outcome may still be worked on. */
 export type DeliveryResult<TTask extends WorkItem = WorkItem> =
   | { status: "merged" | "closed"; change: ApprovedChange<TTask>; pr: PrRef }
   | DeliveryStopped<TTask>;
 
 export interface ImplementAndReviewOptions<TTask extends WorkItem = WorkItem> {
+  /** Recorded durably, so keep it plain serializable data. */
   task: TTask;
   worktree: WorktreeFacts;
   implementation: ImplementationAgent<TTask>;
@@ -199,7 +263,9 @@ export interface ImplementAndReviewOptions<TTask extends WorkItem = WorkItem> {
 }
 export interface PublishApprovedChangeOptions<TTask extends WorkItem = WorkItem> {
   change: ApprovedChange<TTask>;
+  /** The factory binding naming the GitHub repository to open the pull request on. */
   binding: string;
+  /** Supplies the harness the description is written with when no description role is given. */
   implementation: ImplementationAgent<TTask>;
   pullRequestDescription?: DescriptionAgent<TTask>;
 }
@@ -210,6 +276,7 @@ export interface FollowPullRequestOptions<TTask extends WorkItem = WorkItem> {
   ciRepair?: CiRepairAgent<TTask>;
   pullRequestRevision?: PullRequestRevisionAgent<TTask>;
   limits: Pick<DeliveryLimits, "ciFixAttempts" | "pullRequestRevisionRounds">;
+  /** `jigs` squash-merges once the pull request is mergeable; `human` only keeps watching. */
   merge: "human" | "jigs";
   onLimit?: OnDeliveryLimit<TTask>;
 }

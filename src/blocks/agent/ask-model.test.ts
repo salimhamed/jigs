@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { askModel } from "./ask.ts";
+import { askModel } from "./ask-model.ts";
 import { claude } from "./harness-config.ts";
 
 const refuse = (): never => {

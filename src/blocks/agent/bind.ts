@@ -1,5 +1,5 @@
 import { type ExecuteAgentStep, runAgent as runAgentBlock } from "./agent.ts";
-import { askModel as askModelBlock, type ExecuteModelRequestStep } from "./ask.ts";
+import { askModel as askModelBlock, type ExecuteModelRequestStep } from "./ask-model.ts";
 import type { AgentStepConfig, AskStepConfig } from "./plan.ts";
 
 /** The raw durable wrappers a factory supplies, one per execution role. */

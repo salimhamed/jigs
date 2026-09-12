@@ -36,7 +36,7 @@ import { scrubbedEnv } from "./harnesses/env.ts";
 import { claudeCode } from "./harnesses/index.ts";
 import { FileLockTimeoutError, lockPathFor, withFileLock } from "./lock.ts";
 
-// Exported for ./run-ask.ts, which shares the executor seam; not part of the
+// Exported for ./execute-model-request.ts, which shares the executor seam; not part of the
 // ./steps/run subpath.
 export type ExecutorGeneration = StepGeneration & { output?: unknown };
 
@@ -114,7 +114,7 @@ function toCodexMcpServers(
   return mapped;
 }
 
-// Exported for ./run-ask.ts, which builds the same output spec; not part of
+// Exported for ./execute-model-request.ts, which builds the same output spec; not part of
 // the ./steps/run subpath.
 export function outputSpec(
   schema: Record<string, unknown> | undefined,

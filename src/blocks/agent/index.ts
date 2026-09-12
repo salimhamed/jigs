@@ -5,7 +5,7 @@ export {
   runAgent,
   unwrapAgentStep,
 } from "./agent.ts";
-export { askModel, type ExecuteModelRequestStep } from "./ask.ts";
+export { askModel, type ExecuteModelRequestStep } from "./ask-model.ts";
 export { type AgentSteps, bindAgentSteps } from "./bind.ts";
 export {
   type ClaudeHarnessConfig,
