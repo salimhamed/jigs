@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.11.0](https://github.com/salimhamed/jigs/compare/jigs-v0.10.0...jigs-v0.11.0) (2026-09-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* review committed work and publish only the approved commit ([#168](https://github.com/salimhamed/jigs/issues/168))
+
+### Features
+
+* review committed work and publish only the approved commit ([#168](https://github.com/salimhamed/jigs/issues/168)) ([55dd9ec](https://github.com/salimhamed/jigs/commit/55dd9ec4bcedf1b8ec302ea9ecd499b90d89097a))
+
 ## [0.10.0](https://github.com/salimhamed/jigs/compare/jigs-v0.9.0...jigs-v0.10.0) (2026-09-12)
 
 
