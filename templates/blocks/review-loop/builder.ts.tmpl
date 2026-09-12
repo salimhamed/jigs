@@ -1,8 +1,0 @@
-import type { AgentSession, HarnessConfig } from "@salimhamed/jigs/blocks";
-
-// Keep the builder's session separate from agents using a different harness.
-export type Builder = {
-  harness: HarnessConfig;
-  cwd: string;
-  session?: AgentSession;
-};

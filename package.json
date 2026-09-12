@@ -51,6 +51,22 @@
     "./plugins/start-dashboard": {
       "types": "./dist/plugins/start-dashboard.d.ts",
       "default": "./dist/plugins/start-dashboard.js"
+    },
+    "./agents": {
+      "types": "./dist/blocks/agent/index.d.ts",
+      "default": "./dist/blocks/agent/index.js"
+    },
+    "./linear": {
+      "types": "./dist/blocks/ticket/index.d.ts",
+      "default": "./dist/blocks/ticket/index.js"
+    },
+    "./pull-requests": {
+      "types": "./dist/blocks/pull-request/index.d.ts",
+      "default": "./dist/blocks/pull-request/index.js"
+    },
+    "./delivery": {
+      "types": "./dist/blocks/delivery/index.d.ts",
+      "default": "./dist/blocks/delivery/index.js"
     }
   },
   "files": [

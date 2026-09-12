@@ -62,7 +62,7 @@ export function createApp(factory: Factory): Hono {
   });
 
   // The manual half of the trigger path; the schedule ticker fires the same
-  // function, so preflight and ticket resolution cannot differ between them.
+  // function, so preflight cannot differ between them.
   app.post("/api/workflows/:name/runs", async (c) => {
     const name = c.req.param("name");
     const body = await c.req.json<{ inputs?: unknown }>().catch(() => ({}) as { inputs?: unknown });
@@ -74,8 +74,6 @@ export function createApp(factory: Factory): Hono {
         return c.json({ error: "invalid inputs", issues: result.issues }, 400);
       case "preflight-failed":
         return c.json({ error: "preflight failed", failures: failedChecks(result.report) }, 424);
-      case "invalid-ticket":
-        return c.json({ error: `invalid ticket: ${result.reason}` }, 400);
       case "started":
         return c.json(
           {

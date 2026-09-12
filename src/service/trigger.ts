@@ -1,19 +1,12 @@
-// The one trigger path: validate the inputs, preflight the workflow's
-// requirements, resolve a ticket ref, create the run. The HTTP
-// route and the schedule ticker both go through here, so a scheduled fire is
-// an ordinary run and neither caller can drift from the other's checks.
-
 import { start } from "workflow/api";
 import type { z } from "zod";
-import type { Factory, Injected, TicketInjected } from "../blocks/factory.ts";
+import type { Factory, Injected } from "../blocks/factory.ts";
 import { type CheckReport, preflightChecks, runChecks } from "../checks/index.ts";
-import { resolveIssueRef } from "../providers/linear.ts";
 
 export type StartRunResult =
   | { kind: "started"; runId: string }
   | { kind: "unknown-workflow"; knownWorkflows: string[] }
   | { kind: "invalid-inputs"; issues: z.core.$ZodIssue[] }
-  | { kind: "invalid-ticket"; reason: string }
   | { kind: "preflight-failed"; report: CheckReport };
 
 export async function startRun(
@@ -42,36 +35,8 @@ export async function startRun(
   const report = await runChecks(preflightChecks(entry.requires ?? {}));
   if (!report.ok) return { kind: "preflight-failed", report };
 
-  let issue: { id: string; identifier: string } | undefined;
-  if (hasTicket(parsed.data)) {
-    try {
-      issue = await resolveIssueRef(parsed.data.ticket);
-    } catch (err) {
-      return { kind: "invalid-ticket", reason: String(err) };
-    }
-  }
-
-  // The entry is schema-agnostic, so `start` infers `any` for its args and
-  // checks nothing: these two `satisfies` are what hold what is injected here
-  // to what `WorkflowInputs` and `TicketWorkflowInputs` promise a body.
-  const injection =
-    issue === undefined
-      ? ({ triggerId } satisfies Injected)
-      : ({
-          triggerId,
-          issueId: issue.id,
-          identifier: issue.identifier,
-        } satisfies TicketInjected);
+  const injection = { triggerId } satisfies Injected;
 
   const run = await start(entry.workflow, [{ ...parsed.data, ...injection }]);
   return { kind: "started", runId: run.runId };
-}
-
-function hasTicket(value: unknown): value is { ticket: string } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "ticket" in value &&
-    typeof value.ticket === "string"
-  );
 }

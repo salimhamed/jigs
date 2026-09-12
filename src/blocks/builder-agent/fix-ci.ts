@@ -30,11 +30,7 @@ export interface FixCiOptions {
   freshPrompt?: FixCiFreshPrompt;
 }
 
-/**
- * A resumed fix runs inside the builder's own session and leaves the pointer
- * where it is; only the fresh-context rebuild reports a session, and that one
- * is then the one holding the change.
- */
+/** Repair failing checks and return the session holding the fix. */
 export async function fixCi(options: FixCiOptions): Promise<{ session?: AgentSession }> {
   const { agent, readWorktreeDiff: read } = options;
   const checks = renderChecks(options.failing);

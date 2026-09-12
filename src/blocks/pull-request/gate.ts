@@ -8,6 +8,7 @@
 import { createHook } from "workflow";
 import type { CheckRun, PrRef, PrSnapshot, ReviewThread } from "../../providers/github.ts";
 import { ClaimConflictError } from "../ticket/claim.ts";
+import { isPullRequestMergeReady } from "./merge-ready.ts";
 
 // The gate's hook token names the pull request, never the run: owning it is
 // the exclusivity lock. The ingress has only a webhook payload to go on, so it
@@ -60,6 +61,7 @@ export function tokenFromGithubPayload(payload: unknown): string | null {
 export type { PrRef };
 
 export type GateWake =
+  | { kind: "merge-ready"; headSha: string }
   | {
       kind: "approved";
       reviewId: number;
@@ -97,6 +99,7 @@ export interface GateCursor {
   // by id on the Linear side.
   selfCommentIds: number[];
   lastRedSha: string | null;
+  lastMergeReadySha?: string | null;
 }
 
 /** What the consumer hands back through `next()` after posting its replies. */
@@ -117,6 +120,14 @@ export function classifyPrState(
   done: boolean;
   skippedSelfThreads: number;
 } {
+  if (snapshot.state === "closed") {
+    return {
+      wakes: [{ kind: "closed", merged: snapshot.merged }],
+      cursor,
+      done: true,
+      skippedSelfThreads: 0,
+    };
+  }
   const wakes: GateWake[] = [];
   const seenReviewIds = new Set(cursor.seenReviewIds);
   for (const review of snapshot.reviews) {
@@ -193,8 +204,14 @@ export function classifyPrState(
   // `done` is the PR being closed, and nothing else. An approval no longer
   // ends the gate: human-merges mode has to keep listening until the PR
   // actually closes, so ending the review is the consumer's policy call.
-  const done = snapshot.state === "closed";
-  if (done) wakes.push({ kind: "closed", merged: snapshot.merged });
+  const done = false;
+  const ready =
+    isPullRequestMergeReady(snapshot) &&
+    !wakes.some((wake) => wake.kind === "review-comments" || wake.kind === "changes-requested");
+  const lastMergeReadySha = ready ? snapshot.headSha : null;
+  if (ready && cursor.lastMergeReadySha !== snapshot.headSha) {
+    wakes.push({ kind: "merge-ready", headSha: snapshot.headSha });
+  }
   return {
     wakes,
     cursor: {
@@ -202,6 +219,7 @@ export function classifyPrState(
       seenCommentIds: [...seenComments],
       selfCommentIds: [...selfComments],
       lastRedSha,
+      lastMergeReadySha,
     },
     done,
     skippedSelfThreads,

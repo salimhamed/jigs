@@ -21,17 +21,17 @@ test("every entry carries a zod inputs schema and a workflow", () => {
 test("ship takes a ticket in either form and declares its needs", () => {
   const entry = workflows.ship;
   const launch = { binding: "repo", merge: "human" };
-  expect(entry?.inputs.parse({ ticket: crypto.randomUUID(), ...launch })).toEqual({
+  expect(entry?.inputs.parse({ ticket: crypto.randomUUID(), ...launch })).toMatchObject({
     ticket: expect.any(String),
     ...launch,
   });
-  expect(entry?.inputs.parse({ ticket: "ABC-123", ...launch })).toEqual({
+  expect(entry?.inputs.parse({ ticket: "ABC-123", ...launch })).toMatchObject({
     ticket: "ABC-123",
     ...launch,
   });
-  expect(entry?.inputs.safeParse({ ticket: "not-a-ticket", ...launch }).success).toBe(false);
+  expect(entry?.inputs.safeParse({ ticket: "", ...launch }).success).toBe(false);
   expect(entry?.inputs.safeParse({ ticket: "ABC-123" }).success).toBe(false);
-  expect(entry?.requires).toEqual({ harnesses: ["claude", "codex"] });
+  expect(entry?.requires).toEqual({ harnesses: ["claude", "codex"], integrations: ["linear", "github"] });
 });
 
 // Inspect compiled IDs; source imports do not determine the emitted addresses.

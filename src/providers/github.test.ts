@@ -411,3 +411,51 @@ test("a squash merge PUTs merge_method squash with the commit title", async () =
     commit_title: "AGE-316 Review loop jig",
   });
 });
+
+test("a guarded merge requires GitHub to match the approved head", async () => {
+  fetchMock.mockResolvedValueOnce(json({ merged: true, sha: "merge-sha" }));
+  await squashMergePr(pr, "fix: search", "approved-head");
+  const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect(JSON.parse(String(init.body))).toEqual({
+    merge_method: "squash",
+    commit_title: "fix: search",
+    sha: "approved-head",
+  });
+});
+
+test("reads later review pages so a recent rejection is not hidden", async () => {
+  fetchMock
+    .mockResolvedValueOnce(json({ state: "open", merged: false, head: { sha: "head" } }))
+    .mockResolvedValueOnce(
+      json(
+        Array.from({ length: 100 }, (_, id) => ({
+          id,
+          state: "APPROVED",
+          body: "",
+          user: { login: "person" },
+          submitted_at: "1",
+          commit_id: "head",
+        })),
+      ),
+    )
+    .mockResolvedValueOnce(
+      json([
+        {
+          id: 101,
+          state: "CHANGES_REQUESTED",
+          body: "fix",
+          user: { login: "person" },
+          submitted_at: "2",
+          commit_id: "head",
+        },
+      ]),
+    )
+    .mockResolvedValueOnce(json([]))
+    .mockResolvedValueOnce(json({ check_runs: [] }))
+    .mockResolvedValueOnce(json({ statuses: [] }))
+    .mockResolvedValueOnce(json({ login: "agent" }));
+  const state = await fetchPrSnapshot(pr);
+  expect(state.reviews).toHaveLength(101);
+  expect(state.reviews.at(-1)).toMatchObject({ state: "CHANGES_REQUESTED", commitSha: "head" });
+  expect(fetchMock.mock.calls[2]?.[0]).toContain("reviews?per_page=100&page=2");
+});

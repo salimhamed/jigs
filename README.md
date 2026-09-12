@@ -2,9 +2,9 @@
 
 > In manufacturing, a jig guides tools through repeatable operations.
 
-jigs lets you write a repeatable piece of development work — take this ticket,
-implement it, review it, open the pull request — once, then have coding agents
-run it for you whenever you want.
+jigs runs durable TypeScript workflows that combine agents, model calls, and
+external operations. Use it to deliver software, investigate infrastructure,
+or automate another repeatable process. Factories own the process and policy.
 
 ## How it fits together
 
@@ -72,12 +72,13 @@ The factory separates its configuration, generated integration, and custom code:
   and ready-to-call jigs blocks. Never put custom code here. `jigs generate`
   refreshes it from the installed library; `jigs build` reports stale code.
 - `workflows/ship.ts` is the starter workflow: a ticket to a merged pull request.
-- `blocks/review-loop/` holds the factory's review policy and composition.
+- `blocks/` holds factory-specific prompts, ticket acquisition, and domain decisions.
+- The optional delivery module supplies the review loop and its independently usable phases.
 - `steps/` holds any custom durable operations a factory adds.
 - Prompts are typed functions beside the code that uses them. Pass a prompt
   override to a block; keep shared factory defaults in a custom block.
 
-Start with the bound blocks in `jigs.ts`: `agent` runs a coding agent, `ask`
+Start with the bound blocks in `jigs.ts`: `agent` runs an agent with tools, `ask`
 makes a plain model call, and `haltForHuman` asks for help and waits for a reply.
 Their JSDoc explains when to use them. The durable wrappers use
 explicit parameter names and the library's named types; their implementation
@@ -143,6 +144,12 @@ pnpm exec jigs upgrade
 bumps jigs to the latest release (`--to <version>` pins it), refreshes
 `jigs.ts` using the newly installed library, runs `jigs up`, then typechecks
 the factory. Custom code is never generated.
+
+## Factory control
+
+See [the delivery guide](docs/delivery.md) for role/model selection, review limits,
+prompt overrides, custom ticket sources, and composing individual phases. Generic
+agent workflows use the same core without adopting any delivery concepts.
 
 ## The `/jigs` skill
 
@@ -234,6 +241,7 @@ src/
                built-in, the environment, the network, or steps/, service/,
                cli/, checks/, config/ or providers/.
     agent/          how a workflow calls an agent
+    delivery/       configurable delivery phases and role/session tracking
     builder-agent/  the moves the builder agent makes: implement, answer a
                     review, fix CI, commit work, describe a PR
     ticket/         claim a ticket, review it, shape its snapshot, and halt
@@ -244,6 +252,7 @@ src/
     worktree.ts     the WorktreeFacts type a workflow passes around
   steps/       step implementations: the real work. May import providers/,
                config/, checks/, errors.ts and blocks/.
+    run-directory/  scratch directories owned by a run
     agent/          run an agent or a plain model call, and take the worktree
                     lock
     ticket/         fetch a ticket snapshot, post and read Linear comments,
@@ -269,9 +278,16 @@ module, and a type used on both sides of the blocks/steps line lives in
 Prompts sit beside the code that uses them, as `<name>.prompt.ts`. They are
 still exported, so a factory can read one or pass its own instead.
 
-### The two import paths
+### Import paths
 
-A factory imports jigs code from two subpaths:
+Workflow-side modules are available independently:
+
+- `/agents`: agent and model calls, harness configuration, and sessions.
+- `/linear`: ticket acquisition, clarification, and human replies.
+- `/pull-requests`: watching GitHub review and CI state.
+- `/delivery`: configurable review loops and their individual phases.
+
+The broader paths remain available:
 
 - `@salimhamed/jigs/blocks` is everything a workflow or a factory's own block
   may call. Nothing behind it touches a node built-in, the environment or the

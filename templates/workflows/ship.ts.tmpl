@@ -1,59 +1,66 @@
-import { type TicketWorkflowInputs, ticketInput, type WorkflowEntry } from "@salimhamed/jigs";
-import { claimTicket, claude, codex } from "@salimhamed/jigs/blocks";
+import { type WorkflowEntry, type WorkflowInputs } from "@salimhamed/jigs";
+import { claude, codex } from "@salimhamed/jigs/agents";
 import { z } from "zod";
-import { reviewLoop } from "../blocks/review-loop/index.ts";
+import { acquireLinearTicket, workItemFromHandoff } from "../blocks/tickets/linear.ts";
 import {
-  fetchTicketSnapshot,
   provisionWorktree,
   removeMergedRunWorktrees,
+  reviewLoop,
   reviewTicket,
 } from "../jigs.ts";
 
 export const shipInputs = z.object({
-  ticket: ticketInput,
-  // Set a binding default and list it under requires.bindings below.
+  ticket: z.string().min(1),
   binding: z.string(),
-  // "jigs" merges on approval; "human" waits for a person to merge.
-  merge: z.enum(["jigs", "human"]),
+  merge: z.enum(["jigs", "human"]).default("human"),
+  implementationHarness: z.enum(["claude", "codex"]).default("codex"),
+  implementationModel: z.string().min(1).default("gpt-5.6-sol"),
+  reviewHarness: z.enum(["claude", "codex"]).default("claude"),
+  reviewModel: z.string().min(1).default("opus"),
+  reviewRounds: z.number().int().positive().default(3),
+  ciFixAttempts: z.number().int().nonnegative().default(3),
+  pullRequestRevisionRounds: z.number().int().nonnegative().default(3),
 });
 
-type ShipInputs = TicketWorkflowInputs<typeof shipInputs>;
+type ShipInputs = WorkflowInputs<typeof shipInputs>;
 
-/** Take a ticket through implementation and review to a merged pull request. */
+/** Take a Linear ticket through implementation, review, and pull-request merge. */
 export async function shipWorkflow(inputs: ShipInputs) {
   "use workflow";
 
-  const claim = await claimTicket(inputs.issueId, inputs.identifier);
-  const snapshot = await fetchTicketSnapshot(inputs.issueId);
-
-  const workspace = await provisionWorktree({
+  const { claim, snapshot } = await acquireLinearTicket(inputs.ticket);
+  const worktree = await provisionWorktree({
     binding: inputs.binding,
     branch: snapshot.branchName,
   });
-
   const handoff = await reviewTicket({
     claim,
     snapshot,
     harness: claude({ model: "opus" }),
-    cwd: workspace.path,
+    cwd: worktree.path,
   });
-
+  const implementationHarness = inputs.implementationHarness === "claude" ? claude : codex;
+  const reviewHarness = inputs.reviewHarness === "claude" ? claude : codex;
   const result = await reviewLoop({
-    claim,
-    handoff,
-    harness: codex({ model: "gpt-5.6-sol" }),
-    worktree: workspace,
+    task: workItemFromHandoff(handoff),
+    worktree,
     binding: inputs.binding,
+    implementation: { harness: implementationHarness({ model: inputs.implementationModel }) },
+    review: { harness: reviewHarness({ model: inputs.reviewModel }) },
+    limits: {
+      implementationReviewRounds: inputs.reviewRounds,
+      ciFixAttempts: inputs.ciFixAttempts,
+      pullRequestRevisionRounds: inputs.pullRequestRevisionRounds,
+    },
     merge: inputs.merge,
   });
 
-  await removeMergedRunWorktrees();
-
-  return { pr: result.pr, cycles: result.cycles };
+  if (result.status === "merged") await removeMergedRunWorktrees();
+  return result;
 }
 
 export default {
   workflow: shipWorkflow,
   inputs: shipInputs,
-  requires: { harnesses: ["claude", "codex"] },
+  requires: { harnesses: ["claude", "codex"], integrations: ["linear", "github"] },
 } satisfies WorkflowEntry<typeof shipInputs>;

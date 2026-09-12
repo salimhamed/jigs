@@ -5,7 +5,7 @@ import { getViewer } from "../providers/linear.ts";
 import { awsCredentialsCheck } from "./aws.ts";
 import { bindingChecks } from "./bindings.ts";
 import { CHECK_TIMEOUT_MS, type Check } from "./catalog.ts";
-import { type CoreProbes, coreChecks } from "./core.ts";
+import { type CoreProbes, coreChecks, type Integration } from "./core.ts";
 import { type HarnessKind, harnessChecks } from "./harnesses.ts";
 import { linearWebhookChecks } from "./linear-webhook.ts";
 import { codexWorktreeConfigCheck, mcpServerChecks } from "./mcp.ts";
@@ -42,6 +42,7 @@ export { type WebhookChecksOptions, webhookChecks } from "./webhooks.ts";
 // A workflow's declared requirements — the manifest side of the computed check
 // list. Hand-maintaining the list is the drift trap this exists to avoid.
 export interface WorkflowRequires {
+  integrations?: Integration[];
   bindings?: string[];
   harnesses?: HarnessKind[];
   aws?: true;
@@ -56,22 +57,22 @@ const coreProbes: CoreProbes = {
 
 export function preflightChecks(requires: WorkflowRequires): Check[] {
   return [
-    ...coreChecks(coreProbes),
+    ...coreChecks(coreProbes, process.env, requires.integrations ?? []),
     ...bindingChecks({ factoryRoot, names: requires.bindings ?? [] }),
     ...harnessChecks(requires.harnesses ?? []),
     ...(requires.aws ? [awsCredentialsCheck()] : []),
   ];
 }
 
-// No workflow, so no manifest: doctor takes every declared binding and both
-// harnesses. MCP is absent on purpose — it is JIT-only. AWS is conditional for
-// the same reason: with no manifest to read, a set AWS_PROFILE is the only
-// evidence this factory uses AWS at all.
+// Without a workflow manifest, doctor checks integrations configured in the environment.
 export function doctorChecks(): Check[] {
   const profile = process.env.AWS_PROFILE;
+  const integrations: Integration[] = [];
+  if (process.env.LINEAR_API_KEY) integrations.push("linear");
+  if (process.env.GITHUB_TOKEN) integrations.push("github");
   return [
-    ...coreChecks(coreProbes),
-    ...linearWebhookChecks({ factoryRoot }),
+    ...coreChecks(coreProbes, process.env, integrations),
+    ...(integrations.includes("linear") ? linearWebhookChecks({ factoryRoot }) : []),
     ...bindingChecks({ factoryRoot }),
     ...webhookChecks({ factoryRoot }),
     ...harnessChecks(["claude", "codex"]),

@@ -4,10 +4,12 @@
 // from inside a step body — the errors these raise workflow-side live in the
 // factory's own composition, never here.
 
+import { isPullRequestMergeReady } from "../../blocks/pull-request/merge-ready.ts";
 import { resolveBinding } from "../../config/factory-config.ts";
 import { factoryRoot } from "../../config/factory-root.ts";
 import {
   createPullRequest,
+  fetchPrSnapshot,
   fetchPrTitle,
   type PrRef,
   postPrComment,
@@ -70,7 +72,16 @@ export async function commentOnPullRequest(pr: PrRef, body: string): Promise<voi
 // the target repo, usually — does it between the PR opening and this merge,
 // and a title captured at open time would ship the one they corrected away.
 /** Squash and merge the pull request using its current title. */
-export async function squashMergePullRequest(pr: PrRef): Promise<{ merged: boolean; sha: string }> {
+export async function squashMergePullRequest(
+  pr: PrRef,
+  expectedHeadSha?: string,
+): Promise<{ merged: boolean; sha: string }> {
+  if (expectedHeadSha !== undefined) {
+    const snapshot = await fetchPrSnapshot(pr);
+    if (snapshot.headSha !== expectedHeadSha || !isPullRequestMergeReady(snapshot)) {
+      return { merged: false, sha: snapshot.headSha };
+    }
+  }
   const title = await fetchPrTitle(pr);
-  return squashMergePr(pr, title);
+  return squashMergePr(pr, title, expectedHeadSha);
 }

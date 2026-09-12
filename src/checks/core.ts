@@ -50,9 +50,15 @@ function credentialCheck(spec: CredentialCheck): Check {
   };
 }
 
-export function coreChecks(probes: CoreProbes, env: NodeJS.ProcessEnv = process.env): Check[] {
-  return [
-    credentialCheck({
+export type Integration = "linear" | "github";
+
+export function coreChecks(
+  probes: CoreProbes,
+  env: NodeJS.ProcessEnv = process.env,
+  integrations: Integration[] = ["linear", "github"],
+): Check[] {
+  const checks: Record<Integration, Check> = {
+    linear: credentialCheck({
       id: "core.linear-api-key",
       label: "Linear API key",
       variable: "LINEAR_API_KEY",
@@ -60,7 +66,7 @@ export function coreChecks(probes: CoreProbes, env: NodeJS.ProcessEnv = process.
       probe: () => probes.linearViewer(),
       env,
     }),
-    credentialCheck({
+    github: credentialCheck({
       id: "core.github-token",
       label: "GitHub token",
       variable: "GITHUB_TOKEN",
@@ -68,5 +74,6 @@ export function coreChecks(probes: CoreProbes, env: NodeJS.ProcessEnv = process.
       probe: () => probes.githubWhoami(),
       env,
     }),
-  ];
+  };
+  return [...new Set(integrations)].map((integration) => checks[integration]);
 }
