@@ -4,8 +4,6 @@ import type { Factory } from "@salimhamed/jigs";
 import { expect, test } from "vitest";
 import factory from "./jigs.config.ts";
 
-// Read through the interface rather than the literal: these are assertions
-// about what this factory declares, including the fields it omits.
 const workflows: Factory["workflows"] = Object.fromEntries(
   await Promise.all(
     Object.entries(factory.workflows).map(async ([name, load]) => [name, (await load()).default]),
@@ -36,23 +34,11 @@ test("ship takes a ticket in either form and declares its needs", () => {
   expect(entry?.requires).toEqual({ harnesses: ["claude", "codex"] });
 });
 
-// Every id the build emits is a memoization key in this factory's World, so
-// these read the last build rather than the source: what a parked run replays
-// against is what the bundle says, not what the imports look like. They assert
-// the shape of an id, not a list of them — a list would have to be edited
-// every time a workflow or a wrapper is added, and an id that *moved* looks
-// exactly like one that was added. Renaming an exported wrapper or a workflow
-// file changes its id and orphans the runs parked against it, so do that only
-// when `jigs ps` shows none. blocks/ is deliberately absent from the shapes
-// below: nothing under it carries a directive, so an id addressed there would
-// mean a factory wrote `"use step"` on the workflow side of the line.
+// Inspect compiled IDs; source imports do not determine the emitted addresses.
 
 const BUNDLE = new URL("./.output/server/index.mjs", import.meta.url);
 
-// The SDK registers this one itself. It lives under node_modules, so the
-// builder addresses it by name and version — the one id here this factory does
-// not own, and cannot make path-shaped. It tracks package.json's `workflow`
-// pin, so an SDK bump moves it and nothing else.
+// The SDK owns this ID and includes its package version.
 const SDK_BUILTIN_STEP = `step//workflow@${workflowVersion()}//fetch`;
 
 function workflowVersion(): string {
@@ -67,8 +53,6 @@ function emittedIds(): string[] {
   try {
     bundle = readFileSync(BUNDLE, "utf8");
   } catch {
-    // Failing beats skipping: an id guard that quietly stops running looks
-    // exactly like one that passes, and these ids fail silently by design.
     throw new Error(
       `no build at ${fileURLToPath(BUNDLE)} to read ids from — run pnpm exec jigs build first`,
     );

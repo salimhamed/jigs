@@ -11,25 +11,15 @@ import {
 
 export const shipInputs = z.object({
   ticket: ticketInput,
-  // A name from jigs.config.ts's `bindings`. Give it a `.default(...)` once this
-  // factory has bound its repo, and list the name under `requires.bindings`
-  // in the default export below so preflight catches a missing binding.
+  // Set a binding default and list it under requires.bindings below.
   binding: z.string(),
-  // "jigs" squash-merges on approval; "human" keeps listening and lets a
-  // person press merge. The gate ends either way only when the PR closes.
+  // "jigs" merges on approval; "human" waits for a person to merge.
   merge: z.enum(["jigs", "human"]),
 });
 
-// TicketWorkflowInputs is the schema's output plus what the trigger injects:
-// `triggerId`, and the `issueId` and `identifier` it resolved `ticket` (either
-// form) to, so the body reads the resolved pair rather than re-resolving it.
 type ShipInputs = TicketWorkflowInputs<typeof shipInputs>;
 
-// A ticket to a merged pull request: claim ticket → snapshot → worktree →
-// reviewTicket → reviewLoop (implement ⇄ review → PR → gate → merge) →
-// teardown.
-// Standard steps and bound blocks come from ../jigs.ts; the factory owns
-// the composition in ../blocks/review-loop/.
+/** Take a ticket through implementation and review to a merged pull request. */
 export async function shipWorkflow(inputs: ShipInputs) {
   "use workflow";
 
@@ -41,8 +31,6 @@ export async function shipWorkflow(inputs: ShipInputs) {
     branch: snapshot.branchName,
   });
 
-  // Parks inside reviewTicket until a human replies on the ticket, re-reading
-  // the ticket each round, and returns only once the review proceeds.
   const handoff = await reviewTicket({
     claim,
     snapshot,
@@ -59,9 +47,6 @@ export async function shipWorkflow(inputs: ShipInputs) {
     merge: inputs.merge,
   });
 
-  // reviewLoop returns only when the PR merged; every thrown ending leaves
-  // the worktree for `jigs sweep`. A plain sequential call, never a finally —
-  // suspension is a thrown error, and a parked run keeps its worktree.
   await removeMergedRunWorktrees();
 
   return { pr: result.pr, cycles: result.cycles };

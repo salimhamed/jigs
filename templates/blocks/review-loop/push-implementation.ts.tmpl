@@ -10,10 +10,7 @@ export async function pushImplementation(builder: Builder, worktree: WorktreeFac
     return;
   }
 
-  // Thrown workflow-side so the SDK does not retry an empty branch three
-  // times. A dirty tree is a complete implementation the builder forgot to
-  // commit, so it gets exactly one bounded round to save it; a clean tree has
-  // nothing to save.
+  // Give uncommitted changes one recovery attempt before failing the run.
   const empty = `${worktree.branch} holds no commits since ${worktree.baseSha} — the builder finished without committing, so there is nothing to open a pull request for`;
   if (!state.dirty) throw new Error(empty);
 

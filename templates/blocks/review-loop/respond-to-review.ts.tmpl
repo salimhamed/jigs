@@ -41,8 +41,6 @@ export async function respondToReview(
   });
   builder.session = answered.session ?? builder.session;
 
-  // The answer prompts tell the builder to commit its fix before replying, so
-  // the reply is only true once the branch carries it.
   await pushBranch(builder.cwd, worktree.branch);
 
   const posted = await postReviewAnswers({
@@ -52,7 +50,5 @@ export async function respondToReview(
     answers: answered.output,
     threads,
   });
-  // An empty ack is not the same as no ack: the gate folds whatever arrives
-  // into its cursor, and there is nothing to fold when nothing was replied to.
   return posted.length > 0 ? listen({ selfCommentIds: posted }) : listen();
 }

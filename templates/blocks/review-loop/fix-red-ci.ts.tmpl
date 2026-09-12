@@ -27,14 +27,11 @@ export function ciFixer(pr: PrRef, builder: Builder, worktree: WorktreeFacts, ha
 
   return {
     async onRed(wake: CiRed): Promise<Attend<never>> {
-      // Standing down is per red streak: a later red on the same streak draws
-      // neither a fix nor a second comment, and a green clears it.
+      // Wait for green CI before trying another round of fixes.
       if (stoodDown) return listen();
 
       redInARow += 1;
       if (redInARow > MAX_CI_ATTEMPTS) {
-        // On GitHub rather than through haltForHuman: the conversation about
-        // this pull request belongs on this pull request.
         await commentOnPullRequest(pr, ciExhausted(wake, pr.owner));
         stoodDown = true;
         return listen();
@@ -53,9 +50,7 @@ export function ciFixer(pr: PrRef, builder: Builder, worktree: WorktreeFacts, ha
       });
       builder.session = fixed.session ?? builder.session;
 
-      // A fix that committed nothing has no new head to push, so CI never runs
-      // again and no further wake can arrive: stand down now rather than wait
-      // on a wake that cannot come.
+      // Without a new commit, no new CI run will start.
       const state = await readBranchState(builder.cwd, worktree.baseSha);
       if (state.headSha === wake.headSha) {
         await commentOnPullRequest(pr, ciMadeNoCommit(wake, pr.owner));
