@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.15.0](https://github.com/salimhamed/jigs/compare/jigs-v0.14.0...jigs-v0.15.0) (2026-09-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* document the delivery shape and rename DeliveryLimit to LimitReached ([#176](https://github.com/salimhamed/jigs/issues/176))
+
+### Features
+
+* document the delivery shape and rename DeliveryLimit to LimitReached ([#176](https://github.com/salimhamed/jigs/issues/176)) ([613cfdd](https://github.com/salimhamed/jigs/commit/613cfdd9cbebcb2752c96631c37070264d2edb35))
+
 ## [0.14.0](https://github.com/salimhamed/jigs/compare/jigs-v0.13.0...jigs-v0.14.0) (2026-09-12)
 
 
