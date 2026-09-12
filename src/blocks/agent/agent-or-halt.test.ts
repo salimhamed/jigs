@@ -30,7 +30,7 @@ test("agentOrHalt posts the repair through haltForHuman and re-runs the step aft
   const halts: Halt[] = [];
   let attempts = 0;
   const deps = {
-    agent: async () => {
+    runAgent: async () => {
       attempts += 1;
       if (attempts === 1) {
         throw new JitCheckError([
@@ -81,7 +81,7 @@ test("agentOrHalt posts the repair through haltForHuman and re-runs the step aft
 test("agentOrHalt rethrows a non-JIT step failure instead of halting", async () => {
   let halts = 0;
   const deps = {
-    agent: async () => {
+    runAgent: async () => {
       throw new Error("the agent could not build the project");
     },
     haltForHuman: async () => {

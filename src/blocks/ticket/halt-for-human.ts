@@ -65,23 +65,23 @@ export interface HumanReply {
   createdAt: string;
 }
 
-// Declared here rather than written as `typeof postNeedsHumanComment`:
+// Declared here rather than written as `typeof postComment`:
 // declaring the contract block-side typechecks the step against the block and
 // keeps this side free of any value import into steps/.
-export type PostNeedsHumanComment = (
+export type PostComment = (
   issueId: string,
   halt: Halt,
 ) => Promise<{ commentId: string; postedAt: string }>;
 
-export type CheckForHumanReply = (
+export type CheckForReply = (
   issueId: string,
   sinceIso: string,
   postedCommentId: string,
 ) => Promise<{ reply: HumanReply | null; cursor: string }>;
 
 export type HaltForHumanDeps = {
-  postComment: PostNeedsHumanComment;
-  checkForReply: CheckForHumanReply;
+  postComment: PostComment;
+  checkForReply: CheckForReply;
 };
 
 /** {@link haltForHuman} with its steps already bound — what a block is handed. */

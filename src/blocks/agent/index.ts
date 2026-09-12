@@ -1,11 +1,11 @@
 export { interpolate } from "../interpolate.ts";
 export {
-  agent,
+  type ExecuteAgentStep,
   JitCheckError,
-  type RunAgentStep,
+  runAgent,
   unwrapAgentStep,
 } from "./agent.ts";
-export { ask, type RunAskStep } from "./ask.ts";
+export { askModel, type ExecuteModelRequestStep } from "./ask.ts";
 export { type AgentSteps, bindAgentSteps } from "./bind.ts";
 export {
   type ClaudeHarnessConfig,
@@ -13,11 +13,13 @@ export {
   claude,
   codex,
   type HarnessConfig,
+  type HarnessName,
   type HarnessOptions,
   type McpHttpServer,
   type McpProbe,
   type McpServerConfig,
   type McpStdioServer,
+  selectHarness,
 } from "./harness-config.ts";
 export {
   type AgentStepConfig,

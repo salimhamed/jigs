@@ -15,7 +15,7 @@ import { type FixCiPrompt, fixCiPrompt } from "./fix-ci.prompt.ts";
 import { type FixCiFreshPrompt, fixCiFreshPrompt } from "./fix-ci-fresh.prompt.ts";
 
 export interface FixCiOptions {
-  agent: AgentFn;
+  runAgent: AgentFn;
   readWorktreeDiff: typeof readWorktreeDiff;
   harness: HarnessConfig;
   cwd: string;
@@ -32,13 +32,13 @@ export interface FixCiOptions {
 
 /** Repair failing checks and return the session holding the fix. */
 export async function fixCi(options: FixCiOptions): Promise<{ session?: AgentSession }> {
-  const { agent, readWorktreeDiff: read } = options;
+  const { runAgent, readWorktreeDiff: read } = options;
   const checks = renderChecks(options.failing);
   const renderResume = options.resumePrompt ?? fixCiPrompt;
   const renderFresh = options.freshPrompt ?? fixCiFreshPrompt;
 
   return resumeOrRebuild({
-    agent,
+    runAgent,
     label: "fixCi",
     harness: options.harness,
     cwd: options.cwd,

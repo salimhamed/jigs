@@ -115,7 +115,7 @@ export async function applyTeardown(
   }
 }
 
-// The per-run teardown a workflow calls after a merged reviewLoop return.
+// The per-run teardown a workflow calls after a merged delivery.
 // The loop only returns merged, so this is the matrix's merged row as a fixed
 // recipe rather than a decision: no dirtiness read (the forced remove takes
 // build output with it), and "merged" never derived — a squash merge leaves

@@ -1,14 +1,14 @@
 import { expect, test } from "vitest";
-import { ask } from "./ask.ts";
+import { askModel } from "./ask.ts";
 import { claude } from "./harness-config.ts";
 
 const refuse = (): never => {
   throw new Error("the step was called");
 };
 
-test("ask() rejects a harness descriptor carrying mcpServers before any step call", async () => {
+test("askModel() rejects a harness descriptor carrying mcpServers before any step call", async () => {
   await expect(
-    ask(
+    askModel(
       {
         harness: claude({
           model: "sonnet",

@@ -1,4 +1,4 @@
-// The step side of agent(): what the factory's "use step" wrapper delegates
+// The step side of runAgent(): what the factory's "use step" wrapper delegates
 // to. Runs the JIT checks, hydrates live providers from wire config (nothing
 // live crossed the boundary), and normalizes the generation into the uniform
 // AgentStepResult.
@@ -12,7 +12,7 @@ import type { McpServerConfig as ClaudeMcpServerConfig } from "ai-sdk-provider-c
 import type { CodexExecSettings } from "ai-sdk-provider-codex-cli";
 // Type-only, so it is erased and no workflow-side module is pulled in here.
 // The wrapper type is the one declaration of what crosses the step boundary.
-import type { RunAgentStep } from "../../blocks/agent/agent.ts";
+import type { ExecuteAgentStep } from "../../blocks/agent/agent.ts";
 import type { McpServerConfig } from "../../blocks/agent/harness-config.ts";
 import type { AgentWire } from "../../blocks/agent/plan.ts";
 import {
@@ -127,11 +127,11 @@ export function outputSpec(
 const LOCK_STALE_MS = 4 * 60 * 60_000 + 60_000;
 
 /** Run an agent in its worktree, checking required tools before it starts. */
-export async function runAgent(
+export async function executeAgent(
   wire: AgentWire,
   metadata: RunMetadata,
   deps: ExecuteDeps = realDeps,
-): ReturnType<RunAgentStep> {
+): ReturnType<ExecuteAgentStep> {
   const runId = metadata.workflowRunId;
   // JIT checks first — this is the last honest moment before agent turns
   // get burned, and the servers only exist now that the body built them.
@@ -183,7 +183,7 @@ async function generateAgentStep(
     prompt: wire.prompt,
     ...(output !== undefined ? { output } : {}),
   };
-  // Kind-checked by runAgent before the lock; anything left here names this
+  // Kind-checked by executeAgent before the lock; anything left here names this
   // harness.
   const resume = wire.resume;
 

@@ -48,7 +48,7 @@ const reply: HumanReply = {
   createdAt: "2026-08-26T14:00:00Z",
 };
 
-// Applies parseOutput exactly as the real agent() does, so the verdict schema
+// Applies parseOutput exactly as the real runAgent() does, so the verdict schema
 // is exercised through the production path rather than around it.
 const fakeAgent: AgentFn = async <T>(config: AgentStepConfig<T>) => {
   agentCalls.push(config as AgentStepConfig<unknown>);
@@ -82,7 +82,7 @@ const fakeFetchSnapshot = async (issueId: string): Promise<TicketSnapshot> => {
 
 const review = () =>
   reviewTicket({
-    agent: fakeAgent,
+    runAgent: fakeAgent,
     haltForHuman: fakeHaltForHuman,
     postNote: fakePostNote,
     fetchTicketSnapshot: fakeFetchSnapshot,
@@ -259,7 +259,7 @@ test("a caller-supplied prompt replaces the one shipped beside the block", async
   verdicts = [proceed()];
   const factoryPrompt: TicketReviewPrompt = ({ ticket }) => `# Infra ticket review\n\n${ticket}`;
   await reviewTicket({
-    agent: fakeAgent,
+    runAgent: fakeAgent,
     haltForHuman: fakeHaltForHuman,
     postNote: fakePostNote,
     fetchTicketSnapshot: fakeFetchSnapshot,

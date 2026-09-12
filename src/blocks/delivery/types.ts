@@ -51,13 +51,19 @@ export interface ImplementationPromptContext<TTask extends WorkItem = WorkItem>
   diff?: string;
 }
 
-/** Judge the committed work. Runs fresh every round, so it is always told everything. */
+/**
+ * Judge the committed work. Runs fresh every round against the committed diff,
+ * which is why it is never told the previous round's `findings`: the verdict is
+ * a new reading of the code, not a re-scoring of what the last review said.
+ */
 export interface ReviewPromptContext<TTask extends WorkItem = WorkItem>
   extends RolePromptContext<TTask> {
   baseCommit: string;
   /** The commit being reviewed, and the only one publication will accept. */
   headCommit: string;
   diff: string;
+  /** Direction an `onLimit` continuation supplied; empty until a limit is extended. */
+  instructions: string;
 }
 
 /** Repair the pull request's failing checks. */
@@ -120,8 +126,18 @@ export interface DescriptionAgent<TTask extends WorkItem = WorkItem>
   transform?: (description: PullRequestDescription, task: TTask) => PullRequestDescription;
 }
 
-/** Counts agent attempts across the entire delivery, including later CI failures. */
+/** The budgets a delivery runs under. Each phase counts cumulatively and alone. */
 export interface DeliveryLimits {
+  /** One round is one implementation attempt plus one review of what it committed. */
+  implementationReviewRounds: number;
+  /** Repair attempts against failing checks, over the pull request's whole life. */
+  ciFixAttempts: number;
+  /** Rounds spent answering pull-request review feedback; one batch of threads is one round. */
+  pullRequestRevisionRounds: number;
+}
+
+/** What a delivery has spent, counted under the same names as its budgets. */
+export interface DeliveryAttempts {
   implementationReviewRounds: number;
   ciFixAttempts: number;
   pullRequestRevisionRounds: number;
@@ -145,7 +161,7 @@ export type OnDeliveryLimit<TTask extends WorkItem = WorkItem> = (
 export interface DeliveryChange<TTask extends WorkItem = WorkItem> {
   task: TTask;
   worktree: WorktreeFacts;
-  attempts: DeliveryLimits;
+  attempts: DeliveryAttempts;
   sessions: Partial<Record<AgentRoleName, { harness: HarnessConfig; session: AgentSession }>>;
 }
 /** An approved change, carrying the commit the reviewer judged. */
@@ -166,22 +182,22 @@ export interface DeliveryStopped<TTask extends WorkItem = WorkItem> {
   change: DeliveryChange<TTask>;
   pr?: PrRef;
 }
-export type ImplementResult<TTask extends WorkItem = WorkItem> =
+export type ImplementAndReviewResult<TTask extends WorkItem = WorkItem> =
   | { status: "approved"; change: ApprovedChange<TTask> }
   | DeliveryStopped<TTask>;
 export type DeliveryResult<TTask extends WorkItem = WorkItem> =
   | { status: "merged" | "closed"; change: ApprovedChange<TTask>; pr: PrRef }
   | DeliveryStopped<TTask>;
 
-export interface ImplementOptions<TTask extends WorkItem = WorkItem> {
+export interface ImplementAndReviewOptions<TTask extends WorkItem = WorkItem> {
   task: TTask;
   worktree: WorktreeFacts;
   implementation: ImplementationAgent<TTask>;
   review: ReviewAgent<TTask>;
-  maxRounds: number;
+  limits: Pick<DeliveryLimits, "implementationReviewRounds">;
   onLimit?: OnDeliveryLimit<TTask>;
 }
-export interface OpenPullRequestOptions<TTask extends WorkItem = WorkItem> {
+export interface PublishApprovedChangeOptions<TTask extends WorkItem = WorkItem> {
   change: ApprovedChange<TTask>;
   binding: string;
   implementation: ImplementationAgent<TTask>;
@@ -197,8 +213,8 @@ export interface FollowPullRequestOptions<TTask extends WorkItem = WorkItem> {
   merge: "human" | "jigs";
   onLimit?: OnDeliveryLimit<TTask>;
 }
-export interface ReviewLoopOptions<TTask extends WorkItem = WorkItem>
-  extends Omit<ImplementOptions<TTask>, "maxRounds"> {
+export interface DeliverChangeOptions<TTask extends WorkItem = WorkItem>
+  extends Omit<ImplementAndReviewOptions<TTask>, "limits"> {
   binding: string;
   ciRepair?: CiRepairAgent<TTask>;
   pullRequestRevision?: PullRequestRevisionAgent<TTask>;
@@ -209,13 +225,13 @@ export interface ReviewLoopOptions<TTask extends WorkItem = WorkItem>
 
 /** Supply the factory's durable functions once, then use the delivery operations. */
 export interface DeliverySteps {
-  agent: AgentFn;
+  runAgent: AgentFn;
   pullRequestGate: (pr: PrRef) => AsyncGenerator<GateWake, void, GateAck | undefined>;
   readBranchState: typeof branch.readBranchState;
   readWorktreeDiff: typeof branch.readWorktreeDiff;
   pushBranch: typeof branch.pushBranch;
   resolveRepository: typeof pr.resolveRepository;
-  createPullRequest: typeof pr.openPullRequest;
+  openPullRequest: typeof pr.openPullRequest;
   commentOnPullRequest: typeof pr.commentOnPullRequest;
   replyToPullRequestReviewThread: typeof pr.replyToPullRequestReviewThread;
   squashMergePullRequest: typeof pr.squashMergePullRequest;

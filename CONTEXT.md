@@ -171,10 +171,35 @@ The block that turns a ticket into an implementation brief, asking a human
 when clarification is needed. It returns a handoff when review can proceed.
 _Avoid_: intake, triage
 
+**Delivery**:
+The whole of carrying a work item to a merged or closed pull request:
+implementation, code review, publication, pull-request feedback, CI repair and
+merge or closure, under factory-selected policy. Coordinated by
+`deliverChange`, whose phases are also usable on their own.
+_Avoid_: shipping, the pipeline, the review loop (for the whole)
+
 **Review loop**:
-Reusable delivery coordination that carries a work item through implementation,
-code review, pull-request feedback and merge under factory-selected policy.
-_Avoid_: build loop, PR loop, the reviewLoop jig
+The part of a delivery that repeats implementation and code review until the
+review approves or the round budget runs out. Coordinated by
+`implementAndReview`.
+_Avoid_: build loop, PR loop, the whole delivery
+
+**Budget**:
+The number of attempts a phase is allowed before it stops or asks a human.
+Each phase has its own — `implementationReviewRounds`, `ciFixAttempts` and
+`pullRequestRevisionRounds` — under those names at every layer, and an
+`onLimit` continuation grants more only to the phase that exhausted one.
+_Avoid_: limit (for the number), retries, max, quota
+
+**Round**:
+One implementation attempt plus the review of what it committed, or one batch
+of pull-request feedback answered. Counts against that phase's budget.
+_Avoid_: iteration, loop, pass
+
+**Attempt**:
+One try of a phase's agent, counted cumulatively for the life of the delivery.
+A change's `attempts` are tallied under the same names as the budgets.
+_Avoid_: retry (for the first try), run
 
 **Brief**:
 The implementation plan produced by ticket review. The ticket remains the

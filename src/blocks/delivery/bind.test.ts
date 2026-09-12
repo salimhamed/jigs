@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import { resumeFailed } from "../agent/resume-or-rebuild.ts";
 import type { GateAck, GateWake } from "../pull-request/gate.ts";
+import { bindDeliverySteps } from "./bind.ts";
 import {
   defaultCiRepairPrompt,
   defaultDescriptionPrompt,
@@ -9,16 +10,15 @@ import {
   defaultReviewPrompt,
   defaultRevisionPrompt,
 } from "./prompts.ts";
-import { bindDeliverySteps } from "./review-loop.ts";
 import type {
   ApprovedChange,
+  DeliverChangeOptions,
   DeliverySteps,
   FollowPullRequestOptions,
-  ReviewLoopOptions,
 } from "./types.ts";
 
 const pr = { owner: "owner", repo: "repo", number: 1 };
-const options: ReviewLoopOptions = {
+const options: DeliverChangeOptions = {
   task: { key: "internal-42", title: "Repair search", instructions: "Find exact matches" },
   worktree: { path: "/work", branch: "fix", defaultBranch: "main", baseSha: "base" },
   binding: "repo",
@@ -34,7 +34,7 @@ function setup(wakes: GateWake[] = [{ kind: "closed", merged: true }]) {
     prompt: string;
     resume?: unknown;
   }> = [];
-  const agent: AgentFn = async <T>(config: Parameters<AgentFn>[0]) => {
+  const runAgent: AgentFn = async <T>(config: Parameters<AgentFn>[0]) => {
     calls.push(config);
     const output = config.output?.parse(
       config.prompt.includes("Review the changes")
@@ -55,13 +55,13 @@ function setup(wakes: GateWake[] = [{ kind: "closed", merged: true }]) {
     }
   }
   const steps: DeliverySteps = {
-    agent,
+    runAgent,
     pullRequestGate: gate,
     readBranchState: vi.fn().mockResolvedValue({ commits: 1, headSha: "new", dirty: false }),
     readWorktreeDiff: vi.fn().mockResolvedValue("diff"),
     pushBranch: vi.fn().mockResolvedValue({ headSha: "new" }),
     resolveRepository: vi.fn().mockResolvedValue({ owner: "owner", repo: "repo" }),
-    createPullRequest: vi.fn().mockResolvedValue(pr),
+    openPullRequest: vi.fn().mockResolvedValue(pr),
     commentOnPullRequest: vi.fn().mockResolvedValue(undefined),
     replyToPullRequestReviewThread: vi.fn().mockResolvedValue({ id: 77 }),
     squashMergePullRequest: vi.fn().mockResolvedValue({ merged: true, sha: "merged" }),
@@ -89,7 +89,7 @@ const red = (headSha: string): GateWake => ({
 describe("delivery", () => {
   it("delivers a provider-independent task with separate roles and retains worktree facts", async () => {
     const { steps, calls, closed } = setup();
-    const result = await bindDeliverySteps(steps).reviewLoop(options);
+    const result = await bindDeliverySteps(steps).deliverChange(options);
     expect(result.status).toBe("merged");
     expect(result.change.worktree).toEqual(options.worktree);
     expect(calls.map((call) => call.harness.model)).toEqual(["builder", "reviewer", "builder"]);
@@ -100,27 +100,27 @@ describe("delivery", () => {
 
   it("returns limit-reached without opening a PR or implicitly retrying", async () => {
     const { steps } = setup();
-    const agent = vi.fn().mockImplementation(async (config) => ({
+    const runAgent = vi.fn().mockImplementation(async (config) => ({
       text: "",
       output: config.output
         ? { verdict: "changes-requested", findings: ["Missing test"] }
         : undefined,
     }));
-    steps.agent = agent;
-    const result = await bindDeliverySteps(steps).reviewLoop(options);
+    steps.runAgent = runAgent;
+    const result = await bindDeliverySteps(steps).deliverChange(options);
     expect(result).toMatchObject({
       status: "limit-reached",
       phase: "implementation-review",
       attempts: 2,
     });
-    expect(agent).toHaveBeenCalledTimes(4);
-    expect(steps.createPullRequest).not.toHaveBeenCalled();
+    expect(runAgent).toHaveBeenCalledTimes(4);
+    expect(steps.openPullRequest).not.toHaveBeenCalled();
   });
 
   it("only adds the explicitly granted attempts and passes human direction", async () => {
     const { steps } = setup();
     const prompts: string[] = [];
-    steps.agent = (async (config) => {
+    steps.runAgent = (async (config) => {
       prompts.push(config.prompt);
       return {
         text: "",
@@ -135,9 +135,11 @@ describe("delivery", () => {
         instructions: "Test Unicode",
       })
       .mockResolvedValueOnce({ action: "stop" });
-    const result = await bindDeliverySteps(steps).reviewLoop({ ...options, onLimit });
+    const result = await bindDeliverySteps(steps).deliverChange({ ...options, onLimit });
     expect(result).toMatchObject({ status: "stopped", attempts: 3 });
     expect(prompts[4]).toContain("Test Unicode");
+    // The reviewer hears the human too: direction reaches both roles of the round.
+    expect(prompts[5]).toContain("Test Unicode");
     expect(onLimit).toHaveBeenCalledTimes(2);
   });
 
@@ -155,7 +157,7 @@ describe("delivery", () => {
       .mockResolvedValueOnce({ commits: 1, headSha: "new", dirty: false })
       .mockResolvedValueOnce({ commits: 1, headSha: "first", dirty: false })
       .mockResolvedValueOnce({ commits: 1, headSha: "second", dirty: false });
-    const result = await bindDeliverySteps(steps).reviewLoop({
+    const result = await bindDeliverySteps(steps).deliverChange({
       ...options,
       ciRepair: { harness: { kind: "claude", model: "repair" } },
     });
@@ -186,12 +188,12 @@ describe("delivery", () => {
       { kind: "review-comments", threads: [thread] },
       { kind: "closed", merged: true },
     ]);
-    const original = steps.agent;
-    steps.agent = (async (config) =>
+    const original = steps.runAgent;
+    steps.runAgent = (async (config) =>
       config.prompt.includes("Address the review feedback")
         ? { text: "", output: { answers: [{ threadId: 4, body: "Fixed" }] } }
         : original(config)) as AgentFn;
-    const result = await bindDeliverySteps(steps).reviewLoop(options);
+    const result = await bindDeliverySteps(steps).deliverChange(options);
     expect(result.status).toBe("merged");
     expect(acks[0]).toEqual({ selfCommentIds: [77] });
     expect(steps.replyToPullRequestReviewThread).toHaveBeenCalledWith(pr, 4, "Fixed");
@@ -203,16 +205,16 @@ describe("delivery", () => {
       { kind: "closed", merged: false },
     ]);
     vi.mocked(steps.squashMergePullRequest).mockResolvedValue({ merged: false, sha: "" });
-    expect((await bindDeliverySteps(steps).reviewLoop({ ...options, merge: "jigs" })).status).toBe(
-      "closed",
-    );
+    expect(
+      (await bindDeliverySteps(steps).deliverChange({ ...options, merge: "jigs" })).status,
+    ).toBe("closed");
   });
 
   it("rebuilds failed implementation sessions with full task context", async () => {
     const { steps } = setup();
     let reviews = 0;
     const prompts: string[] = [];
-    steps.agent = (async (config) => {
+    steps.runAgent = (async (config) => {
       if (config.resume) resumeFailed("expired");
       prompts.push(config.prompt);
       if (config.output)
@@ -222,7 +224,10 @@ describe("delivery", () => {
         };
       return { text: "", output: undefined, session: { harness: "codex", id: "saved" } };
     }) as AgentFn;
-    const result = await bindDeliverySteps(steps).implementAndReview({ ...options, maxRounds: 2 });
+    const result = await bindDeliverySteps(steps).implementAndReview({
+      ...options,
+      limits: { implementationReviewRounds: 2 },
+    });
     expect(result.status).toBe("approved");
     expect(prompts[2]).toContain("Find exact matches");
     expect(prompts[2]).toContain("Current diff:");
@@ -231,7 +236,7 @@ describe("delivery", () => {
   it("rejects invalid limits before running an agent", async () => {
     const { steps, calls } = setup();
     await expect(
-      bindDeliverySteps(steps).reviewLoop({
+      bindDeliverySteps(steps).deliverChange({
         ...options,
         limits: { ...options.limits, ciFixAttempts: -1 },
       }),
@@ -245,7 +250,7 @@ describe("delivery", () => {
       headSha: "first",
       dirty: false,
     });
-    const result = await bindDeliverySteps(steps).reviewLoop({
+    const result = await bindDeliverySteps(steps).deliverChange({
       ...options,
       limits: { ...options.limits, ciFixAttempts: 0 },
     });
@@ -263,7 +268,7 @@ describe("delivery", () => {
       submittedAt: "today",
     };
     const { steps, calls } = setup([review, review, { ...review, reviewId: 2 }]);
-    const result = await bindDeliverySteps(steps).reviewLoop({
+    const result = await bindDeliverySteps(steps).deliverChange({
       ...options,
       pullRequestRevision: { harness: { kind: "claude", model: "revision" } },
     });
@@ -277,7 +282,7 @@ describe("delivery", () => {
 
   it("applies the factory's description transformation before publishing", async () => {
     const { steps } = setup();
-    await bindDeliverySteps(steps).reviewLoop({
+    await bindDeliverySteps(steps).deliverChange({
       ...options,
       pullRequestDescription: {
         harness: { kind: "claude", model: "writer" },
@@ -287,7 +292,7 @@ describe("delivery", () => {
         }),
       },
     });
-    expect(steps.createPullRequest).toHaveBeenCalledWith(
+    expect(steps.openPullRequest).toHaveBeenCalledWith(
       { owner: "owner", repo: "repo" },
       "fix",
       "main",
@@ -299,7 +304,7 @@ describe("delivery", () => {
   it("stops before review when the implementation leaves the worktree dirty", async () => {
     const { steps, calls } = setup();
     vi.mocked(steps.readBranchState).mockResolvedValue({ commits: 1, headSha: "new", dirty: true });
-    const result = await bindDeliverySteps(steps).reviewLoop(options);
+    const result = await bindDeliverySteps(steps).deliverChange(options);
     expect(result).toMatchObject({
       status: "uncommitted-work",
       phase: "implementation-review",
@@ -308,7 +313,7 @@ describe("delivery", () => {
     });
     expect(result.change.worktree).toEqual(options.worktree);
     expect(calls.map((call) => call.harness.model)).toEqual(["builder"]);
-    expect(steps.createPullRequest).not.toHaveBeenCalled();
+    expect(steps.openPullRequest).not.toHaveBeenCalled();
   });
 
   it("stops before review when the implementation committed nothing", async () => {
@@ -318,7 +323,7 @@ describe("delivery", () => {
       headSha: "base",
       dirty: false,
     });
-    const result = await bindDeliverySteps(steps).reviewLoop(options);
+    const result = await bindDeliverySteps(steps).deliverChange(options);
     expect(result).toMatchObject({
       status: "uncommitted-work",
       findings: ["The implementation added no commits since the base commit."],
@@ -334,7 +339,10 @@ describe("delivery", () => {
       headSha: "reviewed",
       dirty: false,
     });
-    const built = await bindDeliverySteps(steps).implementAndReview({ ...options, maxRounds: 1 });
+    const built = await bindDeliverySteps(steps).implementAndReview({
+      ...options,
+      limits: { implementationReviewRounds: 1 },
+    });
     expect(built).toMatchObject({
       status: "approved",
       change: { approval: { reviewedCommit: "reviewed" } },
@@ -345,11 +353,11 @@ describe("delivery", () => {
   it("refuses to publish a dirty worktree", async () => {
     const { steps } = setup();
     vi.mocked(steps.readBranchState).mockResolvedValue({ commits: 1, headSha: "new", dirty: true });
-    await expect(bindDeliverySteps(steps).openPullRequest(publish)).rejects.toThrow(
+    await expect(bindDeliverySteps(steps).publishApprovedChange(publish)).rejects.toThrow(
       "uncommitted changes that no review approved",
     );
     expect(steps.pushBranch).not.toHaveBeenCalled();
-    expect(steps.createPullRequest).not.toHaveBeenCalled();
+    expect(steps.openPullRequest).not.toHaveBeenCalled();
   });
 
   it("refuses to publish a commit the review never saw", async () => {
@@ -359,7 +367,7 @@ describe("delivery", () => {
       headSha: "later",
       dirty: false,
     });
-    await expect(bindDeliverySteps(steps).openPullRequest(publish)).rejects.toThrow(
+    await expect(bindDeliverySteps(steps).publishApprovedChange(publish)).rejects.toThrow(
       "later is not the approved commit new",
     );
     expect(steps.pushBranch).not.toHaveBeenCalled();
@@ -367,9 +375,9 @@ describe("delivery", () => {
 
   it("publishes the approved commit without an implementation agent turn", async () => {
     const { steps, calls } = setup();
-    expect(await bindDeliverySteps(steps).openPullRequest(publish)).toEqual(pr);
+    expect(await bindDeliverySteps(steps).publishApprovedChange(publish)).toEqual(pr);
     expect(steps.pushBranch).toHaveBeenCalledExactlyOnceWith("/work", "fix");
-    expect(steps.createPullRequest).toHaveBeenCalledWith(
+    expect(steps.openPullRequest).toHaveBeenCalledWith(
       { owner: "owner", repo: "repo" },
       "fix",
       "main",
@@ -387,7 +395,7 @@ describe("delivery", () => {
       service: "bucket-a",
       impact: "unexpected growth",
     };
-    const result = await bindDeliverySteps(steps).reviewLoop({
+    const result = await bindDeliverySteps(steps).deliverChange({
       ...options,
       task: incident,
       implementation: {
@@ -402,7 +410,7 @@ describe("delivery", () => {
   });
   it("ignores an old CI failure after a revision has moved the branch", async () => {
     const { steps, calls } = setup([red("old"), { kind: "closed", merged: true }]);
-    const result = await bindDeliverySteps(steps).reviewLoop(options);
+    const result = await bindDeliverySteps(steps).deliverChange(options);
     expect(result.change.attempts.ciFixAttempts).toBe(0);
     expect(calls).toHaveLength(3);
   });
@@ -413,13 +421,13 @@ describe("delivery", () => {
       { kind: "ci-green", headSha: "new" },
       { kind: "merge-ready", headSha: "new" },
     ]);
-    const result = await bindDeliverySteps(steps).reviewLoop({ ...options, merge: "jigs" });
+    const result = await bindDeliverySteps(steps).deliverChange({ ...options, merge: "jigs" });
     expect(result.status).toBe("merged");
     expect(steps.squashMergePullRequest).toHaveBeenCalledExactlyOnceWith(pr, "new");
   });
   it("lets a role add to the prompt jigs would have sent", async () => {
     const { steps, calls } = setup();
-    await bindDeliverySteps(steps).reviewLoop({
+    await bindDeliverySteps(steps).deliverChange({
       ...options,
       implementation: {
         harness: options.implementation.harness,
@@ -434,7 +442,7 @@ describe("delivery", () => {
 
   it("lets a role ignore the renderer and replace the prompt outright", async () => {
     const { steps, calls } = setup();
-    await bindDeliverySteps(steps).reviewLoop({
+    await bindDeliverySteps(steps).deliverChange({
       ...options,
       implementation: {
         harness: options.implementation.harness,
@@ -448,7 +456,7 @@ describe("delivery", () => {
     const { steps, calls } = setup();
     const shared = { task: options.task, worktree: options.worktree };
     const renderDefaultPrompt = async () => "";
-    await bindDeliverySteps(steps).reviewLoop(options);
+    await bindDeliverySteps(steps).deliverChange(options);
     expect(calls[0]?.prompt).toBe(
       defaultImplementationPrompt({
         ...shared,
@@ -466,6 +474,7 @@ describe("delivery", () => {
         baseCommit: "base",
         headCommit: "new",
         diff: "diff",
+        instructions: "",
         renderDefaultPrompt,
       }),
     );
@@ -477,7 +486,7 @@ describe("delivery", () => {
   it("still validates structured output when a role replaces the prompt", async () => {
     const { steps } = setup();
     await expect(
-      bindDeliverySteps(steps).reviewLoop({
+      bindDeliverySteps(steps).deliverChange({
         ...options,
         review: { harness: options.review.harness, prompt: () => "Say yes or no." },
       }),
@@ -486,13 +495,13 @@ describe("delivery", () => {
 
   it("keeps a custom task's own fields on the limit callback and the result", async () => {
     const { steps } = setup();
-    steps.agent = (async (config) => ({
+    steps.runAgent = (async (config) => ({
       text: "",
       output: config.output ? { verdict: "changes-requested", findings: ["Test"] } : undefined,
     })) as AgentFn;
     const incident = { ...options.task, service: "bucket-a", impact: "unexpected growth" };
     const seen: string[] = [];
-    const result = await bindDeliverySteps(steps).reviewLoop({
+    const result = await bindDeliverySteps(steps).deliverChange({
       ...options,
       task: incident,
       onLimit: async (limit) => {

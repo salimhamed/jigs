@@ -57,7 +57,7 @@ export function buildAskWire<T>(config: AskStepConfig<T>): AskWire {
   // reach would be a silent lie, so it fails here instead.
   if (config.harness.mcpServers !== undefined) {
     throw new Error(
-      "ask() is a plain model call with no MCP universe — mcpServers on the harness descriptor is only honored by agent()",
+      "askModel() is a plain model call with no MCP universe — mcpServers on the harness descriptor is only honored by runAgent()",
     );
   }
   const { output, ...wire } = config;

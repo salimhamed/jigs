@@ -9,24 +9,27 @@
 // factory's own `"use step"` wrappers are what join the two.
 
 export {
-  agent,
+  type ExecuteAgentStep,
   JitCheckError,
-  type RunAgentStep,
+  runAgent,
   unwrapAgentStep,
 } from "./agent/agent.ts";
 export { type AgentOrHaltDeps, agentOrHalt } from "./agent/agent-or-halt.ts";
-export { ask, type RunAskStep } from "./agent/ask.ts";
+export { askModel, type ExecuteModelRequestStep } from "./agent/ask.ts";
+export { type AgentSteps, bindAgentSteps } from "./agent/bind.ts";
 export {
   type ClaudeHarnessConfig,
   type CodexHarnessConfig,
   claude,
   codex,
   type HarnessConfig,
+  type HarnessName,
   type HarnessOptions,
   type McpHttpServer,
   type McpProbe,
   type McpServerConfig,
   type McpStdioServer,
+  selectHarness,
 } from "./agent/harness-config.ts";
 export {
   type AgentStepConfig,
@@ -55,14 +58,6 @@ export {
   type ResumeOrRebuildResult,
   resumeOrRebuild,
 } from "./agent/resume-or-rebuild.ts";
-export {
-  type BoundReviewTicketOptions,
-  bindAgentSteps,
-  bindJigs,
-  bindLinearSteps,
-  bindPullRequestSteps,
-  type JigsSteps,
-} from "./bind-jigs.ts";
 export {
   type AnswerReviewPrompt,
   type AnswerReviewPromptInput,
@@ -119,6 +114,7 @@ export {
   finished,
   listen,
 } from "./pull-request/attend.ts";
+export { bindPullRequestSteps } from "./pull-request/bind.ts";
 export {
   classifyPrState,
   type GateAck,
@@ -132,6 +128,11 @@ export {
   tokenFromGithubPayload,
 } from "./pull-request/gate.ts";
 export {
+  type BoundReviewTicketOptions,
+  bindLinearSteps,
+  type LinearSteps,
+} from "./ticket/bind.ts";
+export {
   ClaimConflictError,
   claimTicket,
   TICKET_TOKEN_PREFIX,
@@ -140,7 +141,7 @@ export {
   tokenFromLinearPayload,
 } from "./ticket/claim.ts";
 export {
-  type CheckForHumanReply,
+  type CheckForReply,
   type Halt,
   type HaltForHumanDeps,
   type HaltForHumanFn,
@@ -153,11 +154,11 @@ export {
   type JsonValue,
   NEEDS_HUMAN_TOKEN_PREFIX,
   needsHumanToken,
-  type PostNeedsHumanComment,
+  type PostComment,
 } from "./ticket/halt-for-human.ts";
 export {
   type Handoff,
-  type PostTicketNote,
+  type PostNote,
   type ReviewTicketOptions,
   reviewTicket,
   type TicketNote,

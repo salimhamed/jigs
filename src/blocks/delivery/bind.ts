@@ -15,6 +15,7 @@ import {
 import type {
   AgentRoleName,
   CiRepairPromptContext,
+  DeliverChangeOptions,
   DeliveryAgent,
   DeliveryChange,
   DeliveryLimit,
@@ -22,13 +23,12 @@ import type {
   DeliverySteps,
   DeliveryStopped,
   FollowPullRequestOptions,
+  ImplementAndReviewOptions,
+  ImplementAndReviewResult,
   ImplementationPromptContext,
-  ImplementOptions,
-  ImplementResult,
   OnDeliveryLimit,
-  OpenPullRequestOptions,
+  PublishApprovedChangeOptions,
   PullRequestRevisionPromptContext,
-  ReviewLoopOptions,
   ReviewPromptContext,
   WorkItem,
 } from "./types.ts";
@@ -92,13 +92,13 @@ function uncommittedReason(dirty: boolean): string {
 /** Bind factory steps to delivery phases. Worktrees remain available on every return path. */
 export function bindDeliverySteps(steps: DeliverySteps) {
   const {
-    agent,
+    runAgent,
     pullRequestGate,
     readBranchState,
     readWorktreeDiff,
     pushBranch,
     resolveRepository,
-    createPullRequest,
+    openPullRequest,
     commentOnPullRequest,
     replyToPullRequestReviewThread,
     squashMergePullRequest,
@@ -128,7 +128,7 @@ export function bindDeliverySteps(steps: DeliverySteps) {
         ? saved.session
         : undefined;
     const result = await resumeOrRebuild({
-      agent,
+      runAgent,
       harness: role.harness,
       cwd: change.worktree.path,
       ...(session === undefined ? {} : { session }),
@@ -147,16 +147,16 @@ export function bindDeliverySteps(steps: DeliverySteps) {
 
   /** Implement and independently review until approved or the configured budget is exhausted. */
   async function implementAndReview<TTask extends WorkItem = WorkItem>(
-    options: ImplementOptions<TTask>,
-  ): Promise<ImplementResult<TTask>> {
-    validateLimit(options.maxRounds, "maxRounds");
+    options: ImplementAndReviewOptions<TTask>,
+  ): Promise<ImplementAndReviewResult<TTask>> {
+    validateLimit(options.limits.implementationReviewRounds, "implementationReviewRounds");
     const change: DeliveryChange<TTask> = {
       task: options.task,
       worktree: options.worktree,
       attempts: { implementationReviewRounds: 0, ciFixAttempts: 0, pullRequestRevisionRounds: 0 },
       sessions: {},
     };
-    let budget = options.maxRounds;
+    let budget = options.limits.implementationReviewRounds;
     let findings: string[] = [];
     let instructions = "";
     for (;;) {
@@ -213,8 +213,9 @@ export function bindDeliverySteps(steps: DeliverySteps) {
         baseCommit: change.worktree.baseSha,
         headCommit: state.headSha,
         diff: await readWorktreeDiff(change.worktree.path, change.worktree.baseSha),
+        instructions,
       };
-      const verdict = await agent({
+      const verdict = await runAgent({
         harness: options.review.harness,
         cwd: change.worktree.path,
         prompt: await renderPrompt(options.review, defaultReviewPrompt, reviewed),
@@ -231,8 +232,8 @@ export function bindDeliverySteps(steps: DeliverySteps) {
   }
 
   /** Push the reviewed commit and open a pull request with a separate description agent. */
-  async function openPullRequest<TTask extends WorkItem = WorkItem>(
-    options: OpenPullRequestOptions<TTask>,
+  async function publishApprovedChange<TTask extends WorkItem = WorkItem>(
+    options: PublishApprovedChangeOptions<TTask>,
   ) {
     const { change } = options;
     const { path, baseSha, branch, defaultBranch } = change.worktree;
@@ -250,7 +251,7 @@ export function bindDeliverySteps(steps: DeliverySteps) {
     }
     await pushBranch(path, branch);
     const role = options.pullRequestDescription ?? { harness: options.implementation.harness };
-    const result = await agent({
+    const result = await runAgent({
       harness: role.harness,
       cwd: path,
       prompt: await renderPrompt(role, defaultDescriptionPrompt, {
@@ -264,13 +265,7 @@ export function bindDeliverySteps(steps: DeliverySteps) {
       role.transform?.(result.output, change.task) ?? result.output,
     );
     const repository = await resolveRepository(options.binding);
-    return createPullRequest(
-      repository,
-      branch,
-      defaultBranch,
-      description.title,
-      description.body,
-    );
+    return openPullRequest(repository, branch, defaultBranch, description.title, description.body);
   }
 
   /** Address CI and review feedback until merge, closure, or an exhausted attempt budget. */
@@ -410,20 +405,17 @@ export function bindDeliverySteps(steps: DeliverySteps) {
     });
   }
 
-  /** Deliver a work item using configurable agents, review budgets, and merge policy. */
-  async function reviewLoop<TTask extends WorkItem = WorkItem>(
-    options: ReviewLoopOptions<TTask>,
+  /** Deliver a work item using configurable agents, budgets, and merge policy. */
+  async function deliverChange<TTask extends WorkItem = WorkItem>(
+    options: DeliverChangeOptions<TTask>,
   ): Promise<DeliveryResult<TTask>> {
     validateLimit(options.limits.ciFixAttempts, "ciFixAttempts");
     validateLimit(options.limits.pullRequestRevisionRounds, "pullRequestRevisionRounds");
-    const built = await implementAndReview({
-      ...options,
-      maxRounds: options.limits.implementationReviewRounds,
-    });
+    const built = await implementAndReview(options);
     if (built.status !== "approved") return built;
-    const pr = await openPullRequest({ ...options, change: built.change });
+    const pr = await publishApprovedChange({ ...options, change: built.change });
     return followPullRequest({ ...options, change: built.change, pr });
   }
 
-  return { reviewLoop, implementAndReview, openPullRequest, followPullRequest };
+  return { deliverChange, implementAndReview, publishApprovedChange, followPullRequest };
 }

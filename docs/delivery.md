@@ -1,18 +1,22 @@
 # Delivery from a factory
 
 The optional `/delivery` module implements software changes and follows their
-pull requests. Other workflows can use `/agents` without any delivery concepts.
-All examples run inside a factory workflow or a replay-safe block.
+pull requests. **Delivery** is the whole of it: implementation, code review,
+publication, pull-request feedback, CI repair, and merge or closure, coordinated
+by `deliverChange`. The **review loop** is the part `implementAndReview`
+coordinates: implementation and code review repeated until approval or the
+configured limit. Other workflows can use `/agents` without any delivery
+concepts. All examples run inside a factory workflow or a replay-safe block.
 
-## Choose agents and limits
+## Choose agents and budgets
 
 Import the bound operation from your generated `jigs.ts`:
 
 ```ts
 import { claude, codex } from "@salimhamed/jigs/agents";
-import { reviewLoop } from "../jigs.ts";
+import { deliverChange } from "../jigs.ts";
 
-const result = await reviewLoop({
+const result = await deliverChange({
   task,
   worktree,
   binding: "application",
@@ -27,13 +31,15 @@ const result = await reviewLoop({
 });
 ```
 
-One implementation-review round includes an implementation attempt followed by
+The three budgets carry the same names wherever they appear — on `deliverChange`,
+on a single phase, and on the scaffold workflow's inputs.
+One `implementationReviewRounds` round is one implementation attempt followed by
 an independent review of what that attempt committed. The implementation agent
 commits its own work; if it leaves the worktree dirty or adds no commit, the
 round stops with `status: "uncommitted-work"` before any review, and the
-worktree is retained. The loop stops early on approval, recording the reviewed
-commit on the change. CI repairs and batches
-of PR feedback have separate budgets; duplicate notifications do not consume them.
+worktree is retained. The review loop stops early on approval, recording the reviewed
+commit on the change. `ciFixAttempts` and `pullRequestRevisionRounds` are
+separate cumulative budgets; duplicate notifications do not consume them.
 Counters are cumulative, including CI failures after earlier successful checks.
 Zero permits no attempts in that phase and returns a limit outcome when work is needed.
 
@@ -52,10 +58,14 @@ by the operation, whatever the prompt says.
 | Role | Context | Beyond `task`, `worktree`, `attempt` |
 | --- | --- | --- |
 | `implementation` | `ImplementationPromptContext` | `findings`, `instructions`, `diff?` |
-| `review` | `ReviewPromptContext` | `baseCommit`, `headCommit`, `diff` |
+| `review` | `ReviewPromptContext` | `baseCommit`, `headCommit`, `diff`, `instructions` |
 | `ciRepair` | `CiRepairPromptContext` | `failing`, `pr`, `instructions`, `diff?` |
 | `pullRequestRevision` | `PullRequestRevisionPromptContext` | `threads`, `reviewBody?`, `pr`, `instructions`, `diff?` |
 | `pullRequestDescription` | `DescriptionPromptContext` | `diff` (no `attempt`) |
+
+The review role is never given the previous round's `findings`: it reads the
+committed diff fresh every round, and `instructions` is how a human's direction
+from `onLimit` reaches it.
 
 An optional `diff` is present only when the role runs in a fresh session, which
 is the one arm that has to rebuild context; a resumed agent already holds the
@@ -115,6 +125,13 @@ type Incident = WorkItem & {
   acceptance: string[];
 };
 
+declare const outage: {
+  reference: string;
+  service: string;
+  symptoms: string;
+  acceptance: string[];
+};
+
 const incident: Incident = {
   key: outage.reference,
   title: `Repair ${outage.service}`,
@@ -131,13 +148,13 @@ delivery returns. Task values are recorded durably, so keep them plain
 serializable data; prompts and callbacks stay in workflow-side configuration.
 
 A factory can load an incident, GitHub issue, or another source in its own durable
-step, then pass it to `reviewLoop`. No plugin registration or change to jigs is
+step, then pass it to `deliverChange`. No plugin registration or change to jigs is
 needed. Generic workflows such as S3 analysis do not need to use `WorkItem` at all.
 
 Ticket acquisition, claims, clarification, progress notes, and human communication
 are separate capabilities. The starter factory explicitly resolves and claims its
 Linear ticket before delivery. Replacing that factory block can change the source
-without changing the review loop. An input named `ticket` has no special behavior.
+without changing the delivery. An input named `ticket` has no special behavior.
 Declare the providers you use under `requires.integrations`, such as `["linear",
 "github"]`; an agent-only workflow can omit that property.
 
@@ -176,7 +193,7 @@ Use the complete loop, or place factory decisions between its phases:
 ```ts
 import {
   implementAndReview,
-  openPullRequestForChange,
+  publishApprovedChange,
   followPullRequest,
 } from "../jigs.ts";
 
@@ -185,12 +202,12 @@ const built = await implementAndReview({
   worktree,
   implementation,
   review,
-  maxRounds: 5,
+  limits: { implementationReviewRounds: 5 },
 });
 if (built.status !== "approved") return built;
 
 await checkSecurity(built.change);
-const pr = await openPullRequestForChange({
+const pr = await publishApprovedChange({
   change: built.change,
   binding: "application",
   implementation,
@@ -207,7 +224,7 @@ return followPullRequest({
 `checkSecurity` is a factory-owned operation. Each delivery phase still uses
 individual durable steps internally, so completed operations remain recorded.
 
-Only an approved change types as the input to `openPullRequestForChange`: an
+Only an approved change types as the input to `publishApprovedChange`: an
 `ApprovedChange` carries `approval.reviewedCommit`, and a stopped result's change
 does not. Publication pushes that commit and opens the pull request — it runs no
 implementation agent and makes no commit, and it throws when the worktree is
@@ -219,8 +236,9 @@ For different execution behavior, use `bindDeliverySteps` with the generated
 
 ## Generic agent workflows
 
-`agent` and `ask` accept a harness, prompt, and optional output schema. `agent`
-also accepts a working directory and optional session. `ask` runs without tools.
+`runAgent` and `askModel` accept a harness, prompt, and optional output schema.
+`runAgent` also accepts a working directory and optional session. `askModel`
+runs without tools.
 `createRunDirectory()` provides run-owned scratch space without a repository;
 `removeRunDirectory()` removes it after successful completion. Suspension must
 retain the directory, so do not put its removal in a `finally` block.

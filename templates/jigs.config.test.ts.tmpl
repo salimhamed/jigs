@@ -34,6 +34,17 @@ test("ship takes a ticket in either form and declares its needs", () => {
   expect(entry?.requires).toEqual({ harnesses: ["claude", "codex"], integrations: ["linear", "github"] });
 });
 
+test("an omitted model stays unset, so the chosen harness supplies its own default", () => {
+  const parsed = workflows.ship?.inputs.parse({
+    ticket: "ABC-123",
+    binding: "repo",
+    implementationHarness: "claude",
+  });
+  expect(parsed).toMatchObject({ implementationHarness: "claude" });
+  expect(parsed?.implementationModel).toBeUndefined();
+  expect(parsed?.reviewModel).toBeUndefined();
+});
+
 // Inspect compiled IDs; source imports do not determine the emitted addresses.
 
 const BUNDLE = new URL("./.output/server/index.mjs", import.meta.url);

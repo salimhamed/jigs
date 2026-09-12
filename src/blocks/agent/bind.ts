@@ -1,19 +1,20 @@
-import { agent as agentBlock, type RunAgentStep } from "./agent.ts";
-import { ask as askBlock, type RunAskStep } from "./ask.ts";
+import { type ExecuteAgentStep, runAgent as runAgentBlock } from "./agent.ts";
+import { askModel as askModelBlock, type ExecuteModelRequestStep } from "./ask.ts";
 import type { AgentStepConfig, AskStepConfig } from "./plan.ts";
 
+/** The raw durable wrappers a factory supplies, one per execution role. */
 export interface AgentSteps {
-  runAgent: RunAgentStep;
-  askModel: RunAskStep;
+  executeAgent: ExecuteAgentStep;
+  executeModelRequest: ExecuteModelRequestStep;
 }
 
 /** Connect agent calls to durable steps without requiring a ticket integration. */
 export function bindAgentSteps(steps: AgentSteps) {
   function runAgent<T = undefined>(config: AgentStepConfig<T>) {
-    return agentBlock(config, steps.runAgent);
+    return runAgentBlock(config, steps.executeAgent);
   }
   function askModel<T = undefined>(config: AskStepConfig<T>) {
-    return askBlock(config, steps.askModel);
+    return askModelBlock(config, steps.executeModelRequest);
   }
-  return { runAgent, askModel, agent: runAgent, ask: askModel };
+  return { runAgent, askModel };
 }

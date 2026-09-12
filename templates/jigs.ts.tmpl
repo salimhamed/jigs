@@ -25,41 +25,37 @@ export async function removeMergedRunWorktrees() {
   return steps.removeMergedRunWorktrees(metadata);
 }
 
-/** Run an agent in a working directory. Use agent() to pass an output schema and parse its answer. */
-export async function runAgent(request: AgentWire) {
+/** Execute an agent in a working directory. Use runAgent() to pass an output schema and parse its answer. */
+export async function executeAgent(request: AgentWire) {
   "use step";
   const metadata = getWorkflowMetadata();
-  return steps.runAgent(request, metadata);
+  return steps.executeAgent(request, metadata);
 }
 
-/** Ask a model without tools. Use ask() to pass an output schema and parse its answer. */
-export async function askModel(request: AskWire) {
+/** Execute a model request without tools. Use askModel() to pass an output schema and parse its answer. */
+export async function executeModelRequest(request: AskWire) {
   "use step";
   const metadata = getWorkflowMetadata();
-  return steps.askModel(request, metadata);
+  return steps.executeModelRequest(request, metadata);
 }
 
 /** Post a request for human input on the ticket. Use haltForHuman() to also wait for a reply. */
-export async function postNeedsHumanComment(issueId: string, halt: Halt) {
+export async function postComment(issueId: string, halt: Halt) {
   "use step";
   const metadata = getWorkflowMetadata();
-  return steps.postNeedsHumanComment(issueId, halt, metadata);
+  return steps.postComment(issueId, halt, metadata);
 }
 
 /** Post the assumptions that let ticket review proceed without waiting for a reply. */
-export async function postTicketNote(issueId: string, note: TicketNote) {
+export async function postNote(issueId: string, note: TicketNote) {
   "use step";
-  return steps.postTicketNote(issueId, note);
+  return steps.postNote(issueId, note);
 }
 
 /** Look for a human reply since the last check, excluding the run's own question. */
-export async function checkForHumanReply(
-  issueId: string,
-  sinceIso: string,
-  postedCommentId: string,
-) {
+export async function checkForReply(issueId: string, sinceIso: string, postedCommentId: string) {
   "use step";
-  return steps.checkForHumanReply(issueId, sinceIso, postedCommentId);
+  return steps.checkForReply(issueId, sinceIso, postedCommentId);
 }
 
 /** Read a pull request's reviews, comments, CI results, and merge state. */
@@ -153,21 +149,21 @@ export async function squashMergePullRequest(pullRequest: PrRef, expectedHeadSha
 }
 
 /** Durable operations used by agent blocks. */
-export const agentSteps = { runAgent, askModel };
+export const agentSteps = { executeAgent, executeModelRequest };
 const agents = bindAgentSteps(agentSteps);
 
 /** Run an agent with tools and validate its answer against your output schema. */
-export const agent = agents.agent;
+export const runAgent = agents.runAgent;
 
 /** Ask a model without tools and validate its answer against your output schema. */
-export const ask = agents.ask;
+export const askModel = agents.askModel;
 
 /** Durable operations used by Linear blocks. */
 export const linearSteps = {
-  agent,
-  postNeedsHumanComment,
-  postTicketNote,
-  checkForHumanReply,
+  runAgent,
+  postComment,
+  postNote,
+  checkForReply,
   fetchTicketSnapshot,
 };
 const linear = bindLinearSteps(linearSteps);
@@ -190,13 +186,13 @@ export const pullRequestGate = pullRequests.pullRequestGate;
 
 /** Operations used by delivery blocks; replace any with your own factory operation. */
 export const deliverySteps = {
-  agent,
+  runAgent,
   pullRequestGate,
   readBranchState,
   readWorktreeDiff,
   pushBranch,
   resolveRepository,
-  createPullRequest: openPullRequest,
+  openPullRequest,
   commentOnPullRequest,
   replyToPullRequestReviewThread,
   squashMergePullRequest,
@@ -204,13 +200,13 @@ export const deliverySteps = {
 const delivery = bindDeliverySteps(deliverySteps);
 
 /** Implement a task and follow its pull request through review and merge. Keeps your task's own fields. */
-export const reviewLoop = delivery.reviewLoop;
+export const deliverChange = delivery.deliverChange;
 
-/** Implement a task and review its commits within your chosen round limit. */
+/** Implement a task and review its commits within your round budget. Keeps your task's own fields. */
 export const implementAndReview = delivery.implementAndReview;
 
-/** Publish the approved commit of a reviewed change as a pull request. */
-export const openPullRequestForChange = delivery.openPullRequest;
+/** Publish the approved commit of a reviewed change as a pull request. Keeps your task's own fields. */
+export const publishApprovedChange = delivery.publishApprovedChange;
 
-/** Address pull-request feedback and CI failures until it merges, closes, or reaches a limit. */
+/** Address pull-request feedback and CI failures until it merges, closes, or reaches a limit. Keeps your task's own fields. */
 export const followPullRequest = delivery.followPullRequest;

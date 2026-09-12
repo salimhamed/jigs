@@ -42,7 +42,7 @@ let verdicts: unknown[] = [];
 let humanCalls: Halt[] = [];
 let humanReply = "the reviewer is wrong, ship it";
 
-// Applies parseOutput exactly as the real agent() does, so the verdict schema
+// Applies parseOutput exactly as the real runAgent() does, so the verdict schema
 // is exercised through the production path rather than around it.
 const fakeAgent: AgentFn = async <T>(config: AgentStepConfig<T>) => {
   agentCalls.push(config as AgentStepConfig<unknown>);
@@ -71,7 +71,7 @@ const fakeHaltForHuman: HaltForHumanFn = async (_claim, halt) => {
 
 const run = () =>
   implementUntilCodeReviewApproves({
-    agent: fakeAgent,
+    runAgent: fakeAgent,
     haltForHuman: fakeHaltForHuman,
     claim,
     handoff,

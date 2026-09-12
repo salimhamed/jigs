@@ -8,8 +8,8 @@ import { ensureManagedCodexHome } from "../harnesses/codex-home.ts";
 import { stripApiCredentials } from "../harnesses/env.ts";
 import { assertLivePreconditions, makeScratchRepo } from "../harnesses/live/fixtures/live-env.ts";
 import { makeTmpDir, removeTmpDir } from "../harnesses/test-fixtures.ts";
-import { type ExecuteDeps, realDeps, runAgent as runAgentStep } from "../run-agent.ts";
-import { askModel } from "../run-ask.ts";
+import { type ExecuteDeps, executeAgent, realDeps } from "../run-agent.ts";
+import { executeModelRequest } from "../run-ask.ts";
 
 let tmp: string;
 let deps: ExecuteDeps;
@@ -43,10 +43,10 @@ function assertUsage(usage: StepUsage | undefined): void {
   expect(usage?.outputTokens ?? 0).toBeGreaterThan(0);
 }
 
-// runAgent answers a union; a step that declares no MCP servers and carries
+// executeAgent answers a union; a step that declares no MCP servers and carries
 // no resume pointer can only take the successful arm.
 async function runAgent(wire: AgentWire, runId: string): Promise<AgentStepResult<unknown>> {
-  const result = await runAgentStep(wire, { workflowRunId: runId }, deps);
+  const result = await executeAgent(wire, { workflowRunId: runId }, deps);
   if ("jitFailure" in result) {
     throw new Error(`unexpected JIT failure: ${JSON.stringify(result.jitFailure)}`);
   }
@@ -100,7 +100,7 @@ test("claude ask step: structured output round-trips typed with usage", async ()
     output: verdict,
   });
 
-  const result = await askModel(wire, { workflowRunId: runId }, deps);
+  const result = await executeModelRequest(wire, { workflowRunId: runId }, deps);
 
   expect(verdict.parse(result.output)).toEqual({ ok: true, word: "sky" });
   assertUsage(result.usage);
@@ -114,7 +114,7 @@ test("codex ask step: structured output round-trips typed with usage", async () 
     output: verdict,
   });
 
-  const result = await askModel(wire, { workflowRunId: runId }, deps);
+  const result = await executeModelRequest(wire, { workflowRunId: runId }, deps);
 
   expect(verdict.parse(result.output)).toEqual({ ok: true, word: "sky" });
   assertUsage(result.usage);

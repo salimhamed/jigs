@@ -7,10 +7,10 @@
 export type { GithubRepoRef } from "../providers/github-webhook.ts";
 export {
   type ExecuteDeps,
+  executeAgent,
   realDeps,
-  runAgent,
 } from "./agent/run-agent.ts";
-export { askModel } from "./agent/run-ask.ts";
+export { executeModelRequest } from "./agent/run-ask.ts";
 export { pushBranch, readBranchState, readWorktreeDiff } from "./pull-request/branch.ts";
 export { fetchPullRequestState } from "./pull-request/fetch-state.ts";
 export {
@@ -31,9 +31,9 @@ export {
   type LinearIssueMatch,
 } from "./ticket/issues.ts";
 export {
-  checkForHumanReply,
-  postNeedsHumanComment,
-  postTicketNote,
+  checkForReply,
+  postComment,
+  postNote,
 } from "./ticket/needs-human-comments.ts";
 export {
   type NeedsHumanContext,

@@ -28,14 +28,14 @@ export class JitCheckError extends Error {
   }
 }
 
-/** The factory's `"use step"` wrapper around `runAgent`. */
-export type RunAgentStep = (
+/** The factory's `"use step"` wrapper around `executeAgent`. */
+export type ExecuteAgentStep = (
   wire: AgentWire,
 ) => Promise<AgentStepResult | { jitFailure: FailedCheck[] } | { resumeFailed: string }>;
 
 // Where the step's returned markers become errors: workflow-side, so no
 // retries are spent and `instanceof` still means something to the caller.
-export function unwrapAgentStep(result: Awaited<ReturnType<RunAgentStep>>): AgentStepResult {
+export function unwrapAgentStep(result: Awaited<ReturnType<ExecuteAgentStep>>): AgentStepResult {
   if ("jitFailure" in result) throw new JitCheckError(result.jitFailure);
   // Same shape, same reason as the JIT marker, but the error it becomes is
   // ./resume-or-rebuild's business: only the fallback there may recognize it.
@@ -43,11 +43,11 @@ export function unwrapAgentStep(result: Awaited<ReturnType<RunAgentStep>>): Agen
   return result;
 }
 
-export async function agent<T = undefined>(
+export async function runAgent<T = undefined>(
   config: AgentStepConfig<T>,
-  runStep: RunAgentStep,
+  executeAgent: ExecuteAgentStep,
 ): Promise<AgentStepResult<T>> {
   const wire = buildAgentWire(config);
-  const result = unwrapAgentStep(await runStep(wire));
+  const result = unwrapAgentStep(await executeAgent(wire));
   return { ...result, output: parseOutput(config.output, result.output) };
 }

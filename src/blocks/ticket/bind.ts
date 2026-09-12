@@ -2,42 +2,42 @@ import { agentOrHalt as agentOrHaltBlock } from "../agent/agent-or-halt.ts";
 import type { AgentStepConfig } from "../agent/plan.ts";
 import type { TicketClaim } from "./claim.ts";
 import {
-  type CheckForHumanReply,
+  type CheckForReply,
   type HaltForHumanFn,
   haltForHuman as haltBlock,
-  type PostNeedsHumanComment,
+  type PostComment,
 } from "./halt-for-human.ts";
 import { type ReviewTicketOptions, reviewTicket as reviewBlock } from "./review.ts";
 export type BoundReviewTicketOptions = Omit<
   ReviewTicketOptions,
-  "agent" | "haltForHuman" | "fetchTicketSnapshot" | "postNote"
+  "runAgent" | "haltForHuman" | "fetchTicketSnapshot" | "postNote"
 >;
 
 export interface LinearSteps {
-  agent: ReviewTicketOptions["agent"];
-  postNeedsHumanComment: PostNeedsHumanComment;
-  postTicketNote: ReviewTicketOptions["postNote"];
-  checkForHumanReply: CheckForHumanReply;
+  runAgent: ReviewTicketOptions["runAgent"];
+  postComment: PostComment;
+  postNote: ReviewTicketOptions["postNote"];
+  checkForReply: CheckForReply;
   fetchTicketSnapshot: ReviewTicketOptions["fetchTicketSnapshot"];
 }
 
 /** Connect Linear clarification and review to the factory's durable steps. */
 export function bindLinearSteps(steps: LinearSteps) {
-  const { agent } = steps;
+  const { runAgent } = steps;
   const haltForHuman: HaltForHumanFn = (claim, halt) =>
     haltBlock(claim, halt, {
-      postComment: steps.postNeedsHumanComment,
-      checkForReply: steps.checkForHumanReply,
+      postComment: steps.postComment,
+      checkForReply: steps.checkForReply,
     });
   function agentOrHalt<T = undefined>(claim: TicketClaim, config: AgentStepConfig<T>) {
-    return agentOrHaltBlock(claim, config, { agent, haltForHuman });
+    return agentOrHaltBlock(claim, config, { runAgent, haltForHuman });
   }
   function reviewTicket(options: BoundReviewTicketOptions) {
     return reviewBlock({
       ...options,
-      agent,
+      runAgent,
       haltForHuman,
-      postNote: steps.postTicketNote,
+      postNote: steps.postNote,
       fetchTicketSnapshot: steps.fetchTicketSnapshot,
     });
   }

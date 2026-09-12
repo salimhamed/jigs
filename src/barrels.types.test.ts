@@ -18,12 +18,14 @@ import type {
   AskStepConfig,
   AskWire,
   Attend,
-  CheckForHumanReply,
+  CheckForReply,
   ClaudeHarnessConfig,
   CodeReviewPrompt,
   CodeReviewPromptInput,
   CodexHarnessConfig,
   DescribePullRequestOptions,
+  ExecuteAgentStep,
+  ExecuteModelRequestStep,
   FixCiFreshPrompt,
   FixCiFreshPromptInput,
   FixCiOptions,
@@ -40,6 +42,7 @@ import type {
   HaltQuestion,
   Handoff,
   HarnessConfig,
+  HarnessName,
   HarnessOptions,
   HumanReply,
   ImplementOptions,
@@ -51,9 +54,9 @@ import type {
   McpProbe,
   McpServerConfig,
   McpStdioServer,
-  PostNeedsHumanComment,
+  PostComment,
+  PostNote,
   PostReviewAnswersOptions,
-  PostTicketNote,
   PrRef,
   PullRequestDescription,
   RebuildContextPrompt,
@@ -61,8 +64,6 @@ import type {
   ResumeOrRebuildOptions,
   ResumeOrRebuildResult,
   ReviewTicketOptions,
-  RunAgentStep,
-  RunAskStep,
   SnapshotComment,
   StepResult,
   StepUsage,
@@ -100,7 +101,7 @@ type BlocksTypeSurface = {
   askStepConfig: AskStepConfig;
   askWire: AskWire;
   attend: Attend<number>;
-  checkForHumanReply: CheckForHumanReply;
+  checkForReply: CheckForReply;
   claudeHarnessConfig: ClaudeHarnessConfig;
   codeReviewPrompt: CodeReviewPrompt;
   codeReviewPromptInput: CodeReviewPromptInput;
@@ -119,6 +120,7 @@ type BlocksTypeSurface = {
   haltForHumanFn: HaltForHumanFn;
   handoff: Handoff;
   harnessConfig: HarnessConfig;
+  harnessName: HarnessName;
   halt: Halt;
   haltOption: HaltOption;
   haltQuestion: HaltQuestion;
@@ -133,18 +135,18 @@ type BlocksTypeSurface = {
   mcpProbe: McpProbe;
   mcpServerConfig: McpServerConfig;
   mcpStdioServer: McpStdioServer;
-  postNeedsHumanComment: PostNeedsHumanComment;
+  postComment: PostComment;
   postReviewAnswersOptions: PostReviewAnswersOptions;
   pullRequestDescription: PullRequestDescription;
-  postTicketNote: PostTicketNote;
+  postNote: PostNote;
   prRef: PrRef;
   rebuildContextPrompt: RebuildContextPrompt;
   rebuildContextPromptInput: RebuildContextPromptInput;
   resumeOrRebuildOptions: ResumeOrRebuildOptions<undefined>;
   resumeOrRebuildResult: ResumeOrRebuildResult<undefined>;
   reviewTicketOptions: ReviewTicketOptions;
-  runAgentStep: RunAgentStep;
-  runAskStep: RunAskStep;
+  executeAgentStep: ExecuteAgentStep;
+  executeModelRequestStep: ExecuteModelRequestStep;
   snapshotComment: SnapshotComment;
   stepResult: StepResult;
   stepUsage: StepUsage;

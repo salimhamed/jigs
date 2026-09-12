@@ -6,10 +6,11 @@
 import { expect, test } from "vitest";
 import type { HarnessConfig } from "../agent/harness-config.ts";
 import type { WorktreeFacts } from "../worktree.ts";
-import { bindDeliverySteps } from "./review-loop.ts";
+import { bindDeliverySteps } from "./bind.ts";
 import type {
   CiRepairPromptContext,
   DeliverySteps,
+  DescriptionPromptContext,
   ImplementationPromptContext,
   ReviewPromptContext,
 } from "./types.ts";
@@ -28,7 +29,7 @@ const incident = {
 /** No explicit generic argument and no cast, from the context or the result. */
 async function customTaskFieldsAreReachable(): Promise<string> {
   const delivery = bindDeliverySteps(steps);
-  const result = await delivery.reviewLoop({
+  const result = await delivery.deliverChange({
     task: incident,
     worktree,
     binding: "application",
@@ -60,11 +61,25 @@ function ciRepairIsNeverGivenReviewThreads(context: CiRepairPromptContext): unkn
   return context.threads;
 }
 
+function implementationIsNeverGivenReviewThreads(context: ImplementationPromptContext): unknown {
+  // @ts-expect-error review threads belong to the pull-request revision role
+  return context.threads;
+}
+
+/** Every role renders the default it would otherwise have been sent. */
+function descriptionRendersTheShippedDefault(
+  context: DescriptionPromptContext,
+): () => Promise<string> {
+  return context.renderDefaultPrompt;
+}
+
 test("each role's context exposes only what its operation supplies", () => {
   expect([
     customTaskFieldsAreReachable,
     reviewIsNeverGivenFailingChecks,
     implementationIsNeverGivenTheHeadCommit,
     ciRepairIsNeverGivenReviewThreads,
-  ]).toHaveLength(4);
+    implementationIsNeverGivenReviewThreads,
+    descriptionRendersTheShippedDefault,
+  ]).toHaveLength(6);
 });

@@ -11,7 +11,7 @@ import type { AgentStepResult } from "./result.ts";
 import type { AgentFn } from "./resume-or-rebuild.ts";
 
 export interface AgentOrHaltDeps {
-  agent: AgentFn;
+  runAgent: AgentFn;
   haltForHuman: HaltForHumanFn;
 }
 
@@ -25,7 +25,7 @@ export async function agentOrHalt<T = undefined>(
 ): Promise<AgentStepResult<T>> {
   for (;;) {
     try {
-      return await deps.agent(config);
+      return await deps.runAgent(config);
     } catch (err) {
       if (!(err instanceof JitCheckError)) throw err;
       await deps.haltForHuman(claim, {
