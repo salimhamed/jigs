@@ -1,6 +1,6 @@
 ---
 name: jigs
-description: Work with a jigs software factory — operate its runs, author its pipelines, set one up, or answer a question about how jigs works.
+description: Work with a jigs software factory — operate its runs, author its workflows, set one up, or answer a question about how jigs works.
 disable-model-invocation: true
 argument-hint: "<run …, add …, set up …, or a question about jigs>"
 ---
@@ -13,13 +13,13 @@ Read only the file you picked.
 | The argument is about | Route |
 | --- | --- |
 | Running, watching, cancelling, sweeping or poking runs; a run that looks stuck; answering a needs-human halt | `operate.md` |
-| Adding or changing a pipeline, block, step, prompt, schedule, or a `requires` manifest | `author.md` |
+| Adding or changing a workflow, block, step, prompt, schedule, or a `requires` manifest | `author.md` |
 | Installing jigs, initialising a factory, binding a repo, bringing a service up | `setup.md` |
 | A question — what a term means, why something works the way it does, where something lives | `ask.md` |
 
 Routing rules:
 
-- A directory with no `jigs.yml` at its root is not a factory repo. Any request
+- A directory with no `jigs.config.ts` at its root is not a factory repo. Any request
   that needs one goes to `setup.md` first, whatever it asked for.
 - A question phrased as a request ("can you cancel that run?") is a request.
   A request phrased as a question ("why is my run stuck?") is a request too —

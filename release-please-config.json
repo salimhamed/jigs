@@ -7,7 +7,7 @@
   "group-pull-request-title-pattern": "chore${scope}: release jigs",
   "bootstrap-sha": "6c17b41553702d0b73b71e82df95c8a8aae74b57",
   "packages": {
-    "packages/jigs": {
+    ".": {
       "component": "jigs"
     }
   }

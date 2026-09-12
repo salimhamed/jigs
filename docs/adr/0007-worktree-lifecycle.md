@@ -33,17 +33,17 @@ three-way resolution. The registry row is ownership and state only — no
 worktree facts carry the fork point in memory for the review loop's diff.
 
 Provisioning is declared on the binding itself, in the factory repo's
-committed `jigs.yml`: `copy` patterns are gitignore-blind disk globs relative
+committed `jigs.config.ts`: `copy` patterns are gitignore-blind disk globs relative
 to the binding's own `bindings/<name>/` directory in that repo, landing at the
 same relative path in the worktree (copying `.env`-class files is their
 purpose); a directory match copies the whole tree, and existing destinations
 are never overwritten. A `copy` entry that matches nothing, or that reaches
 outside `bindings/<name>/`, fails the `worktree()` request by name rather than
-provisioning silently. `post_create` commands run in the worktree with
+provisioning silently. `postCreate` commands run in the worktree with
 `VIRTUAL_ENV` stripped and stdin `/dev/null`, **fail fast** — a failing hook
 fails the `worktree()` request, leaving the half-provisioned tree
 registry-marked for diagnosis — under a single overridable
-`hook_timeout_minutes` (default 10). Scratch data is not a category: scratch
+`hookTimeoutMinutes` (default 10). Scratch data is not a category: scratch
 *is* the worktree; `runs/<run-id>/` files are the kept record.
 
 ## Teardown
@@ -61,7 +61,7 @@ commit, which would push half-states onto the Linear/GitHub-keyed branch name.
 There is no background sweep timer, and no block calls teardown itself. The
 first mid-stream cancellation showed a timer deleting state between two
 commands an operator was reading — automation nobody asked for. The lifecycle
-is: a merged run's pipeline calls `teardownMergedRun` as its own last line (a
+is: a merged run's workflow calls `teardownMergedRun` as its own last line (a
 plain sequential call, never a `finally` — suspension is a thrown error);
 every other ending leaves the worktree on disk, `jigs ps` shows it as
 `abandoned` via the same classifier sweep uses, and the operator reclaims it
@@ -110,7 +110,7 @@ fixed recipe for exactly that reason.
 - **Auto-WIP-committing dirty failed worktrees**: rejected — pushes half-states
   under the ticket-keyed branch name; dirty-worktree preservation (sandcastle's
   rule) keeps the evidence in place instead.
-- **Warn-and-continue on `post_create` failure**: rejected — an agent building
+- **Warn-and-continue on `postCreate` failure**: rejected — an agent building
   in a half-provisioned tree produces expensive garbage; failing the request
   is cheaper than the run it would corrupt.
 - **A jigs-owned scratch-dir primitive**: rejected for v0 — agent steps share
@@ -120,7 +120,7 @@ fixed recipe for exactly that reason.
 ## Consequences
 
 - The provisioning schema stays small and lives in one committed place:
-  `copy`, `post_create`, `hook_timeout_minutes` on the binding. Everything
+  `copy`, `postCreate`, `hookTimeoutMinutes` on the binding. Everything
   else in this ADR is runtime behavior, not config.
 - The TS glob implementation must match dotfiles (Python's `pathlib.glob`
   does; most JS globbers default to ignoring them) or `.env`-class copies

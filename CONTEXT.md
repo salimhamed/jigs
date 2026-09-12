@@ -1,321 +1,232 @@
 # jigs
 
-A lights-on software development factory: pipelines that take approved Linear
+A lights-on software development factory: workflows that take approved Linear
 tickets through agent implementation, review, and human approval to a merged PR.
 
 ## Language
 
-**Pipeline**:
-The whole route a ticket or feature moves through, written as a plain
-TypeScript async body the runtime calls. One pipeline definition can be reused
-across many runs.
-_Avoid_: workflow, flow, DAG
+**Workflow**:
+A complete development process, defined once and reused across many runs.
+_Avoid_: pipeline, flow, DAG
 
 **Jig**:
-The name of the project, from the manufacturing fixture that guides a tool
-through a repeatable operation. It is not a name for any kind of code. A
-reusable stretch of pipeline-side code is a **block**.
+The project name, from the manufacturing fixture that guides a tool through a
+repeatable operation. Reusable workflow code is called a block.
 _Avoid_: jig as a code term, sub-jig
 
 **Block**:
-Pipeline-side reusable code that calls steps in a fixed way. A block is one
-async TypeScript function taking the step wrappers it needs, and the options
-that vary it — its prompts included — as plain parameters. It carries no
-directive, so it owns no step id and renaming one is safe. jigs ships blocks and a factory writes its own; both are
-the same kind of thing.
-jigs ships the blocks a wrong edit would break: the ones holding the builder's
-session, the resume fallback, the ids the gate cursor needs back, the
-code-review call the brief is kept out of. What a wrong edit would merely
-change, such as the order, the CI bound, the merge policy and the escalation
-prose, the factory writes as blocks of its own — and the prompts it passes in.
-_Avoid_: building block, composition, flow, sub-pipeline, primitive, helper,
+Reusable workflow coordination that combines steps and replay-safe decisions.
+Both jigs and factories supply blocks; a block has no independently recorded
+result.
+_Avoid_: building block, composition, flow, sub-workflow, primitive, helper,
 util
 
 **Prompt**:
-A function beside a block that turns typed inputs into the text an agent is
-told. jigs ships one next to every block that speaks to an agent; the block
-takes it as an optional parameter and defaults to the shipped one, so a
-factory passes its own — at the call site, or once in the binding in its
-`blocks/jigs.ts`. The mechanics are the block's, the words are the factory's.
+A typed function beside the code that uses it, producing the instructions
+given to an agent. Factories can override shipped prompts at a call site or
+through a custom block that supplies shared defaults.
 _Avoid_: template
 
 **Step**:
-One recorded unit of work in a pipeline, awaited from the body and memoized
-by the runtime's deterministic replay. Three kinds: an **agent step** (a
-coding agent on a harness, in a worktree), a **model step** (a plain model
-call, no worktree), and a **function step** (plain TypeScript).
+A durable unit of work whose attempts and result the runtime tracks. Agent
+steps drive coding agents, model steps make plain model calls, and function
+steps perform other operations.
 _Avoid_: node, task, stage
 
 **Step id**:
-The name the runtime memoizes a step's result under: the step file's path
-relative to the factory root plus the function's name (an installed
-dependency's steps take name+version+subpath instead — the SDK's own
-`step//workflow@4.8.4//fetch` is the only such id today; see ADR 0013). The
-jigs package's version appears in none of them, so releasing jigs moves none.
-Not authored, not stable across a move — a step id that changes is every
-in-flight run losing its memory.
+The runtime address of a durable step, determined by its location and name.
+Factory-local addresses are independent of the installed jigs version, but
+renaming or moving a step changes its address.
 _Avoid_: step key, step name, cache key
 
 **Step wrapper**:
-The `"use step"` function in a factory's own `steps/jigs.ts` that delegates to
-one of jigs' plain step implementations. Scaffolded once by `jigs init`, then
-committed source the factory owns and extends by hand: its file path and its
-name *are* the step id. Edit one freely; renaming or moving one changes its id
-and orphans every run parked against it, so that waits for a `jigs ps` with no
-parked runs.
-_Avoid_: shim, binding, adapter
+A factory-local durable function that delegates to a library implementation.
+It establishes the durable address of that operation within the factory.
+_Avoid_: shim
 
 **Run**:
-One execution of a pipeline. Detachable: it survives terminal close and idles
-awaiting human review.
+One execution of a workflow, including any suspensions and resumptions.
+It survives the terminal that launched it.
 _Avoid_: job, execution
 
 **Binding**:
-A target repository declared in the factory repo's config — a name mapped to
-the repo's remote URL plus the worktree provisioning it carries (`copy`,
-`post_create`, `hook_timeout_minutes`), the one place that story is told. jigs
-keeps its own clone per binding; the operator's checkout of the repo is not
-part of it. A binding attaches to a step, never to a run.
+A named target repository and the provisioning settings for its worktrees.
+jigs maintains its own clone for each binding; the operator’s checkout is separate.
 _Avoid_: registration, registry, target, checkout
 
 **Binding clone**:
-The bare git clone jigs keeps for each binding of each factory, under the jigs
-data directory. Created when the service starts, fetched before every cut,
-and the `git -C` root for that binding's worktree, branch and
-branch-deletion operations — a run's push comes from the worktree itself.
-Nobody edits it; it has no working tree.
+The repository copy jigs maintains for a binding and uses as the source of
+its worktrees. It is managed by jigs rather than edited by an agent.
 _Avoid_: mirror, cache, bare repo
 
 **Factory repo**:
-The central git-tracked repository holding the user's pipeline definitions
-and bindings. Target repos contain no pipeline code. It pins jigs to a
-version and runs its own copy of the CLI (`pnpm exec jigs`); no jigs is
-installed globally and no checkout is linked.
-_Avoid_: pipelines repo, config repo
+The user-owned repository containing workflow definitions, configuration and
+custom code. It pins the jigs library and runs its own service.
+_Avoid_: workflows repo, config repo
 
 **jigs package**:
-`@salimhamed/jigs` — the CLI, the blocks, the step implementations, the
-service, and the templates `jigs init` writes from. A factory reaches the
-blocks through `@salimhamed/jigs/blocks` and the step implementations through
-`@salimhamed/jigs/steps`; the root carries the types a factory names and
-`ticketInput`, and the service subpaths belong to the build. Published
-compiled to GitHub Packages under the `@salimhamed` scope and installed by a
-factory like any dependency, through a scope line in its `.npmrc` and a
-`read:packages` token in the operator's `~/.npmrc` (ADR 0017).
+The single distributed library and CLI that provides blocks, step
+implementations, service code and factory templates.
 _Avoid_: the checkout, link:, @jigs/service, @salimhamed/jigs-service, the
 jigs packages (plural), the jigs repo (as a dependency)
 
 **Factory-supplied runtime**:
-The four packages a factory installs itself, at the versions jigs peers on:
-`workflow`, `@workflow/world-postgres`, `@workflow/web` and `zod`. The SDK
-loads the World and the dashboard by name from the factory's own
-`node_modules`, `workflow` must be one copy per process, and
-one zod copy is what lets the factory's schemas unify with jigs' types;
-`strictPeerDependencies` in the factory turns a mismatch into an install
-failure. Everything else the service needs is its own dependency.
+The workflow runtime, persistence backend, dashboard and schema library
+installed by the factory at versions compatible with jigs.
 _Avoid_: transitive deps, runtime deps, peer set
 
 **Scaffold**:
-What `jigs init` writes into a factory, once each and never again: the
-infrastructure (`jigs.yml`, `package.json`, `.npmrc`, `nitro.config.ts`,
-`docker-compose.yml`, `.env.example`, the build config) and the code the
-factory starts from (`jigs.config.ts`, `pipelines/ship.ts`,
-`steps/jigs.ts`, `blocks/jigs.ts`, `blocks/review-loop/`,
-`prompts/describe-pr.ts`, the ids test). `init` touches nothing on the machine;
-`jigs up` is what runs.
-_Avoid_: generated code, boilerplate, template (for the written files)
+The starting configuration, workflows and custom code a new factory receives.
+Those files become factory-owned; generated integration is maintained separately.
+_Avoid_: generated integration (for factory-owned code)
+
+**Generated integration**:
+The committed factory-local connection between shipped blocks and their
+durable steps, maintained by jigs. Factory-specific behavior lives outside it
+in custom blocks and steps.
+_Avoid_: custom code
 
 **Up**:
-`jigs up` — the command that takes a factory from any state to a running
-service: env, install, World, bootstrap, build, start-or-restart, ready,
-doctor, each idempotent and each its own line, stopping at the first failure
-with its repair. Also the command after every change; an unchanged factory
-installs, migrates and restarts nothing. `jigs upgrade` is a bump of both
-jigs pins, then `up`, then the factory's typecheck.
+The operation that brings a factory’s installed dependencies, persistence,
+built code and running service into agreement with its current configuration.
 _Avoid_: deploy, bootstrap (for the whole), start (for the whole)
 
 **Suspension**:
-A run pausing until a named external condition satisfies it. Never open-ended:
-every suspension declares what can wake it. A suspended run is not terminal,
-so it keeps its worktree.
+A run waiting for an external condition before it can continue. A suspended
+run remains active and retains its worktrees.
 _Avoid_: pause, block
 
 **Satisfier**:
-The named external condition a suspension declares can wake it — a PR
-approval for the gate, a human reply for the needs-human halt. Checked on
-every wake; an unsatisfied wake simply re-suspends.
+The external condition that permits a suspended run to continue, such as a
+human reply. The run rechecks it whenever a wake arrives.
 _Avoid_: trigger, wake condition
 
 **Gate**:
-A suspension the pipeline plans for. v0 ships one, the pull request gate,
-satisfied by a human approving the PR.
+An expected waiting point in a workflow, such as waiting for pull-request
+review, CI results or closure.
 _Avoid_: checkpoint, approval step
 
 **Needs-human halt**:
-A suspension raised from a step's verdict rather than planned, satisfied by a
-human's reply on the Linear ticket. What it posts is written for a reader with
-no knowledge of the repository: a headline saying what paused and why, what the
-ticket is about, numbered questions with lettered options, and what replying
-does. The block supplies those words and names where it paused; a step-side
-renderer supplies every piece of the formatting — Linear renumbers nothing, so
-the numbers and letters are written out — and a factory restyles the comment by
-passing its own renderer to the step.
+A suspension that asks a human to resolve a question or repair a problem on
+the ticket. A verified reply allows the workflow to continue or retry.
 _Avoid_: failure, abort
 
 **Worktree**:
-The working copy an agent step runs in, cut from the binding's clone. Requested
-by the pipeline; the runtime remembers every one it made and tears them down
-when the run ends.
+The working copy an agent uses, provisioned from a binding’s clone for a run.
+A workflow can remove it after success; leftovers remain available for inspection
+and sweep.
 _Avoid_: checkout, clone, workspace
 
 **Worktree registry**:
-The run store's record of every worktree the runtime created — which run owns
-it and what state it is in. What reuse checks and the sweep consult.
+The record of worktrees managed by jigs, including their owning runs and
+states. It supports reuse and reconciliation.
 _Avoid_: worktree list, worktree cache
 
 **Sweep**:
-The reconciliation that compares worktrees on disk against the registry and
-run states — reporting what it finds, deleting only on explicit request. The
-cleanup net for runs that never reached their own teardown.
+The reconciliation of worktrees on disk with their owning runs. It reports
+leftovers and removes eligible worktrees when requested.
 _Avoid_: gc, prune, cleanup job
 
 **Abandoned worktree**:
-A worktree still on disk whose owning run is terminal or interrupted — leaked
-by a crash, or deliberately preserved because it held uncommitted work.
-Sweep-eligible; a suspended run's worktree is never abandoned.
+A worktree remaining after its owning run ended or was interrupted.
+It is eligible for sweep; a suspended run’s worktree is not abandoned.
 _Avoid_: orphan, stale worktree
 
 **Harness**:
-The coding-agent runtime a step runs on, driven through its AI SDK provider
-with the worktree as plain `cwd` (Claude Code and Codex in v0).
+The coding-agent runtime used by an agent step, such as Claude Code or Codex.
 _Avoid_: agent CLI, backend, sandbox
 
 **Activation**:
-One waking of a run — its launch or any resume. Steps within one activation
-all see the same snapshot.
+One execution of a run’s workflow body following launch or a wake.
+Recorded step results allow it to replay prior decisions.
 _Avoid_: session, attempt
 
 **Snapshot**:
-The copy of a Linear ticket fetched at each activation and kept in run state.
-What steps read; the audit record of what agents saw.
+A captured view of a Linear ticket that a workflow uses as evidence.
+Ticket review refreshes it after a human reply before reviewing again.
 _Avoid_: cache, mirror
 
 **Builder**:
-The agent that implemented a run's change. The review loop resumes its
-persisted session so review answers come from the agent that holds the
-context, falling back to a fresh agent fed the run's record whenever the
-pointer is unusable — stale, or recorded on a different harness than the step
-runs on.
+The agent responsible for implementing a run’s change. Its session is reused
+when possible, or rebuilt from the run’s record when necessary.
 _Avoid_: implementer, author agent
 
 **Ingress**:
-The service's static HTTP routes that receive provider webhooks — verify the
-signature, reconstruct the hook token from the payload, resume the hook.
-Stateless: an unroutable delivery is dropped, never queued.
+The service’s entry point for provider webhooks, translating external
+activity into wakes for existing runs.
 _Avoid_: webhook handler, receiver, endpoint
 
 **Wake**:
-One delivery of external activity to a suspended run — from a webhook, a
-manual poke, or reconciliation. Always a hint: the satisfier is re-checked
-against the provider API on every wake, and an unsatisfied wake re-suspends.
+A notification asking a suspended run to recheck its satisfier.
+A webhook, manual poke or reconciliation can supply it.
 _Avoid_: trigger, notification
 
 **Claim**:
-A run's run-long hold of an external resource's hook token, enforcing one
-active run per resource — claiming an owned token fails loudly, naming the
-owner. The ticket claim is a run's first act and doubles as the needs-human
-wake channel.
+A run-long hold on an external resource that prevents another active run
+from claiming the same resource.
 _Avoid_: lock, lease
 
 **Ticket review**:
-The jigs block that normalizes a ticket into a brief, parking on a
-needs-human verdict and re-reading the ticket each round until it proceeds. It
-returns a handoff, never a verdict to branch on.
+The block that turns a ticket into an implementation brief, asking a human
+when clarification is needed. It returns a handoff when review can proceed.
 _Avoid_: intake, triage
 
 **Review loop**:
-The factory's own blocks that carry a handoff from implementation to a merged
-PR: implement until the code review approves, then the pull request gate,
-answered by the builder. Scaffolded into `blocks/review-loop/`, one decision per file; the
-jigs blocks it calls come from `@salimhamed/jigs/blocks`.
+Factory-owned coordination that carries a handoff through implementation,
+code review, pull-request feedback and merge.
 _Avoid_: build loop, PR loop, the reviewLoop jig
 
 **Brief**:
-The normalized implementation plan a ticket review produces — the
-implementer's working plan. The ticket stays the definition of done.
+The implementation plan produced by ticket review. The ticket remains the
+authoritative definition of done.
 _Avoid_: plan, spec
 
 **Handoff**:
-What a ticket review returns and every builder block takes: the brief plus the
-ticket snapshot it was written from. The two travel together on purpose. The
-ticket is authoritative wherever they conflict, and a review step judges the
-work against the snapshot's acceptance criteria rather than against the brief,
-so a re-planning agent cannot move the goalposts.
+The brief and the ticket snapshot from which it was produced, passed together
+to builder blocks. The ticket takes precedence when they conflict.
 _Avoid_: context, payload, the brief (for the pair)
 
 **Preflight**:
-The trigger-path verification, before a run is created, that its
-requirements are satisfiable — the pipeline's `requires` manifest plus jigs'
-service credentials. Aggregates every failure with repair instructions; a
-failed preflight means no run ever existed.
+Verification that a workflow’s declared requirements and service credentials
+are available before creating a run.
 _Avoid_: health check, validation, smoke test
 
 **Check catalog**:
-The shared module of requirement checks and their repair instructions, used
-by preflight, JIT checks, and `jigs doctor` — one source of repair text at
-launch and mid-run.
+The shared set of requirement checks and repair instructions used before
+launch, during steps and when inspecting factory health.
 _Avoid_: validators, checkers
 
 **JIT check**:
-The verification a step runs at hydration, just before burning agent turns —
-the only honest moment for requirements invisible before the body executes,
-like a step's MCP servers. Failure raises the needs-human halt.
+Verification of requirements that become known only when a step is about to
+execute. Failure can produce a needs-human halt.
 _Avoid_: runtime check, lazy check
 
 **Managed Codex home**:
-The jigs-owned `CODEX_HOME` directory every Codex step runs under — a curated
-zero-server `config.toml` plus a symlink to the real `auth.json`. What makes
-MCP deny-by-default enforceable on a harness with no strict-config flag.
+The jigs-managed Codex configuration that supplies an agent step’s selected
+capabilities while retaining the operator’s authentication.
 _Avoid_: isolated home, custom home, sandbox home
 
 **Service**:
-The long-lived process (one per factory repo, supervised by `jigs service`)
-that owns execution: it hosts the compiled pipelines, creates runs at the
-trigger, and resumes them on wakes. Everything else — the CLI included — is
-its HTTP client. A host process, not a container: it drives the operator's
-`claude` and `codex` logins, the AWS SSO cache and the git clones.
+The long-running process owned by a factory that executes workflows,
+accepts triggers and wakes, and hosts the dashboard.
 _Avoid_: server, daemon, worker, container
 
 **Dashboard**:
-The SDK's run-history UI, hosted by the service on a second port the factory
-declares — one dashboard per factory, reading the World its own service
-writes. `jigs logs` links to a run's page there. Never run standalone against
-a live World: opening that World starts a second queue worker, which delivers
-the run's own jobs to a port with no workflow route.
+The factory’s run-history interface, showing durable step attempts and events
+from the same persistence backend as its service.
 _Avoid_: observability UI, web, console
 
 **Trigger**:
-The service route that creates a run: it validates a named pipeline's zod
-`inputs` against plain JSON and calls the runtime's start. It injects
-`triggerId` on every run, and for a pipeline taking a `ticket` the `issueId`
-and `identifier` it resolved the ref to; a body that reads them types itself
-`PipelineInputs` or `TicketPipelineInputs`, and the injection site is checked
-against the same declaration, so a field added on one side and not the other
-fails to compile. Distinct from a wake, which resumes a run that already
-exists. Preflight lives in the trigger path.
+A request to create a new run, including input validation and preflight.
+A wake resumes a run that already exists.
 _Avoid_: launch endpoint, kickoff, start route
 
 **Schedule**:
-A named recurring trigger a factory declares — a pipeline, a five-field cron
-in the service host's local time, and the static inputs to fire it with. The
-service is the clock; each fire goes through the trigger path, so a missed
-tick is skipped and a fire while the schedule's last run is still active is
-skipped too.
+A named recurring trigger with a workflow, cron expression and fixed inputs.
+Missed ticks and ticks overlapping its previous active run are skipped.
 _Avoid_: cron job, timer, recurring run
 
 **World**:
-The Workflow SDK's persistence-and-queue backend a service runs against —
-one per factory repo: its own Postgres container on its own port, holding
-only its runs. The service refuses to start without one: the worktree
-registry lives in the same database. Selected by environment, never by code.
+The workflow runtime’s persistence and queue backend, dedicated to one
+factory’s runs.
 _Avoid_: backend, database, store

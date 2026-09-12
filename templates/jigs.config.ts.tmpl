@@ -1,0 +1,12 @@
+import { defineFactory } from "@salimhamed/jigs";
+
+export default defineFactory({
+  service: { port: {{SERVICE_PORT}}, dashboardPort: {{DASHBOARD_PORT}} },
+  // Public tunnel URL used to register provider webhooks:
+  // ingressUrl: "https://<machine>.<tailnet>.ts.net",
+  // Bindings may declare copy, postCreate, and hookTimeoutMinutes.
+  bindings: {},
+  workflows: {
+    ship: () => import("./workflows/ship.ts"),
+  },
+});

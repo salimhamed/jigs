@@ -2,7 +2,7 @@
 
 Before a run exists, the service's trigger path verifies the run's
 requirements and refuses to call `start()` on any failure. The check list is
-computed, not hand-maintained: the pipeline's `requires: { bindings,
+computed, not hand-maintained: the workflow's `requires: { bindings,
 harnesses, aws }` manifest (per binding — the name is declared, jigs' own
 clone of its remote exists, concurrent `git ls-remote` auth probe; per harness
 — the subscription login asserted via `claude auth status --json` requiring
@@ -27,7 +27,7 @@ skip flag. Decided in
   `jigs doctor` (the same engine behind a service endpoint + CLI verb,
   runnable without a launch).
 - **MCP servers are deliberately not preflighted.** A step's `mcpServers`
-  config is constructed inside the pipeline body, so the list is not visible
+  config is constructed inside the workflow body, so the list is not visible
   before the body executes; the only launch-time source would be a second,
   hand-maintained manifest field — the drift trap. MCP checks are JIT-only:
   the step hydrates exactly its declared servers and fails through the
@@ -44,7 +44,7 @@ skip flag. Decided in
 
 ## Considered options
 
-- **First step of every pipeline**: a failure creates a failed run as
+- **First step of every workflow**: a failure creates a failed run as
   debris, and memoized replay means it never re-runs on resume anyway.
 - **CLI-side checks**: the interactive shell's env is not the service's env
   (an exported `ANTHROPIC_API_KEY` flips Claude's auth mode in one and not the

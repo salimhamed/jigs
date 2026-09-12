@@ -1,27 +1,117 @@
 {
-  "name": "jigs-workspace",
-  "private": true,
+  "name": "@salimhamed/jigs",
+  "version": "0.7.0",
+  "description": "Guides coding agents through repeatable workflows",
   "type": "module",
   "license": "MIT",
   "author": "Salim Hamed",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/salimhamed/jigs.git"
+  },
   "engines": {
     "node": ">=24"
   },
-  "packageManager": "pnpm@11.21.0",
+  "bin": {
+    "jigs": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./blocks": {
+      "types": "./dist/blocks/index.d.ts",
+      "default": "./dist/blocks/index.js"
+    },
+    "./steps": {
+      "types": "./dist/steps/index.d.ts",
+      "default": "./dist/steps/index.js"
+    },
+    "./app": {
+      "types": "./dist/app.d.ts",
+      "default": "./dist/app.js"
+    },
+    "./nitro": {
+      "types": "./dist/nitro.d.ts",
+      "default": "./dist/nitro.js"
+    },
+    "./schedules": {
+      "types": "./dist/schedules.d.ts",
+      "default": "./dist/schedules.js"
+    },
+    "./build": {
+      "types": "./dist/build.d.ts",
+      "default": "./dist/build.js"
+    },
+    "./plugins/start-world": {
+      "types": "./dist/plugins/start-world.d.ts",
+      "default": "./dist/plugins/start-world.js"
+    },
+    "./plugins/start-dashboard": {
+      "types": "./dist/plugins/start-dashboard.d.ts",
+      "default": "./dist/plugins/start-dashboard.js"
+    }
+  },
+  "files": [
+    "dist",
+    "templates"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
   "scripts": {
-    "dev": "pnpm --filter @salimhamed/jigs dev",
+    "dev": "node src/cli/cli.ts",
+    "build": "tsdown",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:live": "vitest run --config vitest.live.config.ts",
+    "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "typecheck": "pnpm -r run typecheck",
-    "test": "pnpm -r run test",
-    "build": "pnpm -r run build",
     "e2e": "node e2e/check-step-ids.mjs",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "ai": "^7.0.79",
+    "ai-sdk-provider-claude-code": "4.1.1",
+    "ai-sdk-provider-codex-cli": "2.1.2",
+    "commander": "^15.0.0",
+    "croner": "10.0.1",
+    "hono": "^4.13.4",
+    "jiti": "^2.7.0",
+    "postgres": "^3.4.7",
+    "smol-toml": "^1.8.0",
+    "tinyglobby": "^0.2.17",
+    "ts-morph": "^28.0.0",
+    "undici": "^7.28.0",
+    "yaml": "^2.9.0"
+  },
+  "peerDependencies": {
+    "@workflow/web": "4.1.20",
+    "@workflow/world-postgres": "4.3.4",
+    "nitro": "3.0.260610-beta",
+    "workflow": "4.8.4",
+    "zod": "^4.4.3"
+  },
+  "peerDependenciesMeta": {
+    "nitro": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.9",
     "@types/node": "^26.2.0",
+    "@workflow/web": "4.1.20",
+    "@workflow/world-postgres": "4.3.4",
+    "nitro": "3.0.260610-beta",
+    "tsdown": "^0.22.14",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
-  }
+    "vitest": "^4.1.10",
+    "workflow": "4.8.4",
+    "zod": "^4.4.3"
+  },
+  "packageManager": "pnpm@11.21.0"
 }

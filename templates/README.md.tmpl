@@ -1,0 +1,109 @@
+# {{FACTORY_NAME}}
+
+A [jigs](https://github.com/salimhamed/jigs) factory: workflows, repository
+bindings, and the service that runs them.
+
+## Layout
+
+- `jigs.config.ts` — service settings, bindings, deferred workflow registrations,
+  and schedules. Secrets live in `.env`.
+- `jigs.ts` — generated factory-local durable steps and bound jigs blocks.
+  Commit this file. Refresh it with `jigs generate`; custom code belongs elsewhere.
+- `workflows/` — complete processes with a `"use workflow"` entry point.
+- `blocks/` — reusable coordination and replay-safe decisions, without directives.
+- `steps/` — add custom `"use step"` functions here for durable external operations.
+- `blocks/review-loop/` — this factory's review loop and its colocated
+  `describe-pr.prompt.ts`. Override jigs prompts where their blocks are called.
+- `jigs.config.test.ts` — factory declarations and emitted workflow/step ids.
+- `docker-compose.yml` — the factory's Postgres World.
+
+## Setup
+
+```sh
+cp .env.example .env      # fill in LINEAR_API_KEY and GITHUB_TOKEN
+pnpm install
+pnpm exec jigs up
+pnpm exec jigs bind git@github.com:owner/repo.git
+pnpm exec jigs up --restart
+```
+
+Every `jigs` below is this factory's own: `pnpm exec jigs …`.
+The service listens on `:{{SERVICE_PORT}}`, its dashboard on
+`:{{DASHBOARD_PORT}}`, its World on `:{{POSTGRES_PORT}}`.
+
+`jigs bind` and `jigs unbind` edit the literal `bindings` object in
+`jigs.config.ts`. If the configuration computes bindings or otherwise cannot
+be edited unambiguously, they explain the required manual change and leave
+configuration and webhooks untouched.
+
+## Running a workflow
+
+```sh
+jigs run ship --input ticket=ABC-123 --input binding=repo --input merge=human
+jigs ps
+jigs logs <run>
+jigs cancel <run>
+```
+
+`ship` reviews a ticket, implements and reviews the change, opens a pull request,
+responds to reviews and CI, then tears down the worktree after merge.
+`merge=jigs` squash-merges on approval; `merge=human` waits for a person to merge.
+
+`<run>` is a run id, a unique prefix, or the ticket the run claimed.
+Runs outlive the launching terminal. `jigs doctor` checks prerequisites;
+every launch also preflights before creating a run.
+
+## Development
+
+```sh
+pnpm typecheck
+jigs build
+pnpm test
+```
+
+`pnpm test` checks the last build's emitted ids, so build first. Builds refuse
+missing or modified generated `jigs.ts` files: run `jigs generate`, review,
+and commit the result.
+
+To add a workflow, export its function and input schema from `workflows/`,
+and default-export `{ workflow: yourWorkflow, inputs: yourInputs }` (with
+optional `requires`). Register a deferred loader in `jigs.config.ts`:
+
+```ts
+workflows: {
+  ship: () => import("./workflows/ship.ts"),
+}
+```
+
+Import standard steps and bound blocks from `../jigs.ts`. Import pure builders
+such as `claude`, `codex`, and `claimTicket` from `@salimhamed/jigs/blocks`.
+Custom steps import implementations from `@salimhamed/jigs/steps` inside a
+factory module containing named `"use step"` functions.
+
+To customize a bound block's underlying steps, use `bindJigs` outside the
+generated file:
+
+```ts
+import { bindJigs } from "@salimhamed/jigs/blocks";
+import { jigsSteps } from "../jigs.ts";
+import { postNeedsHumanComment } from "../steps/post-comment.ts";
+
+export const { reviewTicket } = bindJigs({ ...jigsSteps, postNeedsHumanComment });
+```
+
+Prompt overrides belong beside their callers. A custom comment renderer runs
+inside a custom step; do not pass renderer functions as durable step arguments.
+
+## Upgrading jigs
+
+```sh
+jigs upgrade              # or: jigs upgrade --to <version>
+```
+
+Upgrade installs the new package, refreshes `jigs.ts`, runs `jigs up`, and
+checks custom factory code with `pnpm typecheck`. Review and commit the changes.
+GitHub Packages requires a token in `~/.npmrc`; this factory's `.npmrc` only
+routes the scope.
+
+Changing a workflow or step's path or function name changes its durable id.
+Finish or cancel affected active and parked runs before deploying those changes.

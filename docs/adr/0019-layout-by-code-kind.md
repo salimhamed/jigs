@@ -1,13 +1,13 @@
 # The source layout follows the three kinds of code, and the folders are the import paths
 
-`packages/jigs/src` is split by what the Workflow SDK does with the code, not
+`src` is split by what the Workflow SDK does with the code, not
 by feature. There are three kinds, and each gets a top level folder:
 
-- `blocks/` is pipeline-side code. It runs on every replay and must do nothing
+- `blocks/` is workflow-side code. It runs on every replay and must do nothing
   on its own.
 - `steps/` is step implementations. Each one runs once and its result is
   recorded.
-- `service/` is the long-running process. It never runs inside a pipeline.
+- `service/` is the long-running process. It never runs inside a workflow.
 
 Two of those folders are the public import paths: `@salimhamed/jigs/blocks`
 and `@salimhamed/jigs/steps`. The service paths the build uses stay as they
@@ -15,38 +15,38 @@ were. Decided by Salim on 2026-09-11, shipped in 0.5.0.
 
 ## Why the runtime forces this
 
-The SDK runs a pipeline by **replay**. On every wake it calls the pipeline
+The SDK runs a workflow by **replay**. On every wake it calls the workflow
 function again from the first line, and any step that already has a recorded
-result returns that record instead of running. So the pipeline function runs
+result returns that record instead of running. So the workflow function runs
 many times for one run, and each step inside it runs once.
 
-Two rules follow. Code that runs inside a pipeline must have no effects of its
+Two rules follow. Code that runs inside a workflow must have no effects of its
 own: no git, no network, no filesystem, no `process.env`. It is also bundled
 into a sandbox with no Node built-ins, so those calls would not resolve
 anyway. Code that does real work has to be a step, so the SDK can run it once
 and record the answer.
 
-The service is neither. It is the process that hosts the compiled pipelines,
+The service is neither. It is the process that hosts the compiled workflows,
 receives webhooks, fires schedules and serves the dashboard — one per factory
 repo.
 
 Before 0.5.0 jigs mixed all three kinds in the same folders and held the line
 with header comments on three files: `src/index.ts`, `src/steps/index.ts` and
 `src/worktrees/facts.ts`. A comment is not a boundary. Three files held both a
-pipeline-side half and a step half in one module, so the only thing stopping a
-`node:` import from reaching the pipeline bundle was whoever read the comment
+workflow-side half and a step half in one module, so the only thing stopping a
+`node:` import from reaching the workflow bundle was whoever read the comment
 last.
 
 ## The layout
 
 ```
-blocks/      pipeline-side.
-  agent/          how a pipeline calls an agent
+blocks/      workflow-side.
+  agent/          how a workflow calls an agent
   builder-agent/  the moves the builder agent makes
   ticket/         claim, ticket review, snapshot shaping, the halt for a human
   pull-request/   the gate, attend, review answers
-  factory.ts      the types a factory declares its pipelines with
-  worktree.ts     the WorktreeFacts type a pipeline passes around
+  factory.ts      the types a factory declares its workflows with
+  worktree.ts     the WorktreeFacts type a workflow passes around
 steps/       step implementations.
   agent/          run an agent or a plain model call, and the worktree lock
   ticket/         fetch a snapshot, post and read Linear comments, issues
@@ -103,19 +103,19 @@ service reaches for a raw client. If a step ever needs it, it moves.
 The vocabulary this layout is named in is four words, and they chain in one
 direction.
 
-- **Pipeline**: a whole process, one file, started by `jigs run`.
-- **Block**: pipeline-side reusable code that calls steps in a fixed way,
+- **Workflow**: a whole process, one file, started by `jigs run`.
+- **Block**: workflow-side reusable code that calls steps in a fixed way,
   whether jigs ships it or the factory writes it.
 - **Step wrapper**: the factory's `"use step"` function around a step. It gives
   the step its durable id.
 - **Step**: the function that does the work.
 
-A pipeline calls blocks and wrappers. A block calls wrappers. A wrapper calls a
+A workflow calls blocks and wrappers. A block calls wrappers. A wrapper calls a
 step. The SDK's two markers live only in the factory: `"use workflow"` on each
-pipeline, `"use step"` on each wrapper. No file in this repo carries either
+workflow, `"use step"` on each wrapper. No file in this repo carries either
 ([ADR 0013](./0013-factory-owned-steps.md)), so everything between the two
 markers, jigs blocks and factory blocks alike, is plain code pulled into the
-pipeline bundle because the pipeline imports it.
+workflow bundle because the workflow imports it.
 
 ## What enforcement there is
 
@@ -141,10 +141,11 @@ sandbox, and it catches it whatever route the import took.
   `./ticket/*`, `./review-loop`, `./review-loop/pull-request`, `./worktrees`
   and `./providers/linear`. That is a breaking change, released as 0.5.0
   ([ADR 0017](./0017-single-package.md)).
-- **The scaffold follows the same split.** A factory gets `steps/jigs.ts`
-  holding only `"use step"` wrappers, `blocks/jigs.ts` holding the jigs blocks
-  bound to those wrappers, and `blocks/review-loop/` holding its own process,
-  one decision per file.
+- **Factory integration is generated in root `jigs.ts`.** It contains local
+  step wrappers and bound block exports. Custom workflows, blocks and steps live
+  in their respective directories. Prompt functions live beside their callers.
+  See ADR 0013 for the ownership and generation contract.
+
 - **No step id moved for a layout reason.** Ids are factory local paths
   ([ADR 0013](./0013-factory-owned-steps.md)), so moving a file inside this
   package cannot address one. 0.5.0 did move ids, but because it renamed two

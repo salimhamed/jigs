@@ -1,0 +1,107 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import type { Factory } from "@salimhamed/jigs";
+import { expect, test } from "vitest";
+import factory from "./jigs.config.ts";
+
+// Read through the interface rather than the literal: these are assertions
+// about what this factory declares, including the fields it omits.
+const workflows: Factory["workflows"] = Object.fromEntries(await Promise.all(
+  Object.entries(factory.workflows).map(async ([name, load]) => [name, (await load()).default]),
+));
+
+test("every entry carries a zod inputs schema and a workflow", () => {
+  expect(Object.keys(workflows)).toContain("ship");
+  for (const entry of Object.values(workflows)) {
+    expect(entry.inputs.safeParse).toBeTypeOf("function");
+    expect(entry.workflow).toBeTypeOf("function");
+  }
+});
+
+test("ship takes a ticket in either form and declares its needs", () => {
+  const entry = workflows.ship;
+  const launch = { binding: "repo", merge: "human" };
+  expect(
+    entry?.inputs.parse({ ticket: crypto.randomUUID(), ...launch }),
+  ).toEqual({ ticket: expect.any(String), ...launch });
+  expect(entry?.inputs.parse({ ticket: "ABC-123", ...launch })).toEqual({
+    ticket: "ABC-123",
+    ...launch,
+  });
+  expect(
+    entry?.inputs.safeParse({ ticket: "not-a-ticket", ...launch }).success,
+  ).toBe(false);
+  expect(entry?.inputs.safeParse({ ticket: "ABC-123" }).success).toBe(false);
+  expect(entry?.requires).toEqual({ harnesses: ["claude", "codex"] });
+});
+
+// Every id the build emits is a memoization key in this factory's World, so
+// these read the last build rather than the source: what a parked run replays
+// against is what the bundle says, not what the imports look like. They assert
+// the shape of an id, not a list of them — a list would have to be edited
+// every time a workflow or a wrapper is added, and an id that *moved* looks
+// exactly like one that was added. Renaming an exported wrapper or a workflow
+// file changes its id and orphans the runs parked against it, so do that only
+// when `jigs ps` shows none. blocks/ is deliberately absent from the shapes
+// below: nothing under it carries a directive, so an id addressed there would
+// mean a factory wrote `"use step"` on the workflow side of the line.
+
+const BUNDLE = new URL("./.output/server/index.mjs", import.meta.url);
+
+// The SDK registers this one itself. It lives under node_modules, so the
+// builder addresses it by name and version — the one id here this factory does
+// not own, and cannot make path-shaped. It tracks package.json's `workflow`
+// pin, so an SDK bump moves it and nothing else.
+const SDK_BUILTIN_STEP = `step//workflow@${workflowVersion()}//fetch`;
+
+function workflowVersion(): string {
+  const manifest = JSON.parse(
+    readFileSync(new URL("./package.json", import.meta.url), "utf8"),
+  ) as { dependencies: Record<string, string> };
+  return manifest.dependencies.workflow;
+}
+
+function emittedIds(): string[] {
+  let bundle: string;
+  try {
+    bundle = readFileSync(BUNDLE, "utf8");
+  } catch {
+    // Failing beats skipping: an id guard that quietly stops running looks
+    // exactly like one that passes, and these ids fail silently by design.
+    throw new Error(
+      `no build at ${fileURLToPath(BUNDLE)} to read ids from — run pnpm exec jigs build first`,
+    );
+  }
+  return [
+    ...new Set(bundle.match(/(?:workflow|step)\/\/[^"']+/g) ?? []),
+  ].sort();
+}
+
+test("no emitted id carries a package version, bar the SDK's own step", () => {
+  expect(emittedIds().filter((id) => id.includes("@"))).toEqual([
+    SDK_BUILTIN_STEP,
+  ]);
+});
+
+test("every id this factory owns is addressed by a path inside it", () => {
+  const owned = emittedIds().filter((id) => id !== SDK_BUILTIN_STEP);
+  expect(owned.length).toBeGreaterThan(0);
+  for (const id of owned) {
+    expect(id).toMatch(/^(?:workflow|step)\/\/\.\/(?:(?:workflows|steps)\/|jigs\/\/)/);
+  }
+});
+
+test("every workflow this factory registers emitted a workflow id", () => {
+  const emitted = emittedIds().filter((id) => id.startsWith("workflow//"));
+  expect(emitted).toHaveLength(Object.keys(workflows).length);
+});
+
+test("every step id is declared under workflows/ or steps/", () => {
+  const steps = emittedIds().filter(
+    (id) => id.startsWith("step//") && id !== SDK_BUILTIN_STEP,
+  );
+  expect(steps.length).toBeGreaterThan(0);
+  for (const id of steps) {
+    expect(id).toMatch(/^step\/\/\.\/(?:(?:workflows|steps)\/[^/]+|jigs)\/\/\w+$/);
+  }
+});

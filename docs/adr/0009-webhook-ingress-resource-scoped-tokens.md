@@ -61,7 +61,7 @@ close-unmerged is a terminal failed run under ADR 0007's teardown matrix.
   documented manual alternative.
 - Linear: one workspace-wide webhook per factory
   (`resourceTypes: ["Comment"]`), manually pointed at that factory's exact
-  `<ingress_url>/ingress/linear`; secret into service config. `jigs doctor`
+  `<ingressUrl>/ingress/linear`; secret into service config. `jigs doctor`
   verifies that exact webhook exists and remains enabled. Webhooks at the same
   path on other hosts belong to other factories or are stale and do not count.
 

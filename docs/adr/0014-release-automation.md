@@ -13,15 +13,13 @@ change was a patch or a minor — the titles already said.
 While a jigs version was baked into every step id, a release renamed every
 memoization key in every factory at once, which is why the version was pinned
 at `0.0.0` and why automating it would have been automating a footgun. Step ids
-are factory-local paths now (`step//./steps/jigs//worktree`), nothing reads
-either package's version at runtime, and a factory pins both to one published
-version. The number is a signal to a reader and a coordinate for `pnpm update`,
-so the cost of getting one wrong is a reader being told the wrong thing — small
-enough that a machine should be the one choosing it.
+are factory-local paths now (`step//./jigs//provisionWorktree`). The factory
+pins the one published jigs package; the number is its update coordinate.
 
-**One component, one number.** `packages/jigs` is the only release-please
-component, so a version is one release PR, one tag and Release
-(`jigs-vX.Y.Z`), and one publish ([ADR 0017](./0017-single-package.md)).
+**One component, one number.** The repository root is the only release-please
+package, with component `jigs`, so a version is one release PR, one tag and
+Release (`jigs-vX.Y.Z`), and one publish (ADR 0017). The release workflow reads
+the unprefixed root-package `tag_name` output.
 
 **Both the action and the merge step authenticate as a PAT
 (`RELEASE_PLEASE_TOKEN`), never `GITHUB_TOKEN`.** GitHub raises no workflow run
