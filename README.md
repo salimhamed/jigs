@@ -78,6 +78,10 @@ The factory separates its configuration, generated integration, and custom code:
 - Prompts are typed functions beside the code that uses them. Pass a prompt
   override to a block; keep shared factory defaults in a custom block.
 
+Factory code names all of it from the project root — `#jigs`, `#blocks/…`,
+`#steps/…` — through the `imports` map in the factory's `package.json`, so a
+file's depth never changes how it reaches another.
+
 Start with the bound blocks in `jigs.ts`: `runAgent` runs an agent with tools,
 `askModel` makes a plain model call, and `haltForHuman` asks for help and waits
 for a reply. Their JSDoc explains when to use them. The durable wrappers use

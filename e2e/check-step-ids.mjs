@@ -415,6 +415,24 @@ if (envReads.length > 0) {
   );
 }
 
+// The scaffold imports through its package.json `imports` map, so this build
+// is where the map is resolved by everything that has to resolve it: tsc, the
+// workflows pass' esbuild, nitro's bundler, and vitest below. A specifier that
+// survives into the emitted bundle was never resolved — the module it names is
+// gone, and the failure only surfaces when the code path runs in production.
+const unresolved = [
+  ...new Set(
+    readFileSync(bundle(), "utf8").match(/(?:from|import|require)\s*\(?\s*["']#[^"']+["']/g) ?? [],
+  ),
+];
+if (unresolved.length > 0) {
+  for (const specifier of unresolved) console.error(`  ${specifier}`);
+  fail(
+    `the emitted bundle carries ${unresolved.length} unresolved root-anchored specifier(s)`,
+    "the factory's package.json `imports` map no longer covers them, or the bundler stopped reading it — a conditional target the workflows pass cannot match does exactly this",
+  );
+}
+
 const expected = readFileSync(expectedFile, "utf8")
   .split("\n")
   .filter((line) => line !== "" && !line.startsWith("#"));
@@ -439,9 +457,11 @@ if (moved.missing.length > 0 || moved.unexpected.length > 0) {
 
 // The scaffold's own checks, run the way a new factory runs them on day one:
 // the typecheck covers the generated entry, the workflow, and the blocks and
-// prompts scaffolded beside them, and the two scaffolded tests cover the shape
-// of every id the same build emitted (the exact list is this file's business,
-// above) and the sequence the review loop runs.
+// prompts scaffolded beside them, and the scaffolded tests cover the shape of
+// every id the same build emitted (the exact list is this file's business,
+// above) and what the workflow body hands delivery. Both read the scaffold
+// through its `imports` map, so this is also where tsc and vitest are held to
+// resolving it.
 console.log("\n=== scaffold: typecheck, then the scaffolded tests");
 run("pnpm", ["typecheck"]);
 run("pnpm", ["test"]);

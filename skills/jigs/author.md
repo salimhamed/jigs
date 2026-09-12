@@ -12,8 +12,11 @@ existing `workflows/`, `blocks/`, and `steps/` before editing. The installed
 - A step has `"use step"` and performs work the runtime records. Keep custom
   steps in `steps/`; their implementations may use Node and external services.
 - `jigs.ts` is generated and committed. Import built-in steps and bound blocks
-  from it. Never add custom behavior or prompts there. `jigs generate` refreshes
-  it; builds check for drift and upgrades regenerate it automatically.
+  from it as `#jigs`. Never add custom behavior or prompts there. `jigs generate`
+  refreshes it; builds check for drift and upgrades regenerate it automatically.
+- Imports are anchored at the factory root by the `imports` map in its
+  `package.json`: `#jigs`, `#blocks/<path>`, `#steps/<path>`, never `../`. The
+  deferred workflow loaders in `jigs.config.ts` stay relative.
 
 A workflow calls blocks and steps. A step calls an implementation. Only the
 factory carries directives, so library version changes do not rename its steps.

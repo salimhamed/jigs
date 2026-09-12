@@ -2,6 +2,11 @@
   "name": "{{FACTORY_NAME}}",
   "private": true,
   "type": "module",
+  "imports": {
+    "#jigs": "./jigs.ts",
+    "#blocks/*": "./blocks/*.ts",
+    "#steps/*": "./steps/*.ts"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run"

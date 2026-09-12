@@ -150,8 +150,10 @@ bound blocks such as `reviewTicket`. Commit it, but keep custom code outside it.
 checks for drift and fails with that command as the repair. `jigs upgrade`
 refreshes it automatically after installing the new library.
 
-Workflows import built-in steps and bound blocks from `../jigs.ts`. Custom steps
-live in `steps/`, and custom coordination lives in `blocks/`. Bind only the
+Workflows import built-in steps and bound blocks from `#jigs`, and factory
+modules from `#blocks/…` and `#steps/…` — the `imports` map in the factory's
+`package.json`, so a file's own depth never changes how it names another. Custom
+steps live in `steps/`, and custom coordination lives in `blocks/`. Bind only the
 capabilities you need with `bindAgentSteps`, `bindLinearSteps`,
 `bindPullRequestSteps`, or `bindDeliverySteps`; generated integration exports
 `agentSteps`, `linearSteps`, `pullRequestSteps`, and `deliverySteps` for overrides.
