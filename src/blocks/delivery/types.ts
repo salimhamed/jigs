@@ -52,11 +52,8 @@ export interface ImplementationPromptContext<TTask extends WorkItem = WorkItem>
   findings: string[];
   /** Direction an `onLimit` continuation supplied; empty until a limit is extended. */
   instructions: string;
-  /**
-   * Only on the fresh-session rebuild arm, where the agent holds no memory of
-   * the work. A resumed agent already has it and is never charged a diff read.
-   */
-  diff?: string;
+  /** Read the diff when needed; available only for a fresh or rebuilt session. */
+  readDiff?: () => Promise<string>;
 }
 
 /**
@@ -81,8 +78,8 @@ export interface CiRepairPromptContext<TTask extends WorkItem = WorkItem>
   pr: PrRef;
   /** Direction an `onLimit` continuation supplied; empty until a limit is extended. */
   instructions: string;
-  /** Only on the fresh-session rebuild arm, where the agent holds no memory of the work. */
-  diff?: string;
+  /** Read the diff when needed; available only for a fresh or rebuilt session. */
+  readDiff?: () => Promise<string>;
 }
 
 /** Answer the pull request's review feedback. */
@@ -95,8 +92,8 @@ export interface PullRequestRevisionPromptContext<TTask extends WorkItem = WorkI
   pr: PrRef;
   /** Direction an `onLimit` continuation supplied; empty until a limit is extended. */
   instructions: string;
-  /** Only on the fresh-session rebuild arm, where the agent holds no memory of the work. */
-  diff?: string;
+  /** Read the diff when needed; available only for a fresh or rebuilt session. */
+  readDiff?: () => Promise<string>;
 }
 
 /** Describe the approved change. Runs once, against the commit about to be published. */
@@ -298,6 +295,7 @@ export interface DeliverySteps {
   readBranchState: typeof branch.readBranchState;
   readWorktreeDiff: typeof branch.readWorktreeDiff;
   pushBranch: typeof branch.pushBranch;
+  pushApprovedChange: typeof branch.pushApprovedChange;
   resolveRepository: typeof pr.resolveRepository;
   openPullRequest: typeof pr.openPullRequest;
   commentOnPullRequest: typeof pr.commentOnPullRequest;

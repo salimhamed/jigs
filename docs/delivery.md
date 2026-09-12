@@ -121,7 +121,8 @@ Reading the graph against the code:
 - **Approval names a commit.** `approval.reviewedCommit` is the head the
   reviewer judged, and `publishApprovedChange` refuses to publish anything else:
   it throws if the worktree is dirty, and throws if the head has moved off that
-  commit. Only an `ApprovedChange` typechecks as its input, so a stopped result
+  commit. The push step repeats these checks on every retry and pushes the
+  approved SHA explicitly. Only an `ApprovedChange` typechecks as its input, so a stopped result
   cannot be published at all.
 - **Following the pull request** is one suspended gate per pull request, woken
   by GitHub webhooks. `ci-green` and `approved` wakes only update state and
@@ -159,8 +160,8 @@ The three budgets carry the same names wherever they appear — on
 | `pullRequestRevisionRounds` | One batch of review feedback answered | After publication |
 
 Each budget is spent by its own phase and no other. All three count
-cumulatively for the life of the delivery: a CI failure after ten green runs
-still charges the eleventh attempt, and counters never reset. Zero permits no
+cumulatively for the life of the delivery, and counters never reset. Green CI
+results consume no repair attempts; the first repair uses attempt one. Zero permits no
 attempt in that phase and returns a limit outcome the moment that phase has
 work to do. Duplicate notifications — a second webhook for a head already
 repaired, or a review thread whose only new comment is jigs' own reply — do not
@@ -302,16 +303,16 @@ by the operation, whatever the prompt says.
 
 | Role | Context | Beyond `task`, `worktree`, `attempt` |
 | --- | --- | --- |
-| `implementation` | `ImplementationPromptContext` | `findings`, `instructions`, `diff?` |
+| `implementation` | `ImplementationPromptContext` | `findings`, `instructions`, `readDiff?()` |
 | `review` | `ReviewPromptContext` | `baseCommit`, `headCommit`, `diff`, `instructions` |
-| `ciRepair` | `CiRepairPromptContext` | `failing`, `pr`, `instructions`, `diff?` |
-| `pullRequestRevision` | `PullRequestRevisionPromptContext` | `threads`, `reviewBody?`, `pr`, `instructions`, `diff?` |
+| `ciRepair` | `CiRepairPromptContext` | `failing`, `pr`, `instructions`, `readDiff?()` |
+| `pullRequestRevision` | `PullRequestRevisionPromptContext` | `threads`, `reviewBody?`, `pr`, `instructions`, `readDiff?()` |
 | `pullRequestDescription` | `DescriptionPromptContext` | `diff` (no `attempt`) |
 
-An optional `diff` is present only when the role runs in a fresh session, which
-is the one arm that has to rebuild context; a resumed agent already holds the
-change and is never charged a diff read. The review role runs fresh every round,
-so its diff is always there.
+`readDiff()` is available only for fresh or rebuilt sessions. It reads the diff
+when called and reuses that result within the attempt. The default prompt calls
+it; a replacement can ignore it. Resumed sessions do not read the diff. Review
+and description contexts always contain their required `diff` string.
 
 Every context carries `renderDefaultPrompt()`, which renders what jigs would
 have sent for this attempt. Await it to extend the default:

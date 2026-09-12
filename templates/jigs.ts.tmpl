@@ -40,22 +40,26 @@ export async function executeModelRequest(request: AskWire) {
 }
 
 /** Post a request for human input on the ticket. Use haltForHuman() to also wait for a reply. */
-export async function postComment(issueId: string, halt: Halt) {
+export async function postTicketHumanInputRequest(issueId: string, halt: Halt) {
   "use step";
   const metadata = getWorkflowMetadata();
-  return steps.postComment(issueId, halt, metadata);
+  return steps.postTicketHumanInputRequest(issueId, halt, metadata);
 }
 
 /** Post the assumptions that let ticket review proceed without waiting for a reply. */
-export async function postNote(issueId: string, note: TicketNote) {
+export async function postTicketNote(issueId: string, note: TicketNote) {
   "use step";
-  return steps.postNote(issueId, note);
+  return steps.postTicketNote(issueId, note);
 }
 
 /** Look for a human reply since the last check, excluding the run's own question. */
-export async function checkForReply(issueId: string, sinceIso: string, postedCommentId: string) {
+export async function checkForTicketHumanReply(
+  issueId: string,
+  sinceIso: string,
+  postedCommentId: string,
+) {
   "use step";
-  return steps.checkForReply(issueId, sinceIso, postedCommentId);
+  return steps.checkForTicketHumanReply(issueId, sinceIso, postedCommentId);
 }
 
 /** Read a pull request's reviews, comments, CI results, and merge state. */
@@ -106,6 +110,16 @@ export async function readBranchState(worktreePath: string, baseSha: string) {
 export async function pushBranch(worktreePath: string, branch: string) {
   "use step";
   return steps.pushBranch(worktreePath, branch);
+}
+
+/** Recheck approval and push only the reviewed commit, including on retries. */
+export async function pushApprovedChange(
+  worktreePath: string,
+  branch: string,
+  approvedCommit: string,
+) {
+  "use step";
+  return steps.pushApprovedChange(worktreePath, branch, approvedCommit);
 }
 
 /** Read committed changes since the base commit. Large diffs are truncated. */
@@ -161,9 +175,9 @@ export const askModel = agents.askModel;
 /** Durable operations used by Linear blocks. */
 export const linearSteps = {
   runAgent,
-  postComment,
-  postNote,
-  checkForReply,
+  postTicketHumanInputRequest,
+  postTicketNote,
+  checkForTicketHumanReply,
   fetchTicketSnapshot,
 };
 const linear = bindLinearSteps(linearSteps);
@@ -191,6 +205,7 @@ export const deliverySteps = {
   readBranchState,
   readWorktreeDiff,
   pushBranch,
+  pushApprovedChange,
   resolveRepository,
   openPullRequest,
   commentOnPullRequest,

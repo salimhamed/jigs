@@ -64,7 +64,7 @@ const fakeHaltForHuman: HaltForHumanFn = async (humanClaim, halt) => {
   return reply;
 };
 
-const fakePostNote = async (
+const fakePostTicketNote = async (
   issueId: string,
   note: { identifier: string; assumptions: string[] },
 ): Promise<void> => {
@@ -84,7 +84,7 @@ const review = () =>
   reviewTicket({
     runAgent: fakeAgent,
     haltForHuman: fakeHaltForHuman,
-    postNote: fakePostNote,
+    postTicketNote: fakePostTicketNote,
     fetchTicketSnapshot: fakeFetchSnapshot,
     claim,
     snapshot,
@@ -261,7 +261,7 @@ test("a caller-supplied prompt replaces the one shipped beside the block", async
   await reviewTicket({
     runAgent: fakeAgent,
     haltForHuman: fakeHaltForHuman,
-    postNote: fakePostNote,
+    postTicketNote: fakePostTicketNote,
     fetchTicketSnapshot: fakeFetchSnapshot,
     claim,
     snapshot,

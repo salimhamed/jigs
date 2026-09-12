@@ -24,7 +24,7 @@ vi.mock("../../providers/linear.ts", async (importOriginal) => ({
   getIssueParticipants,
 }));
 
-const { postComment, postNote } = await import("./needs-human-comments.ts");
+const { postTicketHumanInputRequest, postTicketNote } = await import("./needs-human-comments.ts");
 
 const context = {
   workflowRunId: "wrun_01M26",
@@ -77,7 +77,7 @@ const questions: Halt = {
 // the run and the work it paused — the four things the rendering this replaced
 // got wrong.
 test("a two-question halt renders as numbered questions with lettered options", async () => {
-  await postComment("issue-1", questions, context);
+  await postTicketHumanInputRequest("issue-1", questions, context);
 
   expect(body()).toBe(
     `@[Salim](user-1) @[Dana](user-2) — jigs paused work on **AI-659** and needs your answers before it writes any code.
@@ -112,7 +112,7 @@ The ticket offers two, but they behave differently.
 });
 
 test("a retry halt renders its notes and asks for any reply at all", async () => {
-  await postComment(
+  await postTicketHumanInputRequest(
     "issue-1",
     {
       headline: "jigs could not start a step on **AI-659** because a check failed.",
@@ -148,7 +148,7 @@ test("the creator and the assignee are one mention when they are one person", as
     creator: { id: "user-1", name: "Salim" },
     assignee: { id: "user-1", name: "Salim" },
   });
-  await postComment("issue-1", questions, context);
+  await postTicketHumanInputRequest("issue-1", questions, context);
   expect(body().split("\n")[0]).toBe(
     "@[Salim](user-1) — jigs paused work on **AI-659** and needs your answers before it writes any code.",
   );
@@ -159,7 +159,7 @@ test("an unassigned ticket greets its creator alone", async () => {
     creator: { id: "user-1", name: "Salim" },
     assignee: null,
   });
-  await postComment("issue-1", questions, context);
+  await postTicketHumanInputRequest("issue-1", questions, context);
   expect(body().split("\n")[0]).toBe(
     "@[Salim](user-1) — jigs paused work on **AI-659** and needs your answers before it writes any code.",
   );
@@ -167,14 +167,14 @@ test("an unassigned ticket greets its creator alone", async () => {
 
 test("a ticket with nobody on it gets the headline without a dangling dash", async () => {
   getIssueParticipants.mockResolvedValue({ creator: null, assignee: null });
-  await postComment("issue-1", questions, context);
+  await postTicketHumanInputRequest("issue-1", questions, context);
   expect(body().split("\n")[0]).toBe(
     "jigs paused work on **AI-659** and needs your answers before it writes any code.",
   );
 });
 
 test("the proceeding note lists the assumptions and says where a correction lands", async () => {
-  await postNote("issue-1", {
+  await postTicketNote("issue-1", {
     identifier: "AI-659",
     assumptions: [
       "Only the validate script changes.",
@@ -194,7 +194,12 @@ If one of these is wrong, reply here now, or comment on the pull request when it
 });
 
 test("a factory's own renderer replaces the comment without replacing the step", async () => {
-  await postComment("issue-1", questions, context, (halt) => `just: ${halt.headline}`);
+  await postTicketHumanInputRequest(
+    "issue-1",
+    questions,
+    context,
+    (halt) => `just: ${halt.headline}`,
+  );
   expect(body()).toBe(
     "just: jigs paused work on **AI-659** and needs your answers before it writes any code.",
   );

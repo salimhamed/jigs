@@ -49,7 +49,7 @@ import type {
   AskStepConfig,
   AskWire,
   Attend,
-  CheckForReply,
+  CheckForTicketHumanReply,
   ClaudeHarnessConfig,
   CodeReviewPrompt,
   CodeReviewPromptInput,
@@ -85,9 +85,9 @@ import type {
   McpProbe,
   McpServerConfig,
   McpStdioServer,
-  PostComment,
-  PostNote,
   PostReviewAnswersOptions,
+  PostTicketHumanInputRequest,
+  PostTicketNote,
   PrRef,
   PullRequestDescription,
   RebuildContextPrompt,
@@ -132,7 +132,7 @@ type BlocksTypeSurface = {
   askStepConfig: AskStepConfig;
   askWire: AskWire;
   attend: Attend<number>;
-  checkForReply: CheckForReply;
+  checkForTicketHumanReply: CheckForTicketHumanReply;
   claudeHarnessConfig: ClaudeHarnessConfig;
   codeReviewPrompt: CodeReviewPrompt;
   codeReviewPromptInput: CodeReviewPromptInput;
@@ -166,10 +166,10 @@ type BlocksTypeSurface = {
   mcpProbe: McpProbe;
   mcpServerConfig: McpServerConfig;
   mcpStdioServer: McpStdioServer;
-  postComment: PostComment;
+  postTicketHumanInputRequest: PostTicketHumanInputRequest;
   postReviewAnswersOptions: PostReviewAnswersOptions;
   pullRequestDescription: PullRequestDescription;
-  postNote: PostNote;
+  postTicketNote: PostTicketNote;
   prRef: PrRef;
   rebuildContextPrompt: RebuildContextPrompt;
   rebuildContextPromptInput: RebuildContextPromptInput;

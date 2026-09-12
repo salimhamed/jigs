@@ -89,6 +89,15 @@ export async function pushBranch(worktreePath: string, branch: string): Promise<
   await git(["push", "origin", `HEAD:refs/heads/${branch}`], worktreePath);
 }
 
+/** Push an exact commit even if the local branch moves before Git sends it. */
+export async function pushCommit(
+  worktreePath: string,
+  branch: string,
+  commit: string,
+): Promise<void> {
+  await git(["push", "origin", `${commit}:refs/heads/${branch}`], worktreePath);
+}
+
 export async function headSha(worktreePath: string): Promise<string> {
   return git(["rev-parse", "HEAD"], worktreePath);
 }

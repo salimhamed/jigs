@@ -24,7 +24,7 @@ export function resumeFailed(detail: string): never {
   throw new ResumeFailedError(detail);
 }
 
-/** The `runAgent` jig with its step wrapper already bound — what a jig is handed. */
+/** Run an agent through the factory’s bound step wrapper. */
 export type AgentFn = <T = undefined>(config: AgentStepConfig<T>) => Promise<AgentStepResult<T>>;
 
 export interface ResumeOrRebuildOptions<T> {
