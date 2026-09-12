@@ -2,7 +2,6 @@
 // commits look like, and getting them onto the remote. Reaches node builtins
 // through jigs' git helpers, so it is only ever imported from a step body.
 
-import { FatalError } from "workflow";
 import {
   commitsAhead,
   diffSince,
@@ -48,12 +47,12 @@ export async function pushApprovedChange(
   const head = await headSha(worktreePath);
   const status = await git(["status", "--porcelain"], worktreePath);
   if (status !== "") {
-    throw new FatalError(
+    throw new Error(
       `Cannot publish ${branch}: the worktree has uncommitted changes that no review approved`,
     );
   }
   if (head !== approvedCommit) {
-    throw new FatalError(
+    throw new Error(
       `Cannot publish ${branch}: ${head} is not the approved commit ${approvedCommit}`,
     );
   }
