@@ -14,6 +14,7 @@ bindings, and the service that runs them.
 - `steps/` — add custom `"use step"` functions here for durable external operations.
 - `blocks/tickets/` — explicit ticket acquisition and mapping to delivery requirements.
 - `jigs.config.test.ts` — factory declarations and emitted workflow/step ids.
+- `workflows/ship.test.ts` — what the workflow body hands delivery for a given input.
 - `docker-compose.yml` — the factory's Postgres World.
 
 ## Setup
@@ -74,10 +75,25 @@ workflows: {
 }
 ```
 
-Import standard steps and bound blocks from `../jigs.ts`. Import pure builders
-such as `claude`, `codex`, and `claimTicket` from `@salimhamed/jigs/blocks`.
-Custom steps import implementations from `@salimhamed/jigs/steps` inside a
-factory module containing named `"use step"` functions.
+Factory code imports from the project root, not by relative depth. The
+`imports` map in `package.json` anchors three names:
+
+```ts
+import { deliverChange } from "#jigs";
+import { acquireLinearTicket } from "#blocks/tickets/linear";
+import { publishPullRequest } from "#steps/publish";
+```
+
+`#jigs` is the generated file, `#blocks/<path>` and `#steps/<path>` mirror those
+directories, and the target's `.ts` extension lives in the map rather than at the
+import. Add a mapping for any directory you add. The deferred workflow loaders in
+`jigs.config.ts` stay relative: they register workflow files for the build rather
+than being import sites.
+
+Import pure builders such as `claude`, `codex`, and `claimTicket` from
+`@salimhamed/jigs/blocks`. Custom steps import implementations from
+`@salimhamed/jigs/steps` inside a factory module containing named `"use step"`
+functions.
 
 `ship` exposes `implementationHarness`, `implementationModel`, `reviewHarness`,
 `reviewModel`, `implementationReviewRounds`, `ciFixAttempts`, and
@@ -91,8 +107,8 @@ To replace durable behavior, bind a module outside the generated file:
 
 ```ts
 import { bindDeliverySteps } from "@salimhamed/jigs/delivery";
-import { deliverySteps } from "../jigs.ts";
-import { publishPullRequest } from "../steps/publish.ts";
+import { deliverySteps } from "#jigs";
+import { publishPullRequest } from "#steps/publish";
 
 export const { deliverChange } = bindDeliverySteps({
   ...deliverySteps,

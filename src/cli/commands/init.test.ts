@@ -40,6 +40,7 @@ test("scaffolds a factory that can be installed and built", async () => {
       "nitro.config.ts",
       "package.json",
       "workflows/ship.ts",
+      "workflows/ship.test.ts",
       "pnpm-workspace.yaml",
       "tsconfig.json",
     ].sort(),
@@ -83,6 +84,53 @@ test("every placeholder a template carries is filled in", async () => {
       /\{\{\s*[A-Za-z_][A-Za-z0-9_]*\s*\}\}/,
     );
   }
+});
+
+// Root-anchored specifiers are the factory's own import spelling; the map has
+// to mirror the directory layout exactly, because an alias pointing at another
+// real file would silently re-address the steps declared in it. Plain string
+// targets only: a conditional target keyed on "node" resolves in neither tsc
+// nor the workflows bundle, whose esbuild conditions are default, import and
+// workflow.
+test("the scaffold's imports map mirrors its layout with plain .ts targets", async () => {
+  const dir = scaffold("iota");
+  await init(dir);
+
+  const pkg = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8"));
+  expect(pkg.imports).toEqual({
+    "#jigs": "./jigs.ts",
+    "#blocks/*": "./blocks/*.ts",
+    "#steps/*": "./steps/*.ts",
+  });
+  for (const target of Object.values(pkg.imports as Record<string, unknown>)) {
+    expect(typeof target, String(target)).toBe("string");
+    expect(String(target).endsWith(".ts"), String(target)).toBe(true);
+  }
+  // Each mapping resolves to the real file at the path it mirrors. steps/ is
+  // the exception: factories add it, and a mapping with nothing behind it is
+  // inert — nothing resolves it, so nothing complains about it.
+  expect(existsSync(path.join(dir, "jigs.ts"))).toBe(true);
+  expect(existsSync(path.join(dir, "blocks", "tickets", "linear.ts"))).toBe(true);
+  expect(existsSync(path.join(dir, "steps"))).toBe(false);
+});
+
+// The factory code scaffolded beside the map has to be written in it, or the
+// e2e build is the only factory in existence never resolving a # specifier.
+test("the scaffolded factory code imports through the root-anchored map", async () => {
+  const dir = scaffold("kappa");
+  await init(dir);
+
+  const authored = ["workflows/ship.ts", "workflows/ship.test.ts", "blocks/tickets/linear.ts"];
+  for (const file of authored) {
+    const source = readFileSync(path.join(dir, file), "utf8");
+    expect(source, file).not.toMatch(/from "\.\.\//);
+    expect(source, file).toMatch(/["']#(?:jigs|blocks|steps)/);
+  }
+  // The deferred loaders are registrations rather than import sites, and stay
+  // relative on purpose.
+  expect(readFileSync(path.join(dir, "jigs.config.ts"), "utf8")).toContain(
+    'import("./workflows/ship.ts")',
+  );
 });
 
 test("the tsconfig compiles the code this factory starts with", async () => {

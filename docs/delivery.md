@@ -10,11 +10,12 @@ concepts. All examples run inside a factory workflow or a replay-safe block.
 
 ## Choose agents and budgets
 
-Import the bound operation from your generated `jigs.ts`:
+Import the bound operation from your generated `jigs.ts`, which every factory
+file reaches at the same root-anchored specifier:
 
 ```ts
 import { claude, codex } from "@salimhamed/jigs/agents";
-import { deliverChange } from "../jigs.ts";
+import { deliverChange } from "#jigs";
 
 const result = await deliverChange({
   task,
@@ -195,7 +196,7 @@ import {
   implementAndReview,
   publishApprovedChange,
   followPullRequest,
-} from "../jigs.ts";
+} from "#jigs";
 
 const built = await implementAndReview({
   task,

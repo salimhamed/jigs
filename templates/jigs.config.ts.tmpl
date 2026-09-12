@@ -5,6 +5,8 @@ export default defineFactory({
   // Public URL for provider webhooks.
   // ingressUrl: "https://<machine>.<tailnet>.ts.net",
   bindings: {},
+  // These loaders stay relative: they register workflow files for the build,
+  // rather than being import sites factory code reads from.
   workflows: {
     ship: () => import("./workflows/ship.ts"),
   },
