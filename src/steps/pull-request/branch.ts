@@ -5,8 +5,10 @@
 import {
   commitsAhead,
   diffSince,
+  git,
   pushBranch as gitPushBranch,
   headSha,
+  pushCommit,
 } from "../../providers/git.ts";
 import { isWorktreeDirty } from "../worktree/teardown.ts";
 
@@ -34,6 +36,28 @@ export async function pushBranch(
 ): Promise<{ headSha: string }> {
   await gitPushBranch(worktreePath, branch);
   return { headSha: await headSha(worktreePath) };
+}
+
+/** Recheck approval on every attempt and push only the reviewed commit. */
+export async function pushApprovedChange(
+  worktreePath: string,
+  branch: string,
+  approvedCommit: string,
+): Promise<{ headSha: string }> {
+  const head = await headSha(worktreePath);
+  const status = await git(["status", "--porcelain"], worktreePath);
+  if (status !== "") {
+    throw new Error(
+      `Cannot publish ${branch}: the worktree has uncommitted changes that no review approved`,
+    );
+  }
+  if (head !== approvedCommit) {
+    throw new Error(
+      `Cannot publish ${branch}: ${head} is not the approved commit ${approvedCommit}`,
+    );
+  }
+  await pushCommit(worktreePath, branch, approvedCommit);
+  return { headSha: approvedCommit };
 }
 
 /** Read committed changes since the base commit. Large diffs are truncated. */

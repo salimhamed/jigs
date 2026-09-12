@@ -17,9 +17,9 @@ const unused = async (): Promise<never> => {
 };
 const defaults: LinearSteps = {
   runAgent: unused,
-  postComment: unused,
-  postNote: unused,
-  checkForReply: unused,
+  postTicketHumanInputRequest: unused,
+  postTicketNote: unused,
+  checkForTicketHumanReply: unused,
   fetchTicketSnapshot: unused,
 };
 
@@ -36,25 +36,27 @@ test("custom comment steps receive only serializable halt data and no step-objec
     author: { id: "user", name: "Human" },
     createdAt: "2026-09-11T00:00:01Z",
   };
-  const postComment = vi.fn<LinearSteps["postComment"]>(async function (
-    this: unknown,
-    issueId,
-    received,
-  ) {
-    expect(this).toBeUndefined();
-    expect(issueId).toBe("issue-1");
-    expect(received).toBe(halt);
-    expect(JSON.parse(JSON.stringify(received))).toEqual(halt);
-    return { commentId: "posted", postedAt: "2026-09-11T00:00:00Z" };
-  });
-  const checkForReply = vi.fn<LinearSteps["checkForReply"]>(async () => ({
+  const postTicketHumanInputRequest = vi.fn<LinearSteps["postTicketHumanInputRequest"]>(
+    async function (this: unknown, issueId, received) {
+      expect(this).toBeUndefined();
+      expect(issueId).toBe("issue-1");
+      expect(received).toBe(halt);
+      expect(JSON.parse(JSON.stringify(received))).toEqual(halt);
+      return { commentId: "posted", postedAt: "2026-09-11T00:00:00Z" };
+    },
+  );
+  const checkForTicketHumanReply = vi.fn<LinearSteps["checkForTicketHumanReply"]>(async () => ({
     reply,
     cursor: reply.createdAt,
   }));
-  const linear = bindLinearSteps({ ...defaults, postComment, checkForReply });
+  const linear = bindLinearSteps({
+    ...defaults,
+    postTicketHumanInputRequest,
+    checkForTicketHumanReply,
+  });
   expect(await linear.haltForHuman(claim, halt)).toEqual(reply);
-  expect(postComment).toHaveBeenCalledExactlyOnceWith("issue-1", halt);
-  expect(checkForReply).toHaveBeenCalledExactlyOnceWith(
+  expect(postTicketHumanInputRequest).toHaveBeenCalledExactlyOnceWith("issue-1", halt);
+  expect(checkForTicketHumanReply).toHaveBeenCalledExactlyOnceWith(
     "issue-1",
     "2026-09-11T00:00:00Z",
     "posted",

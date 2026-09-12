@@ -47,7 +47,7 @@ function validateLimit(value: number, name: string, minimum = 0): void {
 // default would have produced for this very attempt.
 async function renderPrompt<TContext extends { renderDefaultPrompt: () => Promise<string> }>(
   role: DeliveryAgent<TContext>,
-  renderDefault: (context: TContext) => string,
+  renderDefault: (context: TContext) => string | Promise<string>,
   fields: PromptFields<TContext>,
 ): Promise<string> {
   const context: TContext = {
@@ -97,6 +97,7 @@ export function bindDeliverySteps(steps: DeliverySteps) {
     readBranchState,
     readWorktreeDiff,
     pushBranch,
+    pushApprovedChange,
     resolveRepository,
     openPullRequest,
     commentOnPullRequest,
@@ -104,11 +105,16 @@ export function bindDeliverySteps(steps: DeliverySteps) {
     squashMergePullRequest,
   } = steps;
 
+  function lazyDiff(change: DeliveryChange) {
+    let diff: Promise<string> | undefined;
+    return () => (diff ??= readWorktreeDiff(change.worktree.path, change.worktree.baseSha));
+  }
+
   interface RoleRun<TTask extends WorkItem, TContext, T> {
     change: DeliveryChange<TTask>;
     name: AgentRoleName;
     role: DeliveryAgent<TContext>;
-    renderDefault: (context: TContext) => string;
+    renderDefault: (context: TContext) => string | Promise<string>;
     /** The job as stated to the agent that already holds the change. */
     resume: PromptFields<TContext>;
     /** The same job for an agent holding nothing. Deferred: the diff read is a step. */
@@ -189,7 +195,7 @@ export function bindDeliverySteps(steps: DeliverySteps) {
         resume: built,
         fresh: async () => ({
           ...built,
-          diff: await readWorktreeDiff(change.worktree.path, change.worktree.baseSha),
+          readDiff: lazyDiff(change),
         }),
       });
       const state = await readBranchState(change.worktree.path, change.worktree.baseSha);
@@ -238,18 +244,7 @@ export function bindDeliverySteps(steps: DeliverySteps) {
     const { change } = options;
     const { path, baseSha, branch, defaultBranch } = change.worktree;
     const { reviewedCommit } = change.approval;
-    const state = await readBranchState(path, baseSha);
-    if (state.dirty) {
-      throw new Error(
-        `Cannot publish ${branch}: the worktree has uncommitted changes that no review approved`,
-      );
-    }
-    if (state.headSha !== reviewedCommit) {
-      throw new Error(
-        `Cannot publish ${branch}: ${state.headSha} is not the approved commit ${reviewedCommit}`,
-      );
-    }
-    await pushBranch(path, branch);
+    await pushApprovedChange(path, branch, reviewedCommit);
     const role = options.pullRequestDescription ?? { harness: options.implementation.harness };
     const result = await runAgent({
       harness: role.harness,
@@ -340,9 +335,6 @@ export function bindDeliverySteps(steps: DeliverySteps) {
         attempt: change.attempts[counter],
         instructions: instructions[counter],
       };
-      const withDiff = async () => ({
-        diff: await readWorktreeDiff(change.worktree.path, change.worktree.baseSha),
-      });
       if (wake.kind === "ci-red") {
         const repairing: PromptFields<CiRepairPromptContext<TTask>> = {
           ...shared,
@@ -354,7 +346,7 @@ export function bindDeliverySteps(steps: DeliverySteps) {
           role: options.ciRepair ?? { harness: options.implementation.harness },
           renderDefault: defaultCiRepairPrompt,
           resume: repairing,
-          fresh: async () => ({ ...repairing, ...(await withDiff()) }),
+          fresh: async () => ({ ...repairing, readDiff: lazyDiff(change) }),
         });
         const state = await readBranchState(change.worktree.path, change.worktree.baseSha);
         if (state.headSha === wake.headSha || state.dirty) {
@@ -388,7 +380,7 @@ export function bindDeliverySteps(steps: DeliverySteps) {
         role: options.pullRequestRevision ?? { harness: options.implementation.harness },
         renderDefault: defaultRevisionPrompt,
         resume: revising,
-        fresh: async () => ({ ...revising, ...(await withDiff()) }),
+        fresh: async () => ({ ...revising, readDiff: lazyDiff(change) }),
         output: threadAnswers,
       });
       const state = await readBranchState(change.worktree.path, change.worktree.baseSha);

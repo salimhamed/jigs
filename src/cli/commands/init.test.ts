@@ -169,7 +169,7 @@ test("the wrappers scaffolded are the step ids this repo has recorded", async ()
   const steps = [...wrappers.matchAll(/^export async function (\w+)\(/gm)]
     .map((match) => `step//./jigs//${match[1]}`)
     .sort();
-  expect(steps).toHaveLength(20);
+  expect(steps).toHaveLength(21);
   const recorded = readFileSync(path.join(packageRoot(), "e2e", "expected-ids.txt"), "utf8")
     .split("\n")
     .filter((line) => line.startsWith("step//./jigs//"))
@@ -177,7 +177,7 @@ test("the wrappers scaffolded are the step ids this repo has recorded", async ()
   expect(recorded).toEqual(steps);
   // Every wrapper has its directive: one without it compiles clean and runs
   // unmemoized.
-  expect(wrappers.match(/"use step";/g)).toHaveLength(20);
+  expect(wrappers.match(/"use step";/g)).toHaveLength(steps.length);
 });
 
 test("the docker project and ports all carry the factory", async () => {

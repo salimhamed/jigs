@@ -60,6 +60,7 @@ function setup(wakes: GateWake[] = [{ kind: "closed", merged: true }]) {
     readBranchState: vi.fn().mockResolvedValue({ commits: 1, headSha: "new", dirty: false }),
     readWorktreeDiff: vi.fn().mockResolvedValue("diff"),
     pushBranch: vi.fn().mockResolvedValue({ headSha: "new" }),
+    pushApprovedChange: vi.fn().mockResolvedValue({ headSha: "new" }),
     resolveRepository: vi.fn().mockResolvedValue({ owner: "owner", repo: "repo" }),
     openPullRequest: vi.fn().mockResolvedValue(pr),
     commentOnPullRequest: vi.fn().mockResolvedValue(undefined),
@@ -151,7 +152,6 @@ describe("delivery", () => {
       red("second"),
     ]);
     vi.mocked(steps.readBranchState)
-      .mockResolvedValueOnce({ commits: 1, headSha: "new", dirty: false })
       .mockResolvedValueOnce({ commits: 1, headSha: "new", dirty: false })
       .mockResolvedValueOnce({ commits: 1, headSha: "first", dirty: false })
       .mockResolvedValueOnce({ commits: 1, headSha: "new", dirty: false })
@@ -350,33 +350,22 @@ describe("delivery", () => {
     expect(calls[1]?.prompt).toContain("Head commit under review: reviewed");
   });
 
-  it("refuses to publish a dirty worktree", async () => {
-    const { steps } = setup();
-    vi.mocked(steps.readBranchState).mockResolvedValue({ commits: 1, headSha: "new", dirty: true });
+  it("does not open a PR when the durable approval check rejects publication", async () => {
+    const { steps, calls } = setup();
+    vi.mocked(steps.pushApprovedChange).mockRejectedValue(new Error("Unapproved work"));
     await expect(bindDeliverySteps(steps).publishApprovedChange(publish)).rejects.toThrow(
-      "uncommitted changes that no review approved",
+      "Unapproved work",
     );
-    expect(steps.pushBranch).not.toHaveBeenCalled();
     expect(steps.openPullRequest).not.toHaveBeenCalled();
-  });
-
-  it("refuses to publish a commit the review never saw", async () => {
-    const { steps } = setup();
-    vi.mocked(steps.readBranchState).mockResolvedValue({
-      commits: 2,
-      headSha: "later",
-      dirty: false,
-    });
-    await expect(bindDeliverySteps(steps).publishApprovedChange(publish)).rejects.toThrow(
-      "later is not the approved commit new",
-    );
-    expect(steps.pushBranch).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(0);
   });
 
   it("publishes the approved commit without an implementation agent turn", async () => {
     const { steps, calls } = setup();
     expect(await bindDeliverySteps(steps).publishApprovedChange(publish)).toEqual(pr);
-    expect(steps.pushBranch).toHaveBeenCalledExactlyOnceWith("/work", "fix");
+    expect(steps.pushApprovedChange).toHaveBeenCalledExactlyOnceWith("/work", "fix", "new");
+    expect(steps.readBranchState).not.toHaveBeenCalled();
+    expect(steps.pushBranch).not.toHaveBeenCalled();
     expect(steps.openPullRequest).toHaveBeenCalledWith(
       { owner: "owner", repo: "repo" },
       "fix",
@@ -452,18 +441,117 @@ describe("delivery", () => {
     expect(calls[0]?.prompt).toBe("Rewrite the search index.");
   });
 
+  it("does not read an unused implementation diff when its replacement runs", async () => {
+    const { steps, calls } = setup();
+    vi.mocked(steps.readWorktreeDiff).mockRejectedValue(new Error("Diff unavailable"));
+    vi.mocked(steps.readBranchState).mockResolvedValue({
+      commits: 0,
+      headSha: "base",
+      dirty: true,
+    });
+    const result = await bindDeliverySteps(steps).implementAndReview({
+      ...options,
+      implementation: { ...options.implementation, prompt: () => "Follow TASK.md" },
+    });
+    expect(calls[0]?.prompt).toBe("Follow TASK.md");
+    expect(result.status).toBe("uncommitted-work");
+    expect(steps.readWorktreeDiff).not.toHaveBeenCalled();
+  });
+
+  it.each(["ciRepair", "pullRequestRevision"] as const)(
+    "does not read an unused diff for a replacement %s prompt",
+    async (role) => {
+      const { steps, calls } = setup([
+        role === "ciRepair"
+          ? red("first")
+          : { kind: "review-comments", threads: [], body: "Fix search" },
+        { kind: "closed", merged: true },
+      ]);
+      vi.mocked(steps.readWorktreeDiff).mockRejectedValue(new Error("Diff unavailable"));
+      vi.mocked(steps.readBranchState)
+        .mockResolvedValueOnce({ commits: 1, headSha: "first", dirty: false })
+        .mockResolvedValue({ commits: 2, headSha: "second", dirty: false });
+      await bindDeliverySteps(steps).followPullRequest({
+        change: { ...approved, attempts: { ...approved.attempts }, sessions: {} },
+        pr,
+        implementation: options.implementation,
+        [role]: { ...options.implementation, prompt: () => "Follow TASK.md" },
+        limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
+        merge: "human",
+      });
+      expect(calls[0]?.prompt).toBe("Follow TASK.md");
+      expect(steps.readWorktreeDiff).not.toHaveBeenCalled();
+    },
+  );
+
+  it("skips unused diffs even when a replacement rebuilds an expired session", async () => {
+    const { steps, calls } = setup([red("first"), { kind: "closed", merged: true }]);
+    const runAgent = steps.runAgent;
+    steps.runAgent = async (config) => {
+      if (config.resume) resumeFailed("expired");
+      return runAgent(config);
+    };
+    vi.mocked(steps.readWorktreeDiff).mockRejectedValue(new Error("Diff unavailable"));
+    vi.mocked(steps.readBranchState)
+      .mockResolvedValueOnce({ commits: 1, headSha: "first", dirty: false })
+      .mockResolvedValue({ commits: 2, headSha: "second", dirty: false });
+    await bindDeliverySteps(steps).followPullRequest({
+      change: {
+        ...approved,
+        attempts: { ...approved.attempts },
+        sessions: {
+          ciRepair: {
+            harness: options.implementation.harness,
+            session: { harness: "codex", id: "expired" },
+          },
+        },
+      },
+      pr,
+      implementation: options.implementation,
+      ciRepair: { ...options.implementation, prompt: () => "Follow TASK.md" },
+      limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
+      merge: "human",
+    });
+    expect(calls[0]?.prompt).toBe("Follow TASK.md");
+    expect(calls[0]?.resume).toBeUndefined();
+    expect(steps.readWorktreeDiff).not.toHaveBeenCalled();
+  });
+
+  it("shares a fresh attempt's diff between custom and default prompt reads", async () => {
+    const { steps, calls } = setup();
+    vi.mocked(steps.readBranchState).mockResolvedValue({
+      commits: 0,
+      headSha: "base",
+      dirty: true,
+    });
+    await bindDeliverySteps(steps).implementAndReview({
+      ...options,
+      implementation: {
+        ...options.implementation,
+        prompt: async ({ readDiff, renderDefaultPrompt }) => {
+          expect(await readDiff?.()).toBe("diff");
+          const first = await renderDefaultPrompt();
+          expect(await renderDefaultPrompt()).toBe(first);
+          return first;
+        },
+      },
+    });
+    expect(steps.readWorktreeDiff).toHaveBeenCalledExactlyOnceWith("/work", "base");
+    expect(calls[0]?.prompt).toContain("Current diff:\ndiff");
+  });
+
   it("sends each role the shipped default when it supplies no prompt", async () => {
     const { steps, calls } = setup();
     const shared = { task: options.task, worktree: options.worktree };
     const renderDefaultPrompt = async () => "";
     await bindDeliverySteps(steps).deliverChange(options);
     expect(calls[0]?.prompt).toBe(
-      defaultImplementationPrompt({
+      await defaultImplementationPrompt({
         ...shared,
         attempt: 1,
         findings: [],
         instructions: "",
-        diff: "diff",
+        readDiff: async () => "diff",
         renderDefaultPrompt,
       }),
     );
@@ -532,7 +620,7 @@ describe("delivery", () => {
       merge: "human",
     });
     expect(calls[0]?.prompt).toBe(
-      defaultRevisionPrompt({
+      await defaultRevisionPrompt({
         task: options.task,
         worktree: options.worktree,
         pr,
@@ -540,7 +628,7 @@ describe("delivery", () => {
         instructions: "",
         threads: [thread],
         reviewBody: "Fix search",
-        diff: "diff",
+        readDiff: async () => "diff",
         renderDefaultPrompt: async () => "",
       }),
     );
@@ -581,14 +669,14 @@ describe("delivery", () => {
     expect(rebuilt.calls[0]?.resume).toBeUndefined();
     expect(rebuilt.calls[0]?.prompt).toContain("Current diff:\ndiff");
     expect(rebuilt.calls[0]?.prompt).toBe(
-      defaultCiRepairPrompt({
+      await defaultCiRepairPrompt({
         task: options.task,
         worktree: options.worktree,
         pr,
         attempt: 1,
         instructions: "",
         failing: [],
-        diff: "diff",
+        readDiff: async () => "diff",
         renderDefaultPrompt: async () => "",
       }),
     );

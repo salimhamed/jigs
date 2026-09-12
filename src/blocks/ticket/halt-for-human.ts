@@ -65,23 +65,23 @@ export interface HumanReply {
   createdAt: string;
 }
 
-// Declared here rather than written as `typeof postComment`:
+// Declared here rather than written as `typeof postTicketHumanInputRequest`:
 // declaring the contract block-side typechecks the step against the block and
 // keeps this side free of any value import into steps/.
-export type PostComment = (
+export type PostTicketHumanInputRequest = (
   issueId: string,
   halt: Halt,
 ) => Promise<{ commentId: string; postedAt: string }>;
 
-export type CheckForReply = (
+export type CheckForTicketHumanReply = (
   issueId: string,
   sinceIso: string,
   postedCommentId: string,
 ) => Promise<{ reply: HumanReply | null; cursor: string }>;
 
 export type HaltForHumanDeps = {
-  postComment: PostComment;
-  checkForReply: CheckForReply;
+  postTicketHumanInputRequest: PostTicketHumanInputRequest;
+  checkForTicketHumanReply: CheckForTicketHumanReply;
 };
 
 /** {@link haltForHuman} with its steps already bound — what a block is handed. */
@@ -96,11 +96,11 @@ export async function haltForHuman(
   halt: Halt,
   deps: HaltForHumanDeps,
 ): Promise<HumanReply> {
-  // Destructured, never invoked as `deps.postComment(...)`: the SDK
+  // Destructured, never invoked as `deps.postTicketHumanInputRequest(...)`: the SDK
   // serializes a step call's receiver along with its arguments, and this
   // object holds functions.
-  const { checkForReply, postComment } = deps;
-  const posted = await postComment(claim.issueId, halt);
+  const { checkForTicketHumanReply, postTicketHumanInputRequest } = deps;
+  const posted = await postTicketHumanInputRequest(claim.issueId, halt);
   // The halt's only signal: the claim hook is held for the run's whole life,
   // so this marker is what tells `jigs ps` the run is parked on a human. Never
   // awaited — it registers when the run suspends on the claim hook below.
@@ -110,7 +110,7 @@ export async function haltForHuman(
   try {
     let cursor = posted.postedAt;
     for await (const _hint of claim.hook) {
-      const check = await checkForReply(claim.issueId, cursor, posted.commentId);
+      const check = await checkForTicketHumanReply(claim.issueId, cursor, posted.commentId);
       if (check.reply !== null) return check.reply;
       cursor = check.cursor;
     }

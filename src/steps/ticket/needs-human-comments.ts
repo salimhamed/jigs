@@ -10,10 +10,10 @@
 // replaces no step.
 
 import type {
-  CheckForReply,
+  CheckForTicketHumanReply,
   Halt,
   HumanReply,
-  PostComment,
+  PostTicketHumanInputRequest,
 } from "../../blocks/ticket/halt-for-human.ts";
 import type { TicketNote } from "../../blocks/ticket/review.ts";
 import { createComment, getIssueParticipants, listCommentsSince } from "../../providers/linear.ts";
@@ -27,12 +27,12 @@ import {
 } from "./render-comment.ts";
 
 /** Post a question or failure on the ticket so a person can help the run continue. */
-export const postComment = async (
+export const postTicketHumanInputRequest = async (
   issueId: string,
   halt: Halt,
   metadata: NamedRunMetadata,
   render: RenderNeedsHumanComment = renderNeedsHumanComment,
-): ReturnType<PostComment> => {
+): ReturnType<PostTicketHumanInputRequest> => {
   const context: NeedsHumanContext = {
     runId: metadata.workflowRunId,
     workflow: metadata.workflowName,
@@ -40,23 +40,27 @@ export const postComment = async (
   };
   const participants = await getIssueParticipants(issueId);
   const comment = await createComment(issueId, render(halt, context, participants));
-  console.log(`[postComment] posted comment=${comment.id} issue=${issueId}`);
+  console.log(`[postTicketHumanInputRequest] posted comment=${comment.id} issue=${issueId}`);
   return { commentId: comment.id, postedAt: comment.createdAt };
 };
 
 /** Tell ticket participants which assumptions the run is proceeding with. */
-export const postNote = async (
+export const postTicketNote = async (
   issueId: string,
   note: TicketNote,
   render: RenderProceedingNote = renderProceedingNote,
 ): Promise<void> => {
   const participants = await getIssueParticipants(issueId);
   const comment = await createComment(issueId, render(note, participants));
-  console.log(`[postNote] posted comment=${comment.id} issue=${issueId}`);
+  console.log(`[postTicketNote] posted comment=${comment.id} issue=${issueId}`);
 };
 
 /** Look for a reply since the last check, excluding the run’s own question. */
-export const checkForReply: CheckForReply = async (issueId, sinceIso, postedCommentId) => {
+export const checkForTicketHumanReply: CheckForTicketHumanReply = async (
+  issueId,
+  sinceIso,
+  postedCommentId,
+) => {
   const comments = await listCommentsSince(issueId, sinceIso);
   const cursor = comments.reduce(
     (max, comment) => (comment.createdAt > max ? comment.createdAt : max),
@@ -67,7 +71,7 @@ export const checkForReply: CheckForReply = async (issueId, sinceIso, postedComm
   // suspension posted instead.
   const human = comments.find((comment) => comment.user !== null && comment.id !== postedCommentId);
   console.log(
-    `[checkForReply] re-check issue=${issueId} since=${sinceIso} found=${human !== undefined}`,
+    `[checkForTicketHumanReply] re-check issue=${issueId} since=${sinceIso} found=${human !== undefined}`,
   );
   if (human === undefined || human.user === null) return { reply: null, cursor };
   const reply: HumanReply = {

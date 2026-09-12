@@ -11,7 +11,12 @@ export {
   realDeps,
 } from "./agent/execute-agent.ts";
 export { executeModelRequest } from "./agent/execute-model-request.ts";
-export { pushBranch, readBranchState, readWorktreeDiff } from "./pull-request/branch.ts";
+export {
+  pushApprovedChange,
+  pushBranch,
+  readBranchState,
+  readWorktreeDiff,
+} from "./pull-request/branch.ts";
 export { fetchPullRequestState } from "./pull-request/fetch-state.ts";
 export {
   commentOnPullRequest,
@@ -31,9 +36,9 @@ export {
   type LinearIssueMatch,
 } from "./ticket/issues.ts";
 export {
-  checkForReply,
-  postComment,
-  postNote,
+  checkForTicketHumanReply,
+  postTicketHumanInputRequest,
+  postTicketNote,
 } from "./ticket/needs-human-comments.ts";
 export {
   type NeedsHumanContext,

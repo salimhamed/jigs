@@ -2,22 +2,22 @@ import { agentOrHalt as agentOrHaltBlock } from "../agent/agent-or-halt.ts";
 import type { AgentStepConfig } from "../agent/plan.ts";
 import type { TicketClaim } from "./claim.ts";
 import {
-  type CheckForReply,
+  type CheckForTicketHumanReply,
   type HaltForHumanFn,
   haltForHuman as haltBlock,
-  type PostComment,
+  type PostTicketHumanInputRequest,
 } from "./halt-for-human.ts";
 import { type ReviewTicketOptions, reviewTicket as reviewBlock } from "./review.ts";
 export type BoundReviewTicketOptions = Omit<
   ReviewTicketOptions,
-  "runAgent" | "haltForHuman" | "fetchTicketSnapshot" | "postNote"
+  "runAgent" | "haltForHuman" | "fetchTicketSnapshot" | "postTicketNote"
 >;
 
 export interface LinearSteps {
   runAgent: ReviewTicketOptions["runAgent"];
-  postComment: PostComment;
-  postNote: ReviewTicketOptions["postNote"];
-  checkForReply: CheckForReply;
+  postTicketHumanInputRequest: PostTicketHumanInputRequest;
+  postTicketNote: ReviewTicketOptions["postTicketNote"];
+  checkForTicketHumanReply: CheckForTicketHumanReply;
   fetchTicketSnapshot: ReviewTicketOptions["fetchTicketSnapshot"];
 }
 
@@ -26,8 +26,8 @@ export function bindLinearSteps(steps: LinearSteps) {
   const { runAgent } = steps;
   const haltForHuman: HaltForHumanFn = (claim, halt) =>
     haltBlock(claim, halt, {
-      postComment: steps.postComment,
-      checkForReply: steps.checkForReply,
+      postTicketHumanInputRequest: steps.postTicketHumanInputRequest,
+      checkForTicketHumanReply: steps.checkForTicketHumanReply,
     });
   function agentOrHalt<T = undefined>(claim: TicketClaim, config: AgentStepConfig<T>) {
     return agentOrHaltBlock(claim, config, { runAgent, haltForHuman });
@@ -37,7 +37,7 @@ export function bindLinearSteps(steps: LinearSteps) {
       ...options,
       runAgent,
       haltForHuman,
-      postNote: steps.postNote,
+      postTicketNote: steps.postTicketNote,
       fetchTicketSnapshot: steps.fetchTicketSnapshot,
     });
   }

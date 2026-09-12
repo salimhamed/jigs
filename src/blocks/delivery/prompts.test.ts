@@ -19,8 +19,8 @@ test("the review prompt carries the direction a human granted at a limit", () =>
   expect(rendered).toContain("Check the migration too");
 });
 
-test("a review that requested changes without a summary still states the job", () => {
-  const rendered = defaultRevisionPrompt({
+test("a review that requested changes without a summary still states the job", async () => {
+  const rendered = await defaultRevisionPrompt({
     task,
     worktree,
     attempt: 1,

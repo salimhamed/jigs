@@ -31,10 +31,10 @@ export type TicketNote = {
 
 /**
  * Posting a note on the ticket that asks for nothing and suspends nothing.
- * Declared here rather than written as `typeof postNote` for the same
+ * Declared here rather than written as `typeof postTicketNote` for the same
  * reason the halt's step contracts are: the block side owns the contract.
  */
-export type PostNote = (issueId: string, note: TicketNote) => Promise<void>;
+export type PostTicketNote = (issueId: string, note: TicketNote) => Promise<void>;
 
 /**
  * What a ticket review hands the builder: the brief plus the snapshot it
@@ -55,7 +55,7 @@ export type Handoff = {
 export interface ReviewTicketOptions {
   runAgent: AgentFn;
   haltForHuman: HaltForHumanFn;
-  postNote: PostNote;
+  postTicketNote: PostTicketNote;
   // Re-read between rounds: a human's reply lands on the ticket, not in the
   // verdict, so a round that does not re-snapshot reviews the same words again.
   fetchTicketSnapshot: (issueId: string) => Promise<TicketSnapshot>;
@@ -72,7 +72,7 @@ export interface ReviewTicketOptions {
 }
 
 export async function reviewTicket(options: ReviewTicketOptions): Promise<Handoff> {
-  const { runAgent, haltForHuman, fetchTicketSnapshot, postNote } = options;
+  const { runAgent, haltForHuman, fetchTicketSnapshot, postTicketNote } = options;
   let snapshot = options.snapshot;
 
   for (;;) {
@@ -92,7 +92,7 @@ export async function reviewTicket(options: ReviewTicketOptions): Promise<Handof
       // A note, not a halt: the run keeps going, and the comment says plainly
       // that a correction now lands on the pull request instead.
       if (assumptions.length > 0) {
-        await postNote(snapshot.id, {
+        await postTicketNote(snapshot.id, {
           identifier: snapshot.identifier,
           assumptions,
         });
