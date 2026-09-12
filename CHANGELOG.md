@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.0](https://github.com/salimhamed/jigs/compare/jigs-v0.7.0...jigs-v0.8.0) (2026-09-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* simplify factory configuration and generated integration ([#161](https://github.com/salimhamed/jigs/issues/161))
+
+### Features
+
+* simplify factory configuration and generated integration ([#161](https://github.com/salimhamed/jigs/issues/161)) ([fdd0cca](https://github.com/salimhamed/jigs/commit/fdd0ccaa7e79aee3c8b011956f50425705a235c7))
+
 ## [0.7.0](https://github.com/salimhamed/jigs/compare/jigs-v0.6.0...jigs-v0.7.0) (2026-09-11)
 
 
