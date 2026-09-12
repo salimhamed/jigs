@@ -43,15 +43,7 @@ export function makeClonedBinding(
 ): ClonedBinding {
   const defaultBranch = "main";
   const remoteDir = path.join(parent, "remote.git");
-  git(
-    parent,
-    "init",
-    "-q",
-    "--bare",
-    "--initial-branch",
-    defaultBranch,
-    remoteDir,
-  );
+  git(parent, "init", "-q", "--bare", "--initial-branch", defaultBranch, remoteDir);
 
   const bootstrap = path.join(parent, "bootstrap-checkout");
   mkdirSync(bootstrap, { recursive: true });
@@ -120,17 +112,12 @@ export function makeFakeSql(store: Map<string, WorktreeRow>): Sql {
   const sql = (strings: TemplateStringsArray, ...values: unknown[]) => {
     const statement = strings.join("$").trimStart();
     // DELETE also reads FROM jigs_worktrees, so the verb decides first.
-    if (
-      statement.startsWith("SELECT") &&
-      statement.includes("jigs_worktrees")
-    ) {
+    if (statement.startsWith("SELECT") && statement.includes("jigs_worktrees")) {
       // No interpolation is listWorktrees; the real one orders by recency,
       // which insertion order stands in for here.
       if (values.length === 0) return Promise.resolve([...store.values()]);
       if (statement.includes("owner_run_id =")) {
-        return Promise.resolve(
-          [...store.values()].filter((row) => row.ownerRunId === values[0]),
-        );
+        return Promise.resolve([...store.values()].filter((row) => row.ownerRunId === values[0]));
       }
       const row = store.get(values[0] as string);
       return Promise.resolve(row === undefined ? [] : [row]);

@@ -1,15 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
-import {
-  type Check,
-  failedCheck,
-  formatFailures,
-  runChecks,
-} from "./catalog.ts";
-import {
-  doctorChecks,
-  preflightChecks,
-  type WorkflowRequires,
-} from "./index.ts";
+import { type Check, failedCheck, formatFailures, runChecks } from "./catalog.ts";
+import { doctorChecks, preflightChecks, type WorkflowRequires } from "./index.ts";
 
 const passing = (id: string): Check => ({
   id,
@@ -121,9 +112,7 @@ test("a workflow requiring aws gets the credentials check", () => {
 });
 
 test("a workflow that does not require aws does not get it", () => {
-  expect(preflightIds({ harnesses: ["claude"] })).not.toContain(
-    "aws.credentials",
-  );
+  expect(preflightIds({ harnesses: ["claude"] })).not.toContain("aws.credentials");
 });
 
 test("doctor checks aws only when a profile is set, having no manifest to read", () => {

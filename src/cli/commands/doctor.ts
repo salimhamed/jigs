@@ -9,9 +9,7 @@ import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 export async function runDoctor(deps: ServiceDeps): Promise<CheckReport> {
   const res = await serviceFetch(deps.serviceUrl, "/api/doctor");
   if (!res.ok) {
-    throw new JigsError(
-      `doctor failed: HTTP ${res.status} ${await res.text()}`,
-    );
+    throw new JigsError(`doctor failed: HTTP ${res.status} ${await res.text()}`);
   }
   const report = (await res.json()) as CheckReport;
 

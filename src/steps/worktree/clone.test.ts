@@ -1,12 +1,7 @@
 import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import {
-  git,
-  makeFactoryRepo,
-  makeTmpDir,
-  removeTmpDir,
-} from "../../test-fixtures.ts";
+import { git, makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import { bindingClones, ensureBindingClone, hasBindingClone } from "./clone.ts";
 import { bindingRepoDir } from "./layout.ts";
 
@@ -53,22 +48,16 @@ const objects = () => {
 test("the clone mirrors origin's branches and claims none of refs/heads", async () => {
   await ensureBindingClone({ remote: remoteDir, repoDir });
 
-  expect(git(repoDir, "config", "remote.origin.fetch")).toBe(
-    "+refs/heads/*:refs/remotes/origin/*",
-  );
+  expect(git(repoDir, "config", "remote.origin.fetch")).toBe("+refs/heads/*:refs/remotes/origin/*");
   expect(git(repoDir, "rev-parse", "refs/remotes/origin/main")).toBe(
     git(remoteDir, "rev-parse", "refs/heads/main"),
   );
-  expect(
-    git(repoDir, "for-each-ref", "--format=%(refname)", "refs/heads"),
-  ).toBe("");
+  expect(git(repoDir, "for-each-ref", "--format=%(refname)", "refs/heads")).toBe("");
 });
 
 test("the clone records origin's default branch as the finished marker", async () => {
   await ensureBindingClone({ remote: remoteDir, repoDir });
-  expect(git(repoDir, "symbolic-ref", "refs/remotes/origin/HEAD")).toBe(
-    "refs/remotes/origin/main",
-  );
+  expect(git(repoDir, "symbolic-ref", "refs/remotes/origin/HEAD")).toBe("refs/remotes/origin/main");
   expect(hasBindingClone(repoDir)).toBe(true);
 });
 
@@ -110,9 +99,7 @@ test("a drifted remote url is repointed in place", async () => {
 
 test("a failing fetch leaves no marker, and the next call finishes the clone", async () => {
   const unreachable = path.join(tmp, "nonexistent.git");
-  await expect(
-    ensureBindingClone({ remote: unreachable, repoDir }),
-  ).rejects.toThrow(unreachable);
+  await expect(ensureBindingClone({ remote: unreachable, repoDir })).rejects.toThrow(unreachable);
   expect(hasBindingClone(repoDir)).toBe(false);
 
   await ensureBindingClone({ remote: remoteDir, repoDir });

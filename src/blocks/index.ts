@@ -86,10 +86,10 @@ export {
   commitWork,
 } from "./builder-agent/commit-work.ts";
 export {
-  type DescribePrOptions,
-  describePr,
-  type PrDescription,
-  prDescription,
+  type DescribePullRequestOptions,
+  describePullRequest,
+  type PullRequestDescription,
+  pullRequestDescription,
 } from "./builder-agent/describe-pr.ts";
 export {
   type FixCiPrompt,

@@ -1,11 +1,7 @@
 import type { ISql } from "postgres";
 import type { BindingClone } from "../../steps/worktree/clone.ts";
 import { READY_PHASE, setBootPhase } from "../readiness.ts";
-import {
-  installShutdown,
-  onShutdown,
-  startOwningSignals,
-} from "../shutdown.ts";
+import { installShutdown, onShutdown, startOwningSignals } from "../shutdown.ts";
 
 // Why every import below is dynamic: this module's top level has to stay free
 // of postgres, the factory config and the workflow runtime — the gate tests
@@ -25,20 +21,16 @@ export interface RegistryGateDeps {
 // unhandled rejection, so a throw out of here would leave the service up with
 // the World already polling against a registry it cannot use. Exiting is the
 // point; the boolean is for an injected exit that returns.
-export async function gateOnWorktreeRegistry(
-  deps: RegistryGateDeps = {},
-): Promise<boolean> {
+export async function gateOnWorktreeRegistry(deps: RegistryGateDeps = {}): Promise<boolean> {
   const log = deps.log ?? ((line: string) => console.log(line));
   try {
     // Opening the connection belongs inside the try: a missing or malformed
     // WORKFLOW_POSTGRES_URL throws synchronously, and that escape is the very
     // thing this gate exists to stop.
-    const resolveSql =
-      deps.sql ?? (await import("../../steps/worktree/sql.ts")).registrySql;
+    const resolveSql = deps.sql ?? (await import("../../steps/worktree/sql.ts")).registrySql;
     const sql = resolveSql();
     const ensure =
-      deps.ensure ??
-      (await import("../../steps/worktree/registry.ts")).ensureWorktreeRegistry;
+      deps.ensure ?? (await import("../../steps/worktree/registry.ts")).ensureWorktreeRegistry;
     await ensure(sql);
   } catch (err) {
     const error = deps.error ?? ((line: string) => console.error(line));
@@ -71,9 +63,7 @@ function describe(err: unknown): string {
 // Cloning at start rather than when a run asks for a worktree is what keeps a
 // minute of `git fetch` out of that run, and puts a remote jigs cannot reach
 // in front of the operator at start instead of mid-agent.
-export async function gateOnBindingClones(
-  deps: BindingCloneGateDeps = {},
-): Promise<boolean> {
+export async function gateOnBindingClones(deps: BindingCloneGateDeps = {}): Promise<boolean> {
   const log = deps.log ?? ((line: string) => console.log(line));
   const error = deps.error ?? ((line: string) => console.error(line));
   const exit = deps.exit ?? process.exit;
@@ -101,9 +91,7 @@ export async function gateOnBindingClones(
     // Before, not after: a first fetch of a large repo holds the boot for
     // minutes, and this line is the only thing that says which one.
     setBootPhase(`cloning ${binding.name}`);
-    log(
-      `[service] binding ${binding.name}: ensuring clone at ${binding.repoDir}`,
-    );
+    log(`[service] binding ${binding.name}: ensuring clone at ${binding.repoDir}`);
     try {
       await ensure({ repoDir: binding.repoDir, remote: binding.remote });
     } catch (err) {
@@ -126,9 +114,7 @@ export interface WorldStartGateDeps {
 // registry gate — would otherwise be a console.error from nitro and a process
 // that stays up with `ready` never true, so `jigs service start` waits out its
 // whole budget on it.
-export async function gateOnWorldStart(
-  deps: WorldStartGateDeps,
-): Promise<boolean> {
+export async function gateOnWorldStart(deps: WorldStartGateDeps): Promise<boolean> {
   try {
     await deps.start();
   } catch (err) {
@@ -151,9 +137,7 @@ export default async function startWorld() {
 
   // Before the World starts polling: the queue's very first step dispatch has
   // to go out on the scoped dispatcher, not node's five-minute default.
-  const { describeStepCeiling, raiseStepCeiling } = await import(
-    "../step-ceiling.ts"
-  );
+  const { describeStepCeiling, raiseStepCeiling } = await import("../step-ceiling.ts");
   raiseStepCeiling();
   console.log(`[service] step ceiling: ${describeStepCeiling()}`);
 
@@ -183,9 +167,7 @@ export default async function startWorld() {
   if (!started) return;
   // Startup reconciliation of suspended runs (poke every held hook) would
   // live here; fast-follow — `jigs poke <run>` covers the gap for now.
-  console.log(
-    `[service] world started: ${process.env.WORKFLOW_TARGET_WORLD ?? "local (default)"}`,
-  );
+  console.log(`[service] world started: ${process.env.WORKFLOW_TARGET_WORLD ?? "local (default)"}`);
   setBootPhase(READY_PHASE);
 
   // No background sweep: a run that finishes cleanly tears itself down, and

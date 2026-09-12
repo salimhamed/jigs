@@ -2,7 +2,7 @@
 // approved, then a pull request whose human review the builder answers, whose
 // red CI the builder fixes under a bound, and whose close ends the run. It
 // returns only when the PR merged — every other ending throws — and it never
-// cleans up: the workflow calls teardownRunWorktrees after a merged return, and a
+// cleans up: the workflow calls removeMergedRunWorktrees after a merged return, and a
 // thrown ending leaves the worktree for `jigs sweep`.
 //
 // This file is the story; each decision it names lives in the file beside it.
@@ -23,12 +23,9 @@ import {
 } from "@salimhamed/jigs/blocks";
 import { agent, haltForHuman, pullRequestGate } from "../../jigs.ts";
 import type { Builder } from "./builder.ts";
-import { describeAndOpenPr } from "./describe-and-open-pr.ts";
+import { describeAndOpenPullRequest } from "./describe-and-open-pr.ts";
 import { ciFixer } from "./fix-red-ci.ts";
-import {
-  squashMergeOnApproval,
-  waitForHumanMerge,
-} from "./merge-on-approval.ts";
+import { squashMergeOnApproval, waitForHumanMerge } from "./merge-on-approval.ts";
 import { pushImplementation } from "./push-implementation.ts";
 import { respondToReview } from "./respond-to-review.ts";
 
@@ -47,9 +44,7 @@ export interface ReviewLoopOptions {
 
 export type ReviewLoopResult = { pr: PrRef; cycles: number };
 
-export async function reviewLoop(
-  options: ReviewLoopOptions,
-): Promise<ReviewLoopResult> {
+export async function reviewLoop(options: ReviewLoopOptions): Promise<ReviewLoopResult> {
   const { handoff, worktree } = options;
 
   const built = await implementUntilCodeReviewApproves({
@@ -70,12 +65,7 @@ export async function reviewLoop(
   await pushImplementation(builder, worktree);
   // After the push, so nothing writes a description for a branch that turned
   // out to have nothing on it.
-  const pr = await describeAndOpenPr(
-    builder,
-    worktree,
-    handoff,
-    options.binding,
-  );
+  const pr = await describeAndOpenPullRequest(builder, worktree, handoff, options.binding);
   const ci = ciFixer(pr, builder, worktree, handoff);
 
   // The type argument is explicit because most arms return Attend<never>: left

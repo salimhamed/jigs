@@ -7,12 +7,7 @@
 // ../../steps/agent/run-agent.ts is the step side of the same split.
 
 import type { FailedCheck } from "../../checks/catalog.ts";
-import {
-  type AgentStepConfig,
-  type AgentWire,
-  buildAgentWire,
-  parseOutput,
-} from "./plan.ts";
+import { type AgentStepConfig, type AgentWire, buildAgentWire, parseOutput } from "./plan.ts";
 import type { AgentStepResult } from "./result.ts";
 import { resumeFailed } from "./resume-or-rebuild.ts";
 
@@ -27,9 +22,7 @@ export class JitCheckError extends Error {
   readonly failures: FailedCheck[];
 
   constructor(failures: FailedCheck[]) {
-    super(
-      failures.map(({ label, reason }) => `${label}: ${reason}`).join("\n"),
-    );
+    super(failures.map(({ label, reason }) => `${label}: ${reason}`).join("\n"));
     this.name = "JitCheckError";
     this.failures = failures;
   }
@@ -38,15 +31,11 @@ export class JitCheckError extends Error {
 /** The factory's `"use step"` wrapper around `runAgent`. */
 export type RunAgentStep = (
   wire: AgentWire,
-) => Promise<
-  AgentStepResult | { jitFailure: FailedCheck[] } | { resumeFailed: string }
->;
+) => Promise<AgentStepResult | { jitFailure: FailedCheck[] } | { resumeFailed: string }>;
 
 // Where the step's returned markers become errors: workflow-side, so no
 // retries are spent and `instanceof` still means something to the caller.
-export function unwrapAgentStep(
-  result: Awaited<ReturnType<RunAgentStep>>,
-): AgentStepResult {
+export function unwrapAgentStep(result: Awaited<ReturnType<RunAgentStep>>): AgentStepResult {
   if ("jitFailure" in result) throw new JitCheckError(result.jitFailure);
   // Same shape, same reason as the JIT marker, but the error it becomes is
   // ./resume-or-rebuild's business: only the fallback there may recognize it.

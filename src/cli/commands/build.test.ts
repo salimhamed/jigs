@@ -42,9 +42,7 @@ test("prepares the factory, then runs the factory's own nitro", async () => {
     { cwd: root },
   );
   expect(lines).toContain("Σ Nitro server built");
-  expect(lines.at(-1)).toBe(
-    `built ${path.join(root, ".output/server/index.mjs")}`,
-  );
+  expect(lines.at(-1)).toBe(`built ${path.join(root, ".output/server/index.mjs")}`);
 });
 
 test("a factory with no nitro installed is told to install, not to guess", async () => {

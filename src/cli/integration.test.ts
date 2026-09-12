@@ -2,10 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, test } from "vitest";
-import {
-  checkFactoryIntegration,
-  generateFactoryIntegration,
-} from "./integration.ts";
+import { checkFactoryIntegration, generateFactoryIntegration } from "./integration.ts";
 
 const roots: string[] = [];
 function factory() {
@@ -14,8 +11,7 @@ function factory() {
   return root;
 }
 afterEach(() => {
-  for (const root of roots.splice(0))
-    rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
 test("generation is repeatable and build validation never overwrites drift", () => {

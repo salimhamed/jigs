@@ -53,10 +53,7 @@ export interface TicketClaim {
 // One hook, on the issue's UUID: an operator naming a run by its ticket
 // identifier is resolved through Linear by the run-ref resolver, so a second
 // hook keyed on the identifier would index nothing.
-export async function claimTicket(
-  issueId: string,
-  identifier: string,
-): Promise<TicketClaim> {
+export async function claimTicket(issueId: string, identifier: string): Promise<TicketClaim> {
   const token = ticketToken(issueId);
   const hook = createHook<unknown>({ token });
   const conflict = await hook.getConflict();

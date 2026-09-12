@@ -7,13 +7,7 @@
 // imported from inside a step body — a workflow-side import of it fails the
 // build loudly, which is the point of keeping it out of blocks/.
 
-import {
-  generateText,
-  jsonSchema,
-  type LanguageModel,
-  Output,
-  type OutputInterface,
-} from "ai";
+import { generateText, jsonSchema, type LanguageModel, Output, type OutputInterface } from "ai";
 import type { McpServerConfig as ClaudeMcpServerConfig } from "ai-sdk-provider-claude-code";
 import type { CodexExecSettings } from "ai-sdk-provider-codex-cli";
 // Type-only, so it is erased and no workflow-side module is pulled in here.
@@ -34,11 +28,9 @@ import {
   jitChecks,
   runChecks,
 } from "../../checks/index.ts";
+import type { RunMetadata } from "../run-context.ts";
 import { claudeStepSettings } from "./harnesses/claude.ts";
-import {
-  codexAppServerStepSettings,
-  withCodexAppServer,
-} from "./harnesses/codex.ts";
+import { codexAppServerStepSettings, withCodexAppServer } from "./harnesses/codex.ts";
 import { ensureManagedCodexHome } from "./harnesses/codex-home.ts";
 import { scrubbedEnv } from "./harnesses/env.ts";
 import { claudeCode } from "./harnesses/index.ts";
@@ -49,9 +41,7 @@ import { FileLockTimeoutError, lockPathFor, withFileLock } from "./lock.ts";
 export type ExecutorGeneration = StepGeneration & { output?: unknown };
 
 // The provider declares but does not export its MCP config type.
-type CodexMcpServerConfig = NonNullable<
-  CodexExecSettings["mcpServers"]
->[string];
+type CodexMcpServerConfig = NonNullable<CodexExecSettings["mcpServers"]>[string];
 
 export interface ExecuteDeps {
   generateText(options: {
@@ -96,9 +86,7 @@ function toClaudeMcpServers(
         : {
             type: "http",
             url: server.url,
-            ...(server.headers !== undefined
-              ? { headers: server.headers }
-              : {}),
+            ...(server.headers !== undefined ? { headers: server.headers } : {}),
           };
   }
   return mapped;
@@ -120,9 +108,7 @@ function toCodexMcpServers(
         : {
             transport: "http",
             url: server.url,
-            ...(server.headers !== undefined
-              ? { httpHeaders: server.headers }
-              : {}),
+            ...(server.headers !== undefined ? { httpHeaders: server.headers } : {}),
           };
   }
   return mapped;
@@ -133,20 +119,20 @@ function toCodexMcpServers(
 export function outputSpec(
   schema: Record<string, unknown> | undefined,
 ): OutputInterface<unknown, unknown, never> | undefined {
-  return schema === undefined
-    ? undefined
-    : Output.object({ schema: jsonSchema<unknown>(schema) });
+  return schema === undefined ? undefined : Output.object({ schema: jsonSchema<unknown>(schema) });
 }
 
 // graphile-worker's 4h job expiry is the last thing that can redeliver a step,
 // so the lock a takeover guard holds has to outlast it.
 const LOCK_STALE_MS = 4 * 60 * 60_000 + 60_000;
 
+/** Run an agent in its worktree, checking required tools before it starts. */
 export async function runAgent(
   wire: AgentWire,
-  runId: string,
+  metadata: RunMetadata,
   deps: ExecuteDeps = realDeps,
 ): ReturnType<RunAgentStep> {
+  const runId = metadata.workflowRunId;
   // JIT checks first — this is the last honest moment before agent turns
   // get burned, and the servers only exist now that the body built them.
   const jitFailure = await deps.jitFailures(wire);
@@ -266,15 +252,9 @@ async function generateAgentStep(
     return { resumeFailed: String(err) };
   }
 
-  const session = extractAgentSession(
-    harness.kind,
-    generation.providerMetadata,
-  );
+  const session = extractAgentSession(harness.kind, generation.providerMetadata);
   return {
-    ...toStepResult(
-      generation,
-      wire.outputSchema !== undefined ? generation.output : undefined,
-    ),
+    ...toStepResult(generation, wire.outputSchema !== undefined ? generation.output : undefined),
     ...(session !== undefined ? { session } : {}),
   };
 }

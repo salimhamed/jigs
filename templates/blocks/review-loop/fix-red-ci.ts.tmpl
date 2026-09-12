@@ -21,12 +21,7 @@ const MAX_CI_ATTEMPTS = 3;
 
 type CiRed = Extract<GateWake, { kind: "ci-red" }>;
 
-export function ciFixer(
-  pr: PrRef,
-  builder: Builder,
-  worktree: WorktreeFacts,
-  handoff: Handoff,
-) {
+export function ciFixer(pr: PrRef, builder: Builder, worktree: WorktreeFacts, handoff: Handoff) {
   let redInARow = 0;
   let stoodDown = false;
 
@@ -47,7 +42,7 @@ export function ciFixer(
 
       const fixed = await fixCi({
         agent,
-        readDiff: readWorktreeDiff,
+        readWorktreeDiff,
         harness: builder.harness,
         cwd: builder.cwd,
         ...(builder.session === undefined ? {} : { session: builder.session }),

@@ -7,11 +7,7 @@
 
 import { expect, test, vi } from "vitest";
 import { z } from "zod";
-import type {
-  Factory,
-  TicketWorkflowInputs,
-  WorkflowInputs,
-} from "../blocks/factory.ts";
+import type { Factory, TicketWorkflowInputs, WorkflowInputs } from "../blocks/factory.ts";
 import { ticketInput } from "../blocks/factory.ts";
 
 const ISSUE_ID = "68bc9696-35d5-442d-ab56-214c8cfefbec";
@@ -85,7 +81,5 @@ test("a workflow with no ticket input is handed triggerId alone", async () => {
   const result = await startRun(factory, "sweep", {}, "trig_sched");
 
   expect(result.kind).toBe("started");
-  expect(start.mock.calls[0]?.[1]).toEqual([
-    { olderThanDays: 7, triggerId: "trig_sched" },
-  ]);
+  expect(start.mock.calls[0]?.[1]).toEqual([{ olderThanDays: 7, triggerId: "trig_sched" }]);
 });

@@ -1,9 +1,4 @@
-import {
-  Agent,
-  Dispatcher,
-  getGlobalDispatcher,
-  setGlobalDispatcher,
-} from "undici";
+import { Agent, Dispatcher, getGlobalDispatcher, setGlobalDispatcher } from "undici";
 
 // The World runs every step by POSTing the step route with a bare `fetch`, so
 // undici's default 300s headersTimeout aborts any step past five minutes and
@@ -33,11 +28,7 @@ export function selfOrigins(env: NodeJS.ProcessEnv = process.env): string[] {
   }
   const port = env.PORT;
   if (port === undefined || port === "") return [];
-  return [
-    `http://localhost:${port}`,
-    `http://127.0.0.1:${port}`,
-    `http://[::1]:${port}`,
-  ];
+  return [`http://localhost:${port}`, `http://127.0.0.1:${port}`, `http://[::1]:${port}`];
 }
 
 // Origin, never path: the step route's path belongs to the SDK
@@ -76,9 +67,7 @@ export class SelfOriginDispatcher extends Dispatcher {
     handler: Dispatcher.DispatchHandler,
   ): boolean {
     const origin = options.origin === undefined ? "" : String(options.origin);
-    const route = matchesSelfOrigin(origin, this.#origins)
-      ? this.#self
-      : this.#other;
+    const route = matchesSelfOrigin(origin, this.#origins) ? this.#self : this.#other;
     return route.dispatch(options, handler);
   }
 
@@ -110,9 +99,7 @@ export function raiseStepCeiling(env: NodeJS.ProcessEnv = process.env): void {
   );
 }
 
-export function describeStepCeiling(
-  env: NodeJS.ProcessEnv = process.env,
-): string {
+export function describeStepCeiling(env: NodeJS.ProcessEnv = process.env): string {
   const scope = selfOrigins(env)[0] ?? "any loopback origin";
   return `uncapped on the step route at ${scope}; undici defaults elsewhere`;
 }

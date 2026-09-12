@@ -7,9 +7,7 @@ export interface LinearWebhookChecksOptions {
   list?: () => Promise<LinearWebhook[]>;
 }
 
-export function linearWebhookChecks(
-  options: LinearWebhookChecksOptions,
-): Check[] {
+export function linearWebhookChecks(options: LinearWebhookChecksOptions): Check[] {
   let ingressUrl: string | undefined;
   try {
     const root = options.factoryRoot();

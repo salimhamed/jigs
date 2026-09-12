@@ -41,10 +41,7 @@ export type RenderNeedsHumanComment = (
   participants: TicketParticipants,
 ) => string;
 
-export type RenderProceedingNote = (
-  note: TicketNote,
-  participants: TicketParticipants,
-) => string;
+export type RenderProceedingNote = (note: TicketNote, participants: TicketParticipants) => string;
 
 // Creator and assignee, in that order, each named once. Either may be absent;
 // a ticket nobody created and nobody owns gets no greeting rather than a
@@ -57,9 +54,7 @@ function greet(participants: TicketParticipants, headline: string): string {
     seen.add(user.id);
     people.push(user);
   }
-  return people.length === 0
-    ? headline
-    : `${people.map(mention).join(" ")} — ${headline}`;
+  return people.length === 0 ? headline : `${people.map(mention).join(" ")} — ${headline}`;
 }
 
 function questionBlock(question: HaltQuestion, index: number): string {
@@ -96,11 +91,7 @@ function footer(halt: Halt, context: NeedsHumanContext): string {
   return `<sub>${parts.join(" · ")}</sub>`;
 }
 
-export const renderNeedsHumanComment: RenderNeedsHumanComment = (
-  halt,
-  context,
-  participants,
-) => {
+export const renderNeedsHumanComment: RenderNeedsHumanComment = (halt, context, participants) => {
   const blocks = [greet(participants, halt.headline)];
   if (halt.about !== undefined && halt.about !== "") {
     blocks.push(`**What this ticket is about.** ${halt.about}`);
@@ -121,10 +112,7 @@ export const renderNeedsHumanComment: RenderNeedsHumanComment = (
   return `${blocks.join("\n\n")}\n`;
 };
 
-export const renderProceedingNote: RenderProceedingNote = (
-  note,
-  participants,
-) =>
+export const renderProceedingNote: RenderProceedingNote = (note, participants) =>
   `${[
     greet(
       participants,

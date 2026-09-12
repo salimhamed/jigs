@@ -15,10 +15,7 @@ export interface LinearComment {
   user: LinearUser | null;
 }
 
-async function linearGraphql<T>(
-  query: string,
-  variables: Record<string, unknown>,
-): Promise<T> {
+async function linearGraphql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
   const apiKey = process.env.LINEAR_API_KEY;
   if (apiKey === undefined || apiKey === "") {
     throw new Error("LINEAR_API_KEY is not set");
@@ -49,10 +46,7 @@ async function linearGraphql<T>(
 // The preflight probe for LINEAR_API_KEY: the cheapest call that proves the
 // key is both present and accepted.
 export async function getViewer(): Promise<LinearUser> {
-  const data = await linearGraphql<{ viewer: LinearUser }>(
-    "query { viewer { id name } }",
-    {},
-  );
+  const data = await linearGraphql<{ viewer: LinearUser }>("query { viewer { id name } }", {});
   return data.viewer;
 }
 
@@ -80,9 +74,7 @@ export async function listWebhooks(): Promise<LinearWebhook[]> {
       { after },
     );
     webhooks.push(...data.webhooks.nodes);
-    after = data.webhooks.pageInfo.hasNextPage
-      ? data.webhooks.pageInfo.endCursor
-      : null;
+    after = data.webhooks.pageInfo.hasNextPage ? data.webhooks.pageInfo.endCursor : null;
     if (data.webhooks.pageInfo.hasNextPage && after === null) {
       throw new Error("Linear GraphQL: webhooks page has no end cursor");
     }
@@ -147,9 +139,7 @@ export interface RawIssueSnapshot {
 // a copy taken at one instant. Unpaginated `last: 100` on comments is an
 // accepted cap: a ticket with more than 100 comments loses its oldest ones
 // from the reviewed copy.
-export async function fetchIssueSnapshot(
-  issueId: string,
-): Promise<RawIssueSnapshot> {
+export async function fetchIssueSnapshot(issueId: string): Promise<RawIssueSnapshot> {
   const data = await linearGraphql<{ issue: RawIssueSnapshot }>(
     `query IssueSnapshot($id: String!) {
       issue(id: $id) {
@@ -168,6 +158,7 @@ export async function fetchIssueSnapshot(
   return data.issue;
 }
 
+/** Post a comment on a ticket. */
 export async function createComment(
   issueId: string,
   body: string,
@@ -194,8 +185,7 @@ interface RawProject {
   teams: { nodes: Array<{ id: string }> };
 }
 
-const PROJECT_UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const PROJECT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // A Linear project URL ends in its slugId, so accept that as well as the UUID.
 async function resolveProject(ref: string): Promise<RawProject> {
@@ -226,11 +216,16 @@ async function resolveProject(ref: string): Promise<RawProject> {
   return project;
 }
 
-export async function createIssueInProject(input: {
+export interface CreateIssueInProjectInput {
   project: string;
   title: string;
   description: string;
-}): Promise<{ id: string; identifier: string; url: string }> {
+}
+
+/** Create a ticket in the project’s first team. */
+export async function createIssueInProject(
+  input: CreateIssueInProjectInput,
+): Promise<{ id: string; identifier: string; url: string }> {
   const project = await resolveProject(input.project);
   const team = project.teams.nodes[0];
   if (team === undefined) {
@@ -279,6 +274,7 @@ export interface LinearIssueMatch {
   state: string;
 }
 
+/** Find the newest ticket in a project whose title starts with the given text. */
 export async function findIssueInProject(input: {
   project: string;
   titlePrefix: string;
@@ -324,9 +320,7 @@ export async function listCommentsSince(
     }`,
     { id: issueId },
   );
-  return data.issue.comments.nodes.filter(
-    (comment) => comment.createdAt > sinceIso,
-  );
+  return data.issue.comments.nodes.filter((comment) => comment.createdAt > sinceIso);
 }
 
 // Linear renders @-mentions in API-created comments as @[displayName](userId).

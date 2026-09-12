@@ -4,24 +4,26 @@
 // so this specifier must never be imported from a workflow or a block, only
 // from inside a wrapper body the directive transform erases.
 
+export type { GithubRepoRef } from "../providers/github-webhook.ts";
 export {
   type ExecuteDeps,
   realDeps,
   runAgent,
 } from "./agent/run-agent.ts";
-export { runAsk } from "./agent/run-ask.ts";
-export { branchState, pushBranch, readDiff } from "./pull-request/branch.ts";
-export { fetchPrState } from "./pull-request/fetch-state.ts";
+export { askModel } from "./agent/run-ask.ts";
+export { pushBranch, readBranchState, readWorktreeDiff } from "./pull-request/branch.ts";
+export { fetchPullRequestState } from "./pull-request/fetch-state.ts";
 export {
-  commentOnPr,
-  openPr,
-  replyInThread,
-  resolveRepo,
-  squashMerge,
+  commentOnPullRequest,
+  openPullRequest,
+  replyToPullRequestReviewThread,
+  resolveRepository,
+  squashMergePullRequest,
 } from "./pull-request/pr.ts";
 export { dashboardRunUrl } from "./run-context.ts";
-export { fetchSnapshot } from "./ticket/fetch-snapshot.ts";
+export { fetchTicketSnapshot } from "./ticket/fetch-snapshot.ts";
 export {
+  type CreateIssueInProjectInput,
   createComment,
   createIssueInProject,
   findIssueInProject,
@@ -41,9 +43,8 @@ export {
   type TicketParticipants,
 } from "./ticket/render-comment.ts";
 export {
-  type ProvisionRunWorktreeDeps,
-  provisionRunWorktree,
-  teardownMergedRun,
-  teardownRunWorktrees,
+  type ProvisionWorktreeDeps,
+  provisionWorktree,
+  removeMergedRunWorktrees,
   type WorktreeRequest,
 } from "./worktree/index.ts";

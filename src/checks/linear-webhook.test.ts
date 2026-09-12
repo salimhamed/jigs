@@ -13,10 +13,7 @@ afterEach(() => {
   }
 });
 
-function checks(
-  webhooks: LinearWebhook[],
-  ingressUrl = "https://factory.example.test",
-) {
+function checks(webhooks: LinearWebhook[], ingressUrl = "https://factory.example.test") {
   const root = mkdtempSync(path.join(tmpdir(), "jigs-linear-webhook-"));
   roots.push(root);
   writeFileSync(
@@ -33,9 +30,7 @@ const run = async (webhooks: LinearWebhook[]) => checks(webhooks)[0]?.run();
 
 test("an enabled webhook at the exact ingress URL passes", async () => {
   await expect(
-    run([
-      { url: "https://factory.example.test/ingress/linear", enabled: true },
-    ]),
+    run([{ url: "https://factory.example.test/ingress/linear", enabled: true }]),
   ).resolves.toEqual({ ok: true });
 });
 
@@ -53,9 +48,7 @@ test("a disabled webhook fails and names its URL in the repair", async () => {
   ]);
   expect(result).toMatchObject({
     ok: false,
-    repair: expect.stringContaining(
-      "https://factory.example.test/ingress/linear",
-    ),
+    repair: expect.stringContaining("https://factory.example.test/ingress/linear"),
   });
 });
 
@@ -68,9 +61,7 @@ test("a missing webhook says to create a Comment webhook", async () => {
 });
 
 test("another host is not a match and is named as possible stale state", async () => {
-  const result = await run([
-    { url: "https://old.example.test/ingress/linear", enabled: true },
-  ]);
+  const result = await run([{ url: "https://old.example.test/ingress/linear", enabled: true }]);
   expect(result).toMatchObject({
     ok: false,
     repair: expect.stringContaining("old.example.test"),

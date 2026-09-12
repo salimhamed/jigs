@@ -2,15 +2,7 @@ import { createHmac } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  expect,
-  test,
-  vi,
-} from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
 import { setWorld } from "workflow/runtime";
@@ -94,9 +86,7 @@ beforeEach(() => {
   vi.stubEnv("WORKFLOW_LOCAL_DATA_DIR", dataDir);
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "gh-hook-secret");
   vi.stubEnv("LINEAR_WEBHOOK_SECRET", "linear-hook-secret");
-  resumeHookMock
-    .mockReset()
-    .mockRejectedValue(new HookNotFoundError("unclaimed-test-token"));
+  resumeHookMock.mockReset().mockRejectedValue(new HookNotFoundError("unclaimed-test-token"));
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -252,16 +242,13 @@ test("POST /ingress/linear with a forged signature is a 401", async () => {
     "linear-signature": sign(body, "wrong-secret"),
   });
   expect(res.status).toBe(401);
-  expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[ingress] linear rejected reason=signature",
-  );
+  expect(log).toHaveBeenCalledExactlyOnceWith("[ingress] linear rejected reason=signature");
 });
 
 test("a validly signed Comment delivery for an unclaimed issue is acknowledged", async () => {
   const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
   const body = commentPayload();
-  const issueId = (JSON.parse(body) as { data: { issueId: string } }).data
-    .issueId;
+  const issueId = (JSON.parse(body) as { data: { issueId: string } }).data.issueId;
   const res = await postLinear(body, {
     "linear-signature": sign(body, "linear-hook-secret"),
   });
@@ -276,8 +263,7 @@ test("a Linear delivery matching a hook logs acceptance with its token", async (
   const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
   delivers();
   const body = commentPayload();
-  const issueId = (JSON.parse(body) as { data: { issueId: string } }).data
-    .issueId;
+  const issueId = (JSON.parse(body) as { data: { issueId: string } }).data.issueId;
   const res = await postLinear(body, {
     "linear-signature": sign(body, "linear-hook-secret"),
   });
@@ -295,9 +281,7 @@ test("a validly signed non-JSON linear body is acknowledged and ignored", async 
   });
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ ignored: true });
-  expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[ingress] linear ignored reason=unrecognized-shape",
-  );
+  expect(log).toHaveBeenCalledExactlyOnceWith("[ingress] linear ignored reason=unrecognized-shape");
 });
 
 test("an unroutable linear resource type is acknowledged and ignored", async () => {
@@ -325,12 +309,9 @@ test("poke of an unknown run is a 404", async () => {
 });
 
 test("cancel of a run nobody holds is a 404", async () => {
-  const res = await app.request(
-    "/api/runs/wrun_01ZZZZZZZZZZZZZZZZZZZZZZZZ/cancel",
-    {
-      method: "POST",
-    },
-  );
+  const res = await app.request("/api/runs/wrun_01ZZZZZZZZZZZZZZZZZZZZZZZZ/cancel", {
+    method: "POST",
+  });
   expect(res.status).toBe(404);
   expect(await res.json()).toEqual({ error: "not found" });
 });

@@ -54,9 +54,7 @@ export function parseFactoryConfig(value: unknown): FactoryConfig {
     const lines = result.error.issues.map(
       (issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`,
     );
-    throw new JigsError(
-      `invalid ${FACTORY_CONFIG_FILE}:\n  ${lines.join("\n  ")}`,
-    );
+    throw new JigsError(`invalid ${FACTORY_CONFIG_FILE}:\n  ${lines.join("\n  ")}`);
   }
   return result.data;
 }
@@ -125,9 +123,6 @@ export function readFactoryConfigText(factoryRoot: string): string {
   return readFileSync(factoryConfigPath(factoryRoot), "utf8");
 }
 
-export function writeFactoryConfigText(
-  factoryRoot: string,
-  text: string,
-): void {
+export function writeFactoryConfigText(factoryRoot: string, text: string): void {
   writeFileSync(factoryConfigPath(factoryRoot), text);
 }

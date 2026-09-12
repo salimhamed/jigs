@@ -25,14 +25,10 @@ afterEach(() => {
 });
 
 const respond = (data: unknown) =>
-  fetchMock.mockResolvedValueOnce(
-    new Response(JSON.stringify({ data }), { status: 200 }),
-  );
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ data }), { status: 200 }));
 
 const requestBodies = () =>
-  fetchMock.mock.calls.map(([, init]) =>
-    JSON.parse((init as RequestInit).body as string),
-  );
+  fetchMock.mock.calls.map(([, init]) => JSON.parse((init as RequestInit).body as string));
 
 const lastRequest = () => {
   const [url, init] = fetchMock.mock.calls.at(-1) as [string, RequestInit];
@@ -324,10 +320,7 @@ test("listCommentsSince filters strictly after the cursor", async () => {
       },
     },
   });
-  const comments = await listCommentsSince(
-    "issue-uuid",
-    "2026-08-26T12:00:00Z",
-  );
+  const comments = await listCommentsSince("issue-uuid", "2026-08-26T12:00:00Z");
   expect(comments.map((c) => c.id)).toEqual(["c2"]);
 });
 

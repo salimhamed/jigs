@@ -66,28 +66,19 @@ test("toSnapshot splits blocking relations, keeps links and sub-issues, and drop
   ]);
   expect(snapshot.blocks.map((ref) => ref.identifier)).toEqual(["AGE-318"]);
   expect(snapshot.blockedBy.map((ref) => ref.identifier)).toEqual(["AGE-312"]);
-  expect(snapshot.links).toEqual([
-    { title: "design doc", url: "https://doc.test" },
-  ]);
+  expect(snapshot.links).toEqual([{ title: "design doc", url: "https://doc.test" }]);
   expect(snapshot.subIssues.map((ref) => ref.identifier)).toEqual(["AGE-400"]);
 });
 
 test("a null description normalizes rather than leaking null into the prompt", () => {
-  const snapshot = toSnapshot(
-    rawIssue({ description: null }),
-    "2026-08-26T13:00:00Z",
-  );
+  const snapshot = toSnapshot(rawIssue({ description: null }), "2026-08-26T13:00:00Z");
   expect(snapshot.description).toBe("");
   expect(renderSnapshot(snapshot)).not.toContain("null");
 });
 
 test("renderSnapshot includes every section a reviewing agent needs", () => {
-  const rendered = renderSnapshot(
-    toSnapshot(rawIssue(), "2026-08-26T13:00:00Z"),
-  );
-  expect(rendered).toContain(
-    "AGE-313 Ticket snapshot and the reviewTicket jig",
-  );
+  const rendered = renderSnapshot(toSnapshot(rawIssue(), "2026-08-26T13:00:00Z"));
+  expect(rendered).toContain("AGE-313 Ticket snapshot and the reviewTicket jig");
   expect(rendered).toContain("Fetch the ticket on each activation.");
   expect(rendered).toContain("ready-for-agent");
   expect(rendered).toContain("first pass looks right");

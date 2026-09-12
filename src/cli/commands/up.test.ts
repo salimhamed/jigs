@@ -76,9 +76,7 @@ test("from a freshly scaffolded factory, every step runs once, in order", async 
   expect(result.serviceUrl).toBe(`http://localhost:${port}`);
   expect(result.dashboardUrl).toBe("http://localhost:9200");
 
-  expect(
-    io.exec.calls.map((call) => [path.basename(call.file), ...call.args]),
-  ).toEqual([
+  expect(io.exec.calls.map((call) => [path.basename(call.file), ...call.args])).toEqual([
     ["pnpm", "install"],
     ["docker", "compose", "up", "-d", "--wait"],
     ["bootstrap"],
@@ -88,13 +86,9 @@ test("from a freshly scaffolded factory, every step runs once, in order", async 
   expect(io.procs.spawns).toHaveLength(1);
 
   // .env was copied, and the slots that stay empty are named, not refused.
-  expect(readFileSync(path.join(root, ".env"), "utf8")).toContain(
-    "WORKFLOW_POSTGRES_URL=",
-  );
+  expect(readFileSync(path.join(root, ".env"), "utf8")).toContain("WORKFLOW_POSTGRES_URL=");
   const printed = lines.join("\n");
-  expect(printed).toMatch(
-    /^ok {3}env \(\d+ms\) — copied \.env\.example to \.env$/m,
-  );
+  expect(printed).toMatch(/^ok {3}env \(\d+ms\) — copied \.env\.example to \.env$/m);
   expect(printed).toContain("LINEAR_API_KEY, GITHUB_TOKEN empty in .env");
   expect(printed).toMatch(/^ok {3}doctor \(\d+ms\)$/m);
   expect(lines.at(-1)).toContain(`is up at http://localhost:${port}`);
@@ -107,9 +101,7 @@ test("bootstrap is handed the World URL from .env explicitly", async () => {
 
   await up(root, io);
 
-  const bootstrap = io.exec.calls.find(
-    (call) => path.basename(call.file) === "bootstrap",
-  );
+  const bootstrap = io.exec.calls.find((call) => path.basename(call.file) === "bootstrap");
   expect(bootstrap?.options.env?.WORKFLOW_POSTGRES_URL).toBe(
     "postgres://jigs:jigs@localhost:5555/jigs",
   );
@@ -128,9 +120,7 @@ test("a second up on an unchanged factory leaves the running service alone", asy
   expect(again.service).toBe("unchanged");
   expect(io.procs.spawns).toHaveLength(1);
   expect(io.procs.signals.map((s) => s.sig)).not.toContain("SIGTERM");
-  expect(lines.join("\n")).toMatch(
-    /^ok {3}service .* — unchanged, not restarted$/m,
-  );
+  expect(lines.join("\n")).toMatch(/^ok {3}service .* — unchanged, not restarted$/m);
 });
 
 test("a changed bundle restarts the service; --restart forces one", async () => {
@@ -323,9 +313,7 @@ test("an existing .env is kept and its credentials are not reported when set", a
 test("pnpm missing from PATH is named, not echoed", async () => {
   const root = factory({ port: 1 });
   const io = {
-    exec: fakeExec((call) =>
-      call.file === "pnpm" ? execError("ENOENT") : undefined,
-    ),
+    exec: fakeExec((call) => (call.file === "pnpm" ? execError("ENOENT") : undefined)),
     procs: fakeProcesses(),
   };
 
@@ -339,9 +327,7 @@ test("a failing pnpm install echoes pnpm's output and stops", async () => {
   const root = factory({ port: 1 });
   const io = {
     exec: fakeExec((call) =>
-      call.file === "pnpm"
-        ? execError(1, "ERR_PNPM_NO_MATCHING_VERSION\n")
-        : undefined,
+      call.file === "pnpm" ? execError(1, "ERR_PNPM_NO_MATCHING_VERSION\n") : undefined,
     ),
     procs: fakeProcesses(),
   };
@@ -358,10 +344,7 @@ test("a stopped docker daemon is told to start, not diagnosed from compose outpu
   const io = {
     exec: fakeExec((call) =>
       call.file === "docker"
-        ? execError(
-            1,
-            "Cannot connect to the Docker daemon at unix:///var/run/docker.sock\n",
-          )
+        ? execError(1, "Cannot connect to the Docker daemon at unix:///var/run/docker.sock\n")
         : undefined,
     ),
     procs: fakeProcesses(),
@@ -392,9 +375,7 @@ test("bootstrap refuses to run without a World URL in .env", async () => {
 
   expect(statuses(result).at(-1)).toBe("bootstrap:failed");
   expect(result.steps.at(-1)?.detail).toContain("WORKFLOW_POSTGRES_URL");
-  expect(
-    io.exec.calls.some((call) => path.basename(call.file) === "bootstrap"),
-  ).toBe(false);
+  expect(io.exec.calls.some((call) => path.basename(call.file) === "bootstrap")).toBe(false);
 });
 
 test("a missing bootstrap bin names the package pnpm install did not bring", async () => {
@@ -421,9 +402,7 @@ test("a World bootstrap cannot reach names both sides of the port mismatch", asy
   const result = await up(root, io);
 
   expect(statuses(result).at(-1)).toBe("bootstrap:failed");
-  expect(result.steps.at(-1)?.detail).toContain(
-    "postgres://jigs:***@localhost:5555/jigs",
-  );
+  expect(result.steps.at(-1)?.detail).toContain("postgres://jigs:***@localhost:5555/jigs");
   expect(result.steps.at(-1)?.repair).toContain(":5555");
 });
 

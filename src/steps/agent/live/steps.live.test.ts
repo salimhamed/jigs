@@ -2,28 +2,14 @@ import path from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { z } from "zod";
 import { claude, codex } from "../../../blocks/agent/harness-config.ts";
-import {
-  type AgentWire,
-  buildAgentWire,
-  buildAskWire,
-} from "../../../blocks/agent/plan.ts";
-import type {
-  AgentStepResult,
-  StepUsage,
-} from "../../../blocks/agent/result.ts";
+import { type AgentWire, buildAgentWire, buildAskWire } from "../../../blocks/agent/plan.ts";
+import type { AgentStepResult, StepUsage } from "../../../blocks/agent/result.ts";
 import { ensureManagedCodexHome } from "../harnesses/codex-home.ts";
 import { stripApiCredentials } from "../harnesses/env.ts";
-import {
-  assertLivePreconditions,
-  makeScratchRepo,
-} from "../harnesses/live/fixtures/live-env.ts";
+import { assertLivePreconditions, makeScratchRepo } from "../harnesses/live/fixtures/live-env.ts";
 import { makeTmpDir, removeTmpDir } from "../harnesses/test-fixtures.ts";
-import {
-  type ExecuteDeps,
-  realDeps,
-  runAgent as runAgentStep,
-} from "../run-agent.ts";
-import { runAsk } from "../run-ask.ts";
+import { type ExecuteDeps, realDeps, runAgent as runAgentStep } from "../run-agent.ts";
+import { askModel } from "../run-ask.ts";
 
 let tmp: string;
 let deps: ExecuteDeps;
@@ -59,15 +45,10 @@ function assertUsage(usage: StepUsage | undefined): void {
 
 // runAgent answers a union; a step that declares no MCP servers and carries
 // no resume pointer can only take the successful arm.
-async function runAgent(
-  wire: AgentWire,
-  runId: string,
-): Promise<AgentStepResult<unknown>> {
-  const result = await runAgentStep(wire, runId, deps);
+async function runAgent(wire: AgentWire, runId: string): Promise<AgentStepResult<unknown>> {
+  const result = await runAgentStep(wire, { workflowRunId: runId }, deps);
   if ("jitFailure" in result) {
-    throw new Error(
-      `unexpected JIT failure: ${JSON.stringify(result.jitFailure)}`,
-    );
+    throw new Error(`unexpected JIT failure: ${JSON.stringify(result.jitFailure)}`);
   }
   if ("resumeFailed" in result) {
     throw new Error(`unexpected resume failure: ${result.resumeFailed}`);
@@ -119,7 +100,7 @@ test("claude ask step: structured output round-trips typed with usage", async ()
     output: verdict,
   });
 
-  const result = await runAsk(wire, runId, deps);
+  const result = await askModel(wire, { workflowRunId: runId }, deps);
 
   expect(verdict.parse(result.output)).toEqual({ ok: true, word: "sky" });
   assertUsage(result.usage);
@@ -133,7 +114,7 @@ test("codex ask step: structured output round-trips typed with usage", async () 
     output: verdict,
   });
 
-  const result = await runAsk(wire, runId, deps);
+  const result = await askModel(wire, { workflowRunId: runId }, deps);
 
   expect(verdict.parse(result.output)).toEqual({ ok: true, word: "sky" });
   assertUsage(result.usage);

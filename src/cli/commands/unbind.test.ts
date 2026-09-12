@@ -2,11 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { bindingDir } from "../../steps/worktree/layout.ts";
-import {
-  makeFactoryRepo,
-  makeTmpDir,
-  removeTmpDir,
-} from "../../test-fixtures.ts";
+import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import { unbindRepo } from "./unbind.ts";
 
 let tmp: string;
@@ -44,9 +40,7 @@ test("unbind says the clone stays and where it is", () => {
   unbindRepo("web", { cwd: factory, out: (line) => lines.push(line) });
   expect(lines.some((line) => line.includes("the clone stays at"))).toBe(true);
   expect(
-    lines.some((line) =>
-      line.includes(bindingDir({ factoryRoot: factory, bindingName: "web" })),
-    ),
+    lines.some((line) => line.includes(bindingDir({ factoryRoot: factory, bindingName: "web" }))),
   ).toBe(true);
 });
 
@@ -57,7 +51,5 @@ test("unbind of an unknown name lists what is bound", () => {
 });
 
 test("unbind outside a factory repo fails with guidance", () => {
-  expect(() => unbindRepo("api", { cwd: tmp, out: () => {} })).toThrow(
-    "not inside a factory repo",
-  );
+  expect(() => unbindRepo("api", { cwd: tmp, out: () => {} })).toThrow("not inside a factory repo");
 });

@@ -48,9 +48,7 @@ test("an inline-table mcp_servers declaration fails", () => {
 });
 
 test("multiple servers are all named, sorted", () => {
-  writeConfig(
-    '[mcp_servers.zeta]\ncommand = "z"\n[mcp_servers.alpha]\ncommand = "a"\n',
-  );
+  writeConfig('[mcp_servers.zeta]\ncommand = "z"\n[mcp_servers.alpha]\ncommand = "a"\n');
   expect(checkWorktreeCodexMcpConfig(tmp)).toMatchObject({
     reason: expect.stringContaining("alpha, zeta"),
   });

@@ -77,6 +77,14 @@ The factory separates its configuration, generated integration, and custom code:
 - Prompts are typed functions beside the code that uses them. Pass a prompt
   override to a block; keep shared factory defaults in a custom block.
 
+Start with the bound blocks in `jigs.ts`: `agent` runs a coding agent, `ask`
+makes a plain model call, and `haltForHuman` asks for help and waits for a reply.
+Their JSDoc explains when to use them. The durable wrappers use
+explicit parameter names and the library's named types; their implementation
+names match, so `steps.openPullRequest` does the work for `openPullRequest`.
+Wrappers pass run metadata to jigs, which handles run-specific details such as
+dashboard links. Call `removeMergedRunWorktrees` only after a successful merge.
+
 Both workflow and step function paths and names contribute to durable IDs.
 Renames are supported breaking changes: finish or cancel affected active runs
 before deploying them. Ordinary library version bumps do not change these IDs.
@@ -297,6 +305,10 @@ pnpm check      # lint + typecheck + test + build
 pnpm e2e        # jigs init into a temp dir, install from packed tarballs, build twice, diff ids
                 # (with WORKFLOW_POSTGRES_URL set: boot the service and stop it too)
 ```
+
+Biome formats code with a line width of 100 characters. Keep the generated
+`jigs.ts` template formatted the same way so formatting a factory does not make
+its integration appear stale.
 
 A merge to `main` with a releasable title opens or updates the release PR;
 its merge tags the release and publishes to GitHub Packages. The

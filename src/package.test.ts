@@ -15,9 +15,7 @@ import tsdownConfig from "../tsdown.config.ts";
 
 const packageDir = fileURLToPath(new URL("..", import.meta.url));
 const templatesDir = path.join(packageDir, "templates");
-const pkg = JSON.parse(
-  await readFile(path.join(packageDir, "package.json"), "utf8"),
-);
+const pkg = JSON.parse(await readFile(path.join(packageDir, "package.json"), "utf8"));
 const exportTargets: string[] = Object.values(pkg.exports).flatMap((entry) =>
   typeof entry === "string" ? [entry] : Object.values(entry as object),
 );
@@ -46,9 +44,7 @@ async function sourceFiles(dir: string): Promise<string[]> {
   });
   const files = await Promise.all(
     entries.map((entry) =>
-      entry.isDirectory()
-        ? sourceFiles(`${dir}/${entry.name}`)
-        : [`${dir}/${entry.name}`],
+      entry.isDirectory() ? sourceFiles(`${dir}/${entry.name}`) : [`${dir}/${entry.name}`],
     ),
   );
   return files.flat().filter((file) => file.endsWith(".ts"));
@@ -117,12 +113,7 @@ test("every tsdown entry is reachable through the exports map or the bin", () =>
 // dependency, pnpm resolves a range to the newest version, so a factory that
 // pins an older one gets a second copy — and a second copy is silent: step
 // ids nothing registers, schema types that do not unify.
-const FACTORY_SUPPLIED = [
-  "@workflow/web",
-  "@workflow/world-postgres",
-  "workflow",
-  "zod",
-];
+const FACTORY_SUPPLIED = ["@workflow/web", "@workflow/world-postgres", "workflow", "zod"];
 
 test("the runtime a factory supplies is a peer here, and still a devDependency", () => {
   // They stay in devDependencies so this repo's own tests and build still
@@ -130,9 +121,7 @@ test("the runtime a factory supplies is a peer here, and still a devDependency",
   // an install resolves it from this package's own node_modules, so the
   // factory never has to list it.
   const peers: Record<string, string> = pkg.peerDependencies;
-  expect(Object.keys(peers).filter((name) => !optionalPeers.has(name))).toEqual(
-    FACTORY_SUPPLIED,
-  );
+  expect(Object.keys(peers).filter((name) => !optionalPeers.has(name))).toEqual(FACTORY_SUPPLIED);
   for (const [name, range] of Object.entries(peers)) {
     expect(pkg.devDependencies[name], name).toBe(range);
     expect(pkg.dependencies[name], name).toBeUndefined();
@@ -145,17 +134,16 @@ test("the factory template pins the same versions this package peers on", async 
   // gives the factory two copies of the SDK and a manifest full of step ids
   // nothing registers.
   const template = JSON.parse(
-    (
-      await readFile(path.join(templatesDir, "package.json.tmpl"), "utf8")
-    ).replaceAll("{{JIGS_VERSION}}", pkg.version),
+    (await readFile(path.join(templatesDir, "package.json.tmpl"), "utf8")).replaceAll(
+      "{{JIGS_VERSION}}",
+      pkg.version,
+    ),
   );
   for (const [name, range] of Object.entries<string>(pkg.peerDependencies)) {
     // nitro is the one optional peer: it is only here so the emitted
     // declarations reference its types instead of inlining them, and a factory
     // holds it as a devDependency, the way this package does.
-    const section = optionalPeers.has(name)
-      ? "devDependencies"
-      : "dependencies";
+    const section = optionalPeers.has(name) ? "devDependencies" : "dependencies";
     expect(template[section][name], name).toBe(range);
   }
   for (const name of ["croner", "hono", "postgres"]) {
@@ -193,7 +181,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "codex",
     "commitWork",
     "commitWorkPrompt",
-    "describePr",
+    "describePullRequest",
     "finished",
     "fixCi",
     "fixCiFreshPrompt",
@@ -211,7 +199,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "parseOutput",
     "postReviewAnswers",
     "PR_TOKEN_PREFIX",
-    "prDescription",
+    "pullRequestDescription",
     "prToken",
     "pullRequestGate",
     "rebuildContextPrompt",
@@ -231,31 +219,30 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "unwrapAgentStep",
   ],
   "steps/index.ts": [
-    "branchState",
+    "readBranchState",
     "checkForHumanReply",
-    "commentOnPr",
+    "commentOnPullRequest",
     "createComment",
     "createIssueInProject",
     "dashboardRunUrl",
-    "fetchPrState",
-    "fetchSnapshot",
+    "fetchPullRequestState",
+    "fetchTicketSnapshot",
     "findIssueInProject",
-    "openPr",
+    "openPullRequest",
     "postNeedsHumanComment",
     "postTicketNote",
-    "provisionRunWorktree",
+    "provisionWorktree",
     "pushBranch",
-    "readDiff",
+    "readWorktreeDiff",
     "realDeps",
     "renderNeedsHumanComment",
     "renderProceedingNote",
-    "replyInThread",
-    "resolveRepo",
+    "replyToPullRequestReviewThread",
+    "resolveRepository",
     "runAgent",
-    "runAsk",
-    "squashMerge",
-    "teardownMergedRun",
-    "teardownRunWorktrees",
+    "askModel",
+    "squashMergePullRequest",
+    "removeMergedRunWorktrees",
   ],
 };
 

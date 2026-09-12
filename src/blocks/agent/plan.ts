@@ -38,15 +38,11 @@ export type AskWire = Omit<AskStepConfig, "output"> & {
   outputSchema?: WireJsonSchema;
 };
 
-function toWireSchema(
-  output: z.ZodType | undefined,
-): WireJsonSchema | undefined {
+function toWireSchema(output: z.ZodType | undefined): WireJsonSchema | undefined {
   if (output === undefined) return undefined;
   // The Claude CLI rejects zod's $schema meta-declaration outright ("no
   // schema with key or ref"); neither harness needs it.
-  const { $schema: _dropped, ...schema } = z.toJSONSchema(
-    output,
-  ) as WireJsonSchema;
+  const { $schema: _dropped, ...schema } = z.toJSONSchema(output) as WireJsonSchema;
   return schema;
 }
 
@@ -72,9 +68,6 @@ export function buildAskWire<T>(config: AskStepConfig<T>): AskWire {
 // The executor asks the harness for schema-conformant output; the real
 // validation is this workflow-side zod parse of the recorded raw output —
 // deterministic on replay, and where the result gets its `T`.
-export function parseOutput<T>(
-  schema: z.ZodType<T> | undefined,
-  raw: unknown,
-): T {
+export function parseOutput<T>(schema: z.ZodType<T> | undefined, raw: unknown): T {
   return schema === undefined ? (undefined as T) : schema.parse(raw);
 }

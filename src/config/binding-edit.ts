@@ -23,10 +23,9 @@ function namedProperty(
 ): PropertyAssignment | undefined {
   return object
     .getProperties()
-    .find(
-      (property) =>
-        Node.isPropertyAssignment(property) && propertyName(property) === name,
-    ) as PropertyAssignment | undefined;
+    .find((property) => Node.isPropertyAssignment(property) && propertyName(property) === name) as
+    | PropertyAssignment
+    | undefined;
 }
 
 // Editing deliberately supports the scaffold's direct object shape. Runtime
@@ -45,10 +44,7 @@ function editableBindings(text: string, manualEdit?: string) {
   };
   const diagnostics = source
     .getPreEmitDiagnostics()
-    .filter(
-      (d) =>
-        d.getCategory() === ts.DiagnosticCategory.Error && d.getCode() < 2000,
-    );
+    .filter((d) => d.getCategory() === ts.DiagnosticCategory.Error && d.getCode() < 2000);
   if (diagnostics.length) fail("the file contains invalid TypeScript syntax");
   const exports = source.getExportAssignments();
   if (exports.length !== 1) fail("expected one default export");
@@ -94,9 +90,7 @@ function editableBindings(text: string, manualEdit?: string) {
   for (const property of object.getProperties()) {
     const initializer = (property as PropertyAssignment).getInitializer();
     if (!initializer || !Node.isObjectLiteralExpression(initializer))
-      fail(
-        `binding ${(property as PropertyAssignment).getName()} is not a direct object`,
-      );
+      fail(`binding ${(property as PropertyAssignment).getName()} is not a direct object`);
     validate(
       initializer as ObjectLiteralExpression,
       `binding ${(property as PropertyAssignment).getName()}`,
@@ -105,30 +99,20 @@ function editableBindings(text: string, manualEdit?: string) {
   return { source, object, fail };
 }
 
-export function upsertBinding(
-  text: string,
-  name: string,
-  remote: string,
-): string {
+export function upsertBinding(text: string, name: string, remote: string): string {
   const { source, object, fail } = editableBindings(
     text,
     `Binding to add: ${JSON.stringify(name)}: { remote: ${JSON.stringify(remote)} }`,
   );
-  const property = namedProperty(object, name) as
-    | PropertyAssignment
-    | undefined;
+  const property = namedProperty(object, name) as PropertyAssignment | undefined;
   if (!property) {
     object.addPropertyAssignment({
       name: JSON.stringify(name),
       initializer: `{ remote: ${JSON.stringify(remote)} }`,
     });
   } else {
-    const binding = property.getInitializerIfKindOrThrow(
-      SyntaxKind.ObjectLiteralExpression,
-    );
-    const remoteProperty = namedProperty(binding, "remote") as
-      | PropertyAssignment
-      | undefined;
+    const binding = property.getInitializerIfKindOrThrow(SyntaxKind.ObjectLiteralExpression);
+    const remoteProperty = namedProperty(binding, "remote") as PropertyAssignment | undefined;
     if (remoteProperty) {
       const value = remoteProperty.getInitializer();
       if (!value || !Node.isStringLiteral(value))

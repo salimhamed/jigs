@@ -52,9 +52,7 @@ export async function resolveRunRef(ref: string): Promise<RunRef> {
   // keyed on the issue's UUID, so an identifier first costs the same Linear
   // lookup the trigger already makes to start a run — upper-cased, because
   // Linear keys identifiers by upper-case team key.
-  const issueId = TICKET_IDENTIFIER.test(ref)
-    ? await linearIssueId(ref.toUpperCase())
-    : ref;
+  const issueId = TICKET_IDENTIFIER.test(ref) ? await linearIssueId(ref.toUpperCase()) : ref;
   if (issueId === null) return { kind: "unknown" };
   const owner = await worldHookRunId(ticketToken(issueId));
   return owner === null ? { kind: "unknown" } : { kind: "found", runId: owner };
@@ -81,8 +79,7 @@ export interface WorldRun {
 const SCHEDULE_TRIGGER_PREFIX = "schedule:";
 const MANUAL_TRIGGER = "manual";
 
-export const scheduleTriggerLabel = (name: string): string =>
-  `${SCHEDULE_TRIGGER_PREFIX}${name}`;
+export const scheduleTriggerLabel = (name: string): string => `${SCHEDULE_TRIGGER_PREFIX}${name}`;
 
 /** What a scheduled fire records as its triggerId: the schedule that fired
  *  it and the tick it fired on. */
@@ -113,8 +110,7 @@ export function triggerLabel(triggerId: string | undefined): string {
 export function parkReason(token: string): string | null {
   if (token.startsWith(TICKET_TOKEN_PREFIX)) return null;
   if (token.startsWith(PR_TOKEN_PREFIX)) return "awaiting pull request review";
-  if (token.startsWith(NEEDS_HUMAN_TOKEN_PREFIX))
-    return "needs a human on the ticket";
+  if (token.startsWith(NEEDS_HUMAN_TOKEN_PREFIX)) return "needs a human on the ticket";
   return "awaiting an external event";
 }
 
@@ -165,10 +161,7 @@ export interface RunFacts {
  * Suspended wins over stalled: a parked run is waiting on the world, not on a
  * job nobody is going to deliver.
  */
-export async function describeRun(
-  runId: string,
-  facts: RunFacts = {},
-): Promise<RunDescription> {
+export async function describeRun(runId: string, facts: RunFacts = {}): Promise<RunDescription> {
   const run = facts.run ?? (await worldRun(runId));
   const stored: RunDescription = {
     runId,
@@ -181,12 +174,10 @@ export async function describeRun(
   // does not restate its status, so neither is worth reading.
   if (TERMINAL_RUN_STATUSES.has(run.status)) return stored;
 
-  const suspensions = (facts.tokens ?? (await worldRunTokens(runId))).flatMap(
-    (token) => {
-      const reason = parkReason(token);
-      return reason === null ? [] : [{ token, reason }];
-    },
-  );
+  const suspensions = (facts.tokens ?? (await worldRunTokens(runId))).flatMap((token) => {
+    const reason = parkReason(token);
+    return reason === null ? [] : [{ token, reason }];
+  });
   if (suspensions.length > 0)
     return { ...stored, status: "suspended", suspended: true, suspensions };
 
@@ -198,11 +189,7 @@ export async function describeRun(
 }
 
 export async function listRuns(factory: Factory): Promise<RunRow[]> {
-  const [runs, hooks, stalled] = await Promise.all([
-    worldRuns(),
-    worldHooks(),
-    stalledRuns(),
-  ]);
+  const [runs, hooks, stalled] = await Promise.all([worldRuns(), worldHooks(), stalledRuns()]);
   const tokensByRun = Map.groupBy(hooks, (hook) => hook.runId);
   // The compiler stamps each workflow with the workflowId the world stores as
   // workflowName; untransformed (unit tests, plain imports) there is nothing to
@@ -223,8 +210,7 @@ export async function listRuns(factory: Factory): Promise<RunRow[]> {
       });
       return {
         runId: run.runId,
-        workflow:
-          workflowByWorkflowId.get(run.workflowName) ?? run.workflowName,
+        workflow: workflowByWorkflowId.get(run.workflowName) ?? run.workflowName,
         status: described.status,
         trigger: described.trigger,
         createdAt: run.createdAt.toISOString(),

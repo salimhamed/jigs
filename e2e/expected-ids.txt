@@ -16,10 +16,10 @@ step//./jigs//provisionWorktree
 step//./jigs//pushBranch
 step//./jigs//readBranchState
 step//./jigs//readWorktreeDiff
-step//./jigs//replyInThread
+step//./jigs//removeMergedRunWorktrees
+step//./jigs//replyToPullRequestReviewThread
 step//./jigs//resolveRepository
 step//./jigs//runAgent
-step//./jigs//squashMerge
-step//./jigs//teardownRunWorktrees
+step//./jigs//squashMergePullRequest
 step//workflow@4.8.4//fetch
 workflow//./workflows/ship//shipWorkflow

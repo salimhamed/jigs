@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 import type { ReviewThread } from "../../providers/github.ts";
-import type { readDiff } from "../../steps/pull-request/branch.ts";
+import type { readWorktreeDiff } from "../../steps/pull-request/branch.ts";
 import type { HarnessConfig } from "../agent/harness-config.ts";
 import {
   type RebuildContextPrompt,
@@ -19,10 +19,7 @@ import {
 } from "../agent/resume-or-rebuild.ts";
 import type { Handoff } from "../ticket/review.ts";
 import { renderSnapshot } from "../ticket/snapshot.ts";
-import {
-  type AnswerReviewPrompt,
-  answerReviewPrompt,
-} from "./answer-review.prompt.ts";
+import { type AnswerReviewPrompt, answerReviewPrompt } from "./answer-review.prompt.ts";
 
 // threadId null means the pull request conversation: a review body has no
 // thread root to reply into.
@@ -39,7 +36,7 @@ export type ThreadAnswers = z.output<typeof threadAnswers>;
 
 export interface AnswerReviewOptions {
   agent: AgentFn;
-  readDiff: typeof readDiff;
+  readWorktreeDiff: typeof readWorktreeDiff;
   harness: HarnessConfig;
   cwd: string;
   session?: AgentSession;
@@ -56,16 +53,11 @@ export interface AnswerReviewOptions {
 
 function renderThreads(threads: ReviewThread[], reviewBody?: string): string {
   const blocks = threads.map((thread) => {
-    const where =
-      thread.line === null
-        ? thread.path
-        : `${thread.path}:${String(thread.line)}`;
+    const where = thread.line === null ? thread.path : `${thread.path}:${String(thread.line)}`;
     return [
       `### Thread ${thread.rootId} — ${where}`,
       "",
-      ...thread.comments.map(
-        (comment) => `**${comment.user}:** ${comment.body}`,
-      ),
+      ...thread.comments.map((comment) => `**${comment.user}:** ${comment.body}`),
     ].join("\n");
   });
   if (reviewBody !== undefined && reviewBody !== "") {
@@ -82,10 +74,11 @@ function renderThreads(threads: ReviewThread[], reviewBody?: string): string {
   return blocks.length === 0 ? "_(no threads)_" : blocks.join("\n\n");
 }
 
+/** Ask the builder to address review feedback and explain its changes. */
 export async function answerReview(
   options: AnswerReviewOptions,
 ): Promise<ResumeOrRebuildResult<ThreadAnswers>> {
-  const { agent, readDiff: read } = options;
+  const { agent, readWorktreeDiff: read } = options;
   const threads = renderThreads(options.threads, options.reviewBody);
   const renderResume = options.resumePrompt ?? answerReviewPrompt;
   const renderFresh = options.freshPrompt ?? rebuildContextPrompt;

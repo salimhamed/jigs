@@ -1,25 +1,13 @@
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { provisionRunWorktree, teardownRunWorktrees } from "./index.ts";
+import { provisionWorktree } from "./index.ts";
 import { bindingDir, worktreePath } from "./layout.ts";
 import type { OwnerState } from "./owner.ts";
 import { PostCreateFailedError } from "./provision.ts";
 import type { WorktreeRow } from "./registry.ts";
 import { WorktreeOwnedError } from "./reuse.ts";
-import {
-  git,
-  makeClonedBinding,
-  makeFakeSql,
-  makeTmpDir,
-  removeTmpDir,
-} from "./test-fixtures.ts";
+import { git, makeClonedBinding, makeFakeSql, makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
 // A real factory repo, a real clone of a real origin, and real cuts on disk:
 // the registry is the only stand-in, so what these tests are about is the
@@ -70,10 +58,7 @@ function writeBinding(provisioning: Record<string, unknown> = {}): void {
 const registry = () => ({ sql: makeFakeSql(store) });
 
 // The owner read is the World, the one external system this path consults.
-const ownedBy = (
-  runId: string,
-  owner: OwnerState = { terminal: true, status: "completed" },
-) => ({
+const ownedBy = (runId: string, owner: OwnerState = { terminal: true, status: "completed" }) => ({
   sql: makeFakeSql(store),
   readOwner: async (asked: string) => {
     expect(asked).toBe(runId);
@@ -83,15 +68,15 @@ const ownedBy = (
 
 // The tree a previous run left behind, cut the way the request path cuts it.
 const existingWorktree = (ownerRunId: string) =>
-  provisionRunWorktree(request, ownerRunId, registry());
+  provisionWorktree(request, { workflowRunId: ownerRunId }, registry());
 
 const originMain = () => git(repoDir, "rev-parse", "refs/remotes/origin/main");
 
 test("a worktree registered to a live run is refused, naming the owner", async () => {
   await existingWorktree("run_owner");
-  const failure = await provisionRunWorktree(
+  const failure = await provisionWorktree(
     request,
-    "run_new",
+    { workflowRunId: "run_new" },
     ownedBy("run_owner", { terminal: false, status: "running" }),
   ).then(
     () => null,
@@ -100,9 +85,7 @@ test("a worktree registered to a live run is refused, naming the owner", async (
   expect(failure).toBeInstanceOf(WorktreeOwnedError);
   expect((failure as WorktreeOwnedError).owningRunId).toBe("run_owner");
   // The escape hatch the message names has to keep existing.
-  expect((failure as WorktreeOwnedError).message).toContain(
-    "jigs cancel run_owner",
-  );
+  expect((failure as WorktreeOwnedError).message).toContain("jigs cancel run_owner");
   expect(store.get(target)?.ownerRunId).toBe("run_owner");
 });
 
@@ -113,9 +96,9 @@ test("a live foreign owner is refused before disk is ever inspected", async () =
   git(repoDir, "remote", "set-url", "origin", path.join(tmp, "nonexistent"));
 
   await expect(
-    provisionRunWorktree(
+    provisionWorktree(
       request,
-      "run_new",
+      { workflowRunId: "run_new" },
       ownedBy("run_owner", { terminal: false, status: "running" }),
     ),
   ).rejects.toThrow(WorktreeOwnedError);
@@ -131,11 +114,7 @@ test("a terminal owner's clean worktree is reused and re-owned", async () => {
   const head = git(target, "rev-parse", "HEAD");
   expect(head).not.toBe(originMain());
 
-  const facts = await provisionRunWorktree(
-    request,
-    "run_new",
-    ownedBy("run_done"),
-  );
+  const facts = await provisionWorktree(request, { workflowRunId: "run_new" }, ownedBy("run_done"));
 
   expect(facts).toMatchObject({ path: target, baseSha: originMain() });
   // Reused, not re-cut: the work the previous run left is still checked out.
@@ -155,11 +134,7 @@ test("a registry row whose directory is gone is cut afresh and re-owned", async 
     repoDir,
   });
 
-  const facts = await provisionRunWorktree(
-    request,
-    "run_new",
-    ownedBy("run_done"),
-  );
+  const facts = await provisionWorktree(request, { workflowRunId: "run_new" }, ownedBy("run_done"));
 
   expect(facts).toEqual({
     path: target,
@@ -177,22 +152,24 @@ test("the owning run re-enters its own dirty worktree without asking whether it 
   await existingWorktree("run_owner");
   writeFileSync(path.join(target, "wip.txt"), "half-finished\n");
 
-  const facts = await provisionRunWorktree(request, "run_owner", {
-    sql: makeFakeSql(store),
-    readOwner: () => {
-      throw new Error("the owner's own liveness is beside the point");
+  const facts = await provisionWorktree(
+    request,
+    { workflowRunId: "run_owner" },
+    {
+      sql: makeFakeSql(store),
+      readOwner: () => {
+        throw new Error("the owner's own liveness is beside the point");
+      },
     },
-  });
+  );
 
   expect(facts.baseSha).toBe(originMain());
-  expect(readFileSync(path.join(target, "wip.txt"), "utf8")).toBe(
-    "half-finished\n",
-  );
+  expect(readFileSync(path.join(target, "wip.txt"), "utf8")).toBe("half-finished\n");
   expect(store.get(target)?.ownerRunId).toBe("run_owner");
 });
 
 test("no worktree on disk cuts one from the default branch and registers the run", async () => {
-  const facts = await provisionRunWorktree(request, "run_new", registry());
+  const facts = await provisionWorktree(request, { workflowRunId: "run_new" }, registry());
 
   expect(facts).toEqual({
     path: target,
@@ -215,18 +192,16 @@ test("the binding's own provisioning is what the worktree is provisioned with", 
   writeFileSync(path.join(bindingFiles, ".env"), "TOKEN=secret\n");
   writeBinding({ copy: [".env"], postCreate: ["echo ran > provisioned"] });
 
-  await provisionRunWorktree(request, "run_a", registry());
+  await provisionWorktree(request, { workflowRunId: "run_a" }, registry());
 
-  expect(readFileSync(path.join(target, ".env"), "utf8")).toBe(
-    "TOKEN=secret\n",
-  );
+  expect(readFileSync(path.join(target, ".env"), "utf8")).toBe("TOKEN=secret\n");
   expect(existsSync(path.join(target, "provisioned"))).toBe(true);
 });
 
 test("a failing postCreate leaves the row marked provision-failed and rethrows", async () => {
   writeBinding({ postCreate: ["exit 3"] });
 
-  const failure = await provisionRunWorktree(request, "run_a", registry()).then(
+  const failure = await provisionWorktree(request, { workflowRunId: "run_a" }, registry()).then(
     () => null,
     (err: unknown) => err,
   );
@@ -237,7 +212,7 @@ test("a failing postCreate leaves the row marked provision-failed and rethrows",
 
 test("a binding with no clone is refused, naming the restart that makes one", async () => {
   rmSync(repoDir, { recursive: true, force: true });
-  const failure = await provisionRunWorktree(request, "run_a", registry()).then(
+  const failure = await provisionWorktree(request, { workflowRunId: "run_a" }, registry()).then(
     () => null,
     (err: unknown) => err,
   );
@@ -247,14 +222,6 @@ test("a binding with no clone is refused, naming the restart that makes one", as
 });
 
 test("a provisioned worktree logs its binding, branch, and path", async () => {
-  await provisionRunWorktree(request, "run_a", registry());
-  expect(log).toContain(
-    `[worktree] provisioned binding=api branch=feat path=${target}`,
-  );
-});
-
-test("the teardownRunWorktrees alias refuses an unmerged outcome instead of deleting branches", () => {
-  expect(() => teardownRunWorktrees("run_1", { merged: false })).toThrow(
-    /only tears down merged runs/,
-  );
+  await provisionWorktree(request, { workflowRunId: "run_a" }, registry());
+  expect(log).toContain(`[worktree] provisioned binding=api branch=feat path=${target}`);
 });

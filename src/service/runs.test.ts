@@ -62,10 +62,7 @@ function world(fixture: Fixture = {}): void {
         return hook;
       },
       list: async ({ runId }: { runId?: string }) => ({
-        data:
-          runId === undefined
-            ? hooks
-            : hooks.filter((hook) => hook.runId === runId),
+        data: runId === undefined ? hooks : hooks.filter((hook) => hook.runId === runId),
       }),
     },
   } as unknown as Parameters<typeof setWorld>[0]);
@@ -194,14 +191,10 @@ test("a ticket claim is not a park, and every other hook explains itself", () =>
   expect(parkReason(prToken({ owner: "acme", repo: "api", number: 41 }))).toBe(
     "awaiting pull request review",
   );
-  expect(parkReason(needsHumanToken("issue-1", "comment-1"))).toBe(
-    "needs a human on the ticket",
-  );
+  expect(parkReason(needsHumanToken("issue-1", "comment-1"))).toBe("needs a human on the ticket");
   // A workflow of its own that parks on createHook({ token }) is parked too,
   // so parkedness can never depend on jigs recognizing the token.
-  expect(parkReason(`demo:${crypto.randomUUID()}`)).toBe(
-    "awaiting an external event",
-  );
+  expect(parkReason(`demo:${crypto.randomUUID()}`)).toBe("awaiting an external event");
 });
 
 // Compiled workflows carry the workflowId the world records as workflowName;
@@ -378,10 +371,7 @@ test("a run launched by hand reads as a manual trigger", async () => {
 });
 
 test("a scheduled run names its schedule, without the tick it fired on", async () => {
-  const triggerId = scheduleTriggerId(
-    "nightly-sweep",
-    new Date("2026-08-26T03:00:00.400Z"),
-  );
+  const triggerId = scheduleTriggerId("nightly-sweep", new Date("2026-08-26T03:00:00.400Z"));
   expect(triggerId).toBe("schedule:nightly-sweep:2026-08-26T03:00:00Z");
   world({ runs: [worldRun({ input: storedArgs(triggerId) })] });
   const rows = await listRuns(factory);

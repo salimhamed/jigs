@@ -28,8 +28,7 @@ function wtPath(name: string): string {
   return path.join(worktreesDir, name);
 }
 
-const localBranches = () =>
-  git(repoDir, "for-each-ref", "--format=%(refname)", "refs/heads");
+const localBranches = () => git(repoDir, "for-each-ref", "--format=%(refname)", "refs/heads");
 
 test("existing local branch is checked out as-is and never reset", async () => {
   const shaA = git(repoDir, "rev-parse", "refs/remotes/origin/main");
@@ -55,9 +54,7 @@ test("remote-only branch is tracked", async () => {
     branch: "feat",
   });
   expect(git(wtPath("feat"), "rev-parse", "HEAD")).toBe(remoteSha);
-  expect(git(repoDir, "rev-parse", "--abbrev-ref", "feat@{upstream}")).toBe(
-    "origin/feat",
-  );
+  expect(git(repoDir, "rev-parse", "--abbrev-ref", "feat@{upstream}")).toBe("origin/feat");
 });
 
 test("unknown branch forks from origin default, not a stale local one", async () => {
@@ -87,9 +84,7 @@ test("a branch the remote deleted on merge forks fresh, not off its stale tracki
     "old.txt": "pre-squash",
   });
   git(repoDir, "fetch", "-q", "origin");
-  expect(git(repoDir, "rev-parse", "refs/remotes/origin/agent/merged")).toBe(
-    preSquash,
-  );
+  expect(git(repoDir, "rev-parse", "refs/remotes/origin/agent/merged")).toBe(preSquash);
   git(remoteDir, "update-ref", "-d", "refs/heads/agent/merged");
 
   await createWorktree({
@@ -100,9 +95,7 @@ test("a branch the remote deleted on merge forks fresh, not off its stale tracki
   expect(git(wtPath("merged"), "rev-parse", "HEAD")).toBe(
     git(repoDir, "rev-parse", "refs/remotes/origin/main"),
   );
-  expect(() =>
-    git(repoDir, "rev-parse", "refs/remotes/origin/agent/merged"),
-  ).toThrow();
+  expect(() => git(repoDir, "rev-parse", "refs/remotes/origin/agent/merged")).toThrow();
 });
 
 test("the deleted-branch case survives an operator locale that translates git", async () => {
@@ -155,9 +148,7 @@ test("git operations survive the orchestrator's cwd being a removed worktree", a
       worktreePath: wtPath("two"),
       branch: "agent/two",
     });
-    expect(git(wtPath("two"), "rev-parse", "--abbrev-ref", "HEAD")).toBe(
-      "agent/two",
-    );
+    expect(git(wtPath("two"), "rev-parse", "--abbrev-ref", "HEAD")).toBe("agent/two");
   } finally {
     process.chdir(originalCwd);
   }

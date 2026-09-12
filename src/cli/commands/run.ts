@@ -25,10 +25,7 @@ export function parseInputs(pairs: string[]): Record<string, unknown> {
   for (const pair of pairs) {
     const split = pair.indexOf("=");
     if (split <= 0) {
-      throw new JigsError(
-        "--input must be key=value",
-        "example: --input ticket=AGE-123",
-      );
+      throw new JigsError("--input must be key=value", "example: --input ticket=AGE-123");
     }
     const key = pair.slice(0, split);
     const raw = pair.slice(split + 1);
@@ -156,9 +153,7 @@ export async function launchRun(
     const issues = schemaIssues(raw);
     if (issues !== null) {
       throw new JigsError(
-        issues
-          .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
-          .join("\n"),
+        issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`).join("\n"),
         SCHEMA_HINT,
       );
     }

@@ -108,10 +108,7 @@ export async function applyTeardown(
     // same ticket branch would fork from it — the pre-squash lineage, whose
     // commits are already merged. Tolerated: a push that did delete took the
     // ref with it.
-    await tryGit(
-      ["update-ref", "-d", `refs/remotes/origin/${branch}`],
-      repoDir,
-    );
+    await tryGit(["update-ref", "-d", `refs/remotes/origin/${branch}`], repoDir);
   }
   if (plan.removeWorktree) {
     await tryGit(["worktree", "prune"], repoDir);
@@ -131,10 +128,7 @@ export async function applyTeardown(
 // still executing its own body. The operator's `jigs sweep` is the net for
 // runs that never reach here — nothing reclaims a worktree unattended.
 
-export async function teardownMergedRun(
-  runId: string,
-  sql: Sql,
-): Promise<string[]> {
+export async function teardownMergedRun(runId: string, sql: Sql): Promise<string[]> {
   const rows = await listWorktreesForRun(sql, runId);
   const removed: string[] = [];
   for (const row of rows) {

@@ -1,13 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import {
-  closeSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeSync,
-} from "node:fs";
+import { closeSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeSync } from "node:fs";
 import path from "node:path";
 import { jigsDataDir } from "../../config/paths.ts";
 
@@ -40,10 +32,7 @@ function locksDir(): string {
 export function lockPathFor(target: string, kind: string): string {
   const resolved = path.resolve(target);
   const hash = createHash("sha256").update(resolved).digest("hex").slice(0, 12);
-  return path.join(
-    locksDir(),
-    `${kind}-${path.basename(resolved)}-${hash}.lock`,
-  );
+  return path.join(locksDir(), `${kind}-${path.basename(resolved)}-${hash}.lock`);
 }
 
 // The token is what makes the release safe: a holder that overran staleMs has
@@ -60,8 +49,7 @@ function tryAcquire(lockPath: string): string | null {
   }
 }
 
-const sleep = (ms: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export async function withFileLock<T>(
   lockPath: string,

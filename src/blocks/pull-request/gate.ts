@@ -6,12 +6,7 @@
 // gave its replies), so they replay with it.
 
 import { createHook } from "workflow";
-import type {
-  CheckRun,
-  PrRef,
-  PrSnapshot,
-  ReviewThread,
-} from "../../providers/github.ts";
+import type { CheckRun, PrRef, PrSnapshot, ReviewThread } from "../../providers/github.ts";
 import { ClaimConflictError } from "../ticket/claim.ts";
 
 // The gate's hook token names the pull request, never the run: owning it is
@@ -36,9 +31,7 @@ type GithubPayload = {
 function prNumber(payload: GithubPayload): number | null {
   const candidates = [
     payload.pull_request?.number,
-    payload.issue?.pull_request === undefined
-      ? undefined
-      : payload.issue?.number,
+    payload.issue?.pull_request === undefined ? undefined : payload.issue?.number,
     payload.check_suite?.pull_requests?.[0]?.number,
     payload.check_run?.pull_requests?.[0]?.number,
   ];
@@ -56,11 +49,7 @@ export function tokenFromGithubPayload(payload: unknown): string | null {
   const repo = repository?.name;
   const owner = repository?.owner?.login;
   const number = prNumber(payload as GithubPayload);
-  if (
-    number === null ||
-    typeof repo !== "string" ||
-    typeof owner !== "string"
-  ) {
+  if (number === null || typeof repo !== "string" || typeof owner !== "string") {
     return null;
   }
   return prToken({ owner, repo, number });
@@ -116,10 +105,7 @@ export interface GateAck {
 }
 
 function lastHumanReviewer(snapshot: PrSnapshot): string | null {
-  return (
-    snapshot.reviews.findLast((review) => review.user !== snapshot.viewer)
-      ?.user ?? null
-  );
+  return snapshot.reviews.findLast((review) => review.user !== snapshot.viewer)?.user ?? null;
 }
 
 export function classifyPrState(
@@ -183,9 +169,7 @@ export function classifyPrState(
     wakes.push({
       kind: "review-comments",
       threads,
-      ...(requested?.kind === "changes-requested"
-        ? { body: requested.body }
-        : {}),
+      ...(requested?.kind === "changes-requested" ? { body: requested.body } : {}),
     });
   }
 
@@ -224,15 +208,13 @@ export function classifyPrState(
   };
 }
 
-// Declared here rather than written as `typeof fetchPrState`: declaring the
+// Declared here rather than written as `typeof fetchPullRequestState`: declaring the
 // contract block-side typechecks the step against the block and keeps this
 // side free of any value import into steps/.
 export type FetchPrState = (pr: PrRef) => Promise<PrSnapshot>;
 
 /** {@link pullRequestGate} with its step already bound. */
-export type GateFn = (
-  pr: PrRef,
-) => AsyncGenerator<GateWake, void, GateAck | undefined>;
+export type GateFn = (pr: PrRef) => AsyncGenerator<GateWake, void, GateAck | undefined>;
 
 // One hook per PR, held across the whole review until the PR closes — the
 // token is never released mid-review. The satisfier re-check lives inside the
@@ -272,9 +254,7 @@ export async function* pullRequestGate(
         if (ack !== undefined) {
           cursor = {
             ...cursor,
-            selfCommentIds: [
-              ...new Set([...cursor.selfCommentIds, ...ack.selfCommentIds]),
-            ],
+            selfCommentIds: [...new Set([...cursor.selfCommentIds, ...ack.selfCommentIds])],
           };
         }
       }

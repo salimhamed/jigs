@@ -9,10 +9,7 @@ import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import type { TicketClaim } from "./claim.ts";
 import { type HaltForHumanFn, haltQuestion } from "./halt-for-human.ts";
 import { renderSnapshot, type TicketSnapshot } from "./snapshot.ts";
-import {
-  type TicketReviewPrompt,
-  ticketReviewPrompt,
-} from "./ticket-review.prompt.ts";
+import { type TicketReviewPrompt, ticketReviewPrompt } from "./ticket-review.prompt.ts";
 
 // strictObject so the harness's native structured output carries
 // additionalProperties:false and a malformed verdict throws at the
@@ -37,10 +34,7 @@ export type TicketNote = {
  * Declared here rather than written as `typeof postTicketNote` for the same
  * reason the halt's step contracts are: the block side owns the contract.
  */
-export type PostTicketNote = (
-  issueId: string,
-  note: TicketNote,
-) => Promise<void>;
+export type PostTicketNote = (issueId: string, note: TicketNote) => Promise<void>;
 
 /**
  * What a ticket review hands the builder: the brief plus the snapshot it
@@ -64,7 +58,7 @@ export interface ReviewTicketOptions {
   postNote: PostTicketNote;
   // Re-read between rounds: a human's reply lands on the ticket, not in the
   // verdict, so a round that does not re-snapshot reviews the same words again.
-  fetchSnapshot: (issueId: string) => Promise<TicketSnapshot>;
+  fetchTicketSnapshot: (issueId: string) => Promise<TicketSnapshot>;
   claim: TicketClaim;
   // The block never fetches the first one: the workflow body owns
   // per-activation snapshots and passes one in, which is what keeps every step
@@ -77,10 +71,8 @@ export interface ReviewTicketOptions {
   prompt?: TicketReviewPrompt;
 }
 
-export async function reviewTicket(
-  options: ReviewTicketOptions,
-): Promise<Handoff> {
-  const { agent, haltForHuman, fetchSnapshot, postNote } = options;
+export async function reviewTicket(options: ReviewTicketOptions): Promise<Handoff> {
+  const { agent, haltForHuman, fetchTicketSnapshot, postNote } = options;
   let snapshot = options.snapshot;
 
   for (;;) {
@@ -118,6 +110,6 @@ export async function reviewTicket(
       questions,
       onReply: "continue",
     });
-    snapshot = await fetchSnapshot(snapshot.id);
+    snapshot = await fetchTicketSnapshot(snapshot.id);
   }
 }

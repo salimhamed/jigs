@@ -7,11 +7,7 @@ import {
   managedCodexHomePath,
   removeManagedCodexHome,
 } from "./codex-home.ts";
-import {
-  makeTmpDir,
-  managedCodexHomeState,
-  removeTmpDir,
-} from "./test-fixtures.ts";
+import { makeTmpDir, managedCodexHomeState, removeTmpDir } from "./test-fixtures.ts";
 
 let tmp: string;
 let realAuthPath: string;
@@ -39,12 +35,7 @@ test("fresh ensure creates the curated config and the auth symlink", () => {
 
 test("re-ensure preserves sessions/ — the home is per-run durable state", () => {
   const home = ensureManagedCodexHome("run-1", opts);
-  const rollout = path.join(
-    home,
-    "sessions",
-    "2026-08-26",
-    "rollout-abc.jsonl",
-  );
+  const rollout = path.join(home, "sessions", "2026-08-26", "rollout-abc.jsonl");
   mkdirSync(path.dirname(rollout), { recursive: true });
   writeFileSync(rollout, "{}");
 
@@ -106,9 +97,7 @@ test("path convention honors XDG_DATA_HOME and baseDir", () => {
   const prev = process.env.XDG_DATA_HOME;
   process.env.XDG_DATA_HOME = "/xdg-data";
   try {
-    expect(managedCodexHomePath("run-1")).toBe(
-      "/xdg-data/jigs/codex-homes/run-1",
-    );
+    expect(managedCodexHomePath("run-1")).toBe("/xdg-data/jigs/codex-homes/run-1");
   } finally {
     if (prev === undefined) delete process.env.XDG_DATA_HOME;
     else process.env.XDG_DATA_HOME = prev;

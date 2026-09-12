@@ -50,10 +50,7 @@ function credentialCheck(spec: CredentialCheck): Check {
   };
 }
 
-export function coreChecks(
-  probes: CoreProbes,
-  env: NodeJS.ProcessEnv = process.env,
-): Check[] {
+export function coreChecks(probes: CoreProbes, env: NodeJS.ProcessEnv = process.env): Check[] {
   return [
     credentialCheck({
       id: "core.linear-api-key",

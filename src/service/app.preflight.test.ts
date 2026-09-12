@@ -1,14 +1,6 @@
 import { chmodSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  expect,
-  test,
-  vi,
-} from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { ensureBindingClone } from "../steps/worktree/clone.ts";
 import { bindingRepoDir } from "../steps/worktree/layout.ts";
@@ -224,7 +216,5 @@ test("doctor names an unreadable factory config instead of staying silent", asyn
   const body = (await (await app.request("/api/doctor")).json()) as {
     checks: Failure[];
   };
-  expect(body.checks.map((check) => check.id)).toContain(
-    "binding.factory-config",
-  );
+  expect(body.checks.map((check) => check.id)).toContain("binding.factory-config");
 });

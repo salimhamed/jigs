@@ -1,11 +1,5 @@
 import { createHash } from "node:crypto";
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { interpolate } from "../../blocks/interpolate.ts";
 import { JigsError } from "../../errors.ts";
@@ -43,10 +37,7 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   const created: string[] = [];
   const skipped: string[] = [];
   for (const relative of templateFiles(templates)) {
-    const destination = path.join(
-      root,
-      relative.slice(0, -TEMPLATE_SUFFIX.length),
-    );
+    const destination = path.join(root, relative.slice(0, -TEMPLATE_SUFFIX.length));
     if (existsSync(destination)) {
       skipped.push(path.relative(root, destination));
       continue;
@@ -72,18 +63,10 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   );
   deps.out("");
   deps.out("next, in this directory:");
-  deps.out(
-    "  cp .env.example .env    # then fill in LINEAR_API_KEY and GITHUB_TOKEN",
-  );
-  deps.out(
-    "  # the install reads @salimhamed/* from GitHub Packages — ~/.npmrc needs",
-  );
-  deps.out(
-    "  #   //npm.pkg.github.com/:_authToken=<a token with read:packages>",
-  );
-  deps.out(
-    "  jigs up                 # install, World, bootstrap, build, start, doctor",
-  );
+  deps.out("  cp .env.example .env    # then fill in LINEAR_API_KEY and GITHUB_TOKEN");
+  deps.out("  # the install reads @salimhamed/* from GitHub Packages — ~/.npmrc needs");
+  deps.out("  #   //npm.pkg.github.com/:_authToken=<a token with read:packages>");
+  deps.out("  jigs up                 # install, World, bootstrap, build, start, doctor");
   deps.out("  jigs bind <remote-url>  # then jigs service restart to clone it");
 
   return { created, skipped, ...ports };
@@ -127,8 +110,7 @@ function factoryName(factoryRoot: string): string {
 function templateFiles(dir: string, prefix = ""): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const relative = path.join(prefix, entry.name);
-    if (entry.isDirectory())
-      return templateFiles(path.join(dir, entry.name), relative);
+    if (entry.isDirectory()) return templateFiles(path.join(dir, entry.name), relative);
     return entry.name.endsWith(TEMPLATE_SUFFIX) ? [relative] : [];
   });
 }
@@ -137,8 +119,8 @@ function templateFiles(dir: string, prefix = ""): string[] {
 // the jigs that compiles a factory's workflows has to be the one its service
 // runs, and only one install can be both.
 function jigsVersion(): string {
-  const manifest = JSON.parse(
-    readFileSync(path.join(packageRoot(), "package.json"), "utf8"),
-  ) as { version: string };
+  const manifest = JSON.parse(readFileSync(path.join(packageRoot(), "package.json"), "utf8")) as {
+    version: string;
+  };
   return manifest.version;
 }

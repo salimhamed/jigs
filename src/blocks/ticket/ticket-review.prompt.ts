@@ -3,9 +3,7 @@ import { plainLanguage } from "./plain-language.prompt.ts";
 export type TicketReviewPromptInput = { ticket: string };
 export type TicketReviewPrompt = (input: TicketReviewPromptInput) => string;
 
-export const ticketReviewPrompt: TicketReviewPrompt = ({
-  ticket,
-}) => `# Ticket review
+export const ticketReviewPrompt: TicketReviewPrompt = ({ ticket }) => `# Ticket review
 
 You are reviewing a Linear ticket before a builder agent starts on it.
 Your job is to **restate, not re-decide**.

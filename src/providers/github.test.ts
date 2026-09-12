@@ -91,9 +91,7 @@ test("fetchPrSnapshot shapes the PR, its reviews, the head sha and the viewer", 
     "http://mock.test/github/user",
   ]);
   const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-  expect(new Headers(init.headers).get("authorization")).toBe(
-    "Bearer gh_test_token",
-  );
+  expect(new Headers(init.headers).get("authorization")).toBe("Bearer gh_test_token");
 });
 
 test("review comments group into threads by in_reply_to_id", async () => {
@@ -251,9 +249,7 @@ test("a green check run does not hide a red status, or the reverse", async () =>
         html_url: "http://ci.test/1",
       },
     ],
-    statuses: [
-      { context: "build", state: "failure", target_url: "http://cb.test/1" },
-    ],
+    statuses: [{ context: "build", state: "failure", target_url: "http://cb.test/1" }],
   });
   const statusRed = await fetchPrSnapshot(pr);
   expect(statusRed.ci).toBe("red");
@@ -270,9 +266,7 @@ test("a green check run does not hide a red status, or the reverse", async () =>
         html_url: "http://ci.test/1",
       },
     ],
-    statuses: [
-      { context: "build", state: "success", target_url: "http://cb.test/1" },
-    ],
+    statuses: [{ context: "build", state: "success", target_url: "http://cb.test/1" }],
   });
   expect((await fetchPrSnapshot(pr)).failingChecks).toEqual([
     { name: "lint", conclusion: "failure", url: "http://ci.test/1" },
@@ -289,9 +283,7 @@ test("one context on both surfaces counts once, as the check run", async () => {
 
   stubSnapshot({
     checkRuns: [run({ conclusion: "failure" })],
-    statuses: [
-      { context: "build", state: "success", target_url: "http://cb.test/1" },
-    ],
+    statuses: [{ context: "build", state: "success", target_url: "http://cb.test/1" }],
   });
   const red = await fetchPrSnapshot(pr);
   expect(red.ci).toBe("red");
@@ -302,9 +294,7 @@ test("one context on both surfaces counts once, as the check run", async () => {
   fetchMock.mockReset();
   stubSnapshot({
     checkRuns: [run({})],
-    statuses: [
-      { context: "build", state: "failure", target_url: "http://cb.test/1" },
-    ],
+    statuses: [{ context: "build", state: "failure", target_url: "http://cb.test/1" }],
   });
   const green = await fetchPrSnapshot(pr);
   expect(green.ci).toBe("green");
@@ -359,14 +349,10 @@ test("a threaded reply posts to the thread root's replies endpoint", async () =>
   await replyToReviewThread(pr, 900, "fixed in a2b3c4d");
 
   const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-  expect(url).toBe(
-    "http://mock.test/github/repos/acme/api/pulls/41/comments/900/replies",
-  );
+  expect(url).toBe("http://mock.test/github/repos/acme/api/pulls/41/comments/900/replies");
   expect(init.method).toBe("POST");
   expect(JSON.parse(String(init.body))).toEqual({ body: "fixed in a2b3c4d" });
-  expect(new Headers(init.headers).get("content-type")).toBe(
-    "application/json",
-  );
+  expect(new Headers(init.headers).get("content-type")).toBe("application/json");
 });
 
 test("a PR comment posts to the issue comments endpoint", async () => {

@@ -13,11 +13,7 @@ import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import { listWorktreesForRun } from "../steps/worktree/registry.ts";
 import { registrySql } from "../steps/worktree/sql.ts";
 import { sweepWorktrees } from "../steps/worktree/sweep.ts";
-import {
-  githubWebhookSecret,
-  verifyGithubSignature,
-  verifyLinearSignature,
-} from "./ingress.ts";
+import { githubWebhookSecret, verifyGithubSignature, verifyLinearSignature } from "./ingress.ts";
 import { bootPhase, isReady } from "./readiness.ts";
 import { describeRun, listRuns, type RunRef, resolveRunRef } from "./runs.ts";
 import { listSchedules, scheduleChecks } from "./schedules.ts";
@@ -69,25 +65,15 @@ export function createApp(factory: Factory): Hono {
   // function, so preflight and ticket resolution cannot differ between them.
   app.post("/api/workflows/:name/runs", async (c) => {
     const name = c.req.param("name");
-    const body = await c.req
-      .json<{ inputs?: unknown }>()
-      .catch(() => ({}) as { inputs?: unknown });
-    const result = await startRun(
-      factory,
-      name,
-      body.inputs,
-      crypto.randomUUID(),
-    );
+    const body = await c.req.json<{ inputs?: unknown }>().catch(() => ({}) as { inputs?: unknown });
+    const result = await startRun(factory, name, body.inputs, crypto.randomUUID());
     switch (result.kind) {
       case "unknown-workflow":
         return c.json(unknownWorkflow(name), 404);
       case "invalid-inputs":
         return c.json({ error: "invalid inputs", issues: result.issues }, 400);
       case "preflight-failed":
-        return c.json(
-          { error: "preflight failed", failures: failedChecks(result.report) },
-          424,
-        );
+        return c.json({ error: "preflight failed", failures: failedChecks(result.report) }, 424);
       case "invalid-ticket":
         return c.json({ error: `invalid ticket: ${result.reason}` }, 400);
       case "started":
@@ -139,9 +125,7 @@ export function createApp(factory: Factory): Hono {
     const event = sanitizeForLog(c.req.header("x-github-event") ?? "unknown");
     const secret = githubWebhookSecret();
     if (secret === null) {
-      console.log(
-        `[ingress] github rejected reason=configuration event=${event}`,
-      );
+      console.log(`[ingress] github rejected reason=configuration event=${event}`);
       return c.json({ error: "no GitHub webhook secret configured" }, 503);
     }
     const rawBody = await c.req.text();
@@ -153,9 +137,7 @@ export function createApp(factory: Factory): Hono {
     const payload = parseJson(rawBody);
     const token = tokenFromGithubPayload(payload);
     if (token === null) {
-      console.log(
-        `[ingress] github ignored reason=unrecognized-event event=${event}`,
-      );
+      console.log(`[ingress] github ignored reason=unrecognized-event event=${event}`);
       return c.json({ ignored: true });
     }
     return resumeAndLog(c, "github", token, event, resumeHook);
@@ -217,9 +199,7 @@ export function createApp(factory: Factory): Hono {
   app.get("/api/runs", async (c) => {
     const [runs, worktrees] = await Promise.all([
       listRuns(factory),
-      sweepWorktrees({ clean: false }, { sql: registrySql() }).then(
-        (report) => report.entries,
-      ),
+      sweepWorktrees({ clean: false }, { sql: registrySql() }).then((report) => report.entries),
     ]);
     // The schedules ride along on the same run listing the table above
     // renders, so ps stays one round trip and the two tables can never
@@ -239,18 +219,13 @@ export function createApp(factory: Factory): Hono {
     const run = getRun(ref.runId);
     const status = await run.status;
     if (TERMINAL_RUN_STATUSES.has(status)) {
-      return c.json(
-        { error: `run ${ref.runId} is already ${status}`, status },
-        409,
-      );
+      return c.json({ error: `run ${ref.runId} is already ${status}`, status }, 409);
     }
     const releasedTokens = await runResourceTokens(ref.runId);
     await run.cancel();
     // Cancel never cleans up: name what stays so the operator knows where the
     // worktree is and that `jigs sweep` is the way to reclaim it.
-    const worktrees = (await listWorktreesForRun(registrySql(), ref.runId)).map(
-      (row) => row.path,
-    );
+    const worktrees = (await listWorktreesForRun(registrySql(), ref.runId)).map((row) => row.path);
     // A merged run's workflow tears its own worktree down; everything else —
     // cancel included — leaves the tree on disk for the operator's `jigs
     // sweep`. A cancelled run's dirty tree is exactly the wreckage the sweep
@@ -321,10 +296,7 @@ function factoryRootOrNull(): string | null {
   }
 }
 
-function unresolvedRunResponse(
-  c: Context,
-  ref: Exclude<RunRef, { kind: "found" }>,
-): Response {
+function unresolvedRunResponse(c: Context, ref: Exclude<RunRef, { kind: "found" }>): Response {
   return ref.kind === "ambiguous"
     ? c.json({ error: "ambiguous run ref", candidates: ref.candidates }, 409)
     : c.json({ error: "not found" }, 404);
@@ -374,16 +346,9 @@ async function resumeAndLog(
     console.log(`[ingress] ${provider} accepted ${correlation}`);
     return c.json({ delivered: true, ...result });
   } catch (error) {
-    const reason = HookNotFoundError.is(error)
-      ? "no-matching-hook"
-      : "delivery-failed";
-    console.log(
-      `[ingress] ${provider} dropped reason=${reason} ${correlation}`,
-    );
-    return c.json(
-      { delivered: false },
-      reason === "no-matching-hook" ? 200 : 404,
-    );
+    const reason = HookNotFoundError.is(error) ? "no-matching-hook" : "delivery-failed";
+    console.log(`[ingress] ${provider} dropped reason=${reason} ${correlation}`);
+    return c.json({ delivered: false }, reason === "no-matching-hook" ? 200 : 404);
   }
 }
 

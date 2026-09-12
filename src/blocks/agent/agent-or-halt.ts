@@ -32,9 +32,7 @@ export async function agentOrHalt<T = undefined>(
         headline: `jigs could not start a step on **${claim.identifier}** because a check failed.`,
         where: "starting a step",
         // The comment is not a console: one failure, one plain line.
-        notes: err.failures.map(
-          ({ label, reason, repair }) => `${label}: ${reason}. ${repair}`,
-        ),
+        notes: err.failures.map(({ label, reason, repair }) => `${label}: ${reason}. ${repair}`),
         onReply: "retry",
       });
     }

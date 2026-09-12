@@ -61,9 +61,7 @@ test("an ANTHROPIC_API_KEY overriding the subscription login fails and names the
     reason: expect.stringContaining("ANTHROPIC_API_KEY"),
     repair: expect.stringContaining("ANTHROPIC_API_KEY"),
   });
-  expect(result.ok === false && result.repair).toContain(
-    "the factory repo's .env",
-  );
+  expect(result.ok === false && result.repair).toContain("the factory repo's .env");
 });
 
 test("the probe spawns the CLI with the unscrubbed env, so an API key can flip its auth mode", async () => {
@@ -87,9 +85,7 @@ test("a logged-out CLI fails with claude auth login", async () => {
 });
 
 test("a non-subscription authMethod fails naming the method found", async () => {
-  const result = await claudeResult(
-    JSON.stringify({ loggedIn: true, authMethod: "bedrock" }),
-  );
+  const result = await claudeResult(JSON.stringify({ loggedIn: true, authMethod: "bedrock" }));
   expect(result).toMatchObject({
     ok: false,
     reason: expect.stringContaining("bedrock"),

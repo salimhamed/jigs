@@ -35,12 +35,10 @@ test("PATH scan finds an executable claude, skipping non-executable dirs", () =>
 });
 
 test("no claude anywhere throws a repair error", () => {
-  expect(() =>
-    resolveClaudeExecutable({ PATH: path.join(tmp, "empty2") }),
-  ).toThrow("no `claude` executable found on PATH");
-  expect(() => resolveClaudeExecutable({ PATH: "" })).toThrow(
-    "JIGS_CLAUDE_EXECUTABLE",
+  expect(() => resolveClaudeExecutable({ PATH: path.join(tmp, "empty2") })).toThrow(
+    "no `claude` executable found on PATH",
   );
+  expect(() => resolveClaudeExecutable({ PATH: "" })).toThrow("JIGS_CLAUDE_EXECUTABLE");
 });
 
 test("claudeStepSettings force-merges the invariants over caller options", () => {
@@ -63,9 +61,9 @@ test("claudeStepSettings resolves the executable when not supplied", () => {
   const prev = process.env.JIGS_CLAUDE_EXECUTABLE;
   process.env.JIGS_CLAUDE_EXECUTABLE = "/opt/claude-from-env";
   try {
-    expect(
-      claudeStepSettings({ cwd: "/worktree" }).pathToClaudeCodeExecutable,
-    ).toBe("/opt/claude-from-env");
+    expect(claudeStepSettings({ cwd: "/worktree" }).pathToClaudeCodeExecutable).toBe(
+      "/opt/claude-from-env",
+    );
   } finally {
     if (prev === undefined) delete process.env.JIGS_CLAUDE_EXECUTABLE;
     else process.env.JIGS_CLAUDE_EXECUTABLE = prev;

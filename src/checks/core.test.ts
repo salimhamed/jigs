@@ -35,11 +35,7 @@ test("an unset LINEAR_API_KEY fails before any probe runs", async () => {
 
 test("an empty GITHUB_TOKEN fails before any probe runs", async () => {
   const { probes: p, calls } = probes();
-  const check = await outcome(
-    { LINEAR_API_KEY: "lin", GITHUB_TOKEN: "" },
-    "core.github-token",
-    p,
-  );
+  const check = await outcome({ LINEAR_API_KEY: "lin", GITHUB_TOKEN: "" }, "core.github-token", p);
   expect(check).toMatchObject({ ok: false });
   expect(calls).not.toContain("github");
 });
@@ -50,11 +46,7 @@ test("a rejected LINEAR_API_KEY surfaces the provider error and a re-issue repai
       throw new Error("Linear API 401: authentication required");
     },
   });
-  const check = await outcome(
-    { LINEAR_API_KEY: "stale" },
-    "core.linear-api-key",
-    p,
-  );
+  const check = await outcome({ LINEAR_API_KEY: "stale" }, "core.linear-api-key", p);
   expect(check).toMatchObject({
     ok: false,
     reason: expect.stringContaining("Linear API 401"),
@@ -68,11 +60,7 @@ test("a rejected GITHUB_TOKEN surfaces the provider error and a re-issue repair"
       throw new Error("GitHub API 401 on /user: Bad credentials");
     },
   });
-  const check = await outcome(
-    { GITHUB_TOKEN: "stale" },
-    "core.github-token",
-    p,
-  );
+  const check = await outcome({ GITHUB_TOKEN: "stale" }, "core.github-token", p);
   expect(check).toMatchObject({
     ok: false,
     reason: expect.stringContaining("Bad credentials"),
@@ -82,9 +70,7 @@ test("a rejected GITHUB_TOKEN surfaces the provider error and a re-issue repair"
 
 test("both credentials present and accepted is green", async () => {
   const { probes: p, calls } = probes();
-  const report = await runChecks(
-    coreChecks(p, { LINEAR_API_KEY: "lin", GITHUB_TOKEN: "gh" }),
-  );
+  const report = await runChecks(coreChecks(p, { LINEAR_API_KEY: "lin", GITHUB_TOKEN: "gh" }));
   expect(report.ok).toBe(true);
   expect(calls.sort()).toEqual(["github", "linear"]);
 });

@@ -1,9 +1,9 @@
 import { beforeEach, expect, test } from "vitest";
-import type { readDiff } from "../../steps/pull-request/branch.ts";
+import type { readWorktreeDiff } from "../../steps/pull-request/branch.ts";
 import { claude } from "../agent/harness-config.ts";
 import { type AgentStepConfig, parseOutput } from "../agent/plan.ts";
 import { type AgentFn, resumeFailed } from "../agent/resume-or-rebuild.ts";
-import { describePr } from "./describe-pr.ts";
+import { describePullRequest } from "./describe-pr.ts";
 
 let agentCalls: AgentStepConfig<unknown>[] = [];
 let diffCalls: Array<[string, string]> = [];
@@ -23,7 +23,7 @@ const fakeAgent: AgentFn = async <T>(config: AgentStepConfig<T>) => {
   };
 };
 
-const fakeReadDiff: typeof readDiff = async (cwd, baseSha) => {
+const fakeReadDiff: typeof readWorktreeDiff = async (cwd, baseSha) => {
   diffCalls.push([cwd, baseSha]);
   return "THE-ACTUAL-DIFF";
 };
@@ -31,9 +31,9 @@ const fakeReadDiff: typeof readDiff = async (cwd, baseSha) => {
 const described = { title: "feat: ship it", body: "what changed and why" };
 
 const run = (session?: { harness: "claude"; id: string }) =>
-  describePr({
+  describePullRequest({
     agent: fakeAgent,
-    readDiff: fakeReadDiff,
+    readWorktreeDiff: fakeReadDiff,
     harness: claude({ model: "opus" }),
     cwd: "/tmp/worktree",
     baseSha: "base-sha-1",

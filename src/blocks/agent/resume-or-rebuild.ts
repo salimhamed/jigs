@@ -25,9 +25,7 @@ export function resumeFailed(detail: string): never {
 }
 
 /** The `agent` jig with its step wrapper already bound — what a jig is handed. */
-export type AgentFn = <T = undefined>(
-  config: AgentStepConfig<T>,
-) => Promise<AgentStepResult<T>>;
+export type AgentFn = <T = undefined>(config: AgentStepConfig<T>) => Promise<AgentStepResult<T>>;
 
 export interface ResumeOrRebuildOptions<T> {
   agent: AgentFn;
@@ -81,16 +79,12 @@ export async function resumeOrRebuild<T = undefined>(
       return { output: resumed.output };
     } catch (err) {
       if (!(err instanceof ResumeFailedError)) throw err;
-      console.log(
-        `[${options.label}] resume failed — falling back to a fresh context`,
-      );
+      console.log(`[${options.label}] resume failed — falling back to a fresh context`);
     }
   }
 
   const prompt =
-    typeof options.freshPrompt === "string"
-      ? options.freshPrompt
-      : await options.freshPrompt();
+    typeof options.freshPrompt === "string" ? options.freshPrompt : await options.freshPrompt();
   const rebuilt = await options.agent<T>({ ...base, prompt });
   return {
     output: rebuilt.output,

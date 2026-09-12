@@ -14,7 +14,7 @@ import { buildAgentWire, buildAskWire } from "../../blocks/agent/plan.ts";
 import type { AgentStepResult, StepUsage } from "../../blocks/agent/result.ts";
 import { makeTmpDir, removeTmpDir } from "./harnesses/test-fixtures.ts";
 import { type ExecuteDeps, runAgent } from "./run-agent.ts";
-import { runAsk } from "./run-ask.ts";
+import { askModel } from "./run-ask.ts";
 
 const usage = { inputTokens: 12, outputTokens: 34 } as unknown as StepUsage;
 
@@ -50,9 +50,10 @@ type Captured = {
   homeRunIds: string[];
 };
 
-function makeDeps(
-  generation: Partial<Awaited<ReturnType<ExecuteDeps["generateText"]>>> = {},
-): { deps: ExecuteDeps; captured: Captured } {
+function makeDeps(generation: Partial<Awaited<ReturnType<ExecuteDeps["generateText"]>>> = {}): {
+  deps: ExecuteDeps;
+  captured: Captured;
+} {
   const captured: Captured = { homeRunIds: [] };
   const deps: ExecuteDeps = {
     generateText: async (options) => {
@@ -80,14 +81,10 @@ function makeDeps(
 
 // runAgent answers a union; every test but the resume-failure ones wants the
 // successful arm.
-async function agentStep(
-  ...args: Parameters<typeof runAgent>
-): Promise<AgentStepResult<unknown>> {
+async function agentStep(...args: Parameters<typeof runAgent>): Promise<AgentStepResult<unknown>> {
   const result = await runAgent(...args);
   if ("jitFailure" in result) {
-    throw new Error(
-      `unexpected JIT failure: ${JSON.stringify(result.jitFailure)}`,
-    );
+    throw new Error(`unexpected JIT failure: ${JSON.stringify(result.jitFailure)}`);
   }
   if ("resumeFailed" in result) {
     throw new Error(`unexpected resume failure: ${result.resumeFailed}`);
@@ -127,7 +124,7 @@ test("claude agent step hydrates from wire config with the harness invariants fo
   });
   const { deps, captured } = makeDeps();
 
-  await agentStep(wire, "run-1", deps);
+  await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
   const settings = claudeSettingsOf(captured);
   expect(settings.cwd).toBe(worktree);
@@ -152,7 +149,7 @@ test("codex agent step runs on the app-server under the managed home with fixed 
   });
   const { deps, captured } = makeDeps();
 
-  await agentStep(wire, "run-7", deps);
+  await agentStep(wire, { workflowRunId: "run-7" }, deps);
 
   expect(captured.codexModel).toBe("gpt-5.5");
   const settings = captured.codexSettings;
@@ -177,7 +174,7 @@ test("a declared output schema becomes an AI SDK output spec and the raw output 
   });
   const { deps, captured } = makeDeps({ output: { ok: true } });
 
-  const result = await agentStep(wire, "run-1", deps);
+  const result = await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
   expect(captured.options?.output).toBeDefined();
   expect(result.output).toEqual({ ok: true });
@@ -191,7 +188,7 @@ test("without an output schema no output spec is passed and output is undefined"
   });
   const { deps, captured } = makeDeps({ output: "should not surface" });
 
-  const result = await agentStep(wire, "run-1", deps);
+  const result = await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
   expect(captured.options?.output).toBeUndefined();
   expect(result.output).toBeUndefined();
@@ -207,7 +204,7 @@ test("usage passes through and the Claude session pointer is captured", async ()
     providerMetadata: { "claude-code": { sessionId: "s-42" } },
   });
 
-  const result = await agentStep(wire, "run-1", deps);
+  const result = await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
   expect(result.usage).toEqual(usage);
   expect(result.session).toEqual({ harness: "claude", id: "s-42" });
@@ -223,11 +220,11 @@ test("the Codex threadId is captured, and a missing pointer is omitted, never an
   const withThread = makeDeps({
     providerMetadata: { "codex-app-server": { threadId: "t-7" } },
   });
-  const threaded = await agentStep(codexWire, "run-1", withThread.deps);
+  const threaded = await agentStep(codexWire, { workflowRunId: "run-1" }, withThread.deps);
   expect(threaded.session).toEqual({ harness: "codex", id: "t-7" });
 
   const bare = makeDeps();
-  const sessionless = await agentStep(codexWire, "run-1", bare.deps);
+  const sessionless = await agentStep(codexWire, { workflowRunId: "run-1" }, bare.deps);
   expect(sessionless.session).toBeUndefined();
   expect("session" in sessionless).toBe(false);
 });
@@ -241,7 +238,7 @@ test("a claude resume rides on the settings' resume field", async () => {
   });
   const { deps, captured } = makeDeps();
 
-  await agentStep(wire, "run-1", deps);
+  await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
   expect(claudeSettingsOf(captured).resume).toBe("s-42");
   expect(captured.options?.providerOptions).toBeUndefined();
@@ -256,7 +253,7 @@ test("a codex resume rides on providerOptions['codex-app-server'].threadId", asy
   });
   const { deps, captured } = makeDeps();
 
-  await agentStep(wire, "run-1", deps);
+  await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
   expect(captured.options?.providerOptions).toEqual({
     "codex-app-server": { threadId: "0199-thread" },
@@ -274,7 +271,7 @@ test("a session pointer recorded on the other harness reports resumeFailed, not 
   });
   const { deps, captured } = makeDeps();
 
-  const result = await runAgent(wire, "run-1", deps);
+  const result = await runAgent(wire, { workflowRunId: "run-1" }, deps);
 
   // The resume prompt was written for an agent that already holds the change,
   // so running it against a brand-new session would be a lie. The marker sends
@@ -293,7 +290,7 @@ test("Claude steps always run with bypass", async () => {
   });
   const { deps, captured } = makeDeps();
 
-  await agentStep(wire, "run-1", deps);
+  await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
   const settings = claudeSettingsOf(captured);
   expect(settings.permissionMode).toBe("bypassPermissions");
@@ -314,7 +311,7 @@ test("a failed resume returns the resumeFailed marker instead of throwing", asyn
     throw new Error("no rollout found for thread id 0199-gone");
   };
 
-  const result = await runAgent(wire, "run-1", deps);
+  const result = await runAgent(wire, { workflowRunId: "run-1" }, deps);
 
   expect(result).toEqual({
     resumeFailed: expect.stringContaining("no rollout found for thread id"),
@@ -332,7 +329,7 @@ test("a failure with no resume to blame still throws", async () => {
     throw new Error("the harness fell over");
   };
 
-  await expect(runAgent(wire, "run-1", deps)).rejects.toThrow(
+  await expect(runAgent(wire, { workflowRunId: "run-1" }, deps)).rejects.toThrow(
     "the harness fell over",
   );
 });
@@ -352,12 +349,12 @@ test("a second agent in the same worktree is refused while the first is running"
     return { text: "done", usage };
   };
 
-  const inFlight = agentStep(wire, "run-1", first.deps);
+  const inFlight = agentStep(wire, { workflowRunId: "run-1" }, first.deps);
   // Yield so the first call is inside the lock before the second tries.
   await new Promise((resolve) => setTimeout(resolve, 20));
 
   const second = makeDeps();
-  await expect(runAgent(wire, "run-1", second.deps)).rejects.toThrow(
+  await expect(runAgent(wire, { workflowRunId: "run-1" }, second.deps)).rejects.toThrow(
     /an agent is already running in .* refusing to start a second one/,
   );
   expect(second.captured.options).toBeUndefined();
@@ -367,7 +364,7 @@ test("a second agent in the same worktree is refused while the first is running"
 
   // Released, so the worktree takes the next agent step normally.
   const after = makeDeps();
-  await agentStep(wire, "run-1", after.deps);
+  await agentStep(wire, { workflowRunId: "run-1" }, after.deps);
   expect(after.captured.options?.prompt).toBe("implement it");
 });
 
@@ -389,7 +386,7 @@ test("a busy worktree does not block an agent in another one", async () => {
       cwd: worktree,
       prompt: "implement it",
     }),
-    "run-1",
+    { workflowRunId: "run-1" },
     first.deps,
   );
   await new Promise((resolve) => setTimeout(resolve, 20));
@@ -401,7 +398,7 @@ test("a busy worktree does not block an agent in another one", async () => {
       cwd: other,
       prompt: "implement it elsewhere",
     }),
-    "run-1",
+    { workflowRunId: "run-1" },
     elsewhere.deps,
   );
   expect(elsewhere.captured.options?.prompt).toBe("implement it elsewhere");
@@ -420,7 +417,7 @@ test("the step env is a scrubbed copy: no API credentials, process.env untouched
     });
     const { deps, captured } = makeDeps();
 
-    await agentStep(wire, "run-1", deps);
+    await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
     expect(claudeSettingsOf(captured).env?.ANTHROPIC_API_KEY).toBeUndefined();
     expect(process.env.ANTHROPIC_API_KEY).toBe("sk-test-scrub");
@@ -447,10 +444,14 @@ test("a failed JIT check returns the marker before the harness is reached", asyn
     },
   ];
 
-  const result = await runAgent(wire, "run-1", {
-    ...deps,
-    jitFailures: async () => failures,
-  });
+  const result = await runAgent(
+    wire,
+    { workflowRunId: "run-1" },
+    {
+      ...deps,
+      jitFailures: async () => failures,
+    },
+  );
 
   expect(result).toEqual({ jitFailure: failures });
   expect(captured.options).toBeUndefined();
@@ -464,7 +465,7 @@ test("claude ask step sees no MCP universe and loads no filesystem settings", as
   });
   const { deps, captured } = makeDeps();
 
-  await runAsk(wire, "run-1", deps);
+  await askModel(wire, { workflowRunId: "run-1" }, deps);
 
   const settings = claudeSettingsOf(captured);
   expect(settings.strictMcpConfig).toBe(true);
@@ -481,7 +482,7 @@ test("codex ask step uses read-only exec in a scratch cwd it cleans up", async (
   });
   const { deps, captured } = makeDeps();
 
-  const result = await runAsk(wire, "run-9", deps);
+  const result = await askModel(wire, { workflowRunId: "run-9" }, deps);
 
   const model = captured.options?.model as { settings?: CodexExecSettings };
   const settings = model.settings;
@@ -489,9 +490,7 @@ test("codex ask step uses read-only exec in a scratch cwd it cleans up", async (
   expect(settings?.approvalMode).toBe("never");
   expect(settings?.skipGitRepoCheck).toBe(true);
   expect(settings?.env?.CODEX_HOME).toBe(path.join(tmp, "codex-home", "run-9"));
-  expect(settings?.cwd?.startsWith(path.join(tmpdir(), "jigs-ask-"))).toBe(
-    true,
-  );
+  expect(settings?.cwd?.startsWith(path.join(tmpdir(), "jigs-ask-"))).toBe(true);
   expect(existsSync(settings?.cwd ?? "")).toBe(false);
   expect(result.text).toBe("done");
   expect("session" in result).toBe(false);

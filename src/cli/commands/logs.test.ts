@@ -44,14 +44,10 @@ test("logs prints the run's status, its suspensions, and the dashboard link", as
   );
   timeline({ steps: [], deadJobs: [] });
   await showLogs("AGE-317", deps());
-  expect(fetchMock.mock.calls[0]?.[0]).toBe(
-    "http://svc.test:8990/api/runs/AGE-317",
-  );
+  expect(fetchMock.mock.calls[0]?.[0]).toBe("http://svc.test:8990/api/runs/AGE-317");
   // The timeline is asked for by the run id the first call resolved, never by
   // the ref the operator typed.
-  expect(fetchMock.mock.calls[1]?.[0]).toBe(
-    `http://svc.test:8990/api/runs/${RUN}/steps`,
-  );
+  expect(fetchMock.mock.calls[1]?.[0]).toBe(`http://svc.test:8990/api/runs/${RUN}/steps`);
   expect(lines).toEqual([
     `run ${RUN}`,
     "status running",
@@ -160,8 +156,7 @@ test("a dead job is printed with its error's first line and a copy-pasteable req
         id: "4128",
         task: "jigs:workflow",
         attempts: 3,
-        lastError:
-          "Queue execution failed (404): Not Found\n  at executeMessageOverHttp",
+        lastError: "Queue execution failed (404): Not Found\n  at executeMessageOverHttp",
         createdAt: "2026-09-04T10:00:00.000Z",
       },
     ],

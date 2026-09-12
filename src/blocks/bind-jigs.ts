@@ -14,10 +14,7 @@ import {
   haltForHuman as haltBlock,
   type PostNeedsHumanComment,
 } from "./ticket/halt-for-human.ts";
-import {
-  type ReviewTicketOptions,
-  reviewTicket as reviewBlock,
-} from "./ticket/review.ts";
+import { type ReviewTicketOptions, reviewTicket as reviewBlock } from "./ticket/review.ts";
 
 /** Named factory steps used by the standard jigs blocks. Replace any member
  * with a custom factory step to customize behavior without editing jigs.ts. */
@@ -28,12 +25,12 @@ export interface JigsSteps {
   postTicketNote: ReviewTicketOptions["postNote"];
   checkForHumanReply: CheckForHumanReply;
   fetchPullRequestState: FetchPrState;
-  fetchTicketSnapshot: ReviewTicketOptions["fetchSnapshot"];
+  fetchTicketSnapshot: ReviewTicketOptions["fetchTicketSnapshot"];
 }
 
 export type BoundReviewTicketOptions = Omit<
   ReviewTicketOptions,
-  "agent" | "haltForHuman" | "fetchSnapshot" | "postNote"
+  "agent" | "haltForHuman" | "fetchTicketSnapshot" | "postNote"
 >;
 
 /** Bind reusable workflow blocks to the factory's durable step functions. */
@@ -49,12 +46,8 @@ export function bindJigs(steps: JigsSteps) {
       postComment: steps.postNeedsHumanComment,
       checkForReply: steps.checkForHumanReply,
     });
-  const pullRequestGate: GateFn = (pr) =>
-    gateBlock(pr, steps.fetchPullRequestState);
-  function agentOrHalt<T = undefined>(
-    claim: TicketClaim,
-    config: AgentStepConfig<T>,
-  ) {
+  const pullRequestGate: GateFn = (pr) => gateBlock(pr, steps.fetchPullRequestState);
+  function agentOrHalt<T = undefined>(claim: TicketClaim, config: AgentStepConfig<T>) {
     return agentOrHaltBlock(claim, config, { agent, haltForHuman });
   }
   function reviewTicket(options: BoundReviewTicketOptions) {
@@ -63,15 +56,21 @@ export function bindJigs(steps: JigsSteps) {
       agent,
       haltForHuman,
       postNote: steps.postTicketNote,
-      fetchSnapshot: steps.fetchTicketSnapshot,
+      fetchTicketSnapshot: steps.fetchTicketSnapshot,
     });
   }
   return {
+    /** Run an agent in a worktree and validate its answer. */
     agent,
+    /** Ask a model a question without a worktree or tools, and validate its answer. */
     ask,
+    /** Pause the run until someone replies on the ticket. */
     haltForHuman,
+    /** Wait until the pull request needs action or is ready to merge. */
     pullRequestGate,
+    /** Run an agent, pausing for help when a required capability is unavailable. */
     agentOrHalt,
+    /** Review the ticket and clarify missing details before building. */
     reviewTicket,
   };
 }

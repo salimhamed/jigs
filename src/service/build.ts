@@ -65,9 +65,6 @@ export function prepare(factoryRoot: string): string {
   writeFileSync(path.join(generated, "factory.ts"), FACTORY_SOURCE);
   const entry = path.join(generated, GENERATED_ENTRY_FILE);
   writeFileSync(entry, ENTRY_SOURCE);
-  writeFileSync(
-    path.join(generated, GENERATED_SCHEDULES_FILE),
-    SCHEDULES_SOURCE,
-  );
+  writeFileSync(path.join(generated, GENERATED_SCHEDULES_FILE), SCHEDULES_SOURCE);
   return entry;
 }

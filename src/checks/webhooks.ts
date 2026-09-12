@@ -64,10 +64,7 @@ async function checkWebhook(
           repair: bindRepair,
         };
   } catch (err) {
-    if (
-      err instanceof GithubApiError &&
-      (err.status === 403 || err.status === 404)
-    ) {
+    if (err instanceof GithubApiError && (err.status === 403 || err.status === 404)) {
       return {
         ok: false,
         reason: `GitHub refused the repo hooks request (${err.status})`,

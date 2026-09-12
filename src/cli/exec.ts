@@ -15,16 +15,11 @@ export interface ExecOptions {
   env?: Record<string, string>;
 }
 
-export type ExecFile = (
-  file: string,
-  args: string[],
-  options: ExecOptions,
-) => Promise<ExecOutput>;
+export type ExecFile = (file: string, args: string[], options: ExecOptions) => Promise<ExecOutput>;
 
 // What a failed exec rejects with: `code` is the exit status, or "ENOENT" when
 // the binary itself is missing, and whatever the child printed rides along.
-export type ExecError = Error &
-  Partial<ExecOutput> & { code?: number | string };
+export type ExecError = Error & Partial<ExecOutput> & { code?: number | string };
 
 export const nodeExecFile: ExecFile = async (file, args, options) =>
   await promisify(execFile)(file, args, {

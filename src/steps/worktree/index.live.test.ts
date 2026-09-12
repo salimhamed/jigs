@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, expect, test, vi } from "vitest";
-import { provisionRunWorktree } from "./index.ts";
+import { provisionWorktree } from "./index.ts";
 import { bindingDir, worktreePath } from "./layout.ts";
 import {
   connectRegistry,
@@ -9,16 +9,10 @@ import {
   getWorktree,
   upsertWorktree,
 } from "./registry.ts";
-import {
-  git,
-  makeClonedBinding,
-  makeTmpDir,
-  removeTmpDir,
-} from "./test-fixtures.ts";
+import { git, makeClonedBinding, makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
 const sql = connectRegistry(
-  process.env.WORKFLOW_POSTGRES_URL ??
-    "postgres://jigs:jigs@localhost:5439/jigs",
+  process.env.WORKFLOW_POSTGRES_URL ?? "postgres://jigs:jigs@localhost:5439/jigs",
   { max: 1 },
 );
 
@@ -51,7 +45,7 @@ const request = { binding: "api", branch: "feat" };
 test("a relaunched ticket adopts the leftover worktree and takes over its row", async () => {
   await ensureWorktreeRegistry(sql);
 
-  const first = await provisionRunWorktree(request, "run_first", { sql });
+  const first = await provisionWorktree(request, { workflowRunId: "run_first" }, { sql });
   expect(first).toMatchObject({ path: testPath });
   expect((await getWorktree(sql, testPath))?.ownerRunId).toBe("run_first");
   // Committed, so the tree stays clean while its HEAD moves off the default
@@ -61,10 +55,14 @@ test("a relaunched ticket adopts the leftover worktree and takes over its row", 
   git(testPath, "commit", "-q", "-m", "shipped");
   const head = git(testPath, "rev-parse", "HEAD");
 
-  const second = await provisionRunWorktree(request, "run_second", {
-    sql,
-    readOwner: async () => ({ terminal: true, status: "completed" }),
-  });
+  const second = await provisionWorktree(
+    request,
+    { workflowRunId: "run_second" },
+    {
+      sql,
+      readOwner: async () => ({ terminal: true, status: "completed" }),
+    },
+  );
   // Adopted, not re-cut: the work the first run left is still checked out.
   expect(second).toMatchObject({ path: testPath });
   expect(git(testPath, "rev-parse", "HEAD")).toBe(head);
@@ -82,10 +80,14 @@ test("a live owner read back from the registry refuses the second run by name", 
   });
 
   await expect(
-    provisionRunWorktree(request, "run_other", {
-      sql,
-      readOwner: async () => ({ terminal: false, status: "running" }),
-    }),
+    provisionWorktree(
+      request,
+      { workflowRunId: "run_other" },
+      {
+        sql,
+        readOwner: async () => ({ terminal: false, status: "running" }),
+      },
+    ),
   ).rejects.toThrow(/run_live/);
   expect((await getWorktree(sql, testPath))?.ownerRunId).toBe("run_live");
 });

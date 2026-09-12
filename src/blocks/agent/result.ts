@@ -31,10 +31,7 @@ export type StepGeneration = {
   providerMetadata?: ProviderMetadataLike;
 };
 
-export function toStepResult(
-  generation: StepGeneration,
-  output: unknown,
-): StepResult<unknown> {
+export function toStepResult(generation: StepGeneration, output: unknown): StepResult<unknown> {
   return { text: generation.text, output, usage: generation.usage };
 }
 

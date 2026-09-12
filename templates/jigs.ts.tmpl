@@ -2,144 +2,140 @@
 // Put custom steps and bindings in steps/ and blocks/.
 
 import type { WorktreeFacts } from "@salimhamed/jigs";
-import { bindJigs } from "@salimhamed/jigs/blocks";
 import {
-  branchState as branchStateImpl,
-  checkForHumanReply as checkForHumanReplyImpl,
-  commentOnPr as commentOnPrImpl,
-  dashboardRunUrl,
-  fetchPrState as fetchPrStateImpl,
-  fetchSnapshot as fetchSnapshotImpl,
-  openPr as openPrImpl,
-  postNeedsHumanComment as postNeedsHumanCommentImpl,
-  postTicketNote as postTicketNoteImpl,
-  provisionRunWorktree,
-  pushBranch as pushBranchImpl,
-  readDiff as readDiffImpl,
-  replyInThread as replyInThreadImpl,
-  resolveRepo as resolveRepoImpl,
-  runAgent as runAgentImpl,
-  runAsk as runAskImpl,
-  squashMerge as squashMergeImpl,
-  teardownMergedRun,
-  type WorktreeRequest,
-} from "@salimhamed/jigs/steps";
+  type AgentWire,
+  type AskWire,
+  bindJigs,
+  type Halt,
+  type PrRef,
+  type TicketNote,
+} from "@salimhamed/jigs/blocks";
+import type { GithubRepoRef, WorktreeRequest } from "@salimhamed/jigs/steps";
+import * as steps from "@salimhamed/jigs/steps";
 import { getWorkflowMetadata } from "workflow";
 
-export async function provisionWorktree(
-  request: WorktreeRequest,
-): Promise<WorktreeFacts> {
-  "use step";
-  return provisionRunWorktree(request, getWorkflowMetadata().workflowRunId);
-}
-
-export async function teardownRunWorktrees() {
-  "use step";
-  return teardownMergedRun(getWorkflowMetadata().workflowRunId);
-}
-
-export async function runAgent(wire: Parameters<typeof runAgentImpl>[0]) {
-  "use step";
-  return runAgentImpl(wire, getWorkflowMetadata().workflowRunId);
-}
-
-export async function askModel(wire: Parameters<typeof runAskImpl>[0]) {
-  "use step";
-  return runAskImpl(wire, getWorkflowMetadata().workflowRunId);
-}
-
-export async function postNeedsHumanComment(
-  issueId: string,
-  halt: Parameters<typeof postNeedsHumanCommentImpl>[1],
-) {
+/** Prepare a worktree for this run, reusing it when the run resumes. */
+export async function provisionWorktree(request: WorktreeRequest): Promise<WorktreeFacts> {
   "use step";
   const metadata = getWorkflowMetadata();
-  return postNeedsHumanCommentImpl(issueId, halt, {
-    runId: metadata.workflowRunId,
-    workflow: metadata.workflowName,
-    dashboardUrl: dashboardRunUrl(metadata.workflowRunId),
-  });
+  return steps.provisionWorktree(request, metadata);
 }
 
-export async function postTicketNote(
-  issueId: string,
-  note: Parameters<typeof postTicketNoteImpl>[1],
-) {
+/** Remove this run's worktrees after a successful merge. Never call from a finally block. */
+export async function removeMergedRunWorktrees() {
   "use step";
-  return postTicketNoteImpl(issueId, note);
+  const metadata = getWorkflowMetadata();
+  return steps.removeMergedRunWorktrees(metadata);
 }
 
+/** Run a coding agent in a worktree. Use agent() to pass an output schema and parse its answer. */
+export async function runAgent(request: AgentWire) {
+  "use step";
+  const metadata = getWorkflowMetadata();
+  return steps.runAgent(request, metadata);
+}
+
+/** Ask a model without worktree access. Use ask() to pass an output schema and parse its answer. */
+export async function askModel(request: AskWire) {
+  "use step";
+  const metadata = getWorkflowMetadata();
+  return steps.askModel(request, metadata);
+}
+
+/** Post a request for human input on the ticket. Use haltForHuman() to also wait for a reply. */
+export async function postNeedsHumanComment(issueId: string, halt: Halt) {
+  "use step";
+  const metadata = getWorkflowMetadata();
+  return steps.postNeedsHumanComment(issueId, halt, metadata);
+}
+
+/** Post the assumptions that let ticket review proceed without waiting for a reply. */
+export async function postTicketNote(issueId: string, note: TicketNote) {
+  "use step";
+  return steps.postTicketNote(issueId, note);
+}
+
+/** Look for a human reply since the last check, excluding the run's own question. */
 export async function checkForHumanReply(
-  ...args: Parameters<typeof checkForHumanReplyImpl>
+  issueId: string,
+  sinceIso: string,
+  postedCommentId: string,
 ) {
   "use step";
-  return checkForHumanReplyImpl(...args);
+  return steps.checkForHumanReply(issueId, sinceIso, postedCommentId);
 }
 
-export async function fetchPullRequestState(
-  ...args: Parameters<typeof fetchPrStateImpl>
+/** Read a pull request's reviews, comments, CI results, and merge state. */
+export async function fetchPullRequestState(pullRequest: PrRef) {
+  "use step";
+  return steps.fetchPullRequestState(pullRequest);
+}
+
+/** Read the ticket's current details, comments, and related issues from Linear. */
+export async function fetchTicketSnapshot(issueId: string) {
+  "use step";
+  return steps.fetchTicketSnapshot(issueId);
+}
+
+/** Find the GitHub repository configured for a factory binding. */
+export async function resolveRepository(binding: string) {
+  "use step";
+  return steps.resolveRepository(binding);
+}
+
+/** Check commits since the base, the branch's current commit, and uncommitted changes. */
+export async function readBranchState(worktreePath: string, baseSha: string) {
+  "use step";
+  return steps.readBranchState(worktreePath, baseSha);
+}
+
+/** Push the worktree's branch to its remote, including any newly committed changes. */
+export async function pushBranch(worktreePath: string, branch: string) {
+  "use step";
+  return steps.pushBranch(worktreePath, branch);
+}
+
+/** Read committed changes since the base commit. Large diffs are truncated. */
+export async function readWorktreeDiff(worktreePath: string, baseSha: string) {
+  "use step";
+  return steps.readWorktreeDiff(worktreePath, baseSha);
+}
+
+/** Open a pull request for a branch that has already been pushed. */
+export async function openPullRequest(
+  repository: GithubRepoRef,
+  headBranch: string,
+  baseBranch: string,
+  title: string,
+  body: string,
 ) {
   "use step";
-  return fetchPrStateImpl(...args);
+  return steps.openPullRequest(repository, headBranch, baseBranch, title, body);
 }
 
-export async function fetchTicketSnapshot(
-  ...args: Parameters<typeof fetchSnapshotImpl>
+/** Reply to an existing code-review thread on a pull request. */
+export async function replyToPullRequestReviewThread(
+  pullRequest: PrRef,
+  rootCommentId: number,
+  body: string,
 ) {
   "use step";
-  return fetchSnapshotImpl(...args);
+  return steps.replyToPullRequestReviewThread(pullRequest, rootCommentId, body);
 }
 
-export async function resolveRepository(
-  ...args: Parameters<typeof resolveRepoImpl>
-) {
+/** Add a comment to the pull request's main conversation. */
+export async function commentOnPullRequest(pullRequest: PrRef, body: string) {
   "use step";
-  return resolveRepoImpl(...args);
+  return steps.commentOnPullRequest(pullRequest, body);
 }
 
-export async function readBranchState(
-  ...args: Parameters<typeof branchStateImpl>
-) {
+/** Squash-merge the pull request, using its current title for the merge commit. */
+export async function squashMergePullRequest(pullRequest: PrRef) {
   "use step";
-  return branchStateImpl(...args);
+  return steps.squashMergePullRequest(pullRequest);
 }
 
-export async function pushBranch(...args: Parameters<typeof pushBranchImpl>) {
-  "use step";
-  return pushBranchImpl(...args);
-}
-
-export async function readWorktreeDiff(
-  ...args: Parameters<typeof readDiffImpl>
-) {
-  "use step";
-  return readDiffImpl(...args);
-}
-
-export async function openPullRequest(...args: Parameters<typeof openPrImpl>) {
-  "use step";
-  return openPrImpl(...args);
-}
-
-export async function replyInThread(
-  ...args: Parameters<typeof replyInThreadImpl>
-) {
-  "use step";
-  return replyInThreadImpl(...args);
-}
-
-export async function commentOnPullRequest(
-  ...args: Parameters<typeof commentOnPrImpl>
-) {
-  "use step";
-  return commentOnPrImpl(...args);
-}
-
-export async function squashMerge(...args: Parameters<typeof squashMergeImpl>) {
-  "use step";
-  return squashMergeImpl(...args);
-}
-
+/** Standard steps for bindJigs(). Replace a member to customize a block's behavior. */
 export const jigsSteps = {
   runAgent,
   askModel,
@@ -150,11 +146,22 @@ export const jigsSteps = {
   fetchTicketSnapshot,
 };
 
-export const {
-  agent,
-  ask,
-  haltForHuman,
-  pullRequestGate,
-  agentOrHalt,
-  reviewTicket,
-} = bindJigs(jigsSteps);
+const blocks = bindJigs(jigsSteps);
+
+/** Run a coding agent in a worktree and parse its answer using your output schema. */
+export const agent = blocks.agent;
+
+/** Ask a model without worktree access and parse its answer using your output schema. */
+export const ask = blocks.ask;
+
+/** Ask for help on the ticket and wait for a human reply before continuing. */
+export const haltForHuman = blocks.haltForHuman;
+
+/** Watch pull-request reviews, CI results, and closure so your workflow can respond. */
+export const pullRequestGate = blocks.pullRequestGate;
+
+/** Run an agent, asking a human to fix missing capabilities before retrying. */
+export const agentOrHalt = blocks.agentOrHalt;
+
+/** Turn a ticket into an implementation brief, asking a human to clarify missing details. */
+export const reviewTicket = blocks.reviewTicket;

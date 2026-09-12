@@ -10,9 +10,7 @@ const cleanDisk = {
 };
 
 test("unowned, clean, and ff-safe is reusable", () => {
-  expect(() =>
-    assertReusable({ path, sameOwner: false, disk: cleanDisk }),
-  ).not.toThrow();
+  expect(() => assertReusable({ path, sameOwner: false, disk: cleanDisk })).not.toThrow();
 });
 
 test("unowned but dirty is preserved and errors with guidance", () => {

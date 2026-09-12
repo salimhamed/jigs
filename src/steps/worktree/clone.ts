@@ -40,17 +40,14 @@ export function hasBindingClone(repoDir: string): boolean {
   return existsSync(path.join(repoDir, "refs", "remotes", "origin", "HEAD"));
 }
 
-const reason = (err: unknown) =>
-  err instanceof Error ? err.message : String(err);
+const reason = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 // Four steps, each a no-op against the state the one before it leaves, so a
 // clone interrupted anywhere resumes into the objects already on disk rather
 // than downloading them again. A directory already at repoDir is adopted on
 // purpose rather than refused: every step is idempotent, so whatever a killed
 // attempt left is exactly what the next one builds on.
-export async function ensureBindingClone(
-  options: EnsureBindingCloneOptions,
-): Promise<void> {
+export async function ensureBindingClone(options: EnsureBindingCloneOptions): Promise<void> {
   const { repoDir, remote } = options;
   const parent = path.dirname(repoDir);
   try {
@@ -68,9 +65,7 @@ export async function ensureBindingClone(
     // The fetch has already said the one thing an operator can act on;
     // everything else fails for a reason no credential fixes.
     if (err instanceof JigsError) throw err;
-    throw new JigsError(
-      `could not prepare the clone of ${remote} at ${repoDir}: ${reason(err)}`,
-    );
+    throw new JigsError(`could not prepare the clone of ${remote} at ${repoDir}: ${reason(err)}`);
   }
 }
 
@@ -94,9 +89,6 @@ async function pointOriginAt(repoDir: string, remote: string): Promise<void> {
   if (url === null) {
     await git(["remote", "add", "--end-of-options", "origin", remote], repoDir);
   } else if (url !== remote) {
-    await git(
-      ["remote", "set-url", "--end-of-options", "origin", remote],
-      repoDir,
-    );
+    await git(["remote", "set-url", "--end-of-options", "origin", remote], repoDir);
   }
 }

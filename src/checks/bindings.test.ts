@@ -30,18 +30,13 @@ const yml = (name: string, remote: string) => ({
 // Stands in for the clone the service makes at start, for the cases whose
 // remote is deliberately unreachable.
 function markClone(factoryRoot: string, name: string): void {
-  const dir = path.join(
-    bindingRepoDir({ factoryRoot, bindingName: name }),
-    "refs/remotes/origin",
-  );
+  const dir = path.join(bindingRepoDir({ factoryRoot, bindingName: name }), "refs/remotes/origin");
   mkdirSync(dir, { recursive: true });
   writeFileSync(path.join(dir, "HEAD"), "ref: refs/remotes/origin/main\n");
 }
 
 async function check(factoryRoot: string, name: string) {
-  const report = await runChecks(
-    bindingChecks({ factoryRoot: () => factoryRoot, names: [name] }),
-  );
+  const report = await runChecks(bindingChecks({ factoryRoot: () => factoryRoot, names: [name] }));
   const outcome = report.checks[0];
   if (outcome === undefined) throw new Error("no outcome");
   return outcome;
@@ -66,8 +61,7 @@ test("a declared binding with no clone yet names the restart that makes one", as
   expect(await check(factory, "api")).toMatchObject({
     ok: false,
     reason: "binding api has no clone yet",
-    repair:
-      "restart the service: jigs service restart (it clones every binding on start)",
+    repair: "restart the service: jigs service restart (it clones every binding on start)",
   });
 });
 
@@ -98,9 +92,7 @@ test("a declared, cloned binding whose remote answers passes", async () => {
 
 test("a missing jigs.config.ts collapses to one failed check naming the file, not a throw", async () => {
   const root = path.join(tmp, "no-factory-here");
-  const report = await runChecks(
-    bindingChecks({ factoryRoot: () => root, names: ["api", "web"] }),
-  );
+  const report = await runChecks(bindingChecks({ factoryRoot: () => root, names: ["api", "web"] }));
   expect(report.checks).toHaveLength(1);
   expect(report.checks[0]).toMatchObject({
     id: "binding.factory-config",
@@ -110,13 +102,8 @@ test("a missing jigs.config.ts collapses to one failed check naming the file, no
 });
 
 test("an unparseable jigs.config.ts collapses to one failed check", async () => {
-  const factory = makeFactoryRepo(
-    tmp,
-    "export default { bindings: { api: { remote: [",
-  );
-  const report = await runChecks(
-    bindingChecks({ factoryRoot: () => factory, names: ["api"] }),
-  );
+  const factory = makeFactoryRepo(tmp, "export default { bindings: { api: { remote: [");
+  const report = await runChecks(bindingChecks({ factoryRoot: () => factory, names: ["api"] }));
   expect(report.checks).toHaveLength(1);
   expect(report.checks[0]).toMatchObject({
     id: "binding.factory-config",

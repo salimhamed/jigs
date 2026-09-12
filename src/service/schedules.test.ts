@@ -2,12 +2,7 @@ import { expect, test } from "vitest";
 import { z } from "zod";
 import type { Factory, Schedule } from "../blocks/factory.ts";
 import type { RunRow } from "./runs.ts";
-import {
-  fireSchedule,
-  listSchedules,
-  scheduleChecks,
-  startSchedules,
-} from "./schedules.ts";
+import { fireSchedule, listSchedules, scheduleChecks, startSchedules } from "./schedules.ts";
 import type { StartRunResult } from "./trigger.ts";
 
 const RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
@@ -168,9 +163,7 @@ test("a fire while a run of the same schedule is active is skipped, naming the r
     log: (line) => lines.push(line),
   });
   expect(starts).toBe(0);
-  expect(lines).toEqual([
-    `[schedule] nightly skipped: run ${RUN} is still active`,
-  ]);
+  expect(lines).toEqual([`[schedule] nightly skipped: run ${RUN} is still active`]);
 });
 
 test("a suspended run of the same schedule blocks the next fire too", async () => {
@@ -202,9 +195,7 @@ test("a terminal run of the same schedule does not block the next fire", async (
     log: () => {},
   });
   expect(triggerIds).toHaveLength(1);
-  expect(triggerIds[0]).toMatch(
-    /^schedule:nightly:\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/,
-  );
+  expect(triggerIds[0]).toMatch(/^schedule:nightly:\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
 });
 
 test("a fire triggers its workflow with the schedule's declared inputs", async () => {
@@ -257,9 +248,7 @@ test("a trigger path that throws is logged, not left to take the service down", 
     },
     log: (line) => lines.push(line),
   });
-  expect(lines).toEqual([
-    "[schedule] nightly failed: Error: world unreachable",
-  ]);
+  expect(lines).toEqual(["[schedule] nightly failed: Error: world unreachable"]);
 });
 
 test("the listing carries the next occurrence and the active run", async () => {

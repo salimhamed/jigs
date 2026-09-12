@@ -14,13 +14,11 @@ import {
   replyToReviewThread,
   squashMergePr,
 } from "../../providers/github.ts";
-import {
-  type GithubRepoRef,
-  parseGithubRemote,
-} from "../../providers/github-webhook.ts";
+import { type GithubRepoRef, parseGithubRemote } from "../../providers/github-webhook.ts";
 
 // The binding is the remote now, so this is a config read: no git subprocess.
-export async function resolveRepo(binding: string): Promise<GithubRepoRef> {
+/** Find the GitHub repository configured for a binding. */
+export async function resolveRepository(binding: string): Promise<GithubRepoRef> {
   const { remote } = resolveBinding(factoryRoot(), binding);
   const ref = parseGithubRemote(remote);
   if (ref === null) {
@@ -31,7 +29,8 @@ export async function resolveRepo(binding: string): Promise<GithubRepoRef> {
   return ref;
 }
 
-export async function openPr(
+/** Open a pull request from the working branch into the base branch. */
+export async function openPullRequest(
   repo: GithubRepoRef,
   head: string,
   base: string,
@@ -52,7 +51,8 @@ export async function openPr(
 // The posted id is returned rather than dropped: the gate cursor needs the ids
 // of jigs' own replies to tell its last word on a thread from a human's, which
 // author identity cannot do on a personal-token factory.
-export async function replyInThread(
+/** Reply to a review thread and return the posted comment id. */
+export async function replyToPullRequestReviewThread(
   pr: PrRef,
   rootId: number,
   body: string,
@@ -60,17 +60,17 @@ export async function replyInThread(
   return replyToReviewThread(pr, rootId, body);
 }
 
-export async function commentOnPr(pr: PrRef, body: string): Promise<void> {
+/** Post a comment on the pull request conversation. */
+export async function commentOnPullRequest(pr: PrRef, body: string): Promise<void> {
   await postPrComment(pr, body);
 }
 
-// The subject is read here rather than carried in from `describePr`: a
+// The subject is read here rather than carried in from `describePullRequest`: a
 // reviewer who corrects the title — to satisfy a conventional-commit check on
 // the target repo, usually — does it between the PR opening and this merge,
 // and a title captured at open time would ship the one they corrected away.
-export async function squashMerge(
-  pr: PrRef,
-): Promise<{ merged: boolean; sha: string }> {
+/** Squash and merge the pull request using its current title. */
+export async function squashMergePullRequest(pr: PrRef): Promise<{ merged: boolean; sha: string }> {
   const title = await fetchPrTitle(pr);
   return squashMergePr(pr, title);
 }

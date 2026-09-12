@@ -19,12 +19,7 @@ export async function listBindings(deps: BindingsDeps): Promise<void> {
   const rows: string[][] = [];
   for (const [name, binding] of Object.entries(config.bindings)) {
     const clone = bindingRepoDir({ factoryRoot, bindingName: name });
-    rows.push([
-      name,
-      binding.remote,
-      clone,
-      await resolveState(clone, binding.remote),
-    ]);
+    rows.push([name, binding.remote, clone, await resolveState(clone, binding.remote)]);
   }
   if (rows.length === 0) {
     deps.out("no bindings");
@@ -35,10 +30,7 @@ export async function listBindings(deps: BindingsDeps): Promise<void> {
   }
 }
 
-async function resolveState(
-  repoDir: string,
-  pinnedRemote: string,
-): Promise<string> {
+async function resolveState(repoDir: string, pinnedRemote: string): Promise<string> {
   // The same marker the startup gate, doctor and the worktree request read,
   // so all four agree about which bindings have a clone.
   if (!hasBindingClone(repoDir)) return "not cloned (restart the service)";

@@ -5,11 +5,7 @@ import { afterAll, beforeAll, expect, test } from "vitest";
 import { codexExecStepSettings } from "../codex.ts";
 import { stripApiCredentials } from "../env.ts";
 import { codexExec } from "../index.ts";
-import {
-  makeTmpDir,
-  managedCodexHomeState,
-  removeTmpDir,
-} from "../test-fixtures.ts";
+import { makeTmpDir, managedCodexHomeState, removeTmpDir } from "../test-fixtures.ts";
 import {
   assertLivePreconditions,
   makeManagedHome,
@@ -55,9 +51,6 @@ test("Codex exec smoke under the managed home; auth symlink and login survive", 
   const state = managedCodexHomeState(home);
   expect(state.authIsSymlink).toBe(true);
   expect(state.authLinkTarget).toBe(REAL_CODEX_AUTH);
-  const realAuth = JSON.parse(readFileSync(REAL_CODEX_AUTH, "utf8")) as Record<
-    string,
-    unknown
-  >;
+  const realAuth = JSON.parse(readFileSync(REAL_CODEX_AUTH, "utf8")) as Record<string, unknown>;
   expect(Object.keys(realAuth).length).toBeGreaterThan(0);
 });

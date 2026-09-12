@@ -1,10 +1,4 @@
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -48,16 +42,7 @@ afterEach(() => {
 // branch is in by the time the review loop reaches its teardown.
 function runWorktree(branch: string, runId = "run_1"): string {
   const target = path.join(worktreesDir, branch);
-  git(
-    repoDir,
-    "worktree",
-    "add",
-    "-q",
-    target,
-    "-b",
-    branch,
-    "refs/remotes/origin/main",
-  );
+  git(repoDir, "worktree", "add", "-q", target, "-b", branch, "refs/remotes/origin/main");
   writeFileSync(path.join(target, "shipped.txt"), "shipped\n");
   git(target, "add", "shipped.txt");
   git(target, "commit", "-q", "-m", "agent work");
@@ -80,8 +65,7 @@ function codexHome(runId: string): string {
   return home;
 }
 
-const localBranches = () =>
-  git(repoDir, "branch", "--list", "--format=%(refname:short)");
+const localBranches = () => git(repoDir, "branch", "--list", "--format=%(refname:short)");
 const remoteBranches = () => git(repoDir, "ls-remote", "--heads", "origin");
 
 // Merged, not completed: the sweep asks the ancestry question of every
@@ -145,10 +129,8 @@ const featTarget = (worktree: string) => ({
   worktreePath: worktree,
   branch: "feat",
 });
-const featLocal = () =>
-  git(repoDir, "rev-parse", "--verify", "--quiet", "refs/heads/feat") !== "";
-const featRemote = () =>
-  git(repoDir, "ls-remote", "--heads", "origin", "feat") !== "";
+const featLocal = () => git(repoDir, "rev-parse", "--verify", "--quiet", "refs/heads/feat") !== "";
+const featRemote = () => git(repoDir, "ls-remote", "--heads", "origin", "feat") !== "";
 
 test("applying the merged row removes the worktree and deletes the local and remote branches", async () => {
   const worktree = runWorktree("feat");
@@ -189,10 +171,7 @@ test("a merged teardown prunes the tracking ref delete-on-merge left behind", as
   expect(git(repoDir, "rev-parse", "refs/remotes/origin/feat")).not.toBe("");
   git(remoteDir, "update-ref", "-d", "refs/heads/feat");
 
-  await applyTeardown(
-    decideTeardown({ dirty: false, merged: true }),
-    featTarget(worktree),
-  );
+  await applyTeardown(decideTeardown({ dirty: false, merged: true }), featTarget(worktree));
   expect(() => git(repoDir, "rev-parse", "refs/remotes/origin/feat")).toThrow();
 });
 
@@ -235,9 +214,7 @@ test("removing a worktree prunes the admin entry so the same path can be re-adde
     }),
     featTarget(worktree),
   );
-  expect(() =>
-    git(repoDir, "worktree", "add", "-q", worktree, "feat"),
-  ).not.toThrow();
+  expect(() => git(repoDir, "worktree", "add", "-q", worktree, "feat")).not.toThrow();
 });
 
 test("a branch origin's default branch does not contain counts its commits", async () => {
@@ -297,9 +274,7 @@ test("a squash-merged branch is torn down even though it is not an ancestor of t
   );
   git(repoDir, "push", "-q", "origin", `${squashed}:refs/heads/main`);
   git(repoDir, "fetch", "-q", "origin");
-  expect(() =>
-    git(repoDir, "merge-base", "--is-ancestor", "feature", "origin/main"),
-  ).toThrow();
+  expect(() => git(repoDir, "merge-base", "--is-ancestor", "feature", "origin/main")).toThrow();
 
   await teardownMergedRun("run_1", registry());
 

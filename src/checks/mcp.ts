@@ -2,10 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type {
-  McpProbe,
-  McpServerConfig,
-} from "../blocks/agent/harness-config.ts";
+import type { McpProbe, McpServerConfig } from "../blocks/agent/harness-config.ts";
 import { checkWorktreeCodexMcpConfig } from "../steps/agent/harnesses/codex-config-guard.ts";
 import { scrubbedEnv } from "../steps/agent/harnesses/env.ts";
 import { CHECK_TIMEOUT_MS, type Check, type CheckResult } from "./catalog.ts";
@@ -34,9 +31,7 @@ function transportFor(server: McpServerConfig, cwd: string): Transport {
     });
   }
   return new StreamableHTTPClientTransport(new URL(server.url), {
-    ...(server.headers !== undefined
-      ? { requestInit: { headers: server.headers } }
-      : {}),
+    ...(server.headers !== undefined ? { requestInit: { headers: server.headers } } : {}),
   });
 }
 
@@ -105,10 +100,7 @@ async function checkMcpServer(
   }
 }
 
-export function mcpServerChecks(
-  servers: Record<string, McpServerConfig>,
-  cwd: string,
-): Check[] {
+export function mcpServerChecks(servers: Record<string, McpServerConfig>, cwd: string): Check[] {
   return Object.entries(servers).map(([name, server]) => ({
     id: `mcp.${name}`,
     label: `MCP server ${name}`,

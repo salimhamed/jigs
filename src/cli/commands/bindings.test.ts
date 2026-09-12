@@ -33,8 +33,7 @@ const printed = async (cwd = factory) => {
   return lines;
 };
 
-const cloneDir = () =>
-  bindingRepoDir({ factoryRoot: factory, bindingName: "api" });
+const cloneDir = () => bindingRepoDir({ factoryRoot: factory, bindingName: "api" });
 
 // "api" pads to the NAME header's width; the remote, clone and state columns
 // are each already wider than their header.
@@ -42,12 +41,7 @@ const apiRow = (state: string) => `api   ${remoteDir}  ${cloneDir()}  ${state}`;
 
 test("a binding with no clone yet reports where the clone will land", async () => {
   const lines = await printed();
-  expect(lines[0]?.split(/ {2,}/)).toEqual([
-    "NAME",
-    "REMOTE",
-    "CLONE",
-    "STATE",
-  ]);
+  expect(lines[0]?.split(/ {2,}/)).toEqual(["NAME", "REMOTE", "CLONE", "STATE"]);
   expect(lines.slice(1)).toEqual([apiRow("not cloned (restart the service)")]);
 });
 
@@ -62,9 +56,7 @@ test("a clone whose remote no longer matches names the url it found", async () =
   await ensureBindingClone({ repoDir, remote: remoteDir });
   git(repoDir, "remote", "set-url", "origin", "git@github.com:other/api.git");
   const lines = await printed();
-  expect(lines[1]).toBe(
-    apiRow("cloned, remote drifted: git@github.com:other/api.git"),
-  );
+  expect(lines[1]).toBe(apiRow("cloned, remote drifted: git@github.com:other/api.git"));
 });
 
 test("a clone that lost its remote HEAD reports as not cloned, like doctor does", async () => {

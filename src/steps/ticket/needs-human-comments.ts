@@ -16,11 +16,8 @@ import type {
   PostNeedsHumanComment,
 } from "../../blocks/ticket/halt-for-human.ts";
 import type { TicketNote } from "../../blocks/ticket/review.ts";
-import {
-  createComment,
-  getIssueParticipants,
-  listCommentsSince,
-} from "../../providers/linear.ts";
+import { createComment, getIssueParticipants, listCommentsSince } from "../../providers/linear.ts";
+import { dashboardRunUrl, type NamedRunMetadata } from "../run-context.ts";
 import {
   type NeedsHumanContext,
   type RenderNeedsHumanComment,
@@ -29,23 +26,25 @@ import {
   renderProceedingNote,
 } from "./render-comment.ts";
 
+/** Post a question or failure on the ticket so a person can help the run continue. */
 export const postNeedsHumanComment = async (
   issueId: string,
   halt: Halt,
-  context: NeedsHumanContext,
+  metadata: NamedRunMetadata,
   render: RenderNeedsHumanComment = renderNeedsHumanComment,
 ): ReturnType<PostNeedsHumanComment> => {
+  const context: NeedsHumanContext = {
+    runId: metadata.workflowRunId,
+    workflow: metadata.workflowName,
+    dashboardUrl: dashboardRunUrl(metadata.workflowRunId),
+  };
   const participants = await getIssueParticipants(issueId);
-  const comment = await createComment(
-    issueId,
-    render(halt, context, participants),
-  );
-  console.log(
-    `[postNeedsHumanComment] posted comment=${comment.id} issue=${issueId}`,
-  );
+  const comment = await createComment(issueId, render(halt, context, participants));
+  console.log(`[postNeedsHumanComment] posted comment=${comment.id} issue=${issueId}`);
   return { commentId: comment.id, postedAt: comment.createdAt };
 };
 
+/** Tell ticket participants which assumptions the run is proceeding with. */
 export const postTicketNote = async (
   issueId: string,
   note: TicketNote,
@@ -56,6 +55,7 @@ export const postTicketNote = async (
   console.log(`[postTicketNote] posted comment=${comment.id} issue=${issueId}`);
 };
 
+/** Look for a reply since the last check, excluding the run’s own question. */
 export const checkForHumanReply: CheckForHumanReply = async (
   issueId,
   sinceIso,
@@ -69,14 +69,11 @@ export const checkForHumanReply: CheckForHumanReply = async (
   // A factory may run on its operator's own API key, so author identity cannot
   // tell the run's comment from the human's: exclude exactly the comment this
   // suspension posted instead.
-  const human = comments.find(
-    (comment) => comment.user !== null && comment.id !== postedCommentId,
-  );
+  const human = comments.find((comment) => comment.user !== null && comment.id !== postedCommentId);
   console.log(
     `[checkForHumanReply] re-check issue=${issueId} since=${sinceIso} found=${human !== undefined}`,
   );
-  if (human === undefined || human.user === null)
-    return { reply: null, cursor };
+  if (human === undefined || human.user === null) return { reply: null, cursor };
   const reply: HumanReply = {
     commentId: human.id,
     body: human.body,

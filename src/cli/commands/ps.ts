@@ -31,10 +31,7 @@ export interface PsResult {
   schedules: PsSchedule[];
 }
 
-export async function showRuns(
-  deps: ServiceDeps,
-  now: Date = new Date(),
-): Promise<PsResult> {
+export async function showRuns(deps: ServiceDeps, now: Date = new Date()): Promise<PsResult> {
   const res = await serviceFetch(deps.serviceUrl, "/api/runs");
   if (!res.ok) {
     throw new JigsError(`ps failed: HTTP ${res.status} ${await res.text()}`);
@@ -94,10 +91,7 @@ export async function showRuns(
 }
 
 function age(createdAt: string, now: Date): string {
-  const seconds = Math.max(
-    0,
-    Math.round((now.getTime() - new Date(createdAt).getTime()) / 1000),
-  );
+  const seconds = Math.max(0, Math.round((now.getTime() - new Date(createdAt).getTime()) / 1000));
   if (seconds < 60) return `${seconds}s`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
   if (seconds < 86_400) return `${Math.floor(seconds / 3600)}h`;

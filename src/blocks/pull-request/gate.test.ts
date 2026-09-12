@@ -32,10 +32,7 @@ beforeEach(() => {
     token: "github:pr:acme/app#7",
     getConflict: async () => hook.conflict,
     // biome-ignore lint/suspicious/noThenProperty: the SDK's Hook is a thenable
-    then: (
-      onfulfilled: (value: unknown) => unknown,
-      onrejected?: (reason: unknown) => unknown,
-    ) => {
+    then: (onfulfilled: (value: unknown) => unknown, onrejected?: (reason: unknown) => unknown) => {
       hook.awaited += 1;
       return new Promise<unknown>((resolve) => {
         hook.wake = () => resolve(undefined);
@@ -74,10 +71,7 @@ const review = (id: number, state: string, user = "reviewer") => ({
   submittedAt: "2026-08-26T12:00:00Z",
 });
 
-const thread = (
-  rootId: number,
-  authors: Array<[number, string]>,
-): ReviewThread => ({
+const thread = (rootId: number, authors: Array<[number, string]>): ReviewThread => ({
   rootId,
   path: "src/gate.ts",
   line: 12,
@@ -107,10 +101,7 @@ test("no change yields no wakes — the unsatisfied-wake core", () => {
 });
 
 test("an approval yields approved but no longer ends the gate", () => {
-  const result = classifyPrState(
-    snapshot({ reviews: [review(1, "APPROVED")] }),
-    empty,
-  );
+  const result = classifyPrState(snapshot({ reviews: [review(1, "APPROVED")] }), empty);
   expect(result.wakes).toEqual([
     {
       kind: "approved",
@@ -124,10 +115,7 @@ test("an approval yields approved but no longer ends the gate", () => {
 });
 
 test("changes requested since the cursor yields a wake but keeps the gate open", () => {
-  const result = classifyPrState(
-    snapshot({ reviews: [review(2, "CHANGES_REQUESTED")] }),
-    empty,
-  );
+  const result = classifyPrState(snapshot({ reviews: [review(2, "CHANGES_REQUESTED")] }), empty);
   expect(result.wakes).toEqual([
     {
       kind: "changes-requested",
@@ -150,9 +138,7 @@ test("a changes-requested review submitted with inline comments yields one wake 
     empty,
   );
 
-  expect(result.wakes).toEqual([
-    { kind: "review-comments", threads, body: "please fix" },
-  ]);
+  expect(result.wakes).toEqual([{ kind: "review-comments", threads, body: "please fix" }]);
 });
 
 test("an approval alongside inline comments is left alone", () => {
@@ -162,10 +148,7 @@ test("an approval alongside inline comments is left alone", () => {
     empty,
   );
 
-  expect(result.wakes.map((wake) => wake.kind)).toEqual([
-    "approved",
-    "review-comments",
-  ]);
+  expect(result.wakes.map((wake) => wake.kind)).toEqual(["approved", "review-comments"]);
 });
 
 test("already-seen reviews are not re-yielded", () => {
@@ -177,19 +160,13 @@ test("already-seen reviews are not re-yielded", () => {
 });
 
 test("comment-only reviews advance the cursor without a wake", () => {
-  const result = classifyPrState(
-    snapshot({ reviews: [review(3, "COMMENTED")] }),
-    empty,
-  );
+  const result = classifyPrState(snapshot({ reviews: [review(3, "COMMENTED")] }), empty);
   expect(result.wakes).toEqual([]);
   expect(result.cursor.seenReviewIds).toEqual([3]);
 });
 
 test("an unanswered thread since the cursor yields review-comments", () => {
-  const threads = [
-    thread(900, [[900, "reviewer"]]),
-    thread(910, [[910, "reviewer"]]),
-  ];
+  const threads = [thread(900, [[900, "reviewer"]]), thread(910, [[910, "reviewer"]])];
   const result = classifyPrState(snapshot({ reviewThreads: threads }), empty);
 
   expect(result.wakes).toEqual([{ kind: "review-comments", threads }]);
@@ -201,10 +178,7 @@ test("an unanswered thread since the cursor yields review-comments", () => {
 // swallowed every human review comment.
 test("a comment by the viewer's own login still yields review-comments", () => {
   const threads = [thread(900, [[900, "salim"]])];
-  const result = classifyPrState(
-    snapshot({ viewer: "salim", reviewThreads: threads }),
-    empty,
-  );
+  const result = classifyPrState(snapshot({ viewer: "salim", reviewThreads: threads }), empty);
 
   expect(result.wakes).toEqual([{ kind: "review-comments", threads }]);
 });
@@ -220,10 +194,10 @@ test("a thread whose only new comment is our own acked reply yields nothing", ()
       [901, "salim"],
     ]),
   ];
-  const second = classifyPrState(
-    snapshot({ viewer: "salim", reviewThreads: answered }),
-    { ...first.cursor, selfCommentIds: [901] },
-  );
+  const second = classifyPrState(snapshot({ viewer: "salim", reviewThreads: answered }), {
+    ...first.cursor,
+    selfCommentIds: [901],
+  });
 
   expect(second.wakes).toEqual([]);
   expect(second.skippedSelfThreads).toBe(1);
@@ -240,10 +214,10 @@ test("a human's follow-up on a thread we answered re-opens it", () => {
       [901, "salim"],
     ]),
   ];
-  const second = classifyPrState(
-    snapshot({ viewer: "salim", reviewThreads: answered }),
-    { ...first.cursor, selfCommentIds: [901] },
-  );
+  const second = classifyPrState(snapshot({ viewer: "salim", reviewThreads: answered }), {
+    ...first.cursor,
+    selfCommentIds: [901],
+  });
 
   // The operator, on their own token: same login as our reply above.
   const followUp = [
@@ -277,10 +251,7 @@ test("an unacked reply of ours is a wake — the guard is ids, not identity", ()
 test("already-seen comments are not re-yielded", () => {
   const threads = [thread(900, [[900, "reviewer"]])];
   const first = classifyPrState(snapshot({ reviewThreads: threads }), empty);
-  const second = classifyPrState(
-    snapshot({ reviewThreads: threads }),
-    first.cursor,
-  );
+  const second = classifyPrState(snapshot({ reviewThreads: threads }), first.cursor);
   expect(second.wakes).toEqual([]);
   expect(second.cursor.seenCommentIds).toEqual([900]);
 });
@@ -315,32 +286,21 @@ test("the same red head does not re-yield, but a new head does", () => {
     snapshot({ ci: "red", headSha: "head-2", failingChecks: [check("test")] }),
     second.cursor,
   );
-  expect(pushed.wakes).toEqual([
-    expect.objectContaining({ kind: "ci-red", headSha: "head-2" }),
-  ]);
+  expect(pushed.wakes).toEqual([expect.objectContaining({ kind: "ci-red", headSha: "head-2" })]);
 });
 
 test("a recovery to green yields ci-green, and green from nowhere yields nothing", () => {
   const fresh = classifyPrState(snapshot({ ci: "green" }), empty);
   expect(fresh.wakes).toEqual([]);
 
-  const red = classifyPrState(
-    snapshot({ ci: "red", failingChecks: [check("test")] }),
-    empty,
-  );
-  const recovered = classifyPrState(
-    snapshot({ ci: "green", headSha: "head-2" }),
-    red.cursor,
-  );
+  const red = classifyPrState(snapshot({ ci: "red", failingChecks: [check("test")] }), empty);
+  const recovered = classifyPrState(snapshot({ ci: "green", headSha: "head-2" }), red.cursor);
   expect(recovered.wakes).toEqual([{ kind: "ci-green", headSha: "head-2" }]);
   expect(recovered.cursor.lastRedSha).toBeNull();
 });
 
 test("pending yields nothing and leaves the cursor's CI state alone", () => {
-  const red = classifyPrState(
-    snapshot({ ci: "red", failingChecks: [check("test")] }),
-    empty,
-  );
+  const red = classifyPrState(snapshot({ ci: "red", failingChecks: [check("test")] }), empty);
   const pending = classifyPrState(snapshot({ ci: "pending" }), red.cursor);
   expect(pending.wakes).toEqual([]);
   expect(pending.cursor.lastRedSha).toBe(red.cursor.lastRedSha);
@@ -348,19 +308,14 @@ test("pending yields nothing and leaves the cursor's CI state alone", () => {
 
 test("a closed PR yields closed with the merged flag and finishes the gate", () => {
   for (const merged of [true, false]) {
-    const result = classifyPrState(
-      snapshot({ state: "closed", merged }),
-      empty,
-    );
+    const result = classifyPrState(snapshot({ state: "closed", merged }), empty);
     expect(result.wakes).toEqual([{ kind: "closed", merged }]);
     expect(result.done).toBe(true);
   }
 });
 
 test("the gate classifies a first snapshot before it ever awaits the hook", async () => {
-  const fetchState = vi.fn(async () =>
-    snapshot({ state: "closed", merged: true }),
-  );
+  const fetchState = vi.fn(async () => snapshot({ state: "closed", merged: true }));
   const gate = pullRequestGate(pr, fetchState);
 
   expect(await gate.next()).toEqual({
@@ -521,7 +476,5 @@ test("a github ping payload is unroutable", () => {
   ).toBe(null);
   expect(tokenFromGithubPayload(null)).toBe(null);
   expect(tokenFromGithubPayload("pull_request")).toBe(null);
-  expect(
-    tokenFromGithubPayload({ pull_request: { number: "41" }, repository: {} }),
-  ).toBe(null);
+  expect(tokenFromGithubPayload({ pull_request: { number: "41" }, repository: {} })).toBe(null);
 });

@@ -1,10 +1,4 @@
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -40,9 +34,7 @@ test("a non-terminal owner holds its worktree", () => {
 
 test("a suspended run reads as running and is therefore held", () => {
   // The SDK has no `suspended` status — the join sees a non-terminal owner.
-  expect(
-    classifySweep(input({ ownerTerminal: false, dirty: true })).state,
-  ).toBe("held");
+  expect(classifySweep(input({ ownerTerminal: false, dirty: true })).state).toBe("held");
 });
 
 test("a terminal owner with a clean tree is abandoned and eligible", () => {
@@ -67,10 +59,9 @@ test("a half-provisioned tree is kept for diagnosis until force", () => {
 });
 
 test("a live owner holds its worktree even in provision-failed", () => {
-  expect(
-    classifySweep(input({ state: "provision-failed", ownerTerminal: false }))
-      .state,
-  ).toBe("held");
+  expect(classifySweep(input({ state: "provision-failed", ownerTerminal: false })).state).toBe(
+    "held",
+  );
 });
 
 test("a registered path missing from disk is a stale row", () => {
@@ -108,24 +99,11 @@ afterEach(() => {
 
 function addWorktree(branch: string): string {
   const target = path.join(worktreesDir, branch);
-  git(
-    repoDir,
-    "worktree",
-    "add",
-    "-q",
-    target,
-    "-b",
-    branch,
-    "refs/remotes/origin/main",
-  );
+  git(repoDir, "worktree", "add", "-q", target, "-b", branch, "refs/remotes/origin/main");
   return target;
 }
 
-function register(
-  target: string,
-  branch: string,
-  overrides: Partial<WorktreeRow> = {},
-): void {
+function register(target: string, branch: string, overrides: Partial<WorktreeRow> = {}): void {
   store.set(target, {
     path: target,
     branch,
@@ -151,8 +129,7 @@ function codexHome(runId: string): string {
   return home;
 }
 
-const dirty = (target: string) =>
-  writeFileSync(path.join(target, "wip.txt"), "half-finished\n");
+const dirty = (target: string) => writeFileSync(path.join(target, "wip.txt"), "half-finished\n");
 
 function commit(target: string, file: string): void {
   writeFileSync(path.join(target, file), `${file}\n`);
@@ -171,10 +148,7 @@ test("a dry run deletes nothing", async () => {
   expect(report.entries).toHaveLength(2);
   expect(report.removed).toEqual([]);
   // Nothing was decided, so no entry claims a branch outcome.
-  expect(report.entries.map((entry) => entry.branchOutcome)).toEqual([
-    undefined,
-    undefined,
-  ]);
+  expect(report.entries.map((entry) => entry.branchOutcome)).toEqual([undefined, undefined]);
   expect(existsSync(clean)).toBe(true);
   expect(existsSync(messy)).toBe(true);
   expect(store.size).toBe(2);
@@ -201,10 +175,7 @@ test("paths scopes a clean to the approved worktrees only", async () => {
   register(approvedTree, "approved");
   register(declined, "declined");
 
-  const report = await sweepWorktrees(
-    { clean: true, force: true, paths: [approvedTree] },
-    deps(),
-  );
+  const report = await sweepWorktrees({ clean: true, force: true, paths: [approvedTree] }, deps());
   expect(report.removed).toEqual([approvedTree]);
   expect(existsSync(approvedTree)).toBe(false);
   expect(existsSync(declined)).toBe(true);
@@ -246,9 +217,7 @@ test("a half-provisioned tree is kept for diagnosis until --force", async () => 
   await sweepWorktrees({ clean: true, force: true }, deps());
   expect(existsSync(broken)).toBe(false);
   // The branch survives: nothing was merged.
-  expect(git(repoDir, "rev-parse", "--verify", "refs/heads/broken")).toMatch(
-    /^[0-9a-f]{40}$/,
-  );
+  expect(git(repoDir, "rev-parse", "--verify", "refs/heads/broken")).toMatch(/^[0-9a-f]{40}$/);
 });
 
 test("a registered path missing from disk drops only its row", async () => {
@@ -274,9 +243,7 @@ test("a completed owner's merged teardown deletes the row and the branch", async
   );
   expect(store.size).toBe(0);
   // done (merged): the local branch goes with the worktree.
-  expect(() =>
-    git(repoDir, "rev-parse", "--verify", "refs/heads/done"),
-  ).toThrow();
+  expect(() => git(repoDir, "rev-parse", "--verify", "refs/heads/done")).toThrow();
   expect(report.entries[0]?.branchOutcome).toEqual({
     deleted: true,
     unmergedCommits: 0,
@@ -317,9 +284,7 @@ test("an untracked file does not cost a merged worktree its teardown", async () 
   );
   expect(existsSync(done)).toBe(false);
   expect(store.size).toBe(0);
-  expect(() =>
-    git(repoDir, "rev-parse", "--verify", "refs/heads/done"),
-  ).toThrow();
+  expect(() => git(repoDir, "rev-parse", "--verify", "refs/heads/done")).toThrow();
 });
 
 test("the merge check sees work pushed since the clone last fetched", async () => {
@@ -337,9 +302,7 @@ test("the merge check sees work pushed since the clone last fetched", async () =
     { clean: true },
     deps({ run_done: { terminal: true, status: "completed" } }),
   );
-  expect(() =>
-    git(repoDir, "rev-parse", "--verify", "refs/heads/done"),
-  ).toThrow();
+  expect(() => git(repoDir, "rev-parse", "--verify", "refs/heads/done")).toThrow();
 });
 
 test("an unreachable origin costs a notice, not the pass", async () => {
@@ -356,9 +319,7 @@ test("an unreachable origin costs a notice, not the pass", async () => {
   expect(report.removed).toEqual([done]);
   expect(log.some((line) => line.includes("could not fetch"))).toBe(true);
   // The merge check fell back to the stale ref, which reads unmerged.
-  expect(git(repoDir, "rev-parse", "--verify", "refs/heads/done")).toMatch(
-    /^[0-9a-f]{40}$/,
-  );
+  expect(git(repoDir, "rev-parse", "--verify", "refs/heads/done")).toMatch(/^[0-9a-f]{40}$/);
 });
 
 test("a completed owner whose branch never merged keeps it as insurance", async () => {
@@ -371,9 +332,7 @@ test("a completed owner whose branch never merged keeps it as insurance", async 
     deps({ run_done: { terminal: true, status: "completed" } }),
   );
   expect(existsSync(done)).toBe(false);
-  expect(git(repoDir, "rev-parse", "--verify", "refs/heads/done")).toMatch(
-    /^[0-9a-f]{40}$/,
-  );
+  expect(git(repoDir, "rev-parse", "--verify", "refs/heads/done")).toMatch(/^[0-9a-f]{40}$/);
   // The count is what the removed line reports the branch was kept for.
   expect(report.entries[0]?.branchOutcome).toEqual({
     deleted: false,
@@ -385,14 +344,9 @@ test("a failed owner's unmerged branch stays as insurance", async () => {
   const failed = addWorktree("failed");
   commit(failed, "unshipped.txt");
   register(failed, "failed");
-  await sweepWorktrees(
-    { clean: true },
-    deps({ run_failed: { terminal: true, status: "failed" } }),
-  );
+  await sweepWorktrees({ clean: true }, deps({ run_failed: { terminal: true, status: "failed" } }));
   expect(existsSync(failed)).toBe(false);
-  expect(git(repoDir, "rev-parse", "--verify", "refs/heads/failed")).toMatch(
-    /^[0-9a-f]{40}$/,
-  );
+  expect(git(repoDir, "rev-parse", "--verify", "refs/heads/failed")).toMatch(/^[0-9a-f]{40}$/);
 });
 
 test("a cancelled run's empty branch goes with its worktree", async () => {
@@ -407,9 +361,7 @@ test("a cancelled run's empty branch goes with its worktree", async () => {
   );
 
   expect(existsSync(stopped)).toBe(false);
-  expect(() =>
-    git(repoDir, "rev-parse", "--verify", "refs/heads/stopped"),
-  ).toThrow();
+  expect(() => git(repoDir, "rev-parse", "--verify", "refs/heads/stopped")).toThrow();
 });
 
 test("a cancelled run's redundant branch keeps its remote", async () => {
@@ -425,13 +377,9 @@ test("a cancelled run's redundant branch keeps its remote", async () => {
     deps({ run_stopped: { terminal: true, status: "cancelled" } }),
   );
 
-  expect(() =>
-    git(repoDir, "rev-parse", "--verify", "refs/heads/stopped"),
-  ).toThrow();
+  expect(() => git(repoDir, "rev-parse", "--verify", "refs/heads/stopped")).toThrow();
   // The pushed branch is somebody's open PR: only the done row deletes it.
-  expect(git(remoteDir, "rev-parse", "--verify", "refs/heads/stopped")).toMatch(
-    /^[0-9a-f]{40}$/,
-  );
+  expect(git(remoteDir, "rev-parse", "--verify", "refs/heads/stopped")).toMatch(/^[0-9a-f]{40}$/);
 });
 
 test("a cancelled run's dirty tree survives its empty branch", async () => {
@@ -446,9 +394,7 @@ test("a cancelled run's dirty tree survives its empty branch", async () => {
 
   expect(existsSync(stopped)).toBe(true);
   expect(store.get(stopped)?.state).toBe("abandoned-dirty");
-  expect(git(repoDir, "rev-parse", "--verify", "refs/heads/stopped")).toMatch(
-    /^[0-9a-f]{40}$/,
-  );
+  expect(git(repoDir, "rev-parse", "--verify", "refs/heads/stopped")).toMatch(/^[0-9a-f]{40}$/);
 });
 
 test("a cancelled run's branch stays when the ancestry cannot be proven", async () => {
@@ -468,9 +414,7 @@ test("a cancelled run's branch stays when the ancestry cannot be proven", async 
   expect(report.removed).toEqual([stopped]);
   expect(log.some((line) => line.includes("could not fetch"))).toBe(true);
   expect(existsSync(stopped)).toBe(false);
-  expect(git(repoDir, "rev-parse", "--verify", "refs/heads/stopped")).toMatch(
-    /^[0-9a-f]{40}$/,
-  );
+  expect(git(repoDir, "rev-parse", "--verify", "refs/heads/stopped")).toMatch(/^[0-9a-f]{40}$/);
   // No count either: nothing answered the ancestry question.
   expect(report.entries[0]?.branchOutcome).toEqual({ deleted: false });
 });

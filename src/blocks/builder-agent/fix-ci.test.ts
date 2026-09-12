@@ -1,6 +1,6 @@
 import { beforeEach, expect, test } from "vitest";
 import type { CheckRun } from "../../providers/github.ts";
-import type { readDiff } from "../../steps/pull-request/branch.ts";
+import type { readWorktreeDiff } from "../../steps/pull-request/branch.ts";
 import { claude } from "../agent/harness-config.ts";
 import type { AgentStepConfig } from "../agent/plan.ts";
 import { type AgentFn, resumeFailed } from "../agent/resume-or-rebuild.ts";
@@ -27,9 +27,7 @@ const snapshot: TicketSnapshot = {
 
 const handoff: Handoff = { brief: "THE-BRIEF", snapshot, assumptions: [] };
 
-const failing: CheckRun[] = [
-  { name: "test", conclusion: "failure", url: "http://ci.test/1" },
-];
+const failing: CheckRun[] = [{ name: "test", conclusion: "failure", url: "http://ci.test/1" }];
 
 let agentCalls: AgentStepConfig<unknown>[] = [];
 let diffCalls: Array<[string, string]> = [];
@@ -48,7 +46,7 @@ const fakeAgent: AgentFn = async <T>(config: AgentStepConfig<T>) => {
   };
 };
 
-const fakeReadDiff: typeof readDiff = async (cwd, baseSha) => {
+const fakeReadDiff: typeof readWorktreeDiff = async (cwd, baseSha) => {
   diffCalls.push([cwd, baseSha]);
   return "THE-ACTUAL-DIFF";
 };
@@ -56,7 +54,7 @@ const fakeReadDiff: typeof readDiff = async (cwd, baseSha) => {
 const run = (session?: { harness: "claude"; id: string }) =>
   fixCi({
     agent: fakeAgent,
-    readDiff: fakeReadDiff,
+    readWorktreeDiff: fakeReadDiff,
     harness: claude({ model: "sonnet" }),
     cwd: "/tmp/worktree",
     ...(session === undefined ? {} : { session }),
@@ -117,7 +115,7 @@ test("an error that is not a resume failure is not swallowed", async () => {
   await expect(
     fixCi({
       agent: boom,
-      readDiff: fakeReadDiff,
+      readWorktreeDiff: fakeReadDiff,
       harness: claude({ model: "sonnet" }),
       cwd: "/tmp/worktree",
       session: { harness: "claude", id: "s-42" },

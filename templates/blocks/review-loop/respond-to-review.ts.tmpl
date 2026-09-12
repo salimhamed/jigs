@@ -13,14 +13,11 @@ import {
   commentOnPullRequest,
   pushBranch,
   readWorktreeDiff,
-  replyInThread,
+  replyToPullRequestReviewThread,
 } from "../../jigs.ts";
 import type { Builder } from "./builder.ts";
 
-type ReviewWake = Extract<
-  GateWake,
-  { kind: "review-comments" | "changes-requested" }
->;
+type ReviewWake = Extract<GateWake, { kind: "review-comments" | "changes-requested" }>;
 
 export async function respondToReview(
   wake: ReviewWake,
@@ -33,7 +30,7 @@ export async function respondToReview(
 
   const answered = await answerReview({
     agent,
-    readDiff: readWorktreeDiff,
+    readWorktreeDiff,
     harness: builder.harness,
     cwd: builder.cwd,
     ...(builder.session === undefined ? {} : { session: builder.session }),
@@ -49,8 +46,8 @@ export async function respondToReview(
   await pushBranch(builder.cwd, worktree.branch);
 
   const posted = await postReviewAnswers({
-    replyInThread,
-    commentOnPr: commentOnPullRequest,
+    replyToPullRequestReviewThread,
+    commentOnPullRequest,
     pr,
     answers: answered.output,
     threads,

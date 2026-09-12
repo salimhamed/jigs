@@ -5,11 +5,7 @@ import { promisify } from "node:util";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { stripApiCredentials } from "../env.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
-import {
-  assertLivePreconditions,
-  makeManagedHome,
-  makeScratchRepo,
-} from "./fixtures/live-env.ts";
+import { assertLivePreconditions, makeManagedHome, makeScratchRepo } from "./fixtures/live-env.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -28,11 +24,7 @@ afterAll(() => {
 test("app-server step: persistent thread, rollout under the managed home, clean exit", async () => {
   const scratch = makeScratchRepo(tmp);
   const home = makeManagedHome(tmp, "live-appserver");
-  const fixture = path.join(
-    import.meta.dirname,
-    "fixtures",
-    "app-server-step.ts",
-  );
+  const fixture = path.join(import.meta.dirname, "fixtures", "app-server-step.ts");
   const resultFile = path.join(tmp, "app-server-result.json");
 
   const childEnv = { ...process.env };
@@ -52,9 +44,7 @@ test("app-server step: persistent thread, rollout under the managed home, clean 
 
   // Rollouts live under CODEX_HOME/sessions — the managed home is per-run
   // durable state (only persistent threads write one).
-  const rollouts = globSync(
-    path.join(home, "sessions", "**", `*${result.threadId}*`),
-  );
+  const rollouts = globSync(path.join(home, "sessions", "**", `*${result.threadId}*`));
   expect(rollouts.length).toBeGreaterThan(0);
   expect(existsSync(path.join(home, "auth.json"))).toBe(true);
 });

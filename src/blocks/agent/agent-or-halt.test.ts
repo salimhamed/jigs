@@ -64,8 +64,7 @@ test("agentOrHalt posts the repair through haltForHuman and re-runs the step aft
   // step: nobody is being asked to choose between options here.
   expect(halts).toEqual([
     {
-      headline:
-        "jigs could not start a step on **AGE-420** because a check failed.",
+      headline: "jigs could not start a step on **AGE-420** because a check failed.",
       where: "starting a step",
       notes: [
         "MCP server linear: it did not start. fix the linear server",
@@ -91,8 +90,6 @@ test("agentOrHalt rethrows a non-JIT step failure instead of halting", async () 
     },
   } as unknown as AgentOrHaltDeps;
 
-  await expect(agentOrHalt(claim, config, deps)).rejects.toThrow(
-    "could not build the project",
-  );
+  await expect(agentOrHalt(claim, config, deps)).rejects.toThrow("could not build the project");
   expect(halts).toBe(0);
 });

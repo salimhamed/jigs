@@ -11,9 +11,7 @@ export const REAL_CODEX_AUTH = path.join(homedir(), ".codex", "auth.json");
 // five ten-minute timeouts.
 export function assertLivePreconditions(): void {
   if (!existsSync(REAL_CODEX_AUTH)) {
-    throw new Error(
-      `live tests need a ChatGPT-authed Codex login: ${REAL_CODEX_AUTH} is missing`,
-    );
+    throw new Error(`live tests need a ChatGPT-authed Codex login: ${REAL_CODEX_AUTH} is missing`);
   }
   resolveClaudeExecutable();
 }
@@ -34,10 +32,7 @@ export function makeScratchRepo(parent: string, name = "scratch"): string {
 
 // A control CODEX_HOME that DOES declare the probe MCP server — the live
 // control proving the observable (a real tool call) detects registration.
-export function makeControlCodexHome(
-  parent: string,
-  probeToken: string,
-): string {
+export function makeControlCodexHome(parent: string, probeToken: string): string {
   const home = path.join(parent, "control-home");
   mkdirSync(home, { recursive: true });
   const probeServer = path.join(import.meta.dirname, "mcp-probe-server.mjs");

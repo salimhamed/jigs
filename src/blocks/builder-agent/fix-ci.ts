@@ -4,7 +4,7 @@
 // repairing.
 
 import type { CheckRun } from "../../providers/github.ts";
-import type { readDiff } from "../../steps/pull-request/branch.ts";
+import type { readWorktreeDiff } from "../../steps/pull-request/branch.ts";
 import type { HarnessConfig } from "../agent/harness-config.ts";
 import type { AgentSession } from "../agent/result.ts";
 import { type AgentFn, resumeOrRebuild } from "../agent/resume-or-rebuild.ts";
@@ -12,14 +12,11 @@ import { renderChecks } from "../pull-request/answers.ts";
 import type { Handoff } from "../ticket/review.ts";
 import { renderSnapshot } from "../ticket/snapshot.ts";
 import { type FixCiPrompt, fixCiPrompt } from "./fix-ci.prompt.ts";
-import {
-  type FixCiFreshPrompt,
-  fixCiFreshPrompt,
-} from "./fix-ci-fresh.prompt.ts";
+import { type FixCiFreshPrompt, fixCiFreshPrompt } from "./fix-ci-fresh.prompt.ts";
 
 export interface FixCiOptions {
   agent: AgentFn;
-  readDiff: typeof readDiff;
+  readWorktreeDiff: typeof readWorktreeDiff;
   harness: HarnessConfig;
   cwd: string;
   session?: AgentSession;
@@ -38,10 +35,8 @@ export interface FixCiOptions {
  * where it is; only the fresh-context rebuild reports a session, and that one
  * is then the one holding the change.
  */
-export async function fixCi(
-  options: FixCiOptions,
-): Promise<{ session?: AgentSession }> {
-  const { agent, readDiff: read } = options;
+export async function fixCi(options: FixCiOptions): Promise<{ session?: AgentSession }> {
+  const { agent, readWorktreeDiff: read } = options;
   const checks = renderChecks(options.failing);
   const renderResume = options.resumePrompt ?? fixCiPrompt;
   const renderFresh = options.freshPrompt ?? fixCiFreshPrompt;

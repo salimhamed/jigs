@@ -3,6 +3,7 @@
 // and the other steps, which share its GraphQL helper.
 
 export {
+  type CreateIssueInProjectInput,
   createComment,
   createIssueInProject,
   findIssueInProject,

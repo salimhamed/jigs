@@ -3,11 +3,7 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { JigsError } from "../../errors.ts";
-import {
-  makeFactoryRepo,
-  makeTmpDir,
-  removeTmpDir,
-} from "../../test-fixtures.ts";
+import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import { launchRun, parseInputs, validateInputs } from "./run.ts";
 import { SERVICE_ENTRY } from "./service-lifecycle.ts";
 
@@ -43,9 +39,7 @@ const inputsSchema = z.toJSONSchema(
 
 const respondSchema = () =>
   fetchMock.mockResolvedValueOnce(
-    new Response(
-      JSON.stringify({ name: "deliver-feature", inputs: inputsSchema }),
-    ),
+    new Response(JSON.stringify({ name: "deliver-feature", inputs: inputsSchema })),
   );
 
 const respondStarted = () =>
@@ -96,9 +90,7 @@ test("a value the workflow's schema rejects fails with the schema's own error", 
 
 test("a schema violation never reaches the trigger route", async () => {
   respondSchema();
-  const err = await failure(
-    launchRun("deliver-feature", ["ticket=not-a-ticket"], deps()),
-  );
+  const err = await failure(launchRun("deliver-feature", ["ticket=not-a-ticket"], deps()));
   expect(err).toBeInstanceOf(JigsError);
   expect(fetchMock).toHaveBeenCalledTimes(1);
   expect(fetchMock.mock.calls[0]?.[0]).toBe(
@@ -183,9 +175,7 @@ test("a refused launch prints every preflight failure with its repair", async ()
       { status: 424 },
     ),
   );
-  const err = await failure(
-    launchRun("deliver-feature", ["ticket=AGE-346"], deps()),
-  );
+  const err = await failure(launchRun("deliver-feature", ["ticket=AGE-346"], deps()));
   expect(err?.message).toBe("preflight failed — no run created");
   expect(lines.join("\n")).toBe(
     [
@@ -216,9 +206,7 @@ test("a started run prints its id, workflow and log pointer", async () => {
     "logs: http://localhost:9090/run/wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
   ]);
   const [, trigger] = fetchMock.mock.calls;
-  expect(trigger?.[0]).toBe(
-    "http://svc.test:8990/api/workflows/deliver-feature/runs",
-  );
+  expect(trigger?.[0]).toBe("http://svc.test:8990/api/workflows/deliver-feature/runs");
   expect(JSON.parse(String(trigger?.[1]?.body))).toEqual({
     inputs: { ticket: "AGE-346" },
   });
@@ -256,14 +244,10 @@ test("a refinement only the service can see renders as a schema error", async ()
       { status: 400 },
     ),
   );
-  const err = await failure(
-    launchRun("deliver-feature", ["ticket=AGE-346"], deps()),
-  );
+  const err = await failure(launchRun("deliver-feature", ["ticket=AGE-346"], deps()));
   expect(err).toBeInstanceOf(JigsError);
   expect(err?.message).toBe(
-    ["ticket: issue is closed", "(root): askHuman requires a reviewer"].join(
-      "\n",
-    ),
+    ["ticket: issue is closed", "(root): askHuman requires a reviewer"].join("\n"),
   );
   expect(err?.hint).toContain("inputs schema");
 });
@@ -271,9 +255,7 @@ test("a refinement only the service can see renders as a schema error", async ()
 test("a 400 carrying no issues keeps the raw-body error", async () => {
   respondSchema();
   fetchMock.mockResolvedValueOnce(new Response("nope", { status: 400 }));
-  const err = await failure(
-    launchRun("deliver-feature", ["ticket=AGE-346"], deps()),
-  );
+  const err = await failure(launchRun("deliver-feature", ["ticket=AGE-346"], deps()));
   expect(err?.message).toBe("launch failed: HTTP 400 nope");
 });
 

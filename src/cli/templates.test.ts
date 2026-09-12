@@ -5,9 +5,7 @@ import { locateTemplates, packageRoot } from "./templates.ts";
 
 test("the templates ship inside this package, found from its own root", () => {
   const root = packageRoot();
-  const manifest = JSON.parse(
-    readFileSync(path.join(root, "package.json"), "utf8"),
-  );
+  const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
   // The bin name outlives the package name: it is what `pnpm dlx` runs.
   expect(manifest.bin.jigs).toBeDefined();
   // `files` is what `pnpm pack` ships; a templates/ missing from it would

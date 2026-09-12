@@ -2,20 +2,9 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
-import {
-  type ExecFile,
-  execOrExplain,
-  execOutput,
-  nodeExecFile,
-} from "../exec.ts";
+import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
 import { type Step, StepFailed, stepRunner } from "./step-runner.ts";
-import {
-  type UpDeps,
-  type UpOptions,
-  type UpResult,
-  type UpStepName,
-  upFactory,
-} from "./up.ts";
+import { type UpDeps, type UpOptions, type UpResult, type UpStepName, upFactory } from "./up.ts";
 
 // Install the release, refresh its generated integration using the newly
 // installed CLI, rebuild/restart, then check the factory's custom code.
@@ -63,10 +52,7 @@ export async function upgradeFactory(
   options: UpgradeOptions = {},
 ): Promise<UpgradeResult> {
   if (options.to !== undefined && !VERSION.test(options.to)) {
-    throw new JigsError(
-      `--to takes an exact version, got ${options.to}`,
-      "e.g. --to 0.3.0",
-    );
+    throw new JigsError(`--to takes an exact version, got ${options.to}`, "e.g. --to 0.3.0");
   }
   const execFile = deps.execFile ?? nodeExecFile;
   const runner = stepRunner<UpgradeStepName | UpStepName>(deps.out);
@@ -85,11 +71,7 @@ export async function upgradeFactory(
     const after = await runner.run("bump", async (note) => {
       await bump(execFile, factoryRoot, options.to, deps.out);
       const after = publishedVersion(factoryRoot);
-      note(
-        before === after
-          ? `jigs ${after} (unchanged)`
-          : `jigs ${before} → ${after}`,
-      );
+      note(before === after ? `jigs ${after} (unchanged)` : `jigs ${before} → ${after}`);
       return after;
     });
     result.after = after;
@@ -123,9 +105,7 @@ export async function upgradeFactory(
     if (readManifest(factoryRoot).scripts?.typecheck === undefined) {
       runner.skip("typecheck", "no typecheck script in package.json");
     } else {
-      await runner.run("typecheck", () =>
-        typecheck(execFile, factoryRoot, deps.out),
-      );
+      await runner.run("typecheck", () => typecheck(execFile, factoryRoot, deps.out));
     }
 
     deps.out(`${path.basename(factoryRoot)} runs jigs ${after}`);
@@ -140,10 +120,7 @@ export async function upgradeFactory(
 function readManifest(factoryRoot: string): Manifest {
   const file = path.join(factoryRoot, "package.json");
   if (!existsSync(file)) {
-    throw new JigsError(
-      `no package.json in ${factoryRoot}`,
-      "scaffold one: jigs init",
-    );
+    throw new JigsError(`no package.json in ${factoryRoot}`, "scaffold one: jigs init");
   }
   return JSON.parse(readFileSync(file, "utf8")) as Manifest;
 }
@@ -159,8 +136,7 @@ function publishedVersion(factoryRoot: string): string {
   const fromCheckout = Object.entries(declared)
     .filter(
       ([name, spec]) =>
-        CHECKOUT_PACKAGES.includes(name) ||
-        (name === JIGS_PACKAGE && spec.startsWith("link:")),
+        CHECKOUT_PACKAGES.includes(name) || (name === JIGS_PACKAGE && spec.startsWith("link:")),
     )
     .map(([name, spec]) => `${name}: ${spec}`);
   if (fromCheckout.length > 0) {
@@ -196,14 +172,9 @@ async function bump(
   out: (line: string) => void,
 ): Promise<void> {
   const args =
-    to === undefined
-      ? ["update", "--latest", JIGS_PACKAGE]
-      : ["update", `${JIGS_PACKAGE}@${to}`];
+    to === undefined ? ["update", "--latest", JIGS_PACKAGE] : ["update", `${JIGS_PACKAGE}@${to}`];
   await execOrExplain(execFile, "pnpm", args, { cwd: factoryRoot }, out, {
-    missing: new JigsError(
-      "pnpm is not on PATH",
-      "install pnpm: https://pnpm.io/installation",
-    ),
+    missing: new JigsError("pnpm is not on PATH", "install pnpm: https://pnpm.io/installation"),
     failed: (err) => {
       const output = execOutput(err);
       if (/ERR_PNPM_PEER_DEP_ISSUES/.test(output)) {
@@ -232,10 +203,7 @@ async function bump(
           "pick a version the registry has",
         );
       }
-      return new JigsError(
-        `pnpm update failed in ${factoryRoot}`,
-        "the output above is pnpm's",
-      );
+      return new JigsError(`pnpm update failed in ${factoryRoot}`, "the output above is pnpm's");
     },
   });
 }
@@ -245,22 +213,12 @@ async function typecheck(
   factoryRoot: string,
   out: (line: string) => void,
 ): Promise<void> {
-  await execOrExplain(
-    execFile,
-    "pnpm",
-    ["run", "typecheck"],
-    { cwd: factoryRoot },
-    out,
-    {
-      missing: new JigsError(
-        "pnpm is not on PATH",
-        "install pnpm: https://pnpm.io/installation",
+  await execOrExplain(execFile, "pnpm", ["run", "typecheck"], { cwd: factoryRoot }, out, {
+    missing: new JigsError("pnpm is not on PATH", "install pnpm: https://pnpm.io/installation"),
+    failed: () =>
+      new JigsError(
+        `typecheck failed in ${factoryRoot}`,
+        "update custom factory code to match the installed jigs API; jigs.ts has already been regenerated",
       ),
-      failed: () =>
-        new JigsError(
-          `typecheck failed in ${factoryRoot}`,
-          "update custom factory code to match the installed jigs API; jigs.ts has already been regenerated",
-        ),
-    },
-  );
+  });
 }

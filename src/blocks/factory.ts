@@ -3,10 +3,7 @@
 import { z } from "zod";
 import type { WorkflowRequires } from "../checks/index.ts";
 
-export const ticketInput = z.union([
-  z.uuid(),
-  z.string().regex(/^[A-Z][A-Z0-9]*-\d+$/),
-]);
+export const ticketInput = z.union([z.uuid(), z.string().regex(/^[A-Z][A-Z0-9]*-\d+$/)]);
 
 /** What the trigger injects beside a workflow's own parsed inputs. Exported
  *  for the trigger to `satisfies` its injected object against: the workflow
@@ -26,13 +23,12 @@ export type WorkflowInputs<S extends z.ZodType> = z.output<S> & Injected;
  *  the ref against Linear and injects the resolved pair, so the body reads it
  *  rather than resolving the ticket again. The constraint is the honest half —
  *  a schema with no required `ticket` gets nothing resolved. */
-export type TicketWorkflowInputs<S extends z.ZodType<{ ticket: string }>> =
-  z.output<S> & TicketInjected;
+export type TicketWorkflowInputs<S extends z.ZodType<{ ticket: string }>> = z.output<S> &
+  TicketInjected;
 
 export interface WorkflowEntry<S extends z.ZodType = z.ZodType> {
   workflow: (
-    inputs: z.output<S> &
-      (z.output<S> extends { ticket: string } ? TicketInjected : Injected),
+    inputs: z.output<S> & (z.output<S> extends { ticket: string } ? TicketInjected : Injected),
   ) => Promise<unknown>;
   inputs: S;
   // The manifest half of preflight's computed check list.
@@ -80,8 +76,6 @@ export interface FactoryDefinition {
 }
 
 /** Preserve the declaration's inferred keys without loading its workflows. */
-export function defineFactory<const T extends FactoryDefinition>(
-  factory: T,
-): T {
+export function defineFactory<const T extends FactoryDefinition>(factory: T): T {
   return factory;
 }

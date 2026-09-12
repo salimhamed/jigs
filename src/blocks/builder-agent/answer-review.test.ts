@@ -1,6 +1,6 @@
 import { beforeEach, expect, test } from "vitest";
 import type { ReviewThread } from "../../providers/github.ts";
-import type { readDiff } from "../../steps/pull-request/branch.ts";
+import type { readWorktreeDiff } from "../../steps/pull-request/branch.ts";
 import { claude } from "../agent/harness-config.ts";
 import { type AgentStepConfig, parseOutput } from "../agent/plan.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
@@ -69,7 +69,7 @@ const fakeAgent: AgentFn = async <T>(config: AgentStepConfig<T>) => {
   };
 };
 
-const fakeReadDiff: typeof readDiff = async (cwd, baseSha) => {
+const fakeReadDiff: typeof readWorktreeDiff = async (cwd, baseSha) => {
   diffCalls.push([cwd, baseSha]);
   return "diff --git a/src/gate.ts b/src/gate.ts\n+THE-ACTUAL-DIFF\n";
 };
@@ -81,7 +81,7 @@ const answer = (body: string) => ({
 const run = (session?: { harness: "claude"; id: string }) =>
   answerReview({
     agent: fakeAgent,
-    readDiff: fakeReadDiff,
+    readWorktreeDiff: fakeReadDiff,
     harness: claude({ model: "sonnet" }),
     cwd: "/tmp/worktree",
     ...(session === undefined ? {} : { session }),
@@ -149,7 +149,7 @@ test("an error that is not a resume failure is not swallowed", async () => {
   await expect(
     answerReview({
       agent: exploding,
-      readDiff: fakeReadDiff,
+      readWorktreeDiff: fakeReadDiff,
       harness: claude({ model: "sonnet" }),
       cwd: "/tmp/worktree",
       session: { harness: "claude", id: "s-42" },
@@ -164,7 +164,7 @@ test("a review body with no thread of its own is answered on the conversation", 
   raw = [{ answers: [{ threadId: null, body: "addressed all four" }] }];
   const result = await answerReview({
     agent: fakeAgent,
-    readDiff: fakeReadDiff,
+    readWorktreeDiff: fakeReadDiff,
     harness: claude({ model: "sonnet" }),
     cwd: "/tmp/worktree",
     session: { harness: "claude", id: "s-42" },

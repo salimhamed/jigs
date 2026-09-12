@@ -27,10 +27,7 @@ test("the schedules plugin is generated beside the entry, holding the ticker", (
   const root = factory();
   prepare(root);
 
-  const source = readFileSync(
-    path.join(root, GENERATED_DIR, "schedules.ts"),
-    "utf8",
-  );
+  const source = readFileSync(path.join(root, GENERATED_DIR, "schedules.ts"), "utf8");
   expect(source).toContain('from "@salimhamed/jigs/schedules"');
   expect(source).toContain('from "./factory.ts"');
   expect(source).toContain("startSchedules(factory)");
@@ -50,10 +47,7 @@ test("preparing twice restores a hand-edited entry", () => {
 test("generated factory resolves deferred modules only inside the service", () => {
   const root = factory();
   prepare(root);
-  const source = readFileSync(
-    path.join(root, GENERATED_DIR, "factory.ts"),
-    "utf8",
-  );
+  const source = readFileSync(path.join(root, GENERATED_DIR, "factory.ts"), "utf8");
   expect(source).toContain('from "../jigs.config.ts"');
   expect(source).toContain("(await load()).default");
 });

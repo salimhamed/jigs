@@ -70,8 +70,7 @@ export function claudeAuthCheck(deps: ClaudeAuthDeps = {}): Check {
         return {
           ok: false,
           reason: `\`claude auth status --json\` did not answer JSON: ${stdout.slice(0, 200)}`,
-          repair:
-            "check the Claude Code CLI version — jigs reads `claude auth status --json`",
+          repair: "check the Claude Code CLI version — jigs reads `claude auth status --json`",
         };
       }
 
@@ -145,7 +144,5 @@ export function codexAuthCheck(authPath = realCodexAuthPath()): Check {
 
 export function harnessChecks(kinds: HarnessKind[]): Check[] {
   const unique = [...new Set(kinds)];
-  return unique.map((kind) =>
-    kind === "claude" ? claudeAuthCheck() : codexAuthCheck(),
-  );
+  return unique.map((kind) => (kind === "claude" ? claudeAuthCheck() : codexAuthCheck()));
 }

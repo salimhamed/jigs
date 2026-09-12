@@ -4,14 +4,14 @@
 
 import type { CheckRun, PrRef, ReviewThread } from "../../providers/github.ts";
 import type {
-  commentOnPr,
-  replyInThread,
+  commentOnPullRequest,
+  replyToPullRequestReviewThread,
 } from "../../steps/pull-request/pr.ts";
 import type { ThreadAnswers } from "../builder-agent/answer-review.ts";
 
 export interface PostReviewAnswersOptions {
-  replyInThread: typeof replyInThread;
-  commentOnPr: typeof commentOnPr;
+  replyToPullRequestReviewThread: typeof replyToPullRequestReviewThread;
+  commentOnPullRequest: typeof commentOnPullRequest;
   pr: PrRef;
   answers: ThreadAnswers;
   // The wake's own threads: anything the model names outside them is invented,
@@ -25,10 +25,8 @@ export interface PostReviewAnswersOptions {
  * thread from a human's. Conversation comments are left out: they never appear
  * among the review threads the guard filters.
  */
-export async function postReviewAnswers(
-  options: PostReviewAnswersOptions,
-): Promise<number[]> {
-  const { commentOnPr: comment, replyInThread: reply, pr } = options;
+export async function postReviewAnswers(options: PostReviewAnswersOptions): Promise<number[]> {
+  const { commentOnPullRequest: comment, replyToPullRequestReviewThread: reply, pr } = options;
   const known = new Set(options.threads.map((thread) => thread.rootId));
   const posted: number[] = [];
   for (const answer of options.answers.answers) {

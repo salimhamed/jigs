@@ -2,11 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { bindingRepoDir } from "../../steps/worktree/layout.ts";
-import {
-  makeFactoryRepo,
-  makeTmpDir,
-  removeTmpDir,
-} from "../../test-fixtures.ts";
+import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import { type BindDeps, bindRepo } from "./bind.ts";
 import { unbindRepo } from "./unbind.ts";
 
@@ -31,8 +27,7 @@ function deps(overrides: Partial<BindDeps> = {}): BindDeps {
   };
 }
 
-const jigsConfig = () =>
-  readFileSync(path.join(factory, "jigs.config.ts"), "utf8");
+const jigsConfig = () => readFileSync(path.join(factory, "jigs.config.ts"), "utf8");
 const API = "git@github.com:acme/Api.git";
 
 test("bind writes the remote under a name derived from the repo", async () => {
@@ -44,9 +39,7 @@ test("bind writes the remote under a name derived from the repo", async () => {
 
 test("a new binding says the restart that clones it", async () => {
   await bindRepo(API, deps());
-  expect(lines).toContain(
-    "restart the service to clone api: jigs service restart",
-  );
+  expect(lines).toContain("restart the service to clone api: jigs service restart");
 });
 
 test("a non-github remote's name comes from the last path segment", async () => {
@@ -92,9 +85,7 @@ test("a name re-bound after an unbind says the restart the old clone hides", asy
 
   lines = [];
   await bindRepo("git@github.com:acme/api-moved.git", deps(), { name: "api" });
-  expect(lines).toContain(
-    "restart the service to clone api: jigs service restart",
-  );
+  expect(lines).toContain("restart the service to clone api: jigs service restart");
 });
 
 test("a name already bound to another remote is refused, hinting unbind", async () => {
@@ -132,16 +123,14 @@ test("a path argument is refused with the remote-URL hint", async () => {
 
 test("a remote starting with a dash is refused before it can become a git option", async () => {
   const before = jigsConfig();
-  await expect(
-    bindRepo("--upload-pack=touch /tmp/pwned", deps()),
-  ).rejects.toThrow("starts with a dash");
+  await expect(bindRepo("--upload-pack=touch /tmp/pwned", deps())).rejects.toThrow(
+    "starts with a dash",
+  );
   expect(jigsConfig()).toBe(before);
 });
 
 test("bind outside a factory repo fails with guidance", async () => {
-  await expect(bindRepo(API, deps({ cwd: tmp }))).rejects.toThrow(
-    "not inside a factory repo",
-  );
+  await expect(bindRepo(API, deps({ cwd: tmp }))).rejects.toThrow("not inside a factory repo");
 });
 
 // ---- the webhook leg --------------------------------------------------------
@@ -181,9 +170,7 @@ test("re-bind with ingressUrl configured performs no webhook writes the second t
   const first = await bindRepo(API, deps());
   expect(first.webhook).toBe("created");
   expect(fetchMock).toHaveBeenCalledTimes(2);
-  const created = JSON.parse(
-    String((fetchMock.mock.calls[1] as [string, RequestInit])[1].body),
-  );
+  const created = JSON.parse(String((fetchMock.mock.calls[1] as [string, RequestInit])[1].body));
 
   const secretFile = path.join(tmp, "data", "jigs", "github-webhook-secret");
   const secretBytes = readFileSync(secretFile);
@@ -268,21 +255,15 @@ test("no GITHUB_TOKEN anywhere fails with the repair, and the retry ensures the 
   const retry = await bindRepo(API, deps());
   expect(retry.webhook).toBe("created");
   // The failed run wrote the binding but nothing cloned it.
-  expect(lines).toContain(
-    "restart the service to clone api: jigs service restart",
-  );
+  expect(lines).toContain("restart the service to clone api: jigs service restart");
 });
 
 test("the repair carries --name, so the retry lands on the same binding", async () => {
   stubWebhookEnv();
   vi.stubEnv("GITHUB_TOKEN", "");
   makeIngressFactory();
-  const failure = await bindRepo(API, deps(), { name: "forge" }).catch(
-    (err: unknown) => err,
-  );
-  expect((failure as { hint?: string }).hint).toContain(
-    `re-run: jigs bind ${API} --name forge`,
-  );
+  const failure = await bindRepo(API, deps(), { name: "forge" }).catch((err: unknown) => err);
+  expect((failure as { hint?: string }).hint).toContain(`re-run: jigs bind ${API} --name forge`);
 });
 
 test("a failure GitHub did not lay on the token does not send the operator after one", async () => {
@@ -299,14 +280,10 @@ test("a failure GitHub did not lay on the token does not send the operator after
 test("a token GitHub rejects fails with the repair, and the retry ensures the webhook", async () => {
   stubWebhookEnv();
   makeIngressFactory();
-  fetchMock.mockResolvedValueOnce(
-    new Response("Bad credentials", { status: 401 }),
-  );
+  fetchMock.mockResolvedValueOnce(new Response("Bad credentials", { status: 401 }));
   const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
   expect(String(failure)).toContain("401");
-  expect((failure as { hint?: string }).hint).toContain(
-    `re-run: jigs bind ${API}`,
-  );
+  expect((failure as { hint?: string }).hint).toContain(`re-run: jigs bind ${API}`);
   expect(jigsConfig()).toContain(`remote: "${API}"`);
 
   fetchMock
@@ -383,10 +360,7 @@ test("a token this shell alone has is noted, since the service reads .env", asyn
     .mockResolvedValueOnce(new Response(JSON.stringify({ id: 9 })));
   await bindRepo(API, deps());
   expect(
-    lines.some(
-      (l) =>
-        l.includes("this shell's") && l.includes(path.join(factory, ".env")),
-    ),
+    lines.some((l) => l.includes("this shell's") && l.includes(path.join(factory, ".env"))),
   ).toBe(true);
 });
 
@@ -415,9 +389,7 @@ test("unsupported bindings fail before modifying files or registering webhooks",
   writeFileSync(path.join(factory, "jigs.config.ts"), text);
   const fetch = vi.fn();
   vi.stubGlobal("fetch", fetch);
-  await expect(bindRepo(API, deps())).rejects.toThrow(
-    "Cannot edit bindings in jigs.config.ts",
-  );
+  await expect(bindRepo(API, deps())).rejects.toThrow("Cannot edit bindings in jigs.config.ts");
   expect(jigsConfig()).toBe(text);
   expect(fetch).not.toHaveBeenCalled();
 });
