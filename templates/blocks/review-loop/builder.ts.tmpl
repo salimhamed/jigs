@@ -1,11 +1,6 @@
 import type { AgentSession, HarnessConfig } from "@salimhamed/jigs/blocks";
 
-// The one mutable cell the builder-facing files share. ./describe-and-open-pr.ts
-// reads `session` and `cwd` and never writes back: the describing harness is
-// that file's own choice while the builder's is the loop's, and a session
-// recorded on one harness cannot be resumed on the other. It is written by
-// ./review-loop.ts after the implementation, and by the three files that send
-// the builder back in.
+// Keep the builder's session separate from agents using a different harness.
 export type Builder = {
   harness: HarnessConfig;
   cwd: string;

@@ -1,7 +1,3 @@
-// How a pull request introduces itself is this factory's voice: jigs ships the
-// mechanics, ./describe-pr.prompt.ts ships the words, and what is left
-// here is what to do when the answer drifts out of this factory's conventions.
-
 import type { WorktreeFacts } from "@salimhamed/jigs";
 import {
   claude,
@@ -26,10 +22,6 @@ export async function describeAndOpenPullRequest(
   const described = await describePullRequest({
     agent,
     readWorktreeDiff,
-    // The describing agent is this factory's own choice, not the loop's: the
-    // loop runs on the implementation harness, and prose is a different job.
-    // A session recorded on the other harness is the common case here, and the
-    // resume fallback reports it as a resume failure like any other.
     harness: claude({ model: "opus" }),
     cwd: builder.cwd,
     baseSha: worktree.baseSha,
@@ -43,11 +35,6 @@ export async function describeAndOpenPullRequest(
   return openPullRequest(repo, worktree.branch, worktree.defaultBranch, title, body);
 }
 
-// This factory's policy for a description that drifts: repair it. A factory
-// whose target repo gates on the title — a conventional-commit check, say —
-// may prefer to throw here instead, and kill the run rather than open a pull
-// request CI will refuse. Only one attempt is on offer either way: the resume
-// fallback fires on a resume failure and on nothing else.
 function repaired(description: { title: string; body: string }, ticket: TicketSnapshot) {
   let { title, body } = description;
   if (!title.startsWith(`${ticket.identifier}: `)) {

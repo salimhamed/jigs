@@ -1,9 +1,4 @@
-// The sequence ./review-loop.ts runs, held to through the real jigs blocks.
-// The integration in ../../jigs.ts is faked where the loop reaches a
-// network, git remote, agent, or durable gate. This folder runs for real —
-// the resume-first fallbacks, the prompts, this factory's PR conventions and
-// the repair applied to them — so what these tests pin is the part this factory
-// owns: the order, the CI bound, the merge policy and the endings.
+// Run real blocks with durable steps replaced by test doubles.
 
 import type { ReviewThread, WorktreeFacts } from "@salimhamed/jigs";
 import {
@@ -26,9 +21,6 @@ type BranchState = { commits: number; headSha: string; dirty: boolean };
 type RepoRef = { owner: string; repo: string };
 type CiRed = Extract<GateWake, { kind: "ci-red" }>;
 
-// Hoisted above the imports: the mock factories below run while
-// ./review-loop.ts is being imported, which is before this module's own body
-// has evaluated anything.
 const shared = vi.hoisted(() => ({
   calls: {
     trail: [] as string[],
@@ -55,9 +47,7 @@ const shared = vi.hoisted(() => ({
     pushHead: ((nth: number) => ({ headSha: `pushed-${nth}` })) as (nth: number) => {
       headSha: string;
     },
-    // Names the one resuming agent call a test wants to fail, by its prompt: a
-    // positional count would silently re-aim itself onto whichever resuming
-    // call happens to come first.
+    // Match by prompt so adding earlier calls does not move the simulated failure.
     staleResume: (() => false) as (config: AgentStepConfig<unknown>) => boolean,
     mergeError: null as Error | null,
   },
@@ -75,8 +65,6 @@ vi.mock("../../jigs.ts", () => {
       }
       calls.gateFinished = true;
     } finally {
-      // What attend's own finally does: an early return disposes the gate's
-      // hook rather than leaving it held.
       calls.trail.push("gate closed");
     }
   }
@@ -85,9 +73,6 @@ vi.mock("../../jigs.ts", () => {
       calls.trail.push("agent");
       calls.agent.push(config as AgentStepConfig<unknown>);
       if (config.resume !== undefined && script.staleResume(config as AgentStepConfig<unknown>)) {
-        // What the real wrapper does with the step's marker: a session the
-        // harness no longer holds becomes the one throw resumeOrRebuild
-        // catches.
         unwrapAgentStep({ resumeFailed: "no rollout for thread id 0199-gone" });
       }
       const raw = config.output === undefined ? undefined : script.outputs.shift();
@@ -232,8 +217,6 @@ const approval: GateWake = {
 
 const approved = { verdict: "approved", findings: [] };
 
-// The description every run needs before the PR is opened. Both fields are
-// non-empty because pullRequestDescription refuses anything else.
 const description = { title: "described title", body: "described body" };
 
 const answerFor = (rootIds: number[]) => ({
@@ -243,8 +226,7 @@ const answerFor = (rootIds: number[]) => ({
   })),
 });
 
-// The first `empty` branch reads report a dirty worktree and no commits; every
-// read after them carries one.
+// Simulate uncommitted work until the recovery attempt succeeds.
 const emptyBranches =
   (empty: number) =>
   (nth: number): BranchState =>
@@ -268,8 +250,7 @@ const run = (merge: "jigs" | "human" = "jigs") =>
   });
 
 beforeEach(() => {
-  // Assigned into rather than rebound: the mock factories closed over these
-  // two objects while ./review-loop.ts was being imported.
+  // Preserve the object references captured by the hoisted mocks.
   Object.assign(calls, {
     trail: [],
     agent: [],
@@ -286,8 +267,6 @@ beforeEach(() => {
   });
   Object.assign(script, {
     wakes: [],
-    // The code-review verdict and the PR description every test needs before
-    // the gate is reached.
     outputs: [approved, description],
     branch: (nth: number) => ({
       commits: 1,
@@ -326,9 +305,7 @@ test("an empty branch with a clean tree fails loudly instead of opening an empty
   script.branch = () => ({ commits: 0, headSha: "base-sha-1", dirty: false });
 
   await expect(run()).rejects.toThrow(snapshot.branchName);
-  // Nothing describes or opens a branch that turned out to carry nothing.
   expect(calls.opens).toEqual([]);
-  // Nothing to recover, so no commit round is spent and nothing is pushed.
   expect(commitRounds()).toEqual([]);
   expect(calls.branchStates).toHaveLength(1);
   expect(calls.pushes).toEqual([]);
@@ -341,12 +318,8 @@ test("an empty branch with a dirty worktree sends the builder back to commit", a
 
   const rounds = commitRounds();
   expect(rounds).toHaveLength(1);
-  // Inside the builder's own session: it is the one holding the work it left
-  // uncommitted.
   expect(rounds[0]?.resume).toEqual({ harness: "claude", id: "s-1" });
   expect(rounds[0]?.cwd).toBe("/tmp/worktree");
-  // The second read sees the commit, so the branch is pushed once and the run
-  // continues into the PR.
   expect(calls.branchStates).toHaveLength(2);
   expect(calls.pushes).toHaveLength(1);
   expect(calls.opens).toHaveLength(1);
@@ -359,14 +332,11 @@ test("a stale session commits from a fresh context rather than failing the run",
   script.staleResume = (config) => config.prompt.startsWith("# Commit your work");
   const result = await run();
 
-  // The same prompt either way: the work is on disk, so the fresh round needs
-  // no rebuilt context of its own.
   const rounds = commitRounds();
   expect(rounds).toHaveLength(2);
   expect(rounds[0]?.resume).toEqual({ harness: "claude", id: "s-1" });
   expect(rounds[1]?.resume).toBeUndefined();
-  // The throwing resume records no session, so the fresh round is s-4 — and
-  // the describing call after it is the one that resumes it.
+  // s-4 is the fresh session created after the failed resume.
   expect(calls.agent[4]?.resume).toEqual({ harness: "claude", id: "s-4" });
   expect(result).toEqual({ pr, cycles: 1 });
 });
@@ -375,7 +345,6 @@ test("a commit round that still commits nothing fails the run", async () => {
   script.branch = emptyBranches(2);
 
   await expect(run()).rejects.toThrow("commit-recovery round");
-  // Exactly one round: the recovery is bounded, not a loop.
   expect(commitRounds()).toHaveLength(1);
   expect(calls.branchStates).toHaveLength(2);
   expect(calls.pushes).toEqual([]);
@@ -386,9 +355,6 @@ test("the description this factory writes is what the PR is opened with", async 
   script.wakes = [closedMerged];
   await run();
 
-  // The loop holds no title or body of its own, and the repair is this
-  // factory's: the ticket is prefixed onto the title and its link appended to
-  // a body that carries none.
   expect(calls.opens).toEqual([
     [
       { owner: pr.owner, repo: pr.repo },
@@ -404,9 +370,6 @@ test("the description resumes the builder's session on this factory's own harnes
   script.wakes = [closedMerged];
   await run();
 
-  // s-1 is the implement call, so the describing agent can resume the context
-  // that wrote the change rather than reading the diff cold — on the harness
-  // this factory picked for prose, not the loop's.
   const describing = calls.agent[2];
   expect(describing?.resume).toEqual({ harness: "claude", id: "s-1" });
   expect(describing?.cwd).toBe("/tmp/worktree");
@@ -424,8 +387,6 @@ test("a review-comments wake answers every thread in place", async () => {
     [910, "answered 910"],
   ]);
   expect(calls.comments).toEqual([]);
-  // The answer prompts have the builder commit its fix, so the branch has to
-  // carry it before the reply claims it does.
   expect(calls.pushes).toEqual([
     ["/tmp/worktree", snapshot.branchName],
     ["/tmp/worktree", snapshot.branchName],
@@ -454,8 +415,7 @@ test("the ids of the replies it posts ride back into the gate", async () => {
   script.wakes = [{ kind: "review-comments", threads: [thread(900), thread(910)] }, closedMerged];
   await run();
 
-  // What keeps the gate from waking the builder back into a thread whose only
-  // new comment is the loop's own reply, without filtering by author.
+  // Ignore replies posted by this run when the gate next checks the thread.
   expect(calls.acks).toEqual([{ selfCommentIds: [901, 911] }]);
 });
 
@@ -504,8 +464,6 @@ test("the fourth consecutive red escalates as an @-mention instead of a fix", as
   script.wakes = [ciRed("sha-1"), ciRed("sha-2"), ciRed("sha-3"), ciRed("sha-4"), closedMerged];
   await run();
 
-  // Three bounded fix attempts, each reading the branch and pushing what it
-  // committed, then the escalation in place of a fourth.
   expect(calls.trail).toEqual([
     "agent",
     "agent",
@@ -541,24 +499,19 @@ test("the fourth consecutive red escalates as an @-mention instead of a fix", as
   expect(calls.comments[0]?.startsWith("@salim")).toBe(true);
   expect(calls.comments[0]).toContain("3 fix attempts");
   expect(calls.comments[0]).toContain("**test** — failure");
-  // Never haltForHuman: the channel for this conversation is GitHub.
   expect(calls.haltForHuman).toBe(0);
 });
 
 test("a fix that commits nothing escalates instead of waiting for a wake that cannot come", async () => {
-  // The second red is the same streak: the stand-down already spent it, so it
-  // draws neither a fix nor a second comment.
   script.wakes = [ciRed("sha-1"), ciRed("sha-1"), closedMerged];
-  // No new head means no new CI event, so the gate would never wake again.
+  // No new commit means CI will not run again.
   script.branch = () => ({ commits: 1, headSha: "sha-1", dirty: false });
   await run();
 
   expect(ciFixes()).toHaveLength(1);
-  // And nothing is pushed on that wake: there is no new commit to push.
   expect(calls.pushes).toHaveLength(1);
   expect(calls.comments).toHaveLength(1);
   expect(calls.comments[0]?.startsWith("@salim")).toBe(true);
-  // Its own reason, not the exhausted-bound one: no attempt count was spent.
   expect(calls.comments[0]).toContain("produced no new commit");
   expect(calls.comments[0]).not.toContain("fix attempts");
 });
@@ -579,9 +532,6 @@ test("the CI fix does not take over the builder's session pointer", async () => 
   ];
   await run();
 
-  // s-1 is the implement step: the code reviewer, the description, the CI fix
-  // and the answer all ran after it, and only the implement session holds the
-  // ticket and the change.
   expect(calls.agent.at(-1)?.resume).toEqual({ harness: "claude", id: "s-1" });
 });
 
@@ -595,9 +545,7 @@ test("a stale session sends the CI fix into a fresh context that then holds the 
   ];
   await run();
 
-  // s-1, s-2 and s-3 are implement, code review and the description, and the
-  // throwing resume records no session, so the rebuilt fix is s-5. The answer
-  // resumes that.
+  // The failed resume creates no session; the fresh retry is s-5.
   const fresh = calls.agent[4];
   expect(fresh?.resume).toBeUndefined();
   expect(fresh?.prompt).toContain("AGE-316");
@@ -650,16 +598,12 @@ test("with no reviewer to name the escalation falls back to the repo owner", asy
 });
 
 test("an approval squash-merges and returns the merged PR", async () => {
-  // The second wake is never reached: the loop returns on the approval.
   script.wakes = [approval, closedMerged];
   const result = await run();
 
-  // No title crosses the boundary: the merge reads the PR's own, so a title a
-  // reviewer corrected after the PR opened is the one that ships.
   expect(calls.merges).toEqual([pr.number]);
   expect(result.pr).toEqual(pr);
-  // The gate never ran out of wakes, so only attend's finally can have closed
-  // it.
+  // Exiting early must still dispose the gate.
   expect(calls.gateFinished).toBe(false);
   expect(calls.trail.at(-1)).toBe("gate closed");
 });

@@ -1,5 +1,4 @@
-# This factory's own Postgres World. The project name namespaces the
-# container and the volume, so two factories on one machine never collide.
+# Isolate this factory's container and volume from other factories.
 name: {{FACTORY_NAME}}
 services:
   postgres:

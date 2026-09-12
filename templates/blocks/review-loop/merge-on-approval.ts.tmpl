@@ -1,6 +1,3 @@
-// What an approval means here, under both merge policies — they are one
-// decision and have to be read side by side.
-
 import { type Attend, finished, type GateWake, listen, type PrRef } from "@salimhamed/jigs/blocks";
 import { commentOnPullRequest, squashMergePullRequest } from "../../jigs.ts";
 
@@ -21,10 +18,7 @@ export async function squashMergeOnApproval(
   try {
     await squashMergePullRequest(pr);
   } catch (error) {
-    // GitHub answers 405 for a pull request that is not mergeable, and this
-    // arm merges on approval without checking CI. Letting that escape would
-    // fail the run on a recoverable state; listening on keeps the gate alive
-    // so the eventual close still ends the run.
+    // A refused merge can recover; keep listening for a later merge or close.
     await commentOnPullRequest(pr, mergeRefused(wake.reviewer, error));
     return listen();
   }
