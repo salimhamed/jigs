@@ -199,8 +199,6 @@ function describeFailure(result: Exclude<StartRunResult, { kind: "started" }>) {
   switch (result.kind) {
     case "preflight-failed":
       return `preflight failed\n${formatFailures(result.report)}`;
-    case "invalid-ticket":
-      return `invalid ticket: ${result.reason}`;
     case "unknown-workflow":
       return `unknown workflow (known: ${result.knownWorkflows.join(", ")})`;
     case "invalid-inputs":

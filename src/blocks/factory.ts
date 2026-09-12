@@ -5,31 +5,17 @@ import type { WorkflowRequires } from "../checks/index.ts";
 
 export const ticketInput = z.union([z.uuid(), z.string().regex(/^[A-Z][A-Z0-9]*-\d+$/)]);
 
-/** What the trigger injects beside a workflow's own parsed inputs. Exported
- *  for the trigger to `satisfies` its injected object against: the workflow
- *  types below are built from these two, so a field on one side and not the
- *  other fails to compile. */
+/** Metadata supplied to every workflow run. */
 export type Injected = { triggerId: string };
-export type TicketInjected = Injected & {
-  issueId: string;
-  identifier: string;
-};
 
-/** What a workflow body is handed: its own parsed inputs plus the `triggerId`
- *  the trigger injects on every run. */
+/** Parsed workflow inputs with the trigger that started the run. */
 export type WorkflowInputs<S extends z.ZodType> = z.output<S> & Injected;
 
-/** The same for a workflow whose inputs carry a `ticket`: the trigger resolves
- *  the ref against Linear and injects the resolved pair, so the body reads it
- *  rather than resolving the ticket again. The constraint is the honest half —
- *  a schema with no required `ticket` gets nothing resolved. */
-export type TicketWorkflowInputs<S extends z.ZodType<{ ticket: string }>> = z.output<S> &
-  TicketInjected;
+/** Ticket references are ordinary inputs; resolve them explicitly in a step. */
+export type TicketWorkflowInputs<S extends z.ZodType<{ ticket: string }>> = WorkflowInputs<S>;
 
 export interface WorkflowEntry<S extends z.ZodType = z.ZodType> {
-  workflow: (
-    inputs: z.output<S> & (z.output<S> extends { ticket: string } ? TicketInjected : Injected),
-  ) => Promise<unknown>;
+  workflow: (inputs: WorkflowInputs<S>) => Promise<unknown>;
   inputs: S;
   // The manifest half of preflight's computed check list.
   requires?: WorkflowRequires;

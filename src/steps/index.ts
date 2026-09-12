@@ -21,6 +21,7 @@ export {
   squashMergePullRequest,
 } from "./pull-request/pr.ts";
 export { dashboardRunUrl } from "./run-context.ts";
+export { createRunDirectory, removeRunDirectory } from "./run-directory/index.ts";
 export { fetchTicketSnapshot } from "./ticket/fetch-snapshot.ts";
 export {
   type CreateIssueInProjectInput,
@@ -42,6 +43,7 @@ export {
   renderProceedingNote,
   type TicketParticipants,
 } from "./ticket/render-comment.ts";
+export { resolveLinearIssue } from "./ticket/resolve.ts";
 export {
   type ProvisionWorktreeDeps,
   provisionWorktree,

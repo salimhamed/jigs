@@ -124,3 +124,33 @@ test("doctor checks aws only when a profile is set, having no manifest to read",
   vi.stubEnv("AWS_PROFILE", "some-profile");
   expect(doctorChecks().map((c) => c.id)).toContain("aws.credentials");
 });
+
+test("generic workflows require neither Linear nor GitHub credentials", async () => {
+  vi.stubEnv("LINEAR_API_KEY", "");
+  vi.stubEnv("GITHUB_TOKEN", "");
+  expect(preflightIds({})).toEqual([]);
+  expect((await runChecks(preflightChecks({}))).ok).toBe(true);
+});
+
+test("workflows check only explicitly declared integrations", async () => {
+  vi.stubEnv("LINEAR_API_KEY", "");
+  vi.stubEnv("GITHUB_TOKEN", "");
+  expect(preflightIds({ integrations: ["linear"] })).toEqual(["core.linear-api-key"]);
+  expect(preflightIds({ integrations: ["github"] })).toEqual(["core.github-token"]);
+  const report = await runChecks(preflightChecks({ integrations: ["linear", "github"] }));
+  expect(report.ok).toBe(false);
+  expect(report.checks).toHaveLength(2);
+});
+
+test("doctor checks credentials only for configured integrations", () => {
+  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  vi.stubEnv("LINEAR_API_KEY", "");
+  vi.stubEnv("GITHUB_TOKEN", "");
+  const ids = () => doctorChecks().map((check) => check.id);
+  expect(ids()).not.toContain("core.linear-api-key");
+  expect(ids()).not.toContain("core.github-token");
+  expect(ids()).not.toContain("linear.webhook");
+  vi.stubEnv("LINEAR_API_KEY", "configured");
+  expect(ids()).toContain("core.linear-api-key");
+  expect(ids()).not.toContain("core.github-token");
+});

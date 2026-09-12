@@ -47,11 +47,7 @@ export interface ResumeOrRebuildOptions<T> {
 
 export interface ResumeOrRebuildResult<T> {
   output: T;
-  /**
-   * Set only when a fresh context did the work, and that session is then the
-   * one holding the change. A resumed agent works inside the pointer it was
-   * handed, which is still the run's own, so it reports none.
-   */
+  /** The session holding the completed work, whether resumed or newly created. */
   session?: AgentSession;
 }
 
@@ -76,7 +72,7 @@ export async function resumeOrRebuild<T = undefined>(
         resume: options.session,
         prompt: options.resumePrompt,
       });
-      return { output: resumed.output };
+      return { output: resumed.output, session: resumed.session ?? options.session };
     } catch (err) {
       if (!(err instanceof ResumeFailedError)) throw err;
       console.log(`[${options.label}] resume failed — falling back to a fresh context`);

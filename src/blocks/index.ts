@@ -57,7 +57,10 @@ export {
 } from "./agent/resume-or-rebuild.ts";
 export {
   type BoundReviewTicketOptions,
+  bindAgentSteps,
   bindJigs,
+  bindLinearSteps,
+  bindPullRequestSteps,
   type JigsSteps,
 } from "./bind-jigs.ts";
 export {

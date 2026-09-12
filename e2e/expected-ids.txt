@@ -7,6 +7,7 @@
 step//./jigs//askModel
 step//./jigs//checkForHumanReply
 step//./jigs//commentOnPullRequest
+step//./jigs//createRunDirectory
 step//./jigs//fetchPullRequestState
 step//./jigs//fetchTicketSnapshot
 step//./jigs//openPullRequest
@@ -17,7 +18,9 @@ step//./jigs//pushBranch
 step//./jigs//readBranchState
 step//./jigs//readWorktreeDiff
 step//./jigs//removeMergedRunWorktrees
+step//./jigs//removeRunDirectory
 step//./jigs//replyToPullRequestReviewThread
+step//./jigs//resolveLinearIssue
 step//./jigs//resolveRepository
 step//./jigs//runAgent
 step//./jigs//squashMergePullRequest

@@ -6,14 +6,14 @@ name. jigs keeps all directives in factories so upgrading the library does not
 rename their durable addresses. Library implementations are plain functions.
 
 The factory commits a generated root `jigs.ts` containing explicit named step
-wrappers and blocks bound to those wrappers through `bindJigs`. This replaces
+wrappers and blocks bound to those wrappers through independent agent, integration and delivery binders. This replaces
 the manually maintained `steps/jigs.ts` and `blocks/jigs.ts`. `jigs generate`
 refreshes the integration from the installed package, and `jigs upgrade` runs
 that command after installation. Normal builds check for drift without editing
 source. Committing the generated file keeps a fresh clone typecheckable and the
 addresses reviewable. Custom code and prompt choices never belong in it.
 
-Custom blocks can use `bindJigs` with a replacement factory-local step. A custom
+Custom blocks can bind just the capabilities they need with replacement factory-local steps. A custom
 comment renderer is imported inside that step, not passed across a durable call.
 This preserves customization without teaching a generator to rewrite user code.
 

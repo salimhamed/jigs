@@ -35,7 +35,7 @@ const app = createApp({
     bound: {
       workflow: async () => undefined,
       inputs: z.object({}),
-      requires: { bindings: ["api"], harnesses: ["claude"] },
+      requires: { bindings: ["api"], harnesses: ["claude"], integrations: ["linear", "github"] },
     },
   },
 });
@@ -135,8 +135,12 @@ test("the undeclared-binding failure names the exact jigs bind invocation", asyn
   expect(binding?.repair).toContain("--name api");
 });
 
-test("GET /api/doctor reports red without creating a run", async () => {
+test("GET /api/doctor reports rejected configured credentials without creating a run", async () => {
   seedThreeFailures();
+  vi.stubEnv("GITHUB_TOKEN", "rejected-token");
+  vi.stubGlobal("fetch", async () =>
+    Response.json({ message: "Bad credentials" }, { status: 401 }),
+  );
   const res = await app.request("/api/doctor");
   expect(res.status).toBe(200);
   const body = (await res.json()) as {
@@ -146,7 +150,7 @@ test("GET /api/doctor reports red without creating a run", async () => {
   };
   expect(body.ok).toBe(false);
   const failed = body.checks.filter((check) => !("ok" in check && check.ok));
-  expect(failed.length).toBeGreaterThan(0);
+  expect(failed.map((check) => check.id)).toContain("core.github-token");
   for (const failure of failed) expect(failure.repair).not.toBe("");
   // Doctor runs the whole catalog, not one workflow's manifest.
   expect(body.checks.map((check) => check.id)).toContain("harness.codex-auth");
@@ -203,9 +207,8 @@ test("doctor reports a malformed schedule beside the catalog's own checks", asyn
   const schedule = body.checks.find((check) => check.id === "schedule.nightly");
   expect(schedule?.label).toBe("schedule nightly");
   expect(schedule?.repair).toContain("fix schedules.nightly.cron");
-  // Still the whole catalog: the schedule checks are appended to it, not a
-  // replacement for it.
-  expect(body.checks.map((check) => check.id)).toContain("core.github-token");
+  expect(body.checks.map((check) => check.id)).toContain("harness.claude-auth");
+  expect(body.checks.map((check) => check.id)).not.toContain("core.github-token");
 });
 
 test("doctor names an unreadable factory config instead of staying silent", async () => {

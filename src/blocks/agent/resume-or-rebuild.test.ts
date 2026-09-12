@@ -59,9 +59,7 @@ test("a live session is resumed and the fresh prompt is never built", async () =
   // the resume path must not pay for it.
   expect(built).toBe(0);
   expect(result.output).toEqual({ note: "done" });
-  // The resumed agent worked inside the pointer it was handed, so the run's
-  // own pointer is still the current one.
-  expect(result.session).toBeUndefined();
+  expect(result.session).toEqual({ harness: "claude", id: "s-1" });
 });
 
 test("an unusable session falls back to the fresh context, which then holds the change", async () => {
@@ -105,4 +103,16 @@ test("an error that is not a resume failure is not swallowed", async () => {
       freshPrompt: "here is everything",
     }),
   ).rejects.toThrow("the harness fell over");
+});
+
+test("a successful resume retains its session when the harness omits session metadata", async () => {
+  const session = { harness: "claude" as const, id: "s-retained" };
+  const agent: AgentFn = async <T>() => ({ text: "", output: undefined as T });
+  const result = await resumeOrRebuild({
+    ...base,
+    agent,
+    session,
+    freshPrompt: "unused",
+  });
+  expect(result.session).toEqual(session);
 });

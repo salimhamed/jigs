@@ -14,6 +14,7 @@ export interface PrReview {
   body: string;
   user: string;
   submittedAt: string;
+  commitSha?: string;
 }
 
 export interface ReviewComment {
@@ -171,8 +172,14 @@ export async function fetchPrSnapshot(pr: PrRef): Promise<PrSnapshot> {
       body: string | null;
       user: { login: string } | null;
       submitted_at: string;
+      commit_id?: string;
     }>
-  >(`${prPath}/reviews?per_page=100`); // unpaginated cap, accepted for v0
+  >(`${prPath}/reviews?per_page=100`);
+  for (let page = 2; reviews.length === (page - 1) * 100; page += 1) {
+    const more = await githubGet<typeof reviews>(`${prPath}/reviews?per_page=100&page=${page}`);
+    reviews.push(...more);
+    if (more.length < 100) break;
+  }
   const comments = await githubGet<
     Array<{
       id: number;
@@ -235,6 +242,7 @@ export async function fetchPrSnapshot(pr: PrRef): Promise<PrSnapshot> {
       body: review.body ?? "",
       user: review.user?.login ?? "unknown",
       submittedAt: review.submitted_at,
+      ...(review.commit_id === undefined ? {} : { commitSha: review.commit_id }),
     })),
     reviewThreads: groupThreads(comments),
     ci,
@@ -288,10 +296,15 @@ export async function fetchPrTitle(pr: PrRef): Promise<string> {
 export async function squashMergePr(
   pr: PrRef,
   title: string,
+  expectedHeadSha?: string,
 ): Promise<{ merged: boolean; sha: string }> {
   return githubRequest<{ merged: boolean; sha: string }>(
     "PUT",
     `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}/merge`,
-    { merge_method: "squash", commit_title: title },
+    {
+      merge_method: "squash",
+      commit_title: title,
+      ...(expectedHeadSha === undefined ? {} : { sha: expectedHeadSha }),
+    },
   );
 }

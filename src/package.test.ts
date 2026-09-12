@@ -154,18 +154,15 @@ test("the factory template pins the same versions this package peers on", async 
   expect(template.dependencies["@salimhamed/jigs"]).toBe(pkg.version);
 });
 
-// The two barrels are the whole public code surface now: nine subpaths, of
-// which four are reachable from the scaffold — `.`, ./blocks, ./steps and
-// ./nitro — so the exports-map test above covers under half of them, and the
-// exports-target test checks only that an entry's source file exists, never
-// what it exports. Value names only: this test reads them back through a
-// runtime import, which cannot see a type at all. The type surface of both
-// barrels is guarded next door, by tsc, in barrels.types.test.ts.
+// Public value exports are checked here; TypeScript checks the type surface.
 const BARREL_EXPORTS: Record<string, string[]> = {
   "blocks/index.ts": [
     "agent",
     "agentOrHalt",
     "bindJigs",
+    "bindAgentSteps",
+    "bindLinearSteps",
+    "bindPullRequestSteps",
     "answerReview",
     "answerReviewPrompt",
     "ask",
@@ -218,7 +215,57 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "unreachable",
     "unwrapAgentStep",
   ],
+  "blocks/agent/index.ts": [
+    "agent",
+    "ask",
+    "bindAgentSteps",
+    "claude",
+    "codex",
+    "interpolate",
+    "JitCheckError",
+    "unwrapAgentStep",
+    "buildAgentWire",
+    "buildAskWire",
+    "parseOutput",
+    "rebuildContextPrompt",
+    "resumeOrRebuild",
+  ],
+  "blocks/ticket/index.ts": [
+    "bindLinearSteps",
+    "ClaimConflictError",
+    "claimTicket",
+    "TICKET_TOKEN_PREFIX",
+    "ticketToken",
+    "tokenFromLinearPayload",
+    "haltForHuman",
+    "haltOption",
+    "haltQuestion",
+    "NEEDS_HUMAN_TOKEN_PREFIX",
+    "needsHumanToken",
+    "reviewTicket",
+    "ticketReviewVerdict",
+    "renderSnapshot",
+    "toSnapshot",
+    "ticketReviewPrompt",
+  ],
+  "blocks/pull-request/index.ts": [
+    "postReviewAnswers",
+    "renderChecks",
+    "attend",
+    "finished",
+    "listen",
+    "bindPullRequestSteps",
+    "classifyPrState",
+    "PR_TOKEN_PREFIX",
+    "prToken",
+    "pullRequestGate",
+    "tokenFromGithubPayload",
+  ],
+  "blocks/delivery/index.ts": ["bindDeliverySteps"],
   "steps/index.ts": [
+    "createRunDirectory",
+    "removeRunDirectory",
+    "resolveLinearIssue",
     "readBranchState",
     "checkForHumanReply",
     "commentOnPullRequest",

@@ -1,12 +1,12 @@
 # jigs
 
-A lights-on software development factory: workflows that take approved Linear
-tickets through agent implementation, review, and human approval to a merged PR.
+Durable workflows that combine agent reasoning, model calls, and external operations.
+Factories define their processes; jigs supplies reusable execution and domain blocks.
 
 ## Language
 
 **Workflow**:
-A complete development process, defined once and reused across many runs.
+A complete process, defined once and reused across many runs.
 _Avoid_: pipeline, flow, DAG
 
 **Jig**:
@@ -172,8 +172,8 @@ when clarification is needed. It returns a handoff when review can proceed.
 _Avoid_: intake, triage
 
 **Review loop**:
-Factory-owned coordination that carries a handoff through implementation,
-code review, pull-request feedback and merge.
+Reusable delivery coordination that carries a work item through implementation,
+code review, pull-request feedback and merge under factory-selected policy.
 _Avoid_: build loop, PR loop, the reviewLoop jig
 
 **Brief**:
@@ -230,3 +230,11 @@ _Avoid_: cron job, timer, recurring run
 The workflow runtime’s persistence and queue backend, dedicated to one
 factory’s runs.
 _Avoid_: backend, database, store
+
+**Work item**:
+The requirements a delivery process implements, independent of their source.
+_Avoid_: Linear ticket (for a source-independent work item)
+
+**Run directory**:
+A scratch directory retained for a run while it is active, without a Git repository requirement.
+_Avoid_: worktree (for a directory without a repository)

@@ -80,8 +80,7 @@ test("the fix runs inside the builder's session rather than context-free", async
   expect(agentCalls[0]?.prompt).toContain("http://ci.test/1");
   // The diff read is a step call; the resumed arm must not pay for it.
   expect(diffCalls).toEqual([]);
-  // A resumed fix leaves the builder's pointer where it is.
-  expect(fixed.session).toBeUndefined();
+  expect(fixed.session).toEqual({ harness: "claude", id: "s-1" });
 });
 
 test("a stale session sends the fix into a fresh context that then holds the change", async () => {

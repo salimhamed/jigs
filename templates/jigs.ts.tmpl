@@ -2,14 +2,11 @@
 // Put custom steps and bindings in steps/ and blocks/.
 
 import type { WorktreeFacts } from "@salimhamed/jigs";
-import {
-  type AgentWire,
-  type AskWire,
-  bindJigs,
-  type Halt,
-  type PrRef,
-  type TicketNote,
-} from "@salimhamed/jigs/blocks";
+import { bindAgentSteps } from "@salimhamed/jigs/agents";
+import type { AgentWire, AskWire, Halt, PrRef, TicketNote } from "@salimhamed/jigs/blocks";
+import { bindDeliverySteps } from "@salimhamed/jigs/delivery";
+import { bindLinearSteps } from "@salimhamed/jigs/linear";
+import { bindPullRequestSteps } from "@salimhamed/jigs/pull-requests";
 import type { GithubRepoRef, WorktreeRequest } from "@salimhamed/jigs/steps";
 import * as steps from "@salimhamed/jigs/steps";
 import { getWorkflowMetadata } from "workflow";
@@ -28,14 +25,14 @@ export async function removeMergedRunWorktrees() {
   return steps.removeMergedRunWorktrees(metadata);
 }
 
-/** Run a coding agent in a worktree. Use agent() to pass an output schema and parse its answer. */
+/** Run an agent in a working directory. Use agent() to pass an output schema and parse its answer. */
 export async function runAgent(request: AgentWire) {
   "use step";
   const metadata = getWorkflowMetadata();
   return steps.runAgent(request, metadata);
 }
 
-/** Ask a model without worktree access. Use ask() to pass an output schema and parse its answer. */
+/** Ask a model without tools. Use ask() to pass an output schema and parse its answer. */
 export async function askModel(request: AskWire) {
   "use step";
   const metadata = getWorkflowMetadata();
@@ -75,6 +72,26 @@ export async function fetchPullRequestState(pullRequest: PrRef) {
 export async function fetchTicketSnapshot(issueId: string) {
   "use step";
   return steps.fetchTicketSnapshot(issueId);
+}
+
+/** Resolve a Linear ticket identifier or issue ID before claiming it. */
+export async function resolveLinearIssue(reference: string) {
+  "use step";
+  return steps.resolveLinearIssue(reference);
+}
+
+/** Prepare this run's scratch directory, preserving it when the run resumes. */
+export async function createRunDirectory() {
+  "use step";
+  const metadata = getWorkflowMetadata();
+  return steps.createRunDirectory(metadata);
+}
+
+/** Remove this run's scratch directory after its work is complete. */
+export async function removeRunDirectory() {
+  "use step";
+  const metadata = getWorkflowMetadata();
+  return steps.removeRunDirectory(metadata);
 }
 
 /** Find the GitHub repository configured for a factory binding. */
@@ -130,38 +147,70 @@ export async function commentOnPullRequest(pullRequest: PrRef, body: string) {
 }
 
 /** Squash-merge the pull request, using its current title for the merge commit. */
-export async function squashMergePullRequest(pullRequest: PrRef) {
+export async function squashMergePullRequest(pullRequest: PrRef, expectedHeadSha?: string) {
   "use step";
-  return steps.squashMergePullRequest(pullRequest);
+  return steps.squashMergePullRequest(pullRequest, expectedHeadSha);
 }
 
-/** Standard steps for bindJigs(). Replace a member to customize a block's behavior. */
-export const jigsSteps = {
-  runAgent,
-  askModel,
+/** Durable operations used by agent blocks. */
+export const agentSteps = { runAgent, askModel };
+const agents = bindAgentSteps(agentSteps);
+
+/** Run an agent with tools and validate its answer against your output schema. */
+export const agent = agents.agent;
+
+/** Ask a model without tools and validate its answer against your output schema. */
+export const ask = agents.ask;
+
+/** Durable operations used by Linear blocks. */
+export const linearSteps = {
+  agent,
   postNeedsHumanComment,
   postTicketNote,
   checkForHumanReply,
-  fetchPullRequestState,
   fetchTicketSnapshot,
 };
+const linear = bindLinearSteps(linearSteps);
 
-const blocks = bindJigs(jigsSteps);
-
-/** Run a coding agent in a worktree and parse its answer using your output schema. */
-export const agent = blocks.agent;
-
-/** Ask a model without worktree access and parse its answer using your output schema. */
-export const ask = blocks.ask;
-
-/** Ask for help on the ticket and wait for a human reply before continuing. */
-export const haltForHuman = blocks.haltForHuman;
-
-/** Watch pull-request reviews, CI results, and closure so your workflow can respond. */
-export const pullRequestGate = blocks.pullRequestGate;
+/** Ask for help on the Linear ticket and wait for a human reply. */
+export const haltForHuman = linear.haltForHuman;
 
 /** Run an agent, asking a human to fix missing capabilities before retrying. */
-export const agentOrHalt = blocks.agentOrHalt;
+export const agentOrHalt = linear.agentOrHalt;
 
-/** Turn a ticket into an implementation brief, asking a human to clarify missing details. */
-export const reviewTicket = blocks.reviewTicket;
+/** Clarify a Linear ticket and prepare an implementation brief. */
+export const reviewTicket = linear.reviewTicket;
+
+/** Durable operations used by pull-request blocks. */
+export const pullRequestSteps = { fetchPullRequestState };
+const pullRequests = bindPullRequestSteps(pullRequestSteps);
+
+/** Watch pull-request reviews, CI results, and closure. */
+export const pullRequestGate = pullRequests.pullRequestGate;
+
+/** Operations used by delivery blocks; replace any with your own factory operation. */
+export const deliverySteps = {
+  agent,
+  pullRequestGate,
+  readBranchState,
+  readWorktreeDiff,
+  pushBranch,
+  resolveRepository,
+  createPullRequest: openPullRequest,
+  commentOnPullRequest,
+  replyToPullRequestReviewThread,
+  squashMergePullRequest,
+};
+const delivery = bindDeliverySteps(deliverySteps);
+
+/** Implement a task and follow its pull request through review and merge. */
+export const reviewLoop = delivery.reviewLoop;
+
+/** Implement a task and review the change within your chosen round limit. */
+export const implementAndReview = delivery.implementAndReview;
+
+/** Publish an approved change as a pull request. */
+export const openPullRequestForChange = delivery.openPullRequest;
+
+/** Address pull-request feedback and CI failures until it merges, closes, or reaches a limit. */
+export const followPullRequest = delivery.followPullRequest;

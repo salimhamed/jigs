@@ -12,8 +12,7 @@ bindings, and the service that runs them.
 - `workflows/` — complete processes with a `"use workflow"` entry point.
 - `blocks/` — reusable coordination and replay-safe decisions, without directives.
 - `steps/` — add custom `"use step"` functions here for durable external operations.
-- `blocks/review-loop/` — this factory's review loop and its colocated
-  `describe-pr.prompt.ts`. Override jigs prompts where their blocks are called.
+- `blocks/tickets/` — explicit ticket acquisition and mapping to delivery requirements.
 - `jigs.config.test.ts` — factory declarations and emitted workflow/step ids.
 - `docker-compose.yml` — the factory's Postgres World.
 
@@ -80,19 +79,28 @@ such as `claude`, `codex`, and `claimTicket` from `@salimhamed/jigs/blocks`.
 Custom steps import implementations from `@salimhamed/jigs/steps` inside a
 factory module containing named `"use step"` functions.
 
-To customize a bound block's underlying steps, use `bindJigs` outside the
-generated file:
+`ship` exposes `implementationHarness`, `implementationModel`, `reviewHarness`,
+`reviewModel`, `reviewRounds`, `ciFixAttempts`, and `pullRequestRevisionRounds` inputs.
+A reached limit returns `limit-reached`; only `merged` triggers worktree removal.
+Factory code can supply role prompts and an `onLimit` callback for human guidance.
+
+To replace durable behavior, bind a module outside the generated file:
 
 ```ts
-import { bindJigs } from "@salimhamed/jigs/blocks";
-import { jigsSteps } from "../jigs.ts";
-import { postNeedsHumanComment } from "../steps/post-comment.ts";
+import { bindDeliverySteps } from "@salimhamed/jigs/delivery";
+import { deliverySteps } from "../jigs.ts";
+import { publishPullRequest } from "../steps/publish.ts";
 
-export const { reviewTicket } = bindJigs({ ...jigsSteps, postNeedsHumanComment });
+export const { reviewLoop } = bindDeliverySteps({
+  ...deliverySteps,
+  createPullRequest: publishPullRequest,
+});
 ```
 
-Prompt overrides belong beside their callers. A custom comment renderer runs
-inside a custom step; do not pass renderer functions as durable step arguments.
+`/agents`, `/linear`, and `/pull-requests` can also be bound independently.
+A different ticket source can supply the delivery module's `WorkItem` directly.
+See [the delivery guide](https://github.com/salimhamed/jigs/blob/main/docs/delivery.md)
+for limits, role overrides, and phase composition.
 
 ## Upgrading jigs
 

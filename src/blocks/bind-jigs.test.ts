@@ -92,3 +92,20 @@ test("custom comment steps receive only serializable halt data and no step-objec
     "posted",
   );
 });
+
+test("generic agents require no ticket or pull-request steps", async () => {
+  const { bindAgentSteps } = await import("./agent/index.ts");
+  const askModel = vi.fn<JigsSteps["askModel"]>(async function (this: unknown) {
+    expect(this).toBeUndefined();
+    return { text: "", output: { finding: "unused" } };
+  });
+  const bound = bindAgentSteps({ runAgent: unused, askModel });
+  expect(
+    await bound.askModel({
+      harness: claude({ model: "sonnet" }),
+      prompt: "Summarize evidence",
+      output: z.object({ finding: z.string() }),
+    }),
+  ).toMatchObject({ output: { finding: "unused" } });
+  expect(askModel).toHaveBeenCalledOnce();
+});

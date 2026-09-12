@@ -25,9 +25,8 @@ completion or cancellation with the operator.
 
 1. Write `workflows/<name>.ts` with a zod input schema and an exported async
    function whose first statement is `"use workflow"`.
-2. Type inputs as `WorkflowInputs<typeof inputs>`, or
-   `TicketWorkflowInputs<typeof inputs>` for required ticket inputs. These
-   include the trigger's injected fields. Do not resolve the ticket again.
+2. Type inputs as `WorkflowInputs<typeof inputs>`. Only `triggerId` is injected.
+   Resolve and claim tickets explicitly in factory code; a `ticket` input has no special behavior.
 3. Default-export `{ workflow: functionName, inputs, requires }` from the module.
 4. Register `name: () => import("./workflows/<name>.ts")` in the config's
    `workflows` object. Keep imports deferred so operating commands don't load
@@ -44,31 +43,25 @@ Pass typed prompt overrides directly to jigs blocks. For shared defaults, write
 one custom block wrapping the shipped block, with defaults before the spread
 of caller options so a call site can override them.
 
-For different durable behavior, write a named custom `"use step"` function.
-`bindJigs` from `@salimhamed/jigs/blocks` accepts the `jigsSteps` exported by
-local `jigs.ts`, with individual steps replaced:
+For different durable behavior, write a named custom `"use step"` function and
+bind the appropriate module: `bindAgentSteps`, `bindLinearSteps`,
+`bindPullRequestSteps`, or `bindDeliverySteps`. Generated integration exports each
+module's dependencies for selective replacement. Keep functions workflow-side;
+never send a prompt or callback through a durable step argument.
 
-```ts
-const blocks = bindJigs({ ...jigsSteps, postNeedsHumanComment: customComment });
-```
+For delivery, use `reviewLoop` or compose `implementAndReview`,
+`openPullRequestForChange`, and `followPullRequest`. Configure separate role
+harnesses/prompts and explicit limits. Handle `limit-reached`, `stopped`, and
+`closed` outcomes; remove worktrees only after `merged`. Ticket-source code returns
+`WorkItem` requirements without making the loop depend on that provider.
 
-Keep renderer functions inside the custom step that calls the implementation;
-functions are not ordinary serializable step inputs. Preserve the current `Halt`
-structure, run metadata and ticket-note behavior when replacing comment steps.
-
-## Prompts
-
-Prompts are typed functions in `.prompt.ts` files beside their callers. Use the
-shipped prompt types for overrides. `reviewTicket` accepts `prompt`, the
-implementation/review block accepts `implementPrompt` and `codeReviewPrompt`,
-and CI/review-response blocks accept `freshPrompt` and `resumePrompt`.
-Keep prompt choices out of generated integration; no central prompt registry
-is needed. The scaffold's PR prompt is beside `describe-and-open-pr.ts`.
+Consult `docs/delivery.md` in the jigs repository for the supported interface and
+examples. Keep factory prompt overrides beside their callers.
 
 ## Configuration and schedules
 
 `jigs.config.ts` declares ports, ingress URL, bindings, deferred workflow imports
-and schedules. Secrets remain in `.env`. A schedule names a `workflow`, cron
+and schedules. Declare used credential providers in `requires.integrations`. Secrets remain in `.env`. A schedule names a `workflow`, cron
 expression and inputs; the service validates its inputs against the workflow's
 schema. An active prior run causes a tick to be skipped; downtime isn't replayed.
 

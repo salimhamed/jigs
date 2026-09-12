@@ -1,0 +1,21 @@
+import { claimTicket, type Handoff, renderSnapshot } from "@salimhamed/jigs/linear";
+import type { WorkItem } from "@salimhamed/jigs/delivery";
+import { fetchTicketSnapshot, resolveLinearIssue } from "../../jigs.ts";
+
+/** Claim a Linear ticket and read its current requirements. */
+export async function acquireLinearTicket(reference: string) {
+  const issue = await resolveLinearIssue(reference);
+  const claim = await claimTicket(issue.id, issue.identifier);
+  const snapshot = await fetchTicketSnapshot(issue.id);
+  return { claim, snapshot };
+}
+
+/** Keep the ticket requirements and implementation brief together for delivery. */
+export function workItemFromHandoff(handoff: Handoff): WorkItem {
+  return {
+    key: handoff.snapshot.identifier,
+    title: handoff.snapshot.title,
+    url: handoff.snapshot.url,
+    instructions: `${renderSnapshot(handoff.snapshot)}\n\n## Implementation brief\n${handoff.brief}\n\nThe ticket requirements take precedence over the brief.`,
+  };
+}

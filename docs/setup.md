@@ -151,105 +151,26 @@ checks for drift and fails with that command as the repair. `jigs upgrade`
 refreshes it automatically after installing the new library.
 
 Workflows import built-in steps and bound blocks from `../jigs.ts`. Custom steps
-live in `steps/`, and custom compositions live in `blocks/`. To replace a shipped
-step, bind your own named wrapper with `bindJigs({ ...jigsSteps, ...overrides })`.
-The `bindJigs` helper comes from `@salimhamed/jigs/blocks`, and `jigsSteps` from
-local `jigs.ts`. Comment renderers belong inside the custom step that calls them;
-never pass a renderer function across a durable step call.
+live in `steps/`, and custom coordination lives in `blocks/`. Bind only the
+capabilities you need with `bindAgentSteps`, `bindLinearSteps`,
+`bindPullRequestSteps`, or `bindDeliverySteps`; generated integration exports
+`agentSteps`, `linearSteps`, `pullRequestSteps`, and `deliverySteps` for overrides.
+Functions such as prompts stay workflow-side and are never durable step inputs.
 
 Renaming a workflow or durable step changes its address. Finish or cancel affected
 runs before deploying such a change. Library version bumps alone do not rename
 factory-local addresses.
 
-**The loop itself is factory code too.** jigs ships the review loop's pieces
-as blocks — `implementUntilCodeReviewApproves`, `answerReview`, `fixCi`,
-`commitWork`, `postReviewAnswers`, `describePr`, `attend` — and `jigs init`
-scaffolds `blocks/review-loop/`, one decision per file, calling them in order.
-The split is where a wrong edit lands: jigs owns what would break (the
-builder's session pointer, the resume fallback, the ids the gate cursor needs
-back, the cap on implement-and-review rounds, and the code-review call that
-is never handed the brief), the factory owns what would merely change (the order,
-the CI bound, the merge policy, the escalation prose, the prompts). A team
-that wants no self-review round, a merge commit instead of a squash, or a
-different gate edits its own blocks — and still gets the jigs blocks
-underneath fixed by `jigs upgrade`.
+The starter workflow explicitly resolves and claims its Linear ticket, then calls
+the library's `reviewLoop`. Set implementation and review harnesses/models separately,
+and choose budgets for agent review, CI repairs, and PR revisions. A reached limit
+returns an outcome; only a merged result permits worktree removal. For custom prompts,
+ticket sources, human intervention, and individual phases, see [delivery](delivery.md).
 
-`blocks/review-loop/describe-pr.prompt.ts` is the same split at one block. jigs owns the
-mechanics — resume the builder that wrote the change, fall back to a fresh context fed
-the diff, parse a `{ title, body }` back — and the factory owns the words and
-the policy: the conventions it asks for, and what to do when the answer drifts
-out of them. The scaffold repairs a drifting title; a factory whose target
-repo gates on the title (a conventional-commit check, say) may prefer to throw
-and kill the run rather than open a pull request CI will refuse. How a pull
-request introduces itself is the factory's voice, and the title is what the
-target repo's own CI and release tooling read.
-
-#### Prompts
-
-The words a block speaks are a parameter too. Every jigs block that talks to an
-agent ships a **prompt** beside it — a function from a typed input to the text
-the agent is told — and takes it as an optional parameter, defaulting to the
-one it ships with. A factory that wants different words writes a function of
-the same type and passes it in; the block's mechanics do not change.
-`reviewTicket` takes `prompt`, `implementUntilCodeReviewApproves` takes
-`implementPrompt` and `codeReviewPrompt`, `answerReview` and `fixCi` take
-`resumePrompt` and `freshPrompt`, and `commitWork` takes `prompt`.
-(`describePr` is the one with no default: its two prompts are
-`blocks/review-loop/describe-pr.prompt.ts`, and the caller always passes them.)
-
-Per call site — a prompt of this factory's own, in `workflows/ship.prompt.ts`:
-
-```ts
-import type { TicketReviewPrompt } from "@salimhamed/jigs/blocks";
-
-export const infraTicketReview: TicketReviewPrompt = ({ ticket }) => `# Ticket review
-
-You are reviewing a ticket for this team's infrastructure repo, where a change
-that is wrong is a change that pages someone. Restate the ticket into a brief;
-never re-decide it.
-
-## The ticket
-
-${ticket}
-
-...
-`;
-```
-
-passed where `workflows/ship.ts` calls the block:
-
-```ts
-import { infraTicketReview } from "./ship.prompt.ts";
-
-const handoff = await reviewTicket({
-  claim,
-  snapshot,
-  prompt: infraTicketReview,
-  harness: claude({ model: "opus" }),
-  cwd: workspace.path,
-});
-```
-
-For shared factory defaults, put a custom block next to its prompt, for example
-`blocks/review-ticket/review-ticket.ts` and `review-ticket.prompt.ts`:
-
-```ts
-import { reviewTicket as defaultReviewTicket } from "../../jigs.ts";
-import { infraTicketReview } from "./review-ticket.prompt.ts";
-
-export function reviewTicket(options: Parameters<typeof defaultReviewTicket>[0]) {
-  return defaultReviewTicket({ prompt: infraTicketReview, ...options });
-}
-```
-
-The `prompt` goes before the spread, so a call site that passes its own still
-wins. Nothing about this is wired: the input is a plain object, the prompt is a
-plain function, and `tsc` is what tells you a field the words need is missing.
-
-The starter `ship` workflow takes its `binding` and `merge` as inputs with no
-default, because the scaffold knows neither: once step 4 has bound a repo, give
-`binding` that name as its default and list it under `requires.bindings` in
-the default export in `workflows/ship.ts`, so preflight catches a missing binding.
+The starter `ship` workflow requires a `binding` input and defaults to human merge.
+After binding a repository, you can make it the input default and add its name to
+`requires.bindings`. Declare credential integrations under `requires.integrations`;
+other workflows do not need Linear or GitHub credentials merely to use agents.
 
 ### 2. Tokens
 
@@ -261,8 +182,7 @@ cp .env.example .env      # then fill in LINEAR_API_KEY / GITHUB_TOKEN
 starts, `jigs bind` reads `GITHUB_TOKEN` out of it, and `PORT` comes from
 `jigs.config.ts` rather than from here. The `LINEAR_API_KEY` / `GITHUB_TOKEN` slots
 are consumed by the suspension blocks (`haltForHuman()` posts Linear
-comments, `pullRequestGate()` re-checks PR state), and both are validated on
-every trigger: preflight refuses to create a run when a requirement is unmet,
+comments, `pullRequestGate()` re-checks PR state), and are validated when declared in the workflow requirements: preflight refuses to create a run when a requirement is unmet,
 reporting every failure with its repair. `jigs doctor` runs the same checks
 without a launch.
 

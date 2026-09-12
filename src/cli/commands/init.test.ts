@@ -32,16 +32,7 @@ test("scaffolds a factory that can be installed and built", async () => {
       ".gitignore",
       ".npmrc",
       "README.md",
-      "blocks/review-loop/builder.ts",
-      "blocks/review-loop/describe-and-open-pr.ts",
-      "blocks/review-loop/describe-pr.prompt.ts",
-      "blocks/review-loop/fix-red-ci.ts",
-      "blocks/review-loop/index.ts",
-      "blocks/review-loop/merge-on-approval.ts",
-      "blocks/review-loop/push-implementation.ts",
-      "blocks/review-loop/respond-to-review.ts",
-      "blocks/review-loop/review-loop.test.ts",
-      "blocks/review-loop/review-loop.ts",
+      "blocks/tickets/linear.ts",
       "docker-compose.yml",
       "jigs.config.test.ts",
       "jigs.config.ts",
@@ -118,7 +109,7 @@ test("the wrappers scaffolded are the step ids this repo has recorded", async ()
   const steps = [...wrappers.matchAll(/^export async function (\w+)\(/gm)]
     .map((match) => `step//./jigs//${match[1]}`)
     .sort();
-  expect(steps).toHaveLength(17);
+  expect(steps).toHaveLength(20);
   const recorded = readFileSync(path.join(packageRoot(), "e2e", "expected-ids.txt"), "utf8")
     .split("\n")
     .filter((line) => line.startsWith("step//./jigs//"))
@@ -126,7 +117,7 @@ test("the wrappers scaffolded are the step ids this repo has recorded", async ()
   expect(recorded).toEqual(steps);
   // Every wrapper has its directive: one without it compiles clean and runs
   // unmemoized.
-  expect(wrappers.match(/"use step";/g)).toHaveLength(17);
+  expect(wrappers.match(/"use step";/g)).toHaveLength(20);
 });
 
 test("the docker project and ports all carry the factory", async () => {

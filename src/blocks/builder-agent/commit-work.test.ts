@@ -40,8 +40,7 @@ test("the builder that left the work uncommitted is resumed to commit it", async
   expect(agentCalls).toHaveLength(1);
   expect(agentCalls[0]?.resume).toEqual({ harness: "claude", id: "s-42" });
   expect(agentCalls[0]?.prompt).toContain("commit");
-  // A resumed agent works inside the pointer it was handed, so it reports none.
-  expect(session).toBeUndefined();
+  expect(session).toEqual({ harness: "claude", id: "s-1" });
 });
 
 test("a stale session commits from a fresh context that then holds the change", async () => {
