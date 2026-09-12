@@ -1,23 +1,28 @@
 import { type WorkflowEntry, type WorkflowInputs } from "@salimhamed/jigs";
-import { claude, codex } from "@salimhamed/jigs/agents";
+import { claude, selectHarness } from "@salimhamed/jigs/agents";
 import { z } from "zod";
 import { acquireLinearTicket, workItemFromHandoff } from "../blocks/tickets/linear.ts";
 import {
+  deliverChange,
   provisionWorktree,
   removeMergedRunWorktrees,
-  reviewLoop,
   reviewTicket,
 } from "../jigs.ts";
+
+// This factory's model per harness. A model input left unset takes the default
+// of the harness that was actually chosen, so naming one never drags the
+// other's default along.
+const defaultModels = { claude: "opus", codex: "gpt-5.6-sol" };
 
 export const shipInputs = z.object({
   ticket: z.string().min(1),
   binding: z.string(),
   merge: z.enum(["jigs", "human"]).default("human"),
   implementationHarness: z.enum(["claude", "codex"]).default("codex"),
-  implementationModel: z.string().min(1).default("gpt-5.6-sol"),
+  implementationModel: z.string().min(1).optional(),
   reviewHarness: z.enum(["claude", "codex"]).default("claude"),
-  reviewModel: z.string().min(1).default("opus"),
-  reviewRounds: z.number().int().positive().default(3),
+  reviewModel: z.string().min(1).optional(),
+  implementationReviewRounds: z.number().int().positive().default(3),
   ciFixAttempts: z.number().int().nonnegative().default(3),
   pullRequestRevisionRounds: z.number().int().nonnegative().default(3),
 });
@@ -36,19 +41,23 @@ export async function shipWorkflow(inputs: ShipInputs) {
   const handoff = await reviewTicket({
     claim,
     snapshot,
-    harness: claude({ model: "opus" }),
+    harness: claude({ model: defaultModels.claude }),
     cwd: worktree.path,
   });
-  const implementationHarness = inputs.implementationHarness === "claude" ? claude : codex;
-  const reviewHarness = inputs.reviewHarness === "claude" ? claude : codex;
-  const result = await reviewLoop({
+  const result = await deliverChange({
     task: workItemFromHandoff(handoff),
     worktree,
     binding: inputs.binding,
-    implementation: { harness: implementationHarness({ model: inputs.implementationModel }) },
-    review: { harness: reviewHarness({ model: inputs.reviewModel }) },
+    implementation: {
+      harness: selectHarness(
+        inputs.implementationHarness,
+        defaultModels,
+        inputs.implementationModel,
+      ),
+    },
+    review: { harness: selectHarness(inputs.reviewHarness, defaultModels, inputs.reviewModel) },
     limits: {
-      implementationReviewRounds: inputs.reviewRounds,
+      implementationReviewRounds: inputs.implementationReviewRounds,
       ciFixAttempts: inputs.ciFixAttempts,
       pullRequestRevisionRounds: inputs.pullRequestRevisionRounds,
     },

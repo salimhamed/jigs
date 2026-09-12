@@ -13,8 +13,8 @@ import { claude, codex } from "../../blocks/agent/harness-config.ts";
 import { buildAgentWire, buildAskWire } from "../../blocks/agent/plan.ts";
 import type { AgentStepResult, StepUsage } from "../../blocks/agent/result.ts";
 import { makeTmpDir, removeTmpDir } from "./harnesses/test-fixtures.ts";
-import { type ExecuteDeps, runAgent } from "./run-agent.ts";
-import { askModel } from "./run-ask.ts";
+import { type ExecuteDeps, executeAgent } from "./run-agent.ts";
+import { executeModelRequest } from "./run-ask.ts";
 
 const usage = { inputTokens: 12, outputTokens: 34 } as unknown as StepUsage;
 
@@ -79,10 +79,12 @@ function makeDeps(generation: Partial<Awaited<ReturnType<ExecuteDeps["generateTe
   return { deps, captured };
 }
 
-// runAgent answers a union; every test but the resume-failure ones wants the
+// executeAgent answers a union; every test but the resume-failure ones wants the
 // successful arm.
-async function agentStep(...args: Parameters<typeof runAgent>): Promise<AgentStepResult<unknown>> {
-  const result = await runAgent(...args);
+async function agentStep(
+  ...args: Parameters<typeof executeAgent>
+): Promise<AgentStepResult<unknown>> {
+  const result = await executeAgent(...args);
   if ("jitFailure" in result) {
     throw new Error(`unexpected JIT failure: ${JSON.stringify(result.jitFailure)}`);
   }
@@ -271,7 +273,7 @@ test("a session pointer recorded on the other harness reports resumeFailed, not 
   });
   const { deps, captured } = makeDeps();
 
-  const result = await runAgent(wire, { workflowRunId: "run-1" }, deps);
+  const result = await executeAgent(wire, { workflowRunId: "run-1" }, deps);
 
   // The resume prompt was written for an agent that already holds the change,
   // so running it against a brand-new session would be a lie. The marker sends
@@ -311,7 +313,7 @@ test("a failed resume returns the resumeFailed marker instead of throwing", asyn
     throw new Error("no rollout found for thread id 0199-gone");
   };
 
-  const result = await runAgent(wire, { workflowRunId: "run-1" }, deps);
+  const result = await executeAgent(wire, { workflowRunId: "run-1" }, deps);
 
   expect(result).toEqual({
     resumeFailed: expect.stringContaining("no rollout found for thread id"),
@@ -329,7 +331,7 @@ test("a failure with no resume to blame still throws", async () => {
     throw new Error("the harness fell over");
   };
 
-  await expect(runAgent(wire, { workflowRunId: "run-1" }, deps)).rejects.toThrow(
+  await expect(executeAgent(wire, { workflowRunId: "run-1" }, deps)).rejects.toThrow(
     "the harness fell over",
   );
 });
@@ -354,7 +356,7 @@ test("a second agent in the same worktree is refused while the first is running"
   await new Promise((resolve) => setTimeout(resolve, 20));
 
   const second = makeDeps();
-  await expect(runAgent(wire, { workflowRunId: "run-1" }, second.deps)).rejects.toThrow(
+  await expect(executeAgent(wire, { workflowRunId: "run-1" }, second.deps)).rejects.toThrow(
     /an agent is already running in .* refusing to start a second one/,
   );
   expect(second.captured.options).toBeUndefined();
@@ -444,7 +446,7 @@ test("a failed JIT check returns the marker before the harness is reached", asyn
     },
   ];
 
-  const result = await runAgent(
+  const result = await executeAgent(
     wire,
     { workflowRunId: "run-1" },
     {
@@ -465,7 +467,7 @@ test("claude ask step sees no MCP universe and loads no filesystem settings", as
   });
   const { deps, captured } = makeDeps();
 
-  await askModel(wire, { workflowRunId: "run-1" }, deps);
+  await executeModelRequest(wire, { workflowRunId: "run-1" }, deps);
 
   const settings = claudeSettingsOf(captured);
   expect(settings.strictMcpConfig).toBe(true);
@@ -482,7 +484,7 @@ test("codex ask step uses read-only exec in a scratch cwd it cleans up", async (
   });
   const { deps, captured } = makeDeps();
 
-  const result = await askModel(wire, { workflowRunId: "run-9" }, deps);
+  const result = await executeModelRequest(wire, { workflowRunId: "run-9" }, deps);
 
   const model = captured.options?.model as { settings?: CodexExecSettings };
   const settings = model.settings;

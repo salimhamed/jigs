@@ -31,10 +31,10 @@ export type TicketNote = {
 
 /**
  * Posting a note on the ticket that asks for nothing and suspends nothing.
- * Declared here rather than written as `typeof postTicketNote` for the same
+ * Declared here rather than written as `typeof postNote` for the same
  * reason the halt's step contracts are: the block side owns the contract.
  */
-export type PostTicketNote = (issueId: string, note: TicketNote) => Promise<void>;
+export type PostNote = (issueId: string, note: TicketNote) => Promise<void>;
 
 /**
  * What a ticket review hands the builder: the brief plus the snapshot it
@@ -53,9 +53,9 @@ export type Handoff = {
 };
 
 export interface ReviewTicketOptions {
-  agent: AgentFn;
+  runAgent: AgentFn;
   haltForHuman: HaltForHumanFn;
-  postNote: PostTicketNote;
+  postNote: PostNote;
   // Re-read between rounds: a human's reply lands on the ticket, not in the
   // verdict, so a round that does not re-snapshot reviews the same words again.
   fetchTicketSnapshot: (issueId: string) => Promise<TicketSnapshot>;
@@ -72,11 +72,11 @@ export interface ReviewTicketOptions {
 }
 
 export async function reviewTicket(options: ReviewTicketOptions): Promise<Handoff> {
-  const { agent, haltForHuman, fetchTicketSnapshot, postNote } = options;
+  const { runAgent, haltForHuman, fetchTicketSnapshot, postNote } = options;
   let snapshot = options.snapshot;
 
   for (;;) {
-    const review = await agent({
+    const review = await runAgent({
       harness: options.harness,
       cwd: options.cwd,
       prompt: (options.prompt ?? ticketReviewPrompt)({

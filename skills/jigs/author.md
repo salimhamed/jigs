@@ -49,11 +49,13 @@ bind the appropriate module: `bindAgentSteps`, `bindLinearSteps`,
 module's dependencies for selective replacement. Keep functions workflow-side;
 never send a prompt or callback through a durable step argument.
 
-For delivery, use `reviewLoop` or compose `implementAndReview`,
-`openPullRequestForChange`, and `followPullRequest`. Configure separate role
-harnesses/prompts and explicit limits. Handle `limit-reached`, `stopped`,
+For delivery, use `deliverChange` or compose `implementAndReview`,
+`publishApprovedChange`, and `followPullRequest`. Configure separate role
+harnesses/prompts and explicit budgets: `implementationReviewRounds`,
+`ciFixAttempts` and `pullRequestRevisionRounds`, under those names on the whole
+operation and on each phase. Handle `limit-reached`, `stopped`,
 `uncommitted-work`, and `closed` outcomes; remove worktrees only after `merged`.
-Only an approved change can be passed to `openPullRequestForChange`. Each role's
+Only an approved change can be passed to `publishApprovedChange`. Each role's
 `prompt` receives a context for that role alone and may extend the shipped
 default through `renderDefaultPrompt()` or return its own string instead.
 Ticket-source code passes a task that extends `WorkItem`; its extra fields stay

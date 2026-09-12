@@ -35,7 +35,7 @@ export const threadAnswers = z.strictObject({
 export type ThreadAnswers = z.output<typeof threadAnswers>;
 
 export interface AnswerReviewOptions {
-  agent: AgentFn;
+  runAgent: AgentFn;
   readWorktreeDiff: typeof readWorktreeDiff;
   harness: HarnessConfig;
   cwd: string;
@@ -78,13 +78,13 @@ function renderThreads(threads: ReviewThread[], reviewBody?: string): string {
 export async function answerReview(
   options: AnswerReviewOptions,
 ): Promise<ResumeOrRebuildResult<ThreadAnswers>> {
-  const { agent, readWorktreeDiff: read } = options;
+  const { runAgent, readWorktreeDiff: read } = options;
   const threads = renderThreads(options.threads, options.reviewBody);
   const renderResume = options.resumePrompt ?? answerReviewPrompt;
   const renderFresh = options.freshPrompt ?? rebuildContextPrompt;
 
   return resumeOrRebuild({
-    agent,
+    runAgent,
     label: "answerReview",
     harness: options.harness,
     cwd: options.cwd,

@@ -8,7 +8,7 @@ export {
   tokenFromLinearPayload,
 } from "./claim.ts";
 export {
-  type CheckForHumanReply,
+  type CheckForReply,
   type Halt,
   type HaltForHumanDeps,
   type HaltForHumanFn,
@@ -21,11 +21,11 @@ export {
   type JsonValue,
   NEEDS_HUMAN_TOKEN_PREFIX,
   needsHumanToken,
-  type PostNeedsHumanComment,
+  type PostComment,
 } from "./halt-for-human.ts";
 export {
   type Handoff,
-  type PostTicketNote,
+  type PostNote,
   type ReviewTicketOptions,
   reviewTicket,
   type TicketNote,

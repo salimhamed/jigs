@@ -1,13 +1,12 @@
 import { expect, test } from "vitest";
-import type { RunAgentStep } from "../../blocks/agent/agent.ts";
-import { agent, JitCheckError } from "../../blocks/agent/agent.ts";
+import { type ExecuteAgentStep, JitCheckError, runAgent } from "../../blocks/agent/agent.ts";
 import { claude } from "../../blocks/agent/harness-config.ts";
 import { buildAgentWire } from "../../blocks/agent/plan.ts";
-import { runAgent } from "./run-agent.ts";
+import { executeAgent } from "./run-agent.ts";
 
 // Stands in for a factory's wrapper, minus the directive: it delegates to
-// runAgent the way a factory's own does.
-const runStep: RunAgentStep = (wire) => runAgent(wire, { workflowRunId: "run-under-test" });
+// executeAgent the way a factory's own does.
+const runStep: ExecuteAgentStep = (wire) => executeAgent(wire, { workflowRunId: "run-under-test" });
 
 test("an agent step whose declared MCP server cannot start returns the JIT failure instead of throwing", async () => {
   const wire = buildAgentWire({
@@ -36,8 +35,8 @@ test("an agent step whose declared MCP server cannot start returns the JIT failu
   });
 });
 
-test("agent() turns a failed JIT check into a thrown JitCheckError carrying the repair text", async () => {
-  const failing = agent(
+test("runAgent() turns a failed JIT check into a thrown JitCheckError carrying the repair text", async () => {
+  const failing = runAgent(
     {
       harness: claude({
         model: "sonnet",

@@ -4,15 +4,16 @@
 # These addresses come from the factory's named workflow and step functions.
 # Renaming a factory file or function deliberately changes its address; merely
 # upgrading the jigs library must not. Review intended renames before recording.
-step//./jigs//askModel
-step//./jigs//checkForHumanReply
+step//./jigs//checkForReply
 step//./jigs//commentOnPullRequest
 step//./jigs//createRunDirectory
+step//./jigs//executeAgent
+step//./jigs//executeModelRequest
 step//./jigs//fetchPullRequestState
 step//./jigs//fetchTicketSnapshot
 step//./jigs//openPullRequest
-step//./jigs//postNeedsHumanComment
-step//./jigs//postTicketNote
+step//./jigs//postComment
+step//./jigs//postNote
 step//./jigs//provisionWorktree
 step//./jigs//pushBranch
 step//./jigs//readBranchState
@@ -22,7 +23,6 @@ step//./jigs//removeRunDirectory
 step//./jigs//replyToPullRequestReviewThread
 step//./jigs//resolveLinearIssue
 step//./jigs//resolveRepository
-step//./jigs//runAgent
 step//./jigs//squashMergePullRequest
 step//workflow@4.8.4//fetch
 workflow//./workflows/ship//shipWorkflow

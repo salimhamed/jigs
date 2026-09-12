@@ -35,7 +35,7 @@ test("without an output schema the wire omits it", () => {
   expect(wire.outputSchema).toBeUndefined();
 });
 
-test("ask() rejects a harness descriptor carrying mcpServers", () => {
+test("askModel() rejects a harness descriptor carrying mcpServers", () => {
   expect(() =>
     buildAskWire({
       harness: claude({

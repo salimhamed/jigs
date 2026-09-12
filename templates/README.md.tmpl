@@ -80,7 +80,9 @@ Custom steps import implementations from `@salimhamed/jigs/steps` inside a
 factory module containing named `"use step"` functions.
 
 `ship` exposes `implementationHarness`, `implementationModel`, `reviewHarness`,
-`reviewModel`, `reviewRounds`, `ciFixAttempts`, and `pullRequestRevisionRounds` inputs.
+`reviewModel`, `implementationReviewRounds`, `ciFixAttempts`, and
+`pullRequestRevisionRounds` inputs. A model left unset takes the chosen
+harness's own default from `defaultModels` in `workflows/ship.ts`.
 Outcomes are `merged`, `closed`, `limit-reached`, `stopped`, and
 `uncommitted-work`; only `merged` triggers worktree removal.
 Factory code can supply role prompts and an `onLimit` callback for human guidance.
@@ -92,16 +94,16 @@ import { bindDeliverySteps } from "@salimhamed/jigs/delivery";
 import { deliverySteps } from "../jigs.ts";
 import { publishPullRequest } from "../steps/publish.ts";
 
-export const { reviewLoop } = bindDeliverySteps({
+export const { deliverChange } = bindDeliverySteps({
   ...deliverySteps,
-  createPullRequest: publishPullRequest,
+  openPullRequest: publishPullRequest,
 });
 ```
 
 `/agents`, `/linear`, and `/pull-requests` can also be bound independently.
 A different ticket source can supply the delivery module's `WorkItem` directly.
 See [the delivery guide](https://github.com/salimhamed/jigs/blob/main/docs/delivery.md)
-for limits, role overrides, and phase composition.
+for budgets, role overrides, and phase composition.
 
 ## Upgrading jigs
 

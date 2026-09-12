@@ -1,4 +1,4 @@
-// The step side of ask(): one model call with no worktree, no MCP universe and
+// The step side of askModel(): one model call with no worktree, no MCP universe and
 // no session pointer. It shares the executor seam with ./run-agent.ts so a
 // test hydrating either wire stubs one set of deps.
 
@@ -15,7 +15,7 @@ import { claudeCode, codexExec } from "./harnesses/index.ts";
 import { type ExecuteDeps, type ExecutorGeneration, outputSpec, realDeps } from "./run-agent.ts";
 
 /** Ask a model a question without giving it a worktree or tools. */
-export async function askModel(
+export async function executeModelRequest(
   wire: AskWire,
   metadata: RunMetadata,
   deps: ExecuteDeps = realDeps,

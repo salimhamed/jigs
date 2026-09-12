@@ -13,7 +13,7 @@ const verdict = z.strictObject({ note: z.string() });
 // chain, not just that the fallback catches what it itself constructs.
 function recorder(options: { staleResume?: boolean } = {}) {
   const calls: AgentStepConfig<unknown>[] = [];
-  const agent: AgentFn = async <T>(config: AgentStepConfig<T>) => {
+  const runAgent: AgentFn = async <T>(config: AgentStepConfig<T>) => {
     calls.push(config as AgentStepConfig<unknown>);
     const result = unwrapAgentStep(
       options.staleResume === true && config.resume !== undefined
@@ -29,7 +29,7 @@ function recorder(options: { staleResume?: boolean } = {}) {
       output: parseOutput(config.output, result.output),
     } as AgentStepResult<T>;
   };
-  return { calls, agent };
+  return { calls, runAgent };
 }
 
 const base = {
@@ -41,11 +41,11 @@ const base = {
 };
 
 test("a live session is resumed and the fresh prompt is never built", async () => {
-  const { calls, agent } = recorder();
+  const { calls, runAgent } = recorder();
   let built = 0;
   const result = await resumeOrRebuild({
     ...base,
-    agent,
+    runAgent,
     session: { harness: "claude", id: "s-42" },
     freshPrompt: async () => {
       built += 1;
@@ -63,10 +63,10 @@ test("a live session is resumed and the fresh prompt is never built", async () =
 });
 
 test("an unusable session falls back to the fresh context, which then holds the change", async () => {
-  const { calls, agent } = recorder({ staleResume: true });
+  const { calls, runAgent } = recorder({ staleResume: true });
   const result = await resumeOrRebuild({
     ...base,
-    agent,
+    runAgent,
     session: { harness: "claude", id: "s-gone" },
     freshPrompt: "here is everything",
   });
@@ -79,10 +79,10 @@ test("an unusable session falls back to the fresh context, which then holds the 
 });
 
 test("with no session at all the fresh context is entered directly", async () => {
-  const { calls, agent } = recorder();
+  const { calls, runAgent } = recorder();
   const result = await resumeOrRebuild({
     ...base,
-    agent,
+    runAgent,
     freshPrompt: "here is everything",
   });
 
@@ -92,13 +92,13 @@ test("with no session at all the fresh context is entered directly", async () =>
 });
 
 test("an error that is not a resume failure is not swallowed", async () => {
-  const agent: AgentFn = async () => {
+  const runAgent: AgentFn = async () => {
     throw new Error("the harness fell over");
   };
   await expect(
     resumeOrRebuild({
       ...base,
-      agent,
+      runAgent,
       session: { harness: "claude", id: "s-42" },
       freshPrompt: "here is everything",
     }),
@@ -107,10 +107,10 @@ test("an error that is not a resume failure is not swallowed", async () => {
 
 test("a successful resume retains its session when the harness omits session metadata", async () => {
   const session = { harness: "claude" as const, id: "s-retained" };
-  const agent: AgentFn = async <T>() => ({ text: "", output: undefined as T });
+  const runAgent: AgentFn = async <T>() => ({ text: "", output: undefined as T });
   const result = await resumeOrRebuild({
     ...base,
-    agent,
+    runAgent,
     session,
     freshPrompt: "unused",
   });

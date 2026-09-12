@@ -45,3 +45,19 @@ export function claude(options: HarnessOptions): ClaudeHarnessConfig {
 export function codex(options: HarnessOptions): CodexHarnessConfig {
   return { kind: "codex", ...options };
 }
+
+export type HarnessName = HarnessConfig["kind"];
+
+const harnesses = { claude, codex } as const;
+
+/**
+ * Build a harness from the name a caller chose, falling back to that harness's
+ * own default model. The map is the factory's: jigs knows no model names.
+ */
+export function selectHarness(
+  harness: HarnessName,
+  defaultModels: Record<HarnessName, string>,
+  model?: string,
+): HarnessConfig {
+  return harnesses[harness]({ model: model ?? defaultModels[harness] });
+}

@@ -3,9 +3,11 @@
 // result from being published. `pnpm typecheck` fails if that stops being true.
 
 import { expect, test } from "vitest";
-import type { ImplementResult, OpenPullRequestOptions } from "./types.ts";
+import type { ImplementAndReviewResult, PublishApprovedChangeOptions } from "./types.ts";
 
-function publishableChange(result: ImplementResult): OpenPullRequestOptions["change"] {
+function publishableChange(
+  result: ImplementAndReviewResult,
+): PublishApprovedChangeOptions["change"] {
   if (result.status === "approved") return result.change;
   // @ts-expect-error a stopped change carries no approval and cannot be published
   return result.change;

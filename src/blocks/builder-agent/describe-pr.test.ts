@@ -32,7 +32,7 @@ const described = { title: "feat: ship it", body: "what changed and why" };
 
 const run = (session?: { harness: "claude"; id: string }) =>
   describePullRequest({
-    agent: fakeAgent,
+    runAgent: fakeAgent,
     readWorktreeDiff: fakeReadDiff,
     harness: claude({ model: "opus" }),
     cwd: "/tmp/worktree",

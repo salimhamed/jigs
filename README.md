@@ -73,16 +73,17 @@ The factory separates its configuration, generated integration, and custom code:
   refreshes it from the installed library; `jigs build` reports stale code.
 - `workflows/ship.ts` is the starter workflow: a ticket to a merged pull request.
 - `blocks/` holds factory-specific prompts, ticket acquisition, and domain decisions.
-- The optional delivery module supplies the review loop and its independently usable phases.
+- The optional delivery module supplies `deliverChange` and its independently usable phases.
 - `steps/` holds any custom durable operations a factory adds.
 - Prompts are typed functions beside the code that uses them. Pass a prompt
   override to a block; keep shared factory defaults in a custom block.
 
-Start with the bound blocks in `jigs.ts`: `agent` runs an agent with tools, `ask`
-makes a plain model call, and `haltForHuman` asks for help and waits for a reply.
-Their JSDoc explains when to use them. The durable wrappers use
-explicit parameter names and the library's named types; their implementation
-names match, so `steps.openPullRequest` does the work for `openPullRequest`.
+Start with the bound blocks in `jigs.ts`: `runAgent` runs an agent with tools,
+`askModel` makes a plain model call, and `haltForHuman` asks for help and waits
+for a reply. Their JSDoc explains when to use them. The durable wrappers use
+explicit parameter names and the library's named types; every wrapper and its
+implementation carry the same name, so `steps.executeAgent` does the work for
+`executeAgent` and `steps.openPullRequest` for `openPullRequest`.
 Wrappers pass run metadata to jigs, which handles run-specific details such as
 dashboard links. Call `removeMergedRunWorktrees` only after a successful merge.
 
@@ -147,7 +148,7 @@ the factory. Custom code is never generated.
 
 ## Factory control
 
-See [the delivery guide](docs/delivery.md) for role/model selection, review limits,
+See [the delivery guide](docs/delivery.md) for role/model selection, budgets,
 prompt overrides, custom ticket sources, and composing individual phases. Generic
 agent workflows use the same core without adopting any delivery concepts.
 
@@ -285,7 +286,7 @@ Workflow-side modules are available independently:
 - `/agents`: agent and model calls, harness configuration, and sessions.
 - `/linear`: ticket acquisition, clarification, and human replies.
 - `/pull-requests`: watching GitHub review and CI state.
-- `/delivery`: configurable review loops and their individual phases.
+- `/delivery`: `deliverChange` and its individual phases.
 
 The broader paths remain available:
 

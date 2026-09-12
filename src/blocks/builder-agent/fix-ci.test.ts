@@ -53,7 +53,7 @@ const fakeReadDiff: typeof readWorktreeDiff = async (cwd, baseSha) => {
 
 const run = (session?: { harness: "claude"; id: string }) =>
   fixCi({
-    agent: fakeAgent,
+    runAgent: fakeAgent,
     readWorktreeDiff: fakeReadDiff,
     harness: claude({ model: "sonnet" }),
     cwd: "/tmp/worktree",
@@ -113,7 +113,7 @@ test("an error that is not a resume failure is not swallowed", async () => {
   };
   await expect(
     fixCi({
-      agent: boom,
+      runAgent: boom,
       readWorktreeDiff: fakeReadDiff,
       harness: claude({ model: "sonnet" }),
       cwd: "/tmp/worktree",

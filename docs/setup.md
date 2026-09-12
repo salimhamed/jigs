@@ -162,8 +162,10 @@ runs before deploying such a change. Library version bumps alone do not rename
 factory-local addresses.
 
 The starter workflow explicitly resolves and claims its Linear ticket, then calls
-the library's `reviewLoop`. Set implementation and review harnesses/models separately,
-and choose budgets for agent review, CI repairs, and PR revisions. A reached limit
+the library's `deliverChange`. Set implementation and review harnesses/models
+separately — a model left unset takes the chosen harness's own default — and choose
+the `implementationReviewRounds`, `ciFixAttempts`, and `pullRequestRevisionRounds`
+budgets. A reached limit
 returns an outcome; only a merged result permits worktree removal. For custom prompts,
 ticket sources, human intervention, and individual phases, see [delivery](delivery.md).
 

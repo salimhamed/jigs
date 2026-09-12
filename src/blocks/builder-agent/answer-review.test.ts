@@ -80,7 +80,7 @@ const answer = (body: string) => ({
 
 const run = (session?: { harness: "claude"; id: string }) =>
   answerReview({
-    agent: fakeAgent,
+    runAgent: fakeAgent,
     readWorktreeDiff: fakeReadDiff,
     harness: claude({ model: "sonnet" }),
     cwd: "/tmp/worktree",
@@ -148,7 +148,7 @@ test("an error that is not a resume failure is not swallowed", async () => {
   };
   await expect(
     answerReview({
-      agent: exploding,
+      runAgent: exploding,
       readWorktreeDiff: fakeReadDiff,
       harness: claude({ model: "sonnet" }),
       cwd: "/tmp/worktree",
@@ -163,7 +163,7 @@ test("an error that is not a resume failure is not swallowed", async () => {
 test("a review body with no thread of its own is answered on the conversation", async () => {
   raw = [{ answers: [{ threadId: null, body: "addressed all four" }] }];
   const result = await answerReview({
-    agent: fakeAgent,
+    runAgent: fakeAgent,
     readWorktreeDiff: fakeReadDiff,
     harness: claude({ model: "sonnet" }),
     cwd: "/tmp/worktree",

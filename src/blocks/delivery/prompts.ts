@@ -37,6 +37,7 @@ export const defaultReviewPrompt = (context: ReviewPromptContext): string =>
       ...taskBrief(context.task),
       `Base commit: ${context.baseCommit}`,
       `Head commit under review: ${context.headCommit}`,
+      context.instructions,
       `Current diff:\n${context.diff}`,
     ],
     "Review the changes against the requirements and repository instructions. Inspect the diff between the base and head commits and check for correctness and regressions. Do not edit files. Return approved only when no changes are needed; otherwise return changes-requested with actionable findings.",
@@ -62,7 +63,7 @@ export const defaultRevisionPrompt = (context: PullRequestRevisionPromptContext)
       context.instructions,
       context.diff === undefined ? "" : `Current diff:\n${context.diff}`,
       `Review threads:\n${JSON.stringify(context.threads)}`,
-      context.reviewBody ?? "",
+      context.reviewBody ?? "Address the pull request review threads.",
     ],
     "Address the review feedback, test and commit any changes, and explain your response to each thread. Use its rootId as threadId, or null for the review summary. Do not push or post comments yourself.",
   );

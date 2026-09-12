@@ -24,11 +24,11 @@ export function resumeFailed(detail: string): never {
   throw new ResumeFailedError(detail);
 }
 
-/** The `agent` jig with its step wrapper already bound — what a jig is handed. */
+/** The `runAgent` jig with its step wrapper already bound — what a jig is handed. */
 export type AgentFn = <T = undefined>(config: AgentStepConfig<T>) => Promise<AgentStepResult<T>>;
 
 export interface ResumeOrRebuildOptions<T> {
-  agent: AgentFn;
+  runAgent: AgentFn;
   harness: HarnessConfig;
   cwd: string;
   session?: AgentSession;
@@ -74,7 +74,7 @@ export async function resumeOrRebuild<T = undefined>(
 
   if (options.session !== undefined) {
     try {
-      const resumed = await options.agent<T>({
+      const resumed = await options.runAgent<T>({
         ...base,
         resume: options.session,
         prompt: await render(options.resumePrompt),
@@ -86,7 +86,7 @@ export async function resumeOrRebuild<T = undefined>(
     }
   }
 
-  const rebuilt = await options.agent<T>({ ...base, prompt: await render(options.freshPrompt) });
+  const rebuilt = await options.runAgent<T>({ ...base, prompt: await render(options.freshPrompt) });
   return {
     output: rebuilt.output,
     ...(rebuilt.session === undefined ? {} : { session: rebuilt.session }),

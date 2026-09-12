@@ -1,8 +1,8 @@
 // The step side of the worktree lifecycle: what the factory's "use step"
 // wrappers delegate to. The runtime creates a worktree and registers it; the
-// workflow calls teardown as a plain sequential line after a merged
-// reviewLoop return — never in a `finally`, which would fire on every
-// suspension, and a suspended run keeps its worktree. Every other ending
+// workflow calls teardown as a plain sequential line after a merged delivery —
+// never in a `finally`, which would fire on every suspension, and a suspended
+// run keeps its worktree. Every other ending
 // leaves the tree for the operator's `jigs sweep`.
 //
 // Everything below reaches node builtins, so this module must only ever be
@@ -114,9 +114,8 @@ export async function provisionWorktree(
   return facts;
 }
 
-// The per-run teardown, called by the workflow after a merged reviewLoop
-// return. The operator's `jigs sweep` is the net for runs that never get
-// there.
+// The per-run teardown, called by the workflow after a merged delivery. The
+// operator's `jigs sweep` is the net for runs that never get there.
 /** Remove this run’s worktrees and branches after its pull requests have merged. */
 export async function removeMergedRunWorktrees(metadata: RunMetadata): Promise<string[]> {
   return teardownMerged(metadata.workflowRunId, registrySql());

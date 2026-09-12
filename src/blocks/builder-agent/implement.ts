@@ -31,7 +31,7 @@ export const codeReviewVerdict = z.strictObject({
 });
 
 export interface ImplementOptions {
-  agent: AgentFn;
+  runAgent: AgentFn;
   haltForHuman: HaltForHumanFn;
   claim: TicketClaim;
   handoff: Handoff;
@@ -62,7 +62,7 @@ function renderFindings(findings: string[]): string {
 export async function implementUntilCodeReviewApproves(
   options: ImplementOptions,
 ): Promise<ImplementResult> {
-  const { agent, haltForHuman } = options;
+  const { runAgent, haltForHuman } = options;
   const renderImplement = options.implementPrompt ?? implementPrompt;
   const renderCodeReview = options.codeReviewPrompt ?? codeReviewPrompt;
   const { identifier } = options.handoff.snapshot;
@@ -77,7 +77,7 @@ export async function implementUntilCodeReviewApproves(
   for (;;) {
     for (let cycle = 1; cycle <= MAX_REVIEW_CYCLES; cycle += 1) {
       cycles += 1;
-      const build = await agent({
+      const build = await runAgent({
         harness: options.harness,
         cwd: options.cwd,
         prompt: renderImplement({
@@ -89,7 +89,7 @@ export async function implementUntilCodeReviewApproves(
       // The builder's session pointer, captured where the builder ran.
       session = build.session ?? session;
 
-      const verdict = await agent({
+      const verdict = await runAgent({
         harness: options.harness,
         cwd: options.cwd,
         prompt: renderCodeReview({ ticket, baseSha: options.baseSha }),

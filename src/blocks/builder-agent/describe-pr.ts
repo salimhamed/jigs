@@ -21,7 +21,7 @@ export const pullRequestDescription = z.strictObject({
 export type PullRequestDescription = z.output<typeof pullRequestDescription>;
 
 export interface DescribePullRequestOptions {
-  agent: AgentFn;
+  runAgent: AgentFn;
   readWorktreeDiff: typeof readWorktreeDiff;
   harness: HarnessConfig;
   cwd: string;
@@ -35,10 +35,10 @@ export interface DescribePullRequestOptions {
 export async function describePullRequest(
   options: DescribePullRequestOptions,
 ): Promise<PullRequestDescription> {
-  const { agent, readWorktreeDiff: read } = options;
+  const { runAgent, readWorktreeDiff: read } = options;
 
   const described = await resumeOrRebuild({
-    agent,
+    runAgent,
     label: "describePullRequest",
     harness: options.harness,
     cwd: options.cwd,
