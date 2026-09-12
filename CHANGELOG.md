@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.12.0](https://github.com/salimhamed/jigs/compare/jigs-v0.11.0...jigs-v0.12.0) (2026-09-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* give each delivery role its own prompt context and preserve custom task fields ([#170](https://github.com/salimhamed/jigs/issues/170))
+
+### Features
+
+* give each delivery role its own prompt context and preserve custom task fields ([#170](https://github.com/salimhamed/jigs/issues/170)) ([2919131](https://github.com/salimhamed/jigs/commit/2919131109fbaf122ff1a9475e82bbb08986592f))
+
 ## [0.11.0](https://github.com/salimhamed/jigs/compare/jigs-v0.10.0...jigs-v0.11.0) (2026-09-12)
 
 
