@@ -52,7 +52,6 @@ export async function reviewLoop(options: ReviewLoopOptions): Promise<ReviewLoop
   const pr = await describeAndOpenPullRequest(builder, worktree, handoff, options.binding);
   const ci = ciFixer(pr, builder, worktree, handoff);
 
-  // Explicit because most handlers return Attend<never>.
   return attend<ReviewLoopResult>(
     pullRequestGate(pr),
     async (wake) => {

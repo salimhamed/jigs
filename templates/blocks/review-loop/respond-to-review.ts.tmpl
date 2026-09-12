@@ -41,7 +41,6 @@ export async function respondToReview(
   });
   builder.session = answered.session ?? builder.session;
 
-  // Push the fix before posting a reply that says it is available.
   await pushBranch(builder.cwd, worktree.branch);
 
   const posted = await postReviewAnswers({
