@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.14.0](https://github.com/salimhamed/jigs/compare/jigs-v0.13.0...jigs-v0.14.0) (2026-09-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* anchor factory imports at the project root ([#174](https://github.com/salimhamed/jigs/issues/174))
+
+### Features
+
+* anchor factory imports at the project root ([#174](https://github.com/salimhamed/jigs/issues/174)) ([e11ecd5](https://github.com/salimhamed/jigs/commit/e11ecd5929c1945fa08dd8e2e50f1080d036c1e3))
+
 ## [0.13.0](https://github.com/salimhamed/jigs/compare/jigs-v0.12.0...jigs-v0.13.0) (2026-09-12)
 
 
