@@ -1,16 +1,12 @@
-import {
-  type TicketWorkflowInputs,
-  ticketInput,
-  type WorkflowEntry,
-} from "@salimhamed/jigs";
+import { type TicketWorkflowInputs, ticketInput, type WorkflowEntry } from "@salimhamed/jigs";
 import { claimTicket, claude, codex } from "@salimhamed/jigs/blocks";
 import { z } from "zod";
 import { reviewLoop } from "../blocks/review-loop/index.ts";
 import {
   fetchTicketSnapshot,
   provisionWorktree,
+  removeMergedRunWorktrees,
   reviewTicket,
-  teardownRunWorktrees,
 } from "../jigs.ts";
 
 export const shipInputs = z.object({
@@ -66,7 +62,7 @@ export async function shipWorkflow(inputs: ShipInputs) {
   // reviewLoop returns only when the PR merged; every thrown ending leaves
   // the worktree for `jigs sweep`. A plain sequential call, never a finally —
   // suspension is a thrown error, and a parked run keeps its worktree.
-  await teardownRunWorktrees();
+  await removeMergedRunWorktrees();
 
   return { pr: result.pr, cycles: result.cycles };
 }

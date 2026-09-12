@@ -22,9 +22,7 @@ export interface Runner<Name extends string> {
   skip(name: Name, detail: string): void;
 }
 
-export function stepRunner<Name extends string>(
-  out: (line: string) => void,
-): Runner<Name> {
+export function stepRunner<Name extends string>(out: (line: string) => void): Runner<Name> {
   const steps: Step<Name>[] = [];
   return {
     steps,

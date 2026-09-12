@@ -6,11 +6,7 @@
 import { start } from "workflow/api";
 import type { z } from "zod";
 import type { Factory, Injected, TicketInjected } from "../blocks/factory.ts";
-import {
-  type CheckReport,
-  preflightChecks,
-  runChecks,
-} from "../checks/index.ts";
+import { type CheckReport, preflightChecks, runChecks } from "../checks/index.ts";
 import { resolveIssueRef } from "../providers/linear.ts";
 
 export type StartRunResult =

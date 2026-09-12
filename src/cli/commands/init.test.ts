@@ -65,16 +65,12 @@ test("scaffolds a factory that can be installed and built", async () => {
   expect(pkg.scripts.test).toBe("vitest run");
   // Pinned to the version of the CLI scaffolding it: a range would let the
   // scaffold's wrappers and the package they import from drift apart.
-  const { version } = JSON.parse(
-    readFileSync(path.join(packageRoot(), "package.json"), "utf8"),
-  );
+  const { version } = JSON.parse(readFileSync(path.join(packageRoot(), "package.json"), "utf8"));
   expect(version).toMatch(/^\d+\.\d+\.\d+$/);
   expect(pkg.dependencies["@salimhamed/jigs"]).toBe(version);
-  expect(
-    Object.keys(pkg.dependencies).filter((name) =>
-      name.startsWith("@salimhamed/"),
-    ),
-  ).toEqual(["@salimhamed/jigs"]);
+  expect(Object.keys(pkg.dependencies).filter((name) => name.startsWith("@salimhamed/"))).toEqual([
+    "@salimhamed/jigs",
+  ]);
   expect(JSON.stringify(pkg)).not.toContain("link:");
   // Spike finding 5: pnpm 11 reads allowBuilds only from pnpm-workspace.yaml.
   const workspace = readFileSync(path.join(dir, "pnpm-workspace.yaml"), "utf8");
@@ -123,10 +119,7 @@ test("the wrappers scaffolded are the step ids this repo has recorded", async ()
     .map((match) => `step//./jigs//${match[1]}`)
     .sort();
   expect(steps).toHaveLength(17);
-  const recorded = readFileSync(
-    path.join(packageRoot(), "e2e", "expected-ids.txt"),
-    "utf8",
-  )
+  const recorded = readFileSync(path.join(packageRoot(), "e2e", "expected-ids.txt"), "utf8")
     .split("\n")
     .filter((line) => line.startsWith("step//./jigs//"))
     .sort();
@@ -169,9 +162,7 @@ test("the docker project and ports all carry the factory", async () => {
   // the directory rather than the ports.
   const other = scaffold("beta");
   const b = await init(other);
-  expect(
-    readFileSync(path.join(other, "docker-compose.yml"), "utf8"),
-  ).toContain("name: beta");
+  expect(readFileSync(path.join(other, "docker-compose.yml"), "utf8")).toContain("name: beta");
   for (const port of [a.servicePort, b.servicePort]) {
     expect(a.dashboardPort).not.toBe(port);
     expect(b.dashboardPort).not.toBe(port);
@@ -192,9 +183,7 @@ test("an existing file is kept, never overwritten", async () => {
 
   expect(again.created).toEqual([]);
   expect(again.skipped).toContain("jigs.config.ts");
-  expect(readFileSync(path.join(dir, "jigs.config.ts"), "utf8")).toContain(
-    "9999",
-  );
+  expect(readFileSync(path.join(dir, "jigs.config.ts"), "utf8")).toContain("9999");
 });
 
 test("the next steps are printed, not run", async () => {

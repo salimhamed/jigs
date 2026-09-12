@@ -8,12 +8,7 @@ import type { z } from "zod";
 import type { Factory, Schedule } from "../blocks/factory.ts";
 import { type Check, failedCheck, formatFailures } from "../checks/index.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
-import {
-  listRuns,
-  type RunRow,
-  scheduleTriggerId,
-  scheduleTriggerLabel,
-} from "./runs.ts";
+import { listRuns, type RunRow, scheduleTriggerId, scheduleTriggerLabel } from "./runs.ts";
 import { onShutdown } from "./shutdown.ts";
 import { type StartRunResult, startRun } from "./trigger.ts";
 
@@ -41,10 +36,7 @@ export interface ScheduleDeps {
  * logged with its repair and left unscheduled: the service still starts, and
  * `jigs doctor` reports the same failure on demand.
  */
-export function startSchedules(
-  factory: Factory,
-  deps: ScheduleDeps = {},
-): Cron[] {
+export function startSchedules(factory: Factory, deps: ScheduleDeps = {}): Cron[] {
   const log = deps.log ?? console.log;
   const jobs: Cron[] = [];
   for (const [name, schedule] of Object.entries(factory.schedules ?? {})) {
@@ -97,9 +89,7 @@ export async function fireSchedule(
       scheduleTriggerId(name, new Date()),
     );
     if (result.kind === "started") {
-      log(
-        `[schedule] ${name} fired: run ${result.runId} of ${schedule.workflow}`,
-      );
+      log(`[schedule] ${name} fired: run ${result.runId} of ${schedule.workflow}`);
       return;
     }
     log(`[schedule] ${name} not fired: ${describeFailure(result)}`);
@@ -178,10 +168,7 @@ function scheduleProblem(
   if (!parsed.success) {
     return {
       reason: `inputs do not satisfy the ${schedule.workflow} workflow's schema: ${parsed.error.issues
-        .map(
-          (issue: z.core.$ZodIssue) =>
-            `${issue.path.join(".") || "(root)"} ${issue.message}`,
-        )
+        .map((issue: z.core.$ZodIssue) => `${issue.path.join(".") || "(root)"} ${issue.message}`)
         .join("; ")}`,
       repair: `fix schedules.${name}.inputs in jigs.config.ts to satisfy the ${schedule.workflow} workflow's inputs`,
     };

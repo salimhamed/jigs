@@ -7,8 +7,7 @@ import { startOwningSignals } from "./shutdown.ts";
 // starting this World creates the workflow schema and graphile's tables, which
 // the registry tests' `jigs` database must not acquire.
 const url =
-  process.env.WORKFLOW_POSTGRES_URL ??
-  "postgres://jigs:jigs@localhost:5439/jigs_shutdown_live";
+  process.env.WORKFLOW_POSTGRES_URL ?? "postgres://jigs:jigs@localhost:5439/jigs_shutdown_live";
 
 // world-postgres starts graphile's runner inside start() only when it can
 // reach the service port within 200ms; a bare listener stands in for the

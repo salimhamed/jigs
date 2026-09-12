@@ -1,12 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import {
-  git,
-  makeRemoteBackedRepo,
-  makeTmpDir,
-  removeTmpDir,
-} from "../test-fixtures.ts";
+import { git, makeRemoteBackedRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import {
   commitsAhead,
   deriveDefaultBranch,
@@ -25,10 +20,7 @@ afterEach(() => {
 });
 
 // A repo whose remotes are the whole point: no commits, no worktree needed.
-function repoWithRemotes(
-  name: string,
-  ...remotes: Array<[string, string]>
-): string {
+function repoWithRemotes(name: string, ...remotes: Array<[string, string]>): string {
   const dir = path.join(tmp, name);
   mkdirSync(dir, { recursive: true });
   git(dir, "init", "-q");
@@ -49,10 +41,7 @@ test("resolveRemoteUrl prefers origin", async () => {
 });
 
 test("resolveRemoteUrl falls back to a sole non-origin remote", async () => {
-  const repo = repoWithRemotes("sole-remote", [
-    "upstream",
-    "git@github.com:acme/api.git",
-  ]);
+  const repo = repoWithRemotes("sole-remote", ["upstream", "git@github.com:acme/api.git"]);
   expect(await resolveRemoteUrl(repo)).toEqual({
     remote: "upstream",
     url: "git@github.com:acme/api.git",
@@ -74,24 +63,13 @@ test("resolveRemoteUrl errors on multiple remotes without origin", async () => {
 });
 
 test("deriveDefaultBranch reads refs/remotes/origin/HEAD", async () => {
-  const repo = repoWithRemotes("with-head", [
-    "origin",
-    "git@github.com:acme/api.git",
-  ]);
-  git(
-    repo,
-    "symbolic-ref",
-    "refs/remotes/origin/HEAD",
-    "refs/remotes/origin/main",
-  );
+  const repo = repoWithRemotes("with-head", ["origin", "git@github.com:acme/api.git"]);
+  git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
   expect(await deriveDefaultBranch(repo)).toBe("main");
 });
 
 test("deriveDefaultBranch returns null when unset", async () => {
-  const repo = repoWithRemotes("no-head", [
-    "origin",
-    "git@github.com:acme/api.git",
-  ]);
+  const repo = repoWithRemotes("no-head", ["origin", "git@github.com:acme/api.git"]);
   expect(await deriveDefaultBranch(repo)).toBeNull();
 });
 
@@ -134,9 +112,7 @@ test("pushBranch creates the remote branch and is idempotent on a second call", 
   git(tree, "add", ".");
   git(tree, "commit", "-q", "-m", "more work");
   await pushBranch(tree, "feature");
-  expect(git(remoteDir, "rev-parse", "refs/heads/feature")).toBe(
-    git(tree, "rev-parse", "HEAD"),
-  );
+  expect(git(remoteDir, "rev-parse", "refs/heads/feature")).toBe(git(tree, "rev-parse", "HEAD"));
 });
 
 test("commitsAhead counts the work on the branch and is 0 on an untouched one", async () => {
@@ -181,10 +157,7 @@ test("probeRemoteAuth returns null for a reachable remote and stderr for an unre
 
   // The regression guard for GIT_TERMINAL_PROMPT=0: an unreachable remote
   // must fail inside the timeout, not hang on a credential prompt.
-  const stderr = await probeRemoteAuth(
-    path.join(tmp, "nonexistent.git"),
-    10_000,
-  );
+  const stderr = await probeRemoteAuth(path.join(tmp, "nonexistent.git"), 10_000);
   expect(stderr).not.toBeNull();
   expect(stderr).toContain("nonexistent.git");
 }, 20_000);

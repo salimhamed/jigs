@@ -1,12 +1,7 @@
 import type { ISql } from "postgres";
 import { afterEach, expect, test } from "vitest";
 import { setWorld } from "workflow/runtime";
-import {
-  listJobRunIds,
-  listRunDeadJobs,
-  listRunSteps,
-  runsWithActiveStep,
-} from "./stalls.ts";
+import { listJobRunIds, listRunDeadJobs, listRunSteps, runsWithActiveStep } from "./stalls.ts";
 
 const RUN_A = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 const RUN_B = "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ";
@@ -96,10 +91,7 @@ test("a pending step counts as in flight, like a running one", async () => {
 
 test("a job is sorted into dead or live by the run its message body names", async () => {
   const jobs = await listJobRunIds(
-    fakeSql([
-      job(),
-      job({ id: "4129", dead: false, payload: payloadFor(RUN_B) }),
-    ]),
+    fakeSql([job(), job({ id: "4129", dead: false, payload: payloadFor(RUN_B) })]),
   );
   expect(jobs).toEqual({ dead: [RUN_A], live: [RUN_B] });
 });

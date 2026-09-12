@@ -55,12 +55,7 @@ test("an active exact-url hook with current events passes", async () => {
 test("a valid exact-url hook passes after a stale duplicate", async () => {
   configure();
   fetchMock.mockResolvedValueOnce(
-    new Response(
-      JSON.stringify([
-        hook({ id: 8, active: false }),
-        hook({ id: 9, active: true }),
-      ]),
-    ),
+    new Response(JSON.stringify([hook({ id: 8, active: false }), hook({ id: 9, active: true })])),
   );
   expect(await check().run()).toEqual({ ok: true });
 });
@@ -70,8 +65,7 @@ test("a missing hook fails with the exact bind repair", async () => {
   fetchMock.mockResolvedValueOnce(new Response("[]"));
   expect(await check().run()).toEqual({
     ok: false,
-    reason:
-      "the repo has no active webhook at this factory's ingress URL with the current events",
+    reason: "the repo has no active webhook at this factory's ingress URL with the current events",
     repair: "run: jigs bind git@github.com:acme/api.git",
   });
 });
@@ -81,9 +75,7 @@ test.each([
   ["wrong events", { events: ["pull_request"] }],
 ])("a hook with %s fails", async (_label, overrides) => {
   configure();
-  fetchMock.mockResolvedValueOnce(
-    new Response(JSON.stringify([hook(overrides)])),
-  );
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify([hook(overrides)])));
   expect(await check().run()).toMatchObject({ ok: false });
 });
 

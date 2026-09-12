@@ -101,12 +101,9 @@ export function builtBundleHash(factoryRoot: string): string | undefined {
   if (!existsSync(entry)) return undefined;
   const hash = createHash("sha256");
   const output = path.dirname(entry);
-  for (const name of readdirSync(output, { recursive: true })
-    .map(String)
-    .sort()) {
+  for (const name of readdirSync(output, { recursive: true }).map(String).sort()) {
     const file = path.join(output, name);
-    if (statSync(file).isFile())
-      hash.update(name).update("\0").update(readFileSync(file));
+    if (statSync(file).isFile()) hash.update(name).update("\0").update(readFileSync(file));
   }
   // Service ports and binding settings are also read from the factory at boot.
   hash.update(JSON.stringify(readFactoryConfig(factoryRoot)));
@@ -116,13 +113,7 @@ export function builtBundleHash(factoryRoot: string): string | undefined {
 // What `jigs build` compiles into the bundle. An edit to one of them that was
 // never built is invisible at run time: the service keeps executing the bundle
 // it booted from.
-const WORKFLOW_SOURCES = [
-  "jigs.config.ts",
-  "jigs.ts",
-  "workflows",
-  "blocks",
-  "steps",
-];
+const WORKFLOW_SOURCES = ["jigs.config.ts", "jigs.ts", "workflows", "blocks", "steps"];
 
 // A test file beside a workflow is compiled into no bundle, so editing one
 // leaves the build current.
@@ -134,9 +125,7 @@ export function staleWorkflowSources(factoryRoot: string): string[] {
   const entry = path.join(factoryRoot, SERVICE_ENTRY);
   if (!existsSync(entry)) return [];
   const builtAt = statSync(entry).mtimeMs;
-  return WORKFLOW_SOURCES.filter((source) =>
-    newerThan(path.join(factoryRoot, source), builtAt),
-  );
+  return WORKFLOW_SOURCES.filter((source) => newerThan(path.join(factoryRoot, source), builtAt));
 }
 
 function newerThan(target: string, builtAt: number): boolean {
@@ -188,10 +177,7 @@ function readPid(slug: string): number | undefined {
   return Number.isInteger(pid) && pid > 0 ? pid : undefined;
 }
 
-function livePid(
-  slug: string,
-  processes: ServiceProcesses,
-): number | undefined {
+function livePid(slug: string, processes: ServiceProcesses): number | undefined {
   const pid = readPid(slug);
   if (pid === undefined) return undefined;
   return processes.signal(pid, 0) ? pid : undefined;
@@ -212,10 +198,7 @@ export function liveServicePid(deps: ServiceLifecycleDeps): number | undefined {
 // dashboard's included — to the service's own workflow routes. Left unset the
 // World guesses a port the process happens to listen on, and a queue job
 // delivered to a port with no workflow route dies after three 404s.
-function childEnv(
-  factoryRoot: string,
-  service: ResolvedService,
-): Record<string, string> {
+function childEnv(factoryRoot: string, service: ResolvedService): Record<string, string> {
   return {
     ...stringEnv(process.env),
     ...readFactoryEnv(factoryRoot),
@@ -257,18 +240,14 @@ export async function startService(
     logPath: logFile,
   });
   if (pid === undefined) {
-    throw new JigsError(
-      `the service process for ${slug} did not start`,
-      `check ${logFile}`,
-    );
+    throw new JigsError(`the service process for ${slug} did not start`, `check ${logFile}`);
   }
 
   const pidfile = servicePidfilePath(slug);
   mkdirSync(path.dirname(pidfile), { recursive: true });
   writeFileSync(pidfile, `${pid}\n`);
   writeFileSync(serviceBundlePath(slug), `${builtBundleHash(factoryRoot)}\n`);
-  if (options.awaitReady !== false)
-    await awaitReady(deps, slug, serviceUrl, pid);
+  if (options.awaitReady !== false) await awaitReady(deps, slug, serviceUrl, pid);
   out(`started ${slug}: pid ${pid} at ${serviceUrl}`);
   out(`dashboard: ${dashboardUrl}`);
   out(`logs: ${logFile}`);
@@ -278,9 +257,7 @@ export async function startService(
  * Waits for the recorded service to report itself ready. What `start` does
  * before it says "started", for a caller that spawned without waiting.
  */
-export async function awaitServiceReady(
-  deps: ServiceLifecycleDeps,
-): Promise<void> {
+export async function awaitServiceReady(deps: ServiceLifecycleDeps): Promise<void> {
   const { out, processes = nodeProcesses } = deps;
   const { slug, serviceUrl } = resolveService(locateFactoryRoot(deps.cwd));
   const pid = readPid(slug);
@@ -330,11 +307,7 @@ async function awaitReady(
 // The gates exit the process when a clone or the registry fails, so a pid
 // gone mid-boot is the failed boot itself; its log is the explanation, and
 // the last lines of it are worth more here than a path.
-function failedBoot(
-  slug: string,
-  pid: number,
-  out: (line: string) => void,
-): JigsError {
+function failedBoot(slug: string, pid: number, out: (line: string) => void): JigsError {
   const logFile = serviceLogPath(slug);
   for (const line of tailLines(logFile, LOG_LINES)) out(line);
   rmSync(servicePidfilePath(slug), { force: true });
@@ -360,15 +333,10 @@ async function healthProbe(url: string): Promise<ServiceHealth | null> {
   }
 }
 
-const sleep = (ms: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export async function stopService(deps: ServiceLifecycleDeps): Promise<void> {
-  const {
-    out,
-    processes = nodeProcesses,
-    stopTimeoutMs = STOP_TIMEOUT_MS,
-  } = deps;
+  const { out, processes = nodeProcesses, stopTimeoutMs = STOP_TIMEOUT_MS } = deps;
   const { slug } = resolveService(locateFactoryRoot(deps.cwd));
   const pid = readPid(slug);
   const pidfile = servicePidfilePath(slug);
@@ -419,10 +387,7 @@ export function serviceStatus(deps: ServiceLifecycleDeps): void {
 // the stdout the supervisor redirects, which no dashboard can know about.
 // Different subject, so the `service` namespace keeps them apart rather than
 // one shadowing the other.
-export function serviceLogs(
-  deps: ServiceLifecycleDeps,
-  options: { lines?: number } = {},
-): void {
+export function serviceLogs(deps: ServiceLifecycleDeps, options: { lines?: number } = {}): void {
   const { out } = deps;
   const { slug } = resolveService(locateFactoryRoot(deps.cwd));
   const file = serviceLogPath(slug);

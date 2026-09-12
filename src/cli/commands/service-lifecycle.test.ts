@@ -10,16 +10,8 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { JigsError } from "../../errors.ts";
 import { factorySlug } from "../../steps/worktree/layout.ts";
-import {
-  makeFactoryRepo,
-  makeTmpDir,
-  removeTmpDir,
-} from "../../test-fixtures.ts";
-import type {
-  ServiceHealth,
-  ServiceProcesses,
-  SpawnSpec,
-} from "./service-lifecycle.ts";
+import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
+import type { ServiceHealth, ServiceProcesses, SpawnSpec } from "./service-lifecycle.ts";
 import {
   awaitServiceReady,
   builtBundleHash,
@@ -161,9 +153,7 @@ test("the child is told where to host its dashboard and where its queue delivers
   expect(io.spawns[0]?.env.JIGS_DASHBOARD_PORT).toBe("9200");
   // Every queue worker in the child, the dashboard's included, dispatches to
   // the service's own workflow routes rather than a guessed port.
-  expect(io.spawns[0]?.env.WORKFLOW_LOCAL_BASE_URL).toBe(
-    "http://localhost:9100",
-  );
+  expect(io.spawns[0]?.env.WORKFLOW_LOCAL_BASE_URL).toBe("http://localhost:9100");
   expect(lines).toContain("dashboard: http://localhost:9200");
 });
 
@@ -217,11 +207,7 @@ function touchFile(root: string, relative: string, offsetMs: number): void {
 function touch(root: string, relative: string, offsetMs: number): void {
   touchFile(root, relative, offsetMs);
   const when = new Date(Date.now() + offsetMs);
-  for (
-    let dir = path.dirname(path.join(root, relative));
-    dir !== root;
-    dir = path.dirname(dir)
-  ) {
+  for (let dir = path.dirname(path.join(root, relative)); dir !== root; dir = path.dirname(dir)) {
     utimesSync(dir, when, when);
   }
 }
@@ -265,10 +251,7 @@ test("a rename that carries the old mtime along is stale by its directory", () =
   const root = builtFactory();
   touch(root, "workflows/ship.ts", -60_000);
   touch(root, SERVICE_ENTRY, -30_000);
-  renameSync(
-    path.join(root, "workflows/ship.ts"),
-    path.join(root, "workflows/deliver.ts"),
-  );
+  renameSync(path.join(root, "workflows/ship.ts"), path.join(root, "workflows/deliver.ts"));
 
   expect(staleWorkflowSources(root)).toEqual(["workflows"]);
 });
@@ -381,11 +364,7 @@ test("a process that dies while booting fails the start at once, printing its lo
 
   expect(err?.message).toContain("exited during boot");
   expect(err?.hint).toContain(serviceLogPath(factorySlug(root)));
-  expect(lines).toEqual([
-    "booting: cloning forge",
-    "cloning binding forge",
-    "fatal: repo gone",
-  ]);
+  expect(lines).toEqual(["booting: cloning forge", "cloning binding forge", "fatal: repo gone"]);
   expect(io.probes).toHaveLength(1);
   // Nothing is left to supervise.
   expect(existsSync(servicePidfilePath(factorySlug(root)))).toBe(false);
@@ -395,17 +374,13 @@ test("a start that outlives its timeout fails, names the log and the phase, and 
   const root = builtFactory();
   const io = fake([booting("cloning forge")]);
 
-  const err = await failure(
-    startService(deps(root, io, { startTimeoutMs: 0 })),
-  );
+  const err = await failure(startService(deps(root, io, { startTimeoutMs: 0 })));
 
   expect(err?.message).toContain("still booting");
   expect(err?.message).toContain("cloning forge");
   expect(err?.hint).toContain(serviceLogPath(factorySlug(root)));
   expect(err?.hint).toContain("jigs service stop");
-  expect(
-    readFileSync(servicePidfilePath(factorySlug(root)), "utf8").trim(),
-  ).toBe("4242");
+  expect(readFileSync(servicePidfilePath(factorySlug(root)), "utf8").trim()).toBe("4242");
 });
 
 // `jigs up` names the spawn and the wait as two steps.
@@ -495,9 +470,7 @@ test("status reports the pid, the url and the factory root", async () => {
 
   serviceStatus(deps(root, io));
 
-  expect(lines[0]).toBe(
-    `${factorySlug(root)}: running pid 4242 at http://localhost:9100`,
-  );
+  expect(lines[0]).toBe(`${factorySlug(root)}: running pid 4242 at http://localhost:9100`);
   expect(lines).toContain("dashboard: http://localhost:9200");
   expect(lines).toContain(`factory ${root}`);
 });

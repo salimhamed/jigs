@@ -48,14 +48,11 @@ test("--force posts one yes-to-everything clean and prints the summary", async (
     removedDirs: [],
   });
   const result = await runSweep(deps(), { force: true });
-  expect(fetchMock).toHaveBeenCalledWith(
-    "http://svc.test:8990/api/worktrees/sweep",
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ clean: true, force: true }),
-    },
-  );
+  expect(fetchMock).toHaveBeenCalledWith("http://svc.test:8990/api/worktrees/sweep", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ clean: true, force: true }),
+  });
   expect(result.removed).toEqual(["/data/wt/feat"]);
   expect(lines[0]).toContain("abandoned");
   expect(lines[0]).toContain("branch deleted");
@@ -93,9 +90,7 @@ test("a bare sweep with no terminal reports and points at the removal paths", as
     removedDirs: [],
   });
   await runSweep(deps());
-  expect(fetchMock.mock.calls[0]?.[1].body).toBe(
-    JSON.stringify({ clean: false, force: false }),
-  );
+  expect(fetchMock.mock.calls[0]?.[1].body).toBe(JSON.stringify({ clean: false, force: false }));
   expect(lines.at(-1)).toBe(
     "report only — rerun in a terminal to be asked per worktree, or --force to remove all 1",
   );

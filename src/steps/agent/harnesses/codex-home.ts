@@ -32,10 +32,7 @@ export interface CodexHomeOptions {
   realAuthPath?: string;
 }
 
-export function managedCodexHomePath(
-  runId: string,
-  options: CodexHomeOptions = {},
-): string {
+export function managedCodexHomePath(runId: string, options: CodexHomeOptions = {}): string {
   const base = options.baseDir ?? path.join(jigsDataDir(), "codex-homes");
   return path.join(base, runId);
 }
@@ -45,16 +42,11 @@ export function managedCodexHomePath(
 // between wakes. config.toml IS rewritten on every ensure — codex prepends
 // [projects."<cwd>"] trust records into it (the managed home is codex-mutable
 // state), and re-curation restores the zero-server invariant.
-export function ensureManagedCodexHome(
-  runId: string,
-  options: CodexHomeOptions = {},
-): string {
+export function ensureManagedCodexHome(runId: string, options: CodexHomeOptions = {}): string {
   const home = managedCodexHomePath(runId, options);
   const realAuthPath = options.realAuthPath ?? realCodexAuthPath();
   if (!existsSync(realAuthPath)) {
-    throw new Error(
-      `no Codex login found at ${realAuthPath} — run: codex login`,
-    );
+    throw new Error(`no Codex login found at ${realAuthPath} — run: codex login`);
   }
   mkdirSync(home, { recursive: true });
   writeFileSync(path.join(home, "config.toml"), CURATED_CONFIG_TOML);
@@ -80,10 +72,7 @@ export function ensureManagedCodexHome(
 }
 
 // Explicit teardown for the run-end path (wired by the worktree lifecycle).
-export function removeManagedCodexHome(
-  runId: string,
-  options: CodexHomeOptions = {},
-): void {
+export function removeManagedCodexHome(runId: string, options: CodexHomeOptions = {}): void {
   rmSync(managedCodexHomePath(runId, options), {
     recursive: true,
     force: true,

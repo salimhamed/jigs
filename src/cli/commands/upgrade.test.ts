@@ -12,11 +12,7 @@ import {
   fakeService,
   factory as scaffold,
 } from "./test-fixtures.ts";
-import {
-  type UpgradeDeps,
-  type UpgradeOptions,
-  upgradeFactory,
-} from "./upgrade.ts";
+import { type UpgradeDeps, type UpgradeOptions, upgradeFactory } from "./upgrade.ts";
 
 let tmp: string;
 let lines: string[];
@@ -47,10 +43,7 @@ function factory(
   },
 ): string {
   const root = scaffold(tmp, { port });
-  writeFileSync(
-    path.join(root, "package.json"),
-    JSON.stringify(manifest, null, 2),
-  );
+  writeFileSync(path.join(root, "package.json"), JSON.stringify(manifest, null, 2));
   return root;
 }
 
@@ -59,10 +52,7 @@ const readManifest = (root: string): Manifest =>
 
 // The registry as far as `upgrade` can tell: the fake pnpm rewrites
 // package.json the way `pnpm update` does, to `latest` or to the pinned spec.
-function fakeRegistry(
-  latest: string,
-  fail?: (call: Call) => Error | undefined,
-) {
+function fakeRegistry(latest: string, fail?: (call: Call) => Error | undefined) {
   return fakeExec((call) => {
     const err = fail?.(call);
     if (err !== undefined) return err;
@@ -71,14 +61,10 @@ function fakeRegistry(
     for (const spec of call.args.slice(1)) {
       if (spec.startsWith("--")) continue;
       const at = spec.lastIndexOf("@");
-      const [name, version] =
-        at > 0 ? [spec.slice(0, at), spec.slice(at + 1)] : [spec, latest];
+      const [name, version] = at > 0 ? [spec.slice(0, at), spec.slice(at + 1)] : [spec, latest];
       manifest.dependencies[name] = version;
     }
-    writeFileSync(
-      path.join(call.options.cwd, "package.json"),
-      JSON.stringify(manifest, null, 2),
-    );
+    writeFileSync(path.join(call.options.cwd, "package.json"), JSON.stringify(manifest, null, 2));
     return undefined;
   });
 }
@@ -172,9 +158,7 @@ test("--to that is not an exact version is refused before anything runs", async 
   const root = factory(1);
   const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
 
-  await expect(upgrade(root, io, { to: "latest" })).rejects.toThrow(
-    "--to takes an exact version",
-  );
+  await expect(upgrade(root, io, { to: "latest" })).rejects.toThrow("--to takes an exact version");
   expect(io.exec.calls).toHaveLength(0);
 });
 
@@ -186,9 +170,7 @@ test("a factory already on the latest says so and still runs up and the typechec
   const result = await upgrade(root, io);
 
   expect(result.ok).toBe(true);
-  expect(lines.join("\n")).toMatch(
-    /^ok {3}bump .* — jigs 0\.1\.18 \(unchanged\)$/m,
-  );
+  expect(lines.join("\n")).toMatch(/^ok {3}bump .* — jigs 0\.1\.18 \(unchanged\)$/m);
   expect(statuses(result).at(-1)).toBe("typecheck:ok");
 });
 
@@ -209,9 +191,7 @@ test("a factory linked to a checkout is refused before pnpm runs, naming the pub
   expect(result.steps[0]?.detail).toBe(
     "this factory installs jigs from a checkout (@jigs/service: link:/home/me/jigs/packages/service, jigs: link:/home/me/jigs/packages/jigs)",
   );
-  expect(result.steps[0]?.repair).toContain(
-    "@salimhamed/jigs from GitHub Packages",
-  );
+  expect(result.steps[0]?.repair).toContain("@salimhamed/jigs from GitHub Packages");
   expect(io.exec.calls).toHaveLength(0);
 });
 
@@ -238,9 +218,7 @@ test("a link: to something other than jigs is not a checkout install", async () 
   const result = await upgrade(root, io);
 
   expect(result.ok).toBe(true);
-  expect(readManifest(root).dependencies["acme-tools"]).toBe(
-    "link:../acme-tools",
-  );
+  expect(readManifest(root).dependencies["acme-tools"]).toBe("link:../acme-tools");
 });
 
 test("a factory that does not depend on jigs is told so, since pnpm would silently skip it", async () => {
@@ -250,9 +228,7 @@ test("a factory that does not depend on jigs is told so, since pnpm would silent
   const result = await upgrade(root, io);
 
   expect(statuses(result)).toEqual(["packages:failed"]);
-  expect(result.steps[0]?.detail).toBe(
-    "@salimhamed/jigs not in this factory's package.json",
-  );
+  expect(result.steps[0]?.detail).toBe("@salimhamed/jigs not in this factory's package.json");
   expect(io.exec.calls).toHaveLength(0);
 });
 
@@ -348,9 +324,7 @@ test("GitHub Packages answering 404 is a token problem, not a missing release", 
   const result = await upgrade(root, io);
 
   expect(statuses(result).at(-1)).toBe("bump:failed");
-  expect(result.steps.at(-1)?.detail).toBe(
-    "GitHub Packages refused the request",
-  );
+  expect(result.steps.at(-1)?.detail).toBe("GitHub Packages refused the request");
   expect(result.steps.at(-1)?.repair).toContain("read:packages");
 });
 
@@ -371,9 +345,7 @@ test("an @salimhamed scope not routed to GitHub Packages names the .npmrc line",
   const result = await upgrade(root, io);
 
   expect(statuses(result).at(-1)).toBe("bump:failed");
-  expect(result.steps.at(-1)?.repair).toContain(
-    "@salimhamed:registry=https://npm.pkg.github.com",
-  );
+  expect(result.steps.at(-1)?.repair).toContain("@salimhamed:registry=https://npm.pkg.github.com");
 });
 
 test("a version the registry does not have is named with the --to that asked for it", async () => {
@@ -415,9 +387,7 @@ test("a failing up step ends the upgrade there; no typecheck runs", async () => 
   const root = factory(1);
   const io = {
     exec: fakeRegistry("0.1.19", (call) =>
-      call.file === "docker"
-        ? execError(1, "Cannot connect to the Docker daemon\n")
-        : undefined,
+      call.file === "docker" ? execError(1, "Cannot connect to the Docker daemon\n") : undefined,
     ),
     procs: fakeProcesses(),
   };
@@ -435,9 +405,7 @@ test("a failing up step ends the upgrade there; no typecheck runs", async () => 
     "compose:failed",
   ]);
   expect(result.up?.ok).toBe(false);
-  expect(commands(io).map((c) => c.join(" "))).not.toContain(
-    "pnpm run typecheck",
-  );
+  expect(commands(io).map((c) => c.join(" "))).not.toContain("pnpm run typecheck");
 });
 
 test("a red typecheck reports custom factory code errors after refreshing the integration", async () => {
@@ -475,12 +443,8 @@ test("without a typecheck script the step is skipped and says so", async () => {
 
   expect(result.ok).toBe(true);
   expect(statuses(result).at(-1)).toBe("typecheck:skipped");
-  expect(lines).toContain(
-    "skip typecheck — no typecheck script in package.json",
-  );
-  expect(commands(io).map((c) => c.join(" "))).not.toContain(
-    "pnpm run typecheck",
-  );
+  expect(lines).toContain("skip typecheck — no typecheck script in package.json");
+  expect(commands(io).map((c) => c.join(" "))).not.toContain("pnpm run typecheck");
 });
 
 test("--force and --no-doctor reach up", async () => {
@@ -503,19 +467,13 @@ test("a failed integration refresh stops before rebuilding or restarting", async
   const root = factory(59997);
   const io = {
     exec: fakeRegistry("0.1.19", (call) =>
-      call.args.join(" ") === "exec jigs generate"
-        ? execError("generation failed")
-        : undefined,
+      call.args.join(" ") === "exec jigs generate" ? execError("generation failed") : undefined,
     ),
     procs: fakeProcesses(),
   };
   const result = await upgrade(root, io);
   expect(result.ok).toBe(false);
-  expect(statuses(result)).toEqual([
-    "packages:ok",
-    "bump:ok",
-    "generate:failed",
-  ]);
+  expect(statuses(result)).toEqual(["packages:ok", "bump:ok", "generate:failed"]);
   expect(commands(io)).toEqual([
     ["pnpm", "update", "--latest", "@salimhamed/jigs"],
     ["pnpm", "exec", "jigs", "generate"],

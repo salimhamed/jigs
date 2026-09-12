@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { RawIssueSnapshot } from "../../providers/linear.ts";
-import { fetchSnapshot } from "./fetch-snapshot.ts";
+import { fetchTicketSnapshot } from "./fetch-snapshot.ts";
 
 const fetchMock = vi.fn();
 
@@ -16,9 +16,7 @@ afterEach(() => {
 });
 
 const respond = (data: unknown) =>
-  fetchMock.mockResolvedValueOnce(
-    new Response(JSON.stringify({ data }), { status: 200 }),
-  );
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ data }), { status: 200 }));
 
 const comment = (id: string, body: string) => ({
   id,
@@ -82,8 +80,8 @@ test("a later fetch carries the new comment while the earlier copy keeps its own
     }),
   });
 
-  const launch = await fetchSnapshot("68bc9696-35d5-442d-ab56-214c8cfefbec");
-  const later = await fetchSnapshot("68bc9696-35d5-442d-ab56-214c8cfefbec");
+  const launch = await fetchTicketSnapshot("68bc9696-35d5-442d-ab56-214c8cfefbec");
+  const later = await fetchTicketSnapshot("68bc9696-35d5-442d-ab56-214c8cfefbec");
 
   expect(launch.comments.map((c) => c.id)).toEqual(["c1"]);
   expect(later.comments.map((c) => c.id)).toEqual(["c1", "c2"]);

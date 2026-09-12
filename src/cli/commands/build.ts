@@ -4,12 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
-import {
-  type ExecFile,
-  type ExecOutput,
-  execOutput,
-  nodeExecFile,
-} from "../exec.ts";
+import { type ExecFile, type ExecOutput, execOutput, nodeExecFile } from "../exec.ts";
 import { SERVICE_ENTRY } from "./service-lifecycle.ts";
 
 // Compiles a factory repo's own workflows into its own service bundle. Both
@@ -48,10 +43,7 @@ export async function buildFactoryService(deps: BuildDeps): Promise<void> {
     echo(await execFile(nitro, ["build"], { cwd: factoryRoot }), deps.out);
   } catch (err) {
     echo(err as Partial<ExecOutput>, deps.out);
-    throw new JigsError(
-      `nitro build failed in ${factoryRoot}`,
-      "the output above is nitro's",
-    );
+    throw new JigsError(`nitro build failed in ${factoryRoot}`, "the output above is nitro's");
   }
   deps.out(`built ${path.join(factoryRoot, SERVICE_ENTRY)}`);
 }
@@ -72,9 +64,7 @@ function echo(result: Partial<ExecOutput>, out: (line: string) => void): void {
  *   workflows is the copy the built service will run.
  */
 async function loadPrepare(factoryRoot: string): Promise<Prepare> {
-  const resolveFromFactory = createRequire(
-    path.join(factoryRoot, "package.json"),
-  );
+  const resolveFromFactory = createRequire(path.join(factoryRoot, "package.json"));
   let entry: string;
   try {
     entry = resolveFromFactory.resolve("@salimhamed/jigs/build");

@@ -52,9 +52,9 @@ const shared = vi.hoisted(() => ({
       headSha: "head-1",
       dirty: false,
     })) as (nth: number) => BranchState,
-    pushHead: ((nth: number) => ({ headSha: `pushed-${nth}` })) as (
-      nth: number,
-    ) => { headSha: string },
+    pushHead: ((nth: number) => ({ headSha: `pushed-${nth}` })) as (nth: number) => {
+      headSha: string;
+    },
     // Names the one resuming agent call a test wants to fail, by its prompt: a
     // positional count would silently re-aim itself onto whichever resuming
     // call happens to come first.
@@ -66,11 +66,7 @@ const shared = vi.hoisted(() => ({
 
 vi.mock("../../jigs.ts", () => {
   const { calls, script, pr } = shared;
-  async function* deliver(): AsyncGenerator<
-    GateWake,
-    void,
-    GateAck | undefined
-  > {
+  async function* deliver(): AsyncGenerator<GateWake, void, GateAck | undefined> {
     try {
       for (const wake of script.wakes) {
         calls.trail.push(`wake ${wake.kind}`);
@@ -85,22 +81,16 @@ vi.mock("../../jigs.ts", () => {
     }
   }
   return {
-    agent: async <T>(
-      config: AgentStepConfig<T>,
-    ): Promise<AgentStepResult<T>> => {
+    agent: async <T>(config: AgentStepConfig<T>): Promise<AgentStepResult<T>> => {
       calls.trail.push("agent");
       calls.agent.push(config as AgentStepConfig<unknown>);
-      if (
-        config.resume !== undefined &&
-        script.staleResume(config as AgentStepConfig<unknown>)
-      ) {
+      if (config.resume !== undefined && script.staleResume(config as AgentStepConfig<unknown>)) {
         // What the real wrapper does with the step's marker: a session the
         // harness no longer holds becomes the one throw resumeOrRebuild
         // catches.
         unwrapAgentStep({ resumeFailed: "no rollout for thread id 0199-gone" });
       }
-      const raw =
-        config.output === undefined ? undefined : script.outputs.shift();
+      const raw = config.output === undefined ? undefined : script.outputs.shift();
       return {
         text: "",
         output: parseOutput(config.output, raw),
@@ -137,7 +127,7 @@ vi.mock("../../jigs.ts", () => {
       return script.pushHead(calls.pushes.length);
     },
     readWorktreeDiff: async (_path: string, _baseSha: string) => {
-      calls.trail.push("readDiff");
+      calls.trail.push("readWorktreeDiff");
       return "THE-DIFF";
     },
     openPullRequest: async (
@@ -151,7 +141,7 @@ vi.mock("../../jigs.ts", () => {
       calls.opens.push([repo, head, base, title, body]);
       return pr;
     },
-    replyInThread: async (_target: PrRef, rootId: number, body: string) => {
+    replyToPullRequestReviewThread: async (_target: PrRef, rootId: number, body: string) => {
       calls.trail.push("reply");
       calls.replies.push([rootId, body]);
       return { id: rootId + 1 };
@@ -160,7 +150,7 @@ vi.mock("../../jigs.ts", () => {
       calls.trail.push("comment");
       calls.comments.push(body);
     },
-    squashMerge: async (target: PrRef) => {
+    squashMergePullRequest: async (target: PrRef) => {
       calls.trail.push("merge");
       if (script.mergeError !== null) throw script.mergeError;
       calls.merges.push(target.number);
@@ -224,10 +214,12 @@ const failing: CiRed["failing"] = [
   { name: "test", conclusion: "failure", url: "http://ci.test/1" },
 ];
 
-const ciRed = (
-  headSha: string,
-  mentionLogin: string | null = "salim",
-): GateWake => ({ kind: "ci-red", headSha, failing, mentionLogin });
+const ciRed = (headSha: string, mentionLogin: string | null = "salim"): GateWake => ({
+  kind: "ci-red",
+  headSha,
+  failing,
+  mentionLogin,
+});
 
 const closedMerged: GateWake = { kind: "closed", merged: true };
 
@@ -241,7 +233,7 @@ const approval: GateWake = {
 const approved = { verdict: "approved", findings: [] };
 
 // The description every run needs before the PR is opened. Both fields are
-// non-empty because prDescription refuses anything else.
+// non-empty because pullRequestDescription refuses anything else.
 const description = { title: "described title", body: "described body" };
 
 const answerFor = (rootIds: number[]) => ({
@@ -263,8 +255,7 @@ const emptyBranches =
 const commitRounds = () =>
   calls.agent.filter((call) => call.prompt.startsWith("# Commit your work"));
 
-const ciFixes = () =>
-  calls.agent.filter((call) => call.prompt.startsWith("# Fix CI"));
+const ciFixes = () => calls.agent.filter((call) => call.prompt.startsWith("# Fix CI"));
 
 const run = (merge: "jigs" | "human" = "jigs") =>
   reviewLoop({
@@ -365,8 +356,7 @@ test("an empty branch with a dirty worktree sends the builder back to commit", a
 test("a stale session commits from a fresh context rather than failing the run", async () => {
   script.wakes = [closedMerged];
   script.branch = emptyBranches(1);
-  script.staleResume = (config) =>
-    config.prompt.startsWith("# Commit your work");
+  script.staleResume = (config) => config.prompt.startsWith("# Commit your work");
   const result = await run();
 
   // The same prompt either way: the work is on disk, so the fresh round needs
@@ -426,10 +416,7 @@ test("the description resumes the builder's session on this factory's own harnes
 
 test("a review-comments wake answers every thread in place", async () => {
   script.outputs = [approved, description, answerFor([900, 910])];
-  script.wakes = [
-    { kind: "review-comments", threads: [thread(900), thread(910)] },
-    closedMerged,
-  ];
+  script.wakes = [{ kind: "review-comments", threads: [thread(900), thread(910)] }, closedMerged];
   await run();
 
   expect(calls.replies).toEqual([
@@ -464,10 +451,7 @@ test("a review-comments wake answers every thread in place", async () => {
 
 test("the ids of the replies it posts ride back into the gate", async () => {
   script.outputs = [approved, description, answerFor([900, 910])];
-  script.wakes = [
-    { kind: "review-comments", threads: [thread(900), thread(910)] },
-    closedMerged,
-  ];
+  script.wakes = [{ kind: "review-comments", threads: [thread(900), thread(910)] }, closedMerged];
   await run();
 
   // What keeps the gate from waking the builder back into a thread whose only
@@ -476,15 +460,8 @@ test("the ids of the replies it posts ride back into the gate", async () => {
 });
 
 test("answers that land on the conversation ack nothing", async () => {
-  script.outputs = [
-    approved,
-    description,
-    { answers: [{ threadId: null, body: "addressed it" }] },
-  ];
-  script.wakes = [
-    { kind: "review-comments", threads: [thread(900)] },
-    closedMerged,
-  ];
+  script.outputs = [approved, description, { answers: [{ threadId: null, body: "addressed it" }] }];
+  script.wakes = [{ kind: "review-comments", threads: [thread(900)] }, closedMerged];
   await run();
 
   expect(calls.comments).toEqual(["addressed it"]);
@@ -493,10 +470,7 @@ test("answers that land on the conversation ack nothing", async () => {
 
 test("an answer naming a thread the wake never carried lands on the conversation", async () => {
   script.outputs = [approved, description, answerFor([900, 4242])];
-  script.wakes = [
-    { kind: "review-comments", threads: [thread(900)] },
-    closedMerged,
-  ];
+  script.wakes = [{ kind: "review-comments", threads: [thread(900)] }, closedMerged];
   await run();
 
   expect(calls.replies).toEqual([[900, "answered 900"]]);
@@ -527,13 +501,7 @@ test("a changes-requested review body is answered on the PR conversation", async
 });
 
 test("the fourth consecutive red escalates as an @-mention instead of a fix", async () => {
-  script.wakes = [
-    ciRed("sha-1"),
-    ciRed("sha-2"),
-    ciRed("sha-3"),
-    ciRed("sha-4"),
-    closedMerged,
-  ];
+  script.wakes = [ciRed("sha-1"), ciRed("sha-2"), ciRed("sha-3"), ciRed("sha-4"), closedMerged];
   await run();
 
   // Three bounded fix attempts, each reading the branch and pushing what it

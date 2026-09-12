@@ -53,11 +53,7 @@ export interface PrSnapshot {
   failingChecks: CheckRun[];
 }
 
-async function githubRequest<T>(
-  method: string,
-  path: string,
-  body?: unknown,
-): Promise<T> {
+async function githubRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
   const token = process.env.GITHUB_TOKEN;
   if (token === undefined || token === "") {
     throw new Error("GITHUB_TOKEN is not set");
@@ -79,8 +75,7 @@ async function githubRequest<T>(
   return (await res.json()) as T;
 }
 
-const githubGet = <T>(path: string): Promise<T> =>
-  githubRequest<T>("GET", path);
+const githubGet = <T>(path: string): Promise<T> => githubRequest<T>("GET", path);
 
 // The preflight probe for GITHUB_TOKEN.
 export async function getAuthenticatedUser(): Promise<{ login: string }> {
@@ -261,10 +256,7 @@ export async function replyToReviewThread(
 
 // The PR conversation, not a thread: what a review-body answer and the CI
 // escalation both land on.
-export async function postPrComment(
-  pr: PrRef,
-  body: string,
-): Promise<{ id: number }> {
+export async function postPrComment(pr: PrRef, body: string): Promise<{ id: number }> {
   return githubRequest<{ id: number }>(
     "POST",
     `/repos/${pr.owner}/${pr.repo}/issues/${pr.number}/comments`,
@@ -281,15 +273,9 @@ export interface CreatePullRequest {
   body: string;
 }
 
-export async function createPullRequest(
-  request: CreatePullRequest,
-): Promise<{ number: number }> {
+export async function createPullRequest(request: CreatePullRequest): Promise<{ number: number }> {
   const { owner, repo, ...rest } = request;
-  return githubRequest<{ number: number }>(
-    "POST",
-    `/repos/${owner}/${repo}/pulls`,
-    rest,
-  );
+  return githubRequest<{ number: number }>("POST", `/repos/${owner}/${repo}/pulls`, rest);
 }
 
 export async function fetchPrTitle(pr: PrRef): Promise<string> {

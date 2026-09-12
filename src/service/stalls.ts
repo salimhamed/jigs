@@ -23,10 +23,7 @@ export interface DeadJobView {
   createdAt: string;
 }
 
-const ACTIVE_STEP_STATUSES: ReadonlySet<string> = new Set([
-  "running",
-  "pending",
-]);
+const ACTIVE_STEP_STATUSES: ReadonlySet<string> = new Set(["running", "pending"]);
 
 /** The steps a run recorded, oldest first. The World's own listing sorts by
  *  step id, which is only creation order while the ids are ULIDs. */
@@ -53,9 +50,7 @@ export async function runsWithActiveStep(runIds: string[]): Promise<string[]> {
   const busy = await Promise.all(
     runIds.map(async (runId) => {
       const steps = await listRunSteps(runId);
-      return steps.some((step) => ACTIVE_STEP_STATUSES.has(step.status))
-        ? runId
-        : null;
+      return steps.some((step) => ACTIVE_STEP_STATUSES.has(step.status)) ? runId : null;
     }),
   );
   return busy.filter((runId): runId is string => runId !== null);
@@ -101,13 +96,8 @@ export async function listJobRunIds(sql: ISql): Promise<JobRunIds> {
 }
 
 /** The jobs the queue gave up on for one run. */
-export async function listRunDeadJobs(
-  sql: ISql,
-  runId: string,
-): Promise<DeadJobView[]> {
-  return (await jobRows(sql))
-    .filter((row) => row.dead && runIdOf(row.payload) === runId)
-    .map(view);
+export async function listRunDeadJobs(sql: ISql, runId: string): Promise<DeadJobView[]> {
+  return (await jobRows(sql)).filter((row) => row.dead && runIdOf(row.payload) === runId).map(view);
 }
 
 function view({ payload: _payload, dead: _dead, ...job }: JobRow): DeadJobView {

@@ -28,14 +28,7 @@
 // install itself, and nothing says otherwise until the built service starts
 // in someone else's repo.
 import { execFileSync, spawn } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -140,11 +133,7 @@ function cliBundleImports() {
     )) {
       if (spec.startsWith(".")) visit(path.resolve(path.dirname(file), spec));
       else if (!spec.startsWith("node:")) {
-        bare.add(
-          spec.startsWith("@")
-            ? spec.split("/").slice(0, 2).join("/")
-            : spec.split("/")[0],
-        );
+        bare.add(spec.startsWith("@") ? spec.split("/").slice(0, 2).join("/") : spec.split("/")[0]);
       }
     }
   };
@@ -195,9 +184,7 @@ function emittedIds() {
 // imports — from this half. That erasure is silent when it stops working.
 function workflowBundle() {
   const lines = readFileSync(bundle(), "utf8").split("\n");
-  const start = lines.findIndex((line) =>
-    line.includes("workflowEntrypoint(`"),
-  );
+  const start = lines.findIndex((line) => line.includes("workflowEntrypoint(`"));
   const end = lines.indexOf("`);", start);
   if (start === -1 || end === -1) {
     fail(
@@ -211,10 +198,7 @@ function workflowBundle() {
 function withFakeVersion(packJigs) {
   const original = readFileSync(jigsPackage, "utf8");
   const { version } = JSON.parse(original);
-  const bumped = original.replace(
-    `"version": "${version}"`,
-    `"version": "${FAKE_VERSION}"`,
-  );
+  const bumped = original.replace(`"version": "${version}"`, `"version": "${FAKE_VERSION}"`);
   // A bump that silently failed to land would make this whole assertion
   // vacuous: two identical builds, ids "unchanged", nothing tested.
   if (bumped === original) {
@@ -302,16 +286,14 @@ function bootOutcome(postgresUrl) {
         output,
         problem,
         readyMs,
-        exitMs:
-          terminatedAt === undefined ? undefined : Date.now() - terminatedAt,
+        exitMs: terminatedAt === undefined ? undefined : Date.now() - terminatedAt,
       });
     };
     const terminate = () => {
       terminatedAt = Date.now();
       clearTimeout(timer);
       timer = setTimeout(
-        () =>
-          settle(`it did not exit within ${SHUTDOWN_TIMEOUT_MS}ms of SIGTERM`),
+        () => settle(`it did not exit within ${SHUTDOWN_TIMEOUT_MS}ms of SIGTERM`),
         SHUTDOWN_TIMEOUT_MS,
       );
       child.kill("SIGTERM");
@@ -346,15 +328,11 @@ function bootOutcome(postgresUrl) {
     // `close`, not `exit`: the last lines of output arrive after `exit`.
     child.on("close", (code, signal) => {
       if (terminatedAt === undefined) {
-        settle(
-          `it exited (code ${code}, signal ${signal}) before it was ready`,
-        );
+        settle(`it exited (code ${code}, signal ${signal}) before it was ready`);
       } else if (code === 0) {
         settle(null);
       } else {
-        settle(
-          `it exited with code ${code} (signal ${signal}) after SIGTERM, not 0`,
-        );
+        settle(`it exited with code ${code} (signal ${signal}) after SIGTERM, not 0`);
       }
     });
   });
@@ -367,16 +345,12 @@ async function ready() {
     });
     if (!res.ok) return false;
     const health = await res.json();
-    if (health.ready !== true || !health.workflows.includes("ship"))
-      return false;
+    if (health.ready !== true || !health.workflows.includes("ship")) return false;
     // The deferred module must have resolved into the compiled service's
     // registration, including its input schema; readiness alone cannot prove it.
-    const inputs = await fetch(
-      `http://127.0.0.1:${BOOT_PORT}/api/workflows/ship/inputs`,
-      {
-        signal: AbortSignal.timeout(1_000),
-      },
-    );
+    const inputs = await fetch(`http://127.0.0.1:${BOOT_PORT}/api/workflows/ship/inputs`, {
+      signal: AbortSignal.timeout(1_000),
+    });
     return inputs.ok;
   } catch {
     return false;
@@ -391,9 +365,7 @@ function reportDiff(expected, actual) {
   return { missing, unexpected };
 }
 
-console.log(
-  "\n=== scaffold: pack the package, jigs init into an empty directory",
-);
+console.log("\n=== scaffold: pack the package, jigs init into an empty directory");
 scaffold();
 
 console.log("\n=== cli: the bundle a factory installs the service from");
@@ -485,9 +457,7 @@ if (postgresUrl === undefined || postgresUrl === "") {
   );
   const boot = await bootOutcome(postgresUrl);
   if (boot.problem === null) {
-    console.log(
-      `ready after ${boot.readyMs}ms; exited 0 ${boot.exitMs}ms after SIGTERM`,
-    );
+    console.log(`ready after ${boot.readyMs}ms; exited 0 ${boot.exitMs}ms after SIGTERM`);
   } else {
     console.error(boot.output);
     fail(

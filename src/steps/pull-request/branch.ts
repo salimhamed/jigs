@@ -15,7 +15,8 @@ import { isWorktreeDirty } from "../worktree/teardown.ts";
 // together are what tell an empty branch apart: no commits and a clean tree is
 // a builder that did nothing, no commits and a dirty tree is work that can
 // still be saved.
-export async function branchState(
+/** Check for new commits and uncommitted changes before pushing a branch. */
+export async function readBranchState(
   worktreePath: string,
   baseSha: string,
 ): Promise<{ commits: number; headSha: string; dirty: boolean }> {
@@ -26,7 +27,8 @@ export async function branchState(
 }
 
 // Pushes unconditionally: a push with nothing new is a successful no-op, and
-// the caller that cares asks branchState first.
+// the caller that cares asks readBranchState first.
+/** Push the worktree branch to its remote. */
 export async function pushBranch(
   worktreePath: string,
   branch: string,
@@ -35,9 +37,7 @@ export async function pushBranch(
   return { headSha: await headSha(worktreePath) };
 }
 
-export async function readDiff(
-  worktreePath: string,
-  baseSha: string,
-): Promise<string> {
+/** Read committed changes since the base commit. Large diffs are truncated. */
+export async function readWorktreeDiff(worktreePath: string, baseSha: string): Promise<string> {
   return diffSince(worktreePath, baseSha);
 }

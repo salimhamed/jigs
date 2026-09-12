@@ -19,10 +19,7 @@ import type { TicketClaim } from "../ticket/claim.ts";
 import type { Halt, HaltForHumanFn } from "../ticket/halt-for-human.ts";
 import type { Handoff } from "../ticket/review.ts";
 import { renderSnapshot } from "../ticket/snapshot.ts";
-import {
-  type CodeReviewPrompt,
-  codeReviewPrompt,
-} from "./code-review.prompt.ts";
+import { type CodeReviewPrompt, codeReviewPrompt } from "./code-review.prompt.ts";
 import { type ImplementPrompt, implementPrompt } from "./implement.prompt.ts";
 
 // strictObject for the same reason ticketReviewVerdict is: the harness's
@@ -61,6 +58,7 @@ function renderFindings(findings: string[]): string {
     : findings.map((finding) => `- ${finding}`).join("\n");
 }
 
+/** Build the change and repeat code review until it is approved. */
 export async function implementUntilCodeReviewApproves(
   options: ImplementOptions,
 ): Promise<ImplementResult> {

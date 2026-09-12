@@ -5,12 +5,7 @@ import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { removeManagedCodexHome } from "../agent/harnesses/codex-home.ts";
 import { fetchOriginDefault } from "./create.ts";
 import { type OwnerState, readOwner } from "./owner.ts";
-import {
-  deleteWorktree,
-  listWorktrees,
-  setWorktreeState,
-  type WorktreeRow,
-} from "./registry.ts";
+import { deleteWorktree, listWorktrees, setWorktreeState, type WorktreeRow } from "./registry.ts";
 import {
   applyTeardown,
   countUnmergedCommits,
@@ -29,12 +24,7 @@ import {
 // test; sweepWorktrees below gathers the facts (registry rows, run states,
 // disk) and acts on the verdict.
 
-export type SweepState =
-  | "held"
-  | "abandoned"
-  | "abandoned-dirty"
-  | "provision-failed"
-  | "missing";
+export type SweepState = "held" | "abandoned" | "abandoned-dirty" | "provision-failed" | "missing";
 
 export interface SweepInput {
   path: string;
@@ -156,10 +146,7 @@ export interface SweepReport {
   removedDirs: string[];
 }
 
-export async function sweepWorktrees(
-  options: SweepOptions,
-  deps: SweepDeps,
-): Promise<SweepReport> {
+export async function sweepWorktrees(options: SweepOptions, deps: SweepDeps): Promise<SweepReport> {
   const clean = options.clean === true;
   const force = options.force === true;
   const owner = deps.readOwner ?? readOwner;
@@ -211,9 +198,7 @@ export async function sweepWorktrees(
     // evidence. A dirty tree is asked only when the run completed, where the
     // merged exemption below is the done row's; elsewhere the uncommitted
     // work is what the dirty guard is holding.
-    const askMerged =
-      TERMINAL_RUN_STATUSES.has(status) &&
-      (status === "completed" || !dirtyTree);
+    const askMerged = TERMINAL_RUN_STATUSES.has(status) && (status === "completed" || !dirtyTree);
     // The merge check below reads refs/remotes/origin/<default>, and nothing
     // else refreshes it. A failure is a notice, never the end of the pass:
     // trees earlier in the loop are already gone, and the stale ref reads
@@ -223,14 +208,10 @@ export async function sweepWorktrees(
       try {
         await fetchOriginDefault(repoDir);
       } catch (err) {
-        console.log(
-          `[sweep] could not fetch the default branch of ${repoDir}: ${String(err)}`,
-        );
+        console.log(`[sweep] could not fetch the default branch of ${repoDir}: ${String(err)}`);
       }
     }
-    const unmerged = askMerged
-      ? await countUnmergedCommits(repoDir, entry.branch)
-      : null;
+    const unmerged = askMerged ? await countUnmergedCommits(repoDir, entry.branch) : null;
     const merged = unmerged === 0;
     let plan = decideTeardown({ dirty: dirtyTree, merged });
     // Only a completed run's teardown reaches the remote. A cancelled or
@@ -276,18 +257,14 @@ export async function sweepWorktrees(
     removed.push(entry.path);
   }
 
-  const removedDirs = removeEmptyParentDirs(
-    new Set(rows.map((row) => path.dirname(row.path))),
-  );
+  const removedDirs = removeEmptyParentDirs(new Set(rows.map((row) => path.dirname(row.path))));
 
   const gone = new Set(removed);
   // Known gap: a terminal run that never requested a worktree still leaks its
   // managed Codex home — no pass would ever notice it.
   for (const [runId, state] of owners) {
     if (!state.terminal) continue;
-    const held = rows.some(
-      (row) => row.ownerRunId === runId && !gone.has(row.path),
-    );
+    const held = rows.some((row) => row.ownerRunId === runId && !gone.has(row.path));
     if (!held) removeManagedCodexHome(runId);
   }
 

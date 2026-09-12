@@ -13,10 +13,7 @@ import { showLogs } from "./commands/logs.ts";
 import { pokeRun } from "./commands/poke.ts";
 import { showRuns } from "./commands/ps.ts";
 import { launchRun } from "./commands/run.ts";
-import {
-  resolveServiceUrl,
-  usesFactoryService,
-} from "./commands/service-client.ts";
+import { resolveServiceUrl, usesFactoryService } from "./commands/service-client.ts";
 import {
   restartService,
   serviceLogs,
@@ -38,8 +35,7 @@ const serviceOption = () =>
     "jigs service URL (default: this factory's service.port in jigs.config.ts)",
   ).env("JIGS_SERVICE_URL");
 
-const serviceUrl = (explicit?: string) =>
-  resolveServiceUrl(process.cwd(), explicit);
+const serviceUrl = (explicit?: string) => resolveServiceUrl(process.cwd(), explicit);
 
 function makeConfirm(): ((question: string) => Promise<boolean>) | undefined {
   if (!process.stdin.isTTY || !process.stdout.isTTY) return undefined;
@@ -72,9 +68,7 @@ program
 
 program
   .command("generate")
-  .description(
-    "refresh the committed jigs.ts integration from the factory's installed jigs",
-  )
+  .description("refresh the committed jigs.ts integration from the factory's installed jigs")
   .action(async () => {
     await generateIntegration({ cwd: process.cwd(), out });
   });
@@ -94,57 +88,36 @@ program
   .option("--restart", "restart the service even when the bundle is unchanged")
   .option("--force", "restart over in-flight runs without asking")
   .option("--no-doctor", "skip the doctor pass once the service is up")
-  .action(
-    async (options: {
-      restart?: boolean;
-      force?: boolean;
-      doctor: boolean;
-    }) => {
-      // Every step has already printed its own FAIL line and repair, so the
-      // exit code is the only thing left to say.
-      const result = await upFactory(
-        { cwd: process.cwd(), out, confirm: makeConfirm() },
-        options,
-      );
-      if (!result.ok) process.exitCode = 1;
-    },
-  );
+  .action(async (options: { restart?: boolean; force?: boolean; doctor: boolean }) => {
+    // Every step has already printed its own FAIL line and repair, so the
+    // exit code is the only thing left to say.
+    const result = await upFactory({ cwd: process.cwd(), out, confirm: makeConfirm() }, options);
+    if (!result.ok) process.exitCode = 1;
+  });
 
 program
   .command("upgrade")
   .description(
     "move this factory to a newer jigs: bump the package, then up, then the factory's typecheck",
   )
-  .option(
-    "--to <version>",
-    "pin jigs to this version instead of the latest release",
-  )
+  .option("--to <version>", "pin jigs to this version instead of the latest release")
   .option("--force", "restart over in-flight runs without asking")
   .option("--no-doctor", "skip the doctor pass once the service is up")
-  .action(
-    async (options: { to?: string; force?: boolean; doctor: boolean }) => {
-      const result = await upgradeFactory(
-        { cwd: process.cwd(), out, confirm: makeConfirm() },
-        options,
-      );
-      if (!result.ok) process.exitCode = 1;
-    },
-  );
+  .action(async (options: { to?: string; force?: boolean; doctor: boolean }) => {
+    const result = await upgradeFactory(
+      { cwd: process.cwd(), out, confirm: makeConfirm() },
+      options,
+    );
+    if (!result.ok) process.exitCode = 1;
+  });
 
 program
   .command("bind")
   .description("bind a target repo by its remote URL")
-  .argument(
-    "<remote-url>",
-    "the target repo's git remote (e.g. git@github.com:owner/repo.git)",
-  )
+  .argument("<remote-url>", "the target repo's git remote (e.g. git@github.com:owner/repo.git)")
   .option("--name <name>", "binding name (default: the repo name, lowercased)")
   .action(async (remoteUrl: string, options: { name?: string }) => {
-    await bindRepo(
-      remoteUrl,
-      { cwd: process.cwd(), out },
-      { name: options.name },
-    );
+    await bindRepo(remoteUrl, { cwd: process.cwd(), out }, { name: options.name });
   });
 
 program
@@ -166,20 +139,13 @@ program
     [] as string[],
   )
   .addOption(serviceOption())
-  .action(
-    async (
-      workflow: string,
-      options: { input: string[]; service?: string },
-    ) => {
-      await launchRun(workflow, options.input, {
-        out,
-        factoryCwd: usesFactoryService(options.service)
-          ? process.cwd()
-          : undefined,
-        serviceUrl: serviceUrl(options.service),
-      });
-    },
-  );
+  .action(async (workflow: string, options: { input: string[]; service?: string }) => {
+    await launchRun(workflow, options.input, {
+      out,
+      factoryCwd: usesFactoryService(options.service) ? process.cwd() : undefined,
+      serviceUrl: serviceUrl(options.service),
+    });
+  });
 
 program
   .command("ps")
@@ -192,30 +158,22 @@ program
 program
   .command("cancel")
   .description("cancel a run, releasing every resource it claims")
-  .argument(
-    "<run>",
-    "run id, unique id prefix, or ticket (`AGE-123` or its UUID)",
-  )
+  .argument("<run>", "run id, unique id prefix, or ticket (`AGE-123` or its UUID)")
   .option("--force", "skip the confirmation for an in-flight run")
   .addOption(serviceOption())
-  .action(
-    async (run: string, options: { force?: boolean; service?: string }) => {
-      await cancelRun(run, {
-        out,
-        serviceUrl: serviceUrl(options.service),
-        confirm: makeConfirm(),
-        force: options.force,
-      });
-    },
-  );
+  .action(async (run: string, options: { force?: boolean; service?: string }) => {
+    await cancelRun(run, {
+      out,
+      serviceUrl: serviceUrl(options.service),
+      confirm: makeConfirm(),
+      force: options.force,
+    });
+  });
 
 program
   .command("logs")
   .description("show a run's state, step timeline, and dashboard link")
-  .argument(
-    "<run>",
-    "run id, unique id prefix, or ticket (`AGE-123` or its UUID)",
-  )
+  .argument("<run>", "run id, unique id prefix, or ticket (`AGE-123` or its UUID)")
   .addOption(serviceOption())
   .action(async (run: string, options: { service?: string }) => {
     await showLogs(run, { out, serviceUrl: serviceUrl(options.service) });
@@ -224,10 +182,7 @@ program
 program
   .command("poke")
   .description("manually wake a suspended run (the missed-delivery fallback)")
-  .argument(
-    "<run>",
-    "run id, unique id prefix, or ticket (`AGE-123` or its UUID)",
-  )
+  .argument("<run>", "run id, unique id prefix, or ticket (`AGE-123` or its UUID)")
   .addOption(serviceOption())
   .action(async (runId: string, options: { service?: string }) => {
     await pokeRun(runId, { out, serviceUrl: serviceUrl(options.service) });
@@ -243,13 +198,8 @@ program
 
 program
   .command("sweep")
-  .description(
-    "reconcile worktrees on disk against the registry and run states",
-  )
-  .option(
-    "--force",
-    "delete every eligible worktree without asking, dirty ones included",
-  )
+  .description("reconcile worktrees on disk against the registry and run states")
+  .option("--force", "delete every eligible worktree without asking, dirty ones included")
   .addOption(serviceOption())
   .action(async (options: { force?: boolean; service?: string }) => {
     await runSweep(

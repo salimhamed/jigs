@@ -7,11 +7,7 @@ const green = (headSha: string): GateWake => ({ kind: "ci-green", headSha });
 function gate(wakes: GateWake[]) {
   const trail: string[] = [];
   const acks: Array<GateAck | undefined> = [];
-  async function* deliver(): AsyncGenerator<
-    GateWake,
-    void,
-    GateAck | undefined
-  > {
+  async function* deliver(): AsyncGenerator<GateWake, void, GateAck | undefined> {
     try {
       for (const wake of wakes) {
         const ack = yield wake;
@@ -74,7 +70,7 @@ test("a gate that runs out of wakes is an error, not a silent success", async ()
 test("the error names the pull request when the caller described it", async () => {
   const g = gate([]);
 
-  await expect(
-    attend<number>(g.wakes, () => listen(), "acme/api#41"),
-  ).rejects.toThrow("gate for acme/api#41 stopped delivering");
+  await expect(attend<number>(g.wakes, () => listen(), "acme/api#41")).rejects.toThrow(
+    "gate for acme/api#41 stopped delivering",
+  );
 });

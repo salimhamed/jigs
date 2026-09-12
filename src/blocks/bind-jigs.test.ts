@@ -64,28 +64,28 @@ test("custom comment steps receive only serializable halt data and no step-objec
     author: { id: "user", name: "Human" },
     createdAt: "2026-09-11T00:00:01Z",
   };
-  const postNeedsHumanComment = vi.fn<JigsSteps["postNeedsHumanComment"]>(
-    async function (this: unknown, issueId, received) {
-      expect(this).toBeUndefined();
-      expect(issueId).toBe("issue-1");
-      expect(received).toBe(halt);
-      expect(JSON.parse(JSON.stringify(received))).toEqual(halt);
-      return { commentId: "posted", postedAt: "2026-09-11T00:00:00Z" };
-    },
-  );
-  const checkForHumanReply = vi.fn<JigsSteps["checkForHumanReply"]>(
-    async () => ({ reply, cursor: reply.createdAt }),
-  );
+  const postNeedsHumanComment = vi.fn<JigsSteps["postNeedsHumanComment"]>(async function (
+    this: unknown,
+    issueId,
+    received,
+  ) {
+    expect(this).toBeUndefined();
+    expect(issueId).toBe("issue-1");
+    expect(received).toBe(halt);
+    expect(JSON.parse(JSON.stringify(received))).toEqual(halt);
+    return { commentId: "posted", postedAt: "2026-09-11T00:00:00Z" };
+  });
+  const checkForHumanReply = vi.fn<JigsSteps["checkForHumanReply"]>(async () => ({
+    reply,
+    cursor: reply.createdAt,
+  }));
   const custom = bindJigs({
     ...defaults,
     postNeedsHumanComment,
     checkForHumanReply,
   });
   expect(await custom.haltForHuman(claim, halt)).toEqual(reply);
-  expect(postNeedsHumanComment).toHaveBeenCalledExactlyOnceWith(
-    "issue-1",
-    halt,
-  );
+  expect(postNeedsHumanComment).toHaveBeenCalledExactlyOnceWith("issue-1", halt);
   expect(checkForHumanReply).toHaveBeenCalledExactlyOnceWith(
     "issue-1",
     "2026-09-11T00:00:00Z",

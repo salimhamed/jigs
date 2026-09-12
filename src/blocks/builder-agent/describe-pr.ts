@@ -8,21 +8,21 @@
 // nothing when the resume is taken.
 
 import { z } from "zod";
-import type { readDiff } from "../../steps/pull-request/branch.ts";
+import type { readWorktreeDiff } from "../../steps/pull-request/branch.ts";
 import type { HarnessConfig } from "../agent/harness-config.ts";
 import type { AgentSession } from "../agent/result.ts";
 import { type AgentFn, resumeOrRebuild } from "../agent/resume-or-rebuild.ts";
 
-export const prDescription = z.strictObject({
+export const pullRequestDescription = z.strictObject({
   title: z.string().min(1),
   body: z.string().min(1),
 });
 
-export type PrDescription = z.output<typeof prDescription>;
+export type PullRequestDescription = z.output<typeof pullRequestDescription>;
 
-export interface DescribePrOptions {
+export interface DescribePullRequestOptions {
   agent: AgentFn;
-  readDiff: typeof readDiff;
+  readWorktreeDiff: typeof readWorktreeDiff;
   harness: HarnessConfig;
   cwd: string;
   baseSha: string;
@@ -31,21 +31,21 @@ export interface DescribePrOptions {
   freshPrompt: (diff: string) => string;
 }
 
-export async function describePr(
-  options: DescribePrOptions,
-): Promise<PrDescription> {
-  const { agent, readDiff: read } = options;
+/** Ask the builder to write a pull request title and description for its changes. */
+export async function describePullRequest(
+  options: DescribePullRequestOptions,
+): Promise<PullRequestDescription> {
+  const { agent, readWorktreeDiff: read } = options;
 
   const described = await resumeOrRebuild({
     agent,
-    label: "describePr",
+    label: "describePullRequest",
     harness: options.harness,
     cwd: options.cwd,
     ...(options.session === undefined ? {} : { session: options.session }),
     resumePrompt: options.resumePrompt,
-    freshPrompt: async () =>
-      options.freshPrompt(await read(options.cwd, options.baseSha)),
-    output: prDescription,
+    freshPrompt: async () => options.freshPrompt(await read(options.cwd, options.baseSha)),
+    output: pullRequestDescription,
   });
   return described.output;
 }

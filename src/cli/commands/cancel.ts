@@ -1,10 +1,5 @@
 import { JigsError } from "../../errors.ts";
-import {
-  readErrorBody,
-  runRefError,
-  type ServiceDeps,
-  serviceFetch,
-} from "./service-client.ts";
+import { readErrorBody, runRefError, type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 // The escape hatch for a zombie claim owner: cancelling releases every
 // resource the run holds, so the next run on the same ticket can start.
@@ -21,19 +16,14 @@ export interface CancelResult {
   worktrees: string[];
 }
 
-export async function cancelRun(
-  ref: string,
-  deps: CancelDeps,
-): Promise<CancelResult | null> {
+export async function cancelRun(ref: string, deps: CancelDeps): Promise<CancelResult | null> {
   const runPath = `/api/runs/${encodeURIComponent(ref)}`;
   const lookup = await serviceFetch(deps.serviceUrl, runPath);
   if (lookup.status === 404 || lookup.status === 409) {
     throw runRefError(ref, await readErrorBody(lookup));
   }
   if (!lookup.ok) {
-    throw new JigsError(
-      `cancel failed: HTTP ${lookup.status} ${await lookup.text()}`,
-    );
+    throw new JigsError(`cancel failed: HTTP ${lookup.status} ${await lookup.text()}`);
   }
   const run = (await lookup.json()) as {
     runId: string;
@@ -43,11 +33,7 @@ export async function cancelRun(
 
   // A suspended run holds no process, so there is nothing to destroy and
   // nothing to ask about. Only work actually in flight earns the prompt.
-  if (
-    run.status === "running" &&
-    run.suspended !== true &&
-    deps.force !== true
-  ) {
+  if (run.status === "running" && run.suspended !== true && deps.force !== true) {
     if (deps.confirm === undefined) {
       throw new JigsError(
         "refusing to cancel an in-flight run without confirmation",

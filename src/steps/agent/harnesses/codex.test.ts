@@ -1,9 +1,5 @@
 import { expect, test } from "vitest";
-import {
-  codexAppServerStepSettings,
-  codexExecStepSettings,
-  withCodexAppServer,
-} from "./codex.ts";
+import { codexAppServerStepSettings, codexExecStepSettings, withCodexAppServer } from "./codex.ts";
 
 test("exec settings inject CODEX_HOME and survive caller-supplied env", () => {
   const settings = codexExecStepSettings({
@@ -31,7 +27,7 @@ test("app-server settings force persistent threads and CODEX_HOME", () => {
 // model use, so this exercises the actual close() path cheaply. The
 // close-on-throw contract is covered in codex-lifecycle.test.ts.
 test("withCodexAppServer with the real provider resolves and closes", async () => {
-  await expect(
-    withCodexAppServer(async (provider) => typeof provider.close),
-  ).resolves.toBe("function");
+  await expect(withCodexAppServer(async (provider) => typeof provider.close)).resolves.toBe(
+    "function",
+  );
 });

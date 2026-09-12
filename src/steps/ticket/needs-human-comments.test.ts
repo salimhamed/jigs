@@ -24,19 +24,17 @@ vi.mock("../../providers/linear.ts", async (importOriginal) => ({
   getIssueParticipants,
 }));
 
-const { postNeedsHumanComment, postTicketNote } = await import(
-  "./needs-human-comments.ts"
-);
+const { postNeedsHumanComment, postTicketNote } = await import("./needs-human-comments.ts");
 
 const context = {
-  runId: "wrun_01M26",
-  workflow: "ship",
-  dashboardUrl: "http://localhost:9040/run/wrun_01M26",
+  workflowRunId: "wrun_01M26",
+  workflowName: "ship",
 };
 
 const body = (): string => createComment.mock.calls[0]?.[1] ?? "";
 
 beforeEach(() => {
+  vi.stubEnv("JIGS_DASHBOARD_PORT", "9040");
   createComment.mockClear();
   getIssueParticipants.mockClear();
   getIssueParticipants.mockResolvedValue({
@@ -46,8 +44,7 @@ beforeEach(() => {
 });
 
 const questions: Halt = {
-  headline:
-    "jigs paused work on **AI-659** and needs your answers before it writes any code.",
+  headline: "jigs paused work on **AI-659** and needs your answers before it writes any code.",
   where: "ticket review",
   about:
     "When the tests run inside Docker, the files they leave behind are owned by the wrong user. Nobody can delete them afterwards without special permissions.",
@@ -118,8 +115,7 @@ test("a retry halt renders its notes and asks for any reply at all", async () =>
   await postNeedsHumanComment(
     "issue-1",
     {
-      headline:
-        "jigs could not start a step on **AI-659** because a check failed.",
+      headline: "jigs could not start a step on **AI-659** because a check failed.",
       where: "starting a step",
       notes: [
         "MCP server 'linear': did not start — fix the 'linear' server",
@@ -127,7 +123,7 @@ test("a retry halt renders its notes and asks for any reply at all", async () =>
       ],
       onReply: "retry",
     },
-    { runId: "wrun_2" },
+    { workflowRunId: "wrun_2", workflowName: "ship" },
   );
 
   expect(body()).toBe(
@@ -142,7 +138,7 @@ Once this is fixed, reply with anything and jigs will try the step again.
 
 ---
 
-<sub>Run wrun_2 · paused at starting a step</sub>
+<sub>Run wrun_2 · workflow \`ship\` · paused at starting a step · [dashboard](http://localhost:9040/run/wrun_2)</sub>
 `,
   );
 });
@@ -198,12 +194,7 @@ If one of these is wrong, reply here now, or comment on the pull request when it
 });
 
 test("a factory's own renderer replaces the comment without replacing the step", async () => {
-  await postNeedsHumanComment(
-    "issue-1",
-    questions,
-    context,
-    (halt) => `just: ${halt.headline}`,
-  );
+  await postNeedsHumanComment("issue-1", questions, context, (halt) => `just: ${halt.headline}`);
   expect(body()).toBe(
     "just: jigs paused work on **AI-659** and needs your answers before it writes any code.",
   );

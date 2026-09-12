@@ -15,8 +15,7 @@ afterEach(() => {
   removeTmpDir(tmp);
 });
 
-const sleep = (ms: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 test("a second acquire waits for the first to release", async () => {
   const events: string[] = [];

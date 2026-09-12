@@ -1,11 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { NitroConfig } from "nitro/types";
-import {
-  GENERATED_DIR,
-  GENERATED_ENTRY_FILE,
-  GENERATED_SCHEDULES_FILE,
-} from "./build.ts";
+import { GENERATED_DIR, GENERATED_ENTRY_FILE, GENERATED_SCHEDULES_FILE } from "./build.ts";
 
 // Nitro resolves a bare `plugins` entry against the build root, which is the
 // factory rather than this package, so the path has to be absolute and

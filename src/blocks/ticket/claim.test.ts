@@ -8,9 +8,7 @@ const { createHook, getConflict, dispose } = vi.hoisted(() => ({
 
 vi.mock("workflow", () => ({ createHook }));
 
-const { claimTicket, ticketToken, tokenFromLinearPayload } = await import(
-  "./claim.ts"
-);
+const { claimTicket, ticketToken, tokenFromLinearPayload } = await import("./claim.ts");
 
 beforeEach(() => {
   createHook.mockReset();

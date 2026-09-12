@@ -1,11 +1,6 @@
 import { JigsError } from "../../errors.ts";
 import { formatTable } from "../table.ts";
-import {
-  readErrorBody,
-  runRefError,
-  type ServiceDeps,
-  serviceFetch,
-} from "./service-client.ts";
+import { readErrorBody, runRefError, type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 // jigs contributes the two things the dashboard cannot — resolving a ticket id
 // or a ULID prefix to a run, and the queue jobs that died holding its resume —
@@ -37,14 +32,8 @@ interface DeadJob {
   createdAt: string;
 }
 
-export async function showLogs(
-  ref: string,
-  deps: ServiceDeps,
-): Promise<LogsResult> {
-  const res = await serviceFetch(
-    deps.serviceUrl,
-    `/api/runs/${encodeURIComponent(ref)}`,
-  );
+export async function showLogs(ref: string, deps: ServiceDeps): Promise<LogsResult> {
+  const res = await serviceFetch(deps.serviceUrl, `/api/runs/${encodeURIComponent(ref)}`);
   if (res.status === 404 || res.status === 409) {
     throw runRefError(ref, await readErrorBody(res));
   }
@@ -110,8 +99,7 @@ async function showTimeline(runId: string, deps: ServiceDeps): Promise<void> {
 function took(step: StepRow): string {
   if (step.startedAt === null) return "-";
   if (step.completedAt === null) return "running";
-  const ms =
-    new Date(step.completedAt).getTime() - new Date(step.startedAt).getTime();
+  const ms = new Date(step.completedAt).getTime() - new Date(step.startedAt).getTime();
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
 

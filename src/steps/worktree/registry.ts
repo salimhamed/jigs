@@ -1,9 +1,4 @@
-import postgres, {
-  type ISql,
-  type Options,
-  type PostgresType,
-  type Sql,
-} from "postgres";
+import postgres, { type ISql, type Options, type PostgresType, type Sql } from "postgres";
 
 // The worktree registry holds state, never config: which run owns a worktree
 // and what state it is in. Bindings stay in jigs.config.ts. It lives in the same
@@ -59,9 +54,7 @@ export async function ensureWorktreeRegistry(sql: ISql): Promise<void> {
   `;
   const actual = new Set(columns.map((column) => column.columnName));
   const missing = REGISTRY_COLUMNS.filter((column) => !actual.has(column));
-  const extra = [...actual].filter(
-    (column) => !REGISTRY_COLUMNS.includes(column),
-  );
+  const extra = [...actual].filter((column) => !REGISTRY_COLUMNS.includes(column));
   if (missing.length > 0 || extra.length > 0) {
     const diff = [
       missing.length > 0 ? `missing ${missing.join(", ")}` : null,
@@ -78,10 +71,7 @@ export async function ensureWorktreeRegistry(sql: ISql): Promise<void> {
   }
 }
 
-export async function getWorktree(
-  sql: ISql,
-  path: string,
-): Promise<WorktreeRow | null> {
+export async function getWorktree(sql: ISql, path: string): Promise<WorktreeRow | null> {
   const rows = await sql<WorktreeRow[]>`
     SELECT path, branch, owner_run_id, state, repo_dir
     FROM jigs_worktrees
@@ -98,10 +88,7 @@ export async function listWorktrees(sql: ISql): Promise<WorktreeRow[]> {
   `;
 }
 
-export async function listWorktreesForRun(
-  sql: ISql,
-  runId: string,
-): Promise<WorktreeRow[]> {
+export async function listWorktreesForRun(sql: ISql, runId: string): Promise<WorktreeRow[]> {
   return sql<WorktreeRow[]>`
     SELECT path, branch, owner_run_id, state, repo_dir
     FROM jigs_worktrees
@@ -110,10 +97,7 @@ export async function listWorktreesForRun(
   `;
 }
 
-export async function upsertWorktree(
-  sql: ISql,
-  row: WorktreeRow,
-): Promise<void> {
+export async function upsertWorktree(sql: ISql, row: WorktreeRow): Promise<void> {
   await sql`
     INSERT INTO jigs_worktrees
       (path, branch, owner_run_id, state, repo_dir)
@@ -129,11 +113,7 @@ export async function upsertWorktree(
   `;
 }
 
-export async function setWorktreeState(
-  sql: ISql,
-  path: string,
-  state: string,
-): Promise<void> {
+export async function setWorktreeState(sql: ISql, path: string, state: string): Promise<void> {
   await sql`
     UPDATE jigs_worktrees SET state = ${state}, updated_at = now()
     WHERE path = ${path}

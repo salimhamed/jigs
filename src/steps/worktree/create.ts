@@ -25,9 +25,7 @@ async function resolveDefaultBranch(repoDir: string): Promise<string> {
 }
 
 const missingRemoteRef = (err: unknown): boolean =>
-  /couldn't find remote ref/i.test(
-    String((err as { stderr?: string }).stderr ?? ""),
-  );
+  /couldn't find remote ref/i.test(String((err as { stderr?: string }).stderr ?? ""));
 
 // The freshness gate is fetch, never pull: refs/heads/* holds jigs' own run
 // branches only, and new branches fork from origin/<default>.
@@ -47,10 +45,7 @@ async function fetchFreshness(
     // pre-squash lineage of an already-merged run. Only the missing-ref case:
     // an unreachable remote must not cost a ref that is still real.
     if (!missingRemoteRef(err)) return;
-    await tryGit(
-      ["update-ref", "-d", `refs/remotes/origin/${branch}`],
-      repoDir,
-    );
+    await tryGit(["update-ref", "-d", `refs/remotes/origin/${branch}`], repoDir);
   }
 }
 
@@ -67,9 +62,7 @@ interface CutOptions {
   branch: string;
 }
 
-export async function createWorktree(
-  options: CutOptions,
-): Promise<WorktreeFacts> {
+export async function createWorktree(options: CutOptions): Promise<WorktreeFacts> {
   const { repoDir, worktreePath, branch } = options;
   const defaultBranch = await resolveDefaultBranch(repoDir);
   await fetchFreshness(repoDir, defaultBranch, branch);
@@ -94,29 +87,11 @@ export async function createWorktree(
     await git(["worktree", "add", worktreePath, branch], repoDir);
   } else if (remoteRef !== null) {
     await git(
-      [
-        "worktree",
-        "add",
-        "--track",
-        "-b",
-        branch,
-        worktreePath,
-        `origin/${branch}`,
-      ],
+      ["worktree", "add", "--track", "-b", branch, worktreePath, `origin/${branch}`],
       repoDir,
     );
   } else {
-    await git(
-      [
-        "worktree",
-        "add",
-        worktreePath,
-        "-b",
-        branch,
-        `origin/${defaultBranch}`,
-      ],
-      repoDir,
-    );
+    await git(["worktree", "add", worktreePath, "-b", branch, `origin/${defaultBranch}`], repoDir);
   }
 
   return { path: worktreePath, branch, defaultBranch, baseSha };
@@ -130,9 +105,7 @@ interface WorktreeStatus {
   baseSha: string;
 }
 
-export async function worktreeStatus(
-  options: CutOptions,
-): Promise<WorktreeStatus | null> {
+export async function worktreeStatus(options: CutOptions): Promise<WorktreeStatus | null> {
   const { repoDir, worktreePath, branch } = options;
   const toplevel = await tryGit(["rev-parse", "--show-toplevel"], worktreePath);
   if (toplevel === null) return null;
@@ -144,10 +117,7 @@ export async function worktreeStatus(
 
   const defaultBranch = await resolveDefaultBranch(repoDir);
   await fetchFreshness(repoDir, defaultBranch, branch);
-  const checkedOut = await git(
-    ["rev-parse", "--abbrev-ref", "HEAD"],
-    worktreePath,
-  );
+  const checkedOut = await git(["rev-parse", "--abbrev-ref", "HEAD"], worktreePath);
   const clean = (await git(["status", "--porcelain"], worktreePath)) === "";
   const headSha = await git(["rev-parse", "HEAD"], worktreePath);
 

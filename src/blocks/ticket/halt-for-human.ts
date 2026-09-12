@@ -85,10 +85,7 @@ export type HaltForHumanDeps = {
 };
 
 /** {@link haltForHuman} with its steps already bound — what a block is handed. */
-export type HaltForHumanFn = (
-  claim: TicketClaim,
-  halt: Halt,
-) => Promise<HumanReply>;
+export type HaltForHumanFn = (claim: TicketClaim, halt: Halt) => Promise<HumanReply>;
 
 // Posts the halt to the Linear ticket (@-mentioning its creator and assignee),
 // then suspends on the claim hook. Wakes are hints: each one re-checks the
@@ -113,17 +110,11 @@ export async function haltForHuman(
   try {
     let cursor = posted.postedAt;
     for await (const _hint of claim.hook) {
-      const check = await checkForReply(
-        claim.issueId,
-        cursor,
-        posted.commentId,
-      );
+      const check = await checkForReply(claim.issueId, cursor, posted.commentId);
       if (check.reply !== null) return check.reply;
       cursor = check.cursor;
     }
-    throw new Error(
-      "claim hook stopped delivering wakes before a human replied",
-    );
+    throw new Error("claim hook stopped delivering wakes before a human replied");
   } finally {
     marker.dispose();
   }

@@ -7,12 +7,7 @@ import {
 import { probeRemoteAuth } from "../providers/git.ts";
 import { hasBindingClone } from "../steps/worktree/clone.ts";
 import { bindingRepoDir } from "../steps/worktree/layout.ts";
-import {
-  type Check,
-  type CheckResult,
-  failedCheck,
-  PROBE_TIMEOUT_MS,
-} from "./catalog.ts";
+import { type Check, type CheckResult, failedCheck, PROBE_TIMEOUT_MS } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 
 export interface BindingChecksOptions {

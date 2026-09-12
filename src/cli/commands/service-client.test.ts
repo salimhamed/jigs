@@ -1,15 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { JigsError } from "../../errors.ts";
-import {
-  makeFactoryRepo,
-  makeTmpDir,
-  removeTmpDir,
-} from "../../test-fixtures.ts";
-import {
-  resolveServiceUrl,
-  serviceFetch,
-  usesFactoryService,
-} from "./service-client.ts";
+import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
+import { resolveServiceUrl, serviceFetch, usesFactoryService } from "./service-client.ts";
 
 let tmp: string;
 
@@ -27,9 +19,7 @@ test("an explicit --service / JIGS_SERVICE_URL wins over the factory config", ()
   const factory = makeFactoryRepo(tmp, {
     service: { port: 9100, dashboardPort: 9200 },
   });
-  expect(resolveServiceUrl(factory, "http://elsewhere:1234")).toBe(
-    "http://elsewhere:1234",
-  );
+  expect(resolveServiceUrl(factory, "http://elsewhere:1234")).toBe("http://elsewhere:1234");
 });
 
 test("without an explicit url the factory the user stands in names its service", () => {
@@ -59,14 +49,8 @@ test("outside a factory repo, with no explicit url, the walk fails with guidance
 });
 
 test("an unreachable service names the url and the lifecycle verbs", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockRejectedValue(new TypeError("fetch failed")),
-  );
-  const failure = await serviceFetch(
-    "http://svc.test:9100",
-    "/api/doctor",
-  ).then(
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+  const failure = await serviceFetch("http://svc.test:9100", "/api/doctor").then(
     () => null,
     (err: unknown) => err as JigsError,
   );

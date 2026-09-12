@@ -19,8 +19,7 @@ afterEach(() => {
   removeTmpDir(tmp);
 });
 
-const writeEnv = (text: string) =>
-  writeFileSync(path.join(factory, ".env"), text);
+const writeEnv = (text: string) => writeFileSync(path.join(factory, ".env"), text);
 
 test("a factory with no .env reads as an empty environment", () => {
   expect(readFactoryEnv(factory)).toEqual({});

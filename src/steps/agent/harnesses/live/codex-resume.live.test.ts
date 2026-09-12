@@ -6,10 +6,7 @@ import { type ExecuteDeps, realDeps, runAgent } from "../../run-agent.ts";
 import { ensureManagedCodexHome } from "../codex-home.ts";
 import { stripApiCredentials } from "../env.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
-import {
-  assertLivePreconditions,
-  makeScratchRepo,
-} from "./fixtures/live-env.ts";
+import { assertLivePreconditions, makeScratchRepo } from "./fixtures/live-env.ts";
 
 // The staleness half of the resume contract, against the real harnesses: a
 // session pointer that names nothing must surface as the resumeFailed marker,
@@ -42,7 +39,7 @@ test("a codex thread id with no rollout behind it reports resumeFailed", async (
     resume: { harness: "codex", id: `0199${crypto.randomUUID().slice(4)}` },
   });
 
-  const result = await runAgent(wire, "live-codex-resume", deps);
+  const result = await runAgent(wire, { workflowRunId: "live-codex-resume" }, deps);
 
   expect(result).toHaveProperty("resumeFailed");
   // codex 0.149.1 raises a raw JSON-RPC error that does not match the
@@ -60,7 +57,7 @@ test("a claude session id with no transcript behind it reports resumeFailed", as
     resume: { harness: "claude", id: crypto.randomUUID() },
   });
 
-  const result = await runAgent(wire, "live-claude-resume", deps);
+  const result = await runAgent(wire, { workflowRunId: "live-claude-resume" }, deps);
 
   expect(result).toHaveProperty("resumeFailed");
 });

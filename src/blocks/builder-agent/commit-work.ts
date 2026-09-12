@@ -6,10 +6,7 @@
 import type { HarnessConfig } from "../agent/harness-config.ts";
 import type { AgentSession } from "../agent/result.ts";
 import { type AgentFn, resumeOrRebuild } from "../agent/resume-or-rebuild.ts";
-import {
-  type CommitWorkPrompt,
-  commitWorkPrompt,
-} from "./commit-work.prompt.ts";
+import { type CommitWorkPrompt, commitWorkPrompt } from "./commit-work.prompt.ts";
 
 export interface CommitWorkOptions {
   agent: AgentFn;
@@ -21,9 +18,8 @@ export interface CommitWorkOptions {
   prompt?: CommitWorkPrompt;
 }
 
-export async function commitWork(
-  options: CommitWorkOptions,
-): Promise<AgentSession | undefined> {
+/** Ask the builder to commit its changes, restoring context if needed. */
+export async function commitWork(options: CommitWorkOptions): Promise<AgentSession | undefined> {
   const { agent } = options;
   const prompt = (options.prompt ?? commitWorkPrompt)({});
   const committed = await resumeOrRebuild({

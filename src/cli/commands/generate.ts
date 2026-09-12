@@ -14,14 +14,9 @@ export async function generateIntegration(deps: {
   try {
     entry = resolve.resolve("@salimhamed/jigs/build");
   } catch {
-    throw new JigsError(
-      `@salimhamed/jigs is not installed in ${root}`,
-      "run pnpm install first",
-    );
+    throw new JigsError(`@salimhamed/jigs is not installed in ${root}`, "run pnpm install first");
   }
-  const { generateFactoryIntegration } = await import(
-    pathToFileURL(entry).href
-  );
+  const { generateFactoryIntegration } = await import(pathToFileURL(entry).href);
   generateFactoryIntegration(root);
   deps.out("generated jigs.ts — review and commit this file");
 }

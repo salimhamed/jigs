@@ -26,7 +26,7 @@ import type {
   CommitWorkOptions,
   CommitWorkPrompt,
   CommitWorkPromptInput,
-  DescribePrOptions,
+  DescribePullRequestOptions,
   FixCiFreshPrompt,
   FixCiFreshPromptInput,
   FixCiOptions,
@@ -57,8 +57,8 @@ import type {
   PostNeedsHumanComment,
   PostReviewAnswersOptions,
   PostTicketNote,
-  PrDescription,
   PrRef,
+  PullRequestDescription,
   RebuildContextPrompt,
   RebuildContextPromptInput,
   ResumeOrRebuildOptions,
@@ -83,7 +83,7 @@ import type {
   ExecuteDeps,
   LinearIssueMatch,
   NeedsHumanContext,
-  ProvisionRunWorktreeDeps,
+  ProvisionWorktreeDeps,
   RenderNeedsHumanComment,
   RenderProceedingNote,
   TicketParticipants,
@@ -111,7 +111,7 @@ type BlocksTypeSurface = {
   commitWorkOptions: CommitWorkOptions;
   commitWorkPrompt: CommitWorkPrompt;
   commitWorkPromptInput: CommitWorkPromptInput;
-  describePrOptions: DescribePrOptions;
+  describePrOptions: DescribePullRequestOptions;
   fixCiFreshPrompt: FixCiFreshPrompt;
   fixCiFreshPromptInput: FixCiFreshPromptInput;
   fixCiOptions: FixCiOptions;
@@ -141,7 +141,7 @@ type BlocksTypeSurface = {
   mcpStdioServer: McpStdioServer;
   postNeedsHumanComment: PostNeedsHumanComment;
   postReviewAnswersOptions: PostReviewAnswersOptions;
-  prDescription: PrDescription;
+  pullRequestDescription: PullRequestDescription;
   postTicketNote: PostTicketNote;
   prRef: PrRef;
   rebuildContextPrompt: RebuildContextPrompt;
@@ -169,7 +169,7 @@ type StepsTypeSurface = {
   executeDeps: ExecuteDeps;
   linearIssueMatch: LinearIssueMatch;
   needsHumanContext: NeedsHumanContext;
-  provisionRunWorktreeDeps: ProvisionRunWorktreeDeps;
+  provisionRunWorktreeDeps: ProvisionWorktreeDeps;
   renderNeedsHumanComment: RenderNeedsHumanComment;
   renderProceedingNote: RenderProceedingNote;
   ticketParticipants: TicketParticipants;
@@ -177,9 +177,6 @@ type StepsTypeSurface = {
 };
 
 test("both barrels still export every type a factory names", () => {
-  const surfaces: Array<BlocksTypeSurface | StepsTypeSurface | undefined> = [
-    undefined,
-    undefined,
-  ];
+  const surfaces: Array<BlocksTypeSurface | StepsTypeSurface | undefined> = [undefined, undefined];
   expect(surfaces).toHaveLength(2);
 });

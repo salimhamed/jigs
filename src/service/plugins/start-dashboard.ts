@@ -27,10 +27,7 @@ export default async function startDashboard() {
 function closeServer(server: Server): Promise<void> {
   return new Promise((resolve, reject) => {
     server.close((err) => {
-      if (
-        err === undefined ||
-        (err as NodeJS.ErrnoException).code === "ERR_SERVER_NOT_RUNNING"
-      ) {
+      if (err === undefined || (err as NodeJS.ErrnoException).code === "ERR_SERVER_NOT_RUNNING") {
         resolve();
       } else {
         reject(err);

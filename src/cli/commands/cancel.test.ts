@@ -25,15 +25,11 @@ const deps = (over: Record<string, unknown> = {}) => ({
 });
 
 const respondLookup = (body: unknown, status = 200) =>
-  fetchMock.mockResolvedValueOnce(
-    new Response(JSON.stringify(body), { status }),
-  );
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(body), { status }));
 
 const respondCancel = (releasedTokens: string[]) =>
   fetchMock.mockResolvedValueOnce(
-    new Response(
-      JSON.stringify({ runId: RUN, cancelled: true, releasedTokens }),
-    ),
+    new Response(JSON.stringify({ runId: RUN, cancelled: true, releasedTokens })),
   );
 
 const suspended = {
@@ -60,9 +56,7 @@ test("a suspended run cancels with no confirmation prompt", async () => {
   const confirm = vi.fn();
   await cancelRun("AGE-317", deps({ confirm }));
   expect(confirm).not.toHaveBeenCalled();
-  expect(fetchMock.mock.calls[1]?.[0]).toBe(
-    `http://svc.test:8990/api/runs/${RUN}/cancel`,
-  );
+  expect(fetchMock.mock.calls[1]?.[0]).toBe(`http://svc.test:8990/api/runs/${RUN}/cancel`);
 });
 
 test("the released claim tokens are printed", async () => {
@@ -104,9 +98,7 @@ test("--force skips the prompt", async () => {
 test("no TTY and no --force refuses with a hint", async () => {
   respondLookup({ runId: RUN, status: "running", suspensions: [] });
   const err = await failure(cancelRun(RUN, deps()));
-  expect(err?.message).toBe(
-    "refusing to cancel an in-flight run without confirmation",
-  );
+  expect(err?.message).toBe("refusing to cancel an in-flight run without confirmation");
   expect(err?.hint).toBe("re-run with --force");
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });

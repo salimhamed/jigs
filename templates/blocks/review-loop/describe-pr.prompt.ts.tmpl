@@ -4,13 +4,9 @@
 // conventions() string so a resumed description and a rebuilt one cannot come
 // back to different rules.
 
-import {
-  type Handoff,
-  renderSnapshot,
-  type TicketSnapshot,
-} from "@salimhamed/jigs/blocks";
+import { type Handoff, renderSnapshot, type TicketSnapshot } from "@salimhamed/jigs/blocks";
 
-export function prDescriptionPrompts(handoff: Handoff): {
+export function pullRequestDescriptionPrompts(handoff: Handoff): {
   resumePrompt: string;
   freshPrompt: (diff: string) => string;
 } {

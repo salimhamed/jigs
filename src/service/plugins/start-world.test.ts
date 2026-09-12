@@ -1,11 +1,7 @@
 import type { ISql } from "postgres";
 import { afterEach, expect, test, vi } from "vitest";
 import { JigsError } from "../../errors.ts";
-import {
-  gateOnBindingClones,
-  gateOnWorktreeRegistry,
-  gateOnWorldStart,
-} from "./start-world.ts";
+import { gateOnBindingClones, gateOnWorktreeRegistry, gateOnWorldStart } from "./start-world.ts";
 
 // Nitro never awaits a plugin, so the only thing that can stop the service is
 // the plugin itself.
@@ -102,9 +98,7 @@ test("every declared binding is ensured, and says so before the fetch runs", asy
     bindings: () => [forge],
     ensure: async (options) => {
       // The line is out before the fetch that can hold the boot for minutes.
-      expect(logs).toEqual([
-        `[service] binding forge: ensuring clone at ${forge.repoDir}`,
-      ]);
+      expect(logs).toEqual([`[service] binding forge: ensuring clone at ${forge.repoDir}`]);
       ensured.push(`${options.repoDir} ${options.remote}`);
     },
     log: (line) => logs.push(line),
@@ -120,10 +114,7 @@ test("a clone that fails names the binding and exits instead of starting", async
 
   const proceed = await gateOnBindingClones({
     bindings: () => [forge],
-    ensure: () =>
-      Promise.reject(
-        new Error("could not fetch git@github.com:acme/forge.git"),
-      ),
+    ensure: () => Promise.reject(new Error("could not fetch git@github.com:acme/forge.git")),
     exit: (code) => exits.push(code),
     error: (line) => errors.push(line),
     log: () => {},
@@ -142,9 +133,7 @@ test("a JigsError's repair reaches the log beside the reason", async () => {
   await gateOnBindingClones({
     bindings: () => [forge],
     ensure: () =>
-      Promise.reject(
-        new JigsError("could not fetch acme/forge", "give git credentials"),
-      ),
+      Promise.reject(new JigsError("could not fetch acme/forge", "give git credentials")),
     exit: () => {},
     error: (line) => errors.push(line),
     log: () => {},
@@ -201,9 +190,7 @@ test("a World that fails to start exits the process with the reason", async () =
 
   expect(proceed).toBe(false);
   expect(exits).toEqual([1]);
-  expect(errors).toEqual([
-    '[service] world failed to start: Invalid version string: "bundled"',
-  ]);
+  expect(errors).toEqual(['[service] world failed to start: Invalid version string: "bundled"']);
 });
 
 test("a World that starts lets the boot finish", async () => {

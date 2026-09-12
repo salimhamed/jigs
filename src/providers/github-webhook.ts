@@ -86,10 +86,7 @@ export function githubWebhookUrl(ingressUrl: string): string {
 function isJigsHookAtAnotherUrl(hook: RepoHook, desiredUrl: string): boolean {
   try {
     const url = new URL(hook.config.url ?? "");
-    return (
-      url.pathname === "/ingress/github" &&
-      url.host !== new URL(desiredUrl).host
-    );
+    return url.pathname === "/ingress/github" && url.host !== new URL(desiredUrl).host;
   } catch {
     return false;
   }
@@ -135,11 +132,7 @@ export async function ensureRepoWebhook({
 }: EnsureRepoWebhookOptions): Promise<EnsureRepoWebhookResult> {
   const hookUrl = githubWebhookUrl(ingressUrl);
   const hooksPath = `/repos/${owner}/${repo}/hooks`;
-  const hooks = await githubRequest<RepoHook[]>(
-    token,
-    "GET",
-    `${hooksPath}?per_page=100`,
-  );
+  const hooks = await githubRequest<RepoHook[]>(token, "GET", `${hooksPath}?per_page=100`);
   const existing = hooks.find((hook) => hook.config.url === hookUrl);
   const otherHosts = [
     ...new Set(
@@ -184,9 +177,6 @@ export async function verifyRepoWebhook({
   );
   const hookUrl = githubWebhookUrl(ingressUrl);
   return hooks.some(
-    (hook) =>
-      hook.config.url === hookUrl &&
-      hook.active &&
-      sameEvents(hook.events, WEBHOOK_EVENTS),
+    (hook) => hook.config.url === hookUrl && hook.active && sameEvents(hook.events, WEBHOOK_EVENTS),
   );
 }

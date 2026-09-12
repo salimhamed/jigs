@@ -4,13 +4,11 @@
 // from the record and the new fetch is genuinely fresh, which is why a human's
 // unblocking reply appears in the later version without any special handling.
 
-import {
-  type TicketSnapshot,
-  toSnapshot,
-} from "../../blocks/ticket/snapshot.ts";
+import { type TicketSnapshot, toSnapshot } from "../../blocks/ticket/snapshot.ts";
 import { fetchIssueSnapshot } from "../../providers/linear.ts";
 
-export async function fetchSnapshot(issueId: string): Promise<TicketSnapshot> {
+/** Read the ticket’s current details and discussion. */
+export async function fetchTicketSnapshot(issueId: string): Promise<TicketSnapshot> {
   const raw = await fetchIssueSnapshot(issueId);
   const snapshot = toSnapshot(raw, new Date().toISOString());
   console.log(

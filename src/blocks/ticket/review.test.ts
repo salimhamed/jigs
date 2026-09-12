@@ -85,7 +85,7 @@ const review = () =>
     agent: fakeAgent,
     haltForHuman: fakeHaltForHuman,
     postNote: fakePostNote,
-    fetchSnapshot: fakeFetchSnapshot,
+    fetchTicketSnapshot: fakeFetchSnapshot,
     claim,
     snapshot,
     harness: claude({ model: "sonnet" }),
@@ -109,13 +109,9 @@ test("a malformed verdict object fails the schema", () => {
     assumptions: [],
   };
   expect(() => ticketReviewVerdict.parse(good)).not.toThrow();
-  expect(() =>
-    ticketReviewVerdict.parse({ ...good, verdict: "maybe" }),
-  ).toThrow();
+  expect(() => ticketReviewVerdict.parse({ ...good, verdict: "maybe" })).toThrow();
   expect(() => ticketReviewVerdict.parse({ ...good, brief: "" })).toThrow();
-  expect(() =>
-    ticketReviewVerdict.parse({ ...good, confidence: 0.8 }),
-  ).toThrow();
+  expect(() => ticketReviewVerdict.parse({ ...good, confidence: 0.8 })).toThrow();
   // A question is a question and up to three plain choices — nothing else.
   expect(() =>
     ticketReviewVerdict.parse({
@@ -151,9 +147,7 @@ test("reviewTicket rejects when the agent returns a verdict the schema refuses",
 
 test("a proceed verdict returns the brief with the snapshot it was reviewed against", async () => {
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
-  verdicts = [
-    proceed({ brief: "Implement the snapshot fetch, then the jig." }),
-  ];
+  verdicts = [proceed({ brief: "Implement the snapshot fetch, then the jig." })];
   const result = await review();
   expect(result.brief).toBe("Implement the snapshot fetch, then the jig.");
   expect(result.snapshot).toBe(snapshot);
@@ -210,8 +204,7 @@ test("a needs-human verdict routes the questions and the about to haltForHuman, 
   const call = humanCalls[0];
   expect(call?.claim).toBe(claim);
   expect(call?.halt).toEqual({
-    headline:
-      "jigs paused work on **AGE-313** and needs your answers before it writes any code.",
+    headline: "jigs paused work on **AGE-313** and needs your answers before it writes any code.",
     where: "ticket review",
     about: "The tests leave files nobody can delete.",
     questions: [
@@ -236,11 +229,7 @@ test("a needs-human verdict with nothing to say about the ticket carries no abou
 });
 
 test("the needs-human round re-reads the ticket, so the human's reply is what the next review sees", async () => {
-  verdicts = [
-    needsHuman(),
-    needsHuman(),
-    proceed({ brief: "the agreed plan" }),
-  ];
+  verdicts = [needsHuman(), needsHuman(), proceed({ brief: "the agreed plan" })];
   const result = await review();
 
   // Three reviews, two halts, one re-read per halt: the halt is a pause, and
@@ -268,13 +257,12 @@ test("the prompt carries the rendered ticket", async () => {
 
 test("a caller-supplied prompt replaces the one shipped beside the block", async () => {
   verdicts = [proceed()];
-  const factoryPrompt: TicketReviewPrompt = ({ ticket }) =>
-    `# Infra ticket review\n\n${ticket}`;
+  const factoryPrompt: TicketReviewPrompt = ({ ticket }) => `# Infra ticket review\n\n${ticket}`;
   await reviewTicket({
     agent: fakeAgent,
     haltForHuman: fakeHaltForHuman,
     postNote: fakePostNote,
-    fetchSnapshot: fakeFetchSnapshot,
+    fetchTicketSnapshot: fakeFetchSnapshot,
     claim,
     snapshot,
     harness: claude({ model: "sonnet" }),

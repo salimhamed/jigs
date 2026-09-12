@@ -7,22 +7,20 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AskWire } from "../../blocks/agent/plan.ts";
 import { type StepResult, toStepResult } from "../../blocks/agent/result.ts";
+import type { RunMetadata } from "../run-context.ts";
 import { resolveClaudeExecutable } from "./harnesses/claude.ts";
 import { codexExecStepSettings } from "./harnesses/codex.ts";
 import { scrubbedEnv } from "./harnesses/env.ts";
 import { claudeCode, codexExec } from "./harnesses/index.ts";
-import {
-  type ExecuteDeps,
-  type ExecutorGeneration,
-  outputSpec,
-  realDeps,
-} from "./run-agent.ts";
+import { type ExecuteDeps, type ExecutorGeneration, outputSpec, realDeps } from "./run-agent.ts";
 
-export async function runAsk(
+/** Ask a model a question without giving it a worktree or tools. */
+export async function askModel(
   wire: AskWire,
-  runId: string,
+  metadata: RunMetadata,
   deps: ExecuteDeps = realDeps,
 ): Promise<StepResult> {
+  const runId = metadata.workflowRunId;
   const harness = wire.harness;
   const env = scrubbedEnv();
   const output = outputSpec(wire.outputSchema);
@@ -69,8 +67,5 @@ export async function runAsk(
     }
   }
 
-  return toStepResult(
-    generation,
-    wire.outputSchema !== undefined ? generation.output : undefined,
-  );
+  return toStepResult(generation, wire.outputSchema !== undefined ? generation.output : undefined);
 }

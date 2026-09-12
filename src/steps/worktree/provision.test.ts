@@ -3,11 +3,7 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { Binding } from "../../config/factory-config.ts";
 import { JigsError } from "../../errors.ts";
-import {
-  CopySourceMissingError,
-  PostCreateFailedError,
-  provisionWorktree,
-} from "./provision.ts";
+import { CopySourceMissingError, PostCreateFailedError, provisionWorktree } from "./provision.ts";
 import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
 // The binding's own directory in the factory repo to copy from and a worktree
@@ -130,9 +126,9 @@ test("an absolute entry is refused rather than silently matching nothing", async
 });
 
 test("a missing copy entry fails before any postCreate runs", async () => {
-  await expect(
-    provision({ copy: [".env"], postCreate: ["touch ran.txt"] }),
-  ).rejects.toThrow(CopySourceMissingError);
+  await expect(provision({ copy: [".env"], postCreate: ["touch ran.txt"] })).rejects.toThrow(
+    CopySourceMissingError,
+  );
   expect(existsSync(path.join(worktree, "ran.txt"))).toBe(false);
 });
 
@@ -147,9 +143,9 @@ test("a failing postCreate command rejects with the command and exit code", asyn
 });
 
 test("commands after a failure never run", async () => {
-  await expect(
-    provision({ postCreate: ["exit 1", "touch after.txt"] }),
-  ).rejects.toThrow(PostCreateFailedError);
+  await expect(provision({ postCreate: ["exit 1", "touch after.txt"] })).rejects.toThrow(
+    PostCreateFailedError,
+  );
   expect(existsSync(path.join(worktree, "after.txt"))).toBe(false);
 });
 

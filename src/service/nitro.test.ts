@@ -37,7 +37,5 @@ test("the schedules plugin is the factory's own, and comes last", () => {
 test("the optional telemetry import is external, not an unresolved one", () => {
   // Every World the SDK can load imports it optionally; leaving it to
   // rolldown puts a boxed UNRESOLVED_IMPORT on every green build.
-  expect(defineJigsService().rolldownConfig?.external).toContain(
-    "@opentelemetry/api",
-  );
+  expect(defineJigsService().rolldownConfig?.external).toContain("@opentelemetry/api");
 });

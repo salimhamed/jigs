@@ -1,10 +1,7 @@
 export type CodeReviewPromptInput = { ticket: string; baseSha: string };
 export type CodeReviewPrompt = (input: CodeReviewPromptInput) => string;
 
-export const codeReviewPrompt: CodeReviewPrompt = ({
-  ticket,
-  baseSha,
-}) => `# Code review
+export const codeReviewPrompt: CodeReviewPrompt = ({ ticket, baseSha }) => `# Code review
 
 You are reviewing a builder agent's change before it becomes a pull request.
 Your working directory is the worktree holding that change.

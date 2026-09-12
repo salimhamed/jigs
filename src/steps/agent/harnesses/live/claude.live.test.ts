@@ -6,10 +6,7 @@ import { claudeStepSettings } from "../claude.ts";
 import { stripApiCredentials } from "../env.ts";
 import { claudeCode } from "../index.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
-import {
-  assertLivePreconditions,
-  makeScratchRepo,
-} from "./fixtures/live-env.ts";
+import { assertLivePreconditions, makeScratchRepo } from "./fixtures/live-env.ts";
 
 let tmp: string;
 beforeAll(() => {
@@ -36,8 +33,6 @@ test("Claude Code smoke: subscription auth drives an agentic step, no API keys",
   expect(existsSync(probeFile)).toBe(true);
   expect(readFileSync(probeFile, "utf8").trim()).toBe(codeword);
 
-  const meta = result.providerMetadata?.["claude-code"] as
-    | { sessionId?: string }
-    | undefined;
+  const meta = result.providerMetadata?.["claude-code"] as { sessionId?: string } | undefined;
   expect(meta?.sessionId).toBeTruthy();
 });

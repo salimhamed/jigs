@@ -118,12 +118,7 @@ export async function bindRepo(
 
 // The likeliest operator error, given that bind used to take a checkout path.
 function looksLikePath(arg: string): boolean {
-  return (
-    arg.startsWith(".") ||
-    arg.startsWith("/") ||
-    arg.startsWith("~") ||
-    existsSync(arg)
-  );
+  return arg.startsWith(".") || arg.startsWith("/") || arg.startsWith("~") || existsSync(arg);
 }
 
 function defaultBindingName(remoteUrl: string): string {
@@ -153,9 +148,7 @@ async function ensureWebhook({
   }
   const repoRef = parseGithubRemote(remoteUrl);
   if (repoRef === null) {
-    deps.out(
-      `note: skipping webhook (${remoteUrl} is not a github.com remote)`,
-    );
+    deps.out(`note: skipping webhook (${remoteUrl} is not a github.com remote)`);
     return "skipped";
   }
   const slug = `${repoRef.owner}/${repoRef.repo}`;
@@ -210,7 +203,5 @@ async function ensureWebhook({
 // on 403 — but a rate limit is a 403 too, and no re-issued token clears one.
 function tokenWasRejected(err: unknown): boolean {
   if (!(err instanceof GithubApiError)) return false;
-  return (
-    err.status === 401 || (err.status === 403 && !/rate limit/i.test(err.body))
-  );
+  return err.status === 401 || (err.status === 403 && !/rate limit/i.test(err.body));
 }

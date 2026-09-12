@@ -21,9 +21,7 @@ const thread = (rootId: number, body: string): ReviewThread => ({
 
 const threads = [thread(900, "why not a set here?"), thread(910, "typo")];
 
-const failing: CheckRun[] = [
-  { name: "test", conclusion: "failure", url: "http://ci.test/1" },
-];
+const failing: CheckRun[] = [{ name: "test", conclusion: "failure", url: "http://ci.test/1" }];
 
 const pr = { owner: "acme", repo: "api", number: 41 };
 
@@ -33,11 +31,11 @@ function recorder() {
   return {
     replies,
     comments,
-    replyInThread: async (_pr: typeof pr, rootId: number, body: string) => {
+    replyToPullRequestReviewThread: async (_pr: typeof pr, rootId: number, body: string) => {
       replies.push([rootId, body]);
       return { id: 7000 + replies.length };
     },
-    commentOnPr: async (_pr: typeof pr, body: string) => {
+    commentOnPullRequest: async (_pr: typeof pr, body: string) => {
       comments.push(body);
     },
   };
@@ -46,8 +44,8 @@ function recorder() {
 test("the ids of the thread replies it posts come back for the gate cursor", async () => {
   const posted = recorder();
   const ids = await postReviewAnswers({
-    replyInThread: posted.replyInThread,
-    commentOnPr: posted.commentOnPr,
+    replyToPullRequestReviewThread: posted.replyToPullRequestReviewThread,
+    commentOnPullRequest: posted.commentOnPullRequest,
     pr,
     answers: { answers: [{ threadId: 900, body: "done" }] },
     threads,
@@ -61,8 +59,8 @@ test("the ids of the thread replies it posts come back for the gate cursor", asy
 test("an answer that lands on the conversation acks nothing", async () => {
   const posted = recorder();
   const ids = await postReviewAnswers({
-    replyInThread: posted.replyInThread,
-    commentOnPr: posted.commentOnPr,
+    replyToPullRequestReviewThread: posted.replyToPullRequestReviewThread,
+    commentOnPullRequest: posted.commentOnPullRequest,
     pr,
     answers: { answers: [{ threadId: null, body: "addressed all four" }] },
     threads,
@@ -76,8 +74,8 @@ test("an answer that lands on the conversation acks nothing", async () => {
 test("an answer naming a thread this wake never carried lands on the conversation", async () => {
   const posted = recorder();
   const ids = await postReviewAnswers({
-    replyInThread: posted.replyInThread,
-    commentOnPr: posted.commentOnPr,
+    replyToPullRequestReviewThread: posted.replyToPullRequestReviewThread,
+    commentOnPullRequest: posted.commentOnPullRequest,
     pr,
     answers: { answers: [{ threadId: 4242, body: "invented" }] },
     threads,

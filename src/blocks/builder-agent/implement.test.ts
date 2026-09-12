@@ -3,17 +3,10 @@ import { claude } from "../agent/harness-config.ts";
 import { type AgentStepConfig, parseOutput } from "../agent/plan.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import type { TicketClaim } from "../ticket/claim.ts";
-import type {
-  Halt,
-  HaltForHumanFn,
-  HumanReply,
-} from "../ticket/halt-for-human.ts";
+import type { Halt, HaltForHumanFn, HumanReply } from "../ticket/halt-for-human.ts";
 import type { Handoff } from "../ticket/review.ts";
 import type { TicketSnapshot } from "../ticket/snapshot.ts";
-import {
-  codeReviewVerdict,
-  implementUntilCodeReviewApproves,
-} from "./implement.ts";
+import { codeReviewVerdict, implementUntilCodeReviewApproves } from "./implement.ts";
 
 const claim = {
   issueId: "68bc9696-35d5-442d-ab56-214c8cfefbec",
@@ -101,12 +94,8 @@ beforeEach(() => {
 });
 
 test("a malformed verdict object fails the schema", () => {
-  expect(() =>
-    codeReviewVerdict.parse({ verdict: "maybe", findings: [] }),
-  ).toThrow();
-  expect(() =>
-    codeReviewVerdict.parse({ verdict: "approved", findings: [], score: 9 }),
-  ).toThrow();
+  expect(() => codeReviewVerdict.parse({ verdict: "maybe", findings: [] })).toThrow();
+  expect(() => codeReviewVerdict.parse({ verdict: "approved", findings: [], score: 9 })).toThrow();
 });
 
 test("an approved first cycle runs one implement and one review step", async () => {

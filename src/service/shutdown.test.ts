@@ -1,10 +1,6 @@
 import { EventEmitter } from "node:events";
 import { afterEach, expect, test, vi } from "vitest";
-import {
-  createShutdown,
-  SHUTDOWN_BACKSTOP_MS,
-  startOwningSignals,
-} from "./shutdown.ts";
+import { createShutdown, SHUTDOWN_BACKSTOP_MS, startOwningSignals } from "./shutdown.ts";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -27,8 +23,7 @@ function harness(backstopMs?: number) {
   return { signals, exits, logs, errors, shutdown, install };
 }
 
-const exited = (exits: number[]) =>
-  vi.waitFor(() => expect(exits.length).toBeGreaterThan(0));
+const exited = (exits: number[]) => vi.waitFor(() => expect(exits.length).toBeGreaterThan(0));
 
 test("SIGTERM runs every closer, registered before or after install, then exits 0", async () => {
   const h = harness();
@@ -63,9 +58,7 @@ test("a closer that rejects is logged and does not stop the others", async () =>
 
   expect(closed).toBe(true);
   expect(h.exits).toEqual([0]);
-  expect(h.errors).toEqual([
-    "[service] shutdown step failed: pool already ended",
-  ]);
+  expect(h.errors).toEqual(["[service] shutdown step failed: pool already ended"]);
 });
 
 test("a closer that hangs trips the backstop, which exits 1", async () => {

@@ -1,10 +1,4 @@
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, test } from "vitest";
@@ -18,8 +12,7 @@ function factory() {
   return root;
 }
 afterEach(() => {
-  for (const root of roots.splice(0))
-    rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
 test("generation comes from the factory's installed package, even from a subdirectory", async () => {
@@ -48,14 +41,12 @@ export function generateFactoryIntegration(root) {
   mkdirSync(nested);
   const lines: string[] = [];
   await generateIntegration({ cwd: nested, out: (line) => lines.push(line) });
-  expect(readFileSync(path.join(root, "jigs.ts"), "utf8")).toBe(
-    "// this factory installed me",
-  );
+  expect(readFileSync(path.join(root, "jigs.ts"), "utf8")).toBe("// this factory installed me");
   expect(lines).toEqual(["generated jigs.ts — review and commit this file"]);
 });
 
 test("generation explains when the factory has not installed jigs", async () => {
-  await expect(
-    generateIntegration({ cwd: factory(), out: () => {} }),
-  ).rejects.toThrow(/not installed/);
+  await expect(generateIntegration({ cwd: factory(), out: () => {} })).rejects.toThrow(
+    /not installed/,
+  );
 });

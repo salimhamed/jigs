@@ -7,7 +7,7 @@ import { runAgent } from "./run-agent.ts";
 
 // Stands in for a factory's wrapper, minus the directive: it delegates to
 // runAgent the way a factory's own does.
-const runStep: RunAgentStep = (wire) => runAgent(wire, "run-under-test");
+const runStep: RunAgentStep = (wire) => runAgent(wire, { workflowRunId: "run-under-test" });
 
 test("an agent step whose declared MCP server cannot start returns the JIT failure instead of throwing", async () => {
   const wire = buildAgentWire({

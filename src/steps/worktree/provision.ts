@@ -23,11 +23,8 @@ export class PostCreateFailedError extends Error {
     signal: NodeJS.Signals | null,
     stderr: string,
   ) {
-    const how =
-      signal !== null ? `killed by ${signal}` : `exited ${exitCode ?? "?"}`;
-    super(
-      `postCreate command failed (${how}): ${command}${stderr === "" ? "" : `\n${stderr}`}`,
-    );
+    const how = signal !== null ? `killed by ${signal}` : `exited ${exitCode ?? "?"}`;
+    super(`postCreate command failed (${how}): ${command}${stderr === "" ? "" : `\n${stderr}`}`);
     this.name = "PostCreateFailedError";
     this.command = command;
     this.exitCode = exitCode;
@@ -41,9 +38,7 @@ export class CopySourceMissingError extends Error {
   readonly entry: string;
 
   constructor(bindingName: string, entry: string, copyDir: string) {
-    super(
-      `binding ${bindingName}: copy entry ${entry} matches nothing under ${copyDir}/`,
-    );
+    super(`binding ${bindingName}: copy entry ${entry} matches nothing under ${copyDir}/`);
     this.name = "CopySourceMissingError";
     this.bindingName = bindingName;
     this.entry = entry;
@@ -66,9 +61,7 @@ function copyOne(src: string, dest: string): void {
 function isInside(root: string, candidate: string): boolean {
   const resolvedRoot = path.resolve(root);
   const resolved = path.resolve(root, candidate);
-  return (
-    resolved === resolvedRoot || resolved.startsWith(resolvedRoot + path.sep)
-  );
+  return resolved === resolvedRoot || resolved.startsWith(resolvedRoot + path.sep);
 }
 
 // Both ends of a copy are relative paths under their own root, so both are
@@ -105,14 +98,7 @@ function copySources(
   const copyDir = path.join("bindings", bindingName);
   const sourceDir = path.join(factoryRoot, copyDir);
   for (const entry of entries) {
-    assertInsideCopyDir(
-      bindingName,
-      copyDir,
-      sourceDir,
-      worktreePath,
-      entry,
-      entry,
-    );
+    assertInsideCopyDir(bindingName, copyDir, sourceDir, worktreePath, entry, entry);
     // dot:true is load-bearing — the point of `copy` is .env-class files, and
     // most globbers skip dotfiles by default. expandDirectories:false keeps a
     // directory a single match instead of its flattened contents.
@@ -131,18 +117,8 @@ function copySources(
       throw new CopySourceMissingError(bindingName, entry, copyDir);
     }
     for (const relative of relatives) {
-      assertInsideCopyDir(
-        bindingName,
-        copyDir,
-        sourceDir,
-        worktreePath,
-        entry,
-        relative,
-      );
-      copyOne(
-        path.join(sourceDir, relative),
-        path.join(worktreePath, relative),
-      );
+      assertInsideCopyDir(bindingName, copyDir, sourceDir, worktreePath, entry, relative);
+      copyOne(path.join(sourceDir, relative), path.join(worktreePath, relative));
     }
   }
 }
@@ -169,9 +145,7 @@ async function runCommand(
       stderr += chunk.toString();
       process.stderr.write(chunk);
     });
-    child.on("error", (err) =>
-      reject(new PostCreateFailedError(command, null, null, String(err))),
-    );
+    child.on("error", (err) => reject(new PostCreateFailedError(command, null, null, String(err))));
     // exit, not close: close waits for the stdio pipes, which a hook that
     // backgrounds a long-lived process keeps open long after sh itself is
     // gone — and the spawn timeout no longer applies to that wait.
@@ -205,14 +179,8 @@ export interface ProvisionWorktreeOptions {
   worktreePath: string;
 }
 
-export async function provisionWorktree(
-  options: ProvisionWorktreeOptions,
-): Promise<void> {
+export async function provisionWorktree(options: ProvisionWorktreeOptions): Promise<void> {
   const { binding, factoryRoot, worktreePath } = options;
   copySources(binding.name, factoryRoot, worktreePath, binding.copy);
-  await runPostCreate(
-    worktreePath,
-    binding.postCreate,
-    binding.hookTimeoutMinutes,
-  );
+  await runPostCreate(worktreePath, binding.postCreate, binding.hookTimeoutMinutes);
 }

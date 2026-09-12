@@ -1,3 +1,8 @@
+import type { WorkflowMetadata } from "workflow";
+
+export type RunMetadata = Pick<WorkflowMetadata, "workflowRunId">;
+export type NamedRunMetadata = Pick<WorkflowMetadata, "workflowRunId" | "workflowName">;
+
 // What a step can tell a human about the run it is inside. The Workflow SDK's
 // metadata carries the run id and the workflow name; the dashboard link is
 // jigs', and only the service process knows it — the port the service was

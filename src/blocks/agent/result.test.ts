@@ -18,24 +18,22 @@ test("toStepResult maps text and usage into the uniform shape", () => {
 });
 
 test("extractAgentSession reads the Claude sessionId", () => {
-  expect(
-    extractAgentSession("claude", { "claude-code": { sessionId: "s-42" } }),
-  ).toEqual({ harness: "claude", id: "s-42" });
+  expect(extractAgentSession("claude", { "claude-code": { sessionId: "s-42" } })).toEqual({
+    harness: "claude",
+    id: "s-42",
+  });
 });
 
 test("extractAgentSession reads the Codex app-server threadId", () => {
-  expect(
-    extractAgentSession("codex", { "codex-app-server": { threadId: "t-7" } }),
-  ).toEqual({ harness: "codex", id: "t-7" });
+  expect(extractAgentSession("codex", { "codex-app-server": { threadId: "t-7" } })).toEqual({
+    harness: "codex",
+    id: "t-7",
+  });
 });
 
 test("extractAgentSession is best-effort: absent or malformed metadata yields undefined", () => {
   expect(extractAgentSession("claude", undefined)).toBeUndefined();
   expect(extractAgentSession("claude", {})).toBeUndefined();
-  expect(
-    extractAgentSession("codex", { "codex-app-server": { threadId: 9 } }),
-  ).toBeUndefined();
-  expect(
-    extractAgentSession("claude", { "claude-code": { sessionId: "" } }),
-  ).toBeUndefined();
+  expect(extractAgentSession("codex", { "codex-app-server": { threadId: 9 } })).toBeUndefined();
+  expect(extractAgentSession("claude", { "claude-code": { sessionId: "" } })).toBeUndefined();
 });

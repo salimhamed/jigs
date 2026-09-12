@@ -11,8 +11,7 @@ import {
 } from "./registry.ts";
 
 const sql = connectRegistry(
-  process.env.WORKFLOW_POSTGRES_URL ??
-    "postgres://jigs:jigs@localhost:5439/jigs",
+  process.env.WORKFLOW_POSTGRES_URL ?? "postgres://jigs:jigs@localhost:5439/jigs",
   { max: 1 },
 );
 
@@ -49,9 +48,7 @@ test("re-upsert with a new owner updates the row in place", async () => {
   await ensureWorktreeRegistry(sql);
   await upsertWorktree(sql, row());
   await upsertWorktree(sql, row({ ownerRunId: "run_b", branch: "feat-2" }));
-  expect(await getWorktree(sql, testPath)).toEqual(
-    row({ ownerRunId: "run_b", branch: "feat-2" }),
-  );
+  expect(await getWorktree(sql, testPath)).toEqual(row({ ownerRunId: "run_b", branch: "feat-2" }));
 });
 
 test("getWorktree misses cleanly on an unregistered path", async () => {
@@ -78,9 +75,7 @@ test("setWorktreeState marks a row without touching the rest of it", async () =>
   await ensureWorktreeRegistry(sql);
   await upsertWorktree(sql, row());
   await setWorktreeState(sql, testPath, "abandoned-dirty");
-  expect(await getWorktree(sql, testPath)).toEqual(
-    row({ state: "abandoned-dirty" }),
-  );
+  expect(await getWorktree(sql, testPath)).toEqual(row({ state: "abandoned-dirty" }));
 });
 
 test("deleteWorktree drops the row — the registry holds live worktrees only", async () => {
@@ -118,10 +113,7 @@ function replacing(from: string, to: string): string {
 
 test("a table that predates repo_dir is refused, naming the drop", async () => {
   await expectRefused(
-    replacing(
-      "repo_dir text NOT NULL",
-      "checkout_root text NOT NULL DEFAULT ''",
-    ),
+    replacing("repo_dir text NOT NULL", "checkout_root text NOT NULL DEFAULT ''"),
     /missing repo_dir.*DROP TABLE jigs_worktrees/s,
   );
 });

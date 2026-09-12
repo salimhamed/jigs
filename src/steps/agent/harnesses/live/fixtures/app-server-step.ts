@@ -11,9 +11,7 @@ import { stripApiCredentials } from "../../env.ts";
 
 const [cwd, codexHome, resultFile] = process.argv.slice(2);
 if (cwd === undefined || codexHome === undefined || resultFile === undefined) {
-  console.error(
-    "usage: node app-server-step.ts <cwd> <codexHome> <resultFile>",
-  );
+  console.error("usage: node app-server-step.ts <cwd> <codexHome> <resultFile>");
   process.exit(2);
 }
 

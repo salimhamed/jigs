@@ -5,9 +5,7 @@ import type { ClaudeCodeSettings } from "ai-sdk-provider-claude-code";
 // Always resolved explicitly: the Nitro build severs the provider's vendored
 // binary, and pointing at the system `claude` keeps dev and the built service
 // behaving identically.
-export function resolveClaudeExecutable(
-  env: NodeJS.ProcessEnv = process.env,
-): string {
+export function resolveClaudeExecutable(env: NodeJS.ProcessEnv = process.env): string {
   const override = env.JIGS_CLAUDE_EXECUTABLE;
   if (override !== undefined && override !== "") return override;
   for (const dir of (env.PATH ?? "").split(path.delimiter)) {
@@ -34,16 +32,13 @@ export type ClaudeStepOptions = ClaudeCodeSettings & { cwd: string };
 // possible at all — below it Bash prompts, and a prompt no one can answer
 // hangs the step. The provider gates that mode behind the paired
 // allowDangerouslySkipPermissions flag.
-export function claudeStepSettings(
-  options: ClaudeStepOptions,
-): ClaudeCodeSettings {
+export function claudeStepSettings(options: ClaudeStepOptions): ClaudeCodeSettings {
   return {
     ...options,
     strictMcpConfig: true,
     settingSources: ["project"],
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
-    pathToClaudeCodeExecutable:
-      options.pathToClaudeCodeExecutable ?? resolveClaudeExecutable(),
+    pathToClaudeCodeExecutable: options.pathToClaudeCodeExecutable ?? resolveClaudeExecutable(),
   };
 }

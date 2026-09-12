@@ -3,11 +3,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 import type { ExecFile, ExecOptions } from "../exec.ts";
-import {
-  SERVICE_ENTRY,
-  type ServiceProcesses,
-  type SpawnSpec,
-} from "./service-lifecycle.ts";
+import { SERVICE_ENTRY, type ServiceProcesses, type SpawnSpec } from "./service-lifecycle.ts";
 
 // The machine as `up` and `upgrade` see it: a scaffolded factory on disk, the
 // child processes they exec, the service process they supervise, and the HTTP
@@ -38,8 +34,7 @@ export function factory(tmp: string, shape: FactoryShape): string {
       "WORKFLOW_TARGET_WORLD=@workflow/world-postgres\nWORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\nLINEAR_API_KEY=\nGITHUB_TOKEN=\n",
     );
   }
-  if (shape.env !== undefined)
-    writeFileSync(path.join(root, ".env"), shape.env);
+  if (shape.env !== undefined) writeFileSync(path.join(root, ".env"), shape.env);
   if (shape.compose !== false) {
     writeFileSync(
       path.join(root, "docker-compose.yml"),

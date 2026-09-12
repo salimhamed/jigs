@@ -1,20 +1,12 @@
 import { copyFileSync, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import {
-  type ResolvedService,
-  resolveService,
-} from "../../config/factory-config.ts";
+import { type ResolvedService, resolveService } from "../../config/factory-config.ts";
 import { readFactoryEnv } from "../../config/factory-env.ts";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { stringEnv } from "../../steps/agent/harnesses/env.ts";
-import {
-  type ExecFile,
-  execOrExplain,
-  execOutput,
-  nodeExecFile,
-} from "../exec.ts";
+import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
 import { buildFactoryService, type Prepare } from "./build.ts";
 import { runDoctor } from "./doctor.ts";
 import { type PsRun, showRuns } from "./ps.ts";
@@ -29,13 +21,7 @@ import {
   type ServiceProcesses,
   startService,
 } from "./service-lifecycle.ts";
-import {
-  indent,
-  type Note,
-  type Step,
-  StepFailed,
-  stepRunner,
-} from "./step-runner.ts";
+import { indent, type Note, type Step, StepFailed, stepRunner } from "./step-runner.ts";
 
 // Takes a factory from any state to a running service: the commands a human
 // used to type after `jigs init`, run in order. Each step is idempotent, so a
@@ -86,10 +72,7 @@ export interface UpOptions {
 // freshly copied .env, so they are reported, not refused.
 const CREDENTIAL_SLOTS = ["LINEAR_API_KEY", "GITHUB_TOKEN"];
 
-export async function upFactory(
-  deps: UpDeps,
-  options: UpOptions = {},
-): Promise<UpResult> {
+export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<UpResult> {
   const execFile = deps.execFile ?? nodeExecFile;
   const runner = stepRunner<UpStepName>(deps.out);
   const result: UpResult = { ok: false, steps: runner.steps };
@@ -114,33 +97,16 @@ export async function upFactory(
     reportEmptyCredentials(env, deps.out);
 
     await runner.run("install", () =>
-      execOrExplain(
-        execFile,
-        "pnpm",
-        ["install"],
-        { cwd: factoryRoot },
-        deps.out,
-        {
-          missing: new JigsError(
-            "pnpm is not on PATH",
-            "install pnpm: https://pnpm.io/installation",
-          ),
-          failed: () =>
-            new JigsError(
-              `pnpm install failed in ${factoryRoot}`,
-              "the output above is pnpm's",
-            ),
-        },
-      ),
+      execOrExplain(execFile, "pnpm", ["install"], { cwd: factoryRoot }, deps.out, {
+        missing: new JigsError("pnpm is not on PATH", "install pnpm: https://pnpm.io/installation"),
+        failed: () =>
+          new JigsError(`pnpm install failed in ${factoryRoot}`, "the output above is pnpm's"),
+      }),
     );
 
-    await runner.run("compose", () =>
-      composeUp(execFile, factoryRoot, deps.out),
-    );
+    await runner.run("compose", () => composeUp(execFile, factoryRoot, deps.out));
 
-    await runner.run("bootstrap", () =>
-      bootstrapWorld(execFile, factoryRoot, env, deps.out),
-    );
+    await runner.run("bootstrap", () => bootstrapWorld(execFile, factoryRoot, env, deps.out));
 
     await runner.run("build", () =>
       buildFactoryService({
@@ -161,8 +127,7 @@ export async function upFactory(
         await startService(lifecycle, { awaitReady: false });
         return "started";
       }
-      const unchanged =
-        builtBundleHash(factoryRoot) === runningBundleHash(lifecycle);
+      const unchanged = builtBundleHash(factoryRoot) === runningBundleHash(lifecycle);
       if (unchanged && options.restart !== true) {
         note("unchanged, not restarted");
         return "unchanged";
@@ -185,19 +150,14 @@ export async function upFactory(
           });
         } catch (err) {
           if (err instanceof JigsError && err.hint === undefined) {
-            throw new JigsError(
-              err.message,
-              "each failing check above names its own repair",
-            );
+            throw new JigsError(err.message, "each failing check above names its own repair");
           }
           throw err;
         }
       });
     }
 
-    deps.out(
-      `${service.slug} is up at ${service.serviceUrl} — dashboard ${service.dashboardUrl}`,
-    );
+    deps.out(`${service.slug} is up at ${service.serviceUrl} — dashboard ${service.dashboardUrl}`);
     result.ok = true;
     return result;
   } catch (err) {
@@ -220,10 +180,7 @@ function ensureEnv(factoryRoot: string, note: Note): Record<string, string> {
   if (!existsSync(dotenv)) {
     const example = path.join(factoryRoot, ".env.example");
     if (!existsSync(example)) {
-      throw new JigsError(
-        `no .env or .env.example in ${factoryRoot}`,
-        "scaffold one: jigs init",
-      );
+      throw new JigsError(`no .env or .env.example in ${factoryRoot}`, "scaffold one: jigs init");
     }
     copyFileSync(example, dotenv);
     note("copied .env.example to .env");
@@ -231,15 +188,10 @@ function ensureEnv(factoryRoot: string, note: Note): Record<string, string> {
   return readFactoryEnv(factoryRoot);
 }
 
-function reportEmptyCredentials(
-  env: Record<string, string>,
-  out: (line: string) => void,
-): void {
+function reportEmptyCredentials(env: Record<string, string>, out: (line: string) => void): void {
   const empty = CREDENTIAL_SLOTS.filter((key) => (env[key] ?? "") === "");
   if (empty.length === 0) return;
-  out(
-    `     ${empty.join(", ")} empty in .env — fill them in before a workflow needs them`,
-  );
+  out(`     ${empty.join(", ")} empty in .env — fill them in before a workflow needs them`);
 }
 
 async function composeUp(
@@ -248,10 +200,7 @@ async function composeUp(
   out: (line: string) => void,
 ): Promise<void> {
   if (!existsSync(path.join(factoryRoot, "docker-compose.yml"))) {
-    throw new JigsError(
-      `no docker-compose.yml in ${factoryRoot}`,
-      "scaffold one: jigs init",
-    );
+    throw new JigsError(`no docker-compose.yml in ${factoryRoot}`, "scaffold one: jigs init");
   }
   await execOrExplain(
     execFile,
@@ -260,10 +209,7 @@ async function composeUp(
     { cwd: factoryRoot },
     out,
     {
-      missing: new JigsError(
-        "docker is not on PATH",
-        "install docker and start its daemon",
-      ),
+      missing: new JigsError("docker is not on PATH", "install docker and start its daemon"),
       failed: (err) =>
         /Cannot connect to the Docker daemon/i.test(execOutput(err))
           ? new JigsError("the docker daemon is not running", "start docker")
@@ -315,10 +261,7 @@ async function bootstrapWorld(
               `bootstrap could not reach the World at ${redactPassword(url)}`,
               `docker-compose.yml publishes ${publishedPostgresPorts(factoryRoot)} — the two have to agree`,
             )
-          : new JigsError(
-              "bootstrap failed",
-              "the output above is @workflow/world-postgres's",
-            ),
+          : new JigsError("bootstrap failed", "the output above is @workflow/world-postgres's"),
     },
   );
 }
@@ -328,10 +271,7 @@ function redactPassword(url: string): string {
 }
 
 function publishedPostgresPorts(factoryRoot: string): string {
-  const compose = readFileSync(
-    path.join(factoryRoot, "docker-compose.yml"),
-    "utf8",
-  );
+  const compose = readFileSync(path.join(factoryRoot, "docker-compose.yml"), "utf8");
   const ports = [...compose.matchAll(/"?(\d+):5432"?/g)].map((m) => m[1]);
   return ports.length === 0 ? "no port for 5432" : `:${ports.join(", :")}`;
 }

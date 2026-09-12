@@ -42,10 +42,7 @@ export type TicketSnapshot = {
   subIssues: TicketRef[];
 };
 
-export function toSnapshot(
-  raw: RawIssueSnapshot,
-  fetchedAt: string,
-): TicketSnapshot {
+export function toSnapshot(raw: RawIssueSnapshot, fetchedAt: string): TicketSnapshot {
   return {
     fetchedAt,
     id: raw.id,
@@ -100,11 +97,7 @@ export function renderSnapshot(snapshot: TicketSnapshot): string {
     ...section(
       "Comments",
       snapshot.comments.map((comment) =>
-        [
-          `### ${comment.author ?? "unknown"} — ${comment.createdAt}`,
-          "",
-          comment.body,
-        ].join("\n"),
+        [`### ${comment.author ?? "unknown"} — ${comment.createdAt}`, "", comment.body].join("\n"),
       ),
     ),
     ...section("Blocked by", refLines(snapshot.blockedBy)),

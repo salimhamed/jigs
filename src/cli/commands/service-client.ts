@@ -13,9 +13,7 @@ export interface ServiceDeps {
 
 // `JIGS_SERVICE_URL=` reaches commander as an empty string, which names no
 // service at all: the factory the user is standing in owns the run either way.
-export function usesFactoryService(
-  explicit?: string,
-): explicit is undefined | "" {
+export function usesFactoryService(explicit?: string): explicit is undefined | "" {
   return explicit === undefined || explicit === "";
 }
 

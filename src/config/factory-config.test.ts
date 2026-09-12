@@ -68,15 +68,14 @@ test.each([
 });
 
 test("service port defaults while dashboard port is explicit", () => {
-  expect(
-    parseFactoryConfig({ service: { dashboardPort: 3456 } }).service,
-  ).toEqual({ port: 8990, dashboardPort: 3456 });
+  expect(parseFactoryConfig({ service: { dashboardPort: 3456 } }).service).toEqual({
+    port: 8990,
+    dashboardPort: 3456,
+  });
 });
 
 test("identical re-bind preserves every byte", () => {
-  expect(upsertBinding(source, "acme-api", "git@github.com:acme/api.git")).toBe(
-    source,
-  );
+  expect(upsertBinding(source, "acme-api", "git@github.com:acme/api.git")).toBe(source);
 });
 
 test("updating a remote preserves all surrounding text and comments", () => {
@@ -86,20 +85,14 @@ test("updating a remote preserves all surrounding text and comments", () => {
 });
 
 test("adding and removing bindings preserves sibling comments and provisioning", () => {
-  const added = upsertBinding(
-    source,
-    "other.repo",
-    "git@github.com:acme/other.git",
-  );
+  const added = upsertBinding(source, "other.repo", "git@github.com:acme/other.git");
   expect(readFactoryConfig(factory(added)).bindings["other.repo"]?.remote).toBe(
     "git@github.com:acme/other.git",
   );
   const removed = removeBinding(added, "other.repo");
   expect(removed).toContain("// Main API.");
   expect(removed).toContain("// GitHub");
-  expect(
-    readFactoryConfig(factory(removed)).bindings["acme-api"]?.postCreate,
-  ).toEqual(["npm ci"]);
+  expect(readFactoryConfig(factory(removed)).bindings["acme-api"]?.postCreate).toEqual(["npm ci"]);
 });
 
 test("missing bindings object is inserted", () => {
@@ -123,9 +116,7 @@ test.each([
   "export default config;",
   "export default defineFactory({ bindings: { api: { remote: url } } });",
 ])("unsupported automatic edits fail clearly", (text) => {
-  expect(() => upsertBinding(text, "api", "url")).toThrow(
-    "Cannot edit bindings in jigs.config.ts",
-  );
+  expect(() => upsertBinding(text, "api", "url")).toThrow("Cannot edit bindings in jigs.config.ts");
 });
 
 test("config loading supports computed settings without invoking workflow loaders", () => {
@@ -137,9 +128,7 @@ test("config loading supports computed settings without invoking workflow loader
 });
 
 test("config and imported settings changes are observed in the same process", () => {
-  const root = factory(
-    `import service from "./settings.ts"; export default { service };`,
-  );
+  const root = factory(`import service from "./settings.ts"; export default { service };`);
   const settings = path.join(root, "settings.ts");
   writeFileSync(settings, "export default { dashboardPort: 9090 };");
   expect(resolveService(root).dashboardPort).toBe(9090);

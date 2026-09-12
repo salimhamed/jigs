@@ -1,11 +1,6 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import {
-  Agent,
-  type Dispatcher,
-  getGlobalDispatcher,
-  setGlobalDispatcher,
-} from "undici";
+import { Agent, type Dispatcher, getGlobalDispatcher, setGlobalDispatcher } from "undici";
 import { afterEach, expect, test } from "vitest";
 import {
   describeStepCeiling,
@@ -27,9 +22,9 @@ test("the ceiling is scoped to the origin the World self-invokes on", () => {
     "http://[::1]:8990",
   ]);
   // WORKFLOW_LOCAL_BASE_URL is what world-postgres reads first.
-  expect(
-    selfOrigins({ PORT: "8990", WORKFLOW_LOCAL_BASE_URL: "http://svc:3000/x" }),
-  ).toEqual(["http://svc:3000"]);
+  expect(selfOrigins({ PORT: "8990", WORKFLOW_LOCAL_BASE_URL: "http://svc:3000/x" })).toEqual([
+    "http://svc:3000",
+  ]);
   expect(selfOrigins({})).toEqual([]);
 });
 
@@ -72,11 +67,7 @@ test("a request off the self origin is handed to the dispatcher that was global"
         return true;
       },
     }) as unknown as Dispatcher;
-  const router = new SelfOriginDispatcher(
-    ["http://localhost:8990"],
-    stub("step"),
-    stub("default"),
-  );
+  const router = new SelfOriginDispatcher(["http://localhost:8990"], stub("step"), stub("default"));
   const handler = {} as Dispatcher.DispatchHandler;
 
   router.dispatch(
@@ -87,10 +78,7 @@ test("a request off the self origin is handed to the dispatcher that was global"
     },
     handler,
   );
-  router.dispatch(
-    { origin: "https://api.github.com", path: "/user", method: "GET" },
-    handler,
-  );
+  router.dispatch({ origin: "https://api.github.com", path: "/user", method: "GET" }, handler);
 
   expect(dispatched).toEqual([
     "step http://localhost:8990/.well-known/workflow/v1/step",
@@ -107,19 +95,13 @@ test("the routing is what the process's own fetch picks up", async () => {
       res.end("ok");
     }, 1300);
   });
-  await new Promise<void>((resolve) =>
-    server.listen(0, "127.0.0.1", () => resolve()),
-  );
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
   const { port } = server.address() as AddressInfo;
 
   const stepRoute = new Agent({ headersTimeout: 0 });
   const everythingElse = new Agent({ headersTimeout: 1 });
   setGlobalDispatcher(
-    new SelfOriginDispatcher(
-      [`http://localhost:${port}`],
-      stepRoute,
-      everythingElse,
-    ),
+    new SelfOriginDispatcher([`http://localhost:${port}`], stepRoute, everythingElse),
   );
 
   const [self, other] = await Promise.allSettled([

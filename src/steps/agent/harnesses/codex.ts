@@ -14,9 +14,7 @@ export type CodexExecStepOptions = CodexExecSettings & {
   codexHome: string;
 };
 
-export function codexExecStepSettings(
-  options: CodexExecStepOptions,
-): CodexExecSettings {
+export function codexExecStepSettings(options: CodexExecStepOptions): CodexExecSettings {
   const { codexHome, ...settings } = options;
   return {
     // codex exec refuses a non-git cwd without this; an overridable default

@@ -14,11 +14,12 @@ import type { WorktreeFacts } from "../../blocks/worktree.ts";
 import { resolveBinding } from "../../config/factory-config.ts";
 import { factoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
+import type { RunMetadata } from "../run-context.ts";
 import { hasBindingClone } from "./clone.ts";
 import { createWorktree, worktreeStatus } from "./create.ts";
 import { bindingRepoDir, worktreePath } from "./layout.ts";
 import { type OwnerState, readOwner } from "./owner.ts";
-import { provisionWorktree } from "./provision.ts";
+import { provisionWorktree as provisionWorktreeFiles } from "./provision.ts";
 import { getWorktree, setWorktreeState, upsertWorktree } from "./registry.ts";
 import { assertReusable, WorktreeOwnedError } from "./reuse.ts";
 import { registrySql } from "./sql.ts";
@@ -31,17 +32,19 @@ export interface WorktreeRequest {
 
 // `sql` and `readOwner` wrap the two external systems this path consults —
 // the registry and the World — and nothing else here is an option.
-export interface ProvisionRunWorktreeDeps {
+export interface ProvisionWorktreeDeps {
   sql?: Sql;
   readOwner?: (runId: string) => Promise<OwnerState>;
 }
 
 // The clone is the service's to make at start, so this path only asserts it.
-export async function provisionRunWorktree(
+/** Create or reuse a worktree for this run and prepare its files and dependencies. */
+export async function provisionWorktree(
   request: WorktreeRequest,
-  runId: string,
-  deps: ProvisionRunWorktreeDeps = {},
+  metadata: RunMetadata,
+  deps: ProvisionWorktreeDeps = {},
 ): Promise<WorktreeFacts> {
+  const runId = metadata.workflowRunId;
   const sql = deps.sql ?? registrySql();
   const owner = deps.readOwner ?? readOwner;
 
@@ -94,7 +97,7 @@ export async function provisionRunWorktree(
   });
 
   try {
-    await provisionWorktree({
+    await provisionWorktreeFiles({
       binding,
       factoryRoot: dirs.factoryRoot,
       worktreePath: facts.path,
@@ -114,23 +117,7 @@ export async function provisionRunWorktree(
 // The per-run teardown, called by the workflow after a merged reviewLoop
 // return. The operator's `jigs sweep` is the net for runs that never get
 // there.
-export async function teardownMergedRun(runId: string): Promise<string[]> {
-  return teardownMerged(runId, registrySql());
-}
-
-// The name the factories' steps/jigs.ts wrappers still import. The review
-// loop only returns merged, so `outcome` was always `{ merged: true }`; this
-// goes once the wrappers call teardownMergedRun directly. The guard keeps a
-// stray `{ merged: false }` from deleting the only copy of unmerged work now
-// that the flag no longer chooses a row.
-export function teardownRunWorktrees(
-  runId: string,
-  outcome: { merged: boolean },
-): Promise<string[]> {
-  if (!outcome.merged) {
-    throw new Error(
-      "teardownRunWorktrees only tears down merged runs; unmerged worktrees are reclaimed by `jigs sweep`",
-    );
-  }
-  return teardownMergedRun(runId);
+/** Remove this run’s worktrees and branches after its pull requests have merged. */
+export async function removeMergedRunWorktrees(metadata: RunMetadata): Promise<string[]> {
+  return teardownMerged(metadata.workflowRunId, registrySql());
 }

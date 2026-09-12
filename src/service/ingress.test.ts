@@ -3,11 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
-import {
-  githubWebhookSecret,
-  verifyGithubSignature,
-  verifyLinearSignature,
-} from "./ingress.ts";
+import { githubWebhookSecret, verifyGithubSignature, verifyLinearSignature } from "./ingress.ts";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -24,9 +20,7 @@ test("github signature verifies against the raw body", () => {
 
 test("github signature rejects a tampered body", () => {
   const header = `sha256=${hmac('{"action":"submitted"}', "s3cret")}`;
-  expect(verifyGithubSignature('{"action":"approved"}', header, "s3cret")).toBe(
-    false,
-  );
+  expect(verifyGithubSignature('{"action":"approved"}', header, "s3cret")).toBe(false);
 });
 
 test("github signature rejects the wrong secret", () => {
@@ -38,24 +32,16 @@ test("github signature rejects the wrong secret", () => {
 test("github signature rejects a malformed or missing header", () => {
   const body = "{}";
   expect(verifyGithubSignature(body, undefined, "s3cret")).toBe(false);
-  expect(verifyGithubSignature(body, hmac(body, "s3cret"), "s3cret")).toBe(
-    false,
-  );
+  expect(verifyGithubSignature(body, hmac(body, "s3cret"), "s3cret")).toBe(false);
   expect(verifyGithubSignature(body, "sha256=", "s3cret")).toBe(false);
   expect(verifyGithubSignature(body, "sha256=abc123", "s3cret")).toBe(false);
-  expect(
-    verifyGithubSignature(body, `sha256=${"zz".repeat(32)}`, "s3cret"),
-  ).toBe(false);
+  expect(verifyGithubSignature(body, `sha256=${"zz".repeat(32)}`, "s3cret")).toBe(false);
 });
 
 test("linear signature verifies and rejects the wrong secret", () => {
   const body = JSON.stringify({ type: "Comment" });
-  expect(
-    verifyLinearSignature(body, hmac(body, "lin-secret"), "lin-secret"),
-  ).toBe(true);
-  expect(verifyLinearSignature(body, hmac(body, "wrong"), "lin-secret")).toBe(
-    false,
-  );
+  expect(verifyLinearSignature(body, hmac(body, "lin-secret"), "lin-secret")).toBe(true);
+  expect(verifyLinearSignature(body, hmac(body, "wrong"), "lin-secret")).toBe(false);
   expect(verifyLinearSignature(body, undefined, "lin-secret")).toBe(false);
 });
 
@@ -67,10 +53,7 @@ test("github secret resolver prefers env and falls back to the data-dir file", (
     expect(githubWebhookSecret()).toBe(null);
 
     mkdirSync(path.join(dataHome, "jigs"), { recursive: true });
-    writeFileSync(
-      path.join(dataHome, "jigs", "github-webhook-secret"),
-      "file-secret\n",
-    );
+    writeFileSync(path.join(dataHome, "jigs", "github-webhook-secret"), "file-secret\n");
     expect(githubWebhookSecret()).toBe("file-secret");
 
     vi.stubEnv("GITHUB_WEBHOOK_SECRET", "env-secret");

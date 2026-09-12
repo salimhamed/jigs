@@ -2,9 +2,7 @@
 // its repair instruction, so preflight, JIT checks and `jigs doctor` render
 // the same text at launch and mid-run.
 
-export type CheckResult =
-  | { ok: true }
-  | { ok: false; reason: string; repair: string };
+export type CheckResult = { ok: true } | { ok: false; reason: string; repair: string };
 
 export interface Check {
   id: string;
@@ -61,25 +59,16 @@ export async function runChecks(
 }
 
 export function failedChecks(report: CheckReport): FailedCheck[] {
-  return report.checks.filter(
-    (outcome): outcome is FailedCheck => outcome.ok === false,
-  );
+  return report.checks.filter((outcome): outcome is FailedCheck => outcome.ok === false);
 }
 
 // The one shared renderer — the reason every caller reads the same repair.
 export function formatFailures(report: CheckReport): string {
   return failedChecks(report)
-    .map(
-      (failure) => `${failure.label}: ${failure.reason}\n  → ${failure.repair}`,
-    )
+    .map((failure) => `${failure.label}: ${failure.reason}\n  → ${failure.repair}`)
     .join("\n");
 }
 
-export function failedCheck(
-  id: string,
-  label: string,
-  reason: string,
-  repair: string,
-): Check {
+export function failedCheck(id: string, label: string, reason: string, repair: string): Check {
   return { id, label, run: async () => ({ ok: false, reason, repair }) };
 }

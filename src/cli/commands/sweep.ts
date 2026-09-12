@@ -36,10 +36,7 @@ export interface SweepResult {
   removedDirs: string[];
 }
 
-export async function runSweep(
-  deps: SweepDeps,
-  options: SweepOptions = {},
-): Promise<SweepResult> {
+export async function runSweep(deps: SweepDeps, options: SweepOptions = {}): Promise<SweepResult> {
   if (options.force === true) {
     const result = await postSweep(deps, { clean: true, force: true });
     printEntries(result.entries, deps.out);
@@ -69,9 +66,7 @@ export async function runSweep(
   const approved: string[] = [];
   for (const entry of eligible) {
     printEntries([entry], deps.out);
-    const warning = entry.requiresForce
-      ? " (HOLDS UNCOMMITTED WORK — removal is permanent)"
-      : "";
+    const warning = entry.requiresForce ? " (HOLDS UNCOMMITTED WORK — removal is permanent)" : "";
     if (await deps.confirm(`remove ${entry.path}${warning}?`)) {
       approved.push(entry.path);
     }
@@ -139,14 +134,9 @@ function printSummary(result: SweepResult, out: (line: string) => void) {
     out("no worktrees");
   }
   const held = result.entries.filter((entry) => !entry.eligible).length;
-  const kept = result.entries.filter(
-    (entry) => entry.branchOutcome?.deleted === false,
-  ).length;
-  const branches =
-    kept === 0 ? "" : ` (${kept} branch${kept === 1 ? "" : "es"} kept)`;
+  const kept = result.entries.filter((entry) => entry.branchOutcome?.deleted === false).length;
+  const branches = kept === 0 ? "" : ` (${kept} branch${kept === 1 ? "" : "es"} kept)`;
   const dirs =
-    result.removedDirs.length === 0
-      ? ""
-      : `, ${result.removedDirs.length} empty dir(s) removed`;
+    result.removedDirs.length === 0 ? "" : `, ${result.removedDirs.length} empty dir(s) removed`;
   out(`${result.removed.length} removed${branches}, ${held} held${dirs}`);
 }
