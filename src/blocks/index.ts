@@ -80,15 +80,6 @@ export {
   codeReviewPrompt,
 } from "./builder-agent/code-review.prompt.ts";
 export {
-  type CommitWorkPrompt,
-  type CommitWorkPromptInput,
-  commitWorkPrompt,
-} from "./builder-agent/commit-work.prompt.ts";
-export {
-  type CommitWorkOptions,
-  commitWork,
-} from "./builder-agent/commit-work.ts";
-export {
   type DescribePullRequestOptions,
   describePullRequest,
   type PullRequestDescription,

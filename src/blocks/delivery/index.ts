@@ -1,5 +1,6 @@
 export { bindDeliverySteps } from "./review-loop.ts";
 export type {
+  ApprovedChange,
   DeliveryAgent,
   DeliveryChange,
   DeliveryLimit,

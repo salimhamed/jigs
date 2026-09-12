@@ -3,7 +3,7 @@ import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import { resumeFailed } from "../agent/resume-or-rebuild.ts";
 import type { GateAck, GateWake } from "../pull-request/gate.ts";
 import { bindDeliverySteps } from "./review-loop.ts";
-import type { DeliverySteps, ReviewLoopOptions } from "./types.ts";
+import type { ApprovedChange, DeliverySteps, ReviewLoopOptions } from "./types.ts";
 
 const pr = { owner: "owner", repo: "repo", number: 1 };
 const options: ReviewLoopOptions = {
@@ -56,6 +56,16 @@ function setup(wakes: GateWake[] = [{ kind: "closed", merged: true }]) {
   };
   return { steps, calls, acks, closed };
 }
+
+const approved: ApprovedChange = {
+  task: options.task,
+  worktree: options.worktree,
+  attempts: { implementationReviewRounds: 1, ciFixAttempts: 0, pullRequestRevisionRounds: 0 },
+  sessions: {},
+  approval: { reviewedCommit: "new" },
+};
+
+const publish = { change: approved, binding: "repo", implementation: options.implementation };
 
 const red = (headSha: string): GateWake => ({
   kind: "ci-red",
@@ -127,6 +137,7 @@ describe("delivery", () => {
       red("second"),
     ]);
     vi.mocked(steps.readBranchState)
+      .mockResolvedValueOnce({ commits: 1, headSha: "new", dirty: false })
       .mockResolvedValueOnce({ commits: 1, headSha: "new", dirty: false })
       .mockResolvedValueOnce({ commits: 1, headSha: "first", dirty: false })
       .mockResolvedValueOnce({ commits: 1, headSha: "new", dirty: false })
@@ -273,14 +284,88 @@ describe("delivery", () => {
     );
   });
 
-  it("refuses to publish a still-dirty worktree after commit recovery", async () => {
+  it("stops before review when the implementation leaves the worktree dirty", async () => {
+    const { steps, calls } = setup();
+    vi.mocked(steps.readBranchState).mockResolvedValue({ commits: 1, headSha: "new", dirty: true });
+    const result = await bindDeliverySteps(steps).reviewLoop(options);
+    expect(result).toMatchObject({
+      status: "uncommitted-work",
+      phase: "implementation-review",
+      attempts: 1,
+      findings: ["The implementation left uncommitted changes; only committed work is reviewed."],
+    });
+    expect(result.change.worktree).toEqual(options.worktree);
+    expect(calls.map((call) => call.harness.model)).toEqual(["builder"]);
+    expect(steps.createPullRequest).not.toHaveBeenCalled();
+  });
+
+  it("stops before review when the implementation committed nothing", async () => {
+    const { steps, calls } = setup();
+    vi.mocked(steps.readBranchState).mockResolvedValue({
+      commits: 0,
+      headSha: "base",
+      dirty: false,
+    });
+    const result = await bindDeliverySteps(steps).reviewLoop(options);
+    expect(result).toMatchObject({
+      status: "uncommitted-work",
+      findings: ["The implementation added no commits since the base commit."],
+    });
+    expect(calls).toHaveLength(1);
+    expect(steps.pushBranch).not.toHaveBeenCalled();
+  });
+
+  it("records the reviewed commit and shows it to the reviewer", async () => {
+    const { steps, calls } = setup();
+    vi.mocked(steps.readBranchState).mockResolvedValue({
+      commits: 2,
+      headSha: "reviewed",
+      dirty: false,
+    });
+    const built = await bindDeliverySteps(steps).implementAndReview({ ...options, maxRounds: 1 });
+    expect(built).toMatchObject({
+      status: "approved",
+      change: { approval: { reviewedCommit: "reviewed" } },
+    });
+    expect(calls[1]?.prompt).toContain("Head commit under review: reviewed");
+  });
+
+  it("refuses to publish a dirty worktree", async () => {
     const { steps } = setup();
     vi.mocked(steps.readBranchState).mockResolvedValue({ commits: 1, headSha: "new", dirty: true });
-    await expect(bindDeliverySteps(steps).reviewLoop(options)).rejects.toThrow(
-      "committed changes only",
+    await expect(bindDeliverySteps(steps).openPullRequest(publish)).rejects.toThrow(
+      "uncommitted changes that no review approved",
     );
     expect(steps.pushBranch).not.toHaveBeenCalled();
     expect(steps.createPullRequest).not.toHaveBeenCalled();
+  });
+
+  it("refuses to publish a commit the review never saw", async () => {
+    const { steps } = setup();
+    vi.mocked(steps.readBranchState).mockResolvedValue({
+      commits: 2,
+      headSha: "later",
+      dirty: false,
+    });
+    await expect(bindDeliverySteps(steps).openPullRequest(publish)).rejects.toThrow(
+      "later is not the approved commit new",
+    );
+    expect(steps.pushBranch).not.toHaveBeenCalled();
+  });
+
+  it("publishes the approved commit without an implementation agent turn", async () => {
+    const { steps, calls } = setup();
+    expect(await bindDeliverySteps(steps).openPullRequest(publish)).toEqual(pr);
+    expect(steps.pushBranch).toHaveBeenCalledExactlyOnceWith("/work", "fix");
+    expect(steps.createPullRequest).toHaveBeenCalledWith(
+      { owner: "owner", repo: "repo" },
+      "fix",
+      "main",
+      "fix: search",
+      "Fixed and tested",
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.prompt).toContain("Write a concise");
   });
   it("lets a factory retain its own task fields and use them in prompt functions", async () => {
     const { steps, calls } = setup();

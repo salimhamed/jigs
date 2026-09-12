@@ -51,8 +51,9 @@ never send a prompt or callback through a durable step argument.
 
 For delivery, use `reviewLoop` or compose `implementAndReview`,
 `openPullRequestForChange`, and `followPullRequest`. Configure separate role
-harnesses/prompts and explicit limits. Handle `limit-reached`, `stopped`, and
-`closed` outcomes; remove worktrees only after `merged`. Ticket-source code returns
+harnesses/prompts and explicit limits. Handle `limit-reached`, `stopped`,
+`uncommitted-work`, and `closed` outcomes; remove worktrees only after `merged`.
+Only an approved change can be passed to `openPullRequestForChange`. Ticket-source code returns
 `WorkItem` requirements without making the loop depend on that provider.
 
 Consult `docs/delivery.md` in the jigs repository for the supported interface and

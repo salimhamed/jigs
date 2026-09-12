@@ -243,7 +243,7 @@ src/
     agent/          how a workflow calls an agent
     delivery/       configurable delivery phases and role/session tracking
     builder-agent/  the moves the builder agent makes: implement, answer a
-                    review, fix CI, commit work, describe a PR
+                    review, fix CI, describe a PR
     ticket/         claim a ticket, review it, shape its snapshot, and halt
                     the run for a human
     pull-request/   the pull request gate, waiting on it, and the answers

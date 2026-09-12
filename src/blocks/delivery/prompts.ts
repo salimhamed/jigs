@@ -6,6 +6,7 @@ export function contextPrompt(context: DeliveryPromptContext): string {
     context.task.url ?? "",
     context.task.instructions,
     `Base commit: ${context.worktree.baseSha}`,
+    context.headSha === undefined ? "" : `Head commit under review: ${context.headSha}`,
     context.instructions,
     context.findings.length ? `Findings:\n${context.findings.join("\n")}` : "",
     context.diff === undefined ? "" : `Current diff:\n${context.diff}`,
@@ -18,10 +19,10 @@ export function contextPrompt(context: DeliveryPromptContext): string {
 }
 
 export const implementPrompt = (context: DeliveryPromptContext): string =>
-  `${contextPrompt(context)}\n\nImplement the requirements and address the findings. Follow the repository instructions, run relevant checks, and commit your changes. Do not push or open a pull request.`;
+  `${contextPrompt(context)}\n\nImplement the requirements and address the findings. Follow the repository instructions, run relevant checks, and commit your changes before you finish: only committed work is reviewed, and an uncommitted worktree stops the change. Do not push or open a pull request.`;
 
 export const reviewPrompt = (context: DeliveryPromptContext): string =>
-  `${contextPrompt(context)}\n\nReview the changes against the requirements and repository instructions. Inspect the diff from the base commit and check for correctness and regressions. Do not edit files. Return approved only when no changes are needed; otherwise return changes-requested with actionable findings.`;
+  `${contextPrompt(context)}\n\nReview the changes against the requirements and repository instructions. Inspect the diff between the base and head commits and check for correctness and regressions. Do not edit files. Return approved only when no changes are needed; otherwise return changes-requested with actionable findings.`;
 
 export const repairPrompt = (context: DeliveryPromptContext): string =>
   `${contextPrompt(context)}\n\nInvestigate the failing checks, fix their cause, run relevant checks, and commit the fix. Do not push.`;

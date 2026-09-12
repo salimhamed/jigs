@@ -23,9 +23,6 @@ import type {
   CodeReviewPrompt,
   CodeReviewPromptInput,
   CodexHarnessConfig,
-  CommitWorkOptions,
-  CommitWorkPrompt,
-  CommitWorkPromptInput,
   DescribePullRequestOptions,
   FixCiFreshPrompt,
   FixCiFreshPromptInput,
@@ -108,9 +105,6 @@ type BlocksTypeSurface = {
   codeReviewPrompt: CodeReviewPrompt;
   codeReviewPromptInput: CodeReviewPromptInput;
   codexHarnessConfig: CodexHarnessConfig;
-  commitWorkOptions: CommitWorkOptions;
-  commitWorkPrompt: CommitWorkPrompt;
-  commitWorkPromptInput: CommitWorkPromptInput;
   describePrOptions: DescribePullRequestOptions;
   fixCiFreshPrompt: FixCiFreshPrompt;
   fixCiFreshPromptInput: FixCiFreshPromptInput;

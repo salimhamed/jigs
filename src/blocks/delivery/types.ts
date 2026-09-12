@@ -21,10 +21,11 @@ export type AgentRoleName = "implementation" | "review" | "ciRepair" | "pullRequ
 export interface DeliveryPromptContext {
   task: WorkItem;
   worktree: WorktreeFacts;
-  phase: DeliveryPhase | "pull-request-description" | "commit";
+  phase: DeliveryPhase | "pull-request-description";
   attempt: number;
   findings: string[];
   instructions: string;
+  headSha?: string;
   diff?: string;
   threads?: ReviewThread[];
   reviewBody?: string;
@@ -65,17 +66,21 @@ export interface DeliveryChange {
   attempts: DeliveryLimits;
   sessions: Partial<Record<AgentRoleName, { harness: HarnessConfig; session: AgentSession }>>;
 }
+/** An approved change, carrying the commit the reviewer judged. */
+export interface ApprovedChange extends DeliveryChange {
+  approval: { reviewedCommit: string };
+}
 export interface DeliveryStopped {
-  status: "limit-reached" | "stopped";
+  status: "limit-reached" | "stopped" | "uncommitted-work";
   phase: DeliveryPhase;
   attempts: number;
   findings: string[];
   change: DeliveryChange;
   pr?: PrRef;
 }
-export type ImplementResult = { status: "approved"; change: DeliveryChange } | DeliveryStopped;
+export type ImplementResult = { status: "approved"; change: ApprovedChange } | DeliveryStopped;
 export type DeliveryResult =
-  | { status: "merged" | "closed"; change: DeliveryChange; pr: PrRef }
+  | { status: "merged" | "closed"; change: ApprovedChange; pr: PrRef }
   | DeliveryStopped;
 
 export interface ImplementOptions {
@@ -87,13 +92,13 @@ export interface ImplementOptions {
   onLimit?: OnDeliveryLimit;
 }
 export interface OpenPullRequestOptions {
-  change: DeliveryChange;
+  change: ApprovedChange;
   binding: string;
   implementation: DeliveryAgent;
   pullRequestDescription?: DescriptionAgent;
 }
 export interface FollowPullRequestOptions {
-  change: DeliveryChange;
+  change: ApprovedChange;
   pr: PrRef;
   implementation: DeliveryAgent;
   ciRepair?: DeliveryAgent;

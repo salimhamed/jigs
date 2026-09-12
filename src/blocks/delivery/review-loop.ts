@@ -6,7 +6,6 @@ import { codeReviewVerdict } from "../builder-agent/implement.ts";
 import { postReviewAnswers } from "../pull-request/answers.ts";
 import { attend, finished, listen } from "../pull-request/attend.ts";
 import {
-  contextPrompt,
   descriptionPrompt,
   implementPrompt,
   repairPrompt,
@@ -57,6 +56,12 @@ function stopped(
     change,
     ...(limit.pr === undefined ? {} : { pr: limit.pr }),
   };
+}
+
+function uncommittedReason(dirty: boolean): string {
+  return dirty
+    ? "The implementation left uncommitted changes; only committed work is reviewed."
+    : "The implementation added no commits since the base commit.";
 }
 
 /** Bind factory steps to delivery phases. Worktrees remain available on every return path. */
@@ -146,41 +151,51 @@ export function bindDeliverySteps(steps: DeliverySteps) {
         instructions,
       };
       await runRole(change, "implementation", options.implementation, context, implementPrompt);
+      const state = await readBranchState(change.worktree.path, change.worktree.baseSha);
+      if (state.dirty || state.commits === 0) {
+        return stopped(
+          change,
+          {
+            task: change.task,
+            worktree: change.worktree,
+            phase: "implementation-review",
+            attempts: change.attempts.implementationReviewRounds,
+            findings: [uncommittedReason(state.dirty)],
+          },
+          "uncommitted-work",
+        );
+      }
       const verdict = await agent({
         harness: options.review.harness,
         cwd: change.worktree.path,
-        prompt: (options.review.prompt ?? reviewPrompt)(context),
+        prompt: (options.review.prompt ?? reviewPrompt)({ ...context, headSha: state.headSha }),
         output: codeReviewVerdict,
       });
       findings = verdict.output.findings;
-      if (verdict.output.verdict === "approved") return { status: "approved", change };
+      if (verdict.output.verdict === "approved") {
+        return {
+          status: "approved",
+          change: { ...change, approval: { reviewedCommit: state.headSha } },
+        };
+      }
     }
   }
 
-  /** Push the approved change and open a pull request with a separate description agent. */
+  /** Push the reviewed commit and open a pull request with a separate description agent. */
   async function openPullRequest(options: OpenPullRequestOptions) {
     const { change } = options;
     const { path, baseSha, branch, defaultBranch } = change.worktree;
+    const { reviewedCommit } = change.approval;
     const state = await readBranchState(path, baseSha);
     if (state.dirty) {
-      await runRole(
-        change,
-        "implementation",
-        { harness: options.implementation.harness },
-        {
-          task: change.task,
-          worktree: change.worktree,
-          phase: "commit",
-          attempt: 1,
-          findings: [],
-          instructions: "Commit the completed changes. Do not push or change their scope.",
-        },
-        contextPrompt,
+      throw new Error(
+        `Cannot publish ${branch}: the worktree has uncommitted changes that no review approved`,
       );
     }
-    const committed = state.dirty ? await readBranchState(path, baseSha) : state;
-    if (committed.commits === 0 || committed.dirty) {
-      throw new Error(`Cannot publish ${branch}: the worktree must contain committed changes only`);
+    if (state.headSha !== reviewedCommit) {
+      throw new Error(
+        `Cannot publish ${branch}: ${state.headSha} is not the approved commit ${reviewedCommit}`,
+      );
     }
     await pushBranch(path, branch);
     const role = options.pullRequestDescription ?? { harness: options.implementation.harness };
