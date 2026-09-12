@@ -28,7 +28,11 @@ const result = await reviewLoop({
 ```
 
 One implementation-review round includes an implementation attempt followed by
-an independent review. The loop stops early on approval. CI repairs and batches
+an independent review of what that attempt committed. The implementation agent
+commits its own work; if it leaves the worktree dirty or adds no commit, the
+round stops with `status: "uncommitted-work"` before any review, and the
+worktree is retained. The loop stops early on approval, recording the reviewed
+commit on the change. CI repairs and batches
 of PR feedback have separate budgets; duplicate notifications do not consume them.
 Counters are cumulative, including CI failures after earlier successful checks.
 Zero permits no attempts in that phase and returns a limit outcome when work is needed.
@@ -103,7 +107,8 @@ Declare the providers you use under `requires.integrations`, such as `["linear",
 
 Without `onLimit`, exhausted budgets return `status: "limit-reached"`, including
 the phase, findings, counters, and available change/PR data. Other outcomes are
-`merged`, `closed`, and `stopped`. Remove worktrees only after `merged`.
+`merged`, `closed`, `stopped`, and `uncommitted-work`, whose `findings` say why
+the implementation was not reviewable. Remove worktrees only after `merged`.
 
 For durable human intervention, supply a workflow-side callback:
 
@@ -163,6 +168,12 @@ return followPullRequest({
 
 `checkSecurity` is a factory-owned operation. Each delivery phase still uses
 individual durable steps internally, so completed operations remain recorded.
+
+Only an approved change types as the input to `openPullRequestForChange`: an
+`ApprovedChange` carries `approval.reviewedCommit`, and a stopped result's change
+does not. Publication pushes that commit and opens the pull request — it runs no
+implementation agent and makes no commit, and it throws when the worktree is
+dirty or its head has moved off the reviewed commit.
 
 For different execution behavior, use `bindDeliverySteps` with the generated
 `deliverySteps` object and replace a named operation. Keep custom bindings in

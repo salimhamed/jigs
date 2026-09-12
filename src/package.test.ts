@@ -176,8 +176,6 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "codeReviewPrompt",
     "codeReviewVerdict",
     "codex",
-    "commitWork",
-    "commitWorkPrompt",
     "describePullRequest",
     "finished",
     "fixCi",

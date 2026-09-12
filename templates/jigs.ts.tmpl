@@ -206,10 +206,10 @@ const delivery = bindDeliverySteps(deliverySteps);
 /** Implement a task and follow its pull request through review and merge. */
 export const reviewLoop = delivery.reviewLoop;
 
-/** Implement a task and review the change within your chosen round limit. */
+/** Implement a task and review its commits within your chosen round limit. */
 export const implementAndReview = delivery.implementAndReview;
 
-/** Publish an approved change as a pull request. */
+/** Publish the approved commit of a reviewed change as a pull request. */
 export const openPullRequestForChange = delivery.openPullRequest;
 
 /** Address pull-request feedback and CI failures until it merges, closes, or reaches a limit. */
