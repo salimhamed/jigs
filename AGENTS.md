@@ -53,3 +53,9 @@ Default vocabulary — the five canonical labels, names used as-is. See `docs/ag
 ### Domain docs
 
 Single-context: root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
+
+### Bespoke workflow direction
+
+For factory layout refactors, bespoke workflow authoring, or changes to jigs'
+execution API, read [the implementation plan](docs/bespoke-workflows-plan.md)
+for the agreed ownership boundaries, rationale and staged acceptance criteria.
