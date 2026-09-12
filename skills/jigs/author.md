@@ -53,20 +53,18 @@ module's dependencies for selective replacement. Keep functions workflow-side;
 never send a prompt or callback through a durable step argument.
 
 For delivery, use `deliverChange` or compose `implementAndReview`,
-`publishApprovedChange`, and `followPullRequest`. Configure separate role
-harnesses/prompts and explicit budgets: `implementationReviewRounds`,
-`ciFixAttempts` and `pullRequestRevisionRounds`, under those names on the whole
-operation and on each phase. Handle `limit-reached`, `stopped`,
-`uncommitted-work`, and `closed` outcomes; remove worktrees only after `merged`.
-Only an approved change can be passed to `publishApprovedChange`. Each role's
-`prompt` receives a context for that role alone and may extend the shipped
-default through `renderDefaultPrompt()` or return its own string instead.
-Ticket-source code passes a task that extends `WorkItem`; its extra fields stay
-reachable from the prompt contexts, `onLimit`, and the result without a cast,
-and the loop still depends on no provider.
+`publishApprovedChange`, and `followPullRequest`. Each role takes its own
+harness and prompt. Each budget — `implementationReviewRounds`, `ciFixAttempts`,
+`pullRequestRevisionRounds` — carries that name on the whole operation and on
+each phase. Handle every outcome: `merged`, `closed`, `limit-reached`,
+`stopped`, `uncommitted-work`. Remove worktrees only after `merged`. A
+continuation comes from `onLimit`, which is workflow-side and may suspend on a
+human, typically through `haltForHuman` on the run's ticket.
 
-Consult `docs/delivery.md` in the jigs repository for the supported interface and
-examples. Keep factory prompt overrides beside their callers.
+`docs/delivery.md` in the jigs repository holds the delivery graph, what each
+budget buys, and compiling examples of all of this. Read it before writing
+delivery configuration instead of reconstructing the shape from memory. Keep
+factory prompt overrides beside their callers.
 
 ## Configuration and schedules
 

@@ -2,7 +2,7 @@ import path from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { claude, codex } from "../../../../blocks/agent/harness-config.ts";
 import { buildAgentWire } from "../../../../blocks/agent/plan.ts";
-import { type ExecuteDeps, executeAgent, realDeps } from "../../run-agent.ts";
+import { type ExecuteDeps, executeAgent, realDeps } from "../../execute-agent.ts";
 import { ensureManagedCodexHome } from "../codex-home.ts";
 import { stripApiCredentials } from "../env.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";

@@ -18,7 +18,6 @@ import type {
   DeliverChangeOptions,
   DeliveryAgent,
   DeliveryChange,
-  DeliveryLimit,
   DeliveryResult,
   DeliverySteps,
   DeliveryStopped,
@@ -26,6 +25,7 @@ import type {
   ImplementAndReviewOptions,
   ImplementAndReviewResult,
   ImplementationPromptContext,
+  LimitReached,
   OnDeliveryLimit,
   PublishApprovedChangeOptions,
   PullRequestRevisionPromptContext,
@@ -58,7 +58,7 @@ async function renderPrompt<TContext extends { renderDefaultPrompt: () => Promis
 }
 
 async function extendLimit<TTask extends WorkItem>(
-  limit: DeliveryLimit<TTask>,
+  limit: LimitReached<TTask>,
   onLimit?: OnDeliveryLimit<TTask>,
 ) {
   if (onLimit === undefined) return { status: "limit-reached" as const };
@@ -70,7 +70,7 @@ async function extendLimit<TTask extends WorkItem>(
 
 function stopped<TTask extends WorkItem>(
   change: DeliveryChange<TTask>,
-  limit: DeliveryLimit<TTask>,
+  limit: LimitReached<TTask>,
   status: DeliveryStopped["status"],
 ): DeliveryStopped<TTask> {
   return {
@@ -161,7 +161,7 @@ export function bindDeliverySteps(steps: DeliverySteps) {
     let instructions = "";
     for (;;) {
       if (change.attempts.implementationReviewRounds >= budget) {
-        const limit: DeliveryLimit<TTask> = {
+        const limit: LimitReached<TTask> = {
           task: change.task,
           worktree: change.worktree,
           phase: "implementation-review",
@@ -318,7 +318,7 @@ export function bindDeliverySteps(steps: DeliverySteps) {
         ? wake.failing.map((check) => `${check.name}: ${check.conclusion}`)
         : [wake.body ?? "Address the pull request review threads."];
       if (change.attempts[counter] >= budgets[counter]) {
-        const limit: DeliveryLimit<TTask> = {
+        const limit: LimitReached<TTask> = {
           task: change.task,
           worktree: change.worktree,
           pr,

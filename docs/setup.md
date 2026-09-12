@@ -114,8 +114,8 @@ pnpm dlx @salimhamed/jigs init
 ```
 
 `jigs init` writes `jigs.config.ts`, the pinned package manifest, build and
-infrastructure settings, `workflows/ship.ts`, and the factory's review-loop
-blocks. Prompts live beside the blocks that use them. Existing files are kept.
+infrastructure settings, `workflows/ship.ts`, and the factory's ticket-source
+block. Prompts live beside the blocks that use them. Existing files are kept.
 
 `jigs.config.ts` combines operating settings and deferred workflow registrations:
 
@@ -151,12 +151,13 @@ checks for drift and fails with that command as the repair. `jigs upgrade`
 refreshes it automatically after installing the new library.
 
 Workflows import built-in steps and bound blocks from `#jigs`, and factory
-modules from `#blocks/…` and `#steps/…` — the `imports` map in the factory's
-`package.json`, so a file's own depth never changes how it names another. Custom
-steps live in `steps/`, and custom coordination lives in `blocks/`. Bind only the
-capabilities you need with `bindAgentSteps`, `bindLinearSteps`,
-`bindPullRequestSteps`, or `bindDeliverySteps`; generated integration exports
-`agentSteps`, `linearSteps`, `pullRequestSteps`, and `deliverySteps` for overrides.
+modules from `#blocks/…` and `#steps/…`. Those specifiers come from the
+`imports` map in the factory's `package.json`, so a file's own depth never
+changes how it reaches another. Custom steps live in `steps/`, and custom
+coordination lives in `blocks/`. Bind only the capabilities you need with
+`bindAgentSteps`, `bindLinearSteps`, `bindPullRequestSteps`, or
+`bindDeliverySteps`; generated integration exports `agentSteps`, `linearSteps`,
+`pullRequestSteps`, and `deliverySteps` for overrides.
 Functions such as prompts stay workflow-side and are never durable step inputs.
 
 Renaming a workflow or durable step changes its address. Finish or cancel affected

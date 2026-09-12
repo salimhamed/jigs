@@ -15,7 +15,7 @@ export {
   unwrapAgentStep,
 } from "./agent/agent.ts";
 export { type AgentOrHaltDeps, agentOrHalt } from "./agent/agent-or-halt.ts";
-export { askModel, type ExecuteModelRequestStep } from "./agent/ask.ts";
+export { askModel, type ExecuteModelRequestStep } from "./agent/ask-model.ts";
 export { type AgentSteps, bindAgentSteps } from "./agent/bind.ts";
 export {
   type ClaudeHarnessConfig,

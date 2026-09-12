@@ -9,8 +9,8 @@ export {
   type ExecuteDeps,
   executeAgent,
   realDeps,
-} from "./agent/run-agent.ts";
-export { executeModelRequest } from "./agent/run-ask.ts";
+} from "./agent/execute-agent.ts";
+export { executeModelRequest } from "./agent/execute-model-request.ts";
 export { pushBranch, readBranchState, readWorktreeDiff } from "./pull-request/branch.ts";
 export { fetchPullRequestState } from "./pull-request/fetch-state.ts";
 export {

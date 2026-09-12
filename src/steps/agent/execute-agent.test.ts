@@ -12,9 +12,9 @@ import { z } from "zod";
 import { claude, codex } from "../../blocks/agent/harness-config.ts";
 import { buildAgentWire, buildAskWire } from "../../blocks/agent/plan.ts";
 import type { AgentStepResult, StepUsage } from "../../blocks/agent/result.ts";
+import { type ExecuteDeps, executeAgent } from "./execute-agent.ts";
+import { executeModelRequest } from "./execute-model-request.ts";
 import { makeTmpDir, removeTmpDir } from "./harnesses/test-fixtures.ts";
-import { type ExecuteDeps, executeAgent } from "./run-agent.ts";
-import { executeModelRequest } from "./run-ask.ts";
 
 const usage = { inputTokens: 12, outputTokens: 34 } as unknown as StepUsage;
 

@@ -4,12 +4,12 @@ import { z } from "zod";
 import { claude, codex } from "../../../blocks/agent/harness-config.ts";
 import { type AgentWire, buildAgentWire, buildAskWire } from "../../../blocks/agent/plan.ts";
 import type { AgentStepResult, StepUsage } from "../../../blocks/agent/result.ts";
+import { type ExecuteDeps, executeAgent, realDeps } from "../execute-agent.ts";
+import { executeModelRequest } from "../execute-model-request.ts";
 import { ensureManagedCodexHome } from "../harnesses/codex-home.ts";
 import { stripApiCredentials } from "../harnesses/env.ts";
 import { assertLivePreconditions, makeScratchRepo } from "../harnesses/live/fixtures/live-env.ts";
 import { makeTmpDir, removeTmpDir } from "../harnesses/test-fixtures.ts";
-import { type ExecuteDeps, executeAgent, realDeps } from "../run-agent.ts";
-import { executeModelRequest } from "../run-ask.ts";
 
 let tmp: string;
 let deps: ExecuteDeps;

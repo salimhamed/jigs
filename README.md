@@ -226,8 +226,9 @@ run endpoints and the dashboard. It never runs inside a workflow at all.
 
 What goes into that sandboxed bundle is decided by the two Workflow SDK
 markers, and both live only in the factory: `"use workflow"` on each workflow,
-`"use step"` on each wrapper. No file in this repo carries either
-([ADR 0013](docs/adr/0013-factory-owned-steps.md)). Everything between the two
+`"use step"` on each wrapper. No file in this repo carries either: a directive
+here would put this package's version inside every durable step id, and bumping
+it would orphan parked runs. Everything between the two
 markers, jigs blocks and factory blocks alike, is plain code that gets pulled
 into the bundle because the workflow imports it — which is why a single stray
 `node:` import in a block would land there.
@@ -312,8 +313,8 @@ generates name the rest.
 
 The package ships compiled, from `dist/`, one entry per export subpath. The
 Workflow SDK, its Postgres World, its dashboard and zod are peers the factory
-installs itself; the measurements behind that shape are in
-[ADR 0017](docs/adr/0017-single-package.md).
+installs itself, so a factory pins one copy of each and the CLI stays
+installable with `pnpm dlx` before any of them exist.
 
 ## Development
 

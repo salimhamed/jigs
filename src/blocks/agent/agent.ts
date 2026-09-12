@@ -4,7 +4,7 @@
 // Memoization is the SDK's positional replay — no author-supplied keys
 // anywhere.
 //
-// ../../steps/agent/run-agent.ts is the step side of the same split.
+// ../../steps/agent/execute-agent.ts is the step side of the same split.
 
 import type { FailedCheck } from "../../checks/catalog.ts";
 import { type AgentStepConfig, type AgentWire, buildAgentWire, parseOutput } from "./plan.ts";

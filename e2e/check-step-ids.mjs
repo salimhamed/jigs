@@ -28,7 +28,15 @@
 // install itself, and nothing says otherwise until the built service starts
 // in someone else's repo.
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -111,6 +119,26 @@ function installFromTarball(tarball) {
 }
 
 const bundle = () => path.join(factory, ".output", "server", "index.mjs");
+
+// Every module nitro emitted from the factory's own code: the entry plus the
+// `_chunks/` split it puts each workflow module in. `_libs/` and
+// `node_modules/` are vendored dependency code, which resolves its own
+// specifiers and is none of this check's business.
+const VENDORED = new Set(["_libs", "node_modules"]);
+
+function factoryModules() {
+  const root = path.join(factory, ".output", "server");
+  const walk = (dir) =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) return VENDORED.has(entry.name) ? [] : walk(full);
+      return entry.name.endsWith(".mjs") ? [full] : [];
+    });
+  return existsSync(root) ? walk(root) : [];
+}
+
+const unresolvedSpecifiers = (source) =>
+  source.match(/(?:from|import|require)\s*\(?\s*["']#[^"']+["']/g) ?? [];
 
 // The CLI half of a package that is now also the service (ADR 0017). `jigs
 // init` runs from `pnpm dlx` on a machine that has installed nothing, and the
@@ -418,17 +446,43 @@ if (envReads.length > 0) {
 // The scaffold imports through its package.json `imports` map, so this build
 // is where the map is resolved by everything that has to resolve it: tsc, the
 // workflows pass' esbuild, nitro's bundler, and vitest below. A specifier that
-// survives into the emitted bundle was never resolved — the module it names is
+// survives into the emitted output was never resolved — the module it names is
 // gone, and the failure only surfaces when the code path runs in production.
-const unresolved = [
-  ...new Set(
-    readFileSync(bundle(), "utf8").match(/(?:from|import|require)\s*\(?\s*["']#[^"']+["']/g) ?? [],
-  ),
-];
+// The entry alone is not the output: nitro splits the factory's own modules
+// into `_chunks/`, and `_chunks/ship.mjs` is where the compiled workflow — and
+// every `#jigs` import site in it — actually lands.
+const scan = (files) => files.flatMap((file) => unresolvedSpecifiers(readFileSync(file, "utf8")));
+
+const emitted = factoryModules();
+
+// A clean scan means nothing until the scan is shown to catch what it is
+// looking for, in the place it was widened to look: a specifier planted in a
+// chunk must come back, or every clean result below is vacuous. The plant is
+// the one case that has to re-walk, because the sample is a file the walk
+// above could not have seen.
+const chunks = emitted.filter((file) => path.dirname(file).endsWith("_chunks"));
+if (chunks.length === 0) {
+  fail(
+    "no `_chunks/` module among the emitted ones to scan",
+    "the split moved or is gone, and this scan would be reading the entry alone again — which is the hole it was widened to close",
+  );
+}
+const sample = path.join(path.dirname(chunks[0]), "__scan-sample.mjs");
+writeFileSync(sample, 'import { deliverChange } from "#jigs";\n');
+const caught = scan(factoryModules()).some((specifier) => specifier.includes("#jigs"));
+rmSync(sample);
+if (!caught) {
+  fail(
+    "the unresolved-specifier scan missed a planted specifier in an emitted chunk",
+    "the scan is not reading what it claims to read — fix it before trusting a clean run",
+  );
+}
+
+const unresolved = [...new Set(scan(emitted))];
 if (unresolved.length > 0) {
   for (const specifier of unresolved) console.error(`  ${specifier}`);
   fail(
-    `the emitted bundle carries ${unresolved.length} unresolved root-anchored specifier(s)`,
+    `the emitted output carries ${unresolved.length} unresolved root-anchored specifier(s) across ${emitted.length} module(s)`,
     "the factory's package.json `imports` map no longer covers them, or the bundler stopped reading it — a conditional target the workflows pass cannot match does exactly this",
   );
 }

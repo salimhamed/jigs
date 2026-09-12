@@ -1,5 +1,5 @@
 // The step side of askModel(): one model call with no worktree, no MCP universe and
-// no session pointer. It shares the executor seam with ./run-agent.ts so a
+// no session pointer. It shares the executor seam with ./execute-agent.ts so a
 // test hydrating either wire stubs one set of deps.
 
 import { mkdtempSync, rmSync } from "node:fs";
@@ -8,11 +8,16 @@ import path from "node:path";
 import type { AskWire } from "../../blocks/agent/plan.ts";
 import { type StepResult, toStepResult } from "../../blocks/agent/result.ts";
 import type { RunMetadata } from "../run-context.ts";
+import {
+  type ExecuteDeps,
+  type ExecutorGeneration,
+  outputSpec,
+  realDeps,
+} from "./execute-agent.ts";
 import { resolveClaudeExecutable } from "./harnesses/claude.ts";
 import { codexExecStepSettings } from "./harnesses/codex.ts";
 import { scrubbedEnv } from "./harnesses/env.ts";
 import { claudeCode, codexExec } from "./harnesses/index.ts";
-import { type ExecuteDeps, type ExecutorGeneration, outputSpec, realDeps } from "./run-agent.ts";
 
 /** Ask a model a question without giving it a worktree or tools. */
 export async function executeModelRequest(
