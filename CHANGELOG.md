@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.16.0](https://github.com/salimhamed/jigs/compare/jigs-v0.15.0...jigs-v0.16.0) (2026-09-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* enforce approved publication and clarify factory operations ([#178](https://github.com/salimhamed/jigs/issues/178))
+
+### Bug Fixes
+
+* enforce approved publication and clarify factory operations ([#178](https://github.com/salimhamed/jigs/issues/178)) ([ce653bc](https://github.com/salimhamed/jigs/commit/ce653bcc04961f26dbf9e0c1728ea53ac7d5cf6a))
+
 ## [0.15.0](https://github.com/salimhamed/jigs/compare/jigs-v0.14.0...jigs-v0.15.0) (2026-09-12)
 
 
