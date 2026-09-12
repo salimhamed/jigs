@@ -203,7 +203,7 @@ export const deliverySteps = {
 };
 const delivery = bindDeliverySteps(deliverySteps);
 
-/** Implement a task and follow its pull request through review and merge. */
+/** Implement a task and follow its pull request through review and merge. Keeps your task's own fields. */
 export const reviewLoop = delivery.reviewLoop;
 
 /** Implement a task and review its commits within your chosen round limit. */

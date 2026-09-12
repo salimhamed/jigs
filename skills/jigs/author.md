@@ -53,8 +53,12 @@ For delivery, use `reviewLoop` or compose `implementAndReview`,
 `openPullRequestForChange`, and `followPullRequest`. Configure separate role
 harnesses/prompts and explicit limits. Handle `limit-reached`, `stopped`,
 `uncommitted-work`, and `closed` outcomes; remove worktrees only after `merged`.
-Only an approved change can be passed to `openPullRequestForChange`. Ticket-source code returns
-`WorkItem` requirements without making the loop depend on that provider.
+Only an approved change can be passed to `openPullRequestForChange`. Each role's
+`prompt` receives a context for that role alone and may extend the shipped
+default through `renderDefaultPrompt()` or return its own string instead.
+Ticket-source code passes a task that extends `WorkItem`; its extra fields stay
+reachable from the prompt contexts, `onLimit`, and the result without a cast,
+and the loop still depends on no provider.
 
 Consult `docs/delivery.md` in the jigs repository for the supported interface and
 examples. Keep factory prompt overrides beside their callers.

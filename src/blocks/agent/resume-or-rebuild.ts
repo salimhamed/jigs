@@ -32,8 +32,11 @@ export interface ResumeOrRebuildOptions<T> {
   harness: HarnessConfig;
   cwd: string;
   session?: AgentSession;
-  /** For an agent that already holds the change: no context is re-sent. */
-  resumePrompt: string;
+  /**
+   * For an agent that already holds the change: no context is re-sent.
+   * Deferred so that rendering it costs nothing when the rebuild is taken.
+   */
+  resumePrompt: string | (() => Promise<string>);
   /**
    * The same job stated to an agent that holds nothing. Deferred so that
    * gathering what it needs — a diff read is a step call — costs nothing when
@@ -49,6 +52,10 @@ export interface ResumeOrRebuildResult<T> {
   output: T;
   /** The session holding the completed work, whether resumed or newly created. */
   session?: AgentSession;
+}
+
+async function render(prompt: string | (() => Promise<string>)): Promise<string> {
+  return typeof prompt === "string" ? prompt : prompt();
 }
 
 /**
@@ -70,7 +77,7 @@ export async function resumeOrRebuild<T = undefined>(
       const resumed = await options.agent<T>({
         ...base,
         resume: options.session,
-        prompt: options.resumePrompt,
+        prompt: await render(options.resumePrompt),
       });
       return { output: resumed.output, session: resumed.session ?? options.session };
     } catch (err) {
@@ -79,9 +86,7 @@ export async function resumeOrRebuild<T = undefined>(
     }
   }
 
-  const prompt =
-    typeof options.freshPrompt === "string" ? options.freshPrompt : await options.freshPrompt();
-  const rebuilt = await options.agent<T>({ ...base, prompt });
+  const rebuilt = await options.agent<T>({ ...base, prompt: await render(options.freshPrompt) });
   return {
     output: rebuilt.output,
     ...(rebuilt.session === undefined ? {} : { session: rebuilt.session }),

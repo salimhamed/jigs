@@ -45,56 +45,94 @@ fresh so their verdict does not inherit the implementation conversation.
 
 ## Own the prompts
 
-Each role accepts a function receiving `DeliveryPromptContext`. It includes the
-work item, worktree, attempt number, prior findings, human instructions, and any
-relevant diff, review threads, or failed checks. Return the full instructions for
-that role. The output schema remains owned by the operation.
+Each role accepts a `prompt` function receiving a context shaped for that role
+alone, and returning a string or a promise of one. The output schema stays owned
+by the operation, whatever the prompt says.
+
+| Role | Context | Beyond `task`, `worktree`, `attempt` |
+| --- | --- | --- |
+| `implementation` | `ImplementationPromptContext` | `findings`, `instructions`, `diff?` |
+| `review` | `ReviewPromptContext` | `baseCommit`, `headCommit`, `diff` |
+| `ciRepair` | `CiRepairPromptContext` | `failing`, `pr`, `instructions`, `diff?` |
+| `pullRequestRevision` | `PullRequestRevisionPromptContext` | `threads`, `reviewBody?`, `pr`, `instructions`, `diff?` |
+| `pullRequestDescription` | `DescriptionPromptContext` | `diff` (no `attempt`) |
+
+An optional `diff` is present only when the role runs in a fresh session, which
+is the one arm that has to rebuild context; a resumed agent already holds the
+change and is never charged a diff read. The review role runs fresh every round,
+so its diff is always there.
+
+Every context carries `renderDefaultPrompt()`, which renders what jigs would
+have sent for this attempt. Await it to extend the default:
 
 ```ts
-import type { DeliveryPromptContext } from "@salimhamed/jigs/delivery";
+import type { ReviewPromptContext } from "@salimhamed/jigs/delivery";
 
 const review = {
   harness: claude({ model: "opus" }),
-  prompt: (context: DeliveryPromptContext) => `
-Review the changes since ${context.worktree.baseSha} against these requirements:
+  prompt: async (context: ReviewPromptContext) =>
+    `${await context.renderDefaultPrompt()}
+
+Also check authorization and migration compatibility.`,
+};
+```
+
+Ignore it and the default is replaced outright — an equally supported use:
+
+```ts
+const review = {
+  harness: claude({ model: "opus" }),
+  prompt: (context: ReviewPromptContext) => `
+Review ${context.headCommit} against these requirements:
 ${context.task.instructions}
 
-Check authorization and migration compatibility. Do not edit files.
-Return approved only if no changes are needed; otherwise list actionable findings.
+${context.diff}
+
+Do not edit files. Return approved only if no changes are needed;
+otherwise list actionable findings.
 `,
 };
 ```
+
+The shipped renderers are exported too, for a role that wants one verbatim with
+its own additions: `defaultImplementationPrompt`, `defaultReviewPrompt`,
+`defaultCiRepairPrompt`, `defaultRevisionPrompt`, and `defaultDescriptionPrompt`.
 
 A description role can also provide `transform(description, task)` to enforce
 factory title and body conventions after the model responds.
 
 ## Supply your own work items
 
-Factories own their domain types. Delivery needs only a small view:
+Factories own their domain types. Delivery needs only a small view — `key`,
+`title`, `instructions`, and an optional `url` — and keeps whatever else the
+task carries:
 
 ```ts
 import type { WorkItem } from "@salimhamed/jigs/delivery";
 
-type Incident = {
-  reference: string;
+type Incident = WorkItem & {
   service: string;
-  symptoms: string;
   acceptance: string[];
 };
 
-function deliveryTask(incident: Incident): WorkItem {
-  return {
-    key: incident.reference,
-    title: `Repair ${incident.service}`,
-    instructions: [incident.symptoms, ...incident.acceptance].join("\n"),
-  };
-}
+const incident: Incident = {
+  key: outage.reference,
+  title: `Repair ${outage.service}`,
+  instructions: outage.symptoms,
+  service: outage.service,
+  acceptance: outage.acceptance,
+};
 ```
 
+Pass `task: incident` and the task type is inferred: no explicit generic
+argument and no cast. `context.task.service` is reachable from every prompt
+context, from `limit.task` in `onLimit`, and from `result.change.task` when the
+delivery returns. Task values are recorded durably, so keep them plain
+serializable data; prompts and callbacks stay in workflow-side configuration.
+
 A factory can load an incident, GitHub issue, or another source in its own durable
-step, then pass `deliveryTask(incident)` to `reviewLoop`. Custom prompts can close
-over the richer incident data. No plugin registration or change to jigs is needed.
-Generic workflows such as S3 analysis do not need to use `WorkItem` at all.
+step, then pass it to `reviewLoop`. No plugin registration or change to jigs is
+needed. Generic workflows such as S3 analysis do not need to use `WorkItem` at all.
 
 Ticket acquisition, claims, clarification, progress notes, and human communication
 are separate capabilities. The starter factory explicitly resolves and claims its
