@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.10.0](https://github.com/salimhamed/jigs/compare/jigs-v0.9.0...jigs-v0.10.0) (2026-09-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* make factory delivery configurable and provider independent ([#166](https://github.com/salimhamed/jigs/issues/166))
+
+### Features
+
+* make factory delivery configurable and provider independent ([#166](https://github.com/salimhamed/jigs/issues/166)) ([5e1538b](https://github.com/salimhamed/jigs/commit/5e1538bd89c7f4789e189bdf7d6182ddf5823d57))
+
 ## [0.9.0](https://github.com/salimhamed/jigs/compare/jigs-v0.8.0...jigs-v0.9.0) (2026-09-12)
 
 
