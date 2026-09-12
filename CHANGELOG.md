@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.13.0](https://github.com/salimhamed/jigs/compare/jigs-v0.12.0...jigs-v0.13.0) (2026-09-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* give every author-facing operation one canonical name ([#172](https://github.com/salimhamed/jigs/issues/172))
+
+### Features
+
+* give every author-facing operation one canonical name ([#172](https://github.com/salimhamed/jigs/issues/172)) ([48a12f5](https://github.com/salimhamed/jigs/commit/48a12f5901618a89ece7b02626af74b841ce4f86))
+
 ## [0.12.0](https://github.com/salimhamed/jigs/compare/jigs-v0.11.0...jigs-v0.12.0) (2026-09-12)
 
 
