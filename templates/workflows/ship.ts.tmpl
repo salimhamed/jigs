@@ -47,7 +47,6 @@ export async function shipWorkflow(inputs: ShipInputs) {
     merge: inputs.merge,
   });
 
-  // Keep cleanup out of finally: suspended runs must retain their worktrees.
   await removeMergedRunWorktrees();
 
   return { pr: result.pr, cycles: result.cycles };
