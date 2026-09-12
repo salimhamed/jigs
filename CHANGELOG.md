@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.9.0](https://github.com/salimhamed/jigs/compare/jigs-v0.8.0...jigs-v0.9.0) (2026-09-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* clarify factory operations and generated code ([#163](https://github.com/salimhamed/jigs/issues/163))
+
+### Features
+
+* clarify factory operations and generated code ([#163](https://github.com/salimhamed/jigs/issues/163)) ([cc765d1](https://github.com/salimhamed/jigs/commit/cc765d135229acc5a4995f44ff4cf6834008f01a))
+
 ## [0.8.0](https://github.com/salimhamed/jigs/compare/jigs-v0.7.0...jigs-v0.8.0) (2026-09-12)
 
 
