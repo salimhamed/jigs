@@ -11,10 +11,9 @@ import {
 import { isWorktreeDirty } from "../worktree/teardown.ts";
 
 // Three reads and no side effect, so a caller can ask what is on the branch
-// before deciding whether to push. The commit count and the dirty flag
-// together are what tell an empty branch apart: no commits and a clean tree is
-// a builder that did nothing, no commits and a dirty tree is work that can
-// still be saved.
+// before deciding whether to push. Only committed work is ever reviewed or
+// published, so a dirty tree is a terminal stop whatever the commit count
+// says, and the head sha is what publication holds the approved commit to.
 /** Check for new commits and uncommitted changes before pushing a branch. */
 export async function readBranchState(
   worktreePath: string,

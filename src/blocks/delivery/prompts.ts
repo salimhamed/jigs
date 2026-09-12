@@ -1,34 +1,78 @@
-import type { DeliveryPromptContext } from "./types.ts";
+// The prompts jigs sends when a role supplies no callback of its own. They are
+// exported so a role that only wants to add to one can render it directly,
+// the same way `renderDefaultPrompt()` does from inside a prompt callback.
 
-export function contextPrompt(context: DeliveryPromptContext): string {
-  return [
-    `Task ${context.task.key}: ${context.task.title}`,
-    context.task.url ?? "",
-    context.task.instructions,
-    `Base commit: ${context.worktree.baseSha}`,
-    context.headSha === undefined ? "" : `Head commit under review: ${context.headSha}`,
-    context.instructions,
-    context.findings.length ? `Findings:\n${context.findings.join("\n")}` : "",
-    context.diff === undefined ? "" : `Current diff:\n${context.diff}`,
-    context.failing === undefined ? "" : `Failing checks:\n${JSON.stringify(context.failing)}`,
-    context.threads === undefined ? "" : `Review threads:\n${JSON.stringify(context.threads)}`,
-    context.reviewBody ?? "",
-  ]
-    .filter(Boolean)
-    .join("\n\n");
+import type {
+  CiRepairPromptContext,
+  DescriptionPromptContext,
+  ImplementationPromptContext,
+  PullRequestRevisionPromptContext,
+  ReviewPromptContext,
+  WorkItem,
+} from "./types.ts";
+
+function taskBrief(task: WorkItem): string[] {
+  return [`Task ${task.key}: ${task.title}`, task.url ?? "", task.instructions];
 }
 
-export const implementPrompt = (context: DeliveryPromptContext): string =>
-  `${contextPrompt(context)}\n\nImplement the requirements and address the findings. Follow the repository instructions, run relevant checks, and commit your changes before you finish: only committed work is reviewed, and an uncommitted worktree stops the change. Do not push or open a pull request.`;
+function prompt(parts: string[], job: string): string {
+  return [...parts, job].filter(Boolean).join("\n\n");
+}
 
-export const reviewPrompt = (context: DeliveryPromptContext): string =>
-  `${contextPrompt(context)}\n\nReview the changes against the requirements and repository instructions. Inspect the diff between the base and head commits and check for correctness and regressions. Do not edit files. Return approved only when no changes are needed; otherwise return changes-requested with actionable findings.`;
+export const defaultImplementationPrompt = (context: ImplementationPromptContext): string =>
+  prompt(
+    [
+      ...taskBrief(context.task),
+      `Base commit: ${context.worktree.baseSha}`,
+      context.instructions,
+      context.findings.length ? `Findings:\n${context.findings.join("\n")}` : "",
+      context.diff === undefined ? "" : `Current diff:\n${context.diff}`,
+    ],
+    "Implement the requirements and address the findings. Follow the repository instructions, run relevant checks, and commit your changes before you finish: only committed work is reviewed, and an uncommitted worktree stops the change. Do not push or open a pull request.",
+  );
 
-export const repairPrompt = (context: DeliveryPromptContext): string =>
-  `${contextPrompt(context)}\n\nInvestigate the failing checks, fix their cause, run relevant checks, and commit the fix. Do not push.`;
+export const defaultReviewPrompt = (context: ReviewPromptContext): string =>
+  prompt(
+    [
+      ...taskBrief(context.task),
+      `Base commit: ${context.baseCommit}`,
+      `Head commit under review: ${context.headCommit}`,
+      `Current diff:\n${context.diff}`,
+    ],
+    "Review the changes against the requirements and repository instructions. Inspect the diff between the base and head commits and check for correctness and regressions. Do not edit files. Return approved only when no changes are needed; otherwise return changes-requested with actionable findings.",
+  );
 
-export const revisionPrompt = (context: DeliveryPromptContext): string =>
-  `${contextPrompt(context)}\n\nAddress the review feedback, test and commit any changes, and explain your response to each thread. Use its rootId as threadId, or null for the review summary. Do not push or post comments yourself.`;
+export const defaultCiRepairPrompt = (context: CiRepairPromptContext): string =>
+  prompt(
+    [
+      ...taskBrief(context.task),
+      `Base commit: ${context.worktree.baseSha}`,
+      context.instructions,
+      context.diff === undefined ? "" : `Current diff:\n${context.diff}`,
+      `Failing checks:\n${JSON.stringify(context.failing)}`,
+    ],
+    "Investigate the failing checks, fix their cause, run relevant checks, and commit the fix. Do not push.",
+  );
 
-export const descriptionPrompt = (context: DeliveryPromptContext): string =>
-  `${contextPrompt(context)}\n\nWrite a concise pull request title and body explaining the change and its validation. Include the task link when available. Follow the repository's pull request conventions. Do not modify files.`;
+export const defaultRevisionPrompt = (context: PullRequestRevisionPromptContext): string =>
+  prompt(
+    [
+      ...taskBrief(context.task),
+      `Base commit: ${context.worktree.baseSha}`,
+      context.instructions,
+      context.diff === undefined ? "" : `Current diff:\n${context.diff}`,
+      `Review threads:\n${JSON.stringify(context.threads)}`,
+      context.reviewBody ?? "",
+    ],
+    "Address the review feedback, test and commit any changes, and explain your response to each thread. Use its rootId as threadId, or null for the review summary. Do not push or post comments yourself.",
+  );
+
+export const defaultDescriptionPrompt = (context: DescriptionPromptContext): string =>
+  prompt(
+    [
+      ...taskBrief(context.task),
+      `Base commit: ${context.worktree.baseSha}`,
+      `Current diff:\n${context.diff}`,
+    ],
+    "Write a concise pull request title and body explaining the change and its validation. Include the task link when available. Follow the repository's pull request conventions. Do not modify files.",
+  );

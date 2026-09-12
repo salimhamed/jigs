@@ -2,8 +2,20 @@ import { describe, expect, it, vi } from "vitest";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import { resumeFailed } from "../agent/resume-or-rebuild.ts";
 import type { GateAck, GateWake } from "../pull-request/gate.ts";
+import {
+  defaultCiRepairPrompt,
+  defaultDescriptionPrompt,
+  defaultImplementationPrompt,
+  defaultReviewPrompt,
+  defaultRevisionPrompt,
+} from "./prompts.ts";
 import { bindDeliverySteps } from "./review-loop.ts";
-import type { ApprovedChange, DeliverySteps, ReviewLoopOptions } from "./types.ts";
+import type {
+  ApprovedChange,
+  DeliverySteps,
+  FollowPullRequestOptions,
+  ReviewLoopOptions,
+} from "./types.ts";
 
 const pr = { owner: "owner", repo: "repo", number: 1 };
 const options: ReviewLoopOptions = {
@@ -404,5 +416,172 @@ describe("delivery", () => {
     const result = await bindDeliverySteps(steps).reviewLoop({ ...options, merge: "jigs" });
     expect(result.status).toBe("merged");
     expect(steps.squashMergePullRequest).toHaveBeenCalledExactlyOnceWith(pr, "new");
+  });
+  it("lets a role add to the prompt jigs would have sent", async () => {
+    const { steps, calls } = setup();
+    await bindDeliverySteps(steps).reviewLoop({
+      ...options,
+      implementation: {
+        harness: options.implementation.harness,
+        prompt: async (context) =>
+          `${await context.renderDefaultPrompt()}\n\nAlso check the migration.`,
+      },
+    });
+    expect(calls[0]?.prompt).toContain("Implement the requirements and address the findings.");
+    expect(calls[0]?.prompt).toContain("Find exact matches");
+    expect(calls[0]?.prompt?.endsWith("Also check the migration.")).toBe(true);
+  });
+
+  it("lets a role ignore the renderer and replace the prompt outright", async () => {
+    const { steps, calls } = setup();
+    await bindDeliverySteps(steps).reviewLoop({
+      ...options,
+      implementation: {
+        harness: options.implementation.harness,
+        prompt: () => "Rewrite the search index.",
+      },
+    });
+    expect(calls[0]?.prompt).toBe("Rewrite the search index.");
+  });
+
+  it("sends each role the shipped default when it supplies no prompt", async () => {
+    const { steps, calls } = setup();
+    const shared = { task: options.task, worktree: options.worktree };
+    const renderDefaultPrompt = async () => "";
+    await bindDeliverySteps(steps).reviewLoop(options);
+    expect(calls[0]?.prompt).toBe(
+      defaultImplementationPrompt({
+        ...shared,
+        attempt: 1,
+        findings: [],
+        instructions: "",
+        diff: "diff",
+        renderDefaultPrompt,
+      }),
+    );
+    expect(calls[1]?.prompt).toBe(
+      defaultReviewPrompt({
+        ...shared,
+        attempt: 1,
+        baseCommit: "base",
+        headCommit: "new",
+        diff: "diff",
+        renderDefaultPrompt,
+      }),
+    );
+    expect(calls[2]?.prompt).toBe(
+      defaultDescriptionPrompt({ ...shared, diff: "diff", renderDefaultPrompt }),
+    );
+  });
+
+  it("still validates structured output when a role replaces the prompt", async () => {
+    const { steps } = setup();
+    await expect(
+      bindDeliverySteps(steps).reviewLoop({
+        ...options,
+        review: { harness: options.review.harness, prompt: () => "Say yes or no." },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("keeps a custom task's own fields on the limit callback and the result", async () => {
+    const { steps } = setup();
+    steps.agent = (async (config) => ({
+      text: "",
+      output: config.output ? { verdict: "changes-requested", findings: ["Test"] } : undefined,
+    })) as AgentFn;
+    const incident = { ...options.task, service: "bucket-a", impact: "unexpected growth" };
+    const seen: string[] = [];
+    const result = await bindDeliverySteps(steps).reviewLoop({
+      ...options,
+      task: incident,
+      onLimit: async (limit) => {
+        seen.push(`${limit.task.service}: ${limit.task.impact}`);
+        return { action: "stop" };
+      },
+    });
+    expect(seen).toEqual(["bucket-a: unexpected growth"]);
+    expect(result.change.task.impact).toBe("unexpected growth");
+  });
+
+  it("sends the pull-request revision role its shipped default", async () => {
+    const thread = {
+      rootId: 4,
+      path: "src/a.ts",
+      line: 1,
+      comments: [],
+    };
+    const { steps, calls } = setup([
+      { kind: "review-comments", threads: [thread], body: "Fix search" },
+      { kind: "closed", merged: true },
+    ]);
+    await bindDeliverySteps(steps).followPullRequest({
+      change: { ...approved, attempts: { ...approved.attempts }, sessions: {} },
+      pr,
+      implementation: options.implementation,
+      limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
+      merge: "human",
+    });
+    expect(calls[0]?.prompt).toBe(
+      defaultRevisionPrompt({
+        task: options.task,
+        worktree: options.worktree,
+        pr,
+        attempt: 1,
+        instructions: "",
+        threads: [thread],
+        reviewBody: "Fix search",
+        diff: "diff",
+        renderDefaultPrompt: async () => "",
+      }),
+    );
+  });
+
+  it("reads no diff on the resume arm and renders one on the rebuild arm", async () => {
+    const follow = (sessions: ApprovedChange["sessions"]): FollowPullRequestOptions => ({
+      change: { ...approved, attempts: { ...approved.attempts }, sessions },
+      pr,
+      implementation: options.implementation,
+      limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
+      merge: "human",
+    });
+    const branchStates = (steps: DeliverySteps) =>
+      vi
+        .mocked(steps.readBranchState)
+        .mockResolvedValueOnce({ commits: 1, headSha: "first", dirty: false })
+        .mockResolvedValueOnce({ commits: 2, headSha: "second", dirty: false });
+
+    const resumed = setup([red("first"), { kind: "closed", merged: true }]);
+    branchStates(resumed.steps);
+    await bindDeliverySteps(resumed.steps).followPullRequest(
+      follow({
+        ciRepair: {
+          harness: options.implementation.harness,
+          session: { harness: "codex", id: "saved" },
+        },
+      }),
+    );
+    expect(resumed.steps.readWorktreeDiff).not.toHaveBeenCalled();
+    expect(resumed.calls[0]?.resume).toEqual({ harness: "codex", id: "saved" });
+    expect(resumed.calls[0]?.prompt).not.toContain("Current diff:");
+
+    const rebuilt = setup([red("first"), { kind: "closed", merged: true }]);
+    branchStates(rebuilt.steps);
+    await bindDeliverySteps(rebuilt.steps).followPullRequest(follow({}));
+    expect(rebuilt.steps.readWorktreeDiff).toHaveBeenCalledExactlyOnceWith("/work", "base");
+    expect(rebuilt.calls[0]?.resume).toBeUndefined();
+    expect(rebuilt.calls[0]?.prompt).toContain("Current diff:\ndiff");
+    expect(rebuilt.calls[0]?.prompt).toBe(
+      defaultCiRepairPrompt({
+        task: options.task,
+        worktree: options.worktree,
+        pr,
+        attempt: 1,
+        instructions: "",
+        failing: [],
+        diff: "diff",
+        renderDefaultPrompt: async () => "",
+      }),
+    );
   });
 });

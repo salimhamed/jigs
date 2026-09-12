@@ -259,7 +259,14 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "pullRequestGate",
     "tokenFromGithubPayload",
   ],
-  "blocks/delivery/index.ts": ["bindDeliverySteps"],
+  "blocks/delivery/index.ts": [
+    "bindDeliverySteps",
+    "defaultCiRepairPrompt",
+    "defaultDescriptionPrompt",
+    "defaultImplementationPrompt",
+    "defaultReviewPrompt",
+    "defaultRevisionPrompt",
+  ],
   "steps/index.ts": [
     "createRunDirectory",
     "removeRunDirectory",

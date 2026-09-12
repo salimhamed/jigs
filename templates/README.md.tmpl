@@ -81,7 +81,8 @@ factory module containing named `"use step"` functions.
 
 `ship` exposes `implementationHarness`, `implementationModel`, `reviewHarness`,
 `reviewModel`, `reviewRounds`, `ciFixAttempts`, and `pullRequestRevisionRounds` inputs.
-A reached limit returns `limit-reached`; only `merged` triggers worktree removal.
+Outcomes are `merged`, `closed`, `limit-reached`, `stopped`, and
+`uncommitted-work`; only `merged` triggers worktree removal.
 Factory code can supply role prompts and an `onLimit` callback for human guidance.
 
 To replace durable behavior, bind a module outside the generated file:

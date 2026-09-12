@@ -18,26 +18,106 @@ export interface WorkItem {
 
 export type DeliveryPhase = "implementation-review" | "ci-repair" | "pull-request-revision";
 export type AgentRoleName = "implementation" | "review" | "ciRepair" | "pullRequestRevision";
-export interface DeliveryPromptContext {
-  task: WorkItem;
+
+/**
+ * What every role is told, whatever its job: the work item as the factory
+ * wrote it, the worktree it is checked out in, which attempt of its phase this
+ * is, and the prompt jigs would have sent if the role had no callback.
+ */
+interface RolePromptContext<TTask extends WorkItem> {
+  task: TTask;
   worktree: WorktreeFacts;
-  phase: DeliveryPhase | "pull-request-description";
+  /** Counts attempts of this role's phase; 1 on the first one. */
   attempt: number;
-  findings: string[];
-  instructions: string;
-  headSha?: string;
-  diff?: string;
-  threads?: ReviewThread[];
-  reviewBody?: string;
-  failing?: CheckRun[];
+  /**
+   * Renders the shipped default prompt for this attempt. Await it and add to
+   * the result to extend the default; ignore it and return a string of your
+   * own to replace the default entirely. Either is a first-class use.
+   */
+  renderDefaultPrompt: () => Promise<string>;
 }
 
-export interface DeliveryAgent {
-  harness: HarnessConfig;
-  prompt?: (context: DeliveryPromptContext) => string;
+/** Write the change and commit it. */
+export interface ImplementationPromptContext<TTask extends WorkItem = WorkItem>
+  extends RolePromptContext<TTask> {
+  /** The previous round's review findings; empty on the first round. */
+  findings: string[];
+  /** Direction an `onLimit` continuation supplied; empty until a limit is extended. */
+  instructions: string;
+  /**
+   * Only on the fresh-session rebuild arm, where the agent holds no memory of
+   * the work. A resumed agent already has it and is never charged a diff read.
+   */
+  diff?: string;
 }
-export interface DescriptionAgent extends DeliveryAgent {
-  transform?: (description: PullRequestDescription, task: WorkItem) => PullRequestDescription;
+
+/** Judge the committed work. Runs fresh every round, so it is always told everything. */
+export interface ReviewPromptContext<TTask extends WorkItem = WorkItem>
+  extends RolePromptContext<TTask> {
+  baseCommit: string;
+  /** The commit being reviewed, and the only one publication will accept. */
+  headCommit: string;
+  diff: string;
+}
+
+/** Repair the pull request's failing checks. */
+export interface CiRepairPromptContext<TTask extends WorkItem = WorkItem>
+  extends RolePromptContext<TTask> {
+  failing: CheckRun[];
+  pr: PrRef;
+  /** Direction an `onLimit` continuation supplied; empty until a limit is extended. */
+  instructions: string;
+  /** Only on the fresh-session rebuild arm, where the agent holds no memory of the work. */
+  diff?: string;
+}
+
+/** Answer the pull request's review feedback. */
+export interface PullRequestRevisionPromptContext<TTask extends WorkItem = WorkItem>
+  extends RolePromptContext<TTask> {
+  /** Empty when a review requested changes without leaving line comments. */
+  threads: ReviewThread[];
+  /** The summary of the review that requested changes, when it had one. */
+  reviewBody?: string;
+  pr: PrRef;
+  /** Direction an `onLimit` continuation supplied; empty until a limit is extended. */
+  instructions: string;
+  /** Only on the fresh-session rebuild arm, where the agent holds no memory of the work. */
+  diff?: string;
+}
+
+/** Describe the approved change. Runs once, against the commit about to be published. */
+export interface DescriptionPromptContext<TTask extends WorkItem = WorkItem> {
+  task: TTask;
+  worktree: WorktreeFacts;
+  diff: string;
+  /**
+   * Renders the shipped default prompt. Await it and add to the result to
+   * extend the default; ignore it and return a string of your own to replace
+   * the default entirely. Either is a first-class use.
+   */
+  renderDefaultPrompt: () => Promise<string>;
+}
+
+/** A harness, and optionally the prompt its role is given instead of the default. */
+export interface DeliveryAgent<TContext> {
+  harness: HarnessConfig;
+  prompt?: (context: TContext) => string | Promise<string>;
+}
+export type ImplementationAgent<TTask extends WorkItem = WorkItem> = DeliveryAgent<
+  ImplementationPromptContext<TTask>
+>;
+export type ReviewAgent<TTask extends WorkItem = WorkItem> = DeliveryAgent<
+  ReviewPromptContext<TTask>
+>;
+export type CiRepairAgent<TTask extends WorkItem = WorkItem> = DeliveryAgent<
+  CiRepairPromptContext<TTask>
+>;
+export type PullRequestRevisionAgent<TTask extends WorkItem = WorkItem> = DeliveryAgent<
+  PullRequestRevisionPromptContext<TTask>
+>;
+export interface DescriptionAgent<TTask extends WorkItem = WorkItem>
+  extends DeliveryAgent<DescriptionPromptContext<TTask>> {
+  transform?: (description: PullRequestDescription, task: TTask) => PullRequestDescription;
 }
 
 /** Counts agent attempts across the entire delivery, including later CI failures. */
@@ -46,72 +126,83 @@ export interface DeliveryLimits {
   ciFixAttempts: number;
   pullRequestRevisionRounds: number;
 }
-export interface DeliveryLimit {
+export interface DeliveryLimit<TTask extends WorkItem = WorkItem> {
   phase: DeliveryPhase;
   attempts: number;
   findings: string[];
-  task: WorkItem;
+  task: TTask;
   worktree: WorktreeFacts;
   pr?: PrRef;
 }
 export type LimitDecision =
   | { action: "continue"; instructions: string; additionalAttempts: number }
   | { action: "stop" };
-export type OnDeliveryLimit = (limit: DeliveryLimit) => Promise<LimitDecision>;
+export type OnDeliveryLimit<TTask extends WorkItem = WorkItem> = (
+  limit: DeliveryLimit<TTask>,
+) => Promise<LimitDecision>;
 
 /** The work performed so far. Use onLimit to continue within the same durable run. */
-export interface DeliveryChange {
-  task: WorkItem;
+export interface DeliveryChange<TTask extends WorkItem = WorkItem> {
+  task: TTask;
   worktree: WorktreeFacts;
   attempts: DeliveryLimits;
   sessions: Partial<Record<AgentRoleName, { harness: HarnessConfig; session: AgentSession }>>;
 }
 /** An approved change, carrying the commit the reviewer judged. */
-export interface ApprovedChange extends DeliveryChange {
-  approval: { reviewedCommit: string };
+export interface ApprovedChange<TTask extends WorkItem = WorkItem> extends DeliveryChange<TTask> {
+  approval: {
+    /**
+     * The commit that passed pre-publication review, not the merged head: CI
+     * repairs and pull-request revisions push further commits after it.
+     */
+    reviewedCommit: string;
+  };
 }
-export interface DeliveryStopped {
+export interface DeliveryStopped<TTask extends WorkItem = WorkItem> {
   status: "limit-reached" | "stopped" | "uncommitted-work";
   phase: DeliveryPhase;
   attempts: number;
   findings: string[];
-  change: DeliveryChange;
+  change: DeliveryChange<TTask>;
   pr?: PrRef;
 }
-export type ImplementResult = { status: "approved"; change: ApprovedChange } | DeliveryStopped;
-export type DeliveryResult =
-  | { status: "merged" | "closed"; change: ApprovedChange; pr: PrRef }
-  | DeliveryStopped;
+export type ImplementResult<TTask extends WorkItem = WorkItem> =
+  | { status: "approved"; change: ApprovedChange<TTask> }
+  | DeliveryStopped<TTask>;
+export type DeliveryResult<TTask extends WorkItem = WorkItem> =
+  | { status: "merged" | "closed"; change: ApprovedChange<TTask>; pr: PrRef }
+  | DeliveryStopped<TTask>;
 
-export interface ImplementOptions {
-  task: WorkItem;
+export interface ImplementOptions<TTask extends WorkItem = WorkItem> {
+  task: TTask;
   worktree: WorktreeFacts;
-  implementation: DeliveryAgent;
-  review: DeliveryAgent;
+  implementation: ImplementationAgent<TTask>;
+  review: ReviewAgent<TTask>;
   maxRounds: number;
-  onLimit?: OnDeliveryLimit;
+  onLimit?: OnDeliveryLimit<TTask>;
 }
-export interface OpenPullRequestOptions {
-  change: ApprovedChange;
+export interface OpenPullRequestOptions<TTask extends WorkItem = WorkItem> {
+  change: ApprovedChange<TTask>;
   binding: string;
-  implementation: DeliveryAgent;
-  pullRequestDescription?: DescriptionAgent;
+  implementation: ImplementationAgent<TTask>;
+  pullRequestDescription?: DescriptionAgent<TTask>;
 }
-export interface FollowPullRequestOptions {
-  change: ApprovedChange;
+export interface FollowPullRequestOptions<TTask extends WorkItem = WorkItem> {
+  change: ApprovedChange<TTask>;
   pr: PrRef;
-  implementation: DeliveryAgent;
-  ciRepair?: DeliveryAgent;
-  pullRequestRevision?: DeliveryAgent;
+  implementation: ImplementationAgent<TTask>;
+  ciRepair?: CiRepairAgent<TTask>;
+  pullRequestRevision?: PullRequestRevisionAgent<TTask>;
   limits: Pick<DeliveryLimits, "ciFixAttempts" | "pullRequestRevisionRounds">;
   merge: "human" | "jigs";
-  onLimit?: OnDeliveryLimit;
+  onLimit?: OnDeliveryLimit<TTask>;
 }
-export interface ReviewLoopOptions extends Omit<ImplementOptions, "maxRounds"> {
+export interface ReviewLoopOptions<TTask extends WorkItem = WorkItem>
+  extends Omit<ImplementOptions<TTask>, "maxRounds"> {
   binding: string;
-  ciRepair?: DeliveryAgent;
-  pullRequestRevision?: DeliveryAgent;
-  pullRequestDescription?: DescriptionAgent;
+  ciRepair?: CiRepairAgent<TTask>;
+  pullRequestRevision?: PullRequestRevisionAgent<TTask>;
+  pullRequestDescription?: DescriptionAgent<TTask>;
   limits: DeliveryLimits;
   merge: "human" | "jigs";
 }
