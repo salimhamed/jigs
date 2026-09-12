@@ -1,14 +1,15 @@
 // The examples in docs/delivery.md, kept compiling by tsc. A doc example that
 // does not typecheck is worse than no example: a factory author pastes it and
-// the failure is theirs. The only edit from the published text is the import
-// line — a factory reaches its bound operations at `#jigs`, which resolves
-// through the factory's own package.json imports map and cannot resolve here,
-// so the operations are declared from the binder's return type instead. Every
-// other line is the doc verbatim; change one and change the other.
+// the failure is theirs. Two edits from the published text. The import line: a
+// factory reaches its bound operations at `#jigs`, which resolves through the
+// factory's own package.json imports map and cannot resolve here, so the
+// operations are declared from the binder's return type instead. And
+// `onlyApprovedWorkPublishes`, which has no counterpart in the doc: it asserts
+// the publication type gate the doc states in prose. Every other line is the
+// doc verbatim; change one and change the other.
 
 import { expect, test } from "vitest";
 import { claude, codex, selectHarness } from "../agent/harness-config.ts";
-import type { PullRequestDescription } from "../builder-agent/describe-pr.ts";
 import type { PrRef } from "../pull-request/gate.ts";
 import type { TicketClaim } from "../ticket/claim.ts";
 import type { HaltForHumanFn } from "../ticket/halt-for-human.ts";
@@ -71,10 +72,7 @@ async function configureEachRoleIndependently() {
     pullRequestRevision: { harness: claude({ model: "sonnet" }) },
     pullRequestDescription: {
       harness: claude({ model: "haiku" }),
-      transform: (description: PullRequestDescription) => ({
-        ...description,
-        title: `[factory] ${description.title}`,
-      }),
+      transform: (description) => ({ ...description, title: `[factory] ${description.title}` }),
     },
     limits: {
       implementationReviewRounds: 5,

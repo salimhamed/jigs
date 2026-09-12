@@ -16,6 +16,7 @@ import type { WorktreeFacts } from "../worktree.ts";
 export interface WorkItem {
   /** Short human-facing identifier, as the prompts name the task. */
   key: string;
+  /** One-line summary of the work, as the prompts and the pull request name it. */
   title: string;
   /** What to build, in full: the only statement of the requirements an agent is given. */
   instructions: string;

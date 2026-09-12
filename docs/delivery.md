@@ -63,19 +63,25 @@ flowchart TD
     ciCommit{"a new clean commit?"}
     revBudget{"pullRequestRevisionRounds<br/>left?"}
     revise["revision agent<br/>commits and answers threads"]
+    revCommitted{"worktree clean?"}
     pushRevise["push and post the answers"]
+    done(["merged / closed"])
 
     gate -- "ci-green, approved" --> gate
     gate -- "merge-ready" --> mergePolicy
     mergePolicy -- "human" --> gate
-    mergePolicy -- "jigs" --> squash --> gate
+    mergePolicy -- "jigs" --> squash
+    squash -- "merged" --> done
+    squash -- "merge failed:<br/>comment, keep listening" --> gate
     gate -- "ci-red on a new head" --> ciBudget
     ciBudget -- "yes: attempt + 1" --> ciFix --> ciCommit
     ciCommit -- "no" --> ciStopped(["stopped"])
     ciCommit -- "yes: push" --> gate
     gate -- "changes-requested,<br/>review-comments" --> revBudget
-    revBudget -- "yes: round + 1" --> revise --> pushRevise --> gate
-    gate -- "closed" --> done(["merged / closed"])
+    revBudget -- "yes: round + 1" --> revise --> revCommitted
+    revCommitted -- "no" --> revRaise(["throws: revision left<br/>uncommitted changes"])
+    revCommitted -- "yes" --> pushRevise --> gate
+    gate -- "closed" --> done
   end
 
   irBudget -- "spent" --> onLimit
@@ -85,11 +91,11 @@ flowchart TD
   subgraph LIM["the limit"]
     direction TB
     onLimit{"onLimit supplied?"}
-    human["factory code asks a human:<br/>haltForHuman posts to the ticket<br/>and the run suspends"]
-    decision{"the reply"}
+    policy["factory code decides —<br/>typically haltForHuman posts to the<br/>ticket and the run suspends"]
+    decision{"the decision"}
 
     onLimit -- "no" --> limitReached(["limit-reached"])
-    onLimit -- "yes" --> human --> decision
+    onLimit -- "yes" --> policy --> decision
     decision -- "stop" --> stopped(["stopped"])
   end
 
@@ -124,13 +130,21 @@ Reading the graph against the code:
   carrying inline comments arrives as one `review-comments` wake, not two.
   `merge-ready` means green CI plus an approval of the *current* head; under
   `merge: "human"` it only keeps listening. The gate ends when the pull request
-  closes.
-- **Every outcome** is one of five statuses. `merged` and `closed` come from the
-  pull request closing. `limit-reached` is a budget spent with no `onLimit`.
+  closes, and under `merge: "jigs"` it also ends the moment jigs' own squash
+  merge succeeds — `merged` is returned right there, without waiting for the
+  `closed` wake. A squash merge that fails is reported as a comment on the pull
+  request and the gate keeps listening.
+- **Every outcome** is one of five statuses. `merged` comes from the pull
+  request closing merged, or from jigs' own squash merge; `closed` from it
+  closing unmerged. `limit-reached` is a budget spent with no `onLimit`.
   `stopped` is `onLimit` declining, or a CI repair that produced no new clean
   commit. `uncommitted-work` is an implementation attempt that left nothing
   reviewable. Remove worktrees only after `merged`; every other outcome leaves
   work someone may want to pick up.
+- **Two paths end the run with an error** rather than a status, because both
+  mean the worktree stopped matching what was agreed: publishing a change whose
+  head has moved off `approval.reviewedCommit` or whose worktree is dirty, and a
+  pull-request revision that left uncommitted changes behind.
 
 ## Budgets
 

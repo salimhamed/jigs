@@ -153,11 +153,11 @@ refreshes it automatically after installing the new library.
 Workflows import built-in steps and bound blocks from `#jigs`, and factory
 modules from `#blocks/…` and `#steps/…`. Those specifiers come from the
 `imports` map in the factory's `package.json`, so a file's own depth never
-changes how it reaches another. Custom
-steps live in `steps/`, and custom coordination lives in `blocks/`. Bind only the
-capabilities you need with `bindAgentSteps`, `bindLinearSteps`,
-`bindPullRequestSteps`, or `bindDeliverySteps`; generated integration exports
-`agentSteps`, `linearSteps`, `pullRequestSteps`, and `deliverySteps` for overrides.
+changes how it reaches another. Custom steps live in `steps/`, and custom
+coordination lives in `blocks/`. Bind only the capabilities you need with
+`bindAgentSteps`, `bindLinearSteps`, `bindPullRequestSteps`, or
+`bindDeliverySteps`; generated integration exports `agentSteps`, `linearSteps`,
+`pullRequestSteps`, and `deliverySteps` for overrides.
 Functions such as prompts stay workflow-side and are never durable step inputs.
 
 Renaming a workflow or durable step changes its address. Finish or cancel affected

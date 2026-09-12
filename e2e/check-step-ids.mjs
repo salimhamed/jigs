@@ -121,15 +121,17 @@ function installFromTarball(tarball) {
 const bundle = () => path.join(factory, ".output", "server", "index.mjs");
 
 // Every module nitro emitted from the factory's own code: the entry plus the
-// `_chunks/` split it puts each workflow module in. `_libs/` is vendored
-// dependency code, which resolves its own specifiers and is none of this
-// check's business.
+// `_chunks/` split it puts each workflow module in. `_libs/` and
+// `node_modules/` are vendored dependency code, which resolves its own
+// specifiers and is none of this check's business.
+const VENDORED = new Set(["_libs", "node_modules"]);
+
 function factoryModules() {
   const root = path.join(factory, ".output", "server");
   const walk = (dir) =>
     readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
       const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) return entry.name === "_libs" ? [] : walk(full);
+      if (entry.isDirectory()) return VENDORED.has(entry.name) ? [] : walk(full);
       return entry.name.endsWith(".mjs") ? [full] : [];
     });
   return existsSync(root) ? walk(root) : [];
@@ -449,13 +451,16 @@ if (envReads.length > 0) {
 // The entry alone is not the output: nitro splits the factory's own modules
 // into `_chunks/`, and `_chunks/ship.mjs` is where the compiled workflow — and
 // every `#jigs` import site in it — actually lands.
-const scan = () =>
-  factoryModules().flatMap((file) => unresolvedSpecifiers(readFileSync(file, "utf8")));
+const scan = (files) => files.flatMap((file) => unresolvedSpecifiers(readFileSync(file, "utf8")));
+
+const emitted = factoryModules();
 
 // A clean scan means nothing until the scan is shown to catch what it is
 // looking for, in the place it was widened to look: a specifier planted in a
-// chunk must come back, or every clean result below is vacuous.
-const chunks = factoryModules().filter((file) => path.dirname(file).endsWith("_chunks"));
+// chunk must come back, or every clean result below is vacuous. The plant is
+// the one case that has to re-walk, because the sample is a file the walk
+// above could not have seen.
+const chunks = emitted.filter((file) => path.dirname(file).endsWith("_chunks"));
 if (chunks.length === 0) {
   fail(
     "no `_chunks/` module among the emitted ones to scan",
@@ -464,7 +469,7 @@ if (chunks.length === 0) {
 }
 const sample = path.join(path.dirname(chunks[0]), "__scan-sample.mjs");
 writeFileSync(sample, 'import { deliverChange } from "#jigs";\n');
-const caught = scan().some((specifier) => specifier.includes("#jigs"));
+const caught = scan(factoryModules()).some((specifier) => specifier.includes("#jigs"));
 rmSync(sample);
 if (!caught) {
   fail(
@@ -473,12 +478,11 @@ if (!caught) {
   );
 }
 
-const unresolved = [...new Set(scan())];
-const scanned = factoryModules();
+const unresolved = [...new Set(scan(emitted))];
 if (unresolved.length > 0) {
   for (const specifier of unresolved) console.error(`  ${specifier}`);
   fail(
-    `the emitted output carries ${unresolved.length} unresolved root-anchored specifier(s) across ${scanned.length} module(s)`,
+    `the emitted output carries ${unresolved.length} unresolved root-anchored specifier(s) across ${emitted.length} module(s)`,
     "the factory's package.json `imports` map no longer covers them, or the bundler stopped reading it — a conditional target the workflows pass cannot match does exactly this",
   );
 }
