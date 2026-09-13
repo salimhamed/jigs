@@ -3,7 +3,7 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import type { CheckResult } from "./catalog.ts";
-import { claudeAuthCheck, codexAuthCheck } from "./harnesses.ts";
+import { claudeAuthCheck, codexAuthCheck, harnessRuntimeCheck } from "./harnesses.ts";
 
 let tmp: string;
 
@@ -150,4 +150,25 @@ test("an expired-looking token is not gated on", async () => {
     last_refresh: "2024-01-01T00:00:00.000Z",
   });
   expect(await codexAuthCheck(file).run()).toEqual({ ok: true });
+});
+
+// Doctor shows the same line the boot would have refused on.
+test("the CLI check reports the shared line, as detail when it passes", async () => {
+  const result = await harnessRuntimeCheck("codex", {
+    resolve: () => "/usr/local/bin/codex",
+    exec: async () => ({ stdout: "codex-cli 0.153.4", stderr: "" }),
+  }).run();
+  expect(result).toMatchObject({ ok: true });
+  expect((result as { detail: string }).detail).toContain("codex 0.153.4 at /usr/local/bin/codex");
+});
+
+test("the CLI check fails with the same line as the reason, and the PATH caveat to repair it", async () => {
+  const result = await harnessRuntimeCheck("codex", {
+    resolve: () => "/usr/local/bin/codex",
+    exec: async () => ({ stdout: "codex-cli 0.144.6", stderr: "" }),
+  }).run();
+  expect(result).toMatchObject({ ok: false });
+  const failure = result as { reason: string; repair: string };
+  expect(failure.reason).toContain("below the minimum");
+  expect(failure.repair).toContain("same PATH as your shell");
 });

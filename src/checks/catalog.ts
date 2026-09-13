@@ -2,7 +2,10 @@
 // its repair instruction, so preflight, JIT checks and `jigs doctor` render
 // the same text at launch and mid-run.
 
-export type CheckResult = { ok: true } | { ok: false; reason: string; repair: string };
+// `detail` is what a passing check found, when that is worth showing.
+export type CheckResult =
+  | { ok: true; detail?: string }
+  | { ok: false; reason: string; repair: string };
 
 export interface Check {
   id: string;

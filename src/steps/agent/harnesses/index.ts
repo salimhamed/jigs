@@ -26,4 +26,5 @@ export {
   codexExec,
   createCodexAppServer,
   createCodexExec,
+  DEFAULT_MIN_CODEX_VERSION,
 } from "ai-sdk-provider-codex-cli";

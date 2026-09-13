@@ -7,7 +7,7 @@ import type {
   CodexAppServerSettings,
   CodexExecSettings,
 } from "ai-sdk-provider-codex-cli";
-import { afterAll, beforeAll, expect, test } from "vitest";
+import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { claude, codex } from "../../blocks/agent/harness-config.ts";
 import { buildAgentWire, buildAskWire } from "../../blocks/agent/plan.ts";
@@ -15,6 +15,13 @@ import type { AgentStepResult, StepUsage } from "../../blocks/agent/result.ts";
 import { type ExecuteDeps, executeAgent } from "./execute-agent.ts";
 import { executeModelRequest } from "./execute-model-request.ts";
 import { makeTmpDir, removeTmpDir } from "./harnesses/test-fixtures.ts";
+
+// The settings look for the CLI eagerly, so these tests would need a codex
+// installed. Claude's half is stubbed below, through JIGS_CLAUDE_EXECUTABLE.
+vi.mock("./harnesses/executables.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./harnesses/executables.ts")>()),
+  resolveCodexExecutable: () => "/fake/codex",
+}));
 
 const usage = { inputTokens: 12, outputTokens: 34 } as unknown as StepUsage;
 

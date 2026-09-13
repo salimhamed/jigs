@@ -5,3 +5,7 @@ allowBuilds:
   esbuild: true
 # Reject incompatible runtime and schema-library versions.
 strictPeerDependencies: true
+# jigs runs the `codex` on PATH, so the provider's optional copy is 320 MB
+# that would never run.
+ignoredOptionalDependencies:
+  - '@openai/codex'

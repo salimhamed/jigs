@@ -28,7 +28,8 @@ cloned. Expect around ten minutes.
 - Node 24 or newer, and pnpm.
 - Docker, with the daemon running.
 - The coding-agent CLIs your workflows will drive — `claude` and `codex` — each
-  logged in to its subscription.
+  logged in to its subscription. Install both yourself and keep them on the
+  `PATH` of whatever starts the service; it will not start without them.
 - A GitHub **classic** personal access token with `read:packages` and, while
   this repo is private, `repo`. Fine-grained tokens cannot read GitHub
   Packages.

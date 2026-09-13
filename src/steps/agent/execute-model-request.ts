@@ -14,9 +14,9 @@ import {
   outputSpec,
   realDeps,
 } from "./execute-agent.ts";
-import { resolveClaudeExecutable } from "./harnesses/claude.ts";
 import { codexExecStepSettings } from "./harnesses/codex.ts";
 import { scrubbedEnv } from "./harnesses/env.ts";
+import { resolveClaudeExecutable } from "./harnesses/executables.ts";
 import { claudeCode, codexExec } from "./harnesses/index.ts";
 
 /** Ask a model a question without giving it a worktree or tools. */

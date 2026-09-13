@@ -16,7 +16,7 @@ export async function runDoctor(deps: ServiceDeps): Promise<CheckReport> {
   let failures = 0;
   for (const check of report.checks) {
     if (check.ok) {
-      deps.out(`ok   ${check.label}`);
+      deps.out(`ok   ${check.label}${check.detail === undefined ? "" : `: ${check.detail}`}`);
       continue;
     }
     failures += 1;

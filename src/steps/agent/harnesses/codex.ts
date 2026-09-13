@@ -4,6 +4,7 @@ import {
   type CodexExecSettings,
   createCodexAppServer,
 } from "ai-sdk-provider-codex-cli";
+import { resolveCodexExecutable } from "./executables.ts";
 
 // Both surfaces force-merge env.CODEX_HOME AFTER caller options: every Codex
 // step runs under the managed home — that is the deny-by-default mechanism on
@@ -21,6 +22,8 @@ export function codexExecStepSettings(options: CodexExecStepOptions): CodexExecS
     // (before the spread), unlike the CODEX_HOME invariant below.
     skipGitRepoCheck: true,
     ...settings,
+    // Given a path the provider spawns it and never looks in node_modules.
+    codexPath: settings.codexPath ?? resolveCodexExecutable(),
     env: { ...settings.env, CODEX_HOME: codexHome },
   };
 }
@@ -39,6 +42,7 @@ export function codexAppServerStepSettings(
   return {
     ...settings,
     threadMode: "persistent",
+    codexPath: settings.codexPath ?? resolveCodexExecutable(),
     env: { ...settings.env, CODEX_HOME: codexHome },
   };
 }

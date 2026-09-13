@@ -31,10 +31,17 @@ export {
   SERVICE_ENV_FILE,
 } from "./core.ts";
 export {
+  type HarnessRuntime,
+  type HarnessRuntimeDeps,
+  harnessRuntime,
+  harnessRuntimes,
+} from "./harness-runtime.ts";
+export {
   claudeAuthCheck,
   codexAuthCheck,
   type HarnessKind,
   harnessChecks,
+  harnessRuntimeCheck,
 } from "./harnesses.ts";
 export { codexWorktreeConfigCheck, mcpServerChecks } from "./mcp.ts";
 export { type WebhookChecksOptions, webhookChecks } from "./webhooks.ts";

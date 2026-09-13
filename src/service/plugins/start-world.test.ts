@@ -1,7 +1,13 @@
 import type { ISql } from "postgres";
 import { afterEach, expect, test, vi } from "vitest";
+import type { HarnessRuntime } from "../../checks/harness-runtime.ts";
 import { JigsError } from "../../errors.ts";
-import { gateOnBindingClones, gateOnWorktreeRegistry, gateOnWorldStart } from "./start-world.ts";
+import {
+  gateOnBindingClones,
+  gateOnHarnessRuntimes,
+  gateOnWorktreeRegistry,
+  gateOnWorldStart,
+} from "./start-world.ts";
 
 // Nitro never awaits a plugin, so the only thing that can stop the service is
 // the plugin itself.
@@ -201,4 +207,60 @@ test("a World that starts lets the boot finish", async () => {
   });
   expect(proceed).toBe(true);
   expect(exits).toEqual([]);
+});
+
+// Only the gate's decision; the check itself is covered in
+// checks/harness-runtime.test.ts.
+const passing = (over: Partial<HarnessRuntime> = {}): HarnessRuntime =>
+  ({
+    harness: "codex",
+    path: "/usr/local/bin/codex",
+    version: "0.153.4",
+    minimum: "0.153.0",
+    ok: true,
+    line: "codex 0.153.4 at /usr/local/bin/codex (minimum 0.153.0)",
+    ...over,
+  }) as HarnessRuntime;
+
+const failing = (harness: "claude" | "codex", line: string): HarnessRuntime => ({
+  harness,
+  path: null,
+  version: null,
+  minimum: null,
+  ok: false,
+  line,
+  repair: "the service may not have the same PATH as your shell",
+});
+
+test("a harness CLI the shared check rejects exits the boot before anything costly", async () => {
+  const exits: number[] = [];
+  const errors: string[] = [];
+
+  const proceed = await gateOnHarnessRuntimes({
+    runtimes: async () => [passing(), failing("claude", "claude not found on PATH")],
+    exit: (code) => exits.push(code),
+    error: (line) => errors.push(line),
+    log: () => {},
+  });
+
+  expect(proceed).toBe(false);
+  expect(exits).toEqual([1]);
+  expect(errors).toHaveLength(1);
+  expect(errors[0]).toContain("claude not found on PATH");
+  expect(errors[0]).toContain("same PATH as your shell");
+});
+
+test("harnesses the shared check accepts are logged and let the boot continue", async () => {
+  const logs: string[] = [];
+  const exits: number[] = [];
+
+  const proceed = await gateOnHarnessRuntimes({
+    runtimes: async () => [passing(), passing({ harness: "claude", minimum: null })],
+    exit: (code) => exits.push(code),
+    log: (line) => logs.push(line),
+  });
+
+  expect(proceed).toBe(true);
+  expect(exits).toEqual([]);
+  expect(logs[0]).toContain("codex 0.153.4 at /usr/local/bin/codex");
 });
