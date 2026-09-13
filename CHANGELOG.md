@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.17.0](https://github.com/salimhamed/jigs/compare/jigs-v0.16.0...jigs-v0.17.0) (2026-09-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* wake runs on top-level PR comments and track self-posted comment ids ([#183](https://github.com/salimhamed/jigs/issues/183))
+
+### Features
+
+* wake runs on top-level PR comments and track self-posted comment ids ([#183](https://github.com/salimhamed/jigs/issues/183)) ([3e58017](https://github.com/salimhamed/jigs/commit/3e580175daf2ab6eddad3fe98b651b50ac918e46))
+
 ## [0.16.0](https://github.com/salimhamed/jigs/compare/jigs-v0.15.0...jigs-v0.16.0) (2026-09-12)
 
 
