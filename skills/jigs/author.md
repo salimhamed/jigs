@@ -40,6 +40,27 @@ Teardown is a plain last call, never a `finally`: suspension can throw, and a
 parked run must retain its worktree. Configuration values vary by factory;
 requirements belong to the workflow declaration next to its input schema.
 
+## Validation ownership
+
+Give the responsible agent the acceptance criteria and repository access. It
+inspects repository guidance, chooses and runs appropriate checks, and records
+the tested revision, commands, results, evidence locations, and unresolved gaps.
+An independent reviewer assesses that exact revision and whether the evidence
+supports each criterion; it can run further checks before approving.
+
+Workflow code owns durable sequencing, separate session continuation, artifact
+handoffs, and general result gates. Keep deterministic guards for session identity,
+iteration limits, required evidence fields, explicit approval, and publishing only
+the approved clean revision. Repository-specific validation belongs in agent work:
+commands, environment setup, wrapper names, and filesystem layout are discovered
+from the repository rather than guessed in a ticket-specific validation step.
+
+When validation fails, return the findings and evidence to the responsible agent
+within the workflow's revision loop. That agent investigates and repairs the work
+or reports a blocker. A different implementation choice should not require editing
+and redeploying the workflow's validation program. Retain concrete evidence through
+review and cleanup; a success flag alone does not establish acceptance.
+
 ## Customize blocks and steps
 
 Pass typed prompt overrides directly to jigs blocks. For shared defaults, write
