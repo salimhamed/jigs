@@ -115,7 +115,10 @@ program
   .command("bind")
   .description("bind a target repo by its remote URL")
   .argument("<remote-url>", "the target repo's git remote (e.g. git@github.com:owner/repo.git)")
-  .option("--name <name>", "binding name (default: the repo name, lowercased)")
+  .option(
+    "--name <name>",
+    "binding name (default: an existing exact-remote match, else the repo name lowercased)",
+  )
   .action(async (remoteUrl: string, options: { name?: string }) => {
     await bindRepo(remoteUrl, { cwd: process.cwd(), out }, { name: options.name });
   });

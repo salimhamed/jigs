@@ -329,6 +329,10 @@ jigs keeps its own bare clone per binding, at
 `~/.local/share/jigs/bindings/<factory>/<binding>/repo.git`, and cuts every
 agent worktree from it — your own checkout of the repo is not involved at all.
 Workflows name bindings; the runtime provisions worktrees from them.
+Without `--name`, bind reuses the first configured binding whose remote URL is
+an exact match; only an absent remote creates a repo-name-derived binding. An
+explicit `--name` bypasses remote matching and can create another binding for
+the same remote.
 
 **The clones are made when the service starts**, not when a run asks for a
 worktree, so the first start after a bind pays for them — seconds for a small

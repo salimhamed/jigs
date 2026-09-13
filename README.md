@@ -127,8 +127,11 @@ configuration; it rebuilds and restarts when the configuration changes.
 `--restart` can explicitly request a restart.
 
 `jigs bind` edits a literal `bindings` object in `jigs.config.ts` using the
-TypeScript syntax tree. Unsupported expressions produce a clear error before
-any file or webhook changes; those configurations can be edited manually.
+TypeScript syntax tree. Without `--name`, an existing binding with the exact
+remote URL is reused; otherwise its name comes from the repo name. An explicit
+`--name` bypasses that match and can create another binding for the same remote.
+Unsupported expressions produce a clear error before any file or webhook
+changes; those configurations can be edited manually.
 
 ### 6. Run
 

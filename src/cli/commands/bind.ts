@@ -59,7 +59,13 @@ export async function bindRepo(
     );
   }
 
-  const name = options.name ?? defaultBindingName(remoteUrl);
+  const config = readFactoryConfig(factoryRoot);
+  const matchingBindings = Object.entries(config.bindings).filter(
+    ([, binding]) => binding.remote === remoteUrl,
+  );
+  const matchingBinding = matchingBindings[0];
+  const derivedName = defaultBindingName(remoteUrl);
+  const name = options.name ?? matchingBinding?.[0] ?? derivedName;
   if (!BINDING_NAME_PATTERN.test(name)) {
     throw new JigsError(
       `invalid binding name ${JSON.stringify(name)}`,
@@ -68,9 +74,7 @@ export async function bindRepo(
   }
 
   const text = readFactoryConfigText(factoryRoot);
-  const updated = upsertBinding(text, name, remoteUrl);
-  const config = readFactoryConfig(factoryRoot);
-  const existing = config.bindings[name];
+  const existing = Object.hasOwn(config.bindings, name) ? config.bindings[name] : undefined;
   if (existing !== undefined && existing.remote !== remoteUrl) {
     // Repointing silently would fetch an unrelated history into an object
     // store that already holds another repo's.
@@ -79,6 +83,7 @@ export async function bindRepo(
       `jigs unbind ${name}, then bind again — the clone at ${bindingDir({ factoryRoot, bindingName: name })} holds the old repo's objects`,
     );
   }
+  const updated = upsertBinding(text, name, remoteUrl);
 
   if (updated !== text) {
     writeFactoryConfigText(factoryRoot, updated);
@@ -108,9 +113,9 @@ export async function bindRepo(
     // The repair it prints has to land on this binding, not on the one the
     // remote alone would derive.
     reBindCommand:
-      options.name === undefined
-        ? `jigs bind ${remoteUrl}`
-        : `jigs bind ${remoteUrl} --name ${name}`,
+      options.name !== undefined || name !== derivedName
+        ? `jigs bind ${remoteUrl} --name ${name}`
+        : `jigs bind ${remoteUrl}`,
     deps,
   });
   return { name, remote: remoteUrl, webhook };

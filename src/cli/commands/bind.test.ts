@@ -37,6 +37,93 @@ test("bind writes the remote under a name derived from the repo", async () => {
   expect(jigsConfig()).toContain(`remote: "${API}"`);
 });
 
+test("bind reuses an alias whose remote already matches", async () => {
+  const remote = "git@github.com:acme/gambit-infrastructure.git";
+  await bindRepo(remote, deps(), { name: "gambit" });
+  const withComment = `// keep this alias\n${jigsConfig()}`;
+  writeFileSync(path.join(factory, "jigs.config.ts"), withComment);
+
+  lines = [];
+  const result = await bindRepo(remote, deps());
+
+  expect(result.name).toBe("gambit");
+  expect(jigsConfig()).toBe(withComment);
+  expect(jigsConfig()).not.toContain("gambitinfrastructure");
+  expect(lines).toContain(`gambit already points at ${remote}`);
+});
+
+test("--name creates a separate binding even when another name has the remote", async () => {
+  await bindRepo(API, deps(), { name: "gambit" });
+
+  const result = await bindRepo(API, deps(), { name: "forge" });
+
+  expect(result.name).toBe("forge");
+  expect(jigsConfig()).toContain('"gambit":');
+  expect(jigsConfig()).toContain('"forge":');
+});
+
+test("an invalid --name errors even when another name has the remote", async () => {
+  await bindRepo(API, deps(), { name: "gambit" });
+
+  await expect(bindRepo(API, deps(), { name: "bad name!" })).rejects.toThrow(
+    "invalid binding name",
+  );
+});
+
+test("an invalid alias from config is refused", async () => {
+  await bindRepo(API, deps());
+  writeFileSync(
+    path.join(factory, "jigs.config.ts"),
+    jigsConfig().replace('"api":', '"bad name!":'),
+  );
+
+  await expect(bindRepo(API, deps())).rejects.toThrow("invalid binding name");
+});
+
+test("an implicit name uses the first binding when a remote is bound more than once", async () => {
+  await bindRepo(API, deps(), { name: "gambit" });
+  await bindRepo(API, deps(), { name: "forge" });
+
+  const result = await bindRepo(API, deps());
+
+  expect(result.name).toBe("gambit");
+});
+
+test("re-bind refuses an expression-backed remote before the webhook leg", async () => {
+  stubWebhookEnv();
+  await bindRepo(API, deps());
+  const expressionConfig = `const remote = ${JSON.stringify(API)};\n${jigsConfig()
+    .replace("export default {", 'export default { ingressUrl: "https://factory.example.ts.net",')
+    .replace(`remote: "${API}"`, "remote")}`;
+  writeFileSync(path.join(factory, "jigs.config.ts"), expressionConfig);
+
+  await expect(bindRepo(API, deps())).rejects.toThrow("Cannot edit bindings");
+
+  expect(jigsConfig()).toBe(expressionConfig);
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test("a prototype-chain repo name creates an own binding", async () => {
+  const remote = "git@github.com:acme/constructor.git";
+
+  const result = await bindRepo(remote, deps());
+
+  expect(result).toMatchObject({ name: "constructor", remote });
+  expect(jigsConfig()).toContain('"constructor":');
+});
+
+test("bind creates a derived-name entry when no binding has the remote", async () => {
+  await bindRepo("git@github.com:acme/gambit-infrastructure.git", deps(), {
+    name: "gambit",
+  });
+
+  const result = await bindRepo(API, deps());
+
+  expect(result.name).toBe("api");
+  expect(jigsConfig()).toContain('"api":');
+  expect(jigsConfig()).toContain(`remote: "${API}"`);
+});
+
 test("a new binding says the restart that clones it", async () => {
   await bindRepo(API, deps());
   expect(lines).toContain("restart the service to clone api: jigs service restart");
@@ -264,6 +351,21 @@ test("the repair carries --name, so the retry lands on the same binding", async 
   makeIngressFactory();
   const failure = await bindRepo(API, deps(), { name: "forge" }).catch((err: unknown) => err);
   expect((failure as { hint?: string }).hint).toContain(`re-run: jigs bind ${API} --name forge`);
+});
+
+test("an alias match is named in the repair command", async () => {
+  stubWebhookEnv();
+  vi.stubEnv("GITHUB_TOKEN", "");
+  await bindRepo(API, deps(), { name: "gambit" });
+  const withIngress = jigsConfig().replace(
+    "export default {",
+    'export default { ingressUrl: "https://factory.example.ts.net",',
+  );
+  writeFileSync(path.join(factory, "jigs.config.ts"), withIngress);
+
+  const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
+
+  expect((failure as { hint?: string }).hint).toContain(`re-run: jigs bind ${API} --name gambit`);
 });
 
 test("a failure GitHub did not lay on the token does not send the operator after one", async () => {
