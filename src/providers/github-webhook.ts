@@ -27,9 +27,9 @@ export interface GithubRepoRef {
 }
 
 const REMOTE_PATTERNS = [
-  /^git@github\.com:([^/]+)\/(.+?)(?:\.git)?$/i,
-  /^ssh:\/\/git@github\.com\/([^/]+)\/(.+?)(?:\.git)?\/?$/i,
-  /^https:\/\/github\.com\/([^/]+)\/(.+?)(?:\.git)?\/?$/i,
+  /^git@github\.com:([^/]+)\/(.+?)(?:\.git)?$/,
+  /^ssh:\/\/git@github\.com\/([^/]+)\/(.+?)(?:\.git)?\/?$/,
+  /^https:\/\/github\.com\/([^/]+)\/(.+?)(?:\.git)?\/?$/,
 ];
 
 export function parseGithubRemote(url: string): GithubRepoRef | null {

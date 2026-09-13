@@ -60,16 +60,9 @@ export async function bindRepo(
   }
 
   const config = readFactoryConfig(factoryRoot);
-  const matchingBindings = Object.entries(config.bindings).filter(([, binding]) =>
-    remotesMatch(binding.remote, remoteUrl),
+  const matchingBindings = Object.entries(config.bindings).filter(
+    ([, binding]) => binding.remote === remoteUrl,
   );
-  if (options.name === undefined && matchingBindings.length > 1) {
-    const names = matchingBindings.map(([bindingName]) => bindingName);
-    throw new JigsError(
-      `${remoteUrl} is bound more than once: ${names.join(", ")}`,
-      `pass --name to choose which binding to repair`,
-    );
-  }
   const matchingBinding = matchingBindings[0];
   const name = options.name ?? matchingBinding?.[0] ?? defaultBindingName(remoteUrl);
   if (!BINDING_NAME_PATTERN.test(name)) {
@@ -80,8 +73,8 @@ export async function bindRepo(
   }
 
   const text = readFactoryConfigText(factoryRoot);
-  const existing = config.bindings[name];
-  if (existing !== undefined && !remotesMatch(existing.remote, remoteUrl)) {
+  const existing = Object.hasOwn(config.bindings, name) ? config.bindings[name] : undefined;
+  if (existing !== undefined && existing.remote !== remoteUrl) {
     // Repointing silently would fetch an unrelated history into an object
     // store that already holds another repo's.
     throw new JigsError(
@@ -90,7 +83,7 @@ export async function bindRepo(
     );
   }
   const persistedRemote = existing?.remote ?? remoteUrl;
-  const updated = existing === undefined ? upsertBinding(text, name, remoteUrl) : text;
+  const updated = upsertBinding(text, name, remoteUrl);
 
   if (updated !== text) {
     writeFactoryConfigText(factoryRoot, updated);
@@ -120,9 +113,10 @@ export async function bindRepo(
     // The repair it prints has to land on this binding, not on the one the
     // remote alone would derive.
     reBindCommand:
-      options.name === undefined
-        ? `jigs bind ${remoteUrl}`
-        : `jigs bind ${remoteUrl} --name ${name}`,
+      options.name !== undefined ||
+      (matchingBinding !== undefined && name !== defaultBindingName(remoteUrl))
+        ? `jigs bind ${remoteUrl} --name ${name}`
+        : `jigs bind ${remoteUrl}`,
     deps,
   });
   return { name, remote: persistedRemote, webhook };
@@ -139,18 +133,6 @@ function defaultBindingName(remoteUrl: string): string {
   const repo = repoRef?.repo ?? last.replace(/\.git$/, "");
   // Lowercased: the name is typed on a command line and written into yaml.
   return repo.toLowerCase();
-}
-
-function remotesMatch(left: string, right: string): boolean {
-  if (left === right) return true;
-  const leftRef = parseGithubRemote(left);
-  const rightRef = parseGithubRemote(right);
-  return (
-    leftRef !== null &&
-    rightRef !== null &&
-    leftRef.owner.toLowerCase() === rightRef.owner.toLowerCase() &&
-    leftRef.repo.toLowerCase() === rightRef.repo.toLowerCase()
-  );
 }
 
 async function ensureWebhook({

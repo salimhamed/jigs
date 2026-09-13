@@ -344,6 +344,8 @@ reads it from this factory's `.env`, and an exported one wins for that one
 command — a convenience of bind's, not the factory's rule: the service reads
 `.env` alone, so a token that only ever lives in your shell leaves the running
 factory without one, and bind notes it. The token is for the webhook, not for the binding.
+Without `--name`, bind reuses the first configured binding whose remote URL is
+an exact match; only an absent remote creates a repo-name-derived binding.
 
 A factory with an `ingressUrl` in its `jigs.config.ts` (step 5) and no usable token
 is half configured — an ingress nothing posts to, a PR gate that never wakes —
