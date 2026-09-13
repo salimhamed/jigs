@@ -201,6 +201,23 @@ Skipping the copy is allowed — `jigs up` copies `.env.example` itself when
 there is no `.env` and tells you which slots are empty — but a run cannot be
 created until both tokens are in.
 
+#### One GitHub identity, shared
+
+A `GITHUB_TOKEN` that is your own personal access token makes jigs *you* on
+GitHub, and GitHub refuses to let an author approve or request changes on their
+own pull request. So on a pull request jigs opened, the approve and
+request-changes buttons are unavailable to you: `merge: "jigs"` never fires,
+because `merge-ready` needs an approval it can never receive, and a human
+presses merge by hand. Sending work back is what still works — an inline review
+comment, or a comment on the pull request conversation, both of which wake the
+run. A `COMMENTED` review's summary body wakes it too.
+
+The way out is a second GitHub identity: a machine user with its own token and
+write access on the target repos, or a GitHub App installed there whose
+installation token jigs uses. Either makes jigs a different author from you,
+restoring approve, request-changes and `merge: "jigs"`. Neither is wired up
+here yet; until then treat the review loop as comment-driven and merge by hand.
+
 ### 3. Up
 
 ```sh
@@ -409,10 +426,10 @@ the old one for you to delete by hand.
 
 Manual alternative: one org-level webhook (org settings → Webhooks) pointed at
 `<ingressUrl>/ingress/github`, content type `application/json`, events
-`pull_request`, `pull_request_review`, `pull_request_review_comment` and
-`check_suite`, secret from that same file — covers every repo without per-repo
-binds. Note that it points at one factory: an org-level hook and several
-factories do not mix.
+`pull_request`, `pull_request_review`, `pull_request_review_comment`,
+`issue_comment` and `check_suite`, secret from that same file — covers every
+repo without per-repo binds. Note that it points at one factory: an org-level
+hook and several factories do not mix.
 
 #### Linear
 

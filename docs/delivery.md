@@ -129,6 +129,10 @@ Reading the graph against the code:
   listen again. A `ci-red` wake is ignored when it names a head the worktree has
   already moved past, and is charged once per head. A `changes-requested` review
   carrying inline comments arrives as one `review-comments` wake, not two.
+  Feedback that is not a formal review wakes the loop the same way: a
+  `COMMENTED` review's body and a comment on the pull request conversation each
+  arrive as a single-comment thread in that wake, answered on the conversation
+  rather than in a thread reply.
   `merge-ready` means green CI plus an approval of the *current* head; under
   `merge: "human"` it only keeps listening. The gate ends when the pull request
   closes, and under `merge: "jigs"` it also ends the moment jigs' own squash

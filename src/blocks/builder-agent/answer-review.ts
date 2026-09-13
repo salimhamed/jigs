@@ -53,7 +53,12 @@ export interface AnswerReviewOptions {
 
 function renderThreads(threads: ReviewThread[], reviewBody?: string): string {
   const blocks = threads.map((thread) => {
-    const where = thread.line === null ? thread.path : `${thread.path}:${String(thread.line)}`;
+    const where =
+      thread.origin === "conversation"
+        ? "the pull request conversation"
+        : thread.line === null
+          ? thread.path
+          : `${thread.path}:${String(thread.line)}`;
     return [
       `### Thread ${thread.rootId} — ${where}`,
       "",

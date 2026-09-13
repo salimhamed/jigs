@@ -6,7 +6,14 @@
 // gave its replies), so they replay with it.
 
 import { createHook } from "workflow";
-import type { CheckRun, PrRef, PrSnapshot, ReviewThread } from "../../providers/github.ts";
+import type {
+  CheckRun,
+  PrComment,
+  PrRef,
+  PrReview,
+  PrSnapshot,
+  ReviewThread,
+} from "../../providers/github.ts";
 import { ClaimConflictError } from "../ticket/claim.ts";
 import { isPullRequestMergeReady } from "./merge-ready.ts";
 
@@ -76,7 +83,9 @@ export type GateWake =
       submittedAt: string;
     }
   // `body` is the summary of the CHANGES_REQUESTED review these threads were
-  // submitted with, when they came together.
+  // submitted with, when they came together. A thread with `origin:
+  // "conversation"` is not an inline thread at all: it is a COMMENTED review's
+  // body or a pull request conversation comment, carried in the same shape.
   | { kind: "review-comments"; threads: ReviewThread[]; body?: string }
   | {
       kind: "ci-red";
@@ -92,12 +101,21 @@ export type GateWake =
 export interface GateCursor {
   seenReviewIds: number[];
   seenCommentIds: number[];
+  // `${id}@${updatedAt}`, not a bare id. A conversation comment has no thread
+  // to reply into, so editing one is how a reviewer adds to it, and the edit
+  // has to read as new. An inline comment gets a reply instead, and stays
+  // keyed by id alone.
+  seenConversationComments?: string[];
   // Review-thread replies jigs posted itself. Author identity cannot stand in
   // for this: a factory running on its operator's own token has the operator
   // as `snapshot.viewer`, so filtering by viewer swallows the very review
   // comments the loop exists to answer — the same collision haltForHuman avoids
   // by id on the Linear side.
   selfCommentIds: number[];
+  // Conversation comments jigs posted itself — its answers, its summaries and
+  // its stand-down notes. Kept apart from `selfCommentIds` because GitHub
+  // numbers issue comments and review comments in different spaces.
+  selfConversationCommentIds?: number[];
   lastRedSha: string | null;
   lastMergeReadySha?: string | null;
 }
@@ -105,7 +123,33 @@ export interface GateCursor {
 /** What the consumer hands back through `next()` after posting its replies. */
 export interface GateAck {
   selfCommentIds: number[];
+  selfConversationCommentIds?: number[];
 }
+
+// A review summary and a conversation comment both arrive without an inline
+// anchor. Carrying them as single-comment threads gives the builder one shape
+// to answer and the cursor one shape to filter; `origin` is what routes the
+// answer back to the conversation.
+function conversationThread(
+  rootId: number,
+  body: string,
+  user: string,
+  createdAt: string,
+): ReviewThread {
+  return {
+    rootId,
+    path: "",
+    line: null,
+    origin: "conversation",
+    comments: [{ id: rootId, rootId, body, user, path: "", line: null, createdAt }],
+  };
+}
+
+const reviewBodyThread = (review: PrReview): ReviewThread =>
+  conversationThread(review.id, review.body, review.user, review.submittedAt);
+
+const commentThread = (comment: PrComment): ReviewThread =>
+  conversationThread(comment.id, comment.body, comment.user, comment.createdAt);
 
 function lastHumanReviewer(snapshot: PrSnapshot): string | null {
   return snapshot.reviews.findLast((review) => review.user !== snapshot.viewer)?.user ?? null;
@@ -129,7 +173,15 @@ export function classifyPrState(
     };
   }
   const wakes: GateWake[] = [];
+  // The self guard: jigs' own comment is the last word on something it just
+  // answered, and must not wake the loop back into it. Identified by the ids
+  // the loop posted, so a human sharing the token's identity still wakes it.
+  let skippedSelfThreads = 0;
   const seenReviewIds = new Set(cursor.seenReviewIds);
+  // A COMMENTED review is the only review a factory sharing its operator's
+  // GitHub identity can leave on its own pull request — GitHub refuses approve
+  // and request-changes there — so its body is feedback, not chatter.
+  const reviewBodies: ReviewThread[] = [];
   for (const review of snapshot.reviews) {
     if (seenReviewIds.has(review.id)) continue;
     seenReviewIds.add(review.id);
@@ -148,16 +200,14 @@ export function classifyPrState(
         body: review.body,
         submittedAt: review.submittedAt,
       });
+    } else if (review.state === "COMMENTED" && review.body !== "") {
+      reviewBodies.push(reviewBodyThread(review));
     }
   }
 
   const seenComments = new Set(cursor.seenCommentIds);
   const selfComments = new Set(cursor.selfCommentIds);
   const threads: ReviewThread[] = [];
-  // The self guard: jigs' own reply is the last word on a thread it just
-  // answered, and must not wake the loop back into it. Identified by the ids
-  // the loop posted, so a human sharing the token's identity still wakes it.
-  let skippedSelfThreads = 0;
   for (const thread of snapshot.reviewThreads) {
     let human = false;
     let ours = 0;
@@ -170,6 +220,22 @@ export function classifyPrState(
     if (human) threads.push(thread);
     else if (ours > 0) skippedSelfThreads += 1;
   }
+
+  const seenConversation = new Set(cursor.seenConversationComments ?? []);
+  const selfConversation = new Set(cursor.selfConversationCommentIds ?? []);
+  for (const comment of snapshot.conversationComments) {
+    const version = `${comment.id}@${comment.updatedAt}`;
+    if (seenConversation.has(version)) continue;
+    seenConversation.add(version);
+    // Coverage reports, dependabot and release-please all comment here, and a
+    // revision round each would burn the budget on nobody's feedback.
+    if (comment.userType === "Bot" || comment.body === "") continue;
+    // An edit re-versions a comment jigs wrote too, so the id check comes
+    // second and still wins.
+    if (selfConversation.has(comment.id)) skippedSelfThreads += 1;
+    else threads.push(commentThread(comment));
+  }
+  threads.push(...reviewBodies);
   // A CHANGES_REQUESTED review carrying inline comments is one act by one
   // reviewer, and the ordinary GitHub flow: yielding it twice would burn two
   // builder turns, the first of them answering a summary blind to the very
@@ -217,7 +283,9 @@ export function classifyPrState(
     cursor: {
       seenReviewIds: [...seenReviewIds],
       seenCommentIds: [...seenComments],
+      seenConversationComments: [...seenConversation],
       selfCommentIds: [...selfComments],
+      selfConversationCommentIds: [...selfConversation],
       lastRedSha,
       lastMergeReadySha,
     },
@@ -254,14 +322,16 @@ export async function* pullRequestGate(
     let cursor: GateCursor = {
       seenReviewIds: [],
       seenCommentIds: [],
+      seenConversationComments: [],
       selfCommentIds: [],
+      selfConversationCommentIds: [],
       lastRedSha: null,
     };
     while (true) {
       const round = classifyPrState(await fetchState(pr), cursor);
       if (round.skippedSelfThreads > 0) {
         console.log(
-          `[prGate] ${pr.owner}/${pr.repo}#${pr.number} skipped ${round.skippedSelfThreads} thread(s) whose only new comments were jigs' own replies`,
+          `[prGate] ${pr.owner}/${pr.repo}#${pr.number} skipped ${round.skippedSelfThreads} comment(s) of jigs' own`,
         );
       }
       cursor = round.cursor;
@@ -273,6 +343,12 @@ export async function* pullRequestGate(
           cursor = {
             ...cursor,
             selfCommentIds: [...new Set([...cursor.selfCommentIds, ...ack.selfCommentIds])],
+            selfConversationCommentIds: [
+              ...new Set([
+                ...(cursor.selfConversationCommentIds ?? []),
+                ...(ack.selfConversationCommentIds ?? []),
+              ]),
+            ],
           };
         }
       }

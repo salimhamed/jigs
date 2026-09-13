@@ -32,6 +32,24 @@ export interface ReviewThread {
   path: string;
   line: number | null;
   comments: ReviewComment[];
+  // Absent on an inline thread. A conversation thread is synthetic — a review
+  // summary or a pull request conversation comment — and has no file anchor,
+  // so an answer to it is posted on the conversation, not as a thread reply.
+  origin?: "conversation";
+}
+
+/** A comment on the pull request conversation, which hangs off no thread. */
+export interface PrComment {
+  id: number;
+  body: string;
+  user: string;
+  // GitHub's own account kind — "User", "Bot" or "Organization". Not the self
+  // guard, which is exact-id: a human and jigs are both "User" here.
+  userType: string;
+  createdAt: string;
+  // An edit is how a reviewer adds to a comment that has no thread to reply
+  // into, so the gate keys its cursor on this as well as the id.
+  updatedAt: string;
 }
 
 export interface CheckRun {
@@ -50,6 +68,7 @@ export interface PrSnapshot {
   viewer: string;
   reviews: PrReview[];
   reviewThreads: ReviewThread[];
+  conversationComments: PrComment[];
   ci: "red" | "green" | "pending";
   failingChecks: CheckRun[];
 }
@@ -77,6 +96,22 @@ async function githubRequest<T>(method: string, path: string, body?: unknown): P
 }
 
 const githubGet = <T>(path: string): Promise<T> => githubRequest<T>("GET", path);
+
+// GitHub caps a page at 100 and a short page is the last one. The ceiling is
+// not a real pull request's size — it is the stop for a proxy that answers
+// every page with a full one, which would otherwise spin a step forever.
+const MAX_PAGES = 50;
+
+async function githubGetAll<T>(path: string): Promise<T[]> {
+  const join = path.includes("?") ? "&" : "?";
+  const all: T[] = [];
+  for (let page = 1; page <= MAX_PAGES; page += 1) {
+    const batch = await githubGet<T[]>(`${path}${join}per_page=100&page=${page}`);
+    all.push(...batch);
+    if (batch.length < 100) return all;
+  }
+  throw new Error(`GitHub kept returning full pages of ${path} past ${MAX_PAGES} pages`);
+}
 
 // The preflight probe for GITHUB_TOKEN.
 export async function getAuthenticatedUser(): Promise<{ login: string }> {
@@ -165,32 +200,33 @@ export async function fetchPrSnapshot(pr: PrRef): Promise<PrSnapshot> {
     merged: boolean;
     head: { sha: string };
   }>(prPath);
-  const reviews = await githubGet<
-    Array<{
-      id: number;
-      state: string;
-      body: string | null;
-      user: { login: string } | null;
-      submitted_at: string;
-      commit_id?: string;
-    }>
-  >(`${prPath}/reviews?per_page=100`);
-  for (let page = 2; reviews.length === (page - 1) * 100; page += 1) {
-    const more = await githubGet<typeof reviews>(`${prPath}/reviews?per_page=100&page=${page}`);
-    reviews.push(...more);
-    if (more.length < 100) break;
-  }
-  const comments = await githubGet<
-    Array<{
-      id: number;
-      in_reply_to_id?: number | null;
-      body: string | null;
-      user: { login: string } | null;
-      path?: string | null;
-      line?: number | null;
-      created_at: string;
-    }>
-  >(`${prPath}/comments?per_page=100`); // unpaginated cap, accepted for v0
+  const reviews = await githubGetAll<{
+    id: number;
+    state: string;
+    body: string | null;
+    user: { login: string } | null;
+    submitted_at: string;
+    commit_id?: string;
+  }>(`${prPath}/reviews`);
+  const comments = await githubGetAll<{
+    id: number;
+    in_reply_to_id?: number | null;
+    body: string | null;
+    user: { login: string } | null;
+    path?: string | null;
+    line?: number | null;
+    created_at: string;
+  }>(`${prPath}/comments`);
+  // The conversation, where a review the operator cannot formally submit —
+  // GitHub refuses approve and request-changes on one's own pull request —
+  // lands instead. Issues and pull requests share this collection.
+  const conversation = await githubGetAll<{
+    id: number;
+    body: string | null;
+    user: { login: string; type?: string } | null;
+    created_at: string;
+    updated_at: string;
+  }>(`${repoPath}/issues/${pr.number}/comments`);
   const checks = await githubGet<{
     check_runs: Array<{
       name: string;
@@ -245,6 +281,16 @@ export async function fetchPrSnapshot(pr: PrRef): Promise<PrSnapshot> {
       ...(review.commit_id === undefined ? {} : { commitSha: review.commit_id }),
     })),
     reviewThreads: groupThreads(comments),
+    conversationComments: conversation.map((comment) => ({
+      id: comment.id,
+      body: comment.body ?? "",
+      user: comment.user?.login ?? "unknown",
+      // A deleted author reads as a person: a dropped wake is worse than one
+      // the builder decides is noise.
+      userType: comment.user?.type ?? "User",
+      createdAt: comment.created_at,
+      updatedAt: comment.updated_at,
+    })),
     ci,
     failingChecks: failing,
   };

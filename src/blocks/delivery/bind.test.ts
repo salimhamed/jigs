@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
+import type { PrSnapshot } from "../../providers/github.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import { resumeFailed } from "../agent/resume-or-rebuild.ts";
 import type { GateAck, GateWake } from "../pull-request/gate.ts";
+import { pullRequestGate } from "../pull-request/gate.ts";
 import { bindDeliverySteps } from "./bind.ts";
 import {
   defaultCiRepairPrompt,
@@ -16,6 +18,18 @@ import type {
   DeliverySteps,
   FollowPullRequestOptions,
 } from "./types.ts";
+
+// The real gate reaches the SDK through this one hook. Resolving straight
+// through turns a suspension into the next round, which is all these tests
+// need from it.
+vi.mock("workflow", () => ({
+  createHook: () => ({
+    getConflict: async () => null,
+    // biome-ignore lint/suspicious/noThenProperty: the SDK's Hook is a thenable
+    then: (onfulfilled: (value: unknown) => unknown) => Promise.resolve().then(onfulfilled),
+    dispose: () => {},
+  }),
+}));
 
 const pr = { owner: "owner", repo: "repo", number: 1 };
 const options: DeliverChangeOptions = {
@@ -63,7 +77,7 @@ function setup(wakes: GateWake[] = [{ kind: "closed", merged: true }]) {
     pushApprovedChange: vi.fn().mockResolvedValue({ headSha: "new" }),
     resolveRepository: vi.fn().mockResolvedValue({ owner: "owner", repo: "repo" }),
     openPullRequest: vi.fn().mockResolvedValue(pr),
-    commentOnPullRequest: vi.fn().mockResolvedValue(undefined),
+    commentOnPullRequest: vi.fn().mockResolvedValue({ id: 8800 }),
     replyToPullRequestReviewThread: vi.fn().mockResolvedValue({ id: 77 }),
     squashMergePullRequest: vi.fn().mockResolvedValue({ merged: true, sha: "merged" }),
   };
@@ -195,8 +209,109 @@ describe("delivery", () => {
         : original(config)) as AgentFn;
     const result = await bindDeliverySteps(steps).deliverChange(options);
     expect(result.status).toBe("merged");
-    expect(acks[0]).toEqual({ selfCommentIds: [77] });
+    expect(acks[0]).toEqual({ selfCommentIds: [77], selfConversationCommentIds: [] });
     expect(steps.replyToPullRequestReviewThread).toHaveBeenCalledWith(pr, 4, "Fixed");
+  });
+
+  // The gate delivers a conversation comment once per version, so an edit
+  // arrives under the same id. followPullRequest must not treat that id as
+  // already handled, or the edited feedback is silently dropped.
+  it("runs a revision round again for an edited conversation comment", async () => {
+    const edited = (body: string): GateWake => ({
+      kind: "review-comments",
+      threads: [
+        {
+          rootId: 5150,
+          path: "",
+          line: null,
+          origin: "conversation",
+          comments: [
+            {
+              id: 5150,
+              rootId: 5150,
+              path: "",
+              line: null,
+              user: "reviewer",
+              body,
+              createdAt: "2026-01-01",
+            },
+          ],
+        },
+      ],
+    });
+    const { steps, calls } = setup([
+      edited("rename this"),
+      edited("rename this — and the caller too"),
+      { kind: "closed", merged: true },
+    ]);
+    await bindDeliverySteps(steps).followPullRequest({
+      change: { ...approved, attempts: { ...approved.attempts }, sessions: {} },
+      pr,
+      implementation: options.implementation,
+      limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 2 },
+      merge: "human",
+    });
+
+    expect(calls).toHaveLength(2);
+    // Both answers land on the conversation: a synthetic thread has no anchor.
+    expect(steps.commentOnPullRequest).toHaveBeenCalledTimes(2);
+    expect(steps.replyToPullRequestReviewThread).not.toHaveBeenCalled();
+  });
+
+  // followPullRequest keeps no comment set of its own any more, so this drives
+  // the real gate: the guarantee that an answered comment does not buy a
+  // second revision round is the gate's, and this is where the delivery loop
+  // depends on it.
+  it("does not run a second revision round for an inline comment the gate already delivered", async () => {
+    const inlineThread = {
+      rootId: 4,
+      path: "src/a.ts",
+      line: 1,
+      comments: [
+        {
+          id: 4,
+          rootId: 4,
+          path: "src/a.ts",
+          line: 1,
+          user: "reviewer",
+          body: "Fix this",
+          createdAt: "2026-01-01",
+        },
+      ],
+    };
+    const open: PrSnapshot = {
+      state: "open",
+      merged: false,
+      headSha: "new",
+      viewer: "salim",
+      reviews: [],
+      reviewThreads: [inlineThread],
+      conversationComments: [],
+      ci: "green",
+      failingChecks: [],
+    };
+    // The same unanswered comment on every poll, then the PR closes.
+    const staged: PrSnapshot[] = [open, open, { ...open, state: "closed", merged: true }];
+    let round = 0;
+    const { steps, calls } = setup();
+    steps.pullRequestGate = (target) =>
+      pullRequestGate(target, async () => {
+        const next = staged[round++];
+        if (next === undefined) throw new Error("the gate polled past the staged snapshots");
+        return next;
+      });
+
+    const result = await bindDeliverySteps(steps).followPullRequest({
+      change: { ...approved, attempts: { ...approved.attempts }, sessions: {} },
+      pr,
+      implementation: options.implementation,
+      limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 3 },
+      merge: "human",
+    });
+
+    expect(result.status).toBe("merged");
+    expect(calls).toHaveLength(1);
+    expect(round).toBe(3);
   });
 
   it("does not report a refused merge as merged", async () => {
