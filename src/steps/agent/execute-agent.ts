@@ -221,7 +221,9 @@ async function generateAgentStep(
                   // lives in the main checkout's .git/worktrees/<name>/,
                   // outside the workspace, so workspace-write fails every
                   // commit on a read-only index lock. Same trust level the
-                  // claude path already runs at.
+                  // claude path already runs at. It also keeps MCP working:
+                  // since codex 0.153 a narrower sandbox makes an MCP tool
+                  // call approvable, and approvalPolicy 'never' denies it.
                   sandboxPolicy: "danger-full-access",
                   autoApprove: true,
                   ...(harness.mcpServers !== undefined

@@ -1,45 +1,5 @@
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
-import path from "node:path";
-import { afterEach, beforeEach, expect, test } from "vitest";
-import { claudeStepSettings, resolveClaudeExecutable } from "./claude.ts";
-import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
-
-let tmp: string;
-let fakeBin: string;
-
-beforeEach(() => {
-  tmp = makeTmpDir();
-  fakeBin = path.join(tmp, "bin");
-  mkdirSync(fakeBin);
-  writeFileSync(path.join(fakeBin, "claude"), "#!/bin/sh\n");
-  chmodSync(path.join(fakeBin, "claude"), 0o755);
-});
-afterEach(() => {
-  removeTmpDir(tmp);
-});
-
-test("JIGS_CLAUDE_EXECUTABLE override wins", () => {
-  expect(
-    resolveClaudeExecutable({
-      JIGS_CLAUDE_EXECUTABLE: "/opt/claude",
-      PATH: fakeBin,
-    }),
-  ).toBe("/opt/claude");
-});
-
-test("PATH scan finds an executable claude, skipping non-executable dirs", () => {
-  const emptyDir = path.join(tmp, "empty");
-  mkdirSync(emptyDir);
-  const env = { PATH: [emptyDir, fakeBin].join(path.delimiter) };
-  expect(resolveClaudeExecutable(env)).toBe(path.join(fakeBin, "claude"));
-});
-
-test("no claude anywhere throws a repair error", () => {
-  expect(() => resolveClaudeExecutable({ PATH: path.join(tmp, "empty2") })).toThrow(
-    "no `claude` executable found on PATH",
-  );
-  expect(() => resolveClaudeExecutable({ PATH: "" })).toThrow("JIGS_CLAUDE_EXECUTABLE");
-});
+import { expect, test } from "vitest";
+import { claudeStepSettings } from "./claude.ts";
 
 test("claudeStepSettings force-merges the invariants over caller options", () => {
   const settings = claudeStepSettings({

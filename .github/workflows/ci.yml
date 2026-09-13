@@ -51,6 +51,10 @@ jobs:
       # `jigs init` and `jigs build` run from the CLI's dist, so the CLI has to
       # exist as the built artifact its bin entry points at.
       - run: pnpm build
+      # The built service will not start unless both CLIs are on its PATH.
+      # Unpinned: the check reads the minimum codex version from the provider.
+      # No login needed — the check only runs `--version`.
+      - run: npm install --global @anthropic-ai/claude-code @openai/codex
       - run: pnpm e2e
         env:
           WORKFLOW_POSTGRES_URL: postgres://jigs:jigs@localhost:5432/jigs

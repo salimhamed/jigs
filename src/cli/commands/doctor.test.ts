@@ -90,3 +90,21 @@ test("a trailing slash on the service URL does not break the doctor route", asyn
   });
   expect(fetchMock.mock.calls[0]?.[0]).toBe("http://svc.test:8990/api/doctor");
 });
+
+test("a passing check that found something prints what it found", async () => {
+  respond({
+    ok: true,
+    checks: [
+      {
+        id: "harness.codex-cli",
+        label: "Codex CLI",
+        ok: true,
+        detail: "codex 0.153.4 at /usr/local/bin/codex (minimum 0.153.0)",
+      },
+    ],
+  });
+  await runDoctor(deps());
+  expect(lines).toEqual([
+    "ok   Codex CLI: codex 0.153.4 at /usr/local/bin/codex (minimum 0.153.0)",
+  ]);
+});

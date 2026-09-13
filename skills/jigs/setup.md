@@ -27,7 +27,11 @@ person can judge.
   `npm.pkg.github.com` during an install is this token missing or wrong, not a
   missing package.
 - The agent harness CLIs the factory's workflows will drive — `claude` and
-  `codex` — each logged in to its subscription.
+  `codex` — each logged in to its subscription, and both on the `PATH` of
+  whatever starts the service. The service will not start without them, or
+  with a `codex` below the minimum version it prints. A service does not always
+  get the same `PATH` as the shell. `JIGS_CLAUDE_EXECUTABLE` can point at a
+  `claude` that is not on `PATH`; `codex` has no equivalent.
 - The AWS CLI, only if a workflow will declare `aws: true`.
 - A tunnel tool (`tailscale` or `cloudflared`), only if the factory will receive
   provider webhooks.
@@ -185,7 +189,12 @@ commit the regenerated integration. Fix API errors in custom code outside
 `jigs.ts`; refresh generated wrappers with `jigs generate`. An install failure
 naming `@workflow/web`, `@workflow/world-postgres`, `workflow` or `zod` is a release
 that moved a runtime peer: move the same pin in the factory's `package.json`
-and run `jigs upgrade` again. A factory still installing jigs from a checkout
+and run `jigs upgrade` again. A release can also raise the minimum `codex`
+version; the service reports that at startup, and the fix is to upgrade
+`codex` on the machine. A factory made before this release should add
+`ignoredOptionalDependencies: ['@openai/codex']` to its `pnpm-workspace.yaml`
+and delete any `@openai/codex` dependency or `overrides` entry. A factory still
+installing jigs from a checkout
 (`link:` entries, or the old `jigs` / `@jigs/service` names) is refused;
 switch it to the published package first. So is a factory still depending on
 `@salimhamed/jigs-service`, retired in 0.3.0: drop that line from

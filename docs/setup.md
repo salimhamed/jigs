@@ -33,6 +33,13 @@ World. Nothing below is global except part 1.
   `codex login`. `jigs doctor` probes both; a trigger's preflight probes the
   ones its workflow declares in `requires.harnesses`, and refuses the run when
   one is missing or logged out.
+
+  Install both yourself and keep them on the `PATH` of whatever starts the
+  service. The service checks them before it reports ready: if either is
+  missing, or `codex` is older than the minimum version the message names, it
+  prints what it found and exits. A service does not always get the same
+  `PATH` as your shell, so start it from a shell where both CLIs run. There is
+  no codex equivalent of `JIGS_CLAUDE_EXECUTABLE`.
 - **The AWS CLI v2**, if any workflow declares `requires: { aws: true }`
   alongside its bindings and harnesses: preflight probes the service's
   `AWS_PROFILE` with `aws sts get-caller-identity` and refuses the run when it
@@ -57,7 +64,12 @@ latest release (`--to <version>` picks one), regenerates `jigs.ts` using the
 installed release, runs `jigs up`, then the factory's own typecheck. A release
 that moves one of the four runtime peers — `workflow`, `@workflow/world-postgres`,
 `@workflow/web`, `zod` — fails the install by name; make the same move in the
-factory's `package.json` and run it again. A factory still carrying the
+factory's `package.json` and run it again. A release can also raise the
+minimum `codex` version; no install will say so, but the service will at
+startup, and the fix is to upgrade `codex` on the machine. A factory made
+before this release should add `ignoredOptionalDependencies: ['@openai/codex']`
+to its `pnpm-workspace.yaml` and delete any `@openai/codex` dependency or
+`overrides` entry. A factory still carrying the
 `@salimhamed/jigs-service` dependency retired in 0.3.0 is refused: drop that
 line and rewrite its `@salimhamed/jigs-service/X` imports to
 `@salimhamed/jigs/X` first ([ADR 0017](adr/0017-single-package.md)).

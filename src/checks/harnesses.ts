@@ -1,15 +1,16 @@
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { promisify } from "node:util";
-import { resolveClaudeExecutable } from "../steps/agent/harnesses/claude.ts";
 import { realCodexAuthPath } from "../steps/agent/harnesses/codex-home.ts";
 import { stringEnv } from "../steps/agent/harnesses/env.ts";
+import { resolveClaudeExecutable } from "../steps/agent/harnesses/executables.ts";
 import { type Check, type CheckResult, PROBE_TIMEOUT_MS } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
+import { type HarnessKind, type HarnessRuntimeDeps, harnessRuntime } from "./harness-runtime.ts";
 
 const execFileAsync = promisify(execFile);
 
-export type HarnessKind = "claude" | "codex";
+export type { HarnessKind } from "./harness-runtime.ts";
 
 export interface ClaudeAuthDeps {
   exec?: (
@@ -26,6 +27,7 @@ type ClaudeAuthStatus = {
   apiKeySource?: unknown;
 };
 
+// A login probe only; the CLI itself is harnessRuntimeCheck's business.
 // Heuristic, never a model call. The probe runs under the unscrubbed env: the
 // Claude provider re-inherits every ANTHROPIC_*/CLAUDE_* key from process.env
 // regardless of the env a step hands it, so a probe that scrubbed them would
@@ -103,6 +105,7 @@ export function claudeAuthCheck(deps: ClaudeAuthDeps = {}): Check {
   };
 }
 
+// A login file only, never a version.
 export function codexAuthCheck(authPath = realCodexAuthPath()): Check {
   return {
     id: "harness.codex-auth",
@@ -142,7 +145,24 @@ export function codexAuthCheck(authPath = realCodexAuthPath()): Check {
   };
 }
 
+/** The same check the service gates its boot on, so doctor cannot pass
+ *  something the service would refuse. */
+export function harnessRuntimeCheck(kind: HarnessKind, deps: HarnessRuntimeDeps = {}): Check {
+  return {
+    id: `harness.${kind}-cli`,
+    label: `${kind === "claude" ? "Claude Code" : "Codex"} CLI`,
+    run: async (): Promise<CheckResult> => {
+      const runtime = await harnessRuntime(kind, deps);
+      return runtime.ok
+        ? { ok: true, detail: runtime.line }
+        : { ok: false, reason: runtime.line, repair: runtime.repair };
+    },
+  };
+}
+
 export function harnessChecks(kinds: HarnessKind[]): Check[] {
-  const unique = [...new Set(kinds)];
-  return unique.map((kind) => (kind === "claude" ? claudeAuthCheck() : codexAuthCheck()));
+  return [...new Set(kinds)].flatMap((kind) => [
+    harnessRuntimeCheck(kind),
+    kind === "claude" ? claudeAuthCheck() : codexAuthCheck(),
+  ]);
 }

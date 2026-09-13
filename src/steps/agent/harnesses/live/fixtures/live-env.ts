@@ -2,8 +2,8 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
-import { resolveClaudeExecutable } from "../../claude.ts";
 import { ensureManagedCodexHome } from "../../codex-home.ts";
+import { resolveClaudeExecutable } from "../../executables.ts";
 
 export const REAL_CODEX_AUTH = path.join(homedir(), ".codex", "auth.json");
 

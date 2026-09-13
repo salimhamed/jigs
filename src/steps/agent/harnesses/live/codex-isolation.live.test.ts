@@ -60,7 +60,12 @@ async function appServerProbe(codexHome: string): Promise<string> {
         cwd: scratch,
         codexHome,
         approvalPolicy: "never",
-        sandboxPolicy: "workspace-write",
+        // The sandbox an agent step actually runs under. Codex 0.153 made an
+        // MCP tool call an approvable action, and under any narrower sandbox
+        // approvalPolicy 'never' auto-DENIES it ("MCP tool call requires
+        // approval, but approval policy is never") — which would fake a
+        // passing isolation result, the way the exec bypass above would.
+        sandboxPolicy: "danger-full-access",
         effort: "low",
         autoApprove: true,
       }),

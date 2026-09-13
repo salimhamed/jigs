@@ -62,10 +62,13 @@ const SUBSCRIPTION_STATUS = JSON.stringify({
 
 beforeAll(() => {
   tmp = makeTmpDir();
-  // A real executable answering the real flags, so the harness check runs
-  // its actual code path without depending on this machine's login.
+  // A real executable answering the real flags, so the harness checks run
+  // their actual code paths without needing this machine's login or CLI.
   claudeStub = path.join(tmp, "claude-stub");
-  writeFileSync(claudeStub, `#!/bin/sh\necho '${SUBSCRIPTION_STATUS}'\n`);
+  writeFileSync(
+    claudeStub,
+    `#!/bin/sh\ncase "$1" in\n  --version) echo '2.1.270 (Claude Code)' ;;\n  *) echo '${SUBSCRIPTION_STATUS}' ;;\nesac\n`,
+  );
   chmodSync(claudeStub, 0o755);
   seededFactory = makeFactoryRepo(tmp, { bindings: {} });
 });

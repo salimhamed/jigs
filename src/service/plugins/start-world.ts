@@ -1,4 +1,5 @@
 import type { ISql } from "postgres";
+import type { HarnessKind, HarnessRuntime } from "../../checks/harness-runtime.ts";
 import type { BindingClone } from "../../steps/worktree/clone.ts";
 import { READY_PHASE, setBootPhase } from "../readiness.ts";
 import { installShutdown, onShutdown, startOwningSignals } from "../shutdown.ts";
@@ -8,6 +9,49 @@ import { installShutdown, onShutdown, startOwningSignals } from "../shutdown.ts"
 // import these functions directly, and a static import would stand all three
 // up to do it. Inside the plugin the deferral also orders the boot: nothing
 // fallible resolves until installShutdown() can turn its failure into an exit.
+
+// Both, because the service hosts every workflow the factory declares.
+const HARNESSES: HarnessKind[] = ["claude", "codex"];
+
+export interface HarnessRuntimeGateDeps {
+  runtimes?: () => Promise<HarnessRuntime[]>;
+  exit?: (code: number) => void;
+  log?: (line: string) => void;
+  error?: (line: string) => void;
+}
+
+// Without this, a missing or too-old CLI is found by the first agent step of
+// the first run, long after the queue, the preflight and a worktree.
+export async function gateOnHarnessRuntimes(deps: HarnessRuntimeGateDeps = {}): Promise<boolean> {
+  const log = deps.log ?? ((line: string) => console.log(line));
+  const resolve =
+    deps.runtimes ??
+    (async () => (await import("../../checks/harness-runtime.ts")).harnessRuntimes(HARNESSES));
+
+  let runtimes: HarnessRuntime[];
+  try {
+    runtimes = await resolve();
+  } catch (err) {
+    (deps.error ?? ((line: string) => console.error(line)))(
+      `[service] could not check the harness CLIs: ${describe(err)}`,
+    );
+    (deps.exit ?? process.exit)(1);
+    return false;
+  }
+
+  const failures = runtimes.filter((runtime) => !runtime.ok);
+  const [first] = failures;
+  if (first !== undefined && first.ok === false) {
+    const error = deps.error ?? ((line: string) => console.error(line));
+    error(
+      `[service] cannot run agents: ${failures.map((runtime) => runtime.line).join("; ")}. The ${first.repair}`,
+    );
+    (deps.exit ?? process.exit)(1);
+    return false;
+  }
+  for (const runtime of runtimes) log(`[service] harness ${runtime.line}`);
+  return true;
+}
 
 export interface RegistryGateDeps {
   sql?: () => ISql;
@@ -140,6 +184,11 @@ export default async function startWorld() {
   const { describeStepCeiling, raiseStepCeiling } = await import("../step-ceiling.ts");
   raiseStepCeiling();
   console.log(`[service] step ceiling: ${describeStepCeiling()}`);
+
+  // First, because it is local and fast: no point cloning for a service that
+  // cannot run an agent.
+  setBootPhase("harnesses");
+  if (!(await gateOnHarnessRuntimes())) return;
 
   // Also before the World starts: a run that asks for a worktree against an
   // unusable registry has already burned an agent.

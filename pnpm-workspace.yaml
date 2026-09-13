@@ -2,3 +2,7 @@ allowBuilds:
   '@swc/core': true
   cbor-extract: true
   esbuild: true
+# jigs runs the `codex` on PATH, so the provider's optional copy is 320 MB
+# that would never run.
+ignoredOptionalDependencies:
+  - '@openai/codex'
