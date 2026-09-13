@@ -59,7 +59,19 @@ export async function bindRepo(
     );
   }
 
-  const name = options.name ?? defaultBindingName(remoteUrl);
+  const config = readFactoryConfig(factoryRoot);
+  const matchingBindings = Object.entries(config.bindings).filter(([, binding]) =>
+    remotesMatch(binding.remote, remoteUrl),
+  );
+  if (options.name === undefined && matchingBindings.length > 1) {
+    const names = matchingBindings.map(([bindingName]) => bindingName);
+    throw new JigsError(
+      `${remoteUrl} is bound more than once: ${names.join(", ")}`,
+      `pass --name to choose which binding to repair`,
+    );
+  }
+  const matchingBinding = matchingBindings[0];
+  const name = options.name ?? matchingBinding?.[0] ?? defaultBindingName(remoteUrl);
   if (!BINDING_NAME_PATTERN.test(name)) {
     throw new JigsError(
       `invalid binding name ${JSON.stringify(name)}`,
@@ -68,10 +80,8 @@ export async function bindRepo(
   }
 
   const text = readFactoryConfigText(factoryRoot);
-  const updated = upsertBinding(text, name, remoteUrl);
-  const config = readFactoryConfig(factoryRoot);
   const existing = config.bindings[name];
-  if (existing !== undefined && existing.remote !== remoteUrl) {
+  if (existing !== undefined && !remotesMatch(existing.remote, remoteUrl)) {
     // Repointing silently would fetch an unrelated history into an object
     // store that already holds another repo's.
     throw new JigsError(
@@ -79,6 +89,8 @@ export async function bindRepo(
       `jigs unbind ${name}, then bind again — the clone at ${bindingDir({ factoryRoot, bindingName: name })} holds the old repo's objects`,
     );
   }
+  const persistedRemote = existing?.remote ?? remoteUrl;
+  const updated = existing === undefined ? upsertBinding(text, name, remoteUrl) : text;
 
   if (updated !== text) {
     writeFactoryConfigText(factoryRoot, updated);
@@ -86,7 +98,7 @@ export async function bindRepo(
   deps.out(
     existing === undefined
       ? `bound ${name} → ${remoteUrl}`
-      : `${name} already points at ${remoteUrl}`,
+      : `${name} already points at ${persistedRemote}`,
   );
   // A new entry has nothing cloned yet, or — after the unbind a repoint takes
   // — the old repo's objects sitting where its clone goes. An entry a failed
@@ -113,7 +125,7 @@ export async function bindRepo(
         : `jigs bind ${remoteUrl} --name ${name}`,
     deps,
   });
-  return { name, remote: remoteUrl, webhook };
+  return { name, remote: persistedRemote, webhook };
 }
 
 // The likeliest operator error, given that bind used to take a checkout path.
@@ -127,6 +139,18 @@ function defaultBindingName(remoteUrl: string): string {
   const repo = repoRef?.repo ?? last.replace(/\.git$/, "");
   // Lowercased: the name is typed on a command line and written into yaml.
   return repo.toLowerCase();
+}
+
+function remotesMatch(left: string, right: string): boolean {
+  if (left === right) return true;
+  const leftRef = parseGithubRemote(left);
+  const rightRef = parseGithubRemote(right);
+  return (
+    leftRef !== null &&
+    rightRef !== null &&
+    leftRef.owner.toLowerCase() === rightRef.owner.toLowerCase() &&
+    leftRef.repo.toLowerCase() === rightRef.repo.toLowerCase()
+  );
 }
 
 async function ensureWebhook({

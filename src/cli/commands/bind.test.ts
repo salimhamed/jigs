@@ -37,6 +37,105 @@ test("bind writes the remote under a name derived from the repo", async () => {
   expect(jigsConfig()).toContain(`remote: "${API}"`);
 });
 
+test("bind reuses an alias whose remote already matches", async () => {
+  const remote = "git@github.com:acme/gambit-infrastructure.git";
+  await bindRepo(remote, deps(), { name: "gambit" });
+  const withComment = `// keep this alias\n${jigsConfig()}`;
+  writeFileSync(path.join(factory, "jigs.config.ts"), withComment);
+
+  lines = [];
+  const result = await bindRepo(remote, deps());
+
+  expect(result.name).toBe("gambit");
+  expect(jigsConfig()).toBe(withComment);
+  expect(jigsConfig()).not.toContain("gambitinfrastructure");
+  expect(lines).toContain(`gambit already points at ${remote}`);
+});
+
+test("bind reuses an alias for an equivalent GitHub remote spelling", async () => {
+  stubWebhookEnv();
+  const configuredRemote = "git@github.com:acme/gambit-infrastructure.git";
+  await bindRepo(configuredRemote, deps(), { name: "gambit" });
+  const withIngress = jigsConfig().replace(
+    "export default {",
+    'export default { ingressUrl: "https://factory.example.ts.net",',
+  );
+  writeFileSync(path.join(factory, "jigs.config.ts"), withIngress);
+  fetchMock
+    .mockResolvedValueOnce(new Response("[]"))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 9 })));
+
+  const result = await bindRepo("https://GitHub.com/ACME/Gambit-Infrastructure", deps());
+
+  expect(result).toMatchObject({ name: "gambit", remote: configuredRemote, webhook: "created" });
+  expect(jigsConfig()).toBe(withIngress);
+  expect(jigsConfig()).not.toContain("gambitinfrastructure");
+});
+
+test("--name creates a separate binding even when another name has the remote", async () => {
+  await bindRepo(API, deps(), { name: "gambit" });
+
+  const result = await bindRepo(API, deps(), { name: "forge" });
+
+  expect(result.name).toBe("forge");
+  expect(jigsConfig()).toContain('"gambit":');
+  expect(jigsConfig()).toContain('"forge":');
+});
+
+test("an invalid --name errors even when another name has the remote", async () => {
+  await bindRepo(API, deps(), { name: "gambit" });
+
+  await expect(bindRepo(API, deps(), { name: "bad name!" })).rejects.toThrow(
+    "invalid binding name",
+  );
+});
+
+test("an invalid alias from config is refused", async () => {
+  await bindRepo(API, deps());
+  writeFileSync(
+    path.join(factory, "jigs.config.ts"),
+    jigsConfig().replace('"api":', '"bad name!":'),
+  );
+
+  await expect(bindRepo(API, deps())).rejects.toThrow("invalid binding name");
+});
+
+test("an ambiguous remote requires --name", async () => {
+  await bindRepo(API, deps(), { name: "gambit" });
+  await bindRepo(API, deps(), { name: "forge" });
+
+  const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
+
+  expect(String(failure)).toContain("bound more than once: gambit, forge");
+  expect((failure as { hint?: string }).hint).toContain("pass --name");
+});
+
+test("re-bind leaves an expression-backed matching remote untouched", async () => {
+  await bindRepo(API, deps());
+  const expressionConfig = `const remote = ${JSON.stringify(API)};\n${jigsConfig().replace(
+    `remote: "${API}"`,
+    "remote",
+  )}`;
+  writeFileSync(path.join(factory, "jigs.config.ts"), expressionConfig);
+
+  const result = await bindRepo(API, deps());
+
+  expect(result).toMatchObject({ name: "api", remote: API });
+  expect(jigsConfig()).toBe(expressionConfig);
+});
+
+test("bind creates a derived-name entry when no binding has the remote", async () => {
+  await bindRepo("git@github.com:acme/gambit-infrastructure.git", deps(), {
+    name: "gambit",
+  });
+
+  const result = await bindRepo(API, deps());
+
+  expect(result.name).toBe("api");
+  expect(jigsConfig()).toContain('"api":');
+  expect(jigsConfig()).toContain(`remote: "${API}"`);
+});
+
 test("a new binding says the restart that clones it", async () => {
   await bindRepo(API, deps());
   expect(lines).toContain("restart the service to clone api: jigs service restart");
