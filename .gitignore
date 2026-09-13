@@ -7,3 +7,4 @@ dist/
 .workflow-data/
 .swc/
 .jigs/
+/.codex/config.toml
