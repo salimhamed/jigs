@@ -82,6 +82,13 @@ Keep deliverChange available as an optional recipe. Do not require it for the
 experiments, or extend its options to accommodate every new workflow shape.
 Keep the package together until an actual packaging problem warrants a split.
 
+Repository-specific validation is agent work. The workflow coordinates evidence
+handoffs and general execution gates; agents determine and run the repository's
+checks and independently review their results. Follow the
+[validation ownership guidance](../skills/jigs/author.md#validation-ownership)
+when authoring an experiment. This boundary was clarified during AI-659: changing
+Compose wrappers repeatedly invalidated checks guessed by the workflow itself.
+
 ## Current evidence
 
 - Both factories' ship workflows primarily configure jigs' delivery process.
@@ -168,10 +175,10 @@ Acceptance:
 
 ### 2. Prove the authoring shape with a small factory workflow
 
-Start in the personal factory with a bounded build/review experiment, using
-existing low-level operations rather than deliverChange. Choose a small real
-ticket at implementation time. Begin with one implementation worktree, a Codex
-builder, a Claude reviewer, workflow-local prompts, and a finite review loop.
+Use AI-659 in the JS factory for the bounded build/review experiment, as selected
+after this plan's initial publication. Use existing low-level operations rather
+than deliverChange. Begin with one implementation worktree, a Codex builder, a
+Claude reviewer, workflow-local prompts, and a finite review loop.
 
 Use a new workflow directory with workflow.ts, steps.ts, prompts.ts and tests as
 needed. Keep generated jigs.ts in place. Reuse the proven colocation convention.
@@ -185,6 +192,9 @@ Acceptance:
   is a workflow choice and observable, not reported as successful continuation.
 - Build, deploy, launch and monitoring use the existing factory commands.
 - The agent can find all workflow-specific code within its directory.
+- Agents produce acceptance evidence for the reviewed revision, including the
+  ticket's validation, file ownership and cleanup checks. The independent reviewer
+  assesses that evidence; the workflow enforces general publication gates.
 
 If existing calls suffice, make no new session abstraction. If they do not,
 change the smallest contract necessary and add a meaningful recovery test.
@@ -302,7 +312,6 @@ live checks for claims about restart, suspension and service lifecycle. For each
 factory follow its own CI sequence, including building before tests that inspect
 emitted IDs. Mocks alone cannot establish session continuation or replay safety.
 
-This plan does not select live tickets, enable event subscriptions, or authorize
-Slack/Linear/PagerDuty messages. Select the real inputs and communication scope
-when running each experiment. No further framework-level clarification blocks
-starting the factory layout refactor.
+AI-659 is the selected input for the small experiment. This plan does not enable
+event subscriptions or authorize Slack/Linear/PagerDuty messages. Select the real
+inputs and communication scope when running subsequent experiments.
