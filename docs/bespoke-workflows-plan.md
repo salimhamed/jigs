@@ -199,6 +199,14 @@ Acceptance:
 If existing calls suffice, make no new session abstraction. If they do not,
 change the smallest contract necessary and add a meaningful recovery test.
 
+A PR-feedback-loop experiment in the personal factory is inserted between this
+stage and the next: a Codex builder and a Claude reviewer, waiting on a
+PR-scoped hook, replying directly to question-only comments and reviewing code
+changes independently, with a human performing the merge. It reuses this
+stage's authoring shape on a live pull request rather than a bounded build, and
+its handling of comments that arrive between rounds is early evidence for stage
+5's "an answer arriving before suspension is still observed".
+
 ### 3. Extend to the parent-ticket workflow
 
 Read subtasks and dependencies through factory-local steps. Keep dependency
