@@ -274,7 +274,6 @@ export function bindDeliverySteps(steps: DeliverySteps) {
     const instructions = { ciFixAttempts: "", pullRequestRevisionRounds: "" };
     const seenRed = new Set<string>();
     const seenReviews = new Set<number>();
-    const seenComments = new Set<number>();
     return attend<DeliveryResult<TTask>>(pullRequestGate(pr), async (wake) => {
       if (wake.kind === "closed") {
         return finished({ status: wake.merged ? "merged" : "closed", change, pr });
@@ -286,10 +285,13 @@ export function bindDeliverySteps(steps: DeliverySteps) {
           const result = await squashMergePullRequest(pr, wake.headSha);
           if (result.merged) return finished({ status: "merged", change, pr });
         } catch (error) {
-          await commentOnPullRequest(
+          const posted = await commentOnPullRequest(
             pr,
             `I could not merge this pull request: ${String(error)}. I am still watching for updates.`,
           );
+          // Acked, or jigs' own stand-down note wakes the gate straight back
+          // into this branch.
+          return listen({ selfCommentIds: [], selfConversationCommentIds: [posted.id] });
         }
         return listen();
       }
@@ -301,11 +303,12 @@ export function bindDeliverySteps(steps: DeliverySteps) {
       } else if (wake.kind === "changes-requested") {
         if (seenReviews.has(wake.reviewId)) return listen();
         seenReviews.add(wake.reviewId);
-      } else {
-        const ids = wake.threads.flatMap((thread) => thread.comments.map((comment) => comment.id));
-        if (ids.length > 0 && ids.every((id) => seenComments.has(id))) return listen();
-        for (const id of ids) seenComments.add(id);
       }
+      // A `review-comments` wake needs no guard here: the gate is the one
+      // owner of "is this feedback new", and never yields a wake without
+      // something no earlier wake carried. A second set of ids kept on this
+      // side could only disagree with it — as it did for an edited
+      // conversation comment, which reuses its id.
       const ci = wake.kind === "ci-red";
       const counter = ci ? "ciFixAttempts" : "pullRequestRevisionRounds";
       const phase = ci ? "ci-repair" : "pull-request-revision";
@@ -386,14 +389,15 @@ export function bindDeliverySteps(steps: DeliverySteps) {
       const state = await readBranchState(change.worktree.path, change.worktree.baseSha);
       if (state.dirty) throw new Error("Pull request revision left uncommitted changes");
       await pushBranch(change.worktree.path, change.worktree.branch);
-      const ids = await postReviewAnswers({
-        commentOnPullRequest,
-        replyToPullRequestReviewThread,
-        pr,
-        answers,
-        threads,
-      });
-      return listen({ selfCommentIds: ids });
+      return listen(
+        await postReviewAnswers({
+          commentOnPullRequest,
+          replyToPullRequestReviewThread,
+          pr,
+          answers,
+          threads,
+        }),
+      );
     });
   }
 

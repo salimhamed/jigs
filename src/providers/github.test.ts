@@ -29,11 +29,12 @@ interface SnapshotFixture {
   pull?: Record<string, unknown>;
   reviews?: unknown[];
   comments?: unknown[];
+  conversation?: unknown[];
   checkRuns?: unknown[];
   statuses?: unknown[];
 }
 
-// The six calls fetchPrSnapshot makes, in order.
+// The seven calls fetchPrSnapshot makes, in order.
 function stubSnapshot(fixture: SnapshotFixture = {}): void {
   fetchMock
     .mockResolvedValueOnce(
@@ -46,6 +47,7 @@ function stubSnapshot(fixture: SnapshotFixture = {}): void {
     )
     .mockResolvedValueOnce(json(fixture.reviews ?? []))
     .mockResolvedValueOnce(json(fixture.comments ?? []))
+    .mockResolvedValueOnce(json(fixture.conversation ?? []))
     .mockResolvedValueOnce(json({ check_runs: fixture.checkRuns ?? [] }))
     .mockResolvedValueOnce(json({ statuses: fixture.statuses ?? [] }))
     .mockResolvedValueOnce(json({ login: "jigs-bot" }));
@@ -84,8 +86,9 @@ test("fetchPrSnapshot shapes the PR, its reviews, the head sha and the viewer", 
 
   expect(urls()).toEqual([
     "http://mock.test/github/repos/acme/api/pulls/41",
-    "http://mock.test/github/repos/acme/api/pulls/41/reviews?per_page=100",
-    "http://mock.test/github/repos/acme/api/pulls/41/comments?per_page=100",
+    "http://mock.test/github/repos/acme/api/pulls/41/reviews?per_page=100&page=1",
+    "http://mock.test/github/repos/acme/api/pulls/41/comments?per_page=100&page=1",
+    "http://mock.test/github/repos/acme/api/issues/41/comments?per_page=100&page=1",
     "http://mock.test/github/repos/acme/api/commits/head-sha-1/check-runs?per_page=100",
     "http://mock.test/github/repos/acme/api/commits/head-sha-1/status?per_page=100",
     "http://mock.test/github/user",
@@ -451,6 +454,7 @@ test("reads later review pages so a recent rejection is not hidden", async () =>
       ]),
     )
     .mockResolvedValueOnce(json([]))
+    .mockResolvedValueOnce(json([]))
     .mockResolvedValueOnce(json({ check_runs: [] }))
     .mockResolvedValueOnce(json({ statuses: [] }))
     .mockResolvedValueOnce(json({ login: "agent" }));
@@ -458,4 +462,71 @@ test("reads later review pages so a recent rejection is not hidden", async () =>
   expect(state.reviews).toHaveLength(101);
   expect(state.reviews.at(-1)).toMatchObject({ state: "CHANGES_REQUESTED", commitSha: "head" });
   expect(fetchMock.mock.calls[2]?.[0]).toContain("reviews?per_page=100&page=2");
+});
+
+test("conversation comments come back whole, with the version an edit changes", async () => {
+  stubSnapshot({
+    conversation: [
+      {
+        id: 5150,
+        body: "one more thing",
+        user: { login: "salim", type: "User" },
+        created_at: "2026-09-13T10:00:00Z",
+        updated_at: "2026-09-13T10:30:00Z",
+      },
+      {
+        id: 5151,
+        body: "coverage dropped",
+        user: { login: "codecov[bot]", type: "Bot" },
+        created_at: "2026-09-13T10:05:00Z",
+        updated_at: "2026-09-13T10:05:00Z",
+      },
+    ],
+  });
+
+  const snapshot = await fetchPrSnapshot(pr);
+
+  expect(snapshot.conversationComments).toEqual([
+    {
+      id: 5150,
+      body: "one more thing",
+      user: "salim",
+      userType: "User",
+      createdAt: "2026-09-13T10:00:00Z",
+      updatedAt: "2026-09-13T10:30:00Z",
+    },
+    {
+      id: 5151,
+      body: "coverage dropped",
+      user: "codecov[bot]",
+      userType: "Bot",
+      createdAt: "2026-09-13T10:05:00Z",
+      updatedAt: "2026-09-13T10:05:00Z",
+    },
+  ]);
+});
+
+test("a full page of conversation comments is followed to the next page", async () => {
+  const page = (from: number, count: number) =>
+    Array.from({ length: count }, (_, i) => ({
+      id: from + i,
+      body: "note",
+      user: { login: "salim" },
+      created_at: "1",
+      updated_at: "1",
+    }));
+  fetchMock
+    .mockResolvedValueOnce(json({ state: "open", merged: false, head: { sha: "head" } }))
+    .mockResolvedValueOnce(json([]))
+    .mockResolvedValueOnce(json([]))
+    .mockResolvedValueOnce(json(page(1, 100)))
+    .mockResolvedValueOnce(json(page(101, 2)))
+    .mockResolvedValueOnce(json({ check_runs: [] }))
+    .mockResolvedValueOnce(json({ statuses: [] }))
+    .mockResolvedValueOnce(json({ login: "agent" }));
+
+  const snapshot = await fetchPrSnapshot(pr);
+
+  expect(snapshot.conversationComments).toHaveLength(102);
+  expect(fetchMock.mock.calls[4]?.[0]).toContain("issues/41/comments?per_page=100&page=2");
 });

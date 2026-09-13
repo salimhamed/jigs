@@ -112,6 +112,17 @@ deletion rather than repaired across hostnames.
   are hints, never truth" a replayed Comment delivery only re-runs the
   satisfier, which re-suspends when the ticket has not moved, so the guard
   bought nothing GitHub's path did not already live without.
+- AGE-398 widens what counts as review feedback. A factory running on its
+  operator's own token shares that GitHub identity, and GitHub refuses approve
+  and request-changes on one's own pull request — so the formal review states
+  the loop was built around are unreachable on exactly the pull requests jigs
+  opens. A `COMMENTED` review's body and a comment on the pull request
+  conversation (`issue_comment`, now in the repo hook's event set) are
+  therefore wakes in their own right, carried as synthetic single-comment
+  threads and answered on the conversation. The self guard extends with them:
+  jigs' own conversation comments are filtered by the ids it posted, in their
+  own id space, never by author login — the same collision the inline guard
+  already avoids.
 - This ADR's "exiting on approval or close" is amended: the gate now ends only
   when the pull request closes. `classifyPrState` sets `done` on
   `state === "closed"` and nothing else, because human-merges mode has to keep

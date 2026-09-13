@@ -7,13 +7,17 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { githubWebhookSecretFile, jigsDataDir } from "../config/paths.ts";
 import { JigsError } from "../errors.ts";
 
-// Reviews, inline review comments, and the check-run half of CI. No `status`:
-// that payload names no pull request, so routing one needs a sha lookup jigs
-// does not do yet. The drift PATCH picks up a change on re-bind.
+// Reviews, inline review comments, conversation comments, and the check-run
+// half of CI. `issue_comment` is here because a factory sharing its operator's
+// GitHub identity cannot receive a formal review on its own pull request, so
+// the conversation is where feedback arrives. No `status`: that payload names
+// no pull request, so routing one needs a sha lookup jigs does not do yet. The
+// drift PATCH picks up a change on re-bind.
 export const WEBHOOK_EVENTS = [
   "pull_request",
   "pull_request_review",
   "pull_request_review_comment",
+  "issue_comment",
   "check_suite",
 ];
 

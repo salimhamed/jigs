@@ -6,6 +6,7 @@ import {
   ensureRepoWebhook,
   ensureWebhookSecret,
   parseGithubRemote,
+  verifyRepoWebhook,
   WEBHOOK_EVENTS,
 } from "./github-webhook.ts";
 
@@ -98,6 +99,31 @@ test("verifies an existing matching webhook with zero writes", async () => {
     otherHosts: [],
   });
   expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+// The event set is named once, so bind (ensure) and doctor (verify) cannot
+// drift apart over `issue_comment`, the top-level PR comment.
+test("a hook on the pre-issue_comment event set is repaired by bind and failed by doctor", async () => {
+  const stale = [
+    {
+      id: 9,
+      active: true,
+      events: ["pull_request", "pull_request_review", "pull_request_review_comment", "check_suite"],
+      config: {
+        url: "https://factory.example.ts.net/ingress/github",
+        content_type: "json",
+      },
+    },
+  ];
+  fetchMock.mockResolvedValueOnce(jsonResponse(stale));
+  expect(await verifyRepoWebhook({ ...opts })).toBe(false);
+
+  fetchMock
+    .mockResolvedValueOnce(jsonResponse(stale))
+    .mockResolvedValueOnce(jsonResponse({ id: 9 }));
+  expect((await ensureRepoWebhook(opts)).outcome).toBe("updated");
+  const [, patchInit] = fetchMock.mock.calls[2] as [string, RequestInit];
+  expect(JSON.parse(String(patchInit.body)).events).toEqual(WEBHOOK_EVENTS);
 });
 
 test("patches a webhook whose events drifted", async () => {

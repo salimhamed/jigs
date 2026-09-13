@@ -8,6 +8,7 @@ import type {
   replyToPullRequestReviewThread,
 } from "../../steps/pull-request/pr.ts";
 import type { ThreadAnswers } from "../builder-agent/answer-review.ts";
+import type { GateAck } from "./gate.ts";
 
 export interface PostReviewAnswersOptions {
   replyToPullRequestReviewThread: typeof replyToPullRequestReviewThread;
@@ -20,28 +21,38 @@ export interface PostReviewAnswersOptions {
 }
 
 /**
- * Posts each answer where it belongs and returns the ids of the thread replies
- * — the gate cursor needs jigs' own comment ids to tell its last word on a
- * thread from a human's. Conversation comments are left out: they never appear
- * among the review threads the guard filters.
+ * Posts each answer where it belongs and returns the ack the gate cursor needs
+ * — jigs' own comment ids, the only way to tell its last word from a human's
+ * on a factory that shares its operator's GitHub identity. A synthetic
+ * conversation thread has no inline anchor, so its answer lands on the
+ * conversation and is acked in the conversation's own id space.
  */
-export async function postReviewAnswers(options: PostReviewAnswersOptions): Promise<number[]> {
+export async function postReviewAnswers(options: PostReviewAnswersOptions): Promise<GateAck> {
   const { commentOnPullRequest: comment, replyToPullRequestReviewThread: reply, pr } = options;
-  const known = new Set(options.threads.map((thread) => thread.rootId));
-  const posted: number[] = [];
+  const known = new Map(options.threads.map((thread) => [thread.rootId, thread]));
+  if (known.size < options.threads.length) {
+    // An inline root and a review or conversation id are numbered separately
+    // by GitHub and can collide. The rootId stays as it is — the model reads
+    // it — so the shadowed thread is reported rather than renamed.
+    console.log(
+      `[postReviewAnswers] ${options.threads.length - known.size} thread(s) share a rootId with another in this wake`,
+    );
+  }
+  const ack: Required<GateAck> = { selfCommentIds: [], selfConversationCommentIds: [] };
   for (const answer of options.answers.answers) {
-    if (answer.threadId !== null && !known.has(answer.threadId)) {
+    const thread = answer.threadId === null ? undefined : known.get(answer.threadId);
+    if (answer.threadId !== null && thread === undefined) {
       console.log(
         `[postReviewAnswers] answer named unknown thread ${answer.threadId} — posting on the conversation instead`,
       );
     }
-    if (answer.threadId === null || !known.has(answer.threadId)) {
-      await comment(pr, answer.body);
+    if (thread === undefined || thread.origin === "conversation") {
+      ack.selfConversationCommentIds.push((await comment(pr, answer.body)).id);
     } else {
-      posted.push((await reply(pr, answer.threadId, answer.body)).id);
+      ack.selfCommentIds.push((await reply(pr, thread.rootId, answer.body)).id);
     }
   }
-  return posted;
+  return ack;
 }
 
 export function renderChecks(failing: CheckRun[]): string {

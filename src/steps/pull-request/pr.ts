@@ -62,9 +62,12 @@ export async function replyToPullRequestReviewThread(
   return replyToReviewThread(pr, rootId, body);
 }
 
-/** Post a comment on the pull request conversation. */
-export async function commentOnPullRequest(pr: PrRef, body: string): Promise<void> {
-  await postPrComment(pr, body);
+// The id comes back for the same reason a thread reply's does: the gate
+// cursor filters jigs' own conversation comments by id, and a conversation
+// comment now wakes the gate like an inline one.
+/** Post a comment on the pull request conversation and return its id. */
+export async function commentOnPullRequest(pr: PrRef, body: string): Promise<{ id: number }> {
+  return postPrComment(pr, body);
 }
 
 // The subject is read here rather than carried in from `describePullRequest`: a

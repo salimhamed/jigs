@@ -15,6 +15,7 @@ const snapshot: PrSnapshot = {
   headSha: "new",
   viewer: "agent",
   reviewThreads: [],
+  conversationComments: [],
   ci: "green",
   failingChecks: [],
   reviews: [

@@ -17,6 +17,7 @@ const snapshot: PrSnapshot = {
   failingChecks: [],
   viewer: "agent",
   reviewThreads: [],
+  conversationComments: [],
   reviews: [
     { id: 1, user: "person", state: "APPROVED", submittedAt: "today", body: "", commitSha: "head" },
   ],
