@@ -64,7 +64,8 @@ export async function bindRepo(
     ([, binding]) => binding.remote === remoteUrl,
   );
   const matchingBinding = matchingBindings[0];
-  const name = options.name ?? matchingBinding?.[0] ?? defaultBindingName(remoteUrl);
+  const derivedName = defaultBindingName(remoteUrl);
+  const name = options.name ?? matchingBinding?.[0] ?? derivedName;
   if (!BINDING_NAME_PATTERN.test(name)) {
     throw new JigsError(
       `invalid binding name ${JSON.stringify(name)}`,
@@ -82,7 +83,6 @@ export async function bindRepo(
       `jigs unbind ${name}, then bind again — the clone at ${bindingDir({ factoryRoot, bindingName: name })} holds the old repo's objects`,
     );
   }
-  const persistedRemote = existing?.remote ?? remoteUrl;
   const updated = upsertBinding(text, name, remoteUrl);
 
   if (updated !== text) {
@@ -91,7 +91,7 @@ export async function bindRepo(
   deps.out(
     existing === undefined
       ? `bound ${name} → ${remoteUrl}`
-      : `${name} already points at ${persistedRemote}`,
+      : `${name} already points at ${remoteUrl}`,
   );
   // A new entry has nothing cloned yet, or — after the unbind a repoint takes
   // — the old repo's objects sitting where its clone goes. An entry a failed
@@ -113,13 +113,12 @@ export async function bindRepo(
     // The repair it prints has to land on this binding, not on the one the
     // remote alone would derive.
     reBindCommand:
-      options.name !== undefined ||
-      (matchingBinding !== undefined && name !== defaultBindingName(remoteUrl))
+      options.name !== undefined || name !== derivedName
         ? `jigs bind ${remoteUrl} --name ${name}`
         : `jigs bind ${remoteUrl}`,
     deps,
   });
-  return { name, remote: persistedRemote, webhook };
+  return { name, remote: remoteUrl, webhook };
 }
 
 // The likeliest operator error, given that bind used to take a checkout path.
