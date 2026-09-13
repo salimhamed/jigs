@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.18.0](https://github.com/salimhamed/jigs/compare/jigs-v0.17.0...jigs-v0.18.0) (2026-09-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* run the operator's codex and refuse to start without it ([#184](https://github.com/salimhamed/jigs/issues/184))
+
+### Bug Fixes
+
+* run the operator's codex and refuse to start without it ([#184](https://github.com/salimhamed/jigs/issues/184)) ([5782a75](https://github.com/salimhamed/jigs/commit/5782a75d77a1aeb500ebef5e99b3ce4052c03043))
+
 ## [0.17.0](https://github.com/salimhamed/jigs/compare/jigs-v0.16.0...jigs-v0.17.0) (2026-09-13)
 
 
