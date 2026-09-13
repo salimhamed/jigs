@@ -39,6 +39,14 @@ a factory ([ADR 0013](docs/adr/0013-factory-owned-steps.md)). `pnpm e2e` is
 what proves it, and it also scans the built workflow bundle for `node:`
 specifiers and `process.env`.
 
+## Compatibility
+
+Jigs has no compatibility obligation. Change a contract in place: rename,
+remove and reshape types, exports, config and durable addresses without shims,
+deprecation paths, fallbacks for old callers or dual code paths. A breaking
+change is a `!` in the PR title and one footer line in the commit, nothing more.
+Factories adopt a release by upgrading and fixing what breaks.
+
 ## Agent skills
 
 ### Issue tracker
