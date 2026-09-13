@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.1](https://github.com/salimhamed/jigs/compare/jigs-v0.18.0...jigs-v0.18.1) (2026-09-13)
+
+
+### Bug Fixes
+
+* match an existing binding by remote when bind derives the name ([#188](https://github.com/salimhamed/jigs/issues/188)) ([b477216](https://github.com/salimhamed/jigs/commit/b47721679ec0ba403174e08cfe8657823f4f6295))
+
 ## [0.18.0](https://github.com/salimhamed/jigs/compare/jigs-v0.17.0...jigs-v0.18.0) (2026-09-13)
 
 
