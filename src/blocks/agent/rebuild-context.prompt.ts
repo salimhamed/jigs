@@ -40,12 +40,16 @@ ${threads}
 Read the diff and the files it touches in your working directory before you
 answer anything — the diff above is the summary, the worktree is the truth.
 
-Emit the answers object: one entry per thread listed above.
+Emit the answers object: one entry per thread listed above, plus a commit
+explanation.
 
 - \`threadId\`: the thread's id, exactly as it appears above. Use \`null\` for an
   answer that belongs on the pull request conversation rather than in a thread.
 - \`body\`: your reply, as GitHub-flavoured markdown. Address the reviewer's
   actual point. Say what you changed, or why you did not change it.
+- \`commitExplanation\`: when you made a commit, a concise explanation of what
+  changed and what validation you ran. Otherwise, \`null\`. Do not use this
+  field to summarize answers when no commit was made.
 
 If a comment asks for a code change, make the change and commit it before you
 answer, then say so in the reply. If it asks a question, answer the question.

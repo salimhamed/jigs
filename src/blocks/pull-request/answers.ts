@@ -15,6 +15,7 @@ export interface PostReviewAnswersOptions {
   commentOnPullRequest: typeof commentOnPullRequest;
   pr: PrRef;
   answers: ThreadAnswers;
+  postCommitExplanation: boolean;
   // The wake's own threads: anything the model names outside them is invented,
   // and replying into it 404s, which burns the step's three retries.
   threads: ReviewThread[];
@@ -50,6 +51,16 @@ export async function postReviewAnswers(options: PostReviewAnswersOptions): Prom
       ack.selfConversationCommentIds.push((await comment(pr, answer.body)).id);
     } else {
       ack.selfCommentIds.push((await reply(pr, thread.rootId, answer.body)).id);
+    }
+  }
+  if (options.postCommitExplanation) {
+    const explanation = options.answers.commitExplanation;
+    if (explanation === null) {
+      console.log(
+        "[postReviewAnswers] revision committed changes without an explanation — posting answers only",
+      );
+    } else {
+      ack.selfConversationCommentIds.push((await comment(pr, explanation)).id);
     }
   }
   return ack;

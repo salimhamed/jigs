@@ -62,9 +62,9 @@ flowchart TD
     ciFix["CI repair agent<br/>commits the fix"]
     ciCommit{"a new clean commit?"}
     revBudget{"pullRequestRevisionRounds<br/>left?"}
-    revise["revision agent<br/>commits and answers threads"]
+    revise["revision agent<br/>answers threads and may commit"]
     revCommitted{"worktree clean?"}
-    pushRevise["push and post the answers"]
+    pushRevise["push and post answers;<br/>if a commit landed, post its explanation"]
     done(["merged / closed"])
 
     gate -- "ci-green, approved" --> gate
@@ -132,7 +132,10 @@ Reading the graph against the code:
   Feedback that is not a formal review wakes the loop the same way: a
   `COMMENTED` review's body and a comment on the pull request conversation each
   arrive as a single-comment thread in that wake, answered on the conversation
-  rather than in a thread reply.
+  rather than in a thread reply. After a revision, answers are always posted.
+  A separate change-and-validation explanation is posted only when the branch
+  head moved during that round; a missing explanation degrades to answers-only
+  rather than ending the run.
   `merge-ready` means green CI plus an approval of the *current* head; under
   `merge: "human"` it only keeps listening. The gate ends when the pull request
   closes, and under `merge: "jigs"` it also ends the moment jigs' own squash
