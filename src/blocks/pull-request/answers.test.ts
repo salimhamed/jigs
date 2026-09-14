@@ -148,6 +148,22 @@ test("a requested commit explanation is posted and acknowledged once", async () 
   expect(ack).toEqual({ selfCommentIds: [7001], selfConversationCommentIds: [8001] });
 });
 
+test("a missing commit explanation degrades to posting and acknowledging the answers", async () => {
+  const posted = recorder();
+  const ack = await postReviewAnswers({
+    replyToPullRequestReviewThread: posted.replyToPullRequestReviewThread,
+    commentOnPullRequest: posted.commentOnPullRequest,
+    pr,
+    answers: { answers: [{ threadId: 900, body: "fixed" }], commitExplanation: null },
+    postCommitExplanation: true,
+    threads,
+  });
+
+  expect(posted.replies).toEqual([[900, "fixed"]]);
+  expect(posted.comments).toEqual([]);
+  expect(ack).toEqual({ selfCommentIds: [7001], selfConversationCommentIds: [] });
+});
+
 test("a red build the provider named no check for still renders something", () => {
   expect(renderChecks([])).toContain("without naming a check");
   expect(renderChecks(failing)).toBe("- **test** — failure — http://ci.test/1");

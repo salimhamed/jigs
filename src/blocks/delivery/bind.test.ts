@@ -207,10 +207,10 @@ describe("delivery", () => {
       config.prompt.includes("Address the review feedback")
         ? {
             text: "",
-            output: {
+            output: config.output?.parse({
               answers: [{ threadId: 4, body: "It keeps membership checks constant-time." }],
               commitExplanation: "No changes were needed. The bind tests passed.",
-            },
+            }),
           }
         : original(config)) as AgentFn;
     const result = await bindDeliverySteps(steps).deliverChange(options);

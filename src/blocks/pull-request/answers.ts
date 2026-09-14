@@ -42,7 +42,9 @@ export async function postReviewAnswers(options: PostReviewAnswersOptions): Prom
   const ack: Required<GateAck> = { selfCommentIds: [], selfConversationCommentIds: [] };
   const explanation = options.answers.commitExplanation;
   if (options.postCommitExplanation && explanation === null) {
-    throw new Error("Pull request revision committed changes without an explanation");
+    console.log(
+      "[postReviewAnswers] revision committed changes without an explanation — posting answers only",
+    );
   }
   const commitExplanation = options.postCommitExplanation ? explanation : null;
   for (const answer of options.answers.answers) {
