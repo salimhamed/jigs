@@ -12,4 +12,6 @@ test("the rebuild prompt renders the ticket, the brief, the diff and the threads
   expect(rendered).toContain("THE-BRIEF");
   expect(rendered).toContain("THE-DIFF");
   expect(rendered).toContain("THE-THREADS");
+  expect(rendered).toContain("`commitExplanation`");
+  expect(rendered).toContain("Otherwise, `null`");
 });
