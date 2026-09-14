@@ -55,7 +55,7 @@ function setup(wakes: GateWake[] = [{ kind: "closed", merged: true }]) {
         ? { verdict: "approved", findings: [] }
         : config.prompt.includes("Write a concise")
           ? { title: "fix: search", body: "Fixed and tested" }
-          : { answers: [{ threadId: null, body: "Done" }] },
+          : { answers: [{ threadId: null, body: "Done" }], commitExplanation: null },
     ) as T;
     return { text: "", output, session: { harness: config.harness.kind, id: "session" } };
   };
@@ -181,7 +181,51 @@ describe("delivery", () => {
     expect(closed).toHaveBeenCalledOnce();
   });
 
-  it("acknowledges posted thread replies before asking the gate for another wake", async () => {
+  it("posts only the answer for a question-only revision round with no commit", async () => {
+    const thread = {
+      rootId: 4,
+      path: "src/a.ts",
+      line: 1,
+      comments: [
+        {
+          id: 4,
+          rootId: 4,
+          path: "src/a.ts",
+          line: 1,
+          user: "reviewer",
+          body: "Why use a set here?",
+          createdAt: "2026-01-01",
+        },
+      ],
+    };
+    const { steps, acks } = setup([
+      { kind: "review-comments", threads: [thread] },
+      { kind: "closed", merged: true },
+    ]);
+    const original = steps.runAgent;
+    steps.runAgent = (async (config) =>
+      config.prompt.includes("Address the review feedback")
+        ? {
+            text: "",
+            output: {
+              answers: [{ threadId: 4, body: "It keeps membership checks constant-time." }],
+              commitExplanation: "No changes were needed. The bind tests passed.",
+            },
+          }
+        : original(config)) as AgentFn;
+    const result = await bindDeliverySteps(steps).deliverChange(options);
+    expect(result.status).toBe("merged");
+    expect(acks[0]).toEqual({ selfCommentIds: [77], selfConversationCommentIds: [] });
+    expect(steps.replyToPullRequestReviewThread).toHaveBeenCalledOnce();
+    expect(steps.replyToPullRequestReviewThread).toHaveBeenCalledWith(
+      pr,
+      4,
+      "It keeps membership checks constant-time.",
+    );
+    expect(steps.commentOnPullRequest).not.toHaveBeenCalled();
+  });
+
+  it("posts and acknowledges one commit explanation when a revision pushes a commit", async () => {
     const thread = {
       rootId: 4,
       path: "src/a.ts",
@@ -202,15 +246,37 @@ describe("delivery", () => {
       { kind: "review-comments", threads: [thread] },
       { kind: "closed", merged: true },
     ]);
-    const original = steps.runAgent;
-    steps.runAgent = (async (config) =>
-      config.prompt.includes("Address the review feedback")
-        ? { text: "", output: { answers: [{ threadId: 4, body: "Fixed" }] } }
-        : original(config)) as AgentFn;
-    const result = await bindDeliverySteps(steps).deliverChange(options);
+    vi.mocked(steps.readBranchState)
+      .mockResolvedValueOnce({ commits: 1, headSha: "before", dirty: false })
+      .mockResolvedValueOnce({ commits: 2, headSha: "after", dirty: false });
+    steps.runAgent = (async (config) => ({
+      text: "",
+      output: config.output?.parse({
+        answers: [{ threadId: 4, body: "Fixed." }],
+        commitExplanation: "Changed the lookup and ran the bind tests.",
+      }),
+    })) as AgentFn;
+
+    const result = await bindDeliverySteps(steps).followPullRequest({
+      change: { ...approved, attempts: { ...approved.attempts }, sessions: {} },
+      pr,
+      implementation: options.implementation,
+      limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
+      merge: "human",
+    });
+
     expect(result.status).toBe("merged");
-    expect(acks[0]).toEqual({ selfCommentIds: [77], selfConversationCommentIds: [] });
-    expect(steps.replyToPullRequestReviewThread).toHaveBeenCalledWith(pr, 4, "Fixed");
+    expect(steps.pushBranch).toHaveBeenCalledOnce();
+    expect(steps.replyToPullRequestReviewThread).toHaveBeenCalledOnce();
+    expect(steps.commentOnPullRequest).toHaveBeenCalledOnce();
+    expect(steps.commentOnPullRequest).toHaveBeenCalledWith(
+      pr,
+      "Changed the lookup and ran the bind tests.",
+    );
+    expect(acks[0]).toEqual({
+      selfCommentIds: [77],
+      selfConversationCommentIds: [8800],
+    });
   });
 
   // The gate delivers a conversation comment once per version, so an edit
@@ -583,9 +649,17 @@ describe("delivery", () => {
         { kind: "closed", merged: true },
       ]);
       vi.mocked(steps.readWorktreeDiff).mockRejectedValue(new Error("Diff unavailable"));
-      vi.mocked(steps.readBranchState)
-        .mockResolvedValueOnce({ commits: 1, headSha: "first", dirty: false })
-        .mockResolvedValue({ commits: 2, headSha: "second", dirty: false });
+      if (role === "ciRepair") {
+        vi.mocked(steps.readBranchState)
+          .mockResolvedValueOnce({ commits: 1, headSha: "first", dirty: false })
+          .mockResolvedValue({ commits: 2, headSha: "second", dirty: false });
+      } else {
+        vi.mocked(steps.readBranchState).mockResolvedValue({
+          commits: 1,
+          headSha: "first",
+          dirty: false,
+        });
+      }
       await bindDeliverySteps(steps).followPullRequest({
         change: { ...approved, attempts: { ...approved.attempts }, sessions: {} },
         pr,

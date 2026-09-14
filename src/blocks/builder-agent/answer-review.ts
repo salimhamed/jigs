@@ -30,6 +30,7 @@ export const threadAnswers = z.strictObject({
       body: z.string().min(1),
     }),
   ),
+  commitExplanation: z.string().min(1).nullable(),
 });
 
 export type ThreadAnswers = z.output<typeof threadAnswers>;

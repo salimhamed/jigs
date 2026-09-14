@@ -68,7 +68,8 @@ test("the ids of the thread replies it posts come back for the gate cursor", asy
     replyToPullRequestReviewThread: posted.replyToPullRequestReviewThread,
     commentOnPullRequest: posted.commentOnPullRequest,
     pr,
-    answers: { answers: [{ threadId: 900, body: "done" }] },
+    answers: { answers: [{ threadId: 900, body: "done" }], commitExplanation: null },
+    postCommitExplanation: false,
     threads,
   });
 
@@ -83,7 +84,8 @@ test("an answer that lands on the conversation acks in the conversation id space
     replyToPullRequestReviewThread: posted.replyToPullRequestReviewThread,
     commentOnPullRequest: posted.commentOnPullRequest,
     pr,
-    answers: { answers: [{ threadId: null, body: "addressed all four" }] },
+    answers: { answers: [{ threadId: null, body: "addressed all four" }], commitExplanation: null },
+    postCommitExplanation: false,
     threads,
   });
 
@@ -98,7 +100,8 @@ test("a synthetic conversation thread is answered on the conversation, not repli
     replyToPullRequestReviewThread: posted.replyToPullRequestReviewThread,
     commentOnPullRequest: posted.commentOnPullRequest,
     pr,
-    answers: { answers: [{ threadId: 5150, body: "good catch" }] },
+    answers: { answers: [{ threadId: 5150, body: "good catch" }], commitExplanation: null },
+    postCommitExplanation: false,
     threads: [...threads, conversation(5150, "one more thing")],
   });
 
@@ -114,7 +117,8 @@ test("an answer naming a thread this wake never carried lands on the conversatio
     replyToPullRequestReviewThread: posted.replyToPullRequestReviewThread,
     commentOnPullRequest: posted.commentOnPullRequest,
     pr,
-    answers: { answers: [{ threadId: 4242, body: "invented" }] },
+    answers: { answers: [{ threadId: 4242, body: "invented" }], commitExplanation: null },
+    postCommitExplanation: false,
     threads,
   });
 
@@ -123,6 +127,25 @@ test("an answer naming a thread this wake never carried lands on the conversatio
   expect(posted.replies).toEqual([]);
   expect(posted.comments).toEqual(["invented"]);
   expect(ack).toEqual({ selfCommentIds: [], selfConversationCommentIds: [8001] });
+});
+
+test("a requested commit explanation is posted and acknowledged once", async () => {
+  const posted = recorder();
+  const ack = await postReviewAnswers({
+    replyToPullRequestReviewThread: posted.replyToPullRequestReviewThread,
+    commentOnPullRequest: posted.commentOnPullRequest,
+    pr,
+    answers: {
+      answers: [{ threadId: 900, body: "fixed" }],
+      commitExplanation: "Changed the lookup and ran tests.",
+    },
+    postCommitExplanation: true,
+    threads,
+  });
+
+  expect(posted.replies).toEqual([[900, "fixed"]]);
+  expect(posted.comments).toEqual(["Changed the lookup and ran tests."]);
+  expect(ack).toEqual({ selfCommentIds: [7001], selfConversationCommentIds: [8001] });
 });
 
 test("a red build the provider named no check for still renders something", () => {

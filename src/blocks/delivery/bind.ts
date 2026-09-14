@@ -377,6 +377,7 @@ export function bindDeliverySteps(steps: DeliverySteps) {
         threads,
         ...(wake.body === undefined ? {} : { reviewBody: wake.body }),
       };
+      const startingState = await readBranchState(change.worktree.path, change.worktree.baseSha);
       const answers = await runRole<TTask, PullRequestRevisionPromptContext<TTask>, ThreadAnswers>({
         change,
         name: "pullRequestRevision",
@@ -395,6 +396,7 @@ export function bindDeliverySteps(steps: DeliverySteps) {
           replyToPullRequestReviewThread,
           pr,
           answers,
+          postCommitExplanation: state.headSha !== startingState.headSha,
           threads,
         }),
       );

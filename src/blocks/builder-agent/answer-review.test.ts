@@ -76,6 +76,7 @@ const fakeReadDiff: typeof readWorktreeDiff = async (cwd, baseSha) => {
 
 const answer = (body: string) => ({
   answers: [{ threadId: 900, body }],
+  commitExplanation: null,
 });
 
 const run = (session?: { harness: "claude"; id: string }) =>
@@ -161,7 +162,7 @@ test("an error that is not a resume failure is not swallowed", async () => {
 });
 
 test("a review body with no thread of its own is answered on the conversation", async () => {
-  raw = [{ answers: [{ threadId: null, body: "addressed all four" }] }];
+  raw = [{ answers: [{ threadId: null, body: "addressed all four" }], commitExplanation: null }];
   const result = await answerReview({
     runAgent: fakeAgent,
     readWorktreeDiff: fakeReadDiff,
@@ -180,6 +181,6 @@ test("a review body with no thread of its own is answered on the conversation", 
 });
 
 test("a malformed answers object fails the schema", async () => {
-  raw = [{ answers: [{ threadId: 900, body: "" }] }];
+  raw = [{ answers: [{ threadId: 900, body: "" }], commitExplanation: null }];
   await expect(run({ harness: "claude", id: "s-42" })).rejects.toThrow();
 });
