@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.19.0](https://github.com/salimhamed/jigs/compare/jigs-v0.18.1...jigs-v0.19.0) (2026-09-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* post a revision summary only when a commit lands ([#190](https://github.com/salimhamed/jigs/issues/190))
+
+### Bug Fixes
+
+* post a revision summary only when a commit lands ([#190](https://github.com/salimhamed/jigs/issues/190)) ([cd42934](https://github.com/salimhamed/jigs/commit/cd42934d47951176100d693747869f4f7ae1f4fb))
+
 ## [0.18.1](https://github.com/salimhamed/jigs/compare/jigs-v0.18.0...jigs-v0.18.1) (2026-09-13)
 
 
