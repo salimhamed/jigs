@@ -4,6 +4,7 @@ import {
   fetchPrCommitMessages,
   fetchPrSnapshot,
   fetchPrTitle,
+  findOpenPullRequestsByHeadSha,
   markPrReady,
   mergePr,
   postPrComment,
@@ -55,6 +56,38 @@ function stubSnapshot(fixture: SnapshotFixture = {}): void {
 }
 
 const urls = () => fetchMock.mock.calls.map(([url]) => url as string);
+
+test("findOpenPullRequestsByHeadSha returns matching open PRs using their base repos", async () => {
+  fetchMock.mockResolvedValueOnce(
+    json([
+      {
+        number: 41,
+        state: "open",
+        head: { sha: "status-sha" },
+        base: { repo: { name: "api", owner: { login: "acme" } } },
+      },
+      {
+        number: 42,
+        state: "closed",
+        head: { sha: "status-sha" },
+        base: { repo: { name: "api", owner: { login: "acme" } } },
+      },
+      {
+        number: 43,
+        state: "open",
+        head: { sha: "newer-sha" },
+        base: { repo: { name: "api", owner: { login: "acme" } } },
+      },
+    ]),
+  );
+
+  await expect(
+    findOpenPullRequestsByHeadSha({ owner: "fork-owner", repo: "fork" }, "status-sha"),
+  ).resolves.toEqual([{ owner: "acme", repo: "api", number: 41 }]);
+  expect(urls()).toEqual([
+    "http://mock.test/github/repos/fork-owner/fork/commits/status-sha/pulls?per_page=100&page=1",
+  ]);
+});
 
 test("fetchPrSnapshot shapes the PR, its reviews and the head sha", async () => {
   stubSnapshot({

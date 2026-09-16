@@ -92,6 +92,26 @@ export async function getAuthenticatedUser(): Promise<{ login: string }> {
   return githubGet<{ login: string }>("/user");
 }
 
+/** Resolve a commit-status delivery to every open PR currently headed by that commit. */
+export async function findOpenPullRequestsByHeadSha(
+  repository: Pick<PrRef, "owner" | "repo">,
+  sha: string,
+): Promise<PrRef[]> {
+  const pulls = await githubGetAll<{
+    number: number;
+    state: string;
+    head: { sha: string };
+    base: { repo: { name: string; owner: { login: string } } };
+  }>(`/repos/${repository.owner}/${repository.repo}/commits/${sha}/pulls`);
+  return pulls
+    .filter((pull) => pull.state === "open" && pull.head.sha === sha)
+    .map((pull) => ({
+      owner: pull.base.repo.owner.login,
+      repo: pull.base.repo.name,
+      number: pull.number,
+    }));
+}
+
 // A completed run in any of these is a red build; everything else that
 // completed counts as green.
 const RED_CONCLUSIONS = new Set([

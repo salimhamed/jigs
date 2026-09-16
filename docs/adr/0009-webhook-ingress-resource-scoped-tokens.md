@@ -89,6 +89,15 @@ overwrite another's hook and secret when both used the same repository. A
 hostname change now creates a new hook; the old hook is left for manual
 deletion rather than repaired across hostnames.
 
+### Addendum: commit-status routing (2026-09-16)
+
+Repository hooks now subscribe to GitHub's legacy `status` event as well as
+`check_suite`, so CodeBuild results wake a gate immediately. It was originally
+excluded because its payload names a commit but no pull request. The service
+ingress now resolves that sha through `GET /repos/{owner}/{repo}/commits/{sha}/pulls`
+and wakes every open pull request whose head matches; the network lookup stays
+outside the replay-safe blocks layer.
+
 - AGE-393 amends the original delivery response: verified events with no
   matching suspended run return 200 with `{ delivered: false }`, because they
   are successfully received events jigs does not care about. Resume failures
