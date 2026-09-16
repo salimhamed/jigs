@@ -22,12 +22,13 @@ import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { jigsDataDir } from "../../config/paths.ts";
 import { JigsError } from "../../errors.ts";
 import { stringEnv } from "../../steps/agent/harnesses/env.ts";
+import { type SystemdUserManager, systemdUserManager } from "./systemd-user.ts";
 
-// Supervision is a pidfile under the jigs data dir, keyed by factory slug —
-// not a systemd unit. A service per factory repo would otherwise need a unit
-// per factory, and the CLI would have to generate, install and name them;
-// the pidfile keeps jigs portable and collapses every "how do I restart
-// this" repair string to one constant, `jigs service restart`.
+// Supervision remains a pidfile under the jigs data dir, keyed by factory
+// slug. On systemd hosts the process also enters a transient user scope, but
+// jigs never installs a persistent unit or delegates lifecycle state to it.
+// The pidfile keeps every "how do I restart this" repair string portable and
+// constant: `jigs service restart`.
 
 // The factory repo builds its service with nitro; this is where that build
 // lands. Producing it is `jigs build`'s job, so a missing entry is an error
@@ -73,6 +74,7 @@ export interface ServiceLifecycleDeps {
   startTimeoutMs?: number;
   startPollMs?: number;
   stopTimeoutMs?: number;
+  systemd?: SystemdUserManager;
 }
 
 export interface StartOptions {
@@ -212,7 +214,7 @@ export async function startService(
   deps: ServiceLifecycleDeps,
   options: StartOptions = {},
 ): Promise<void> {
-  const { out, processes = nodeProcesses } = deps;
+  const { out, processes = nodeProcesses, systemd = systemdUserManager } = deps;
   const factoryRoot = locateFactoryRoot(deps.cwd);
   const service = resolveService(factoryRoot);
   const { slug, serviceUrl, dashboardUrl } = service;
@@ -232,9 +234,12 @@ export async function startService(
   }
 
   const logFile = serviceLogPath(slug);
+  const supervised = systemd.available();
   const pid = processes.spawn({
-    command: process.execPath,
-    args: [SERVICE_ENTRY],
+    command: supervised ? "systemd-run" : process.execPath,
+    args: supervised
+      ? ["--user", "--scope", `--unit=jigs-${slug}`, process.execPath, SERVICE_ENTRY]
+      : [SERVICE_ENTRY],
     cwd: factoryRoot,
     env: childEnv(factoryRoot, service),
     logPath: logFile,
@@ -375,11 +380,22 @@ export function serviceStatus(deps: ServiceLifecycleDeps): void {
   const pid = livePid(slug, processes);
   out(
     pid === undefined
-      ? `${slug}: not running (${serviceUrl})`
+      ? deadServiceStatus(slug, serviceUrl)
       : `${slug}: running pid ${pid} at ${serviceUrl}`,
   );
   out(`dashboard: ${dashboardUrl}`);
   out(`factory ${factoryRoot}`);
+}
+
+function deadServiceStatus(slug: string, serviceUrl: string): string {
+  const log = serviceLogPath(slug);
+  if (!existsSync(log)) return `${slug}: not running (${serviceUrl})`;
+  const signal = tailLines(log, LOG_LINES)
+    .reverse()
+    .map((line) => line.match(/Received ['"](SIG[A-Z]+)['"]/i)?.[1]?.toUpperCase())
+    .find((value) => value !== undefined);
+  const since = statSync(log).mtime.toISOString();
+  return `${slug}: not running since ${since}${signal === undefined ? "" : `, last signal ${signal}`} (${serviceUrl})`;
 }
 
 // `jigs logs <run>` is about a run — it resolves the ref and points at the
