@@ -84,7 +84,12 @@ export interface GithubMergePolicyProbes {
     owner: string,
     repo: string,
     branch: string,
-  ): Promise<{ requiredStatusChecks: number; requiredApprovingReviews: number } | null>;
+  ): Promise<{
+    requiredStatusChecks: number;
+    requiredApprovingReviews: number;
+    /** False when one protection mechanism could not be read. */
+    complete?: boolean;
+  } | null>;
 }
 
 export const realGithubMergePolicyProbes: GithubMergePolicyProbes = {
@@ -153,7 +158,13 @@ export const realGithubMergePolicyProbes: GithubMergePolicyProbes = {
     const ruleValues = settledValue(rules) ?? [];
     const statusRules = ruleValues.filter((rule) => rule.type === "required_status_checks");
     const reviewRules = ruleValues.filter((rule) => rule.type === "pull_request");
-    if (classicValue === undefined && statusRules.length === 0 && reviewRules.length === 0) {
+    const complete = classic.status === "fulfilled" && rules.status === "fulfilled";
+    if (
+      complete &&
+      classicValue === undefined &&
+      statusRules.length === 0 &&
+      reviewRules.length === 0
+    ) {
       return null;
     }
     const requiredChecks = new Set([
@@ -171,6 +182,7 @@ export const realGithubMergePolicyProbes: GithubMergePolicyProbes = {
         classicValue?.required_pull_request_reviews?.required_approving_review_count ?? 0,
         ...reviewRules.map((rule) => rule.parameters?.required_approving_review_count ?? 0),
       ),
+      complete,
     };
   },
 };
@@ -388,7 +400,14 @@ async function inspectBinding(
     probes.protection(ref.owner, ref.repo, repository.default_branch),
   ]);
   const protectionResult = settledValue(protectionSettled);
-  if (protectionSettled.status === "rejected") {
+  const incompleteCouldChangeVerdict =
+    protectionResult !== null &&
+    protectionResult !== undefined &&
+    protectionResult.complete === false &&
+    (protectionResult.requiredStatusChecks === 0 ||
+      merge.approval.kind === "label" ||
+      protectionResult.requiredApprovingReviews === 0);
+  if (protectionSettled.status === "rejected" || incompleteCouldChangeVerdict) {
     findings.push({
       binding: bindingName,
       reason: `could not read branch protection or rulesets for ${ref.owner}/${ref.repo}, so jigs cannot verify that merges will be allowed`,

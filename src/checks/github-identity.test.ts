@@ -301,7 +301,11 @@ test("the protection probe combines classic protection and rulesets", async () =
     ]);
   await expect(
     realGithubMergePolicyProbes.protection("acme", "api", "release/v1"),
-  ).resolves.toEqual({ requiredStatusChecks: 2, requiredApprovingReviews: 2 });
+  ).resolves.toEqual({
+    requiredStatusChecks: 2,
+    requiredApprovingReviews: 2,
+    complete: true,
+  });
   expect(githubGetMock.mock.calls.map(([url]) => url)).toEqual([
     "/repos/acme/api/branches/release%2Fv1/protection",
     "/repos/acme/api/rules/branches/release%2Fv1",
@@ -316,13 +320,21 @@ test("the classic-protection probe reports required checks and reviews, includin
   githubGetMock.mockResolvedValueOnce([]);
   await expect(
     realGithubMergePolicyProbes.protection("acme", "api", "release/v1"),
-  ).resolves.toEqual({ requiredStatusChecks: 2, requiredApprovingReviews: 1 });
+  ).resolves.toEqual({
+    requiredStatusChecks: 2,
+    requiredApprovingReviews: 1,
+    complete: true,
+  });
 
   githubGetMock.mockRejectedValueOnce(
     new GithubApiError(404, "/branches/main/protection", "not protected"),
   );
   githubGetMock.mockResolvedValueOnce([]);
-  await expect(realGithubMergePolicyProbes.protection("acme", "api", "main")).resolves.toBeNull();
+  await expect(realGithubMergePolicyProbes.protection("acme", "api", "main")).resolves.toEqual({
+    requiredStatusChecks: 0,
+    requiredApprovingReviews: 0,
+    complete: false,
+  });
 });
 
 test("the protection probe falls back from classic protection to rulesets", async () => {
@@ -340,6 +352,7 @@ test("the protection probe falls back from classic protection to rulesets", asyn
   await expect(realGithubMergePolicyProbes.protection("acme", "api", "main")).resolves.toEqual({
     requiredStatusChecks: 2,
     requiredApprovingReviews: 2,
+    complete: false,
   });
   expect(githubGetMock.mock.calls.map(([url]) => url)).toEqual([
     "/repos/acme/api/branches/main/protection",
@@ -356,6 +369,7 @@ test("the protection probe preserves a readable leg and rejects when both are un
   await expect(realGithubMergePolicyProbes.protection("acme", "api", "main")).resolves.toEqual({
     requiredStatusChecks: 0,
     requiredApprovingReviews: 3,
+    complete: false,
   });
 
   githubGetMock
@@ -436,6 +450,24 @@ test("App mode reports missing required checks and approving review", async () =
   });
   if (result?.ok !== false) throw new Error("expected failure");
   expect(result.reason).toContain("does not require an approving review");
+});
+
+test.each([
+  [
+    "unreadable classic protection and no rulesets",
+    { requiredStatusChecks: 0, requiredApprovingReviews: 0, complete: false },
+  ],
+  [
+    "readable classic protection and unreadable rulesets",
+    { requiredStatusChecks: 1, requiredApprovingReviews: 0, complete: false },
+  ],
+])("%s reports that label policy could not be fully verified", async (_case, protection) => {
+  expect(
+    await policyOutcome(LABEL_POLICY, binding, { protection: async () => protection }),
+  ).toMatchObject({
+    ok: false,
+    reason: expect.stringContaining("could not read branch protection or rulesets"),
+  });
 });
 
 test("the effective merge policy is reported and checked per binding", async () => {
