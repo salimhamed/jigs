@@ -1,8 +1,8 @@
 import type { z } from "zod";
-import { JigsError } from "../../errors.ts";
 import { resumeOrRebuild } from "../agent/resume-or-rebuild.ts";
 import { type ThreadAnswers, threadAnswers } from "../builder-agent/answer-review.ts";
 import { pullRequestDescription } from "../builder-agent/describe-pr.ts";
+import { JigsError } from "../errors.ts";
 import { postPullRequestNote, postReviewAnswers, renderChecks } from "../pull-request/answers.ts";
 import { attend, finished, listen } from "../pull-request/attend.ts";
 import type { StatusReason } from "../pull-request/marker.ts";

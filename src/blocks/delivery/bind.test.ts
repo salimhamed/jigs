@@ -167,7 +167,7 @@ describe("delivery", () => {
     expect(closed).toHaveBeenCalledOnce();
   });
 
-  it("returns limit-reached without opening a PR or implicitly retrying", async () => {
+  it("fails at the round limit without opening a PR or implicitly retrying", async () => {
     const { steps } = setup();
     const runAgent = vi.fn().mockImplementation(async (config) => ({
       text: "",

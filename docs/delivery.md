@@ -31,7 +31,6 @@ flowchart TD
 
     irBudget -- "yes: round + 1" --> impl
     impl --> committed
-    committed -- "no" --> uncommitted(["throw after push + ticket note"])
     committed -- "yes" --> review
     review --> verdict
     verdict -- "yes: findings and the builder's<br/>answers carried to the next round" --> irBudget
@@ -65,7 +64,8 @@ flowchart TD
     revise["revision agent<br/>answers threads and may commit"]
     revCommitted{"worktree clean?"}
     pushRevise["push and post marked answers;<br/>if a commit landed, post its explanation"]
-    done(["merged / closed"])
+    closed{"pull request<br/>merged?"}
+    done(["return { change, pr }"])
 
     gate -- "merge-ready" --> mergePolicy
     mergePolicy -- "by: human" --> gate
@@ -74,13 +74,15 @@ flowchart TD
     squash -- "not merged: post a marked<br/>stand-down, keep listening" --> gate
     gate -- "ci-red on the current head" --> ciBudget
     ciBudget -- "yes: attempt + 1" --> ciFix --> ciCommit
-    ciCommit -- "no: post a marked<br/>could-not-repair note" --> ciStopped(["stopped"])
+    ciCommit -- "no: post a marked<br/>could-not-repair note" --> preserve
     ciCommit -- "yes: push" --> gate
     gate -- "review-comments" --> revBudget
     revBudget -- "yes: round + 1" --> revise --> revCommitted
     revCommitted -- "no" --> revRaise(["throws: revision left<br/>uncommitted changes"])
     revCommitted -- "yes" --> pushRevise --> gate
-    gate -- "closed" --> done
+    gate -- "closed" --> closed
+    closed -- "yes" --> done
+    closed -- "no" --> preserve
   end
 
   irBudget -- "spent" --> onLimit
@@ -93,10 +95,13 @@ flowchart TD
     policy["factory code decides —<br/>typically haltForHuman posts to the<br/>ticket and the run suspends"]
     decision{"the decision"}
 
-    onLimit -- "no" --> push2["push the branch,<br/>post a ticket note"] --> limitReached(["throw"])
+    onLimit -- "no" --> preserve
     onLimit -- "yes" --> policy --> decision
-    decision -- "stop" --> stopped(["stopped"])
+    decision -- "stop" --> preserve
   end
+
+  committed -- "no" --> preserve["push the branch,<br/>post a ticket note"]
+  preserve --> failed(["throw JigsError"])
 
   decision -- "continue: budget + additionalAttempts,<br/>instructions to the next attempt" --> irBudget
   decision -. "continue" .-> ciBudget
