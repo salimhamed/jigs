@@ -49,7 +49,7 @@ Packages links the package to it and lets the repo-scoped token publish.
   — fixing a rejected title is enough, with no push.
 - **A PR jigs opened complies through `describePr`, and a corrected one still
   wins.** The title a factory's `describePr` writes is the PR's opening title,
-  not its merge subject: `squashMerge` reads the PR's current title back from
+  not its merge subject: `mergePullRequest` reads the PR's current title back from
   GitHub at merge time, so the edit that turned a rejected title into a
   releasable one is what lands on `main`. A title captured when the PR opened
   would quietly ship the version the reviewer corrected away, and the release

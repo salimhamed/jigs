@@ -57,7 +57,7 @@ flowchart TD
     direction TB
     gate{"gate wake"}
     mergePolicy{"merge"}
-    squash["squash merge"]
+    squash["merge, by the configured method"]
     ciBudget{"ciFixAttempts left?"}
     ciFix["CI repair agent<br/>commits the fix"]
     ciCommit{"a new clean commit?"}
@@ -68,8 +68,8 @@ flowchart TD
     done(["merged / closed"])
 
     gate -- "merge-ready" --> mergePolicy
-    mergePolicy -- "human" --> gate
-    mergePolicy -- "jigs" --> squash
+    mergePolicy -- "by: human" --> gate
+    mergePolicy -- "by: jigs" --> squash
     squash -- "merged" --> done
     squash -- "not merged: post a marked<br/>stand-down, keep listening" --> gate
     gate -- "ci-red on the current head" --> ciBudget
@@ -140,10 +140,11 @@ Reading the graph against the code:
   run. A `ci-red` wake names the current head and is skipped when the worktree
   has already moved past it; a repair that produces no new commit posts a marked
   note saying so, which is what keeps a later run from spending its budget on
-  the same failure. `merge-ready` means green CI plus an approval of the
-  *current* head and no outstanding feedback; under `merge: "human"` it only
+  the same failure. `merge-ready` means the configured `merge.approval` signal is
+  present, GitHub itself reports the pull request mergeable, CI is green, it is
+  not a draft, and no feedback is outstanding; under `merge.by: "human"` it only
   keeps listening. The gate ends when the pull request closes, and under
-  `merge: "jigs"` it also ends the moment jigs' own squash merge succeeds —
+  `merge.by: "jigs"` it also ends the moment jigs' own merge succeeds —
   `merged` is returned right there, without waiting for the `closed` wake. A
   merge GitHub does not make is reported as a marked comment on the pull
   request, and the gate keeps listening.
@@ -167,7 +168,7 @@ Reading the graph against the code:
   unanswered. A reply lost to a transport failure is therefore delayed by at
   most one nudge interval, never dropped and never doubled.
 - **Every outcome** is one of five statuses. `merged` comes from the pull
-  request closing merged, or from jigs' own squash merge; `closed` from it
+  request closing merged, or from jigs' own merge; `closed` from it
   closing unmerged. `limit-reached` is a budget spent with no `onLimit`.
   `stopped` is `onLimit` declining, or a CI repair that produced no new clean
   commit. `uncommitted-work` is an implementation attempt that left nothing
@@ -177,6 +178,28 @@ Reading the graph against the code:
   mean the worktree stopped matching what was agreed: publishing a change whose
   head has moved off `approval.reviewedCommit` or whose worktree is dirty, and a
   pull-request revision that left uncommitted changes behind.
+
+## Merge policy
+
+`followPullRequest` and `deliverChange` take one `merge` value: who merges
+(`by`), by which of GitHub's three methods (`method`), and what counts as
+consent (`approval`, either an approving review of the current commit or a
+named label on the pull request). It is the factory's, stated in
+`jigs.config.ts`, and `resolveMergePolicy()` is the step that reads it — pass
+`resolveMergePolicy("jigs")` to override who merges for one run, and nothing
+else. [setup](setup.md) has the values and how they pair with the GitHub
+identity jigs runs as.
+
+Readiness is GitHub's own verdict plus a green build: jigs merges when the
+approval signal is present, GitHub reports the pull request mergeable, it is not
+a draft, and at least one check has finished and passed. That last condition is
+jigs' own, because GitHub calls a repository with no required checks mergeable
+with no build at all — so **jigs never merges in a repository with no CI**, and
+such a repository wants `merge.by: "human"`. `behind`, `blocked`, `has_hooks`
+and `unknown` are all "not yet, ask again". The merge call pins the commit the
+wake named, so a push that lands in between is refused rather than merged over;
+jigs logs the refusal, posts a marked stand-down, and re-reads the pull request
+on the next wake.
 
 ## Budgets
 
@@ -269,7 +292,7 @@ file reaches at the same root-anchored specifier:
 
 ```ts
 import { claude, codex } from "@salimhamed/jigs/agents";
-import { deliverChange } from "#jigs";
+import { deliverChange, resolveMergePolicy } from "#jigs";
 
 const result = await deliverChange({
   task,
@@ -282,7 +305,7 @@ const result = await deliverChange({
     ciFixAttempts: 3,
     pullRequestRevisionRounds: 4,
   },
-  merge: "human",
+  merge: await resolveMergePolicy(),
 });
 ```
 
@@ -294,7 +317,7 @@ other's default model along:
 
 ```ts
 import { claude, codex, selectHarness } from "@salimhamed/jigs/agents";
-import { deliverChange } from "#jigs";
+import { deliverChange, resolveMergePolicy } from "#jigs";
 
 const defaultModels = { claude: "opus", codex: "gpt-5.6-sol" };
 
@@ -315,7 +338,7 @@ const result = await deliverChange({
     ciFixAttempts: 3,
     pullRequestRevisionRounds: 4,
   },
-  merge: "human",
+  merge: await resolveMergePolicy(),
 });
 ```
 
@@ -403,7 +426,7 @@ result, with no explicit generic argument and no cast:
 ```ts
 import { claude, codex } from "@salimhamed/jigs/agents";
 import type { WorkItem } from "@salimhamed/jigs/delivery";
-import { deliverChange } from "#jigs";
+import { deliverChange, resolveMergePolicy } from "#jigs";
 
 interface Incident extends WorkItem {
   service: string;
@@ -431,7 +454,7 @@ const result = await deliverChange({
     ciFixAttempts: 3,
     pullRequestRevisionRounds: 4,
   },
-  merge: "human",
+  merge: await resolveMergePolicy(),
   onLimit: async (limit) => ({
     action: "continue",
     instructions: `The on-call owner of ${limit.task.service} asked for one more pass.`,
@@ -491,7 +514,7 @@ return followPullRequest({
   pr,
   implementation,
   limits: { ciFixAttempts: 3, pullRequestRevisionRounds: 4 },
-  merge: "human",
+  merge: await resolveMergePolicy(),
 });
 ```
 
