@@ -184,6 +184,13 @@ test("adding a non-identifier binding keeps its key quoted", () => {
 `);
 });
 
+test("adding a binding to a one-line object does not duplicate the config", () => {
+  const input = `export default { bindings: { api: { remote: "a" } } };`;
+  expect(upsertBinding(input, "web", "b")).toBe(
+    `export default { bindings: { api: { remote: "a" }, web: { remote: "b" }, } };`,
+  );
+});
+
 test("missing bindings object is inserted", () => {
   const edited = upsertBinding(
     "export default { service: { dashboardPort: 9090 } };",

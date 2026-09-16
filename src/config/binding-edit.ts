@@ -108,6 +108,10 @@ function insertBinding(
   const entryIndent = leadingWhitespace(text, first.getStart());
   const closeBrace = object.getEnd() - 1;
   const closeLineStart = text.lastIndexOf("\n", closeBrace - 1) + 1;
+  if (closeLineStart <= last.getEnd()) {
+    const separator = text.slice(last.getEnd(), closeBrace).includes(",") ? "" : ",";
+    return `${text.slice(0, last.getEnd())}${separator}${text.slice(last.getEnd(), closeBrace)}${entry} ${text.slice(closeBrace)}`;
+  }
   const separator = text.slice(last.getEnd(), closeLineStart).includes(",") ? "" : ",";
   return `${text.slice(0, last.getEnd())}${separator}${text.slice(last.getEnd(), closeLineStart)}${entryIndent}${entry}\n${text.slice(closeLineStart)}`;
 }
