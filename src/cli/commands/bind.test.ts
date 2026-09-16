@@ -347,7 +347,7 @@ test("bind prints a merge-policy repair but still resolves successfully", async 
     }),
   );
   expect(result.name).toBe("api");
-  expect(lines.join("\n")).toContain("merge policy: api: acme/Api has no Actions workflows");
+  expect(lines.join("\n")).toContain("api: acme/Api has no Actions workflows");
   expect(lines.join("\n")).toContain('set merge.by to "human" in jigs.config.ts');
 });
 

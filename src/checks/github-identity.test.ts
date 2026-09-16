@@ -228,6 +228,16 @@ test.each([
   });
 });
 
+test("an omitted merge-method setting is unknown rather than disabled", async () => {
+  const repository = await policyProbes().repository("acme", "api");
+  const { allow_squash_merge: _omitted, ...withoutSquashVerdict } = repository;
+  expect(
+    await policyOutcome(SQUASH_REVIEW, binding, {
+      repository: async () => withoutSquashVerdict,
+    }),
+  ).toMatchObject({ ok: true });
+});
+
 const LABEL_POLICY: MergePolicy = {
   by: "jigs",
   method: "squash",
@@ -247,15 +257,18 @@ test("label approval fails when native approving reviews are required", async ()
 });
 
 test("label approval fails when the configured label does not exist", async () => {
-  expect(
-    await policyOutcome(LABEL_POLICY, binding, {
-      labelExists: async () => false,
-    }),
-  ).toMatchObject({
+  const result = await policyOutcome(LABEL_POLICY, binding, {
+    labelExists: async () => false,
+  });
+  expect(result).toMatchObject({
     ok: false,
     reason: expect.stringContaining("has no jigs:approved label"),
     repair: expect.stringContaining("create the jigs:approved label"),
   });
+  if (result?.ok !== false) throw new Error("expected failure");
+  expect(result.reason).toContain(
+    "jigs merges with squash once GitHub reports it mergeable and the jigs:approved label is present",
+  );
 });
 
 test("findings from several bindings are folded into one named failure", async () => {
@@ -284,6 +297,16 @@ test("a jigs policy with no selected bindings does not probe repositories", asyn
   const repository = vi.fn();
   expect(await policyOutcome(SQUASH_REVIEW, {}, { repository })).toMatchObject({ ok: true });
   expect(repository).not.toHaveBeenCalled();
+});
+
+test("an inaccessible repository stays silent for the merge-policy check", async () => {
+  expect(
+    await policyOutcome(SQUASH_REVIEW, binding, {
+      repository: async () => {
+        throw new Error("GitHub API 403: rate limited");
+      },
+    }),
+  ).toMatchObject({ ok: true });
 });
 
 test("an unreadable approvals rule stays silent", async () => {

@@ -57,9 +57,9 @@ export interface GithubMergePolicyProbes {
     repo: string,
   ): Promise<{
     default_branch: string;
-    allow_merge_commit: boolean;
-    allow_squash_merge: boolean;
-    allow_rebase_merge: boolean;
+    allow_merge_commit?: boolean;
+    allow_squash_merge?: boolean;
+    allow_rebase_merge?: boolean;
   }>;
   checkRuns(owner: string, repo: string, ref: string): Promise<number>;
   commitStatuses(owner: string, repo: string, ref: string): Promise<number>;
@@ -232,8 +232,8 @@ function appCheck(identity: AppIdentity, probes: GithubIdentityProbes): Check {
   };
 }
 
-// Not a probe: the one line that tells an operator what the factory will
-// actually do when a pull request goes green, without reading the config.
+// The one line that tells an operator what the factory will actually do when
+// a pull request goes green, plus any repository facts that make it impossible.
 export function mergePolicyCheck(
   merge: MergePolicy,
   bindings: Record<string, Pick<BindingEntry, "remote">>,
@@ -262,7 +262,7 @@ export function mergePolicyCheck(
       if (findings.length === 0) return { ok: true, detail: who };
       return {
         ok: false,
-        reason: findings.map((finding) => `${finding.binding}: ${finding.reason}`).join("; "),
+        reason: `${who}; ${findings.map((finding) => `${finding.binding}: ${finding.reason}`).join("; ")}`,
         repair: findings.map((finding) => `${finding.binding}: ${finding.repair}`).join("; "),
       };
     },
@@ -309,7 +309,7 @@ async function inspectBinding(
     squash: repository.allow_squash_merge,
     rebase: repository.allow_rebase_merge,
   }[merge.method];
-  if (!allowed)
+  if (allowed === false)
     findings.push({
       binding: bindingName,
       reason: `${merge.method} merges are disabled on ${ref.owner}/${ref.repo}`,

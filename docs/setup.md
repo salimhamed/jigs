@@ -205,11 +205,6 @@ comments, `pullRequestGate()` re-checks PR state), and are validated when declar
 reporting every failure with its repair. `jigs doctor` runs the same checks
 without a launch.
 
-For factories configured with `merge.by: "jigs"`, `jigs bind` and `jigs doctor`
-also report when a bound repository has no CI, disables the configured merge
-method, requires reviews that label approval cannot satisfy, or lacks the
-configured approval label. These checks only read repository settings.
-
 `WORKFLOW_TARGET_WORLD=@workflow/world-postgres` and `WORKFLOW_POSTGRES_URL`
 come filled in; leave them. The service refuses to start when the URL is
 unset: the worktree registry lives in that database, so there is no
@@ -371,7 +366,11 @@ A few merge states you will see jigs wait on rather than merge:
   the next wake.
 
 `jigs doctor` prints the effective policy in one line, so what a factory will
-actually do is readable without opening its config.
+actually do is readable without opening its config. For factories configured
+with `merge.by: "jigs"`, `jigs bind` and `jigs doctor` also report on that line
+when a bound repository has no CI, disables the configured merge method,
+requires reviews that label approval cannot satisfy, or lacks the configured
+approval label. These checks only read repository settings.
 
 ### 3. Up
 
