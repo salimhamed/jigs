@@ -378,7 +378,9 @@ will actually do is readable without opening its config. For bindings whose
 effective `merge.by` is `"jigs"`, `jigs bind` and `jigs doctor` also report
 when that repository has no CI, disables the configured merge method,
 requires reviews that label approval cannot satisfy, or lacks the configured
-approval label. These checks only read repository settings.
+approval label. Bind creates or restores that configured label; doctor reports
+it missing and directs you to re-run bind. The remaining checks only read
+repository settings.
 
 ### 3. Up
 
@@ -493,11 +495,14 @@ restart above before any run can name it; `jigs bind` says so, and
 `jigs up` works too and saves the restart; the order here is only the one a
 newcomer meets.)
 
-`jigs bind` also creates the repo's webhook, which needs `GITHUB_TOKEN`. Bind
-reads it from this factory's `.env`, and an exported one wins for that one
-command — a convenience of bind's, not the factory's rule: the service reads
-`.env` alone, so a token that only ever lives in your shell leaves the running
-factory without one, and bind notes it. The token is for the webhook, not for the binding.
+`jigs bind` creates or verifies jigs' repository furniture: the webhook, plus
+the configured approval label when `merge.approval.kind` is `"label"`. In PAT
+mode it reads `GITHUB_TOKEN` from this factory's `.env`, and an exported one
+wins for that one command — a convenience of bind's, not the factory's rule:
+the service reads `.env` alone, so a token that only ever lives in your shell
+leaves the running factory without one, and bind notes it. A classic PAT needs
+`admin:repo_hook` for the webhook and `repo` (or `public_repo` for a public
+repository) to create the label.
 
 A factory with an `ingressUrl` in its `jigs.config.ts` (step 5) and no usable token
 is half configured — an ingress nothing posts to, a PR gate that never wakes —
@@ -505,7 +510,8 @@ so `jigs bind` **fails** there rather than noting a skip, and says the repair.
 GitHub rejecting the token fails the same way. Fix the token and run the same
 `jigs bind` again: the binding it already recorded stands, and the webhook
 registration is create-or-verify, so re-running is how you repair. A factory
-with no `ingressUrl` receives no webhooks at all and binds without a token.
+with no `ingressUrl` skips the webhook; it still needs a usable identity when
+label approval is configured, because bind creates or verifies that label.
 
 The binding also declares what its worktrees need before an agent can work in
 them — files to copy in, commands to run:

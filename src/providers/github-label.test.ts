@@ -42,7 +42,11 @@ test("a missing repository label is created with its configured name", async () 
   expect(fetchMock.mock.calls[1]?.[0]).toBe("http://mock.test/github/repos/acme/api/labels");
   expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
     method: "POST",
-    body: JSON.stringify({ name: "ship-it" }),
+    body: JSON.stringify({
+      name: "ship-it",
+      color: "1d76db",
+      description: "Approval signal managed by jigs",
+    }),
   });
 });
 

@@ -20,6 +20,10 @@ export async function ensureRepoLabel({
     if (!(err instanceof GithubApiError) || err.status !== 404) throw err;
   }
 
-  await githubRequest("POST", `/repos/${owner}/${repo}/labels`, { name });
+  await githubRequest("POST", `/repos/${owner}/${repo}/labels`, {
+    name,
+    color: "1d76db",
+    description: "Approval signal managed by jigs",
+  });
   return "created";
 }

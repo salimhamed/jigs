@@ -85,7 +85,8 @@ Both live in `jigs.config.ts` and are independent of each other; `jigs init`
 writes a matching pair and nothing derives one from the other at run time.
 
 **`pat`** — jigs is the operator. `GITHUB_TOKEN` in `.env` is all it needs, and
-`jigs bind` wants a classic PAT with `admin:repo_hook`. GitHub refuses to let
+`jigs bind` wants a classic PAT with `admin:repo_hook` plus `repo` (or
+`public_repo` for a public repository). GitHub refuses to let
 an author approve their own pull request, so `merge.approval` is a label:
 `{ kind: "label", name: "jigs:approved" }`, meaning "merge whenever ready" —
 it survives later pushes and jigs never removes it.
@@ -206,8 +207,10 @@ the worktree request by name. `.env`-class files therefore belong in the
 factory repo under `bindings/<name>/`, gitignored as `bindings/*/.env`, never
 in the target repo.
 
-`jigs bind` also creates the repo's GitHub webhook when the factory has an
-`ingressUrl` in `jigs.config.ts`, using the configured identity: in `pat` mode
+`jigs bind` creates or verifies jigs' repository furniture: the configured
+approval label when `merge.approval.kind` is `"label"`, and the GitHub webhook
+when the factory has an `ingressUrl` in `jigs.config.ts`. It uses the configured
+identity: in `pat` mode
 `GITHUB_TOKEN` from the factory's `.env` — or from the shell for that one
 command, which wins there and only there (the service reads `.env` alone) — and
 in `app` mode the installation token, which needs the App's Repository webhooks
@@ -215,8 +218,9 @@ permission. Without usable hook rights it fails and says
 the repair — an ingress with no webhook is a gate that never wakes — and the
 retry is the same `jigs bind`: the binding already recorded stands and the
 webhook is create-or-verify. A factory with no `ingressUrl` skips the webhook
-with a note and needs no token. `jigs unbind` edits the config only; the clone
-stays on disk.
+with a note, but still needs a usable identity when label approval is
+configured. Re-running bind also restores a deleted approval label; doctor
+reports one that is missing. `jigs unbind` edits the config only; the clone stays on disk.
 
 ## 5. Webhook ingress, only if the factory needs it
 
