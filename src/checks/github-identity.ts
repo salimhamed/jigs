@@ -16,6 +16,7 @@ import {
   fetchAppRegistration,
   readAppPrivateKey,
 } from "../providers/github-auth.ts";
+import { getBranchProtection } from "../providers/github-branch-protection.ts";
 import { parseGithubRemote } from "../providers/github-webhook.ts";
 import { type Check, type CheckResult, PROBE_TIMEOUT_MS } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
@@ -30,6 +31,7 @@ interface RequiredPermission {
 }
 
 const REQUIRED_PERMISSIONS: RequiredPermission[] = [
+  { name: "administration", level: "write", why: "inspect and apply repository protection" },
   { name: "contents", level: "write", why: "push the reviewed commit" },
   { name: "pull_requests", level: "write", why: "open, comment on and merge pull requests" },
   { name: "issues", level: "write", why: "post on the pull request conversation" },
@@ -70,6 +72,7 @@ export interface GithubMergePolicyProbes {
     repo: string,
   ): Promise<{
     default_branch: string;
+    permissions?: { admin?: boolean };
     allow_merge_commit?: boolean;
     allow_squash_merge?: boolean;
     allow_rebase_merge?: boolean;
@@ -78,6 +81,11 @@ export interface GithubMergePolicyProbes {
   commitStatuses(owner: string, repo: string, ref: string): Promise<number>;
   actionsWorkflows(owner: string, repo: string): Promise<number>;
   labelExists(owner: string, repo: string, label: string): Promise<boolean>;
+  classicProtection(
+    owner: string,
+    repo: string,
+    branch: string,
+  ): Promise<{ requiredStatusChecks: number; requiredApprovingReviews: number } | null>;
   requiredApprovingReviews(owner: string, repo: string, branch: string): Promise<number | null>;
 }
 
@@ -115,6 +123,15 @@ export const realGithubMergePolicyProbes: GithubMergePolicyProbes = {
       if (err instanceof GithubApiError && err.status === 404) return false;
       throw err;
     }
+  },
+  classicProtection: async (owner, repo, branch) => {
+    const protection = await getBranchProtection({ owner, repo }, branch);
+    return protection.protected
+      ? {
+          requiredStatusChecks: protection.requiredChecks.length,
+          requiredApprovingReviews: protection.requiredApprovingReviews,
+        }
+      : null;
   },
   requiredApprovingReviews: async (owner, repo, branch) => {
     const base = `/repos/${owner}/${repo}`;
@@ -266,7 +283,7 @@ function appCheck(
 
 // The effective policy per binding, plus repository facts that make one impossible.
 export function mergePolicyCheck(
-  identity: GithubIdentity,
+  _identity: GithubIdentity,
   merge: MergePolicy,
   bindings: Record<string, Pick<BindingEntry, "remote" | "merge">>,
   probes: GithubMergePolicyProbes,
@@ -288,7 +305,7 @@ export function mergePolicyCheck(
         entries.map(([name, binding]) => {
           const policy = bindingMergePolicy(merge, binding);
           return policy.by === "jigs"
-            ? inspectBindingWithin(name, binding, identity, policy, probes, probeTimeoutMs)
+            ? inspectBindingWithin(name, binding, policy, probes, probeTimeoutMs)
             : [];
         }),
       );
@@ -318,7 +335,6 @@ function describeMergePolicy(merge: MergePolicy): string {
 async function inspectBindingWithin(
   bindingName: string,
   binding: Pick<BindingEntry, "remote">,
-  identity: GithubIdentity,
   merge: MergePolicy,
   probes: GithubMergePolicyProbes,
   timeoutMs: number,
@@ -326,7 +342,7 @@ async function inspectBindingWithin(
   const timeout = new Promise<PolicyFinding[]>((resolve) => {
     AbortSignal.timeout(timeoutMs).addEventListener("abort", () => resolve([]), { once: true });
   });
-  return Promise.race([inspectBinding(bindingName, binding, identity, merge, probes), timeout]);
+  return Promise.race([inspectBinding(bindingName, binding, merge, probes), timeout]);
 }
 
 interface PolicyFinding {
@@ -338,7 +354,6 @@ interface PolicyFinding {
 async function inspectBinding(
   bindingName: string,
   binding: Pick<BindingEntry, "remote">,
-  identity: GithubIdentity,
   merge: MergePolicy,
   probes: GithubMergePolicyProbes,
 ): Promise<PolicyFinding[]> {
@@ -359,6 +374,40 @@ async function inspectBinding(
     probes.actionsWorkflows(ref.owner, ref.repo),
   ]);
   const findings: PolicyFinding[] = [];
+  const classicProtectionResult =
+    repository.permissions?.admin === true
+      ? await Promise.allSettled([
+          probes.classicProtection(ref.owner, ref.repo, repository.default_branch),
+        ]).then(([result]) => settledValue(result))
+      : undefined;
+  const setupRepair = `run: jigs repo setup ${bindingName}`;
+  if (repository.permissions?.admin !== true) {
+    findings.push({
+      binding: bindingName,
+      reason: `cannot read classic branch protection for ${ref.owner}/${ref.repo} without repository administration access`,
+      repair:
+        "grant Administration: read and write to the GitHub App and accept the updated installation permissions, or use an admin PAT",
+    });
+  } else if (classicProtectionResult === null) {
+    findings.push({
+      binding: bindingName,
+      reason: `${ref.owner}/${ref.repo}'s default branch has no classic branch protection`,
+      repair: setupRepair,
+    });
+  } else if (classicProtectionResult !== undefined) {
+    if (classicProtectionResult.requiredStatusChecks === 0)
+      findings.push({
+        binding: bindingName,
+        reason: `${ref.owner}/${ref.repo}'s default branch does not require status checks`,
+        repair: setupRepair,
+      });
+    if (merge.approval.kind === "review" && classicProtectionResult.requiredApprovingReviews < 1)
+      findings.push({
+        binding: bindingName,
+        reason: `${ref.owner}/${ref.repo}'s default branch does not require an approving review, which is the configured approval signal`,
+        repair: setupRepair,
+      });
+  }
   const allowed = {
     merge: repository.allow_merge_commit,
     squash: repository.allow_squash_merge,
@@ -389,18 +438,16 @@ async function inspectBinding(
         reason: `${ref.owner}/${ref.repo} has no ${merge.approval.name} label`,
         repair: `re-run jigs bind for this repository to restore the ${merge.approval.name} label, or change merge.approval in jigs.config.ts`,
       });
-    if (identity.mode === "pat") {
-      const [approvalsResult] = await Promise.allSettled([
-        probes.requiredApprovingReviews(ref.owner, ref.repo, repository.default_branch),
-      ]);
-      const approvals = settledValue(approvalsResult);
-      if (approvals !== undefined && approvals !== null && approvals > 0)
-        findings.push({
-          binding: bindingName,
-          reason: `${ref.owner}/${ref.repo}'s default branch requires ${approvals} approving review${approvals === 1 ? "" : "s"}, which a label cannot satisfy when jigs authors the pull request`,
-          repair: `remove the repository's required approving reviews, or switch github.identity to app and change merge.approval to { kind: "review" } in jigs.config.ts`,
-        });
-    }
+    const [approvalsResult] = await Promise.allSettled([
+      probes.requiredApprovingReviews(ref.owner, ref.repo, repository.default_branch),
+    ]);
+    const approvals = settledValue(approvalsResult);
+    if (approvals !== undefined && approvals !== null && approvals > 0)
+      findings.push({
+        binding: bindingName,
+        reason: `${ref.owner}/${ref.repo}'s default branch requires ${approvals} approving review${approvals === 1 ? "" : "s"}, which a label cannot satisfy when jigs authors the pull request`,
+        repair: `remove the repository's required approving reviews, or change merge.approval to { kind: "review" } in jigs.config.ts; ${setupRepair} will not remove an operator-owned review rule`,
+      });
   }
   return findings;
 }

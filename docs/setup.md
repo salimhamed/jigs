@@ -274,8 +274,9 @@ Where each value comes from:
    Active under Webhook** — jigs keeps its own per-repo webhooks, and one App
    registration has only one webhook URL, which two factories cannot share.
 2. **Grant these repository permissions**, and nothing else: **Contents**,
-   **Pull requests** and **Issues** read & write; **Metadata**, **Checks** and
-   **Commit statuses** read; and **Repository webhooks** read & write. When
+   **Pull requests**, **Issues**, and **Administration** read & write;
+   **Metadata**, **Checks** and **Commit statuses** read; and **Repository
+   webhooks** read & write. When
    `merge.by` is `"jigs"` and the factory has bindings, also grant **Actions**
    read so `jigs bind` and `jigs doctor` can verify that the repository has an
    active Actions workflow. The Repository webhooks
@@ -381,6 +382,25 @@ requires reviews that label approval cannot satisfy, or lacks the configured
 approval label. Bind creates or restores that configured label; doctor reports
 it missing and directs you to re-run bind. The remaining checks only read
 repository settings.
+
+Repository governance is changed only by an explicit repo command. To inspect
+the recommended classic protection for a binding's default branch and approve
+it interactively, run:
+
+```sh
+jigs repo setup <binding>
+```
+
+The plan names the status checks it will require and whether it will require an
+approving review. Review approval gets at least one required review, regardless
+of identity. Factories using label approval refuse required reviews because
+their label cannot satisfy GitHub's native review rule. Pass `--yes` to accept the complete
+plan without a prompt; this is the only unattended mode. Re-running the command
+against the resulting protection reports `already set` and performs no write.
+Neither `jigs bind` nor `jigs doctor` writes branch protection.
+When protection has no required checks yet, the proposed names come from check
+runs and commit statuses on the default branch's current HEAD. That observation
+can be partial or failing, so confirm the displayed list before applying it.
 
 ### 3. Up
 

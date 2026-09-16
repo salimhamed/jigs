@@ -337,6 +337,7 @@ test("bind ensures the configured approval label on every run", async () => {
     commitStatuses: async () => 0,
     actionsWorkflows: async () => 0,
     labelExists: async () => true,
+    classicProtection: async () => ({ requiredStatusChecks: 1, requiredApprovingReviews: 0 }),
     requiredApprovingReviews: async () => 0,
   };
 
@@ -400,6 +401,7 @@ test("bind prints a merge-policy repair but still resolves successfully", async 
       mergePolicyProbes: {
         repository: async () => ({
           default_branch: "main",
+          permissions: { admin: true },
           allow_merge_commit: true,
           allow_squash_merge: true,
           allow_rebase_merge: true,
@@ -408,6 +410,7 @@ test("bind prints a merge-policy repair but still resolves successfully", async 
         commitStatuses: async () => 0,
         actionsWorkflows: async () => 0,
         labelExists: async () => true,
+        classicProtection: async () => null,
         requiredApprovingReviews: async () => 0,
       },
     }),
@@ -415,6 +418,7 @@ test("bind prints a merge-policy repair but still resolves successfully", async 
   expect(result.name).toBe("api");
   expect(lines.join("\n")).toContain("api: acme/Api has no active Actions workflows");
   expect(lines.join("\n")).toContain('set bindings.api.merge.by to "human" in jigs.config.ts');
+  expect(lines.join("\n")).toContain("jigs repo setup api");
 });
 
 test("no GITHUB_TOKEN anywhere fails with the repair, and the retry ensures the webhook", async () => {
