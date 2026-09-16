@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.2](https://github.com/salimhamed/jigs/compare/jigs-v0.25.1...jigs-v0.25.2) (2026-09-16)
+
+
+### Bug Fixes
+
+* **ticket:** ask ticket-review questions in one round ([9b41108](https://github.com/salimhamed/jigs/commit/9b41108310419bdd6fc78d84014c98bb83ddc7d2))
+
 ## [0.25.1](https://github.com/salimhamed/jigs/compare/jigs-v0.25.0...jigs-v0.25.1) (2026-09-16)
 
 
