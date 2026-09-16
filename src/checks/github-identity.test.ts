@@ -292,6 +292,23 @@ test("real approval probe combines classic protection and rulesets", async () =>
   ]);
 });
 
+test("the classic-protection probe reports required checks and reviews, including absence", async () => {
+  githubGetMock.mockResolvedValueOnce({
+    required_status_checks: { contexts: ["legacy"], checks: [{ context: "build" }] },
+    required_pull_request_reviews: { required_approving_review_count: 1 },
+  });
+  await expect(
+    realGithubMergePolicyProbes.classicProtection("acme", "api", "release/v1"),
+  ).resolves.toEqual({ requiredStatusChecks: 2, requiredApprovingReviews: 1 });
+
+  githubGetMock.mockRejectedValueOnce(
+    new GithubApiError(404, "/branches/main/protection", "not protected"),
+  );
+  await expect(
+    realGithubMergePolicyProbes.classicProtection("acme", "api", "main"),
+  ).resolves.toBeNull();
+});
+
 test("real approval probe preserves a readable leg and reports both unreadable as unknown", async () => {
   githubGetMock
     .mockRejectedValueOnce(new Error("protection forbidden"))
@@ -323,6 +340,7 @@ const policyProbes = (
   commitStatuses: async () => 0,
   actionsWorkflows: async () => 0,
   labelExists: async () => true,
+  classicProtection: async () => ({ requiredStatusChecks: 1, requiredApprovingReviews: 1 }),
   requiredApprovingReviews: async () => 0,
   ...overrides,
 });
@@ -347,6 +365,38 @@ test("a healthy binding preserves the existing passing merge-policy line", async
     detail:
       "api: jigs merges with squash once GitHub reports it mergeable and an approving GitHub review of the current commit is present",
   });
+});
+
+test("missing recommended protection names repo setup as the repair", async () => {
+  const result = await policyOutcome(SQUASH_REVIEW, binding, {
+    classicProtection: async () => null,
+  });
+  expect(result).toMatchObject({
+    ok: false,
+    reason: expect.stringContaining("has no classic branch protection"),
+    repair: expect.stringContaining("jigs repo setup api"),
+  });
+});
+
+test("App mode reports missing required checks and approving review", async () => {
+  const result = await policyOutcome(
+    SQUASH_REVIEW,
+    binding,
+    {
+      classicProtection: async () => ({
+        requiredStatusChecks: 0,
+        requiredApprovingReviews: 0,
+      }),
+    },
+    APP,
+  );
+  expect(result).toMatchObject({
+    ok: false,
+    reason: expect.stringContaining("does not require status checks"),
+    repair: expect.stringContaining("jigs repo setup api"),
+  });
+  if (result?.ok !== false) throw new Error("expected failure");
+  expect(result.reason).toContain("does not require an approving review");
 });
 
 test("the effective merge policy is reported and checked per binding", async () => {

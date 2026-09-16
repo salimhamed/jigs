@@ -79,10 +79,11 @@ export async function setupRepo(
     );
   }
 
-  const reviews = identity.mode === "app" && merge.approval.kind === "review" ? 1 : 0;
+  const reviews = identity.mode === "app" ? 1 : 0;
   const desired: BranchProtection = {
     protected: true,
     requiredChecks,
+    requiredCheckApps: current.requiredCheckApps,
     strictChecks: current.strictChecks,
     requiredApprovingReviews: reviews,
   };

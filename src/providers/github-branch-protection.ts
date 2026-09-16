@@ -4,6 +4,8 @@ import type { GithubRepoRef } from "./github-webhook.ts";
 export interface BranchProtection {
   protected: boolean;
   requiredChecks: string[];
+  /** Check-App bindings must round-trip: reducing them to contexts changes who may satisfy a rule. */
+  requiredCheckApps?: Array<{ context: string; appId: number }>;
   strictChecks: boolean;
   requiredApprovingReviews: number;
 }
@@ -12,7 +14,7 @@ interface GithubProtection {
   required_status_checks?: {
     strict?: boolean;
     contexts?: string[];
-    checks?: Array<{ context: string }>;
+    checks?: Array<{ context: string; app_id: number }>;
   } | null;
   required_pull_request_reviews?: {
     required_approving_review_count?: number;
@@ -23,7 +25,12 @@ interface GithubProtection {
       users?: Array<{ login: string }>;
       teams?: Array<{ slug: string }>;
       apps?: Array<{ slug: string }>;
-    };
+    } | null;
+    bypass_pull_request_allowances?: {
+      users?: Array<{ login: string }>;
+      teams?: Array<{ slug: string }>;
+      apps?: Array<{ slug: string }>;
+    } | null;
   } | null;
   enforce_admins?: { enabled?: boolean } | null;
   restrictions?: {
@@ -71,6 +78,10 @@ export async function getBranchProtection(
     requiredChecks: [
       ...new Set([...(checks?.contexts ?? []), ...(checks?.checks ?? []).map((c) => c.context)]),
     ].sort(),
+    requiredCheckApps: (checks?.checks ?? []).map((check) => ({
+      context: check.context,
+      appId: check.app_id,
+    })),
     strictChecks: checks?.strict ?? false,
     requiredApprovingReviews:
       raw.required_pull_request_reviews?.required_approving_review_count ?? 0,
@@ -106,8 +117,16 @@ export async function putBranchProtection(
 ): Promise<void> {
   const raw = current.raw;
   const reviews = raw?.required_pull_request_reviews;
+  const checkApps = desired.requiredCheckApps ?? [];
+  const appBoundContexts = new Set(checkApps.map((check) => check.context));
+  const dismissalRestrictions = reviews?.dismissal_restrictions;
+  const bypassAllowances = reviews?.bypass_pull_request_allowances;
   await githubRequest("PUT", branchPath(repo, branch), {
-    required_status_checks: { strict: desired.strictChecks, contexts: desired.requiredChecks },
+    required_status_checks: {
+      strict: desired.strictChecks,
+      contexts: desired.requiredChecks.filter((context) => !appBoundContexts.has(context)),
+      checks: checkApps.map((check) => ({ context: check.context, app_id: check.appId })),
+    },
     enforce_admins: raw?.enforce_admins?.enabled ?? false,
     required_pull_request_reviews:
       desired.requiredApprovingReviews === 0
@@ -116,11 +135,24 @@ export async function putBranchProtection(
             dismiss_stale_reviews: reviews?.dismiss_stale_reviews ?? false,
             require_code_owner_reviews: reviews?.require_code_owner_reviews ?? false,
             require_last_push_approval: reviews?.require_last_push_approval ?? false,
-            dismissal_restrictions: {
-              users: reviews?.dismissal_restrictions?.users?.map((user) => user.login) ?? [],
-              teams: reviews?.dismissal_restrictions?.teams?.map((team) => team.slug) ?? [],
-              apps: reviews?.dismissal_restrictions?.apps?.map((app) => app.slug) ?? [],
-            },
+            ...(dismissalRestrictions == null
+              ? {}
+              : {
+                  dismissal_restrictions: {
+                    users: dismissalRestrictions.users?.map((user) => user.login) ?? [],
+                    teams: dismissalRestrictions.teams?.map((team) => team.slug) ?? [],
+                    apps: dismissalRestrictions.apps?.map((app) => app.slug) ?? [],
+                  },
+                }),
+            ...(bypassAllowances == null
+              ? {}
+              : {
+                  bypass_pull_request_allowances: {
+                    users: bypassAllowances.users?.map((user) => user.login) ?? [],
+                    teams: bypassAllowances.teams?.map((team) => team.slug) ?? [],
+                    apps: bypassAllowances.apps?.map((app) => app.slug) ?? [],
+                  },
+                }),
             required_approving_review_count: desired.requiredApprovingReviews,
           },
     restrictions:

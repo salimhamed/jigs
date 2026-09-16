@@ -78,6 +78,11 @@ export interface GithubMergePolicyProbes {
   commitStatuses(owner: string, repo: string, ref: string): Promise<number>;
   actionsWorkflows(owner: string, repo: string): Promise<number>;
   labelExists(owner: string, repo: string, label: string): Promise<boolean>;
+  classicProtection(
+    owner: string,
+    repo: string,
+    branch: string,
+  ): Promise<{ requiredStatusChecks: number; requiredApprovingReviews: number } | null>;
   requiredApprovingReviews(owner: string, repo: string, branch: string): Promise<number | null>;
 }
 
@@ -114,6 +119,27 @@ export const realGithubMergePolicyProbes: GithubMergePolicyProbes = {
     } catch (err) {
       if (err instanceof GithubApiError && err.status === 404) return false;
       throw err;
+    }
+  },
+  classicProtection: async (owner, repo, branch) => {
+    try {
+      const protection = await githubGet<{
+        required_status_checks?: { contexts?: string[]; checks?: unknown[] } | null;
+        required_pull_request_reviews?: {
+          required_approving_review_count?: number;
+        } | null;
+      }>(`/repos/${owner}/${repo}/branches/${encodeURIComponent(branch)}/protection`);
+      return {
+        requiredStatusChecks: new Set([
+          ...(protection.required_status_checks?.contexts ?? []),
+          ...(protection.required_status_checks?.checks ?? []),
+        ]).size,
+        requiredApprovingReviews:
+          protection.required_pull_request_reviews?.required_approving_review_count ?? 0,
+      };
+    } catch (error) {
+      if (error instanceof GithubApiError && error.status === 404) return null;
+      throw error;
     }
   },
   requiredApprovingReviews: async (owner, repo, branch) => {
@@ -359,6 +385,30 @@ async function inspectBinding(
     probes.actionsWorkflows(ref.owner, ref.repo),
   ]);
   const findings: PolicyFinding[] = [];
+  const classicProtectionResult = await Promise.allSettled([
+    probes.classicProtection(ref.owner, ref.repo, repository.default_branch),
+  ]).then(([result]) => settledValue(result));
+  const setupRepair = `run: jigs repo setup ${bindingName}`;
+  if (classicProtectionResult === null) {
+    findings.push({
+      binding: bindingName,
+      reason: `${ref.owner}/${ref.repo}'s default branch has no classic branch protection`,
+      repair: setupRepair,
+    });
+  } else if (classicProtectionResult !== undefined) {
+    if (classicProtectionResult.requiredStatusChecks === 0)
+      findings.push({
+        binding: bindingName,
+        reason: `${ref.owner}/${ref.repo}'s default branch does not require status checks`,
+        repair: setupRepair,
+      });
+    if (identity.mode === "app" && classicProtectionResult.requiredApprovingReviews < 1)
+      findings.push({
+        binding: bindingName,
+        reason: `${ref.owner}/${ref.repo}'s default branch does not require an approving review for App-authored pull requests`,
+        repair: setupRepair,
+      });
+  }
   const allowed = {
     merge: repository.allow_merge_commit,
     squash: repository.allow_squash_merge,
@@ -398,7 +448,7 @@ async function inspectBinding(
         findings.push({
           binding: bindingName,
           reason: `${ref.owner}/${ref.repo}'s default branch requires ${approvals} approving review${approvals === 1 ? "" : "s"}, which a label cannot satisfy when jigs authors the pull request`,
-          repair: `remove the repository's required approving reviews, or switch github.identity to app and change merge.approval to { kind: "review" } in jigs.config.ts`,
+          repair: `${setupRepair}, or switch github.identity to app and change merge.approval to { kind: "review" } in jigs.config.ts`,
         });
     }
   }
