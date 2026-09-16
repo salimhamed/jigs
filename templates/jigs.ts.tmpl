@@ -142,16 +142,14 @@ export async function readWorktreeDiff(worktreePath: string, baseSha: string) {
 }
 
 /** Open a pull request for a branch that has already been pushed. */
-export async function openPullRequest(
-  request: {
-    repo: GithubRepoRef;
-    head: string;
-    base: string;
-    title: string;
-    body: string;
-    draft?: boolean;
-  },
-) {
+export async function openPullRequest(request: {
+  repo: GithubRepoRef;
+  head: string;
+  base: string;
+  title: string;
+  body: string;
+  draft?: boolean;
+}) {
   "use step";
   return steps.openPullRequest(request);
 }
