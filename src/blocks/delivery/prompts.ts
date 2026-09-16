@@ -74,7 +74,7 @@ export const defaultRevisionPrompt = async (
       `Review threads:\n${JSON.stringify(context.threads)}`,
       context.reviewBody ?? "Address the pull request review threads.",
     ],
-    "Address the review feedback, test and commit any changes, and explain your response to each thread. Use its rootId as threadId, or null for an answer to the review body. Set commitExplanation to a concise account of changes and validation when you commit, or null when you do not. Do not push or post comments yourself.",
+    "Address the review feedback, test and commit any changes, and explain your response to each thread. Use its rootId as threadId; every thread listed has one, the review summary included. Set commitExplanation to a concise account of changes and validation when you commit, or null when you do not. Do not push or post comments yourself.",
   );
 };
 

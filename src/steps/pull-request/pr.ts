@@ -50,9 +50,9 @@ export async function openPullRequest(
   return { owner: repo.owner, repo: repo.repo, number };
 }
 
-// The posted id is returned rather than dropped: the gate cursor needs the ids
-// of jigs' own replies to tell its last word on a thread from a human's, which
-// author identity cannot do on a personal-token factory.
+// A plain POST: the body already carries the marker that says what it answers,
+// so nothing here reads or writes progress. The posted id is returned for a
+// caller that wants to name it in a log.
 /** Reply to a review thread and return the posted comment id. */
 export async function replyToPullRequestReviewThread(
   pr: PrRef,
@@ -62,9 +62,6 @@ export async function replyToPullRequestReviewThread(
   return replyToReviewThread(pr, rootId, body);
 }
 
-// The id comes back for the same reason a thread reply's does: the gate
-// cursor filters jigs' own conversation comments by id, and a conversation
-// comment now wakes the gate like an inline one.
 /** Post a comment on the pull request conversation and return its id. */
 export async function commentOnPullRequest(pr: PrRef, body: string): Promise<{ id: number }> {
   return postPrComment(pr, body);

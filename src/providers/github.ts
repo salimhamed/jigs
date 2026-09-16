@@ -25,6 +25,9 @@ export interface ReviewComment {
   path: string;
   line: number | null;
   createdAt: string;
+  // An edit is a reviewer saying something new, so it is part of what a marker
+  // names when jigs records that it answered this comment.
+  updatedAt: string;
 }
 
 export interface ReviewThread {
@@ -44,11 +47,9 @@ export interface PrComment {
   body: string;
   user: string;
   // GitHub's own account kind — "User", "Bot" or "Organization". Not the self
-  // guard, which is exact-id: a human and jigs are both "User" here.
+  // guard, which is the marker: a human and jigs are both "User" here.
   userType: string;
   createdAt: string;
-  // An edit is how a reviewer adds to a comment that has no thread to reply
-  // into, so the gate keys its cursor on this as well as the id.
   updatedAt: string;
 }
 
@@ -62,10 +63,6 @@ export interface PrSnapshot {
   state: "open" | "closed";
   merged: boolean;
   headSha: string;
-  // The authenticated login. Never proof of authorship: a factory on its
-  // operator's personal token has the operator as the viewer, so nothing may
-  // read "the viewer wrote it" as "jigs wrote it".
-  viewer: string;
   reviews: PrReview[];
   reviewThreads: ReviewThread[];
   conversationComments: PrComment[];
@@ -163,6 +160,7 @@ function groupThreads(
     path?: string | null;
     line?: number | null;
     created_at: string;
+    updated_at: string;
   }>,
 ): ReviewThread[] {
   const byRoot = new Map<number, ReviewThread>();
@@ -176,6 +174,7 @@ function groupThreads(
       path: raw.path ?? "",
       line: raw.line ?? null,
       createdAt: raw.created_at,
+      updatedAt: raw.updated_at,
     };
     const thread = byRoot.get(rootId);
     if (thread === undefined) {
@@ -216,6 +215,7 @@ export async function fetchPrSnapshot(pr: PrRef): Promise<PrSnapshot> {
     path?: string | null;
     line?: number | null;
     created_at: string;
+    updated_at: string;
   }>(`${prPath}/comments`);
   // The conversation, where a review the operator cannot formally submit —
   // GitHub refuses approve and request-changes on one's own pull request —
@@ -241,7 +241,6 @@ export async function fetchPrSnapshot(pr: PrRef): Promise<PrSnapshot> {
       target_url: string | null;
     }>;
   }>(`${repoPath}/commits/${pull.head.sha}/status?per_page=100`); // unpaginated cap, accepted for v0
-  const viewer = await getAuthenticatedUser();
 
   const runs: CheckRun[] = checks.check_runs.map((run) => ({
     name: run.name,
@@ -271,7 +270,6 @@ export async function fetchPrSnapshot(pr: PrRef): Promise<PrSnapshot> {
     state: pull.state,
     merged: pull.merged,
     headSha: pull.head.sha,
-    viewer: viewer.login,
     reviews: reviews.map((review) => ({
       id: review.id,
       state: review.state,

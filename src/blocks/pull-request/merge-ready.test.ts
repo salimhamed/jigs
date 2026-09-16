@@ -1,19 +1,14 @@
 import { expect, test } from "vitest";
 import type { PrSnapshot } from "../../providers/github.ts";
-import { classifyPrState, type GateCursor } from "./gate.ts";
+import { classifyPrState } from "./gate.ts";
+import { markBody } from "./marker.ts";
 import { isPullRequestMergeReady } from "./merge-ready.ts";
 
-const cursor: GateCursor = {
-  seenReviewIds: [],
-  seenCommentIds: [],
-  selfCommentIds: [],
-  lastRedSha: null,
-};
+const SCOPE = "ship/AGE-402";
 const snapshot: PrSnapshot = {
   state: "open",
   merged: false,
   headSha: "new",
-  viewer: "agent",
   reviewThreads: [],
   conversationComments: [],
   ci: "green",
@@ -55,32 +50,42 @@ test("latest effective reviewer decision supersedes historical approvals", () =>
 });
 
 test("approval while pending becomes merge-ready when CI later turns green", () => {
-  const pending = classifyPrState({ ...snapshot, ci: "pending" }, cursor);
-  expect(pending.wakes.map((wake) => wake.kind)).toEqual(["approved"]);
-  expect(classifyPrState(snapshot, pending.cursor).wakes).toEqual([
-    { kind: "merge-ready", headSha: "new" },
-  ]);
+  expect(classifyPrState({ ...snapshot, ci: "pending" }, SCOPE).wakes).toEqual([]);
+  expect(classifyPrState(snapshot, SCOPE).wakes).toEqual([{ kind: "merge-ready", headSha: "new" }]);
 });
 
 test("closed snapshots yield no agent or merge work", () => {
-  expect(classifyPrState({ ...snapshot, state: "closed", ci: "red" }, cursor).wakes).toEqual([
+  expect(classifyPrState({ ...snapshot, state: "closed", ci: "red" }, SCOPE).wakes).toEqual([
     { kind: "closed", merged: false },
   ]);
 });
 
-test("unchanged ready snapshots do not retry refused merges on comment webhooks", () => {
-  const first = classifyPrState(snapshot, cursor);
-  expect(first.wakes.some((wake) => wake.kind === "merge-ready")).toBe(true);
-  const ownCommentWebhook = classifyPrState(snapshot, first.cursor);
-  expect(ownCommentWebhook.wakes).toEqual([]);
-  expect(classifyPrState(snapshot, ownCommentWebhook.cursor).wakes).toEqual([]);
-});
-
-test("a new readiness transition permits another merge attempt on the same head", () => {
-  const first = classifyPrState(snapshot, cursor);
-  const pending = classifyPrState({ ...snapshot, ci: "pending" }, first.cursor);
-  expect(pending.wakes).toEqual([]);
-  expect(classifyPrState(snapshot, pending.cursor).wakes).toEqual([
-    { kind: "merge-ready", headSha: "new" },
-  ]);
+test("a stood-down head does not ask to be merged again", () => {
+  const stoodDown: PrSnapshot = {
+    ...snapshot,
+    conversationComments: [
+      {
+        id: 1,
+        body: markBody("I could not merge this pull request.", [
+          { scope: SCOPE, run: "wrun_RUN", kind: "status", reason: "merge", source: "new" },
+        ]),
+        user: "salim",
+        userType: "User",
+        createdAt: "1",
+        updatedAt: "1",
+      },
+    ],
+  };
+  expect(classifyPrState(stoodDown, SCOPE).wakes).toEqual([]);
+  // A push moves the head, and the approval of that new head is new work.
+  expect(
+    classifyPrState(
+      {
+        ...stoodDown,
+        headSha: "newer",
+        reviews: stoodDown.reviews.map((review) => ({ ...review, commitSha: "newer" })),
+      },
+      SCOPE,
+    ).wakes,
+  ).toEqual([{ kind: "merge-ready", headSha: "newer" }]);
 });

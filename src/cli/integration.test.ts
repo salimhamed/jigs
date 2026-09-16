@@ -32,3 +32,13 @@ test("generation is repeatable and build validation never overwrites drift", () 
   checkFactoryIntegration(root);
   expect(readFileSync(file, "utf8")).toBe(generated);
 });
+
+// The one write jigs must never repeat blind. The SDK reads `maxRetries` off
+// the step function, so the property has to survive into the factory's own
+// file — a generated wrapper without it retries a POST that may already have
+// posted.
+test("the pull request POST wrappers are generated single-attempt", () => {
+  const generated = readFileSync(generateFactoryIntegration(factory()), "utf8");
+  expect(generated).toContain("replyToPullRequestReviewThread.maxRetries = 0;");
+  expect(generated).toContain("commentOnPullRequest.maxRetries = 0;");
+});

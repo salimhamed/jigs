@@ -3,8 +3,10 @@ import { resumeOrRebuild } from "../agent/resume-or-rebuild.ts";
 import { type ThreadAnswers, threadAnswers } from "../builder-agent/answer-review.ts";
 import { pullRequestDescription } from "../builder-agent/describe-pr.ts";
 import { codeReviewVerdict } from "../builder-agent/implement.ts";
-import { postReviewAnswers } from "../pull-request/answers.ts";
+import { postPullRequestNote, postReviewAnswers, renderChecks } from "../pull-request/answers.ts";
 import { attend, finished, listen } from "../pull-request/attend.ts";
+import type { StatusReason } from "../pull-request/marker.ts";
+import { defaultPrScope } from "../pull-request/writer.ts";
 import {
   defaultCiRepairPrompt,
   defaultDescriptionPrompt,
@@ -270,45 +272,40 @@ export function bindDeliverySteps(steps: DeliverySteps) {
     validateLimit(options.limits.ciFixAttempts, "ciFixAttempts");
     validateLimit(options.limits.pullRequestRevisionRounds, "pullRequestRevisionRounds");
     const { change, pr } = options;
+    const scope = options.scope ?? defaultPrScope(change.task.key);
     const budgets = { ...options.limits };
     const instructions = { ciFixAttempts: "", pullRequestRevisionRounds: "" };
-    const seenRed = new Set<string>();
-    const seenReviews = new Set<number>();
-    return attend<DeliveryResult<TTask>>(pullRequestGate(pr), async (wake) => {
+    const note = (reason: StatusReason, headSha: string, body: string) =>
+      postPullRequestNote({ commentOnPullRequest, pr, scope, reason, headSha, body });
+    return attend<DeliveryResult<TTask>>(pullRequestGate(pr, scope), async (wake) => {
       if (wake.kind === "closed") {
         return finished({ status: wake.merged ? "merged" : "closed", change, pr });
       }
-      if (wake.kind === "ci-green" || wake.kind === "approved") return listen();
       if (wake.kind === "merge-ready") {
         if (options.merge === "human") return listen();
+        let refused: string;
         try {
           const result = await squashMergePullRequest(pr, wake.headSha);
           if (result.merged) return finished({ status: "merged", change, pr });
+          refused = `GitHub did not merge ${wake.headSha}, so the pull request has moved since it was ready`;
         } catch (error) {
-          const posted = await commentOnPullRequest(
-            pr,
-            `I could not merge this pull request: ${String(error)}. I am still watching for updates.`,
-          );
-          // Acked, or jigs' own stand-down note wakes the gate straight back
-          // into this branch.
-          return listen({ selfCommentIds: [], selfConversationCommentIds: [posted.id] });
+          refused = String(error);
         }
+        // The note is what stands this commit down: without it the same
+        // approval reads as unfinished work on every later wake.
+        await note(
+          "merge",
+          wake.headSha,
+          `I could not merge this pull request: ${refused}. I am still watching for updates.`,
+        );
         return listen();
       }
       if (wake.kind === "ci-red") {
+        // The worktree, not the snapshot: a repair pushed seconds ago is on
+        // the branch before GitHub reports the new head.
         const current = await readBranchState(change.worktree.path, change.worktree.baseSha);
         if (current.headSha !== wake.headSha) return listen();
-        if (seenRed.has(wake.headSha)) return listen();
-        seenRed.add(wake.headSha);
-      } else if (wake.kind === "changes-requested") {
-        if (seenReviews.has(wake.reviewId)) return listen();
-        seenReviews.add(wake.reviewId);
       }
-      // A `review-comments` wake needs no guard here: the gate is the one
-      // owner of "is this feedback new", and never yields a wake without
-      // something no earlier wake carried. A second set of ids kept on this
-      // side could only disagree with it — as it did for an edited
-      // conversation comment, which reuses its id.
       const ci = wake.kind === "ci-red";
       const counter = ci ? "ciFixAttempts" : "pullRequestRevisionRounds";
       const phase = ci ? "ci-repair" : "pull-request-revision";
@@ -353,6 +350,14 @@ export function bindDeliverySteps(steps: DeliverySteps) {
         });
         const state = await readBranchState(change.worktree.path, change.worktree.baseSha);
         if (state.headSha === wake.headSha || state.dirty) {
+          // Marked as given up on: this red head is settled, so a later run
+          // attending the same pull request does not spend its budget on it
+          // again.
+          await note(
+            "ci",
+            wake.headSha,
+            `I could not repair the failing checks on ${wake.headSha}.\n\n${renderChecks(wake.failing)}`,
+          );
           return finished(
             stopped(
               change,
@@ -390,16 +395,16 @@ export function bindDeliverySteps(steps: DeliverySteps) {
       const state = await readBranchState(change.worktree.path, change.worktree.baseSha);
       if (state.dirty) throw new Error("Pull request revision left uncommitted changes");
       await pushBranch(change.worktree.path, change.worktree.branch);
-      return listen(
-        await postReviewAnswers({
-          commentOnPullRequest,
-          replyToPullRequestReviewThread,
-          pr,
-          answers,
-          postCommitExplanation: state.headSha !== startingState.headSha,
-          threads,
-        }),
-      );
+      await postReviewAnswers({
+        commentOnPullRequest,
+        replyToPullRequestReviewThread,
+        pr,
+        scope,
+        answers,
+        ...(state.headSha === startingState.headSha ? {} : { committedSha: state.headSha }),
+        threads,
+      });
+      return listen();
     });
   }
 

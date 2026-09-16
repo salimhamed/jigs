@@ -62,8 +62,6 @@ import type {
   FixCiOptions,
   FixCiPrompt,
   FixCiPromptInput,
-  GateAck,
-  GateCursor,
   GateFn,
   GateWake,
   Halt,
@@ -81,14 +79,19 @@ import type {
   ImplementPromptInput,
   ImplementResult,
   JsonValue,
+  MarkerKind,
+  MarkerLedger,
   McpHttpServer,
   McpProbe,
   McpServerConfig,
   McpStdioServer,
+  PostPullRequestNoteOptions,
   PostReviewAnswersOptions,
   PostTicketHumanInputRequest,
   PostTicketNote,
+  PrMarker,
   PrRef,
+  PrState,
   PullRequestDescription,
   RebuildContextPrompt,
   RebuildContextPromptInput,
@@ -96,6 +99,7 @@ import type {
   ResumeOrRebuildResult,
   ReviewTicketOptions,
   SnapshotComment,
+  StatusReason,
   StepResult,
   StepUsage,
   ThreadAnswers,
@@ -143,10 +147,13 @@ type BlocksTypeSurface = {
   fixCiOptions: FixCiOptions;
   fixCiPrompt: FixCiPrompt;
   fixCiPromptInput: FixCiPromptInput;
-  gateAck: GateAck;
-  gateCursor: GateCursor;
   gateFn: GateFn;
   gateWake: GateWake;
+  markerKind: MarkerKind;
+  markerLedger: MarkerLedger;
+  prMarker: PrMarker;
+  prState: PrState;
+  statusReason: StatusReason;
   haltForHumanDeps: HaltForHumanDeps;
   haltForHumanFn: HaltForHumanFn;
   handoff: Handoff;
@@ -167,6 +174,7 @@ type BlocksTypeSurface = {
   mcpServerConfig: McpServerConfig;
   mcpStdioServer: McpStdioServer;
   postTicketHumanInputRequest: PostTicketHumanInputRequest;
+  postPullRequestNoteOptions: PostPullRequestNoteOptions;
   postReviewAnswersOptions: PostReviewAnswersOptions;
   pullRequestDescription: PullRequestDescription;
   postTicketNote: PostTicketNote;

@@ -224,11 +224,19 @@ presses merge by hand. Sending work back is what still works — an inline revie
 comment, or a comment on the pull request conversation, both of which wake the
 run. A `COMMENTED` review's summary body wakes it too.
 
-The way out is a second GitHub identity: a machine user with its own token and
-write access on the target repos, or a GitHub App installed there whose
-installation token jigs uses. Either makes jigs a different author from you,
-restoring approve, request-changes and `merge: "jigs"`. Neither is wired up
-here yet; until then treat the review loop as comment-driven and merge by hand.
+Sharing the login does not confuse jigs about who said what. Every comment jigs
+posts carries a hidden HTML comment naming the workflow, the run and the
+comment it answers, and that marker — not the author — is how jigs tells its own
+words from yours. It reads the same whether jigs runs as you or as a bot. You
+will not see the markers in GitHub's UI, and editing a comment of yours that
+jigs answered asks the question again, which is usually what you meant.
+
+The way out of the approval limit is a second GitHub identity: a machine user
+with its own token and write access on the target repos, or a GitHub App
+installed there whose installation token jigs uses. Either makes jigs a
+different author from you, restoring approve, request-changes and
+`merge: "jigs"`. Neither is wired up here yet; until then treat the review loop
+as comment-driven and merge by hand.
 
 ### 3. Up
 
@@ -457,11 +465,28 @@ signing secret in this factory's `.env` as `LINEAR_WEBHOOK_SECRET` and
 
 #### Missed deliveries
 
+GitHub does not retry a delivery it failed to make, and a tunnel that drops one
+connection in three is a real thing that happens. So the webhook is the fast
+path, not the only one: the service re-reads every pull request a run is parked
+on every five minutes, and once more when it starts. A lost delivery costs
+minutes, not the whole wait. Each sweep logs one line:
+
+```
+[nudge] pull requests: 2 held, 2 nudged, 0 mid-turn, 0 gone, 0 failed
+```
+
+`gone` is a run that has moved on since the listing, which is ordinary;
+`failed` is a pull request that has lost its floor, and each one is warned
+about by name. A sweep that cannot run at all logs a warning instead; while
+that is happening, no lost delivery is recovered, so it is worth reading. A run
+that is mid-turn is left alone and swept on the next pass.
+
 ```sh
 jigs poke <run>
 ```
 
-manually wakes a suspended run over the same code path as a webhook delivery.
+still wakes a suspended run by hand, over the same code path, when five minutes
+is too long to wait.
 
 ### 6. Operating runs
 

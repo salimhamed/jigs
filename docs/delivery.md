@@ -64,20 +64,19 @@ flowchart TD
     revBudget{"pullRequestRevisionRounds<br/>left?"}
     revise["revision agent<br/>answers threads and may commit"]
     revCommitted{"worktree clean?"}
-    pushRevise["push and post answers;<br/>if a commit landed, post its explanation"]
+    pushRevise["push and post marked answers;<br/>if a commit landed, post its explanation"]
     done(["merged / closed"])
 
-    gate -- "ci-green, approved" --> gate
     gate -- "merge-ready" --> mergePolicy
     mergePolicy -- "human" --> gate
     mergePolicy -- "jigs" --> squash
     squash -- "merged" --> done
-    squash -- "merge failed:<br/>comment, keep listening" --> gate
-    gate -- "ci-red on a new head" --> ciBudget
+    squash -- "not merged: post a marked<br/>stand-down, keep listening" --> gate
+    gate -- "ci-red on the current head" --> ciBudget
     ciBudget -- "yes: attempt + 1" --> ciFix --> ciCommit
-    ciCommit -- "no" --> ciStopped(["stopped"])
+    ciCommit -- "no: post a marked<br/>could-not-repair note" --> ciStopped(["stopped"])
     ciCommit -- "yes: push" --> gate
-    gate -- "changes-requested,<br/>review-comments" --> revBudget
+    gate -- "review-comments" --> revBudget
     revBudget -- "yes: round + 1" --> revise --> revCommitted
     revCommitted -- "no" --> revRaise(["throws: revision left<br/>uncommitted changes"])
     revCommitted -- "yes" --> pushRevise --> gate
@@ -125,23 +124,48 @@ Reading the graph against the code:
   approved SHA explicitly. Only an `ApprovedChange` typechecks as its input, so a stopped result
   cannot be published at all.
 - **Following the pull request** is one suspended gate per pull request, woken
-  by GitHub webhooks. `ci-green` and `approved` wakes only update state and
-  listen again. A `ci-red` wake is ignored when it names a head the worktree has
-  already moved past, and is charged once per head. A `changes-requested` review
-  carrying inline comments arrives as one `review-comments` wake, not two.
-  Feedback that is not a formal review wakes the loop the same way: a
-  `COMMENTED` review's body and a comment on the pull request conversation each
-  arrive as a single-comment thread in that wake, answered on the conversation
-  rather than in a thread reply. After a revision, answers are always posted.
-  A separate change-and-validation explanation is posted only when the branch
-  head moved during that round; a missing explanation degrades to answers-only
-  rather than ending the run.
-  `merge-ready` means green CI plus an approval of the *current* head; under
-  `merge: "human"` it only keeps listening. The gate ends when the pull request
-  closes, and under `merge: "jigs"` it also ends the moment jigs' own squash
-  merge succeeds — `merged` is returned right there, without waiting for the
-  `closed` wake. A squash merge that fails is reported as a comment on the pull
-  request and the gate keeps listening.
+  by a GitHub webhook or by the service's five-minute nudge. Every wake re-reads
+  the whole pull request and says what is outstanding *now*; nothing is
+  remembered between wakes, because every comment jigs posts carries a hidden
+  marker naming what it answered ([ADR 0009](adr/0009-webhook-ingress-resource-scoped-tokens.md)).
+  Feedback that is not a formal review wakes the loop the same way: a review's
+  summary body and a comment on the pull request conversation each arrive as a
+  single-comment thread in the `review-comments` wake, answered on the
+  conversation rather than in a thread reply, so a changes-requested review with
+  inline comments is one wake, not two. After a revision, answers are always
+  posted, each marked with the comment version it answers; edit that comment and
+  it is unanswered again. A separate change-and-validation explanation is posted
+  only when the branch head moved during that round, marked with the commit that
+  landed; a missing explanation degrades to answers-only rather than ending the
+  run. A `ci-red` wake names the current head and is skipped when the worktree
+  has already moved past it; a repair that produces no new commit posts a marked
+  note saying so, which is what keeps a later run from spending its budget on
+  the same failure. `merge-ready` means green CI plus an approval of the
+  *current* head and no outstanding feedback; under `merge: "human"` it only
+  keeps listening. The gate ends when the pull request closes, and under
+  `merge: "jigs"` it also ends the moment jigs' own squash merge succeeds —
+  `merged` is returned right there, without waiting for the `closed` wake. A
+  merge GitHub does not make is reported as a marked comment on the pull
+  request, and the gate keeps listening.
+- **Scope names the work.** Every marker carries one, and it is what "already
+  done" is measured against. It defaults to the workflow function's own name and
+  the task's key, so `shipWorkflow` delivering `AGE-123` writes
+  `shipWorkflow/AGE-123`; renaming that function changes the scope, exactly as
+  it moves the durable step ids. Pass `scope` to `deliverChange` or
+  `followPullRequest` to continue work a differently named workflow started, or
+  to review a pull request independently of the run delivering it. Two scopes on
+  one pull request never claim each other's answers, and neither reads the
+  other's comments as human feedback.
+- **An answer is posted where the reviewer is reading.** An inline comment is
+  answered in its own thread and nowhere else; an answer naming no thread lands
+  on the conversation and claims only what is already on the conversation. An
+  answer that claims nothing is still posted, and still marked as jigs'.
+- **Post-once.** Each answer is posted at most once, because every wake reads
+  GitHub first and the gate only yields what has no marked answer. Nothing is
+  re-read before posting. A post that fails ends that wake — the round stops
+  there, the run does not fail, and the next wake reposts whatever is still
+  unanswered. A reply lost to a transport failure is therefore delayed by at
+  most one nudge interval, never dropped and never doubled.
 - **Every outcome** is one of five statuses. `merged` comes from the pull
   request closing merged, or from jigs' own squash merge; `closed` from it
   closing unmerged. `limit-reached` is a budget spent with no `onLimit`.

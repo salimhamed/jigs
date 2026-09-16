@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import type { PrSnapshot } from "../../providers/github.ts";
+import type { PrComment, PrSnapshot, ReviewThread } from "../../providers/github.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import { resumeFailed } from "../agent/resume-or-rebuild.ts";
-import type { GateAck, GateWake } from "../pull-request/gate.ts";
+import type { GateWake } from "../pull-request/gate.ts";
 import { pullRequestGate } from "../pull-request/gate.ts";
+import { parseMarkers } from "../pull-request/marker.ts";
 import { bindDeliverySteps } from "./bind.ts";
 import {
   defaultCiRepairPrompt,
@@ -23,6 +24,7 @@ import type {
 // through turns a suspension into the next round, which is all these tests
 // need from it.
 vi.mock("workflow", () => ({
+  getWorkflowMetadata: () => ({ workflowRunId: "wrun_TEST", workflowName: "ship" }),
   createHook: () => ({
     getConflict: async () => null,
     // biome-ignore lint/suspicious/noThenProperty: the SDK's Hook is a thenable
@@ -32,6 +34,20 @@ vi.mock("workflow", () => ({
 }));
 
 const pr = { owner: "owner", repo: "repo", number: 1 };
+
+const markersOf = (body: string | undefined) => parseMarkers(body ?? "");
+
+const openSnapshot = (overrides: Partial<PrSnapshot> = {}): PrSnapshot => ({
+  state: "open",
+  merged: false,
+  headSha: "new",
+  reviews: [],
+  reviewThreads: [],
+  conversationComments: [],
+  ci: "green",
+  failingChecks: [],
+  ...overrides,
+});
 const options: DeliverChangeOptions = {
   task: { key: "internal-42", title: "Repair search", instructions: "Find exact matches" },
   worktree: { path: "/work", branch: "fix", defaultBranch: "main", baseSha: "base" },
@@ -59,11 +75,10 @@ function setup(wakes: GateWake[] = [{ kind: "closed", merged: true }]) {
     ) as T;
     return { text: "", output, session: { harness: config.harness.kind, id: "session" } };
   };
-  const acks: Array<GateAck | undefined> = [];
   const closed = vi.fn();
-  async function* gate(): AsyncGenerator<GateWake, void, GateAck | undefined> {
+  async function* gate(): AsyncGenerator<GateWake, void, undefined> {
     try {
-      for (const wake of wakes) acks.push(yield wake);
+      for (const wake of wakes) yield wake;
     } finally {
       closed();
     }
@@ -81,7 +96,7 @@ function setup(wakes: GateWake[] = [{ kind: "closed", merged: true }]) {
     replyToPullRequestReviewThread: vi.fn().mockResolvedValue({ id: 77 }),
     squashMergePullRequest: vi.fn().mockResolvedValue({ merged: true, sha: "merged" }),
   };
-  return { steps, calls, acks, closed };
+  return { steps, calls, closed };
 }
 
 const approved: ApprovedChange = {
@@ -158,13 +173,8 @@ describe("delivery", () => {
     expect(onLimit).toHaveBeenCalledTimes(2);
   });
 
-  it("counts CI repairs cumulatively across green checks and ignores duplicate red wakes", async () => {
-    const { steps, calls, closed } = setup([
-      red("first"),
-      red("first"),
-      { kind: "ci-green", headSha: "second" },
-      red("second"),
-    ]);
+  it("counts CI repairs cumulatively across heads and skips a red the branch moved past", async () => {
+    const { steps, calls, closed } = setup([red("first"), red("stale"), red("second")]);
     vi.mocked(steps.readBranchState)
       .mockResolvedValueOnce({ commits: 1, headSha: "new", dirty: false })
       .mockResolvedValueOnce({ commits: 1, headSha: "first", dirty: false })
@@ -195,10 +205,11 @@ describe("delivery", () => {
           user: "reviewer",
           body: "Why use a set here?",
           createdAt: "2026-01-01",
+          updatedAt: "2026-01-01",
         },
       ],
     };
-    const { steps, acks } = setup([
+    const { steps } = setup([
       { kind: "review-comments", threads: [thread] },
       { kind: "closed", merged: true },
     ]);
@@ -215,17 +226,19 @@ describe("delivery", () => {
         : original(config)) as AgentFn;
     const result = await bindDeliverySteps(steps).deliverChange(options);
     expect(result.status).toBe("merged");
-    expect(acks[0]).toEqual({ selfCommentIds: [77], selfConversationCommentIds: [] });
     expect(steps.replyToPullRequestReviewThread).toHaveBeenCalledOnce();
     expect(steps.replyToPullRequestReviewThread).toHaveBeenCalledWith(
       pr,
       4,
-      "It keeps membership checks constant-time.",
+      expect.stringContaining("It keeps membership checks constant-time."),
     );
+    expect(markersOf(vi.mocked(steps.replyToPullRequestReviewThread).mock.calls[0]?.[2])).toEqual([
+      { scope: "ship/internal-42", run: "wrun_TEST", kind: "reply", source: "4@2026-01-01" },
+    ]);
     expect(steps.commentOnPullRequest).not.toHaveBeenCalled();
   });
 
-  it("posts and acknowledges one commit explanation when a revision pushes a commit", async () => {
+  it("posts one commit explanation, marked with the commit, when a revision pushes one", async () => {
     const thread = {
       rootId: 4,
       path: "src/a.ts",
@@ -239,10 +252,11 @@ describe("delivery", () => {
           user: "reviewer",
           body: "Fix this",
           createdAt: "2026-01-01",
+          updatedAt: "2026-01-01",
         },
       ],
     };
-    const { steps, acks } = setup([
+    const { steps } = setup([
       { kind: "review-comments", threads: [thread] },
       { kind: "closed", merged: true },
     ]);
@@ -271,12 +285,11 @@ describe("delivery", () => {
     expect(steps.commentOnPullRequest).toHaveBeenCalledOnce();
     expect(steps.commentOnPullRequest).toHaveBeenCalledWith(
       pr,
-      "Changed the lookup and ran the bind tests.",
+      expect.stringContaining("Changed the lookup and ran the bind tests."),
     );
-    expect(acks[0]).toEqual({
-      selfCommentIds: [77],
-      selfConversationCommentIds: [8800],
-    });
+    expect(markersOf(vi.mocked(steps.commentOnPullRequest).mock.calls[0]?.[1])).toEqual([
+      { scope: "ship/internal-42", run: "wrun_TEST", kind: "completion", source: "after" },
+    ]);
   });
 
   // The gate delivers a conversation comment once per version, so an edit
@@ -300,6 +313,7 @@ describe("delivery", () => {
               user: "reviewer",
               body,
               createdAt: "2026-01-01",
+              updatedAt: body,
             },
           ],
         },
@@ -324,12 +338,11 @@ describe("delivery", () => {
     expect(steps.replyToPullRequestReviewThread).not.toHaveBeenCalled();
   });
 
-  // followPullRequest keeps no comment set of its own any more, so this drives
-  // the real gate: the guarantee that an answered comment does not buy a
-  // second revision round is the gate's, and this is where the delivery loop
-  // depends on it.
-  it("does not run a second revision round for an inline comment the gate already delivered", async () => {
-    const inlineThread = {
+  // followPullRequest keeps no record of what it answered: the answer it posts
+  // is the record. This drives the real gate against a pull request that keeps
+  // the replies, which is what makes a repeated snapshot cost nothing.
+  it("answers an inline comment once, however often the same state arrives", async () => {
+    const thread: ReviewThread = {
       rootId: 4,
       path: "src/a.ts",
       line: 1,
@@ -342,30 +355,64 @@ describe("delivery", () => {
           user: "reviewer",
           body: "Fix this",
           createdAt: "2026-01-01",
+          updatedAt: "2026-01-01",
         },
       ],
     };
-    const open: PrSnapshot = {
-      state: "open",
-      merged: false,
-      headSha: "new",
-      viewer: "salim",
-      reviews: [],
-      reviewThreads: [inlineThread],
-      conversationComments: [],
-      ci: "green",
-      failingChecks: [],
-    };
-    // The same unanswered comment on every poll, then the PR closes.
-    const staged: PrSnapshot[] = [open, open, { ...open, state: "closed", merged: true }];
-    let round = 0;
-    const { steps, calls } = setup();
-    steps.pullRequestGate = (target) =>
-      pullRequestGate(target, async () => {
-        const next = staged[round++];
-        if (next === undefined) throw new Error("the gate polled past the staged snapshots");
-        return next;
+    const conversation: PrComment[] = [];
+    const state = (): PrSnapshot =>
+      openSnapshot({
+        reviewThreads: [{ ...thread, comments: [...thread.comments] }],
+        conversationComments: [...conversation],
       });
+    const { steps, calls } = setup();
+    // The revision agent answers the thread by its rootId, as the prompt asks:
+    // an inline comment is only answered in its own thread.
+    const recorded = steps.runAgent;
+    steps.runAgent = (async (config) => {
+      const result = await recorded(config);
+      return config.prompt.includes("Address the review feedback")
+        ? {
+            ...result,
+            output: config.output?.parse({
+              answers: [{ threadId: 4, body: "Fixed." }],
+              commitExplanation: null,
+            }),
+          }
+        : result;
+    }) as AgentFn;
+    steps.commentOnPullRequest = async (_target, body) => {
+      conversation.push({
+        id: 6,
+        body,
+        user: "salim",
+        userType: "User",
+        createdAt: "2026-01-02",
+        updatedAt: "2026-01-02",
+      });
+      return { id: 6 };
+    };
+    steps.replyToPullRequestReviewThread = async (_target, rootId, body) => {
+      thread.comments.push({
+        id: 5,
+        rootId,
+        path: "src/a.ts",
+        line: 1,
+        user: "salim",
+        body,
+        createdAt: "2026-01-02",
+        updatedAt: "2026-01-02",
+      });
+      return { id: 5 };
+    };
+    // The same pull request on every poll, then it closes.
+    let round = 0;
+    steps.pullRequestGate = (target, scope) =>
+      pullRequestGate(
+        target,
+        async () => (++round >= 3 ? { ...state(), state: "closed", merged: true } : state()),
+        scope,
+      );
 
     const result = await bindDeliverySteps(steps).followPullRequest({
       change: { ...approved, attempts: { ...approved.attempts }, sessions: {} },
@@ -440,15 +487,9 @@ describe("delivery", () => {
     expect(closed).toHaveBeenCalledOnce();
   });
 
-  it("does not count duplicate review events against the revision budget", async () => {
-    const review: GateWake = {
-      kind: "changes-requested",
-      reviewId: 1,
-      reviewer: "person",
-      body: "Fix search",
-      submittedAt: "today",
-    };
-    const { steps, calls } = setup([review, review, { ...review, reviewId: 2 }]);
+  it("spends one revision round per feedback wake and stops at the budget", async () => {
+    const summary: GateWake = { kind: "review-comments", threads: [], body: "Fix search" };
+    const { steps, calls } = setup([summary, summary]);
     const result = await bindDeliverySteps(steps).deliverChange({
       ...options,
       pullRequestRevision: { harness: { kind: "claude", model: "revision" } },
@@ -585,12 +626,8 @@ describe("delivery", () => {
     expect(calls).toHaveLength(3);
   });
 
-  it("ignores historical approvals and merges only the current ready commit", async () => {
-    const { steps } = setup([
-      { kind: "approved", reviewId: 1, reviewer: "person", submittedAt: "today" },
-      { kind: "ci-green", headSha: "new" },
-      { kind: "merge-ready", headSha: "new" },
-    ]);
+  it("merges the ready commit the wake named", async () => {
+    const { steps } = setup([{ kind: "merge-ready", headSha: "new" }]);
     const result = await bindDeliverySteps(steps).deliverChange({ ...options, merge: "jigs" });
     expect(result.status).toBe("merged");
     expect(steps.squashMergePullRequest).toHaveBeenCalledExactlyOnceWith(pr, "new");
