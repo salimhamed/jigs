@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.24.0](https://github.com/salimhamed/jigs/compare/jigs-v0.23.3...jigs-v0.24.0) (2026-09-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* resolveMergePolicy now requires a binding name and the scaffolded ship workflow no longer accepts a merge input.
+
+### Features
+
+* let bindings override merge policy ([f887bca](https://github.com/salimhamed/jigs/commit/f887bca07d508cf7d6266e357ed00fe30410e5bb))
+
 ## [0.23.3](https://github.com/salimhamed/jigs/compare/jigs-v0.23.2...jigs-v0.23.3) (2026-09-16)
 
 
