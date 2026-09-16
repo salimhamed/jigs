@@ -63,11 +63,17 @@ export async function setupRepo(
     );
   }
 
-  const identity = resolveGithubIdentity(factoryRoot);
+  resolveGithubIdentity(factoryRoot);
   const merge = bindingMergePolicy(config.merge, binding);
   const protection = deps.protection ?? realProtection;
   const branch = await protection.defaultBranch(repo.owner, repo.repo);
   const current = await protection.get(repo.owner, repo.repo, branch);
+  if (merge.approval.kind === "label" && current.requiredApprovingReviews > 0) {
+    throw new JigsError(
+      `refusing to change ${repo.owner}/${repo.repo}:${branch}: it requires ${current.requiredApprovingReviews} approving review${current.requiredApprovingReviews === 1 ? "" : "s"}, but the ${merge.approval.name} label cannot satisfy that rule and jigs-authored pull requests would stay blocked forever`,
+      `remove the required-review rule explicitly, then re-run: jigs repo setup ${bindingName}`,
+    );
+  }
   const requiredChecks =
     current.requiredChecks.length > 0
       ? current.requiredChecks
@@ -79,7 +85,10 @@ export async function setupRepo(
     );
   }
 
-  const reviews = identity.mode === "app" ? 1 : 0;
+  const reviews =
+    merge.approval.kind === "review"
+      ? Math.max(1, current.requiredApprovingReviews)
+      : current.requiredApprovingReviews;
   const desired: BranchProtection = {
     protected: true,
     requiredChecks,
@@ -93,15 +102,13 @@ export async function setupRepo(
     `  status checks: require ${requiredChecks.join(", ")} — prevents merging before CI passes`,
   );
   deps.out("  branch protection — prevents direct, ungoverned changes to the default branch");
-  if (reviews === 1) {
-    deps.out("  approving reviews: require 1 — a human approves pull requests authored by the App");
-  } else if (identity.mode === "pat" && merge.approval.kind === "label") {
+  if (merge.approval.kind === "review") {
     deps.out(
-      `  approving reviews: require 0 — refusing a required-review rule because the ${merge.approval.name} label cannot satisfy it; jigs-authored pull requests would stay blocked forever`,
+      `  approving reviews: require ${reviews} — enforces the configured approving GitHub review signal`,
     );
   } else {
     deps.out(
-      "  approving reviews: require 0 — the effective approval signal is not a GitHub review",
+      `  approving reviews: require 0 — refusing a required-review rule because the ${merge.approval.name} label cannot satisfy it; jigs-authored pull requests would stay blocked forever`,
     );
   }
   if (changes.length === 0) {
@@ -132,9 +139,7 @@ function diff(current: BranchProtection, desired: BranchProtection): string[] {
   const changes: string[] = [];
   if (!current.protected) changes.push("+ protect the default branch");
   if (current.requiredChecks.join("\0") !== desired.requiredChecks.join("\0")) {
-    changes.push(
-      `${current.requiredChecks.length === 0 ? "+" : "~"} required status checks: ${desired.requiredChecks.join(", ")}`,
-    );
+    changes.push(`+ required status checks: ${desired.requiredChecks.join(", ")}`);
   }
   if (current.requiredApprovingReviews !== desired.requiredApprovingReviews) {
     changes.push(

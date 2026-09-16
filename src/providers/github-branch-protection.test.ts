@@ -13,7 +13,16 @@ const repo = { owner: "salim", repo: "jigs" };
 
 beforeEach(() => vi.clearAllMocks());
 
+test("a non-admin response is not mistaken for an unprotected branch", async () => {
+  getMock.mockResolvedValueOnce({ permissions: { admin: false } });
+  await expect(getBranchProtection(repo, "main")).rejects.toThrow(
+    "does not have repository administration access",
+  );
+  expect(getMock).toHaveBeenCalledOnce();
+});
+
 test("the protection payload preserves check App identity and review bypass allowances", async () => {
+  getMock.mockResolvedValueOnce({ permissions: { admin: true } });
   getMock.mockResolvedValueOnce({
     required_status_checks: {
       strict: true,
@@ -61,6 +70,7 @@ test("the protection payload preserves check App identity and review bypass allo
 });
 
 test("personal-repository payloads omit absent organization-only review restrictions", async () => {
+  getMock.mockResolvedValueOnce({ permissions: { admin: true } });
   getMock.mockResolvedValueOnce({
     required_status_checks: { strict: false, contexts: ["test"], checks: [] },
     required_pull_request_reviews: { required_approving_review_count: 1 },

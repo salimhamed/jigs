@@ -401,6 +401,7 @@ test("bind prints a merge-policy repair but still resolves successfully", async 
       mergePolicyProbes: {
         repository: async () => ({
           default_branch: "main",
+          permissions: { admin: true },
           allow_merge_commit: true,
           allow_squash_merge: true,
           allow_rebase_merge: true,

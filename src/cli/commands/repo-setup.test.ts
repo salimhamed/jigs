@@ -74,18 +74,12 @@ test("App review mode proposes checks and one approving review, then prompts", a
     expect.anything(),
     expect.objectContaining({ requiredChecks: ["test", "typecheck"], requiredApprovingReviews: 1 }),
   );
-  expect(lines.join("\n")).toContain("a human approves pull requests authored by the App");
+  expect(lines.join("\n")).toContain("configured approving GitHub review signal");
 });
 
-test("PAT label mode removes required reviews and explains the refusal", async () => {
-  makeFactory("pat", "label");
-  const current = {
-    ...unprotected(),
-    protected: true,
-    requiredChecks: ["test"],
-    requiredApprovingReviews: 2,
-  };
-  const { deps, put } = harness(current);
+test("App label mode does not propose a required review", async () => {
+  makeFactory("app", "label");
+  const { deps, put } = harness(unprotected());
 
   await setupRepo("api", deps, { yes: true });
 
@@ -96,10 +90,39 @@ test("PAT label mode removes required reviews and explains the refusal", async (
     expect.anything(),
     expect.objectContaining({ requiredApprovingReviews: 0 }),
   );
-  expect(lines.join("\n")).toContain(
-    "refusing a required-review rule because the jigs:approved label cannot satisfy it",
+});
+
+test("review mode preserves an operator's stronger review count", async () => {
+  makeFactory("pat", "review");
+  const { deps, put } = harness({
+    ...unprotected(),
+    protected: true,
+    requiredApprovingReviews: 2,
+  });
+
+  await setupRepo("api", deps, { yes: true });
+
+  expect(put).toHaveBeenCalledWith(
+    "acme",
+    "api",
+    "main",
+    expect.anything(),
+    expect.objectContaining({ requiredApprovingReviews: 2 }),
   );
-  expect(lines.join("\n")).toContain("would stay blocked forever");
+});
+
+test("label mode refuses an existing review rule without deleting it", async () => {
+  makeFactory("pat", "label");
+  const current = {
+    ...unprotected(),
+    protected: true,
+    requiredChecks: ["test"],
+    requiredApprovingReviews: 2,
+  };
+  const { deps, put } = harness(current);
+
+  await expect(setupRepo("api", deps, { yes: true })).rejects.toThrow("refusing to change");
+  expect(put).not.toHaveBeenCalled();
 });
 
 test("--yes is unattended, while the default refuses to write without a prompt", async () => {

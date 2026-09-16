@@ -1,3 +1,4 @@
+import { JigsError } from "../errors.ts";
 import { GithubApiError, githubGet, githubRequest } from "./github-api.ts";
 import type { GithubRepoRef } from "./github-webhook.ts";
 
@@ -58,6 +59,15 @@ export async function getBranchProtection(
   repo: GithubRepoRef,
   branch: string,
 ): Promise<GithubBranchProtection> {
+  const repository = await githubGet<{ permissions?: { admin?: boolean } }>(
+    `/repos/${repo.owner}/${repo.repo}`,
+  );
+  if (repository.permissions?.admin !== true) {
+    throw new JigsError(
+      `cannot read branch protection for ${repo.owner}/${repo.repo}: the GitHub credential does not have repository administration access`,
+      "grant Administration: read and write to the GitHub App and accept the updated installation permissions, or use an admin PAT",
+    );
+  }
   let raw: GithubProtection;
   try {
     raw = await githubGet<GithubProtection>(branchPath(repo, branch));
