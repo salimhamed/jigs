@@ -224,6 +224,24 @@ test("adding a binding ignores commas in a trailing comment", () => {
 `);
 });
 
+test("adding a binding preserves a trailing comma before a comment", () => {
+  const input = `export default defineFactory({
+  bindings: {
+    api: { remote: "r1" },
+    // note, with comma
+  },
+});
+`;
+  expect(upsertBinding(input, "web", "r2")).toBe(`export default defineFactory({
+  bindings: {
+    api: { remote: "r1" },
+    // note, with comma
+    web: { remote: "r2" },
+  },
+});
+`);
+});
+
 test("adding a binding to a one-line object ignores commas in comments", () => {
   const input = `export default { bindings: { api: { remote: "a" } /* one, two */ } };`;
   expect(upsertBinding(input, "web", "b")).toBe(

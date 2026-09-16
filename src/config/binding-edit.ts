@@ -62,8 +62,7 @@ function insertBinding(
 
   const first = properties[0] as PropertyAssignment;
   const last = properties.at(-1) as PropertyAssignment;
-  const hasTrailingComma =
-    object.getChildSyntaxList()?.getChildren().at(-1)?.getKind() === SyntaxKind.CommaToken;
+  const hasTrailingComma = last.getNextSiblingIfKind(SyntaxKind.CommaToken) !== undefined;
   const entryIndent = leadingWhitespace(text, first.getStart());
   const closeBrace = object.getEnd() - 1;
   const closeLineStart = text.lastIndexOf("\n", closeBrace - 1) + 1;
