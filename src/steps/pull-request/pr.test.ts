@@ -14,7 +14,12 @@ import {
 import { GithubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity } from "../../providers/github-auth.ts";
 import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
-import { defaultMergeBody, mergePullRequest, openPullRequest, resolveMergePolicy } from "./pr.ts";
+import {
+  mergePullRequest,
+  openPullRequest,
+  preservedCommitMessageBody,
+  resolveMergePolicy,
+} from "./pr.ts";
 
 vi.mock("../../providers/github.ts", () => ({
   assignPullRequest: vi.fn(),
@@ -190,9 +195,9 @@ test("any other GitHub error is a real failure", async () => {
   await expect(mergePullRequest(pr, "head", SQUASH)).rejects.toThrow("500");
 });
 
-test("the co-author trailer is appended to GitHub's own body, never sent instead of it", async () => {
-  // `commit_message` replaces the body GitHub would write, and that body is
-  // where the BREAKING CHANGE footer release-please reads lives.
+test("the co-author trailer follows preserved commit content", async () => {
+  // `commit_message` replaces the body GitHub would generate, so jigs keeps
+  // the commit content where the BREAKING CHANGE footer lives.
   asApp("Salim Hamed <salim@example.com>");
   await mergePullRequest(pr, "head", SQUASH);
   expect(mergePr).toHaveBeenCalledWith(
@@ -204,7 +209,7 @@ test("the co-author trailer is appended to GitHub's own body, never sent instead
   );
 });
 
-test("several commits become the bulleted list GitHub would have written", async () => {
+test("the preservation policy keeps several commits in a bulleted list", async () => {
   asApp("Salim Hamed <salim@example.com>");
   vi.mocked(fetchPrCommitMessages).mockResolvedValue([
     "feat: first\n\nWhy the first.",
@@ -246,15 +251,15 @@ test("app mode names the operator on the pull request it opens for them", async 
   expect(assignPullRequest).toHaveBeenCalledWith(pr, ["salimhamed"]);
 });
 
-test("defaultMergeBody reproduces what GitHub composes for itself", () => {
-  // One commit: its body, without the subject GitHub puts in the title.
-  expect(defaultMergeBody(["fix: thing\n\nWhy.\n\nBREAKING CHANGE: moved."])).toBe(
+test("preservedCommitMessageBody keeps useful commit-message content", () => {
+  // One commit: its body, because jigs sends the pull request title separately.
+  expect(preservedCommitMessageBody(["fix: thing\n\nWhy.\n\nBREAKING CHANGE: moved."])).toBe(
     "Why.\n\nBREAKING CHANGE: moved.",
   );
-  expect(defaultMergeBody(["fix: thing"])).toBe("");
+  expect(preservedCommitMessageBody(["fix: thing"])).toBe("");
   // Several: a bullet per commit, each keeping its own body.
-  expect(defaultMergeBody(["feat: a\n\nBecause.", "fix: b"])).toBe(
+  expect(preservedCommitMessageBody(["feat: a\n\nBecause.", "fix: b"])).toBe(
     "* feat: a\n\nBecause.\n\n* fix: b",
   );
-  expect(defaultMergeBody([])).toBe("");
+  expect(preservedCommitMessageBody([])).toBe("");
 });

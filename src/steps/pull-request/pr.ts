@@ -126,7 +126,7 @@ export async function mergePullRequest(
   if (before.merged) return { merged: true, mergeCommitSha: before.mergeCommitSha };
   const refusal = mergeRefusal(before, expectedHeadSha, policy.approval);
   if (refusal !== null) return { merged: false, ...refusal };
-  const message = await mergeCommitBody(pr, policy.method);
+  const message = await suppliedCommitMessageBody(pr, policy.method);
   try {
     const result = await mergePr(pr, {
       title: await fetchPrTitle(pr),
@@ -158,19 +158,20 @@ export async function mergePullRequest(
 }
 
 /**
- * The merge commit body, or nothing at all.
+ * The commit-message body jigs supplies, or nothing at all.
  *
  * GitHub makes a squash commit's author the pull request's author, which in App
  * mode is the bot, so the `Co-authored-by` trailer is how the operator keeps the
- * credit. Sending `commit_message` *replaces* the body GitHub would have
- * written, and that body is the branch's own commit messages — which carry the
- * `BREAKING CHANGE:` footers release-please reads
- * ([ADR 0014](../../../docs/adr/0014-release-automation.md)). So the trailer is
- * appended to a reconstruction of that body rather than sent instead of it, and
- * with no co-author configured nothing is sent and GitHub's own body stands.
- * A rebase rewrites the branch's commits and has no merge message at all.
+ * credit. Sending `commit_message` *replaces* the body GitHub would generate,
+ * so jigs applies its own preservation policy before adding the trailer: for a
+ * one-commit branch it keeps that commit's body, and for several commits it
+ * keeps every subject and body in a bulleted list. This preserves such content
+ * as the `BREAKING CHANGE:` footers release-please reads
+ * ([ADR 0014](../../../docs/adr/0014-release-automation.md)). With no co-author
+ * configured jigs sends no body and leaves its generation to GitHub. A rebase
+ * rewrites the branch's commits and accepts no merge message at all.
  */
-async function mergeCommitBody(
+async function suppliedCommitMessageBody(
   pr: PrRef,
   method: MergePolicy["method"],
 ): Promise<undefined | string> {
@@ -178,14 +179,14 @@ async function mergeCommitBody(
   if (method === "rebase" || identity.mode !== "app" || identity.coAuthor === undefined) {
     return undefined;
   }
-  const body = defaultMergeBody(await fetchPrCommitMessages(pr));
+  const body = preservedCommitMessageBody(await fetchPrCommitMessages(pr));
   const trailer = `Co-authored-by: ${identity.coAuthor}`;
   return body === "" ? trailer : `${body}\n\n${trailer}`;
 }
 
-// What GitHub composes when no `commit_message` is sent: one commit's own body
-// verbatim, or a bulleted list of the messages when the branch carries several.
-export function defaultMergeBody(messages: string[]): string {
+// Jigs' preservation policy when it must replace GitHub's generated body: keep
+// one commit's body, or every subject and body when the branch has several.
+export function preservedCommitMessageBody(messages: string[]): string {
   const only = messages.length === 1 ? messages[0] : undefined;
   if (only !== undefined) return only.split("\n").slice(1).join("\n").trim();
   return messages
