@@ -532,7 +532,7 @@ if (postgresUrl === undefined || postgresUrl === "") {
   console.log("\n=== cancel: pending and exhausted queue jobs are deleted in Postgres");
   execFileSync(
     "pnpm",
-    ["vitest", "run", "--config", "vitest.live.config.ts", "src/service/stalls.live.test.ts"],
+    ["vitest", "run", "--config", "vitest.live.config.ts", "src/service/cancel.live.test.ts"],
     { cwd: repo, stdio: "inherit" },
   );
   console.log(

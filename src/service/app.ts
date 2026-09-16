@@ -14,10 +14,11 @@ import { listWorktreesForRun } from "../steps/worktree/registry.ts";
 import { registrySql } from "../steps/worktree/sql.ts";
 import { sweepWorktrees } from "../steps/worktree/sweep.ts";
 import { githubWebhookSecret, verifyGithubSignature, verifyLinearSignature } from "./ingress.ts";
+import { deleteRunJobs, listRunDeadJobs } from "./queue.ts";
 import { bootPhase, isReady } from "./readiness.ts";
 import { describeRun, enrichSuspensions, listRuns, type RunRef, resolveRunRef } from "./runs.ts";
 import { listSchedules, scheduleChecks } from "./schedules.ts";
-import { deleteRunJobs, listRunDeadJobs, listRunSteps } from "./stalls.ts";
+import { listRunSteps } from "./stalls.ts";
 import { startRun } from "./trigger.ts";
 
 // The app is library code: a factory repo installs this package and hands in
@@ -216,11 +217,11 @@ export function createApp(factory: Factory): Hono {
     if (ref.kind !== "found") return unresolvedRunResponse(c, ref);
     const run = getRun(ref.runId);
     const status = await run.status;
-    if (TERMINAL_RUN_STATUSES.has(status)) {
+    if (TERMINAL_RUN_STATUSES.has(status) && status !== "cancelled") {
       return c.json({ error: `run ${ref.runId} is already ${status}`, status }, 409);
     }
     const releasedTokens = await runResourceTokens(ref.runId);
-    await run.cancel();
+    if (status !== "cancelled") await run.cancel();
     const deletedJobs = await deleteRunJobs(registrySql(), ref.runId);
     // Cancel never cleans up: name what stays so the operator knows where the
     // worktree is and that `jigs sweep` is the way to reclaim it.

@@ -8,6 +8,7 @@ import { ticketToken } from "../blocks/ticket/claim.ts";
 import { needsHumanToken } from "../blocks/ticket/halt-for-human.ts";
 import * as linear from "../providers/linear.ts";
 import * as sql from "../steps/worktree/sql.ts";
+import * as queue from "./queue.ts";
 import {
   describeRun,
   describeSuspension,
@@ -27,7 +28,7 @@ const RUN_B = "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ";
 // would otherwise open a real connection to the operator's own World.
 beforeEach(() => {
   vi.spyOn(sql, "registrySql").mockReturnValue({} as never);
-  vi.spyOn(stalls, "listJobRunIds").mockResolvedValue({ dead: [], live: [] });
+  vi.spyOn(queue, "listJobRunIds").mockResolvedValue({ dead: [], live: [] });
   world();
 });
 afterEach(() => {
@@ -321,7 +322,7 @@ test("a non-terminal run holding a park hook is reported suspended", async () =>
 });
 
 const jobs = (dead: string[], live: string[] = []) =>
-  vi.spyOn(stalls, "listJobRunIds").mockResolvedValue({ dead, live });
+  vi.spyOn(queue, "listJobRunIds").mockResolvedValue({ dead, live });
 
 const inFlight: stalls.StepView = {
   name: "executeAgent",
