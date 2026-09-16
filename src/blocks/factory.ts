@@ -4,7 +4,8 @@ import { z } from "zod";
 import type { WorkflowRequires } from "../checks/index.ts";
 // The schemas that validate these blocks, named for their types alone: a
 // second hand-written copy of either would drift from what jigs accepts.
-import type { githubSchema, mergeSchema } from "../config/factory-config.ts";
+import type { githubSchema } from "../config/factory-config.ts";
+import type { mergeSchema } from "./pull-request/policy.ts";
 
 export const ticketInput = z.union([z.uuid(), z.string().regex(/^[A-Z][A-Z0-9]*-\d+$/)]);
 

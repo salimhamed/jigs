@@ -5,9 +5,9 @@
 // factory's own composition, never here.
 
 import { type MergeRefusal, mergeRefusal } from "../../blocks/pull-request/merge-ready.ts";
+import type { MergePolicy } from "../../blocks/pull-request/policy.ts";
 import {
   bindingMergePolicy,
-  type MergePolicy,
   readFactoryConfig,
   resolveBinding,
 } from "../../config/factory-config.ts";

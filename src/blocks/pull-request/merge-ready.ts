@@ -1,10 +1,5 @@
-import type { ApprovalSignal } from "../../config/factory-config.ts";
 import type { PrReview, PrSnapshot } from "../../providers/github.ts";
-
-// The policy types a factory's configuration and the delivery blocks both
-// name. They are declared where the schema that validates them lives, and a
-// type import crosses no boundary.
-export type { ApprovalSignal, MergePolicy } from "../../config/factory-config.ts";
+import type { ApprovalSignal } from "./policy.ts";
 
 /**
  * Is the operator's consent recorded on the pull request, as this factory

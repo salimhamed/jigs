@@ -3,7 +3,7 @@
 // forbidden. The credential comes from github-auth.ts, whichever identity the
 // factory configured.
 
-import type { MergePolicy } from "../config/factory-config.ts";
+import type { MergePolicy } from "../blocks/pull-request/policy.ts";
 import { githubGet, githubGetAll, githubRequest } from "./github-api.ts";
 
 export type PrRef = {

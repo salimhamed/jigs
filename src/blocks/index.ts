@@ -143,13 +143,17 @@ export {
   type StatusReason,
 } from "./pull-request/marker.ts";
 export {
-  type ApprovalSignal,
   isApprovalSatisfied,
   isPullRequestMergeReady,
-  type MergePolicy,
   type MergeRefusal,
   mergeRefusal,
 } from "./pull-request/merge-ready.ts";
+export {
+  type ApprovalSignal,
+  approvalSchema,
+  type MergePolicy,
+  mergeSchema,
+} from "./pull-request/policy.ts";
 export { currentRunId, defaultPrScope } from "./pull-request/writer.ts";
 export {
   type BoundReviewTicketOptions,
