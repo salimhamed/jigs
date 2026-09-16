@@ -82,6 +82,7 @@ function upgrade(
       execFile: io.exec.execFile,
       processes: io.procs.processes,
       prepare: vi.fn(),
+      generate: vi.fn(),
       readyTimeoutMs: 500,
       ...extra,
     },
@@ -100,16 +101,31 @@ test("bumps jigs to latest, runs every up step, then the typecheck", async () =>
   const root = factory(port);
   const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
 
-  const result = await upgrade(root, io);
+  const generated = path.join(root, "generated-by-new-release");
+  const result = await upgrade(
+    root,
+    io,
+    {},
+    {
+      generate: vi.fn(async () => {
+        expect(commands(io).at(-1)).toEqual(["pnpm", "install"]);
+        expect(readManifest(root).dependencies["@salimhamed/jigs"]).toBe("0.1.19");
+        writeFileSync(generated, "new template");
+      }),
+      prepare: vi.fn(() => {
+        expect(readFileSync(generated, "utf8")).toBe("new template");
+      }),
+    },
+  );
 
   expect(result.ok).toBe(true);
   expect(statuses(result)).toEqual([
     "packages:ok",
     "bump:ok",
-    "generate:ok",
     "locate:ok",
     "env:ok",
     "install:ok",
+    "generate:ok",
     "compose:ok",
     "bootstrap:ok",
     "build:ok",
@@ -124,7 +140,6 @@ test("bumps jigs to latest, runs every up step, then the typecheck", async () =>
 
   expect(commands(io)).toEqual([
     ["pnpm", "update", "--latest", "@salimhamed/jigs"],
-    ["pnpm", "exec", "jigs", "generate"],
     ["pnpm", "install"],
     ["docker", "compose", "up", "-d", "--wait"],
     ["bootstrap"],
@@ -134,10 +149,57 @@ test("bumps jigs to latest, runs every up step, then the typecheck", async () =>
   for (const call of io.exec.calls) expect(call.options.cwd).toBe(root);
 
   const printed = lines.join("\n");
-  expect(printed).toMatch(/^ok {3}packages \(\d+ms\) — jigs 0\.1\.18$/m);
+  expect(printed).toMatch(
+    /^ok {3}packages \(\d+ms\) — jigs 0\.1\.18; normalized minimumReleaseAgeExclude$/m,
+  );
   expect(printed).toMatch(/^ok {3}bump \(\d+ms\) — jigs 0\.1\.18 → 0\.1\.19$/m);
   expect(printed).toMatch(/^ok {3}typecheck \(\d+ms\)$/m);
   expect(lines.at(-1)).toBe("acme-factory runs jigs 0.1.19");
+});
+
+test("normalizes an exact jigs release-age exclusion before pnpm runs", async () => {
+  const port = await fakeService();
+  const root = factory(port);
+  const workspace = path.join(root, "pnpm-workspace.yaml");
+  writeFileSync(
+    workspace,
+    "minimumReleaseAge: 1440\nminimumReleaseAgeExclude:\n  - '@acme/fresh@1.0.0'\n  - '@salimhamed/jigs@0.1.18'\n",
+  );
+  const io = {
+    exec: fakeRegistry("0.1.19", (call) => {
+      if (call.file !== "pnpm") return undefined;
+      const contents = readFileSync(workspace, "utf8");
+      expect(contents).toContain("@acme/fresh@1.0.0");
+      expect(contents).toMatch(/- ['"]?@salimhamed\/jigs['"]?$/m);
+      expect(contents).not.toContain("@salimhamed/jigs@0.1.18");
+      return undefined;
+    }),
+    procs: fakeProcesses(),
+  };
+
+  const result = await upgrade(root, io, { to: "0.1.19" });
+
+  expect(result.ok).toBe(true);
+  expect(result.steps[0]?.detail).toBe("jigs 0.1.18; normalized minimumReleaseAgeExclude");
+  const contents = readFileSync(workspace, "utf8");
+  expect(contents).toContain("minimumReleaseAge: 1440");
+  expect(contents.match(/@salimhamed\/jigs['"]?(?:\n|$)/g)).toHaveLength(1);
+});
+
+test("leaves an already-normalized release-age exclusion byte-identical", async () => {
+  const port = await fakeService();
+  const root = factory(port);
+  const workspace = path.join(root, "pnpm-workspace.yaml");
+  const before =
+    "minimumReleaseAgeExclude:\n  - '@acme/fresh@1.0.0'\n  - '@salimhamed/jigs' # all releases\n";
+  writeFileSync(workspace, before);
+  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+
+  const result = await upgrade(root, io);
+
+  expect(result.ok).toBe(true);
+  expect(result.steps[0]?.detail).toBe("jigs 0.1.18");
+  expect(readFileSync(workspace, "utf8")).toBe(before);
 });
 
 test("--to pins jigs to that version instead of the latest", async () => {
@@ -398,10 +460,10 @@ test("a failing up step ends the upgrade there; no typecheck runs", async () => 
   expect(statuses(result)).toEqual([
     "packages:ok",
     "bump:ok",
-    "generate:ok",
     "locate:ok",
     "env:ok",
     "install:ok",
+    "generate:ok",
     "compose:failed",
   ]);
   expect(result.up?.ok).toBe(false);
@@ -465,17 +527,29 @@ test("--force and --no-doctor reach up", async () => {
 
 test("a failed integration refresh stops before rebuilding or restarting", async () => {
   const root = factory(59997);
-  const io = {
-    exec: fakeRegistry("0.1.19", (call) =>
-      call.args.join(" ") === "exec jigs generate" ? execError("generation failed") : undefined,
-    ),
-    procs: fakeProcesses(),
-  };
-  const result = await upgrade(root, io);
+  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+  const result = await upgrade(
+    root,
+    io,
+    {},
+    {
+      generate: vi.fn().mockRejectedValue(new Error("generation failed")),
+    },
+  );
   expect(result.ok).toBe(false);
-  expect(statuses(result)).toEqual(["packages:ok", "bump:ok", "generate:failed"]);
+  expect(statuses(result)).toEqual([
+    "packages:ok",
+    "bump:ok",
+    "locate:ok",
+    "env:ok",
+    "install:ok",
+    "generate:failed",
+  ]);
+  expect(result.steps.at(-1)?.detail).toBe("generation failed");
+  expect(result.steps.at(-1)?.repair).toBe("run pnpm exec jigs generate in this factory");
+  expect(lines.at(-1)).toBe("  → run pnpm exec jigs generate in this factory");
   expect(commands(io)).toEqual([
     ["pnpm", "update", "--latest", "@salimhamed/jigs"],
-    ["pnpm", "exec", "jigs", "generate"],
+    ["pnpm", "install"],
   ]);
 });

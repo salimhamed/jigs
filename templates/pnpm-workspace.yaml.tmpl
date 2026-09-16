@@ -9,3 +9,6 @@ strictPeerDependencies: true
 # that would never run.
 ignoredOptionalDependencies:
   - '@openai/codex'
+# jigs upgrades immediately after release; other packages remain age-checked.
+minimumReleaseAgeExclude:
+  - '@salimhamed/jigs'

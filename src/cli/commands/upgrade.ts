@@ -1,8 +1,10 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { parseDocument } from "yaml";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
+import { generateIntegration } from "./generate.ts";
 import { type Step, StepFailed, stepRunner } from "./step-runner.ts";
 import { type UpDeps, type UpOptions, type UpResult, type UpStepName, upFactory } from "./up.ts";
 
@@ -20,7 +22,7 @@ const CHECKOUT_PACKAGES = ["jigs", "@jigs/service"];
 // package no release has.
 const RETIRED_PACKAGE = "@salimhamed/jigs-service";
 
-export type UpgradeStepName = "packages" | "bump" | "generate" | "typecheck";
+export type UpgradeStepName = "packages" | "bump" | "typecheck";
 
 export type UpgradeStep = Step<UpgradeStepName | UpStepName>;
 
@@ -62,7 +64,8 @@ export async function upgradeFactory(
     const { factoryRoot, before } = await runner.run("packages", (note) => {
       const factoryRoot = locateFactoryRoot(deps.cwd);
       const before = publishedVersion(factoryRoot);
-      note(`jigs ${before}`);
+      const normalized = normalizeReleaseAgeExclude(factoryRoot);
+      note(normalized ? `jigs ${before}; normalized minimumReleaseAgeExclude` : `jigs ${before}`);
       return { factoryRoot, before };
     });
     result.factoryRoot = factoryRoot;
@@ -76,26 +79,16 @@ export async function upgradeFactory(
     });
     result.after = after;
 
-    await runner.run("generate", () =>
-      execOrExplain(
-        execFile,
-        "pnpm",
-        ["exec", "jigs", "generate"],
-        { cwd: factoryRoot },
-        deps.out,
-        {
-          missing: new JigsError("pnpm is not on PATH", "install pnpm"),
-          failed: () =>
-            new JigsError(
-              "could not refresh jigs.ts",
-              "run pnpm exec jigs generate in this factory",
-            ),
-        },
-      ),
-    );
-
     const up = await upFactory(
-      { ...deps, cwd: factoryRoot, execFile },
+      {
+        ...deps,
+        cwd: factoryRoot,
+        execFile,
+        generate: () =>
+          generateOrExplain(
+            deps.generate ?? (() => generateIntegration({ cwd: factoryRoot, out: deps.out })),
+          ),
+      },
       { force: options.force, doctor: options.doctor },
     );
     result.up = up;
@@ -114,6 +107,54 @@ export async function upgradeFactory(
   } catch (err) {
     if (err instanceof StepFailed) return result;
     throw err;
+  }
+}
+
+function normalizeReleaseAgeExclude(factoryRoot: string): boolean {
+  const file = path.join(factoryRoot, "pnpm-workspace.yaml");
+  const source = existsSync(file) ? readFileSync(file, "utf8") : "";
+  const document = parseDocument(source);
+  if (document.errors.length > 0) {
+    throw new JigsError(
+      `could not parse ${file}: ${document.errors[0]?.message}`,
+      "fix pnpm-workspace.yaml, then run jigs upgrade again",
+    );
+  }
+  const workspace = document.toJS() as { minimumReleaseAgeExclude?: unknown } | null;
+  const existing = workspace?.minimumReleaseAgeExclude;
+  if (existing !== undefined && !Array.isArray(existing)) {
+    throw new JigsError(
+      `minimumReleaseAgeExclude in ${file} is not a list`,
+      "make minimumReleaseAgeExclude a YAML list, then run jigs upgrade again",
+    );
+  }
+  const otherPackages = (existing ?? []).filter(
+    (entry) =>
+      typeof entry !== "string" ||
+      (entry !== JIGS_PACKAGE && !entry.startsWith(`${JIGS_PACKAGE}@`)),
+  );
+  const normalized = [...otherPackages, JIGS_PACKAGE];
+  if (
+    Array.isArray(existing) &&
+    existing.length === normalized.length &&
+    existing.every((entry, index) => entry === normalized[index])
+  ) {
+    return false;
+  }
+  document.set("minimumReleaseAgeExclude", normalized);
+  writeFileSync(file, String(document));
+  return true;
+}
+
+async function generateOrExplain(generate: () => Promise<void>): Promise<void> {
+  try {
+    await generate();
+  } catch (err) {
+    if (err instanceof JigsError && err.hint !== undefined) throw err;
+    throw new JigsError(
+      err instanceof Error ? err.message : String(err),
+      "run pnpm exec jigs generate in this factory",
+    );
   }
 }
 

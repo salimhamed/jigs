@@ -32,6 +32,7 @@ export type UpStepName =
   | "locate"
   | "env"
   | "install"
+  | "generate"
   | "compose"
   | "bootstrap"
   | "build"
@@ -58,6 +59,7 @@ export interface UpDeps {
   execFile?: ExecFile;
   processes?: ServiceProcesses;
   prepare?: Prepare;
+  generate?: () => Promise<void>;
   confirm?: (question: string) => Promise<boolean>;
   readyTimeoutMs?: number;
 }
@@ -103,6 +105,10 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
           new JigsError(`pnpm install failed in ${factoryRoot}`, "the output above is pnpm's"),
       }),
     );
+
+    if (deps.generate !== undefined) {
+      await runner.run("generate", deps.generate);
+    }
 
     await runner.run("compose", () => composeUp(execFile, factoryRoot, deps.out));
 
