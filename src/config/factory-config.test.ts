@@ -184,6 +184,21 @@ test("adding a non-identifier binding keeps its key quoted", () => {
 `);
 });
 
+test("adding a reserved-word binding keeps its key quoted", () => {
+  const input = `export default defineFactory({
+  bindings: {},
+});
+`;
+  expect(upsertBinding(input, "import", "git@github.com:acme/import.git")).toBe(
+    `export default defineFactory({
+  bindings: {
+    "import": { remote: "git@github.com:acme/import.git" },
+  },
+});
+`,
+  );
+});
+
 test("adding a binding to a one-line object does not duplicate the config", () => {
   const input = `export default { bindings: { api: { remote: "a" } } };`;
   expect(upsertBinding(input, "web", "b")).toBe(
