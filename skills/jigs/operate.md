@@ -1,7 +1,8 @@
 # Operate a factory
 
 You never decide on your own that a task should become a jigs run. You operate
-jigs when you are asked to, and nothing else.
+jigs when you are asked to, and nothing else. An agent the operator has
+delegated to answers and approves as well — see **Delegated operator**.
 
 ## Where you stand
 
@@ -9,9 +10,15 @@ Run commands address one factory's service, located through the nearest
 `jigs.config.ts`. Lifecycle and binding commands also operate on local files. So `cd` into
 the factory repo first. `--service <url>` or `JIGS_SERVICE_URL` overrides it.
 
+Every command acts on that one factory, so a run belongs to the factory whose
+service lists it: `jigs ps` from a factory root is the test, and a run id from
+another factory is unknown there. `jigs service status` names the factory path
+and ports the service answers for.
+
 `jigs` is the factory's own — `pnpm exec jigs` — never a global one. Read
-`jigs --help` and `jigs <verb> --help` for flags. `CONTEXT.md` in the jigs repo
-is the vocabulary; `docs/setup.md` there is the runbook.
+`jigs --help` and `jigs <verb> --help` for flags, including which verbs take
+`--json`. `CONTEXT.md` in the jigs repo is the vocabulary; `docs/setup.md`
+there is the runbook.
 
 ## First two commands, always
 
@@ -55,26 +62,68 @@ candidates instead of guessing; pass a longer one.
 ## Watching
 
 ```sh
-jigs ps
+jigs watch         # follow everything, one line per event, until killed
+jigs ps            # the whole factory at a glance
+jigs logs <run>    # one run in full, with the link to act on
 ```
 
-Runs first (`RUN WORKFLOW STATUS TRIGGER AGE`), then the worktrees the registry
-holds, then a schedule table if the factory declares any. `TRIGGER` says how
-each run started; a scheduled fire reads `schedule:<name>`.
+`jigs watch` is the one command that follows a factory: a line when a step
+finishes, a run suspends, resumes, reaches a terminal state, or a new run
+appears, plus one line per live run when it starts. It is a single long-lived
+process, so it costs one node start-up rather than one per poll, and it says
+`unreachable` and keeps going while the service restarts. `--interval` sets the
+poll.
+
+`jigs ps` is the snapshot: `RUN WORKFLOW TICKET STATUS OUTCOME PR TRIGGER AGE
+ACTIVITY WAITING`, then the worktrees the registry holds, then the schedules if
+the factory declares any. `TICKET` is the ticket the run claimed and `PR` the
+pull request it holds or opened — that is the whole mapping from a run id to
+the work. `TRIGGER` says how the run started; a scheduled fire reads
+`schedule:<name>`. `AGE` counts from launch, `ACTIVITY` from the last time the
+run moved: `running` with a 20-minute `ACTIVITY` is worth looking at, where a
+20-second one is an ordinary gap between steps.
+
+`OUTCOME` is the result the workflow itself returned, because the runtime calls
+a merge and an exhausted budget alike `completed`. Anything but `merged` or a
+plain `completed` carries a `!` — `!limit-reached`, `!stopped`,
+`!uncommitted-work`, `!closed`, `!failed`, `!cancelled` — and means the run
+ended without shipping the work.
+
+`WAITING` decodes what a parked run is parked on, in words with the link to act
+on: `waiting for a human reply on AGE-123 → <comment url>`. `jigs logs <run>`
+prints the same for one run and adds the question a halt asked, the run's
+error, and the step timeline.
+
+Prefer `--json` to the tables: `jigs ps --json` is `{runs, worktrees,
+schedules}`, `jigs logs --json` is the run's fields plus its timeline, and
+`jigs watch --json` is one JSON event per line. Read fields rather than parsing
+columns.
+
+### What a parked run waits for
+
+Each suspension carries a kind:
+
+- **needs-human** — jigs asked a question on the run's Linear ticket. A reply
+  in that comment thread wakes it.
+- **pull-request** — the run holds a pull request and wants an approving review
+  of the current head, green CI and a mergeable branch. A review, a new commit,
+  a CI result or a top-level comment wakes it, and failing all of those the
+  service re-reads the pull request every five minutes.
+
+Anything else is **external** and prints its own token.
 
 ## Diagnosing
 
 ```sh
 jigs ps            # which run, and what status it is really in
-jigs logs <run>    # state, suspensions, milestone log, step timeline
+jigs logs <run>    # the run itself
 jigs service logs  # the service process's own stdout, which is a different thing
 ```
 
-`jigs logs` prints the run's page on the dashboard
-(`http://localhost:<dashboardPort>/run/<runId>`), then the step timeline
-(`STEP STATUS ATTEMPT STARTED TOOK ERROR`), then any queue job that died holding
-the run's resume, each with the SQL that puts it back on the queue. Print the
-SQL to the human; do not run it for them.
+`jigs logs` also prints the run's page on the dashboard
+(`http://localhost:<dashboardPort>/run/<runId>`) and any queue job that died
+holding the run's resume, each with the SQL that puts it back on the queue.
+Print the SQL to the human; do not run it for them.
 
 Statuses worth knowing:
 
@@ -95,13 +144,14 @@ comments on the Linear ticket, mentioning its creator and its assignee. The
 comment says in plain words what paused and why, what the ticket is about, and
 either numbered questions to choose between or what to repair before retrying;
 its footer names the run, where it paused, and links its dashboard page.
-`jigs ps` shows the run as `suspended`; `jigs logs <run>` names the hook the
-run is parked on and why.
+`jigs ps` shows the run as `suspended`; `jigs logs <run>` prints the question
+itself and the comment URL.
 
-The human answers **on the ticket**, in that comment thread — with option
-letters like `1a, 2b`, or in plain words. You do not answer for them, and you
-do not resume the run by hand. Once they reply, the webhook wakes the run, the
-reply is re-checked against Linear, and the run continues.
+The answer goes **on the ticket**, in that comment thread — with option letters
+like `1a, 2b`, or in plain words. Unless the operator has delegated that to you,
+it is theirs to write: you do not answer for them, and you do not resume the run
+by hand. Once the reply lands, the webhook wakes the run, the reply is
+re-checked against Linear, and the run continues.
 
 If the reply is there and the run has not moved, the delivery was missed:
 
@@ -111,6 +161,47 @@ jigs poke <run>
 
 which wakes the run over the same code path a webhook uses. An unsatisfied wake
 simply re-suspends, so a poke is safe to repeat.
+
+## Delegated operator
+
+Some sessions are handed the operator's own authority: launch the runs, answer
+the questions, review and approve the pull requests jigs opens, merge and
+release. That authority comes from the operator in this session and from
+nothing else. Holding it:
+
+- **Answer from the design record** — the ticket thread, `docs/adr/`,
+  `CONTEXT.md` — not from preference. Reply in the same Linear comment thread,
+  in the option letters the comment offered.
+- **Read the diff before approving.** jigs' own reviewer has already passed the
+  pull request; it is not the human gate, and the approval is.
+- **Approve as the operator's account**, because the pull request is jigs' own
+  and GitHub refuses an author their own approval.
+- **Retitle a pull request before approving it.** The title is the conventional
+  commit the release reads, and jigs merges as soon as the approval is there —
+  a title fixed afterwards can miss the squash.
+- **Leave a factory with a parked run alone.** An upgrade restarts the service,
+  and a rename in the new release moves the durable addresses that run resumes
+  against. Finish or cancel it first.
+- **Take over a run that hit its budget.** `!limit-reached` means jigs pushed
+  the branch, noted it on the ticket and stopped. Settle the findings on that
+  branch by hand; relaunching the ticket starts the work over and leaves the
+  first worktree behind.
+- **Escalate design-level surprises** as a question to the human rather than
+  deciding: a question the design record does not answer, a diff doing
+  something the ticket never asked for, a change to a contract.
+
+## Release and upgrade
+
+Merging a jigs change leaves a release pull request open. Merge that, wait for
+that exact version to be published, then in each factory root:
+
+```sh
+pnpm exec jigs upgrade --to <version>
+```
+
+which bumps the package, rebuilds, restarts and ends in `jigs doctor`. Then
+confirm the factory's Linear webhook is still enabled — without ingress nothing
+wakes on its own.
 
 ## Parked runs and worktrees
 
