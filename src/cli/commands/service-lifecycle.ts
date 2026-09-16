@@ -22,12 +22,13 @@ import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { jigsDataDir } from "../../config/paths.ts";
 import { JigsError } from "../../errors.ts";
 import { stringEnv } from "../../steps/agent/harnesses/env.ts";
+import { type SystemdUserManager, systemdUserManager } from "./systemd-user.ts";
 
-// Supervision is a pidfile under the jigs data dir, keyed by factory slug —
-// not a systemd unit. A service per factory repo would otherwise need a unit
-// per factory, and the CLI would have to generate, install and name them;
-// the pidfile keeps jigs portable and collapses every "how do I restart
-// this" repair string to one constant, `jigs service restart`.
+// Supervision remains a pidfile under the jigs data dir, keyed by factory
+// slug. On systemd hosts the process also enters a transient user scope, but
+// jigs never installs a persistent unit or delegates lifecycle state to it.
+// The pidfile keeps every "how do I restart this" repair string portable and
+// constant: `jigs service restart`.
 
 // The factory repo builds its service with nitro; this is where that build
 // lands. Producing it is `jigs build`'s job, so a missing entry is an error
@@ -73,6 +74,8 @@ export interface ServiceLifecycleDeps {
   startTimeoutMs?: number;
   startPollMs?: number;
   stopTimeoutMs?: number;
+  systemd?: SystemdUserManager;
+  now?: () => Date;
 }
 
 export interface StartOptions {
@@ -94,6 +97,16 @@ export function serviceLogPath(slug: string): string {
 // pick up.
 export function serviceBundlePath(slug: string): string {
   return path.join(jigsDataDir(), "services", `${slug}.bundle`);
+}
+
+function serviceRunStatePath(slug: string): string {
+  return path.join(jigsDataDir(), "services", `${slug}.run.json`);
+}
+
+interface ServiceRunState {
+  logOffset: number;
+  deathDetectedAt?: string;
+  signal?: string;
 }
 
 export function builtBundleHash(factoryRoot: string): string | undefined {
@@ -212,7 +225,7 @@ export async function startService(
   deps: ServiceLifecycleDeps,
   options: StartOptions = {},
 ): Promise<void> {
-  const { out, processes = nodeProcesses } = deps;
+  const { out, processes = nodeProcesses, systemd = systemdUserManager } = deps;
   const factoryRoot = locateFactoryRoot(deps.cwd);
   const service = resolveService(factoryRoot);
   const { slug, serviceUrl, dashboardUrl } = service;
@@ -232,9 +245,14 @@ export async function startService(
   }
 
   const logFile = serviceLogPath(slug);
+  const logOffset = existsSync(logFile) ? statSync(logFile).size : 0;
+  const supervised = systemd.available();
+  if (supervised) systemd.stopScope(`jigs-${slug}`);
   const pid = processes.spawn({
-    command: process.execPath,
-    args: [SERVICE_ENTRY],
+    command: supervised ? "systemd-run" : process.execPath,
+    args: supervised
+      ? ["--user", "--scope", `--unit=jigs-${slug}`, process.execPath, SERVICE_ENTRY]
+      : [SERVICE_ENTRY],
     cwd: factoryRoot,
     env: childEnv(factoryRoot, service),
     logPath: logFile,
@@ -246,6 +264,7 @@ export async function startService(
   const pidfile = servicePidfilePath(slug);
   mkdirSync(path.dirname(pidfile), { recursive: true });
   writeFileSync(pidfile, `${pid}\n`);
+  writeFileSync(serviceRunStatePath(slug), `${JSON.stringify({ logOffset })}\n`);
   writeFileSync(serviceBundlePath(slug), `${builtBundleHash(factoryRoot)}\n`);
   if (options.awaitReady !== false) await awaitReady(deps, slug, serviceUrl, pid);
   out(`started ${slug}: pid ${pid} at ${serviceUrl}`);
@@ -357,6 +376,7 @@ export async function stopService(deps: ServiceLifecycleDeps): Promise<void> {
     await sleep(POLL_MS);
   }
   rmSync(pidfile, { force: true });
+  rmSync(serviceRunStatePath(slug), { force: true });
   out(`stopped ${slug}: pid ${pid}`);
 }
 
@@ -369,17 +389,58 @@ export async function restartService(
 }
 
 export function serviceStatus(deps: ServiceLifecycleDeps): void {
-  const { out, processes = nodeProcesses } = deps;
+  const { out, processes = nodeProcesses, now = () => new Date() } = deps;
   const factoryRoot = locateFactoryRoot(deps.cwd);
   const { slug, serviceUrl, dashboardUrl } = resolveService(factoryRoot);
   const pid = livePid(slug, processes);
   out(
     pid === undefined
-      ? `${slug}: not running (${serviceUrl})`
+      ? deadServiceStatus(slug, serviceUrl, now)
       : `${slug}: running pid ${pid} at ${serviceUrl}`,
   );
   out(`dashboard: ${dashboardUrl}`);
   out(`factory ${factoryRoot}`);
+}
+
+function deadServiceStatus(slug: string, serviceUrl: string, now: () => Date): string {
+  const stateFile = serviceRunStatePath(slug);
+  const log = serviceLogPath(slug);
+  const state = readRunState(stateFile);
+  if (state === undefined) return `${slug}: not running (${serviceUrl})`;
+  if (state.deathDetectedAt === undefined) {
+    const logStat = existsSync(log) ? statSync(log) : undefined;
+    state.deathDetectedAt = (
+      logStat !== undefined && logStat.size > state.logOffset ? logStat.mtime : now()
+    ).toISOString();
+    state.signal = signalSince(log, state.logOffset);
+    writeFileSync(stateFile, `${JSON.stringify(state)}\n`);
+  }
+  return `${slug}: not running as of ${state.deathDetectedAt}${state.signal === undefined ? "" : `, last signal ${state.signal}`} (${serviceUrl})`;
+}
+
+function readRunState(file: string): ServiceRunState | undefined {
+  if (!existsSync(file)) return undefined;
+  try {
+    const state = JSON.parse(readFileSync(file, "utf8")) as Partial<ServiceRunState>;
+    return typeof state.logOffset === "number" && state.logOffset >= 0
+      ? (state as ServiceRunState)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function signalSince(log: string, offset: number): string | undefined {
+  if (!existsSync(log)) return undefined;
+  const contents = readFileSync(log);
+  if (contents.byteLength < offset) return undefined;
+  return contents
+    .subarray(offset)
+    .toString("utf8")
+    .split("\n")
+    .reverse()
+    .map((line) => line.match(/Received ['"](SIG[A-Z]+)['"]/i)?.[1]?.toUpperCase())
+    .find((value) => value !== undefined);
 }
 
 // `jigs logs <run>` is about a run — it resolves the ref and points at the

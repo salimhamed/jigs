@@ -35,6 +35,8 @@ person can judge.
 - The AWS CLI, only if a workflow will declare `aws: true`.
 - A tunnel tool (`tailscale` or `cloudflared`), only if the factory will receive
   provider webhooks.
+- On Linux with systemd, run `loginctl enable-linger "$USER"` once so factory
+  services survive the last login session ending. `jigs doctor` verifies it.
 
 jigs is one package on GitHub Packages, `@salimhamed/jigs`, pinned by the
 factory to a version. Nothing is cloned and nothing is installed globally:
