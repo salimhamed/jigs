@@ -24,11 +24,7 @@ const GRANTED = {
   repository_hooks: "write",
 };
 
-const SQUASH_REVIEW: MergePolicy = {
-  by: "jigs",
-  method: "squash",
-  approval: { kind: "review" },
-};
+const SQUASH_REVIEW: MergePolicy = { by: "jigs", method: "squash", approval: { kind: "review" } };
 
 const probes = (overrides: Partial<GithubIdentityProbes> = {}): GithubIdentityProbes => ({
   whoami: async () => ({ login: "salimhamed" }),
@@ -92,10 +88,7 @@ test("an unreadable private key is the first thing said", async () => {
 test("a key anyone on the machine can read is a key anyone can act as the App with", async () => {
   expect(
     await outcome(APP, "github.identity", {
-      readPrivateKey: () => ({
-        key: "-----BEGIN PRIVATE KEY-----",
-        looseMode: "0644",
-      }),
+      readPrivateKey: () => ({ key: "-----BEGIN PRIVATE KEY-----", looseMode: "0644" }),
     }),
   ).toMatchObject({
     ok: false,
@@ -136,14 +129,9 @@ test("webhook administration is a permission the operator has to grant and accep
 test("a read grant does not satisfy a write requirement", async () => {
   expect(
     await outcome(APP, "github.identity", {
-      installation: async () => ({
-        permissions: { ...GRANTED, contents: "read" },
-      }),
+      installation: async () => ({ permissions: { ...GRANTED, contents: "read" } }),
     }),
-  ).toMatchObject({
-    ok: false,
-    reason: expect.stringContaining("contents: write"),
-  });
+  ).toMatchObject({ ok: false, reason: expect.stringContaining("contents: write") });
 });
 
 test("the effective policy is one line, whichever identity holds it", async () => {
@@ -159,11 +147,7 @@ test("the effective policy is one line, whichever identity holds it", async () =
       "github.merge-policy",
       {},
       {},
-      {
-        by: "human",
-        method: "rebase",
-        approval: { kind: "label", name: "jigs:approved" },
-      },
+      { by: "human", method: "rebase", approval: { kind: "label", name: "jigs:approved" } },
     ),
   ).toMatchObject({
     ok: true,
@@ -184,6 +168,7 @@ const policyProbes = (
   }),
   checkRuns: async () => 1,
   commitStatuses: async () => 0,
+  actionsWorkflows: async () => 0,
   labelExists: async () => true,
   requiredApprovingReviews: async () => 0,
   ...overrides,
@@ -211,9 +196,18 @@ test("a healthy binding preserves the existing passing merge-policy line", async
 test("jigs merging fails when the default branch has no CI", async () => {
   expect(await policyOutcome(SQUASH_REVIEW, binding, { checkRuns: async () => 0 })).toMatchObject({
     ok: false,
-    reason: expect.stringContaining("api: acme/api's default branch has no check runs"),
+    reason: expect.stringContaining("api: acme/api has no Actions workflows"),
     repair: expect.stringContaining('set merge.by to "human" in jigs.config.ts'),
   });
+});
+
+test("a pull-request-only Actions workflow counts as CI without checks on main", async () => {
+  expect(
+    await policyOutcome(SQUASH_REVIEW, binding, {
+      checkRuns: async () => 0,
+      actionsWorkflows: async () => 1,
+    }),
+  ).toMatchObject({ ok: true });
 });
 
 test.each([
@@ -283,6 +277,12 @@ test("human merging does not probe or report repository policy", async () => {
   const repository = vi.fn();
   const result = await policyOutcome({ ...SQUASH_REVIEW, by: "human" }, binding, { repository });
   expect(result).toMatchObject({ ok: true });
+  expect(repository).not.toHaveBeenCalled();
+});
+
+test("a jigs policy with no selected bindings does not probe repositories", async () => {
+  const repository = vi.fn();
+  expect(await policyOutcome(SQUASH_REVIEW, {}, { repository })).toMatchObject({ ok: true });
   expect(repository).not.toHaveBeenCalled();
 });
 

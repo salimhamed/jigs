@@ -205,6 +205,11 @@ comments, `pullRequestGate()` re-checks PR state), and are validated when declar
 reporting every failure with its repair. `jigs doctor` runs the same checks
 without a launch.
 
+For factories configured with `merge.by: "jigs"`, `jigs bind` and `jigs doctor`
+also report when a bound repository has no CI, disables the configured merge
+method, requires reviews that label approval cannot satisfy, or lacks the
+configured approval label. These checks only read repository settings.
+
 `WORKFLOW_TARGET_WORLD=@workflow/world-postgres` and `WORKFLOW_POSTGRES_URL`
 come filled in; leave them. The service refuses to start when the URL is
 unset: the worktree registry lives in that database, so there is no

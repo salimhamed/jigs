@@ -22,34 +22,15 @@ import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 // What jigs needs of an installation, and why. `repository_hooks` is the one
 // operators miss: `jigs bind` creates the per-repo webhook that wakes every
 // parked pull request run, and no other credential is available to do it.
-const REQUIRED_PERMISSIONS: Array<{
-  name: string;
-  level: "read" | "write";
-  why: string;
-}> = [
+const REQUIRED_PERMISSIONS: Array<{ name: string; level: "read" | "write"; why: string }> = [
   { name: "contents", level: "write", why: "push the reviewed commit" },
-  {
-    name: "pull_requests",
-    level: "write",
-    why: "open, comment on and merge pull requests",
-  },
-  {
-    name: "issues",
-    level: "write",
-    why: "post on the pull request conversation",
-  },
+  { name: "pull_requests", level: "write", why: "open, comment on and merge pull requests" },
+  { name: "issues", level: "write", why: "post on the pull request conversation" },
   { name: "metadata", level: "read", why: "read the repository" },
-  {
-    name: "repository_hooks",
-    level: "write",
-    why: "create the webhook that wakes parked runs",
-  },
+  { name: "repository_hooks", level: "write", why: "create the webhook that wakes parked runs" },
 ];
 
-const SATISFIES: Record<string, string[]> = {
-  read: ["read", "write"],
-  write: ["write"],
-};
+const SATISFIES: Record<string, string[]> = { read: ["read", "write"], write: ["write"] };
 
 export interface GithubIdentityProbes {
   whoami(): Promise<{ login: string }>;
@@ -82,6 +63,7 @@ export interface GithubMergePolicyProbes {
   }>;
   checkRuns(owner: string, repo: string, ref: string): Promise<number>;
   commitStatuses(owner: string, repo: string, ref: string): Promise<number>;
+  actionsWorkflows(owner: string, repo: string): Promise<number>;
   labelExists(owner: string, repo: string, label: string): Promise<boolean>;
   requiredApprovingReviews(owner: string, repo: string, branch: string): Promise<number | null>;
 }
@@ -98,6 +80,12 @@ export const realGithubMergePolicyProbes: GithubMergePolicyProbes = {
     (
       await githubGet<{ total_count: number }>(
         `/repos/${owner}/${repo}/commits/${encodeURIComponent(ref)}/status?per_page=1`,
+      )
+    ).total_count,
+  actionsWorkflows: async (owner, repo) =>
+    (
+      await githubGet<{ total_count: number }>(
+        `/repos/${owner}/${repo}/actions/workflows?per_page=1`,
       )
     ).total_count,
   labelExists: async (owner, repo, label) => {
@@ -239,10 +227,7 @@ function appCheck(identity: AppIdentity, probes: GithubIdentityProbes): Check {
             "grant the permission on the App (Settings → Developer settings → GitHub Apps → Permissions — “Repository webhooks” is Read & write), then accept the updated permissions on the installation",
         };
       }
-      return {
-        ok: true,
-        detail: `jigs acts as ${slug}[bot]; operator ${identity.operator}`,
-      };
+      return { ok: true, detail: `jigs acts as ${slug}[bot]; operator ${identity.operator}` };
     },
   };
 }
@@ -298,57 +283,63 @@ async function inspectBinding(
 ): Promise<PolicyFinding[]> {
   const ref = parseGithubRemote(binding.remote);
   if (ref === null) return [];
+  let repository: Awaited<ReturnType<GithubMergePolicyProbes["repository"]>>;
   try {
-    const repository = await probes.repository(ref.owner, ref.repo);
-    const calls: Array<Promise<unknown>> = [
-      probes.checkRuns(ref.owner, ref.repo, repository.default_branch),
-      probes.commitStatuses(ref.owner, ref.repo, repository.default_branch),
-    ];
-    if (merge.approval.kind === "label")
-      calls.push(
-        probes.labelExists(ref.owner, ref.repo, merge.approval.name),
-        probes.requiredApprovingReviews(ref.owner, ref.repo, repository.default_branch),
-      );
-    const results = await Promise.allSettled(calls);
-    const findings: PolicyFinding[] = [];
-    const allowed = {
-      merge: repository.allow_merge_commit,
-      squash: repository.allow_squash_merge,
-      rebase: repository.allow_rebase_merge,
-    }[merge.method];
-    if (!allowed)
-      findings.push({
-        binding: bindingName,
-        reason: `${merge.method} merges are disabled on ${ref.owner}/${ref.repo}`,
-        repair: `enable ${merge.method} merges on the repository, or change merge.method in jigs.config.ts`,
-      });
-    const checkRunCount = settledValue<number>(results[0]);
-    const statusCount = settledValue<number>(results[1]);
-    if (checkRunCount === 0 && statusCount === 0)
-      findings.push({
-        binding: bindingName,
-        reason: `${ref.owner}/${ref.repo}'s default branch has no check runs or commit statuses`,
-        repair: `add a CI workflow, or set merge.by to "human" in jigs.config.ts`,
-      });
-    if (merge.approval.kind === "label") {
-      if (settledValue<boolean>(results[2]) === false)
-        findings.push({
-          binding: bindingName,
-          reason: `${ref.owner}/${ref.repo} has no ${merge.approval.name} label`,
-          repair: `create the ${merge.approval.name} label, or change merge.approval in jigs.config.ts`,
-        });
-      const approvals = settledValue<number | null>(results[3]);
-      if (approvals !== undefined && approvals !== null && approvals > 0)
-        findings.push({
-          binding: bindingName,
-          reason: `${ref.owner}/${ref.repo}'s default branch requires ${approvals} approving review${approvals === 1 ? "" : "s"}, which label approval cannot satisfy`,
-          repair: `remove the repository's required approving reviews, or change merge.approval to { kind: "review" } in jigs.config.ts`,
-        });
-    }
-    return findings;
+    repository = await probes.repository(ref.owner, ref.repo);
   } catch {
+    // A missing/inaccessible repo is diagnosed by bind's webhook leg and by
+    // the webhook doctor check. It does not provide enough evidence for a
+    // merge-policy repair, and may simply be a transient/rate-limit failure.
     return [];
   }
+  const calls: Array<Promise<unknown>> = [
+    probes.checkRuns(ref.owner, ref.repo, repository.default_branch),
+    probes.commitStatuses(ref.owner, ref.repo, repository.default_branch),
+    probes.actionsWorkflows(ref.owner, ref.repo),
+  ];
+  if (merge.approval.kind === "label")
+    calls.push(
+      probes.labelExists(ref.owner, ref.repo, merge.approval.name),
+      probes.requiredApprovingReviews(ref.owner, ref.repo, repository.default_branch),
+    );
+  const results = await Promise.allSettled(calls);
+  const findings: PolicyFinding[] = [];
+  const allowed = {
+    merge: repository.allow_merge_commit,
+    squash: repository.allow_squash_merge,
+    rebase: repository.allow_rebase_merge,
+  }[merge.method];
+  if (!allowed)
+    findings.push({
+      binding: bindingName,
+      reason: `${merge.method} merges are disabled on ${ref.owner}/${ref.repo}`,
+      repair: `enable ${merge.method} merges on the repository, or change merge.method in jigs.config.ts`,
+    });
+  const checkRunCount = settledValue<number>(results[0]);
+  const statusCount = settledValue<number>(results[1]);
+  const workflowCount = settledValue<number>(results[2]);
+  if (checkRunCount === 0 && statusCount === 0 && workflowCount === 0)
+    findings.push({
+      binding: bindingName,
+      reason: `${ref.owner}/${ref.repo} has no Actions workflows, and its default branch has no check runs or commit statuses`,
+      repair: `add a CI workflow, or set merge.by to "human" in jigs.config.ts`,
+    });
+  if (merge.approval.kind === "label") {
+    if (settledValue<boolean>(results[3]) === false)
+      findings.push({
+        binding: bindingName,
+        reason: `${ref.owner}/${ref.repo} has no ${merge.approval.name} label`,
+        repair: `create the ${merge.approval.name} label, or change merge.approval in jigs.config.ts`,
+      });
+    const approvals = settledValue<number | null>(results[4]);
+    if (approvals !== undefined && approvals !== null && approvals > 0)
+      findings.push({
+        binding: bindingName,
+        reason: `${ref.owner}/${ref.repo}'s default branch requires ${approvals} approving review${approvals === 1 ? "" : "s"}, which label approval cannot satisfy`,
+        repair: `remove the repository's required approving reviews, or change merge.approval to { kind: "review" } in jigs.config.ts`,
+      });
+  }
+  return findings;
 }
 
 function settledValue<T>(result: PromiseSettledResult<unknown> | undefined): T | undefined {

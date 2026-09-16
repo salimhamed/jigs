@@ -78,7 +78,7 @@ const githubProbes: GithubIdentityProbes = realGithubIdentityProbes(getAuthentic
 // Which credential jigs holds and what it is allowed to do with it. Both come
 // from `jigs.config.ts`; where there is none to read, the defaults are what a
 // factory would get, and the credential is still worth checking.
-function githubChecks(): Check[] {
+function githubChecks(checkBindings = false): Check[] {
   try {
     const { merge, bindings } = readFactoryConfig(factoryRoot());
     return githubIdentityChecks(
@@ -86,7 +86,7 @@ function githubChecks(): Check[] {
       merge,
       githubProbes,
       process.env,
-      bindings,
+      checkBindings ? bindings : {},
     );
   } catch {
     // A configuration that cannot be read is the binding checks' diagnosis;
@@ -116,7 +116,7 @@ export function doctorChecks(): Check[] {
     ...coreChecks(coreProbes, process.env, integrations),
     // Always: an App identity needs no environment variable to be configured,
     // so there is nothing to detect — the configuration itself is the answer.
-    ...githubChecks(),
+    ...githubChecks(true),
     ...(integrations.includes("linear") ? linearWebhookChecks({ factoryRoot }) : []),
     ...bindingChecks({ factoryRoot }),
     ...webhookChecks({ factoryRoot }),

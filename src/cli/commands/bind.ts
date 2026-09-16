@@ -201,16 +201,14 @@ async function ensureWebhook({
     return `once that clears, re-run: ${reBindCommand}`;
   };
   const secret = ensureWebhookSecret();
-  const ensured = await ensureRepoWebhook({
-    ...repoRef,
-    ingressUrl,
-    secret,
-  }).catch((err: unknown) => {
-    throw new JigsError(
-      `${slug}'s webhook could not be ensured: ${err instanceof Error ? err.message : String(err)}`,
-      repairFor(err),
-    );
-  });
+  const ensured = await ensureRepoWebhook({ ...repoRef, ingressUrl, secret }).catch(
+    (err: unknown) => {
+      throw new JigsError(
+        `${slug}'s webhook could not be ensured: ${err instanceof Error ? err.message : String(err)}`,
+        repairFor(err),
+      );
+    },
+  );
   deps.out(`webhook ${ensured.outcome}: ${slug}`);
   if (ensured.otherHosts.length > 0) {
     deps.out(

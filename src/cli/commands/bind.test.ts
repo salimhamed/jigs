@@ -340,15 +340,14 @@ test("bind prints a merge-policy repair but still resolves successfully", async 
         }),
         checkRuns: async () => 0,
         commitStatuses: async () => 0,
+        actionsWorkflows: async () => 0,
         labelExists: async () => true,
         requiredApprovingReviews: async () => 0,
       },
     }),
   );
   expect(result.name).toBe("api");
-  expect(lines.join("\n")).toContain(
-    "merge policy: api: acme/Api's default branch has no check runs",
-  );
+  expect(lines.join("\n")).toContain("merge policy: api: acme/Api has no Actions workflows");
   expect(lines.join("\n")).toContain('set merge.by to "human" in jigs.config.ts');
 });
 
