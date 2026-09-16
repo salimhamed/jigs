@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.29.0](https://github.com/salimhamed/jigs/compare/jigs-v0.28.1...jigs-v0.29.0) (2026-09-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* openPullRequest now accepts a single request object instead of positional arguments.
+
+### Features
+
+* add draft pull request steps ([6e5f940](https://github.com/salimhamed/jigs/commit/6e5f940194f4ddc110879baa1d64af3af76d51b7))
+
 ## [0.28.1](https://github.com/salimhamed/jigs/compare/jigs-v0.28.0...jigs-v0.28.1) (2026-09-16)
 
 
