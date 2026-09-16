@@ -51,9 +51,11 @@ import type {
   Attend,
   CheckForTicketHumanReply,
   ClaudeHarnessConfig,
+  ClaudeHarnessOptions,
   CodeReviewPrompt,
   CodeReviewPromptInput,
   CodexHarnessConfig,
+  CodexHarnessOptions,
   DescribePullRequestOptions,
   ExecuteAgentStep,
   ExecuteModelRequestStep,
@@ -142,6 +144,7 @@ type BlocksTypeSurface = {
   codeReviewPrompt: CodeReviewPrompt;
   codeReviewPromptInput: CodeReviewPromptInput;
   codexHarnessConfig: CodexHarnessConfig;
+  codexHarnessOptions: CodexHarnessOptions;
   describePrOptions: DescribePullRequestOptions;
   fixCiFreshPrompt: FixCiFreshPrompt;
   fixCiFreshPromptInput: FixCiFreshPromptInput;
@@ -165,6 +168,7 @@ type BlocksTypeSurface = {
   haltOption: HaltOption;
   haltQuestion: HaltQuestion;
   harnessOptions: HarnessOptions;
+  claudeHarnessOptions: ClaudeHarnessOptions;
   humanReply: HumanReply;
   implementOptions: ImplementOptions;
   implementPrompt: ImplementPrompt;

@@ -197,6 +197,7 @@ async function generateAgentStep(
               claudeStepSettings({
                 cwd: wire.cwd,
                 env,
+                ...(harness.effort !== undefined ? { effort: harness.effort } : {}),
                 ...(resume !== undefined ? { resume: resume.id } : {}),
                 ...(harness.mcpServers !== undefined
                   ? { mcpServers: toClaudeMcpServers(harness.mcpServers) }
@@ -216,6 +217,7 @@ async function generateAgentStep(
                   cwd: wire.cwd,
                   codexHome: deps.ensureCodexHome(runId),
                   env,
+                  ...(harness.effort !== undefined ? { effort: harness.effort } : {}),
                   approvalPolicy: "never",
                   // Unsandboxed on purpose: a jigs worktree's real git dir
                   // lives in the main checkout's .git/worktrees/<name>/,

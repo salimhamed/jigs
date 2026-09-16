@@ -19,7 +19,9 @@ export { askModel, type ExecuteModelRequestStep } from "./agent/ask-model.ts";
 export { type AgentSteps, bindAgentSteps } from "./agent/bind.ts";
 export {
   type ClaudeHarnessConfig,
+  type ClaudeHarnessOptions,
   type CodexHarnessConfig,
+  type CodexHarnessOptions,
   claude,
   codex,
   type HarnessConfig,

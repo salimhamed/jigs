@@ -1,9 +1,20 @@
 import { expect, test } from "vitest";
 import { claude, codex, selectHarness } from "./harness-config.ts";
 
+test("each harness accepts only its own effort levels", () => {
+  const claudeMax: Parameters<typeof claude>[0]["effort"] = "max";
+  const codexNone: Parameters<typeof codex>[0]["effort"] = "none";
+  // The app-server provider also exposes newer levels, but this harness's
+  // settled public contract deliberately stops at xhigh.
+  // @ts-expect-error max is not a Codex harness effort
+  const codexMax: Parameters<typeof codex>[0]["effort"] = "max";
+  expect([claudeMax, codexNone, codexMax]).toEqual(["max", "none", "max"]);
+});
+
 test("claude() returns a tagged plain-data descriptor", () => {
   const descriptor = claude({
     model: "sonnet",
+    effort: "medium",
     mcpServers: {
       probe: { command: "node", args: ["probe.mjs"], probe: { tool: "ping" } },
     },
@@ -11,6 +22,7 @@ test("claude() returns a tagged plain-data descriptor", () => {
   expect(descriptor).toEqual({
     kind: "claude",
     model: "sonnet",
+    effort: "medium",
     mcpServers: {
       probe: { command: "node", args: ["probe.mjs"], probe: { tool: "ping" } },
     },
@@ -21,6 +33,7 @@ test("claude() returns a tagged plain-data descriptor", () => {
 test("codex() returns a tagged plain-data descriptor", () => {
   const descriptor = codex({
     model: "gpt-5.5",
+    effort: "xhigh",
     mcpServers: {
       linear: {
         url: "https://mcp.example",
@@ -32,6 +45,7 @@ test("codex() returns a tagged plain-data descriptor", () => {
   expect(descriptor).toEqual({
     kind: "codex",
     model: "gpt-5.5",
+    effort: "xhigh",
     mcpServers: {
       linear: {
         url: "https://mcp.example",

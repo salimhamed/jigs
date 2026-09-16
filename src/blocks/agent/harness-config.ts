@@ -2,6 +2,9 @@
 // workflow/step boundary, so a factory call returns options + a kind tag and
 // the step hydrates the real provider from it.
 
+import type { ClaudeCodeSettings } from "ai-sdk-provider-claude-code";
+import type { CodexAppServerSettings } from "ai-sdk-provider-codex-cli";
+
 // A real tool call is the only honest availability evidence — agents misreport
 // their own server list — and no tool is universally side-effect-free, so the
 // step declares which one the JIT check may call. Required: TypeScript is the
@@ -26,23 +29,36 @@ export type McpHttpServer = {
 
 export type McpServerConfig = McpStdioServer | McpHttpServer;
 
-// One shared options shape until the factories actually grow different
-// options; split then, not preemptively.
-export type HarnessOptions = {
+type SharedHarnessOptions = {
   model: string;
   mcpServers?: Record<string, McpServerConfig>;
 };
 
-export type ClaudeHarnessConfig = HarnessOptions & { kind: "claude" };
-export type CodexHarnessConfig = HarnessOptions & { kind: "codex" };
+export type ClaudeHarnessOptions = SharedHarnessOptions & {
+  kind: "claude";
+  effort?: NonNullable<ClaudeCodeSettings["effort"]>;
+};
+
+export type CodexHarnessOptions = SharedHarnessOptions & {
+  kind: "codex";
+  effort?: Extract<
+    NonNullable<CodexAppServerSettings["effort"]>,
+    "none" | "minimal" | "low" | "medium" | "high" | "xhigh"
+  >;
+};
+
+export type HarnessOptions = ClaudeHarnessOptions | CodexHarnessOptions;
+
+export type ClaudeHarnessConfig = ClaudeHarnessOptions;
+export type CodexHarnessConfig = CodexHarnessOptions;
 
 export type HarnessConfig = ClaudeHarnessConfig | CodexHarnessConfig;
 
-export function claude(options: HarnessOptions): ClaudeHarnessConfig {
+export function claude(options: Omit<ClaudeHarnessOptions, "kind">): ClaudeHarnessConfig {
   return { kind: "claude", ...options };
 }
 
-export function codex(options: HarnessOptions): CodexHarnessConfig {
+export function codex(options: Omit<CodexHarnessOptions, "kind">): CodexHarnessConfig {
   return { kind: "codex", ...options };
 }
 

@@ -114,6 +114,7 @@ test("claude agent step hydrates from wire config with the harness invariants fo
   const wire = buildAgentWire({
     harness: claude({
       model: "sonnet",
+      effort: "medium",
       mcpServers: {
         probe: {
           command: "node",
@@ -139,6 +140,7 @@ test("claude agent step hydrates from wire config with the harness invariants fo
   expect(settings.cwd).toBe(worktree);
   expect(settings.strictMcpConfig).toBe(true);
   expect(settings.settingSources).toEqual(["project"]);
+  expect(settings.effort).toBe("medium");
   expect(settings.mcpServers).toEqual({
     probe: { type: "stdio", command: "node", args: ["p.mjs"], env: { T: "1" } },
     remote: { type: "http", url: "https://mcp.example", headers: { a: "b" } },
@@ -151,6 +153,7 @@ test("codex agent step runs on the app-server under the managed home with fixed 
   const wire = buildAgentWire({
     harness: codex({
       model: "gpt-5.5",
+      effort: "xhigh",
       mcpServers: { probe: { command: "node", probe: { tool: "ping" } } },
     }),
     cwd: worktree,
@@ -167,11 +170,38 @@ test("codex agent step runs on the app-server under the managed home with fixed 
   expect(settings?.approvalPolicy).toBe("never");
   expect(settings?.sandboxPolicy).toBe("danger-full-access");
   expect(settings?.autoApprove).toBe(true);
+  expect(settings?.effort).toBe("xhigh");
   expect(settings?.env?.CODEX_HOME).toBe(path.join(tmp, "codex-home", "run-7"));
   expect(settings?.mcpServers).toEqual({
     probe: { transport: "stdio", command: "node" },
   });
   expect(captured.homeRunIds).toEqual(["run-7"]);
+});
+
+test("omitting effort leaves both providers' settings unset", async () => {
+  const claudeRun = makeDeps();
+  await agentStep(
+    buildAgentWire({
+      harness: claude({ model: "sonnet" }),
+      cwd: worktree,
+      prompt: "implement it",
+    }),
+    { workflowRunId: "run-1" },
+    claudeRun.deps,
+  );
+  expect("effort" in claudeSettingsOf(claudeRun.captured)).toBe(false);
+
+  const codexRun = makeDeps();
+  await agentStep(
+    buildAgentWire({
+      harness: codex({ model: "gpt-5.5" }),
+      cwd: worktree,
+      prompt: "implement it",
+    }),
+    { workflowRunId: "run-1" },
+    codexRun.deps,
+  );
+  expect(codexRun.captured.codexSettings).not.toHaveProperty("effort");
 });
 
 test("a declared output schema becomes an AI SDK output spec and the raw output is returned", async () => {
