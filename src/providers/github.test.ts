@@ -34,7 +34,7 @@ interface SnapshotFixture {
   statuses?: unknown[];
 }
 
-// The seven calls fetchPrSnapshot makes, in order.
+// The six calls fetchPrSnapshot makes, in order.
 function stubSnapshot(fixture: SnapshotFixture = {}): void {
   fetchMock
     .mockResolvedValueOnce(
@@ -49,13 +49,12 @@ function stubSnapshot(fixture: SnapshotFixture = {}): void {
     .mockResolvedValueOnce(json(fixture.comments ?? []))
     .mockResolvedValueOnce(json(fixture.conversation ?? []))
     .mockResolvedValueOnce(json({ check_runs: fixture.checkRuns ?? [] }))
-    .mockResolvedValueOnce(json({ statuses: fixture.statuses ?? [] }))
-    .mockResolvedValueOnce(json({ login: "jigs-bot" }));
+    .mockResolvedValueOnce(json({ statuses: fixture.statuses ?? [] }));
 }
 
 const urls = () => fetchMock.mock.calls.map(([url]) => url as string);
 
-test("fetchPrSnapshot shapes the PR, its reviews, the head sha and the viewer", async () => {
+test("fetchPrSnapshot shapes the PR, its reviews and the head sha", async () => {
   stubSnapshot({
     reviews: [
       {
@@ -73,7 +72,6 @@ test("fetchPrSnapshot shapes the PR, its reviews, the head sha and the viewer", 
   expect(snapshot.state).toBe("open");
   expect(snapshot.merged).toBe(false);
   expect(snapshot.headSha).toBe("head-sha-1");
-  expect(snapshot.viewer).toBe("jigs-bot");
   expect(snapshot.reviews).toEqual([
     {
       id: 7,
@@ -91,7 +89,6 @@ test("fetchPrSnapshot shapes the PR, its reviews, the head sha and the viewer", 
     "http://mock.test/github/repos/acme/api/issues/41/comments?per_page=100&page=1",
     "http://mock.test/github/repos/acme/api/commits/head-sha-1/check-runs?per_page=100",
     "http://mock.test/github/repos/acme/api/commits/head-sha-1/status?per_page=100",
-    "http://mock.test/github/user",
   ]);
   const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
   expect(new Headers(init.headers).get("authorization")).toBe("Bearer gh_test_token");
@@ -107,6 +104,7 @@ test("review comments group into threads by in_reply_to_id", async () => {
         path: "src/gate.ts",
         line: 12,
         created_at: "2026-08-26T12:00:00Z",
+        updated_at: "2026-08-26T12:00:00Z",
       },
       {
         id: 901,
@@ -116,6 +114,7 @@ test("review comments group into threads by in_reply_to_id", async () => {
         path: "src/gate.ts",
         line: 12,
         created_at: "2026-08-26T12:05:00Z",
+        updated_at: "2026-08-26T12:05:00Z",
       },
       {
         id: 902,
@@ -124,6 +123,7 @@ test("review comments group into threads by in_reply_to_id", async () => {
         path: "README.md",
         line: null,
         created_at: "2026-08-26T12:06:00Z",
+        updated_at: "2026-08-26T12:06:00Z",
       },
     ],
   });

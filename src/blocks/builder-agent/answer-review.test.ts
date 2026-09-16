@@ -45,6 +45,7 @@ const thread = (rootId: number, body: string): ReviewThread => ({
       path: "src/gate.ts",
       line: 12,
       createdAt: "2026-08-26T12:00:00Z",
+      updatedAt: "2026-08-26T12:00:00Z",
     },
   ],
 });

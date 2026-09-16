@@ -214,12 +214,23 @@ export default async function startWorld() {
       }),
   });
   if (!started) return;
-  // Startup reconciliation of suspended runs (poke every held hook) would
-  // live here; fast-follow — `jigs poke <run>` covers the gap for now.
   console.log(`[service] world started: ${process.env.WORKFLOW_TARGET_WORLD ?? "local (default)"}`);
+
   setBootPhase(READY_PHASE);
 
-  // No background sweep: a run that finishes cleanly tears itself down, and
+  // Startup reconciliation, then the floor under the webhook: every parked
+  // pull request is re-read now, in case a delivery was lost while the service
+  // was down, and every five minutes after that. After readiness, not before:
+  // a slow sweep must not hold `jigs service start` on a service that is
+  // already answering.
+  const { nudgePullRequests, startPullRequestNudge } = await import("../nudge.ts");
+  const nudge = startPullRequestNudge();
+  onShutdown(() => {
+    nudge.stop();
+  });
+  await nudgePullRequests();
+
+  // No background worktree sweep: a run that finishes cleanly tears itself down, and
   // everything else stays on disk, visible in `jigs ps`, until the operator
   // reclaims it through `jigs sweep` — nothing deletes behind their back.
 }

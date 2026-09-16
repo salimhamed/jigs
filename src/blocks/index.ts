@@ -104,7 +104,9 @@ export {
 } from "./builder-agent/implement.ts";
 export { interpolate } from "./interpolate.ts";
 export {
+  type PostPullRequestNoteOptions,
   type PostReviewAnswersOptions,
+  postPullRequestNote,
   postReviewAnswers,
   renderChecks,
 } from "./pull-request/answers.ts";
@@ -117,16 +119,30 @@ export {
 export { bindPullRequestSteps } from "./pull-request/bind.ts";
 export {
   classifyPrState,
-  type GateAck,
-  type GateCursor,
   type GateFn,
   type GateWake,
   PR_TOKEN_PREFIX,
   type PrRef,
+  type PrState,
   prToken,
   pullRequestGate,
+  readPrLedger,
   tokenFromGithubPayload,
 } from "./pull-request/gate.ts";
+export {
+  carriesMarker,
+  commentSource,
+  type MarkerKind,
+  type MarkerLedger,
+  markBody,
+  type PrMarker,
+  parseMarkers,
+  prScope,
+  readLedger,
+  renderMarker,
+  type StatusReason,
+} from "./pull-request/marker.ts";
+export { currentRunId, defaultPrScope } from "./pull-request/writer.ts";
 export {
   type BoundReviewTicketOptions,
   bindLinearSteps,

@@ -5,7 +5,7 @@ import type { HarnessConfig } from "../agent/harness-config.ts";
 import type { AgentSession } from "../agent/result.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import type { PullRequestDescription } from "../builder-agent/describe-pr.ts";
-import type { GateAck, GateWake } from "../pull-request/gate.ts";
+import type { GateWake } from "../pull-request/gate.ts";
 import type { WorktreeFacts } from "../worktree.ts";
 
 /**
@@ -270,6 +270,14 @@ export interface PublishApprovedChangeOptions<TTask extends WorkItem = WorkItem>
 export interface FollowPullRequestOptions<TTask extends WorkItem = WorkItem> {
   change: ApprovedChange<TTask>;
   pr: PrRef;
+  /**
+   * The continuation identity written into every comment this delivery posts,
+   * and the one it reads back to see what it has already done. Defaults to
+   * this workflow's name and the task's key. Name it explicitly to continue
+   * another workflow's work on the pull request, or to start a fresh
+   * assessment of one.
+   */
+  scope?: string;
   implementation: ImplementationAgent<TTask>;
   ciRepair?: CiRepairAgent<TTask>;
   pullRequestRevision?: PullRequestRevisionAgent<TTask>;
@@ -286,12 +294,14 @@ export interface DeliverChangeOptions<TTask extends WorkItem = WorkItem>
   pullRequestDescription?: DescriptionAgent<TTask>;
   limits: DeliveryLimits;
   merge: "human" | "jigs";
+  /** See {@link FollowPullRequestOptions.scope}. */
+  scope?: string;
 }
 
 /** Supply the factory's durable functions once, then use the delivery operations. */
 export interface DeliverySteps {
   runAgent: AgentFn;
-  pullRequestGate: (pr: PrRef) => AsyncGenerator<GateWake, void, GateAck | undefined>;
+  pullRequestGate: (pr: PrRef, scope: string) => AsyncGenerator<GateWake, void, undefined>;
   readBranchState: typeof branch.readBranchState;
   readWorktreeDiff: typeof branch.readWorktreeDiff;
   pushBranch: typeof branch.pushBranch;

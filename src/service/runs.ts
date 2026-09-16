@@ -189,7 +189,7 @@ export async function describeRun(runId: string, facts: RunFacts = {}): Promise<
 }
 
 export async function listRuns(factory: Factory): Promise<RunRow[]> {
-  const [runs, hooks, stalled] = await Promise.all([worldRuns(), worldHooks(), stalledRuns()]);
+  const [runs, hooks, stalled] = await Promise.all([worldRuns(), listWorldHooks(), stalledRuns()]);
   const tokensByRun = Map.groupBy(hooks, (hook) => hook.runId);
   // The compiler stamps each workflow with the workflowId the world stores as
   // workflowName; untransformed (unit tests, plain imports) there is nothing to
@@ -289,7 +289,8 @@ const worldRunIds = () => worldRuns().then((runs) => runs.map((r) => r.runId));
 
 // Descending explicitly: the runs list is newest-first, hooks default to
 // oldest-first, and two pages taken from opposite ends stop overlapping.
-async function worldHooks(): Promise<Array<{ runId: string; token: string }>> {
+/** Every hook the world holds, whichever run owns it. */
+export async function listWorldHooks(): Promise<Array<{ runId: string; token: string }>> {
   const page = await getWorld().hooks.list({
     pagination: { limit: 1000, sortOrder: "desc" },
   });

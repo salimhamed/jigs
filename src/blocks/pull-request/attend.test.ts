@@ -1,46 +1,42 @@
 import { expect, test } from "vitest";
 import { attend, finished, listen } from "./attend.ts";
-import type { GateAck, GateWake } from "./gate.ts";
+import type { GateWake } from "./gate.ts";
 
-const green = (headSha: string): GateWake => ({ kind: "ci-green", headSha });
+const red = (headSha: string): GateWake => ({
+  kind: "ci-red",
+  headSha,
+  failing: [],
+  mentionLogin: null,
+});
 
 function gate(wakes: GateWake[]) {
   const trail: string[] = [];
-  const acks: Array<GateAck | undefined> = [];
-  async function* deliver(): AsyncGenerator<GateWake, void, GateAck | undefined> {
+  async function* deliver(): AsyncGenerator<GateWake, void, undefined> {
     try {
-      for (const wake of wakes) {
-        const ack = yield wake;
-        acks.push(ack);
-      }
+      for (const wake of wakes) yield wake;
       trail.push("ran out");
     } finally {
       trail.push("gate closed");
     }
   }
-  return { trail, acks, wakes: deliver() };
+  return { trail, wakes: deliver() };
 }
 
-test("an ack returned from one wake is what the next next() carries", async () => {
-  const g = gate([green("sha-1"), green("sha-2"), green("sha-3")]);
+test("every wake reaches the switch until one finishes the loop", async () => {
+  const g = gate([red("sha-1"), red("sha-2"), red("sha-3")]);
 
   const seen: string[] = [];
   const result = await attend<string>(g.wakes, (wake) => {
-    seen.push(wake.kind === "ci-green" ? wake.headSha : wake.kind);
-    if (seen.length === 3) return finished("done");
-    if (seen.length === 1) return listen({ selfCommentIds: [7] });
-    return listen();
+    seen.push(wake.kind === "ci-red" ? wake.headSha : wake.kind);
+    return seen.length === 3 ? finished("done") : listen();
   });
 
   expect(result).toBe("done");
-  // The ack rides on the very next next() and no further: an ack is consumed
-  // once, never re-sent on the wake after it. The first next() carries none,
-  // because a generator discards the value sent into its first resumption.
-  expect(g.acks).toEqual([{ selfCommentIds: [7] }, undefined]);
+  expect(seen).toEqual(["sha-1", "sha-2", "sha-3"]);
 });
 
 test("finishing early still returns the gate, so its hook is disposed", async () => {
-  const g = gate([green("sha-1"), green("sha-2")]);
+  const g = gate([red("sha-1"), red("sha-2")]);
 
   await attend<number>(g.wakes, () => finished(1));
 
@@ -48,7 +44,7 @@ test("finishing early still returns the gate, so its hook is disposed", async ()
 });
 
 test("an onWake that throws still returns the gate", async () => {
-  const g = gate([green("sha-1")]);
+  const g = gate([red("sha-1")]);
 
   await expect(
     attend<number>(g.wakes, () => {
@@ -59,7 +55,7 @@ test("an onWake that throws still returns the gate", async () => {
 });
 
 test("a gate that runs out of wakes is an error, not a silent success", async () => {
-  const g = gate([green("sha-1")]);
+  const g = gate([red("sha-1")]);
 
   await expect(attend<number>(g.wakes, () => listen())).rejects.toThrow(
     "stopped delivering wakes before the PR closed",
