@@ -181,8 +181,24 @@ _Avoid_: shipping, the pipeline, the review loop (for the whole)
 **Review loop**:
 The part of a delivery that repeats implementation and code review until the
 review approves or the round budget runs out. Coordinated by
-`implementAndReview`.
+`implementAndReview`. The reviewer keeps one session across the rounds, so it
+judges the change as a whole rather than afresh each time.
 _Avoid_: build loop, PR loop, the whole delivery
+
+**Blocking finding**:
+A review finding that sends the round back to the builder: a stated requirement
+left unmet, a defect a user could hit, or an untested risk that matters.
+Everything else is non-blocking — preferences about naming, structure,
+comments, extra test cases and wording — and is kept in the pull request
+description instead of failing the round.
+_Avoid_: nit, blocker, P1
+
+**Findings ledger**:
+Every round of one review loop in order: what the reviewer found, the verdict it
+reached and how the builder answered. Recorded on the change as `review`. It is
+the durable record, and the context a reviewer is rebuilt from when its session
+is gone.
+_Avoid_: history, transcript, review log
 
 **Budget**:
 The number of attempts a phase is allowed before it stops or asks a human.

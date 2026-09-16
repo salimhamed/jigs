@@ -3,6 +3,7 @@ import type { MergePolicy } from "../../config/factory-config.ts";
 import type { PrComment, PrSnapshot, ReviewThread } from "../../providers/github.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import { resumeFailed } from "../agent/resume-or-rebuild.ts";
+import { pullRequestDescription } from "../builder-agent/describe-pr.ts";
 import type { GateWake } from "../pull-request/gate.ts";
 import { pullRequestGate } from "../pull-request/gate.ts";
 import { parseMarkers } from "../pull-request/marker.ts";
@@ -14,6 +15,7 @@ import {
   defaultReviewPrompt,
   defaultRevisionPrompt,
 } from "./prompts.ts";
+import { implementationReport, type ReviewFinding, reviewVerdict } from "./review.ts";
 import type {
   ApprovedChange,
   DeliverChangeOptions,
@@ -35,6 +37,24 @@ vi.mock("workflow", () => ({
 }));
 
 const pr = { owner: "owner", repo: "repo", number: 1 };
+
+// Keyed on the schema the operation asked for, not on the prompt: a role that
+// replaces its prompt entirely still owes the same answer shape.
+// Through `unknown`, because a role's schema reaches the fake as the generic
+// `ZodType<T>` the operation asked with.
+const wants = (output: unknown, schema: unknown): boolean => output === schema;
+
+const blocking = (summary: string): { findings: ReviewFinding[]; verdict: string } => ({
+  verdict: "changes-requested",
+  findings: [{ summary, blocking: true }],
+});
+
+const answerFor = (schema: unknown): unknown => {
+  if (schema === reviewVerdict) return { verdict: "approved", findings: [] };
+  if (schema === implementationReport) return { responses: [] };
+  if (schema === pullRequestDescription) return { title: "fix: search", body: "Fixed and tested" };
+  return { answers: [{ threadId: null, body: "Done" }], commitExplanation: null };
+};
 
 const markersOf = (body: string | undefined) => parseMarkers(body ?? "");
 
@@ -78,13 +98,7 @@ function setup(wakes: GateWake[] = [{ kind: "closed", merged: true }]) {
   }> = [];
   const runAgent: AgentFn = async <T>(config: Parameters<AgentFn>[0]) => {
     calls.push(config);
-    const output = config.output?.parse(
-      config.prompt.includes("Review the changes")
-        ? { verdict: "approved", findings: [] }
-        : config.prompt.includes("Write a concise")
-          ? { title: "fix: search", body: "Fixed and tested" }
-          : { answers: [{ threadId: null, body: "Done" }], commitExplanation: null },
-    ) as T;
+    const output = config.output?.parse(answerFor(config.output)) as T;
     return { text: "", output, session: { harness: config.harness.kind, id: "session" } };
   };
   const closed = vi.fn();
@@ -98,6 +112,7 @@ function setup(wakes: GateWake[] = [{ kind: "closed", merged: true }]) {
   const steps: DeliverySteps = {
     runAgent,
     pullRequestGate: gate,
+    postTicketNote: vi.fn().mockResolvedValue(undefined),
     readBranchState: vi.fn().mockResolvedValue({ commits: 1, headSha: "new", dirty: false }),
     readWorktreeDiff: vi.fn().mockResolvedValue("diff"),
     pushBranch: vi.fn().mockResolvedValue({ headSha: "new" }),
@@ -116,6 +131,7 @@ const approved: ApprovedChange = {
   worktree: options.worktree,
   attempts: { implementationReviewRounds: 1, ciFixAttempts: 0, pullRequestRevisionRounds: 0 },
   sessions: {},
+  review: [],
   approval: { reviewedCommit: "new" },
 };
 
@@ -144,9 +160,9 @@ describe("delivery", () => {
     const { steps } = setup();
     const runAgent = vi.fn().mockImplementation(async (config) => ({
       text: "",
-      output: config.output
-        ? { verdict: "changes-requested", findings: ["Missing test"] }
-        : undefined,
+      output: wants(config.output, implementationReport)
+        ? { responses: [] }
+        : blocking("Missing test"),
     }));
     steps.runAgent = runAgent;
     const result = await bindDeliverySteps(steps).deliverChange(options);
@@ -159,6 +175,204 @@ describe("delivery", () => {
     expect(steps.openPullRequest).not.toHaveBeenCalled();
   });
 
+  it("approves a round whose findings are all non-blocking and keeps them for the PR body", async () => {
+    const { steps, calls } = setup();
+    steps.runAgent = (async (config) =>
+      calls.push(config) && wants(config.output, reviewVerdict)
+        ? {
+            text: "",
+            output: {
+              verdict: "changes-requested",
+              findings: [
+                { summary: "Reorder the doc sentences", blocking: false },
+                { summary: "A third test case would be nice", blocking: false },
+              ],
+            },
+          }
+        : {
+            text: "",
+            output: wants(config.output, implementationReport)
+              ? { responses: [] }
+              : answerFor(config.output),
+          }) as AgentFn;
+    const result = await bindDeliverySteps(steps).deliverChange(options);
+    expect(result.status).toBe("merged");
+    // One round: the preferences did not send it back to the builder.
+    expect(result.change.attempts.implementationReviewRounds).toBe(1);
+    expect(calls.filter((call) => call.harness.model === "builder")).toHaveLength(2);
+    const body = vi.mocked(steps.openPullRequest).mock.calls[0]?.[4] ?? "";
+    expect(body).toContain("Reviewer notes");
+    expect(body).toContain("- Reorder the doc sentences");
+    expect(body).toContain("- A third test case would be nice");
+  });
+
+  it("sends the next round back to the builder while one finding still blocks", async () => {
+    const { steps } = setup();
+    let round = 0;
+    steps.runAgent = (async (config) =>
+      wants(config.output, reviewVerdict)
+        ? {
+            text: "",
+            output:
+              ++round === 1
+                ? {
+                    verdict: "changes-requested",
+                    findings: [
+                      { summary: "The check never fires", blocking: true },
+                      { summary: "Reorder the doc sentences", blocking: false },
+                    ],
+                  }
+                : { verdict: "approved", findings: [] },
+          }
+        : {
+            text: "",
+            output: wants(config.output, implementationReport)
+              ? { responses: [] }
+              : answerFor(config.output),
+          }) as AgentFn;
+    const result = await bindDeliverySteps(steps).deliverChange(options);
+    expect(result.change.attempts.implementationReviewRounds).toBe(2);
+    expect(vi.mocked(steps.openPullRequest).mock.calls[0]?.[4]).not.toContain("Reviewer notes");
+  });
+
+  it("resumes the reviewer's own session and hands it the builder's answers", async () => {
+    const { steps, calls } = setup();
+    let round = 0;
+    steps.runAgent = (async (config) => {
+      calls.push(config);
+      if (wants(config.output, reviewVerdict)) {
+        return {
+          text: "",
+          output:
+            ++round === 1
+              ? blocking("The check never fires")
+              : { verdict: "approved", findings: [] },
+          session: { harness: "claude" as const, id: "reviewer-session" },
+        };
+      }
+      return {
+        text: "",
+        output: {
+          responses: [
+            { finding: "The check never fires", changed: false, detail: "The caller guards it" },
+          ],
+        },
+        session: { harness: "codex" as const, id: "builder-session" },
+      };
+    }) as AgentFn;
+    const result = await bindDeliverySteps(steps).implementAndReview({
+      ...options,
+      limits: { implementationReviewRounds: 2 },
+    });
+    expect(result.status).toBe("approved");
+    const reviews = calls.filter((call) => call.harness.model === "reviewer");
+    expect(reviews[0]?.resume).toBeUndefined();
+    expect(reviews[1]?.resume).toEqual({ harness: "claude", id: "reviewer-session" });
+    expect(reviews[1]?.prompt).toContain("not changed: The caller guards it");
+    // The resumed reviewer already holds its earlier rounds.
+    expect(reviews[1]?.prompt).not.toContain("Earlier rounds of this review");
+    expect(result.change.sessions.review).toEqual({
+      harness: options.review.harness,
+      session: { harness: "claude", id: "reviewer-session" },
+    });
+    expect(result.change.review.map((entry) => entry.verdict)).toEqual([
+      "changes-requested",
+      "approved",
+    ]);
+  });
+
+  it("gives a reviewer whose session expired the whole findings ledger", async () => {
+    const { steps, calls } = setup();
+    let round = 0;
+    steps.runAgent = (async (config) => {
+      calls.push(config);
+      if (wants(config.output, reviewVerdict)) {
+        if (config.resume) resumeFailed("expired");
+        return {
+          text: "",
+          output:
+            ++round === 1
+              ? {
+                  verdict: "changes-requested",
+                  findings: [
+                    { summary: "The check never fires", blocking: true },
+                    { summary: "Reorder the doc sentences", blocking: false },
+                  ],
+                }
+              : { verdict: "approved", findings: [] },
+          session: { harness: "claude" as const, id: "reviewer-session" },
+        };
+      }
+      return {
+        text: "",
+        output: {
+          responses: [
+            { finding: "The check never fires", changed: true, detail: "Called it from bind" },
+          ],
+        },
+        session: { harness: "codex" as const, id: "builder-session" },
+      };
+    }) as AgentFn;
+    const result = await bindDeliverySteps(steps).implementAndReview({
+      ...options,
+      limits: { implementationReviewRounds: 2 },
+    });
+    expect(result.status).toBe("approved");
+    const rebuilt = calls.filter((call) => call.harness.model === "reviewer").at(-1)?.prompt ?? "";
+    expect(rebuilt).toContain("Earlier rounds of this review");
+    expect(rebuilt).toContain("Round 1 — changes-requested");
+    expect(rebuilt).toContain("- The check never fires");
+    expect(rebuilt).toContain("- Reorder the doc sentences (non-blocking)");
+    expect(rebuilt).toContain("Called it from bind");
+    // The round being judged is not in its own ledger.
+    expect(rebuilt).not.toContain("Round 2");
+  });
+
+  it("pushes the branch and posts the open findings on the ticket when the budget runs out", async () => {
+    const { steps } = setup();
+    steps.runAgent = (async (config) => ({
+      text: "",
+      output: wants(config.output, implementationReport)
+        ? { responses: [] }
+        : {
+            verdict: "changes-requested",
+            findings: [
+              { summary: "The check never fires", blocking: true },
+              { summary: "Reorder the doc sentences", blocking: false },
+            ],
+          },
+    })) as AgentFn;
+    const result = await bindDeliverySteps(steps).deliverChange(options);
+    expect(result.status).toBe("limit-reached");
+    expect(steps.pushBranch).toHaveBeenCalledWith("/work", "fix");
+    expect(steps.postTicketNote).toHaveBeenCalledOnce();
+    const [issueId, note] = vi.mocked(steps.postTicketNote).mock.calls[0] ?? [];
+    expect(issueId).toBe("internal-42");
+    expect(note?.headline).toContain("internal-42");
+    expect(note?.notes).toEqual([
+      "The check never fires",
+      "Reorder the doc sentences (non-blocking)",
+      "The work is on branch `fix`, pushed, in the worktree at `/work`.",
+    ]);
+    expect(steps.openPullRequest).not.toHaveBeenCalled();
+  });
+
+  it("leaves a limit an onLimit chose to stop at alone", async () => {
+    const { steps } = setup();
+    steps.runAgent = (async (config) => ({
+      text: "",
+      output: wants(config.output, implementationReport)
+        ? { responses: [] }
+        : blocking("Missing test"),
+    })) as AgentFn;
+    const result = await bindDeliverySteps(steps).deliverChange({
+      ...options,
+      onLimit: async () => ({ action: "stop" }),
+    });
+    expect(result.status).toBe("stopped");
+    expect(steps.postTicketNote).not.toHaveBeenCalled();
+  });
+
   it("only adds the explicitly granted attempts and passes human direction", async () => {
     const { steps } = setup();
     const prompts: string[] = [];
@@ -166,7 +380,7 @@ describe("delivery", () => {
       prompts.push(config.prompt);
       return {
         text: "",
-        output: config.output ? { verdict: "changes-requested", findings: ["Test"] } : undefined,
+        output: wants(config.output, implementationReport) ? { responses: [] } : blocking("Test"),
       };
     }) as AgentFn;
     const onLimit = vi
@@ -284,7 +498,7 @@ describe("delivery", () => {
     })) as AgentFn;
 
     const result = await bindDeliverySteps(steps).followPullRequest({
-      change: { ...approved, attempts: { ...approved.attempts }, sessions: {} },
+      change: { ...approved, attempts: { ...approved.attempts }, sessions: {}, review: [] },
       pr,
       implementation: options.implementation,
       limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
@@ -337,7 +551,7 @@ describe("delivery", () => {
       { kind: "closed", merged: true },
     ]);
     await bindDeliverySteps(steps).followPullRequest({
-      change: { ...approved, attempts: { ...approved.attempts }, sessions: {} },
+      change: { ...approved, attempts: { ...approved.attempts }, sessions: {}, review: [] },
       pr,
       implementation: options.implementation,
       limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 2 },
@@ -428,7 +642,7 @@ describe("delivery", () => {
       );
 
     const result = await bindDeliverySteps(steps).followPullRequest({
-      change: { ...approved, attempts: { ...approved.attempts }, sessions: {} },
+      change: { ...approved, attempts: { ...approved.attempts }, sessions: {}, review: [] },
       pr,
       implementation: options.implementation,
       limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 3 },
@@ -461,12 +675,18 @@ describe("delivery", () => {
     steps.runAgent = (async (config) => {
       if (config.resume) resumeFailed("expired");
       prompts.push(config.prompt);
-      if (config.output)
+      if (wants(config.output, reviewVerdict))
         return {
           text: "",
-          output: { verdict: ++reviews === 1 ? "changes-requested" : "approved", findings: [] },
+          output:
+            ++reviews === 1 ? blocking("Missing test") : { verdict: "approved", findings: [] },
+          session: { harness: "claude", id: "reviewer" },
         };
-      return { text: "", output: undefined, session: { harness: "codex", id: "saved" } };
+      return {
+        text: "",
+        output: { responses: [] },
+        session: { harness: "codex", id: "saved" },
+      };
     }) as AgentFn;
     const result = await bindDeliverySteps(steps).implementAndReview({
       ...options,
@@ -714,7 +934,7 @@ describe("delivery", () => {
         });
       }
       await bindDeliverySteps(steps).followPullRequest({
-        change: { ...approved, attempts: { ...approved.attempts }, sessions: {} },
+        change: { ...approved, attempts: { ...approved.attempts }, sessions: {}, review: [] },
         pr,
         implementation: options.implementation,
         [role]: { ...options.implementation, prompt: () => "Follow TASK.md" },
@@ -805,6 +1025,8 @@ describe("delivery", () => {
         headCommit: "new",
         diff: "diff",
         instructions: "",
+        responses: [],
+        ledger: [],
         renderDefaultPrompt,
       }),
     );
@@ -815,6 +1037,11 @@ describe("delivery", () => {
 
   it("still validates structured output when a role replaces the prompt", async () => {
     const { steps } = setup();
+    const original = steps.runAgent;
+    steps.runAgent = (async (config) =>
+      wants(config.output, reviewVerdict)
+        ? { text: "", output: reviewVerdict.parse({ verdict: "yes" }) }
+        : original(config)) as AgentFn;
     await expect(
       bindDeliverySteps(steps).deliverChange({
         ...options,
@@ -827,7 +1054,7 @@ describe("delivery", () => {
     const { steps } = setup();
     steps.runAgent = (async (config) => ({
       text: "",
-      output: config.output ? { verdict: "changes-requested", findings: ["Test"] } : undefined,
+      output: wants(config.output, implementationReport) ? { responses: [] } : blocking("Test"),
     })) as AgentFn;
     const incident = { ...options.task, service: "bucket-a", impact: "unexpected growth" };
     const seen: string[] = [];
@@ -855,7 +1082,7 @@ describe("delivery", () => {
       { kind: "closed", merged: true },
     ]);
     await bindDeliverySteps(steps).followPullRequest({
-      change: { ...approved, attempts: { ...approved.attempts }, sessions: {} },
+      change: { ...approved, attempts: { ...approved.attempts }, sessions: {}, review: [] },
       pr,
       implementation: options.implementation,
       limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
@@ -878,7 +1105,7 @@ describe("delivery", () => {
 
   it("reads no diff on the resume arm and renders one on the rebuild arm", async () => {
     const follow = (sessions: ApprovedChange["sessions"]): FollowPullRequestOptions => ({
-      change: { ...approved, attempts: { ...approved.attempts }, sessions },
+      change: { ...approved, attempts: { ...approved.attempts }, sessions, review: [] },
       pr,
       implementation: options.implementation,
       limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 1 },

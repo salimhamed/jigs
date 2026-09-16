@@ -104,7 +104,7 @@ Round ${context.attempt} on ${context.task.key}: ${context.task.title}
 
 ${context.task.instructions}
 
-${context.findings.length > 0 ? `Fix these findings:\n${context.findings.join("\n")}` : "This is the first round."}
+${context.findings.length > 0 ? `Fix these findings:\n${context.findings.map((f) => f.summary).join("\n")}` : "This is the first round."}
 ${context.instructions}
 
 Work in ${context.worktree.path}, branched from ${context.worktree.baseSha}.

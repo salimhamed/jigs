@@ -2,6 +2,7 @@
 // exported so a role that only wants to add to one can render it directly,
 // the same way `renderDefaultPrompt()` does from inside a prompt callback.
 
+import { renderFindings, renderLedger, renderResponses } from "./review.ts";
 import type {
   CiRepairPromptContext,
   DescriptionPromptContext,
@@ -28,12 +29,18 @@ export const defaultImplementationPrompt = async (
       ...taskBrief(context.task),
       `Base commit: ${context.worktree.baseSha}`,
       context.instructions,
-      context.findings.length ? `Findings:\n${context.findings.join("\n")}` : "",
+      context.findings.length ? `Findings:\n${renderFindings(context.findings)}` : "",
       diff === undefined ? "" : `Current diff:\n${diff}`,
     ],
-    "Implement the requirements and address the findings. Follow the repository instructions, run relevant checks, and commit your changes before you finish: only committed work is reviewed, and an uncommitted worktree stops the change. Do not push or open a pull request.",
+    "Implement the requirements and address the findings. Follow the repository instructions, run relevant checks, and commit your changes before you finish: only committed work is reviewed, and an uncommitted worktree stops the change. Do not push or open a pull request.\n\nAnswer every finding you were given, one response each, quoting the finding as it was stated. Set changed to true with what you changed, or to false with the reason you did not — a finding you decline stays open until the reviewer accepts your reason, so give one it can judge. Return no responses on a round that was given no findings.",
   );
 };
+
+const reviewJob = [
+  "Review the changes against the requirements and repository instructions. Inspect the diff between the base and head commits and check for correctness and regressions. Do not edit files.",
+  "Separate blocking findings — a stated requirement left unmet, a defect a user could hit, or an untested risk that matters — from non-blocking preferences about naming, structure, comments, extra test cases and wording. Mark each finding blocking or not. Return changes-requested only when a blocking finding remains; otherwise return approved and keep the non-blocking observations in findings, where a human reads them on the pull request.",
+  "You have already reviewed the earlier rounds of this change. Do not re-open a finding you cleared unless the code under it changed. Where the builder answered a finding with a reason for not changing it, either accept that reason and drop the finding, or re-raise it as blocking with one sentence saying why the reason does not hold.",
+].join("\n\n");
 
 export const defaultReviewPrompt = (context: ReviewPromptContext): string =>
   prompt(
@@ -41,10 +48,17 @@ export const defaultReviewPrompt = (context: ReviewPromptContext): string =>
       ...taskBrief(context.task),
       `Base commit: ${context.baseCommit}`,
       `Head commit under review: ${context.headCommit}`,
+      `Review round: ${context.attempt}`,
       context.instructions,
+      context.ledger === undefined || context.ledger.length === 0
+        ? ""
+        : `Earlier rounds of this review:\n${renderLedger(context.ledger)}`,
+      context.responses.length === 0
+        ? ""
+        : `The builder's answer to each finding you last raised:\n${renderResponses(context.responses)}`,
       `Current diff:\n${context.diff}`,
     ],
-    "Review the changes against the requirements and repository instructions. Inspect the diff between the base and head commits and check for correctness and regressions. Do not edit files. Return approved only when no changes are needed; otherwise return changes-requested with actionable findings.",
+    reviewJob,
   );
 
 export const defaultCiRepairPrompt = async (context: CiRepairPromptContext): Promise<string> => {

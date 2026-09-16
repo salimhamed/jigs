@@ -2,7 +2,6 @@ import type { z } from "zod";
 import { resumeOrRebuild } from "../agent/resume-or-rebuild.ts";
 import { type ThreadAnswers, threadAnswers } from "../builder-agent/answer-review.ts";
 import { pullRequestDescription } from "../builder-agent/describe-pr.ts";
-import { codeReviewVerdict } from "../builder-agent/implement.ts";
 import { postPullRequestNote, postReviewAnswers, renderChecks } from "../pull-request/answers.ts";
 import { attend, finished, listen } from "../pull-request/attend.ts";
 import type { StatusReason } from "../pull-request/marker.ts";
@@ -14,6 +13,15 @@ import {
   defaultReviewPrompt,
   defaultRevisionPrompt,
 } from "./prompts.ts";
+import {
+  type ImplementationReport,
+  implementationReport,
+  type ReviewFinding,
+  type ReviewVerdict,
+  renderFinding,
+  reviewerNotes,
+  reviewVerdict,
+} from "./review.ts";
 import type {
   AgentRoleName,
   CiRepairPromptContext,
@@ -96,6 +104,7 @@ export function bindDeliverySteps(steps: DeliverySteps) {
   const {
     runAgent,
     pullRequestGate,
+    postTicketNote,
     readBranchState,
     readWorktreeDiff,
     pushBranch,
@@ -153,6 +162,25 @@ export function bindDeliverySteps(steps: DeliverySteps) {
     return result.output;
   }
 
+  // The budget is spent and no `onLimit` chose anything else, so this run is
+  // over: push, so the commits outlive `jigs sweep`, then say on the ticket
+  // what is still open and where the work is. Nothing waits on a reply.
+  async function reportLimit<TTask extends WorkItem>(
+    change: DeliveryChange<TTask>,
+    limit: LimitReached<TTask>,
+  ) {
+    await pushBranch(change.worktree.path, change.worktree.branch);
+    await postTicketNote(change.task.key, {
+      headline: `jigs stopped work on ${change.task.key} after ${limit.attempts} implementation review round(s) without an approved change.`,
+      notes: [
+        ...limit.findings,
+        `The work is on branch \`${change.worktree.branch}\`, pushed, in the worktree at \`${change.worktree.path}\`.`,
+      ],
+      closing:
+        "Nothing is waiting on a reply here. Settle the open findings and start the run again, or take the branch over by hand.",
+    });
+  }
+
   /** Implement and independently review until approved or the configured budget is exhausted. */
   async function implementAndReview<TTask extends WorkItem = WorkItem>(
     options: ImplementAndReviewOptions<TTask>,
@@ -163,9 +191,10 @@ export function bindDeliverySteps(steps: DeliverySteps) {
       worktree: options.worktree,
       attempts: { implementationReviewRounds: 0, ciFixAttempts: 0, pullRequestRevisionRounds: 0 },
       sessions: {},
+      review: [],
     };
     let budget = options.limits.implementationReviewRounds;
-    let findings: string[] = [];
+    let findings: ReviewFinding[] = [];
     let instructions = "";
     for (;;) {
       if (change.attempts.implementationReviewRounds >= budget) {
@@ -174,32 +203,39 @@ export function bindDeliverySteps(steps: DeliverySteps) {
           worktree: change.worktree,
           phase: "implementation-review",
           attempts: change.attempts.implementationReviewRounds,
-          findings,
+          findings: findings.map(renderFinding),
         };
         const extension = await extendLimit(limit, options.onLimit);
-        if (extension.status !== undefined) return stopped(change, limit, extension.status);
+        if (extension.status !== undefined) {
+          if (extension.status === "limit-reached") await reportLimit(change, limit);
+          return stopped(change, limit, extension.status);
+        }
         budget += extension.additionalAttempts;
         instructions = extension.instructions;
       }
       change.attempts.implementationReviewRounds += 1;
+      const round = change.attempts.implementationReviewRounds;
       const built: PromptFields<ImplementationPromptContext<TTask>> = {
         task: change.task,
         worktree: change.worktree,
-        attempt: change.attempts.implementationReviewRounds,
+        attempt: round,
         findings,
         instructions,
       };
-      await runRole<TTask, ImplementationPromptContext<TTask>>({
-        change,
-        name: "implementation",
-        role: options.implementation,
-        renderDefault: defaultImplementationPrompt,
-        resume: built,
-        fresh: async () => ({
-          ...built,
-          readDiff: lazyDiff(change),
-        }),
-      });
+      const report = await runRole<TTask, ImplementationPromptContext<TTask>, ImplementationReport>(
+        {
+          change,
+          name: "implementation",
+          role: options.implementation,
+          renderDefault: defaultImplementationPrompt,
+          resume: built,
+          fresh: async () => ({
+            ...built,
+            readDiff: lazyDiff(change),
+          }),
+          output: implementationReport,
+        },
+      );
       const state = await readBranchState(change.worktree.path, change.worktree.baseSha);
       if (state.dirty || state.commits === 0) {
         return stopped(
@@ -208,7 +244,7 @@ export function bindDeliverySteps(steps: DeliverySteps) {
             task: change.task,
             worktree: change.worktree,
             phase: "implementation-review",
-            attempts: change.attempts.implementationReviewRounds,
+            attempts: round,
             findings: [uncommittedReason(state.dirty)],
           },
           "uncommitted-work",
@@ -217,20 +253,37 @@ export function bindDeliverySteps(steps: DeliverySteps) {
       const reviewed: PromptFields<ReviewPromptContext<TTask>> = {
         task: change.task,
         worktree: change.worktree,
-        attempt: change.attempts.implementationReviewRounds,
+        attempt: round,
         baseCommit: change.worktree.baseSha,
         headCommit: state.headSha,
         diff: await readWorktreeDiff(change.worktree.path, change.worktree.baseSha),
         instructions,
+        responses: report.responses,
       };
-      const verdict = await runAgent({
-        harness: options.review.harness,
-        cwd: change.worktree.path,
-        prompt: await renderPrompt(options.review, defaultReviewPrompt, reviewed),
-        output: codeReviewVerdict,
+      // Read before the round is recorded, so the ledger a rebuilt reviewer
+      // gets is the rounds it has already judged and not this one.
+      const ledger = [...change.review];
+      const verdict = await runRole<TTask, ReviewPromptContext<TTask>, ReviewVerdict>({
+        change,
+        name: "review",
+        role: options.review,
+        renderDefault: defaultReviewPrompt,
+        resume: reviewed,
+        fresh: async () => ({ ...reviewed, ledger }),
+        output: reviewVerdict,
       });
-      findings = verdict.output.findings;
-      if (verdict.output.verdict === "approved") {
+      findings = verdict.findings;
+      // `blocking` decides, not the stated verdict: an approval carrying a
+      // blocking finding is the reviewer contradicting itself, and the finding
+      // is the more specific claim. It is also what makes a round of pure
+      // preferences an approval rather than another trip through the builder.
+      const blocking = findings.filter((finding) => finding.blocking).length;
+      const decided = blocking === 0 ? "approved" : "changes-requested";
+      change.review.push({ round, responses: report.responses, verdict: decided, findings });
+      console.log(
+        `[implementAndReview] ${change.task.key} round ${round} verdict=${decided} blocking=${blocking} non-blocking=${findings.length - blocking}`,
+      );
+      if (decided === "approved") {
         return {
           status: "approved",
           change: { ...change, approval: { reviewedCommit: state.headSha } },
@@ -262,7 +315,15 @@ export function bindDeliverySteps(steps: DeliverySteps) {
       role.transform?.(result.output, change.task) ?? result.output,
     );
     const repository = await resolveRepository(options.binding);
-    return openPullRequest(repository, branch, defaultBranch, description.title, description.body);
+    // Appended here rather than asked of the description agent: the reviewer's
+    // remaining observations are the one part of the body a model must not be
+    // free to leave out.
+    const notes = reviewerNotes(change.review);
+    const body =
+      notes.length === 0
+        ? description.body
+        : `${description.body}\n\n## Reviewer notes\n\nThe reviewer approved this change and left these non-blocking observations:\n\n${notes.map((note) => `- ${note}`).join("\n")}`;
+    return openPullRequest(repository, branch, defaultBranch, description.title, body);
   }
 
   /** Address CI and review feedback until merge, closure, or an exhausted attempt budget. */

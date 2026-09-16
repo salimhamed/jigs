@@ -23,10 +23,18 @@ export const ticketReviewVerdict = z.strictObject({
   assumptions: z.array(z.string()),
 });
 
-/** What a ticket review posts when it proceeds without asking anything. */
+/**
+ * A comment jigs posts on the ticket that asks for nothing and suspends
+ * nothing. It carries its own words, the way a halt does, so the
+ * renderer owns the layout and every caller owns what it says.
+ */
 export type TicketNote = {
-  identifier: string;
-  assumptions: string[];
+  /** One plain sentence naming what jigs is about to do, or has stopped doing. */
+  headline: string;
+  /** The bullet lines under it. */
+  notes: string[];
+  /** What the reader should do with it. */
+  closing: string;
 };
 
 /**
@@ -93,8 +101,10 @@ export async function reviewTicket(options: ReviewTicketOptions): Promise<Handof
       // that a correction now lands on the pull request instead.
       if (assumptions.length > 0) {
         await postTicketNote(snapshot.id, {
-          identifier: snapshot.identifier,
-          assumptions,
+          headline: `jigs is starting work on ${snapshot.identifier}. Before writing code, the reviewer read the ticket and is going ahead on these assumptions:`,
+          notes: assumptions,
+          closing:
+            "If one of these is wrong, reply here now, or comment on the pull request when it opens. Once the builder starts, a reply on this ticket is not read again until the pull request's review threads.",
         });
       }
       return { brief, snapshot, assumptions };

@@ -82,7 +82,9 @@ export async function resumeOrRebuild<T = undefined>(
       return { output: resumed.output, session: resumed.session ?? options.session };
     } catch (err) {
       if (!(err instanceof ResumeFailedError)) throw err;
-      console.log(`[${options.label}] resume failed — falling back to a fresh context`);
+      console.log(
+        `[${options.label}] resume failed — falling back to a fresh context: ${err.message}`,
+      );
     }
   }
 

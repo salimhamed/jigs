@@ -173,13 +173,16 @@ test("a ticket with nobody on it gets the headline without a dangling dash", asy
   );
 });
 
-test("the proceeding note lists the assumptions and says where a correction lands", async () => {
+test("a note greets the participants, bullets its lines, and closes with what to do", async () => {
   await postTicketNote("issue-1", {
-    identifier: "AI-659",
-    assumptions: [
+    headline:
+      "jigs is starting work on AI-659. Before writing code, the reviewer read the ticket and is going ahead on these assumptions:",
+    notes: [
       "Only the validate script changes.",
       "The build folder is created before Docker starts.",
     ],
+    closing:
+      "If one of these is wrong, reply here now, or comment on the pull request when it opens.",
   });
 
   expect(body()).toBe(
@@ -188,7 +191,7 @@ test("the proceeding note lists the assumptions and says where a correction land
 - Only the validate script changes.
 - The build folder is created before Docker starts.
 
-If one of these is wrong, reply here now, or comment on the pull request when it opens. Once the builder starts, a reply on this ticket is not read again until the pull request's review threads.
+If one of these is wrong, reply here now, or comment on the pull request when it opens.
 `,
   );
 });

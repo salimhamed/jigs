@@ -26,18 +26,18 @@ flowchart TD
     irBudget{"implementationReviewRounds<br/>left?"}
     impl["implementation agent<br/>writes and commits"]
     committed{"worktree clean<br/>and a new commit?"}
-    review["review agent<br/>reads the committed diff"]
-    verdict{"verdict"}
+    review["review agent<br/>resumes its own session,<br/>reads the committed diff"]
+    verdict{"a blocking<br/>finding left?"}
 
     irBudget -- "yes: round + 1" --> impl
     impl --> committed
     committed -- "no" --> uncommitted(["uncommitted-work"])
     committed -- "yes" --> review
     review --> verdict
-    verdict -- "changes-requested<br/>findings carried to the next round" --> irBudget
+    verdict -- "yes: findings and the builder's<br/>answers carried to the next round" --> irBudget
   end
 
-  verdict -- "approved" --> approved(["ApprovedChange<br/>approval.reviewedCommit"])
+  verdict -- "no: approved<br/>non-blocking findings kept" --> approved(["ApprovedChange<br/>approval.reviewedCommit"])
 
   subgraph PUB["publishApprovedChange"]
     direction TB
@@ -93,7 +93,7 @@ flowchart TD
     policy["factory code decides —<br/>typically haltForHuman posts to the<br/>ticket and the run suspends"]
     decision{"the decision"}
 
-    onLimit -- "no" --> limitReached(["limit-reached"])
+    onLimit -- "no" --> push2["push the branch,<br/>post a ticket note"] --> limitReached(["limit-reached"])
     onLimit -- "yes" --> policy --> decision
     decision -- "stop" --> stopped(["stopped"])
   end
@@ -113,10 +113,23 @@ Reading the graph against the code:
   agent. The implementation agent commits its own work. If it leaves the
   worktree dirty or adds no commit since the base, the round stops with
   `status: "uncommitted-work"` before any review runs — nothing uncommitted is
-  ever reviewed. A review that requests changes carries its findings into the
-  next round's implementation prompt; the review role itself is never given
-  them, because it re-reads the committed diff each round rather than
-  re-scoring the last verdict.
+  ever reviewed.
+- **The review blocks on defects, not on preferences.** Each finding is marked
+  `blocking` or not: a requirement left unmet, a defect a user could hit or an
+  untested risk blocks; naming, structure, comments, extra test cases and
+  wording do not. A round with no blocking finding is approved, and its
+  remaining observations are appended to the pull request body as reviewer
+  notes, so a human still reads them. `blocking` is what the loop acts on, so a
+  reviewer that says "approved" while still naming a blocker gets another round.
+- **The reviewer remembers its own rounds.** It keeps a harness session across
+  rounds exactly as the builder does, under `change.sessions.review`, and a
+  resumed reviewer is told only what is new: the current diff and the builder's
+  answer to each finding it last raised. The builder answers every finding, and
+  may answer one with a reason for not changing it; the reviewer then accepts
+  that reason or re-raises the finding as blocking. When a resume fails — which
+  is logged, not swallowed — the rebuilt reviewer is given `change.review`, the
+  ledger of every earlier round's findings, verdicts and builder answers,
+  with the instruction not to re-open a finding it cleared on unchanged code.
 - **Approval names a commit.** `approval.reviewedCommit` is the head the
   reviewer judged, and `publishApprovedChange` refuses to publish anything else:
   it throws if the worktree is dirty, and throws if the head has moved off that
@@ -169,7 +182,10 @@ Reading the graph against the code:
   most one nudge interval, never dropped and never doubled.
 - **Every outcome** is one of five statuses. `merged` comes from the pull
   request closing merged, or from jigs' own merge; `closed` from it
-  closing unmerged. `limit-reached` is a budget spent with no `onLimit`.
+  closing unmerged. `limit-reached` is a budget spent with no `onLimit`; the
+  review loop pushes the branch and posts a ticket note naming the open
+  findings and the worktree before it returns one, so the work survives
+  `jigs sweep` and somebody is told where it is.
   `stopped` is `onLimit` declining, or a CI repair that produced no new clean
   commit. `uncommitted-work` is an implementation attempt that left nothing
   reviewable. Remove worktrees only after `merged`; every other outcome leaves
@@ -344,8 +360,9 @@ const result = await deliverChange({
 
 Sessions are kept per role and never passed between incompatible harness
 configurations: change a role's harness and its next attempt starts fresh, with
-the worktree diff rebuilt into its prompt. Reviews always start fresh, so a
-verdict never inherits the implementation conversation. A description role's
+the worktree diff rebuilt into its prompt. The review role keeps its own
+session, separate from the implementation one, so a verdict never inherits the
+builder's conversation and still remembers what it already judged. A description role's
 `transform(description, task)` enforces factory title and body conventions after
 the model responds.
 
@@ -358,7 +375,7 @@ by the operation, whatever the prompt says.
 | Role | Context | Beyond `task`, `worktree`, `attempt` |
 | --- | --- | --- |
 | `implementation` | `ImplementationPromptContext` | `findings`, `instructions`, `readDiff?()` |
-| `review` | `ReviewPromptContext` | `baseCommit`, `headCommit`, `diff`, `instructions` |
+| `review` | `ReviewPromptContext` | `baseCommit`, `headCommit`, `diff`, `instructions`, `responses`, `ledger?` |
 | `ciRepair` | `CiRepairPromptContext` | `failing`, `pr`, `instructions`, `readDiff?()` |
 | `pullRequestRevision` | `PullRequestRevisionPromptContext` | `threads`, `reviewBody?`, `pr`, `instructions`, `readDiff?()` |
 | `pullRequestDescription` | `DescriptionPromptContext` | `diff` (no `attempt`) |
@@ -366,7 +383,8 @@ by the operation, whatever the prompt says.
 `readDiff()` is available only for fresh or rebuilt sessions. It reads the diff
 when called and reuses that result within the attempt. The default prompt calls
 it; a replacement can ignore it. Resumed sessions do not read the diff. Review
-and description contexts always contain their required `diff` string.
+and description contexts always contain their required `diff` string, and
+`ledger` is present only when the reviewer holds no session to resume.
 
 Every context carries `renderDefaultPrompt()`, which renders what jigs would
 have sent for this attempt. Await it to extend the default:
@@ -398,7 +416,7 @@ Round ${context.attempt} on ${context.task.key}: ${context.task.title}
 
 ${context.task.instructions}
 
-${context.findings.length > 0 ? `Fix these findings:\n${context.findings.join("\n")}` : "This is the first round."}
+${context.findings.length > 0 ? `Fix these findings:\n${context.findings.map((f) => f.summary).join("\n")}` : "This is the first round."}
 ${context.instructions}
 
 Work in ${context.worktree.path}, branched from ${context.worktree.baseSha}.

@@ -41,7 +41,7 @@ export type RenderNeedsHumanComment = (
   participants: TicketParticipants,
 ) => string;
 
-export type RenderProceedingNote = (note: TicketNote, participants: TicketParticipants) => string;
+export type RenderTicketNote = (note: TicketNote, participants: TicketParticipants) => string;
 
 // Creator and assignee, in that order, each named once. Either may be absent;
 // a ticket nobody created and nobody owns gets no greeting rather than a
@@ -112,12 +112,11 @@ export const renderNeedsHumanComment: RenderNeedsHumanComment = (halt, context, 
   return `${blocks.join("\n\n")}\n`;
 };
 
-export const renderProceedingNote: RenderProceedingNote = (note, participants) =>
+export const renderTicketNote: RenderTicketNote = (note, participants) =>
   `${[
-    greet(
-      participants,
-      `jigs is starting work on ${note.identifier}. Before writing code, the reviewer read the ticket and is going ahead on these assumptions:`,
-    ),
-    note.assumptions.map((assumption) => `- ${assumption}`).join("\n"),
-    "If one of these is wrong, reply here now, or comment on the pull request when it opens. Once the builder starts, a reply on this ticket is not read again until the pull request's review threads.",
-  ].join("\n\n")}\n`;
+    greet(participants, note.headline),
+    note.notes.map((line) => `- ${line}`).join("\n"),
+    note.closing,
+  ]
+    .filter(Boolean)
+    .join("\n\n")}\n`;

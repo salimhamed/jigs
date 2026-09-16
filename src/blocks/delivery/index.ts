@@ -6,6 +6,22 @@ export {
   defaultReviewPrompt,
   defaultRevisionPrompt,
 } from "./prompts.ts";
+export {
+  type FindingResponse,
+  findingResponse,
+  type ImplementationReport,
+  implementationReport,
+  type ReviewFinding,
+  type ReviewRound,
+  type ReviewVerdict,
+  renderFinding,
+  renderFindings,
+  renderLedger,
+  renderResponses,
+  reviewerNotes,
+  reviewFinding,
+  reviewVerdict,
+} from "./review.ts";
 export type {
   ApprovedChange,
   CiRepairAgent,
