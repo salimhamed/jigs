@@ -323,7 +323,13 @@ export function bindDeliverySteps(steps: DeliverySteps) {
       notes.length === 0
         ? description.body
         : `${description.body}\n\n## Reviewer notes\n\nThe reviewer approved this change and left these non-blocking observations:\n\n${notes.map((note) => `- ${note}`).join("\n")}`;
-    return openPullRequest(repository, branch, defaultBranch, description.title, body);
+    return openPullRequest({
+      repo: repository,
+      head: branch,
+      base: defaultBranch,
+      title: description.title,
+      body,
+    });
   }
 
   /** Address CI and review feedback until merge, closure, or an exhausted attempt budget. */

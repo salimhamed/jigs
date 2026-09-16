@@ -4,6 +4,7 @@ import {
   fetchPrCommitMessages,
   fetchPrSnapshot,
   fetchPrTitle,
+  markPrReady,
   mergePr,
   postPrComment,
   replyToReviewThread,
@@ -391,6 +392,51 @@ test("createPullRequest posts head, base, title and body and returns the number"
     base: "main",
     title: "AGE-316 Review loop jig",
     body: "the brief",
+  });
+});
+
+test("createPullRequest forwards draft when supplied", async () => {
+  fetchMock.mockResolvedValueOnce(json({ number: 42 }));
+  await createPullRequest({
+    owner: "acme",
+    repo: "api",
+    head: "draft",
+    base: "main",
+    title: "Draft",
+    body: "work in progress",
+    draft: true,
+  });
+  const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect(JSON.parse(String(init.body))).toMatchObject({ draft: true });
+});
+
+test("markPrReady resolves the REST node id and sends the GraphQL mutation", async () => {
+  fetchMock
+    .mockResolvedValueOnce(json({ node_id: "PR_node" }))
+    .mockResolvedValueOnce(json({ data: {} }));
+
+  await expect(markPrReady(pr)).resolves.toBeUndefined();
+
+  expect(urls()).toEqual([
+    "http://mock.test/github/repos/acme/api/pulls/41",
+    "http://mock.test/github/graphql",
+  ]);
+  const [, init] = fetchMock.mock.calls[1] as [string, RequestInit];
+  expect(init.method).toBe("POST");
+  expect(JSON.parse(String(init.body))).toMatchObject({
+    query: expect.stringContaining("markPullRequestReadyForReview"),
+    variables: { pullRequestId: "PR_node" },
+  });
+});
+
+test("markPrReady turns GraphQL errors into a GitHub API failure", async () => {
+  fetchMock
+    .mockResolvedValueOnce(json({ node_id: "PR_node" }))
+    .mockResolvedValueOnce(json({ errors: [{ message: "Pull request cannot be marked ready" }] }));
+
+  await expect(markPrReady(pr)).rejects.toMatchObject({
+    status: 200,
+    body: "Pull request cannot be marked ready",
   });
 });
 

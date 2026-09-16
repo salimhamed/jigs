@@ -211,7 +211,7 @@ describe("delivery", () => {
     // One round: the preferences did not send it back to the builder.
     expect(result.change.attempts.implementationReviewRounds).toBe(1);
     expect(calls.filter((call) => call.harness.model === "builder")).toHaveLength(2);
-    const body = vi.mocked(steps.openPullRequest).mock.calls[0]?.[4] ?? "";
+    const body = vi.mocked(steps.openPullRequest).mock.calls[0]?.[0].body ?? "";
     expect(body).toContain("Reviewer notes");
     expect(body).toContain("- Reorder the doc sentences");
     expect(body).toContain("- A third test case would be nice");
@@ -243,7 +243,9 @@ describe("delivery", () => {
           }) as AgentFn;
     const result = await bindDeliverySteps(steps).deliverChange(options);
     expect(result.change.attempts.implementationReviewRounds).toBe(2);
-    expect(vi.mocked(steps.openPullRequest).mock.calls[0]?.[4]).not.toContain("Reviewer notes");
+    expect(vi.mocked(steps.openPullRequest).mock.calls[0]?.[0].body).not.toContain(
+      "Reviewer notes",
+    );
   });
 
   it("resumes the reviewer's own session and hands it the builder's answers", async () => {
@@ -812,13 +814,13 @@ describe("delivery", () => {
         }),
       },
     });
-    expect(steps.openPullRequest).toHaveBeenCalledWith(
-      { owner: "owner", repo: "repo" },
-      "fix",
-      "main",
-      "internal-42: fix: search",
-      "Fixed and tested",
-    );
+    expect(steps.openPullRequest).toHaveBeenCalledWith({
+      repo: { owner: "owner", repo: "repo" },
+      head: "fix",
+      base: "main",
+      title: "internal-42: fix: search",
+      body: "Fixed and tested",
+    });
   });
 
   it("stops before review when the implementation leaves the worktree dirty", async () => {
@@ -886,13 +888,13 @@ describe("delivery", () => {
     expect(steps.pushApprovedChange).toHaveBeenCalledExactlyOnceWith("/work", "fix", "new");
     expect(steps.readBranchState).not.toHaveBeenCalled();
     expect(steps.pushBranch).not.toHaveBeenCalled();
-    expect(steps.openPullRequest).toHaveBeenCalledWith(
-      { owner: "owner", repo: "repo" },
-      "fix",
-      "main",
-      "fix: search",
-      "Fixed and tested",
-    );
+    expect(steps.openPullRequest).toHaveBeenCalledWith({
+      repo: { owner: "owner", repo: "repo" },
+      head: "fix",
+      base: "main",
+      title: "fix: search",
+      body: "Fixed and tested",
+    });
     expect(calls).toHaveLength(1);
     expect(calls[0]?.prompt).toContain("Write a concise");
   });

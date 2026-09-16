@@ -9,12 +9,14 @@ import {
   fetchPrCommitMessages,
   fetchPrSnapshot,
   fetchPrTitle,
+  markPrReady,
   mergePr,
 } from "../../providers/github.ts";
 import { GithubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity } from "../../providers/github-auth.ts";
 import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import {
+  markPullRequestReady,
   mergePullRequest,
   openPullRequest,
   preservedCommitMessageBody,
@@ -27,6 +29,7 @@ vi.mock("../../providers/github.ts", () => ({
   fetchPrCommitMessages: vi.fn(),
   fetchPrSnapshot: vi.fn(),
   fetchPrTitle: vi.fn(),
+  markPrReady: vi.fn(),
   mergePr: vi.fn(),
 }));
 vi.mock("../../providers/github-auth.ts", () => ({ resolveGithubIdentity: vi.fn() }));
@@ -235,7 +238,9 @@ test("a rebase has no merge message to carry a trailer in", async () => {
 });
 
 test("pat mode adds no trailer, no assignee and no requested-by line", async () => {
-  expect(await openPullRequest(repo, "fix", "main", "fix: search", "Body.")).toEqual(pr);
+  expect(
+    await openPullRequest({ repo, head: "fix", base: "main", title: "fix: search", body: "Body." }),
+  ).toEqual(pr);
   expect(createPullRequest).toHaveBeenCalledWith(expect.objectContaining({ body: "Body." }));
   expect(assignPullRequest).not.toHaveBeenCalled();
   await mergePullRequest(pr, "head", SQUASH);
@@ -244,11 +249,49 @@ test("pat mode adds no trailer, no assignee and no requested-by line", async () 
 
 test("app mode names the operator on the pull request it opens for them", async () => {
   asApp();
-  await openPullRequest(repo, "fix", "main", "fix: search", "Body.");
+  await openPullRequest({ repo, head: "fix", base: "main", title: "fix: search", body: "Body." });
   expect(createPullRequest).toHaveBeenCalledWith(
     expect.objectContaining({ body: "Requested by @salimhamed.\n\nBody." }),
   );
   expect(assignPullRequest).toHaveBeenCalledWith(pr, ["salimhamed"]);
+});
+
+test("openPullRequest forwards draft only when supplied", async () => {
+  await openPullRequest({
+    repo,
+    head: "fix",
+    base: "main",
+    title: "fix: search",
+    body: "Body.",
+    draft: true,
+  });
+  expect(createPullRequest).toHaveBeenLastCalledWith(expect.objectContaining({ draft: true }));
+
+  await openPullRequest({ repo, head: "fix", base: "main", title: "fix: search", body: "Body." });
+  expect(createPullRequest).toHaveBeenLastCalledWith({
+    owner: "owner",
+    repo: "repo",
+    head: "fix",
+    base: "main",
+    title: "fix: search",
+    body: "Body.",
+  });
+});
+
+test("markPullRequestReady mutates before returning a fresh snapshot", async () => {
+  vi.mocked(fetchPrSnapshot).mockResolvedValue({ ...snapshot, draft: false, headSha: "fresh" });
+  await expect(markPullRequestReady(pr)).resolves.toMatchObject({ draft: false, headSha: "fresh" });
+  expect(markPrReady).toHaveBeenCalledExactlyOnceWith(pr);
+  expect(fetchPrSnapshot).toHaveBeenCalledExactlyOnceWith(pr);
+  expect(vi.mocked(markPrReady).mock.invocationCallOrder[0]).toBeLessThan(
+    vi.mocked(fetchPrSnapshot).mock.invocationCallOrder[0] ?? 0,
+  );
+});
+
+test("markPullRequestReady does not read success after a mutation failure", async () => {
+  vi.mocked(markPrReady).mockRejectedValue(new GithubApiError(200, "/graphql", "not ready"));
+  await expect(markPullRequestReady(pr)).rejects.toThrow("not ready");
+  expect(fetchPrSnapshot).not.toHaveBeenCalled();
 });
 
 test("preservedCommitMessageBody keeps useful commit-message content", () => {

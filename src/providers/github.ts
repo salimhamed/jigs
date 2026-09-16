@@ -4,7 +4,7 @@
 // factory configured.
 
 import type { MergePolicy } from "../blocks/pull-request/policy.ts";
-import { githubGet, githubGetAll, githubRequest } from "./github-api.ts";
+import { GithubApiError, githubGet, githubGetAll, githubRequest } from "./github-api.ts";
 
 export type PrRef = {
   owner: string;
@@ -310,6 +310,31 @@ export interface CreatePullRequest {
   base: string;
   title: string;
   body: string;
+  draft?: boolean;
+}
+
+/** Mark a draft pull request ready for review. Safe when it is already ready. */
+export async function markPrReady(pr: PrRef): Promise<void> {
+  // The ready-for-review mutation requires a node id, so resolve it through
+  // the existing REST pull-request endpoint before calling GraphQL.
+  const { node_id: pullRequestId } = await githubGet<{ node_id: string }>(
+    `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}`,
+  );
+  const result = await githubRequest<{ errors?: Array<{ message: string }> }>("POST", "/graphql", {
+    query: `mutation MarkPullRequestReadyForReview($pullRequestId: ID!) {
+      markPullRequestReadyForReview(input: { pullRequestId: $pullRequestId }) {
+        pullRequest { id }
+      }
+    }`,
+    variables: { pullRequestId },
+  });
+  if (result.errors !== undefined && result.errors.length > 0) {
+    throw new GithubApiError(
+      200,
+      "/graphql",
+      result.errors.map(({ message }) => message).join("; "),
+    );
+  }
 }
 
 export async function createPullRequest(request: CreatePullRequest): Promise<{ number: number }> {

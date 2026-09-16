@@ -21,6 +21,7 @@ export { fetchPullRequestState } from "./pull-request/fetch-state.ts";
 export {
   commentOnPullRequest,
   type MergeOutcome,
+  markPullRequestReady,
   mergePullRequest,
   openPullRequest,
   replyToPullRequestReviewThread,

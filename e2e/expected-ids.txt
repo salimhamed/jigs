@@ -11,6 +11,7 @@ step//./jigs//executeAgent
 step//./jigs//executeModelRequest
 step//./jigs//fetchPullRequestState
 step//./jigs//fetchTicketSnapshot
+step//./jigs//markPullRequestReady
 step//./jigs//mergePullRequest
 step//./jigs//openPullRequest
 step//./jigs//postTicketHumanInputRequest
