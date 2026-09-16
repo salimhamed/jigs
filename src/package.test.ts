@@ -322,6 +322,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "fetchPullRequestState",
     "fetchTicketSnapshot",
     "findIssueInProject",
+    "markPullRequestReady",
     "openPullRequest",
     "postTicketHumanInputRequest",
     "postTicketNote",

@@ -142,15 +142,16 @@ export async function readWorktreeDiff(worktreePath: string, baseSha: string) {
 }
 
 /** Open a pull request for a branch that has already been pushed. */
-export async function openPullRequest(
-  repository: GithubRepoRef,
-  headBranch: string,
-  baseBranch: string,
-  title: string,
-  body: string,
-) {
+export async function openPullRequest(request: {
+  repo: GithubRepoRef;
+  head: string;
+  base: string;
+  title: string;
+  body: string;
+  draft?: boolean;
+}) {
   "use step";
-  return steps.openPullRequest(repository, headBranch, baseBranch, title, body);
+  return steps.openPullRequest(request);
 }
 
 /** Reply to an existing code-review thread on a pull request. */
@@ -175,6 +176,12 @@ export async function commentOnPullRequest(pullRequest: PrRef, body: string) {
 
 // One attempt, for the reason above.
 commentOnPullRequest.maxRetries = 0;
+
+/** Mark a draft pull request ready for review and return its current state. */
+export async function markPullRequestReady(pullRequest: PrRef) {
+  "use step";
+  return steps.markPullRequestReady(pullRequest);
+}
 
 /** Merge the pull request with the configured method, pinned to the approved head. */
 export async function mergePullRequest(

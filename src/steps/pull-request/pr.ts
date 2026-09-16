@@ -18,8 +18,10 @@ import {
   fetchPrCommitMessages,
   fetchPrSnapshot,
   fetchPrTitle,
+  markPrReady,
   mergePr,
   type PrRef,
+  type PrSnapshot,
   postPrComment,
   replyToReviewThread,
 } from "../../providers/github.ts";
@@ -48,13 +50,15 @@ export async function resolveMergePolicy(binding: string): Promise<MergePolicy> 
 }
 
 /** Open a pull request from the working branch into the base branch. */
-export async function openPullRequest(
-  repo: GithubRepoRef,
-  head: string,
-  base: string,
-  title: string,
-  body: string,
-): Promise<PrRef> {
+export async function openPullRequest(request: {
+  repo: GithubRepoRef;
+  head: string;
+  base: string;
+  title: string;
+  body: string;
+  draft?: boolean;
+}): Promise<PrRef> {
+  const { repo, head, base, title, body, draft } = request;
   const identity = resolveGithubIdentity();
   // In App mode the pull request's author is the bot, which is what lets the
   // operator approve it. The assignee and the opening line are how the
@@ -67,10 +71,17 @@ export async function openPullRequest(
     base,
     title,
     body: operator === null ? body : `Requested by @${operator}.\n\n${body}`,
+    ...(draft === undefined ? {} : { draft }),
   });
   const pr = { owner: repo.owner, repo: repo.repo, number };
   if (operator !== null) await assignPullRequest(pr, [operator]);
   return pr;
+}
+
+/** Mark a draft pull request ready and return its freshly read state. */
+export async function markPullRequestReady(pr: PrRef): Promise<PrSnapshot> {
+  await markPrReady(pr);
+  return fetchPrSnapshot(pr);
 }
 
 // A plain POST: the body already carries the marker that says what it answers,
