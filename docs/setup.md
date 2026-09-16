@@ -59,16 +59,19 @@ answer instead. The service is a host process on purpose: it drives the
 operator's `claude` and `codex` logins, the AWS SSO cache and the git clones
 ([ADR 0017](adr/0017-single-package.md)).
 
-**Upgrading.** `jigs upgrade` in the factory: it moves the jigs pin to the
-latest release (`--to <version>` picks one), normalizes jigs' release-age
-exclusion, installs the release, regenerates `jigs.ts`, runs `jigs up`, then
-the factory's own typecheck. This is a single command even when an older
-factory excludes an exact jigs version. A release that moves one of the four
-runtime peers — `workflow`, `@workflow/world-postgres`, `@workflow/web`, `zod`
-— fails the install by name; make the same move in the factory's `package.json`
-and run it again. A release can also raise the minimum `codex` version; no
-install will say so, but the service will at startup, and the fix is to upgrade
-`codex` on the machine. A factory made before this release should add
+**Upgrading.** `jigs upgrade` in the factory: it normalizes jigs' release-age
+exclusion, then moves the jigs pin to the latest release (`--to <version>`
+picks one). It runs `jigs up`, whose upgrade path installs the release,
+regenerates `jigs.ts` with that installed CLI, and builds and starts the
+factory, then runs the factory's own typecheck. This is a single command even
+when an older factory excludes an exact jigs version. Review and commit both
+the regenerated `jigs.ts` and any `pnpm-workspace.yaml` normalization. A
+release that moves one of the four runtime peers — `workflow`,
+`@workflow/world-postgres`, `@workflow/web`, `zod` — fails the install by name;
+make the same move in the factory's `package.json` and run it again. A release
+can also raise the minimum `codex` version; no install will say so, but the
+service will at startup, and the fix is to upgrade `codex` on the machine. A
+factory made before this release should add
 `ignoredOptionalDependencies: ['@openai/codex']` to its `pnpm-workspace.yaml`
 and delete any `@openai/codex` dependency or `overrides` entry. A factory still
 carrying the `@salimhamed/jigs-service` dependency retired in 0.3.0 is refused:

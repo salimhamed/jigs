@@ -14,12 +14,6 @@ import {
 } from "./test-fixtures.ts";
 import { type UpgradeDeps, type UpgradeOptions, upgradeFactory } from "./upgrade.ts";
 
-vi.mock("./generate.ts", () => ({
-  generateIntegration: vi.fn(async (deps: { out: (line: string) => void }) => {
-    deps.out("generated jigs.ts — review and commit this file");
-  }),
-}));
-
 let tmp: string;
 let lines: string[];
 
@@ -163,7 +157,7 @@ test("bumps jigs to latest, runs every up step, then the typecheck", async () =>
   expect(lines.at(-1)).toBe("acme-factory runs jigs 0.1.19");
 });
 
-test("indents generated integration output beneath its step", async () => {
+test("runs generation through the newly installed jigs CLI", async () => {
   const port = await fakeService();
   const root = factory(port);
   const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
@@ -178,8 +172,11 @@ test("indents generated integration output beneath its step", async () => {
   });
 
   expect(result.ok).toBe(true);
-  expect(lines).toContain("  generated jigs.ts — review and commit this file");
-  expect(lines).not.toContain("generated jigs.ts — review and commit this file");
+  expect(commands(io).slice(0, 3)).toEqual([
+    ["pnpm", "update", "--latest", "@salimhamed/jigs"],
+    ["pnpm", "install"],
+    ["pnpm", "exec", "jigs", "generate"],
+  ]);
 });
 
 test("normalizes an exact jigs release-age exclusion before pnpm runs", async () => {

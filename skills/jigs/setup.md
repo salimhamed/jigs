@@ -228,18 +228,19 @@ just needs `jigs poke <run>` to notice its answer.
 jigs upgrade                # or: jigs upgrade --to <version>
 ```
 
-normalizes jigs' release-age exclusion, bumps and installs `@salimhamed/jigs`,
-regenerates `jigs.ts` using the newly installed package, runs `jigs up`, then
+normalizes jigs' release-age exclusion, then bumps `@salimhamed/jigs` and runs
+`jigs up`. During that `up`, it installs the release, regenerates `jigs.ts`
+through the newly installed CLI, then builds and starts the factory. Finally it
 checks the factory's custom code. It is the only command needed even when an
 older factory excludes an exact jigs version. Review and commit the regenerated
-integration. Fix API errors in custom code outside `jigs.ts`; refresh generated
-wrappers with `jigs generate`. An install failure naming `@workflow/web`,
-`@workflow/world-postgres`, `workflow` or `zod` is a release that moved a
-runtime peer: move the same pin in the factory's `package.json` and run
-`jigs upgrade` again. A release can also raise the minimum `codex` version; the
-service reports that at startup, and the fix is to upgrade `codex` on the
-machine. A factory made before this release should add
-`ignoredOptionalDependencies: ['@openai/codex']` to its `pnpm-workspace.yaml`
+`jigs.ts` and any `pnpm-workspace.yaml` normalization. Fix API errors in custom
+code outside `jigs.ts`; refresh generated wrappers with `jigs generate`. An
+install failure naming `@workflow/web`, `@workflow/world-postgres`, `workflow`
+or `zod` is a release that moved a runtime peer: move the same pin in the
+factory's `package.json` and run `jigs upgrade` again. A release can also raise
+the minimum `codex` version; the service reports that at startup, and the fix
+is to upgrade `codex` on the machine. A factory made before this release needs
+`ignoredOptionalDependencies: ['@openai/codex']` in its `pnpm-workspace.yaml`
 and delete any `@openai/codex` dependency or `overrides` entry. A factory still
 installing jigs from a checkout
 (`link:` entries, or the old `jigs` / `@jigs/service` names) is refused;

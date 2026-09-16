@@ -4,8 +4,7 @@ import { isScalar, isSeq, parseDocument, Scalar } from "yaml";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
-import { generateIntegration } from "./generate.ts";
-import { indent, type Step, StepFailed, stepRunner } from "./step-runner.ts";
+import { type Step, StepFailed, stepRunner } from "./step-runner.ts";
 import { type UpDeps, type UpOptions, type UpResult, type UpStepName, upFactory } from "./up.ts";
 
 // Install the release, refresh its generated integration using the newly
@@ -85,10 +84,23 @@ export async function upgradeFactory(
         cwd: factoryRoot,
         execFile,
         generate: () =>
-          generateOrExplain(
-            deps.generate ??
-              (() => generateIntegration({ cwd: factoryRoot, out: indent(deps.out) })),
-          ),
+          deps.generate === undefined
+            ? execOrExplain(
+                execFile,
+                "pnpm",
+                ["exec", "jigs", "generate"],
+                { cwd: factoryRoot },
+                deps.out,
+                {
+                  missing: new JigsError("pnpm is not on PATH", "install pnpm"),
+                  failed: () =>
+                    new JigsError(
+                      "could not refresh jigs.ts",
+                      "run pnpm exec jigs generate in this factory",
+                    ),
+                },
+              )
+            : generateOrExplain(deps.generate),
       },
       { force: options.force, doctor: options.doctor },
     );
