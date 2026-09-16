@@ -33,8 +33,8 @@ const REQUIRED_PERMISSIONS: RequiredPermission[] = [
   { name: "pull_requests", level: "write", why: "open, comment on and merge pull requests" },
   { name: "issues", level: "write", why: "post on the pull request conversation" },
   { name: "metadata", level: "read", why: "read the repository" },
-  { name: "checks", level: "read", why: "detect check runs on the default branch" },
-  { name: "statuses", level: "read", why: "detect external CI commit statuses" },
+  { name: "checks", level: "read", why: "read CI check runs while polling pull requests" },
+  { name: "statuses", level: "read", why: "read CI commit statuses while polling pull requests" },
   { name: "repository_hooks", level: "write", why: "create the webhook that wakes parked runs" },
 ];
 
@@ -94,12 +94,18 @@ export const realGithubMergePolicyProbes: GithubMergePolicyProbes = {
         `/repos/${owner}/${repo}/commits/${encodeURIComponent(ref)}/status?per_page=1`,
       )
     ).total_count,
-  actionsWorkflows: async (owner, repo) =>
-    (
-      await githubGet<{ total_count: number }>(
-        `/repos/${owner}/${repo}/actions/workflows?per_page=1`,
-      )
-    ).total_count,
+  actionsWorkflows: async (owner, repo) => {
+    let active = 0;
+    for (let page = 1; page <= 50; page += 1) {
+      const result = await githubGet<{
+        total_count: number;
+        workflows: Array<{ state: string }>;
+      }>(`/repos/${owner}/${repo}/actions/workflows?per_page=100&page=${page}`);
+      active += result.workflows.filter((workflow) => workflow.state === "active").length;
+      if (result.workflows.length < 100 || page * 100 >= result.total_count) return active;
+    }
+    return active;
+  },
   labelExists: async (owner, repo, label) => {
     try {
       await githubGet(`/repos/${owner}/${repo}/labels/${encodeURIComponent(label)}`);
@@ -327,8 +333,6 @@ async function inspectBinding(
   let repository: Awaited<ReturnType<GithubMergePolicyProbes["repository"]>>;
   try {
     repository = await probes.repository(ref.owner, ref.repo);
-    if (typeof repository?.default_branch !== "string" || repository.default_branch === "")
-      return [];
   } catch {
     // A missing/inaccessible repo is diagnosed by bind's webhook leg and by
     // the webhook doctor check. It does not provide enough evidence for a
@@ -358,7 +362,7 @@ async function inspectBinding(
   if (checkRunCount === 0 && statusCount === 0 && workflowCount === 0)
     findings.push({
       binding: bindingName,
-      reason: `${ref.owner}/${ref.repo} has no Actions workflows, and its default branch has no check runs or commit statuses`,
+      reason: `${ref.owner}/${ref.repo} has no active Actions workflows, and its default branch has no check runs or commit statuses`,
       repair: `add a CI workflow, or set merge.by to "human" in jigs.config.ts`,
     });
   if (merge.approval.kind === "label") {

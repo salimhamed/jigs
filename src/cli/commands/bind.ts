@@ -43,8 +43,9 @@ export interface BindResult {
   webhook: "created" | "verified" | "updated" | "skipped";
 }
 
-// A pure config edit plus the webhook leg: nothing here touches the network for
-// the repo itself, and the clone is the service's to make at its next start.
+// A config edit plus repository reads: the webhook leg may write its hook, and
+// merge-policy inspection is read-only and non-fatal. The clone is the
+// service's to make at its next start.
 export async function bindRepo(
   remoteUrl: string,
   deps: BindDeps,

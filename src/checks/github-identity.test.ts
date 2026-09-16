@@ -168,7 +168,7 @@ test("preflight without binding probes does not require merge-policy-only App pe
   ).toMatchObject({ ok: true });
 });
 
-test("review approval does not require App Administration permission", async () => {
+test("App review approval skips the PAT-only branch-rule probe permission", async () => {
   expect(
     await outcome(
       APP,
@@ -237,20 +237,27 @@ test("real merge-policy probes use the repository and CI REST endpoints", async 
     .mockResolvedValueOnce(repository)
     .mockResolvedValueOnce({ total_count: 2 })
     .mockResolvedValueOnce({ total_count: 3 })
-    .mockResolvedValueOnce({ total_count: 4 });
+    .mockResolvedValueOnce({
+      total_count: 3,
+      workflows: [
+        { state: "active" },
+        { state: "disabled_inactivity" },
+        { state: "disabled_manually" },
+      ],
+    });
 
   await expect(realGithubMergePolicyProbes.repository("acme", "api")).resolves.toEqual(repository);
   await expect(realGithubMergePolicyProbes.checkRuns("acme", "api", "main/head")).resolves.toBe(2);
   await expect(
     realGithubMergePolicyProbes.commitStatuses("acme", "api", "main/head"),
   ).resolves.toBe(3);
-  await expect(realGithubMergePolicyProbes.actionsWorkflows("acme", "api")).resolves.toBe(4);
+  await expect(realGithubMergePolicyProbes.actionsWorkflows("acme", "api")).resolves.toBe(1);
 
   expect(githubGetMock.mock.calls.map(([url]) => url)).toEqual([
     "/repos/acme/api",
     "/repos/acme/api/commits/main%2Fhead/check-runs?per_page=1",
     "/repos/acme/api/commits/main%2Fhead/status?per_page=1",
-    "/repos/acme/api/actions/workflows?per_page=1",
+    "/repos/acme/api/actions/workflows?per_page=100&page=1",
   ]);
 });
 
@@ -345,7 +352,7 @@ test("a healthy binding preserves the existing passing merge-policy line", async
 test("jigs merging fails when the default branch has no CI", async () => {
   expect(await policyOutcome(SQUASH_REVIEW, binding, { checkRuns: async () => 0 })).toMatchObject({
     ok: false,
-    reason: expect.stringContaining("api: acme/api has no Actions workflows"),
+    reason: expect.stringContaining("api: acme/api has no active Actions workflows"),
     repair: expect.stringContaining('set merge.by to "human" in jigs.config.ts'),
   });
 });
@@ -472,16 +479,16 @@ test("an unreadable binding does not hide another binding's findings", async () 
       web: { remote: "git@github.com:acme/web.git" },
     },
     {
-      repository: async (_owner, repo) =>
-        repo === "broken"
-          ? (undefined as unknown as Awaited<ReturnType<GithubMergePolicyProbes["repository"]>>)
-          : policyProbes().repository("acme", repo),
+      repository: async (_owner, repo) => {
+        if (repo === "broken") throw new Error("repository unreadable");
+        return policyProbes().repository("acme", repo);
+      },
       checkRuns: async () => 0,
     },
   );
   expect(result).toMatchObject({ ok: false });
   if (result?.ok !== false) throw new Error("expected failure");
-  expect(result.reason).toContain("web: acme/web has no Actions workflows");
+  expect(result.reason).toContain("web: acme/web has no active Actions workflows");
   expect(result.reason).not.toContain("broken:");
 });
 

@@ -272,8 +272,8 @@ Where each value comes from:
    **Pull requests** and **Issues** read & write; **Metadata**, **Checks** and
    **Commit statuses** read; and **Repository webhooks** read & write. When
    `merge.by` is `"jigs"` and the factory has bindings, also grant **Actions**
-   read so `jigs bind` and `jigs doctor` can verify that the repository has CI.
-   The Repository webhooks
+   read so `jigs bind` and `jigs doctor` can verify that the repository has an
+   active Actions workflow. The Repository webhooks
    permission lets `jigs bind` create the hook that wakes a parked run; a
    missing permission is named by `jigs doctor`.
 3. **`appId`** is the "App ID" on the App's settings page.
