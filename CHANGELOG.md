@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.21.0](https://github.com/salimhamed/jigs/compare/jigs-v0.20.0...jigs-v0.21.0) (2026-09-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* two GitHub identities, and merge policy as configuration ([#194](https://github.com/salimhamed/jigs/issues/194))
+
+### Features
+
+* two GitHub identities, and merge policy as configuration ([#194](https://github.com/salimhamed/jigs/issues/194)) ([f3122bf](https://github.com/salimhamed/jigs/commit/f3122bf92ca385b1d622b16f2642021494ad91af))
+
 ## [0.20.0](https://github.com/salimhamed/jigs/compare/jigs-v0.19.0...jigs-v0.20.0) (2026-09-16)
 
 
