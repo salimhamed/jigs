@@ -40,6 +40,17 @@ const app = createApp({
   },
 });
 
+const inputBoundApp = createApp({
+  workflows: {
+    ship: {
+      workflow: async () => undefined,
+      inputs: z.object({ binding: z.string() }),
+      // Deliberately absent from the fixtures: the run input must replace it.
+      requires: { bindings: ["unrelated"] },
+    },
+  },
+});
+
 // Doctor's schedule half needs a factory that declares one: those checks are
 // the factory's own, so they can only arrive through the app.
 const scheduledApp = createApp({
@@ -99,6 +110,13 @@ const trigger = () =>
     body: JSON.stringify({ inputs: {} }),
   });
 
+const triggerInputBinding = (binding: string) =>
+  inputBoundApp.request("/api/workflows/ship/runs", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ inputs: { binding } }),
+  });
+
 interface Failure {
   id: string;
   label: string;
@@ -136,6 +154,34 @@ test("the undeclared-binding failure names the exact jigs bind invocation", asyn
   const binding = body.failures.find((failure) => failure.id === "binding.api");
   expect(binding?.repair).toContain("jigs bind");
   expect(binding?.repair).toContain("--name api");
+});
+
+test("an input-driven workflow preflights the binding named by the run", async () => {
+  vi.stubEnv("JIGS_FACTORY_ROOT", seededFactory);
+  const res = await triggerInputBinding("playground");
+  expect(res.status).toBe(424);
+  const body = (await res.json()) as { failures: Failure[] };
+  expect(body.failures.map((failure) => failure.id)).toEqual(["binding.playground"]);
+  expect(body.failures[0]?.reason).toContain("playground");
+  expect(start).not.toHaveBeenCalled();
+});
+
+test("an input-driven workflow ignores an unrelated static binding", async () => {
+  const workspace = makeTmpDir();
+  const { remoteDir } = makeRemoteBackedRepo(workspace);
+  const factory = makeFactoryRepo(workspace, {
+    bindings: { playground: { remote: remoteDir } },
+  });
+  vi.stubEnv("JIGS_FACTORY_ROOT", factory);
+  await ensureBindingClone({
+    repoDir: bindingRepoDir({ factoryRoot: factory, bindingName: "playground" }),
+    remote: remoteDir,
+  });
+
+  const res = await triggerInputBinding("playground");
+  expect(res.status).toBe(201);
+  expect(start).toHaveBeenCalledTimes(1);
+  removeTmpDir(workspace);
 });
 
 test("GET /api/doctor reports rejected configured credentials without creating a run", async () => {

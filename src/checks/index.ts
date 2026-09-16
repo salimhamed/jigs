@@ -96,12 +96,20 @@ function githubChecks(checkBindings = false): Check[] {
   }
 }
 
-export function preflightChecks(requires: WorkflowRequires): Check[] {
+export function preflightChecks(
+  requires: WorkflowRequires,
+  inputs?: Record<string, unknown>,
+): Check[] {
   const integrations = requires.integrations ?? [];
+  // A binding selected by this run is more specific than the workflow's
+  // static requirements. Workflows without a binding input retain the fixed
+  // binding list declared in their manifest.
+  const bindings =
+    typeof inputs?.binding === "string" ? [inputs.binding] : (requires.bindings ?? []);
   return [
     ...coreChecks(coreProbes, process.env, integrations),
     ...(integrations.includes("github") ? githubChecks() : []),
-    ...bindingChecks({ factoryRoot, names: requires.bindings ?? [] }),
+    ...bindingChecks({ factoryRoot, names: bindings }),
     ...harnessChecks(requires.harnesses ?? []),
     ...(requires.aws ? [awsCredentialsCheck()] : []),
   ];
