@@ -2,15 +2,16 @@ import { expect, test, vi } from "vitest";
 import { z } from "zod";
 import type { Factory, WorkflowInputs } from "../blocks/factory.ts";
 
-const { start, resolveIssueRef } = vi.hoisted(() => ({
+const { start, resolveIssueRef, preflightChecks } = vi.hoisted(() => ({
   start: vi.fn(async (_workflow: unknown, _args: unknown[]) => ({ runId: "wrun_test" })),
+  preflightChecks: vi.fn(() => []),
   resolveIssueRef: vi.fn(() => {
     throw new Error("Unexpected Linear access");
   }),
 }));
 vi.mock("workflow/api", () => ({ start }));
 vi.mock("../checks/index.ts", () => ({
-  preflightChecks: () => [],
+  preflightChecks,
   runChecks: async () => ({ ok: true, results: [] }),
 }));
 vi.mock("../providers/linear.ts", () => ({ resolveIssueRef }));
@@ -28,12 +29,14 @@ const factory = {
 
 test("a ticket field is ordinary input and never triggers Linear resolution", async () => {
   start.mockClear();
+  preflightChecks.mockClear();
   const result = await startRun(factory, "run", { ticket: "abc" }, "trig_manual");
   expect(result).toEqual({ kind: "started", runId: "wrun_test" });
   expect(start).toHaveBeenCalledExactlyOnceWith(factory.workflows.run.workflow, [
     { ticket: "abc", attempts: 3, triggerId: "trig_manual" },
   ]);
   expect(resolveIssueRef).not.toHaveBeenCalled();
+  expect(preflightChecks).toHaveBeenCalledExactlyOnceWith({}, { ticket: "abc", attempts: 3 });
 });
 
 test("invalid inputs cannot start a run", async () => {

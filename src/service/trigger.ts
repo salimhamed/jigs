@@ -32,7 +32,7 @@ export async function startRun(
 
   // Before the run exists: every failure at once, each carrying its repair,
   // and no run created. There is no skip flag.
-  const report = await runChecks(preflightChecks(entry.requires ?? {}));
+  const report = await runChecks(preflightChecks(entry.requires ?? {}, parsed.data));
   if (!report.ok) return { kind: "preflight-failed", report };
 
   const injection = { triggerId } satisfies Injected;
