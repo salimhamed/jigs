@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.24.1](https://github.com/salimhamed/jigs/compare/jigs-v0.24.0...jigs-v0.24.1) (2026-09-16)
+
+
+### Features
+
+* **bind:** ensure configured approval label ([0608d37](https://github.com/salimhamed/jigs/commit/0608d37b5976fb2a84710fad2f0b76578d4674bd))
+
 ## [0.24.0](https://github.com/salimhamed/jigs/compare/jigs-v0.23.3...jigs-v0.24.0) (2026-09-16)
 
 
