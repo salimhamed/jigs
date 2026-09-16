@@ -96,8 +96,8 @@ human's login — an installation token cannot answer `GET /user`). Optional
 Grant the App exactly: Contents, Pull requests and Issues **read & write**;
 Metadata, Checks and Commit statuses **read**; and **Repository webhooks read &
 write**. When `merge.by` is `"jigs"` and the factory has bindings, also grant
-Actions and Administration **read** so `jigs bind` and `jigs doctor` can inspect
-the repositories' merge policies. Permissions have to be accepted on the
+Actions **read** so `jigs bind` and `jigs doctor` can verify that the
+repositories have CI. Permissions have to be accepted on the
 installation after they are granted on the App. Register the App with its own
 webhook **off**; jigs keeps per-repo webhooks, and one App registration has
 only one webhook URL.

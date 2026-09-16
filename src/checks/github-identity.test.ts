@@ -34,7 +34,6 @@ const GRANTED = {
   actions: "read",
   checks: "read",
   statuses: "read",
-  administration: "read",
   repository_hooks: "write",
 };
 
@@ -144,13 +143,7 @@ test("webhook administration is a permission the operator has to grant and accep
 });
 
 test("jigs merging requires the App permissions used by merge-policy probes", async () => {
-  const {
-    actions: _actions,
-    checks: _checks,
-    statuses: _statuses,
-    administration: _admin,
-    ...oldPermissions
-  } = GRANTED;
+  const { actions: _actions, checks: _checks, statuses: _statuses, ...oldPermissions } = GRANTED;
   const check = await outcome(
     APP,
     "github.identity",
@@ -164,11 +157,10 @@ test("jigs merging requires the App permissions used by merge-policy probes", as
   expect(check.reason).toContain("actions: read");
   expect(check.reason).toContain("checks: read");
   expect(check.reason).toContain("statuses: read");
-  expect(check.reason).toContain("administration: read");
 });
 
 test("preflight without binding probes does not require merge-policy-only App permissions", async () => {
-  const { actions: _actions, administration: _admin, ...preflightPermissions } = GRANTED;
+  const { actions: _actions, ...preflightPermissions } = GRANTED;
   expect(
     await outcome(APP, "github.identity", {
       installation: async () => ({ permissions: preflightPermissions }),
@@ -176,8 +168,21 @@ test("preflight without binding probes does not require merge-policy-only App pe
   ).toMatchObject({ ok: true });
 });
 
+test("review approval does not require App Administration permission", async () => {
+  expect(
+    await outcome(
+      APP,
+      "github.identity",
+      { installation: async () => ({ permissions: GRANTED }) },
+      { GITHUB_TOKEN: "ghp_live" },
+      SQUASH_REVIEW,
+      binding,
+    ),
+  ).toMatchObject({ ok: true });
+});
+
 test("human merging does not require merge-policy-only App permissions", async () => {
-  const { actions: _actions, administration: _admin, ...humanPermissions } = GRANTED;
+  const { actions: _actions, ...humanPermissions } = GRANTED;
   expect(
     await outcome(
       APP,
@@ -319,8 +324,11 @@ async function policyOutcome(
   merge: MergePolicy = SQUASH_REVIEW,
   bindings: Record<string, { remote: string }> = binding,
   overrides: Partial<GithubMergePolicyProbes> = {},
+  identity: AppIdentity | { mode: "pat" } = { mode: "pat" },
 ) {
-  const report = await runChecks([mergePolicyCheck(merge, bindings, policyProbes(overrides))]);
+  const report = await runChecks([
+    mergePolicyCheck(identity, merge, bindings, policyProbes(overrides)),
+  ]);
   return report.checks[0];
 }
 
@@ -392,10 +400,18 @@ test("label approval fails when native approving reviews are required", async ()
   expect(result).toMatchObject({
     ok: false,
     reason: expect.stringContaining("requires 2 approving reviews"),
-    repair: expect.stringContaining("remove the repository's required approving reviews"),
+    repair: expect.stringContaining("change merge.approval"),
   });
   if (result?.ok !== false) throw new Error("expected failure");
-  expect(result.repair).not.toContain("merge.approval");
+  expect(result.repair).toContain("github.identity");
+});
+
+test("App-authored pull requests can combine label approval with required reviews", async () => {
+  const requiredApprovingReviews = vi.fn(async () => 1);
+  await expect(
+    policyOutcome(LABEL_POLICY, binding, { requiredApprovingReviews }, APP),
+  ).resolves.toMatchObject({ ok: true });
+  expect(requiredApprovingReviews).not.toHaveBeenCalled();
 });
 
 test("a hung repository probe stays silent before the check catalog times out", async () => {
@@ -403,6 +419,7 @@ test("a hung repository probe stays silent before the check catalog times out", 
     runChecks(
       [
         mergePolicyCheck(
+          { mode: "pat" },
           SQUASH_REVIEW,
           binding,
           policyProbes({ repository: async () => new Promise(() => {}) }),
@@ -445,6 +462,27 @@ test("findings from several bindings are folded into one named failure", async (
   if (result?.ok !== false) throw new Error("expected failure");
   expect(result.reason).toContain("api: acme/api");
   expect(result.reason).toContain("web: acme/web");
+});
+
+test("an unreadable binding does not hide another binding's findings", async () => {
+  const result = await policyOutcome(
+    SQUASH_REVIEW,
+    {
+      broken: { remote: "git@github.com:acme/broken.git" },
+      web: { remote: "git@github.com:acme/web.git" },
+    },
+    {
+      repository: async (_owner, repo) =>
+        repo === "broken"
+          ? (undefined as unknown as Awaited<ReturnType<GithubMergePolicyProbes["repository"]>>)
+          : policyProbes().repository("acme", repo),
+      checkRuns: async () => 0,
+    },
+  );
+  expect(result).toMatchObject({ ok: false });
+  if (result?.ok !== false) throw new Error("expected failure");
+  expect(result.reason).toContain("web: acme/web has no Actions workflows");
+  expect(result.reason).not.toContain("broken:");
 });
 
 test("human merging does not probe or report repository policy", async () => {

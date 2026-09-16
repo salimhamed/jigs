@@ -40,11 +40,6 @@ const REQUIRED_PERMISSIONS: RequiredPermission[] = [
 
 const JIGS_MERGE_PERMISSIONS: RequiredPermission[] = [
   { name: "actions", level: "read", why: "detect whether the repository has CI workflows" },
-  {
-    name: "administration",
-    level: "read",
-    why: "read merge methods and required-review branch rules",
-  },
 ];
 
 const SATISFIES: Record<string, string[]> = { read: ["read", "write"], write: ["write"] };
@@ -162,7 +157,7 @@ export function githubIdentityChecks(
     identity.mode === "pat"
       ? patCheck(probes, env)
       : appCheck(identity, checksBindingPolicies, probes),
-    mergePolicyCheck(merge, bindings, mergeProbes),
+    mergePolicyCheck(identity, merge, bindings, mergeProbes),
   ];
 }
 
@@ -263,6 +258,7 @@ function appCheck(
 // The one line that tells an operator what the factory will actually do when
 // a pull request goes green, plus any repository facts that make it impossible.
 export function mergePolicyCheck(
+  identity: GithubIdentity,
   merge: MergePolicy,
   bindings: Record<string, Pick<BindingEntry, "remote">>,
   probes: GithubMergePolicyProbes,
@@ -281,13 +277,14 @@ export function mergePolicyCheck(
     label: "merge policy",
     run: async (): Promise<CheckResult> => {
       if (merge.by === "human") return { ok: true, detail: who };
-      const findings = (
-        await Promise.all(
-          Object.entries(bindings).map(([name, binding]) =>
-            inspectBindingWithin(name, binding, merge, probes, probeTimeoutMs),
-          ),
-        )
-      ).flat();
+      const inspections = await Promise.allSettled(
+        Object.entries(bindings).map(([name, binding]) =>
+          inspectBindingWithin(name, binding, identity, merge, probes, probeTimeoutMs),
+        ),
+      );
+      const findings = inspections.flatMap((inspection) =>
+        inspection.status === "fulfilled" ? inspection.value : [],
+      );
       if (findings.length === 0) return { ok: true, detail: who };
       return {
         ok: false,
@@ -301,6 +298,7 @@ export function mergePolicyCheck(
 async function inspectBindingWithin(
   bindingName: string,
   binding: Pick<BindingEntry, "remote">,
+  identity: GithubIdentity,
   merge: MergePolicy,
   probes: GithubMergePolicyProbes,
   timeoutMs: number,
@@ -308,7 +306,7 @@ async function inspectBindingWithin(
   const timeout = new Promise<PolicyFinding[]>((resolve) => {
     AbortSignal.timeout(timeoutMs).addEventListener("abort", () => resolve([]), { once: true });
   });
-  return Promise.race([inspectBinding(bindingName, binding, merge, probes), timeout]);
+  return Promise.race([inspectBinding(bindingName, binding, identity, merge, probes), timeout]);
 }
 
 interface PolicyFinding {
@@ -320,6 +318,7 @@ interface PolicyFinding {
 async function inspectBinding(
   bindingName: string,
   binding: Pick<BindingEntry, "remote">,
+  identity: GithubIdentity,
   merge: MergePolicy,
   probes: GithubMergePolicyProbes,
 ): Promise<PolicyFinding[]> {
@@ -328,6 +327,8 @@ async function inspectBinding(
   let repository: Awaited<ReturnType<GithubMergePolicyProbes["repository"]>>;
   try {
     repository = await probes.repository(ref.owner, ref.repo);
+    if (typeof repository?.default_branch !== "string" || repository.default_branch === "")
+      return [];
   } catch {
     // A missing/inaccessible repo is diagnosed by bind's webhook leg and by
     // the webhook doctor check. It does not provide enough evidence for a
@@ -361,9 +362,8 @@ async function inspectBinding(
       repair: `add a CI workflow, or set merge.by to "human" in jigs.config.ts`,
     });
   if (merge.approval.kind === "label") {
-    const [labelExistsResult, approvalsResult] = await Promise.allSettled([
+    const [labelExistsResult] = await Promise.allSettled([
       probes.labelExists(ref.owner, ref.repo, merge.approval.name),
-      probes.requiredApprovingReviews(ref.owner, ref.repo, repository.default_branch),
     ]);
     if (settledValue(labelExistsResult) === false)
       findings.push({
@@ -371,13 +371,18 @@ async function inspectBinding(
         reason: `${ref.owner}/${ref.repo} has no ${merge.approval.name} label`,
         repair: `create the ${merge.approval.name} label, or change merge.approval in jigs.config.ts`,
       });
-    const approvals = settledValue(approvalsResult);
-    if (approvals !== undefined && approvals !== null && approvals > 0)
-      findings.push({
-        binding: bindingName,
-        reason: `${ref.owner}/${ref.repo}'s default branch requires ${approvals} approving review${approvals === 1 ? "" : "s"}, which label approval cannot satisfy`,
-        repair: `remove the repository's required approving reviews so label approval can satisfy the merge policy`,
-      });
+    if (identity.mode === "pat") {
+      const [approvalsResult] = await Promise.allSettled([
+        probes.requiredApprovingReviews(ref.owner, ref.repo, repository.default_branch),
+      ]);
+      const approvals = settledValue(approvalsResult);
+      if (approvals !== undefined && approvals !== null && approvals > 0)
+        findings.push({
+          binding: bindingName,
+          reason: `${ref.owner}/${ref.repo}'s default branch requires ${approvals} approving review${approvals === 1 ? "" : "s"}, which a label cannot satisfy when jigs authors the pull request`,
+          repair: `remove the repository's required approving reviews, or switch github.identity to app and change merge.approval to { kind: "review" } in jigs.config.ts`,
+        });
+    }
   }
   return findings;
 }

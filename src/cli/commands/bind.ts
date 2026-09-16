@@ -131,6 +131,7 @@ export async function bindRepo(
   });
   const report = await runChecks([
     mergePolicyCheck(
+      resolveGithubIdentity(factoryRoot),
       config.merge,
       { [name]: { remote: remoteUrl } },
       deps.mergePolicyProbes ?? realGithubMergePolicyProbes,
