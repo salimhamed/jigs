@@ -699,6 +699,22 @@ describe("delivery", () => {
     expect(body).toContain('"reason":"merge-retry"');
   });
 
+  it("retries when a merge attempt throws, leaving the head eligible", async () => {
+    const { steps } = setup([mergeReady("new"), mergeReady("new", true)]);
+    vi.mocked(steps.mergePullRequest)
+      .mockRejectedValueOnce(new Error("GitHub request timed out"))
+      .mockResolvedValueOnce({ merged: true, mergeCommitSha: "merged" });
+
+    const result = await bindDeliverySteps(steps).deliverChange({ ...options, merge: JIGS_MERGE });
+
+    expect(result.status).toBe("merged");
+    expect(steps.mergePullRequest).toHaveBeenCalledTimes(2);
+    expect(steps.commentOnPullRequest).toHaveBeenCalledOnce();
+    const [, body] = vi.mocked(steps.commentOnPullRequest).mock.calls[0] ?? [];
+    expect(body).toContain("GitHub request timed out");
+    expect(body).toContain('"reason":"merge-retry"');
+  });
+
   it("stands a commit down when nothing but a new commit could merge it", async () => {
     const { steps } = setup([mergeReady("new"), { kind: "closed", merged: false }]);
     vi.mocked(steps.mergePullRequest).mockResolvedValue({

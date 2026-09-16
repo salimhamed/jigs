@@ -351,9 +351,8 @@ export function bindDeliverySteps(steps: DeliverySteps) {
           if (result.merged) return finished({ status: "merged", change, pr });
           refused = result;
         } catch (error) {
-          // An error the merge step could not answer for is not a state jigs
-          // knows how to wait out, so it is reported once and stood down on.
-          refused = { reason: String(error), transient: false };
+          // An unclassified error may pass, so leave the head eligible to retry.
+          refused = { reason: String(error), transient: true };
         }
         if (!refused.transient) {
           // The note is what stands this commit down: without it the same
