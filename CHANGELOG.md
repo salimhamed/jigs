@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.1](https://github.com/salimhamed/jigs/compare/jigs-v0.26.0...jigs-v0.26.1) (2026-09-16)
+
+
+### Bug Fixes
+
+* **doctor:** stop flagging repositories that do not require CI or reviews ([#219](https://github.com/salimhamed/jigs/issues/219)) ([466ce82](https://github.com/salimhamed/jigs/commit/466ce8262e6e040724fb0b7114423b8c32717916))
+
 ## [0.26.0](https://github.com/salimhamed/jigs/compare/jigs-v0.25.2...jigs-v0.26.0) (2026-09-16)
 
 
