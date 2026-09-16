@@ -177,6 +177,22 @@ export async function commentOnPullRequest(pullRequest: PrRef, body: string) {
 // One attempt, for the reason above.
 commentOnPullRequest.maxRetries = 0;
 
+/** Post a review on a pull request. */
+export async function reviewPullRequest(
+  pullRequest: PrRef,
+  review: {
+    event: "comment" | "approve" | "request-changes";
+    body: string;
+    comments?: Array<{ path: string; line: number; body: string }>;
+  },
+) {
+  "use step";
+  return steps.reviewPullRequest(pullRequest, review);
+}
+
+// One attempt: a lost POST response may already have posted the review.
+reviewPullRequest.maxRetries = 0;
+
 /** Mark a draft pull request ready for review and return its current state. */
 export async function markPullRequestReady(pullRequest: PrRef) {
   "use step";

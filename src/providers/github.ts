@@ -303,6 +303,42 @@ export async function postPrComment(pr: PrRef, body: string): Promise<{ id: numb
   );
 }
 
+export interface PullRequestReviewRequest {
+  event: "comment" | "approve" | "request-changes";
+  body: string;
+  comments?: Array<{ path: string; line: number; body: string }>;
+}
+
+const REVIEW_EVENTS = {
+  comment: "COMMENT",
+  approve: "APPROVE",
+  "request-changes": "REQUEST_CHANGES",
+} as const satisfies Record<PullRequestReviewRequest["event"], string>;
+
+export async function postPullRequestReview(
+  pr: PrRef,
+  review: PullRequestReviewRequest,
+): Promise<{ id: number }> {
+  return githubRequest<{ id: number }>(
+    "POST",
+    `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}/reviews`,
+    {
+      event: REVIEW_EVENTS[review.event],
+      body: review.body,
+      ...(review.comments === undefined
+        ? {}
+        : {
+            comments: review.comments.map(({ path, line, body }) => ({
+              path,
+              line,
+              side: "RIGHT",
+              body,
+            })),
+          }),
+    },
+  );
+}
+
 export interface CreatePullRequest {
   owner: string;
   repo: string;

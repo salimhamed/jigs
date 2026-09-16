@@ -27,6 +27,7 @@ export {
   replyToPullRequestReviewThread,
   resolveMergePolicy,
   resolveRepository,
+  reviewPullRequest,
 } from "./pull-request/pr.ts";
 export { dashboardRunUrl } from "./run-context.ts";
 export { createRunDirectory, removeRunDirectory } from "./run-directory/index.ts";

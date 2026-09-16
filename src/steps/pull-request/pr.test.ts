@@ -11,6 +11,7 @@ import {
   fetchPrTitle,
   markPrReady,
   mergePr,
+  postPullRequestReview,
 } from "../../providers/github.ts";
 import { GithubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity } from "../../providers/github-auth.ts";
@@ -21,6 +22,7 @@ import {
   openPullRequest,
   preservedCommitMessageBody,
   resolveMergePolicy,
+  reviewPullRequest,
 } from "./pr.ts";
 
 vi.mock("../../providers/github.ts", () => ({
@@ -31,6 +33,7 @@ vi.mock("../../providers/github.ts", () => ({
   fetchPrTitle: vi.fn(),
   markPrReady: vi.fn(),
   mergePr: vi.fn(),
+  postPullRequestReview: vi.fn(),
 }));
 vi.mock("../../providers/github-auth.ts", () => ({ resolveGithubIdentity: vi.fn() }));
 
@@ -98,6 +101,24 @@ beforeEach(() => {
   ]);
   vi.mocked(createPullRequest).mockResolvedValue({ number: 1 });
   vi.mocked(mergePr).mockResolvedValue({ merged: true, sha: "merged" });
+  vi.mocked(postPullRequestReview).mockResolvedValue({ id: 970 });
+});
+
+test("reviewPullRequest returns the provider's review id", async () => {
+  const review = {
+    event: "comment" as const,
+    body: "Summary",
+    comments: [{ path: "src/file.ts", line: 12, body: "Change this" }],
+  };
+  await expect(reviewPullRequest(pr, review)).resolves.toEqual({ id: 970 });
+  expect(postPullRequestReview).toHaveBeenCalledExactlyOnceWith(pr, review);
+});
+
+test("reviewPullRequest surfaces a GitHub error unchanged", async () => {
+  const error = new GithubApiError(422, "/reviews", "Review cannot approve its own pull request");
+  vi.mocked(postPullRequestReview).mockRejectedValue(error);
+
+  await expect(reviewPullRequest(pr, { event: "approve", body: "Approved" })).rejects.toBe(error);
 });
 
 test("checks readiness again and pins the approved head on the merge call", async () => {

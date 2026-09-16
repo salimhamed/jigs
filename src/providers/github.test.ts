@@ -7,6 +7,7 @@ import {
   markPrReady,
   mergePr,
   postPrComment,
+  postPullRequestReview,
   replyToReviewThread,
 } from "./github.ts";
 
@@ -369,6 +370,43 @@ test("a PR comment posts to the issue comments endpoint", async () => {
   expect(init.method).toBe("POST");
   expect(JSON.parse(String(init.body))).toEqual({
     body: "@reviewer CI is still red",
+  });
+});
+
+test.each([
+  ["comment", "COMMENT"],
+  ["approve", "APPROVE"],
+  ["request-changes", "REQUEST_CHANGES"],
+] as const)("a %s review maps to GitHub's %s event", async (event, githubEvent) => {
+  fetchMock.mockResolvedValueOnce(json({ id: 970 }));
+
+  await expect(postPullRequestReview(pr, { event, body: "Summary" })).resolves.toEqual({ id: 970 });
+
+  const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect(url).toBe("http://mock.test/github/repos/acme/api/pulls/41/reviews");
+  expect(init.method).toBe("POST");
+  expect(JSON.parse(String(init.body))).toEqual({ event: githubEvent, body: "Summary" });
+});
+
+test("a review preserves inline comment order and anchors comments to the head side", async () => {
+  fetchMock.mockResolvedValueOnce(json({ id: 971 }));
+  await postPullRequestReview(pr, {
+    event: "comment",
+    body: "Two notes",
+    comments: [
+      { path: "src/first.ts", line: 4, body: "First" },
+      { path: "src/second.ts", line: 9, body: "Second" },
+    ],
+  });
+
+  const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect(JSON.parse(String(init.body))).toEqual({
+    event: "COMMENT",
+    body: "Two notes",
+    comments: [
+      { path: "src/first.ts", line: 4, side: "RIGHT", body: "First" },
+      { path: "src/second.ts", line: 9, side: "RIGHT", body: "Second" },
+    ],
   });
 });
 

@@ -22,7 +22,9 @@ import {
   mergePr,
   type PrRef,
   type PrSnapshot,
+  type PullRequestReviewRequest,
   postPrComment,
+  postPullRequestReview,
   replyToReviewThread,
 } from "../../providers/github.ts";
 import { GithubApiError } from "../../providers/github-api.ts";
@@ -99,6 +101,18 @@ export async function replyToPullRequestReviewThread(
 /** Post a comment on the pull request conversation and return its id. */
 export async function commentOnPullRequest(pr: PrRef, body: string): Promise<{ id: number }> {
   return postPrComment(pr, body);
+}
+
+/**
+ * Post a pull request review and return its id. GitHub refuses an approval from
+ * the pull request's own author with 422 Unprocessable Entity; Jigs lets
+ * GitHub's GithubApiError surface unchanged.
+ */
+export async function reviewPullRequest(
+  pr: PrRef,
+  review: PullRequestReviewRequest,
+): Promise<{ id: number }> {
+  return postPullRequestReview(pr, review);
 }
 
 /**
