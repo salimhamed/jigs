@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.25.0](https://github.com/salimhamed/jigs/compare/jigs-v0.24.1...jigs-v0.25.0) (2026-09-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* **repo:** GitHub App factories must grant Administration read and write and accept the updated installation permission.
+
+### Features
+
+* **repo:** add opt-in repository setup command ([f8d7d6d](https://github.com/salimhamed/jigs/commit/f8d7d6d230cd00e474d9e680f8d8a6b5067eb508))
+
 ## [0.24.1](https://github.com/salimhamed/jigs/compare/jigs-v0.24.0...jigs-v0.24.1) (2026-09-16)
 
 
