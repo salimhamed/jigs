@@ -75,6 +75,7 @@ export interface ServiceLifecycleDeps {
   startPollMs?: number;
   stopTimeoutMs?: number;
   systemd?: SystemdUserManager;
+  now?: () => Date;
 }
 
 export interface StartOptions {
@@ -96,6 +97,16 @@ export function serviceLogPath(slug: string): string {
 // pick up.
 export function serviceBundlePath(slug: string): string {
   return path.join(jigsDataDir(), "services", `${slug}.bundle`);
+}
+
+function serviceRunStatePath(slug: string): string {
+  return path.join(jigsDataDir(), "services", `${slug}.run.json`);
+}
+
+interface ServiceRunState {
+  logOffset: number;
+  deathDetectedAt?: string;
+  signal?: string;
 }
 
 export function builtBundleHash(factoryRoot: string): string | undefined {
@@ -234,6 +245,7 @@ export async function startService(
   }
 
   const logFile = serviceLogPath(slug);
+  const logOffset = existsSync(logFile) ? statSync(logFile).size : 0;
   const supervised = systemd.available();
   const pid = processes.spawn({
     command: supervised ? "systemd-run" : process.execPath,
@@ -251,6 +263,7 @@ export async function startService(
   const pidfile = servicePidfilePath(slug);
   mkdirSync(path.dirname(pidfile), { recursive: true });
   writeFileSync(pidfile, `${pid}\n`);
+  writeFileSync(serviceRunStatePath(slug), `${JSON.stringify({ logOffset })}\n`);
   writeFileSync(serviceBundlePath(slug), `${builtBundleHash(factoryRoot)}\n`);
   if (options.awaitReady !== false) await awaitReady(deps, slug, serviceUrl, pid);
   out(`started ${slug}: pid ${pid} at ${serviceUrl}`);
@@ -362,6 +375,7 @@ export async function stopService(deps: ServiceLifecycleDeps): Promise<void> {
     await sleep(POLL_MS);
   }
   rmSync(pidfile, { force: true });
+  rmSync(serviceRunStatePath(slug), { force: true });
   out(`stopped ${slug}: pid ${pid}`);
 }
 
@@ -374,28 +388,55 @@ export async function restartService(
 }
 
 export function serviceStatus(deps: ServiceLifecycleDeps): void {
-  const { out, processes = nodeProcesses } = deps;
+  const { out, processes = nodeProcesses, now = () => new Date() } = deps;
   const factoryRoot = locateFactoryRoot(deps.cwd);
   const { slug, serviceUrl, dashboardUrl } = resolveService(factoryRoot);
   const pid = livePid(slug, processes);
   out(
     pid === undefined
-      ? deadServiceStatus(slug, serviceUrl)
+      ? deadServiceStatus(slug, serviceUrl, now)
       : `${slug}: running pid ${pid} at ${serviceUrl}`,
   );
   out(`dashboard: ${dashboardUrl}`);
   out(`factory ${factoryRoot}`);
 }
 
-function deadServiceStatus(slug: string, serviceUrl: string): string {
+function deadServiceStatus(slug: string, serviceUrl: string, now: () => Date): string {
+  const stateFile = serviceRunStatePath(slug);
   const log = serviceLogPath(slug);
-  if (!existsSync(log)) return `${slug}: not running (${serviceUrl})`;
-  const signal = tailLines(log, LOG_LINES)
+  const state = readRunState(stateFile);
+  if (state === undefined) return `${slug}: not running (${serviceUrl})`;
+  if (state.deathDetectedAt === undefined) {
+    state.deathDetectedAt = now().toISOString();
+    state.signal = signalSince(log, state.logOffset);
+    writeFileSync(stateFile, `${JSON.stringify(state)}\n`);
+  }
+  return `${slug}: not running as of ${state.deathDetectedAt}${state.signal === undefined ? "" : `, last signal ${state.signal}`} (${serviceUrl})`;
+}
+
+function readRunState(file: string): ServiceRunState | undefined {
+  if (!existsSync(file)) return undefined;
+  try {
+    const state = JSON.parse(readFileSync(file, "utf8")) as Partial<ServiceRunState>;
+    return typeof state.logOffset === "number" && state.logOffset >= 0
+      ? (state as ServiceRunState)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function signalSince(log: string, offset: number): string | undefined {
+  if (!existsSync(log)) return undefined;
+  const contents = readFileSync(log);
+  if (contents.byteLength < offset) return undefined;
+  return contents
+    .subarray(offset)
+    .toString("utf8")
+    .split("\n")
     .reverse()
     .map((line) => line.match(/Received ['"](SIG[A-Z]+)['"]/i)?.[1]?.toUpperCase())
     .find((value) => value !== undefined);
-  const since = statSync(log).mtime.toISOString();
-  return `${slug}: not running since ${since}${signal === undefined ? "" : `, last signal ${signal}`} (${serviceUrl})`;
 }
 
 // `jigs logs <run>` is about a run — it resolves the ref and points at the
