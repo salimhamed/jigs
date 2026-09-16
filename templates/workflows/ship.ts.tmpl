@@ -12,7 +12,8 @@ import {
 
 // This factory's model per harness. A model input left unset takes the default
 // of the harness that was actually chosen, so naming one never drags the
-// other's default along.
+// other's default along. Pass `effort` beside `model` to tune a particular
+// harness; omit it to keep that provider's default.
 const defaultModels = { claude: "opus", codex: "gpt-5.6-sol" };
 
 export const shipInputs = z.object({
