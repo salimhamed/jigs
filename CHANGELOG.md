@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.1](https://github.com/salimhamed/jigs/compare/jigs-v0.29.0...jigs-v0.29.1) (2026-09-16)
+
+
+### Bug Fixes
+
+* preserve binding config formatting ([526fd5b](https://github.com/salimhamed/jigs/commit/526fd5b59aaecb6624d810229723d797f629629b))
+
 ## [0.29.0](https://github.com/salimhamed/jigs/compare/jigs-v0.28.1...jigs-v0.29.0) (2026-09-16)
 
 
