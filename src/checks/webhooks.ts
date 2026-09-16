@@ -33,7 +33,7 @@ export function webhookChecks(options: WebhookChecksOptions): Check[] {
                 binding.remote,
                 ingressUrl,
                 repo,
-                (options.identity ?? resolveGithubIdentity)(),
+                options.identity ?? resolveGithubIdentity,
               ),
           },
         ];
@@ -59,7 +59,7 @@ async function checkWebhook(
   remote: string,
   ingressUrl: string,
   repo: { owner: string; repo: string },
-  identity: GithubIdentity,
+  resolveIdentity: () => GithubIdentity,
 ): Promise<CheckResult> {
   const bindRepair = `run: jigs bind ${remote}`;
   try {
@@ -76,7 +76,7 @@ async function checkWebhook(
       return {
         ok: false,
         reason: `GitHub refused the repo hooks request (${err.status})`,
-        repair: hookPermissionRepair(repo, identity, err.status),
+        repair: hookPermissionRepair(repo, resolveIdentity(), err.status),
       };
     }
     throw err;

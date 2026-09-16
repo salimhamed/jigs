@@ -52,6 +52,16 @@ test("an active exact-url hook with current events passes", async () => {
   expect(await check().run()).toEqual({ ok: true });
 });
 
+test("a passing webhook check does not resolve the GitHub identity", async () => {
+  configure();
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify([hook()])));
+  const identity = vi.fn();
+  const [found] = webhookChecks({ factoryRoot: () => factory, identity });
+  if (found === undefined) throw new Error("expected a webhook check");
+  expect(await found.run()).toEqual({ ok: true });
+  expect(identity).not.toHaveBeenCalled();
+});
+
 test("a valid exact-url hook passes after a stale duplicate", async () => {
   configure();
   fetchMock.mockResolvedValueOnce(

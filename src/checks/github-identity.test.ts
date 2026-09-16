@@ -1,5 +1,6 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import type { AppIdentity, MergePolicy } from "../config/factory-config.ts";
+import { GithubApiError } from "../providers/github-api.ts";
 import { runChecks } from "./catalog.ts";
 import {
   type GithubIdentityProbes,
@@ -10,7 +11,10 @@ import {
 } from "./github-identity.ts";
 
 const githubGetMock = vi.hoisted(() => vi.fn());
-vi.mock("../providers/github-api.ts", () => ({ githubGet: githubGetMock }));
+vi.mock("../providers/github-api.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../providers/github-api.ts")>()),
+  githubGet: githubGetMock,
+}));
 
 beforeEach(() => githubGetMock.mockReset());
 
@@ -136,7 +140,7 @@ test("webhook administration is a permission the operator has to grant and accep
   expect(check.repair).toContain("accept the updated permissions on the installation");
 });
 
-test("App identity requires the read permissions used by merge-policy probes", async () => {
+test("jigs merging requires the App permissions used by merge-policy probes", async () => {
   const {
     actions: _actions,
     checks: _checks,
@@ -153,6 +157,19 @@ test("App identity requires the read permissions used by merge-policy probes", a
   expect(check.reason).toContain("checks: read");
   expect(check.reason).toContain("statuses: read");
   expect(check.reason).toContain("administration: read");
+});
+
+test("human merging does not require merge-policy-only App permissions", async () => {
+  const { actions: _actions, administration: _admin, ...humanPermissions } = GRANTED;
+  expect(
+    await outcome(
+      APP,
+      "github.identity",
+      { installation: async () => ({ permissions: humanPermissions }) },
+      {},
+      { ...SQUASH_REVIEW, by: "human" },
+    ),
+  ).toMatchObject({ ok: true });
 });
 
 test("a read grant does not satisfy a write requirement", async () => {
@@ -216,13 +233,13 @@ test("real merge-policy probes use the repository and CI REST endpoints", async 
 });
 
 test("real label probe distinguishes absence from unreadable state", async () => {
-  githubGetMock.mockRejectedValueOnce(Object.assign(new Error("not found"), { status: 404 }));
+  githubGetMock.mockRejectedValueOnce(new GithubApiError(404, "/labels/jigs", "not found"));
   await expect(
     realGithubMergePolicyProbes.labelExists("acme", "api", "jigs:approved"),
   ).resolves.toBe(false);
   expect(githubGetMock).toHaveBeenCalledWith("/repos/acme/api/labels/jigs%3Aapproved");
 
-  githubGetMock.mockRejectedValueOnce(Object.assign(new Error("forbidden"), { status: 403 }));
+  githubGetMock.mockRejectedValueOnce(new GithubApiError(403, "/labels/jigs", "forbidden"));
   await expect(
     realGithubMergePolicyProbes.labelExists("acme", "api", "jigs:approved"),
   ).rejects.toThrow("forbidden");

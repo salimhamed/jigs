@@ -129,16 +129,14 @@ export async function bindRepo(
         : `jigs bind ${remoteUrl}`,
     deps,
   });
-  if (parseGithubRemote(remoteUrl) !== null) {
-    const report = await runChecks([
-      mergePolicyCheck(
-        config.merge,
-        { [name]: { remote: remoteUrl } },
-        deps.mergePolicyProbes ?? realGithubMergePolicyProbes,
-      ),
-    ]);
-    if (!report.ok) deps.out(formatFailures(report));
-  }
+  const report = await runChecks([
+    mergePolicyCheck(
+      config.merge,
+      { [name]: { remote: remoteUrl } },
+      deps.mergePolicyProbes ?? realGithubMergePolicyProbes,
+    ),
+  ]);
+  if (!report.ok) deps.out(formatFailures(report));
   return { name, remote: remoteUrl, webhook };
 }
 
