@@ -14,6 +14,12 @@ import {
 } from "./test-fixtures.ts";
 import { type UpgradeDeps, type UpgradeOptions, upgradeFactory } from "./upgrade.ts";
 
+vi.mock("./generate.ts", () => ({
+  generateIntegration: vi.fn(async (deps: { out: (line: string) => void }) => {
+    deps.out("generated jigs.ts — review and commit this file");
+  }),
+}));
+
 let tmp: string;
 let lines: string[];
 
@@ -157,6 +163,25 @@ test("bumps jigs to latest, runs every up step, then the typecheck", async () =>
   expect(lines.at(-1)).toBe("acme-factory runs jigs 0.1.19");
 });
 
+test("indents generated integration output beneath its step", async () => {
+  const port = await fakeService();
+  const root = factory(port);
+  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+
+  const result = await upgradeFactory({
+    cwd: root,
+    out: (line) => lines.push(line),
+    execFile: io.exec.execFile,
+    processes: io.procs.processes,
+    prepare: vi.fn(),
+    readyTimeoutMs: 500,
+  });
+
+  expect(result.ok).toBe(true);
+  expect(lines).toContain("  generated jigs.ts — review and commit this file");
+  expect(lines).not.toContain("generated jigs.ts — review and commit this file");
+});
+
 test("normalizes an exact jigs release-age exclusion before pnpm runs", async () => {
   const port = await fakeService();
   const root = factory(port);
@@ -170,7 +195,7 @@ test("normalizes an exact jigs release-age exclusion before pnpm runs", async ()
       if (call.file !== "pnpm") return undefined;
       const contents = readFileSync(workspace, "utf8");
       expect(contents).toContain("@acme/fresh@1.0.0");
-      expect(contents).toMatch(/- ['"]?@salimhamed\/jigs['"]?$/m);
+      expect(contents).toMatch(/- '@salimhamed\/jigs'$/m);
       expect(contents).not.toContain("@salimhamed/jigs@0.1.18");
       return undefined;
     }),
@@ -184,7 +209,7 @@ test("normalizes an exact jigs release-age exclusion before pnpm runs", async ()
   const contents = readFileSync(workspace, "utf8");
   expect(contents).toContain("minimumReleaseAge: 1440");
   expect(contents).toContain("'@acme/fresh@1.0.0' # preserve me");
-  expect(contents.match(/@salimhamed\/jigs['"]?(?:\n|$)/g)).toHaveLength(1);
+  expect(contents.match(/'@salimhamed\/jigs'(?:\n|$)/g)).toHaveLength(1);
 });
 
 test("adds a release-age exclusion when the workspace has no exclusion list", async () => {
@@ -200,8 +225,23 @@ test("adds a release-age exclusion when the workspace has no exclusion list", as
   expect(result.ok).toBe(true);
   const contents = readFileSync(workspace, "utf8");
   expect(contents).toContain(before);
-  expect(contents).toMatch(/minimumReleaseAgeExclude:\n {2}- ['"]?@salimhamed\/jigs['"]?$/m);
+  expect(contents).toMatch(/minimumReleaseAgeExclude:\n {2}- '@salimhamed\/jigs'$/m);
   expect(contents).not.toContain("minimumReleaseAge:");
+});
+
+test("treats an empty release-age exclusion value as an empty list", async () => {
+  const port = await fakeService();
+  const root = factory(port);
+  const workspace = path.join(root, "pnpm-workspace.yaml");
+  writeFileSync(workspace, "minimumReleaseAgeExclude:\n");
+  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+
+  const result = await upgrade(root, io);
+
+  expect(result.ok).toBe(true);
+  expect(readFileSync(workspace, "utf8")).toBe(
+    "minimumReleaseAgeExclude:\n  - '@salimhamed/jigs'\n",
+  );
 });
 
 test("leaves an already-normalized release-age exclusion byte-identical", async () => {
@@ -210,6 +250,22 @@ test("leaves an already-normalized release-age exclusion byte-identical", async 
   const workspace = path.join(root, "pnpm-workspace.yaml");
   const before =
     "minimumReleaseAgeExclude:\n  - '@acme/fresh@1.0.0'\n  - '@salimhamed/jigs' # all releases\n";
+  writeFileSync(workspace, before);
+  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+
+  const result = await upgrade(root, io);
+
+  expect(result.ok).toBe(true);
+  expect(result.steps[0]?.detail).toBe("jigs 0.1.18");
+  expect(readFileSync(workspace, "utf8")).toBe(before);
+});
+
+test("leaves a normalized exclusion byte-identical when jigs is not last", async () => {
+  const port = await fakeService();
+  const root = factory(port);
+  const workspace = path.join(root, "pnpm-workspace.yaml");
+  const before =
+    "minimumReleaseAgeExclude:\n  - '@salimhamed/jigs' # all releases\n  - '@acme/fresh@1.0.0'\n";
   writeFileSync(workspace, before);
   const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
 

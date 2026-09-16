@@ -231,14 +231,14 @@ jigs upgrade                # or: jigs upgrade --to <version>
 normalizes jigs' release-age exclusion, bumps and installs `@salimhamed/jigs`,
 regenerates `jigs.ts` using the newly installed package, runs `jigs up`, then
 checks the factory's custom code. It is the only command needed even when an
-older factory excludes an exact jigs version. Review and
-commit the regenerated integration. Fix API errors in custom code outside
-`jigs.ts`; refresh generated wrappers with `jigs generate`. An install failure
-naming `@workflow/web`, `@workflow/world-postgres`, `workflow` or `zod` is a release
-that moved a runtime peer: move the same pin in the factory's `package.json`
-and run `jigs upgrade` again. A release can also raise the minimum `codex`
-version; the service reports that at startup, and the fix is to upgrade
-`codex` on the machine. A factory made before this release should add
+older factory excludes an exact jigs version. Review and commit the regenerated
+integration. Fix API errors in custom code outside `jigs.ts`; refresh generated
+wrappers with `jigs generate`. An install failure naming `@workflow/web`,
+`@workflow/world-postgres`, `workflow` or `zod` is a release that moved a
+runtime peer: move the same pin in the factory's `package.json` and run
+`jigs upgrade` again. A release can also raise the minimum `codex` version; the
+service reports that at startup, and the fix is to upgrade `codex` on the
+machine. A factory made before this release should add
 `ignoredOptionalDependencies: ['@openai/codex']` to its `pnpm-workspace.yaml`
 and delete any `@openai/codex` dependency or `overrides` entry. A factory still
 installing jigs from a checkout
@@ -250,7 +250,7 @@ switch it to the published package first. So is a factory still depending on
 
 pnpm still verifies the whole lockfile against its `minimumReleaseAge` policy
 before it resolves anything. `jigs upgrade` keeps every jigs version covered
-by the `@salimhamed/jigs` exclusion; for other recently published packages, leave their
-`minimumReleaseAgeExclude` entry in `pnpm-workspace.yaml` until that install
-has run, then drop the entry. Both factories hit this moving off
+by the `@salimhamed/jigs` exclusion; for other recently published packages,
+leave their `minimumReleaseAgeExclude` entry in `pnpm-workspace.yaml` until
+that install has run, then drop the entry. Both factories hit this moving off
 `@salimhamed/jigs-service`.

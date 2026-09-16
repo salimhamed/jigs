@@ -1,11 +1,11 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { isScalar, isSeq, parseDocument } from "yaml";
+import { isScalar, isSeq, parseDocument, Scalar } from "yaml";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
 import { generateIntegration } from "./generate.ts";
-import { type Step, StepFailed, stepRunner } from "./step-runner.ts";
+import { indent, type Step, StepFailed, stepRunner } from "./step-runner.ts";
 import { type UpDeps, type UpOptions, type UpResult, type UpStepName, upFactory } from "./up.ts";
 
 // Install the release, refresh its generated integration using the newly
@@ -86,7 +86,8 @@ export async function upgradeFactory(
         execFile,
         generate: () =>
           generateOrExplain(
-            deps.generate ?? (() => generateIntegration({ cwd: factoryRoot, out: deps.out })),
+            deps.generate ??
+              (() => generateIntegration({ cwd: factoryRoot, out: indent(deps.out) })),
           ),
       },
       { force: options.force, doctor: options.doctor },
@@ -122,28 +123,18 @@ function normalizeReleaseAgeExclude(factoryRoot: string): boolean {
   }
   const workspace = document.toJS() as { minimumReleaseAgeExclude?: unknown } | null;
   const existing = workspace?.minimumReleaseAgeExclude;
-  if (existing !== undefined && !Array.isArray(existing)) {
+  if (existing != null && !Array.isArray(existing)) {
     throw new JigsError(
       `minimumReleaseAgeExclude in ${file} is not a list`,
       "make minimumReleaseAgeExclude a YAML list, then run jigs upgrade again",
     );
   }
-  const otherPackages = (existing ?? []).filter(
-    (entry) =>
-      typeof entry !== "string" ||
-      (entry !== JIGS_PACKAGE && !entry.startsWith(`${JIGS_PACKAGE}@`)),
-  );
-  const normalized = [...otherPackages, JIGS_PACKAGE];
-  if (
-    Array.isArray(existing) &&
-    existing.length === normalized.length &&
-    existing.every((entry, index) => entry === normalized[index])
-  ) {
-    return false;
-  }
+  if (Array.isArray(existing) && existing.includes(JIGS_PACKAGE)) return false;
   const exclusions = document.get("minimumReleaseAgeExclude", true);
-  if (exclusions === undefined) {
-    document.set("minimumReleaseAgeExclude", normalized);
+  if (exclusions === undefined || (isScalar(exclusions) && exclusions.value === null)) {
+    const created = document.createNode<unknown[]>([]);
+    if (isSeq(created)) created.add(quotedJigsPackage());
+    document.set("minimumReleaseAgeExclude", created);
   } else if (isSeq(exclusions)) {
     for (let index = exclusions.items.length - 1; index >= 0; index -= 1) {
       const item = exclusions.items[index];
@@ -155,10 +146,16 @@ function normalizeReleaseAgeExclude(factoryRoot: string): boolean {
         exclusions.items.splice(index, 1);
       }
     }
-    exclusions.add(JIGS_PACKAGE);
+    exclusions.add(quotedJigsPackage());
   }
   writeFileSync(file, String(document));
   return true;
+}
+
+function quotedJigsPackage(): Scalar<string> {
+  const scalar = new Scalar(JIGS_PACKAGE);
+  scalar.type = Scalar.QUOTE_SINGLE;
+  return scalar;
 }
 
 async function generateOrExplain(generate: () => Promise<void>): Promise<void> {
