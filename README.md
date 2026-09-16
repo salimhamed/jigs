@@ -147,10 +147,19 @@ changes; those configurations can be edited manually.
 pnpm exec jigs run <workflow> --input ticket=AGE-123
 pnpm exec jigs ps
 pnpm exec jigs logs <run>
+pnpm exec jigs watch
 ```
 
 `<run>` is a run id, a unique prefix of one, or the ticket the run claimed.
 `jigs logs` prints the run's page on the dashboard `jigs up` named.
+
+`jigs ps` names each run's ticket, its pull request, how long since it last
+moved, the result it ended with — `merged` and `limit-reached` are both
+`completed` to the runtime — and, for a parked run, what it is waiting for and
+the link to act on. `jigs logs` says the same for one run and adds the question
+a halt asked. `jigs watch` is one long-lived process that follows every run in
+the factory, a line per step, suspension, resume, terminal state and new run.
+All three take `--json`.
 
 ### Upgrading later
 

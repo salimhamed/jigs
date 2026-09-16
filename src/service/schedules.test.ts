@@ -31,8 +31,16 @@ const row = (over: Partial<RunRow> = {}): RunRow => ({
   runId: RUN,
   workflow: "sweep",
   status: "running",
+  outcome: null,
   trigger: "schedule:nightly",
+  ticket: null,
+  pullRequest: null,
   createdAt: "2026-08-26T03:00:00.000Z",
+  lastActivityAt: "2026-08-26T03:00:00.000Z",
+  steps: 0,
+  lastStep: null,
+  suspended: false,
+  suspensions: [],
   ...over,
 });
 

@@ -30,6 +30,7 @@ import { runSweep } from "./commands/sweep.ts";
 import { unbindRepo } from "./commands/unbind.ts";
 import { upFactory } from "./commands/up.ts";
 import { upgradeFactory } from "./commands/upgrade.ts";
+import { watchRuns } from "./commands/watch.ts";
 
 // No `.default()`: commander evaluates defaults eagerly, so resolving the
 // factory's service URL here would walk the filesystem on `jigs --help`.
@@ -173,10 +174,35 @@ program
 
 program
   .command("ps")
-  .description("list runs and the worktrees the registry holds")
+  .description("list runs with their ticket, pull request, outcome and what they wait on")
+  .option("--json", "print one JSON document instead of the tables")
   .addOption(serviceOption())
-  .action(async (options: { service?: string }) => {
-    await showRuns({ out, serviceUrl: serviceUrl(options.service) });
+  .action(async (options: { json?: boolean; service?: string }) => {
+    await showRuns({ out, serviceUrl: serviceUrl(options.service) }, { json: options.json });
+  });
+
+program
+  .command("watch")
+  .description(
+    "follow every run in this factory: one line per step, suspension, resume, terminal state and new run",
+  )
+  .option("--json", "emit one JSON event per line instead of text")
+  .option("--interval <seconds>", "how often to poll the service (default: 5)", (raw) => {
+    const seconds = Number(raw);
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+      throw new JigsError(`--interval must be a positive number of seconds, got ${raw}`);
+    }
+    return seconds;
+  })
+  .addOption(serviceOption())
+  .action(async (options: { json?: boolean; interval?: number; service?: string }) => {
+    await watchRuns(
+      { out, serviceUrl: serviceUrl(options.service) },
+      {
+        json: options.json,
+        ...(options.interval === undefined ? {} : { intervalMs: options.interval * 1000 }),
+      },
+    );
   });
 
 program
@@ -196,11 +222,12 @@ program
 
 program
   .command("logs")
-  .description("show a run's state, step timeline, and dashboard link")
+  .description("show a run's state, what it waits on, its step timeline, and dashboard link")
   .argument("<run>", "run id, unique id prefix, or ticket (`AGE-123` or its UUID)")
+  .option("--json", "print one JSON document instead of the report")
   .addOption(serviceOption())
-  .action(async (run: string, options: { service?: string }) => {
-    await showLogs(run, { out, serviceUrl: serviceUrl(options.service) });
+  .action(async (run: string, options: { json?: boolean; service?: string }) => {
+    await showLogs(run, { out, serviceUrl: serviceUrl(options.service) }, { json: options.json });
   });
 
 program

@@ -15,7 +15,7 @@ import { registrySql } from "../steps/worktree/sql.ts";
 import { sweepWorktrees } from "../steps/worktree/sweep.ts";
 import { githubWebhookSecret, verifyGithubSignature, verifyLinearSignature } from "./ingress.ts";
 import { bootPhase, isReady } from "./readiness.ts";
-import { describeRun, listRuns, type RunRef, resolveRunRef } from "./runs.ts";
+import { describeRun, enrichSuspensions, listRuns, type RunRef, resolveRunRef } from "./runs.ts";
 import { listSchedules, scheduleChecks } from "./schedules.ts";
 import { listRunDeadJobs, listRunSteps } from "./stalls.ts";
 import { startRun } from "./trigger.ts";
@@ -256,8 +256,12 @@ export function createApp(factory: Factory): Hono {
     const ref = await resolveRunRef(c.req.param("runId"));
     if (ref.kind !== "found") return unresolvedRunResponse(c, ref);
     const described = await describeRun(ref.runId);
+    // Only here: reading a halt's comment back from Linear costs a round trip
+    // per suspension, which the listing behind `jigs ps` and `jigs watch`
+    // refuses to pay on every poll.
     const body: Record<string, unknown> = {
       ...described,
+      suspensions: await enrichSuspensions(described.suspensions),
       logs: logsPointer(ref.runId),
     };
     // Read only where there is one: a running run's return value is a promise

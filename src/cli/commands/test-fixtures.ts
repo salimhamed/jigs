@@ -140,12 +140,21 @@ export async function fakeService(routes: ServiceRoutes = {}): Promise<number> {
       res.statusCode = routes.health ?? 200;
       res.end(JSON.stringify({ ok: true }));
     } else if (req.url === "/api/runs") {
+      const at = new Date().toISOString();
       res.end(
         JSON.stringify({
           runs: (routes.runs ?? []).map((run) => ({
-            ...run,
+            outcome: null,
             trigger: "manual",
-            createdAt: new Date().toISOString(),
+            ticket: null,
+            pullRequest: null,
+            createdAt: at,
+            lastActivityAt: at,
+            steps: 0,
+            lastStep: null,
+            suspended: false,
+            suspensions: [],
+            ...run,
           })),
           worktrees: [],
           schedules: [],

@@ -10,9 +10,10 @@ import * as linear from "../providers/linear.ts";
 import * as sql from "../steps/worktree/sql.ts";
 import {
   describeRun,
+  describeSuspension,
   listRuns,
-  parkReason,
   resolveRunRef,
+  runOutcome,
   scheduleTriggerId,
   type WorldRun,
 } from "./runs.ts";
@@ -38,15 +39,29 @@ interface StoredRun extends WorldRun {
   input?: unknown;
 }
 
+interface StoredStep {
+  stepName: string;
+  status: string;
+  attempt: number;
+  createdAt: Date;
+  startedAt?: Date;
+  completedAt?: Date;
+}
+
 interface Fixture {
   runs?: StoredRun[];
   hooks?: Array<{ runId: string; token: string }>;
+  steps?: Record<string, StoredStep[]>;
 }
 
 function world(fixture: Fixture = {}): void {
   const runs = fixture.runs ?? [];
   const hooks = fixture.hooks ?? [];
+  const steps = fixture.steps ?? {};
   setWorld({
+    steps: {
+      list: async ({ runId }: { runId: string }) => ({ data: steps[runId] ?? [] }),
+    },
     runs: {
       get: async (runId: string) => {
         const run = runs.find((candidate) => candidate.runId === runId);
@@ -187,14 +202,55 @@ test("a full-length run id nobody minted falls through to unknown", async () => 
 // derived from a prefix the minters no longer produce degrades to the generic
 // one, and a test carrying its own copy of the prefix would stay green.
 test("a ticket claim is not a park, and every other hook explains itself", () => {
-  expect(parkReason(ticketToken(crypto.randomUUID()))).toBeNull();
-  expect(parkReason(prToken({ owner: "acme", repo: "api", number: 41 }))).toBe(
-    "awaiting pull request review",
-  );
-  expect(parkReason(needsHumanToken("issue-1", "comment-1"))).toBe("needs a human on the ticket");
+  expect(describeSuspension(ticketToken(crypto.randomUUID()))).toBeNull();
+  expect(describeSuspension(prToken({ owner: "acme", repo: "api", number: 41 }))).toEqual({
+    token: "github:pr:acme/api#41",
+    kind: "pull-request",
+    reason: "waiting for an approving review and green CI on acme/api#41",
+    url: "https://github.com/acme/api/pull/41",
+  });
+  // The ticket the run was launched with, never the issue UUID in the token:
+  // the identifier is what an operator can act on.
+  expect(describeSuspension(needsHumanToken("issue-1", "comment-1"), "AGE-317")).toEqual({
+    token: "jigs:needs-human:issue-1:comment-1",
+    kind: "needs-human",
+    reason: "waiting for a human reply on AGE-317",
+  });
   // A workflow of its own that parks on createHook({ token }) is parked too,
   // so parkedness can never depend on jigs recognizing the token.
-  expect(parkReason(`demo:${crypto.randomUUID()}`)).toBe("awaiting an external event");
+  expect(describeSuspension("demo:thing")).toEqual({
+    token: "demo:thing",
+    kind: "external",
+    reason: "waiting for an external event (demo:thing)",
+  });
+});
+
+// devalue-flattened, index 0 the root — the form the world stores a return
+// value in, and what the outcome has to be read back out of.
+const storedResult = (result: Record<string, string>) => [
+  Object.fromEntries(Object.keys(result).map((key, index) => [key, index + 1])),
+  ...Object.values(result),
+];
+
+test("a completed run reports the result its workflow returned, not just `completed`", () => {
+  const completed = (output: unknown) =>
+    runOutcome({
+      runId: RUN_A,
+      workflowName: "w",
+      status: "completed",
+      createdAt: new Date(),
+      output,
+    });
+  expect(completed(storedResult({ status: "merged" }))).toBe("merged");
+  expect(completed(storedResult({ status: "limit-reached" }))).toBe("limit-reached");
+  // A workflow that returned nothing with a status ended in no particular way.
+  expect(completed(undefined)).toBe("completed");
+  expect(
+    runOutcome({ runId: RUN_A, workflowName: "w", status: "failed", createdAt: new Date() }),
+  ).toBe("failed");
+  expect(
+    runOutcome({ runId: RUN_A, workflowName: "w", status: "running", createdAt: new Date() }),
+  ).toBeNull();
 });
 
 // Compiled workflows carry the workflowId the world records as workflowName;
@@ -303,7 +359,12 @@ test("describeRun is the one thing `jigs ps` and the run route both read", async
   expect(await describe("running", PARK, true)).toMatchObject({
     status: "suspended",
     suspended: true,
-    suspensions: [{ token: PARK[0], reason: "awaiting pull request review" }],
+    suspensions: [
+      {
+        token: PARK[0],
+        reason: "waiting for an approving review and green CI on acme/api#41",
+      },
+    ],
   });
   expect(await describe("failed", [], true)).toMatchObject({
     status: "failed",
@@ -384,4 +445,79 @@ test("a run whose inputs cannot be read reads as manual, like every other launch
   world({ runs: [worldRun({ input: encrypted })] });
   const rows = await listRuns(factory);
   expect(rows[0]?.trigger).toBe("manual");
+});
+
+const storedLaunch = (fields: Record<string, string>) => [
+  [1],
+  Object.fromEntries(Object.keys(fields).map((key, index) => [key, index + 2])),
+  ...Object.values(fields),
+];
+
+test("a run names the ticket it was launched with and the pull request it holds", async () => {
+  world({
+    runs: [worldRun({ input: storedLaunch({ ticket: "AGE-317", triggerId: "manual" }) })],
+    hooks: [{ runId: RUN_A, token: PARK_TOKEN }],
+  });
+  const row = (await listRuns(factory))[0];
+  expect(row?.ticket).toBe("AGE-317");
+  expect(row?.pullRequest).toBe("acme/api#41");
+  expect(row?.suspensions[0]?.reason).toBe(
+    "waiting for an approving review and green CI on acme/api#41",
+  );
+});
+
+test("a merged run still names its pull request, from the result it returned", async () => {
+  world({
+    runs: [
+      worldRun({
+        status: "completed",
+        completedAt: new Date("2026-08-26T12:00:00.000Z"),
+        output: [
+          { status: 1, pr: 2 },
+          "merged",
+          { owner: 3, repo: 4, number: 5 },
+          "acme",
+          "api",
+          41,
+        ],
+      }),
+    ],
+  });
+  const row = (await listRuns(factory))[0];
+  expect(row?.outcome).toBe("merged");
+  expect(row?.pullRequest).toBe("acme/api#41");
+  expect(row?.lastActivityAt).toBe("2026-08-26T12:00:00.000Z");
+});
+
+test("last activity is the run's newest step, not the moment it was created", async () => {
+  world({
+    runs: [worldRun({ updatedAt: new Date("2026-08-26T10:00:05.000Z") })],
+    steps: {
+      [RUN_A]: [
+        {
+          stepName: "claimTicket",
+          status: "completed",
+          attempt: 1,
+          createdAt: new Date("2026-08-26T10:00:01.000Z"),
+          startedAt: new Date("2026-08-26T10:00:01.000Z"),
+          completedAt: new Date("2026-08-26T10:00:02.000Z"),
+        },
+        {
+          stepName: "executeAgent",
+          status: "running",
+          attempt: 1,
+          createdAt: new Date("2026-08-26T10:00:03.000Z"),
+          startedAt: new Date("2026-08-26T10:20:00.000Z"),
+        },
+      ],
+    },
+  });
+  const row = (await listRuns(factory))[0];
+  expect(row?.lastActivityAt).toBe("2026-08-26T10:20:00.000Z");
+  expect(row?.steps).toBe(2);
+  expect(row?.lastStep).toEqual({
+    name: "executeAgent",
+    status: "running",
+    at: "2026-08-26T10:20:00.000Z",
+  });
 });

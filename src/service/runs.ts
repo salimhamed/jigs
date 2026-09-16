@@ -9,10 +9,16 @@ import type { Factory } from "../blocks/factory.ts";
 import { PR_TOKEN_PREFIX } from "../blocks/pull-request/gate.ts";
 import { TICKET_TOKEN_PREFIX, ticketToken } from "../blocks/ticket/claim.ts";
 import { NEEDS_HUMAN_TOKEN_PREFIX } from "../blocks/ticket/halt-for-human.ts";
-import { resolveIssueRef } from "../providers/linear.ts";
+import { getComment, resolveIssueRef } from "../providers/linear.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import { registrySql } from "../steps/worktree/sql.ts";
-import { type JobRunIds, listJobRunIds, runsWithActiveStep } from "./stalls.ts";
+import {
+  type JobRunIds,
+  listJobRunIds,
+  listRunSteps,
+  runsWithActiveStep,
+  type StepView,
+} from "./stalls.ts";
 
 // The SDK mints run ids as `wrun_` + a ULID, so a ref is run-id-shaped (with
 // or without the prefix, full or truncated) or it is a ticket ref. Crockford
@@ -58,19 +64,16 @@ export async function resolveRunRef(ref: string): Promise<RunRef> {
   return owner === null ? { kind: "unknown" } : { kind: "found", runId: owner };
 }
 
-export interface RunRow {
-  runId: string;
-  workflow: string;
-  status: string;
-  trigger: string;
-  createdAt: string;
-}
-
 export interface WorldRun {
   runId: string;
   workflowName: string;
   status: string;
   createdAt: Date;
+  updatedAt?: Date;
+  completedAt?: Date;
+  /** The run's own arguments and return value, in the world's serialized form. */
+  input?: unknown;
+  output?: unknown;
   // Lifted out of the run's stored inputs by the listing below, so callers
   // (and their fakes) never handle the world's serialized form.
   triggerId?: string;
@@ -98,20 +101,88 @@ export function triggerLabel(triggerId: string | undefined): string {
   return scheduleTriggerLabel(end === -1 ? rest : rest.slice(0, end));
 }
 
+export interface RunSuspension {
+  token: string;
+  kind: "pull-request" | "needs-human" | "external";
+  /** What the run is waiting for, in the words an operator acts on. */
+  reason: string;
+  /** Where to go and act: the pull request, or the ticket comment that asked. */
+  url?: string;
+  /** The question jigs asked, once the service has read it back from Linear. */
+  question?: string;
+}
+
 /**
- * Why a run holding this hook is parked, or null when the hook is no park at
- * all. The token is the whole answer: it names what the run is waiting on, so
- * nothing has to be written down beside it. The ticket claim is held for the
- * run's whole life and so says nothing about waiting; every other hook is
+ * What a run holding this hook is waiting for, or null when the hook is no
+ * park at all. The token is the whole answer: it names what the run is waiting
+ * on, so nothing has to be written down beside it. The ticket claim is held for
+ * the run's whole life and so says nothing about waiting; every other hook is
  * something the run waits on, including a token jigs has never seen. `jigs ps`,
  * `jigs logs` and `jigs cancel` all read this one function, or a run one calls
  * suspended is one another refuses to confirm.
+ *
+ * `ticket` is the identifier the run was launched with, so a halt names the
+ * ticket an operator knows rather than the issue UUID inside the token.
  */
-export function parkReason(token: string): string | null {
+export function describeSuspension(token: string, ticket?: string | null): RunSuspension | null {
   if (token.startsWith(TICKET_TOKEN_PREFIX)) return null;
-  if (token.startsWith(PR_TOKEN_PREFIX)) return "awaiting pull request review";
-  if (token.startsWith(NEEDS_HUMAN_TOKEN_PREFIX)) return "needs a human on the ticket";
-  return "awaiting an external event";
+  const pr = prFromToken(token);
+  if (pr !== null) {
+    return {
+      token,
+      kind: "pull-request",
+      reason: `waiting for an approving review and green CI on ${pr.slug}`,
+      url: pr.url,
+    };
+  }
+  const halt = needsHumanParts(token);
+  if (halt !== null) {
+    return {
+      token,
+      kind: "needs-human",
+      reason: `waiting for a human reply on ${ticket ?? halt.issueId}`,
+    };
+  }
+  return { token, kind: "external", reason: `waiting for an external event (${token})` };
+}
+
+/** `github:pr:owner/repo#N` as the two things an operator needs from it. */
+function prFromToken(token: string): { slug: string; url: string } | null {
+  if (!token.startsWith(PR_TOKEN_PREFIX)) return null;
+  const slug = token.slice(PR_TOKEN_PREFIX.length);
+  const parsed = /^([^/]+)\/([^#]+)#(\d+)$/.exec(slug);
+  if (parsed === null) return { slug, url: "" };
+  return {
+    slug,
+    url: `https://github.com/${parsed[1]}/${parsed[2]}/pull/${parsed[3]}`,
+  };
+}
+
+/** `jigs:needs-human:<issue>:<comment>` — the halt marker, taken apart. */
+function needsHumanParts(token: string): { issueId: string; commentId: string } | null {
+  if (!token.startsWith(NEEDS_HUMAN_TOKEN_PREFIX)) return null;
+  const [issueId, commentId] = token.slice(NEEDS_HUMAN_TOKEN_PREFIX.length).split(":");
+  return issueId === undefined || commentId === undefined ? null : { issueId, commentId };
+}
+
+/**
+ * The comment a halt is waiting on, read back from Linear: where to reply, and
+ * what was asked. One round trip per halt, so only the single-run route pays
+ * it — the listing behind `jigs ps` and `jigs watch` stays network-free. A
+ * Linear that cannot be asked leaves the suspension as it was.
+ */
+export async function enrichSuspensions(
+  suspensions: readonly RunSuspension[],
+): Promise<RunSuspension[]> {
+  return await Promise.all(
+    suspensions.map(async (suspension) => {
+      const halt = needsHumanParts(suspension.token);
+      if (halt === null) return suspension;
+      const comment = await getComment(halt.commentId).catch(() => null);
+      if (comment === null) return suspension;
+      return { ...suspension, url: comment.url, question: comment.body };
+    }),
+  );
 }
 
 /**
@@ -130,17 +201,33 @@ async function stalledRuns(): Promise<Set<string>> {
   return new Set(stranded.filter((runId) => !busy.has(runId)));
 }
 
-export interface RunSuspension {
-  token: string;
-  reason: string;
+export interface RunStep {
+  name: string;
+  status: string;
+  at: string | null;
 }
 
 export interface RunDescription {
   runId: string;
   status: string;
+  /** What the run ended as, in the workflow's own words; null while it runs. */
+  outcome: string | null;
   trigger: string;
+  /** The ticket the run was launched with, as the operator typed it. */
+  ticket: string | null;
+  /** `owner/repo#N`, once the run has a pull request. */
+  pullRequest: string | null;
+  createdAt: string;
+  /** The last thing that happened to this run, step timings included. */
+  lastActivityAt: string;
+  steps: number;
+  lastStep: RunStep | null;
   suspended: boolean;
   suspensions: RunSuspension[];
+}
+
+export interface RunRow extends RunDescription {
+  workflow: string;
 }
 
 /** Facts a caller already holds. The listing has all of them for every run;
@@ -149,7 +236,47 @@ export interface RunFacts {
   run?: WorldRun;
   tokens?: readonly string[];
   stalled?: boolean;
+  steps?: StepFacts;
 }
+
+interface StepFacts {
+  count: number;
+  last: RunStep | null;
+  latestAt: string | null;
+}
+
+/**
+ * The run's own result, in the words the workflow returned — `merged` and
+ * `limit-reached` are both `completed` to the SDK, and an operator reading
+ * only the status cannot tell a shipped run from one that gave up. A workflow
+ * that returns no `status` field ended in no particular way, which is what
+ * plain `completed` says.
+ */
+export function runOutcome(run: WorldRun): string | null {
+  if (run.status === "cancelled" || run.status === "failed") return run.status;
+  if (run.status !== "completed") return null;
+  const result = hydrate(run.output);
+  return typeof result === "object" &&
+    result !== null &&
+    "status" in result &&
+    typeof result.status === "string"
+    ? result.status
+    : "completed";
+}
+
+/** The pull request the run opened, from the result it returned. A live run
+ *  names its pull request through the gate hook it holds instead. */
+function pullRequestFromOutput(output: unknown): string | null {
+  const result = hydrate(output);
+  const pr = (result as { pr?: { owner?: unknown; repo?: unknown; number?: unknown } } | undefined)
+    ?.pr;
+  if (typeof pr?.owner !== "string" || typeof pr.repo !== "string" || typeof pr.number !== "number")
+    return null;
+  return `${pr.owner}/${pr.repo}#${pr.number}`;
+}
+
+const pullRequestFromTokens = (tokens: readonly string[]): string | null =>
+  tokens.find((token) => token.startsWith(PR_TOKEN_PREFIX))?.slice(PR_TOKEN_PREFIX.length) ?? null;
 
 /**
  * What this run is, past what the world stored: the SDK has neither
@@ -163,29 +290,48 @@ export interface RunFacts {
  */
 export async function describeRun(runId: string, facts: RunFacts = {}): Promise<RunDescription> {
   const run = facts.run ?? (await worldRun(runId));
+  const ticket = ticketOf(run.input);
+  const createdAt = run.createdAt.toISOString();
   const stored: RunDescription = {
     runId,
     status: run.status,
+    outcome: runOutcome(run),
     trigger: triggerLabel(run.triggerId),
+    ticket,
+    pullRequest: pullRequestFromOutput(run.output),
+    createdAt,
+    lastActivityAt: iso(run.completedAt) ?? iso(run.updatedAt) ?? createdAt,
+    steps: 0,
+    lastStep: null,
     suspended: false,
     suspensions: [],
   };
   // A terminal run's hooks are already deleted, and a dead job it left behind
-  // does not restate its status, so neither is worth reading.
+  // does not restate its status, so neither is worth reading. Its steps are
+  // history the timeline already carries, so the listing does not pay for them.
   if (TERMINAL_RUN_STATUSES.has(run.status)) return stored;
 
-  const suspensions = (facts.tokens ?? (await worldRunTokens(runId))).flatMap((token) => {
-    const reason = parkReason(token);
-    return reason === null ? [] : [{ token, reason }];
+  const tokens = facts.tokens ?? (await worldRunTokens(runId));
+  const steps = facts.steps ?? (await stepFacts(runId));
+  const live: RunDescription = {
+    ...stored,
+    pullRequest: pullRequestFromTokens(tokens) ?? stored.pullRequest,
+    lastActivityAt: latest([iso(run.updatedAt) ?? createdAt, steps.latestAt]),
+    steps: steps.count,
+    lastStep: steps.last,
+  };
+
+  const suspensions = tokens.flatMap((token) => {
+    const suspension = describeSuspension(token, ticket);
+    return suspension === null ? [] : [suspension];
   });
-  if (suspensions.length > 0)
-    return { ...stored, status: "suspended", suspended: true, suspensions };
+  if (suspensions.length > 0) return { ...live, status: "suspended", suspended: true, suspensions };
 
   // Only a running run can be stalled — nothing has been handed to the queue
   // for a pending one — and asking costs a queue read.
-  if (run.status !== "running") return stored;
+  if (run.status !== "running") return live;
   const stalled = facts.stalled ?? (await stalledRuns()).has(runId);
-  return stalled ? { ...stored, status: "stalled" } : stored;
+  return stalled ? { ...live, status: "stalled" } : live;
 }
 
 export async function listRuns(factory: Factory): Promise<RunRow[]> {
@@ -200,7 +346,8 @@ export async function listRuns(factory: Factory): Promise<RunRow[]> {
       return id === undefined ? [] : [[id, name] as [string, string]];
     }),
   );
-  // Every fact is already in hand, so no description reaches back to the world.
+  // Only the runs still in play are read step by step; a finished one has
+  // nothing left to happen to it.
   const rows = await Promise.all(
     runs.map(async (run) => {
       const described = await describeRun(run.runId, {
@@ -209,16 +356,34 @@ export async function listRuns(factory: Factory): Promise<RunRow[]> {
         stalled: stalled.has(run.runId),
       });
       return {
-        runId: run.runId,
+        ...described,
         workflow: workflowByWorkflowId.get(run.workflowName) ?? run.workflowName,
-        status: described.status,
-        trigger: described.trigger,
-        createdAt: run.createdAt.toISOString(),
       };
     }),
   );
   return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
+
+/** How far this run has got, and when it last moved. */
+async function stepFacts(runId: string): Promise<StepFacts> {
+  const steps = await listRunSteps(runId);
+  const last = steps.at(-1);
+  const times = steps.flatMap((step) => [step.completedAt, step.startedAt].filter(isIso));
+  return {
+    count: steps.length,
+    last: last === undefined ? null : { name: last.name, status: last.status, at: stepAt(last) },
+    latestAt: times.length === 0 ? null : latest(times),
+  };
+}
+
+const isIso = (value: string | null): value is string => value !== null;
+
+const stepAt = (step: StepView): string | null => step.completedAt ?? step.startedAt;
+
+const latest = (times: Array<string | null>): string =>
+  times.filter(isIso).reduce((max, at) => (at > max ? at : max), "");
+
+const iso = (at: Date | undefined): string | null => at?.toISOString() ?? null;
 
 const worldRunExists = (runId: string) => getRun(runId).exists;
 
@@ -255,7 +420,7 @@ const worldRun = async (runId: string): Promise<WorldRun> =>
 // run's triggerId lives in its stored inputs and the world has no index on
 // it. It costs nothing extra: world-postgres selects every column either way
 // and only strips the data fields after the query.
-function withTriggerId(run: WorldRun & { input?: unknown }): WorldRun {
+function withTriggerId(run: WorldRun): WorldRun {
   const triggerId = triggerIdOf(run.input);
   return { ...run, ...(triggerId === undefined ? {} : { triggerId }) };
 }
@@ -265,25 +430,37 @@ async function worldRunTokens(runId: string): Promise<string[]> {
   return page.data.map((hook) => hook.token);
 }
 
-// Run inputs come back in the world's serialized form; the SDK's
-// observability hydrator is the one public way to read them, and it leaves
-// an encrypted payload as bytes rather than throwing. An input nobody can
-// read costs the run its trigger, never the listing.
-function triggerIdOf(input: unknown): string | undefined {
-  let args: unknown;
+// Run inputs and results come back in the world's serialized form; the SDK's
+// observability hydrator is the one public way to read them, and it leaves an
+// encrypted payload as bytes rather than throwing. Data nobody can read costs
+// the run its trigger, its ticket or its outcome, never the listing.
+function hydrate(data: unknown): unknown {
   try {
-    args = hydrateData(input, observabilityRevivers);
+    return hydrateData(data, observabilityRevivers);
   } catch {
     return undefined;
   }
+}
+
+/** The one object a workflow is launched with: its inputs and the trigger. */
+function launchInputs(input: unknown): Record<string, unknown> | undefined {
+  const args = hydrate(input);
   const first = Array.isArray(args) ? args[0] : undefined;
-  return typeof first === "object" &&
-    first !== null &&
-    "triggerId" in first &&
-    typeof first.triggerId === "string"
-    ? first.triggerId
+  return typeof first === "object" && first !== null
+    ? (first as Record<string, unknown>)
     : undefined;
 }
+
+function stringField(record: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = record?.[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+const triggerIdOf = (input: unknown): string | undefined =>
+  stringField(launchInputs(input), "triggerId");
+
+const ticketOf = (input: unknown): string | null =>
+  stringField(launchInputs(input), "ticket") ?? null;
 
 const worldRunIds = () => worldRuns().then((runs) => runs.map((r) => r.runId));
 
