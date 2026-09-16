@@ -163,7 +163,7 @@ test("normalizes an exact jigs release-age exclusion before pnpm runs", async ()
   const workspace = path.join(root, "pnpm-workspace.yaml");
   writeFileSync(
     workspace,
-    "minimumReleaseAge: 1440\nminimumReleaseAgeExclude:\n  - '@acme/fresh@1.0.0'\n  - '@salimhamed/jigs@0.1.18'\n",
+    "minimumReleaseAge: 1440\nminimumReleaseAgeExclude:\n  - '@acme/fresh@1.0.0' # preserve me\n  - '@salimhamed/jigs@0.1.18'\n",
   );
   const io = {
     exec: fakeRegistry("0.1.19", (call) => {
@@ -183,7 +183,25 @@ test("normalizes an exact jigs release-age exclusion before pnpm runs", async ()
   expect(result.steps[0]?.detail).toBe("jigs 0.1.18; normalized minimumReleaseAgeExclude");
   const contents = readFileSync(workspace, "utf8");
   expect(contents).toContain("minimumReleaseAge: 1440");
+  expect(contents).toContain("'@acme/fresh@1.0.0' # preserve me");
   expect(contents.match(/@salimhamed\/jigs['"]?(?:\n|$)/g)).toHaveLength(1);
+});
+
+test("adds a release-age exclusion when the workspace has no exclusion list", async () => {
+  const port = await fakeService();
+  const root = factory(port);
+  const workspace = path.join(root, "pnpm-workspace.yaml");
+  const before = "packages:\n  - src/*\n# operator setting\nstrictPeerDependencies: true\n";
+  writeFileSync(workspace, before);
+  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+
+  const result = await upgrade(root, io);
+
+  expect(result.ok).toBe(true);
+  const contents = readFileSync(workspace, "utf8");
+  expect(contents).toContain(before);
+  expect(contents).toMatch(/minimumReleaseAgeExclude:\n {2}- ['"]?@salimhamed\/jigs['"]?$/m);
+  expect(contents).not.toContain("minimumReleaseAge:");
 });
 
 test("leaves an already-normalized release-age exclusion byte-identical", async () => {

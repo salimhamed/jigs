@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { parseDocument } from "yaml";
+import { isScalar, isSeq, parseDocument } from "yaml";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
@@ -141,7 +141,22 @@ function normalizeReleaseAgeExclude(factoryRoot: string): boolean {
   ) {
     return false;
   }
-  document.set("minimumReleaseAgeExclude", normalized);
+  const exclusions = document.get("minimumReleaseAgeExclude", true);
+  if (exclusions === undefined) {
+    document.set("minimumReleaseAgeExclude", normalized);
+  } else if (isSeq(exclusions)) {
+    for (let index = exclusions.items.length - 1; index >= 0; index -= 1) {
+      const item = exclusions.items[index];
+      if (
+        isScalar(item) &&
+        typeof item.value === "string" &&
+        (item.value === JIGS_PACKAGE || item.value.startsWith(`${JIGS_PACKAGE}@`))
+      ) {
+        exclusions.items.splice(index, 1);
+      }
+    }
+    exclusions.add(JIGS_PACKAGE);
+  }
   writeFileSync(file, String(document));
   return true;
 }
