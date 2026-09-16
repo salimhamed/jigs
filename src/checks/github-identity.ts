@@ -387,7 +387,7 @@ async function inspectBinding(
       findings.push({
         binding: bindingName,
         reason: `${ref.owner}/${ref.repo} has no ${merge.approval.name} label`,
-        repair: `create the ${merge.approval.name} label, or change merge.approval in jigs.config.ts`,
+        repair: `re-run jigs bind for this repository to restore the ${merge.approval.name} label, or change merge.approval in jigs.config.ts`,
       });
     if (identity.mode === "pat") {
       const [approvalsResult] = await Promise.allSettled([

@@ -459,7 +459,7 @@ test("label approval fails when the configured label does not exist", async () =
   expect(result).toMatchObject({
     ok: false,
     reason: expect.stringContaining("has no jigs:approved label"),
-    repair: expect.stringContaining("create the jigs:approved label"),
+    repair: expect.stringContaining("re-run jigs bind"),
   });
   if (result?.ok !== false) throw new Error("expected failure");
   expect(result.reason).toContain(

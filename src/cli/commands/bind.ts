@@ -8,6 +8,7 @@ import {
 } from "../../checks/github-identity.ts";
 import { upsertBinding } from "../../config/binding-edit.ts";
 import {
+  bindingMergePolicy,
   readFactoryConfig,
   readFactoryConfigText,
   writeFactoryConfigText,
@@ -17,6 +18,7 @@ import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
 import { GithubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity, useFactoryRoot } from "../../providers/github-auth.ts";
+import { type EnsureRepoLabelOptions, ensureRepoLabel } from "../../providers/github-label.ts";
 import {
   ensureRepoWebhook,
   ensureWebhookSecret,
@@ -31,6 +33,7 @@ export interface BindDeps {
   cwd: string;
   out: (line: string) => void;
   mergePolicyProbes?: GithubMergePolicyProbes;
+  ensureLabel?: (options: EnsureRepoLabelOptions) => Promise<"created" | "verified">;
 }
 
 export interface BindOptions {
@@ -43,9 +46,9 @@ export interface BindResult {
   webhook: "created" | "verified" | "updated" | "skipped";
 }
 
-// A config edit plus repository reads: the webhook leg may write its hook, and
-// merge-policy inspection is read-only and non-fatal. The clone is the
-// service's to make at its next start.
+// A config edit plus jigs-owned repository furniture: the webhook and approval
+// label legs may write, while merge-policy inspection is read-only and
+// non-fatal. The clone is the service's to make at its next start.
 export async function bindRepo(
   remoteUrl: string,
   deps: BindDeps,
@@ -115,31 +118,82 @@ export async function bindRepo(
     deps.out(`restart the service to clone ${name}: jigs service restart`);
   }
 
-  // Last, so a webhook that cannot be ensured leaves the binding recorded and
-  // the whole verb re-runnable: the config edit above is idempotent and so is
-  // the registration below.
+  // Last, so furniture that cannot be ensured leaves the binding recorded and
+  // the whole verb re-runnable: the config edit above and both operations below
+  // are idempotent. Ensure the webhook first because it wakes every run; label
+  // approval is only one possible merge signal.
+  const reBindCommand =
+    options.name !== undefined || name !== derivedName
+      ? `jigs bind ${remoteUrl} --name ${name}`
+      : `jigs bind ${remoteUrl}`;
   const webhook = await ensureWebhook({
     remoteUrl,
     factoryRoot,
     ingressUrl: config.ingressUrl,
     // The repair it prints has to land on this binding, not on the one the
     // remote alone would derive.
-    reBindCommand:
-      options.name !== undefined || name !== derivedName
-        ? `jigs bind ${remoteUrl} --name ${name}`
-        : `jigs bind ${remoteUrl}`,
+    reBindCommand,
     deps,
   });
+  const binding = {
+    remote: remoteUrl,
+    ...(existing?.merge ? { merge: existing.merge } : {}),
+  };
+  await ensureApprovalLabel(
+    remoteUrl,
+    bindingMergePolicy(config.merge, binding).approval,
+    factoryRoot,
+    reBindCommand,
+    deps,
+  );
   const report = await runChecks([
     mergePolicyCheck(
       resolveGithubIdentity(factoryRoot),
       config.merge,
-      { [name]: { remote: remoteUrl, ...(existing?.merge ? { merge: existing.merge } : {}) } },
+      { [name]: binding },
       deps.mergePolicyProbes ?? realGithubMergePolicyProbes,
     ),
   ]);
   if (!report.ok) deps.out(formatFailures(report));
   return { name, remote: remoteUrl, webhook };
+}
+
+async function ensureApprovalLabel(
+  remoteUrl: string,
+  approval: ReturnType<typeof readFactoryConfig>["merge"]["approval"],
+  factoryRoot: string,
+  reBindCommand: string,
+  deps: BindDeps,
+): Promise<void> {
+  if (approval.kind !== "label") return;
+  const repoRef = parseGithubRemote(remoteUrl);
+  if (repoRef === null) {
+    deps.out(`note: skipping approval label (${remoteUrl} is not a github.com remote)`);
+    return;
+  }
+  const slug = `${repoRef.owner}/${repoRef.repo}`;
+  const identity = resolveGithubIdentity(factoryRoot);
+  const credentialRepair =
+    identity.mode === "app"
+      ? `grant the App "Issues: read & write", accept it on the installation for ${slug}, then re-run: ${reBindCommand}`
+      : `set GITHUB_TOKEN in ${path.join(factoryRoot, ".env")} to a classic PAT with repo (or public_repo for a public repository) on ${slug} (an exported GITHUB_TOKEN wins over the file), then re-run: ${reBindCommand}`;
+  const outcome = await (deps.ensureLabel ?? ensureRepoLabel)({
+    ...repoRef,
+    name: approval.name,
+  }).catch((err: unknown) => {
+    const repair = tokenWasRejected(err)
+      ? credentialRepair
+      : err instanceof GithubApiError && err.status === 404 && identity.mode === "app"
+        ? `check the remote, and install the App on ${slug} or grant its installation access to the repo, then re-run: ${reBindCommand}`
+        : err instanceof GithubApiError && err.status === 404
+          ? `check the remote, and that this token can see ${slug}, then re-run: ${reBindCommand}`
+          : `once that clears, re-run: ${reBindCommand}`;
+    throw new JigsError(
+      `${slug}'s ${approval.name} label could not be ensured: ${err instanceof Error ? err.message : String(err)}`,
+      repair,
+    );
+  });
+  deps.out(`label ${outcome}: ${repoRef.owner}/${repoRef.repo}#${approval.name}`);
 }
 
 // The likeliest operator error, given that bind used to take a checkout path.
@@ -203,14 +257,16 @@ async function ensureWebhook({
     return `once that clears, re-run: ${reBindCommand}`;
   };
   const secret = ensureWebhookSecret();
-  const ensured = await ensureRepoWebhook({ ...repoRef, ingressUrl, secret }).catch(
-    (err: unknown) => {
-      throw new JigsError(
-        `${slug}'s webhook could not be ensured: ${err instanceof Error ? err.message : String(err)}`,
-        repairFor(err),
-      );
-    },
-  );
+  const ensured = await ensureRepoWebhook({
+    ...repoRef,
+    ingressUrl,
+    secret,
+  }).catch((err: unknown) => {
+    throw new JigsError(
+      `${slug}'s webhook could not be ensured: ${err instanceof Error ? err.message : String(err)}`,
+      repairFor(err),
+    );
+  });
   deps.out(`webhook ${ensured.outcome}: ${slug}`);
   if (ensured.otherHosts.length > 0) {
     deps.out(
