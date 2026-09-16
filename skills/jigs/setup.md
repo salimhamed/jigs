@@ -96,8 +96,8 @@ requests normally. It needs, in `github.identity`: `appId`, `installationId`,
 `privateKeyPath` (the `.pem`, `chmod 600`, gitignored) and `operator` (the
 human's login — an installation token cannot answer `GET /user`). Optional
 `coAuthor` is `Name <email>` for a `Co-authored-by` trailer on merge commits.
-Grant the App exactly: Contents, Pull requests, Issues and Administration
-**read & write**; Metadata, Checks and Commit statuses **read**; and
+Grant the App exactly: Contents, Pull requests and Issues **read & write**;
+Administration, Metadata, Checks and Commit statuses **read**; and
 **Repository webhooks read & write**. When `merge.by` is `"jigs"` and the factory has bindings, also grant
 Actions **read** so `jigs bind` and `jigs doctor` can verify that the
 repositories have an active Actions workflow. Permissions have to be accepted on the

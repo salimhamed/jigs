@@ -27,7 +27,7 @@ const APP: AppIdentity = {
 };
 
 const GRANTED = {
-  administration: "write",
+  administration: "read",
   contents: "write",
   pull_requests: "write",
   issues: "write",
@@ -143,14 +143,14 @@ test("webhook administration is a permission the operator has to grant and accep
   expect(check.repair).toContain("accept the updated permissions on the installation");
 });
 
-test("repository administration is required for explicit protection setup", async () => {
+test("repository administration read is required to inspect classic protection", async () => {
   const { administration: _ungranted, ...withoutAdministration } = GRANTED;
   const check = await outcome(APP, "github.identity", {
     installation: async () => ({ permissions: withoutAdministration }),
   });
   expect(check).toMatchObject({
     ok: false,
-    reason: expect.stringContaining("administration: write"),
+    reason: expect.stringContaining("administration: read"),
   });
 });
 
@@ -305,22 +305,41 @@ test("real approval probe combines classic protection and rulesets", async () =>
 });
 
 test("the classic-protection probe reports required checks and reviews, including absence", async () => {
-  githubGetMock.mockResolvedValueOnce({ permissions: { admin: true } });
   githubGetMock.mockResolvedValueOnce({
     required_status_checks: { contexts: ["legacy"], checks: [{ context: "build" }] },
     required_pull_request_reviews: { required_approving_review_count: 1 },
   });
   await expect(
-    realGithubMergePolicyProbes.classicProtection("acme", "api", "release/v1"),
+    realGithubMergePolicyProbes.protection("acme", "api", "release/v1"),
   ).resolves.toEqual({ requiredStatusChecks: 2, requiredApprovingReviews: 1 });
 
-  githubGetMock.mockResolvedValueOnce({ permissions: { admin: true } });
   githubGetMock.mockRejectedValueOnce(
     new GithubApiError(404, "/branches/main/protection", "not protected"),
   );
-  await expect(
-    realGithubMergePolicyProbes.classicProtection("acme", "api", "main"),
-  ).resolves.toBeNull();
+  githubGetMock.mockResolvedValueOnce([]);
+  await expect(realGithubMergePolicyProbes.protection("acme", "api", "main")).resolves.toBeNull();
+});
+
+test("the protection probe falls back from classic protection to rulesets", async () => {
+  githubGetMock.mockRejectedValueOnce(
+    new GithubApiError(404, "/branches/main/protection", "not accessible"),
+  );
+  githubGetMock.mockResolvedValueOnce([
+    {
+      type: "required_status_checks",
+      parameters: { required_status_checks: [{ context: "build" }, { context: "test" }] },
+    },
+    { type: "pull_request", parameters: { required_approving_review_count: 2 } },
+  ]);
+
+  await expect(realGithubMergePolicyProbes.protection("acme", "api", "main")).resolves.toEqual({
+    requiredStatusChecks: 2,
+    requiredApprovingReviews: 2,
+  });
+  expect(githubGetMock.mock.calls.map(([url]) => url)).toEqual([
+    "/repos/acme/api/branches/main/protection",
+    "/repos/acme/api/rules/branches/main",
+  ]);
 });
 
 test("real approval probe preserves a readable leg and reports both unreadable as unknown", async () => {
@@ -355,7 +374,7 @@ const policyProbes = (
   commitStatuses: async () => 0,
   actionsWorkflows: async () => 0,
   labelExists: async () => true,
-  classicProtection: async () => ({ requiredStatusChecks: 1, requiredApprovingReviews: 1 }),
+  protection: async () => ({ requiredStatusChecks: 1, requiredApprovingReviews: 1 }),
   requiredApprovingReviews: async () => 0,
   ...overrides,
 });
@@ -382,14 +401,14 @@ test("a healthy binding preserves the existing passing merge-policy line", async
   });
 });
 
-test("missing recommended protection names repo setup as the repair", async () => {
+test("missing protection explains how to add a GitHub rule", async () => {
   const result = await policyOutcome(SQUASH_REVIEW, binding, {
-    classicProtection: async () => null,
+    protection: async () => null,
   });
   expect(result).toMatchObject({
     ok: false,
     reason: expect.stringContaining("has no classic branch protection"),
-    repair: expect.stringContaining("jigs repo setup api"),
+    repair: expect.stringContaining("Settings → Branches or Rules → Rulesets"),
   });
 });
 
@@ -398,7 +417,7 @@ test("App mode reports missing required checks and approving review", async () =
     SQUASH_REVIEW,
     binding,
     {
-      classicProtection: async () => ({
+      protection: async () => ({
         requiredStatusChecks: 0,
         requiredApprovingReviews: 0,
       }),
@@ -407,8 +426,8 @@ test("App mode reports missing required checks and approving review", async () =
   );
   expect(result).toMatchObject({
     ok: false,
-    reason: expect.stringContaining("does not require status checks"),
-    repair: expect.stringContaining("jigs repo setup api"),
+    reason: expect.stringContaining("does not require CI checks"),
+    repair: expect.stringContaining("Settings → Branches or Rules → Rulesets"),
   });
   if (result?.ok !== false) throw new Error("expected failure");
   expect(result.reason).toContain("does not require an approving review");
@@ -483,17 +502,20 @@ test("label approval fails when native approving reviews are required", async ()
   expect(result).toMatchObject({
     ok: false,
     reason: expect.stringContaining("requires 2 approving reviews"),
-    repair: expect.stringContaining("change merge.approval"),
+    repair: expect.stringContaining("switch this factory's approval"),
   });
   if (result?.ok !== false) throw new Error("expected failure");
-  expect(result.repair).toContain("change merge.approval");
+  expect(result.repair).toContain("switch this factory's approval");
 });
 
 test("App label approval rejects native required reviews", async () => {
   const requiredApprovingReviews = vi.fn(async () => 1);
   await expect(
     policyOutcome(LABEL_POLICY, binding, { requiredApprovingReviews }, APP),
-  ).resolves.toMatchObject({ ok: false, reason: expect.stringContaining("label cannot satisfy") });
+  ).resolves.toMatchObject({
+    ok: false,
+    reason: expect.stringContaining("this factory approves with a label"),
+  });
   expect(requiredApprovingReviews).toHaveBeenCalledOnce();
 });
 

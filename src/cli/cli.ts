@@ -17,7 +17,6 @@ import {
 import { showLogs } from "./commands/logs.ts";
 import { pokeRun } from "./commands/poke.ts";
 import { showRuns } from "./commands/ps.ts";
-import { setupRepo } from "./commands/repo-setup.ts";
 import { launchRun } from "./commands/run.ts";
 import { resolveServiceUrl, usesFactoryService } from "./commands/service-client.ts";
 import {
@@ -219,17 +218,6 @@ program
   .addOption(serviceOption())
   .action(async (options: { service?: string }) => {
     await runDoctor({ out, serviceUrl: serviceUrl(options.service) });
-  });
-
-const repo = program.command("repo").description("manage a bound repository when explicitly asked");
-
-repo
-  .command("setup")
-  .description("propose and apply recommended repository rules for a binding")
-  .argument("<binding>", "binding name")
-  .option("--yes", "apply the complete recommended plan without prompting")
-  .action(async (binding: string, options: { yes?: boolean }) => {
-    await setupRepo(binding, { cwd: process.cwd(), out, confirm: makeConfirm() }, options);
   });
 
 program
