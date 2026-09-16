@@ -306,7 +306,7 @@ export interface FollowPullRequestOptions<TTask extends WorkItem = WorkItem> {
    * Who merges, by which method, and what signal permits it. `by: "jigs"`
    * merges with `method` as soon as `approval` is satisfied and GitHub reports
    * the pull request mergeable; `by: "human"` only keeps watching. The factory
-   * states it in `jigs.config.ts`; `resolveMergePolicy()` reads it.
+   * states it in `jigs.config.ts`; `resolveMergePolicy(binding)` reads it.
    */
   merge: MergePolicy;
   onLimit?: OnDeliveryLimit<TTask>;

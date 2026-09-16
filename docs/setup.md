@@ -358,7 +358,7 @@ finished and passed. GitHub reports a repository that requires no checks as
 mergeable with no build at all, including in the seconds before CI registers,
 so without it a labelled pull request could merge ahead of its own build. The
 consequence is worth saying plainly: **jigs never merges in a repository with
-no CI.** Set `merge.by: "human"` there.
+no CI.** Set that binding's `merge.by` to `"human"` there.
 
 A few merge states you will see jigs wait on rather than merge:
 
@@ -373,10 +373,10 @@ A few merge states you will see jigs wait on rather than merge:
 - **`has_hooks`** and **`unknown`** — treated as not ready, and rechecked on
   the next wake.
 
-`jigs doctor` prints the effective policy in one line, so what a factory will
-actually do is readable without opening its config. For factories configured
-with `merge.by: "jigs"`, `jigs bind` and `jigs doctor` also report on that line
-when a bound repository has no CI, disables the configured merge method,
+`jigs doctor` prints the effective policy for each binding, so what a factory
+will actually do is readable without opening its config. For bindings whose
+effective `merge.by` is `"jigs"`, `jigs bind` and `jigs doctor` also report
+when that repository has no CI, disables the configured merge method,
 requires reviews that label approval cannot satisfy, or lacks the configured
 approval label. These checks only read repository settings.
 

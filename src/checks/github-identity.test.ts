@@ -345,7 +345,18 @@ test("a healthy binding preserves the existing passing merge-policy line", async
     label: "merge policy",
     ok: true,
     detail:
-      "jigs merges with squash once GitHub reports it mergeable and an approving GitHub review of the current commit is present",
+      "api: jigs merges with squash once GitHub reports it mergeable and an approving GitHub review of the current commit is present",
+  });
+});
+
+test("the effective merge policy is reported and checked per binding", async () => {
+  const bindings = {
+    api: { remote: "git@github.com:acme/api.git", merge: { method: "rebase" as const } },
+    docs: { remote: "git@github.com:acme/docs.git", merge: { by: "human" as const } },
+  };
+  expect(await policyOutcome(SQUASH_REVIEW, bindings)).toMatchObject({
+    ok: true,
+    detail: expect.stringMatching(/^api: jigs merges with rebase.*; docs: a human merges/),
   });
 });
 
@@ -353,7 +364,7 @@ test("jigs merging fails when the default branch has no CI", async () => {
   expect(await policyOutcome(SQUASH_REVIEW, binding, { checkRuns: async () => 0 })).toMatchObject({
     ok: false,
     reason: expect.stringContaining("api: acme/api has no active Actions workflows"),
-    repair: expect.stringContaining('set merge.by to "human" in jigs.config.ts'),
+    repair: expect.stringContaining('set bindings.api.merge.by to "human" in jigs.config.ts'),
   });
 });
 
@@ -380,7 +391,7 @@ test.each([
   expect(result).toMatchObject({
     ok: false,
     reason: expect.stringContaining(`${method} merges are disabled`),
-    repair: expect.stringContaining("merge.method in jigs.config.ts"),
+    repair: expect.stringContaining(`bindings.api.merge.method in jigs.config.ts`),
   });
 });
 
@@ -489,7 +500,7 @@ test("an unreadable binding does not hide another binding's findings", async () 
   expect(result).toMatchObject({ ok: false });
   if (result?.ok !== false) throw new Error("expected failure");
   expect(result.reason).toContain("web: acme/web has no active Actions workflows");
-  expect(result.reason).not.toContain("broken:");
+  expect(result.reason).not.toContain("repository unreadable");
 });
 
 test("human merging does not probe or report repository policy", async () => {

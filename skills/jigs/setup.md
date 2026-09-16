@@ -104,19 +104,20 @@ installation after they are granted on the App. Register the App with its own
 webhook **off**; jigs keeps per-repo webhooks, and one App registration has
 only one webhook URL.
 
-`merge` states the policy: `by` (`jigs` or `human`), `method` (`squash`,
-`merge` or `rebase`), and `approval`. jigs merges only when the signal is
+Factory `merge` states the default policy: `by` (`jigs` or `human`), `method`
+(`squash`, `merge` or `rebase`), and `approval`. A binding may override `by`
+and `method`; approval stays factory-level. jigs merges only when the signal is
 present, GitHub reports the pull request mergeable, CI is green (at least one
 check, all of them passed), and it is not a draft — so **jigs never merges in a
-repository with no CI**; set `merge.by: "human"` there. A `label` approval
+repository with no CI**; set that binding's `merge.by` to `"human"` there. A `label` approval
 cannot satisfy a native "require approvals" rule, so on a repository carrying
 one, `merge.by: "jigs"` in `pat` mode never fires. A `behind` pull request
 (branches must be up to date) is waited on, not updated. `jigs doctor` prints
-the identity and the effective policy, one line each:
+the identity and the effective policy per binding:
 
 ```
 ok   GitHub identity: jigs acts as jigs-app-dev[bot]; operator salimhamed
-ok   merge policy: jigs merges with squash once GitHub reports it mergeable and an approving GitHub review of the current commit is present
+ok   merge policy: repo: jigs merges with squash once GitHub reports it mergeable and an approving GitHub review of the current commit is present
 ```
 
 ## 3. Up

@@ -4,6 +4,7 @@ import { afterEach, expect, test } from "vitest";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { removeBinding, upsertBinding } from "./binding-edit.ts";
 import {
+  bindingMergePolicy,
   parseFactoryConfig,
   readFactoryConfig,
   resolveBinding,
@@ -42,6 +43,39 @@ test("binding defaults and declared provisioning are validated", () => {
     postCreate: ["npm ci"],
     hookTimeoutMinutes: 10,
   });
+});
+
+test("a binding may override either repository-specific merge setting", () => {
+  const config = parseFactoryConfig({
+    service: { dashboardPort: 9090 },
+    bindings: {
+      api: { remote: "url", merge: { by: "jigs" } },
+      web: { remote: "url", merge: { method: "rebase" } },
+    },
+    merge: { by: "human", method: "squash", approval: { kind: "review" } },
+  });
+  const api = config.bindings.api;
+  const web = config.bindings.web;
+  if (api === undefined || web === undefined) throw new Error("expected both bindings");
+  expect(bindingMergePolicy(config.merge, api)).toEqual({
+    by: "jigs",
+    method: "squash",
+    approval: { kind: "review" },
+  });
+  expect(bindingMergePolicy(config.merge, web)).toEqual({
+    by: "human",
+    method: "rebase",
+    approval: { kind: "review" },
+  });
+});
+
+test("binding merge approval is rejected as a factory identity policy", () => {
+  expect(() =>
+    parseFactoryConfig({
+      service: { dashboardPort: 9090 },
+      bindings: { api: { remote: "url", merge: { approval: { kind: "review" } } } },
+    }),
+  ).toThrow("approval is factory-level because it follows github.identity");
 });
 
 test.each([

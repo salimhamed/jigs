@@ -14,6 +14,14 @@ export const FACTORY_CONFIG_FILE = "jigs.config.ts";
 // activation.
 const bindingSchema = z.strictObject({
   remote: z.string().min(1),
+  // Repository policy may differ between bindings. Approval remains a
+  // factory identity concern and is deliberately not accepted here.
+  merge: z
+    .strictObject({
+      by: z.enum(["jigs", "human"]).optional(),
+      method: z.enum(["squash", "merge", "rebase"]).optional(),
+    })
+    .optional(),
   // Paths, or globs, relative to this binding's own `bindings/<name>/`
   // directory in the factory repo; each lands at that same relative path in
   // the worktree. For what git does not carry.
@@ -105,9 +113,17 @@ export const defaultMergePolicy = (): MergePolicy => mergeSchema.parse({});
 export function parseFactoryConfig(value: unknown): FactoryConfig {
   const result = factoryConfigSchema.safeParse(value);
   if (!result.success) {
-    const lines = result.error.issues.map(
-      (issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`,
-    );
+    const lines = result.error.issues.map((issue) => {
+      const path = issue.path.join(".") || "(root)";
+      if (
+        issue.code === "unrecognized_keys" &&
+        issue.path.at(-1) === "merge" &&
+        issue.keys.includes("approval")
+      ) {
+        return `${path}.approval: approval is factory-level because it follows github.identity; a binding may only override merge.by and merge.method`;
+      }
+      return `${path}: ${issue.message}`;
+    });
     throw new JigsError(`invalid ${FACTORY_CONFIG_FILE}:\n  ${lines.join("\n  ")}`);
   }
   return result.data;
@@ -146,6 +162,14 @@ export function resolveBinding(factoryRoot: string, name: string): Binding {
     );
   }
   return { name, ...binding };
+}
+
+/** Apply a binding's repository-specific overrides to the factory policy. */
+export function bindingMergePolicy(
+  merge: MergePolicy,
+  binding: Pick<BindingEntry, "merge">,
+): MergePolicy {
+  return { ...merge, ...binding.merge };
 }
 
 export interface ResolvedService {

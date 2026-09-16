@@ -35,7 +35,7 @@ declare const publishApprovedChange: Delivery["publishApprovedChange"];
 declare const followPullRequest: Delivery["followPullRequest"];
 declare const haltForHuman: HaltForHumanFn;
 // A step rather than a bound block, so it has no place in the binder's type.
-declare const resolveMergePolicy: () => Promise<MergePolicy>;
+declare const resolveMergePolicy: (binding: string) => Promise<MergePolicy>;
 
 declare const task: WorkItem;
 declare const worktree: WorktreeFacts;
@@ -56,7 +56,7 @@ async function chooseAgentsAndBudgets() {
       ciFixAttempts: 3,
       pullRequestRevisionRounds: 4,
     },
-    merge: await resolveMergePolicy(),
+    merge: await resolveMergePolicy("application"),
   });
   return result;
 }
@@ -82,7 +82,7 @@ async function configureEachRoleIndependently() {
       ciFixAttempts: 3,
       pullRequestRevisionRounds: 4,
     },
-    merge: await resolveMergePolicy(),
+    merge: await resolveMergePolicy("application"),
   });
   return result;
 }
@@ -166,7 +166,7 @@ async function customTaskFieldsSurvive() {
       ciFixAttempts: 3,
       pullRequestRevisionRounds: 4,
     },
-    merge: await resolveMergePolicy(),
+    merge: await resolveMergePolicy("application"),
     onLimit: async (limit) => ({
       action: "continue",
       instructions: `The on-call owner of ${limit.task.service} asked for one more pass.`,
@@ -203,7 +203,7 @@ async function composeThePhases(): Promise<DeliveryResult> {
     pr,
     implementation,
     limits: { ciFixAttempts: 3, pullRequestRevisionRounds: 4 },
-    merge: await resolveMergePolicy(),
+    merge: await resolveMergePolicy("application"),
   });
 }
 

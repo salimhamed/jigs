@@ -107,10 +107,10 @@ export async function resolveRepository(binding: string) {
   return steps.resolveRepository(binding);
 }
 
-/** Read this factory's merge policy, optionally overriding who merges. */
-export async function resolveMergePolicy(by?: MergePolicy["by"]) {
+/** Read the effective merge policy for a factory binding. */
+export async function resolveMergePolicy(binding: string) {
   "use step";
-  return steps.resolveMergePolicy(by);
+  return steps.resolveMergePolicy(binding);
 }
 
 /** Check commits since the base, the branch's current commit, and uncommitted changes. */

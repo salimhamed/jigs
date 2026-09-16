@@ -6,6 +6,7 @@
 
 import { type MergeRefusal, mergeRefusal } from "../../blocks/pull-request/merge-ready.ts";
 import {
+  bindingMergePolicy,
   type MergePolicy,
   readFactoryConfig,
   resolveBinding,
@@ -39,10 +40,11 @@ export async function resolveRepository(binding: string): Promise<GithubRepoRef>
   return ref;
 }
 
-/** Read this factory's merge policy, optionally overriding who merges. */
-export async function resolveMergePolicy(by?: MergePolicy["by"]): Promise<MergePolicy> {
-  const { merge } = readFactoryConfig(factoryRoot());
-  return by === undefined ? merge : { ...merge, by };
+/** Read the effective merge policy for a factory binding. */
+export async function resolveMergePolicy(binding: string): Promise<MergePolicy> {
+  const root = factoryRoot();
+  const { merge } = readFactoryConfig(root);
+  return bindingMergePolicy(merge, resolveBinding(root, binding));
 }
 
 /** Open a pull request from the working branch into the base branch. */
