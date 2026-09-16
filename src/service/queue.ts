@@ -34,6 +34,18 @@ async function jobRows(sql: ISql): Promise<JobRow[]> {
   `;
 }
 
+async function jobRowsById(sql: ISql, ids: readonly string[]): Promise<JobRow[]> {
+  return await sql<JobRow[]>`
+    SELECT jobs.id, jobs.task_identifier AS task, jobs.attempts,
+           jobs.attempts >= jobs.max_attempts AS dead,
+           jobs.last_error, jobs.created_at, jobs.locked_at, body.payload
+    FROM graphile_worker.jobs
+    JOIN graphile_worker._private_jobs AS body ON body.id = jobs.id
+    WHERE jobs.id = ANY(${ids}::bigint[])
+    ORDER BY jobs.created_at
+  `;
+}
+
 export async function listJobRunIds(sql: ISql): Promise<JobRunIds> {
   const named = (await jobRows(sql)).flatMap((row) => {
     const runId = runIdOf(row.payload);
@@ -50,26 +62,54 @@ export async function listRunDeadJobs(sql: ISql, runId: string): Promise<DeadJob
   return (await jobRows(sql)).filter((row) => row.dead && runIdOf(row.payload) === runId).map(view);
 }
 
-/** Delete every queued delivery for a run. A locked row is an HTTP delivery
- * already in progress: leave it present until Graphile records its outcome,
- * then delete any retry before returning. This makes a successful cancel
- * response the boundary after which no worker failure for the run can appear. */
-export async function deleteRunJobs(sql: ISql, runId: string): Promise<number> {
-  let count = 0;
+export class RunJobsLockedError extends Error {
+  constructor(runId: string) {
+    super(`queue jobs for ${runId} are still running; retry cancellation`);
+    this.name = "RunJobsLockedError";
+  }
+}
+
+interface DeleteRunJobsOptions {
+  maxWaitMs?: number;
+  pollMs?: number;
+  staleLockMs?: number;
+}
+
+const GRAPHILE_STALE_LOCK_MS = 4 * 60 * 60 * 1000;
+
+/** Delete every queued delivery for a run. A fresh lock is an HTTP delivery
+ * already in progress: wait briefly for Graphile to record its outcome, then
+ * delete every remaining row in one statement. Graphile itself treats a lock
+ * older than four hours as stale, so cancellation may remove those directly.
+ * A still-active delivery after the bounded wait leaves every row untouched
+ * and asks the operator to retry cancellation. */
+export async function deleteRunJobs(
+  sql: ISql,
+  runId: string,
+  options: DeleteRunJobsOptions = {},
+): Promise<number> {
+  const initial = (await jobRows(sql)).filter((row) => runIdOf(row.payload) === runId);
+  const ids = initial.map((row) => row.id);
+  if (ids.length === 0) return 0;
+  const deadline = Date.now() + (options.maxWaitMs ?? 5_000);
+  const staleLockMs = options.staleLockMs ?? GRAPHILE_STALE_LOCK_MS;
   for (;;) {
-    const rows = (await jobRows(sql)).filter((row) => runIdOf(row.payload) === runId);
-    if (rows.length === 0) return count;
-    const ids = rows.filter((row) => row.lockedAt === null).map((row) => row.id);
-    if (ids.length === 0) {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      continue;
+    const rows = await jobRowsById(sql, ids);
+    if (rows.length === 0) return 0;
+    const staleBefore = Date.now() - staleLockMs;
+    const active = rows.some(
+      (row) => row.lockedAt !== null && row.lockedAt.getTime() > staleBefore,
+    );
+    if (!active) {
+      const deleted = await sql<{ id: string }[]>`
+        DELETE FROM graphile_worker._private_jobs
+        WHERE id = ANY(${rows.map((row) => row.id)}::bigint[])
+        RETURNING id
+      `;
+      return deleted.length;
     }
-    const deleted = await sql<{ id: string }[]>`
-      DELETE FROM graphile_worker._private_jobs
-      WHERE id = ANY(${ids}::bigint[]) AND locked_at IS NULL
-      RETURNING id
-    `;
-    count += deleted.length;
+    if (Date.now() >= deadline) throw new RunJobsLockedError(runId);
+    await new Promise((resolve) => setTimeout(resolve, options.pollMs ?? 20));
   }
 }
 

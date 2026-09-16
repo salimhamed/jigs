@@ -14,7 +14,7 @@ import { listWorktreesForRun } from "../steps/worktree/registry.ts";
 import { registrySql } from "../steps/worktree/sql.ts";
 import { sweepWorktrees } from "../steps/worktree/sweep.ts";
 import { githubWebhookSecret, verifyGithubSignature, verifyLinearSignature } from "./ingress.ts";
-import { deleteRunJobs, listRunDeadJobs } from "./queue.ts";
+import { deleteRunJobs, listRunDeadJobs, RunJobsLockedError } from "./queue.ts";
 import { bootPhase, isReady } from "./readiness.ts";
 import { describeRun, enrichSuspensions, listRuns, type RunRef, resolveRunRef } from "./runs.ts";
 import { listSchedules, scheduleChecks } from "./schedules.ts";
@@ -222,7 +222,15 @@ export function createApp(factory: Factory): Hono {
     }
     const releasedTokens = await runResourceTokens(ref.runId);
     if (status !== "cancelled") await run.cancel();
-    const deletedJobs = await deleteRunJobs(registrySql(), ref.runId);
+    let deletedJobs: number;
+    try {
+      deletedJobs = await deleteRunJobs(registrySql(), ref.runId);
+    } catch (error) {
+      if (error instanceof RunJobsLockedError) {
+        return c.json({ error: error.message, retryable: true }, 503);
+      }
+      throw error;
+    }
     // Cancel never cleans up: name what stays so the operator knows where the
     // worktree is and that `jigs sweep` is the way to reclaim it.
     const worktrees = (await listWorktreesForRun(registrySql(), ref.runId)).map((row) => row.path);

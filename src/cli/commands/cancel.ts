@@ -12,6 +12,7 @@ export interface CancelDeps extends ServiceDeps {
 export interface CancelResult {
   runId: string;
   cancelled: boolean;
+  /** Rows removed by this request; a cleanup retry counts the rows still present. */
   deletedJobs: number;
   releasedTokens: string[];
   worktrees: string[];
@@ -58,7 +59,7 @@ export async function cancelRun(ref: string, deps: CancelDeps): Promise<CancelRe
   }
   const result = (await res.json()) as CancelResult;
   deps.out(`cancelled ${result.runId}`);
-  deps.out(`removed ${result.deletedJobs} queue jobs`);
+  deps.out(`removed ${result.deletedJobs} remaining queue jobs`);
   for (const token of result.releasedTokens) deps.out(`released ${token}`);
   // Cancel never cleans up; the sentence replaces what a background pass
   // would otherwise do silently.

@@ -585,6 +585,22 @@ test("cancel retries queue cleanup when the first cleanup failed after cancellat
   expect(errors).toHaveBeenCalled();
 });
 
+test("cancel reports an active queue delivery as retryable", async () => {
+  setWorld({
+    runs: { get: async () => ({ status: "cancelled", createdAt: new Date() }) },
+    hooks: { list: async () => ({ data: [] }) },
+  } as unknown as Parameters<typeof setWorld>[0]);
+  vi.mocked(queue.deleteRunJobs).mockRejectedValueOnce(new queue.RunJobsLockedError(RUN));
+
+  const res = await app.request(`/api/runs/${RUN}/cancel`, { method: "POST" });
+
+  expect(res.status).toBe(503);
+  expect(await res.json()).toEqual({
+    error: `queue jobs for ${RUN} are still running; retry cancellation`,
+    retryable: true,
+  });
+});
+
 test("GET /api/schedules answers with what the factory declared, and what is next", async () => {
   const res = await scheduledApp.request("/api/schedules");
   expect(res.status).toBe(200);

@@ -1,6 +1,6 @@
 import type { ISql } from "postgres";
 import { expect, test } from "vitest";
-import { listJobRunIds, listRunDeadJobs } from "./queue.ts";
+import { deleteRunJobs, listJobRunIds, listRunDeadJobs, RunJobsLockedError } from "./queue.ts";
 
 const RUN_A = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 const RUN_B = "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ";
@@ -48,4 +48,18 @@ test("the per-run listing keeps that run's dead jobs, and drops its internal col
   expect(jobs[0]).not.toHaveProperty("payload");
   expect(jobs[0]).not.toHaveProperty("dead");
   expect(jobs[0]).not.toHaveProperty("lockedAt");
+});
+
+test("cancellation stops waiting when a fresh lock never settles", async () => {
+  const locked = job({ lockedAt: new Date() });
+
+  await expect(deleteRunJobs(fakeSql([locked]), RUN_A, { maxWaitMs: 0 })).rejects.toEqual(
+    new RunJobsLockedError(RUN_A),
+  );
+});
+
+test("cancellation removes a lock Graphile considers stale", async () => {
+  const locked = job({ lockedAt: new Date(Date.now() - 4 * 60 * 60 * 1000 - 1) });
+
+  await expect(deleteRunJobs(fakeSql([locked]), RUN_A)).resolves.toBe(1);
 });
