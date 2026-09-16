@@ -157,9 +157,12 @@ pnpm exec jigs logs <run>
 pnpm exec jigs upgrade
 ```
 
-bumps jigs to the latest release (`--to <version>` pins it), refreshes
-`jigs.ts` using the newly installed library, runs `jigs up`, then typechecks
-the factory. Custom code is never generated.
+normalizes jigs' release-age exclusion, then bumps jigs to the latest release
+(`--to <version>` pins it) and runs `jigs up`. During that `up`, it installs
+the release, regenerates `jigs.ts` through the installed CLI, then builds and
+starts the factory. Finally it typechecks the factory. Review and commit the
+regenerated `jigs.ts` and any `pnpm-workspace.yaml` normalization. Custom code
+is never generated.
 
 ## Factory control
 

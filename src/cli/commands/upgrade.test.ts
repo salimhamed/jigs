@@ -159,28 +159,6 @@ test("bumps jigs to latest, runs every up step, then the typecheck", async () =>
   expect(lines.at(-1)).toBe("acme-factory runs jigs 0.1.19");
 });
 
-test("runs generation through the newly installed jigs CLI", async () => {
-  const port = await fakeService();
-  const root = factory(port);
-  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
-
-  const result = await upgradeFactory({
-    cwd: root,
-    out: (line) => lines.push(line),
-    execFile: io.exec.execFile,
-    processes: io.procs.processes,
-    prepare: vi.fn(),
-    readyTimeoutMs: 500,
-  });
-
-  expect(result.ok).toBe(true);
-  expect(commands(io).slice(0, 3)).toEqual([
-    ["pnpm", "update", "--latest", "@salimhamed/jigs"],
-    ["pnpm", "install"],
-    ["pnpm", "exec", "jigs", "generate"],
-  ]);
-});
-
 test("normalizes an exact jigs release-age exclusion before pnpm runs", async () => {
   const port = await fakeService();
   const root = factory(port);
