@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.3](https://github.com/salimhamed/jigs/compare/jigs-v0.29.2...jigs-v0.29.3) (2026-09-16)
+
+
+### Features
+
+* route github status events to pull request gates ([5a92e3d](https://github.com/salimhamed/jigs/commit/5a92e3d1a64ce55b336310cb4380ac7f4e020338))
+
 ## [0.29.2](https://github.com/salimhamed/jigs/compare/jigs-v0.29.1...jigs-v0.29.2) (2026-09-16)
 
 
