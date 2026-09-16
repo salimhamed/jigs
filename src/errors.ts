@@ -1,9 +1,3 @@
-export class JigsError extends Error {
-  readonly hint?: string;
-
-  constructor(message: string, hint?: string) {
-    super(message);
-    this.name = "JigsError";
-    this.hint = hint;
-  }
-}
+// The implementation lives with workflow-safe blocks. Re-exporting preserves
+// the shared class identity for the CLI, service, providers and steps.
+export { JigsError } from "./blocks/errors.ts";

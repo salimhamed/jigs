@@ -174,9 +174,7 @@ async function customTaskFieldsSurvive() {
     }),
   });
 
-  if (result.status === "merged") {
-    await notifyOncall(result.change.task.service, result.pr);
-  }
+  await notifyOncall(result.change.task.service, result.pr);
 }
 
 // "Compose the phases".
@@ -188,8 +186,6 @@ async function composeThePhases(): Promise<DeliveryResult> {
     review,
     limits: { implementationReviewRounds: 5 },
   });
-  if (built.status !== "approved") return built;
-
   await checkSecurity(built.change);
 
   const pr = await publishApprovedChange({
@@ -207,7 +203,7 @@ async function composeThePhases(): Promise<DeliveryResult> {
   });
 }
 
-/** Publication is a type gate: a stopped result carries no approval. */
+/** Implementation returns only after approval, so its change is publishable. */
 async function onlyApprovedWorkPublishes() {
   const built = await implementAndReview({
     task,
@@ -217,7 +213,6 @@ async function onlyApprovedWorkPublishes() {
     limits: { implementationReviewRounds: 1 },
   });
   return publishApprovedChange({
-    // @ts-expect-error a change that was not approved cannot be published
     change: built.change,
     binding: "application",
     implementation,

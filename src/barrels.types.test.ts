@@ -18,7 +18,6 @@ import type {
   DeliveryPhase,
   DeliveryResult,
   DeliverySteps,
-  DeliveryStopped,
   DescriptionAgent,
   DescriptionPromptContext,
   FollowPullRequestOptions,
@@ -218,7 +217,6 @@ type DeliveryTypeSurface = {
   deliveryPhase: DeliveryPhase;
   deliveryResult: DeliveryResult;
   deliverySteps: DeliverySteps;
-  deliveryStopped: DeliveryStopped;
   descriptionAgent: DescriptionAgent;
   descriptionPromptContext: DescriptionPromptContext;
   followPullRequestOptions: FollowPullRequestOptions;

@@ -26,7 +26,6 @@ const deps = () => ({
 const result = (over: Partial<LogsResult> = {}): LogsResult => ({
   runId: RUN,
   status: "running",
-  outcome: null,
   trigger: "manual",
   ticket: null,
   pullRequest: null,
@@ -82,19 +81,12 @@ test("logs says what the run waits for, where to act, and what was asked", async
   ]);
 });
 
-test("a run that hit its limit says so where a merged one says merged", async () => {
-  respond(result({ status: "completed", outcome: "limit-reached", pullRequest: "acme/api#41" }));
+test("a failed run prints its status and pull request", async () => {
+  respond(result({ status: "failed", pullRequest: "acme/api#41" }));
   respond({ steps: [], deadJobs: [] });
   await showLogs(RUN, deps(), { now: NOW });
-  expect(lines[2]).toBe("outcome !limit-reached — this run did not succeed");
-  expect(lines[4]).toBe("pull request acme/api#41");
-});
-
-test("a merged run's outcome is stated plainly", async () => {
-  respond(result({ status: "completed", outcome: "merged" }));
-  respond({ steps: [], deadJobs: [] });
-  await showLogs(RUN, deps(), { now: NOW });
-  expect(lines[2]).toBe("outcome merged");
+  expect(lines[1]).toBe("status failed");
+  expect(lines[3]).toBe("pull request acme/api#41");
 });
 
 test("--json prints one document with the run, its suspensions and its timeline", async () => {
@@ -122,7 +114,6 @@ test("a failed run's error is printed above the log pointer", async () => {
   respond(
     result({
       status: "failed",
-      outcome: "failed",
       error: "ClaimConflictError: linear:ticket:… is already claimed",
       logs: DASHBOARD,
     }),
@@ -132,7 +123,6 @@ test("a failed run's error is printed above the log pointer", async () => {
   expect(lines).toEqual([
     `run ${RUN}`,
     "status failed",
-    "outcome !failed — this run did not succeed",
     "trigger manual",
     "last activity 1m ago (2026-09-04T10:09:00.000Z)",
     "error ClaimConflictError: linear:ticket:… is already claimed",

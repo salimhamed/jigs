@@ -159,7 +159,7 @@ describe("delivery", () => {
   it("delivers a provider-independent task with separate roles and retains worktree facts", async () => {
     const { steps, calls, closed } = setup();
     const result = await bindDeliverySteps(steps).deliverChange(options);
-    expect(result.status).toBe("merged");
+    expect(result.pr).toEqual(pr);
     expect(result.change.worktree).toEqual(options.worktree);
     expect(calls.map((call) => call.harness.model)).toEqual(["builder", "reviewer", "builder"]);
     expect(calls[1]?.resume).toBeUndefined();
@@ -167,7 +167,7 @@ describe("delivery", () => {
     expect(closed).toHaveBeenCalledOnce();
   });
 
-  it("returns limit-reached without opening a PR or implicitly retrying", async () => {
+  it("fails at the round limit without opening a PR or implicitly retrying", async () => {
     const { steps } = setup();
     const runAgent = vi.fn().mockImplementation(async (config) => ({
       text: "",
@@ -176,12 +176,9 @@ describe("delivery", () => {
         : blocking("Missing test"),
     }));
     steps.runAgent = runAgent;
-    const result = await bindDeliverySteps(steps).deliverChange(options);
-    expect(result).toMatchObject({
-      status: "limit-reached",
-      phase: "implementation-review",
-      attempts: 2,
-    });
+    await expect(bindDeliverySteps(steps).deliverChange(options)).rejects.toThrow(
+      "after 2 implementation review round(s) without an approved change. The work is pushed on branch fix",
+    );
     expect(runAgent).toHaveBeenCalledTimes(4);
     expect(steps.openPullRequest).not.toHaveBeenCalled();
   });
@@ -207,7 +204,7 @@ describe("delivery", () => {
               : answerFor(config.output),
           }) as AgentFn;
     const result = await bindDeliverySteps(steps).deliverChange(options);
-    expect(result.status).toBe("merged");
+    expect(result.pr).toEqual(pr);
     // One round: the preferences did not send it back to the builder.
     expect(result.change.attempts.implementationReviewRounds).toBe(1);
     expect(calls.filter((call) => call.harness.model === "builder")).toHaveLength(2);
@@ -277,7 +274,7 @@ describe("delivery", () => {
       ...options,
       limits: { implementationReviewRounds: 2 },
     });
-    expect(result.status).toBe("approved");
+    expect(result.change.approval.reviewedCommit).toBe("new");
     const reviews = calls.filter((call) => call.harness.model === "reviewer");
     expect(reviews[0]?.resume).toBeUndefined();
     expect(reviews[1]?.resume).toEqual({ harness: "claude", id: "reviewer-session" });
@@ -330,7 +327,7 @@ describe("delivery", () => {
       ...options,
       limits: { implementationReviewRounds: 2 },
     });
-    expect(result.status).toBe("approved");
+    expect(result.change.approval.reviewedCommit).toBe("new");
     const rebuilt = calls.filter((call) => call.harness.model === "reviewer").at(-1)?.prompt ?? "";
     expect(rebuilt).toContain("Earlier rounds of this review");
     expect(rebuilt).toContain("Round 1 — changes-requested");
@@ -355,8 +352,9 @@ describe("delivery", () => {
             ],
           },
     })) as AgentFn;
-    const result = await bindDeliverySteps(steps).deliverChange(options);
-    expect(result.status).toBe("limit-reached");
+    await expect(bindDeliverySteps(steps).deliverChange(options)).rejects.toThrow(
+      "The work is pushed on branch fix",
+    );
     expect(steps.pushBranch).toHaveBeenCalledWith("/work", "fix");
     expect(steps.postTicketNote).toHaveBeenCalledOnce();
     const [issueId, note] = vi.mocked(steps.postTicketNote).mock.calls[0] ?? [];
@@ -372,7 +370,7 @@ describe("delivery", () => {
     expect(steps.openPullRequest).not.toHaveBeenCalled();
   });
 
-  it("leaves a limit an onLimit chose to stop at alone", async () => {
+  it("pushes and reports a limit that onLimit declines", async () => {
     const { steps } = setup();
     steps.runAgent = (async (config) => ({
       text: "",
@@ -380,12 +378,14 @@ describe("delivery", () => {
         ? { responses: [] }
         : blocking("Missing test"),
     })) as AgentFn;
-    const result = await bindDeliverySteps(steps).deliverChange({
-      ...options,
-      onLimit: async () => ({ action: "stop" }),
-    });
-    expect(result.status).toBe("stopped");
-    expect(steps.postTicketNote).not.toHaveBeenCalled();
+    await expect(
+      bindDeliverySteps(steps).deliverChange({
+        ...options,
+        onLimit: async () => ({ action: "stop" }),
+      }),
+    ).rejects.toThrow("The work is pushed on branch fix");
+    expect(steps.pushBranch).toHaveBeenCalledWith("/work", "fix");
+    expect(steps.postTicketNote).toHaveBeenCalledOnce();
   });
 
   it("only adds the explicitly granted attempts and passes human direction", async () => {
@@ -406,8 +406,9 @@ describe("delivery", () => {
         instructions: "Test Unicode",
       })
       .mockResolvedValueOnce({ action: "stop" });
-    const result = await bindDeliverySteps(steps).deliverChange({ ...options, onLimit });
-    expect(result).toMatchObject({ status: "stopped", attempts: 3 });
+    await expect(bindDeliverySteps(steps).deliverChange({ ...options, onLimit })).rejects.toThrow(
+      "after 3 implementation review round(s)",
+    );
     expect(prompts[4]).toContain("Test Unicode");
     // The reviewer hears the human too: direction reaches both roles of the round.
     expect(prompts[5]).toContain("Test Unicode");
@@ -422,11 +423,12 @@ describe("delivery", () => {
       .mockResolvedValueOnce({ commits: 1, headSha: "new", dirty: false })
       .mockResolvedValueOnce({ commits: 1, headSha: "first", dirty: false })
       .mockResolvedValueOnce({ commits: 1, headSha: "second", dirty: false });
-    const result = await bindDeliverySteps(steps).deliverChange({
-      ...options,
-      ciRepair: { harness: { kind: "claude", model: "repair" } },
-    });
-    expect(result).toMatchObject({ status: "limit-reached", phase: "ci-repair", attempts: 1 });
+    await expect(
+      bindDeliverySteps(steps).deliverChange({
+        ...options,
+        ciRepair: { harness: { kind: "claude", model: "repair" } },
+      }),
+    ).rejects.toThrow("after 1 ci-repair attempt(s). The work is pushed on branch fix");
     expect(calls.filter((call) => call.harness.model === "repair")).toHaveLength(1);
     expect(calls.find((call) => call.harness.model === "repair")?.resume).toBeUndefined();
     expect(closed).toHaveBeenCalledOnce();
@@ -466,7 +468,7 @@ describe("delivery", () => {
           }
         : original(config)) as AgentFn;
     const result = await bindDeliverySteps(steps).deliverChange(options);
-    expect(result.status).toBe("merged");
+    expect(result.pr).toEqual(pr);
     expect(steps.replyToPullRequestReviewThread).toHaveBeenCalledOnce();
     expect(steps.replyToPullRequestReviewThread).toHaveBeenCalledWith(
       pr,
@@ -520,7 +522,7 @@ describe("delivery", () => {
       merge: HUMAN_MERGE,
     });
 
-    expect(result.status).toBe("merged");
+    expect(result.pr).toEqual(pr);
     expect(steps.pushBranch).toHaveBeenCalledOnce();
     expect(steps.replyToPullRequestReviewThread).toHaveBeenCalledOnce();
     expect(steps.commentOnPullRequest).toHaveBeenCalledOnce();
@@ -664,7 +666,7 @@ describe("delivery", () => {
       merge: HUMAN_MERGE,
     });
 
-    expect(result.status).toBe("merged");
+    expect(result.pr).toEqual(pr);
     expect(calls).toHaveLength(1);
     expect(round).toBe(3);
   });
@@ -676,9 +678,11 @@ describe("delivery", () => {
       reason: "the head moved",
       transient: true,
     });
-    expect(
-      (await bindDeliverySteps(steps).deliverChange({ ...options, merge: JIGS_MERGE })).status,
-    ).toBe("closed");
+    await expect(
+      bindDeliverySteps(steps).deliverChange({ ...options, merge: JIGS_MERGE }),
+    ).rejects.toThrow("pull request owner/repo#1 was closed unmerged");
+    expect(steps.pushBranch).toHaveBeenCalledWith("/work", "fix");
+    expect(steps.postTicketNote).toHaveBeenCalledOnce();
   });
 
   it("retries a merge refused for a state that passes, and says so once", async () => {
@@ -692,7 +696,7 @@ describe("delivery", () => {
       .mockResolvedValueOnce({ merged: true, mergeCommitSha: "merged" });
     const result = await bindDeliverySteps(steps).deliverChange({ ...options, merge: JIGS_MERGE });
 
-    expect(result.status).toBe("merged");
+    expect(result.pr).toEqual(pr);
     expect(steps.mergePullRequest).toHaveBeenCalledTimes(2);
     // One note, and it does not stand the commit down.
     expect(steps.commentOnPullRequest).toHaveBeenCalledOnce();
@@ -709,7 +713,7 @@ describe("delivery", () => {
 
     const result = await bindDeliverySteps(steps).deliverChange({ ...options, merge: JIGS_MERGE });
 
-    expect(result.status).toBe("merged");
+    expect(result.pr).toEqual(pr);
     expect(steps.mergePullRequest).toHaveBeenCalledTimes(2);
     expect(steps.commentOnPullRequest).toHaveBeenCalledOnce();
     const [, body] = vi.mocked(steps.commentOnPullRequest).mock.calls[0] ?? [];
@@ -724,9 +728,9 @@ describe("delivery", () => {
       reason: "the branch conflicts with its base",
       transient: false,
     });
-    const result = await bindDeliverySteps(steps).deliverChange({ ...options, merge: JIGS_MERGE });
-
-    expect(result.status).toBe("closed");
+    await expect(
+      bindDeliverySteps(steps).deliverChange({ ...options, merge: JIGS_MERGE }),
+    ).rejects.toThrow("pull request owner/repo#1 was closed unmerged");
     const [, body] = vi.mocked(steps.commentOnPullRequest).mock.calls[0] ?? [];
     expect(body).toContain("I am standing down on new");
     expect(body).toContain('"reason":"merge"');
@@ -756,7 +760,7 @@ describe("delivery", () => {
       ...options,
       limits: { implementationReviewRounds: 2 },
     });
-    expect(result.status).toBe("approved");
+    expect(result.change.approval.reviewedCommit).toBe("new");
     expect(prompts[2]).toContain("Find exact matches");
     expect(prompts[2]).toContain("Current diff:");
   });
@@ -778,27 +782,39 @@ describe("delivery", () => {
       headSha: "first",
       dirty: false,
     });
-    const result = await bindDeliverySteps(steps).deliverChange({
-      ...options,
-      limits: { ...options.limits, ciFixAttempts: 0 },
-    });
-    expect(result).toMatchObject({ status: "limit-reached", phase: "ci-repair", attempts: 0 });
+    await expect(
+      bindDeliverySteps(steps).deliverChange({
+        ...options,
+        limits: { ...options.limits, ciFixAttempts: 0 },
+      }),
+    ).rejects.toThrow("after 0 ci-repair attempt(s). The work is pushed on branch fix");
     expect(calls).toHaveLength(3);
     expect(closed).toHaveBeenCalledOnce();
+  });
+
+  it("fails after preserving work when a CI repair produces no clean new commit", async () => {
+    const { steps } = setup([red("first")]);
+    vi.mocked(steps.readBranchState).mockResolvedValue({
+      commits: 1,
+      headSha: "first",
+      dirty: false,
+    });
+    await expect(bindDeliverySteps(steps).deliverChange(options)).rejects.toThrow(
+      "CI repair attempt 1 produced no new clean commit. The work is pushed on branch fix",
+    );
+    expect(steps.pushBranch).toHaveBeenCalledWith("/work", "fix");
+    expect(steps.postTicketNote).toHaveBeenCalledOnce();
   });
 
   it("spends one revision round per feedback wake and stops at the budget", async () => {
     const summary: GateWake = { kind: "review-comments", threads: [], body: "Fix search" };
     const { steps, calls } = setup([summary, summary]);
-    const result = await bindDeliverySteps(steps).deliverChange({
-      ...options,
-      pullRequestRevision: { harness: { kind: "claude", model: "revision" } },
-    });
-    expect(result).toMatchObject({
-      status: "limit-reached",
-      phase: "pull-request-revision",
-      attempts: 1,
-    });
+    await expect(
+      bindDeliverySteps(steps).deliverChange({
+        ...options,
+        pullRequestRevision: { harness: { kind: "claude", model: "revision" } },
+      }),
+    ).rejects.toThrow("after 1 pull-request-revision attempt(s)");
     expect(calls.filter((call) => call.harness.model === "revision")).toHaveLength(1);
   });
 
@@ -826,14 +842,9 @@ describe("delivery", () => {
   it("stops before review when the implementation leaves the worktree dirty", async () => {
     const { steps, calls } = setup();
     vi.mocked(steps.readBranchState).mockResolvedValue({ commits: 1, headSha: "new", dirty: true });
-    const result = await bindDeliverySteps(steps).deliverChange(options);
-    expect(result).toMatchObject({
-      status: "uncommitted-work",
-      phase: "implementation-review",
-      attempts: 1,
-      findings: ["The implementation left uncommitted changes; only committed work is reviewed."],
-    });
-    expect(result.change.worktree).toEqual(options.worktree);
+    await expect(bindDeliverySteps(steps).deliverChange(options)).rejects.toThrow(
+      "The implementation left uncommitted changes; only committed work is reviewed. The work is pushed on branch fix",
+    );
     expect(calls.map((call) => call.harness.model)).toEqual(["builder"]);
     expect(steps.openPullRequest).not.toHaveBeenCalled();
   });
@@ -845,13 +856,11 @@ describe("delivery", () => {
       headSha: "base",
       dirty: false,
     });
-    const result = await bindDeliverySteps(steps).deliverChange(options);
-    expect(result).toMatchObject({
-      status: "uncommitted-work",
-      findings: ["The implementation added no commits since the base commit."],
-    });
+    await expect(bindDeliverySteps(steps).deliverChange(options)).rejects.toThrow(
+      "The implementation added no commits since the base commit. The work is pushed on branch fix",
+    );
     expect(calls).toHaveLength(1);
-    expect(steps.pushBranch).not.toHaveBeenCalled();
+    expect(steps.pushBranch).toHaveBeenCalledWith("/work", "fix");
   });
 
   it("records the reviewed commit and shows it to the reviewer", async () => {
@@ -866,7 +875,6 @@ describe("delivery", () => {
       limits: { implementationReviewRounds: 1 },
     });
     expect(built).toMatchObject({
-      status: "approved",
       change: { approval: { reviewedCommit: "reviewed" } },
     });
     expect(calls[1]?.prompt).toContain("Head commit under review: reviewed");
@@ -915,7 +923,7 @@ describe("delivery", () => {
           `${task.instructions}\nInvestigate ${incident.service}: ${incident.impact}`,
       },
     });
-    expect(result.status).toBe("merged");
+    expect(result.pr).toEqual(pr);
     expect(calls[0]?.prompt).toContain("bucket-a: unexpected growth");
     expect(result.change.task.key).toBe("overnight audit / storage");
   });
@@ -929,7 +937,7 @@ describe("delivery", () => {
   it("merges the ready commit the wake named", async () => {
     const { steps } = setup([mergeReady("new")]);
     const result = await bindDeliverySteps(steps).deliverChange({ ...options, merge: JIGS_MERGE });
-    expect(result.status).toBe("merged");
+    expect(result.pr).toEqual(pr);
     expect(steps.mergePullRequest).toHaveBeenCalledExactlyOnceWith(pr, "new", JIGS_MERGE);
   });
   it("lets a role add to the prompt jigs would have sent", async () => {
@@ -967,12 +975,12 @@ describe("delivery", () => {
       headSha: "base",
       dirty: true,
     });
-    const result = await bindDeliverySteps(steps).implementAndReview({
+    const result = bindDeliverySteps(steps).implementAndReview({
       ...options,
       implementation: { ...options.implementation, prompt: () => "Follow TASK.md" },
     });
+    await expect(result).rejects.toThrow("The work is pushed on branch fix");
     expect(calls[0]?.prompt).toBe("Follow TASK.md");
-    expect(result.status).toBe("uncommitted-work");
     expect(steps.readWorktreeDiff).not.toHaveBeenCalled();
   });
 
@@ -1050,18 +1058,20 @@ describe("delivery", () => {
       headSha: "base",
       dirty: true,
     });
-    await bindDeliverySteps(steps).implementAndReview({
-      ...options,
-      implementation: {
-        ...options.implementation,
-        prompt: async ({ readDiff, renderDefaultPrompt }) => {
-          expect(await readDiff?.()).toBe("diff");
-          const first = await renderDefaultPrompt();
-          expect(await renderDefaultPrompt()).toBe(first);
-          return first;
+    await expect(
+      bindDeliverySteps(steps).implementAndReview({
+        ...options,
+        implementation: {
+          ...options.implementation,
+          prompt: async ({ readDiff, renderDefaultPrompt }) => {
+            expect(await readDiff?.()).toBe("diff");
+            const first = await renderDefaultPrompt();
+            expect(await renderDefaultPrompt()).toBe(first);
+            return first;
+          },
         },
-      },
-    });
+      }),
+    ).rejects.toThrow("The work is pushed on branch fix");
     expect(steps.readWorktreeDiff).toHaveBeenCalledExactlyOnceWith("/work", "base");
     expect(calls[0]?.prompt).toContain("Current diff:\ndiff");
   });
@@ -1114,7 +1124,7 @@ describe("delivery", () => {
     ).rejects.toThrow();
   });
 
-  it("keeps a custom task's own fields on the limit callback and the result", async () => {
+  it("keeps a custom task's own fields on the limit callback", async () => {
     const { steps } = setup();
     steps.runAgent = (async (config) => ({
       text: "",
@@ -1122,16 +1132,17 @@ describe("delivery", () => {
     })) as AgentFn;
     const incident = { ...options.task, service: "bucket-a", impact: "unexpected growth" };
     const seen: string[] = [];
-    const result = await bindDeliverySteps(steps).deliverChange({
-      ...options,
-      task: incident,
-      onLimit: async (limit) => {
-        seen.push(`${limit.task.service}: ${limit.task.impact}`);
-        return { action: "stop" };
-      },
-    });
+    await expect(
+      bindDeliverySteps(steps).deliverChange({
+        ...options,
+        task: incident,
+        onLimit: async (limit) => {
+          seen.push(`${limit.task.service}: ${limit.task.impact}`);
+          return { action: "stop" };
+        },
+      }),
+    ).rejects.toThrow("The work is pushed on branch fix");
     expect(seen).toEqual(["bucket-a: unexpected growth"]);
-    expect(result.change.task.impact).toBe("unexpected growth");
   });
 
   it("sends the pull-request revision role its shipped default", async () => {

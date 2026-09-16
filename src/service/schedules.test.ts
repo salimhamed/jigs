@@ -31,7 +31,6 @@ const row = (over: Partial<RunRow> = {}): RunRow => ({
   runId: RUN,
   workflow: "sweep",
   status: "running",
-  outcome: null,
   trigger: "schedule:nightly",
   ticket: null,
   pullRequest: null,

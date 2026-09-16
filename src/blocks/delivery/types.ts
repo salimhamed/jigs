@@ -246,29 +246,15 @@ export interface ApprovedChange<TTask extends WorkItem = WorkItem> extends Deliv
     reviewedCommit: string;
   };
 }
-/** A delivery that ended without a merge or a closure. The worktree is retained. */
-export interface DeliveryStopped<TTask extends WorkItem = WorkItem> {
-  /**
-   * `limit-reached` when a budget ran out with no `onLimit`, `stopped` when
-   * `onLimit` declined or a repair produced nothing usable, and
-   * `uncommitted-work` when an implementation attempt left nothing reviewable.
-   */
-  status: "limit-reached" | "stopped" | "uncommitted-work";
-  phase: DeliveryPhase;
-  attempts: number;
-  /** Why it stopped here: findings, failing checks, or the reason nothing was reviewable. */
-  findings: string[];
-  change: DeliveryChange<TTask>;
-  pr?: PrRef;
-}
-/** Approved carries the reviewed commit; nothing else is publishable. */
-export type ImplementAndReviewResult<TTask extends WorkItem = WorkItem> =
-  | { status: "approved"; change: ApprovedChange<TTask> }
-  | DeliveryStopped<TTask>;
-/** Remove the worktree only on `merged`; every other outcome may still be worked on. */
-export type DeliveryResult<TTask extends WorkItem = WorkItem> =
-  | { status: "merged" | "closed"; change: ApprovedChange<TTask>; pr: PrRef }
-  | DeliveryStopped<TTask>;
+/** Approved carries the reviewed commit; a stopped delivery throws instead. */
+export type ImplementAndReviewResult<TTask extends WorkItem = WorkItem> = {
+  change: ApprovedChange<TTask>;
+};
+/** A delivery returns only after its pull request merged. */
+export type DeliveryResult<TTask extends WorkItem = WorkItem> = {
+  change: ApprovedChange<TTask>;
+  pr: PrRef;
+};
 
 export interface ImplementAndReviewOptions<TTask extends WorkItem = WorkItem> {
   /** Recorded durably, so keep it plain serializable data. */

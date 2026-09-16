@@ -1,6 +1,6 @@
 import { JigsError } from "../../errors.ts";
 import { formatTable } from "../table.ts";
-import { age, outcomeCell, outcomeNeedsAttention, type PsRun, suspensionLine } from "./ps.ts";
+import { age, type PsRun, suspensionLine } from "./ps.ts";
 import { readErrorBody, runRefError, type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 // jigs contributes the two things the dashboard cannot — resolving a ticket id
@@ -64,7 +64,6 @@ export async function showLogs(
   const now = options.now ?? new Date();
   deps.out(`run ${result.runId}`);
   deps.out(`status ${result.status}`);
-  if (result.outcome !== null) deps.out(`outcome ${outcomeLine(result.outcome)}`);
   deps.out(`trigger ${result.trigger}`);
   if (result.ticket !== null) deps.out(`ticket ${result.ticket}`);
   if (result.pullRequest !== null) deps.out(`pull request ${result.pullRequest}`);
@@ -128,9 +127,6 @@ function showTimeline(timeline: Timeline, deps: ServiceDeps): void {
     );
   }
 }
-
-const outcomeLine = (outcome: string): string =>
-  outcomeNeedsAttention(outcome) ? `${outcomeCell(outcome)} — this run did not succeed` : outcome;
 
 function took(step: StepRow): string {
   if (step.startedAt === null) return "-";

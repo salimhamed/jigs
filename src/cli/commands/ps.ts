@@ -14,7 +14,6 @@ export interface PsRun {
   runId: string;
   workflow: string;
   status: string;
-  outcome: string | null;
   trigger: string;
   ticket: string | null;
   pullRequest: string | null;
@@ -75,24 +74,12 @@ export async function showRuns(deps: ServiceDeps, options: PsOptions = {}): Prom
     deps.out("no runs");
   } else {
     for (const line of formatTable(
-      [
-        "RUN",
-        "WORKFLOW",
-        "TICKET",
-        "STATUS",
-        "OUTCOME",
-        "PR",
-        "TRIGGER",
-        "AGE",
-        "ACTIVITY",
-        "WAITING",
-      ],
+      ["RUN", "WORKFLOW", "TICKET", "STATUS", "PR", "TRIGGER", "AGE", "ACTIVITY", "WAITING"],
       result.runs.map((run) => [
         run.runId,
         run.workflow,
         run.ticket ?? "-",
         run.status,
-        outcomeCell(run.outcome),
         run.pullRequest ?? "-",
         run.trigger,
         age(run.createdAt, now),
@@ -137,24 +124,6 @@ export async function showRuns(deps: ServiceDeps, options: PsOptions = {}): Prom
     }
   }
   return result;
-}
-
-// A run that hit its round limit and one that merged are both `completed` to
-// the SDK: only the outcome the workflow returned tells them apart. A merge,
-// and a workflow that returned no result status at all, are the two quiet
-// endings; everything else — a budget spent, a failure, a result nothing could
-// read — is worth an operator's attention. `jigs logs` and `jigs watch` mark
-// it from here too, which is why this lives beside the table that shows it.
-const QUIET_OUTCOMES: ReadonlySet<string> = new Set(["merged", "completed"]);
-
-export const outcomeNeedsAttention = (outcome: string | null): boolean =>
-  outcome !== null && !QUIET_OUTCOMES.has(outcome);
-
-/** The bang is what stops a run that gave up from passing for a merge at a
- *  glance. */
-export function outcomeCell(outcome: string | null): string {
-  if (outcome === null) return "-";
-  return outcomeNeedsAttention(outcome) ? `!${outcome}` : outcome;
 }
 
 export function waitingCell(run: PsRun): string {

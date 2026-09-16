@@ -28,7 +28,6 @@ const run = (over: Partial<PsRun> = {}): PsRun => ({
   runId: RUN,
   workflow: "deliver-feature",
   status: "running",
-  outcome: null,
   trigger: "manual",
   ticket: null,
   pullRequest: null,
@@ -70,26 +69,25 @@ test("a suspended run names its ticket, its pull request and what it waits for",
   });
   await showRuns(deps(), { now: NOW });
   expect(lines[0]).toBe(
-    "RUN                              WORKFLOW         TICKET   STATUS     OUTCOME  PR           TRIGGER  AGE  ACTIVITY  WAITING",
+    "RUN                              WORKFLOW         TICKET   STATUS     PR           TRIGGER  AGE  ACTIVITY  WAITING",
   );
   expect(lines[1]).toBe(
-    `${RUN}  deliver-feature  AGE-317  suspended  -        acme/api#41  manual   30m  1m        waiting for an approving review and green CI on acme/api#41 → https://github.com/acme/api/pull/41`,
+    `${RUN}  deliver-feature  AGE-317  suspended  acme/api#41  manual   30m  1m        waiting for an approving review and green CI on acme/api#41 → https://github.com/acme/api/pull/41`,
   );
 });
 
-test("a run that gave up does not read like one that merged", async () => {
+test("runs are distinguished by SDK status", async () => {
   respond({
     runs: [
-      run({ status: "completed", outcome: "limit-reached" }),
-      run({ runId: "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ", status: "completed", outcome: "merged" }),
+      run({ status: "failed" }),
+      run({ runId: "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ", status: "completed" }),
     ],
     worktrees: [],
     schedules: [],
   });
   await showRuns(deps(), { now: NOW });
-  expect(lines[1]).toContain("!limit-reached");
-  expect(lines[2]).toContain(" merged ");
-  expect(lines[2]).not.toContain("!");
+  expect(lines[1]).toContain(" failed ");
+  expect(lines[2]).toContain(" completed ");
 });
 
 test("--json prints the service's answer verbatim, tables and all", async () => {
@@ -151,7 +149,7 @@ test("a declared schedule that has never fired shows dashes, not blanks", async 
 
 test("a worktree the registry marks abandoned-dirty is shown, not filtered", async () => {
   respond({
-    runs: [run({ status: "failed", outcome: "failed" })],
+    runs: [run({ status: "failed" })],
     worktrees: [
       {
         path: "/home/dev/worktrees/api/age-317",
