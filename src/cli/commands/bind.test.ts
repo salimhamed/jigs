@@ -337,7 +337,11 @@ test("bind ensures the configured approval label on every run", async () => {
     commitStatuses: async () => 0,
     actionsWorkflows: async () => 0,
     labelExists: async () => true,
-    protection: async () => ({ requiredStatusChecks: 1, requiredApprovingReviews: 0 }),
+    protection: async () => ({
+      requiredStatusChecks: 1,
+      requiredApprovingReviews: 0,
+      unread: null,
+    }),
   };
 
   await bindRepo(API, deps({ ensureLabel, mergePolicyProbes }));
@@ -400,7 +404,6 @@ test("bind prints a merge-policy repair but still resolves successfully", async 
       mergePolicyProbes: {
         repository: async () => ({
           default_branch: "main",
-          permissions: { admin: true },
           allow_merge_commit: true,
           allow_squash_merge: true,
           allow_rebase_merge: true,
