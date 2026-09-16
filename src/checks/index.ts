@@ -39,8 +39,11 @@ export {
 } from "./core.ts";
 export {
   type GithubIdentityProbes,
+  type GithubMergePolicyProbes,
   githubIdentityChecks,
+  mergePolicyCheck,
   realGithubIdentityProbes,
+  realGithubMergePolicyProbes,
 } from "./github-identity.ts";
 export {
   type HarnessRuntime,
@@ -77,8 +80,14 @@ const githubProbes: GithubIdentityProbes = realGithubIdentityProbes(getAuthentic
 // factory would get, and the credential is still worth checking.
 function githubChecks(): Check[] {
   try {
-    const { merge } = readFactoryConfig(factoryRoot());
-    return githubIdentityChecks(resolveGithubIdentity(), merge, githubProbes);
+    const { merge, bindings } = readFactoryConfig(factoryRoot());
+    return githubIdentityChecks(
+      resolveGithubIdentity(),
+      merge,
+      githubProbes,
+      process.env,
+      bindings,
+    );
   } catch {
     // A configuration that cannot be read is the binding checks' diagnosis;
     // the credential is still worth checking, against what a factory that

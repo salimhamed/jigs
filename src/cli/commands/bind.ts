@@ -1,5 +1,11 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { formatFailures, runChecks } from "../../checks/catalog.ts";
+import {
+  type GithubMergePolicyProbes,
+  mergePolicyCheck,
+  realGithubMergePolicyProbes,
+} from "../../checks/github-identity.ts";
 import { upsertBinding } from "../../config/binding-edit.ts";
 import {
   readFactoryConfig,
@@ -24,6 +30,7 @@ const BINDING_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 export interface BindDeps {
   cwd: string;
   out: (line: string) => void;
+  mergePolicyProbes?: GithubMergePolicyProbes;
 }
 
 export interface BindOptions {
@@ -122,6 +129,16 @@ export async function bindRepo(
         : `jigs bind ${remoteUrl}`,
     deps,
   });
+  if (parseGithubRemote(remoteUrl) !== null) {
+    const report = await runChecks([
+      mergePolicyCheck(
+        config.merge,
+        { [name]: { remote: remoteUrl } },
+        deps.mergePolicyProbes ?? realGithubMergePolicyProbes,
+      ),
+    ]);
+    if (!report.ok) deps.out(formatFailures(report));
+  }
   return { name, remote: remoteUrl, webhook };
 }
 
@@ -184,14 +201,16 @@ async function ensureWebhook({
     return `once that clears, re-run: ${reBindCommand}`;
   };
   const secret = ensureWebhookSecret();
-  const ensured = await ensureRepoWebhook({ ...repoRef, ingressUrl, secret }).catch(
-    (err: unknown) => {
-      throw new JigsError(
-        `${slug}'s webhook could not be ensured: ${err instanceof Error ? err.message : String(err)}`,
-        repairFor(err),
-      );
-    },
-  );
+  const ensured = await ensureRepoWebhook({
+    ...repoRef,
+    ingressUrl,
+    secret,
+  }).catch((err: unknown) => {
+    throw new JigsError(
+      `${slug}'s webhook could not be ensured: ${err instanceof Error ? err.message : String(err)}`,
+      repairFor(err),
+    );
+  });
   deps.out(`webhook ${ensured.outcome}: ${slug}`);
   if (ensured.otherHosts.length > 0) {
     deps.out(
