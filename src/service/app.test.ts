@@ -505,6 +505,23 @@ test("GET /api/runs/:ref says what each park is waiting for, and where to act", 
   });
 });
 
+test("a halt whose comment Linear will not hand back keeps the park it can state", async () => {
+  runHolding(CLAIM, MARKER);
+  vi.spyOn(linear, "getComment").mockRejectedValue(new Error("Linear API key is not set"));
+
+  const res = await app.request(`/api/runs/${RUN}`);
+
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as { suspensions: Array<Record<string, unknown>> };
+  expect(body.suspensions).toEqual([
+    {
+      token: MARKER,
+      kind: "needs-human",
+      reason: "waiting for a human reply on 68bc9696-35d5-442d-ab56-214c8cfefbec",
+    },
+  ]);
+});
+
 test("a run holding only its ticket claim is running, not suspended", async () => {
   runHolding(CLAIM);
 

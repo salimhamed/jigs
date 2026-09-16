@@ -7,12 +7,3 @@ export const TERMINAL_RUN_STATUSES: ReadonlySet<string> = new Set([
   "failed",
   "cancelled",
 ]);
-
-// A run that hit its round limit and one that merged are both `completed` to
-// the SDK: only the outcome the workflow returned tells them apart. Anything
-// but a merge — or a workflow that returned no result status at all — is worth
-// an operator's attention, so `jigs ps`, `jigs logs` and `jigs watch` mark it.
-const QUIET_OUTCOMES: ReadonlySet<string> = new Set(["merged", "completed"]);
-
-export const outcomeNeedsAttention = (outcome: string | null): boolean =>
-  outcome !== null && !QUIET_OUTCOMES.has(outcome);

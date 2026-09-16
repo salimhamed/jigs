@@ -43,8 +43,6 @@ const result = (over: Partial<LogsResult> = {}): LogsResult => ({
 const respond = (body: unknown) =>
   fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(body)));
 
-const timeline = (body: unknown) => respond(body);
-
 test("logs says what the run waits for, where to act, and what was asked", async () => {
   respond(
     result({
@@ -63,7 +61,7 @@ test("logs says what the run waits for, where to act, and what was asked", async
       ],
     }),
   );
-  timeline({ steps: [], deadJobs: [] });
+  respond({ steps: [], deadJobs: [] });
   await showLogs("AGE-317", deps(), { now: NOW });
   expect(fetchMock.mock.calls[0]?.[0]).toBe("http://svc.test:8990/api/runs/AGE-317");
   // The timeline is asked for by the run id the first call resolved, never by
@@ -86,7 +84,7 @@ test("logs says what the run waits for, where to act, and what was asked", async
 
 test("a run that hit its limit says so where a merged one says merged", async () => {
   respond(result({ status: "completed", outcome: "limit-reached", pullRequest: "acme/api#41" }));
-  timeline({ steps: [], deadJobs: [] });
+  respond({ steps: [], deadJobs: [] });
   await showLogs(RUN, deps(), { now: NOW });
   expect(lines[2]).toBe("outcome !limit-reached — this run did not succeed");
   expect(lines[4]).toBe("pull request acme/api#41");
@@ -94,14 +92,14 @@ test("a run that hit its limit says so where a merged one says merged", async ()
 
 test("a merged run's outcome is stated plainly", async () => {
   respond(result({ status: "completed", outcome: "merged" }));
-  timeline({ steps: [], deadJobs: [] });
+  respond({ steps: [], deadJobs: [] });
   await showLogs(RUN, deps(), { now: NOW });
   expect(lines[2]).toBe("outcome merged");
 });
 
 test("--json prints one document with the run, its suspensions and its timeline", async () => {
   respond(result({ ticket: "AGE-317", logs: DASHBOARD }));
-  timeline({ steps: [{ name: "claimTicket", status: "completed" }], deadJobs: [] });
+  respond({ steps: [{ name: "claimTicket", status: "completed" }], deadJobs: [] });
   await showLogs(RUN, deps(), { json: true, now: NOW });
   expect(lines).toHaveLength(1);
   const document = JSON.parse(lines[0] ?? "") as Record<string, unknown>;
@@ -115,7 +113,7 @@ test("--json prints one document with the run, its suspensions and its timeline"
 
 test("a scheduled run names the schedule that fired it", async () => {
   respond(result({ trigger: "schedule:nightly-audit" }));
-  timeline({ steps: [], deadJobs: [] });
+  respond({ steps: [], deadJobs: [] });
   await showLogs(RUN, deps(), { now: NOW });
   expect(lines[2]).toBe("trigger schedule:nightly-audit");
 });
@@ -129,7 +127,7 @@ test("a failed run's error is printed above the log pointer", async () => {
       logs: DASHBOARD,
     }),
   );
-  timeline({ steps: [], deadJobs: [] });
+  respond({ steps: [], deadJobs: [] });
   await showLogs(RUN, deps(), { now: NOW });
   expect(lines).toEqual([
     `run ${RUN}`,
@@ -144,7 +142,7 @@ test("a failed run's error is printed above the log pointer", async () => {
 
 test("the step timeline reports a duration, a step still running, and its error", async () => {
   respond(result());
-  timeline({
+  respond({
     steps: [
       {
         name: "step//./steps/jigs//claimTicket",
@@ -176,7 +174,7 @@ test("the step timeline reports a duration, a step still running, and its error"
 
 test("a dead job is printed with its error's first line and a copy-pasteable requeue", async () => {
   respond(result());
-  timeline({
+  respond({
     steps: [],
     deadJobs: [
       {

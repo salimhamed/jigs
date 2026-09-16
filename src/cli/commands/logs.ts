@@ -1,7 +1,6 @@
 import { JigsError } from "../../errors.ts";
-import { outcomeNeedsAttention } from "../../run-status.ts";
 import { formatTable } from "../table.ts";
-import { age, outcomeCell, type PsRun, suspensionLine } from "./ps.ts";
+import { age, outcomeCell, outcomeNeedsAttention, type PsRun, suspensionLine } from "./ps.ts";
 import { readErrorBody, runRefError, type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 // jigs contributes the two things the dashboard cannot — resolving a ticket id

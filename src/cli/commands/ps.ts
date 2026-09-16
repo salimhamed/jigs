@@ -1,5 +1,4 @@
 import { JigsError } from "../../errors.ts";
-import { outcomeNeedsAttention } from "../../run-status.ts";
 import { formatTable } from "../table.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 
@@ -21,7 +20,8 @@ export interface PsRun {
   pullRequest: string | null;
   createdAt: string;
   lastActivityAt: string;
-  steps: number;
+  /** How far the run got, or null when nothing read its steps. */
+  steps: number | null;
   lastStep: { name: string; status: string; at: string | null } | null;
   suspended: boolean;
   suspensions: PsSuspension[];
@@ -139,8 +139,19 @@ export async function showRuns(deps: ServiceDeps, options: PsOptions = {}): Prom
   return result;
 }
 
-/** A run that gave up and one that merged both read `completed`; the bang is
- *  what stops the first from passing for the second at a glance. */
+// A run that hit its round limit and one that merged are both `completed` to
+// the SDK: only the outcome the workflow returned tells them apart. A merge,
+// and a workflow that returned no result status at all, are the two quiet
+// endings; everything else — a budget spent, a failure, a result nothing could
+// read — is worth an operator's attention. `jigs logs` and `jigs watch` mark
+// it from here too, which is why this lives beside the table that shows it.
+const QUIET_OUTCOMES: ReadonlySet<string> = new Set(["merged", "completed"]);
+
+export const outcomeNeedsAttention = (outcome: string | null): boolean =>
+  outcome !== null && !QUIET_OUTCOMES.has(outcome);
+
+/** The bang is what stops a run that gave up from passing for a merge at a
+ *  glance. */
 export function outcomeCell(outcome: string | null): string {
   if (outcome === null) return "-";
   return outcomeNeedsAttention(outcome) ? `!${outcome}` : outcome;
@@ -151,9 +162,7 @@ export function waitingCell(run: PsRun): string {
 }
 
 export const suspensionLine = (suspension: PsSuspension): string =>
-  suspension.url === undefined || suspension.url === ""
-    ? suspension.reason
-    : `${suspension.reason} → ${suspension.url}`;
+  suspension.url === undefined ? suspension.reason : `${suspension.reason} → ${suspension.url}`;
 
 export function age(at: string, now: Date): string {
   const seconds = Math.max(0, Math.round((now.getTime() - new Date(at).getTime()) / 1000));

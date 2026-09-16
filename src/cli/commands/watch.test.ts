@@ -42,6 +42,12 @@ test("a run nobody has seen before appeared", () => {
   expect(events[0]?.detail).toBe("AGE-317");
 });
 
+test("a run first seen already finished is loud, not just new", () => {
+  const events = runEvents(undefined, run({ status: "failed", outcome: "failed" }), AT);
+  expect(names(events)).toEqual(["appeared", "finished"]);
+  expect(events[1]?.detail).toBe("failed — this run did not succeed");
+});
+
 test("a finished step and the park that follows it are two lines, in that order", () => {
   const before = run();
   const after = run({

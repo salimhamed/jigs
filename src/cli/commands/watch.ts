@@ -1,6 +1,12 @@
 import { JigsError } from "../../errors.ts";
-import { outcomeNeedsAttention, TERMINAL_RUN_STATUSES } from "../../run-status.ts";
-import { listFactoryRuns, type PsRun, suspensionLine, waitingCell } from "./ps.ts";
+import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
+import {
+  listFactoryRuns,
+  outcomeNeedsAttention,
+  type PsRun,
+  suspensionLine,
+  waitingCell,
+} from "./ps.ts";
 import type { ServiceDeps } from "./service-client.ts";
 
 // One long-lived process for the whole factory: a watcher that re-ran `jigs
@@ -62,6 +68,9 @@ export async function watchRuns(deps: WatchDeps, options: WatchOptions = {}): Pr
       emit(deps, options, unreachable(at, error));
       continue;
     }
+    // A run that drops out of the listing emits nothing: the world only stops
+    // listing a run that was deleted, and a deletion is not something that
+    // happened to the pipeline.
     for (const run of runs) {
       for (const event of previous === undefined
         ? opening(run, at)
@@ -84,7 +93,12 @@ function opening(run: PsRun, at: string): WatchEvent[] {
  *  happened: the step finished first, then the run parked on what comes next. */
 export function runEvents(previous: PsRun | undefined, next: PsRun, at: string): WatchEvent[] {
   if (previous === undefined) {
-    return [event(next, at, "appeared", next.ticket ?? next.workflow)];
+    const appeared = event(next, at, "appeared", next.ticket ?? next.workflow);
+    // A run that started and ended between two polls has to be as loud as one
+    // watched the whole way: it is the failure nobody saw happen.
+    return TERMINAL_RUN_STATUSES.has(next.status)
+      ? [appeared, event(next, at, "finished", finishedDetail(next))]
+      : [appeared];
   }
   const events: WatchEvent[] = [];
   if (next.lastStep !== null && stepKey(next) !== stepKey(previous)) {

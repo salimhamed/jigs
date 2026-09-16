@@ -77,22 +77,27 @@ poll.
 `jigs ps` is the snapshot: `RUN WORKFLOW TICKET STATUS OUTCOME PR TRIGGER AGE
 ACTIVITY WAITING`, then the worktrees the registry holds, then the schedules if
 the factory declares any. `TICKET` is the ticket the run claimed and `PR` the
-pull request it holds or opened — that is the whole mapping from a run id to
-the work. `TRIGGER` says how the run started; a scheduled fire reads
-`schedule:<name>`. `AGE` counts from launch, `ACTIVITY` from the last time the
-run moved: `running` with a 20-minute `ACTIVITY` is worth looking at, where a
-20-second one is an ordinary gap between steps.
+pull request a live run holds or a merged one opened — that is the whole
+mapping from a run id to the work. A failed or cancelled run kept no result to
+read one out of, so its `PR` is `-`. `TRIGGER` says how the run started; a
+scheduled fire reads `schedule:<name>`. `AGE` counts from launch, `ACTIVITY`
+from the last time the run moved: `running` with a 20-minute `ACTIVITY` is
+worth looking at, where a 20-second one is an ordinary gap between steps.
 
 `OUTCOME` is the result the workflow itself returned, because the runtime calls
 a merge and an exhausted budget alike `completed`. Anything but `merged` or a
 plain `completed` carries a `!` — `!limit-reached`, `!stopped`,
 `!uncommitted-work`, `!closed`, `!failed`, `!cancelled` — and means the run
-ended without shipping the work.
+ended without shipping the work. `!unknown` is the result nothing could read
+back, so whether it shipped is unanswered.
 
-`WAITING` decodes what a parked run is parked on, in words with the link to act
-on: `waiting for a human reply on AGE-123 → <comment url>`. `jigs logs <run>`
-prints the same for one run and adds the question a halt asked, the run's
-error, and the step timeline.
+`WAITING` decodes what a parked run is parked on, in words and — where the
+token names a page — with the link to act on: `waiting for an approving review
+and green CI on acme/api#41 → <pull request url>`. A needs-human halt reads
+`waiting for a human reply on AGE-123` with no link, because the comment URL
+costs a Linear round trip the listing will not pay per poll. `jigs logs <run>`
+is where that URL and the question the halt asked come from; it also prints the
+run's error and the step timeline.
 
 Prefer `--json` to the tables: `jigs ps --json` is `{runs, worktrees,
 schedules}`, `jigs logs --json` is the run's fields plus its timeline, and

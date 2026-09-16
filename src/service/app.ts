@@ -251,14 +251,13 @@ export function createApp(factory: Factory): Hono {
   });
 
   // The run described by the one function `jigs ps` reads, or the two verbs
-  // answer differently about the same run.
+  // answer differently about the same run. One run is worth what the listing
+  // will not spend on every run: its steps, terminal or not, and a round trip
+  // per halt to read the comment back from Linear.
   app.get("/api/runs/:runId", async (c) => {
     const ref = await resolveRunRef(c.req.param("runId"));
     if (ref.kind !== "found") return unresolvedRunResponse(c, ref);
-    const described = await describeRun(ref.runId);
-    // Only here: reading a halt's comment back from Linear costs a round trip
-    // per suspension, which the listing behind `jigs ps` and `jigs watch`
-    // refuses to pay on every poll.
+    const described = await describeRun(ref.runId, { steps: await listRunSteps(ref.runId) });
     const body: Record<string, unknown> = {
       ...described,
       suspensions: await enrichSuspensions(described.suspensions),

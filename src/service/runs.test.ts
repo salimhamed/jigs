@@ -225,6 +225,27 @@ test("a ticket claim is not a park, and every other hook explains itself", () =>
   });
 });
 
+// A token jigs minted but cannot take apart is still jigs' own park: the kind
+// says what to do about it, and only the details are missing.
+test("a park jigs minted keeps its kind when the rest of the token is unreadable", () => {
+  expect(describeSuspension("github:pr:garbage")).toEqual({
+    token: "github:pr:garbage",
+    kind: "pull-request",
+    reason: "waiting for an approving review and green CI on garbage",
+  });
+  expect(describeSuspension("jigs:needs-human:onlyone")).toEqual({
+    token: "jigs:needs-human:onlyone",
+    kind: "needs-human",
+    reason:
+      "waiting for a human reply, on a ticket this halt marker does not name (jigs:needs-human:onlyone)",
+  });
+  // The run was launched with a ticket, so the marker does not have to name one.
+  expect(describeSuspension("jigs:needs-human:onlyone", "AGE-317")).toMatchObject({
+    kind: "needs-human",
+    reason: "waiting for a human reply on AGE-317",
+  });
+});
+
 // devalue-flattened, index 0 the root — the form the world stores a return
 // value in, and what the outcome has to be read back out of.
 const storedResult = (result: Record<string, string>) => [
@@ -251,6 +272,9 @@ test("a completed run reports the result its workflow returned, not just `comple
   expect(
     runOutcome({ runId: RUN_A, workflowName: "w", status: "running", createdAt: new Date() }),
   ).toBeNull();
+  // A stored result the hydrator refuses leaves it unanswered whether the run
+  // shipped anything, which is not the quiet `completed` a plain return is.
+  expect(completed([])).toBe("unknown");
 });
 
 // Compiled workflows carry the workflowId the world records as workflowName;
@@ -299,10 +323,19 @@ test("a non-terminal run holding a park hook is reported suspended", async () =>
 const jobs = (dead: string[], live: string[] = []) =>
   vi.spyOn(stalls, "listJobRunIds").mockResolvedValue({ dead, live });
 
+const inFlight: stalls.StepView = {
+  name: "executeAgent",
+  status: "running",
+  attempt: 1,
+  startedAt: "2026-08-26T10:00:01.000Z",
+  completedAt: null,
+  error: null,
+};
+
 test("a running run with a dead job and nothing in flight is stalled", async () => {
   world({ runs: [worldRun()] });
   jobs([RUN_A]);
-  vi.spyOn(stalls, "runsWithActiveStep").mockResolvedValue([]);
+  vi.spyOn(stalls, "listStepsByRun").mockResolvedValue(new Map([[RUN_A, []]]));
   const rows = await listRuns(factory);
   expect(rows[0]?.status).toBe("stalled");
 });
@@ -310,7 +343,7 @@ test("a running run with a dead job and nothing in flight is stalled", async () 
 test("a dead job beside a step still in flight is not a stall", async () => {
   world({ runs: [worldRun()] });
   jobs([RUN_A]);
-  vi.spyOn(stalls, "runsWithActiveStep").mockResolvedValue([RUN_A]);
+  vi.spyOn(stalls, "listStepsByRun").mockResolvedValue(new Map([[RUN_A, [inFlight]]]));
   const rows = await listRuns(factory);
   expect(rows[0]?.status).toBe("running");
 });
@@ -321,7 +354,7 @@ test("a healed run is not stalled: the dead row stays, but a live job replaced i
   // otherwise read stalled in every gap between its steps.
   world({ runs: [worldRun()] });
   jobs([RUN_A], [RUN_A]);
-  vi.spyOn(stalls, "runsWithActiveStep").mockResolvedValue([]);
+  vi.spyOn(stalls, "listStepsByRun").mockResolvedValue(new Map([[RUN_A, []]]));
   const rows = await listRuns(factory);
   expect(rows[0]?.status).toBe("running");
 });
@@ -332,7 +365,7 @@ test("a run parked on a hook reads suspended even with a dead job", async () => 
     hooks: [{ runId: RUN_A, token: PARK_TOKEN }],
   });
   jobs([RUN_A]);
-  vi.spyOn(stalls, "runsWithActiveStep").mockResolvedValue([]);
+  vi.spyOn(stalls, "listStepsByRun").mockResolvedValue(new Map([[RUN_A, []]]));
   const rows = await listRuns(factory);
   expect(rows[0]?.status).toBe("suspended");
 });
@@ -340,7 +373,7 @@ test("a run parked on a hook reads suspended even with a dead job", async () => 
 test("a dead job left behind by a terminal run does not restate its status", async () => {
   world({ runs: [worldRun({ status: "completed" })] });
   jobs([RUN_A]);
-  vi.spyOn(stalls, "runsWithActiveStep").mockResolvedValue([]);
+  vi.spyOn(stalls, "listStepsByRun").mockResolvedValue(new Map([[RUN_A, []]]));
   const rows = await listRuns(factory);
   expect(rows[0]?.status).toBe("completed");
 });
@@ -487,6 +520,36 @@ test("a merged run still names its pull request, from the result it returned", a
   expect(row?.outcome).toBe("merged");
   expect(row?.pullRequest).toBe("acme/api#41");
   expect(row?.lastActivityAt).toBe("2026-08-26T12:00:00.000Z");
+});
+
+test("a terminal run's step count is null in the listing, not a zero it never read", async () => {
+  world({ runs: [worldRun({ status: "completed", completedAt: new Date() })] });
+  const row = (await listRuns(factory))[0];
+  expect(row?.steps).toBeNull();
+  expect(row?.lastStep).toBeNull();
+});
+
+// What the single-run route does: it holds the steps already, so a finished
+// run says how far it got rather than reporting nothing.
+test("a terminal run reports its steps to a caller that already read them", async () => {
+  const steps: stalls.StepView[] = [
+    {
+      ...inFlight,
+      name: "claimTicket",
+      status: "completed",
+      completedAt: "2026-08-26T10:00:02.000Z",
+    },
+  ];
+  const described = await describeRun(RUN_A, {
+    run: worldRun({ status: "completed" }),
+    steps,
+  });
+  expect(described.steps).toBe(1);
+  expect(described.lastStep).toEqual({
+    name: "claimTicket",
+    status: "completed",
+    at: "2026-08-26T10:00:02.000Z",
+  });
 });
 
 test("last activity is the run's newest step, not the moment it was created", async () => {

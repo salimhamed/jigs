@@ -13,10 +13,11 @@ import { getComment, resolveIssueRef } from "../providers/linear.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import { registrySql } from "../steps/worktree/sql.ts";
 import {
+  hasActiveStep,
   type JobRunIds,
   listJobRunIds,
   listRunSteps,
-  runsWithActiveStep,
+  listStepsByRun,
   type StepView,
 } from "./stalls.ts";
 
@@ -135,23 +136,30 @@ export function describeSuspension(token: string, ticket?: string | null): RunSu
       url: pr.url,
     };
   }
-  const halt = needsHumanParts(token);
-  if (halt !== null) {
+  // The prefix alone decides the kind: a marker jigs minted is a halt even
+  // when the rest of it is unreadable, and calling that external would point
+  // an operator at the wrong thing to do about it.
+  if (token.startsWith(NEEDS_HUMAN_TOKEN_PREFIX)) {
+    const where = ticket ?? needsHumanParts(token)?.issueId;
     return {
       token,
       kind: "needs-human",
-      reason: `waiting for a human reply on ${ticket ?? halt.issueId}`,
+      reason:
+        where === undefined
+          ? `waiting for a human reply, on a ticket this halt marker does not name (${token})`
+          : `waiting for a human reply on ${where}`,
     };
   }
   return { token, kind: "external", reason: `waiting for an external event (${token})` };
 }
 
-/** `github:pr:owner/repo#N` as the two things an operator needs from it. */
-function prFromToken(token: string): { slug: string; url: string } | null {
+/** `github:pr:owner/repo#N` as the two things an operator needs from it. A
+ *  slug this shape does not fit names no page to link to. */
+function prFromToken(token: string): { slug: string; url?: string } | null {
   if (!token.startsWith(PR_TOKEN_PREFIX)) return null;
   const slug = token.slice(PR_TOKEN_PREFIX.length);
   const parsed = /^([^/]+)\/([^#]+)#(\d+)$/.exec(slug);
-  if (parsed === null) return { slug, url: "" };
+  if (parsed === null) return { slug };
   return {
     slug,
     url: `https://github.com/${parsed[1]}/${parsed[2]}/pull/${parsed[3]}`,
@@ -167,9 +175,8 @@ function needsHumanParts(token: string): { issueId: string; commentId: string } 
 
 /**
  * The comment a halt is waiting on, read back from Linear: where to reply, and
- * what was asked. One round trip per halt, so only the single-run route pays
- * it — the listing behind `jigs ps` and `jigs watch` stays network-free. A
- * Linear that cannot be asked leaves the suspension as it was.
+ * what was asked. A Linear that cannot be asked leaves the suspension as the
+ * token alone describes it.
  */
 export async function enrichSuspensions(
   suspensions: readonly RunSuspension[],
@@ -185,6 +192,13 @@ export async function enrichSuspensions(
   );
 }
 
+/** Which runs are stalled, and the steps that answer cost — the listing hands
+ *  them straight back so no run is read twice in one request. */
+interface StallReading {
+  stalled: Set<string>;
+  steps: Map<string, StepView[]>;
+}
+
 /**
  * The runs nothing is coming back for: the queue gave up on a job of theirs,
  * holds no live one to replace it, and no step is in flight. All three,
@@ -192,13 +206,15 @@ export async function enrichSuspensions(
  * reconciliation each add a job beside it, and a healed run would otherwise
  * read stalled in every gap between its steps.
  */
-async function stalledRuns(): Promise<Set<string>> {
+async function stalledRuns(): Promise<StallReading> {
   const jobs = await worldJobRunIds();
   const live = new Set(jobs.live);
   const stranded = [...new Set(jobs.dead)].filter((id) => !live.has(id));
-  if (stranded.length === 0) return new Set();
-  const busy = new Set(await runsWithActiveStep(stranded));
-  return new Set(stranded.filter((runId) => !busy.has(runId)));
+  const steps = await listStepsByRun(stranded);
+  return {
+    stalled: new Set(stranded.filter((runId) => !hasActiveStep(steps.get(runId) ?? []))),
+    steps,
+  };
 }
 
 export interface RunStep {
@@ -220,7 +236,8 @@ export interface RunDescription {
   createdAt: string;
   /** The last thing that happened to this run, step timings included. */
   lastActivityAt: string;
-  steps: number;
+  /** How many steps the run recorded, or null where nothing read them. */
+  steps: number | null;
   lastStep: RunStep | null;
   suspended: boolean;
   suspensions: RunSuspension[];
@@ -236,7 +253,7 @@ export interface RunFacts {
   run?: WorldRun;
   tokens?: readonly string[];
   stalled?: boolean;
-  steps?: StepFacts;
+  steps?: readonly StepView[];
 }
 
 interface StepFacts {
@@ -256,6 +273,9 @@ export function runOutcome(run: WorldRun): string | null {
   if (run.status === "cancelled" || run.status === "failed") return run.status;
   if (run.status !== "completed") return null;
   const result = hydrate(run.output);
+  // A result nobody can read is not a plain `completed`: whether the run
+  // shipped anything is unanswered, and that is worth an operator's attention.
+  if (result === UNREADABLE) return "unknown";
   return typeof result === "object" &&
     result !== null &&
     "status" in result &&
@@ -301,18 +321,23 @@ export async function describeRun(runId: string, facts: RunFacts = {}): Promise<
     pullRequest: pullRequestFromOutput(run.output),
     createdAt,
     lastActivityAt: iso(run.completedAt) ?? iso(run.updatedAt) ?? createdAt,
-    steps: 0,
+    steps: null,
     lastStep: null,
     suspended: false,
     suspensions: [],
   };
   // A terminal run's hooks are already deleted, and a dead job it left behind
   // does not restate its status, so neither is worth reading. Its steps are
-  // history the timeline already carries, so the listing does not pay for them.
-  if (TERMINAL_RUN_STATUSES.has(run.status)) return stored;
+  // history, and the listing does not pay to read them — it says null rather
+  // than a count it never took. A caller holding them says how far the run got.
+  if (TERMINAL_RUN_STATUSES.has(run.status)) {
+    if (facts.steps === undefined) return stored;
+    const { count, last } = stepFacts(facts.steps);
+    return { ...stored, steps: count, lastStep: last };
+  }
 
   const tokens = facts.tokens ?? (await worldRunTokens(runId));
-  const steps = facts.steps ?? (await stepFacts(runId));
+  const steps = stepFacts(facts.steps ?? (await listRunSteps(runId)));
   const live: RunDescription = {
     ...stored,
     pullRequest: pullRequestFromTokens(tokens) ?? stored.pullRequest,
@@ -330,12 +355,12 @@ export async function describeRun(runId: string, facts: RunFacts = {}): Promise<
   // Only a running run can be stalled — nothing has been handed to the queue
   // for a pending one — and asking costs a queue read.
   if (run.status !== "running") return live;
-  const stalled = facts.stalled ?? (await stalledRuns()).has(runId);
+  const stalled = facts.stalled ?? (await stalledRuns()).stalled.has(runId);
   return stalled ? { ...live, status: "stalled" } : live;
 }
 
 export async function listRuns(factory: Factory): Promise<RunRow[]> {
-  const [runs, hooks, stalled] = await Promise.all([worldRuns(), listWorldHooks(), stalledRuns()]);
+  const [runs, hooks, stranded] = await Promise.all([worldRuns(), listWorldHooks(), stalledRuns()]);
   const tokensByRun = Map.groupBy(hooks, (hook) => hook.runId);
   // The compiler stamps each workflow with the workflowId the world stores as
   // workflowName; untransformed (unit tests, plain imports) there is nothing to
@@ -353,7 +378,10 @@ export async function listRuns(factory: Factory): Promise<RunRow[]> {
       const described = await describeRun(run.runId, {
         run,
         tokens: (tokensByRun.get(run.runId) ?? []).map((hook) => hook.token),
-        stalled: stalled.has(run.runId),
+        stalled: stranded.stalled.has(run.runId),
+        // The stall check already listed these; reading them again would ask
+        // the world for the same page twice in one request.
+        steps: stranded.steps.get(run.runId),
       });
       return {
         ...described,
@@ -365,8 +393,7 @@ export async function listRuns(factory: Factory): Promise<RunRow[]> {
 }
 
 /** How far this run has got, and when it last moved. */
-async function stepFacts(runId: string): Promise<StepFacts> {
-  const steps = await listRunSteps(runId);
+function stepFacts(steps: readonly StepView[]): StepFacts {
   const last = steps.at(-1);
   const times = steps.flatMap((step) => [step.completedAt, step.startedAt].filter(isIso));
   return {
@@ -433,12 +460,17 @@ async function worldRunTokens(runId: string): Promise<string[]> {
 // Run inputs and results come back in the world's serialized form; the SDK's
 // observability hydrator is the one public way to read them, and it leaves an
 // encrypted payload as bytes rather than throwing. Data nobody can read costs
-// the run its trigger, its ticket or its outcome, never the listing.
+// the run its trigger and its ticket, and reads its outcome as `unknown`,
+// never the listing.
+const UNREADABLE = Symbol("unreadable");
+
 function hydrate(data: unknown): unknown {
+  // Nothing stored is nothing to read, not a payload that could not be read.
+  if (data === undefined) return undefined;
   try {
     return hydrateData(data, observabilityRevivers);
   } catch {
-    return undefined;
+    return UNREADABLE;
   }
 }
 
