@@ -34,12 +34,14 @@ const respondCancel = (releasedTokens: string[]) =>
 
 const suspended = {
   runId: RUN,
-  status: "running",
+  status: "suspended",
   suspended: true,
   suspensions: [
     {
       token: "github:pr:acme/api#41",
-      reason: "awaiting pull request review",
+      kind: "pull-request",
+      reason: "waiting for an approving review and green CI on acme/api#41",
+      url: "https://github.com/acme/api/pull/41",
     },
   ],
 };

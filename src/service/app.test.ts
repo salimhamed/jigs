@@ -11,6 +11,7 @@ import { type Factory, ticketInput } from "../blocks/factory.ts";
 import { prToken } from "../blocks/pull-request/gate.ts";
 import { ticketToken } from "../blocks/ticket/claim.ts";
 import { needsHumanToken } from "../blocks/ticket/halt-for-human.ts";
+import * as linear from "../providers/linear.ts";
 import * as sql from "../steps/worktree/sql.ts";
 import { makeFakeSql } from "../steps/worktree/test-fixtures.ts";
 import { createApp } from "./app.ts";
@@ -435,7 +436,7 @@ test("GET /api/runs/:ref reports a stalled run as stalled, like `jigs ps` does",
   // `jigs ps` and `jigs logs` must not disagree about the same run, so both
   // read the one derivation in runs.ts.
   setWorld({
-    runs: { get: async () => ({ status: "running" }) },
+    runs: { get: async () => ({ status: "running", createdAt: new Date() }) },
     steps: { list: async () => ({ data: [] }) },
     hooks: { list: async () => ({ data: [] }) },
   } as unknown as Parameters<typeof setWorld>[0]);
@@ -463,14 +464,20 @@ const PR = prToken({ owner: "acme", repo: "api", number: 41 });
 // reported rather than thrown.
 const runHolding = (...tokens: string[]) =>
   setWorld({
-    runs: { get: async () => ({ status: "running" }) },
+    runs: { get: async () => ({ status: "running", createdAt: new Date() }) },
     steps: { list: async () => ({ data: [] }) },
     hooks: { list: async () => ({ data: tokens.map((token) => ({ token })) }) },
     events: { create: async () => undefined },
   } as unknown as Parameters<typeof setWorld>[0]);
 
-test("GET /api/runs/:ref reads every park and its reason off the hook token", async () => {
+test("GET /api/runs/:ref says what each park is waiting for, and where to act", async () => {
   runHolding(CLAIM, MARKER, PR);
+  // The halt's comment is read back from Linear; a Linear nobody can ask
+  // leaves the suspension as the token alone describes it.
+  vi.spyOn(linear, "getComment").mockResolvedValue({
+    url: "https://linear.app/acme/issue/AGE-317#comment-c1",
+    body: "Which binding?",
+  });
 
   const res = await app.request(`/api/runs/${RUN}`);
 
@@ -481,10 +488,38 @@ test("GET /api/runs/:ref reads every park and its reason off the hook token", as
     status: "suspended",
     suspended: true,
     suspensions: [
-      { token: MARKER, reason: "needs a human on the ticket" },
-      { token: PR, reason: "awaiting pull request review" },
+      {
+        token: MARKER,
+        kind: "needs-human",
+        reason: "waiting for a human reply on 68bc9696-35d5-442d-ab56-214c8cfefbec",
+        url: "https://linear.app/acme/issue/AGE-317#comment-c1",
+        question: "Which binding?",
+      },
+      {
+        token: PR,
+        kind: "pull-request",
+        reason: "waiting for an approving review and green CI on acme/api#41",
+        url: "https://github.com/acme/api/pull/41",
+      },
     ],
   });
+});
+
+test("a halt whose comment Linear will not hand back keeps the park it can state", async () => {
+  runHolding(CLAIM, MARKER);
+  vi.spyOn(linear, "getComment").mockRejectedValue(new Error("Linear API key is not set"));
+
+  const res = await app.request(`/api/runs/${RUN}`);
+
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as { suspensions: Array<Record<string, unknown>> };
+  expect(body.suspensions).toEqual([
+    {
+      token: MARKER,
+      kind: "needs-human",
+      reason: "waiting for a human reply on 68bc9696-35d5-442d-ab56-214c8cfefbec",
+    },
+  ]);
 });
 
 test("a run holding only its ticket claim is running, not suspended", async () => {

@@ -180,6 +180,16 @@ export async function createComment(
   return data.commentCreate.comment;
 }
 
+/** One comment by id: where a human replies to it, and what it says. Linear
+ *  mints the permalink, so nothing here guesses at an anchor. */
+export async function getComment(id: string): Promise<{ url: string; body: string }> {
+  const data = await linearGraphql<{
+    comment: { url: string; body: string } | null;
+  }>(`query Comment($id: String!) { comment(id: $id) { url body } }`, { id });
+  if (data.comment === null) throw new Error(`Linear comment not found: ${id}`);
+  return data.comment;
+}
+
 interface RawProject {
   id: string;
   teams: { nodes: Array<{ id: string }> };

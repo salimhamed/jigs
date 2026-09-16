@@ -45,15 +45,22 @@ export async function listRunSteps(runId: string): Promise<StepView[]> {
     }));
 }
 
+/** The steps each of these runs recorded, so a caller that needs both the
+ *  answer below and the steps themselves reads each run once. */
+export async function listStepsByRun(runIds: readonly string[]): Promise<Map<string, StepView[]>> {
+  const listed = await Promise.all(
+    runIds.map(async (runId) => [runId, await listRunSteps(runId)] as const),
+  );
+  return new Map(listed);
+}
+
+export const hasActiveStep = (steps: readonly StepView[]): boolean =>
+  steps.some((step) => ACTIVE_STEP_STATUSES.has(step.status));
+
 /** Which of these runs still has a step in flight. */
 export async function runsWithActiveStep(runIds: string[]): Promise<string[]> {
-  const busy = await Promise.all(
-    runIds.map(async (runId) => {
-      const steps = await listRunSteps(runId);
-      return steps.some((step) => ACTIVE_STEP_STATUSES.has(step.status)) ? runId : null;
-    }),
-  );
-  return busy.filter((runId): runId is string => runId !== null);
+  const steps = await listStepsByRun(runIds);
+  return runIds.filter((runId) => hasActiveStep(steps.get(runId) ?? []));
 }
 
 interface JobRow extends Omit<DeadJobView, "createdAt"> {

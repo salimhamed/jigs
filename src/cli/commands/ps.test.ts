@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { showRuns } from "./ps.ts";
+import { type PsRun, showRuns } from "./ps.ts";
 
 const fetchMock = vi.fn();
 let lines: string[];
@@ -24,44 +24,89 @@ const RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 const respond = (body: unknown) =>
   fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(body)));
 
+const run = (over: Partial<PsRun> = {}): PsRun => ({
+  runId: RUN,
+  workflow: "deliver-feature",
+  status: "running",
+  outcome: null,
+  trigger: "manual",
+  ticket: null,
+  pullRequest: null,
+  createdAt: "2026-08-26T11:30:00.000Z",
+  lastActivityAt: "2026-08-26T11:59:00.000Z",
+  steps: 0,
+  lastStep: null,
+  suspended: false,
+  suspensions: [],
+  ...over,
+});
+
 test("an empty service prints no runs", async () => {
   respond({ runs: [], worktrees: [], schedules: [] });
-  await showRuns(deps(), NOW);
+  await showRuns(deps(), { now: NOW });
   expect(lines).toEqual(["no runs"]);
 });
 
-test("a suspended run renders as suspended, not running", async () => {
+test("a suspended run names its ticket, its pull request and what it waits for", async () => {
   respond({
     runs: [
-      {
-        runId: RUN,
-        workflow: "deliver-feature",
+      run({
         status: "suspended",
-        trigger: "manual",
-        createdAt: "2026-08-26T11:30:00.000Z",
-      },
+        ticket: "AGE-317",
+        pullRequest: "acme/api#41",
+        suspended: true,
+        suspensions: [
+          {
+            token: "github:pr:acme/api#41",
+            kind: "pull-request",
+            reason: "waiting for an approving review and green CI on acme/api#41",
+            url: "https://github.com/acme/api/pull/41",
+          },
+        ],
+      }),
     ],
     worktrees: [],
     schedules: [],
   });
-  await showRuns(deps(), NOW);
-  expect(lines).toEqual([
-    "RUN                              WORKFLOW         STATUS     TRIGGER  AGE",
-    `${RUN}  deliver-feature  suspended  manual   30m`,
-  ]);
+  await showRuns(deps(), { now: NOW });
+  expect(lines[0]).toBe(
+    "RUN                              WORKFLOW         TICKET   STATUS     OUTCOME  PR           TRIGGER  AGE  ACTIVITY  WAITING",
+  );
+  expect(lines[1]).toBe(
+    `${RUN}  deliver-feature  AGE-317  suspended  -        acme/api#41  manual   30m  1m        waiting for an approving review and green CI on acme/api#41 → https://github.com/acme/api/pull/41`,
+  );
+});
+
+test("a run that gave up does not read like one that merged", async () => {
+  respond({
+    runs: [
+      run({ status: "completed", outcome: "limit-reached" }),
+      run({ runId: "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ", status: "completed", outcome: "merged" }),
+    ],
+    worktrees: [],
+    schedules: [],
+  });
+  await showRuns(deps(), { now: NOW });
+  expect(lines[1]).toContain("!limit-reached");
+  expect(lines[2]).toContain(" merged ");
+  expect(lines[2]).not.toContain("!");
+});
+
+test("--json prints the service's answer verbatim, tables and all", async () => {
+  const body = {
+    runs: [run({ ticket: "AGE-317" })],
+    worktrees: [],
+    schedules: [],
+  };
+  respond(body);
+  await showRuns(deps(), { json: true, now: NOW });
+  expect(lines).toHaveLength(1);
+  expect(JSON.parse(lines[0] ?? "")).toEqual(body);
 });
 
 test("a scheduled run names the schedule that fired it", async () => {
   respond({
-    runs: [
-      {
-        runId: RUN,
-        workflow: "deliver-feature",
-        status: "running",
-        trigger: "schedule:nightly-sweep",
-        createdAt: "2026-08-26T11:59:00.000Z",
-      },
-    ],
+    runs: [run({ trigger: "schedule:nightly-sweep" })],
     worktrees: [],
     schedules: [
       {
@@ -73,7 +118,7 @@ test("a scheduled run names the schedule that fired it", async () => {
       },
     ],
   });
-  await showRuns(deps(), NOW);
+  await showRuns(deps(), { now: NOW });
   expect(lines[1]).toContain("schedule:nightly-sweep");
   // The schedule table is its own block, after the runs.
   expect(lines[2]).toBe("");
@@ -99,22 +144,14 @@ test("a declared schedule that has never fired shows dashes, not blanks", async 
       },
     ],
   });
-  await showRuns(deps(), NOW);
+  await showRuns(deps(), { now: NOW });
   expect(lines[0]).toBe("no runs");
   expect(lines[3]).toBe("weekly-audit  audit     nonsense  -     -");
 });
 
 test("a worktree the registry marks abandoned-dirty is shown, not filtered", async () => {
   respond({
-    runs: [
-      {
-        runId: RUN,
-        workflow: "deliver-feature",
-        status: "failed",
-        trigger: "manual",
-        createdAt: "2026-08-25T12:00:00.000Z",
-      },
-    ],
+    runs: [run({ status: "failed", outcome: "failed" })],
     worktrees: [
       {
         path: "/home/dev/worktrees/api/age-317",
@@ -125,7 +162,7 @@ test("a worktree the registry marks abandoned-dirty is shown, not filtered", asy
     ],
     schedules: [],
   });
-  await showRuns(deps(), NOW);
+  await showRuns(deps(), { now: NOW });
   const worktreeLine = lines.find((line) => line.includes("age-317"));
   expect(worktreeLine).toContain("/home/dev/worktrees/api/age-317");
   expect(worktreeLine).toContain("abandoned-dirty");

@@ -1,7 +1,6 @@
 ---
 name: jigs
 description: Work with a jigs software factory — operate its runs, author its workflows, set one up, or answer a question about how jigs works.
-disable-model-invocation: true
 argument-hint: "<run …, add …, set up …, or a question about jigs>"
 ---
 
@@ -12,7 +11,7 @@ Read only the file you picked.
 
 | The argument is about | Route |
 | --- | --- |
-| Running, watching, cancelling, sweeping or poking runs; a run that looks stuck; answering a needs-human halt | `operate.md` |
+| Running, watching, cancelling, sweeping or poking runs; a run that looks stuck; answering a needs-human halt; driving a ticket to merge with the operator's authority | `operate.md` |
 | Adding or changing a workflow, block, step, prompt, schedule, or a `requires` manifest | `author.md` |
 | Installing jigs, initialising a factory, binding a repo, bringing a service up | `setup.md` |
 | A question — what a term means, why something works the way it does, where something lives | `ask.md` |
