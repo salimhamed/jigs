@@ -1,5 +1,11 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { formatFailures, runChecks } from "../../checks/catalog.ts";
+import {
+  type GithubMergePolicyProbes,
+  mergePolicyCheck,
+  realGithubMergePolicyProbes,
+} from "../../checks/github-identity.ts";
 import { upsertBinding } from "../../config/binding-edit.ts";
 import {
   readFactoryConfig,
@@ -24,6 +30,7 @@ const BINDING_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 export interface BindDeps {
   cwd: string;
   out: (line: string) => void;
+  mergePolicyProbes?: GithubMergePolicyProbes;
 }
 
 export interface BindOptions {
@@ -36,8 +43,9 @@ export interface BindResult {
   webhook: "created" | "verified" | "updated" | "skipped";
 }
 
-// A pure config edit plus the webhook leg: nothing here touches the network for
-// the repo itself, and the clone is the service's to make at its next start.
+// A config edit plus repository reads: the webhook leg may write its hook, and
+// merge-policy inspection is read-only and non-fatal. The clone is the
+// service's to make at its next start.
 export async function bindRepo(
   remoteUrl: string,
   deps: BindDeps,
@@ -122,6 +130,15 @@ export async function bindRepo(
         : `jigs bind ${remoteUrl}`,
     deps,
   });
+  const report = await runChecks([
+    mergePolicyCheck(
+      resolveGithubIdentity(factoryRoot),
+      config.merge,
+      { [name]: { remote: remoteUrl } },
+      deps.mergePolicyProbes ?? realGithubMergePolicyProbes,
+    ),
+  ]);
+  if (!report.ok) deps.out(formatFailures(report));
   return { name, remote: remoteUrl, webhook };
 }
 
@@ -179,6 +196,8 @@ async function ensureWebhook({
     if (tokenWasRejected(err)) return credentialRepair;
     // A 404 is as often a typo in the remote as a token that cannot see a
     // private repo, and neither clears on its own.
+    if (err instanceof GithubApiError && err.status === 404 && identity.mode === "app")
+      return `check the remote, and install the App on ${slug} or grant its installation access to the repo, then re-run: ${reBindCommand}`;
     if (err instanceof GithubApiError && err.status === 404)
       return `check the remote, and that this token can see ${slug}, then re-run: ${reBindCommand}`;
     return `once that clears, re-run: ${reBindCommand}`;

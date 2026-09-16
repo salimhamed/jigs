@@ -323,6 +323,34 @@ test("bind without ingressUrl skips the webhook leg with a note", async () => {
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
+test("bind prints a merge-policy repair but still resolves successfully", async () => {
+  writeFileSync(
+    path.join(factory, "jigs.config.ts"),
+    'export default { merge: { by: "jigs", method: "squash", approval: { kind: "review" } }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
+  );
+  const result = await bindRepo(
+    API,
+    deps({
+      mergePolicyProbes: {
+        repository: async () => ({
+          default_branch: "main",
+          allow_merge_commit: true,
+          allow_squash_merge: true,
+          allow_rebase_merge: true,
+        }),
+        checkRuns: async () => 0,
+        commitStatuses: async () => 0,
+        actionsWorkflows: async () => 0,
+        labelExists: async () => true,
+        requiredApprovingReviews: async () => 0,
+      },
+    }),
+  );
+  expect(result.name).toBe("api");
+  expect(lines.join("\n")).toContain("api: acme/Api has no active Actions workflows");
+  expect(lines.join("\n")).toContain('set merge.by to "human" in jigs.config.ts');
+});
+
 test("no GITHUB_TOKEN anywhere fails with the repair, and the retry ensures the webhook", async () => {
   stubWebhookEnv();
   vi.stubEnv("GITHUB_TOKEN", "");

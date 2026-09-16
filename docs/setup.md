@@ -269,10 +269,13 @@ Where each value comes from:
    Active under Webhook** — jigs keeps its own per-repo webhooks, and one App
    registration has only one webhook URL, which two factories cannot share.
 2. **Grant these repository permissions**, and nothing else: **Contents**,
-   **Pull requests** and **Issues** read & write; **Metadata** read; and
-   **Repository webhooks** read & write. The last one is what lets `jigs bind`
-   create the hook that wakes a parked run; without it `jigs bind` and
-   `jigs doctor` both fail, naming it.
+   **Pull requests** and **Issues** read & write; **Metadata**, **Checks** and
+   **Commit statuses** read; and **Repository webhooks** read & write. When
+   `merge.by` is `"jigs"` and the factory has bindings, also grant **Actions**
+   read so `jigs bind` and `jigs doctor` can verify that the repository has an
+   active Actions workflow. The Repository webhooks
+   permission lets `jigs bind` create the hook that wakes a parked run; a
+   missing permission is named by `jigs doctor`.
 3. **`appId`** is the "App ID" on the App's settings page.
 4. **`privateKeyPath`** is the `.pem` GitHub generates under "Private keys".
    Save it in the factory repo (`.gitignore` already excludes
@@ -366,7 +369,11 @@ A few merge states you will see jigs wait on rather than merge:
   the next wake.
 
 `jigs doctor` prints the effective policy in one line, so what a factory will
-actually do is readable without opening its config.
+actually do is readable without opening its config. For factories configured
+with `merge.by: "jigs"`, `jigs bind` and `jigs doctor` also report on that line
+when a bound repository has no CI, disables the configured merge method,
+requires reviews that label approval cannot satisfy, or lacks the configured
+approval label. These checks only read repository settings.
 
 ### 3. Up
 

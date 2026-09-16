@@ -52,6 +52,16 @@ test("an active exact-url hook with current events passes", async () => {
   expect(await check().run()).toEqual({ ok: true });
 });
 
+test("a passing webhook check does not resolve the GitHub identity", async () => {
+  configure();
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify([hook()])));
+  const identity = vi.fn();
+  const [found] = webhookChecks({ factoryRoot: () => factory, identity });
+  if (found === undefined) throw new Error("expected a webhook check");
+  expect(await found.run()).toEqual({ ok: true });
+  expect(identity).not.toHaveBeenCalled();
+});
+
 test("a valid exact-url hook passes after a stale duplicate", async () => {
   configure();
   fetchMock.mockResolvedValueOnce(
@@ -85,6 +95,46 @@ test("a refused hooks API names the required token scope", async () => {
   const result = await check().run();
   expect(result).toMatchObject({ ok: false });
   expect(result.ok === false && result.repair).toContain("admin:repo_hook");
+});
+
+test("an App that cannot read a repo's hooks names installation access", async () => {
+  configure();
+  fetchMock.mockResolvedValueOnce(new Response("Not Found", { status: 404 }));
+  const [appCheck] = webhookChecks({
+    factoryRoot: () => factory,
+    identity: () => ({
+      mode: "app",
+      appId: 4958325,
+      installationId: 162033982,
+      privateKeyPath: "github-app.private-key.pem",
+      operator: "salimhamed",
+    }),
+  });
+  if (appCheck === undefined) throw new Error("expected a webhook check");
+  const result = await appCheck.run();
+  expect(result).toMatchObject({ ok: false });
+  expect(result.ok === false && result.repair).toContain("install the App on acme/api");
+});
+
+test("an installed App missing hook permission gets the permission repair", async () => {
+  configure();
+  fetchMock.mockResolvedValueOnce(new Response("Forbidden", { status: 403 }));
+  const [appCheck] = webhookChecks({
+    factoryRoot: () => factory,
+    identity: () => ({
+      mode: "app",
+      appId: 4958325,
+      installationId: 162033982,
+      privateKeyPath: "github-app.private-key.pem",
+      operator: "salimhamed",
+    }),
+  });
+  if (appCheck === undefined) throw new Error("expected a webhook check");
+  const result = await appCheck.run();
+  expect(result).toMatchObject({ ok: false });
+  if (result.ok !== false) throw new Error("expected failure");
+  expect(result.repair).toMatch(/^grant the App "Repository webhooks: read & write"/);
+  expect(result.repair).not.toContain("install the App");
 });
 
 test("no ingressUrl emits no webhook checks", () => {
