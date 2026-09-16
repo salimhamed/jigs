@@ -84,6 +84,7 @@ beforeEach(() => {
   vi.spyOn(sql, "registrySql").mockReturnValue(makeFakeSql(new Map()));
   vi.spyOn(stalls, "listJobRunIds").mockResolvedValue({ dead: [], live: [] });
   vi.spyOn(stalls, "listRunDeadJobs").mockResolvedValue([]);
+  vi.spyOn(stalls, "deleteRunJobs").mockResolvedValue(0);
   vi.stubEnv("WORKFLOW_LOCAL_DATA_DIR", dataDir);
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "gh-hook-secret");
   vi.stubEnv("LINEAR_WEBHOOK_SECRET", "linear-hook-secret");
@@ -548,11 +549,13 @@ test("poke wakes the hooks that name a resource, never the needs-human marker", 
 
 test("cancel names the resources it released, and not the marker", async () => {
   runHolding(CLAIM, MARKER);
+  vi.mocked(stalls.deleteRunJobs).mockResolvedValueOnce(3);
 
   const res = await app.request(`/api/runs/${RUN}/cancel`, { method: "POST" });
 
   expect(res.status).toBe(200);
-  expect(await res.json()).toMatchObject({ releasedTokens: [CLAIM] });
+  expect(await res.json()).toMatchObject({ deletedJobs: 3, releasedTokens: [CLAIM] });
+  expect(stalls.deleteRunJobs).toHaveBeenCalledWith(expect.anything(), RUN);
 });
 
 test("GET /api/schedules answers with what the factory declared, and what is next", async () => {

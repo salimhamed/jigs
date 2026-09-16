@@ -107,6 +107,22 @@ export async function listRunDeadJobs(sql: ISql, runId: string): Promise<DeadJob
   return (await jobRows(sql)).filter((row) => row.dead && runIdOf(row.payload) === runId).map(view);
 }
 
+/** Delete every queued delivery for a run, whether Graphile can still retry it
+ *  or has already exhausted it. The private table is the payload authority and
+ *  the storage behind Graphile's read-only `jobs` view. */
+export async function deleteRunJobs(sql: ISql, runId: string): Promise<number> {
+  const ids = (await jobRows(sql))
+    .filter((row) => runIdOf(row.payload) === runId)
+    .map((row) => row.id);
+  if (ids.length === 0) return 0;
+  const deleted = await sql<{ id: string }[]>`
+    DELETE FROM graphile_worker._private_jobs
+    WHERE id = ANY(${ids}::bigint[])
+    RETURNING id
+  `;
+  return deleted.length;
+}
+
 function view({ payload: _payload, dead: _dead, ...job }: JobRow): DeadJobView {
   return { ...job, createdAt: job.createdAt.toISOString() };
 }

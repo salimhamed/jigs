@@ -17,7 +17,7 @@ import { githubWebhookSecret, verifyGithubSignature, verifyLinearSignature } fro
 import { bootPhase, isReady } from "./readiness.ts";
 import { describeRun, enrichSuspensions, listRuns, type RunRef, resolveRunRef } from "./runs.ts";
 import { listSchedules, scheduleChecks } from "./schedules.ts";
-import { listRunDeadJobs, listRunSteps } from "./stalls.ts";
+import { deleteRunJobs, listRunDeadJobs, listRunSteps } from "./stalls.ts";
 import { startRun } from "./trigger.ts";
 
 // The app is library code: a factory repo installs this package and hands in
@@ -221,6 +221,7 @@ export function createApp(factory: Factory): Hono {
     }
     const releasedTokens = await runResourceTokens(ref.runId);
     await run.cancel();
+    const deletedJobs = await deleteRunJobs(registrySql(), ref.runId);
     // Cancel never cleans up: name what stays so the operator knows where the
     // worktree is and that `jigs sweep` is the way to reclaim it.
     const worktrees = (await listWorktreesForRun(registrySql(), ref.runId)).map((row) => row.path);
@@ -232,6 +233,7 @@ export function createApp(factory: Factory): Hono {
     return c.json({
       runId: ref.runId,
       cancelled: true,
+      deletedJobs,
       releasedTokens,
       worktrees,
     });
