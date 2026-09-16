@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.28.0](https://github.com/salimhamed/jigs/compare/jigs-v0.27.0...jigs-v0.28.0) (2026-09-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* **agents:** HarnessOptions is now a harness-discriminated union.
+
+### Features
+
+* **agents:** add harness effort settings ([ed15200](https://github.com/salimhamed/jigs/commit/ed152008676944cff7ad44a46ac25379003b2546))
+
 ## [0.27.0](https://github.com/salimhamed/jigs/compare/jigs-v0.26.2...jigs-v0.27.0) (2026-09-16)
 
 
