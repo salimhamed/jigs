@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.28.1](https://github.com/salimhamed/jigs/compare/jigs-v0.28.0...jigs-v0.28.1) (2026-09-16)
+
+
+### Bug Fixes
+
+* **service:** delete a cancelled run's leftover queue jobs ([#230](https://github.com/salimhamed/jigs/issues/230)) ([88c3ba7](https://github.com/salimhamed/jigs/commit/88c3ba7aae2fe3a3a09cd5674eac4fb2813e4e92))
+* **test:** build the cloned-binding fixture once instead of per test ([#234](https://github.com/salimhamed/jigs/issues/234)) ([b45c407](https://github.com/salimhamed/jigs/commit/b45c4074ae88e3bc320929b6ecd9a0c5ed86bd53))
+
 ## [0.28.0](https://github.com/salimhamed/jigs/compare/jigs-v0.27.0...jigs-v0.28.0) (2026-09-16)
 
 
