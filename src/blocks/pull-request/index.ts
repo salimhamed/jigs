@@ -38,11 +38,15 @@ export {
   type StatusReason,
 } from "./marker.ts";
 export {
-  type ApprovalSignal,
   isApprovalSatisfied,
   isPullRequestMergeReady,
-  type MergePolicy,
   type MergeRefusal,
   mergeRefusal,
 } from "./merge-ready.ts";
+export {
+  type ApprovalSignal,
+  approvalSchema,
+  type MergePolicy,
+  mergeSchema,
+} from "./policy.ts";
 export { currentRunId, defaultPrScope } from "./writer.ts";

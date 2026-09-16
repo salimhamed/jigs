@@ -1,4 +1,3 @@
-import type { MergePolicy } from "../../config/factory-config.ts";
 import type { CheckRun, PrRef, ReviewThread } from "../../providers/github.ts";
 import type * as branch from "../../steps/pull-request/branch.ts";
 import type * as pr from "../../steps/pull-request/pr.ts";
@@ -7,6 +6,7 @@ import type { AgentSession } from "../agent/result.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import type { PullRequestDescription } from "../builder-agent/describe-pr.ts";
 import type { GateFn } from "../pull-request/gate.ts";
+import type { MergePolicy } from "../pull-request/policy.ts";
 import type { PostTicketNote } from "../ticket/review.ts";
 import type { WorktreeFacts } from "../worktree.ts";
 import type { FindingResponse, ReviewFinding, ReviewRound } from "./review.ts";

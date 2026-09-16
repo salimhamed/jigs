@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { interpolate } from "../../blocks/interpolate.ts";
-import type { GithubIdentity, MergePolicy } from "../../config/factory-config.ts";
+import type { MergePolicy } from "../../blocks/pull-request/policy.ts";
+import type { GithubIdentity } from "../../config/factory-config.ts";
 import { JigsError } from "../../errors.ts";
 import { locateTemplates, packageRoot, TEMPLATE_SUFFIX } from "../templates.ts";
 

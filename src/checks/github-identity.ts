@@ -3,12 +3,12 @@
 // token versus an App whose key, installation or permissions are wrong — so
 // each gets its own checks and its own repair.
 
+import type { MergePolicy } from "../blocks/pull-request/policy.ts";
 import {
   type AppIdentity,
   type BindingEntry,
   bindingMergePolicy,
   type GithubIdentity,
-  type MergePolicy,
 } from "../config/factory-config.ts";
 import { GithubApiError, githubGet } from "../providers/github-api.ts";
 import {

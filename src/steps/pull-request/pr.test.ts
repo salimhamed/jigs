@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { beforeEach, expect, test, vi } from "vitest";
-import type { MergePolicy } from "../../config/factory-config.ts";
+import type { MergePolicy } from "../../blocks/pull-request/policy.ts";
 import type { PrSnapshot } from "../../providers/github.ts";
 import {
   assignPullRequest,

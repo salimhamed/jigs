@@ -11,7 +11,7 @@
 import { expect, test } from "vitest";
 import { claude, codex, selectHarness } from "../agent/harness-config.ts";
 import type { PrRef } from "../pull-request/gate.ts";
-import type { MergePolicy } from "../pull-request/merge-ready.ts";
+import type { MergePolicy } from "../pull-request/policy.ts";
 import type { TicketClaim } from "../ticket/claim.ts";
 import type { HaltForHumanFn } from "../ticket/halt-for-human.ts";
 import type { WorktreeFacts } from "../worktree.ts";

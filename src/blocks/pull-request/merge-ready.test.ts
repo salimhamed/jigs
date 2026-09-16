@@ -1,9 +1,9 @@
 import { expect, test } from "vitest";
-import type { ApprovalSignal } from "../../config/factory-config.ts";
 import type { PrSnapshot } from "../../providers/github.ts";
 import { classifyPrState } from "./gate.ts";
 import { markBody } from "./marker.ts";
 import { isApprovalSatisfied, isPullRequestMergeReady, mergeRefusal } from "./merge-ready.ts";
+import type { ApprovalSignal } from "./policy.ts";
 
 const SCOPE = "ship/AGE-402";
 const REVIEW: ApprovalSignal = { kind: "review" };

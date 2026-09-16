@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import type { MergePolicy } from "../../config/factory-config.ts";
 import type { PrComment, PrSnapshot, ReviewThread } from "../../providers/github.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import { resumeFailed } from "../agent/resume-or-rebuild.ts";
@@ -7,6 +6,7 @@ import { pullRequestDescription } from "../builder-agent/describe-pr.ts";
 import type { GateWake } from "../pull-request/gate.ts";
 import { pullRequestGate } from "../pull-request/gate.ts";
 import { parseMarkers } from "../pull-request/marker.ts";
+import type { MergePolicy } from "../pull-request/policy.ts";
 import { bindDeliverySteps } from "./bind.ts";
 import {
   defaultCiRepairPrompt,

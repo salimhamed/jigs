@@ -5,10 +5,10 @@
 // that record is the only thing the two runs share.
 
 import { expect, test, vi } from "vitest";
-import type { ApprovalSignal } from "../../config/factory-config.ts";
 import type { PrComment, PrReview, PrSnapshot, ReviewThread } from "../../providers/github.ts";
 import { postPullRequestNote, postReviewAnswers } from "./answers.ts";
 import { classifyPrState } from "./gate.ts";
+import type { ApprovalSignal } from "./policy.ts";
 
 const APPROVAL: ApprovalSignal = { kind: "review" };
 

@@ -6,7 +6,6 @@
 // decides what is still outstanding.
 
 import { createHook } from "workflow";
-import type { ApprovalSignal } from "../../config/factory-config.ts";
 import type {
   CheckRun,
   PrComment,
@@ -18,6 +17,7 @@ import type {
 import { ClaimConflictError } from "../ticket/claim.ts";
 import { carriesMarker, commentSource, type MarkerLedger, readLedger } from "./marker.ts";
 import { isPullRequestMergeReady } from "./merge-ready.ts";
+import type { ApprovalSignal } from "./policy.ts";
 
 // The gate's hook token names the pull request, never the run: owning it is
 // the exclusivity lock. The ingress has only a webhook payload to go on, so it

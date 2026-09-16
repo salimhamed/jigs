@@ -3,6 +3,7 @@ import path from "node:path";
 import { createJiti } from "jiti";
 
 import { z } from "zod";
+import { type MergePolicy, mergeSchema } from "../blocks/pull-request/policy.ts";
 import { JigsError } from "../errors.ts";
 import { factorySlug } from "../steps/worktree/layout.ts";
 
@@ -65,22 +66,6 @@ export const githubSchema = z.strictObject({
   identity: githubIdentitySchema.default({ mode: "pat" }),
 });
 
-// What counts as the operator saying "merge this". `review` is a GitHub
-// APPROVED review of the current commit, which only an identity other than
-// the operator's can receive. `label` is a label on the pull request, which is
-// how an operator consents to their own pull request merging: it means "merge
-// whenever ready" and survives later pushes.
-const approvalSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("review") }),
-  z.strictObject({ kind: z.literal("label"), name: z.string().min(1) }),
-]);
-
-export const mergeSchema = z.strictObject({
-  by: z.enum(["jigs", "human"]).default("human"),
-  method: z.enum(["squash", "merge", "rebase"]).default("squash"),
-  approval: approvalSchema.default({ kind: "review" }),
-});
-
 const factoryConfigSchema = z.looseObject({
   bindings: z.record(z.string(), bindingSchema).default({}),
   // Where provider webhooks reach this factory's service (the tunnel URL);
@@ -104,9 +89,6 @@ export type BindingEntry = z.output<typeof bindingSchema>;
 export type FactoryConfig = z.output<typeof factoryConfigSchema>;
 export type GithubIdentity = z.output<typeof githubIdentitySchema>;
 export type AppIdentity = Extract<GithubIdentity, { mode: "app" }>;
-export type ApprovalSignal = z.output<typeof approvalSchema>;
-export type MergePolicy = z.output<typeof mergeSchema>;
-
 /** The policy a factory that states none gets: a human merges, by squash, on an approving review. */
 export const defaultMergePolicy = (): MergePolicy => mergeSchema.parse({});
 
