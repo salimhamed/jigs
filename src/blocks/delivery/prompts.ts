@@ -36,11 +36,16 @@ export const defaultImplementationPrompt = async (
   );
 };
 
-const reviewJob = [
-  "Review the changes against the requirements and repository instructions. Inspect the diff between the base and head commits and check for correctness and regressions. Do not edit files.",
-  "Separate blocking findings — a stated requirement left unmet, a defect a user could hit, or an untested risk that matters — from non-blocking preferences about naming, structure, comments, extra test cases and wording. Mark each finding blocking or not. Return changes-requested only when a blocking finding remains; otherwise return approved and keep the non-blocking observations in findings, where a human reads them on the pull request.",
-  "You have already reviewed the earlier rounds of this change. Do not re-open a finding you cleared unless the code under it changed. Where the builder answered a finding with a reason for not changing it, either accept that reason and drop the finding, or re-raise it as blocking with one sentence saying why the reason does not hold.",
-].join("\n\n");
+const reviewJob = (context: ReviewPromptContext): string =>
+  [
+    "Review the changes against the requirements and repository instructions. Inspect the diff between the base and head commits and check for correctness and regressions. Do not edit files.",
+    "Separate blocking findings — a stated requirement left unmet, a defect a user could hit, or an untested risk that matters — from non-blocking preferences about naming, structure, comments, extra test cases and wording. Mark each finding blocking or not. Return changes-requested only when a blocking finding remains; otherwise return approved and keep the non-blocking observations in findings, where a human reads them on the pull request.",
+    context.attempt === 1
+      ? ""
+      : "You have already reviewed the earlier rounds of this change. Do not re-open a finding you cleared unless the code under it changed. Where the builder answered a finding with a reason for not changing it, either accept that reason and drop the finding, or re-raise it as blocking with one sentence saying why the reason does not hold.",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
 export const defaultReviewPrompt = (context: ReviewPromptContext): string =>
   prompt(
@@ -58,7 +63,7 @@ export const defaultReviewPrompt = (context: ReviewPromptContext): string =>
         : `The builder's answer to each finding you last raised:\n${renderResponses(context.responses)}`,
       `Current diff:\n${context.diff}`,
     ],
-    reviewJob,
+    reviewJob(context),
   );
 
 export const defaultCiRepairPrompt = async (context: CiRepairPromptContext): Promise<string> => {

@@ -20,6 +20,7 @@ declare const worktree: WorktreeFacts;
 declare const harness: HarnessConfig;
 
 const incident = {
+  id: "68bc9696-35d5-442d-ab56-214c8cfefbec",
   key: "storage-1",
   title: "Repair search",
   instructions: "Find exact matches",

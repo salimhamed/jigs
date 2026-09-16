@@ -17,6 +17,12 @@ import type { FindingResponse, ReviewFinding, ReviewRound } from "./review.ts";
  * prompt context, `onLimit` and the result without a cast.
  */
 export interface WorkItem {
+  /**
+   * The work item's address at its source — a Linear issue UUID, say — which
+   * is what posting back to it needs. `key` is what a human reads; this is
+   * what the note step is given.
+   */
+  id: string;
   /** Short human-facing identifier, as the prompts name the task. */
   key: string;
   /** One-line summary of the work, as the prompts and the pull request name it. */

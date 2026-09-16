@@ -170,7 +170,7 @@ export function bindDeliverySteps(steps: DeliverySteps) {
     limit: LimitReached<TTask>,
   ) {
     await pushBranch(change.worktree.path, change.worktree.branch);
-    await postTicketNote(change.task.key, {
+    await postTicketNote(change.task.id, {
       headline: `jigs stopped work on ${change.task.key} after ${limit.attempts} implementation review round(s) without an approved change.`,
       notes: [
         ...limit.findings,

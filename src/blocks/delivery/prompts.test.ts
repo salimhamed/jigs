@@ -6,7 +6,12 @@ import {
 } from "./prompts.ts";
 import type { ReviewRound } from "./review.ts";
 
-const task = { key: "AGE-1", title: "Repair search", instructions: "Find exact matches" };
+const task = {
+  id: "68bc9696-35d5-442d-ab56-214c8cfefbec",
+  key: "AGE-1",
+  title: "Repair search",
+  instructions: "Find exact matches",
+};
 const worktree = { path: "/work", branch: "fix", defaultBranch: "main", baseSha: "base" };
 const renderDefaultPrompt = async () => "";
 
@@ -31,6 +36,12 @@ test("the review prompt asks for a blocking flag and blocks only on a blocking f
   const rendered = defaultReviewPrompt(reviewing);
   expect(rendered).toContain("Mark each finding blocking or not");
   expect(rendered).toContain("Return changes-requested only when a blocking finding remains");
+});
+
+test("the first round is not told it has reviewed anything before", () => {
+  const rendered = defaultReviewPrompt({ ...reviewing, attempt: 1 });
+  expect(rendered).not.toContain("You have already reviewed");
+  expect(defaultReviewPrompt(reviewing)).toContain("You have already reviewed");
 });
 
 test("a resumed reviewer is told how the builder answered each finding it raised", () => {

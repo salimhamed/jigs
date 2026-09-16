@@ -81,7 +81,12 @@ const openSnapshot = (overrides: Partial<PrSnapshot> = {}): PrSnapshot => ({
   ...overrides,
 });
 const options: DeliverChangeOptions = {
-  task: { key: "internal-42", title: "Repair search", instructions: "Find exact matches" },
+  task: {
+    id: "68bc9696-35d5-442d-ab56-214c8cfefbec",
+    key: "internal-42",
+    title: "Repair search",
+    instructions: "Find exact matches",
+  },
   worktree: { path: "/work", branch: "fix", defaultBranch: "main", baseSha: "base" },
   binding: "repo",
   implementation: { harness: { kind: "codex", model: "builder" } },
@@ -347,7 +352,9 @@ describe("delivery", () => {
     expect(steps.pushBranch).toHaveBeenCalledWith("/work", "fix");
     expect(steps.postTicketNote).toHaveBeenCalledOnce();
     const [issueId, note] = vi.mocked(steps.postTicketNote).mock.calls[0] ?? [];
-    expect(issueId).toBe("internal-42");
+    // The work item's address at its source, never the key a human reads: the
+    // note step posts through Linear's CommentCreateInput, which wants the id.
+    expect(issueId).toBe("68bc9696-35d5-442d-ab56-214c8cfefbec");
     expect(note?.headline).toContain("internal-42");
     expect(note?.notes).toEqual([
       "The check never fires",

@@ -13,6 +13,7 @@ export async function acquireLinearTicket(reference: string) {
 /** Keep the ticket requirements and implementation brief together for delivery. */
 export function workItemFromHandoff(handoff: Handoff): WorkItem {
   return {
+    id: handoff.snapshot.id,
     key: handoff.snapshot.identifier,
     title: handoff.snapshot.title,
     url: handoff.snapshot.url,

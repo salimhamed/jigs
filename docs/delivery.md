@@ -436,9 +436,10 @@ its own additions: `defaultImplementationPrompt`, `defaultReviewPrompt`,
 
 ## Supply your own work items
 
-Factories own their domain types. Delivery needs only a small view — `key`,
-`title`, `instructions`, and an optional `url` — and keeps whatever else the
-task carries. The extra fields reach every prompt context, `onLimit`, and the
+Factories own their domain types. Delivery needs only a small view — `id`, the
+work item's address at its source, `key`, the identifier a human reads, `title`,
+`instructions`, and an optional `url` — and keeps whatever else the task
+carries. `id` is what a note is posted back to when a budget runs out. The extra fields reach every prompt context, `onLimit`, and the
 result, with no explicit generic argument and no cast:
 
 ```ts
