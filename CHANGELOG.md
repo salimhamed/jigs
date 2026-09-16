@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.3](https://github.com/salimhamed/jigs/compare/jigs-v0.23.2...jigs-v0.23.3) (2026-09-16)
+
+
+### Features
+
+* **service:** run factory services in systemd user scopes ([5c3334f](https://github.com/salimhamed/jigs/commit/5c3334f4e8a4d3179ac541b6dbab69f7e1b31c3f))
+
 ## [0.23.2](https://github.com/salimhamed/jigs/compare/jigs-v0.23.1...jigs-v0.23.2) (2026-09-16)
 
 
