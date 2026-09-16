@@ -2,8 +2,9 @@
 // everything here must be pure and sandbox-safe — no node imports (this code
 // is bundled into the workflow sandbox).
 
-import { z } from "zod";
+import type { z } from "zod";
 import type { HarnessConfig } from "./harness-config.ts";
+import { dropNullOptionals, toWireSchema, type WireJsonSchema } from "./output-schema.ts";
 import type { AgentSession } from "./result.ts";
 
 export type AgentStepConfig<T = undefined> = {
@@ -28,7 +29,7 @@ export type AskStepConfig<T = undefined> = {
 // the worktree via the forced settingSources ['project'], so there is nothing
 // for the builder to do until the worktree/jig ticket lands.
 
-export type WireJsonSchema = Record<string, unknown>;
+export type { WireJsonSchema } from "./output-schema.ts";
 
 export type AgentWire = Omit<AgentStepConfig, "output"> & {
   outputSchema?: WireJsonSchema;
@@ -38,17 +39,9 @@ export type AskWire = Omit<AskStepConfig, "output"> & {
   outputSchema?: WireJsonSchema;
 };
 
-function toWireSchema(output: z.ZodType | undefined): WireJsonSchema | undefined {
-  if (output === undefined) return undefined;
-  // The Claude CLI rejects zod's $schema meta-declaration outright ("no
-  // schema with key or ref"); neither harness needs it.
-  const { $schema: _dropped, ...schema } = z.toJSONSchema(output) as WireJsonSchema;
-  return schema;
-}
-
 export function buildAgentWire<T>(config: AgentStepConfig<T>): AgentWire {
   const { output, ...wire } = config;
-  const outputSchema = toWireSchema(output);
+  const outputSchema = output === undefined ? undefined : toWireSchema(output);
   return outputSchema === undefined ? wire : { ...wire, outputSchema };
 }
 
@@ -61,7 +54,7 @@ export function buildAskWire<T>(config: AskStepConfig<T>): AskWire {
     );
   }
   const { output, ...wire } = config;
-  const outputSchema = toWireSchema(output);
+  const outputSchema = output === undefined ? undefined : toWireSchema(output);
   return outputSchema === undefined ? wire : { ...wire, outputSchema };
 }
 
@@ -69,5 +62,5 @@ export function buildAskWire<T>(config: AskStepConfig<T>): AskWire {
 // validation is this workflow-side zod parse of the recorded raw output —
 // deterministic on replay, and where the result gets its `T`.
 export function parseOutput<T>(schema: z.ZodType<T> | undefined, raw: unknown): T {
-  return schema === undefined ? (undefined as T) : schema.parse(raw);
+  return schema === undefined ? (undefined as T) : schema.parse(dropNullOptionals(schema, raw));
 }
