@@ -14,7 +14,6 @@ import {
   describeSuspension,
   listRuns,
   resolveRunRef,
-  runOutcome,
   scheduleTriggerId,
   type WorldRun,
 } from "./runs.ts";
@@ -245,37 +244,6 @@ test("a park jigs minted keeps its kind when the rest of the token is unreadable
     kind: "needs-human",
     reason: "waiting for a human reply on AGE-317",
   });
-});
-
-// devalue-flattened, index 0 the root — the form the world stores a return
-// value in, and what the outcome has to be read back out of.
-const storedResult = (result: Record<string, string>) => [
-  Object.fromEntries(Object.keys(result).map((key, index) => [key, index + 1])),
-  ...Object.values(result),
-];
-
-test("a completed run reports the result its workflow returned, not just `completed`", () => {
-  const completed = (output: unknown) =>
-    runOutcome({
-      runId: RUN_A,
-      workflowName: "w",
-      status: "completed",
-      createdAt: new Date(),
-      output,
-    });
-  expect(completed(storedResult({ status: "merged" }))).toBe("merged");
-  expect(completed(storedResult({ status: "limit-reached" }))).toBe("limit-reached");
-  // A workflow that returned nothing with a status ended in no particular way.
-  expect(completed(undefined)).toBe("completed");
-  expect(
-    runOutcome({ runId: RUN_A, workflowName: "w", status: "failed", createdAt: new Date() }),
-  ).toBe("failed");
-  expect(
-    runOutcome({ runId: RUN_A, workflowName: "w", status: "running", createdAt: new Date() }),
-  ).toBeNull();
-  // A stored result the hydrator refuses leaves it unanswered whether the run
-  // shipped anything, which is not the quiet `completed` a plain return is.
-  expect(completed([])).toBe("unknown");
 });
 
 // Compiled workflows carry the workflowId the world records as workflowName;
@@ -518,7 +486,6 @@ test("a merged run still names its pull request, from the result it returned", a
     ],
   });
   const row = (await listRuns(factory))[0];
-  expect(row?.outcome).toBe("merged");
   expect(row?.pullRequest).toBe("acme/api#41");
   expect(row?.lastActivityAt).toBe("2026-08-26T12:00:00.000Z");
 });

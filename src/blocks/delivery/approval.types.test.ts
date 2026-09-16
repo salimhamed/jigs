@@ -1,6 +1,5 @@
-// The approval gate is a type, not a runtime check: publication accepts only a
-// change carrying the commit a review approved, so tsc is what stops a stopped
-// result from being published. `pnpm typecheck` fails if that stops being true.
+// The approval gate is a type, not a runtime check: implementation returns
+// only a reviewed change, so publication can consume it directly.
 
 import { expect, test } from "vitest";
 import type { ImplementAndReviewResult, PublishApprovedChangeOptions } from "./types.ts";
@@ -8,8 +7,6 @@ import type { ImplementAndReviewResult, PublishApprovedChangeOptions } from "./t
 function publishableChange(
   result: ImplementAndReviewResult,
 ): PublishApprovedChangeOptions["change"] {
-  if (result.status === "approved") return result.change;
-  // @ts-expect-error a stopped change carries no approval and cannot be published
   return result.change;
 }
 

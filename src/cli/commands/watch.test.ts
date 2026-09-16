@@ -21,7 +21,6 @@ const run = (over: Partial<PsRun> = {}): PsRun => ({
   runId: RUN,
   workflow: "deliver-feature",
   status: "running",
-  outcome: null,
   trigger: "manual",
   ticket: "AGE-317",
   pullRequest: null,
@@ -43,9 +42,9 @@ test("a run nobody has seen before appeared", () => {
 });
 
 test("a run first seen already finished is loud, not just new", () => {
-  const events = runEvents(undefined, run({ status: "failed", outcome: "failed" }), AT);
+  const events = runEvents(undefined, run({ status: "failed" }), AT);
   expect(names(events)).toEqual(["appeared", "finished"]);
-  expect(events[1]?.detail).toBe("failed — this run did not succeed");
+  expect(events[1]?.detail).toBe("failed");
 });
 
 test("a finished step and the park that follows it are two lines, in that order", () => {
@@ -79,12 +78,10 @@ test("a woken run resumes, and an unchanged one says nothing", () => {
   expect(runEvents(parked, parked, AT)).toEqual([]);
 });
 
-test("a run that gave up does not end like one that merged", () => {
-  const merged = runEvents(run(), run({ status: "completed", outcome: "merged" }), AT);
-  expect(names(merged)).toEqual(["finished"]);
-  expect(merged[0]?.detail).toBe("merged");
-  const limited = runEvents(run(), run({ status: "completed", outcome: "limit-reached" }), AT);
-  expect(limited[0]?.detail).toBe("limit-reached — this run did not succeed");
+test("a finished event carries only the run status", () => {
+  const completed = runEvents(run(), run({ status: "completed" }), AT);
+  expect(names(completed)).toEqual(["finished"]);
+  expect(completed[0]?.detail).toBe("completed");
 });
 
 const respond = (runs: PsRun[]) =>

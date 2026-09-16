@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { JigsError } from "../../errors.ts";
 import { resumeOrRebuild } from "../agent/resume-or-rebuild.ts";
 import { type ThreadAnswers, threadAnswers } from "../builder-agent/answer-review.ts";
 import { pullRequestDescription } from "../builder-agent/describe-pr.ts";
@@ -30,7 +31,6 @@ import type {
   DeliveryChange,
   DeliveryResult,
   DeliverySteps,
-  DeliveryStopped,
   FollowPullRequestOptions,
   ImplementAndReviewOptions,
   ImplementAndReviewResult,
@@ -71,26 +71,11 @@ async function extendLimit<TTask extends WorkItem>(
   limit: LimitReached<TTask>,
   onLimit?: OnDeliveryLimit<TTask>,
 ) {
-  if (onLimit === undefined) return { status: "limit-reached" as const };
+  if (onLimit === undefined) return { stop: true as const };
   const decision = await onLimit(limit);
-  if (decision.action === "stop") return { status: "stopped" as const };
+  if (decision.action === "stop") return { stop: true as const };
   validateLimit(decision.additionalAttempts, "additionalAttempts", 1);
   return { additionalAttempts: decision.additionalAttempts, instructions: decision.instructions };
-}
-
-function stopped<TTask extends WorkItem>(
-  change: DeliveryChange<TTask>,
-  limit: LimitReached<TTask>,
-  status: DeliveryStopped["status"],
-): DeliveryStopped<TTask> {
-  return {
-    status,
-    phase: limit.phase,
-    attempts: limit.attempts,
-    findings: limit.findings,
-    change,
-    ...(limit.pr === undefined ? {} : { pr: limit.pr }),
-  };
 }
 
 function uncommittedReason(dirty: boolean): string {
@@ -162,16 +147,17 @@ export function bindDeliverySteps(steps: DeliverySteps) {
     return result.output;
   }
 
-  // The budget is spent and no `onLimit` chose anything else, so this run is
-  // over: push, so the commits outlive `jigs sweep`, then say on the ticket
-  // what is still open and where the work is. Nothing waits on a reply.
-  async function reportLimit<TTask extends WorkItem>(
+  // A delivery that stops short first pushes, so the commits outlive `jigs
+  // sweep`, then says on the ticket what is still open and where the work is.
+  // Nothing waits on a reply.
+  async function stopDelivery<TTask extends WorkItem>(
     change: DeliveryChange<TTask>,
     limit: LimitReached<TTask>,
-  ) {
+    reason: string,
+  ): Promise<never> {
     await pushBranch(change.worktree.path, change.worktree.branch);
     await postTicketNote(change.task.id, {
-      headline: `jigs stopped work on ${change.task.key} after ${limit.attempts} implementation review round(s) without an approved change.`,
+      headline: reason,
       notes: [
         ...limit.findings,
         `The work is on branch \`${change.worktree.branch}\`, pushed, in the worktree at \`${change.worktree.path}\`.`,
@@ -179,6 +165,10 @@ export function bindDeliverySteps(steps: DeliverySteps) {
       closing:
         "Nothing is waiting on a reply here. Settle the open findings and start the run again, or take the branch over by hand.",
     });
+    throw new JigsError(
+      `${reason} The work is pushed on branch ${change.worktree.branch}.`,
+      limit.findings.length === 0 ? undefined : limit.findings.join("\n"),
+    );
   }
 
   /** Implement and independently review until approved or the configured budget is exhausted. */
@@ -206,10 +196,12 @@ export function bindDeliverySteps(steps: DeliverySteps) {
           findings: findings.map(renderFinding),
         };
         const extension = await extendLimit(limit, options.onLimit);
-        if (extension.status !== undefined) {
-          if (extension.status === "limit-reached") await reportLimit(change, limit);
-          return stopped(change, limit, extension.status);
-        }
+        if ("stop" in extension)
+          return stopDelivery(
+            change,
+            limit,
+            `jigs stopped work on ${change.task.key} after ${limit.attempts} implementation review round(s) without an approved change.`,
+          );
         budget += extension.additionalAttempts;
         instructions = extension.instructions;
       }
@@ -238,16 +230,17 @@ export function bindDeliverySteps(steps: DeliverySteps) {
       );
       const state = await readBranchState(change.worktree.path, change.worktree.baseSha);
       if (state.dirty || state.commits === 0) {
-        return stopped(
+        const reason = uncommittedReason(state.dirty);
+        return stopDelivery(
           change,
           {
             task: change.task,
             worktree: change.worktree,
             phase: "implementation-review",
             attempts: round,
-            findings: [uncommittedReason(state.dirty)],
+            findings: [reason],
           },
-          "uncommitted-work",
+          `jigs stopped work on ${change.task.key} during implementation review round ${round}. ${reason}`,
         );
       }
       const reviewed: PromptFields<ReviewPromptContext<TTask>> = {
@@ -285,7 +278,6 @@ export function bindDeliverySteps(steps: DeliverySteps) {
       );
       if (decided === "approved") {
         return {
-          status: "approved",
           change: { ...change, approval: { reviewedCommit: state.headSha } },
         };
       }
@@ -347,14 +339,26 @@ export function bindDeliverySteps(steps: DeliverySteps) {
     const gate = pullRequestGate(pr, scope, options.merge.approval);
     return attend<DeliveryResult<TTask>>(gate, async (wake) => {
       if (wake.kind === "closed") {
-        return finished({ status: wake.merged ? "merged" : "closed", change, pr });
+        if (wake.merged) return finished({ change, pr });
+        return stopDelivery(
+          change,
+          {
+            task: change.task,
+            worktree: change.worktree,
+            pr,
+            phase: "pull-request-revision",
+            attempts: change.attempts.pullRequestRevisionRounds,
+            findings: [],
+          },
+          `jigs stopped work on ${change.task.key} because pull request ${pr.owner}/${pr.repo}#${pr.number} was closed unmerged.`,
+        );
       }
       if (wake.kind === "merge-ready") {
         if (options.merge.by === "human") return listen();
         let refused: { reason: string; transient: boolean };
         try {
           const result = await mergePullRequest(pr, wake.headSha, options.merge);
-          if (result.merged) return finished({ status: "merged", change, pr });
+          if (result.merged) return finished({ change, pr });
           refused = result;
         } catch (error) {
           // An unclassified error may pass, so leave the head eligible to retry.
@@ -402,8 +406,12 @@ export function bindDeliverySteps(steps: DeliverySteps) {
           findings,
         };
         const extension = await extendLimit(limit, options.onLimit);
-        if (extension.status !== undefined)
-          return finished(stopped(change, limit, extension.status));
+        if ("stop" in extension)
+          return stopDelivery(
+            change,
+            limit,
+            `jigs stopped work on ${change.task.key} after ${limit.attempts} ${phase} attempt(s).`,
+          );
         budgets[counter] += extension.additionalAttempts;
         instructions[counter] = extension.instructions;
       }
@@ -438,19 +446,17 @@ export function bindDeliverySteps(steps: DeliverySteps) {
             wake.headSha,
             `I could not repair the failing checks on ${wake.headSha}.\n\n${renderChecks(wake.failing)}`,
           );
-          return finished(
-            stopped(
-              change,
-              {
-                task: change.task,
-                worktree: change.worktree,
-                pr,
-                phase,
-                attempts: change.attempts[counter],
-                findings: ["The CI repair did not produce a clean, new commit."],
-              },
-              "stopped",
-            ),
+          return stopDelivery(
+            change,
+            {
+              task: change.task,
+              worktree: change.worktree,
+              pr,
+              phase,
+              attempts: change.attempts[counter],
+              findings: ["The CI repair did not produce a clean, new commit."],
+            },
+            `jigs stopped work on ${change.task.key} because CI repair attempt ${change.attempts[counter]} produced no new clean commit.`,
           );
         }
         await pushBranch(change.worktree.path, change.worktree.branch);
@@ -495,7 +501,6 @@ export function bindDeliverySteps(steps: DeliverySteps) {
     validateLimit(options.limits.ciFixAttempts, "ciFixAttempts");
     validateLimit(options.limits.pullRequestRevisionRounds, "pullRequestRevisionRounds");
     const built = await implementAndReview(options);
-    if (built.status !== "approved") return built;
     const pr = await publishApprovedChange({ ...options, change: built.change });
     return followPullRequest({ ...options, change: built.change, pr });
   }

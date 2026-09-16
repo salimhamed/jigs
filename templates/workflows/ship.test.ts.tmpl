@@ -19,7 +19,10 @@ vi.mock("#jigs", async (importOriginal) => ({
     method: "squash" as const,
     approval: { kind: "review" as const },
   })),
-  deliverChange: vi.fn(async () => ({ status: "stopped", reason: "test" })),
+  deliverChange: vi.fn(async () => ({
+    change: {} as never,
+    pr: { owner: "acme", repo: "repo", number: 1 },
+  })),
   removeMergedRunWorktrees: vi.fn(async () => {}),
 }));
 
@@ -53,6 +56,7 @@ const { shipInputs, shipWorkflow } = await import("./ship.ts");
 
 async function deliveredFor(inputs: Record<string, unknown>) {
   vi.mocked(jigs.deliverChange).mockClear();
+  vi.mocked(jigs.removeMergedRunWorktrees).mockClear();
   await shipWorkflow({
     ...shipInputs.parse({ binding: "repo", ...inputs }),
     triggerId: "ship-test",
@@ -85,4 +89,9 @@ test("the work item delivered carries the ticket and the implementation brief", 
   expect(options.task.key).toBe("ABC-123");
   expect(options.task.instructions).toContain("Implementation brief");
   expect(jigs.resolveMergePolicy).toHaveBeenCalledWith("repo");
+});
+
+test("a successful delivery removes merged worktrees", async () => {
+  await deliveredFor({ ticket: "ABC-123" });
+  expect(jigs.removeMergedRunWorktrees).toHaveBeenCalledOnce();
 });

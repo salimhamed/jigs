@@ -185,8 +185,8 @@ The starter workflow explicitly resolves and claims its Linear ticket, then call
 the library's `deliverChange`. Set implementation and review harnesses/models
 separately — a model left unset takes the chosen harness's own default — and choose
 the `implementationReviewRounds`, `ciFixAttempts`, and `pullRequestRevisionRounds`
-budgets. A reached limit
-returns an outcome; only a merged result permits worktree removal. For custom prompts,
+budgets. A delivery returns only after merge; reaching a limit preserves the
+branch, posts a ticket note and fails the run. For custom prompts,
 ticket sources, human intervention, and individual phases, see [delivery](delivery.md).
 
 The starter `ship` workflow requires a `binding` input and takes its effective

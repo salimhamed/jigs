@@ -31,7 +31,7 @@ flowchart TD
 
     irBudget -- "yes: round + 1" --> impl
     impl --> committed
-    committed -- "no" --> uncommitted(["uncommitted-work"])
+    committed -- "no" --> uncommitted(["throw after push + ticket note"])
     committed -- "yes" --> review
     review --> verdict
     verdict -- "yes: findings and the builder's<br/>answers carried to the next round" --> irBudget
@@ -93,7 +93,7 @@ flowchart TD
     policy["factory code decides —<br/>typically haltForHuman posts to the<br/>ticket and the run suspends"]
     decision{"the decision"}
 
-    onLimit -- "no" --> push2["push the branch,<br/>post a ticket note"] --> limitReached(["limit-reached"])
+    onLimit -- "no" --> push2["push the branch,<br/>post a ticket note"] --> limitReached(["throw"])
     onLimit -- "yes" --> policy --> decision
     decision -- "stop" --> stopped(["stopped"])
   end
@@ -109,11 +109,11 @@ continuation is granted only to the phase that exhausted its own budget.
 Reading the graph against the code:
 
 - **The review loop** checks the budget *before* each attempt, so
-  `implementationReviewRounds: 0` returns a limit outcome without running an
+  `implementationReviewRounds: 0` fails the run without running an
   agent. The implementation agent commits its own work. If it leaves the
-  worktree dirty or adds no commit since the base, the round stops with
-  `status: "uncommitted-work"` before any review runs — nothing uncommitted is
-  ever reviewed.
+  worktree dirty or adds no commit since the base, the delivery preserves the
+  branch, posts the ticket note and throws before any review runs — nothing
+  uncommitted is ever reviewed.
 - **The review blocks on defects, not on preferences.** Each finding is marked
   `blocking` or not: a requirement left unmet, a defect a user could hit or an
   untested risk blocks; naming, structure, comments, extra test cases and
@@ -185,20 +185,12 @@ Reading the graph against the code:
   there, the run does not fail, and the next wake reposts whatever is still
   unanswered. A reply lost to a transport failure is therefore delayed by at
   most one nudge interval, never dropped and never doubled.
-- **Every outcome** is one of five statuses. `merged` comes from the pull
-  request closing merged, or from jigs' own merge; `closed` from it
-  closing unmerged. `limit-reached` is a budget spent with no `onLimit`; the
-  review loop pushes the branch and posts a ticket note naming the open
-  findings and the worktree before it returns one, so the work survives
-  `jigs sweep` and somebody is told where it is.
-  `stopped` is `onLimit` declining, or a CI repair that produced no new clean
-  commit. `uncommitted-work` is an implementation attempt that left nothing
-  reviewable. Remove worktrees only after `merged`; every other outcome leaves
-  work someone may want to pick up.
-- **Two paths end the run with an error** rather than a status, because both
-  mean the worktree stopped matching what was agreed: publishing a change whose
-  head has moved off `approval.reviewedCommit` or whose worktree is dirty, and a
-  pull-request revision that left uncommitted changes behind.
+- **A delivery returns only after merge.** Every stop-short path first pushes
+  the branch and posts a ticket note, then throws with a message naming the
+  branch: an exhausted budget, `onLimit` declining, an unusable CI repair, an
+  unreviewable implementation attempt, or a pull request closed unmerged.
+  Publication whose head moved off `approval.reviewedCommit`, and a pull-request
+  revision that leaves uncommitted changes, also fail rather than returning.
 
 ## Merge policy
 
@@ -238,7 +230,7 @@ The three budgets carry the same names wherever they appear — on
 Each budget is spent by its own phase and no other. All three count
 cumulatively for the life of the delivery, and counters never reset. Green CI
 results consume no repair attempts; the first repair uses attempt one. Zero permits no
-attempt in that phase and returns a limit outcome the moment that phase has
+attempt in that phase and fails the run the moment that phase has
 work to do. Duplicate notifications — a second webhook for a head already
 repaired, or a review thread whose only new comment is jigs' own reply — do not
 consume a budget.
@@ -261,8 +253,8 @@ There are two paths, and a factory usually wires them into one.
 findings that say why the phase is unfinished, the task, the worktree, and the
 pull request once one exists. Returning `{ action: "continue", instructions,
 additionalAttempts }` adds to that phase's budget and passes `instructions` to
-the next attempt and every attempt after it. Returning `{ action: "stop" }` ends
-the delivery with `status: "stopped"`.
+the next attempt and every attempt after it. Returning `{ action: "stop" }`
+preserves the branch, posts the ticket note and fails the run.
 
 The **halt-for-human ticket channel** is how a human actually reaches that
 callback. `onLimit` runs workflow-side, so it may suspend: the starter factory's
@@ -487,9 +479,7 @@ const result = await deliverChange({
   }),
 });
 
-if (result.status === "merged") {
-  await notifyOncall(result.change.task.service, result.pr);
-}
+await notifyOncall(result.change.task.service, result.pr);
 ```
 
 Task values are recorded durably, so keep them plain serializable data; prompts
@@ -524,8 +514,6 @@ const built = await implementAndReview({
   review,
   limits: { implementationReviewRounds: 5 },
 });
-if (built.status !== "approved") return built;
-
 await checkSecurity(built.change);
 
 const pr = await publishApprovedChange({

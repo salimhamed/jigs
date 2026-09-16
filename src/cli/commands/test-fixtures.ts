@@ -144,7 +144,6 @@ export async function fakeService(routes: ServiceRoutes = {}): Promise<number> {
       res.end(
         JSON.stringify({
           runs: (routes.runs ?? []).map((run) => ({
-            outcome: null,
             trigger: "manual",
             ticket: null,
             pullRequest: null,

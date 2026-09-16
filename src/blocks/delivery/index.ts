@@ -34,7 +34,6 @@ export type {
   DeliveryPhase,
   DeliveryResult,
   DeliverySteps,
-  DeliveryStopped,
   DescriptionAgent,
   DescriptionPromptContext,
   FollowPullRequestOptions,

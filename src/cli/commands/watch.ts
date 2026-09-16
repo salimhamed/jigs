@@ -1,12 +1,6 @@
 import { JigsError } from "../../errors.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
-import {
-  listFactoryRuns,
-  outcomeNeedsAttention,
-  type PsRun,
-  suspensionLine,
-  waitingCell,
-} from "./ps.ts";
+import { listFactoryRuns, type PsRun, suspensionLine, waitingCell } from "./ps.ts";
 import type { ServiceDeps } from "./service-client.ts";
 
 // One long-lived process for the whole factory: a watcher that re-ran `jigs
@@ -31,7 +25,6 @@ export interface WatchEvent {
   workflow: string;
   ticket: string | null;
   status: string;
-  outcome: string | null;
   pullRequest: string | null;
   detail: string;
 }
@@ -121,12 +114,7 @@ function statusEvent(previous: PsRun, next: PsRun, at: string): WatchEvent {
   return event(next, at, "status", next.status);
 }
 
-const finishedDetail = (run: PsRun): string =>
-  run.outcome === null
-    ? run.status
-    : outcomeNeedsAttention(run.outcome)
-      ? `${run.outcome} — this run did not succeed`
-      : run.outcome;
+const finishedDetail = (run: PsRun): string => run.status;
 
 const stepKey = (run: PsRun): string =>
   `${run.steps}:${run.lastStep?.name ?? ""}:${run.lastStep?.status ?? ""}:${run.lastStep?.at ?? ""}`;
@@ -139,7 +127,6 @@ function event(run: PsRun, at: string, name: WatchEventName, detail: string): Wa
     workflow: run.workflow,
     ticket: run.ticket,
     status: run.status,
-    outcome: run.outcome,
     pullRequest: run.pullRequest,
     detail,
   };
@@ -152,7 +139,6 @@ const unreachable = (at: string, error: unknown): WatchEvent => ({
   workflow: "",
   ticket: null,
   status: "",
-  outcome: null,
   pullRequest: null,
   detail: error instanceof JigsError ? error.message : String(error),
 });

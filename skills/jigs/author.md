@@ -80,9 +80,9 @@ blocks only on findings it marked blocking; the rest are appended to the pull
 request description. A budget that runs out with no `onLimit` pushes the branch
 and posts a ticket note before the run ends. Each budget — `implementationReviewRounds`, `ciFixAttempts`,
 `pullRequestRevisionRounds` — carries that name on the whole operation and on
-each phase. Handle every outcome: `merged`, `closed`, `limit-reached`,
-`stopped`, `uncommitted-work`. Remove worktrees only after `merged`. A
-continuation comes from `onLimit`, which is workflow-side and may suspend on a
+each phase. A delivery returns its approved change and pull request only after
+merge; it throws after preserving the branch and posting the ticket note when
+it stops short. A continuation comes from `onLimit`, which is workflow-side and may suspend on a
 human, typically through `haltForHuman` on the run's ticket.
 
 `docs/delivery.md` in the jigs repository holds the delivery graph, what each

@@ -74,7 +74,7 @@ process, so it costs one node start-up rather than one per poll, and it says
 `unreachable` and keeps going while the service restarts. `--interval` sets the
 poll.
 
-`jigs ps` is the snapshot: `RUN WORKFLOW TICKET STATUS OUTCOME PR TRIGGER AGE
+`jigs ps` is the snapshot: `RUN WORKFLOW TICKET STATUS PR TRIGGER AGE
 ACTIVITY WAITING`, then the worktrees the registry holds, then the schedules if
 the factory declares any. `TICKET` is the ticket the run claimed and `PR` the
 pull request a live run holds or a merged one opened — that is the whole
@@ -83,13 +83,6 @@ read one out of, so its `PR` is `-`. `TRIGGER` says how the run started; a
 scheduled fire reads `schedule:<name>`. `AGE` counts from launch, `ACTIVITY`
 from the last time the run moved: `running` with a 20-minute `ACTIVITY` is
 worth looking at, where a 20-second one is an ordinary gap between steps.
-
-`OUTCOME` is the result the workflow itself returned, because the runtime calls
-a merge and an exhausted budget alike `completed`. Anything but `merged` or a
-plain `completed` carries a `!` — `!limit-reached`, `!stopped`,
-`!uncommitted-work`, `!closed`, `!failed`, `!cancelled` — and means the run
-ended without shipping the work. `!unknown` is the result nothing could read
-back, so whether it shipped is unanswered.
 
 `WAITING` decodes what a parked run is parked on, in words and — where the
 token names a page — with the link to act on: `waiting for an approving review
@@ -187,10 +180,10 @@ nothing else. Holding it:
 - **Leave a factory with a parked run alone.** An upgrade restarts the service,
   and a rename in the new release moves the durable addresses that run resumes
   against. Finish or cancel it first.
-- **Take over a run that hit its budget.** `!limit-reached` means jigs pushed
-  the branch, noted it on the ticket and stopped. Settle the findings on that
-  branch by hand; relaunching the ticket starts the work over and leaves the
-  first worktree behind.
+- **Take over a delivery that stopped short.** The run fails after jigs pushes
+  the branch and notes it on the ticket. `jigs logs <run>` shows the failure
+  message naming the branch. Settle the findings there by hand; relaunching the
+  ticket starts the work over and leaves the first worktree behind.
 - **Escalate design-level surprises** as a question to the human rather than
   deciding: a question the design record does not answer, a diff doing
   something the ticket never asked for, a change to a contract.

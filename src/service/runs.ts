@@ -220,8 +220,6 @@ export interface RunStep {
 export interface RunDescription {
   runId: string;
   status: string;
-  /** What the run ended as, in the workflow's own words; null while it runs. */
-  outcome: string | null;
   trigger: string;
   /** The ticket the run was launched with, as the operator typed it. */
   ticket: string | null;
@@ -256,28 +254,6 @@ interface StepFacts {
   latestAt: string | null;
 }
 
-/**
- * The run's own result, in the words the workflow returned — `merged` and
- * `limit-reached` are both `completed` to the SDK, and an operator reading
- * only the status cannot tell a shipped run from one that gave up. A workflow
- * that returns no `status` field ended in no particular way, which is what
- * plain `completed` says.
- */
-export function runOutcome(run: WorldRun): string | null {
-  if (run.status === "cancelled" || run.status === "failed") return run.status;
-  if (run.status !== "completed") return null;
-  const result = hydrate(run.output);
-  // A result nobody can read is not a plain `completed`: whether the run
-  // shipped anything is unanswered, and that is worth an operator's attention.
-  if (result === UNREADABLE) return "unknown";
-  return typeof result === "object" &&
-    result !== null &&
-    "status" in result &&
-    typeof result.status === "string"
-    ? result.status
-    : "completed";
-}
-
 /** The pull request the run opened, from the result it returned. A live run
  *  names its pull request through the gate hook it holds instead. */
 function pullRequestFromOutput(output: unknown): string | null {
@@ -309,7 +285,6 @@ export async function describeRun(runId: string, facts: RunFacts = {}): Promise<
   const stored: RunDescription = {
     runId,
     status: run.status,
-    outcome: runOutcome(run),
     trigger: triggerLabel(run.triggerId),
     ticket,
     pullRequest: pullRequestFromOutput(run.output),
@@ -454,9 +429,7 @@ async function worldRunTokens(runId: string): Promise<string[]> {
 // Run inputs and results come back in the world's serialized form; the SDK's
 // observability hydrator is the one public way to read them, and it leaves an
 // encrypted payload as bytes rather than throwing. Data nobody can read costs
-// the run its trigger and its ticket, and reads its outcome as `unknown`,
-// never the listing.
-const UNREADABLE = Symbol("unreadable");
+// the run its trigger and its ticket, but never the listing.
 
 function hydrate(data: unknown): unknown {
   // Nothing stored is nothing to read, not a payload that could not be read.
@@ -464,7 +437,7 @@ function hydrate(data: unknown): unknown {
   try {
     return hydrateData(data, observabilityRevivers);
   } catch {
-    return UNREADABLE;
+    return undefined;
   }
 }
 

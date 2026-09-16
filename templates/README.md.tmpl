@@ -100,8 +100,8 @@ functions.
 `reviewModel`, `implementationReviewRounds`, `ciFixAttempts`, and
 `pullRequestRevisionRounds` inputs. A model left unset takes the chosen
 harness's own default from `defaultModels` in `workflows/ship.ts`.
-Outcomes are `merged`, `closed`, `limit-reached`, `stopped`, and
-`uncommitted-work`; only `merged` triggers worktree removal.
+A delivery returns its change and pull request after merge, then removes the
+merged worktree. If it stops short, it preserves the branch and fails the run.
 Factory code can supply role prompts and an `onLimit` callback for human guidance.
 
 To replace durable behavior, bind a module outside the generated file:
