@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.2](https://github.com/salimhamed/jigs/compare/jigs-v0.29.1...jigs-v0.29.2) (2026-09-16)
+
+
+### Features
+
+* add pull request review step ([2e28991](https://github.com/salimhamed/jigs/commit/2e28991995a370a18abf8b0ce964557df4f36082))
+
 ## [0.29.1](https://github.com/salimhamed/jigs/compare/jigs-v0.29.0...jigs-v0.29.1) (2026-09-16)
 
 
