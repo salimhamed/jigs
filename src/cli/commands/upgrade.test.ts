@@ -207,6 +207,24 @@ test("rewrites an exact exclusion in place with its comment and position", async
   );
 });
 
+test("normalizes an exact jigs exclusion in a flow-style list", async () => {
+  const port = await fakeService();
+  const root = factory(port);
+  const workspace = path.join(root, "pnpm-workspace.yaml");
+  writeFileSync(
+    workspace,
+    "minimumReleaseAgeExclude: ['@acme/fresh@1.0.0', '@salimhamed/jigs@0.1.18']\n",
+  );
+  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+
+  const result = await upgrade(root, io);
+
+  expect(result.ok).toBe(true);
+  expect(readFileSync(workspace, "utf8")).toBe(
+    "minimumReleaseAgeExclude: [ '@acme/fresh@1.0.0', '@salimhamed/jigs' ]\n",
+  );
+});
+
 test("removes stale jigs exclusions beside the wildcard", async () => {
   const port = await fakeService();
   const root = factory(port);
