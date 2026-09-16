@@ -61,8 +61,8 @@ export async function cancelRun(ref: string, deps: CancelDeps): Promise<CancelRe
   deps.out(`cancelled ${result.runId}`);
   deps.out(`removed ${result.deletedJobs} remaining queue jobs`);
   for (const token of result.releasedTokens) deps.out(`released ${token}`);
-  // Cancel never cleans up; the sentence replaces what a background pass
-  // would otherwise do silently.
+  // Cancel leaves the worktree behind; the sentence replaces what a background
+  // pass would otherwise do silently.
   for (const path of result.worktrees ?? []) {
     deps.out(`worktree kept at ${path} — jigs sweep to review`);
   }

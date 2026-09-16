@@ -14,7 +14,6 @@ export interface DeadJobView {
 interface JobRow extends Omit<DeadJobView, "createdAt"> {
   createdAt: Date;
   dead: boolean;
-  lockedAt: Date | null;
   payload: unknown;
 }
 
@@ -27,21 +26,9 @@ async function jobRows(sql: ISql): Promise<JobRow[]> {
   return await sql<JobRow[]>`
     SELECT jobs.id, jobs.task_identifier AS task, jobs.attempts,
            jobs.attempts >= jobs.max_attempts AS dead,
-           jobs.last_error, jobs.created_at, jobs.locked_at, body.payload
+           jobs.last_error, jobs.created_at, body.payload
     FROM graphile_worker.jobs
     JOIN graphile_worker._private_jobs AS body ON body.id = jobs.id
-    ORDER BY jobs.created_at
-  `;
-}
-
-async function jobRowsById(sql: ISql, ids: readonly string[]): Promise<JobRow[]> {
-  return await sql<JobRow[]>`
-    SELECT jobs.id, jobs.task_identifier AS task, jobs.attempts,
-           jobs.attempts >= jobs.max_attempts AS dead,
-           jobs.last_error, jobs.created_at, jobs.locked_at, body.payload
-    FROM graphile_worker.jobs
-    JOIN graphile_worker._private_jobs AS body ON body.id = jobs.id
-    WHERE jobs.id = ANY(${ids}::bigint[])
     ORDER BY jobs.created_at
   `;
 }
@@ -78,47 +65,43 @@ interface DeleteRunJobsOptions {
 const GRAPHILE_STALE_LOCK_MS = 4 * 60 * 60 * 1000;
 
 /** Delete every queued delivery for a run. A fresh lock is an HTTP delivery
- * already in progress: wait briefly for Graphile to record its outcome, then
- * delete every remaining row in one statement. Graphile itself treats a lock
+ * already in progress, so the DELETE carries the lock test itself: a worker
+ * that takes a row between the scan and the statement blocks the statement on
+ * the row and then fails its own predicate, leaving that delivery to finish.
+ * What the DELETE leaves behind is waited on and rescanned, which also catches
+ * a row the in-flight delivery enqueued after the scan. Graphile treats a lock
  * older than four hours as stale, so cancellation may remove those directly.
- * A still-active delivery after the bounded wait leaves every row untouched
- * and asks the operator to retry cancellation. */
+ * A delivery still running when the bounded wait ends asks the operator to
+ * retry cancellation, which resumes from the rows that are left. */
 export async function deleteRunJobs(
   sql: ISql,
   runId: string,
   options: DeleteRunJobsOptions = {},
 ): Promise<number> {
-  const initial = (await jobRows(sql)).filter((row) => runIdOf(row.payload) === runId);
-  const ids = initial.map((row) => row.id);
-  if (ids.length === 0) return 0;
   const deadline = Date.now() + (options.maxWaitMs ?? 5_000);
   const staleLockMs = options.staleLockMs ?? GRAPHILE_STALE_LOCK_MS;
-  for (;;) {
-    const rows = await jobRowsById(sql, ids);
-    if (rows.length === 0) return 0;
-    const staleBefore = Date.now() - staleLockMs;
-    const active = rows.some(
-      (row) => row.lockedAt !== null && row.lockedAt.getTime() > staleBefore,
-    );
-    if (!active) {
-      const deleted = await sql<{ id: string }[]>`
-        DELETE FROM graphile_worker._private_jobs
-        WHERE id = ANY(${rows.map((row) => row.id)}::bigint[])
-        RETURNING id
-      `;
-      return deleted.length;
+  let removed = 0;
+  for (let pass = 0; ; pass += 1) {
+    const ids = (await jobRows(sql))
+      .filter((row) => runIdOf(row.payload) === runId)
+      .map((row) => row.id);
+    if (ids.length === 0) return removed;
+    if (pass > 0 && Date.now() >= deadline) throw new RunJobsLockedError(runId);
+    const staleBefore = new Date(Date.now() - staleLockMs);
+    const deleted = await sql<{ id: string }[]>`
+      DELETE FROM graphile_worker._private_jobs
+      WHERE id = ANY(${ids}::bigint[])
+        AND (locked_at IS NULL OR locked_at < ${staleBefore})
+      RETURNING id
+    `;
+    removed += deleted.length;
+    if (deleted.length < ids.length) {
+      await new Promise((resolve) => setTimeout(resolve, options.pollMs ?? 20));
     }
-    if (Date.now() >= deadline) throw new RunJobsLockedError(runId);
-    await new Promise((resolve) => setTimeout(resolve, options.pollMs ?? 20));
   }
 }
 
-function view({
-  payload: _payload,
-  dead: _dead,
-  lockedAt: _lockedAt,
-  ...job
-}: JobRow): DeadJobView {
+function view({ payload: _payload, dead: _dead, ...job }: JobRow): DeadJobView {
   return { ...job, createdAt: job.createdAt.toISOString() };
 }
 

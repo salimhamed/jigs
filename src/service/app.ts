@@ -231,8 +231,8 @@ export function createApp(factory: Factory): Hono {
       }
       throw error;
     }
-    // Cancel never cleans up: name what stays so the operator knows where the
-    // worktree is and that `jigs sweep` is the way to reclaim it.
+    // Cancel leaves the worktree behind: name what stays so the operator knows
+    // where it is and that `jigs sweep` is the way to reclaim it.
     const worktrees = (await listWorktreesForRun(registrySql(), ref.runId)).map((row) => row.path);
     // A merged run's workflow tears its own worktree down; everything else —
     // cancel included — leaves the tree on disk for the operator's `jigs
