@@ -124,7 +124,7 @@ From here every `jigs` is the factory's own: `pnpm exec jigs …` (or
 
 ```sh
 pnpm exec jigs bind git@github.com:owner/repo.git
-pnpm exec jigs repo setup <binding> # preview and confirm recommended GitHub protection
+pnpm exec jigs doctor # reports repository settings that need attention
 pnpm exec jigs up --restart
 ```
 

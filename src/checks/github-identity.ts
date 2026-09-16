@@ -16,7 +16,6 @@ import {
   fetchAppRegistration,
   readAppPrivateKey,
 } from "../providers/github-auth.ts";
-import { getBranchProtection } from "../providers/github-branch-protection.ts";
 import { parseGithubRemote } from "../providers/github-webhook.ts";
 import { type Check, type CheckResult, PROBE_TIMEOUT_MS } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
@@ -31,7 +30,7 @@ interface RequiredPermission {
 }
 
 const REQUIRED_PERMISSIONS: RequiredPermission[] = [
-  { name: "administration", level: "write", why: "inspect and apply repository protection" },
+  { name: "administration", level: "read", why: "inspect classic branch protection" },
   { name: "contents", level: "write", why: "push the reviewed commit" },
   { name: "pull_requests", level: "write", why: "open, comment on and merge pull requests" },
   { name: "issues", level: "write", why: "post on the pull request conversation" },
@@ -72,7 +71,6 @@ export interface GithubMergePolicyProbes {
     repo: string,
   ): Promise<{
     default_branch: string;
-    permissions?: { admin?: boolean };
     allow_merge_commit?: boolean;
     allow_squash_merge?: boolean;
     allow_rebase_merge?: boolean;
@@ -81,12 +79,16 @@ export interface GithubMergePolicyProbes {
   commitStatuses(owner: string, repo: string, ref: string): Promise<number>;
   actionsWorkflows(owner: string, repo: string): Promise<number>;
   labelExists(owner: string, repo: string, label: string): Promise<boolean>;
-  classicProtection(
-    owner: string,
-    repo: string,
-    branch: string,
-  ): Promise<{ requiredStatusChecks: number; requiredApprovingReviews: number } | null>;
-  requiredApprovingReviews(owner: string, repo: string, branch: string): Promise<number | null>;
+  protection(owner: string, repo: string, branch: string): Promise<ProtectionReading | null>;
+}
+
+/** Which protection mechanism GitHub refused to show, when the other answered. */
+type ProtectionGap = "classic" | "rulesets";
+
+export interface ProtectionReading {
+  requiredStatusChecks: number;
+  requiredApprovingReviews: number;
+  unread: ProtectionGap | null;
 }
 
 export const realGithubMergePolicyProbes: GithubMergePolicyProbes = {
@@ -124,48 +126,75 @@ export const realGithubMergePolicyProbes: GithubMergePolicyProbes = {
       throw err;
     }
   },
-  classicProtection: async (owner, repo, branch) => {
-    const protection = await getBranchProtection({ owner, repo }, branch);
-    return protection.protected
-      ? {
-          requiredStatusChecks: protection.requiredChecks.length,
-          requiredApprovingReviews: protection.requiredApprovingReviews,
-        }
-      : null;
-  },
-  requiredApprovingReviews: async (owner, repo, branch) => {
+  protection: async (owner, repo, branch) => {
     const base = `/repos/${owner}/${repo}`;
     const encodedBranch = encodeURIComponent(branch);
-    const [protection, rules] = await Promise.allSettled([
+    const [classic, rules] = await Promise.allSettled([
       githubGet<{
-        required_pull_request_reviews?: {
-          required_approving_review_count?: number;
+        required_status_checks?: {
+          contexts?: string[];
+          checks?: Array<{ context: string }>;
         } | null;
+        required_pull_request_reviews?: { required_approving_review_count?: number } | null;
       }>(`${base}/branches/${encodedBranch}/protection`),
       githubGet<
         Array<{
           type: string;
-          parameters?: { required_approving_review_count?: number };
+          parameters?: {
+            required_approving_review_count?: number;
+            required_status_checks?: Array<{ context?: string }>;
+          };
         }>
       >(`${base}/rules/branches/${encodedBranch}`),
     ]);
-    const protectedCount =
-      protection.status === "fulfilled"
-        ? (protection.value.required_pull_request_reviews?.required_approving_review_count ?? 0)
-        : null;
-    const rulesCount =
-      rules.status === "fulfilled"
-        ? Math.max(
-            0,
-            ...rules.value
-              .filter((rule) => rule.type === "pull_request")
-              .map((rule) => rule.parameters?.required_approving_review_count ?? 0),
-          )
-        : null;
-    if (protectedCount === null && rulesCount === null) return null;
-    return Math.max(protectedCount ?? 0, rulesCount ?? 0);
+    // GitHub answers 404 on the classic endpoint when the branch carries no
+    // classic protection. That is an answer, not a permission problem.
+    const classicUnprotected = classic.status === "rejected" && isNotFound(classic.reason);
+    if (classic.status === "rejected" && !classicUnprotected && rules.status === "rejected") {
+      throw new AggregateError(
+        [classic.reason, rules.reason],
+        `could not read classic protection or rulesets for ${owner}/${repo}`,
+      );
+    }
+    const classicValue = settledValue(classic);
+    const ruleValues = settledValue(rules) ?? [];
+    const statusRules = ruleValues.filter((rule) => rule.type === "required_status_checks");
+    const reviewRules = ruleValues.filter((rule) => rule.type === "pull_request");
+    const unread: ProtectionGap | null =
+      classic.status === "rejected" && !classicUnprotected
+        ? "classic"
+        : rules.status === "rejected"
+          ? "rulesets"
+          : null;
+    if (
+      unread === null &&
+      classicValue === undefined &&
+      statusRules.length === 0 &&
+      reviewRules.length === 0
+    ) {
+      return null;
+    }
+    const requiredChecks = new Set([
+      ...(classicValue?.required_status_checks?.contexts ?? []),
+      ...(classicValue?.required_status_checks?.checks ?? []).map((check) => check.context),
+      ...statusRules.flatMap((rule) =>
+        (rule.parameters?.required_status_checks ?? []).flatMap((check) =>
+          check.context === undefined ? [] : [check.context],
+        ),
+      ),
+    ]);
+    return {
+      requiredStatusChecks: requiredChecks.size,
+      requiredApprovingReviews: Math.max(
+        classicValue?.required_pull_request_reviews?.required_approving_review_count ?? 0,
+        ...reviewRules.map((rule) => rule.parameters?.required_approving_review_count ?? 0),
+      ),
+      unread,
+    };
   },
 };
+
+const isNotFound = (err: unknown) => err instanceof GithubApiError && err.status === 404;
 
 /** The identity check for the configured mode, plus the effective merge policy. */
 export function githubIdentityChecks(
@@ -283,7 +312,7 @@ function appCheck(
 
 // The effective policy per binding, plus repository facts that make one impossible.
 export function mergePolicyCheck(
-  _identity: GithubIdentity,
+  identity: GithubIdentity,
   merge: MergePolicy,
   bindings: Record<string, Pick<BindingEntry, "remote" | "merge">>,
   probes: GithubMergePolicyProbes,
@@ -305,7 +334,7 @@ export function mergePolicyCheck(
         entries.map(([name, binding]) => {
           const policy = bindingMergePolicy(merge, binding);
           return policy.by === "jigs"
-            ? inspectBindingWithin(name, binding, policy, probes, probeTimeoutMs)
+            ? inspectBindingWithin(name, binding, identity, policy, probes, probeTimeoutMs)
             : [];
         }),
       );
@@ -335,6 +364,7 @@ function describeMergePolicy(merge: MergePolicy): string {
 async function inspectBindingWithin(
   bindingName: string,
   binding: Pick<BindingEntry, "remote">,
+  identity: GithubIdentity,
   merge: MergePolicy,
   probes: GithubMergePolicyProbes,
   timeoutMs: number,
@@ -342,7 +372,7 @@ async function inspectBindingWithin(
   const timeout = new Promise<PolicyFinding[]>((resolve) => {
     AbortSignal.timeout(timeoutMs).addEventListener("abort", () => resolve([]), { once: true });
   });
-  return Promise.race([inspectBinding(bindingName, binding, merge, probes), timeout]);
+  return Promise.race([inspectBinding(bindingName, binding, identity, merge, probes), timeout]);
 }
 
 interface PolicyFinding {
@@ -354,6 +384,7 @@ interface PolicyFinding {
 async function inspectBinding(
   bindingName: string,
   binding: Pick<BindingEntry, "remote">,
+  identity: GithubIdentity,
   merge: MergePolicy,
   probes: GithubMergePolicyProbes,
 ): Promise<PolicyFinding[]> {
@@ -374,38 +405,40 @@ async function inspectBinding(
     probes.actionsWorkflows(ref.owner, ref.repo),
   ]);
   const findings: PolicyFinding[] = [];
-  const classicProtectionResult =
-    repository.permissions?.admin === true
-      ? await Promise.allSettled([
-          probes.classicProtection(ref.owner, ref.repo, repository.default_branch),
-        ]).then(([result]) => settledValue(result))
-      : undefined;
-  const setupRepair = `run: jigs repo setup ${bindingName}`;
-  if (repository.permissions?.admin !== true) {
+  const [protectionSettled] = await Promise.allSettled([
+    probes.protection(ref.owner, ref.repo, repository.default_branch),
+  ]);
+  const protectionResult = settledValue(protectionSettled);
+  const unread: ProtectionGap | "both" | null =
+    protectionSettled.status === "rejected" ? "both" : (protectionResult?.unread ?? null);
+  // A gap only matters when what jigs could read leaves the verdict open.
+  const unreadCouldChangeVerdict =
+    unread === "both" ||
+    (unread !== null &&
+      protectionResult != null &&
+      (protectionResult.requiredStatusChecks === 0 ||
+        merge.approval.kind === "label" ||
+        protectionResult.requiredApprovingReviews === 0));
+  if (unread !== null && unreadCouldChangeVerdict) {
+    findings.push({ binding: bindingName, ...unreadableProtection(unread, ref, identity) });
+  } else if (protectionResult === null) {
     findings.push({
       binding: bindingName,
-      reason: `cannot read classic branch protection for ${ref.owner}/${ref.repo} without repository administration access`,
-      repair:
-        "grant Administration: read and write to the GitHub App and accept the updated installation permissions, or use an admin PAT",
+      reason: `${ref.owner}/${ref.repo}'s default branch has no classic branch protection or ruleset requiring CI`,
+      repair: `in ${ref.owner}/${ref.repo} Settings → Branches or Rules → Rulesets, add a rule for the default branch that requires the repository's CI checks before merge`,
     });
-  } else if (classicProtectionResult === null) {
-    findings.push({
-      binding: bindingName,
-      reason: `${ref.owner}/${ref.repo}'s default branch has no classic branch protection`,
-      repair: setupRepair,
-    });
-  } else if (classicProtectionResult !== undefined) {
-    if (classicProtectionResult.requiredStatusChecks === 0)
+  } else if (protectionResult !== undefined) {
+    if (protectionResult.requiredStatusChecks === 0)
       findings.push({
         binding: bindingName,
-        reason: `${ref.owner}/${ref.repo}'s default branch does not require status checks`,
-        repair: setupRepair,
+        reason: `${ref.owner}/${ref.repo}'s default branch does not require CI checks, so jigs could merge a change whose CI failed`,
+        repair: `in ${ref.owner}/${ref.repo} Settings → Branches or Rules → Rulesets, require the repository's CI checks before merge`,
       });
-    if (merge.approval.kind === "review" && classicProtectionResult.requiredApprovingReviews < 1)
+    if (merge.approval.kind === "review" && protectionResult.requiredApprovingReviews < 1)
       findings.push({
         binding: bindingName,
-        reason: `${ref.owner}/${ref.repo}'s default branch does not require an approving review, which is the configured approval signal`,
-        repair: setupRepair,
+        reason: `${ref.owner}/${ref.repo}'s default branch does not require an approving review, so GitHub does not enforce the approval signal jigs is configured to use`,
+        repair: `in ${ref.owner}/${ref.repo} Settings → Branches or Rules → Rulesets, require at least one approving review, or change this factory's approval to label`,
       });
   }
   const allowed = {
@@ -416,8 +449,8 @@ async function inspectBinding(
   if (allowed === false)
     findings.push({
       binding: bindingName,
-      reason: `${merge.method} merges are disabled on ${ref.owner}/${ref.repo}`,
-      repair: `enable ${merge.method} merges on the repository, or set bindings.${bindingName}.merge.method in jigs.config.ts`,
+      reason: `${merge.method} merges are disabled on ${ref.owner}/${ref.repo}, so GitHub will refuse the merge method jigs is configured to use`,
+      repair: `enable ${merge.method} merges in ${ref.owner}/${ref.repo} Settings → General → Pull Requests, or set bindings.${bindingName}.merge.method in jigs.config.ts to an enabled method`,
     });
   const checkRunCount = settledValue(checkRunsResult);
   const statusCount = settledValue(commitStatusesResult);
@@ -425,8 +458,8 @@ async function inspectBinding(
   if (checkRunCount === 0 && statusCount === 0 && workflowCount === 0)
     findings.push({
       binding: bindingName,
-      reason: `${ref.owner}/${ref.repo} has no active Actions workflows, and its default branch has no check runs or commit statuses`,
-      repair: `add a CI workflow, or set bindings.${bindingName}.merge.by to "human" in jigs.config.ts`,
+      reason: `${ref.owner}/${ref.repo} has no active Actions workflows and its default branch has no check runs or commit statuses, so jigs has no CI result to wait for before merging`,
+      repair: `add and run a CI workflow on the default branch, or set bindings.${bindingName}.merge.by to "human" in jigs.config.ts`,
     });
   if (merge.approval.kind === "label") {
     const [labelExistsResult] = await Promise.allSettled([
@@ -435,21 +468,46 @@ async function inspectBinding(
     if (settledValue(labelExistsResult) === false)
       findings.push({
         binding: bindingName,
-        reason: `${ref.owner}/${ref.repo} has no ${merge.approval.name} label`,
-        repair: `re-run jigs bind for this repository to restore the ${merge.approval.name} label, or change merge.approval in jigs.config.ts`,
+        reason: `${ref.owner}/${ref.repo} has no ${merge.approval.name} label, so the configured approval signal can never be given`,
+        repair: `create the ${merge.approval.name} label in ${ref.owner}/${ref.repo} Issues → Labels, re-run jigs bind to restore it, or switch this factory's approval to review`,
       });
-    const [approvalsResult] = await Promise.allSettled([
-      probes.requiredApprovingReviews(ref.owner, ref.repo, repository.default_branch),
-    ]);
-    const approvals = settledValue(approvalsResult);
-    if (approvals !== undefined && approvals !== null && approvals > 0)
+    const approvals = protectionResult?.requiredApprovingReviews;
+    if (approvals !== undefined && approvals > 0)
       findings.push({
         binding: bindingName,
-        reason: `${ref.owner}/${ref.repo}'s default branch requires ${approvals} approving review${approvals === 1 ? "" : "s"}, which a label cannot satisfy when jigs authors the pull request`,
-        repair: `remove the repository's required approving reviews, or change merge.approval to { kind: "review" } in jigs.config.ts; ${setupRepair} will not remove an operator-owned review rule`,
+        reason: `${ref.owner}/${ref.repo} requires ${approvals} approving review${approvals === 1 ? "" : "s"} before merge, but this factory approves with a label, which GitHub will not count`,
+        repair: `remove the required-review rule in ${ref.owner}/${ref.repo} Settings → Branches or Rules → Rulesets, or switch this factory's approval to review`,
       });
   }
   return findings;
+}
+
+// Each gap has its own repair: only classic branch protection needs
+// administration rights, so pointing at permissions for a failed ruleset read
+// would send an operator after a permission that is already enough.
+function unreadableProtection(
+  unread: ProtectionGap | "both",
+  ref: { owner: string; repo: string },
+  identity: GithubIdentity,
+): Omit<PolicyFinding, "binding"> {
+  const slug = `${ref.owner}/${ref.repo}`;
+  const cannotVerify = "so jigs cannot verify that merges will be allowed";
+  const grantAdministration =
+    identity.mode === "app"
+      ? "grant the GitHub App Administration: read in Settings → Developer settings → GitHub Apps, then accept the updated installation permissions"
+      : "replace GITHUB_TOKEN with a PAT that has repository administration access so it can read branch protection, then restart the jigs service";
+  if (unread === "rulesets")
+    return {
+      reason: `read ${slug}'s classic branch protection but not its rulesets, ${cannotVerify}`,
+      repair: `reading rulesets needs no extra permission, so GitHub did not answer: re-run jigs doctor, and if it keeps failing check GitHub's status and that ${slug} is still reachable`,
+    };
+  return {
+    reason:
+      unread === "classic"
+        ? `read ${slug}'s rulesets but not its classic branch protection, ${cannotVerify}`
+        : `could not read branch protection or rulesets for ${slug}, ${cannotVerify}`,
+    repair: grantAdministration,
+  };
 }
 
 function settledValue<T>(result: PromiseSettledResult<T>): T | undefined {

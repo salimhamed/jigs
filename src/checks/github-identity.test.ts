@@ -27,7 +27,7 @@ const APP: AppIdentity = {
 };
 
 const GRANTED = {
-  administration: "write",
+  administration: "read",
   contents: "write",
   pull_requests: "write",
   issues: "write",
@@ -143,14 +143,14 @@ test("webhook administration is a permission the operator has to grant and accep
   expect(check.repair).toContain("accept the updated permissions on the installation");
 });
 
-test("repository administration is required for explicit protection setup", async () => {
+test("repository administration read is required to inspect classic protection", async () => {
   const { administration: _ungranted, ...withoutAdministration } = GRANTED;
   const check = await outcome(APP, "github.identity", {
     installation: async () => ({ permissions: withoutAdministration }),
   });
   expect(check).toMatchObject({
     ok: false,
-    reason: expect.stringContaining("administration: write"),
+    reason: expect.stringContaining("administration: read"),
   });
 });
 
@@ -286,59 +286,105 @@ test("real label probe distinguishes absence from unreadable state", async () =>
   ).rejects.toThrow("forbidden");
 });
 
-test("real approval probe combines classic protection and rulesets", async () => {
+test("the protection probe combines classic protection and rulesets", async () => {
   githubGetMock
     .mockResolvedValueOnce({
+      required_status_checks: { contexts: ["classic-ci"] },
       required_pull_request_reviews: { required_approving_review_count: 1 },
     })
     .mockResolvedValueOnce([
-      { type: "creation" },
+      {
+        type: "required_status_checks",
+        parameters: { required_status_checks: [{ context: "ruleset-ci" }] },
+      },
       { type: "pull_request", parameters: { required_approving_review_count: 2 } },
     ]);
   await expect(
-    realGithubMergePolicyProbes.requiredApprovingReviews("acme", "api", "release/v1"),
-  ).resolves.toBe(2);
+    realGithubMergePolicyProbes.protection("acme", "api", "release/v1"),
+  ).resolves.toEqual({
+    requiredStatusChecks: 2,
+    requiredApprovingReviews: 2,
+    unread: null,
+  });
   expect(githubGetMock.mock.calls.map(([url]) => url)).toEqual([
     "/repos/acme/api/branches/release%2Fv1/protection",
     "/repos/acme/api/rules/branches/release%2Fv1",
   ]);
 });
 
-test("the classic-protection probe reports required checks and reviews, including absence", async () => {
-  githubGetMock.mockResolvedValueOnce({ permissions: { admin: true } });
+test("the classic-protection probe reports required checks and reviews", async () => {
   githubGetMock.mockResolvedValueOnce({
     required_status_checks: { contexts: ["legacy"], checks: [{ context: "build" }] },
     required_pull_request_reviews: { required_approving_review_count: 1 },
   });
+  githubGetMock.mockResolvedValueOnce([]);
   await expect(
-    realGithubMergePolicyProbes.classicProtection("acme", "api", "release/v1"),
-  ).resolves.toEqual({ requiredStatusChecks: 2, requiredApprovingReviews: 1 });
-
-  githubGetMock.mockResolvedValueOnce({ permissions: { admin: true } });
-  githubGetMock.mockRejectedValueOnce(
-    new GithubApiError(404, "/branches/main/protection", "not protected"),
-  );
-  await expect(
-    realGithubMergePolicyProbes.classicProtection("acme", "api", "main"),
-  ).resolves.toBeNull();
+    realGithubMergePolicyProbes.protection("acme", "api", "release/v1"),
+  ).resolves.toEqual({
+    requiredStatusChecks: 2,
+    requiredApprovingReviews: 1,
+    unread: null,
+  });
 });
 
-test("real approval probe preserves a readable leg and reports both unreadable as unknown", async () => {
+test("an unprotected branch with no rulesets reads as no protection, not as a failure", async () => {
+  githubGetMock.mockRejectedValueOnce(
+    new GithubApiError(404, "/branches/main/protection", "Branch not protected"),
+  );
+  githubGetMock.mockResolvedValueOnce([]);
+  await expect(realGithubMergePolicyProbes.protection("acme", "api", "main")).resolves.toBeNull();
+});
+
+test("the protection probe falls back from classic protection to rulesets", async () => {
+  githubGetMock.mockRejectedValueOnce(
+    new GithubApiError(404, "/branches/main/protection", "not accessible"),
+  );
+  githubGetMock.mockResolvedValueOnce([
+    {
+      type: "required_status_checks",
+      parameters: { required_status_checks: [{ context: "build" }, { context: "test" }] },
+    },
+    { type: "pull_request", parameters: { required_approving_review_count: 2 } },
+  ]);
+
+  await expect(realGithubMergePolicyProbes.protection("acme", "api", "main")).resolves.toEqual({
+    requiredStatusChecks: 2,
+    requiredApprovingReviews: 2,
+    unread: null,
+  });
+  expect(githubGetMock.mock.calls.map(([url]) => url)).toEqual([
+    "/repos/acme/api/branches/main/protection",
+    "/repos/acme/api/rules/branches/main",
+  ]);
+});
+
+test("the protection probe names the leg it could not read and rejects when neither answers", async () => {
   githubGetMock
-    .mockRejectedValueOnce(new Error("protection forbidden"))
+    .mockRejectedValueOnce(new GithubApiError(403, "/branches/main/protection", "forbidden"))
     .mockResolvedValueOnce([
       { type: "pull_request", parameters: { required_approving_review_count: 3 } },
     ]);
-  await expect(
-    realGithubMergePolicyProbes.requiredApprovingReviews("acme", "api", "main"),
-  ).resolves.toBe(3);
+  await expect(realGithubMergePolicyProbes.protection("acme", "api", "main")).resolves.toEqual({
+    requiredStatusChecks: 0,
+    requiredApprovingReviews: 3,
+    unread: "classic",
+  });
+
+  githubGetMock
+    .mockResolvedValueOnce({ required_status_checks: { contexts: ["ci"] } })
+    .mockRejectedValueOnce(new Error("rules unavailable"));
+  await expect(realGithubMergePolicyProbes.protection("acme", "api", "main")).resolves.toEqual({
+    requiredStatusChecks: 1,
+    requiredApprovingReviews: 0,
+    unread: "rulesets",
+  });
 
   githubGetMock
     .mockRejectedValueOnce(new Error("forbidden"))
     .mockRejectedValueOnce(new Error("forbidden"));
-  await expect(
-    realGithubMergePolicyProbes.requiredApprovingReviews("acme", "api", "main"),
-  ).resolves.toBeNull();
+  await expect(realGithubMergePolicyProbes.protection("acme", "api", "main")).rejects.toThrow(
+    "could not read classic protection or rulesets",
+  );
 });
 
 const policyProbes = (
@@ -346,7 +392,6 @@ const policyProbes = (
 ): GithubMergePolicyProbes => ({
   repository: async () => ({
     default_branch: "main",
-    permissions: { admin: true },
     allow_merge_commit: true,
     allow_squash_merge: true,
     allow_rebase_merge: true,
@@ -355,8 +400,7 @@ const policyProbes = (
   commitStatuses: async () => 0,
   actionsWorkflows: async () => 0,
   labelExists: async () => true,
-  classicProtection: async () => ({ requiredStatusChecks: 1, requiredApprovingReviews: 1 }),
-  requiredApprovingReviews: async () => 0,
+  protection: async () => ({ requiredStatusChecks: 1, requiredApprovingReviews: 1, unread: null }),
   ...overrides,
 });
 
@@ -382,14 +426,14 @@ test("a healthy binding preserves the existing passing merge-policy line", async
   });
 });
 
-test("missing recommended protection names repo setup as the repair", async () => {
+test("missing protection explains how to add a GitHub rule", async () => {
   const result = await policyOutcome(SQUASH_REVIEW, binding, {
-    classicProtection: async () => null,
+    protection: async () => null,
   });
   expect(result).toMatchObject({
     ok: false,
     reason: expect.stringContaining("has no classic branch protection"),
-    repair: expect.stringContaining("jigs repo setup api"),
+    repair: expect.stringContaining("Settings → Branches or Rules → Rulesets"),
   });
 });
 
@@ -398,21 +442,48 @@ test("App mode reports missing required checks and approving review", async () =
     SQUASH_REVIEW,
     binding,
     {
-      classicProtection: async () => ({
+      protection: async () => ({
         requiredStatusChecks: 0,
         requiredApprovingReviews: 0,
+        unread: null,
       }),
     },
     APP,
   );
   expect(result).toMatchObject({
     ok: false,
-    reason: expect.stringContaining("does not require status checks"),
-    repair: expect.stringContaining("jigs repo setup api"),
+    reason: expect.stringContaining("does not require CI checks"),
+    repair: expect.stringContaining("Settings → Branches or Rules → Rulesets"),
   });
   if (result?.ok !== false) throw new Error("expected failure");
   expect(result.reason).toContain("does not require an approving review");
 });
+
+test.each([
+  [
+    "unreadable classic protection",
+    { requiredStatusChecks: 0, requiredApprovingReviews: 0, unread: "classic" as const },
+    "read acme/api's rulesets but not its classic branch protection",
+    "grant the GitHub App Administration: read",
+  ],
+  [
+    "unreadable rulesets",
+    { requiredStatusChecks: 1, requiredApprovingReviews: 0, unread: "rulesets" as const },
+    "read acme/api's classic branch protection but not its rulesets",
+    "reading rulesets needs no extra permission",
+  ],
+])(
+  "%s reports which half jigs could not read and how to repair that half",
+  async (_case, protection, reason, repair) => {
+    expect(
+      await policyOutcome(LABEL_POLICY, binding, { protection: async () => protection }, APP),
+    ).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining(reason),
+      repair: expect.stringContaining(repair),
+    });
+  },
+);
 
 test("the effective merge policy is reported and checked per binding", async () => {
   const bindings = {
@@ -478,23 +549,32 @@ const LABEL_POLICY: MergePolicy = {
 
 test("label approval fails when native approving reviews are required", async () => {
   const result = await policyOutcome(LABEL_POLICY, binding, {
-    requiredApprovingReviews: async () => 2,
+    protection: async () => ({
+      requiredStatusChecks: 1,
+      requiredApprovingReviews: 2,
+      unread: null,
+    }),
   });
   expect(result).toMatchObject({
     ok: false,
     reason: expect.stringContaining("requires 2 approving reviews"),
-    repair: expect.stringContaining("change merge.approval"),
+    repair: expect.stringContaining("switch this factory's approval"),
   });
   if (result?.ok !== false) throw new Error("expected failure");
-  expect(result.repair).toContain("change merge.approval");
+  expect(result.repair).toContain("switch this factory's approval");
 });
 
 test("App label approval rejects native required reviews", async () => {
-  const requiredApprovingReviews = vi.fn(async () => 1);
-  await expect(
-    policyOutcome(LABEL_POLICY, binding, { requiredApprovingReviews }, APP),
-  ).resolves.toMatchObject({ ok: false, reason: expect.stringContaining("label cannot satisfy") });
-  expect(requiredApprovingReviews).toHaveBeenCalledOnce();
+  const protection = vi.fn(async () => ({
+    requiredStatusChecks: 1,
+    requiredApprovingReviews: 1,
+    unread: null,
+  }));
+  await expect(policyOutcome(LABEL_POLICY, binding, { protection }, APP)).resolves.toMatchObject({
+    ok: false,
+    reason: expect.stringContaining("this factory approves with a label"),
+  });
+  expect(protection).toHaveBeenCalledOnce();
 });
 
 test("a hung repository probe stays silent before the check catalog times out", async () => {
@@ -591,12 +671,20 @@ test("an inaccessible repository stays silent for the merge-policy check", async
   ).toMatchObject({ ok: true });
 });
 
-test("an unreadable approvals rule stays silent", async () => {
+test.each([
+  [APP, "grant the GitHub App Administration: read"],
+  [{ mode: "pat" as const }, "replace GITHUB_TOKEN with a PAT"],
+])("unreadable protection gives identity-specific guidance", async (identity, repair) => {
   expect(
-    await policyOutcome(LABEL_POLICY, binding, {
-      requiredApprovingReviews: async () => {
-        throw new Error("forbidden");
+    await policyOutcome(
+      LABEL_POLICY,
+      binding,
+      {
+        protection: async () => {
+          throw new Error("forbidden");
+        },
       },
-    }),
-  ).toMatchObject({ ok: true });
+      identity,
+    ),
+  ).toMatchObject({ ok: false, repair: expect.stringContaining(repair) });
 });
