@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.27.0](https://github.com/salimhamed/jigs/compare/jigs-v0.26.2...jigs-v0.27.0) (2026-09-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* make a running pipeline visible from the terminal ([#224](https://github.com/salimhamed/jigs/issues/224))
+
+### Features
+
+* make a running pipeline visible from the terminal ([#224](https://github.com/salimhamed/jigs/issues/224)) ([f911664](https://github.com/salimhamed/jigs/commit/f91166427934c829939615f5efc0100a93945434))
+
 ## [0.26.2](https://github.com/salimhamed/jigs/compare/jigs-v0.26.1...jigs-v0.26.2) (2026-09-16)
 
 
