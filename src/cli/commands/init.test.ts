@@ -81,6 +81,11 @@ test("scaffolds a factory that can be installed and built", async () => {
   // Keeps a factory from installing a Codex CLI it will never run.
   expect(workspace).toContain("ignoredOptionalDependencies");
   expect(workspace).toContain("'@openai/codex'");
+  // jigs can upgrade immediately without disabling the operator's age policy
+  // for any other package.
+  expect(workspace).toContain("minimumReleaseAgeExclude");
+  expect(workspace).toContain("'@salimhamed/jigs'");
+  expect(workspace).not.toContain("minimumReleaseAge:");
   // The scope→registry line only: the token stays in ~/.npmrc.
   const npmrc = readFileSync(path.join(dir, ".npmrc"), "utf8");
   expect(npmrc).toContain("@salimhamed:registry=https://npm.pkg.github.com");

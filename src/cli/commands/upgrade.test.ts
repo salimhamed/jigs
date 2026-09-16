@@ -98,18 +98,35 @@ const commands = (io: { exec: ReturnType<typeof fakeExec> }) =>
 test("bumps jigs to latest, runs every up step, then the typecheck", async () => {
   const port = await fakeService();
   const root = factory(port);
-  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
-
-  const result = await upgrade(root, io);
+  const generated = path.join(root, "generated-by-new-release");
+  const io = {
+    exec: fakeRegistry("0.1.19", (call) => {
+      if (call.args.join(" ") !== "exec jigs generate") return undefined;
+      expect(readManifest(root).dependencies["@salimhamed/jigs"]).toBe("0.1.19");
+      writeFileSync(generated, "new template");
+      return undefined;
+    }),
+    procs: fakeProcesses(),
+  };
+  const result = await upgrade(
+    root,
+    io,
+    {},
+    {
+      prepare: vi.fn(() => {
+        expect(readFileSync(generated, "utf8")).toBe("new template");
+      }),
+    },
+  );
 
   expect(result.ok).toBe(true);
   expect(statuses(result)).toEqual([
     "packages:ok",
     "bump:ok",
-    "generate:ok",
     "locate:ok",
     "env:ok",
     "install:ok",
+    "generate:ok",
     "compose:ok",
     "bootstrap:ok",
     "build:ok",
@@ -124,8 +141,8 @@ test("bumps jigs to latest, runs every up step, then the typecheck", async () =>
 
   expect(commands(io)).toEqual([
     ["pnpm", "update", "--latest", "@salimhamed/jigs"],
-    ["pnpm", "exec", "jigs", "generate"],
     ["pnpm", "install"],
+    ["pnpm", "exec", "jigs", "generate"],
     ["docker", "compose", "up", "-d", "--wait"],
     ["bootstrap"],
     ["nitro", "build"],
@@ -134,10 +151,178 @@ test("bumps jigs to latest, runs every up step, then the typecheck", async () =>
   for (const call of io.exec.calls) expect(call.options.cwd).toBe(root);
 
   const printed = lines.join("\n");
-  expect(printed).toMatch(/^ok {3}packages \(\d+ms\) — jigs 0\.1\.18$/m);
+  expect(printed).toMatch(
+    /^ok {3}packages \(\d+ms\) — jigs 0\.1\.18; normalized minimumReleaseAgeExclude$/m,
+  );
   expect(printed).toMatch(/^ok {3}bump \(\d+ms\) — jigs 0\.1\.18 → 0\.1\.19$/m);
   expect(printed).toMatch(/^ok {3}typecheck \(\d+ms\)$/m);
   expect(lines.at(-1)).toBe("acme-factory runs jigs 0.1.19");
+});
+
+test("normalizes an exact jigs release-age exclusion before pnpm runs", async () => {
+  const port = await fakeService();
+  const root = factory(port);
+  const workspace = path.join(root, "pnpm-workspace.yaml");
+  writeFileSync(
+    workspace,
+    "minimumReleaseAge: 1440\nminimumReleaseAgeExclude:\n  - '@acme/fresh@1.0.0' # preserve me\n  - '@salimhamed/jigs@0.1.18'\n",
+  );
+  const io = {
+    exec: fakeRegistry("0.1.19", (call) => {
+      if (call.file !== "pnpm") return undefined;
+      const contents = readFileSync(workspace, "utf8");
+      expect(contents).toContain("@acme/fresh@1.0.0");
+      expect(contents).toMatch(/- '@salimhamed\/jigs'$/m);
+      expect(contents).not.toContain("@salimhamed/jigs@0.1.18");
+      return undefined;
+    }),
+    procs: fakeProcesses(),
+  };
+
+  const result = await upgrade(root, io, { to: "0.1.19" });
+
+  expect(result.ok).toBe(true);
+  expect(result.steps[0]?.detail).toBe("jigs 0.1.18; normalized minimumReleaseAgeExclude");
+  const contents = readFileSync(workspace, "utf8");
+  expect(contents).toContain("minimumReleaseAge: 1440");
+  expect(contents).toContain("'@acme/fresh@1.0.0' # preserve me");
+  expect(contents.match(/'@salimhamed\/jigs'(?:\n|$)/g)).toHaveLength(1);
+});
+
+test("rewrites an exact exclusion in place with its comment and position", async () => {
+  const port = await fakeService();
+  const root = factory(port);
+  const workspace = path.join(root, "pnpm-workspace.yaml");
+  writeFileSync(
+    workspace,
+    "minimumReleaseAgeExclude:\n  # jigs, freshly published\n  - '@salimhamed/jigs@0.1.18'\n  - 'zod@1.0.0'\n",
+  );
+  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+
+  const result = await upgrade(root, io);
+
+  expect(result.ok).toBe(true);
+  expect(readFileSync(workspace, "utf8")).toBe(
+    "minimumReleaseAgeExclude:\n  # jigs, freshly published\n  - '@salimhamed/jigs'\n  - 'zod@1.0.0'\n",
+  );
+});
+
+test("normalizes an exact jigs exclusion in a flow-style list", async () => {
+  const port = await fakeService();
+  const root = factory(port);
+  const workspace = path.join(root, "pnpm-workspace.yaml");
+  writeFileSync(
+    workspace,
+    "minimumReleaseAgeExclude: ['@acme/fresh@1.0.0', '@salimhamed/jigs@0.1.18']\n",
+  );
+  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+
+  const result = await upgrade(root, io);
+
+  expect(result.ok).toBe(true);
+  expect(readFileSync(workspace, "utf8")).toBe(
+    "minimumReleaseAgeExclude: [ '@acme/fresh@1.0.0', '@salimhamed/jigs' ]\n",
+  );
+});
+
+test("removes stale jigs exclusions beside the wildcard", async () => {
+  const port = await fakeService();
+  const root = factory(port);
+  const workspace = path.join(root, "pnpm-workspace.yaml");
+  writeFileSync(
+    workspace,
+    "minimumReleaseAgeExclude:\n  - '@salimhamed/jigs'\n  - '@acme/fresh@1.0.0'\n  - '@salimhamed/jigs@0.1.18'\n",
+  );
+  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+
+  const result = await upgrade(root, io);
+
+  expect(result.ok).toBe(true);
+  expect(result.steps[0]?.detail).toBe("jigs 0.1.18; normalized minimumReleaseAgeExclude");
+  expect(readFileSync(workspace, "utf8")).toBe(
+    "minimumReleaseAgeExclude:\n  - '@salimhamed/jigs'\n  - '@acme/fresh@1.0.0'\n",
+  );
+});
+
+test("adds a release-age exclusion when the workspace has no exclusion list", async () => {
+  const port = await fakeService();
+  const root = factory(port);
+  const workspace = path.join(root, "pnpm-workspace.yaml");
+  const before = "packages:\n  - src/*\n# operator setting\nstrictPeerDependencies: true\n";
+  writeFileSync(workspace, before);
+  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+
+  const result = await upgrade(root, io);
+
+  expect(result.ok).toBe(true);
+  const contents = readFileSync(workspace, "utf8");
+  expect(contents).toContain(before);
+  expect(contents).toMatch(/minimumReleaseAgeExclude:\n {2}- '@salimhamed\/jigs'$/m);
+  expect(contents).not.toContain("minimumReleaseAge:");
+});
+
+test("treats an empty release-age exclusion value as an empty list", async () => {
+  const port = await fakeService();
+  const root = factory(port);
+  const workspace = path.join(root, "pnpm-workspace.yaml");
+  writeFileSync(workspace, "minimumReleaseAgeExclude:\n");
+  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+
+  const result = await upgrade(root, io);
+
+  expect(result.ok).toBe(true);
+  expect(readFileSync(workspace, "utf8")).toBe(
+    "minimumReleaseAgeExclude:\n  - '@salimhamed/jigs'\n",
+  );
+});
+
+test("reports a non-mapping workspace file with a repair hint", async () => {
+  const root = factory(1);
+  const workspace = path.join(root, "pnpm-workspace.yaml");
+  writeFileSync(workspace, "- packages\n");
+  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+
+  const result = await upgrade(root, io);
+
+  expect(result.ok).toBe(false);
+  expect(statuses(result)).toEqual(["packages:failed"]);
+  expect(result.steps[0]?.detail).toBe(`${workspace} must contain a YAML mapping`);
+  expect(result.steps[0]?.repair).toBe(
+    "make pnpm-workspace.yaml a top-level mapping, then run jigs upgrade again",
+  );
+  expect(io.exec.calls).toHaveLength(0);
+});
+
+test("leaves an already-normalized release-age exclusion byte-identical", async () => {
+  const port = await fakeService();
+  const root = factory(port);
+  const workspace = path.join(root, "pnpm-workspace.yaml");
+  const before =
+    "minimumReleaseAgeExclude:\n  - '@acme/fresh@1.0.0'\n  - '@salimhamed/jigs' # all releases\n";
+  writeFileSync(workspace, before);
+  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+
+  const result = await upgrade(root, io);
+
+  expect(result.ok).toBe(true);
+  expect(result.steps[0]?.detail).toBe("jigs 0.1.18");
+  expect(readFileSync(workspace, "utf8")).toBe(before);
+});
+
+test("leaves a normalized exclusion byte-identical when jigs is not last", async () => {
+  const port = await fakeService();
+  const root = factory(port);
+  const workspace = path.join(root, "pnpm-workspace.yaml");
+  const before =
+    "minimumReleaseAgeExclude:\n  - '@salimhamed/jigs' # all releases\n  - '@acme/fresh@1.0.0'\n";
+  writeFileSync(workspace, before);
+  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+
+  const result = await upgrade(root, io);
+
+  expect(result.ok).toBe(true);
+  expect(result.steps[0]?.detail).toBe("jigs 0.1.18");
+  expect(readFileSync(workspace, "utf8")).toBe(before);
 });
 
 test("--to pins jigs to that version instead of the latest", async () => {
@@ -398,10 +583,10 @@ test("a failing up step ends the upgrade there; no typecheck runs", async () => 
   expect(statuses(result)).toEqual([
     "packages:ok",
     "bump:ok",
-    "generate:ok",
     "locate:ok",
     "env:ok",
     "install:ok",
+    "generate:ok",
     "compose:failed",
   ]);
   expect(result.up?.ok).toBe(false);
@@ -467,15 +652,44 @@ test("a failed integration refresh stops before rebuilding or restarting", async
   const root = factory(59997);
   const io = {
     exec: fakeRegistry("0.1.19", (call) =>
-      call.args.join(" ") === "exec jigs generate" ? execError("generation failed") : undefined,
+      call.args.join(" ") === "exec jigs generate" ? execError(1, "generation failed") : undefined,
     ),
     procs: fakeProcesses(),
   };
   const result = await upgrade(root, io);
   expect(result.ok).toBe(false);
-  expect(statuses(result)).toEqual(["packages:ok", "bump:ok", "generate:failed"]);
+  expect(statuses(result)).toEqual([
+    "packages:ok",
+    "bump:ok",
+    "locate:ok",
+    "env:ok",
+    "install:ok",
+    "generate:failed",
+  ]);
+  expect(result.steps.at(-1)?.detail).toBe("could not refresh jigs.ts");
+  expect(result.steps.at(-1)?.repair).toBe("run pnpm exec jigs generate in this factory");
+  expect(lines.at(-1)).toBe("  → run pnpm exec jigs generate in this factory");
   expect(commands(io)).toEqual([
     ["pnpm", "update", "--latest", "@salimhamed/jigs"],
+    ["pnpm", "install"],
     ["pnpm", "exec", "jigs", "generate"],
   ]);
+});
+
+test("a missing pnpm during integration refresh names the missing tool", async () => {
+  const root = factory(59997);
+  const io = {
+    exec: fakeRegistry("0.1.19", (call) =>
+      call.args.join(" ") === "exec jigs generate" ? execError("ENOENT") : undefined,
+    ),
+    procs: fakeProcesses(),
+  };
+
+  const result = await upgrade(root, io);
+
+  expect(result.ok).toBe(false);
+  expect(statuses(result).at(-1)).toBe("generate:failed");
+  expect(result.steps.at(-1)?.detail).toBe("pnpm is not on PATH");
+  expect(result.steps.at(-1)?.repair).toBe("install pnpm");
+  expect(lines.at(-1)).toBe("  → install pnpm");
 });

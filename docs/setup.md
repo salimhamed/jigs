@@ -59,26 +59,30 @@ answer instead. The service is a host process on purpose: it drives the
 operator's `claude` and `codex` logins, the AWS SSO cache and the git clones
 ([ADR 0017](adr/0017-single-package.md)).
 
-**Upgrading.** `jigs upgrade` in the factory: it moves the jigs pin to the
-latest release (`--to <version>` picks one), regenerates `jigs.ts` using the
-installed release, runs `jigs up`, then the factory's own typecheck. A release
-that moves one of the four runtime peers — `workflow`, `@workflow/world-postgres`,
-`@workflow/web`, `zod` — fails the install by name; make the same move in the
-factory's `package.json` and run it again. A release can also raise the
-minimum `codex` version; no install will say so, but the service will at
-startup, and the fix is to upgrade `codex` on the machine. A factory made
-before this release should add `ignoredOptionalDependencies: ['@openai/codex']`
-to its `pnpm-workspace.yaml` and delete any `@openai/codex` dependency or
-`overrides` entry. A factory still carrying the
-`@salimhamed/jigs-service` dependency retired in 0.3.0 is refused: drop that
-line and rewrite its `@salimhamed/jigs-service/X` imports to
+**Upgrading.** `jigs upgrade` in the factory: it normalizes jigs' release-age
+exclusion, then moves the jigs pin to the latest release (`--to <version>`
+picks one). It runs `jigs up`, whose upgrade path installs the release,
+regenerates `jigs.ts` with that installed CLI, and builds and starts the
+factory, then runs the factory's own typecheck. This is a single command even
+when an older factory excludes an exact jigs version. Review and commit both
+the regenerated `jigs.ts` and any `pnpm-workspace.yaml` normalization. A
+release that moves one of the four runtime peers — `workflow`,
+`@workflow/world-postgres`, `@workflow/web`, `zod` — fails the install by name;
+make the same move in the factory's `package.json` and run it again. A release
+can also raise the minimum `codex` version; no install will say so, but the
+service will at startup, and the fix is to upgrade `codex` on the machine. A
+factory made before this release should add
+`ignoredOptionalDependencies: ['@openai/codex']` to its `pnpm-workspace.yaml`
+and delete any `@openai/codex` dependency or `overrides` entry. A factory still
+carrying the `@salimhamed/jigs-service` dependency retired in 0.3.0 is refused:
+drop that line and rewrite its `@salimhamed/jigs-service/X` imports to
 `@salimhamed/jigs/X` first ([ADR 0017](adr/0017-single-package.md)).
 
-pnpm verifies the whole lockfile against its `minimumReleaseAge` policy
-before it resolves anything, so a dependency is still age-checked on the very
-install that removes it. Leave a recently published package's
-`minimumReleaseAgeExclude` entry in `pnpm-workspace.yaml` until that install
-has run, then drop the entry. Both factories hit this moving off
+pnpm still verifies the whole lockfile against its `minimumReleaseAge` policy
+before it resolves anything. `jigs upgrade` keeps every jigs version covered
+by the `@salimhamed/jigs` exclusion; for other recently published packages,
+leave their `minimumReleaseAgeExclude` entry in `pnpm-workspace.yaml` until
+that install has run, then drop the entry. Both factories hit this moving off
 `@salimhamed/jigs-service`.
 
 **Releasing this repo (once, by whoever owns it).** The package carries

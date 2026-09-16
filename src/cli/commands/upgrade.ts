@@ -1,5 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { isMap, isScalar, isSeq, parseDocument, Scalar } from "yaml";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
@@ -20,7 +21,7 @@ const CHECKOUT_PACKAGES = ["jigs", "@jigs/service"];
 // package no release has.
 const RETIRED_PACKAGE = "@salimhamed/jigs-service";
 
-export type UpgradeStepName = "packages" | "bump" | "generate" | "typecheck";
+export type UpgradeStepName = "packages" | "bump" | "typecheck";
 
 export type UpgradeStep = Step<UpgradeStepName | UpStepName>;
 
@@ -33,7 +34,7 @@ export interface UpgradeResult {
   up?: UpResult;
 }
 
-export type UpgradeDeps = UpDeps;
+export type UpgradeDeps = Omit<UpDeps, "generate">;
 
 export interface UpgradeOptions extends Pick<UpOptions, "force" | "doctor"> {
   to?: string;
@@ -62,7 +63,8 @@ export async function upgradeFactory(
     const { factoryRoot, before } = await runner.run("packages", (note) => {
       const factoryRoot = locateFactoryRoot(deps.cwd);
       const before = publishedVersion(factoryRoot);
-      note(`jigs ${before}`);
+      const normalized = normalizeReleaseAgeExclude(factoryRoot);
+      note(normalized ? `jigs ${before}; normalized minimumReleaseAgeExclude` : `jigs ${before}`);
       return { factoryRoot, before };
     });
     result.factoryRoot = factoryRoot;
@@ -76,26 +78,28 @@ export async function upgradeFactory(
     });
     result.after = after;
 
-    await runner.run("generate", () =>
-      execOrExplain(
-        execFile,
-        "pnpm",
-        ["exec", "jigs", "generate"],
-        { cwd: factoryRoot },
-        deps.out,
-        {
-          missing: new JigsError("pnpm is not on PATH", "install pnpm"),
-          failed: () =>
-            new JigsError(
-              "could not refresh jigs.ts",
-              "run pnpm exec jigs generate in this factory",
-            ),
-        },
-      ),
-    );
-
     const up = await upFactory(
-      { ...deps, cwd: factoryRoot, execFile },
+      {
+        ...deps,
+        cwd: factoryRoot,
+        execFile,
+        generate: () =>
+          execOrExplain(
+            execFile,
+            "pnpm",
+            ["exec", "jigs", "generate"],
+            { cwd: factoryRoot },
+            deps.out,
+            {
+              missing: new JigsError("pnpm is not on PATH", "install pnpm"),
+              failed: () =>
+                new JigsError(
+                  "could not refresh jigs.ts",
+                  "run pnpm exec jigs generate in this factory",
+                ),
+            },
+          ),
+      },
       { force: options.force, doctor: options.doctor },
     );
     result.up = up;
@@ -115,6 +119,74 @@ export async function upgradeFactory(
     if (err instanceof StepFailed) return result;
     throw err;
   }
+}
+
+function normalizeReleaseAgeExclude(factoryRoot: string): boolean {
+  const file = path.join(factoryRoot, "pnpm-workspace.yaml");
+  const source = existsSync(file) ? readFileSync(file, "utf8") : "";
+  const document = parseDocument(source);
+  if (document.errors.length > 0) {
+    throw new JigsError(
+      `could not parse ${file}: ${document.errors[0]?.message}`,
+      "fix pnpm-workspace.yaml, then run jigs upgrade again",
+    );
+  }
+  if (document.contents !== null && !isMap(document.contents)) {
+    throw new JigsError(
+      `${file} must contain a YAML mapping`,
+      "make pnpm-workspace.yaml a top-level mapping, then run jigs upgrade again",
+    );
+  }
+  const workspace = document.toJS() as { minimumReleaseAgeExclude?: unknown } | null;
+  const existing = workspace?.minimumReleaseAgeExclude;
+  if (existing != null && !Array.isArray(existing)) {
+    throw new JigsError(
+      `minimumReleaseAgeExclude in ${file} is not a list`,
+      "make minimumReleaseAgeExclude a YAML list, then run jigs upgrade again",
+    );
+  }
+  const jigsEntries = Array.isArray(existing)
+    ? existing.filter(
+        (entry) =>
+          typeof entry === "string" &&
+          (entry === JIGS_PACKAGE || entry.startsWith(`${JIGS_PACKAGE}@`)),
+      )
+    : [];
+  if (jigsEntries.length === 1 && jigsEntries[0] === JIGS_PACKAGE) return false;
+  const exclusions = document.get("minimumReleaseAgeExclude", true);
+  if (exclusions === undefined || (isScalar(exclusions) && exclusions.value === null)) {
+    const created = document.createNode<unknown[]>([]);
+    if (isSeq(created)) created.add(quotedJigsPackage());
+    document.set("minimumReleaseAgeExclude", created);
+  } else if (isSeq(exclusions)) {
+    let foundJigs = false;
+    for (let index = 0; index < exclusions.items.length; ) {
+      const item = exclusions.items[index];
+      if (
+        isScalar(item) &&
+        typeof item.value === "string" &&
+        (item.value === JIGS_PACKAGE || item.value.startsWith(`${JIGS_PACKAGE}@`))
+      ) {
+        if (foundJigs) {
+          exclusions.items.splice(index, 1);
+          continue;
+        }
+        item.value = JIGS_PACKAGE;
+        item.type = Scalar.QUOTE_SINGLE;
+        foundJigs = true;
+      }
+      index += 1;
+    }
+    if (!foundJigs) exclusions.add(quotedJigsPackage());
+  }
+  writeFileSync(file, String(document));
+  return true;
+}
+
+function quotedJigsPackage(): Scalar<string> {
+  const scalar = new Scalar(JIGS_PACKAGE);
+  scalar.type = Scalar.QUOTE_SINGLE;
+  return scalar;
 }
 
 function readManifest(factoryRoot: string): Manifest {
