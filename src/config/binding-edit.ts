@@ -62,14 +62,16 @@ function insertBinding(
 
   const first = properties[0] as PropertyAssignment;
   const last = properties.at(-1) as PropertyAssignment;
+  const hasTrailingComma =
+    object.getChildSyntaxList()?.getChildren().at(-1)?.getKind() === SyntaxKind.CommaToken;
   const entryIndent = leadingWhitespace(text, first.getStart());
   const closeBrace = object.getEnd() - 1;
   const closeLineStart = text.lastIndexOf("\n", closeBrace - 1) + 1;
   if (closeLineStart <= last.getEnd()) {
-    const separator = text.slice(last.getEnd(), closeBrace).includes(",") ? "" : ",";
+    const separator = hasTrailingComma ? "" : ",";
     return `${text.slice(0, last.getEnd())}${separator}${text.slice(last.getEnd(), closeBrace)}${entry} ${text.slice(closeBrace)}`;
   }
-  const separator = text.slice(last.getEnd(), closeLineStart).includes(",") ? "" : ",";
+  const separator = hasTrailingComma ? "" : ",";
   return `${text.slice(0, last.getEnd())}${separator}${text.slice(last.getEnd(), closeLineStart)}${entryIndent}${entry}\n${text.slice(closeLineStart)}`;
 }
 

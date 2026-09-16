@@ -206,6 +206,31 @@ test("adding a binding to a one-line object does not duplicate the config", () =
   );
 });
 
+test("adding a binding ignores commas in a trailing comment", () => {
+  const input = `export default defineFactory({
+  bindings: {
+    api: { remote: "r1" }
+    // api, the main repo
+  },
+});
+`;
+  expect(upsertBinding(input, "web", "r2")).toBe(`export default defineFactory({
+  bindings: {
+    api: { remote: "r1" },
+    // api, the main repo
+    web: { remote: "r2" },
+  },
+});
+`);
+});
+
+test("adding a binding to a one-line object ignores commas in comments", () => {
+  const input = `export default { bindings: { api: { remote: "a" } /* one, two */ } };`;
+  expect(upsertBinding(input, "web", "b")).toBe(
+    `export default { bindings: { api: { remote: "a" }, /* one, two */ web: { remote: "b" }, } };`,
+  );
+});
+
 test("missing bindings object is inserted", () => {
   const edited = upsertBinding(
     "export default { service: { dashboardPort: 9090 } };",
