@@ -129,6 +129,61 @@ test("adding and removing bindings preserves sibling comments and provisioning",
   expect(readFactoryConfig(factory(removed)).bindings["acme-api"]?.postCreate).toEqual(["npm ci"]);
 });
 
+test("adding a binding matches the surrounding formatting", () => {
+  const input = `import { defineFactory } from "@salimhamed/jigs";
+
+export default defineFactory({
+  bindings: {
+    api: { remote: "git@github.com:acme/api.git" },
+  },
+});
+`;
+  expect(
+    upsertBinding(input, "playground", "git@github.com:acme/pg.git"),
+  ).toBe(`import { defineFactory } from "@salimhamed/jigs";
+
+export default defineFactory({
+  bindings: {
+    api: { remote: "git@github.com:acme/api.git" },
+    playground: { remote: "git@github.com:acme/pg.git" },
+  },
+});
+`);
+});
+
+test("adding the first binding expands an empty bindings object", () => {
+  const input = `export default defineFactory({
+  bindings: {},
+});
+`;
+  expect(
+    upsertBinding(input, "playground", "git@github.com:acme/pg.git"),
+  ).toBe(`export default defineFactory({
+  bindings: {
+    playground: { remote: "git@github.com:acme/pg.git" },
+  },
+});
+`);
+});
+
+test("adding a non-identifier binding keeps its key quoted", () => {
+  const input = `export default defineFactory({
+  bindings: {
+    api: { remote: "git@github.com:acme/api.git" },
+  },
+});
+`;
+  expect(
+    upsertBinding(input, "other.repo", "git@github.com:acme/other.git"),
+  ).toBe(`export default defineFactory({
+  bindings: {
+    api: { remote: "git@github.com:acme/api.git" },
+    "other.repo": { remote: "git@github.com:acme/other.git" },
+  },
+});
+`);
+});
+
 test("missing bindings object is inserted", () => {
   const edited = upsertBinding(
     "export default { service: { dashboardPort: 9090 } };",

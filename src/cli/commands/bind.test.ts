@@ -35,7 +35,7 @@ const API = "git@github.com:acme/Api.git";
 test("bind writes the remote under a name derived from the repo", async () => {
   const result = await bindRepo(API, deps());
   expect(result).toMatchObject({ name: "api", remote: API });
-  expect(jigsConfig()).toContain('"api":');
+  expect(jigsConfig()).toContain("api:");
   expect(jigsConfig()).toContain(`remote: "${API}"`);
 });
 
@@ -60,8 +60,8 @@ test("--name creates a separate binding even when another name has the remote", 
   const result = await bindRepo(API, deps(), { name: "forge" });
 
   expect(result.name).toBe("forge");
-  expect(jigsConfig()).toContain('"gambit":');
-  expect(jigsConfig()).toContain('"forge":');
+  expect(jigsConfig()).toContain("gambit:");
+  expect(jigsConfig()).toContain("forge:");
 });
 
 test("an invalid --name errors even when another name has the remote", async () => {
@@ -74,10 +74,7 @@ test("an invalid --name errors even when another name has the remote", async () 
 
 test("an invalid alias from config is refused", async () => {
   await bindRepo(API, deps());
-  writeFileSync(
-    path.join(factory, "jigs.config.ts"),
-    jigsConfig().replace('"api":', '"bad name!":'),
-  );
+  writeFileSync(path.join(factory, "jigs.config.ts"), jigsConfig().replace("api:", '"bad name!":'));
 
   await expect(bindRepo(API, deps())).rejects.toThrow("invalid binding name");
 });
@@ -111,7 +108,7 @@ test("a prototype-chain repo name creates an own binding", async () => {
   const result = await bindRepo(remote, deps());
 
   expect(result).toMatchObject({ name: "constructor", remote });
-  expect(jigsConfig()).toContain('"constructor":');
+  expect(jigsConfig()).toContain("constructor:");
 });
 
 test("bind creates a derived-name entry when no binding has the remote", async () => {
@@ -122,7 +119,7 @@ test("bind creates a derived-name entry when no binding has the remote", async (
   const result = await bindRepo(API, deps());
 
   expect(result.name).toBe("api");
-  expect(jigsConfig()).toContain('"api":');
+  expect(jigsConfig()).toContain("api:");
   expect(jigsConfig()).toContain(`remote: "${API}"`);
 });
 
@@ -193,7 +190,7 @@ test("a name already bound to another remote is refused, hinting unbind", async 
 test("--name overrides the derived name", async () => {
   const result = await bindRepo(API, deps(), { name: "forge" });
   expect(result.name).toBe("forge");
-  expect(jigsConfig()).toContain('"forge":');
+  expect(jigsConfig()).toContain("forge:");
 });
 
 test("invalid binding name errors", async () => {
