@@ -28,7 +28,7 @@ test("the scaffold names its GitHub identity and merge policy outright", () => {
 
 test("ship takes a ticket in either form and declares its needs", () => {
   const entry = workflows.ship;
-  const launch = { binding: "repo", merge: "human" };
+  const launch = { binding: "repo" };
   expect(entry?.inputs.parse({ ticket: crypto.randomUUID(), ...launch })).toMatchObject({
     ticket: expect.any(String),
     ...launch,
@@ -38,7 +38,6 @@ test("ship takes a ticket in either form and declares its needs", () => {
     ...launch,
   });
   expect(entry?.inputs.safeParse({ ticket: "", ...launch }).success).toBe(false);
-  expect(entry?.inputs.parse({ ticket: "ABC-123", binding: "repo" }).merge).toBeUndefined();
   expect(entry?.requires).toEqual({ harnesses: ["claude", "codex"], integrations: ["linear", "github"] });
 });
 

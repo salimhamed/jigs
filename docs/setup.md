@@ -189,9 +189,9 @@ budgets. A reached limit
 returns an outcome; only a merged result permits worktree removal. For custom prompts,
 ticket sources, human intervention, and individual phases, see [delivery](delivery.md).
 
-The starter `ship` workflow requires a `binding` input and takes its merge
-policy from `jigs.config.ts`, with an optional `merge` input overriding who
-merges for one run.
+The starter `ship` workflow requires a `binding` input and takes its effective
+merge policy from the factory default plus that binding's optional `merge.by`
+and `merge.method` overrides in `jigs.config.ts`.
 After binding a repository, you can make it the input default and add its name to
 `requires.bindings`. Declare credential integrations under `requires.integrations`;
 other workflows do not need Linear or GitHub credentials merely to use agents.
@@ -325,9 +325,9 @@ merge: {
 
 - **`by`** — `"human"` means jigs watches the pull request and answers
   feedback, and you press Merge. `"jigs"` means jigs merges it itself once it
-  is ready. The `ship` workflow's `merge` input overrides this one field per
-  run.
+  is ready. A binding may override this field for its repository.
 - **`method`** — GitHub's three, and it decides what lands on the base branch.
+  A binding may override this field for its repository.
   With `squash`, GitHub makes the pull request's author the commit's author, so
   in `app` mode the bot is the author and `coAuthor` is how you keep the credit.
   With `rebase`, your commit's author survives but it is rewritten by the
@@ -358,7 +358,7 @@ finished and passed. GitHub reports a repository that requires no checks as
 mergeable with no build at all, including in the seconds before CI registers,
 so without it a labelled pull request could merge ahead of its own build. The
 consequence is worth saying plainly: **jigs never merges in a repository with
-no CI.** Set `merge.by: "human"` there.
+no CI.** Set that binding's `merge.by` to `"human"` there.
 
 A few merge states you will see jigs wait on rather than merge:
 
@@ -373,10 +373,10 @@ A few merge states you will see jigs wait on rather than merge:
 - **`has_hooks`** and **`unknown`** — treated as not ready, and rechecked on
   the next wake.
 
-`jigs doctor` prints the effective policy in one line, so what a factory will
-actually do is readable without opening its config. For factories configured
-with `merge.by: "jigs"`, `jigs bind` and `jigs doctor` also report on that line
-when a bound repository has no CI, disables the configured merge method,
+`jigs doctor` prints the effective policy for each binding, so what a factory
+will actually do is readable without opening its config. For bindings whose
+effective `merge.by` is `"jigs"`, `jigs bind` and `jigs doctor` also report
+when that repository has no CI, disables the configured merge method,
 requires reviews that label approval cannot satisfy, or lacks the configured
 approval label. These checks only read repository settings.
 

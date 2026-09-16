@@ -205,11 +205,12 @@ Reading the graph against the code:
 `followPullRequest` and `deliverChange` take one `merge` value: who merges
 (`by`), by which of GitHub's three methods (`method`), and what counts as
 consent (`approval`, either an approving review of the current commit or a
-named label on the pull request). It is the factory's, stated in
-`jigs.config.ts`, and `resolveMergePolicy()` is the step that reads it — pass
-`resolveMergePolicy("jigs")` to override who merges for one run, and nothing
-else. [setup](setup.md) has the values and how they pair with the GitHub
-identity jigs runs as.
+named label on the pull request). The factory policy in `jigs.config.ts` is the
+default. Each binding may override `by` and `method`; `approval` remains
+factory-level because it follows the factory's GitHub identity.
+`resolveMergePolicy(binding)` reads the effective factory-then-binding policy.
+[setup](setup.md) has the values and how they pair with the GitHub identity
+jigs runs as.
 
 Readiness is GitHub's own verdict plus a green build: jigs merges when the
 approval signal is present, GitHub reports the pull request mergeable, it is not
@@ -326,7 +327,7 @@ const result = await deliverChange({
     ciFixAttempts: 3,
     pullRequestRevisionRounds: 4,
   },
-  merge: await resolveMergePolicy(),
+  merge: await resolveMergePolicy("application"),
 });
 ```
 
@@ -359,7 +360,7 @@ const result = await deliverChange({
     ciFixAttempts: 3,
     pullRequestRevisionRounds: 4,
   },
-  merge: await resolveMergePolicy(),
+  merge: await resolveMergePolicy("application"),
 });
 ```
 
@@ -478,7 +479,7 @@ const result = await deliverChange({
     ciFixAttempts: 3,
     pullRequestRevisionRounds: 4,
   },
-  merge: await resolveMergePolicy(),
+  merge: await resolveMergePolicy("application"),
   onLimit: async (limit) => ({
     action: "continue",
     instructions: `The on-call owner of ${limit.task.service} asked for one more pass.`,
@@ -538,7 +539,7 @@ return followPullRequest({
   pr,
   implementation,
   limits: { ciFixAttempts: 3, pullRequestRevisionRounds: 4 },
-  merge: await resolveMergePolicy(),
+  merge: await resolveMergePolicy("application"),
 });
 ```
 

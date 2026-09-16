@@ -1,3 +1,5 @@
+import { writeFileSync } from "node:fs";
+import path from "node:path";
 import { beforeEach, expect, test, vi } from "vitest";
 import type { MergePolicy } from "../../config/factory-config.ts";
 import type { PrSnapshot } from "../../providers/github.ts";
@@ -11,7 +13,8 @@ import {
 } from "../../providers/github.ts";
 import { GithubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity } from "../../providers/github-auth.ts";
-import { defaultMergeBody, mergePullRequest, openPullRequest } from "./pr.ts";
+import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
+import { defaultMergeBody, mergePullRequest, openPullRequest, resolveMergePolicy } from "./pr.ts";
 
 vi.mock("../../providers/github.ts", () => ({
   assignPullRequest: vi.fn(),
@@ -53,6 +56,29 @@ const snapshot: PrSnapshot = {
     { id: 1, user: "person", state: "APPROVED", submittedAt: "today", body: "", commitSha: "head" },
   ],
 };
+
+test("resolveMergePolicy applies a named binding's overrides to the factory policy", async () => {
+  const root = makeTmpDir();
+  writeFileSync(
+    path.join(root, "jigs.config.ts"),
+    `export default {
+      service: { dashboardPort: 9090 },
+      merge: { by: "jigs", method: "squash", approval: { kind: "review" } },
+      bindings: { docs: { remote: "git@github.com:acme/docs.git", merge: { by: "human", method: "rebase" } } },
+    };`,
+  );
+  vi.stubEnv("JIGS_FACTORY_ROOT", root);
+  try {
+    await expect(resolveMergePolicy("docs")).resolves.toEqual({
+      by: "human",
+      method: "rebase",
+      approval: { kind: "review" },
+    });
+  } finally {
+    vi.unstubAllEnvs();
+    removeTmpDir(root);
+  }
+});
 
 beforeEach(() => {
   vi.resetAllMocks();

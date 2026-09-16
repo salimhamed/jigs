@@ -134,7 +134,7 @@ export async function bindRepo(
     mergePolicyCheck(
       resolveGithubIdentity(factoryRoot),
       config.merge,
-      { [name]: { remote: remoteUrl } },
+      { [name]: { remote: remoteUrl, ...(existing?.merge ? { merge: existing.merge } : {}) } },
       deps.mergePolicyProbes ?? realGithubMergePolicyProbes,
     ),
   ]);

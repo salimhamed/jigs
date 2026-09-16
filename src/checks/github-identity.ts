@@ -3,11 +3,12 @@
 // token versus an App whose key, installation or permissions are wrong — so
 // each gets its own checks and its own repair.
 
-import type {
-  AppIdentity,
-  BindingEntry,
-  GithubIdentity,
-  MergePolicy,
+import {
+  type AppIdentity,
+  type BindingEntry,
+  bindingMergePolicy,
+  type GithubIdentity,
+  type MergePolicy,
 } from "../config/factory-config.ts";
 import { GithubApiError, githubGet } from "../providers/github-api.ts";
 import {
@@ -155,10 +156,12 @@ export function githubIdentityChecks(
   merge: MergePolicy,
   probes: GithubIdentityProbes,
   env: NodeJS.ProcessEnv = process.env,
-  bindings: Record<string, Pick<BindingEntry, "remote">> = {},
+  bindings: Record<string, Pick<BindingEntry, "remote" | "merge">> = {},
   mergeProbes: GithubMergePolicyProbes = realGithubMergePolicyProbes,
 ): Check[] {
-  const checksBindingPolicies = merge.by === "jigs" && Object.keys(bindings).length > 0;
+  const checksBindingPolicies = Object.values(bindings).some(
+    (binding) => bindingMergePolicy(merge, binding).by === "jigs",
+  );
   return [
     identity.mode === "pat"
       ? patCheck(probes, env)
@@ -261,44 +264,55 @@ function appCheck(
   };
 }
 
-// The one line that tells an operator what the factory will actually do when
-// a pull request goes green, plus any repository facts that make it impossible.
+// The effective policy per binding, plus repository facts that make one impossible.
 export function mergePolicyCheck(
   identity: GithubIdentity,
   merge: MergePolicy,
-  bindings: Record<string, Pick<BindingEntry, "remote">>,
+  bindings: Record<string, Pick<BindingEntry, "remote" | "merge">>,
   probes: GithubMergePolicyProbes,
   probeTimeoutMs: number = PROBE_TIMEOUT_MS,
 ): Check {
-  const signal =
-    merge.approval.kind === "review"
-      ? "an approving GitHub review of the current commit"
-      : `the ${merge.approval.name} label`;
-  const who =
-    merge.by === "jigs"
-      ? `jigs merges with ${merge.method} once GitHub reports it mergeable and ${signal} is present`
-      : `a human merges; jigs only watches (${signal} would be the signal if merge.by were jigs)`;
+  const entries = Object.entries(bindings);
+  const policies = entries.map(
+    ([name, binding]) => [name, bindingMergePolicy(merge, binding)] as const,
+  );
+  const detail =
+    policies.length === 0
+      ? describeMergePolicy(merge)
+      : policies.map(([name, policy]) => `${name}: ${describeMergePolicy(policy)}`).join("; ");
   return {
     id: "github.merge-policy",
     label: "merge policy",
     run: async (): Promise<CheckResult> => {
-      if (merge.by === "human") return { ok: true, detail: who };
       const inspections = await Promise.allSettled(
-        Object.entries(bindings).map(([name, binding]) =>
-          inspectBindingWithin(name, binding, identity, merge, probes, probeTimeoutMs),
-        ),
+        entries.map(([name, binding]) => {
+          const policy = bindingMergePolicy(merge, binding);
+          return policy.by === "jigs"
+            ? inspectBindingWithin(name, binding, identity, policy, probes, probeTimeoutMs)
+            : [];
+        }),
       );
       const findings = inspections.flatMap((inspection) =>
         inspection.status === "fulfilled" ? inspection.value : [],
       );
-      if (findings.length === 0) return { ok: true, detail: who };
+      if (findings.length === 0) return { ok: true, detail };
       return {
         ok: false,
-        reason: `${who}; ${findings.map((finding) => `${finding.binding}: ${finding.reason}`).join("; ")}`,
+        reason: `${detail}; ${findings.map((finding) => `${finding.binding}: ${finding.reason}`).join("; ")}`,
         repair: findings.map((finding) => `${finding.binding}: ${finding.repair}`).join("; "),
       };
     },
   };
+}
+
+function describeMergePolicy(merge: MergePolicy): string {
+  const signal =
+    merge.approval.kind === "review"
+      ? "an approving GitHub review of the current commit"
+      : `the ${merge.approval.name} label`;
+  return merge.by === "jigs"
+    ? `jigs merges with ${merge.method} once GitHub reports it mergeable and ${signal} is present`
+    : `a human merges; jigs only watches (${signal} would be the signal if merge.by were jigs)`;
 }
 
 async function inspectBindingWithin(
@@ -354,7 +368,7 @@ async function inspectBinding(
     findings.push({
       binding: bindingName,
       reason: `${merge.method} merges are disabled on ${ref.owner}/${ref.repo}`,
-      repair: `enable ${merge.method} merges on the repository, or change merge.method in jigs.config.ts`,
+      repair: `enable ${merge.method} merges on the repository, or set bindings.${bindingName}.merge.method in jigs.config.ts`,
     });
   const checkRunCount = settledValue(checkRunsResult);
   const statusCount = settledValue(commitStatusesResult);
@@ -363,7 +377,7 @@ async function inspectBinding(
     findings.push({
       binding: bindingName,
       reason: `${ref.owner}/${ref.repo} has no active Actions workflows, and its default branch has no check runs or commit statuses`,
-      repair: `add a CI workflow, or set merge.by to "human" in jigs.config.ts`,
+      repair: `add a CI workflow, or set bindings.${bindingName}.merge.by to "human" in jigs.config.ts`,
     });
   if (merge.approval.kind === "label") {
     const [labelExistsResult] = await Promise.allSettled([
