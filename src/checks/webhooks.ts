@@ -1,3 +1,4 @@
+import type { GithubIdentity } from "../config/factory-config.ts";
 import { readFactoryConfig } from "../config/factory-config.ts";
 import { GithubApiError } from "../providers/github-api.ts";
 import { resolveGithubIdentity } from "../providers/github-auth.ts";
@@ -6,6 +7,7 @@ import type { Check, CheckResult } from "./catalog.ts";
 
 export interface WebhookChecksOptions {
   factoryRoot: () => string;
+  identity?: () => GithubIdentity;
 }
 
 export function webhookChecks(options: WebhookChecksOptions): Check[] {
@@ -26,7 +28,13 @@ export function webhookChecks(options: WebhookChecksOptions): Check[] {
           {
             id: `webhook.${name}`,
             label: `webhook ${name}`,
-            run: () => checkWebhook(binding.remote, ingressUrl, repo),
+            run: () =>
+              checkWebhook(
+                binding.remote,
+                ingressUrl,
+                repo,
+                (options.identity ?? resolveGithubIdentity)(),
+              ),
           },
         ];
   });
@@ -35,9 +43,12 @@ export function webhookChecks(options: WebhookChecksOptions): Check[] {
 // Hook administration is its own permission, and which one depends on the
 // identity: a classic PAT needs `admin:repo_hook`, an App needs "Repository
 // webhooks: read & write" granted and accepted on the installation.
-function hookPermissionRepair(repo: { owner: string; repo: string }): string {
-  return resolveGithubIdentity().mode === "app"
-    ? `grant the App "Repository webhooks: read & write" and accept the updated permissions on its installation for ${repo.owner}/${repo.repo}`
+function hookPermissionRepair(
+  repo: { owner: string; repo: string },
+  identity: GithubIdentity,
+): string {
+  return identity.mode === "app"
+    ? `install the App on ${repo.owner}/${repo.repo} or grant its installation access to the repo, then grant "Repository webhooks: read & write" and accept the updated permissions`
     : `set GITHUB_TOKEN in the factory repo's .env to a classic PAT with admin:repo_hook on ${repo.owner}/${repo.repo}`;
 }
 
@@ -45,6 +56,7 @@ async function checkWebhook(
   remote: string,
   ingressUrl: string,
   repo: { owner: string; repo: string },
+  identity: GithubIdentity,
 ): Promise<CheckResult> {
   const bindRepair = `run: jigs bind ${remote}`;
   try {
@@ -61,7 +73,7 @@ async function checkWebhook(
       return {
         ok: false,
         reason: `GitHub refused the repo hooks request (${err.status})`,
-        repair: hookPermissionRepair(repo),
+        repair: hookPermissionRepair(repo, identity),
       };
     }
     throw err;

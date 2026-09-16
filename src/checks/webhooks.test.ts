@@ -87,6 +87,25 @@ test("a refused hooks API names the required token scope", async () => {
   expect(result.ok === false && result.repair).toContain("admin:repo_hook");
 });
 
+test("an App that cannot read a repo's hooks names installation access", async () => {
+  configure();
+  fetchMock.mockResolvedValueOnce(new Response("Not Found", { status: 404 }));
+  const [appCheck] = webhookChecks({
+    factoryRoot: () => factory,
+    identity: () => ({
+      mode: "app",
+      appId: 4958325,
+      installationId: 162033982,
+      privateKeyPath: "github-app.private-key.pem",
+      operator: "salimhamed",
+    }),
+  });
+  if (appCheck === undefined) throw new Error("expected a webhook check");
+  const result = await appCheck.run();
+  expect(result).toMatchObject({ ok: false });
+  expect(result.ok === false && result.repair).toContain("install the App on acme/api");
+});
+
 test("no ingressUrl emits no webhook checks", () => {
   expect(checks()).toEqual([]);
 });

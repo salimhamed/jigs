@@ -196,6 +196,8 @@ async function ensureWebhook({
     if (tokenWasRejected(err)) return credentialRepair;
     // A 404 is as often a typo in the remote as a token that cannot see a
     // private repo, and neither clears on its own.
+    if (err instanceof GithubApiError && err.status === 404 && identity.mode === "app")
+      return `check the remote, and install the App on ${slug} or grant its installation access to the repo, then re-run: ${reBindCommand}`;
     if (err instanceof GithubApiError && err.status === 404)
       return `check the remote, and that this token can see ${slug}, then re-run: ${reBindCommand}`;
     return `once that clears, re-run: ${reBindCommand}`;
