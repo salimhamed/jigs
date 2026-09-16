@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.2](https://github.com/salimhamed/jigs/compare/jigs-v0.26.1...jigs-v0.26.2) (2026-09-16)
+
+
+### Bug Fixes
+
+* retry thrown merge errors ([b2dde32](https://github.com/salimhamed/jigs/commit/b2dde3272cb1b70df5005b675485abae5a853c1a))
+
 ## [0.26.1](https://github.com/salimhamed/jigs/compare/jigs-v0.26.0...jigs-v0.26.1) (2026-09-16)
 
 
