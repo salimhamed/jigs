@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.1](https://github.com/salimhamed/jigs/compare/jigs-v0.25.0...jigs-v0.25.1) (2026-09-16)
+
+
+### Bug Fixes
+
+* check input-selected workflow bindings in preflight ([e7edc6d](https://github.com/salimhamed/jigs/commit/e7edc6d8e6533f043973afaf723db878fae6d26d))
+
 ## [0.25.0](https://github.com/salimhamed/jigs/compare/jigs-v0.24.1...jigs-v0.25.0) (2026-09-16)
 
 
