@@ -28,6 +28,52 @@ function namedProperty(
     | undefined;
 }
 
+const reservedWords = new Set(
+  "await break case catch class const continue debugger default delete do else enum export extends false finally for function if implements import in instanceof interface let new null package private protected public return static super switch this throw true try typeof var void while with yield".split(
+    " ",
+  ),
+);
+
+function bindingPropertyName(name: string): string {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) && !reservedWords.has(name)
+    ? name
+    : JSON.stringify(name);
+}
+
+function leadingWhitespace(text: string, position: number): string {
+  const lineStart = text.lastIndexOf("\n", position - 1) + 1;
+  return text.slice(lineStart, position).match(/^\s*/)?.[0] ?? "";
+}
+
+function insertBinding(
+  text: string,
+  object: ObjectLiteralExpression,
+  bindingsProperty: PropertyAssignment,
+  name: string,
+  remote: string,
+): string {
+  const entry = `${bindingPropertyName(name)}: { remote: ${JSON.stringify(remote)} },`;
+  const properties = object.getProperties();
+  if (properties.length === 0) {
+    const propertyIndent = leadingWhitespace(text, bindingsProperty.getStart());
+    const indentation = propertyIndent || "  ";
+    return `${text.slice(0, object.getStart())}{\n${propertyIndent}${indentation}${entry}\n${propertyIndent}}${text.slice(object.getEnd())}`;
+  }
+
+  const first = properties[0] as PropertyAssignment;
+  const last = properties.at(-1) as PropertyAssignment;
+  const hasTrailingComma = last.getNextSiblingIfKind(SyntaxKind.CommaToken) !== undefined;
+  const entryIndent = leadingWhitespace(text, first.getStart());
+  const closeBrace = object.getEnd() - 1;
+  const closeLineStart = text.lastIndexOf("\n", closeBrace - 1) + 1;
+  if (closeLineStart <= last.getEnd()) {
+    const separator = hasTrailingComma ? "" : ",";
+    return `${text.slice(0, last.getEnd())}${separator}${text.slice(last.getEnd(), closeBrace)}${entry} ${text.slice(closeBrace)}`;
+  }
+  const separator = hasTrailingComma ? "" : ",";
+  return `${text.slice(0, last.getEnd())}${separator}${text.slice(last.getEnd(), closeLineStart)}${entryIndent}${entry}\n${text.slice(closeLineStart)}`;
+}
+
 // Editing deliberately supports the scaffold's direct object shape. Runtime
 // loading is unrestricted; an unsupported edit never writes or registers hooks.
 function editableBindings(text: string, manualEdit?: string) {
@@ -75,6 +121,7 @@ function editableBindings(text: string, manualEdit?: string) {
   };
   validate(root, "the configuration object");
   let property = namedProperty(root, "bindings");
+  const insertedBindings = !property;
   if (!property)
     property = root.addPropertyAssignment({
       name: "bindings",
@@ -96,20 +143,36 @@ function editableBindings(text: string, manualEdit?: string) {
       `binding ${(property as PropertyAssignment).getName()}`,
     );
   }
-  return { source, object, fail };
+  return {
+    source,
+    object,
+    property: property as PropertyAssignment,
+    insertedBindings,
+    fail,
+  };
 }
 
 export function upsertBinding(text: string, name: string, remote: string): string {
-  const { source, object, fail } = editableBindings(
+  const {
+    source,
+    object,
+    property: bindingsProperty,
+    insertedBindings,
+    fail,
+  } = editableBindings(
     text,
     `Binding to add: ${JSON.stringify(name)}: { remote: ${JSON.stringify(remote)} }`,
   );
   const property = namedProperty(object, name) as PropertyAssignment | undefined;
   if (!property) {
-    object.addPropertyAssignment({
-      name: JSON.stringify(name),
-      initializer: `{ remote: ${JSON.stringify(remote)} }`,
-    });
+    if (insertedBindings) {
+      object.addPropertyAssignment({
+        name: bindingPropertyName(name),
+        initializer: `{ remote: ${JSON.stringify(remote)} }`,
+      });
+      return source.getFullText();
+    }
+    return insertBinding(text, object, bindingsProperty, name, remote);
   } else {
     const binding = property.getInitializerIfKindOrThrow(SyntaxKind.ObjectLiteralExpression);
     const remoteProperty = namedProperty(binding, "remote") as PropertyAssignment | undefined;

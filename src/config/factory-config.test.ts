@@ -129,6 +129,126 @@ test("adding and removing bindings preserves sibling comments and provisioning",
   expect(readFactoryConfig(factory(removed)).bindings["acme-api"]?.postCreate).toEqual(["npm ci"]);
 });
 
+test("adding a binding matches the surrounding formatting", () => {
+  const input = `import { defineFactory } from "@salimhamed/jigs";
+
+export default defineFactory({
+  bindings: {
+    api: { remote: "git@github.com:acme/api.git" },
+  },
+});
+`;
+  expect(
+    upsertBinding(input, "playground", "git@github.com:acme/pg.git"),
+  ).toBe(`import { defineFactory } from "@salimhamed/jigs";
+
+export default defineFactory({
+  bindings: {
+    api: { remote: "git@github.com:acme/api.git" },
+    playground: { remote: "git@github.com:acme/pg.git" },
+  },
+});
+`);
+});
+
+test("adding the first binding expands an empty bindings object", () => {
+  const input = `export default defineFactory({
+  bindings: {},
+});
+`;
+  expect(
+    upsertBinding(input, "playground", "git@github.com:acme/pg.git"),
+  ).toBe(`export default defineFactory({
+  bindings: {
+    playground: { remote: "git@github.com:acme/pg.git" },
+  },
+});
+`);
+});
+
+test("adding a non-identifier binding keeps its key quoted", () => {
+  const input = `export default defineFactory({
+  bindings: {
+    api: { remote: "git@github.com:acme/api.git" },
+  },
+});
+`;
+  expect(
+    upsertBinding(input, "other.repo", "git@github.com:acme/other.git"),
+  ).toBe(`export default defineFactory({
+  bindings: {
+    api: { remote: "git@github.com:acme/api.git" },
+    "other.repo": { remote: "git@github.com:acme/other.git" },
+  },
+});
+`);
+});
+
+test("adding a reserved-word binding keeps its key quoted", () => {
+  const input = `export default defineFactory({
+  bindings: {},
+});
+`;
+  expect(upsertBinding(input, "import", "git@github.com:acme/import.git")).toBe(
+    `export default defineFactory({
+  bindings: {
+    "import": { remote: "git@github.com:acme/import.git" },
+  },
+});
+`,
+  );
+});
+
+test("adding a binding to a one-line object does not duplicate the config", () => {
+  const input = `export default { bindings: { api: { remote: "a" } } };`;
+  expect(upsertBinding(input, "web", "b")).toBe(
+    `export default { bindings: { api: { remote: "a" }, web: { remote: "b" }, } };`,
+  );
+});
+
+test("adding a binding ignores commas in a trailing comment", () => {
+  const input = `export default defineFactory({
+  bindings: {
+    api: { remote: "r1" }
+    // api, the main repo
+  },
+});
+`;
+  expect(upsertBinding(input, "web", "r2")).toBe(`export default defineFactory({
+  bindings: {
+    api: { remote: "r1" },
+    // api, the main repo
+    web: { remote: "r2" },
+  },
+});
+`);
+});
+
+test("adding a binding preserves a trailing comma before a comment", () => {
+  const input = `export default defineFactory({
+  bindings: {
+    api: { remote: "r1" },
+    // note, with comma
+  },
+});
+`;
+  expect(upsertBinding(input, "web", "r2")).toBe(`export default defineFactory({
+  bindings: {
+    api: { remote: "r1" },
+    // note, with comma
+    web: { remote: "r2" },
+  },
+});
+`);
+});
+
+test("adding a binding to a one-line object ignores commas in comments", () => {
+  const input = `export default { bindings: { api: { remote: "a" } /* one, two */ } };`;
+  expect(upsertBinding(input, "web", "b")).toBe(
+    `export default { bindings: { api: { remote: "a" }, /* one, two */ web: { remote: "b" }, } };`,
+  );
+});
+
 test("missing bindings object is inserted", () => {
   const edited = upsertBinding(
     "export default { service: { dashboardPort: 9090 } };",
