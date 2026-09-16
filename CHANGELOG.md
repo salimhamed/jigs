@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.26.0](https://github.com/salimhamed/jigs/compare/jigs-v0.25.2...jigs-v0.26.0) (2026-09-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* report repository settings instead of changing them ([#217](https://github.com/salimhamed/jigs/issues/217))
+
+### Features
+
+* report repository settings instead of changing them ([#217](https://github.com/salimhamed/jigs/issues/217)) ([c6fb06e](https://github.com/salimhamed/jigs/commit/c6fb06e77333849793722bbe33ea596059ed55ed))
+
 ## [0.25.2](https://github.com/salimhamed/jigs/compare/jigs-v0.25.1...jigs-v0.25.2) (2026-09-16)
 
 
