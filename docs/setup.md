@@ -382,6 +382,22 @@ approval label. Bind creates or restores that configured label; doctor reports
 it missing and directs you to re-run bind. The remaining checks only read
 repository settings.
 
+Repository governance is changed only by an explicit repo command. To inspect
+the recommended classic protection for a binding's default branch and approve
+it interactively, run:
+
+```sh
+jigs repo setup <binding>
+```
+
+The plan names the status checks it will require and whether it will require an
+approving review. App factories using review approval get one required review.
+PAT factories using label approval refuse required reviews because their label
+cannot satisfy GitHub's native review rule. Pass `--yes` to accept the complete
+plan without a prompt; this is the only unattended mode. Re-running the command
+against the resulting protection reports `already set` and performs no write.
+Neither `jigs bind` nor `jigs doctor` writes branch protection.
+
 ### 3. Up
 
 ```sh
