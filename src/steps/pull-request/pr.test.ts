@@ -98,7 +98,7 @@ test("a refusal says whether asking again could merge the same commit", async ()
   expect(await mergePullRequest(pr, "head", SQUASH)).toMatchObject({ transient: true });
   vi.mocked(fetchPrSnapshot).mockResolvedValue({ ...snapshot, mergeState: "dirty" });
   expect(await mergePullRequest(pr, "head", SQUASH)).toMatchObject({ transient: false });
-  vi.mocked(fetchPrSnapshot).mockResolvedValue({ ...snapshot, reviews: [] });
+  vi.mocked(fetchPrSnapshot).mockResolvedValue({ ...snapshot, state: "closed" });
   expect(await mergePullRequest(pr, "head", SQUASH)).toMatchObject({ transient: false });
 });
 
@@ -120,13 +120,30 @@ test.each([405, 409])("a %i is state that changed, re-read rather than failed", 
   vi.mocked(mergePr).mockRejectedValue(
     new GithubApiError(status, "/merge", "Head branch was modified"),
   );
-  // A state GitHub reports as changed is one the next wake reads again.
+  // The re-read is what names the change, and a moved head is one the next
+  // wake reads again.
+  vi.mocked(fetchPrSnapshot)
+    .mockResolvedValueOnce(snapshot)
+    .mockResolvedValueOnce({ ...snapshot, headSha: "moved" });
   expect(await mergePullRequest(pr, "head", SQUASH)).toMatchObject({
     merged: false,
     transient: true,
   });
   // Whether it merged is GitHub's answer, never the status code's.
   expect(fetchPrSnapshot).toHaveBeenCalledTimes(2);
+});
+
+test("a refusal nothing in the snapshot explains is not tried again", async () => {
+  // The squash method disabled on the repository, or a protection GitHub does
+  // not express in `mergeable_state`: the pull request still reads clean, and
+  // no later wake would read it differently.
+  vi.mocked(mergePr).mockRejectedValue(
+    new GithubApiError(405, "/merge", "Merge method not allowed"),
+  );
+  expect(await mergePullRequest(pr, "head", SQUASH)).toMatchObject({
+    merged: false,
+    transient: false,
+  });
 });
 
 test("a refusal that GitHub then reports as merged is a merge", async () => {

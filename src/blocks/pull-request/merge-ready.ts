@@ -39,9 +39,10 @@ export interface MergeRefusal {
   /**
    * Whether the same head could still merge. A transient refusal is a state
    * jigs is waiting out — a check still running, a merge state GitHub has not
-   * finished computing — so the commit stays merge-ready and the next wake
-   * asks again. A terminal one cannot resolve without a new commit or a new
-   * approval, so the commit is stood down.
+   * finished computing, an approval waiting to be granted again — so the
+   * commit stays merge-ready and the next wake asks again. A terminal one is
+   * the pull request as it stands refusing the merge, so the commit is stood
+   * down until a new commit or a change to the repository moves it.
    */
   transient: boolean;
 }
@@ -85,8 +86,10 @@ export function mergeRefusal(
   if (snapshot.mergeState === "dirty") {
     return { reason: "the branch conflicts with its base", transient: false };
   }
+  // Approving again is all this takes, and the approval names this same
+  // commit, so the wake that carries it is the one that merges.
   if (!isApprovalSatisfied(snapshot, approval)) {
-    return { reason: `the approval does not cover ${expectedHeadSha}`, transient: false };
+    return { reason: `the approval does not cover ${expectedHeadSha}`, transient: true };
   }
   if (snapshot.mergeState !== "clean") {
     return { reason: `GitHub reports the merge state as ${snapshot.mergeState}`, transient: true };

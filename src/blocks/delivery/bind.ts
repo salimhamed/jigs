@@ -361,7 +361,7 @@ export function bindDeliverySteps(steps: DeliverySteps) {
           await note(
             "merge",
             wake.headSha,
-            `I could not merge this pull request: ${refused.reason}. I am standing down on ${wake.headSha}: a new commit, or an approval covering this one, is what would start me again.`,
+            `I could not merge this pull request: ${refused.reason}. I am standing down on ${wake.headSha}: nothing I can do here changes that, so it needs a new commit or a change to the repository.`,
           );
         } else if (!wake.retryNoted) {
           // Marked so the refusal is reported once rather than on every nudge,

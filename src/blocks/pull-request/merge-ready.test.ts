@@ -156,6 +156,9 @@ test("a refusal jigs can wait out is kept apart from one only a new commit fixes
     expect(refusal({ mergeState })).toMatchObject({ transient: true });
   }
   expect(refusal({ ci: "pending" })).toMatchObject({ transient: true });
+  expect(refusal({ ci: "red" })).toMatchObject({ transient: true });
+  // Approving again is the whole recovery, and it names this same commit.
+  expect(refusal({ reviews: [] })).toMatchObject({ transient: true });
   expect(refusal({ draft: true })).toMatchObject({ transient: true });
   expect(refusal({}, "old")).toMatchObject({
     transient: true,
@@ -164,10 +167,7 @@ test("a refusal jigs can wait out is kept apart from one only a new commit fixes
 
   // Nothing a later wake reads changes any of these on this commit.
   expect(refusal({ mergeState: "dirty" })).toMatchObject({ transient: false });
-  expect(refusal({ reviews: [] })).toMatchObject({ transient: false });
   expect(refusal({ state: "closed" })).toMatchObject({ transient: false });
-  // A red build is a terminal approval question only when the approval is gone.
-  expect(refusal({ ci: "red" })).toMatchObject({ transient: true });
 });
 
 test("a merge jigs will retry leaves the head merge-ready, and is only noted once", () => {

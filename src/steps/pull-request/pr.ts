@@ -142,13 +142,15 @@ export async function mergePullRequest(
   // Ambiguous either way: GitHub is the only authority on whether it merged.
   const after = await fetchPrSnapshot(pr);
   if (after.merged) return { merged: true, mergeCommitSha: after.mergeCommitSha };
-  // A snapshot that still reads mergeable means GitHub refused something it
-  // reports as ready, so the next wake is the one that learns why.
+  // A snapshot that still reads mergeable after GitHub refused the merge is
+  // one no later wake will read differently: the configured method is disabled
+  // on the repository, or a protection GitHub does not express in
+  // `mergeable_state` stopped it. Retrying that on every nudge would never end.
   return {
     merged: false,
     ...(mergeRefusal(after, expectedHeadSha, policy.approval) ?? {
-      reason: `GitHub did not merge ${expectedHeadSha} (state ${after.mergeState})`,
-      transient: true,
+      reason: `GitHub refused to merge ${expectedHeadSha} and still reports it as ${after.mergeState}`,
+      transient: false,
     }),
   };
 }

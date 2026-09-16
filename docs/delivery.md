@@ -163,9 +163,9 @@ Reading the graph against the code:
   request, and the gate keeps listening. Whether that comment stands the commit
   down depends on why: a state that passes on its own — a check still running, a
   merge state GitHub has not finished computing, a head that moved — is noted
-  once and retried on the next wake, while a conflict, a withdrawn approval or a
-  closed pull request is stood down until a new commit or a new approval
-  arrives.
+  once and retried on the next wake, as is an approval that has to be granted
+  again, while a conflict, a closed pull request or a refusal the pull request's
+  own state does not explain is stood down.
 - **Scope names the work.** Every marker carries one, and it is what "already
   done" is measured against. It defaults to the workflow function's own name and
   the task's key, so `shipWorkflow` delivering `AGE-123` writes

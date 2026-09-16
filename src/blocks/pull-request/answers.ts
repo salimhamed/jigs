@@ -52,9 +52,13 @@ export interface PostPullRequestNoteOptions {
   commentOnPullRequest: typeof commentOnPullRequest;
   pr: PrRef;
   scope: string;
-  /** The commit the note stands down on: a red head, or a head it could not merge. */
+  /** The commit the note is about: a red head, or a head it could not merge. */
   headSha: string;
-  /** Which of the two it is, so a merge note never silences that commit's checks. */
+  /**
+   * What the note says about that commit, so one note never silences another.
+   * `merge` and `ci` stand it down; `merge-retry` only records that jigs
+   * already reported a refusal it is waiting out.
+   */
   reason: StatusReason;
   body: string;
 }
