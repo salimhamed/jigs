@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.20.0](https://github.com/salimhamed/jigs/compare/jigs-v0.19.0...jigs-v0.20.0) (2026-09-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* keep pull request progress on GitHub as comment markers ([#192](https://github.com/salimhamed/jigs/issues/192))
+
+### Features
+
+* keep pull request progress on GitHub as comment markers ([#192](https://github.com/salimhamed/jigs/issues/192)) ([c30b068](https://github.com/salimhamed/jigs/commit/c30b06851c58249e43fb518cd39b91c28511ead0))
+
 ## [0.19.0](https://github.com/salimhamed/jigs/compare/jigs-v0.18.1...jigs-v0.19.0) (2026-09-14)
 
 
