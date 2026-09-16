@@ -3,7 +3,7 @@ import type { ApprovalSignal } from "../../config/factory-config.ts";
 import type { PrSnapshot } from "../../providers/github.ts";
 import { classifyPrState } from "./gate.ts";
 import { markBody } from "./marker.ts";
-import { isApprovalSatisfied, isPullRequestMergeReady } from "./merge-ready.ts";
+import { isApprovalSatisfied, isPullRequestMergeReady, mergeRefusal } from "./merge-ready.ts";
 
 const SCOPE = "ship/AGE-402";
 const REVIEW: ApprovalSignal = { kind: "review" };
@@ -100,14 +100,14 @@ test("the configured signal is the one the gate classifies with", () => {
   const labelled: PrSnapshot = { ...snapshot, reviews: [], labels: ["jigs:approved"] };
   expect(classifyPrState(labelled, SCOPE, REVIEW).wakes).toEqual([]);
   expect(classifyPrState(labelled, SCOPE, LABEL).wakes).toEqual([
-    { kind: "merge-ready", headSha: "new" },
+    { kind: "merge-ready", headSha: "new", retryNoted: false },
   ]);
 });
 
 test("a pull request GitHub is not ready to merge becomes merge-ready when it is", () => {
   expect(classifyPrState({ ...snapshot, mergeState: "unstable" }, SCOPE, REVIEW).wakes).toEqual([]);
   expect(classifyPrState(snapshot, SCOPE, REVIEW).wakes).toEqual([
-    { kind: "merge-ready", headSha: "new" },
+    { kind: "merge-ready", headSha: "new", retryNoted: false },
   ]);
 });
 
@@ -145,5 +145,49 @@ test("a stood-down head does not ask to be merged again", () => {
       SCOPE,
       REVIEW,
     ).wakes,
-  ).toEqual([{ kind: "merge-ready", headSha: "newer" }]);
+  ).toEqual([{ kind: "merge-ready", headSha: "newer", retryNoted: false }]);
+});
+
+test("a refusal jigs can wait out is kept apart from one only a new commit fixes", () => {
+  const refusal = (patch: Partial<PrSnapshot>, head = "new") =>
+    mergeRefusal({ ...snapshot, ...patch }, head, REVIEW);
+  expect(refusal({})).toBeNull();
+  for (const mergeState of ["unstable", "blocked", "behind", "unknown", "has_hooks"]) {
+    expect(refusal({ mergeState })).toMatchObject({ transient: true });
+  }
+  expect(refusal({ ci: "pending" })).toMatchObject({ transient: true });
+  expect(refusal({ ci: "red" })).toMatchObject({ transient: true });
+  // Approving again is the whole recovery, and it names this same commit.
+  expect(refusal({ reviews: [] })).toMatchObject({ transient: true });
+  expect(refusal({ draft: true })).toMatchObject({ transient: true });
+  expect(refusal({}, "old")).toMatchObject({
+    transient: true,
+    reason: expect.stringContaining("head moved"),
+  });
+
+  // Nothing a later wake reads changes any of these on this commit.
+  expect(refusal({ mergeState: "dirty" })).toMatchObject({ transient: false });
+  expect(refusal({ state: "closed" })).toMatchObject({ transient: false });
+});
+
+test("a merge jigs will retry leaves the head merge-ready, and is only noted once", () => {
+  const noted = (reason: "merge" | "merge-retry"): PrSnapshot => ({
+    ...snapshot,
+    conversationComments: [
+      {
+        id: 1,
+        body: markBody("I could not merge this pull request yet.", [
+          { scope: SCOPE, run: "wrun_RUN", kind: "status", reason, source: "new" },
+        ]),
+        user: "salim",
+        userType: "User",
+        createdAt: "1",
+        updatedAt: "1",
+      },
+    ],
+  });
+  expect(classifyPrState(noted("merge-retry"), SCOPE, REVIEW).wakes).toEqual([
+    { kind: "merge-ready", headSha: "new", retryNoted: true },
+  ]);
+  expect(classifyPrState(noted("merge"), SCOPE, REVIEW).wakes).toEqual([]);
 });

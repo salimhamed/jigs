@@ -311,7 +311,7 @@ test("green and pending CI yield nothing on their own", () => {
 
 test("green plus an approval of the current head is merge-ready", () => {
   expect(wakesOf(snapshot({ ci: "green", reviews: [approval(1)] }))).toEqual([
-    { kind: "merge-ready", headSha: "head-1" },
+    { kind: "merge-ready", headSha: "head-1", retryNoted: false },
   ]);
 });
 
@@ -344,7 +344,7 @@ test("a marked stand-down settles merge-ready for that head", () => {
       ...state,
       conversationComments: [conversationComment(509, "salim", standingDown("head-1", "ci"))],
     }),
-  ).toEqual([{ kind: "merge-ready", headSha: "head-1" }]);
+  ).toEqual([{ kind: "merge-ready", headSha: "head-1", retryNoted: false }]);
 });
 
 test("a human quoting jigs' reply is a human, and is answered again", () => {

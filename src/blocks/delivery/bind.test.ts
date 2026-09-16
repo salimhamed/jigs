@@ -142,6 +142,12 @@ const approved: ApprovedChange = {
 
 const publish = { change: approved, binding: "repo", implementation: options.implementation };
 
+const mergeReady = (headSha: string, retryNoted = false): GateWake => ({
+  kind: "merge-ready",
+  headSha,
+  retryNoted,
+});
+
 const red = (headSha: string): GateWake => ({
   kind: "ci-red",
   headSha,
@@ -662,17 +668,50 @@ describe("delivery", () => {
   });
 
   it("does not report a refused merge as merged", async () => {
-    const { steps } = setup([
-      { kind: "merge-ready", headSha: "new" },
-      { kind: "closed", merged: false },
-    ]);
+    const { steps } = setup([mergeReady("new"), { kind: "closed", merged: false }]);
     vi.mocked(steps.mergePullRequest).mockResolvedValue({
       merged: false,
       reason: "the head moved",
+      transient: true,
     });
     expect(
       (await bindDeliverySteps(steps).deliverChange({ ...options, merge: JIGS_MERGE })).status,
     ).toBe("closed");
+  });
+
+  it("retries a merge refused for a state that passes, and says so once", async () => {
+    const { steps } = setup([mergeReady("new"), mergeReady("new", true)]);
+    vi.mocked(steps.mergePullRequest)
+      .mockResolvedValueOnce({
+        merged: false,
+        reason: "GitHub reports the merge state as unstable",
+        transient: true,
+      })
+      .mockResolvedValueOnce({ merged: true, mergeCommitSha: "merged" });
+    const result = await bindDeliverySteps(steps).deliverChange({ ...options, merge: JIGS_MERGE });
+
+    expect(result.status).toBe("merged");
+    expect(steps.mergePullRequest).toHaveBeenCalledTimes(2);
+    // One note, and it does not stand the commit down.
+    expect(steps.commentOnPullRequest).toHaveBeenCalledOnce();
+    const [, body] = vi.mocked(steps.commentOnPullRequest).mock.calls[0] ?? [];
+    expect(body).toContain("I will try again");
+    expect(body).toContain('"reason":"merge-retry"');
+  });
+
+  it("stands a commit down when nothing but a new commit could merge it", async () => {
+    const { steps } = setup([mergeReady("new"), { kind: "closed", merged: false }]);
+    vi.mocked(steps.mergePullRequest).mockResolvedValue({
+      merged: false,
+      reason: "the branch conflicts with its base",
+      transient: false,
+    });
+    const result = await bindDeliverySteps(steps).deliverChange({ ...options, merge: JIGS_MERGE });
+
+    expect(result.status).toBe("closed");
+    const [, body] = vi.mocked(steps.commentOnPullRequest).mock.calls[0] ?? [];
+    expect(body).toContain("I am standing down on new");
+    expect(body).toContain('"reason":"merge"');
   });
 
   it("rebuilds failed implementation sessions with full task context", async () => {
@@ -870,7 +909,7 @@ describe("delivery", () => {
   });
 
   it("merges the ready commit the wake named", async () => {
-    const { steps } = setup([{ kind: "merge-ready", headSha: "new" }]);
+    const { steps } = setup([mergeReady("new")]);
     const result = await bindDeliverySteps(steps).deliverChange({ ...options, merge: JIGS_MERGE });
     expect(result.status).toBe("merged");
     expect(steps.mergePullRequest).toHaveBeenCalledExactlyOnceWith(pr, "new", JIGS_MERGE);

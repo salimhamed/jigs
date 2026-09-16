@@ -119,6 +119,9 @@ test("the ledger holds only this scope's work, split by what the kind proves", (
     markBody("no repair", [
       { scope: "ship/A", run: "r", kind: "status", reason: "ci", source: "sha3" },
     ]),
+    markBody("not yet", [
+      { scope: "ship/A", run: "r", kind: "status", reason: "merge-retry", source: "sha4" },
+    ]),
     markBody("another workflow", [{ scope: "review/A", run: "r", kind: "reply", source: "2@t" }]),
   ];
   const ledger = readLedger(bodies, "ship/A");
@@ -126,6 +129,8 @@ test("the ledger holds only this scope's work, split by what the kind proves", (
   // A merge jigs could not make says nothing about that commit's checks.
   expect([...ledger.settled.merge]).toEqual(["sha2"]);
   expect([...ledger.settled.ci]).toEqual(["sha3"]);
+  // A merge jigs will try again is not a merge it stood down on.
+  expect([...ledger.settled["merge-retry"]]).toEqual(["sha4"]);
   expect(readLedger(bodies, "review/A").answered.has("1@t")).toBe(false);
 });
 

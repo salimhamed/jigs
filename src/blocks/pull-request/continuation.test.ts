@@ -25,7 +25,13 @@ function fakePullRequest() {
   const threads: ReviewThread[] = [];
   const conversation: PrComment[] = [];
   const reviews: PrReview[] = [];
-  const state = { headSha: "head-1", ci: "pending" as PrSnapshot["ci"], open: true, merged: false };
+  const state = {
+    headSha: "head-1",
+    ci: "pending" as PrSnapshot["ci"],
+    open: true,
+    merged: false,
+    mergeState: "clean",
+  };
   let nextId = 5000;
 
   const ask = (body: string, updatedAt = AT): number => {
@@ -108,11 +114,14 @@ function fakePullRequest() {
     setCi(ci: PrSnapshot["ci"]) {
       state.ci = ci;
     },
+    setMergeState(mergeState: string) {
+      state.mergeState = mergeState;
+    },
     snapshot: async (): Promise<PrSnapshot> => ({
       state: state.open ? "open" : "closed",
       merged: state.merged,
       draft: false,
-      mergeState: "clean",
+      mergeState: state.mergeState,
       labels: [],
       mergeCommitSha: null,
       headSha: state.headSha,
@@ -232,7 +241,7 @@ test("a stand-down note is what keeps an approval from asking twice", async () =
   github.approve("head-1");
 
   const ready = classifyPrState(await github.snapshot(), SHIP, APPROVAL).wakes;
-  expect(ready).toEqual([{ kind: "merge-ready", headSha: "head-1" }]);
+  expect(ready).toEqual([{ kind: "merge-ready", headSha: "head-1", retryNoted: false }]);
 
   // The merge is refused; the note records that this commit was tried.
   await postPullRequestNote({
@@ -259,7 +268,7 @@ test("a stand-down note is what keeps an approval from asking twice", async () =
   // A fresh approval of the new commit is new work, note or no note.
   github.approve("head-2");
   expect(classifyPrState(await github.snapshot(), SHIP, APPROVAL).wakes).toEqual([
-    { kind: "merge-ready", headSha: "head-2" },
+    { kind: "merge-ready", headSha: "head-2", retryNoted: false },
   ]);
 });
 
@@ -289,4 +298,35 @@ test("a red head is outstanding until the branch moves or jigs says it could not
   expect(classifyPrState(await github.snapshot(), SHIP, APPROVAL).wakes).toMatchObject([
     { kind: "ci-red", headSha: "head-2" },
   ]);
+});
+
+test("a merge refused while a check is still running is retried, not stood down", async () => {
+  const github = fakePullRequest();
+  github.setCi("green");
+  github.approve("head-1");
+  const ready = classifyPrState(await github.snapshot(), SHIP, APPROVAL).wakes;
+  expect(ready).toEqual([{ kind: "merge-ready", headSha: "head-1", retryNoted: false }]);
+
+  // The operator retitled the pull request, so the re-fetch inside the merge
+  // step sees a requeued check and GitHub refuses. That is a state jigs waits
+  // out, and the note it leaves says so.
+  github.setMergeState("unstable");
+  await postPullRequestNote({
+    commentOnPullRequest: github.comment,
+    pr,
+    scope: SHIP,
+    reason: "merge-retry",
+    headSha: "head-1",
+    body: "I could not merge this pull request yet. I will try again.",
+  });
+  // Nothing to do while GitHub still reports it unmergeable.
+  expect(classifyPrState(await github.snapshot(), SHIP, APPROVAL).wakes).toEqual([]);
+
+  // The check lands. The same approval, on the same commit, is merge-ready
+  // again with no operator action — and the note is not repeated.
+  github.setMergeState("clean");
+  expect(classifyPrState(await github.snapshot(), SHIP, APPROVAL).wakes).toEqual([
+    { kind: "merge-ready", headSha: "head-1", retryNoted: true },
+  ]);
+  expect(github.conversation).toHaveLength(1);
 });

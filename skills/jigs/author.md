@@ -94,7 +94,11 @@ factory prompt overrides beside their callers.
 
 A pull request keeps its own progress. Every comment jigs posts carries a hidden
 marker naming a `scope`, the run, a `kind` (`reply`, `completion` or `status`)
-and the `source` it answers — a comment as `id@updatedAt`, or a commit sha.
+and the `source` it answers — a comment as `id@updatedAt`, or a commit sha. A
+`status` marker also carries a `reason`: `merge` and `ci` stand that commit
+down, so nothing tries it again, while `merge-retry` only records that a
+refusal jigs is waiting out was already reported and leaves the commit
+merge-ready.
 `classifyPrState(snapshot, scope)` derives what is outstanding from a fresh
 snapshot and those markers, so nothing is remembered between wakes and a
 replacement run continues where the last one stopped.

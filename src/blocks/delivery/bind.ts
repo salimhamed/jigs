@@ -345,21 +345,34 @@ export function bindDeliverySteps(steps: DeliverySteps) {
       }
       if (wake.kind === "merge-ready") {
         if (options.merge.by === "human") return listen();
-        let refused: string;
+        let refused: { reason: string; transient: boolean };
         try {
           const result = await mergePullRequest(pr, wake.headSha, options.merge);
           if (result.merged) return finished({ status: "merged", change, pr });
-          refused = result.reason;
+          refused = result;
         } catch (error) {
-          refused = String(error);
+          // An error the merge step could not answer for is not a state jigs
+          // knows how to wait out, so it is reported once and stood down on.
+          refused = { reason: String(error), transient: false };
         }
-        // The note is what stands this commit down: without it the same
-        // approval reads as unfinished work on every later wake.
-        await note(
-          "merge",
-          wake.headSha,
-          `I could not merge this pull request: ${refused}. I am still watching for updates.`,
-        );
+        if (!refused.transient) {
+          // The note is what stands this commit down: without it the same
+          // approval reads as unfinished work on every later wake.
+          await note(
+            "merge",
+            wake.headSha,
+            `I could not merge this pull request: ${refused.reason}. I am standing down on ${wake.headSha}: nothing I can do here changes that, so it needs a new commit or a change to the repository.`,
+          );
+        } else if (!wake.retryNoted) {
+          // Marked so the refusal is reported once rather than on every nudge,
+          // and with a reason the gate does not read as a stand-down, so this
+          // commit stays merge-ready.
+          await note(
+            "merge-retry",
+            wake.headSha,
+            `I could not merge this pull request yet: ${refused.reason}. I will try again when GitHub reports a change, and I will not repeat this note for ${wake.headSha}.`,
+          );
+        }
         return listen();
       }
       if (wake.kind === "ci-red") {

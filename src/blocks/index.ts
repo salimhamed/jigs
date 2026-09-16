@@ -147,6 +147,8 @@ export {
   isApprovalSatisfied,
   isPullRequestMergeReady,
   type MergePolicy,
+  type MergeRefusal,
+  mergeRefusal,
 } from "./pull-request/merge-ready.ts";
 export { currentRunId, defaultPrScope } from "./pull-request/writer.ts";
 export {
