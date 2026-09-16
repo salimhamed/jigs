@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.22.0](https://github.com/salimhamed/jigs/compare/jigs-v0.21.0...jigs-v0.22.0) (2026-09-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* **delivery:** WorkItem gains a required `id` (the ticket source address, e.g. the Linear issue UUID) beside `key`; DeliverySteps gains a required `postTicketNote`; TicketNote reshaped and renderProceedingNote renamed to renderTicketNote. Factories set `id: handoff.snapshot.id` in their ticket block and wire postTicketNote into deliverySteps.
+
+### Features
+
+* **delivery:** block reviews on defects, and let the reviewer remember ([#196](https://github.com/salimhamed/jigs/issues/196)) ([b66fe92](https://github.com/salimhamed/jigs/commit/b66fe92161276b4626f79b1dc38eb0c06f9ddd9d))
+
 ## [0.21.0](https://github.com/salimhamed/jigs/compare/jigs-v0.20.0...jigs-v0.21.0) (2026-09-16)
 
 
