@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import type { GithubMergePolicyProbes } from "../../checks/github-identity.ts";
 import { bindingRepoDir } from "../../steps/worktree/layout.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import { type BindDeps, bindRepo } from "./bind.ts";
@@ -321,6 +322,38 @@ test("bind without ingressUrl skips the webhook leg with a note", async () => {
   expect(result.webhook).toBe("skipped");
   expect(lines.some((l) => l.includes("no ingressUrl"))).toBe(true);
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test("bind ensures the configured approval label on every run", async () => {
+  writeFileSync(
+    path.join(factory, "jigs.config.ts"),
+    'export default { merge: { by: "jigs", method: "squash", approval: { kind: "label", name: "ship-it" } }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
+  );
+  const ensureLabel = vi.fn().mockResolvedValueOnce("created").mockResolvedValueOnce("verified");
+  const mergePolicyProbes: GithubMergePolicyProbes = {
+    repository: async () => ({ default_branch: "main" }),
+    checkRuns: async () => 1,
+    commitStatuses: async () => 0,
+    actionsWorkflows: async () => 0,
+    labelExists: async () => true,
+    requiredApprovingReviews: async () => 0,
+  };
+
+  await bindRepo(API, deps({ ensureLabel, mergePolicyProbes }));
+  await bindRepo(API, deps({ ensureLabel, mergePolicyProbes }));
+
+  expect(ensureLabel).toHaveBeenCalledTimes(2);
+  expect(ensureLabel).toHaveBeenCalledWith({ owner: "acme", repo: "Api", name: "ship-it" });
+  expect(lines).toContain("label created: acme/Api#ship-it");
+  expect(lines).toContain("label verified: acme/Api#ship-it");
+});
+
+test("review approval does not ensure a repository label", async () => {
+  const ensureLabel = vi.fn();
+
+  await bindRepo(API, deps({ ensureLabel }));
+
+  expect(ensureLabel).not.toHaveBeenCalled();
 });
 
 test("bind prints a merge-policy repair but still resolves successfully", async () => {

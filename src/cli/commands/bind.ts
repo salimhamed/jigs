@@ -17,6 +17,7 @@ import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
 import { GithubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity, useFactoryRoot } from "../../providers/github-auth.ts";
+import { type EnsureRepoLabelOptions, ensureRepoLabel } from "../../providers/github-label.ts";
 import {
   ensureRepoWebhook,
   ensureWebhookSecret,
@@ -31,6 +32,7 @@ export interface BindDeps {
   cwd: string;
   out: (line: string) => void;
   mergePolicyProbes?: GithubMergePolicyProbes;
+  ensureLabel?: (options: EnsureRepoLabelOptions) => Promise<"created" | "verified">;
 }
 
 export interface BindOptions {
@@ -115,9 +117,10 @@ export async function bindRepo(
     deps.out(`restart the service to clone ${name}: jigs service restart`);
   }
 
-  // Last, so a webhook that cannot be ensured leaves the binding recorded and
-  // the whole verb re-runnable: the config edit above is idempotent and so is
-  // the registration below.
+  // Last, so furniture that cannot be ensured leaves the binding recorded and
+  // the whole verb re-runnable: the config edit above and both operations below
+  // are idempotent.
+  await ensureApprovalLabel(remoteUrl, config.merge.approval, deps);
   const webhook = await ensureWebhook({
     remoteUrl,
     factoryRoot,
@@ -140,6 +143,21 @@ export async function bindRepo(
   ]);
   if (!report.ok) deps.out(formatFailures(report));
   return { name, remote: remoteUrl, webhook };
+}
+
+async function ensureApprovalLabel(
+  remoteUrl: string,
+  approval: ReturnType<typeof readFactoryConfig>["merge"]["approval"],
+  deps: BindDeps,
+): Promise<void> {
+  if (approval.kind !== "label") return;
+  const repoRef = parseGithubRemote(remoteUrl);
+  if (repoRef === null) return;
+  const outcome = await (deps.ensureLabel ?? ensureRepoLabel)({
+    ...repoRef,
+    name: approval.name,
+  });
+  deps.out(`label ${outcome}: ${repoRef.owner}/${repoRef.repo}#${approval.name}`);
 }
 
 // The likeliest operator error, given that bind used to take a checkout path.
