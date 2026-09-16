@@ -60,6 +60,7 @@ const opts = {
 };
 
 test("creates the webhook when none matches", async () => {
+  expect(WEBHOOK_EVENTS).toContain("status");
   fetchMock.mockResolvedValueOnce(jsonResponse([])).mockResolvedValueOnce(jsonResponse({ id: 9 }));
   expect(await ensureRepoWebhook(opts)).toEqual({
     outcome: "created",
@@ -106,12 +107,12 @@ test("verifies an existing matching webhook with zero writes", async () => {
 
 // The event set is named once, so bind (ensure) and doctor (verify) cannot
 // drift apart over `issue_comment`, the top-level PR comment.
-test("a hook on the pre-issue_comment event set is repaired by bind and failed by doctor", async () => {
+test("a hook missing status is repaired by bind and failed by doctor", async () => {
   const stale = [
     {
       id: 9,
       active: true,
-      events: ["pull_request", "pull_request_review", "pull_request_review_comment", "check_suite"],
+      events: WEBHOOK_EVENTS.filter((event) => event !== "status"),
       config: {
         url: "https://factory.example.ts.net/ingress/github",
         content_type: "json",

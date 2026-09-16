@@ -309,6 +309,26 @@ test("green and pending CI yield nothing on their own", () => {
   expect(wakesOf(snapshot({ ci: "pending" }))).toEqual([]);
 });
 
+test("a failed commit status wakes ci-red and its successful recovery clears it", () => {
+  const failed = snapshot({
+    ci: "red",
+    failingChecks: [check("AWS CodeBuild us-west-2")],
+  });
+  expect(classifyPrState(failed, SCOPE, APPROVAL)).toMatchObject({
+    wakes: [{ kind: "ci-red", headSha: "head-1" }],
+    done: false,
+  });
+
+  // The next status wake re-fetches the same head. Once CodeBuild reports
+  // success the snapshot is ci-green and the old red work is no longer due.
+  const recovered = { ...failed, ci: "green" as const, failingChecks: [] };
+  expect(recovered.ci).toBe("green");
+  expect(classifyPrState(recovered, SCOPE, APPROVAL)).toMatchObject({
+    wakes: [],
+    done: false,
+  });
+});
+
 test("green plus an approval of the current head is merge-ready", () => {
   expect(wakesOf(snapshot({ ci: "green", reviews: [approval(1)] }))).toEqual([
     { kind: "merge-ready", headSha: "head-1", retryNoted: false },

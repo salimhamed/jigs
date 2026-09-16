@@ -11,6 +11,7 @@ import { type Factory, ticketInput } from "../blocks/factory.ts";
 import { prToken } from "../blocks/pull-request/gate.ts";
 import { ticketToken } from "../blocks/ticket/claim.ts";
 import { needsHumanToken } from "../blocks/ticket/halt-for-human.ts";
+import { resetGithubAuth } from "../providers/github-auth.ts";
 import * as linear from "../providers/linear.ts";
 import * as sql from "../steps/worktree/sql.ts";
 import { makeFakeSql } from "../steps/worktree/test-fixtures.ts";
@@ -87,14 +88,19 @@ beforeEach(() => {
   vi.spyOn(queue, "deleteRunJobs").mockResolvedValue(0);
   vi.stubEnv("WORKFLOW_LOCAL_DATA_DIR", dataDir);
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "gh-hook-secret");
+  vi.stubEnv("GITHUB_TOKEN", "gh-service-token");
+  vi.stubEnv("GITHUB_API_URL", "http://mock.test/github");
   vi.stubEnv("LINEAR_WEBHOOK_SECRET", "linear-hook-secret");
   resumeHookMock.mockReset().mockRejectedValue(new HookNotFoundError("unclaimed-test-token"));
+  resetGithubAuth();
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   // Clears the cached world too, so the next getWorld() opens the local one
   // again from the data dir above.
   setWorld(undefined);
+  resetGithubAuth();
 });
 
 const sign = (body: string, secret: string) =>
@@ -217,6 +223,87 @@ test("a signed check_suite delivery is routed to the PR it belongs to", async ()
   // dropped — what matters is that it was routed rather than ignored.
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ delivered: false });
+});
+
+const statusPayload = (state: string) =>
+  JSON.stringify({
+    sha: "status-sha",
+    state,
+    context: "AWS CodeBuild us-west-2",
+    repository: { name: "fork", full_name: "contributor/fork", owner: { login: "contributor" } },
+  });
+
+const postStatus = (body: string) =>
+  postGithub(body, {
+    "x-hub-signature-256": `sha256=${sign(body, "gh-hook-secret")}`,
+    "x-github-event": "status",
+  });
+
+test("a signed status delivery resolves every matching PR and routes by base repo", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(
+      JSON.stringify([
+        {
+          number: 41,
+          state: "open",
+          head: { sha: "status-sha" },
+          base: { repo: { name: "api", owner: { login: "acme" } } },
+        },
+        {
+          number: 7,
+          state: "open",
+          head: { sha: "status-sha" },
+          base: { repo: { name: "web", owner: { login: "acme" } } },
+        },
+      ]),
+    ),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  resumeHookMock
+    .mockResolvedValueOnce({} as never)
+    .mockRejectedValueOnce(new HookNotFoundError("unclaimed"));
+
+  const res = await postStatus(statusPayload("failure"));
+
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ delivered: true });
+  expect(resumeHookMock.mock.calls.map(([token]) => token)).toEqual([
+    prToken({ owner: "acme", repo: "api", number: 41 }),
+    prToken({ owner: "acme", repo: "web", number: 7 }),
+  ]);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test("pending status is ignored without a sha lookup", async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+  const res = await postStatus(statusPayload("pending"));
+
+  expect(res.status).toBe(200);
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(resumeHookMock).not.toHaveBeenCalled();
+  expect(log).toHaveBeenCalledWith("[ingress] github ignored reason=pending-status event=status");
+});
+
+test("status with no open PR is dropped without waking a gate", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("[]")));
+  const res = await postStatus(statusPayload("success"));
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ delivered: false });
+  expect(resumeHookMock).not.toHaveBeenCalled();
+});
+
+test("a status lookup failure is acknowledged as unroutable rather than a 500", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+  const res = await postStatus(statusPayload("failure"));
+  expect(res.status).toBe(404);
+  expect(await res.json()).toEqual({ delivered: false });
+  expect(log).toHaveBeenCalledWith(
+    "[ingress] github dropped reason=status-lookup-failed event=status",
+  );
 });
 
 test("an unroutable github event is acknowledged and ignored", async () => {

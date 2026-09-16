@@ -11,8 +11,8 @@ import { githubRequest } from "./github-api.ts";
 // Reviews, inline review comments, conversation comments, and the check-run
 // half of CI. `issue_comment` is here because a factory sharing its operator's
 // GitHub identity cannot receive a formal review on its own pull request, so
-// the conversation is where feedback arrives. No `status`: that payload names
-// no pull request, so routing one needs a sha lookup jigs does not do yet. The
+// the conversation is where feedback arrives. `status` names only a commit;
+// ingress resolves that sha to its open pull requests before routing it. The
 // drift PATCH picks up a change on re-bind.
 export const WEBHOOK_EVENTS = [
   "pull_request",
@@ -20,6 +20,7 @@ export const WEBHOOK_EVENTS = [
   "pull_request_review_comment",
   "issue_comment",
   "check_suite",
+  "status",
 ];
 
 export interface GithubRepoRef {

@@ -268,6 +268,9 @@ async function ensureWebhook({
     );
   });
   deps.out(`webhook ${ensured.outcome}: ${slug}`);
+  if (ensured.outcome === "updated") {
+    deps.out("note: existing webhook re-registered with the current event set");
+  }
   if (ensured.otherHosts.length > 0) {
     deps.out(
       `other jigs hooks on this repo: ${ensured.otherHosts.join(", ")} — delete one by hand if it was this factory's before a hostname change`,

@@ -9,6 +9,7 @@ import { tokenFromLinearPayload } from "../blocks/ticket/claim.ts";
 import { NEEDS_HUMAN_TOKEN_PREFIX } from "../blocks/ticket/halt-for-human.ts";
 import { doctorChecks, failedChecks, runChecks } from "../checks/index.ts";
 import { factoryRoot } from "../config/factory-root.ts";
+import { findOpenPullRequestsByHeadSha } from "../providers/github.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import { listWorktreesForRun } from "../steps/worktree/registry.ts";
 import { registrySql } from "../steps/worktree/sql.ts";
@@ -134,12 +135,47 @@ export function createApp(factory: Factory): Hono {
       return c.json({ error: "invalid signature" }, 401);
     }
     const payload = parseJson(rawBody);
+    if (event === "status") {
+      const status = githubStatus(payload);
+      if (status === null) {
+        console.log(`[ingress] github ignored reason=unrecognized-event event=${event}`);
+        return c.json({ ignored: true });
+      }
+      if (status.state === "pending") {
+        console.log(`[ingress] github ignored reason=pending-status event=${event}`);
+        return c.json({ ignored: true });
+      }
+      let prs: Awaited<ReturnType<typeof findOpenPullRequestsByHeadSha>>;
+      try {
+        prs = await findOpenPullRequestsByHeadSha(status.repository, status.sha);
+      } catch (error) {
+        const reason =
+          error instanceof Error && error.message.includes("GITHUB_TOKEN is not set")
+            ? "missing-github-credential"
+            : "status-lookup-failed";
+        console.log(`[ingress] github dropped reason=${reason} event=${event}`);
+        return c.json({ delivered: false }, 404);
+      }
+      if (prs.length === 0) {
+        console.log(`[ingress] github dropped reason=no-open-pull-request event=${event}`);
+        return c.json({ delivered: false });
+      }
+      const tokens = prs
+        .map((pr) =>
+          tokenFromGithubPayload({
+            pull_request: { number: pr.number },
+            repository: { name: pr.repo, owner: { login: pr.owner } },
+          }),
+        )
+        .filter((token): token is string => token !== null);
+      return resumeAndLog(c, "github", tokens, event, resumeHook);
+    }
     const token = tokenFromGithubPayload(payload);
     if (token === null) {
       console.log(`[ingress] github ignored reason=unrecognized-event event=${event}`);
       return c.json({ ignored: true });
     }
-    return resumeAndLog(c, "github", token, event, resumeHook);
+    return resumeAndLog(c, "github", [token], event, resumeHook);
   });
 
   app.post("/ingress/linear", async (c) => {
@@ -167,7 +203,7 @@ export function createApp(factory: Factory): Hono {
       );
       return c.json({ ignored: true });
     }
-    return resumeAndLog(c, "linear", token, event, resumeHook);
+    return resumeAndLog(c, "linear", [token], event, resumeHook);
   });
 
   // Manual wake on the same code path as the ingress: resume every token the
@@ -343,25 +379,53 @@ function linearEvent(payload: unknown): string | null {
   return typeof type === "string" ? sanitizeForLog(type) : null;
 }
 
+function githubStatus(payload: unknown): {
+  sha: string;
+  state: string;
+  repository: { owner: string; repo: string };
+} | null {
+  if (typeof payload !== "object" || payload === null) return null;
+  const candidate = payload as {
+    sha?: unknown;
+    state?: unknown;
+    repository?: { name?: unknown; owner?: { login?: unknown } };
+  };
+  const { sha, state } = candidate;
+  const owner = candidate.repository?.owner?.login;
+  const repo = candidate.repository?.name;
+  return typeof sha === "string" &&
+    typeof state === "string" &&
+    typeof owner === "string" &&
+    typeof repo === "string"
+    ? { sha, state, repository: { owner, repo } }
+    : null;
+}
+
 // A wake carries no payload: the suspension primitives re-check provider
 // state on every wake, so nothing downstream reads one.
 async function resumeAndLog(
   c: Context,
   provider: "github" | "linear",
-  token: string,
+  tokens: string[],
   event: string | null,
   resume: typeof resumeHook,
 ) {
-  const correlation = `token=${sanitizeForLog(token)}${event === null ? "" : ` event=${event}`}`;
-  try {
-    const result = await resume(token, undefined);
-    console.log(`[ingress] ${provider} accepted ${correlation}`);
-    return c.json({ delivered: true, ...result });
-  } catch (error) {
-    const reason = HookNotFoundError.is(error) ? "no-matching-hook" : "delivery-failed";
-    console.log(`[ingress] ${provider} dropped reason=${reason} ${correlation}`);
-    return c.json({ delivered: false }, reason === "no-matching-hook" ? 200 : 404);
-  }
+  const results = await Promise.all(
+    tokens.map(async (token) => {
+      const correlation = `token=${sanitizeForLog(token)}${event === null ? "" : ` event=${event}`}`;
+      try {
+        await resume(token, undefined);
+        console.log(`[ingress] ${provider} accepted ${correlation}`);
+        return "delivered" as const;
+      } catch (error) {
+        const reason = HookNotFoundError.is(error) ? "no-matching-hook" : "delivery-failed";
+        console.log(`[ingress] ${provider} dropped reason=${reason} ${correlation}`);
+        return reason;
+      }
+    }),
+  );
+  if (results.includes("delivered")) return c.json({ delivered: true });
+  return c.json({ delivered: false }, results.includes("delivery-failed") ? 404 : 200);
 }
 
 // The hooks that name an external resource: what another run can be blocked
