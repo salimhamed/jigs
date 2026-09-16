@@ -7,7 +7,9 @@ import type { AgentSession } from "../agent/result.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import type { PullRequestDescription } from "../builder-agent/describe-pr.ts";
 import type { GateFn } from "../pull-request/gate.ts";
+import type { PostTicketNote } from "../ticket/review.ts";
 import type { WorktreeFacts } from "../worktree.ts";
+import type { FindingResponse, ReviewFinding, ReviewRound } from "./review.ts";
 
 /**
  * The requirements to deliver, independent of where they were recorded. A
@@ -15,6 +17,12 @@ import type { WorktreeFacts } from "../worktree.ts";
  * prompt context, `onLimit` and the result without a cast.
  */
 export interface WorkItem {
+  /**
+   * The work item's address at its source — a Linear issue UUID, say — which
+   * is what posting back to it needs. `key` is what a human reads; this is
+   * what the note step is given.
+   */
+  id: string;
   /** Short human-facing identifier, as the prompts name the task. */
   key: string;
   /** One-line summary of the work, as the prompts and the pull request name it. */
@@ -50,7 +58,7 @@ interface RolePromptContext<TTask extends WorkItem> {
 export interface ImplementationPromptContext<TTask extends WorkItem = WorkItem>
   extends RolePromptContext<TTask> {
   /** The previous round's review findings; empty on the first round. */
-  findings: string[];
+  findings: ReviewFinding[];
   /** Direction an `onLimit` continuation supplied; empty until a limit is extended. */
   instructions: string;
   /** Read the diff when needed; available only for a fresh or rebuilt session. */
@@ -58,9 +66,10 @@ export interface ImplementationPromptContext<TTask extends WorkItem = WorkItem>
 }
 
 /**
- * Judge the committed work. Runs fresh every round against the committed diff,
- * which is why it is never told the previous round's `findings`: the verdict is
- * a new reading of the code, not a re-scoring of what the last review said.
+ * Judge the committed work. The reviewer keeps its own session across rounds,
+ * so a resumed one is told only what is new: the current diff and the builder's
+ * answer to what it last raised. `ledger` is what a reviewer holding nothing is
+ * given instead, so either way a round N verdict knows rounds 1..N-1.
  */
 export interface ReviewPromptContext<TTask extends WorkItem = WorkItem>
   extends RolePromptContext<TTask> {
@@ -70,6 +79,10 @@ export interface ReviewPromptContext<TTask extends WorkItem = WorkItem>
   diff: string;
   /** Direction an `onLimit` continuation supplied; empty until a limit is extended. */
   instructions: string;
+  /** The builder's answer to each of the last round's findings; empty on the first round. */
+  responses: FindingResponse[];
+  /** Every earlier round; supplied only when the reviewer holds no session of its own. */
+  ledger?: ReviewRound[];
 }
 
 /** Repair the pull request's failing checks. */
@@ -216,6 +229,12 @@ export interface DeliveryChange<TTask extends WorkItem = WorkItem> {
    * than rebuilds. Dropped for a role whose harness configuration changed.
    */
   sessions: Partial<Record<AgentRoleName, { harness: HarnessConfig; session: AgentSession }>>;
+  /**
+   * Every implementation-review round in order. It is what a rebuilt reviewer
+   * is given in place of its lost session, and where the approving round's
+   * non-blocking findings are read from for the pull request body.
+   */
+  review: ReviewRound[];
 }
 /** An approved change, carrying the commit the reviewer judged. */
 export interface ApprovedChange<TTask extends WorkItem = WorkItem> extends DeliveryChange<TTask> {
@@ -308,6 +327,8 @@ export interface DeliverChangeOptions<TTask extends WorkItem = WorkItem>
 /** Supply the factory's durable functions once, then use the delivery operations. */
 export interface DeliverySteps {
   runAgent: AgentFn;
+  /** How a delivery tells a person it stopped. Reached by the task's `key`. */
+  postTicketNote: PostTicketNote;
   pullRequestGate: GateFn;
   readBranchState: typeof branch.readBranchState;
   readWorktreeDiff: typeof branch.readWorktreeDiff;

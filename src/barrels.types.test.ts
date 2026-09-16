@@ -118,7 +118,7 @@ import type {
   NeedsHumanContext,
   ProvisionWorktreeDeps,
   RenderNeedsHumanComment,
-  RenderProceedingNote,
+  RenderTicketNote,
   TicketParticipants,
   WorktreeRequest,
 } from "./steps/index.ts";
@@ -237,7 +237,7 @@ type StepsTypeSurface = {
   needsHumanContext: NeedsHumanContext;
   provisionRunWorktreeDeps: ProvisionWorktreeDeps;
   renderNeedsHumanComment: RenderNeedsHumanComment;
-  renderProceedingNote: RenderProceedingNote;
+  renderTicketNote: RenderTicketNote;
   ticketParticipants: TicketParticipants;
   worktreeRequest: WorktreeRequest;
 };

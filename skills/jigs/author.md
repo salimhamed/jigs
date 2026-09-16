@@ -75,7 +75,10 @@ never send a prompt or callback through a durable step argument.
 
 For delivery, use `deliverChange` or compose `implementAndReview`,
 `publishApprovedChange`, and `followPullRequest`. Each role takes its own
-harness and prompt. Each budget — `implementationReviewRounds`, `ciFixAttempts`,
+harness and prompt. The review role keeps its own session across rounds and
+blocks only on findings it marked blocking; the rest are appended to the pull
+request description. A budget that runs out with no `onLimit` pushes the branch
+and posts a ticket note before the run ends. Each budget — `implementationReviewRounds`, `ciFixAttempts`,
 `pullRequestRevisionRounds` — carries that name on the whole operation and on
 each phase. Handle every outcome: `merged`, `closed`, `limit-reached`,
 `stopped`, `uncommitted-work`. Remove worktrees only after `merged`. A

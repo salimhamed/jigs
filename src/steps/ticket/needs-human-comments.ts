@@ -21,9 +21,9 @@ import { dashboardRunUrl, type NamedRunMetadata } from "../run-context.ts";
 import {
   type NeedsHumanContext,
   type RenderNeedsHumanComment,
-  type RenderProceedingNote,
+  type RenderTicketNote,
   renderNeedsHumanComment,
-  renderProceedingNote,
+  renderTicketNote,
 } from "./render-comment.ts";
 
 /** Post a question or failure on the ticket so a person can help the run continue. */
@@ -44,11 +44,11 @@ export const postTicketHumanInputRequest = async (
   return { commentId: comment.id, postedAt: comment.createdAt };
 };
 
-/** Tell ticket participants which assumptions the run is proceeding with. */
+/** Tell ticket participants something the run decided, without waiting for a reply. */
 export const postTicketNote = async (
   issueId: string,
   note: TicketNote,
-  render: RenderProceedingNote = renderProceedingNote,
+  render: RenderTicketNote = renderTicketNote,
 ): Promise<void> => {
   const participants = await getIssueParticipants(issueId);
   const comment = await createComment(issueId, render(note, participants));

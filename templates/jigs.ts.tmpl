@@ -53,7 +53,7 @@ export async function postTicketHumanInputRequest(issueId: string, halt: Halt) {
   return steps.postTicketHumanInputRequest(issueId, halt, metadata);
 }
 
-/** Post the assumptions that let ticket review proceed without waiting for a reply. */
+/** Post a note on the ticket that asks for nothing and waits for nothing. */
 export async function postTicketNote(issueId: string, note: TicketNote) {
   "use step";
   return steps.postTicketNote(issueId, note);
@@ -226,6 +226,7 @@ export const pullRequestGate = pullRequests.pullRequestGate;
 export const deliverySteps = {
   runAgent,
   pullRequestGate,
+  postTicketNote,
   readBranchState,
   readWorktreeDiff,
   pushBranch,

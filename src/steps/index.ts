@@ -45,9 +45,9 @@ export {
 export {
   type NeedsHumanContext,
   type RenderNeedsHumanComment,
-  type RenderProceedingNote,
+  type RenderTicketNote,
   renderNeedsHumanComment,
-  renderProceedingNote,
+  renderTicketNote,
   type TicketParticipants,
 } from "./ticket/render-comment.ts";
 export { resolveLinearIssue } from "./ticket/resolve.ts";

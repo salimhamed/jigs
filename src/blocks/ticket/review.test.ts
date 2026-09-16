@@ -4,7 +4,12 @@ import { type AgentStepConfig, parseOutput } from "../agent/plan.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import type { TicketClaim } from "./claim.ts";
 import type { Halt, HaltForHumanFn, HumanReply } from "./halt-for-human.ts";
-import { reviewTicket, ticketReviewVerdict } from "./review.ts";
+import {
+  type PostTicketNote,
+  reviewTicket,
+  type TicketNote,
+  ticketReviewVerdict,
+} from "./review.ts";
 import type { TicketSnapshot } from "./snapshot.ts";
 import type { TicketReviewPrompt } from "./ticket-review.prompt.ts";
 
@@ -34,11 +39,7 @@ const snapshot: TicketSnapshot = {
 let agentCalls: AgentStepConfig<unknown>[] = [];
 let verdicts: unknown[] = [];
 let humanCalls: Array<{ claim: TicketClaim; halt: Halt }> = [];
-let noteCalls: Array<{
-  issueId: string;
-  identifier: string;
-  assumptions: string[];
-}> = [];
+let noteCalls: Array<{ issueId: string } & TicketNote> = [];
 let fetched: string[] = [];
 
 const reply: HumanReply = {
@@ -64,10 +65,7 @@ const fakeHaltForHuman: HaltForHumanFn = async (humanClaim, halt) => {
   return reply;
 };
 
-const fakePostTicketNote = async (
-  issueId: string,
-  note: { identifier: string; assumptions: string[] },
-): Promise<void> => {
+const fakePostTicketNote: PostTicketNote = async (issueId, note) => {
   noteCalls.push({ issueId, ...note });
 };
 
@@ -162,13 +160,10 @@ test("a proceed verdict with assumptions posts them as a note that blocks nothin
   verdicts = [proceed({ assumptions: ["Only the validate script changes."] })];
   const result = await review();
 
-  expect(noteCalls).toEqual([
-    {
-      issueId: snapshot.id,
-      identifier: "AGE-313",
-      assumptions: ["Only the validate script changes."],
-    },
-  ]);
+  expect(noteCalls).toHaveLength(1);
+  expect(noteCalls[0]?.issueId).toBe(snapshot.id);
+  expect(noteCalls[0]?.headline).toContain("AGE-313");
+  expect(noteCalls[0]?.notes).toEqual(["Only the validate script changes."]);
   // Posted, not suspended on: the handoff comes straight back.
   expect(humanCalls).toHaveLength(0);
   expect(result.assumptions).toEqual(["Only the validate script changes."]);
