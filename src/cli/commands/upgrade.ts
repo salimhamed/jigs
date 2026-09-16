@@ -34,7 +34,7 @@ export interface UpgradeResult {
   up?: UpResult;
 }
 
-export type UpgradeDeps = UpDeps;
+export type UpgradeDeps = Omit<UpDeps, "generate">;
 
 export interface UpgradeOptions extends Pick<UpOptions, "force" | "doctor"> {
   to?: string;
@@ -84,23 +84,21 @@ export async function upgradeFactory(
         cwd: factoryRoot,
         execFile,
         generate: () =>
-          deps.generate === undefined
-            ? execOrExplain(
-                execFile,
-                "pnpm",
-                ["exec", "jigs", "generate"],
-                { cwd: factoryRoot },
-                deps.out,
-                {
-                  missing: new JigsError("pnpm is not on PATH", "install pnpm"),
-                  failed: () =>
-                    new JigsError(
-                      "could not refresh jigs.ts",
-                      "run pnpm exec jigs generate in this factory",
-                    ),
-                },
-              )
-            : generateOrExplain(deps.generate),
+          execOrExplain(
+            execFile,
+            "pnpm",
+            ["exec", "jigs", "generate"],
+            { cwd: factoryRoot },
+            deps.out,
+            {
+              missing: new JigsError("pnpm is not on PATH", "install pnpm"),
+              failed: () =>
+                new JigsError(
+                  "could not refresh jigs.ts",
+                  "run pnpm exec jigs generate in this factory",
+                ),
+            },
+          ),
       },
       { force: options.force, doctor: options.doctor },
     );
@@ -189,18 +187,6 @@ function quotedJigsPackage(): Scalar<string> {
   const scalar = new Scalar(JIGS_PACKAGE);
   scalar.type = Scalar.QUOTE_SINGLE;
   return scalar;
-}
-
-async function generateOrExplain(generate: () => Promise<void>): Promise<void> {
-  try {
-    await generate();
-  } catch (err) {
-    if (err instanceof JigsError && err.hint !== undefined) throw err;
-    throw new JigsError(
-      err instanceof Error ? err.message : String(err),
-      "run pnpm exec jigs generate in this factory",
-    );
-  }
 }
 
 function readManifest(factoryRoot: string): Manifest {

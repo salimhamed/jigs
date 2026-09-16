@@ -82,7 +82,6 @@ function upgrade(
       execFile: io.exec.execFile,
       processes: io.procs.processes,
       prepare: vi.fn(),
-      generate: vi.fn(),
       readyTimeoutMs: 500,
       ...extra,
     },
@@ -99,19 +98,21 @@ const commands = (io: { exec: ReturnType<typeof fakeExec> }) =>
 test("bumps jigs to latest, runs every up step, then the typecheck", async () => {
   const port = await fakeService();
   const root = factory(port);
-  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
-
   const generated = path.join(root, "generated-by-new-release");
+  const io = {
+    exec: fakeRegistry("0.1.19", (call) => {
+      if (call.args.join(" ") !== "exec jigs generate") return undefined;
+      expect(readManifest(root).dependencies["@salimhamed/jigs"]).toBe("0.1.19");
+      writeFileSync(generated, "new template");
+      return undefined;
+    }),
+    procs: fakeProcesses(),
+  };
   const result = await upgrade(
     root,
     io,
     {},
     {
-      generate: vi.fn(async () => {
-        expect(commands(io).at(-1)).toEqual(["pnpm", "install"]);
-        expect(readManifest(root).dependencies["@salimhamed/jigs"]).toBe("0.1.19");
-        writeFileSync(generated, "new template");
-      }),
       prepare: vi.fn(() => {
         expect(readFileSync(generated, "utf8")).toBe("new template");
       }),
@@ -141,6 +142,7 @@ test("bumps jigs to latest, runs every up step, then the typecheck", async () =>
   expect(commands(io)).toEqual([
     ["pnpm", "update", "--latest", "@salimhamed/jigs"],
     ["pnpm", "install"],
+    ["pnpm", "exec", "jigs", "generate"],
     ["docker", "compose", "up", "-d", "--wait"],
     ["bootstrap"],
     ["nitro", "build"],
@@ -652,15 +654,13 @@ test("--force and --no-doctor reach up", async () => {
 
 test("a failed integration refresh stops before rebuilding or restarting", async () => {
   const root = factory(59997);
-  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
-  const result = await upgrade(
-    root,
-    io,
-    {},
-    {
-      generate: vi.fn().mockRejectedValue(new Error("generation failed")),
-    },
-  );
+  const io = {
+    exec: fakeRegistry("0.1.19", (call) =>
+      call.args.join(" ") === "exec jigs generate" ? execError(1, "generation failed") : undefined,
+    ),
+    procs: fakeProcesses(),
+  };
+  const result = await upgrade(root, io);
   expect(result.ok).toBe(false);
   expect(statuses(result)).toEqual([
     "packages:ok",
@@ -670,11 +670,30 @@ test("a failed integration refresh stops before rebuilding or restarting", async
     "install:ok",
     "generate:failed",
   ]);
-  expect(result.steps.at(-1)?.detail).toBe("generation failed");
+  expect(result.steps.at(-1)?.detail).toBe("could not refresh jigs.ts");
   expect(result.steps.at(-1)?.repair).toBe("run pnpm exec jigs generate in this factory");
   expect(lines.at(-1)).toBe("  → run pnpm exec jigs generate in this factory");
   expect(commands(io)).toEqual([
     ["pnpm", "update", "--latest", "@salimhamed/jigs"],
     ["pnpm", "install"],
+    ["pnpm", "exec", "jigs", "generate"],
   ]);
+});
+
+test("a missing pnpm during integration refresh names the missing tool", async () => {
+  const root = factory(59997);
+  const io = {
+    exec: fakeRegistry("0.1.19", (call) =>
+      call.args.join(" ") === "exec jigs generate" ? execError("ENOENT") : undefined,
+    ),
+    procs: fakeProcesses(),
+  };
+
+  const result = await upgrade(root, io);
+
+  expect(result.ok).toBe(false);
+  expect(statuses(result).at(-1)).toBe("generate:failed");
+  expect(result.steps.at(-1)?.detail).toBe("pnpm is not on PATH");
+  expect(result.steps.at(-1)?.repair).toBe("install pnpm");
+  expect(lines.at(-1)).toBe("  → install pnpm");
 });
