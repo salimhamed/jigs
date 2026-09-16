@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.1](https://github.com/salimhamed/jigs/compare/jigs-v0.23.0...jigs-v0.23.1) (2026-09-16)
+
+
+### Bug Fixes
+
+* **pull-request:** retry merges refused for transient states instead of standing the commit down ([#201](https://github.com/salimhamed/jigs/issues/201)) ([7779648](https://github.com/salimhamed/jigs/commit/77796487444802e33739795b1080cef639aa40ba))
+
 ## [0.23.0](https://github.com/salimhamed/jigs/compare/jigs-v0.22.0...jigs-v0.23.0) (2026-09-16)
 
 
