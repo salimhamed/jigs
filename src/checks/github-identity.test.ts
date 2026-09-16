@@ -1,4 +1,4 @@
-import { expect, test, vi } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 import type { AppIdentity, MergePolicy } from "../config/factory-config.ts";
 import { runChecks } from "./catalog.ts";
 import {
@@ -6,7 +6,13 @@ import {
   type GithubMergePolicyProbes,
   githubIdentityChecks,
   mergePolicyCheck,
+  realGithubMergePolicyProbes,
 } from "./github-identity.ts";
+
+const githubGetMock = vi.hoisted(() => vi.fn());
+vi.mock("../providers/github-api.ts", () => ({ githubGet: githubGetMock }));
+
+beforeEach(() => githubGetMock.mockReset());
 
 const APP: AppIdentity = {
   mode: "app",
@@ -21,6 +27,10 @@ const GRANTED = {
   pull_requests: "write",
   issues: "write",
   metadata: "read",
+  actions: "read",
+  checks: "read",
+  statuses: "read",
+  administration: "read",
   repository_hooks: "write",
 };
 
@@ -126,6 +136,25 @@ test("webhook administration is a permission the operator has to grant and accep
   expect(check.repair).toContain("accept the updated permissions on the installation");
 });
 
+test("App identity requires the read permissions used by merge-policy probes", async () => {
+  const {
+    actions: _actions,
+    checks: _checks,
+    statuses: _statuses,
+    administration: _admin,
+    ...oldPermissions
+  } = GRANTED;
+  const check = await outcome(APP, "github.identity", {
+    installation: async () => ({ permissions: oldPermissions }),
+  });
+  expect(check).toMatchObject({ ok: false });
+  if (check.ok !== false) throw new Error("expected failure");
+  expect(check.reason).toContain("actions: read");
+  expect(check.reason).toContain("checks: read");
+  expect(check.reason).toContain("statuses: read");
+  expect(check.reason).toContain("administration: read");
+});
+
 test("a read grant does not satisfy a write requirement", async () => {
   expect(
     await outcome(APP, "github.identity", {
@@ -157,6 +186,84 @@ test("the effective policy is one line, whichever identity holds it", async () =
 });
 
 const binding = { api: { remote: "git@github.com:acme/api.git" } };
+
+test("real merge-policy probes use the repository and CI REST endpoints", async () => {
+  const repository = {
+    default_branch: "main",
+    allow_merge_commit: true,
+    allow_squash_merge: false,
+    allow_rebase_merge: true,
+  };
+  githubGetMock
+    .mockResolvedValueOnce(repository)
+    .mockResolvedValueOnce({ total_count: 2 })
+    .mockResolvedValueOnce({ total_count: 3 })
+    .mockResolvedValueOnce({ total_count: 4 });
+
+  await expect(realGithubMergePolicyProbes.repository("acme", "api")).resolves.toEqual(repository);
+  await expect(realGithubMergePolicyProbes.checkRuns("acme", "api", "main/head")).resolves.toBe(2);
+  await expect(
+    realGithubMergePolicyProbes.commitStatuses("acme", "api", "main/head"),
+  ).resolves.toBe(3);
+  await expect(realGithubMergePolicyProbes.actionsWorkflows("acme", "api")).resolves.toBe(4);
+
+  expect(githubGetMock.mock.calls.map(([url]) => url)).toEqual([
+    "/repos/acme/api",
+    "/repos/acme/api/commits/main%2Fhead/check-runs?per_page=1",
+    "/repos/acme/api/commits/main%2Fhead/status?per_page=1",
+    "/repos/acme/api/actions/workflows?per_page=1",
+  ]);
+});
+
+test("real label probe distinguishes absence from unreadable state", async () => {
+  githubGetMock.mockRejectedValueOnce(Object.assign(new Error("not found"), { status: 404 }));
+  await expect(
+    realGithubMergePolicyProbes.labelExists("acme", "api", "jigs:approved"),
+  ).resolves.toBe(false);
+  expect(githubGetMock).toHaveBeenCalledWith("/repos/acme/api/labels/jigs%3Aapproved");
+
+  githubGetMock.mockRejectedValueOnce(Object.assign(new Error("forbidden"), { status: 403 }));
+  await expect(
+    realGithubMergePolicyProbes.labelExists("acme", "api", "jigs:approved"),
+  ).rejects.toThrow("forbidden");
+});
+
+test("real approval probe combines classic protection and rulesets", async () => {
+  githubGetMock
+    .mockResolvedValueOnce({
+      required_pull_request_reviews: { required_approving_review_count: 1 },
+    })
+    .mockResolvedValueOnce([
+      { type: "creation" },
+      { type: "pull_request", parameters: { required_approving_review_count: 2 } },
+    ]);
+  await expect(
+    realGithubMergePolicyProbes.requiredApprovingReviews("acme", "api", "release/v1"),
+  ).resolves.toBe(2);
+  expect(githubGetMock.mock.calls.map(([url]) => url)).toEqual([
+    "/repos/acme/api/branches/release%2Fv1/protection",
+    "/repos/acme/api/rules/branches/release%2Fv1",
+  ]);
+});
+
+test("real approval probe preserves a readable leg and reports both unreadable as unknown", async () => {
+  githubGetMock
+    .mockRejectedValueOnce(new Error("protection forbidden"))
+    .mockResolvedValueOnce([
+      { type: "pull_request", parameters: { required_approving_review_count: 3 } },
+    ]);
+  await expect(
+    realGithubMergePolicyProbes.requiredApprovingReviews("acme", "api", "main"),
+  ).resolves.toBe(3);
+
+  githubGetMock
+    .mockRejectedValueOnce(new Error("forbidden"))
+    .mockRejectedValueOnce(new Error("forbidden"));
+  await expect(
+    realGithubMergePolicyProbes.requiredApprovingReviews("acme", "api", "main"),
+  ).resolves.toBeNull();
+});
+
 const policyProbes = (
   overrides: Partial<GithubMergePolicyProbes> = {},
 ): GithubMergePolicyProbes => ({

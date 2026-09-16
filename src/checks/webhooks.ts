@@ -46,10 +46,13 @@ export function webhookChecks(options: WebhookChecksOptions): Check[] {
 function hookPermissionRepair(
   repo: { owner: string; repo: string },
   identity: GithubIdentity,
+  status: number,
 ): string {
-  return identity.mode === "app"
+  if (identity.mode !== "app")
+    return `set GITHUB_TOKEN in the factory repo's .env to a classic PAT with admin:repo_hook on ${repo.owner}/${repo.repo}`;
+  return status === 404
     ? `install the App on ${repo.owner}/${repo.repo} or grant its installation access to the repo, then grant "Repository webhooks: read & write" and accept the updated permissions`
-    : `set GITHUB_TOKEN in the factory repo's .env to a classic PAT with admin:repo_hook on ${repo.owner}/${repo.repo}`;
+    : `grant the App "Repository webhooks: read & write" and accept the updated permissions on its installation for ${repo.owner}/${repo.repo}`;
 }
 
 async function checkWebhook(
@@ -73,7 +76,7 @@ async function checkWebhook(
       return {
         ok: false,
         reason: `GitHub refused the repo hooks request (${err.status})`,
-        repair: hookPermissionRepair(repo, identity),
+        repair: hookPermissionRepair(repo, identity, err.status),
       };
     }
     throw err;

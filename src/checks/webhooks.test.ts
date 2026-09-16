@@ -106,6 +106,27 @@ test("an App that cannot read a repo's hooks names installation access", async (
   expect(result.ok === false && result.repair).toContain("install the App on acme/api");
 });
 
+test("an installed App missing hook permission gets the permission repair", async () => {
+  configure();
+  fetchMock.mockResolvedValueOnce(new Response("Forbidden", { status: 403 }));
+  const [appCheck] = webhookChecks({
+    factoryRoot: () => factory,
+    identity: () => ({
+      mode: "app",
+      appId: 4958325,
+      installationId: 162033982,
+      privateKeyPath: "github-app.private-key.pem",
+      operator: "salimhamed",
+    }),
+  });
+  if (appCheck === undefined) throw new Error("expected a webhook check");
+  const result = await appCheck.run();
+  expect(result).toMatchObject({ ok: false });
+  if (result.ok !== false) throw new Error("expected failure");
+  expect(result.repair).toMatch(/^grant the App "Repository webhooks: read & write"/);
+  expect(result.repair).not.toContain("install the App");
+});
+
 test("no ingressUrl emits no webhook checks", () => {
   expect(checks()).toEqual([]);
 });

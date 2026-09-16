@@ -27,6 +27,14 @@ const REQUIRED_PERMISSIONS: Array<{ name: string; level: "read" | "write"; why: 
   { name: "pull_requests", level: "write", why: "open, comment on and merge pull requests" },
   { name: "issues", level: "write", why: "post on the pull request conversation" },
   { name: "metadata", level: "read", why: "read the repository" },
+  { name: "actions", level: "read", why: "detect whether the repository has CI workflows" },
+  { name: "checks", level: "read", why: "detect check runs on the default branch" },
+  { name: "statuses", level: "read", why: "detect external CI commit statuses" },
+  {
+    name: "administration",
+    level: "read",
+    why: "read merge methods and required-review branch rules",
+  },
   { name: "repository_hooks", level: "write", why: "create the webhook that wakes parked runs" },
 ];
 

@@ -269,10 +269,12 @@ Where each value comes from:
    Active under Webhook** — jigs keeps its own per-repo webhooks, and one App
    registration has only one webhook URL, which two factories cannot share.
 2. **Grant these repository permissions**, and nothing else: **Contents**,
-   **Pull requests** and **Issues** read & write; **Metadata** read; and
-   **Repository webhooks** read & write. The last one is what lets `jigs bind`
-   create the hook that wakes a parked run; without it `jigs bind` and
-   `jigs doctor` both fail, naming it.
+   **Pull requests** and **Issues** read & write; **Metadata**, **Actions**,
+   **Checks**, **Commit statuses** and **Administration** read; and **Repository
+   webhooks** read & write. The read permissions let `jigs bind` and `jigs
+   doctor` verify that the repository can satisfy its merge policy. The last
+   permission lets `jigs bind` create the hook that wakes a parked run; a
+   missing permission is named by `jigs doctor`.
 3. **`appId`** is the "App ID" on the App's settings page.
 4. **`privateKeyPath`** is the `.pem` GitHub generates under "Private keys".
    Save it in the factory repo (`.gitignore` already excludes
