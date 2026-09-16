@@ -290,7 +290,7 @@ test("pending status is ignored without a sha lookup", async () => {
 test("status with no open PR is dropped without waking a gate", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("[]")));
   const res = await postStatus(statusPayload("success"));
-  expect(res.status).toBe(404);
+  expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ delivered: false });
   expect(resumeHookMock).not.toHaveBeenCalled();
 });

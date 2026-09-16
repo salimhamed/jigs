@@ -158,7 +158,7 @@ export function createApp(factory: Factory): Hono {
       }
       if (prs.length === 0) {
         console.log(`[ingress] github dropped reason=no-open-pull-request event=${event}`);
-        return c.json({ delivered: false }, 404);
+        return c.json({ delivered: false });
       }
       const tokens = prs
         .map((pr) =>
