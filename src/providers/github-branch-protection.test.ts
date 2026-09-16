@@ -18,7 +18,10 @@ test("the protection payload preserves check App identity and review bypass allo
     required_status_checks: {
       strict: true,
       contexts: ["legacy/status"],
-      checks: [{ context: "build", app_id: 15368 }],
+      checks: [
+        { context: "build", app_id: 15368 },
+        { context: "portable", app_id: null },
+      ],
     },
     required_pull_request_reviews: {
       required_approving_review_count: 1,
@@ -44,7 +47,7 @@ test("the protection payload preserves check App identity and review bypass allo
       required_status_checks: {
         strict: true,
         contexts: ["legacy/status"],
-        checks: [{ context: "build", app_id: 15368 }],
+        checks: [{ context: "build", app_id: 15368 }, { context: "portable" }],
       },
       required_pull_request_reviews: expect.objectContaining({
         bypass_pull_request_allowances: {

@@ -5,7 +5,7 @@ export interface BranchProtection {
   protected: boolean;
   requiredChecks: string[];
   /** Check-App bindings must round-trip: reducing them to contexts changes who may satisfy a rule. */
-  requiredCheckApps?: Array<{ context: string; appId: number }>;
+  requiredCheckApps?: Array<{ context: string; appId?: number }>;
   strictChecks: boolean;
   requiredApprovingReviews: number;
 }
@@ -14,7 +14,7 @@ interface GithubProtection {
   required_status_checks?: {
     strict?: boolean;
     contexts?: string[];
-    checks?: Array<{ context: string; app_id: number }>;
+    checks?: Array<{ context: string; app_id: number | null }>;
   } | null;
   required_pull_request_reviews?: {
     required_approving_review_count?: number;
@@ -80,7 +80,7 @@ export async function getBranchProtection(
     ].sort(),
     requiredCheckApps: (checks?.checks ?? []).map((check) => ({
       context: check.context,
-      appId: check.app_id,
+      ...(check.app_id === null ? {} : { appId: check.app_id }),
     })),
     strictChecks: checks?.strict ?? false,
     requiredApprovingReviews:
@@ -125,7 +125,10 @@ export async function putBranchProtection(
     required_status_checks: {
       strict: desired.strictChecks,
       contexts: desired.requiredChecks.filter((context) => !appBoundContexts.has(context)),
-      checks: checkApps.map((check) => ({ context: check.context, app_id: check.appId })),
+      checks: checkApps.map((check) => ({
+        context: check.context,
+        ...(check.appId === undefined ? {} : { app_id: check.appId }),
+      })),
     },
     enforce_admins: raw?.enforce_admins?.enabled ?? false,
     required_pull_request_reviews:

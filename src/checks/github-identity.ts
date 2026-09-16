@@ -16,6 +16,7 @@ import {
   fetchAppRegistration,
   readAppPrivateKey,
 } from "../providers/github-auth.ts";
+import { getBranchProtection } from "../providers/github-branch-protection.ts";
 import { parseGithubRemote } from "../providers/github-webhook.ts";
 import { type Check, type CheckResult, PROBE_TIMEOUT_MS } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
@@ -122,25 +123,13 @@ export const realGithubMergePolicyProbes: GithubMergePolicyProbes = {
     }
   },
   classicProtection: async (owner, repo, branch) => {
-    try {
-      const protection = await githubGet<{
-        required_status_checks?: { contexts?: string[]; checks?: unknown[] } | null;
-        required_pull_request_reviews?: {
-          required_approving_review_count?: number;
-        } | null;
-      }>(`/repos/${owner}/${repo}/branches/${encodeURIComponent(branch)}/protection`);
-      return {
-        requiredStatusChecks: new Set([
-          ...(protection.required_status_checks?.contexts ?? []),
-          ...(protection.required_status_checks?.checks ?? []),
-        ]).size,
-        requiredApprovingReviews:
-          protection.required_pull_request_reviews?.required_approving_review_count ?? 0,
-      };
-    } catch (error) {
-      if (error instanceof GithubApiError && error.status === 404) return null;
-      throw error;
-    }
+    const protection = await getBranchProtection({ owner, repo }, branch);
+    return protection.protected
+      ? {
+          requiredStatusChecks: protection.requiredChecks.length,
+          requiredApprovingReviews: protection.requiredApprovingReviews,
+        }
+      : null;
   },
   requiredApprovingReviews: async (owner, repo, branch) => {
     const base = `/repos/${owner}/${repo}`;
