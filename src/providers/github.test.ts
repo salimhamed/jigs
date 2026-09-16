@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
   createPullRequest,
+  fetchPrCommitMessages,
   fetchPrSnapshot,
   fetchPrTitle,
+  mergePr,
   postPrComment,
   replyToReviewThread,
-  squashMergePr,
 } from "./github.ts";
 
 const fetchMock = vi.fn();
@@ -403,7 +404,12 @@ test("the PR title is read back from GitHub, not remembered", async () => {
 
 test("a squash merge PUTs merge_method squash with the commit title", async () => {
   fetchMock.mockResolvedValueOnce(json({ merged: true, sha: "merge-sha" }));
-  const merged = await squashMergePr(pr, "AGE-316 Review loop jig");
+  const merged = await mergePr(pr, {
+    title: "AGE-316 Review loop jig",
+    expectedHeadSha: "approved-head",
+    method: "squash",
+    message: "Co-authored-by: Salim Hamed <salim@example.com>",
+  });
 
   expect(merged).toEqual({ merged: true, sha: "merge-sha" });
   const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -412,16 +418,22 @@ test("a squash merge PUTs merge_method squash with the commit title", async () =
   expect(JSON.parse(String(init.body))).toEqual({
     merge_method: "squash",
     commit_title: "AGE-316 Review loop jig",
+    commit_message: "Co-authored-by: Salim Hamed <salim@example.com>",
+    sha: "approved-head",
   });
 });
 
-test("a guarded merge requires GitHub to match the approved head", async () => {
+test("a rebase rewrites the commits, so it carries no merge message", async () => {
   fetchMock.mockResolvedValueOnce(json({ merged: true, sha: "merge-sha" }));
-  await squashMergePr(pr, "fix: search", "approved-head");
+  await mergePr(pr, {
+    title: "fix: search",
+    expectedHeadSha: "approved-head",
+    method: "rebase",
+    message: "Co-authored-by: Salim Hamed <salim@example.com>",
+  });
   const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
   expect(JSON.parse(String(init.body))).toEqual({
-    merge_method: "squash",
-    commit_title: "fix: search",
+    merge_method: "rebase",
     sha: "approved-head",
   });
 });
@@ -529,4 +541,12 @@ test("a full page of conversation comments is followed to the next page", async 
 
   expect(snapshot.conversationComments).toHaveLength(102);
   expect(fetchMock.mock.calls[4]?.[0]).toContain("issues/41/comments?per_page=100&page=2");
+});
+
+test("fetchPrCommitMessages reads the branch's own messages, paginated", async () => {
+  fetchMock.mockResolvedValueOnce(
+    json([{ commit: { message: "feat: one\n\nBREAKING CHANGE: moved." } }]),
+  );
+  expect(await fetchPrCommitMessages(pr)).toEqual(["feat: one\n\nBREAKING CHANGE: moved."]);
+  expect(urls()[0]).toContain("/repos/acme/api/pulls/41/commits?per_page=100&page=1");
 });

@@ -233,7 +233,7 @@ comments as nobody's feedback and none of them as its own completed work.
 **The cost we accepted: replay grows while a run is parked.** Every nudge
 appends a `hook_received` event and every wake records a snapshot step, and a
 run replays its whole log each turn. A pull request open for days under
-`merge: "human"` therefore does quadratic work for as long as it waits — a few
+`merge.by: "human"` therefore does quadratic work for as long as it waits — a few
 hundred events, which is slow rather than broken, and the price of never
 losing a delivery. Backing the sweep off for a run that has been parked through
 many unchanged sweeps is the obvious follow-up; it is not built here.

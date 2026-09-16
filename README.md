@@ -68,7 +68,8 @@ not the ones below.
 The factory separates its configuration, generated integration, and custom code:
 
 - `jigs.config.ts` declares service ports, bindings, deferred workflow imports,
-  and schedules. Workflow modules export their function, inputs and requirements together.
+  schedules, the GitHub identity jigs runs as, and this factory's merge policy.
+  Workflow modules export their function, inputs and requirements together.
 - `jigs.ts` is generated, committed integration code: named durable step wrappers
   and ready-to-call jigs blocks. Never put custom code here. `jigs generate`
   refreshes it from the installed library; `jigs build` reports stale code.
@@ -103,6 +104,12 @@ cp .env.example .env      # fill in LINEAR_API_KEY and GITHUB_TOKEN
 pnpm install              # puts the factory's own jigs in node_modules/.bin
 pnpm exec jigs up
 ```
+
+`GITHUB_TOKEN` is the credential of the default `pat` identity, where jigs acts
+as you. `jigs init --identity app` scaffolds the other one, where jigs acts as
+a GitHub App and you can approve the pull requests it opens; it needs an App
+registration and its private key instead, and no `GITHUB_TOKEN`. Both, and the
+merge policy beside them, are in [setup](docs/setup.md).
 
 `jigs up` takes the factory from whatever state it is in to a running service:
 install, Postgres World, migrations, build, start and wait until the service
@@ -267,7 +274,7 @@ src/
                     lock
     ticket/         fetch a ticket snapshot, post and read Linear comments,
                     create and find Linear issues
-    pull-request/   branch state, push, open, comment, reply, squash merge
+    pull-request/   branch state, push, open, comment, reply, merge
     worktree/       provision, create, clone, tear down, registry, sweep
   service/     the long-running process: app, routes, ingress, schedules,
                readiness, shutdown, the Nitro config and the build.

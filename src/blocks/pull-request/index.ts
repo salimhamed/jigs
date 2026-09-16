@@ -37,4 +37,10 @@ export {
   renderMarker,
   type StatusReason,
 } from "./marker.ts";
+export {
+  type ApprovalSignal,
+  isApprovalSatisfied,
+  isPullRequestMergeReady,
+  type MergePolicy,
+} from "./merge-ready.ts";
 export { currentRunId, defaultPrScope } from "./writer.ts";

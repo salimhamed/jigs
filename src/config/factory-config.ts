@@ -32,6 +32,47 @@ const serviceSchema = z.strictObject({
   dashboardPort: portSchema,
 });
 
+// Who jigs is on GitHub. `pat` is the operator's own token, so every pull
+// request jigs opens is authored by the operator and GitHub refuses to let
+// them approve it. `app` mints an installation token, so pull requests come
+// from `<app-slug>[bot]` and the operator can review them normally; the
+// operator login is named here because `GET /user` does not answer for an
+// installation token.
+export const githubIdentitySchema = z.discriminatedUnion("mode", [
+  z.strictObject({ mode: z.literal("pat") }),
+  z.strictObject({
+    mode: z.literal("app"),
+    appId: z.int().positive(),
+    installationId: z.int().positive(),
+    // Relative paths resolve against the factory root.
+    privateKeyPath: z.string().min(1),
+    /** The human's GitHub login: pull request assignee and "Requested by". */
+    operator: z.string().min(1),
+    /** `Name <email>` for the `Co-authored-by` trailer on merge commits. */
+    coAuthor: z.string().min(1).optional(),
+  }),
+]);
+
+export const githubSchema = z.strictObject({
+  identity: githubIdentitySchema.default({ mode: "pat" }),
+});
+
+// What counts as the operator saying "merge this". `review` is a GitHub
+// APPROVED review of the current commit, which only an identity other than
+// the operator's can receive. `label` is a label on the pull request, which is
+// how an operator consents to their own pull request merging: it means "merge
+// whenever ready" and survives later pushes.
+const approvalSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("review") }),
+  z.strictObject({ kind: z.literal("label"), name: z.string().min(1) }),
+]);
+
+export const mergeSchema = z.strictObject({
+  by: z.enum(["jigs", "human"]).default("human"),
+  method: z.enum(["squash", "merge", "rebase"]).default("squash"),
+  approval: approvalSchema.default({ kind: "review" }),
+});
+
 const factoryConfigSchema = z.looseObject({
   bindings: z.record(z.string(), bindingSchema).default({}),
   // Where provider webhooks reach this factory's service (the tunnel URL);
@@ -43,10 +84,23 @@ const factoryConfigSchema = z.looseObject({
   // the factory's own .env. An absent block is read as an empty one, so what
   // it is missing reports itself by name.
   service: z.preprocess((block) => block ?? {}, serviceSchema),
+  // Which GitHub credential jigs uses. Nothing downstream reads the identity
+  // to decide policy — `merge` below states the policy outright.
+  github: z.preprocess((block) => block ?? {}, githubSchema),
+  // This factory's merge policy: who merges, by which of GitHub's three merge
+  // methods, and what signal permits it.
+  merge: z.preprocess((block) => block ?? {}, mergeSchema),
 });
 
 export type BindingEntry = z.output<typeof bindingSchema>;
 export type FactoryConfig = z.output<typeof factoryConfigSchema>;
+export type GithubIdentity = z.output<typeof githubIdentitySchema>;
+export type AppIdentity = Extract<GithubIdentity, { mode: "app" }>;
+export type ApprovalSignal = z.output<typeof approvalSchema>;
+export type MergePolicy = z.output<typeof mergeSchema>;
+
+/** The policy a factory that states none gets: a human merges, by squash, on an approving review. */
+export const defaultMergePolicy = (): MergePolicy => mergeSchema.parse({});
 
 export function parseFactoryConfig(value: unknown): FactoryConfig {
   const result = factoryConfigSchema.safeParse(value);

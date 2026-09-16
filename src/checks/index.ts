@@ -1,11 +1,18 @@
 import type { AgentWire } from "../blocks/agent/plan.ts";
+import { defaultMergePolicy, readFactoryConfig } from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";
 import { getAuthenticatedUser } from "../providers/github.ts";
+import { resolveGithubIdentity } from "../providers/github-auth.ts";
 import { getViewer } from "../providers/linear.ts";
 import { awsCredentialsCheck } from "./aws.ts";
 import { bindingChecks } from "./bindings.ts";
 import { CHECK_TIMEOUT_MS, type Check } from "./catalog.ts";
 import { type CoreProbes, coreChecks, type Integration } from "./core.ts";
+import {
+  type GithubIdentityProbes,
+  githubIdentityChecks,
+  realGithubIdentityProbes,
+} from "./github-identity.ts";
 import { type HarnessKind, harnessChecks } from "./harnesses.ts";
 import { linearWebhookChecks } from "./linear-webhook.ts";
 import { codexWorktreeConfigCheck, mcpServerChecks } from "./mcp.ts";
@@ -30,6 +37,11 @@ export {
   RESTART_SERVICE,
   SERVICE_ENV_FILE,
 } from "./core.ts";
+export {
+  type GithubIdentityProbes,
+  githubIdentityChecks,
+  realGithubIdentityProbes,
+} from "./github-identity.ts";
 export {
   type HarnessRuntime,
   type HarnessRuntimeDeps,
@@ -57,14 +69,29 @@ export interface WorkflowRequires {
 
 // The real provider clients, so a caller of the catalog states only its own
 // requirements. Substituting a probe stays a seam on coreChecks itself.
-const coreProbes: CoreProbes = {
-  linearViewer: getViewer,
-  githubWhoami: getAuthenticatedUser,
-};
+const coreProbes: CoreProbes = { linearViewer: getViewer };
+const githubProbes: GithubIdentityProbes = realGithubIdentityProbes(getAuthenticatedUser);
+
+// Which credential jigs holds and what it is allowed to do with it. Both come
+// from `jigs.config.ts`; where there is none to read, the defaults are what a
+// factory would get, and the credential is still worth checking.
+function githubChecks(): Check[] {
+  try {
+    const { merge } = readFactoryConfig(factoryRoot());
+    return githubIdentityChecks(resolveGithubIdentity(), merge, githubProbes);
+  } catch {
+    // A configuration that cannot be read is the binding checks' diagnosis;
+    // the credential is still worth checking, against what a factory that
+    // states nothing would get.
+    return githubIdentityChecks({ mode: "pat" }, defaultMergePolicy(), githubProbes);
+  }
+}
 
 export function preflightChecks(requires: WorkflowRequires): Check[] {
+  const integrations = requires.integrations ?? [];
   return [
-    ...coreChecks(coreProbes, process.env, requires.integrations ?? []),
+    ...coreChecks(coreProbes, process.env, integrations),
+    ...(integrations.includes("github") ? githubChecks() : []),
     ...bindingChecks({ factoryRoot, names: requires.bindings ?? [] }),
     ...harnessChecks(requires.harnesses ?? []),
     ...(requires.aws ? [awsCredentialsCheck()] : []),
@@ -76,9 +103,11 @@ export function doctorChecks(): Check[] {
   const profile = process.env.AWS_PROFILE;
   const integrations: Integration[] = [];
   if (process.env.LINEAR_API_KEY) integrations.push("linear");
-  if (process.env.GITHUB_TOKEN) integrations.push("github");
   return [
     ...coreChecks(coreProbes, process.env, integrations),
+    // Always: an App identity needs no environment variable to be configured,
+    // so there is nothing to detect — the configuration itself is the answer.
+    ...githubChecks(),
     ...(integrations.includes("linear") ? linearWebhookChecks({ factoryRoot }) : []),
     ...bindingChecks({ factoryRoot }),
     ...webhookChecks({ factoryRoot }),

@@ -1,11 +1,12 @@
 // The per-repo GitHub webhook leg of `jigs bind`: one shared secret in the
 // jigs data dir, idempotent create/verify/repair against the repo's hook list.
-// GITHUB_API_URL override is a test seam.
+// Hook administration is a permission in its own right — an App needs
+// "Repository webhooks: read & write" before any of this works.
 
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { githubWebhookSecretFile, jigsDataDir } from "../config/paths.ts";
-import { JigsError } from "../errors.ts";
+import { githubRequest } from "./github-api.ts";
 
 // Reviews, inline review comments, conversation comments, and the check-run
 // half of CI. `issue_comment` is here because a factory sharing its operator's
@@ -60,20 +61,6 @@ export function ensureWebhookSecret(dataDir: string = jigsDataDir()): string {
 export interface EnsureRepoWebhookOptions extends GithubRepoRef {
   ingressUrl: string;
   secret: string;
-  token: string;
-}
-
-// Carries the status and body so a caller can tell a rejected token from an
-// unreachable repo or a rate limit.
-export class GithubApiError extends JigsError {
-  readonly status: number;
-  readonly body: string;
-
-  constructor(status: number, apiPath: string, body: string) {
-    super(`GitHub API ${status} on ${apiPath}: ${body}`);
-    this.status = status;
-    this.body = body;
-  }
 }
 
 interface RepoHook {
@@ -96,29 +83,6 @@ function isJigsHookAtAnotherUrl(hook: RepoHook, desiredUrl: string): boolean {
   }
 }
 
-async function githubRequest<T>(
-  token: string,
-  method: string,
-  apiPath: string,
-  body?: unknown,
-): Promise<T> {
-  const base = process.env.GITHUB_API_URL ?? "https://api.github.com";
-  const res = await fetch(`${base}${apiPath}`, {
-    method,
-    headers: {
-      authorization: `Bearer ${token}`,
-      accept: "application/vnd.github+json",
-      "x-github-api-version": "2022-11-28",
-      ...(body === undefined ? {} : { "content-type": "application/json" }),
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  if (!res.ok) {
-    throw new GithubApiError(res.status, apiPath, await res.text());
-  }
-  return (await res.json()) as T;
-}
-
 const sameEvents = (a: string[], b: string[]) =>
   a.length === b.length && [...a].sort().join(",") === [...b].sort().join(",");
 
@@ -132,11 +96,10 @@ export async function ensureRepoWebhook({
   repo,
   ingressUrl,
   secret,
-  token,
 }: EnsureRepoWebhookOptions): Promise<EnsureRepoWebhookResult> {
   const hookUrl = githubWebhookUrl(ingressUrl);
   const hooksPath = `/repos/${owner}/${repo}/hooks`;
-  const hooks = await githubRequest<RepoHook[]>(token, "GET", `${hooksPath}?per_page=100`);
+  const hooks = await githubRequest<RepoHook[]>("GET", `${hooksPath}?per_page=100`);
   const existing = hooks.find((hook) => hook.config.url === hookUrl);
   const otherHosts = [
     ...new Set(
@@ -151,7 +114,7 @@ export async function ensureRepoWebhook({
     active: true,
   };
   if (existing === undefined) {
-    await githubRequest(token, "POST", hooksPath, desired);
+    await githubRequest("POST", hooksPath, desired);
     return { outcome: "created", otherHosts };
   }
   if (
@@ -164,7 +127,7 @@ export async function ensureRepoWebhook({
   }
   // Full-config PATCH: GitHub never returns the secret, so re-sending it
   // reconverges a drifted or rotated one along with the events.
-  await githubRequest(token, "PATCH", `${hooksPath}/${existing.id}`, desired);
+  await githubRequest("PATCH", `${hooksPath}/${existing.id}`, desired);
   return { outcome: "updated", otherHosts };
 }
 
@@ -172,10 +135,8 @@ export async function verifyRepoWebhook({
   owner,
   repo,
   ingressUrl,
-  token,
 }: Omit<EnsureRepoWebhookOptions, "secret">): Promise<boolean> {
   const hooks = await githubRequest<RepoHook[]>(
-    token,
     "GET",
     `/repos/${owner}/${repo}/hooks?per_page=100`,
   );

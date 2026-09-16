@@ -20,13 +20,17 @@ function nonInteractiveGitEnv(): NodeJS.ProcessEnv {
   };
 }
 
-export async function git(args: string[], cwd: string): Promise<string> {
+export async function git(
+  args: string[],
+  cwd: string,
+  env: NodeJS.ProcessEnv = {},
+): Promise<string> {
   // execFile's 1MB default rejects a large diff outright; the cap is a
   // ceiling, not an allocation.
   const { stdout } = await execFileAsync("git", args, {
     cwd,
     maxBuffer: 64 * 1024 * 1024,
-    env: { ...process.env, ...nonInteractiveGitEnv() },
+    env: { ...process.env, ...nonInteractiveGitEnv(), ...env },
   });
   return stdout.trim();
 }
@@ -83,10 +87,50 @@ export async function probeRemoteAuth(url: string, timeoutMs: number): Promise<s
   }
 }
 
+/**
+ * Where a push goes and, when the remote needs one, the credential it carries.
+ *
+ * A `token` is a GitHub App installation token: it lives an hour, and it must
+ * not reach `.git/config` (persisted), a log line, an error message, the
+ * process's own argv (any local user reads `/proc/<pid>/cmdline`), or the
+ * World (it would be recorded as a step input). So it is neither written to
+ * the remote's configuration nor spelled into the URL: it travels as an
+ * `Authorization` header supplied through git's environment-variable config,
+ * for the life of this one command. `scrubCredentials` covers the message of
+ * anything that still slips through.
+ */
+export interface PushTarget {
+  /** A configured remote name, or a URL with no credential in it. */
+  remote: string;
+  token?: string;
+}
+
+export const DEFAULT_PUSH_TARGET: PushTarget = { remote: "origin" };
+
+export function scrubCredentials(text: string): string {
+  return text.replace(/\/\/[^/@\s]+@/g, "//***@");
+}
+
+// git reads `GIT_CONFIG_KEY_n`/`VALUE_n` as if they were `-c` settings, but
+// without putting them where another process can read them.
+function pushEnv(target: PushTarget): NodeJS.ProcessEnv {
+  if (target.token === undefined) return {};
+  const basic = Buffer.from(`x-access-token:${target.token}`).toString("base64");
+  return {
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
+    GIT_CONFIG_VALUE_0: `Authorization: Basic ${basic}`,
+  };
+}
+
 // No force: the branch is jigs-owned and only ever appended to, so a plain
 // push is create-or-fast-forward and stays idempotent on a re-push.
-export async function pushBranch(worktreePath: string, branch: string): Promise<void> {
-  await git(["push", "origin", `HEAD:refs/heads/${branch}`], worktreePath);
+export async function pushBranch(
+  worktreePath: string,
+  branch: string,
+  target: PushTarget = DEFAULT_PUSH_TARGET,
+): Promise<void> {
+  await push(worktreePath, target, `HEAD:refs/heads/${branch}`);
 }
 
 /** Push an exact commit even if the local branch moves before Git sends it. */
@@ -94,8 +138,17 @@ export async function pushCommit(
   worktreePath: string,
   branch: string,
   commit: string,
+  target: PushTarget = DEFAULT_PUSH_TARGET,
 ): Promise<void> {
-  await git(["push", "origin", `${commit}:refs/heads/${branch}`], worktreePath);
+  await push(worktreePath, target, `${commit}:refs/heads/${branch}`);
+}
+
+async function push(worktreePath: string, target: PushTarget, refspec: string): Promise<void> {
+  try {
+    await git(["push", "--end-of-options", target.remote, refspec], worktreePath, pushEnv(target));
+  } catch (error) {
+    throw new Error(scrubCredentials(error instanceof Error ? error.message : String(error)));
+  }
 }
 
 export async function headSha(worktreePath: string): Promise<string> {

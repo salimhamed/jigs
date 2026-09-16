@@ -11,6 +11,7 @@ step//./jigs//executeAgent
 step//./jigs//executeModelRequest
 step//./jigs//fetchPullRequestState
 step//./jigs//fetchTicketSnapshot
+step//./jigs//mergePullRequest
 step//./jigs//openPullRequest
 step//./jigs//postTicketHumanInputRequest
 step//./jigs//postTicketNote
@@ -23,7 +24,7 @@ step//./jigs//removeMergedRunWorktrees
 step//./jigs//removeRunDirectory
 step//./jigs//replyToPullRequestReviewThread
 step//./jigs//resolveLinearIssue
+step//./jigs//resolveMergePolicy
 step//./jigs//resolveRepository
-step//./jigs//squashMergePullRequest
 step//workflow@4.8.4//fetch
 workflow//./workflows/ship//shipWorkflow

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { MergePolicy } from "../../config/factory-config.ts";
 import type { PrComment, PrSnapshot, ReviewThread } from "../../providers/github.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import { resumeFailed } from "../agent/resume-or-rebuild.ts";
@@ -37,9 +38,20 @@ const pr = { owner: "owner", repo: "repo", number: 1 };
 
 const markersOf = (body: string | undefined) => parseMarkers(body ?? "");
 
+const HUMAN_MERGE: MergePolicy = {
+  by: "human",
+  method: "squash",
+  approval: { kind: "review" },
+};
+const JIGS_MERGE: MergePolicy = { ...HUMAN_MERGE, by: "jigs" };
+
 const openSnapshot = (overrides: Partial<PrSnapshot> = {}): PrSnapshot => ({
   state: "open",
   merged: false,
+  draft: false,
+  mergeState: "clean",
+  labels: [],
+  mergeCommitSha: null,
   headSha: "new",
   reviews: [],
   reviewThreads: [],
@@ -55,7 +67,7 @@ const options: DeliverChangeOptions = {
   implementation: { harness: { kind: "codex", model: "builder" } },
   review: { harness: { kind: "claude", model: "reviewer" } },
   limits: { implementationReviewRounds: 2, ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
-  merge: "human",
+  merge: HUMAN_MERGE,
 };
 
 function setup(wakes: GateWake[] = [{ kind: "closed", merged: true }]) {
@@ -94,7 +106,7 @@ function setup(wakes: GateWake[] = [{ kind: "closed", merged: true }]) {
     openPullRequest: vi.fn().mockResolvedValue(pr),
     commentOnPullRequest: vi.fn().mockResolvedValue({ id: 8800 }),
     replyToPullRequestReviewThread: vi.fn().mockResolvedValue({ id: 77 }),
-    squashMergePullRequest: vi.fn().mockResolvedValue({ merged: true, sha: "merged" }),
+    mergePullRequest: vi.fn().mockResolvedValue({ merged: true, sha: "merged" }),
   };
   return { steps, calls, closed };
 }
@@ -276,7 +288,7 @@ describe("delivery", () => {
       pr,
       implementation: options.implementation,
       limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
-      merge: "human",
+      merge: HUMAN_MERGE,
     });
 
     expect(result.status).toBe("merged");
@@ -329,7 +341,7 @@ describe("delivery", () => {
       pr,
       implementation: options.implementation,
       limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 2 },
-      merge: "human",
+      merge: HUMAN_MERGE,
     });
 
     expect(calls).toHaveLength(2);
@@ -407,11 +419,12 @@ describe("delivery", () => {
     };
     // The same pull request on every poll, then it closes.
     let round = 0;
-    steps.pullRequestGate = (target, scope) =>
+    steps.pullRequestGate = (target, scope, approval) =>
       pullRequestGate(
         target,
         async () => (++round >= 3 ? { ...state(), state: "closed", merged: true } : state()),
         scope,
+        approval,
       );
 
     const result = await bindDeliverySteps(steps).followPullRequest({
@@ -419,7 +432,7 @@ describe("delivery", () => {
       pr,
       implementation: options.implementation,
       limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 3 },
-      merge: "human",
+      merge: HUMAN_MERGE,
     });
 
     expect(result.status).toBe("merged");
@@ -432,9 +445,12 @@ describe("delivery", () => {
       { kind: "merge-ready", headSha: "new" },
       { kind: "closed", merged: false },
     ]);
-    vi.mocked(steps.squashMergePullRequest).mockResolvedValue({ merged: false, sha: "" });
+    vi.mocked(steps.mergePullRequest).mockResolvedValue({
+      merged: false,
+      reason: "the head moved",
+    });
     expect(
-      (await bindDeliverySteps(steps).deliverChange({ ...options, merge: "jigs" })).status,
+      (await bindDeliverySteps(steps).deliverChange({ ...options, merge: JIGS_MERGE })).status,
     ).toBe("closed");
   });
 
@@ -628,9 +644,9 @@ describe("delivery", () => {
 
   it("merges the ready commit the wake named", async () => {
     const { steps } = setup([{ kind: "merge-ready", headSha: "new" }]);
-    const result = await bindDeliverySteps(steps).deliverChange({ ...options, merge: "jigs" });
+    const result = await bindDeliverySteps(steps).deliverChange({ ...options, merge: JIGS_MERGE });
     expect(result.status).toBe("merged");
-    expect(steps.squashMergePullRequest).toHaveBeenCalledExactlyOnceWith(pr, "new");
+    expect(steps.mergePullRequest).toHaveBeenCalledExactlyOnceWith(pr, "new", JIGS_MERGE);
   });
   it("lets a role add to the prompt jigs would have sent", async () => {
     const { steps, calls } = setup();
@@ -703,7 +719,7 @@ describe("delivery", () => {
         implementation: options.implementation,
         [role]: { ...options.implementation, prompt: () => "Follow TASK.md" },
         limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
-        merge: "human",
+        merge: HUMAN_MERGE,
       });
       expect(calls[0]?.prompt).toBe("Follow TASK.md");
       expect(steps.readWorktreeDiff).not.toHaveBeenCalled();
@@ -736,7 +752,7 @@ describe("delivery", () => {
       implementation: options.implementation,
       ciRepair: { ...options.implementation, prompt: () => "Follow TASK.md" },
       limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
-      merge: "human",
+      merge: HUMAN_MERGE,
     });
     expect(calls[0]?.prompt).toBe("Follow TASK.md");
     expect(calls[0]?.resume).toBeUndefined();
@@ -843,7 +859,7 @@ describe("delivery", () => {
       pr,
       implementation: options.implementation,
       limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
-      merge: "human",
+      merge: HUMAN_MERGE,
     });
     expect(calls[0]?.prompt).toBe(
       await defaultRevisionPrompt({
@@ -866,7 +882,7 @@ describe("delivery", () => {
       pr,
       implementation: options.implementation,
       limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
-      merge: "human",
+      merge: HUMAN_MERGE,
     });
     const branchStates = (steps: DeliverySteps) =>
       vi

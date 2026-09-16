@@ -5,9 +5,12 @@
 // that record is the only thing the two runs share.
 
 import { expect, test, vi } from "vitest";
+import type { ApprovalSignal } from "../../config/factory-config.ts";
 import type { PrComment, PrReview, PrSnapshot, ReviewThread } from "../../providers/github.ts";
 import { postPullRequestNote, postReviewAnswers } from "./answers.ts";
 import { classifyPrState } from "./gate.ts";
+
+const APPROVAL: ApprovalSignal = { kind: "review" };
 
 vi.mock("workflow", () => ({
   getWorkflowMetadata: () => ({ workflowRunId: "wrun_A", workflowName: "ship" }),
@@ -108,6 +111,10 @@ function fakePullRequest() {
     snapshot: async (): Promise<PrSnapshot> => ({
       state: state.open ? "open" : "closed",
       merged: state.merged,
+      draft: false,
+      mergeState: "clean",
+      labels: [],
+      mergeCommitSha: null,
       headSha: state.headSha,
       reviews: reviews.map((review) => ({ ...review })),
       reviewThreads: threads.map((thread) => ({ ...thread, comments: [...thread.comments] })),
@@ -119,7 +126,7 @@ function fakePullRequest() {
 }
 
 const outstandingThreads = async (github: ReturnType<typeof fakePullRequest>, scope: string) => {
-  const [wake] = classifyPrState(await github.snapshot(), scope).wakes;
+  const [wake] = classifyPrState(await github.snapshot(), scope, APPROVAL).wakes;
   return wake?.kind === "review-comments" ? wake.threads.map((thread) => thread.rootId) : [];
 };
 
@@ -134,7 +141,7 @@ test("a replacement run answers only what the pull request does not already carr
   // The run answers the first and pushes a commit; the reply to the second
   // reaches GitHub and the response is lost, so the step throws. The wake ends
   // there — the run does not fail, and nothing is retried.
-  const wake = classifyPrState(await github.snapshot(), SHIP).wakes[0];
+  const wake = classifyPrState(await github.snapshot(), SHIP, APPROVAL).wakes[0];
   if (wake?.kind !== "review-comments") throw new Error("expected feedback");
   github.push("head-2");
   await postReviewAnswers({
@@ -169,7 +176,7 @@ test("a replacement run answers only what the pull request does not already carr
 
   // The commit explanation is jigs' own comment, not feedback, and the answered
   // threads stay answered however often the same state is delivered.
-  const twice = classifyPrState(await github.snapshot(), SHIP);
+  const twice = classifyPrState(await github.snapshot(), SHIP, APPROVAL);
   expect(twice.wakes).toEqual([]);
   expect(twice.ownComments).toBe(3);
 
@@ -187,7 +194,7 @@ test("a reply that never landed is posted by the next wake, not lost", async () 
   const github = fakePullRequest();
   const asked = github.ask("rename this");
 
-  const wake = classifyPrState(await github.snapshot(), SHIP).wakes[0];
+  const wake = classifyPrState(await github.snapshot(), SHIP, APPROVAL).wakes[0];
   if (wake?.kind !== "review-comments") throw new Error("expected feedback");
   // The write failed before GitHub saw it: nothing on the pull request.
   await postReviewAnswers({
@@ -205,7 +212,7 @@ test("a reply that never landed is posted by the next wake, not lost", async () 
   // So the question is still outstanding, and the next wake — a webhook, or
   // the nudge within five minutes — answers it.
   expect(await outstandingThreads(github, SHIP)).toEqual([asked]);
-  const again = classifyPrState(await github.snapshot(), SHIP).wakes[0];
+  const again = classifyPrState(await github.snapshot(), SHIP, APPROVAL).wakes[0];
   if (again?.kind !== "review-comments") throw new Error("expected feedback");
   await postReviewAnswers({
     replyToPullRequestReviewThread: github.reply,
@@ -224,7 +231,7 @@ test("a stand-down note is what keeps an approval from asking twice", async () =
   github.setCi("green");
   github.approve("head-1");
 
-  const ready = classifyPrState(await github.snapshot(), SHIP).wakes;
+  const ready = classifyPrState(await github.snapshot(), SHIP, APPROVAL).wakes;
   expect(ready).toEqual([{ kind: "merge-ready", headSha: "head-1" }]);
 
   // The merge is refused; the note records that this commit was tried.
@@ -236,22 +243,22 @@ test("a stand-down note is what keeps an approval from asking twice", async () =
     headSha: "head-1",
     body: "I could not merge this pull request.",
   });
-  expect(classifyPrState(await github.snapshot(), SHIP).wakes).toEqual([]);
+  expect(classifyPrState(await github.snapshot(), SHIP, APPROVAL).wakes).toEqual([]);
 
   // Nothing asks for a second note: the wake that would have carried the merge
   // is gone, which is the whole of "post once".
-  expect(classifyPrState(await github.snapshot(), SHIP).wakes).toEqual([]);
+  expect(classifyPrState(await github.snapshot(), SHIP, APPROVAL).wakes).toEqual([]);
   expect(github.conversation).toHaveLength(1);
 
   // The approval is withdrawn, and a later revision is not merged on its
   // strength.
   github.dismiss();
   github.push("head-2");
-  expect(classifyPrState(await github.snapshot(), SHIP).wakes).toEqual([]);
+  expect(classifyPrState(await github.snapshot(), SHIP, APPROVAL).wakes).toEqual([]);
 
   // A fresh approval of the new commit is new work, note or no note.
   github.approve("head-2");
-  expect(classifyPrState(await github.snapshot(), SHIP).wakes).toEqual([
+  expect(classifyPrState(await github.snapshot(), SHIP, APPROVAL).wakes).toEqual([
     { kind: "merge-ready", headSha: "head-2" },
   ]);
 });
@@ -259,7 +266,9 @@ test("a stand-down note is what keeps an approval from asking twice", async () =
 test("a red head is outstanding until the branch moves or jigs says it could not fix it", async () => {
   const github = fakePullRequest();
   github.setCi("red");
-  expect(classifyPrState(await github.snapshot(), SHIP).wakes).toMatchObject([{ kind: "ci-red" }]);
+  expect(classifyPrState(await github.snapshot(), SHIP, APPROVAL).wakes).toMatchObject([
+    { kind: "ci-red" },
+  ]);
 
   await postPullRequestNote({
     commentOnPullRequest: github.comment,
@@ -269,15 +278,15 @@ test("a red head is outstanding until the branch moves or jigs says it could not
     headSha: "head-1",
     body: "I could not repair the failing checks.",
   });
-  expect(classifyPrState(await github.snapshot(), SHIP).wakes).toEqual([]);
+  expect(classifyPrState(await github.snapshot(), SHIP, APPROVAL).wakes).toEqual([]);
   // Another workflow's own budget is its own business: the note is scoped.
-  expect(classifyPrState(await github.snapshot(), REVIEW).wakes).toMatchObject([
+  expect(classifyPrState(await github.snapshot(), REVIEW, APPROVAL).wakes).toMatchObject([
     { kind: "ci-red" },
   ]);
 
   // A push is the other way a red head retires, with nothing written down.
   github.push("head-2");
-  expect(classifyPrState(await github.snapshot(), SHIP).wakes).toMatchObject([
+  expect(classifyPrState(await github.snapshot(), SHIP, APPROVAL).wakes).toMatchObject([
     { kind: "ci-red", headSha: "head-2" },
   ]);
 });

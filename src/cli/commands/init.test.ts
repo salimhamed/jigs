@@ -2,8 +2,17 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vitest";
+import { parseFactoryConfig } from "../../config/factory-config.ts";
 import { packageRoot } from "../templates.ts";
-import { initFactory } from "./init.ts";
+import { initFactory, resolveIdentityOptions } from "./init.ts";
+
+const APP = {
+  mode: "app",
+  appId: 4958325,
+  installationId: 162033982,
+  privateKeyPath: "github-app.private-key.pem",
+  operator: "salimhamed",
+} as const;
 
 const scaffold = (name: string) => {
   const dir = path.join(mkdtempSync(path.join(tmpdir(), "jigs-init-")), name);
@@ -172,7 +181,7 @@ test("the wrappers scaffolded are the step ids this repo has recorded", async ()
   const steps = [...wrappers.matchAll(/^export async function (\w+)\(/gm)]
     .map((match) => `step//./jigs//${match[1]}`)
     .sort();
-  expect(steps).toHaveLength(21);
+  expect(steps).toHaveLength(22);
   const recorded = readFileSync(path.join(packageRoot(), "e2e", "expected-ids.txt"), "utf8")
     .split("\n")
     .filter((line) => line.startsWith("step//./jigs//"))
@@ -256,4 +265,105 @@ test("the next steps are printed, not run", async () => {
   // Printing them is the whole point: nothing was executed.
   expect(existsSync(path.join(dir, "node_modules"))).toBe(false);
   expect(existsSync(path.join(dir, ".env"))).toBe(false);
+});
+
+test("the scaffold states an identity and the approval signal that matches it", async () => {
+  const patFactory = scaffold("pat-factory");
+  await init(patFactory);
+  const pat = readFileSync(path.join(patFactory, "jigs.config.ts"), "utf8");
+  expect(pat).toContain('identity: { mode: "pat" }');
+  // jigs is the pull request's author under a personal token, and GitHub
+  // refuses to let an author approve their own, so a label is the consent.
+  expect(pat).toContain('approval: { kind: "label", name: "jigs:approved" }');
+  expect(pat).not.toContain('kind: "review"');
+
+  const appFactory = scaffold("app-factory");
+  const lines: string[] = [];
+  await initFactory({ cwd: appFactory, out: (line) => lines.push(line), identity: APP });
+  const app = readFileSync(path.join(appFactory, "jigs.config.ts"), "utf8");
+  expect(app).toContain('mode: "app"');
+  expect(app).toContain("installationId: 162033982");
+  expect(app).toContain('operator: "salimhamed"');
+  expect(app).toContain('approval: { kind: "review" }');
+  // App mode needs no GITHUB_TOKEN, and does need the key locked down.
+  expect(lines.join("\n")).toContain("chmod 600 github-app.private-key.pem");
+  expect(lines.join("\n")).not.toContain("fill in LINEAR_API_KEY and GITHUB_TOKEN");
+  // The App's private key is a credential, and a scaffolded repo is a git repo.
+  expect(readFileSync(path.join(appFactory, ".gitignore"), "utf8")).toContain("*.private-key.pem");
+});
+
+// What the scaffolded jigs.config.test.ts asserts, evaluated here: the file
+// itself cannot run until the factory installs jigs, and a scaffold whose own
+// test is red on day one is the failure this guards.
+const scaffoldedExpectations = (dir: string) => {
+  const text = readFileSync(path.join(dir, "jigs.config.test.ts"), "utf8");
+  const [, github, merge] =
+    /expect\(factory\.github\)\.toEqual\((.+?)\);\n\s*expect\(factory\.merge\)\.toEqual\((.+?)\);/s.exec(
+      text,
+    ) ?? [];
+  if (github === undefined || merge === undefined) {
+    throw new Error("the scaffolded test no longer asserts the identity and the merge policy");
+  }
+  return { github: evaluate(github), merge: evaluate(merge) };
+};
+
+// Both files carry settings objects rather than data formats, so both are read
+// the same way: as the literal they are.
+const evaluate = (literal: string): unknown => new Function(`return ${literal}`)();
+
+// The scaffolded config is TypeScript that imports jigs, so it is read the way
+// `jigs bind` reads it: as the settings object, with the wrapper stripped.
+const scaffoldedConfig = (dir: string) => {
+  const text = readFileSync(path.join(dir, "jigs.config.ts"), "utf8");
+  const body = text.slice(
+    text.indexOf("defineFactory({") + "defineFactory(".length,
+    text.lastIndexOf(")"),
+  );
+  return evaluate(body.replace(/workflows:\s*\{[^}]*\},?/s, "")) as {
+    github: unknown;
+    merge: unknown;
+  };
+};
+
+test.each(["pat", "app"] as const)(
+  "the %s scaffold's own test asserts what its config declares",
+  async (mode) => {
+    const dir = scaffold(`${mode}-agreement`);
+    await initFactory({
+      cwd: dir,
+      out: () => {},
+      identity: mode === "app" ? APP : { mode: "pat" },
+    });
+    const expectations = scaffoldedExpectations(dir);
+    const config = scaffoldedConfig(dir);
+    expect(config.github).toEqual(expectations.github);
+    expect(config.merge).toEqual(expectations.merge);
+    // And what it declares is what jigs accepts, so the first `jigs up` loads.
+    expect(parseFactoryConfig({ service: { dashboardPort: 9090 }, ...config }).github).toEqual(
+      expectations.github,
+    );
+  },
+);
+
+test("app mode is refused rather than stubbed when a fact is missing", () => {
+  expect(() => resolveIdentityOptions("app", {})).toThrow("--app-id");
+  expect(() => resolveIdentityOptions("app", { appId: "1" })).toThrow("--installation-id");
+  expect(() =>
+    resolveIdentityOptions("app", {
+      appId: "0",
+      installationId: "2",
+      privateKey: "k.pem",
+      operator: "salimhamed",
+    }),
+  ).toThrow("--app-id must be a positive whole number");
+  expect(resolveIdentityOptions("pat", {})).toEqual({ mode: "pat" });
+  expect(
+    resolveIdentityOptions("app", {
+      appId: "4958325",
+      installationId: "162033982",
+      privateKey: "github-app.private-key.pem",
+      operator: "salimhamed",
+      coAuthor: "Salim Hamed <salim@example.com>",
+    }),
+  ).toEqual({ ...APP, coAuthor: "Salim Hamed <salim@example.com>" });
 });

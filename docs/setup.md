@@ -184,7 +184,9 @@ budgets. A reached limit
 returns an outcome; only a merged result permits worktree removal. For custom prompts,
 ticket sources, human intervention, and individual phases, see [delivery](delivery.md).
 
-The starter `ship` workflow requires a `binding` input and defaults to human merge.
+The starter `ship` workflow requires a `binding` input and takes its merge
+policy from `jigs.config.ts`, with an optional `merge` input overriding who
+merges for one run.
 After binding a repository, you can make it the input default and add its name to
 `requires.bindings`. Declare credential integrations under `requires.integrations`;
 other workflows do not need Linear or GitHub credentials merely to use agents.
@@ -213,30 +215,158 @@ Skipping the copy is allowed — `jigs up` copies `.env.example` itself when
 there is no `.env` and tells you which slots are empty — but a run cannot be
 created until both tokens are in.
 
-#### One GitHub identity, shared
+#### Which GitHub identity jigs uses
 
-A `GITHUB_TOKEN` that is your own personal access token makes jigs *you* on
-GitHub, and GitHub refuses to let an author approve or request changes on their
-own pull request. So on a pull request jigs opened, the approve and
-request-changes buttons are unavailable to you: `merge: "jigs"` never fires,
-because `merge-ready` needs an approval it can never receive, and a human
-presses merge by hand. Sending work back is what still works — an inline review
-comment, or a comment on the pull request conversation, both of which wake the
-run. A `COMMENTED` review's summary body wakes it too.
+`github.identity` in `jigs.config.ts` says who jigs is on GitHub. There are two
+modes, and they are chosen once, at `jigs init --identity pat|app`.
 
-Sharing the login does not confuse jigs about who said what. Every comment jigs
+**`pat` — jigs is you.** The `GITHUB_TOKEN` in `.env` is your own personal
+access token, so every pull request jigs opens has you as its author.
+
+```ts
+github: { identity: { mode: "pat" } },
+```
+
+GitHub refuses to let an author approve or request changes on their own pull
+request, so on a pull request jigs opened those buttons are unavailable to you.
+Sending work back is what still works — an inline review comment, or a comment
+on the pull request conversation, both of which wake the run. A `COMMENTED`
+review's summary body wakes it too. To let jigs merge in this mode, use the
+`label` approval signal below.
+
+**`app` — jigs is a bot.** jigs mints an hourly installation token from a
+GitHub App's private key, so pull requests come from `<app-slug>[bot]` and you
+approve them like anyone else's.
+
+```ts
+github: {
+  identity: {
+    mode: "app",
+    appId: 4958325,
+    installationId: 162033982,
+    privateKeyPath: "github-app.private-key.pem",
+    operator: "your-github-login",
+    coAuthor: "Your Name <you@example.com>",
+  },
+},
+```
+
+To fill that block in — `jigs init --identity app` takes all of it on the
+command line, so the scaffold loads on the first `jigs up`:
+
+```sh
+jigs init --identity app \
+  --app-id 4958325 --installation-id 162033982 \
+  --private-key github-app.private-key.pem --operator your-github-login \
+  --co-author "Your Name <you@example.com>"
+```
+
+Where each value comes from:
+
+1. **Register the App.** GitHub → Settings → Developer settings → GitHub Apps →
+   New GitHub App. Give it any name; leave "Request user authorization (OAuth)
+   during installation" and "Enable Device Flow" unchecked, and **uncheck
+   Active under Webhook** — jigs keeps its own per-repo webhooks, and one App
+   registration has only one webhook URL, which two factories cannot share.
+2. **Grant these repository permissions**, and nothing else: **Contents**,
+   **Pull requests** and **Issues** read & write; **Metadata** read; and
+   **Repository webhooks** read & write. The last one is what lets `jigs bind`
+   create the hook that wakes a parked run; without it `jigs bind` and
+   `jigs doctor` both fail, naming it.
+3. **`appId`** is the "App ID" on the App's settings page.
+4. **`privateKeyPath`** is the `.pem` GitHub generates under "Private keys".
+   Save it in the factory repo (`.gitignore` already excludes
+   `*.private-key.pem`) and `chmod 600` it; `jigs doctor` fails on a looser
+   mode, because anyone who can read it can act as the App.
+5. **Install the App** on the repos you bind (App settings → Install App). The
+   installation's URL ends in its id: that is **`installationId`**. A
+   repository admin can install an App on repos they administer as long as it
+   asks for no organization permissions and org policy allows it.
+6. **`operator`** is your own GitHub login. An installation token does not
+   answer `GET /user`, so jigs cannot discover it — and it is what jigs
+   assigns the pull request to and names in its first body line, `Requested by
+   @you`. **`coAuthor`** is optional: `Name <email>` for a `Co-authored-by`
+   trailer on the merge commit. Omit it and no trailer is added.
+
+In `app` mode jigs pushes over HTTPS with the installation token, supplied to
+that one `git push` and never written to `.git/config` or any log. In `pat`
+mode it pushes over the binding's own SSH remote, as you. Either way the commit
+is the one your worktree made, with your author, committer and signature
+intact.
+
+Sharing a login does not confuse jigs about who said what. Every comment jigs
 posts carries a hidden HTML comment naming the workflow, the run and the
 comment it answers, and that marker — not the author — is how jigs tells its own
-words from yours. It reads the same whether jigs runs as you or as a bot. You
+words from yours. It reads the same whether jigs runs as a bot or as you. You
 will not see the markers in GitHub's UI, and editing a comment of yours that
 jigs answered asks the question again, which is usually what you meant.
 
-The way out of the approval limit is a second GitHub identity: a machine user
-with its own token and write access on the target repos, or a GitHub App
-installed there whose installation token jigs uses. Either makes jigs a
-different author from you, restoring approve, request-changes and
-`merge: "jigs"`. Neither is wired up here yet; until then treat the review loop
-as comment-driven and merge by hand.
+#### Who merges, and on what signal
+
+`merge` in `jigs.config.ts` is this factory's policy, independent of the
+identity above. Nothing derives one from the other while jigs is running; `jigs
+init` simply writes the pairing that works for the mode you chose.
+
+```ts
+merge: {
+  by: "human",                    // or "jigs"
+  method: "squash",               // or "merge", or "rebase"
+  approval: { kind: "review" },   // or { kind: "label", name: "jigs:approved" }
+},
+```
+
+- **`by`** — `"human"` means jigs watches the pull request and answers
+  feedback, and you press Merge. `"jigs"` means jigs merges it itself once it
+  is ready. The `ship` workflow's `merge` input overrides this one field per
+  run.
+- **`method`** — GitHub's three, and it decides what lands on the base branch.
+  With `squash`, GitHub makes the pull request's author the commit's author, so
+  in `app` mode the bot is the author and `coAuthor` is how you keep the credit.
+  With `rebase`, your commit's author survives but it is rewritten by the
+  merging credential and loses its signature. With `merge`, your signed commit
+  lands untouched alongside a merge commit. The `Co-authored-by` trailer is
+  appended to the commit message GitHub itself would have written, never sent
+  instead of it, so `BREAKING CHANGE:` footers on your branch still reach the
+  base branch.
+- **`approval`** — what counts as your consent. `{ kind: "review" }` is an
+  APPROVED GitHub review of the current commit; a push withdraws it, and it is
+  only reachable when jigs is not the pull request's author, so it is the `app`
+  mode's signal. `{ kind: "label", name: "…" }` is a label on the pull request,
+  which is the only consent you can give your own pull request, so it is the
+  `pat` mode's signal. The label means "merge whenever ready": it survives
+  later pushes and jigs never removes it, so a revision you have not looked at
+  can merge on its strength.
+
+jigs merges only when the configured signal is present, GitHub itself reports
+the pull request mergeable — its own verdict, which already folds in conflicts,
+required checks and required reviews — the pull request is not a draft, and CI
+is green. GitHub is the authority on mergeability; jigs does not re-derive it.
+The merge call pins the commit jigs judged ready, so a push that lands first is
+refused rather than merged over, and jigs re-reads the pull request and decides
+again.
+
+The CI condition is jigs' own, and it means at least one check that has
+finished and passed. GitHub reports a repository that requires no checks as
+mergeable with no build at all, including in the seconds before CI registers,
+so without it a labelled pull request could merge ahead of its own build. The
+consequence is worth saying plainly: **jigs never merges in a repository with
+no CI.** Set `merge.by: "human"` there.
+
+A few merge states you will see jigs wait on rather than merge:
+
+- **`behind`** — the repository requires branches to be up to date with the
+  base. jigs waits; it does not update the branch for you, and doing that
+  automatically is a follow-up rather than something this does today.
+- **`blocked`** — a required review or a required check is missing. Worth
+  knowing: a `label` approval cannot satisfy a native "require approvals" rule,
+  so on a repository with one, a `pat`-mode pull request stays `blocked` for
+  ever and `merge.by: "jigs"` never fires. Label approval is for repositories
+  whose rules do not require a review.
+- **`has_hooks`** and **`unknown`** — treated as not ready, and rechecked on
+  the next wake.
+
+`jigs doctor` prints the effective policy in one line, so what a factory will
+actually do is readable without opening its config.
 
 ### 3. Up
 
@@ -439,8 +569,10 @@ ingressUrl: "https://<machine>.<tailnet>.ts.net",
 
 (Re-)bind each target repo — `jigs bind` creates the repo webhook from
 `ingressUrl`, verifies it on later binds, and repairs drift. It needs
-`GITHUB_TOKEN` (a classic PAT with `admin:repo_hook`) in this factory's `.env`
-or exported in the shell, and fails without one. The signing secret is the one
+hook-administration rights, and fails without them: in `pat` mode that is a
+`GITHUB_TOKEN` with `admin:repo_hook` in this factory's `.env` or exported in
+the shell, and in `app` mode it is the App's **Repository webhooks: read &
+write** permission, granted on the App and accepted on the installation. The signing secret is the one
 thing here that is not per factory: one file per machine at
 `~/.local/share/jigs/github-webhook-secret`, generated on the first bind and
 shared by every factory's repo webhooks. The service reads

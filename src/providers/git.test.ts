@@ -9,6 +9,7 @@ import {
   probeRemoteAuth,
   pushBranch,
   resolveRemoteUrl,
+  scrubCredentials,
 } from "./git.ts";
 
 let tmp: string;
@@ -171,3 +172,32 @@ test("probeRemoteAuth never lets the remote string become a git option", async (
   expect(existsSync(marker)).toBe(false);
   expect(stderr).toContain("--upload-pack=");
 }, 20_000);
+
+test("the push credential travels in the environment, not the URL or argv", async () => {
+  const { checkout } = makeRemoteBackedRepo(tmp);
+  // Refused on the first connection: nothing here leaves the machine.
+  const remote = "https://127.0.0.1:1/acme/api.git";
+  const failure = await pushBranch(checkout, "feature", {
+    remote,
+    token: "ghs_secret_value",
+  }).catch((err: unknown) => String(err));
+  expect(failure).not.toContain("ghs_secret_value");
+  // The command git ran is in the message, so this is also the argv assertion.
+  expect(failure).toContain(remote);
+  expect(failure).not.toContain("@127.0.0.1");
+});
+
+test("a URL that carries a credential anyway is still scrubbed out of the failure", async () => {
+  const { checkout } = makeRemoteBackedRepo(tmp);
+  const failure = await pushBranch(checkout, "feature", {
+    remote: "https://x-access-token:ghs_secret_value@127.0.0.1:1/acme/api.git",
+  }).catch((err: unknown) => String(err));
+  expect(failure).not.toContain("ghs_secret_value");
+  expect(failure).toContain("***@127.0.0.1");
+});
+
+test("scrubCredentials leaves a URL that carries none alone", () => {
+  expect(scrubCredentials("fatal: could not read from https://github.com/acme/api.git")).toBe(
+    "fatal: could not read from https://github.com/acme/api.git",
+  );
+});

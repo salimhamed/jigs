@@ -44,8 +44,14 @@ inside a factory, `jigs` means `pnpm exec jigs`.
 
 ```sh
 mkdir my-factory && cd my-factory && git init
-pnpm dlx @salimhamed/jigs init
+pnpm dlx @salimhamed/jigs init                  # jigs acts as the operator
+pnpm dlx @salimhamed/jigs init --identity app   # jigs acts as a GitHub App
 ```
+
+Choose the identity now: it is written into `jigs.config.ts` as
+`github.identity`, together with the `merge.approval` signal that works with it
+(a `jigs:approved` label for `pat`, a GitHub review for `app`). Section 2a
+covers both. Changing it later is a config edit, not a re-scaffold.
 
 `jigs init` writes `jigs.config.ts`, a package manifest pinned to the CLI's
 version, build settings, Docker Compose, `.env.example`, and the factory's
@@ -66,10 +72,47 @@ Finish or cancel affected runs before deploying workflow or step renames.
 cp .env.example .env
 ```
 
-Fill in `LINEAR_API_KEY` and `GITHUB_TOKEN` before the first run: both are
-validated on **every** trigger, so a run cannot be created without them, even
-for a workflow that touches neither. `WORKFLOW_TARGET_WORLD` and
-`WORKFLOW_POSTGRES_URL` come filled in and should be left alone.
+Fill in `LINEAR_API_KEY` and, in `pat` mode, `GITHUB_TOKEN` before the first
+run: a workflow that declares either integration cannot start a run without a
+working credential. `WORKFLOW_TARGET_WORLD` and `WORKFLOW_POSTGRES_URL` come
+filled in and should be left alone.
+
+## 2a. GitHub identity and merge policy
+
+Both live in `jigs.config.ts` and are independent of each other; `jigs init`
+writes a matching pair and nothing derives one from the other at run time.
+
+**`pat`** — jigs is the operator. `GITHUB_TOKEN` in `.env` is all it needs, and
+`jigs bind` wants a classic PAT with `admin:repo_hook`. GitHub refuses to let
+an author approve their own pull request, so `merge.approval` is a label:
+`{ kind: "label", name: "jigs:approved" }`, meaning "merge whenever ready" —
+it survives later pushes and jigs never removes it.
+
+**`app`** — jigs is `<app-slug>[bot]` and the operator approves its pull
+requests normally. It needs, in `github.identity`: `appId`, `installationId`,
+`privateKeyPath` (the `.pem`, `chmod 600`, gitignored) and `operator` (the
+human's login — an installation token cannot answer `GET /user`). Optional
+`coAuthor` is `Name <email>` for a `Co-authored-by` trailer on merge commits.
+Grant the App exactly: Contents, Pull requests and Issues **read & write**,
+Metadata **read**, and **Repository webhooks read & write** — that last one is
+what `jigs bind` needs, and it has to be accepted on the installation after it
+is granted on the App. Register the App with its own webhook **off**; jigs
+keeps per-repo webhooks, and one App registration has only one webhook URL.
+
+`merge` states the policy: `by` (`jigs` or `human`), `method` (`squash`,
+`merge` or `rebase`), and `approval`. jigs merges only when the signal is
+present, GitHub reports the pull request mergeable, CI is green (at least one
+check, all of them passed), and it is not a draft — so **jigs never merges in a
+repository with no CI**; set `merge.by: "human"` there. A `label` approval
+cannot satisfy a native "require approvals" rule, so on a repository carrying
+one, `merge.by: "jigs"` in `pat` mode never fires. A `behind` pull request
+(branches must be up to date) is waited on, not updated. `jigs doctor` prints
+the identity and the effective policy, one line each:
+
+```
+ok   GitHub identity: jigs acts as jigs-app-dev[bot]; operator salimhamed
+ok   merge policy: jigs merges with squash once GitHub reports it mergeable and an approving GitHub review of the current commit is present
+```
 
 ## 3. Up
 
@@ -158,9 +201,11 @@ factory repo under `bindings/<name>/`, gitignored as `bindings/*/.env`, never
 in the target repo.
 
 `jigs bind` also creates the repo's GitHub webhook when the factory has an
-`ingressUrl` in `jigs.config.ts`, taking `GITHUB_TOKEN` from the factory's `.env`
-— or from the shell for that one command, which wins there and only there
-(the service reads `.env` alone). Without a usable token it fails and says
+`ingressUrl` in `jigs.config.ts`, using the configured identity: in `pat` mode
+`GITHUB_TOKEN` from the factory's `.env` — or from the shell for that one
+command, which wins there and only there (the service reads `.env` alone) — and
+in `app` mode the installation token, which needs the App's Repository webhooks
+permission. Without usable hook rights it fails and says
 the repair — an ingress with no webhook is a gate that never wakes — and the
 retry is the same `jigs bind`: the binding already recorded stands and the
 webhook is create-or-verify. A factory with no `ingressUrl` skips the webhook
@@ -172,7 +217,7 @@ stays on disk.
 The service's `/ingress/github` and `/ingress/linear` routes must be reachable
 from the public internet on this factory's service port for a suspended run to
 wake on its own. Run a tunnel, put the URL in `jigs.config.ts` as `ingressUrl`,
-re-bind each target repo (`GITHUB_TOKEN` required), and create a Linear webhook
+re-bind each target repo (hook-administration rights required), and create a Linear webhook
 for `Comment` resources. `docs/setup.md` has the exact commands and the
 org-level alternative. Without ingress everything still works; a suspended run
 just needs `jigs poke <run>` to notice its answer.

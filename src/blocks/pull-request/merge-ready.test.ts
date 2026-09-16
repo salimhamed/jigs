@@ -1,13 +1,21 @@
 import { expect, test } from "vitest";
+import type { ApprovalSignal } from "../../config/factory-config.ts";
 import type { PrSnapshot } from "../../providers/github.ts";
 import { classifyPrState } from "./gate.ts";
 import { markBody } from "./marker.ts";
-import { isPullRequestMergeReady } from "./merge-ready.ts";
+import { isApprovalSatisfied, isPullRequestMergeReady } from "./merge-ready.ts";
 
 const SCOPE = "ship/AGE-402";
+const REVIEW: ApprovalSignal = { kind: "review" };
+const LABEL: ApprovalSignal = { kind: "label", name: "jigs:approved" };
+
 const snapshot: PrSnapshot = {
   state: "open",
   merged: false,
+  draft: false,
+  mergeState: "clean",
+  labels: [],
+  mergeCommitSha: null,
   headSha: "new",
   reviewThreads: [],
   conversationComments: [],
@@ -18,46 +26,95 @@ const snapshot: PrSnapshot = {
   ],
 };
 
-test("only current-head approval with green checks permits merge", () => {
-  expect(isPullRequestMergeReady(snapshot)).toBe(true);
-  expect(isPullRequestMergeReady({ ...snapshot, ci: "pending" })).toBe(false);
-  expect(isPullRequestMergeReady({ ...snapshot, ci: "red" })).toBe(false);
-  expect(isPullRequestMergeReady({ ...snapshot, headSha: "later" })).toBe(false);
-  expect(isPullRequestMergeReady({ ...snapshot, state: "closed" })).toBe(false);
+test("GitHub's merge state decides everything it covers", () => {
+  expect(isPullRequestMergeReady(snapshot, REVIEW)).toBe(true);
+  // Conflicts, failing required checks and missing required reviews all reach
+  // jigs as one of these, and none of them is `clean`.
+  for (const mergeState of ["dirty", "blocked", "behind", "unstable", "draft", "has_hooks"]) {
+    expect(isPullRequestMergeReady({ ...snapshot, mergeState }, REVIEW)).toBe(false);
+  }
+});
+
+test("a merge state GitHub has not computed yet is not a merge", () => {
+  expect(isPullRequestMergeReady({ ...snapshot, mergeState: "unknown" }, REVIEW)).toBe(false);
+});
+
+test("a clean pull request with no build is not ready, whatever GitHub says", () => {
+  // A repository that requires no checks is `clean` with nothing run at all,
+  // including in the seconds before CI registers, so `clean` alone would merge
+  // a label-approved pull request ahead of its own build.
+  expect(isPullRequestMergeReady({ ...snapshot, ci: "pending" }, REVIEW)).toBe(false);
+  expect(isPullRequestMergeReady({ ...snapshot, ci: "red" }, REVIEW)).toBe(false);
+  const labelled = { ...snapshot, reviews: [], labels: ["jigs:approved"], ci: "pending" as const };
+  expect(isPullRequestMergeReady(labelled, LABEL)).toBe(false);
+  expect(classifyPrState(labelled, SCOPE, LABEL).wakes).toEqual([]);
+});
+
+test("a draft, a closed and an already merged pull request are never ready", () => {
+  expect(isPullRequestMergeReady({ ...snapshot, draft: true }, REVIEW)).toBe(false);
+  expect(isPullRequestMergeReady({ ...snapshot, state: "closed" }, REVIEW)).toBe(false);
+  expect(isPullRequestMergeReady({ ...snapshot, merged: true }, REVIEW)).toBe(false);
+});
+
+test("a review approval names a commit, so a push withdraws it", () => {
+  expect(isApprovalSatisfied(snapshot, REVIEW)).toBe(true);
+  expect(isApprovalSatisfied({ ...snapshot, headSha: "later" }, REVIEW)).toBe(false);
+  expect(isApprovalSatisfied({ ...snapshot, reviews: [] }, REVIEW)).toBe(false);
 });
 
 test("latest effective reviewer decision supersedes historical approvals", () => {
   const approval = snapshot.reviews[0];
   if (approval === undefined) throw new Error("Missing fixture approval");
+  const withReviews = (reviews: PrSnapshot["reviews"]) => ({ ...snapshot, reviews });
   expect(
-    isPullRequestMergeReady({
-      ...snapshot,
-      reviews: [approval, { ...approval, id: 2, submittedAt: "2", state: "CHANGES_REQUESTED" }],
-    }),
+    isApprovalSatisfied(
+      withReviews([approval, { ...approval, id: 2, submittedAt: "2", state: "CHANGES_REQUESTED" }]),
+      REVIEW,
+    ),
   ).toBe(false);
   expect(
-    isPullRequestMergeReady({
-      ...snapshot,
-      reviews: [{ ...approval, id: 2, submittedAt: "2", state: "DISMISSED" }, approval],
-    }),
+    isApprovalSatisfied(
+      withReviews([{ ...approval, id: 2, submittedAt: "2", state: "DISMISSED" }, approval]),
+      REVIEW,
+    ),
   ).toBe(false);
   expect(
-    isPullRequestMergeReady({
-      ...snapshot,
-      reviews: [approval, { ...approval, id: 2, user: "another", state: "CHANGES_REQUESTED" }],
-    }),
+    isApprovalSatisfied(
+      withReviews([approval, { ...approval, id: 2, user: "another", state: "CHANGES_REQUESTED" }]),
+      REVIEW,
+    ),
   ).toBe(false);
 });
 
-test("approval while pending becomes merge-ready when CI later turns green", () => {
-  expect(classifyPrState({ ...snapshot, ci: "pending" }, SCOPE).wakes).toEqual([]);
-  expect(classifyPrState(snapshot, SCOPE).wakes).toEqual([{ kind: "merge-ready", headSha: "new" }]);
+test("a label approval is the pull request's, not a commit's, so it survives a push", () => {
+  const labelled = { ...snapshot, reviews: [], labels: ["jigs:approved"] };
+  expect(isApprovalSatisfied(labelled, LABEL)).toBe(true);
+  expect(isApprovalSatisfied({ ...labelled, headSha: "later" }, LABEL)).toBe(true);
+  expect(isApprovalSatisfied({ ...labelled, labels: ["needs-review"] }, LABEL)).toBe(false);
+  // The two signals are independent: neither stands in for the other.
+  expect(isApprovalSatisfied(labelled, REVIEW)).toBe(false);
+  expect(isApprovalSatisfied(snapshot, LABEL)).toBe(false);
+});
+
+test("the configured signal is the one the gate classifies with", () => {
+  const labelled: PrSnapshot = { ...snapshot, reviews: [], labels: ["jigs:approved"] };
+  expect(classifyPrState(labelled, SCOPE, REVIEW).wakes).toEqual([]);
+  expect(classifyPrState(labelled, SCOPE, LABEL).wakes).toEqual([
+    { kind: "merge-ready", headSha: "new" },
+  ]);
+});
+
+test("a pull request GitHub is not ready to merge becomes merge-ready when it is", () => {
+  expect(classifyPrState({ ...snapshot, mergeState: "unstable" }, SCOPE, REVIEW).wakes).toEqual([]);
+  expect(classifyPrState(snapshot, SCOPE, REVIEW).wakes).toEqual([
+    { kind: "merge-ready", headSha: "new" },
+  ]);
 });
 
 test("closed snapshots yield no agent or merge work", () => {
-  expect(classifyPrState({ ...snapshot, state: "closed", ci: "red" }, SCOPE).wakes).toEqual([
-    { kind: "closed", merged: false },
-  ]);
+  expect(classifyPrState({ ...snapshot, state: "closed", ci: "red" }, SCOPE, REVIEW).wakes).toEqual(
+    [{ kind: "closed", merged: false }],
+  );
 });
 
 test("a stood-down head does not ask to be merged again", () => {
@@ -76,7 +133,7 @@ test("a stood-down head does not ask to be merged again", () => {
       },
     ],
   };
-  expect(classifyPrState(stoodDown, SCOPE).wakes).toEqual([]);
+  expect(classifyPrState(stoodDown, SCOPE, REVIEW).wakes).toEqual([]);
   // A push moves the head, and the approval of that new head is new work.
   expect(
     classifyPrState(
@@ -86,6 +143,7 @@ test("a stood-down head does not ask to be merged again", () => {
         reviews: stoodDown.reviews.map((review) => ({ ...review, commitSha: "newer" })),
       },
       SCOPE,
+      REVIEW,
     ).wakes,
   ).toEqual([{ kind: "merge-ready", headSha: "newer" }]);
 });

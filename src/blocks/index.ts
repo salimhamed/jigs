@@ -142,6 +142,12 @@ export {
   renderMarker,
   type StatusReason,
 } from "./pull-request/marker.ts";
+export {
+  type ApprovalSignal,
+  isApprovalSatisfied,
+  isPullRequestMergeReady,
+  type MergePolicy,
+} from "./pull-request/merge-ready.ts";
 export { currentRunId, defaultPrScope } from "./pull-request/writer.ts";
 export {
   type BoundReviewTicketOptions,
