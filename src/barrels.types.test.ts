@@ -85,6 +85,7 @@ import type {
   McpProbe,
   McpServerConfig,
   McpStdioServer,
+  MergeRefusal,
   PostPullRequestNoteOptions,
   PostReviewAnswersOptions,
   PostTicketHumanInputRequest,
@@ -151,6 +152,7 @@ type BlocksTypeSurface = {
   gateWake: GateWake;
   markerKind: MarkerKind;
   markerLedger: MarkerLedger;
+  mergeRefusal: MergeRefusal;
   prMarker: PrMarker;
   prState: PrState;
   statusReason: StatusReason;

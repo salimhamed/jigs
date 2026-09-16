@@ -42,5 +42,7 @@ export {
   isApprovalSatisfied,
   isPullRequestMergeReady,
   type MergePolicy,
+  type MergeRefusal,
+  mergeRefusal,
 } from "./merge-ready.ts";
 export { currentRunId, defaultPrScope } from "./writer.ts";

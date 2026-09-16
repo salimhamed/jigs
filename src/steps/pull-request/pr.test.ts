@@ -93,6 +93,15 @@ test("does not merge when the head or readiness changed after the gate wake", as
   expect(mergePr).not.toHaveBeenCalled();
 });
 
+test("a refusal says whether asking again could merge the same commit", async () => {
+  vi.mocked(fetchPrSnapshot).mockResolvedValue({ ...snapshot, mergeState: "unstable" });
+  expect(await mergePullRequest(pr, "head", SQUASH)).toMatchObject({ transient: true });
+  vi.mocked(fetchPrSnapshot).mockResolvedValue({ ...snapshot, mergeState: "dirty" });
+  expect(await mergePullRequest(pr, "head", SQUASH)).toMatchObject({ transient: false });
+  vi.mocked(fetchPrSnapshot).mockResolvedValue({ ...snapshot, reviews: [] });
+  expect(await mergePullRequest(pr, "head", SQUASH)).toMatchObject({ transient: false });
+});
+
 test("a pull request GitHub already merged is merged, not re-merged", async () => {
   vi.mocked(fetchPrSnapshot).mockResolvedValue({
     ...snapshot,
@@ -111,7 +120,11 @@ test.each([405, 409])("a %i is state that changed, re-read rather than failed", 
   vi.mocked(mergePr).mockRejectedValue(
     new GithubApiError(status, "/merge", "Head branch was modified"),
   );
-  expect(await mergePullRequest(pr, "head", SQUASH)).toMatchObject({ merged: false });
+  // A state GitHub reports as changed is one the next wake reads again.
+  expect(await mergePullRequest(pr, "head", SQUASH)).toMatchObject({
+    merged: false,
+    transient: true,
+  });
   // Whether it merged is GitHub's answer, never the status code's.
   expect(fetchPrSnapshot).toHaveBeenCalledTimes(2);
 });

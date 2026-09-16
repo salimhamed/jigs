@@ -160,7 +160,12 @@ Reading the graph against the code:
   `merge.by: "jigs"` it also ends the moment jigs' own merge succeeds —
   `merged` is returned right there, without waiting for the `closed` wake. A
   merge GitHub does not make is reported as a marked comment on the pull
-  request, and the gate keeps listening.
+  request, and the gate keeps listening. Whether that comment stands the commit
+  down depends on why: a state that passes on its own — a check still running, a
+  merge state GitHub has not finished computing, a head that moved — is noted
+  once and retried on the next wake, while a conflict, a withdrawn approval or a
+  closed pull request is stood down until a new commit or a new approval
+  arrives.
 - **Scope names the work.** Every marker carries one, and it is what "already
   done" is measured against. It defaults to the workflow function's own name and
   the task's key, so `shipWorkflow` delivering `AGE-123` writes

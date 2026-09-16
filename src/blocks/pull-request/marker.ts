@@ -6,11 +6,15 @@
 
 export type MarkerKind = "reply" | "completion" | "status";
 
-/** Why a `status` note was written, so one stand-down never silences another. */
-export type StatusReason = "merge" | "ci";
+/**
+ * Why a `status` note was written, so one note never silences another.
+ * `merge` and `ci` stand a commit down; `merge-retry` only records that the
+ * refusal was already reported, and leaves the commit merge-ready.
+ */
+export type StatusReason = "merge" | "ci" | "merge-retry";
 
 const KINDS = new Set<string>(["reply", "completion", "status"]);
-const REASONS = new Set<string>(["merge", "ci"]);
+const REASONS = new Set<string>(["merge", "ci", "merge-retry"]);
 
 export interface PrMarker {
   /**
@@ -25,7 +29,8 @@ export interface PrMarker {
   /**
    * `reply` answers the thing named by `source`, `completion` records work
    * finished for it, and `status` is a note about a commit — a stand-down
-   * after a refused merge, or a CI failure jigs could not repair.
+   * after a refused merge, a CI failure jigs could not repair, or a merge
+   * refused for a state that will pass.
    */
   kind: MarkerKind;
   /** Required on a `status` marker, meaningless on any other. */
@@ -148,13 +153,17 @@ export function carriesMarker(body: string): boolean {
 export interface MarkerLedger {
   /** Sources this scope answered or completed: a comment version, or a commit. */
   answered: ReadonlySet<string>;
-  /** Commits this scope stood down on, kept apart by why it stood down. */
+  /** Commits this scope wrote a status note about, kept apart by why. */
   settled: Readonly<Record<StatusReason, ReadonlySet<string>>>;
 }
 
 export function readLedger(bodies: Iterable<string>, scope: string): MarkerLedger {
   const answered = new Set<string>();
-  const settled = { merge: new Set<string>(), ci: new Set<string>() };
+  const settled = {
+    merge: new Set<string>(),
+    ci: new Set<string>(),
+    "merge-retry": new Set<string>(),
+  };
   for (const body of bodies) {
     for (const marker of parseMarkers(body)) {
       if (marker.scope !== scope || marker.source === undefined) continue;

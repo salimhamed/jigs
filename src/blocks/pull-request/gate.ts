@@ -78,10 +78,12 @@ export type { PrRef };
  * - `ci-red`: the current head is red, with no marked stand-down for it.
  * - `merge-ready`: GitHub reports the pull request mergeable and the
  *   configured approval signal is present, with no marked stand-down for it.
+ *   `retryNoted` says a refusal jigs is waiting out was already reported for
+ *   this head, so the retry is silent.
  * - `closed`: terminal.
  */
 export type GateWake =
-  | { kind: "merge-ready"; headSha: string }
+  | { kind: "merge-ready"; headSha: string; retryNoted: boolean }
   // `body` is the summary of the CHANGES_REQUESTED review these threads were
   // submitted with, when they came together. A thread with `origin:
   // "conversation"` is not an inline thread at all: it is a review's body or a
@@ -224,7 +226,11 @@ export function classifyPrState(
     threads.length === 0 &&
     !ledger.settled.merge.has(snapshot.headSha)
   ) {
-    wakes.push({ kind: "merge-ready", headSha: snapshot.headSha });
+    wakes.push({
+      kind: "merge-ready",
+      headSha: snapshot.headSha,
+      retryNoted: ledger.settled["merge-retry"].has(snapshot.headSha),
+    });
   }
 
   // `done` is the pull request being closed, and nothing else. An approval
