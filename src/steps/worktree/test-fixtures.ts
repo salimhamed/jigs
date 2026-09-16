@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Sql } from "postgres";
@@ -37,10 +37,37 @@ export interface ClonedBinding {
 // commit on its default branch, and jigs' own bare clone of it — so a test's
 // clone and a service's clone cannot drift apart. `bindingDir` is where the
 // clone lands, for a test that has to put it where the layout says it lives.
+//
+// Building it costs fifteen git processes, so a suite that rebuilds it per
+// test case is the first hook to blow its budget on a loaded CI runner. Build
+// it once per worker and copy the directories instead — every caller still
+// gets a remote and a clone it alone writes to.
 export function makeClonedBinding(
   parent: string,
   bindingDir: string = path.join(parent, "binding"),
 ): ClonedBinding {
+  const template = clonedBindingTemplate();
+  const remoteDir = path.join(parent, "remote.git");
+  const repoDir = path.join(bindingDir, "repo.git");
+  cpSync(template.remoteDir, remoteDir, { recursive: true });
+  cpSync(template.repoDir, repoDir, { recursive: true });
+  // The copy arrives pointing at the template's remote, which it must not share.
+  git(repoDir, "remote", "set-url", "origin", remoteDir);
+  return { remoteDir, repoDir, worktreesDir: path.join(bindingDir, "worktrees") };
+}
+
+let template: ClonedBinding | undefined;
+
+function clonedBindingTemplate(): ClonedBinding {
+  if (template === undefined) {
+    const dir = mkdtempSync(path.join(tmpdir(), "jigs-binding-template-"));
+    process.on("exit", () => rmSync(dir, { recursive: true, force: true }));
+    template = buildClonedBinding(dir, path.join(dir, "binding"));
+  }
+  return template;
+}
+
+function buildClonedBinding(parent: string, bindingDir: string): ClonedBinding {
   const defaultBranch = "main";
   const remoteDir = path.join(parent, "remote.git");
   git(parent, "init", "-q", "--bare", "--initial-branch", defaultBranch, remoteDir);
