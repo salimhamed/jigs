@@ -85,7 +85,6 @@ export interface GithubMergePolicyProbes {
     repo: string,
     branch: string,
   ): Promise<{ requiredStatusChecks: number; requiredApprovingReviews: number } | null>;
-  requiredApprovingReviews(owner: string, repo: string, branch: string): Promise<number | null>;
 }
 
 export const realGithubMergePolicyProbes: GithubMergePolicyProbes = {
@@ -126,79 +125,53 @@ export const realGithubMergePolicyProbes: GithubMergePolicyProbes = {
   protection: async (owner, repo, branch) => {
     const base = `/repos/${owner}/${repo}`;
     const encodedBranch = encodeURIComponent(branch);
-    try {
-      const classic = await githubGet<{
+    const [classic, rules] = await Promise.allSettled([
+      githubGet<{
         required_status_checks?: {
           contexts?: string[];
           checks?: Array<{ context: string }>;
         } | null;
         required_pull_request_reviews?: { required_approving_review_count?: number } | null;
-      }>(`${base}/branches/${encodedBranch}/protection`);
-      return {
-        requiredStatusChecks: new Set([
-          ...(classic.required_status_checks?.contexts ?? []),
-          ...(classic.required_status_checks?.checks ?? []).map((check) => check.context),
-        ]).size,
-        requiredApprovingReviews:
-          classic.required_pull_request_reviews?.required_approving_review_count ?? 0,
-      };
-    } catch (error) {
-      if (!(error instanceof GithubApiError) || error.status !== 404) throw error;
-    }
-    const rules = await githubGet<
-      Array<{
-        type: string;
-        parameters?: {
-          required_approving_review_count?: number;
-          required_status_checks?: Array<{ context?: string }>;
-        };
-      }>
-    >(`${base}/rules/branches/${encodedBranch}`);
-    const statusRules = rules.filter((rule) => rule.type === "required_status_checks");
-    const reviewRules = rules.filter((rule) => rule.type === "pull_request");
-    if (statusRules.length === 0 && reviewRules.length === 0) return null;
-    return {
-      requiredStatusChecks: statusRules.reduce(
-        (count, rule) => count + (rule.parameters?.required_status_checks?.length ?? 0),
-        0,
-      ),
-      requiredApprovingReviews: Math.max(
-        0,
-        ...reviewRules.map((rule) => rule.parameters?.required_approving_review_count ?? 0),
-      ),
-    };
-  },
-  requiredApprovingReviews: async (owner, repo, branch) => {
-    const base = `/repos/${owner}/${repo}`;
-    const encodedBranch = encodeURIComponent(branch);
-    const [protection, rules] = await Promise.allSettled([
-      githubGet<{
-        required_pull_request_reviews?: {
-          required_approving_review_count?: number;
-        } | null;
       }>(`${base}/branches/${encodedBranch}/protection`),
       githubGet<
         Array<{
           type: string;
-          parameters?: { required_approving_review_count?: number };
+          parameters?: {
+            required_approving_review_count?: number;
+            required_status_checks?: Array<{ context?: string }>;
+          };
         }>
       >(`${base}/rules/branches/${encodedBranch}`),
     ]);
-    const protectedCount =
-      protection.status === "fulfilled"
-        ? (protection.value.required_pull_request_reviews?.required_approving_review_count ?? 0)
-        : null;
-    const rulesCount =
-      rules.status === "fulfilled"
-        ? Math.max(
-            0,
-            ...rules.value
-              .filter((rule) => rule.type === "pull_request")
-              .map((rule) => rule.parameters?.required_approving_review_count ?? 0),
-          )
-        : null;
-    if (protectedCount === null && rulesCount === null) return null;
-    return Math.max(protectedCount ?? 0, rulesCount ?? 0);
+    if (classic.status === "rejected" && rules.status === "rejected") {
+      throw new AggregateError(
+        [classic.reason, rules.reason],
+        `could not read classic protection or rulesets for ${owner}/${repo}`,
+      );
+    }
+    const classicValue = settledValue(classic);
+    const ruleValues = settledValue(rules) ?? [];
+    const statusRules = ruleValues.filter((rule) => rule.type === "required_status_checks");
+    const reviewRules = ruleValues.filter((rule) => rule.type === "pull_request");
+    if (classicValue === undefined && statusRules.length === 0 && reviewRules.length === 0) {
+      return null;
+    }
+    const requiredChecks = new Set([
+      ...(classicValue?.required_status_checks?.contexts ?? []),
+      ...(classicValue?.required_status_checks?.checks ?? []).map((check) => check.context),
+      ...statusRules.flatMap((rule) =>
+        (rule.parameters?.required_status_checks ?? []).flatMap((check) =>
+          check.context === undefined ? [] : [check.context],
+        ),
+      ),
+    ]);
+    return {
+      requiredStatusChecks: requiredChecks.size,
+      requiredApprovingReviews: Math.max(
+        classicValue?.required_pull_request_reviews?.required_approving_review_count ?? 0,
+        ...reviewRules.map((rule) => rule.parameters?.required_approving_review_count ?? 0),
+      ),
+    };
   },
 };
 
@@ -318,7 +291,7 @@ function appCheck(
 
 // The effective policy per binding, plus repository facts that make one impossible.
 export function mergePolicyCheck(
-  _identity: GithubIdentity,
+  identity: GithubIdentity,
   merge: MergePolicy,
   bindings: Record<string, Pick<BindingEntry, "remote" | "merge">>,
   probes: GithubMergePolicyProbes,
@@ -340,7 +313,7 @@ export function mergePolicyCheck(
         entries.map(([name, binding]) => {
           const policy = bindingMergePolicy(merge, binding);
           return policy.by === "jigs"
-            ? inspectBindingWithin(name, binding, policy, probes, probeTimeoutMs)
+            ? inspectBindingWithin(name, binding, identity, policy, probes, probeTimeoutMs)
             : [];
         }),
       );
@@ -370,6 +343,7 @@ function describeMergePolicy(merge: MergePolicy): string {
 async function inspectBindingWithin(
   bindingName: string,
   binding: Pick<BindingEntry, "remote">,
+  identity: GithubIdentity,
   merge: MergePolicy,
   probes: GithubMergePolicyProbes,
   timeoutMs: number,
@@ -377,7 +351,7 @@ async function inspectBindingWithin(
   const timeout = new Promise<PolicyFinding[]>((resolve) => {
     AbortSignal.timeout(timeoutMs).addEventListener("abort", () => resolve([]), { once: true });
   });
-  return Promise.race([inspectBinding(bindingName, binding, merge, probes), timeout]);
+  return Promise.race([inspectBinding(bindingName, binding, identity, merge, probes), timeout]);
 }
 
 interface PolicyFinding {
@@ -389,6 +363,7 @@ interface PolicyFinding {
 async function inspectBinding(
   bindingName: string,
   binding: Pick<BindingEntry, "remote">,
+  identity: GithubIdentity,
   merge: MergePolicy,
   probes: GithubMergePolicyProbes,
 ): Promise<PolicyFinding[]> {
@@ -418,7 +393,9 @@ async function inspectBinding(
       binding: bindingName,
       reason: `could not read branch protection or rulesets for ${ref.owner}/${ref.repo}, so jigs cannot verify that merges will be allowed`,
       repair:
-        "grant the GitHub App Administration: read in Settings → Developer settings → GitHub Apps, then accept the updated installation permissions",
+        identity.mode === "app"
+          ? "grant the GitHub App Administration: read in Settings → Developer settings → GitHub Apps, then accept the updated installation permissions"
+          : "replace GITHUB_TOKEN with a PAT that has repository administration access so it can read branch protection, then restart the jigs service",
     });
   } else if (protectionResult === null) {
     findings.push({
@@ -470,11 +447,8 @@ async function inspectBinding(
         reason: `${ref.owner}/${ref.repo} has no ${merge.approval.name} label, so the configured approval signal can never be given`,
         repair: `create the ${merge.approval.name} label in ${ref.owner}/${ref.repo} Issues → Labels, re-run jigs bind to restore it, or switch this factory's approval to review`,
       });
-    const [approvalsResult] = await Promise.allSettled([
-      probes.requiredApprovingReviews(ref.owner, ref.repo, repository.default_branch),
-    ]);
-    const approvals = settledValue(approvalsResult);
-    if (approvals !== undefined && approvals !== null && approvals > 0)
+    const approvals = protectionResult?.requiredApprovingReviews;
+    if (approvals !== undefined && approvals > 0)
       findings.push({
         binding: bindingName,
         reason: `${ref.owner}/${ref.repo} requires ${approvals} approving review${approvals === 1 ? "" : "s"} before merge, but this factory approves with a label, which GitHub will not count`,

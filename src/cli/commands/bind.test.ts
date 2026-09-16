@@ -338,7 +338,6 @@ test("bind ensures the configured approval label on every run", async () => {
     actionsWorkflows: async () => 0,
     labelExists: async () => true,
     protection: async () => ({ requiredStatusChecks: 1, requiredApprovingReviews: 0 }),
-    requiredApprovingReviews: async () => 0,
   };
 
   await bindRepo(API, deps({ ensureLabel, mergePolicyProbes }));
@@ -411,7 +410,6 @@ test("bind prints a merge-policy repair but still resolves successfully", async 
         actionsWorkflows: async () => 0,
         labelExists: async () => true,
         protection: async () => null,
-        requiredApprovingReviews: async () => 0,
       },
     }),
   );
