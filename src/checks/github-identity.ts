@@ -86,7 +86,6 @@ export interface GithubMergePolicyProbes {
 type ProtectionGap = "classic" | "rulesets";
 
 export interface ProtectionReading {
-  requiredStatusChecks: number;
   requiredApprovingReviews: number;
   unread: ProtectionGap | null;
 }
@@ -131,19 +130,12 @@ export const realGithubMergePolicyProbes: GithubMergePolicyProbes = {
     const encodedBranch = encodeURIComponent(branch);
     const [classic, rules] = await Promise.allSettled([
       githubGet<{
-        required_status_checks?: {
-          contexts?: string[];
-          checks?: Array<{ context: string }>;
-        } | null;
         required_pull_request_reviews?: { required_approving_review_count?: number } | null;
       }>(`${base}/branches/${encodedBranch}/protection`),
       githubGet<
         Array<{
           type: string;
-          parameters?: {
-            required_approving_review_count?: number;
-            required_status_checks?: Array<{ context?: string }>;
-          };
+          parameters?: { required_approving_review_count?: number };
         }>
       >(`${base}/rules/branches/${encodedBranch}`),
     ]);
@@ -174,17 +166,7 @@ export const realGithubMergePolicyProbes: GithubMergePolicyProbes = {
     ) {
       return null;
     }
-    const requiredChecks = new Set([
-      ...(classicValue?.required_status_checks?.contexts ?? []),
-      ...(classicValue?.required_status_checks?.checks ?? []).map((check) => check.context),
-      ...statusRules.flatMap((rule) =>
-        (rule.parameters?.required_status_checks ?? []).flatMap((check) =>
-          check.context === undefined ? [] : [check.context],
-        ),
-      ),
-    ]);
     return {
-      requiredStatusChecks: requiredChecks.size,
       requiredApprovingReviews: Math.max(
         classicValue?.required_pull_request_reviews?.required_approving_review_count ?? 0,
         ...reviewRules.map((rule) => rule.parameters?.required_approving_review_count ?? 0),
@@ -411,36 +393,9 @@ async function inspectBinding(
   const protectionResult = settledValue(protectionSettled);
   const unread: ProtectionGap | "both" | null =
     protectionSettled.status === "rejected" ? "both" : (protectionResult?.unread ?? null);
-  // A gap only matters when what jigs could read leaves the verdict open.
-  const unreadCouldChangeVerdict =
-    unread === "both" ||
-    (unread !== null &&
-      protectionResult != null &&
-      (protectionResult.requiredStatusChecks === 0 ||
-        merge.approval.kind === "label" ||
-        protectionResult.requiredApprovingReviews === 0));
-  if (unread !== null && unreadCouldChangeVerdict) {
+  // Only label approval reads protection, so only it is left open by a gap.
+  if (unread !== null && merge.approval.kind === "label")
     findings.push({ binding: bindingName, ...unreadableProtection(unread, ref, identity) });
-  } else if (protectionResult === null) {
-    findings.push({
-      binding: bindingName,
-      reason: `${ref.owner}/${ref.repo}'s default branch has no classic branch protection or ruleset requiring CI`,
-      repair: `in ${ref.owner}/${ref.repo} Settings → Branches or Rules → Rulesets, add a rule for the default branch that requires the repository's CI checks before merge`,
-    });
-  } else if (protectionResult !== undefined) {
-    if (protectionResult.requiredStatusChecks === 0)
-      findings.push({
-        binding: bindingName,
-        reason: `${ref.owner}/${ref.repo}'s default branch does not require CI checks, so jigs could merge a change whose CI failed`,
-        repair: `in ${ref.owner}/${ref.repo} Settings → Branches or Rules → Rulesets, require the repository's CI checks before merge`,
-      });
-    if (merge.approval.kind === "review" && protectionResult.requiredApprovingReviews < 1)
-      findings.push({
-        binding: bindingName,
-        reason: `${ref.owner}/${ref.repo}'s default branch does not require an approving review, so GitHub does not enforce the approval signal jigs is configured to use`,
-        repair: `in ${ref.owner}/${ref.repo} Settings → Branches or Rules → Rulesets, require at least one approving review, or change this factory's approval to label`,
-      });
-  }
   const allowed = {
     merge: repository.allow_merge_commit,
     squash: repository.allow_squash_merge,

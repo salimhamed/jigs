@@ -386,10 +386,11 @@ repository settings.
 Jigs only reports repository governance; it never changes branch protection or
 rulesets. Run `jigs doctor`, apply each listed repair in the repository's GitHub
 settings, and run `jigs doctor` again. Repeat that loop until every check is
-green. Review approval needs a rule requiring at least one review. Label
-approval instead needs required-review rules removed, because GitHub does not
-count a label as a review. The report checks both classic branch protection and
-rulesets and names the relevant GitHub settings page for every mismatch.
+green. Jigs waits for CI and for the approval signal itself, so it never asks a
+repository to require either of them of its own contributors; what it cannot
+work around is a required-review rule under label approval, because GitHub does
+not count a label as a review. The report reads both classic branch protection
+and rulesets and names the relevant GitHub settings page for every mismatch.
 
 ### 3. Up
 
