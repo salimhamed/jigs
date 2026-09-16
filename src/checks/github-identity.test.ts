@@ -54,8 +54,11 @@ const outcome = async (
   overrides: Partial<GithubIdentityProbes> = {},
   env: NodeJS.ProcessEnv = { GITHUB_TOKEN: "ghp_live" },
   merge: MergePolicy = SQUASH_REVIEW,
+  bindings: Record<string, { remote: string }> = {},
 ) => {
-  const report = await runChecks(githubIdentityChecks(identity, merge, probes(overrides), env));
+  const report = await runChecks(
+    githubIdentityChecks(identity, merge, probes(overrides), env, bindings),
+  );
   const found = report.checks.find((check) => check.id === id);
   if (found === undefined) throw new Error(`no check ${id}`);
   return found;
@@ -148,15 +151,29 @@ test("jigs merging requires the App permissions used by merge-policy probes", as
     administration: _admin,
     ...oldPermissions
   } = GRANTED;
-  const check = await outcome(APP, "github.identity", {
-    installation: async () => ({ permissions: oldPermissions }),
-  });
+  const check = await outcome(
+    APP,
+    "github.identity",
+    { installation: async () => ({ permissions: oldPermissions }) },
+    { GITHUB_TOKEN: "ghp_live" },
+    SQUASH_REVIEW,
+    { api: { remote: "git@github.com:acme/api.git" } },
+  );
   expect(check).toMatchObject({ ok: false });
   if (check.ok !== false) throw new Error("expected failure");
   expect(check.reason).toContain("actions: read");
   expect(check.reason).toContain("checks: read");
   expect(check.reason).toContain("statuses: read");
   expect(check.reason).toContain("administration: read");
+});
+
+test("preflight without binding probes does not require merge-policy-only App permissions", async () => {
+  const { actions: _actions, administration: _admin, ...preflightPermissions } = GRANTED;
+  expect(
+    await outcome(APP, "github.identity", {
+      installation: async () => ({ permissions: preflightPermissions }),
+    }),
+  ).toMatchObject({ ok: true });
 });
 
 test("human merging does not require merge-policy-only App permissions", async () => {
@@ -369,14 +386,34 @@ const LABEL_POLICY: MergePolicy = {
 };
 
 test("label approval fails when native approving reviews are required", async () => {
-  expect(
-    await policyOutcome(LABEL_POLICY, binding, {
-      requiredApprovingReviews: async () => 2,
-    }),
-  ).toMatchObject({
+  const result = await policyOutcome(LABEL_POLICY, binding, {
+    requiredApprovingReviews: async () => 2,
+  });
+  expect(result).toMatchObject({
     ok: false,
     reason: expect.stringContaining("requires 2 approving reviews"),
-    repair: expect.stringContaining("merge.approval"),
+    repair: expect.stringContaining("remove the repository's required approving reviews"),
+  });
+  if (result?.ok !== false) throw new Error("expected failure");
+  expect(result.repair).not.toContain("merge.approval");
+});
+
+test("a hung repository probe stays silent before the check catalog times out", async () => {
+  await expect(
+    runChecks(
+      [
+        mergePolicyCheck(
+          SQUASH_REVIEW,
+          binding,
+          policyProbes({ repository: async () => new Promise(() => {}) }),
+          5,
+        ),
+      ],
+      50,
+    ),
+  ).resolves.toMatchObject({
+    ok: true,
+    checks: [{ id: "github.merge-policy", ok: true }],
   });
 });
 

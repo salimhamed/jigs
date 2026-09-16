@@ -93,11 +93,14 @@ requests normally. It needs, in `github.identity`: `appId`, `installationId`,
 `privateKeyPath` (the `.pem`, `chmod 600`, gitignored) and `operator` (the
 human's login — an installation token cannot answer `GET /user`). Optional
 `coAuthor` is `Name <email>` for a `Co-authored-by` trailer on merge commits.
-Grant the App exactly: Contents, Pull requests and Issues **read & write**,
-Metadata **read**, and **Repository webhooks read & write** — that last one is
-what `jigs bind` needs, and it has to be accepted on the installation after it
-is granted on the App. Register the App with its own webhook **off**; jigs
-keeps per-repo webhooks, and one App registration has only one webhook URL.
+Grant the App exactly: Contents, Pull requests and Issues **read & write**;
+Metadata, Checks and Commit statuses **read**; and **Repository webhooks read &
+write**. When `merge.by` is `"jigs"` and the factory has bindings, also grant
+Actions and Administration **read** so `jigs bind` and `jigs doctor` can inspect
+the repositories' merge policies. Permissions have to be accepted on the
+installation after they are granted on the App. Register the App with its own
+webhook **off**; jigs keeps per-repo webhooks, and one App registration has
+only one webhook URL.
 
 `merge` states the policy: `by` (`jigs` or `human`), `method` (`squash`,
 `merge` or `rebase`), and `approval`. jigs merges only when the signal is

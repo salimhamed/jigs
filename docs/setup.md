@@ -271,10 +271,11 @@ Where each value comes from:
 2. **Grant these repository permissions**, and nothing else: **Contents**,
    **Pull requests** and **Issues** read & write; **Metadata**, **Checks** and
    **Commit statuses** read; and **Repository webhooks** read & write. When
-   `merge.by` is `"jigs"`, also grant **Actions** and **Administration** read so
-   `jigs bind` and `jigs doctor` can verify that the repository can satisfy its
-   merge policy. The Repository webhooks permission lets `jigs bind` create the hook that
-   wakes a parked run; a missing permission is named by `jigs doctor`.
+   `merge.by` is `"jigs"` and the factory has bindings, also grant **Actions**
+   and **Administration** read so `jigs bind` and `jigs doctor` can verify that
+   the repository can satisfy its merge policy. The Repository webhooks
+   permission lets `jigs bind` create the hook that wakes a parked run; a
+   missing permission is named by `jigs doctor`.
 3. **`appId`** is the "App ID" on the App's settings page.
 4. **`privateKeyPath`** is the `.pem` GitHub generates under "Private keys".
    Save it in the factory repo (`.gitignore` already excludes

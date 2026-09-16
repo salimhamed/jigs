@@ -16,7 +16,7 @@ import {
   readAppPrivateKey,
 } from "../providers/github-auth.ts";
 import { parseGithubRemote } from "../providers/github-webhook.ts";
-import type { Check, CheckResult } from "./catalog.ts";
+import { type Check, type CheckResult, PROBE_TIMEOUT_MS } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 
 // What jigs needs of an installation, and why. `repository_hooks` is the one
@@ -157,8 +157,11 @@ export function githubIdentityChecks(
   bindings: Record<string, Pick<BindingEntry, "remote">> = {},
   mergeProbes: GithubMergePolicyProbes = realGithubMergePolicyProbes,
 ): Check[] {
+  const checksBindingPolicies = merge.by === "jigs" && Object.keys(bindings).length > 0;
   return [
-    identity.mode === "pat" ? patCheck(probes, env) : appCheck(identity, merge, probes),
+    identity.mode === "pat"
+      ? patCheck(probes, env)
+      : appCheck(identity, checksBindingPolicies, probes),
     mergePolicyCheck(merge, bindings, mergeProbes),
   ];
 }
@@ -190,7 +193,11 @@ function patCheck(probes: GithubIdentityProbes, env: NodeJS.ProcessEnv): Check {
   };
 }
 
-function appCheck(identity: AppIdentity, merge: MergePolicy, probes: GithubIdentityProbes): Check {
+function appCheck(
+  identity: AppIdentity,
+  checksBindingPolicies: boolean,
+  probes: GithubIdentityProbes,
+): Check {
   return {
     id: "github.identity",
     label: "GitHub identity",
@@ -234,7 +241,7 @@ function appCheck(identity: AppIdentity, merge: MergePolicy, probes: GithubIdent
       }
       const requiredPermissions = [
         ...REQUIRED_PERMISSIONS,
-        ...(merge.by === "jigs" ? JIGS_MERGE_PERMISSIONS : []),
+        ...(checksBindingPolicies ? JIGS_MERGE_PERMISSIONS : []),
       ];
       const missing = requiredPermissions.filter(
         (required) =>
@@ -259,6 +266,7 @@ export function mergePolicyCheck(
   merge: MergePolicy,
   bindings: Record<string, Pick<BindingEntry, "remote">>,
   probes: GithubMergePolicyProbes,
+  probeTimeoutMs: number = PROBE_TIMEOUT_MS,
 ): Check {
   const signal =
     merge.approval.kind === "review"
@@ -276,7 +284,7 @@ export function mergePolicyCheck(
       const findings = (
         await Promise.all(
           Object.entries(bindings).map(([name, binding]) =>
-            inspectBinding(name, binding, merge, probes),
+            inspectBindingWithin(name, binding, merge, probes, probeTimeoutMs),
           ),
         )
       ).flat();
@@ -288,6 +296,19 @@ export function mergePolicyCheck(
       };
     },
   };
+}
+
+async function inspectBindingWithin(
+  bindingName: string,
+  binding: Pick<BindingEntry, "remote">,
+  merge: MergePolicy,
+  probes: GithubMergePolicyProbes,
+  timeoutMs: number,
+): Promise<PolicyFinding[]> {
+  const timeout = new Promise<PolicyFinding[]>((resolve) => {
+    AbortSignal.timeout(timeoutMs).addEventListener("abort", () => resolve([]), { once: true });
+  });
+  return Promise.race([inspectBinding(bindingName, binding, merge, probes), timeout]);
 }
 
 interface PolicyFinding {
@@ -355,7 +376,7 @@ async function inspectBinding(
       findings.push({
         binding: bindingName,
         reason: `${ref.owner}/${ref.repo}'s default branch requires ${approvals} approving review${approvals === 1 ? "" : "s"}, which label approval cannot satisfy`,
-        repair: `remove the repository's required approving reviews, or change merge.approval to { kind: "review" } in jigs.config.ts`,
+        repair: `remove the repository's required approving reviews so label approval can satisfy the merge policy`,
       });
   }
   return findings;
