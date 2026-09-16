@@ -27,5 +27,6 @@ step//./jigs//replyToPullRequestReviewThread
 step//./jigs//resolveLinearIssue
 step//./jigs//resolveMergePolicy
 step//./jigs//resolveRepository
+step//./jigs//reviewPullRequest
 step//workflow@4.8.4//fetch
 workflow//./workflows/ship//shipWorkflow

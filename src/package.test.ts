@@ -335,6 +335,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "renderTicketNote",
     "replyToPullRequestReviewThread",
     "resolveRepository",
+    "reviewPullRequest",
     "executeAgent",
     "executeModelRequest",
     "mergePullRequest",
