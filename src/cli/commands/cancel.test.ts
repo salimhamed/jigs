@@ -27,9 +27,9 @@ const deps = (over: Record<string, unknown> = {}) => ({
 const respondLookup = (body: unknown, status = 200) =>
   fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(body), { status }));
 
-const respondCancel = (releasedTokens: string[]) =>
+const respondCancel = (releasedTokens: string[], deletedJobs = 0) =>
   fetchMock.mockResolvedValueOnce(
-    new Response(JSON.stringify({ runId: RUN, cancelled: true, releasedTokens })),
+    new Response(JSON.stringify({ runId: RUN, cancelled: true, deletedJobs, releasedTokens })),
   );
 
 const suspended = {
@@ -63,10 +63,11 @@ test("a suspended run cancels with no confirmation prompt", async () => {
 
 test("the released claim tokens are printed", async () => {
   respondLookup(suspended);
-  respondCancel(["linear:ticket:AGE-317", "github:pr:acme/api#41"]);
+  respondCancel(["linear:ticket:AGE-317", "github:pr:acme/api#41"], 3);
   await cancelRun("AGE-317", deps());
   expect(lines).toEqual([
     `cancelled ${RUN}`,
+    "removed 3 remaining queue jobs",
     "released linear:ticket:AGE-317",
     "released github:pr:acme/api#41",
   ]);
@@ -94,7 +95,7 @@ test("--force skips the prompt", async () => {
   const confirm = vi.fn();
   await cancelRun(RUN, deps({ confirm, force: true }));
   expect(confirm).not.toHaveBeenCalled();
-  expect(lines).toEqual([`cancelled ${RUN}`]);
+  expect(lines).toEqual([`cancelled ${RUN}`, "removed 0 remaining queue jobs"]);
 });
 
 test("no TTY and no --force refuses with a hint", async () => {
@@ -105,12 +106,13 @@ test("no TTY and no --force refuses with a hint", async () => {
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
-test("cancelling an already-cancelled run is refused with its status", async () => {
+test("cancelling an already-cancelled run retries cleanup", async () => {
   respondLookup({ runId: RUN, status: "cancelled" });
-  respondLookup({ error: `run ${RUN} is already cancelled` }, 409);
-  const err = await failure(cancelRun(RUN, deps({ force: true })));
-  expect(err?.message).toBe(`run ${RUN} is already cancelled`);
+  respondCancel([], 2);
+
+  await expect(cancelRun(RUN, deps({ force: true }))).resolves.toMatchObject({ deletedJobs: 2 });
   expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(lines).toEqual([`cancelled ${RUN}`, "removed 2 remaining queue jobs"]);
 });
 
 test("an ambiguous ref lists the candidates in the hint", async () => {

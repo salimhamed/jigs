@@ -14,10 +14,11 @@ import { listWorktreesForRun } from "../steps/worktree/registry.ts";
 import { registrySql } from "../steps/worktree/sql.ts";
 import { sweepWorktrees } from "../steps/worktree/sweep.ts";
 import { githubWebhookSecret, verifyGithubSignature, verifyLinearSignature } from "./ingress.ts";
+import { deleteRunJobs, listRunDeadJobs, RunJobsLockedError } from "./queue.ts";
 import { bootPhase, isReady } from "./readiness.ts";
 import { describeRun, enrichSuspensions, listRuns, type RunRef, resolveRunRef } from "./runs.ts";
 import { listSchedules, scheduleChecks } from "./schedules.ts";
-import { listRunDeadJobs, listRunSteps } from "./stalls.ts";
+import { listRunSteps } from "./stalls.ts";
 import { startRun } from "./trigger.ts";
 
 // The app is library code: a factory repo installs this package and hands in
@@ -216,13 +217,22 @@ export function createApp(factory: Factory): Hono {
     if (ref.kind !== "found") return unresolvedRunResponse(c, ref);
     const run = getRun(ref.runId);
     const status = await run.status;
-    if (TERMINAL_RUN_STATUSES.has(status)) {
+    if (TERMINAL_RUN_STATUSES.has(status) && status !== "cancelled") {
       return c.json({ error: `run ${ref.runId} is already ${status}`, status }, 409);
     }
     const releasedTokens = await runResourceTokens(ref.runId);
-    await run.cancel();
-    // Cancel never cleans up: name what stays so the operator knows where the
-    // worktree is and that `jigs sweep` is the way to reclaim it.
+    if (status !== "cancelled") await run.cancel();
+    let deletedJobs: number;
+    try {
+      deletedJobs = await deleteRunJobs(registrySql(), ref.runId);
+    } catch (error) {
+      if (error instanceof RunJobsLockedError) {
+        return c.json({ error: error.message, retryable: true }, 503);
+      }
+      throw error;
+    }
+    // Cancel leaves the worktree behind: name what stays so the operator knows
+    // where it is and that `jigs sweep` is the way to reclaim it.
     const worktrees = (await listWorktreesForRun(registrySql(), ref.runId)).map((row) => row.path);
     // A merged run's workflow tears its own worktree down; everything else —
     // cancel included — leaves the tree on disk for the operator's `jigs
@@ -232,6 +242,7 @@ export function createApp(factory: Factory): Hono {
     return c.json({
       runId: ref.runId,
       cancelled: true,
+      deletedJobs,
       releasedTokens,
       worktrees,
     });

@@ -529,6 +529,12 @@ if (postgresUrl === undefined || postgresUrl === "") {
     "\nboot check skipped: WORKFLOW_POSTGRES_URL unset (CI runs it against a service container)",
   );
 } else {
+  console.log("\n=== cancel: pending and exhausted queue jobs are deleted in Postgres");
+  execFileSync(
+    "pnpm",
+    ["vitest", "run", "--config", "vitest.live.config.ts", "src/service/cancel.live.test.ts"],
+    { cwd: repo, stdio: "inherit" },
+  );
   console.log(
     "\n=== boot: the built bundle resolves every import, becomes ready, and exits on SIGTERM",
   );

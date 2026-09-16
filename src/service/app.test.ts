@@ -15,7 +15,7 @@ import * as linear from "../providers/linear.ts";
 import * as sql from "../steps/worktree/sql.ts";
 import { makeFakeSql } from "../steps/worktree/test-fixtures.ts";
 import { createApp } from "./app.ts";
-import * as stalls from "./stalls.ts";
+import * as queue from "./queue.ts";
 
 // The routes are exercised against workflows this file declares: what is under
 // test is the framework.
@@ -82,8 +82,9 @@ beforeEach(() => {
   // The registry is a hard dependency now, so every route that reads it is
   // pointed at an empty in-memory one rather than the operator's database.
   vi.spyOn(sql, "registrySql").mockReturnValue(makeFakeSql(new Map()));
-  vi.spyOn(stalls, "listJobRunIds").mockResolvedValue({ dead: [], live: [] });
-  vi.spyOn(stalls, "listRunDeadJobs").mockResolvedValue([]);
+  vi.spyOn(queue, "listJobRunIds").mockResolvedValue({ dead: [], live: [] });
+  vi.spyOn(queue, "listRunDeadJobs").mockResolvedValue([]);
+  vi.spyOn(queue, "deleteRunJobs").mockResolvedValue(0);
   vi.stubEnv("WORKFLOW_LOCAL_DATA_DIR", dataDir);
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "gh-hook-secret");
   vi.stubEnv("LINEAR_WEBHOOK_SECRET", "linear-hook-secret");
@@ -440,7 +441,7 @@ test("GET /api/runs/:ref reports a stalled run as stalled, like `jigs ps` does",
     steps: { list: async () => ({ data: [] }) },
     hooks: { list: async () => ({ data: [] }) },
   } as unknown as Parameters<typeof setWorld>[0]);
-  vi.spyOn(stalls, "listJobRunIds").mockResolvedValue({
+  vi.spyOn(queue, "listJobRunIds").mockResolvedValue({
     dead: [RUN],
     live: [],
   });
@@ -548,11 +549,56 @@ test("poke wakes the hooks that name a resource, never the needs-human marker", 
 
 test("cancel names the resources it released, and not the marker", async () => {
   runHolding(CLAIM, MARKER);
+  vi.mocked(queue.deleteRunJobs).mockResolvedValueOnce(3);
 
   const res = await app.request(`/api/runs/${RUN}/cancel`, { method: "POST" });
 
   expect(res.status).toBe(200);
-  expect(await res.json()).toMatchObject({ releasedTokens: [CLAIM] });
+  expect(await res.json()).toMatchObject({ deletedJobs: 3, releasedTokens: [CLAIM] });
+  expect(queue.deleteRunJobs).toHaveBeenCalledWith(expect.anything(), RUN);
+});
+
+test("cancel retries queue cleanup when the first cleanup failed after cancellation", async () => {
+  let status = "running";
+  setWorld({
+    runs: { get: async () => ({ status, createdAt: new Date() }) },
+    hooks: { list: async () => ({ data: [] }) },
+    events: {
+      create: async () => {
+        status = "cancelled";
+      },
+    },
+  } as unknown as Parameters<typeof setWorld>[0]);
+  vi.mocked(queue.deleteRunJobs)
+    .mockRejectedValueOnce(new Error("database connection dropped"))
+    .mockResolvedValueOnce(2);
+  const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+  const failed = await app.request(`/api/runs/${RUN}/cancel`, { method: "POST" });
+  expect(failed.status).toBe(500);
+
+  const retried = await app.request(`/api/runs/${RUN}/cancel`, { method: "POST" });
+
+  expect(retried.status).toBe(200);
+  expect(await retried.json()).toMatchObject({ cancelled: true, deletedJobs: 2 });
+  expect(queue.deleteRunJobs).toHaveBeenCalledTimes(2);
+  expect(errors).toHaveBeenCalled();
+});
+
+test("cancel reports an active queue delivery as retryable", async () => {
+  setWorld({
+    runs: { get: async () => ({ status: "cancelled", createdAt: new Date() }) },
+    hooks: { list: async () => ({ data: [] }) },
+  } as unknown as Parameters<typeof setWorld>[0]);
+  vi.mocked(queue.deleteRunJobs).mockRejectedValueOnce(new queue.RunJobsLockedError(RUN));
+
+  const res = await app.request(`/api/runs/${RUN}/cancel`, { method: "POST" });
+
+  expect(res.status).toBe(503);
+  expect(await res.json()).toEqual({
+    error: `queue jobs for ${RUN} are still running; retry cancellation`,
+    retryable: true,
+  });
 });
 
 test("GET /api/schedules answers with what the factory declared, and what is next", async () => {

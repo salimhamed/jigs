@@ -12,14 +12,8 @@ import { NEEDS_HUMAN_TOKEN_PREFIX } from "../blocks/ticket/halt-for-human.ts";
 import { getComment, resolveIssueRef } from "../providers/linear.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import { registrySql } from "../steps/worktree/sql.ts";
-import {
-  hasActiveStep,
-  type JobRunIds,
-  listJobRunIds,
-  listRunSteps,
-  listStepsByRun,
-  type StepView,
-} from "./stalls.ts";
+import { type JobRunIds, listJobRunIds } from "./queue.ts";
+import { hasActiveStep, listRunSteps, listStepsByRun, type StepView } from "./stalls.ts";
 
 // The SDK mints run ids as `wrun_` + a ULID, so a ref is run-id-shaped (with
 // or without the prefix, full or truncated) or it is a ticket ref. Crockford
