@@ -325,7 +325,7 @@ export async function postPullRequestReview(
     {
       event: REVIEW_EVENTS[review.event],
       body: review.body,
-      ...(review.comments === undefined
+      ...(review.comments === undefined || review.comments.length === 0
         ? {}
         : {
             comments: review.comments.map(({ path, line, body }) => ({

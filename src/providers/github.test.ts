@@ -410,6 +410,14 @@ test("a review preserves inline comment order and anchors comments to the head s
   });
 });
 
+test("a review with an empty comments array omits comments from the request", async () => {
+  fetchMock.mockResolvedValueOnce(json({ id: 972 }));
+  await postPullRequestReview(pr, { event: "comment", body: "Summary", comments: [] });
+
+  const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect(JSON.parse(String(init.body))).toEqual({ event: "COMMENT", body: "Summary" });
+});
+
 test("createPullRequest posts head, base, title and body and returns the number", async () => {
   fetchMock.mockResolvedValueOnce(json({ number: 41 }));
   const created = await createPullRequest({
