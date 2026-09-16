@@ -8,10 +8,11 @@ export const SERVICE_ENV_FILE = "the factory repo's .env";
 export const RESTART_SERVICE = "jigs service restart";
 
 // A probe is a provider client; the catalog owns the repair text, which is
-// what makes preflight and doctor say the same thing.
+// what makes preflight and doctor say the same thing. GitHub has no entry
+// here: its credential is an identity with two shapes, checked in
+// github-identity.ts.
 export interface CoreProbes {
   linearViewer(): Promise<unknown>;
-  githubWhoami(): Promise<unknown>;
 }
 
 interface CredentialCheck {
@@ -52,28 +53,22 @@ function credentialCheck(spec: CredentialCheck): Check {
 
 export type Integration = "linear" | "github";
 
+/** The credential checks for the integrations a caller declared. */
 export function coreChecks(
   probes: CoreProbes,
   env: NodeJS.ProcessEnv = process.env,
-  integrations: Integration[] = ["linear", "github"],
+  integrations: Integration[] = ["linear"],
 ): Check[] {
-  const checks: Record<Integration, Check> = {
-    linear: credentialCheck({
-      id: "core.linear-api-key",
-      label: "Linear API key",
-      variable: "LINEAR_API_KEY",
-      provider: "Linear",
-      probe: () => probes.linearViewer(),
-      env,
-    }),
-    github: credentialCheck({
-      id: "core.github-token",
-      label: "GitHub token",
-      variable: "GITHUB_TOKEN",
-      provider: "GitHub",
-      probe: () => probes.githubWhoami(),
-      env,
-    }),
-  };
-  return [...new Set(integrations)].map((integration) => checks[integration]);
+  return integrations.includes("linear")
+    ? [
+        credentialCheck({
+          id: "core.linear-api-key",
+          label: "Linear API key",
+          variable: "LINEAR_API_KEY",
+          provider: "Linear",
+          probe: () => probes.linearViewer(),
+          env,
+        }),
+      ]
+    : [];
 }

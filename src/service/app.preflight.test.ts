@@ -119,8 +119,8 @@ test("a trigger with three seeded failures is refused with all three at once", a
   expect(body.error).toBe("preflight failed");
   expect(body.failures.map((failure) => failure.id).sort()).toEqual([
     "binding.api",
-    "core.github-token",
     "core.linear-api-key",
+    "github.identity",
   ]);
   for (const failure of body.failures) {
     expect(failure.reason).not.toBe("");
@@ -153,7 +153,7 @@ test("GET /api/doctor reports rejected configured credentials without creating a
   };
   expect(body.ok).toBe(false);
   const failed = body.checks.filter((check) => !("ok" in check && check.ok));
-  expect(failed.map((check) => check.id)).toContain("core.github-token");
+  expect(failed.map((check) => check.id)).toContain("github.identity");
   for (const failure of failed) expect(failure.repair).not.toBe("");
   // Doctor runs the whole catalog, not one workflow's manifest.
   expect(body.checks.map((check) => check.id)).toContain("harness.codex-auth");
@@ -211,7 +211,6 @@ test("doctor reports a malformed schedule beside the catalog's own checks", asyn
   expect(schedule?.label).toBe("schedule nightly");
   expect(schedule?.repair).toContain("fix schedules.nightly.cron");
   expect(body.checks.map((check) => check.id)).toContain("harness.claude-auth");
-  expect(body.checks.map((check) => check.id)).not.toContain("core.github-token");
 });
 
 test("doctor names an unreadable factory config instead of staying silent", async () => {

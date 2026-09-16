@@ -4,13 +4,40 @@
 
 import {
   commitsAhead,
+  DEFAULT_PUSH_TARGET,
   diffSince,
   git,
   pushBranch as gitPushBranch,
   headSha,
+  type PushTarget,
   pushCommit,
+  resolveRemoteUrl,
 } from "../../providers/git.ts";
+import { githubAuth } from "../../providers/github-auth.ts";
+import { parseGithubRemote } from "../../providers/github-webhook.ts";
 import { isWorktreeDirty } from "../worktree/teardown.ts";
+
+// A binding's remote is an SSH URL, which authenticates as whoever owns the
+// key on this machine — the operator. An installation token cannot travel that
+// way, so App mode pushes to the same repository over HTTPS and hands the token
+// to `PushTarget`, which keeps it out of the URL and out of argv. Only the push
+// is redirected: the binding's clone and every fetch still use its own remote,
+// as the operator.
+async function pushTarget(worktreePath: string): Promise<PushTarget> {
+  const auth = githubAuth();
+  if (auth.identity.mode === "pat") return DEFAULT_PUSH_TARGET;
+  const { url } = await resolveRemoteUrl(worktreePath);
+  const ref = parseGithubRemote(url);
+  if (ref === null) {
+    throw new Error(
+      `${worktreePath} pushes to ${url}, which is not a github.com remote — a GitHub App installation token can only push to GitHub`,
+    );
+  }
+  return {
+    remote: `https://github.com/${ref.owner}/${ref.repo}.git`,
+    token: await auth.bearer(),
+  };
+}
 
 // Three reads and no side effect, so a caller can ask what is on the branch
 // before deciding whether to push. Only committed work is ever reviewed or
@@ -34,7 +61,7 @@ export async function pushBranch(
   worktreePath: string,
   branch: string,
 ): Promise<{ headSha: string }> {
-  await gitPushBranch(worktreePath, branch);
+  await gitPushBranch(worktreePath, branch, await pushTarget(worktreePath));
   return { headSha: await headSha(worktreePath) };
 }
 
@@ -56,7 +83,7 @@ export async function pushApprovedChange(
       `Cannot publish ${branch}: ${head} is not the approved commit ${approvedCommit}`,
     );
   }
-  await pushCommit(worktreePath, branch, approvedCommit);
+  await pushCommit(worktreePath, branch, approvedCommit, await pushTarget(worktreePath));
   return { headSha: approvedCommit };
 }
 

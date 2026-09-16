@@ -8,7 +8,12 @@ import { buildFactoryService } from "./commands/build.ts";
 import { cancelRun } from "./commands/cancel.ts";
 import { runDoctor } from "./commands/doctor.ts";
 import { generateIntegration } from "./commands/generate.ts";
-import { initFactory } from "./commands/init.ts";
+import {
+  type AppIdentityOptions,
+  type IdentityMode,
+  initFactory,
+  resolveIdentityOptions,
+} from "./commands/init.ts";
 import { showLogs } from "./commands/logs.ts";
 import { pokeRun } from "./commands/poke.ts";
 import { showRuns } from "./commands/ps.ts";
@@ -62,8 +67,24 @@ const program = new Command("jigs")
 program
   .command("init")
   .description("scaffold a factory repo in the current directory")
-  .action(async () => {
-    await initFactory({ cwd: process.cwd(), out });
+  .addOption(
+    new Option("--identity <mode>", "which GitHub credential this factory is written for")
+      .choices(["pat", "app"])
+      .default("pat"),
+  )
+  // Required together by --identity app, and refused there as a set rather
+  // than defaulted: a scaffold with placeholder ids does not load.
+  .option("--app-id <id>", "GitHub App id (--identity app)")
+  .option("--installation-id <id>", "the App's installation id (--identity app)")
+  .option("--private-key <path>", "the App's private key .pem (--identity app)")
+  .option("--operator <login>", "your GitHub login (--identity app)")
+  .option("--co-author <author>", '"Name <email>" for merge commit trailers (--identity app)')
+  .action(async (options: { identity: IdentityMode } & AppIdentityOptions) => {
+    await initFactory({
+      cwd: process.cwd(),
+      out,
+      identity: resolveIdentityOptions(options.identity, options),
+    });
   });
 
 program

@@ -104,7 +104,7 @@ export function bindDeliverySteps(steps: DeliverySteps) {
     openPullRequest,
     commentOnPullRequest,
     replyToPullRequestReviewThread,
-    squashMergePullRequest,
+    mergePullRequest,
   } = steps;
 
   function lazyDiff(change: DeliveryChange) {
@@ -277,17 +277,18 @@ export function bindDeliverySteps(steps: DeliverySteps) {
     const instructions = { ciFixAttempts: "", pullRequestRevisionRounds: "" };
     const note = (reason: StatusReason, headSha: string, body: string) =>
       postPullRequestNote({ commentOnPullRequest, pr, scope, reason, headSha, body });
-    return attend<DeliveryResult<TTask>>(pullRequestGate(pr, scope), async (wake) => {
+    const gate = pullRequestGate(pr, scope, options.merge.approval);
+    return attend<DeliveryResult<TTask>>(gate, async (wake) => {
       if (wake.kind === "closed") {
         return finished({ status: wake.merged ? "merged" : "closed", change, pr });
       }
       if (wake.kind === "merge-ready") {
-        if (options.merge === "human") return listen();
+        if (options.merge.by === "human") return listen();
         let refused: string;
         try {
-          const result = await squashMergePullRequest(pr, wake.headSha);
+          const result = await mergePullRequest(pr, wake.headSha, options.merge);
           if (result.merged) return finished({ status: "merged", change, pr });
-          refused = `GitHub did not merge ${wake.headSha}, so the pull request has moved since it was ready`;
+          refused = result.reason;
         } catch (error) {
           refused = String(error);
         }

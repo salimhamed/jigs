@@ -1,4 +1,5 @@
 import { beforeEach, expect, test, vi } from "vitest";
+import type { ApprovalSignal } from "../../config/factory-config.ts";
 import type { PrSnapshot, ReviewThread } from "../../providers/github.ts";
 import {
   classifyPrState,
@@ -48,9 +49,15 @@ beforeEach(() => {
 const SCOPE = "ship/AGE-403";
 const AT = "2026-08-26T12:00:00Z";
 
+const APPROVAL: ApprovalSignal = { kind: "review" };
+
 const snapshot = (overrides: Partial<PrSnapshot> = {}): PrSnapshot => ({
   state: "open",
   merged: false,
+  draft: false,
+  mergeState: "clean",
+  labels: [],
+  mergeCommitSha: null,
   headSha: "head-1",
   reviews: [],
   reviewThreads: [],
@@ -113,10 +120,10 @@ const pr = { owner: "acme", repo: "app", number: 7 };
 const check = (name: string) => ({ name, conclusion: "failure", url: "http://ci.test/1" });
 
 const wakesOf = (state: PrSnapshot, scope = SCOPE): GateWake[] =>
-  classifyPrState(state, scope).wakes;
+  classifyPrState(state, scope, APPROVAL).wakes;
 
 test("a pull request with nothing outstanding yields no wakes", () => {
-  const state = classifyPrState(snapshot(), SCOPE);
+  const state = classifyPrState(snapshot(), SCOPE, APPROVAL);
   expect(state.wakes).toEqual([]);
   expect(state.done).toBe(false);
 });
@@ -158,7 +165,7 @@ test("another scope's marker is jigs' own comment, but answers nothing of ours",
     comment(900, "reviewer"),
     comment(901, "salim", answering("900@2026-08-26T12:00:00Z", "reply", "review/outstanding")),
   ]);
-  const state = classifyPrState(snapshot({ reviewThreads: [other] }), SCOPE);
+  const state = classifyPrState(snapshot({ reviewThreads: [other] }), SCOPE, APPROVAL);
   expect(state.wakes).toHaveLength(1);
   // Its own comment is never read back as feedback, whoever wrote it.
   expect(state.wakes[0]).toEqual({ kind: "review-comments", threads: [other] });
@@ -221,6 +228,7 @@ test("a conversation comment jigs posted is never feedback", () => {
       conversationComments: [conversationComment(503, "salim", standingDown("head-9", "ci"))],
     }),
     SCOPE,
+    APPROVAL,
   );
   expect(state.wakes).toEqual([]);
   expect(state.ownComments).toBe(1);
@@ -353,7 +361,7 @@ test("a human quoting jigs' reply is a human, and is answered again", () => {
     comment(901, "salim", answering(`900@${AT}`)),
     comment(902, "reviewer", quoted),
   ]);
-  const state = classifyPrState(snapshot({ reviewThreads: [followed] }), SCOPE);
+  const state = classifyPrState(snapshot({ reviewThreads: [followed] }), SCOPE, APPROVAL);
   expect(state.wakes).toHaveLength(1);
   // Only the real reply counts as jigs' own; the quotation of it does not.
   expect(state.ownComments).toBe(1);
@@ -371,7 +379,7 @@ test("the identical snapshot classifies identically, every time", () => {
 
 test("a closed PR yields closed with the merged flag and finishes the gate", () => {
   for (const merged of [true, false]) {
-    const state = classifyPrState(snapshot({ state: "closed", merged }), SCOPE);
+    const state = classifyPrState(snapshot({ state: "closed", merged }), SCOPE, APPROVAL);
     expect(state.wakes).toEqual([{ kind: "closed", merged }]);
     expect(state.done).toBe(true);
   }
@@ -379,7 +387,7 @@ test("a closed PR yields closed with the merged flag and finishes the gate", () 
 
 test("the gate classifies a first snapshot before it ever awaits the hook", async () => {
   const fetchState = vi.fn(async () => snapshot({ state: "closed", merged: true }));
-  const gate = pullRequestGate(pr, fetchState, SCOPE);
+  const gate = pullRequestGate(pr, fetchState, SCOPE, APPROVAL);
 
   expect(await gate.next()).toEqual({
     done: false,
@@ -401,7 +409,7 @@ test("a second round re-reads the pull request and re-classifies it", async () =
   // The generator stays suspended on the hook when the test ends; nothing is
   // waiting on it.
   const fetchState = vi.fn(async () => states.shift() ?? snapshot());
-  const gate = pullRequestGate(pr, fetchState, SCOPE);
+  const gate = pullRequestGate(pr, fetchState, SCOPE, APPROVAL);
 
   expect((await gate.next()).value).toMatchObject({ kind: "review-comments" });
   const next = gate.next();
@@ -419,7 +427,7 @@ test("a pr another run already holds is a claim conflict, never fetched", async 
   hook.conflict = { runId: "wrun_OWNER" };
   const fetchState = vi.fn(async () => snapshot());
 
-  await expect(pullRequestGate(pr, fetchState, SCOPE).next()).rejects.toThrow(
+  await expect(pullRequestGate(pr, fetchState, SCOPE, APPROVAL).next()).rejects.toThrow(
     "is already claimed by run wrun_OWNER",
   );
   expect(fetchState).not.toHaveBeenCalled();

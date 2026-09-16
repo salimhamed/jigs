@@ -1,3 +1,4 @@
+import type { MergePolicy } from "../../config/factory-config.ts";
 import type { CheckRun, PrRef, ReviewThread } from "../../providers/github.ts";
 import type * as branch from "../../steps/pull-request/branch.ts";
 import type * as pr from "../../steps/pull-request/pr.ts";
@@ -5,7 +6,7 @@ import type { HarnessConfig } from "../agent/harness-config.ts";
 import type { AgentSession } from "../agent/result.ts";
 import type { AgentFn } from "../agent/resume-or-rebuild.ts";
 import type { PullRequestDescription } from "../builder-agent/describe-pr.ts";
-import type { GateWake } from "../pull-request/gate.ts";
+import type { GateFn } from "../pull-request/gate.ts";
 import type { WorktreeFacts } from "../worktree.ts";
 
 /**
@@ -282,8 +283,13 @@ export interface FollowPullRequestOptions<TTask extends WorkItem = WorkItem> {
   ciRepair?: CiRepairAgent<TTask>;
   pullRequestRevision?: PullRequestRevisionAgent<TTask>;
   limits: Pick<DeliveryLimits, "ciFixAttempts" | "pullRequestRevisionRounds">;
-  /** `jigs` squash-merges once the pull request is mergeable; `human` only keeps watching. */
-  merge: "human" | "jigs";
+  /**
+   * Who merges, by which method, and what signal permits it. `by: "jigs"`
+   * merges with `method` as soon as `approval` is satisfied and GitHub reports
+   * the pull request mergeable; `by: "human"` only keeps watching. The factory
+   * states it in `jigs.config.ts`; `resolveMergePolicy()` reads it.
+   */
+  merge: MergePolicy;
   onLimit?: OnDeliveryLimit<TTask>;
 }
 export interface DeliverChangeOptions<TTask extends WorkItem = WorkItem>
@@ -293,7 +299,8 @@ export interface DeliverChangeOptions<TTask extends WorkItem = WorkItem>
   pullRequestRevision?: PullRequestRevisionAgent<TTask>;
   pullRequestDescription?: DescriptionAgent<TTask>;
   limits: DeliveryLimits;
-  merge: "human" | "jigs";
+  /** See {@link FollowPullRequestOptions.merge}. */
+  merge: MergePolicy;
   /** See {@link FollowPullRequestOptions.scope}. */
   scope?: string;
 }
@@ -301,7 +308,7 @@ export interface DeliverChangeOptions<TTask extends WorkItem = WorkItem>
 /** Supply the factory's durable functions once, then use the delivery operations. */
 export interface DeliverySteps {
   runAgent: AgentFn;
-  pullRequestGate: (pr: PrRef, scope: string) => AsyncGenerator<GateWake, void, undefined>;
+  pullRequestGate: GateFn;
   readBranchState: typeof branch.readBranchState;
   readWorktreeDiff: typeof branch.readWorktreeDiff;
   pushBranch: typeof branch.pushBranch;
@@ -310,5 +317,5 @@ export interface DeliverySteps {
   openPullRequest: typeof pr.openPullRequest;
   commentOnPullRequest: typeof pr.commentOnPullRequest;
   replyToPullRequestReviewThread: typeof pr.replyToPullRequestReviewThread;
-  squashMergePullRequest: typeof pr.squashMergePullRequest;
+  mergePullRequest: typeof pr.mergePullRequest;
 }

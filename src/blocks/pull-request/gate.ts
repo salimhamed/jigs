@@ -6,6 +6,7 @@
 // decides what is still outstanding.
 
 import { createHook } from "workflow";
+import type { ApprovalSignal } from "../../config/factory-config.ts";
 import type {
   CheckRun,
   PrComment,
@@ -75,8 +76,8 @@ export type { PrRef };
  *
  * - `review-comments`: feedback with no answer carrying this scope's marker.
  * - `ci-red`: the current head is red, with no marked stand-down for it.
- * - `merge-ready`: green plus an approval of the current head, not merged,
- *   with no marked stand-down for it.
+ * - `merge-ready`: GitHub reports the pull request mergeable and the
+ *   configured approval signal is present, with no marked stand-down for it.
  * - `closed`: terminal.
  */
 export type GateWake =
@@ -147,11 +148,16 @@ export interface PrState {
 }
 
 /**
- * What this scope still owes the pull request, derived from the snapshot and
- * the markers in it. Pure: two identical snapshots classify identically, and a
- * snapshot whose comments already carry this scope's answers yields nothing.
+ * What this scope still owes the pull request, derived from the snapshot, the
+ * markers in it, and the approval signal the factory configured. Pure: two
+ * identical snapshots classify identically, and a snapshot whose comments
+ * already carry this scope's answers yields nothing.
  */
-export function classifyPrState(snapshot: PrSnapshot, scope: string): PrState {
+export function classifyPrState(
+  snapshot: PrSnapshot,
+  scope: string,
+  approval: ApprovalSignal,
+): PrState {
   const ownComments = bodies(snapshot).filter(carriesMarker).length;
   if (snapshot.state === "closed") {
     return { wakes: [{ kind: "closed", merged: snapshot.merged }], done: true, ownComments };
@@ -214,7 +220,7 @@ export function classifyPrState(snapshot: PrSnapshot, scope: string): PrState {
   // Feedback first: merging over an unanswered review comment would answer it
   // with a merge.
   if (
-    isPullRequestMergeReady(snapshot) &&
+    isPullRequestMergeReady(snapshot, approval) &&
     threads.length === 0 &&
     !ledger.settled.merge.has(snapshot.headSha)
   ) {
@@ -233,7 +239,11 @@ export function classifyPrState(snapshot: PrSnapshot, scope: string): PrState {
 export type FetchPrState = (pr: PrRef) => Promise<PrSnapshot>;
 
 /** {@link pullRequestGate} with its step already bound. */
-export type GateFn = (pr: PrRef, scope: string) => AsyncGenerator<GateWake, void, undefined>;
+export type GateFn = (
+  pr: PrRef,
+  scope: string,
+  approval: ApprovalSignal,
+) => AsyncGenerator<GateWake, void, undefined>;
 
 // One hook per PR, held across the whole review until the PR closes — the
 // token is never released mid-review. Holding it is the single-writer rule; a
@@ -244,6 +254,7 @@ export async function* pullRequestGate(
   pr: PrRef,
   fetchState: FetchPrState,
   scope: string,
+  approval: ApprovalSignal,
 ): AsyncGenerator<GateWake, void, undefined> {
   const token = prToken(pr);
   const hook = createHook<unknown>({ token });
@@ -253,7 +264,7 @@ export async function* pullRequestGate(
       throw new ClaimConflictError(token, conflict.runId);
     }
     while (true) {
-      const round = classifyPrState(await fetchState(pr), scope);
+      const round = classifyPrState(await fetchState(pr), scope, approval);
       console.log(
         `[prGate] ${pr.owner}/${pr.repo}#${pr.number} scope=${scope} wakes=${round.wakes.length} jigs-comments=${round.ownComments}`,
       );

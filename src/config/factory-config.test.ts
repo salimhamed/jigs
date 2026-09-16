@@ -140,3 +140,74 @@ test("config and imported settings changes are observed in the same process", ()
   );
   expect(resolveService(root).dashboardPort).toBe(9092);
 });
+
+const withSettings = (extra: Record<string, unknown>) =>
+  parseFactoryConfig({ service: { dashboardPort: 9090 }, ...extra });
+
+test("a factory that states no identity or policy gets the defaults", () => {
+  const config = withSettings({});
+  expect(config.github.identity).toEqual({ mode: "pat" });
+  expect(config.merge).toEqual({
+    by: "human",
+    method: "squash",
+    approval: { kind: "review" },
+  });
+});
+
+test("an app identity needs every fact a token cannot be minted without", () => {
+  const app = {
+    mode: "app",
+    appId: 4958325,
+    installationId: 162033982,
+    privateKeyPath: "key.pem",
+    operator: "salimhamed",
+  };
+  expect(withSettings({ github: { identity: app } }).github.identity).toEqual(app);
+  for (const missing of ["appId", "installationId", "privateKeyPath", "operator"]) {
+    const { [missing as keyof typeof app]: _dropped, ...rest } = app;
+    expect(() => withSettings({ github: { identity: rest } })).toThrow(missing);
+  }
+  // A pat identity carries none of them, so a stray one is a mode that did
+  // not change with the fields under it.
+  expect(() => withSettings({ github: { identity: { mode: "pat", appId: 1 } } })).toThrow("appId");
+});
+
+test("a label approval is nothing without the label's name", () => {
+  expect(() => withSettings({ merge: { approval: { kind: "label" } } })).toThrow("name");
+  expect(
+    withSettings({ merge: { approval: { kind: "label", name: "jigs:approved" } } }).merge.approval,
+  ).toEqual({ kind: "label", name: "jigs:approved" });
+  // A review approval takes no name, and a signal that is neither is refused.
+  expect(() => withSettings({ merge: { approval: { kind: "review", name: "x" } } })).toThrow(
+    "name",
+  );
+  expect(() => withSettings({ merge: { approval: { kind: "comment" } } })).toThrow("approval");
+});
+
+test("the merge method is exactly GitHub's three", () => {
+  for (const method of ["squash", "merge", "rebase"]) {
+    expect(withSettings({ merge: { method } }).merge.method).toBe(method);
+  }
+  expect(() => withSettings({ merge: { method: "fast-forward" } })).toThrow("method");
+});
+
+test("identity and policy are independent: any pairing parses", () => {
+  const config = withSettings({
+    github: {
+      identity: {
+        mode: "app",
+        appId: 1,
+        installationId: 2,
+        privateKeyPath: "k.pem",
+        operator: "salimhamed",
+      },
+    },
+    merge: { by: "jigs", method: "rebase", approval: { kind: "label", name: "ship-it" } },
+  });
+  expect(config.github.identity.mode).toBe("app");
+  expect(config.merge).toEqual({
+    by: "jigs",
+    method: "rebase",
+    approval: { kind: "label", name: "ship-it" },
+  });
+});

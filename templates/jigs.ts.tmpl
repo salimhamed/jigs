@@ -3,7 +3,14 @@
 
 import type { WorktreeFacts } from "@salimhamed/jigs";
 import { bindAgentSteps } from "@salimhamed/jigs/agents";
-import type { AgentWire, AskWire, Halt, PrRef, TicketNote } from "@salimhamed/jigs/blocks";
+import type {
+  AgentWire,
+  AskWire,
+  Halt,
+  MergePolicy,
+  PrRef,
+  TicketNote,
+} from "@salimhamed/jigs/blocks";
 import { bindDeliverySteps } from "@salimhamed/jigs/delivery";
 import { bindLinearSteps } from "@salimhamed/jigs/linear";
 import { bindPullRequestSteps } from "@salimhamed/jigs/pull-requests";
@@ -100,6 +107,12 @@ export async function resolveRepository(binding: string) {
   return steps.resolveRepository(binding);
 }
 
+/** Read this factory's merge policy, optionally overriding who merges. */
+export async function resolveMergePolicy(by?: MergePolicy["by"]) {
+  "use step";
+  return steps.resolveMergePolicy(by);
+}
+
 /** Check commits since the base, the branch's current commit, and uncommitted changes. */
 export async function readBranchState(worktreePath: string, baseSha: string) {
   "use step";
@@ -163,10 +176,14 @@ export async function commentOnPullRequest(pullRequest: PrRef, body: string) {
 // One attempt, for the reason above.
 commentOnPullRequest.maxRetries = 0;
 
-/** Squash-merge the pull request, using its current title for the merge commit. */
-export async function squashMergePullRequest(pullRequest: PrRef, expectedHeadSha?: string) {
+/** Merge the pull request with the configured method, pinned to the approved head. */
+export async function mergePullRequest(
+  pullRequest: PrRef,
+  expectedHeadSha: string,
+  policy: MergePolicy,
+) {
   "use step";
-  return steps.squashMergePullRequest(pullRequest, expectedHeadSha);
+  return steps.mergePullRequest(pullRequest, expectedHeadSha, policy);
 }
 
 /** Durable operations used by agent blocks. */
@@ -217,7 +234,7 @@ export const deliverySteps = {
   openPullRequest,
   commentOnPullRequest,
   replyToPullRequestReviewThread,
-  squashMergePullRequest,
+  mergePullRequest,
 };
 const delivery = bindDeliverySteps(deliverySteps);
 

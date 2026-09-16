@@ -223,10 +223,11 @@ test("a failed preflight is logged with its repairs under the schedule's name, a
         ok: false,
         checks: [
           {
-            id: "core.github-token",
-            label: "GitHub token",
+            id: "github.identity",
+            label: "GitHub identity",
             ok: false,
-            reason: "GITHUB_TOKEN is not set in the service's environment",
+            reason:
+              "github.identity is pat but GITHUB_TOKEN is not set in the service's environment",
             repair: "set GITHUB_TOKEN in the factory repo's .env",
           },
         ],
@@ -235,7 +236,7 @@ test("a failed preflight is logged with its repairs under the schedule's name, a
     log: (line) => lines.push(line),
   });
   expect(lines).toEqual([
-    "[schedule] nightly not fired: preflight failed\nGitHub token: GITHUB_TOKEN is not set in the service's environment\n  → set GITHUB_TOKEN in the factory repo's .env",
+    "[schedule] nightly not fired: preflight failed\nGitHub identity: github.identity is pat but GITHUB_TOKEN is not set in the service's environment\n  → set GITHUB_TOKEN in the factory repo's .env",
   ]);
 });
 

@@ -2,6 +2,7 @@ import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import { resetGithubAuth } from "./github-auth.ts";
 import {
   ensureRepoWebhook,
   ensureWebhookSecret,
@@ -17,11 +18,14 @@ beforeEach(() => {
   tmp = makeTmpDir();
   vi.stubGlobal("fetch", fetchMock);
   vi.stubEnv("GITHUB_API_URL", "http://mock.test/github");
+  vi.stubEnv("GITHUB_TOKEN", "gh_test_token");
+  resetGithubAuth();
   fetchMock.mockReset();
 });
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+  resetGithubAuth();
   removeTmpDir(tmp);
 });
 
@@ -53,7 +57,6 @@ const opts = {
   repo: "api",
   ingressUrl: "https://factory.example.ts.net",
   secret: "hook-secret",
-  token: "gh_test_token",
 };
 
 test("creates the webhook when none matches", async () => {

@@ -1,6 +1,10 @@
 // Called from inside "use step" functions and from the trigger-path
 // preflight — never from a workflow body, where env reads and network are
-// forbidden. GITHUB_API_URL override is a test seam.
+// forbidden. The credential comes from github-auth.ts, whichever identity the
+// factory configured.
+
+import type { MergePolicy } from "../config/factory-config.ts";
+import { githubGet, githubGetAll, githubRequest } from "./github-api.ts";
 
 export type PrRef = {
   owner: string;
@@ -62,7 +66,19 @@ export interface CheckRun {
 export interface PrSnapshot {
   state: "open" | "closed";
   merged: boolean;
+  draft: boolean;
   headSha: string;
+  /**
+   * GitHub's own verdict on whether the pull request can merge right now,
+   * folding in conflicts, required checks and required reviews. `"clean"` is
+   * the only value that permits a merge; `"unknown"` means GitHub has not
+   * finished computing it, so the answer is "not yet, ask again".
+   */
+  mergeState: string;
+  /** Label names on the pull request; the `label` approval signal reads these. */
+  labels: string[];
+  /** The merge commit, once GitHub has made one. */
+  mergeCommitSha: string | null;
   reviews: PrReview[];
   reviewThreads: ReviewThread[];
   conversationComments: PrComment[];
@@ -70,47 +86,8 @@ export interface PrSnapshot {
   failingChecks: CheckRun[];
 }
 
-async function githubRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const token = process.env.GITHUB_TOKEN;
-  if (token === undefined || token === "") {
-    throw new Error("GITHUB_TOKEN is not set");
-  }
-  const base = process.env.GITHUB_API_URL ?? "https://api.github.com";
-  const res = await fetch(`${base}${path}`, {
-    method,
-    headers: {
-      authorization: `Bearer ${token}`,
-      accept: "application/vnd.github+json",
-      "x-github-api-version": "2022-11-28",
-      ...(body === undefined ? {} : { "content-type": "application/json" }),
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  if (!res.ok) {
-    throw new Error(`GitHub API ${res.status} on ${path}: ${await res.text()}`);
-  }
-  return (await res.json()) as T;
-}
-
-const githubGet = <T>(path: string): Promise<T> => githubRequest<T>("GET", path);
-
-// GitHub caps a page at 100 and a short page is the last one. The ceiling is
-// not a real pull request's size — it is the stop for a proxy that answers
-// every page with a full one, which would otherwise spin a step forever.
-const MAX_PAGES = 50;
-
-async function githubGetAll<T>(path: string): Promise<T[]> {
-  const join = path.includes("?") ? "&" : "?";
-  const all: T[] = [];
-  for (let page = 1; page <= MAX_PAGES; page += 1) {
-    const batch = await githubGet<T[]>(`${path}${join}per_page=100&page=${page}`);
-    all.push(...batch);
-    if (batch.length < 100) return all;
-  }
-  throw new Error(`GitHub kept returning full pages of ${path} past ${MAX_PAGES} pages`);
-}
-
-// The preflight probe for GITHUB_TOKEN.
+// The preflight probe for a personal access token. It does not answer for an
+// installation token, which is why the App identity names its operator.
 export async function getAuthenticatedUser(): Promise<{ login: string }> {
   return githubGet<{ login: string }>("/user");
 }
@@ -197,6 +174,10 @@ export async function fetchPrSnapshot(pr: PrRef): Promise<PrSnapshot> {
   const pull = await githubGet<{
     state: "open" | "closed";
     merged: boolean;
+    draft?: boolean;
+    mergeable_state?: string | null;
+    merge_commit_sha?: string | null;
+    labels?: Array<{ name: string }>;
     head: { sha: string };
   }>(prPath);
   const reviews = await githubGetAll<{
@@ -269,6 +250,12 @@ export async function fetchPrSnapshot(pr: PrRef): Promise<PrSnapshot> {
   return {
     state: pull.state,
     merged: pull.merged,
+    draft: pull.draft ?? false,
+    // A missing field is not a clean one: an absent verdict reads as unknown,
+    // which is "recheck on the next wake".
+    mergeState: pull.mergeable_state ?? "unknown",
+    labels: (pull.labels ?? []).map((label) => label.name),
+    mergeCommitSha: pull.merge_commit_sha ?? null,
     headSha: pull.head.sha,
     reviews: reviews.map((review) => ({
       id: review.id,
@@ -330,6 +317,14 @@ export async function createPullRequest(request: CreatePullRequest): Promise<{ n
   return githubRequest<{ number: number }>("POST", `/repos/${owner}/${repo}/pulls`, rest);
 }
 
+/** The commit messages on the branch, in the order GitHub lists them. */
+export async function fetchPrCommitMessages(pr: PrRef): Promise<string[]> {
+  const commits = await githubGetAll<{ commit: { message: string } }>(
+    `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}/commits`,
+  );
+  return commits.map((entry) => entry.commit.message);
+}
+
 export async function fetchPrTitle(pr: PrRef): Promise<string> {
   const pull = await githubGet<{ title: string }>(
     `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}`,
@@ -337,18 +332,40 @@ export async function fetchPrTitle(pr: PrRef): Promise<string> {
   return pull.title;
 }
 
-export async function squashMergePr(
+export interface MergeRequest {
+  title: string;
+  /** The head the caller judged ready; GitHub refuses the merge if it has moved. */
+  expectedHeadSha: string;
+  method: MergePolicy["method"];
+  /** The merge commit body, carrying the `Co-authored-by` trailer when there is one. */
+  message?: string;
+}
+
+// PUT, and `sha` is the guard: GitHub answers 409 rather than merging a commit
+// the caller never saw. A rebase rewrites the commits, so it takes no message.
+export async function mergePr(
   pr: PrRef,
-  title: string,
-  expectedHeadSha?: string,
+  request: MergeRequest,
 ): Promise<{ merged: boolean; sha: string }> {
   return githubRequest<{ merged: boolean; sha: string }>(
     "PUT",
     `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}/merge`,
     {
-      merge_method: "squash",
-      commit_title: title,
-      ...(expectedHeadSha === undefined ? {} : { sha: expectedHeadSha }),
+      merge_method: request.method,
+      sha: request.expectedHeadSha,
+      ...(request.method === "rebase"
+        ? {}
+        : {
+            commit_title: request.title,
+            ...(request.message === undefined ? {} : { commit_message: request.message }),
+          }),
     },
   );
+}
+
+/** Put the operator's name on a pull request the App opened for them. */
+export async function assignPullRequest(pr: PrRef, logins: string[]): Promise<void> {
+  await githubRequest("POST", `/repos/${pr.owner}/${pr.repo}/issues/${pr.number}/assignees`, {
+    assignees: logins,
+  });
 }

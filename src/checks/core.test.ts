@@ -8,9 +8,6 @@ function probes(overrides: Partial<CoreProbes> = {}) {
     linearViewer: async () => {
       calls.push("linear");
     },
-    githubWhoami: async () => {
-      calls.push("github");
-    },
   };
   return { probes: { ...base, ...overrides }, calls };
 }
@@ -24,20 +21,13 @@ const outcome = async (env: NodeJS.ProcessEnv, id: string, p: CoreProbes) => {
 
 test("an unset LINEAR_API_KEY fails before any probe runs", async () => {
   const { probes: p, calls } = probes();
-  const check = await outcome({ GITHUB_TOKEN: "gh" }, "core.linear-api-key", p);
+  const check = await outcome({}, "core.linear-api-key", p);
   expect(check).toMatchObject({
     ok: false,
     reason: expect.stringContaining("LINEAR_API_KEY is not set"),
     repair: expect.stringContaining("the factory repo's .env"),
   });
   expect(calls).not.toContain("linear");
-});
-
-test("an empty GITHUB_TOKEN fails before any probe runs", async () => {
-  const { probes: p, calls } = probes();
-  const check = await outcome({ LINEAR_API_KEY: "lin", GITHUB_TOKEN: "" }, "core.github-token", p);
-  expect(check).toMatchObject({ ok: false });
-  expect(calls).not.toContain("github");
 });
 
 test("a rejected LINEAR_API_KEY surfaces the provider error and a re-issue repair", async () => {
@@ -54,23 +44,14 @@ test("a rejected LINEAR_API_KEY surfaces the provider error and a re-issue repai
   });
 });
 
-test("a rejected GITHUB_TOKEN surfaces the provider error and a re-issue repair", async () => {
-  const { probes: p } = probes({
-    githubWhoami: async () => {
-      throw new Error("GitHub API 401 on /user: Bad credentials");
-    },
-  });
-  const check = await outcome({ GITHUB_TOKEN: "stale" }, "core.github-token", p);
-  expect(check).toMatchObject({
-    ok: false,
-    reason: expect.stringContaining("Bad credentials"),
-    repair: expect.stringContaining("GITHUB_TOKEN"),
-  });
+test("a present and accepted credential is green", async () => {
+  const { probes: p, calls } = probes();
+  const report = await runChecks(coreChecks(p, { LINEAR_API_KEY: "lin" }));
+  expect(report.ok).toBe(true);
+  expect(calls).toEqual(["linear"]);
 });
 
-test("both credentials present and accepted is green", async () => {
-  const { probes: p, calls } = probes();
-  const report = await runChecks(coreChecks(p, { LINEAR_API_KEY: "lin", GITHUB_TOKEN: "gh" }));
-  expect(report.ok).toBe(true);
-  expect(calls.sort()).toEqual(["github", "linear"]);
+test("an integration nobody declared is not checked", async () => {
+  const { probes: p } = probes();
+  expect(await runChecks(coreChecks(p, {}, ["github"]))).toMatchObject({ ok: true, checks: [] });
 });

@@ -6,6 +6,7 @@ import {
   deliverChange,
   provisionWorktree,
   removeMergedRunWorktrees,
+  resolveMergePolicy,
   reviewTicket,
 } from "#jigs";
 
@@ -17,7 +18,9 @@ const defaultModels = { claude: "opus", codex: "gpt-5.6-sol" };
 export const shipInputs = z.object({
   ticket: z.string().min(1),
   binding: z.string(),
-  merge: z.enum(["jigs", "human"]).default("human"),
+  // Overrides only who merges; the method and the approval signal are this
+  // factory's, in jigs.config.ts, so `jigs doctor` can state the real policy.
+  merge: z.enum(["jigs", "human"]).optional(),
   implementationHarness: z.enum(["claude", "codex"]).default("codex"),
   implementationModel: z.string().min(1).optional(),
   reviewHarness: z.enum(["claude", "codex"]).default("claude"),
@@ -61,7 +64,7 @@ export async function shipWorkflow(inputs: ShipInputs) {
       ciFixAttempts: inputs.ciFixAttempts,
       pullRequestRevisionRounds: inputs.pullRequestRevisionRounds,
     },
-    merge: inputs.merge,
+    merge: await resolveMergePolicy(inputs.merge),
   });
 
   if (result.status === "merged") await removeMergedRunWorktrees();

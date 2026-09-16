@@ -9,10 +9,11 @@ import {
 import { factoryEnvValue, readFactoryEnv } from "../../config/factory-env.ts";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
+import { GithubApiError } from "../../providers/github-api.ts";
+import { resolveGithubIdentity, useFactoryRoot } from "../../providers/github-auth.ts";
 import {
   ensureRepoWebhook,
   ensureWebhookSecret,
-  GithubApiError,
   parseGithubRemote,
 } from "../../providers/github-webhook.ts";
 import { hasBindingClone } from "../../steps/worktree/clone.ts";
@@ -43,6 +44,9 @@ export async function bindRepo(
   options: BindOptions = {},
 ): Promise<BindResult> {
   const factoryRoot = locateFactoryRoot(deps.cwd);
+  // The GitHub credential belongs to the factory this verb was typed in, which
+  // need not be the one the process's own directory sits in.
+  useFactoryRoot(factoryRoot);
   // The remote is handed to git in positional slots for the life of the
   // binding, so a leading dash is refused once, here, rather than defended
   // against at every call site.
@@ -157,19 +161,22 @@ async function ensureWebhook({
     return "skipped";
   }
   const slug = `${repoRef.owner}/${repoRef.repo}`;
-  const envFile = path.join(factoryRoot, ".env");
-  const tokenRepair = `set GITHUB_TOKEN in ${envFile} to a classic PAT with admin:repo_hook on ${slug} (an exported GITHUB_TOKEN wins over the file), then re-run: ${reBindCommand}`;
-  const declaredToken = readFactoryEnv(factoryRoot).GITHUB_TOKEN ?? "";
-  const token = factoryEnvValue(factoryRoot, "GITHUB_TOKEN");
-  if (token === undefined) {
+  const identity = resolveGithubIdentity(factoryRoot);
+  // Creating a webhook is hook administration, which each identity holds
+  // differently — and in App mode not at all until the permission is granted.
+  const credentialRepair =
+    identity.mode === "app"
+      ? `grant the App "Repository webhooks: read & write" (Settings → Developer settings → GitHub Apps → Permissions), accept it on the installation for ${slug}, then re-run: ${reBindCommand}`
+      : `set GITHUB_TOKEN in ${path.join(factoryRoot, ".env")} to a classic PAT with admin:repo_hook on ${slug} (an exported GITHUB_TOKEN wins over the file), then re-run: ${reBindCommand}`;
+  if (identity.mode === "pat" && factoryEnvValue(factoryRoot, "GITHUB_TOKEN") === undefined) {
     // An ingress with no webhook is a factory whose PR gate never wakes.
     throw new JigsError(
       `jigs.config.ts declares ingressUrl but GITHUB_TOKEN is not set, so ${slug}'s webhook cannot be created`,
-      tokenRepair,
+      credentialRepair,
     );
   }
   const repairFor = (err: unknown): string => {
-    if (tokenWasRejected(err)) return tokenRepair;
+    if (tokenWasRejected(err)) return credentialRepair;
     // A 404 is as often a typo in the remote as a token that cannot see a
     // private repo, and neither clears on its own.
     if (err instanceof GithubApiError && err.status === 404)
@@ -177,28 +184,25 @@ async function ensureWebhook({
     return `once that clears, re-run: ${reBindCommand}`;
   };
   const secret = ensureWebhookSecret();
-  const ensured = await ensureRepoWebhook({
-    ...repoRef,
-    ingressUrl,
-    secret,
-    token,
-  }).catch((err: unknown) => {
-    throw new JigsError(
-      `${slug}'s webhook could not be ensured: ${err instanceof Error ? err.message : String(err)}`,
-      repairFor(err),
-    );
-  });
+  const ensured = await ensureRepoWebhook({ ...repoRef, ingressUrl, secret }).catch(
+    (err: unknown) => {
+      throw new JigsError(
+        `${slug}'s webhook could not be ensured: ${err instanceof Error ? err.message : String(err)}`,
+        repairFor(err),
+      );
+    },
+  );
   deps.out(`webhook ${ensured.outcome}: ${slug}`);
   if (ensured.otherHosts.length > 0) {
     deps.out(
       `other jigs hooks on this repo: ${ensured.otherHosts.join(", ")} — delete one by hand if it was this factory's before a hostname change`,
     );
   }
-  if (declaredToken === "") {
+  if (identity.mode === "pat" && (readFactoryEnv(factoryRoot).GITHUB_TOKEN ?? "") === "") {
     // The webhook now posts to a service that reads the file alone, so a token
     // living in this shell only leaves the gate it wakes without one.
     deps.out(
-      `note: that GITHUB_TOKEN is this shell's — the service reads ${envFile}, so set it there too`,
+      `note: that GITHUB_TOKEN is this shell's — the service reads ${path.join(factoryRoot, ".env")}, so set it there too`,
     );
   }
   return ensured.outcome;

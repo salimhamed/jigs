@@ -2,6 +2,9 @@
 
 import { z } from "zod";
 import type { WorkflowRequires } from "../checks/index.ts";
+// The schemas that validate these blocks, named for their types alone: a
+// second hand-written copy of either would drift from what jigs accepts.
+import type { githubSchema, mergeSchema } from "../config/factory-config.ts";
 
 export const ticketInput = z.union([z.uuid(), z.string().regex(/^[A-Z][A-Z0-9]*-\d+$/)]);
 
@@ -44,10 +47,18 @@ export interface Factory {
   schedules?: Record<string, Schedule>;
 }
 
+/** Who jigs is on GitHub: the operator's own token, or a GitHub App installation. */
+export type GithubDefinition = z.input<typeof githubSchema>;
+
+/** Who merges, by which of GitHub's three methods, and what signal permits it. */
+export type MergeDefinition = z.input<typeof mergeSchema>;
+
 /** Operating settings and deferred workflow modules declared by a factory. */
 export interface FactoryDefinition {
   service: { port?: number; dashboardPort: number };
   ingressUrl?: string;
+  github?: GithubDefinition;
+  merge?: MergeDefinition;
   bindings?: Record<
     string,
     {

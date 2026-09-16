@@ -20,10 +20,12 @@ export {
 export { fetchPullRequestState } from "./pull-request/fetch-state.ts";
 export {
   commentOnPullRequest,
+  type MergeOutcome,
+  mergePullRequest,
   openPullRequest,
   replyToPullRequestReviewThread,
+  resolveMergePolicy,
   resolveRepository,
-  squashMergePullRequest,
 } from "./pull-request/pr.ts";
 export { dashboardRunUrl } from "./run-context.ts";
 export { createRunDirectory, removeRunDirectory } from "./run-directory/index.ts";

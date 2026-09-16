@@ -16,6 +16,8 @@ export {
   defineFactory,
   type Factory,
   type FactoryDefinition,
+  type GithubDefinition,
+  type MergeDefinition,
   type Schedule,
   type TicketWorkflowInputs,
   ticketInput,
