@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.2](https://github.com/salimhamed/jigs/compare/jigs-v0.23.1...jigs-v0.23.2) (2026-09-16)
+
+
+### Bug Fixes
+
+* **agent:** emit strict-mode JSON schemas for Codex structured output ([#203](https://github.com/salimhamed/jigs/issues/203)) ([b20f85d](https://github.com/salimhamed/jigs/commit/b20f85dabe27d7f0a5139c79f231146a43bf7b90))
+
 ## [0.23.1](https://github.com/salimhamed/jigs/compare/jigs-v0.23.0...jigs-v0.23.1) (2026-09-16)
 
 
