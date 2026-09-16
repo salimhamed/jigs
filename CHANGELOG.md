@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.23.0](https://github.com/salimhamed/jigs/compare/jigs-v0.22.0...jigs-v0.23.0) (2026-09-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* check bound repos against the merge policy
+
+### Features
+
+* check bound repos against the merge policy ([53cf1bf](https://github.com/salimhamed/jigs/commit/53cf1bf17c48cfdb0b816cc0202bd083df6bf8e2))
+
 ## [0.22.0](https://github.com/salimhamed/jigs/compare/jigs-v0.21.0...jigs-v0.22.0) (2026-09-16)
 
 
