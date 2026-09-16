@@ -1,6 +1,6 @@
 {
   "name": "@salimhamed/jigs",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "description": "Guides coding agents through repeatable workflows",
   "type": "module",
   "license": "MIT",
