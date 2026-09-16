@@ -329,14 +329,21 @@ merge: {
   is ready. A binding may override this field for its repository.
 - **`method`** — GitHub's three, and it decides what lands on the base branch.
   A binding may override this field for its repository.
-  With `squash`, GitHub makes the pull request's author the commit's author, so
-  in `app` mode the bot is the author and `coAuthor` is how you keep the credit.
-  With `rebase`, your commit's author survives but it is rewritten by the
-  merging credential and loses its signature. With `merge`, your signed commit
-  lands untouched alongside a merge commit. The `Co-authored-by` trailer is
-  appended to the commit message GitHub itself would have written, never sent
-  instead of it, so `BREAKING CHANGE:` footers on your branch still reach the
-  base branch.
+  With `squash`, jigs uses the pull request title for the new commit's title;
+  GitHub makes the pull request's author the commit's author, so in `app` mode
+  the bot is the author and `coAuthor` is how you keep the credit. With `merge`,
+  jigs uses the pull request title for the merge commit, while your branch
+  commits land untouched alongside it. With `rebase`, GitHub accepts no merge
+  message: each branch commit keeps its author but is rewritten by the merging
+  credential and loses its signature.
+
+  For `squash` and `merge`, jigs supplies a body only in `app` mode when
+  `coAuthor` is configured. Supplying it replaces the body GitHub would
+  generate, so jigs explicitly preserves a one-commit branch's body or every
+  subject and body from a multi-commit branch, then appends the
+  `Co-authored-by` trailer. That keeps content such as `BREAKING CHANGE:`
+  footers. In `pat` mode, or when `coAuthor` is omitted, jigs supplies no body
+  and leaves body generation to GitHub and the repository's configuration.
 - **`approval`** — what counts as your consent. `{ kind: "review" }` is an
   APPROVED GitHub review of the current commit; a push withdraws it, and it is
   only reachable when jigs is not the pull request's author, so it is the `app`

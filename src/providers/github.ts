@@ -337,7 +337,7 @@ export interface MergeRequest {
   /** The head the caller judged ready; GitHub refuses the merge if it has moved. */
   expectedHeadSha: string;
   method: MergePolicy["method"];
-  /** The merge commit body, carrying the `Co-authored-by` trailer when there is one. */
+  /** The squash or merge commit body jigs supplies when one is required. */
   message?: string;
 }
 

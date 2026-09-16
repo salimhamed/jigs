@@ -57,7 +57,7 @@ export const githubIdentitySchema = z.discriminatedUnion("mode", [
     privateKeyPath: z.string().min(1),
     /** The human's GitHub login: pull request assignee and "Requested by". */
     operator: z.string().min(1),
-    /** `Name <email>` for the `Co-authored-by` trailer on merge commits. */
+    /** `Name <email>` for the `Co-authored-by` trailer on squash or merge commits. */
     coAuthor: z.string().min(1).optional(),
   }),
 ]);
