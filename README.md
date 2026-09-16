@@ -256,8 +256,8 @@ src/
                     review, fix CI, describe a PR
     ticket/         claim a ticket, review it, shape its snapshot, and halt
                     the run for a human
-    pull-request/   the pull request gate, waiting on it, and the answers
-                    posted back to it
+    pull-request/   the pull request gate, waiting on it, the answers posted
+                    back to it, and the hidden markers those answers carry
     factory.ts      the types a factory declares its workflows with
     worktree.ts     the WorktreeFacts type a workflow passes around
   steps/       step implementations: the real work. May import providers/,

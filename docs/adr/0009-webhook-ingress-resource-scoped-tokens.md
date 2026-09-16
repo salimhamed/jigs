@@ -29,13 +29,13 @@ its first act — one active run per ticket, failing in seconds instead of after
 a paid implement step — and that claim hook, held for the run's whole life,
 doubles as `needsHuman()`'s wake channel.
 
-**Wakes are hints, never truth.** On every wake — webhook delivery, manual
-`jigs poke <run>`, or startup reconciliation (a fast-follow if enumerating
-suspended runs proves awkward) — the gate fetches actual state from the
-provider API since a last-seen cursor and re-checks its satisfier; unsatisfied
-wakes re-suspend. Webhooks are purely a latency optimization over an
-always-correct core, which also derisks the tunnel and both providers' weak
-retry policies (Linear disables persistently failing webhooks outright).
+**Wakes are hints, never truth.** On every wake — webhook delivery, the
+five-minute nudge, manual `jigs poke <run>`, or startup reconciliation — the
+gate fetches actual state from the provider API and re-derives what is
+outstanding; a wake with nothing outstanding re-suspends. Webhooks are purely a
+latency optimization over an always-correct core, which also derisks the tunnel
+and both providers' weak retry policies (Linear disables persistently failing
+webhooks outright).
 
 **`pullRequestGate()` is an async iterable**, not a call-per-wake await: one
 hook per PR held across the whole review (`for await (const wake of gate)`),
@@ -136,3 +136,109 @@ deletion rather than repaired across hostnames.
 - The service must be reachable from the public internet through the tunnel;
   every inbound route is signature-verified and the ingress holds no state
   worth attacking, but the tunnel is now standing infrastructure.
+
+### Addendum: pull request progress lives on GitHub (2026-09-15)
+
+AGE-403 and AGE-407. Two problems had one answer. A run that attended a pull
+request kept what it had already seen in a variable inside the paused workflow,
+so a replacement run started blank and answered jigs' own earlier comments as
+if they were review feedback. And a webhook GitHub failed to deliver was never
+delivered again, so a parked run waited for a human to run `jigs poke`.
+
+**Every comment jigs posts carries a hidden marker.** It is an HTML comment:
+GitHub renders nothing, a reader sees nothing, and the API returns it.
+
+```
+<!-- jigs:v1 {"scope":"shipWorkflow/AGE-123","run":"wrun_01M2E…","kind":"reply","source":"5657161233@2026-09-14T01:17:07Z"} -->
+```
+
+The payload is JSON, so quoting and escaping are `JSON.stringify`'s problem
+rather than a format of our own. One sequence still matters: `-->` ends an HTML
+comment wherever it appears, so rendering refuses any value carrying it, and
+the scope — the only value a caller supplies — is checked where it enters. A
+field this version does not know is ignored rather than refused.
+
+- `scope` is the continuation identity. It survives run replacement, and it is
+  what "my work" means. It defaults to the workflow function's own name plus
+  the ticket key — the name a person wrote, taken from the end of the durable
+  address the compiler stamps, so moving a workflow file does not orphan the
+  markers on a parked pull request. Renaming the function does change the
+  scope, exactly as it moves the durable step ids
+  (`e2e/expected-ids.txt` states that rule). Any caller may pass its own scope
+  instead, and a bespoke workflow reviewing someone else's pull request should.
+- `run` is provenance for a reader. Nothing matches on it.
+- `kind` is `reply` (answers the thing named by `source`), `completion` (work
+  finished for it, written only once the effect succeeded) or `status` (a note
+  about a commit). A `status` marker also carries `reason`, `merge` or `ci`,
+  because "I could not merge this commit" says nothing about that commit's
+  checks and must not silence them.
+- `source` names what is answered: a comment as `id@updatedAt`, or a commit.
+  A reply that answers nothing nameable still carries a sourceless marker: an
+  unmarked comment of jigs' own would read as a reviewer's next time.
+
+Markers are read off unquoted lines only. GitHub's "Quote reply" copies the
+whole body, marker included, as `> ` lines, and a human quoting jigs' answer to
+ask a follow-up is a human asking a follow-up.
+
+**Classification is a pure function of the snapshot and the scope.** There is
+no cursor. A human comment is outstanding unless a comment on the pull request
+carries a marker of this scope, of kind `reply` or `completion`, naming that
+comment's id *and* its edit time — so editing a comment asks the question
+again. A comment carrying any marker at all, of any scope, is jigs' own: this
+replaces both the author check and the id ledger, and works whether jigs runs
+as a bot or as its operator. Per wake:
+
+| Wake | Outstanding while | Evidence that finishes it |
+| --- | --- | --- |
+| `review-comments` | a human comment or review body has no marked answer | a `reply` or `completion` marker naming that comment version |
+| `ci-red` | the current head is red | the branch moves past that commit, or a `status` marker with `reason="ci"` naming it |
+| `merge-ready` | approved, green, nothing outstanding, not merged | the pull request merges, or a `status` marker with `reason="merge"` naming that commit |
+| `closed` | — | terminal |
+
+The property this buys, pinned by test: the same snapshot delivered twice costs
+no second agent turn, reply or merge attempt. `ci-green` and `approved` wakes
+are gone with the cursor — neither is derivable from a snapshot alone, and
+neither had a consumer.
+
+**Post-once.** jigs posts each answer at most once, and the reason is the
+snapshot at the top of every wake: the classifier has already seen which
+comments carry an answer of this scope and yields only what is outstanding.
+There is no second check before posting — nothing is re-read, nothing is
+compared. That is also why the two POST steps the factory wraps are
+single-attempt (`maxRetries = 0`): jigs never retries a write it cannot tell
+apart from a success. A post whose response is lost ends that wake quietly,
+without failing the run; the next wake — a webhook, or the five-minute nudge at
+worst — reads the pull request again and either finds the marker, in which case
+the answer was delivered and nothing is owed, or does not, in which case it
+posts. A reply lost to a transport failure is delayed by at most one nudge
+interval, never dropped and never doubled.
+
+**The hook is the fast path; a five-minute nudge is the floor.** The service
+resumes every held `github:pr:` hook every five minutes, minus up to thirty
+seconds of jitter, through the same `resumeHook` path the ingress uses, and
+once more at startup — the reconciliation this ADR left as a fast-follow. Each
+wake refreshes the whole snapshot; there is no cheap change probe, because
+`updated_at` and comment counts miss exactly the CI change and the dismissed
+approval that motivated the work. A run that is mid-turn is skipped:
+`resumeHook` at `@workflow/core` 4.8.4 neither coalesces nor drops a resume, so
+each call appends a `hook_received` event and queues a replay whether or not
+anybody is waiting.
+
+**Single writer, free readers.** The exclusive `github:pr:` subscription is
+unchanged and remains the writer claim: a second run that tries to take it
+fails. A scheduled read-only workflow registers no hook — it calls the snapshot
+step on its own schedule — and uses its own scope, so it sees jigs' delivery
+comments as nobody's feedback and none of them as its own completed work.
+
+**The cost we accepted: replay grows while a run is parked.** Every nudge
+appends a `hook_received` event and every wake records a snapshot step, and a
+run replays its whole log each turn. A pull request open for days under
+`merge: "human"` therefore does quadratic work for as long as it waits — a few
+hundred events, which is slow rather than broken, and the price of never
+losing a delivery. Backing the sweep off for a run that has been parked through
+many unchanged sweeps is the obvious follow-up; it is not built here.
+
+**Cutover.** Comments jigs posted before markers existed carry none, so a run
+attending such a pull request reads them as human feedback once. Factories
+upgrade with no parked runs, which is already the rule, and nothing is
+engineered around the old comments.

@@ -87,6 +87,31 @@ budget buys, and compiling examples of all of this. Read it before writing
 delivery configuration instead of reconstructing the shape from memory. Keep
 factory prompt overrides beside their callers.
 
+## Marker convention for bespoke pull request workflows
+
+A pull request keeps its own progress. Every comment jigs posts carries a hidden
+marker naming a `scope`, the run, a `kind` (`reply`, `completion` or `status`)
+and the `source` it answers — a comment as `id@updatedAt`, or a commit sha.
+`classifyPrState(snapshot, scope)` derives what is outstanding from a fresh
+snapshot and those markers, so nothing is remembered between wakes and a
+replacement run continues where the last one stopped.
+
+Writing your own pull request workflow: choose one scope and keep it, since it
+is what "already answered" is measured against. `defaultPrScope(ticketKey)`,
+which every delivery uses unless you pass `scope`, is the workflow function's
+own name plus that key — so renaming the function changes the scope and a pull
+request parked mid-conversation stops recognising its own answers, the same
+rule that governs durable step ids. Pass an explicit `scope` when you want one
+that outlives a rename. Post through `postReviewAnswers` and
+`postPullRequestNote` so answers are marked. They post once and never re-read:
+the snapshot at the top of the wake is the check, and a post that fails ends
+the wake rather than the run, so the next wake reposts what is still
+unanswered. A workflow that only reads a pull request must
+not call `pullRequestGate`: the `github:pr:` hook is an exclusive writer claim
+and a second holder fails. Read on a schedule with the snapshot step instead,
+under a scope of your own, and jigs' delivery comments will read as neither your
+feedback nor your completed work.
+
 ## Configuration and schedules
 
 `jigs.config.ts` declares ports, ingress URL, bindings, deferred workflow imports
