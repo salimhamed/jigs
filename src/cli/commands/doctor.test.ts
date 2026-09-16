@@ -17,7 +17,7 @@ afterEach(() => {
 const deps = () => ({
   out: (line: string) => lines.push(line),
   serviceUrl: "http://svc.test:8990",
-  systemd: { available: () => true, linger: () => true },
+  systemd: { available: () => true, linger: () => true, stopScope: () => undefined },
 });
 
 const respond = (body: unknown) =>
@@ -93,7 +93,7 @@ test("a trailing slash on the service URL does not break the doctor route", asyn
   await runDoctor({
     out: (line: string) => lines.push(line),
     serviceUrl: "http://svc.test:8990/",
-    systemd: { available: () => true, linger: () => true },
+    systemd: { available: () => true, linger: () => true, stopScope: () => undefined },
   });
   expect(fetchMock.mock.calls[0]?.[0]).toBe("http://svc.test:8990/api/doctor");
 });
@@ -121,7 +121,10 @@ test("doctor warns with the linger repair when linger is off", async () => {
   vi.stubEnv("USER", "salim");
   respond({ ok: true, checks: [] });
 
-  await runDoctor({ ...deps(), systemd: { available: () => true, linger: () => false } });
+  await runDoctor({
+    ...deps(),
+    systemd: { available: () => true, linger: () => false, stopScope: () => undefined },
+  });
 
   expect(lines).toContain(
     "WARN systemd linger is off; the service may die when the last login session ends",
@@ -132,7 +135,10 @@ test("doctor warns with the linger repair when linger is off", async () => {
 test("doctor warns when systemd user scopes are unavailable", async () => {
   respond({ ok: true, checks: [] });
 
-  await runDoctor({ ...deps(), systemd: { available: () => false, linger: () => undefined } });
+  await runDoctor({
+    ...deps(),
+    systemd: { available: () => false, linger: () => undefined, stopScope: () => undefined },
+  });
 
   expect(lines[0]).toContain("unsupervised and dies on logout");
 });

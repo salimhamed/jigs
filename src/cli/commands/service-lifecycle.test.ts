@@ -108,19 +108,28 @@ const deps = (
   out: (line: string) => lines.push(line),
   processes: io.processes,
   probe: io.probe,
-  systemd: { available: () => false, linger: () => undefined },
+  systemd: { available: () => false, linger: () => undefined, stopScope: () => undefined },
   // The fake answers at once; the wait between probes is for a real boot.
   startPollMs: 0,
   ...timeouts,
 });
 
-test("start uses a transient systemd user scope when one is available", async () => {
+test("start clears a stale systemd scope before reusing its transient unit name", async () => {
   const root = builtFactory();
   const io = fake();
   const d = deps(root, io);
 
-  await startService({ ...d, systemd: { available: () => true, linger: () => true } });
+  const stopped: string[] = [];
+  await startService({
+    ...d,
+    systemd: {
+      available: () => true,
+      linger: () => true,
+      stopScope: (unit) => stopped.push(unit),
+    },
+  });
 
+  expect(stopped).toEqual([`jigs-${factorySlug(root)}`]);
   expect(io.spawns[0]?.command).toBe("systemd-run");
   expect(io.spawns[0]?.args).toEqual([
     "--user",
@@ -510,12 +519,14 @@ test("status records when death was detected and the current run's last signal",
   const log = serviceLogPath(factorySlug(root));
   mkdirSync(path.dirname(log), { recursive: true });
   writeFileSync(log, "Received 'SIGHUP'; attempting global graceful shutdown...\n");
+  const diedAt = new Date("2026-09-13T21:04:19-07:00");
+  utimesSync(log, diedAt, diedAt);
   io.alive.clear();
   lines = [];
 
   serviceStatus({
     ...deps(root, io),
-    now: () => new Date("2026-09-13T21:04:19-07:00"),
+    now: () => new Date("2026-09-16T12:00:00Z"),
   });
 
   expect(lines[0]).toContain("not running as of 2026-09-14T04:04:19.000Z, last signal SIGHUP");

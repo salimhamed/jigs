@@ -247,6 +247,7 @@ export async function startService(
   const logFile = serviceLogPath(slug);
   const logOffset = existsSync(logFile) ? statSync(logFile).size : 0;
   const supervised = systemd.available();
+  if (supervised) systemd.stopScope(`jigs-${slug}`);
   const pid = processes.spawn({
     command: supervised ? "systemd-run" : process.execPath,
     args: supervised
@@ -407,7 +408,10 @@ function deadServiceStatus(slug: string, serviceUrl: string, now: () => Date): s
   const state = readRunState(stateFile);
   if (state === undefined) return `${slug}: not running (${serviceUrl})`;
   if (state.deathDetectedAt === undefined) {
-    state.deathDetectedAt = now().toISOString();
+    const logStat = existsSync(log) ? statSync(log) : undefined;
+    state.deathDetectedAt = (
+      logStat !== undefined && logStat.size > state.logOffset ? logStat.mtime : now()
+    ).toISOString();
     state.signal = signalSince(log, state.logOffset);
     writeFileSync(stateFile, `${JSON.stringify(state)}\n`);
   }

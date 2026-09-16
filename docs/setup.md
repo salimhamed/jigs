@@ -50,12 +50,13 @@ World. Nothing below is global except part 1.
   `jigs up` are detached from the terminal, but a user session manager still
   reaps them at logout without lingering.
 
-There is no systemd unit and no `~/.config/jigs/service.env`. Both assumed a
-single global service; supervision is now a pidfile per factory under the jigs
-data dir, and the environment is the factory's own `.env`. A unit per factory
-would mean the CLI generating, installing and naming units, and every repair
-instruction growing a "which one" — `jigs service restart` is the whole
-answer instead. The service is a host process on purpose: it drives the
+There is no persistent systemd unit and no `~/.config/jigs/service.env`. Both
+assumed a single global service; supervision is now a pidfile per factory under
+the jigs data dir, and the environment is the factory's own `.env`. On Linux,
+each start enters a transient user scope. An installed unit per factory would
+mean the CLI generating and installing units, and every repair instruction
+growing a "which one" — `jigs service restart` is the whole answer instead.
+The service is a host process on purpose: it drives the
 operator's `claude` and `codex` logins, the AWS SSO cache and the git clones
 ([ADR 0017](adr/0017-single-package.md)).
 

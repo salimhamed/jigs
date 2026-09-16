@@ -31,6 +31,11 @@ exited is what a binding whose clone fails does, and the error names the log.
 A start that gives up after five minutes leaves the process running, so check
 `jigs service status` before repairing anything.
 
+On Linux with systemd, `jigs doctor` also verifies logout-safe supervision and
+linger. Follow its `loginctl enable-linger $USER` repair when linger is off. If
+systemd user scopes are unavailable, it warns that the detached service is
+unsupervised and dies on logout.
+
 `jigs service status` is also where the dashboard URL comes from. Do not guess
 the port. A service that is down comes back with `jigs up`, which also
 rebuilds if the factory's code changed since the running bundle was built.
