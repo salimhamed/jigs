@@ -189,9 +189,9 @@ budgets. A reached limit
 returns an outcome; only a merged result permits worktree removal. For custom prompts,
 ticket sources, human intervention, and individual phases, see [delivery](delivery.md).
 
-The starter `ship` workflow requires a `binding` input and takes its merge
-policy from `jigs.config.ts`, with an optional `merge` input overriding who
-merges for one run.
+The starter `ship` workflow requires a `binding` input and takes its effective
+merge policy from the factory default plus that binding's optional `merge.by`
+and `merge.method` overrides in `jigs.config.ts`.
 After binding a repository, you can make it the input default and add its name to
 `requires.bindings`. Declare credential integrations under `requires.integrations`;
 other workflows do not need Linear or GitHub credentials merely to use agents.
@@ -325,9 +325,9 @@ merge: {
 
 - **`by`** — `"human"` means jigs watches the pull request and answers
   feedback, and you press Merge. `"jigs"` means jigs merges it itself once it
-  is ready. The `ship` workflow's `merge` input overrides this one field per
-  run.
+  is ready. A binding may override this field for its repository.
 - **`method`** — GitHub's three, and it decides what lands on the base branch.
+  A binding may override this field for its repository.
   With `squash`, GitHub makes the pull request's author the commit's author, so
   in `app` mode the bot is the author and `coAuthor` is how you keep the credit.
   With `rebase`, your commit's author survives but it is rewritten by the

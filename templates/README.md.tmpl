@@ -39,7 +39,7 @@ configuration and webhooks untouched.
 ## Running a workflow
 
 ```sh
-jigs run ship --input ticket=ABC-123 --input binding=repo --input merge=human
+jigs run ship --input ticket=ABC-123 --input binding=repo
 jigs ps
 jigs logs <run>
 jigs cancel <run>
@@ -47,7 +47,8 @@ jigs cancel <run>
 
 `ship` reviews a ticket, implements and reviews the change, opens a pull request,
 responds to reviews and CI, then tears down the worktree after merge.
-`merge=jigs` squash-merges on approval; `merge=human` waits for a person to merge.
+The binding's effective merge policy comes from the factory default plus any
+`bindings.repo.merge` override in `jigs.config.ts`.
 
 `<run>` is a run id, a unique prefix, or the ticket the run claimed.
 Runs outlive the launching terminal. `jigs doctor` checks prerequisites;

@@ -50,7 +50,8 @@ It survives the terminal that launched it.
 _Avoid_: job, execution
 
 **Binding**:
-A named target repository and the provisioning settings for its worktrees.
+A named target repository, its repository-specific policy, and the provisioning
+settings for its worktrees.
 jigs maintains its own clone for each binding; the operator’s checkout is separate.
 _Avoid_: registration, registry, target, checkout
 

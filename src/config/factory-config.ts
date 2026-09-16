@@ -8,10 +8,10 @@ import { factorySlug } from "../steps/worktree/layout.ts";
 
 export const FACTORY_CONFIG_FILE = "jigs.config.ts";
 
-// A binding is a name, a remote URL, and how a worktree cut from that remote
-// is provisioned — the single place that story is told. Where the clone lives
-// is jigs' business, and every other fact is derived from git at each
-// activation.
+// A binding is a name, a remote URL, repository-specific policy, and how a
+// worktree cut from that remote is provisioned — the single place that story
+// is told. Where the clone lives is jigs' business, and every other fact is
+// derived from git at each activation.
 const bindingSchema = z.strictObject({
   remote: z.string().min(1),
   // Repository policy may differ between bindings. Approval remains a
