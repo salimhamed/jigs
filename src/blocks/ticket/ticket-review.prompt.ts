@@ -85,6 +85,15 @@ ${plainLanguage}
 Ask at most four. More than four means you are asking about things you could
 have decided; ask more only when every one of them genuinely blocks a builder.
 
+Ask every question you can identify from this review in one exhaustive round.
+Before returning \`needs-human\`, inspect the whole ticket and brief for other
+decisions the builder would otherwise have to guess, and include all of them
+now. When one question may create a follow-up, ask it conditionally in this
+same round (for example, "if 1b, then ..."). A later round is appropriate only
+when the human's answer reveals a question you genuinely could not have known
+to ask before that answer. Do not use a later round for a question that was
+already apparent from the same ticket and comment thread.
+
 Each question has:
 
 - \`question\`: the decision itself, as one plain question. Nothing else.
