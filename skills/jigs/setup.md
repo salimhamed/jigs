@@ -241,8 +241,8 @@ factory's `package.json` and run `jigs upgrade` again. A release can also raise
 the minimum `codex` version; the service reports that at startup, and the fix
 is to upgrade `codex` on the machine. A factory made before this release needs
 `ignoredOptionalDependencies: ['@openai/codex']` in its `pnpm-workspace.yaml`
-and delete any `@openai/codex` dependency or `overrides` entry. A factory still
-installing jigs from a checkout
+and should delete any `@openai/codex` dependency or `overrides` entry. A
+factory still installing jigs from a checkout
 (`link:` entries, or the old `jigs` / `@jigs/service` names) is refused;
 switch it to the published package first. So is a factory still depending on
 `@salimhamed/jigs-service`, retired in 0.3.0: drop that line from

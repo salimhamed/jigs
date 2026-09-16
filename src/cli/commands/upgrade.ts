@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { isScalar, isSeq, parseDocument, Scalar } from "yaml";
+import { isMap, isScalar, isSeq, parseDocument, Scalar } from "yaml";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
@@ -133,6 +133,12 @@ function normalizeReleaseAgeExclude(factoryRoot: string): boolean {
       "fix pnpm-workspace.yaml, then run jigs upgrade again",
     );
   }
+  if (document.contents !== null && !isMap(document.contents)) {
+    throw new JigsError(
+      `${file} must contain a YAML mapping`,
+      "make pnpm-workspace.yaml a top-level mapping, then run jigs upgrade again",
+    );
+  }
   const workspace = document.toJS() as { minimumReleaseAgeExclude?: unknown } | null;
   const existing = workspace?.minimumReleaseAgeExclude;
   if (existing != null && !Array.isArray(existing)) {
@@ -141,24 +147,39 @@ function normalizeReleaseAgeExclude(factoryRoot: string): boolean {
       "make minimumReleaseAgeExclude a YAML list, then run jigs upgrade again",
     );
   }
-  if (Array.isArray(existing) && existing.includes(JIGS_PACKAGE)) return false;
+  const jigsEntries = Array.isArray(existing)
+    ? existing.filter(
+        (entry) =>
+          typeof entry === "string" &&
+          (entry === JIGS_PACKAGE || entry.startsWith(`${JIGS_PACKAGE}@`)),
+      )
+    : [];
+  if (jigsEntries.length === 1 && jigsEntries[0] === JIGS_PACKAGE) return false;
   const exclusions = document.get("minimumReleaseAgeExclude", true);
   if (exclusions === undefined || (isScalar(exclusions) && exclusions.value === null)) {
     const created = document.createNode<unknown[]>([]);
     if (isSeq(created)) created.add(quotedJigsPackage());
     document.set("minimumReleaseAgeExclude", created);
   } else if (isSeq(exclusions)) {
-    for (let index = exclusions.items.length - 1; index >= 0; index -= 1) {
+    let foundJigs = false;
+    for (let index = 0; index < exclusions.items.length; ) {
       const item = exclusions.items[index];
       if (
         isScalar(item) &&
         typeof item.value === "string" &&
         (item.value === JIGS_PACKAGE || item.value.startsWith(`${JIGS_PACKAGE}@`))
       ) {
-        exclusions.items.splice(index, 1);
+        if (foundJigs) {
+          exclusions.items.splice(index, 1);
+          continue;
+        }
+        item.value = JIGS_PACKAGE;
+        item.type = Scalar.QUOTE_SINGLE;
+        foundJigs = true;
       }
+      index += 1;
     }
-    exclusions.add(quotedJigsPackage());
+    if (!foundJigs) exclusions.add(quotedJigsPackage());
   }
   writeFileSync(file, String(document));
   return true;

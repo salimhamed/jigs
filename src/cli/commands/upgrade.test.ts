@@ -209,6 +209,43 @@ test("normalizes an exact jigs release-age exclusion before pnpm runs", async ()
   expect(contents.match(/'@salimhamed\/jigs'(?:\n|$)/g)).toHaveLength(1);
 });
 
+test("rewrites an exact exclusion in place with its comment and position", async () => {
+  const port = await fakeService();
+  const root = factory(port);
+  const workspace = path.join(root, "pnpm-workspace.yaml");
+  writeFileSync(
+    workspace,
+    "minimumReleaseAgeExclude:\n  # jigs, freshly published\n  - '@salimhamed/jigs@0.1.18'\n  - 'zod@1.0.0'\n",
+  );
+  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+
+  const result = await upgrade(root, io);
+
+  expect(result.ok).toBe(true);
+  expect(readFileSync(workspace, "utf8")).toBe(
+    "minimumReleaseAgeExclude:\n  # jigs, freshly published\n  - '@salimhamed/jigs'\n  - 'zod@1.0.0'\n",
+  );
+});
+
+test("removes stale jigs exclusions beside the wildcard", async () => {
+  const port = await fakeService();
+  const root = factory(port);
+  const workspace = path.join(root, "pnpm-workspace.yaml");
+  writeFileSync(
+    workspace,
+    "minimumReleaseAgeExclude:\n  - '@salimhamed/jigs'\n  - '@acme/fresh@1.0.0'\n  - '@salimhamed/jigs@0.1.18'\n",
+  );
+  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+
+  const result = await upgrade(root, io);
+
+  expect(result.ok).toBe(true);
+  expect(result.steps[0]?.detail).toBe("jigs 0.1.18; normalized minimumReleaseAgeExclude");
+  expect(readFileSync(workspace, "utf8")).toBe(
+    "minimumReleaseAgeExclude:\n  - '@salimhamed/jigs'\n  - '@acme/fresh@1.0.0'\n",
+  );
+});
+
 test("adds a release-age exclusion when the workspace has no exclusion list", async () => {
   const port = await fakeService();
   const root = factory(port);
@@ -239,6 +276,23 @@ test("treats an empty release-age exclusion value as an empty list", async () =>
   expect(readFileSync(workspace, "utf8")).toBe(
     "minimumReleaseAgeExclude:\n  - '@salimhamed/jigs'\n",
   );
+});
+
+test("reports a non-mapping workspace file with a repair hint", async () => {
+  const root = factory(1);
+  const workspace = path.join(root, "pnpm-workspace.yaml");
+  writeFileSync(workspace, "- packages\n");
+  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+
+  const result = await upgrade(root, io);
+
+  expect(result.ok).toBe(false);
+  expect(statuses(result)).toEqual(["packages:failed"]);
+  expect(result.steps[0]?.detail).toBe(`${workspace} must contain a YAML mapping`);
+  expect(result.steps[0]?.repair).toBe(
+    "make pnpm-workspace.yaml a top-level mapping, then run jigs upgrade again",
+  );
+  expect(io.exec.calls).toHaveLength(0);
 });
 
 test("leaves an already-normalized release-age exclusion byte-identical", async () => {
