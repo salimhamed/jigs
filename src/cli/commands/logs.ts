@@ -73,6 +73,20 @@ export async function showLogs(
   // itself is an implementation detail of the hook it parked on.
   for (const suspension of result.suspensions) {
     deps.out(suspensionLine(suspension));
+    // Only the single-run route reads the providers, so these are absent
+    // whenever GitHub could not be asked.
+    if (suspension.headSha !== undefined) {
+      deps.out(`  head sha: ${suspension.headSha}`);
+      deps.out(`  CI: ${suspension.ci}`);
+      deps.out(`  approval: ${suspension.approval}`);
+      deps.out(`  draft: ${suspension.draft === true ? "yes" : "no"}`);
+      deps.out(`  mergeable state: ${suspension.mergeState}`);
+      deps.out(`  blocker: ${suspension.blocker}`);
+    }
+    const wake = suspension.lastWake;
+    if (wake !== undefined) {
+      deps.out(`  last wake: ${wake.kind}, ${age(wake.at, now)} ago (${wake.at})`);
+    }
     if (suspension.question !== undefined) {
       deps.out("asked:");
       for (const line of suspension.question.split("\n")) deps.out(`  ${line}`);

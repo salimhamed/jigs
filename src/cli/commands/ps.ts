@@ -1,14 +1,9 @@
 import { JigsError } from "../../errors.ts";
+import type { RunSuspension } from "../../run-suspension.ts";
 import { formatTable } from "../table.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 
-export interface PsSuspension {
-  token: string;
-  kind: string;
-  reason: string;
-  url?: string;
-  question?: string;
-}
+export type PsSuspension = RunSuspension;
 
 export interface PsRun {
   runId: string;

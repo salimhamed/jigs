@@ -21,6 +21,7 @@ import { describeRun, enrichSuspensions, listRuns, type RunRef, resolveRunRef } 
 import { listSchedules, scheduleChecks } from "./schedules.ts";
 import { listRunSteps } from "./stalls.ts";
 import { startRun } from "./trigger.ts";
+import { noteWake, recordWake } from "./wake-note.ts";
 
 // The app is library code: a factory repo installs this package and hands in
 // its own workflows, so nothing here may import a workflow module.
@@ -219,7 +220,10 @@ export function createApp(factory: Factory): Hono {
     const poked = await Promise.all(
       tokens.map((token) =>
         resumeHook(token, undefined).then(
-          () => ({ token, resumed: true }),
+          () => {
+            recordWake(token, run.runId, "poke");
+            return { token, resumed: true };
+          },
           // A hook disposed between list and resume is a report, not an error.
           () => ({ token, resumed: false }),
         ),
@@ -307,7 +311,7 @@ export function createApp(factory: Factory): Hono {
     const described = await describeRun(ref.runId, { steps: await listRunSteps(ref.runId) });
     const body: Record<string, unknown> = {
       ...described,
-      suspensions: await enrichSuspensions(described.suspensions),
+      suspensions: await enrichSuspensions(described.suspensions, ref.runId),
       logs: logsPointer(ref.runId),
     };
     // Read only where there is one: a running run's return value is a promise
@@ -413,6 +417,9 @@ async function resumeAndLog(
   const results = await Promise.all(
     tokens.map(async (token) => {
       const correlation = `token=${sanitizeForLog(token)}${event === null ? "" : ` event=${event}`}`;
+      // Before the resume, while the run that is about to be woken is still
+      // the one holding the hook.
+      await noteWake(token, event === null ? provider : `${provider} ${event}`);
       try {
         await resume(token, undefined);
         console.log(`[ingress] ${provider} accepted ${correlation}`);

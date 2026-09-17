@@ -7,6 +7,7 @@ import {
   nudgePullRequests,
   startPullRequestNudge,
 } from "./nudge.ts";
+import { clearWakes, lastWake } from "./wake-note.ts";
 
 const ambientWorkflowEnv = vi.hoisted(() => {
   const targetWorld = process.env.WORKFLOW_TARGET_WORLD;
@@ -53,6 +54,7 @@ function sweepDeps(overrides: NudgeDeps = {}) {
 }
 
 test("only pull request hooks are nudged, and the ticket claim is left alone", async () => {
+  clearWakes();
   const { deps, resumed, lines } = sweepDeps();
   expect(await nudgePullRequests(deps)).toEqual({
     held: 2,
@@ -63,6 +65,9 @@ test("only pull request hooks are nudged, and the ticket claim is left alone", a
   });
   expect(resumed).toEqual(["github:pr:acme/api#1", "github:pr:acme/api#2"]);
   expect(lines).toEqual(["[nudge] pull requests: 2 held, 2 nudged, 0 mid-turn, 0 gone, 0 failed"]);
+  // `jigs logs` reads this back, and only for the run that was actually woken.
+  expect(lastWake("github:pr:acme/api#1", "wrun_A")?.kind).toBe("nudge sweep");
+  expect(lastWake("github:pr:acme/api#1", "wrun_B")).toBeUndefined();
 });
 
 test("a run in the middle of a turn is skipped rather than queued behind itself", async () => {

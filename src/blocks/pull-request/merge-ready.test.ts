@@ -2,7 +2,12 @@ import { expect, test } from "vitest";
 import type { PrSnapshot } from "../../providers/github.ts";
 import { classifyPrState } from "./gate.ts";
 import { markBody } from "./marker.ts";
-import { isApprovalSatisfied, isPullRequestMergeReady, mergeRefusal } from "./merge-ready.ts";
+import {
+  approvalState,
+  isApprovalSatisfied,
+  isPullRequestMergeReady,
+  mergeRefusal,
+} from "./merge-ready.ts";
 import type { ApprovalSignal } from "./policy.ts";
 
 const SCOPE = "ship/AGE-402";
@@ -60,6 +65,27 @@ test("a review approval names a commit, so a push withdraws it", () => {
   expect(isApprovalSatisfied(snapshot, REVIEW)).toBe(true);
   expect(isApprovalSatisfied({ ...snapshot, headSha: "later" }, REVIEW)).toBe(false);
   expect(isApprovalSatisfied({ ...snapshot, reviews: [] }, REVIEW)).toBe(false);
+});
+
+// The refusal is what an operator reads on a parked pull request, so an
+// approval that named an earlier commit says so rather than reading as one
+// nobody ever gave.
+test("an unmet approval names which of the four things is missing", () => {
+  const refusalFor = (patch: Partial<PrSnapshot>, signal: ApprovalSignal = REVIEW) =>
+    mergeRefusal({ ...snapshot, ...patch }, "new", signal)?.reason;
+  const approval = snapshot.reviews[0];
+  if (approval === undefined) throw new Error("Missing fixture approval");
+  expect(approvalState(snapshot, REVIEW)).toBe("approved");
+  expect(refusalFor({ reviews: [] })).toBe("no approving review yet");
+  expect(refusalFor({ reviews: [{ ...approval, commitSha: "older" }] })).toBe(
+    "the approval does not cover new",
+  );
+  expect(refusalFor({ reviews: [{ ...approval, state: "CHANGES_REQUESTED" }] })).toBe(
+    "a review requests changes",
+  );
+  expect(refusalFor({ reviews: [] }, LABEL)).toBe(
+    "the jigs:approved label is not on the pull request",
+  );
 });
 
 test("latest effective reviewer decision supersedes historical approvals", () => {

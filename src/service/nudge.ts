@@ -10,6 +10,7 @@ import { HookNotFoundError } from "workflow/errors";
 import { PR_TOKEN_PREFIX } from "../blocks/pull-request/gate.ts";
 import { listWorldHooks } from "./runs.ts";
 import { runsWithActiveStep } from "./stalls.ts";
+import { recordWake } from "./wake-note.ts";
 
 /** The detection target for a lost delivery. */
 export const NUDGE_INTERVAL_MS = 5 * 60_000;
@@ -75,6 +76,7 @@ export async function nudgePullRequests(deps: NudgeDeps = {}): Promise<NudgeRepo
       }
       try {
         await resume(hook.token);
+        recordWake(hook.token, hook.runId, "nudge sweep");
         report.nudged += 1;
       } catch (error) {
         // A hook disposed between the listing and the resume is a report: its

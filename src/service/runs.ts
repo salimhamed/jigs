@@ -7,13 +7,19 @@ import { hydrateData, observabilityRevivers } from "workflow/observability";
 import { getWorld } from "workflow/runtime";
 import type { Factory } from "../blocks/factory.ts";
 import { PR_TOKEN_PREFIX } from "../blocks/pull-request/gate.ts";
+import { approvalState, mergeRefusal } from "../blocks/pull-request/merge-ready.ts";
 import { TICKET_TOKEN_PREFIX, ticketToken } from "../blocks/ticket/claim.ts";
 import { NEEDS_HUMAN_TOKEN_PREFIX } from "../blocks/ticket/halt-for-human.ts";
+import { readFactoryConfig } from "../config/factory-config.ts";
+import { factoryRoot } from "../config/factory-root.ts";
+import { fetchPrSnapshot, type PrRef } from "../providers/github.ts";
 import { getComment, resolveIssueRef } from "../providers/linear.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
+import type { RunSuspension } from "../run-suspension.ts";
 import { registrySql } from "../steps/worktree/sql.ts";
 import { type JobRunIds, listJobRunIds } from "./queue.ts";
 import { hasActiveStep, listRunSteps, listStepsByRun, type StepView } from "./stalls.ts";
+import { lastWake } from "./wake-note.ts";
 
 // The SDK mints run ids as `wrun_` + a ULID, so a ref is run-id-shaped (with
 // or without the prefix, full or truncated) or it is a ticket ref. Crockford
@@ -96,16 +102,7 @@ export function triggerLabel(triggerId: string | undefined): string {
   return scheduleTriggerLabel(end === -1 ? rest : rest.slice(0, end));
 }
 
-export interface RunSuspension {
-  token: string;
-  kind: "pull-request" | "needs-human" | "external";
-  /** What the run is waiting for, in the words an operator acts on. */
-  reason: string;
-  /** Where to go and act: the pull request, or the ticket comment that asked. */
-  url?: string;
-  /** The question jigs asked, once the service has read it back from Linear. */
-  question?: string;
-}
+export type { RunSuspension } from "../run-suspension.ts";
 
 /**
  * What a run holding this hook is waiting for, or null when the hook is no
@@ -149,14 +146,17 @@ export function describeSuspension(token: string, ticket?: string | null): RunSu
 
 /** `github:pr:owner/repo#N` as the two things an operator needs from it. A
  *  slug this shape does not fit names no page to link to. */
-function prFromToken(token: string): { slug: string; url?: string } | null {
+function prFromToken(token: string): { slug: string; url?: string; pr?: PrRef } | null {
   if (!token.startsWith(PR_TOKEN_PREFIX)) return null;
   const slug = token.slice(PR_TOKEN_PREFIX.length);
   const parsed = /^([^/]+)\/([^#]+)#(\d+)$/.exec(slug);
   if (parsed === null) return { slug };
+  const [, owner, repo, number] = parsed;
+  if (owner === undefined || repo === undefined || number === undefined) return { slug };
   return {
     slug,
-    url: `https://github.com/${parsed[1]}/${parsed[2]}/pull/${parsed[3]}`,
+    url: `https://github.com/${owner}/${repo}/pull/${number}`,
+    pr: { owner, repo, number: Number(number) },
   };
 }
 
@@ -168,15 +168,19 @@ function needsHumanParts(token: string): { issueId: string; commentId: string } 
 }
 
 /**
- * The comment a halt is waiting on, read back from Linear: where to reply, and
- * what was asked. A Linear that cannot be asked leaves the suspension as the
- * token alone describes it.
+ * What the providers say about one run's suspensions: the pull request the
+ * merge gate is watching, and the comment a halt is waiting on. Failures leave
+ * a suspension exactly as its token described it — observability must never
+ * break the route — so this is for the single-run read only, never the listing.
  */
 export async function enrichSuspensions(
   suspensions: readonly RunSuspension[],
+  runId: string,
 ): Promise<RunSuspension[]> {
   return await Promise.all(
     suspensions.map(async (suspension) => {
+      const pr = prFromToken(suspension.token)?.pr;
+      if (pr !== undefined) return await withPrState(suspension, pr, runId);
       const halt = needsHumanParts(suspension.token);
       if (halt === null) return suspension;
       const comment = await getComment(halt.commentId).catch(() => null);
@@ -184,6 +188,36 @@ export async function enrichSuspensions(
       return { ...suspension, url: comment.url, question: comment.body };
     }),
   );
+}
+
+/**
+ * The pull request as the merge gate sees it: the same classification the gate
+ * merges on, so what an operator reads here and what jigs is doing cannot
+ * disagree. `blocker` is why it will not merge, in the words of the refusal.
+ */
+async function withPrState(
+  suspension: RunSuspension,
+  pr: PrRef,
+  runId: string,
+): Promise<RunSuspension> {
+  const wake = lastWake(suspension.token, runId);
+  const withWake = wake === undefined ? suspension : { ...suspension, lastWake: wake };
+  try {
+    const approval = readFactoryConfig(factoryRoot()).merge.approval;
+    const snapshot = await fetchPrSnapshot(pr);
+    return {
+      ...withWake,
+      headSha: snapshot.headSha.slice(0, 7),
+      ci: snapshot.ci,
+      approval: approvalState(snapshot, approval),
+      draft: snapshot.draft,
+      mergeState: snapshot.mergeState,
+      blocker:
+        mergeRefusal(snapshot, snapshot.headSha, approval)?.reason ?? "nothing — it can merge",
+    };
+  } catch {
+    return withWake;
+  }
 }
 
 /** Which runs are stalled, and the steps that answer cost — the listing hands

@@ -38,6 +38,8 @@ export {
   type StatusReason,
 } from "./marker.ts";
 export {
+  type ApprovalState,
+  approvalState,
   isApprovalSatisfied,
   isPullRequestMergeReady,
   type MergeRefusal,

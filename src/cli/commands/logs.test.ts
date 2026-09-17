@@ -89,6 +89,63 @@ test("a failed run prints its status and pull request", async () => {
   expect(lines[3]).toBe("pull request acme/api#41");
 });
 
+test("logs prints live pull-request gate state under its suspension", async () => {
+  respond(
+    result({
+      status: "suspended",
+      suspended: true,
+      suspensions: [
+        {
+          token: "github:pr:acme/api#41",
+          kind: "pull-request",
+          reason: "waiting for an approving review and green CI on acme/api#41",
+          headSha: "1234567",
+          ci: "red",
+          approval: "approved",
+          draft: false,
+          mergeState: "blocked",
+          blocker: "CI is red",
+          lastWake: { kind: "github check_suite", at: "2026-09-04T10:08:00.000Z" },
+        },
+      ],
+    }),
+  );
+  respond({ steps: [], deadJobs: [] });
+  await showLogs(RUN, deps(), { now: NOW });
+  expect(lines.slice(4, 12)).toEqual([
+    "waiting for an approving review and green CI on acme/api#41",
+    "  head sha: 1234567",
+    "  CI: red",
+    "  approval: approved",
+    "  draft: no",
+    "  mergeable state: blocked",
+    "  blocker: CI is red",
+    "  last wake: github check_suite, 2m ago (2026-09-04T10:08:00.000Z)",
+  ]);
+});
+
+test("a pull request GitHub could not be asked about prints as it always did", async () => {
+  respond(
+    result({
+      status: "suspended",
+      suspended: true,
+      suspensions: [
+        {
+          token: "github:pr:acme/api#41",
+          kind: "pull-request",
+          reason: "waiting for an approving review and green CI on acme/api#41",
+        },
+      ],
+    }),
+  );
+  respond({ steps: [], deadJobs: [] });
+  await showLogs(RUN, deps(), { now: NOW });
+  expect(lines.slice(4)).toEqual([
+    "waiting for an approving review and green CI on acme/api#41",
+    "",
+  ]);
+});
+
 test("--json prints one document with the run, its suspensions and its timeline", async () => {
   respond(result({ ticket: "AGE-317", logs: DASHBOARD }));
   respond({ steps: [{ name: "claimTicket", status: "completed" }], deadJobs: [] });

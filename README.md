@@ -156,7 +156,11 @@ pnpm exec jigs watch
 `jigs ps` names each run's ticket, status, pull request, how long since it last
 moved and, for a parked run, what it is waiting for and the link to act on.
 `jigs logs` says the same for one run and adds the question
-a halt asked. `jigs watch` is one long-lived process that follows every run in
+a halt asked. For a run parked on a pull request it reads GitHub as well and
+prints the head commit, CI, approval, draft and mergeable state, what is
+blocking the merge, and when the service last woke the run. `jigs ps` and
+`jigs watch` never read GitHub.
+`jigs watch` is one long-lived process that follows every run in
 the factory, a line per step, suspension, resume, terminal state and new run.
 All three take `--json`.
 

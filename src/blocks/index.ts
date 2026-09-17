@@ -145,6 +145,8 @@ export {
   type StatusReason,
 } from "./pull-request/marker.ts";
 export {
+  type ApprovalState,
+  approvalState,
   isApprovalSatisfied,
   isPullRequestMergeReady,
   type MergeRefusal,
