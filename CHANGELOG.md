@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.4](https://github.com/salimhamed/jigs/compare/jigs-v0.29.3...jigs-v0.29.4) (2026-09-17)
+
+
+### Bug Fixes
+
+* render empty ticket comments section ([a4c09f4](https://github.com/salimhamed/jigs/commit/a4c09f41302a4a54a4616660e776516ce21890be))
+
 ## [0.29.3](https://github.com/salimhamed/jigs/compare/jigs-v0.29.2...jigs-v0.29.3) (2026-09-16)
 
 
