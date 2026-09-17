@@ -41,6 +41,14 @@ Teardown is a plain last call, never a `finally`: suspension can throw, and a
 parked run must retain its worktree. Configuration values vary by factory;
 requirements belong to the workflow declaration next to its input schema.
 
+### Claim before protected work
+
+Resolve the ticket, then claim it, then do everything else. The claim is the
+one-active-run-per-ticket lock. A run that provisions, posts, writes, or pushes
+before claiming can collide with the run that already holds the ticket. Use
+`acquireTicket` to resolve, claim, and snapshot in the required order before
+starting protected work.
+
 ## Validation ownership
 
 Give the responsible agent the acceptance criteria and repository access. It
