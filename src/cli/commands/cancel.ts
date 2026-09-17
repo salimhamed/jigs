@@ -1,11 +1,13 @@
 import { JigsError } from "../../errors.ts";
 import { readErrorBody, runRefError, type ServiceDeps, serviceFetch } from "./service-client.ts";
+import { runSweep } from "./sweep.ts";
 
 // The escape hatch for a zombie claim owner: cancelling releases every
 // resource the run holds, so the next run on the same ticket can start.
 
 export interface CancelDeps extends ServiceDeps {
   confirm?: (question: string) => Promise<boolean>;
+  discard?: boolean;
   force?: boolean;
 }
 
@@ -61,10 +63,15 @@ export async function cancelRun(ref: string, deps: CancelDeps): Promise<CancelRe
   deps.out(`cancelled ${result.runId}`);
   deps.out(`removed ${result.deletedJobs} remaining queue jobs`);
   for (const token of result.releasedTokens) deps.out(`released ${token}`);
-  // Cancel leaves the worktree behind; the sentence replaces what a background
-  // pass would otherwise do silently.
-  for (const path of result.worktrees ?? []) {
-    deps.out(`worktree kept at ${path} — jigs sweep to review`);
+  const worktrees = result.worktrees ?? [];
+  if (deps.discard === true && worktrees.length > 0) {
+    await runSweep(deps, { paths: worktrees });
+  } else {
+    // Cancel leaves the worktree behind; the sentence replaces what a background
+    // pass would otherwise do silently.
+    for (const path of worktrees) {
+      deps.out(`worktree kept at ${path} — jigs sweep to review`);
+    }
   }
   return result;
 }

@@ -83,6 +83,39 @@ test("a kept branch is named on its line and counted in the summary", async () =
   expect(lines.at(-1)).toBe("2 removed (1 branch kept), 0 held");
 });
 
+test("a path sweep force-cleans only the named worktree", async () => {
+  respond({
+    entries: [
+      entry({ ownerRunId: "run_a", branchOutcome: { deleted: true } }),
+      entry({
+        path: "/data/wt/held",
+        state: "held",
+        eligible: false,
+        ownerRunId: "run_b",
+        reason: "the owning run is still live or suspended",
+      }),
+    ],
+    removed: ["/data/wt/feat"],
+    removedDirs: [],
+  });
+
+  await runSweep(deps(), { paths: ["/data/wt/feat"] });
+
+  expect(fetchMock).toHaveBeenCalledWith("http://svc.test:8990/api/worktrees/sweep", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      clean: true,
+      force: true,
+      paths: ["/data/wt/feat"],
+    }),
+  });
+  expect(lines).toHaveLength(2);
+  expect(lines[0]).toContain("/data/wt/feat");
+  expect(lines[0]).not.toContain("/data/wt/held");
+  expect(lines.at(-1)).toBe("1 removed, 0 held");
+});
+
 test("a bare sweep with no terminal reports and points at the removal paths", async () => {
   respond({
     entries: [entry({ ownerRunId: "run_a" })],

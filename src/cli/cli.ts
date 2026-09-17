@@ -209,16 +209,20 @@ program
   .command("cancel")
   .description("cancel a run, releasing every resource it claims")
   .argument("<run>", "run id, unique id prefix, or ticket (`AGE-123` or its UUID)")
+  .option("--discard", "remove the run's worktrees after cancelling")
   .option("--force", "skip the confirmation for an in-flight run")
   .addOption(serviceOption())
-  .action(async (run: string, options: { force?: boolean; service?: string }) => {
-    await cancelRun(run, {
-      out,
-      serviceUrl: serviceUrl(options.service),
-      confirm: makeConfirm(),
-      force: options.force,
-    });
-  });
+  .action(
+    async (run: string, options: { discard?: boolean; force?: boolean; service?: string }) => {
+      await cancelRun(run, {
+        out,
+        serviceUrl: serviceUrl(options.service),
+        confirm: makeConfirm(),
+        discard: options.discard,
+        force: options.force,
+      });
+    },
+  );
 
 program
   .command("logs")
@@ -250,12 +254,16 @@ program
 program
   .command("sweep")
   .description("reconcile worktrees on disk against the registry and run states")
+  .argument("[path]", "remove only this worktree")
   .option("--force", "delete every eligible worktree without asking, dirty ones included")
   .addOption(serviceOption())
-  .action(async (options: { force?: boolean; service?: string }) => {
+  .action(async (path: string | undefined, options: { force?: boolean; service?: string }) => {
     await runSweep(
       { out, confirm: makeConfirm(), serviceUrl: serviceUrl(options.service) },
-      { force: options.force },
+      {
+        force: options.force,
+        ...(path === undefined ? {} : { paths: [path] }),
+      },
     );
   });
 
