@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.8](https://github.com/salimhamed/jigs/compare/jigs-v0.29.7...jigs-v0.29.8) (2026-09-17)
+
+
+### Features
+
+* print completed run return values in logs ([f8987b0](https://github.com/salimhamed/jigs/commit/f8987b09d774d8741e666b70a1cc947e892f5958))
+
 ## [0.29.7](https://github.com/salimhamed/jigs/compare/jigs-v0.29.6...jigs-v0.29.7) (2026-09-17)
 
 
