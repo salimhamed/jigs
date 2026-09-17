@@ -15,8 +15,20 @@ import { resetGithubAuth } from "../providers/github-auth.ts";
 import * as linear from "../providers/linear.ts";
 import * as sql from "../steps/worktree/sql.ts";
 import { makeFakeSql } from "../steps/worktree/test-fixtures.ts";
-import { createApp } from "./app.ts";
 import * as queue from "./queue.ts";
+
+const ambientWorkflowEnv = vi.hoisted(() => {
+  const targetWorld = process.env.WORKFLOW_TARGET_WORLD;
+  const postgresUrl = process.env.WORKFLOW_POSTGRES_URL;
+  delete process.env.WORKFLOW_TARGET_WORLD;
+  delete process.env.WORKFLOW_POSTGRES_URL;
+  return { targetWorld, postgresUrl };
+});
+
+vi.stubEnv("WORKFLOW_TARGET_WORLD", undefined);
+vi.stubEnv("WORKFLOW_POSTGRES_URL", undefined);
+
+const { createApp } = await import("./app.ts");
 
 // The routes are exercised against workflows this file declares: what is under
 // test is the framework.
@@ -76,6 +88,10 @@ beforeAll(() => {
 });
 afterAll(() => {
   rmSync(dataDir, { recursive: true, force: true });
+  if (ambientWorkflowEnv.targetWorld === undefined) delete process.env.WORKFLOW_TARGET_WORLD;
+  else process.env.WORKFLOW_TARGET_WORLD = ambientWorkflowEnv.targetWorld;
+  if (ambientWorkflowEnv.postgresUrl === undefined) delete process.env.WORKFLOW_POSTGRES_URL;
+  else process.env.WORKFLOW_POSTGRES_URL = ambientWorkflowEnv.postgresUrl;
 });
 
 beforeEach(() => {
@@ -87,6 +103,8 @@ beforeEach(() => {
   vi.spyOn(queue, "listRunDeadJobs").mockResolvedValue([]);
   vi.spyOn(queue, "deleteRunJobs").mockResolvedValue(0);
   vi.stubEnv("WORKFLOW_LOCAL_DATA_DIR", dataDir);
+  vi.stubEnv("WORKFLOW_TARGET_WORLD", undefined);
+  vi.stubEnv("WORKFLOW_POSTGRES_URL", undefined);
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "gh-hook-secret");
   vi.stubEnv("GITHUB_TOKEN", "gh-service-token");
   vi.stubEnv("GITHUB_API_URL", "http://mock.test/github");

@@ -1,6 +1,21 @@
-import { afterEach, expect, test } from "vitest";
+import { afterAll, afterEach, expect, test, vi } from "vitest";
 import { setWorld } from "workflow/runtime";
 import { listRunSteps, runsWithActiveStep } from "./stalls.ts";
+
+const ambientWorkflowEnv = vi.hoisted(() => {
+  const targetWorld = process.env.WORKFLOW_TARGET_WORLD;
+  const postgresUrl = process.env.WORKFLOW_POSTGRES_URL;
+  delete process.env.WORKFLOW_TARGET_WORLD;
+  delete process.env.WORKFLOW_POSTGRES_URL;
+  return { targetWorld, postgresUrl };
+});
+
+afterAll(() => {
+  if (ambientWorkflowEnv.targetWorld === undefined) delete process.env.WORKFLOW_TARGET_WORLD;
+  else process.env.WORKFLOW_TARGET_WORLD = ambientWorkflowEnv.targetWorld;
+  if (ambientWorkflowEnv.postgresUrl === undefined) delete process.env.WORKFLOW_POSTGRES_URL;
+  else process.env.WORKFLOW_POSTGRES_URL = ambientWorkflowEnv.postgresUrl;
+});
 
 const RUN_A = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 

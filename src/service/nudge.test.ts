@@ -1,4 +1,4 @@
-import { expect, test, vi } from "vitest";
+import { afterAll, expect, test, vi } from "vitest";
 import { HookNotFoundError } from "workflow/errors";
 import {
   NUDGE_INTERVAL_MS,
@@ -7,6 +7,21 @@ import {
   nudgePullRequests,
   startPullRequestNudge,
 } from "./nudge.ts";
+
+const ambientWorkflowEnv = vi.hoisted(() => {
+  const targetWorld = process.env.WORKFLOW_TARGET_WORLD;
+  const postgresUrl = process.env.WORKFLOW_POSTGRES_URL;
+  delete process.env.WORKFLOW_TARGET_WORLD;
+  delete process.env.WORKFLOW_POSTGRES_URL;
+  return { targetWorld, postgresUrl };
+});
+
+afterAll(() => {
+  if (ambientWorkflowEnv.targetWorld === undefined) delete process.env.WORKFLOW_TARGET_WORLD;
+  else process.env.WORKFLOW_TARGET_WORLD = ambientWorkflowEnv.targetWorld;
+  if (ambientWorkflowEnv.postgresUrl === undefined) delete process.env.WORKFLOW_POSTGRES_URL;
+  else process.env.WORKFLOW_POSTGRES_URL = ambientWorkflowEnv.postgresUrl;
+});
 
 vi.mock("workflow/api", () => ({ resumeHook: vi.fn() }));
 
