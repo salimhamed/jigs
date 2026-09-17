@@ -157,6 +157,7 @@ test("the factory template pins the same versions this package peers on", async 
 // Public value exports are checked here; TypeScript checks the type surface.
 const BARREL_EXPORTS: Record<string, string[]> = {
   "blocks/index.ts": [
+    "acquireTicket",
     "runAgent",
     "agentOrHalt",
     "bindAgentSteps",
@@ -247,6 +248,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "resumeOrRebuild",
   ],
   "blocks/ticket/index.ts": [
+    "acquireTicket",
     "bindLinearSteps",
     "ClaimConflictError",
     "claimTicket",

@@ -188,6 +188,7 @@ export {
   needsHumanToken,
   type PostTicketHumanInputRequest,
 } from "./ticket/halt-for-human.ts";
+export { acquireTicket, type TicketPreludeSteps } from "./ticket/prelude.ts";
 export {
   type Handoff,
   type PostTicketNote,
