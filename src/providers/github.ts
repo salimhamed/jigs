@@ -393,9 +393,15 @@ export async function markPrReady(pr: PrRef): Promise<void> {
   }
 }
 
-export async function createPullRequest(request: CreatePullRequest): Promise<{ number: number }> {
+export async function createPullRequest(
+  request: CreatePullRequest,
+): Promise<{ number: number; html_url: string }> {
   const { owner, repo, ...rest } = request;
-  return githubRequest<{ number: number }>("POST", `/repos/${owner}/${repo}/pulls`, rest);
+  return githubRequest<{ number: number; html_url: string }>(
+    "POST",
+    `/repos/${owner}/${repo}/pulls`,
+    rest,
+  );
 }
 
 /** The commit messages on the branch, in the order GitHub lists them. */

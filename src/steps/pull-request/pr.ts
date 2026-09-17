@@ -31,6 +31,8 @@ import { GithubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity } from "../../providers/github-auth.ts";
 import { type GithubRepoRef, parseGithubRemote } from "../../providers/github-webhook.ts";
 
+export type OpenedPullRequest = PrRef & { url: string };
+
 // The binding is the remote now, so this is a config read: no git subprocess.
 /** Find the GitHub repository configured for a binding. */
 export async function resolveRepository(binding: string): Promise<GithubRepoRef> {
@@ -59,14 +61,14 @@ export async function openPullRequest(request: {
   title: string;
   body: string;
   draft?: boolean;
-}): Promise<PrRef> {
+}): Promise<OpenedPullRequest> {
   const { repo, head, base, title, body, draft } = request;
   const identity = resolveGithubIdentity();
   // In App mode the pull request's author is the bot, which is what lets the
   // operator approve it. The assignee and the opening line are how the
   // operator still shows up on it — GitHub has no second author field.
   const operator = identity.mode === "app" ? identity.operator : null;
-  const { number } = await createPullRequest({
+  const { number, html_url } = await createPullRequest({
     owner: repo.owner,
     repo: repo.repo,
     head,
@@ -77,7 +79,7 @@ export async function openPullRequest(request: {
   });
   const pr = { owner: repo.owner, repo: repo.repo, number };
   if (operator !== null) await assignPullRequest(pr, [operator]);
-  return pr;
+  return { ...pr, url: html_url };
 }
 
 /** Mark a draft pull request ready and return its freshly read state. */

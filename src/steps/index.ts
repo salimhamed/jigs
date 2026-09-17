@@ -23,6 +23,7 @@ export {
   type MergeOutcome,
   markPullRequestReady,
   mergePullRequest,
+  type OpenedPullRequest,
   openPullRequest,
   replyToPullRequestReviewThread,
   resolveMergePolicy,
