@@ -127,15 +127,16 @@ _Avoid_: failure, abort
 
 **Worktree**:
 The working copy an agent uses, provisioned from a binding’s clone for a run.
-jigs releases it when the run ends, under a policy the factory sets;
-leftovers remain available for inspection and sweep.
+A workflow releases it as its last act, under a policy the factory defaults
+and the workflow may override; leftovers remain available for inspection and
+sweep.
 _Avoid_: checkout, clone, workspace
 
 **Release**:
-The policy-driven end of a run resource once its run reaches a terminal
-state or its pull request closes. Release never deletes a branch holding
-commits the remote lacks.
-_Avoid_: teardown (for the policy), cleanup, gc
+The end of a run resource a workflow requests once its work is done, applied
+under the factory's default policy or the workflow's own. Release never
+deletes a branch holding commits the remote lacks.
+_Avoid_: teardown (for the request), cleanup, gc
 
 **Worktree registry**:
 The record of worktrees managed by jigs, including their owning runs and

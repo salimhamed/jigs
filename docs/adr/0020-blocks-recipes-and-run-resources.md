@@ -4,6 +4,11 @@ status: proposed
 
 # Blocks, recipes and run resources: the workflow API after the six prototypes
 
+Amended 2026-09-17 after Salim's review: model-only halt interpretation with
+no default model, `readPatch` beside `readChange`, identity facts without
+enforcement, kind-then-topic exports, explicit release with automatic release
+deferred, and run resources on SDK attributes after v5 instead of a jigs table.
+
 Six bespoke workflows were written in the JS factory on 2026-09-17, one per
 ticket, none using `deliverChange`, and each ran against a real repository
 ([AGE-448](https://linear.app/salboogie/issue/AGE-448) holds the outcomes,
@@ -60,12 +65,29 @@ so it can show and release it. Decided with Salim on 2026-09-17.
    prototypes used: a `"use step"` function in a file beside the workflow
    that owns it, which the build already discovers. The author skill and the
    scaffold name that convention instead of leaving it to be found.
-2. **Blocks.** Reusable workflow-side code, shipped by jigs under one subpath
-   per topic (`agents`, `linear`, `pull-requests`, `workspaces`, `git`,
-   `human`) and written by factories beside their workflows. A block calls
-   wrappers and other blocks and carries no process policy: no round budgets,
-   no "merged means done", no ticket-note wording. The blocks list below is
-   what the prototypes showed was missing.
+2. **Blocks.** Reusable workflow-side code, shipped by jigs and written by
+   factories beside their workflows. A block calls wrappers and other blocks
+   and carries no process policy: no round budgets, no "merged means done",
+   no ticket-note wording. The blocks list below is what the prototypes
+   showed was missing.
+
+   The public paths name kind first and topic second, and the folders match:
+
+   ```
+   @salimhamed/jigs                        defineFactory, WorkflowEntry, JigsError, config types
+   @salimhamed/jigs/blocks/<topic>         src/blocks/<topic>
+   @salimhamed/jigs/steps/<topic>          src/steps/<topic>
+   ```
+
+   with topics `agents`, `human`, `linear`, `pull-requests`, `workspaces`,
+   `git` and `runtime`. A workflow imports from `blocks/<topic>`; only the
+   generated integration imports from `steps/<topic>`. The flat topic aliases
+   (`/agents`, `/linear`, ...) and the catch-all `/blocks` and `/steps`
+   barrels go; the barrel exported 155 names of which 117 nothing imported.
+   `human` holds provider-neutral questions and answers; `linear` adapts them
+   to tickets, so a later Slack adapter sits beside it. This keeps the
+   blocks-never-on-a-step-path boundary of
+   [ADR 0019](./0019-layout-by-code-kind.md) and changes its export list.
 3. **Recipes.** Complete workflows jigs ships as source in `recipes/` in this
    repository, tested by `pnpm e2e`, and a factory copies one in when it
    wants it. Once copied, a recipe is factory code and is edited freely.
@@ -98,10 +120,13 @@ this ADR is most likely to cause, and the two-caller rule is the guard.
   consume public operations (`CheckRun`, the pull-request snapshot, review
   requests, operation results).
 - `openPullRequest` returns the pull request with its URL.
-- A `readChange(worktree, base)` step returns structured change evidence:
-  base and head commits, each file with its status and line counts, every
-  commit subject, and whether anything was truncated. Patch text is a
-  separate, caller-selected request.
+- Two git steps replace the four the prototypes wrote. `readChange(worktree,
+  base)` returns the table of contents: base and head commits, each file with
+  its status and line counts, every commit subject, and whether anything was
+  truncated. `readPatch(worktree, base, head, paths)` returns capped patch
+  text for named files only, anchored to the same two commits. Workflow code
+  decides on the first; prompts render it and tell the agent it may read
+  chapters through the second or through git in its worktree.
 - A branch-sync step reports the worktree's relation to its remote branch,
   ahead, behind or diverged, and makes discarding local state an explicit
   argument. The prototype's `reset --hard` is a policy and does not become a
@@ -113,15 +138,24 @@ this ADR is most likely to cause, and the two-caller rule is the guard.
 - The ticket prelude becomes one block that returns the claim, the snapshot
   and the worktree facts, with provisioning separable because
   `clarify-then-ship` provisions only after a human answers.
-- The halt for a human takes questions with options and returns the chosen
-  option per question, or "unreadable" so the caller can re-ask, with a
-  yes-or-no variant and an optional deadline that wakes the run with "timed
-  out". Each answer is tied to the question it answers. The renderer writes
-  its instruction from the halt's actual shape.
-- Review posting knows the acting identity and the pull request's author and
-  refuses an approval it cannot post before the call, rather than failing on
-  the provider's error. It does not downgrade an approval to a comment on its
-  own; the caller decides.
+- The halt for a human takes questions with options and returns an
+  interpreted answer per question: a declared option, "unclear", or "wants
+  discussion" with the human's words carried along, so the caller proceeds,
+  re-asks or halts again. A model does the interpreting, always, as one
+  recorded model step with a schema that admits only the declared options.
+  There is no deterministic parser for the exact form, because "for question
+  1 I think (a), but I'd like more information" is the normal reply and no
+  parser reads it. The model is passed explicitly at every call site; jigs
+  holds no default model anywhere. A yes-or-no variant and an optional
+  deadline that wakes the run with "timed out" complete it. Each answer is
+  tied to the question it answers. The renderer writes its instruction from
+  the halt's actual shape.
+- jigs exposes two identity facts, the account it acts as and a pull
+  request's author, for recognising its own comments and reviews, telling a
+  human's ticket reply from its own halt, attribution in notes, and the
+  doctor. It does not use them to block or downgrade anything: an approval
+  GitHub refuses fails loudly with a hint naming the App identity, because
+  that failure tells the author to change the workflow or the setup.
 - Pull-request observation is separable from the merge gate: a workflow can
   subscribe to the wakes (`ci-red`, `review-comments`, `merge-ready`,
   `closed`) without adopting the gate's approval semantics or its exclusive
@@ -133,25 +167,49 @@ this ADR is most likely to cause, and the two-caller rule is the guard.
   may use any credentials the factory has; or from the agent itself, given an
   MCP server for the CI provider. jigs ships no per-provider CI code.
 
-### The runtime records run resources and applies release policy
+### Run resources ride on SDK run attributes, and `jigs ps` stops guessing
 
-The worktree registry (`jigs_worktrees`) becomes the general record of a
-run's resources: worktree, scratch directory, pull request, branch, ticket
-comment, with kind, identity, URL and the run that made it. Steps register
-what they create; a factory step calls the same function. `jigs ps` and
-`jigs logs` read that record, so a finished run shows its pull request
-without a magic return shape, and the record survives failure and
-cancellation.
+A run's resources, worktree, run directory, pull request, branch, ticket
+comment, are recorded against the run as kind, identity and URL, by the step
+that creates them or by a factory step calling the same function. The record
+is generic by construction: it knows kinds, not pull requests, so a run with
+three pull requests, one Linear issue or an S3 report records them the same
+way.
 
-Release is a run-level policy jigs applies when a run reaches a terminal
-state, not a call a workflow makes and not a `finally`
-([ADR 0007](./0007-worktree-lifecycle.md) already forbids the latter because
-suspension throws). The decide-and-apply matrix in ADR 0007 stands; what
-changes is who applies it. Two rules join it: a run that watches a pull
-request releases when that pull request closes, and no release deletes a
-branch ref holding commits the remote does not have. A factory sets the
-policy per workflow (release on completion, keep on failure), and a workflow
-may release one resource early by name.
+Where it lives follows what the runtime offers. The installed Workflow SDK
+(4.8.4, world 4.4.0) has no persisted run attributes; the v5 line does
+(`setAttributes`, `start({ attributes })`, an `attr_set` event, needing a
+newer world). jigs does not add a table of its own for this. The record is
+built on run attributes after the v5 upgrade
+([AGE-422](https://linear.app/salboogie/issue/AGE-422)), and until then a
+finished run's resources are visible only through its return value in
+`jigs logs`. If jigs ever does need a table beyond `jigs_worktrees`, it
+adopts the world's own tooling, drizzle over `pg` with versioned migration
+files and a migrations table, rather than the boot-time column check and
+"drop the table" repair the registry uses today, which is acceptable only
+because that registry is rebuilt from disk.
+
+`jigs ps` becomes generic: run, workflow, the claim it holds, status, age,
+what it waits on. A pull-request column presumes one pull request per run
+and goes. Resources appear as rows, kind and link, in `jigs logs`.
+
+### Release
+
+The decide-and-apply matrix in [ADR 0007](./0007-worktree-lifecycle.md)
+stands, with one rule added: no release deletes a branch ref holding commits
+the remote lacks. What changes is how it is invoked. jigs offers one explicit
+`release` block a workflow calls as its own last line, never in a `finally`,
+which suspension would fire; the factory sets a default policy (release on
+completion, keep on failure) and a workflow's entry overrides it, so two
+workflows in one factory can differ and a workflow can decide from its
+inputs. Sweep remains the reclaim for everything else.
+
+Applying release automatically when a run ends was considered and deferred.
+The SDK exposes no signal for a run reaching a terminal state, only polling,
+so it would be a timer, and ADR 0007 records why a timer that deletes state
+under an operator was rejected once already. If the explicit block proves
+too easy to forget, the policy version is revisited after the v5 upgrade,
+and if it costs more than it saves the requirement is reconsidered.
 
 Conflict resolution on a parked pull request is opt-in and off by default
 ([AGE-463](https://linear.app/salboogie/issue/AGE-463)). When a factory
@@ -179,6 +237,23 @@ new head as unapproved.
 - **Making the generated `jigs.ts` editable by factories.** Rejected; it is
   the durable-address anchor and drift is what the build check exists to
   catch. Steps beside workflows already extend it.
+- **A deterministic parser for halt replies in the exact requested form.**
+  Rejected by Salim; one model path is simpler and the exact form is the rare
+  case.
+- **A jigs-owned run-resources table now.** Rejected in favour of SDK run
+  attributes after v5; a second SQL library and an unversioned schema are
+  what jigs has today, and a new table would entrench both.
+
+## Deferred
+
+- **Agent continuation semantics.** Today any failure while resuming an
+  agent session is one outcome, "resume failed", and the caller may start a
+  fresh agent with rebuilt context, which repeats work if the old agent had
+  already committed. Distinguishing the causes and recording the path taken
+  is right but not urgent: no prototype hit it. Revisit when one does.
+- **An effects log** (question posted, reply accepted, fix pushed) beside the
+  resources record. Deferred until a workflow needs it.
+- **Automatic release on terminal state.** See Release.
 
 ## Consequences
 
@@ -189,10 +264,11 @@ new head as unapproved.
   recipe; this ADR revises that, and the plan's stage 6 is this document.
 - The first slice is the part with the least design risk and the most
   duplicated code: export `JigsError`, return the pull request URL,
-  `readChange`, the ticket-prelude block, and recording a run's pull request
-  so `ps` shows it. The recipe move and the release policy follow, each with
-  its own ticket. Typed halts, PR observation and CI evidence come after the
-  first factory needs them again.
+  `readChange` and `readPatch`, the ticket-prelude block, the explicit
+  `release` block, and the generic `jigs ps`. The recipe move and the
+  kind-then-topic exports follow, each with its own ticket, as one breaking
+  release. Model-interpreted halts, PR observation and CI evidence come when
+  the next factory workflow needs them; run attributes wait for AGE-422.
 - Validation before calling the API general: a concurrent multi-repository
   investigation and an event-started workflow with no pull request, with a
   restart during a human wait, competing worktree acquisition and a lost
