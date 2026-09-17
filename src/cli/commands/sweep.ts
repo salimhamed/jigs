@@ -10,6 +10,7 @@ import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 export interface SweepOptions {
   force?: boolean;
+  paths?: string[];
 }
 
 export interface SweepDeps extends ServiceDeps {
@@ -37,6 +38,17 @@ export interface SweepResult {
 }
 
 export async function runSweep(deps: SweepDeps, options: SweepOptions = {}): Promise<SweepResult> {
+  if (options.paths !== undefined) {
+    const result = await postSweep(deps, {
+      clean: true,
+      force: true,
+      paths: options.paths,
+    });
+    printEntries(result.entries, deps.out);
+    printSummary(result, deps.out);
+    return result;
+  }
+
   if (options.force === true) {
     const result = await postSweep(deps, { clean: true, force: true });
     printEntries(result.entries, deps.out);
