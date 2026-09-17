@@ -11,7 +11,6 @@ export interface PsRun {
   status: string;
   trigger: string;
   ticket: string | null;
-  pullRequest: string | null;
   createdAt: string;
   lastActivityAt: string;
   /** How far the run got, or null when nothing read its steps. */
@@ -69,13 +68,12 @@ export async function showRuns(deps: ServiceDeps, options: PsOptions = {}): Prom
     deps.out("no runs");
   } else {
     for (const line of formatTable(
-      ["RUN", "WORKFLOW", "TICKET", "STATUS", "PR", "TRIGGER", "AGE", "ACTIVITY", "WAITING"],
+      ["RUN", "WORKFLOW", "TICKET", "STATUS", "TRIGGER", "AGE", "ACTIVITY", "WAITING"],
       result.runs.map((run) => [
         run.runId,
         run.workflow,
         run.ticket ?? "-",
         run.status,
-        run.pullRequest ?? "-",
         run.trigger,
         age(run.createdAt, now),
         age(run.lastActivityAt, now),

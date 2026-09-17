@@ -146,7 +146,6 @@ export async function fakeService(routes: ServiceRoutes = {}): Promise<number> {
           runs: (routes.runs ?? []).map((run) => ({
             trigger: "manual",
             ticket: null,
-            pullRequest: null,
             createdAt: at,
             lastActivityAt: at,
             steps: 0,

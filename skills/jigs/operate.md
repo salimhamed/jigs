@@ -74,12 +74,10 @@ process, so it costs one node start-up rather than one per poll, and it says
 `unreachable` and keeps going while the service restarts. `--interval` sets the
 poll.
 
-`jigs ps` is the snapshot: `RUN WORKFLOW TICKET STATUS PR TRIGGER AGE
+`jigs ps` is the snapshot: `RUN WORKFLOW TICKET STATUS TRIGGER AGE
 ACTIVITY WAITING`, then the worktrees the registry holds, then the schedules if
-the factory declares any. `TICKET` is the ticket the run claimed and `PR` the
-pull request a live run holds or a merged one opened — that is the whole
-mapping from a run id to the work. A failed or cancelled run kept no result to
-read one out of, so its `PR` is `-`. `TRIGGER` says how the run started; a
+the factory declares any. `TICKET` is the ticket the run was launched with, as
+the operator typed it. `TRIGGER` says how the run started; a
 scheduled fire reads `schedule:<name>`. `AGE` counts from launch, `ACTIVITY`
 from the last time the run moved: `running` with a 20-minute `ACTIVITY` is
 worth looking at, where a 20-second one is an ordinary gap between steps.

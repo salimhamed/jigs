@@ -153,8 +153,8 @@ pnpm exec jigs watch
 `<run>` is a run id, a unique prefix of one, or the ticket the run claimed.
 `jigs logs` prints the run's page on the dashboard `jigs up` named.
 
-`jigs ps` names each run's ticket, status, pull request, how long since it last
-moved and, for a parked run, what it is waiting for and the link to act on.
+`jigs ps` names each run's ticket, status, trigger, how long since it last moved
+and, for a parked run, what it is waiting for and the link to act on.
 `jigs logs` says the same for one run and adds the question
 a halt asked. For a run parked on a pull request it reads GitHub as well and
 prints the head commit, CI, approval, draft and mergeable state, what is

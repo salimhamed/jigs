@@ -66,10 +66,12 @@ export async function showLogs(
   deps.out(`status ${result.status}`);
   deps.out(`trigger ${result.trigger}`);
   if (result.ticket !== null) deps.out(`ticket ${result.ticket}`);
-  if (result.pullRequest !== null) deps.out(`pull request ${result.pullRequest}`);
   deps.out(`last activity ${age(result.lastActivityAt, now)} ago (${result.lastActivityAt})`);
   if (result.error !== undefined) deps.out(`error ${result.error}`);
-  if (result.status === "completed") showResult(result.returnValue, deps);
+  if (result.status === "completed") {
+    showResult(result.returnValue, deps);
+    showLinks(result.returnValue, deps);
+  }
   // What the run is waiting for, and where to go and act on it — the token
   // itself is an implementation detail of the hook it parked on.
   for (const suspension of result.suspensions) {
@@ -114,6 +116,37 @@ function showResult(value: unknown, deps: ServiceDeps): void {
   }
   const omitted = entries.length - RESULT_KEY_LIMIT;
   if (omitted > 0) deps.out(`  … ${omitted} more ${omitted === 1 ? "key" : "keys"}`);
+}
+
+function showLinks(value: unknown, deps: ServiceDeps): void {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return;
+  const result = value as { pr?: unknown; url?: unknown };
+  const pr = formatPullRequest(result.pr);
+  const nestedUrl = pullRequestUrl(result.pr);
+  const url = typeof result.url === "string" ? singleLine(result.url) : nestedUrl;
+  if (pr !== undefined && url !== undefined) deps.out(`links: ${pr} → ${url}`);
+  else if (pr !== undefined) deps.out(`links: ${pr}`);
+  else if (url !== undefined) deps.out(`links: ${url}`);
+}
+
+function pullRequestUrl(value: unknown): string | undefined {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const url = (value as { url?: unknown }).url;
+  return typeof url === "string" ? singleLine(url) : undefined;
+}
+
+function formatPullRequest(value: unknown): string | undefined {
+  if (typeof value === "string") return singleLine(value);
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const pr = value as { owner?: unknown; repo?: unknown; number?: unknown };
+  if (
+    typeof pr.owner !== "string" ||
+    typeof pr.repo !== "string" ||
+    typeof pr.number !== "number"
+  ) {
+    return undefined;
+  }
+  return `${singleLine(pr.owner)}/${singleLine(pr.repo)}#${pr.number}`;
 }
 
 function formatResultValue(value: unknown): string {

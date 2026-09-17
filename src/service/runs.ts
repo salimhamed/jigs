@@ -257,8 +257,6 @@ export interface RunDescription {
   trigger: string;
   /** The ticket the run was launched with, as the operator typed it. */
   ticket: string | null;
-  /** `owner/repo#N`, once the run has a pull request. */
-  pullRequest: string | null;
   createdAt: string;
   /** The last thing that happened to this run, step timings included. */
   lastActivityAt: string;
@@ -288,20 +286,6 @@ interface StepFacts {
   latestAt: string | null;
 }
 
-/** The pull request the run opened, from the result it returned. A live run
- *  names its pull request through the gate hook it holds instead. */
-function pullRequestFromOutput(output: unknown): string | null {
-  const result = hydrate(output);
-  const pr = (result as { pr?: { owner?: unknown; repo?: unknown; number?: unknown } } | undefined)
-    ?.pr;
-  if (typeof pr?.owner !== "string" || typeof pr.repo !== "string" || typeof pr.number !== "number")
-    return null;
-  return `${pr.owner}/${pr.repo}#${pr.number}`;
-}
-
-const pullRequestFromTokens = (tokens: readonly string[]): string | null =>
-  tokens.find((token) => token.startsWith(PR_TOKEN_PREFIX))?.slice(PR_TOKEN_PREFIX.length) ?? null;
-
 /**
  * What this run is, past what the world stored: the SDK has neither
  * `suspended` nor `stalled`, so a run parked on a hook other than its ticket
@@ -321,7 +305,6 @@ export async function describeRun(runId: string, facts: RunFacts = {}): Promise<
     status: run.status,
     trigger: triggerLabel(run.triggerId),
     ticket,
-    pullRequest: pullRequestFromOutput(run.output),
     createdAt,
     lastActivityAt: iso(run.completedAt) ?? iso(run.updatedAt) ?? createdAt,
     steps: null,
@@ -343,7 +326,6 @@ export async function describeRun(runId: string, facts: RunFacts = {}): Promise<
   const steps = stepFacts(facts.steps ?? (await listRunSteps(runId)));
   const live: RunDescription = {
     ...stored,
-    pullRequest: pullRequestFromTokens(tokens) ?? stored.pullRequest,
     lastActivityAt: latest([iso(run.updatedAt) ?? createdAt, steps.latestAt]),
     steps: steps.count,
     lastStep: steps.last,
