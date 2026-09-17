@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.6](https://github.com/salimhamed/jigs/compare/jigs-v0.29.5...jigs-v0.29.6) (2026-09-17)
+
+
+### Features
+
+* report immediate jigs run failures ([88387d5](https://github.com/salimhamed/jigs/commit/88387d575c4af735033704ccd0306bc3fe86f015))
+
 ## [0.29.5](https://github.com/salimhamed/jigs/compare/jigs-v0.29.4...jigs-v0.29.5) (2026-09-17)
 
 
