@@ -215,6 +215,30 @@ test("a completed run prints a compact object result", async () => {
   ]);
 });
 
+test("result keys and scalar values stay on one terminal line", async () => {
+  respond(
+    result({
+      status: "completed",
+      returnValue: {
+        "multi\nline": "one\r\ntwo\rthree\u2028four\u2029five",
+      },
+    }),
+  );
+  respond({ steps: [], deadJobs: [] });
+  await showLogs(RUN, deps(), { now: NOW });
+  expect(lines.slice(4, 6)).toEqual([
+    "result:",
+    "  multi\\nline: one\\ntwo\\rthree\\u2028four\\u2029five",
+  ]);
+});
+
+test("a multiline scalar result stays on the result line", async () => {
+  respond(result({ status: "completed", returnValue: "one\ntwo" }));
+  respond({ steps: [], deadJobs: [] });
+  await showLogs(RUN, deps(), { now: NOW });
+  expect(lines[4]).toBe("result: one\\ntwo");
+});
+
 test.each([
   ["a string", "gave-up", "result: gave-up"],
   ["a number", 42, "result: 42"],
