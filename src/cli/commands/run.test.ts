@@ -244,6 +244,29 @@ test("a run still running after the poll window keeps the launch successful", as
   expect(lines).toHaveLength(3);
 });
 
+test("a slow first poll cannot push the second delay past the poll window", async () => {
+  respondSchema();
+  respondStarted();
+  let now = 0;
+  const sleeps: number[] = [];
+  fetchMock.mockImplementationOnce(async () => {
+    now += 1_700;
+    return new Response(JSON.stringify({ status: "running" }));
+  });
+
+  await launchRun("deliver-feature", ["ticket=AGE-346"], {
+    ...deps(),
+    now: () => now,
+    sleep: async (ms) => {
+      sleeps.push(ms);
+      now += ms;
+    },
+  });
+
+  expect(now).toBe(3_000);
+  expect(sleeps).toEqual([1_250, 50]);
+});
+
 test("a run completed within the poll window keeps the launch successful", async () => {
   respondSchema();
   respondStarted();

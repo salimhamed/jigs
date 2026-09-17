@@ -11,8 +11,9 @@ export interface LaunchDeps extends ServiceDeps {
   // An explicit --service is some other factory's, and this factory's sources
   // say nothing about it.
   factoryCwd?: string;
-  /** Tests replace the delay; the command uses the fixed short poll window. */
+  /** Tests replace the clock; the command uses the fixed short poll window. */
   sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
 }
 
 export interface LaunchResult {
@@ -180,11 +181,14 @@ const POLL_WINDOW_MS = 3_000;
 
 async function reportEarlyFailure(runId: string, deps: LaunchDeps): Promise<void> {
   const sleep = deps.sleep ?? ((ms: number) => new Promise((done) => setTimeout(done, ms)));
-  const deadline = Date.now() + POLL_WINDOW_MS;
+  const now = deps.now ?? Date.now;
+  const deadline = now() + POLL_WINDOW_MS;
 
   for (let poll = 0; poll < 2; poll++) {
-    await sleep(POLL_INTERVAL_MS);
-    const remaining = deadline - Date.now();
+    const beforeSleep = deadline - now();
+    if (beforeSleep <= 0) return;
+    await sleep(Math.min(POLL_INTERVAL_MS, beforeSleep));
+    const remaining = deadline - now();
     if (remaining <= 0) return;
 
     let run: RunStatus;
