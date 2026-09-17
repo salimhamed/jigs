@@ -156,6 +156,7 @@ test("the factory template pins the same versions this package peers on", async 
 
 // Public value exports are checked here; TypeScript checks the type surface.
 const BARREL_EXPORTS: Record<string, string[]> = {
+  "index.ts": ["defineFactory", "ticketInput", "JigsError"],
   "blocks/index.ts": [
     "acquireTicket",
     "runAgent",

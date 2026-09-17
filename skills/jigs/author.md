@@ -20,7 +20,10 @@ existing `workflows/`, `blocks/`, and `steps/` before editing. The installed
 
 A workflow calls blocks and steps. A step calls an implementation. Only the
 factory carries directives, so library version changes do not rename its steps.
-Signal an unhappy ending by throwing `JigsError`; a value returned from a workflow is treated as success.
+Signal an unhappy ending by throwing `JigsError`, imported with
+`import { JigsError } from "@salimhamed/jigs"`; a value returned from a workflow
+is treated as success. Its optional second constructor argument is the `hint`
+an operator reads.
 Names and paths can be improved, but changing them changes durable addresses:
 check active and parked runs before deploying a rename, and arrange their
 completion or cancellation with the operator.
