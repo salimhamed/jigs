@@ -11,6 +11,8 @@
 // Which subpath a value is reached through does not affect any step id: no
 // file here carries a directive, so every id is a factory-local path
 // (ADR 0013).
+
+export { JigsError } from "./blocks/errors.ts";
 export {
   type AnyWorkflowEntry,
   defineFactory,
