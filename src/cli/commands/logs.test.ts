@@ -147,13 +147,14 @@ test("a pull request GitHub could not be asked about prints as it always did", a
 });
 
 test("--json prints one document with the run, its suspensions and its timeline", async () => {
-  respond(result({ ticket: "AGE-317", logs: DASHBOARD }));
+  respond(result({ ticket: "AGE-317", logs: DASHBOARD, returnValue: { status: "gave-up" } }));
   respond({ steps: [{ name: "claimTicket", status: "completed" }], deadJobs: [] });
   await showLogs(RUN, deps(), { json: true, now: NOW });
   expect(lines).toHaveLength(1);
   const document = JSON.parse(lines[0] ?? "") as Record<string, unknown>;
   expect(document.ticket).toBe("AGE-317");
   expect(document.logs).toBe(DASHBOARD);
+  expect(document.returnValue).toEqual({ status: "gave-up" });
   expect(document.timeline).toEqual({
     steps: [{ name: "claimTicket", status: "completed" }],
     deadJobs: [],
@@ -185,6 +186,102 @@ test("a failed run's error is printed above the log pointer", async () => {
     "error ClaimConflictError: linear:ticket:… is already claimed",
     DASHBOARD,
   ]);
+});
+
+test("a completed run prints a compact object result", async () => {
+  respond(
+    result({
+      status: "completed",
+      returnValue: {
+        status: "gave-up",
+        attempts: 3,
+        retryable: false,
+        detail: { reason: "budget exhausted" },
+        findings: ["one", "two"],
+        note: null,
+      },
+    }),
+  );
+  respond({ steps: [], deadJobs: [] });
+  await showLogs(RUN, deps(), { now: NOW });
+  expect(lines.slice(4, 11)).toEqual([
+    "result:",
+    "  status: gave-up",
+    "  attempts: 3",
+    "  retryable: false",
+    "  detail: {…}",
+    "  findings: [2 items]",
+    "  note: null",
+  ]);
+});
+
+test("result keys and scalar values stay on one terminal line", async () => {
+  respond(
+    result({
+      status: "completed",
+      returnValue: {
+        "multi\nline": "one\r\ntwo\rthree\u2028four\u2029five",
+      },
+    }),
+  );
+  respond({ steps: [], deadJobs: [] });
+  await showLogs(RUN, deps(), { now: NOW });
+  expect(lines.slice(4, 6)).toEqual([
+    "result:",
+    "  multi\\nline: one\\ntwo\\rthree\\u2028four\\u2029five",
+  ]);
+});
+
+test("a multiline scalar result stays on the result line", async () => {
+  respond(result({ status: "completed", returnValue: "one\ntwo" }));
+  respond({ steps: [], deadJobs: [] });
+  await showLogs(RUN, deps(), { now: NOW });
+  expect(lines[4]).toBe("result: one\\ntwo");
+});
+
+test.each([
+  ["a string", "gave-up", "result: gave-up"],
+  ["a number", 42, "result: 42"],
+])("a completed run prints %s result on the result line", async (_label, returnValue, expected) => {
+  respond(result({ status: "completed", returnValue }));
+  respond({ steps: [], deadJobs: [] });
+  await showLogs(RUN, deps(), { now: NOW });
+  expect(lines[4]).toBe(expected);
+});
+
+test.each([
+  ["undefined", undefined],
+  ["null", null],
+])("a completed run with %s for its result prints nothing new", async (_label, returnValue) => {
+  respond(result({ status: "completed", returnValue }));
+  respond({ steps: [], deadJobs: [] });
+  await showLogs(RUN, deps(), { now: NOW });
+  expect(lines).toEqual([
+    `run ${RUN}`,
+    "status completed",
+    "trigger manual",
+    "last activity 1m ago (2026-09-04T10:09:00.000Z)",
+    "",
+  ]);
+});
+
+test("an object result is capped and reports its omitted keys", async () => {
+  respond(
+    result({
+      status: "completed",
+      returnValue: Object.fromEntries(
+        Array.from({ length: 15 }, (_, index) => [`key${index + 1}`, index + 1]),
+      ),
+    }),
+  );
+  respond({ steps: [], deadJobs: [] });
+  await showLogs(RUN, deps(), { now: NOW });
+  expect(lines.slice(4, 18)).toEqual([
+    "result:",
+    ...Array.from({ length: 12 }, (_, index) => `  key${index + 1}: ${index + 1}`),
+    "  … 3 more keys",
+  ]);
+  expect(lines).not.toContain("  key13: 13");
 });
 
 test("the step timeline reports a duration, a step still running, and its error", async () => {

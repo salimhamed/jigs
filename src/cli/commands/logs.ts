@@ -69,6 +69,7 @@ export async function showLogs(
   if (result.pullRequest !== null) deps.out(`pull request ${result.pullRequest}`);
   deps.out(`last activity ${age(result.lastActivityAt, now)} ago (${result.lastActivityAt})`);
   if (result.error !== undefined) deps.out(`error ${result.error}`);
+  if (result.status === "completed") showResult(result.returnValue, deps);
   // What the run is waiting for, and where to go and act on it — the token
   // itself is an implementation detail of the hook it parked on.
   for (const suspension of result.suspensions) {
@@ -95,6 +96,39 @@ export async function showLogs(
   deps.out(result.logs);
   showTimeline(timeline, deps);
   return result;
+}
+
+const RESULT_KEY_LIMIT = 12;
+
+function showResult(value: unknown, deps: ServiceDeps): void {
+  if (value === undefined || value === null) return;
+  if (typeof value !== "object" || Array.isArray(value)) {
+    deps.out(`result: ${formatResultValue(value)}`);
+    return;
+  }
+
+  const entries = Object.entries(value);
+  deps.out("result:");
+  for (const [key, entryValue] of entries.slice(0, RESULT_KEY_LIMIT)) {
+    deps.out(`  ${singleLine(key)}: ${formatResultValue(entryValue)}`);
+  }
+  const omitted = entries.length - RESULT_KEY_LIMIT;
+  if (omitted > 0) deps.out(`  … ${omitted} more ${omitted === 1 ? "key" : "keys"}`);
+}
+
+function formatResultValue(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.length} ${value.length === 1 ? "item" : "items"}]`;
+  if (value !== null && typeof value === "object") return "{…}";
+  return singleLine(String(value));
+}
+
+function singleLine(value: string): string {
+  return value.replace(/\r\n|\r|\n|\u2028|\u2029/g, (lineBreak) => {
+    if (lineBreak === "\r") return "\\r";
+    if (lineBreak === "\u2028") return "\\u2028";
+    if (lineBreak === "\u2029") return "\\u2029";
+    return "\\n";
+  });
 }
 
 // A timeline the service cannot read still leaves the run's own state above,
