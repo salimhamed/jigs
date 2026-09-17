@@ -122,10 +122,17 @@ function showLinks(value: unknown, deps: ServiceDeps): void {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return;
   const result = value as { pr?: unknown; url?: unknown };
   const pr = formatPullRequest(result.pr);
-  const url = typeof result.url === "string" ? singleLine(result.url) : undefined;
+  const nestedUrl = pullRequestUrl(result.pr);
+  const url = typeof result.url === "string" ? singleLine(result.url) : nestedUrl;
   if (pr !== undefined && url !== undefined) deps.out(`links: ${pr} → ${url}`);
   else if (pr !== undefined) deps.out(`links: ${pr}`);
   else if (url !== undefined) deps.out(`links: ${url}`);
+}
+
+function pullRequestUrl(value: unknown): string | undefined {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const url = (value as { url?: unknown }).url;
+  return typeof url === "string" ? singleLine(url) : undefined;
 }
 
 function formatPullRequest(value: unknown): string | undefined {

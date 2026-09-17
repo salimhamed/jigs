@@ -218,8 +218,20 @@ test("a completed run prints a compact object result", async () => {
 test.each([
   [
     "an object-shaped pull request and URL",
-    { pr: { owner: "acme", repo: "api", number: 41 }, url: "https://github.com/acme/api/pull/41" },
+    {
+      pr: {
+        owner: "acme",
+        repo: "api",
+        number: 41,
+        url: "https://github.com/acme/api/pull/41",
+      },
+    },
     "links: acme/api#41 → https://github.com/acme/api/pull/41",
+  ],
+  [
+    "an object-shaped pull request and top-level URL",
+    { pr: { owner: "acme", repo: "api", number: 41 }, url: "https://example.test/change" },
+    "links: acme/api#41 → https://example.test/change",
   ],
   ["a string pull request", { pr: "acme/api#41" }, "links: acme/api#41"],
   ["a URL", { url: "https://example.test/report" }, "links: https://example.test/report"],

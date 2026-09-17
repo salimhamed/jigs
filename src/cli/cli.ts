@@ -174,7 +174,7 @@ program
 
 program
   .command("ps")
-  .description("list runs with their ticket, pull request and what they wait on")
+  .description("list runs with their ticket, status and what they wait on")
   .option("--json", "print one JSON document instead of the tables")
   .addOption(serviceOption())
   .action(async (options: { json?: boolean; service?: string }) => {
