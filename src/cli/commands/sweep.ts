@@ -44,8 +44,13 @@ export async function runSweep(deps: SweepDeps, options: SweepOptions = {}): Pro
       force: true,
       paths: options.paths,
     });
-    printEntries(result.entries, deps.out);
-    printSummary(result, deps.out);
+    const removed = new Set(result.removed);
+    const scopedResult = {
+      ...result,
+      entries: result.entries.filter((entry) => removed.has(entry.path)),
+    };
+    printEntries(scopedResult.entries, deps.out);
+    printSummary(scopedResult, deps.out);
     return result;
   }
 
