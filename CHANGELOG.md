@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.30.0](https://github.com/salimhamed/jigs/compare/jigs-v0.29.9...jigs-v0.30.0) (2026-09-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cli:** ps, logs, and watch JSON no longer include pullRequest.
+
+### Features
+
+* **cli:** make run listings generic ([9581604](https://github.com/salimhamed/jigs/commit/95816042196fb665596dbed972ad0335ae34ade3))
+
 ## [0.29.9](https://github.com/salimhamed/jigs/compare/jigs-v0.29.8...jigs-v0.29.9) (2026-09-17)
 
 
