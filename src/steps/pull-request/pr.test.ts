@@ -99,7 +99,10 @@ beforeEach(() => {
   vi.mocked(fetchPrCommitMessages).mockResolvedValue([
     "fix: title\n\nThe body.\n\nBREAKING CHANGE: the shape moved.",
   ]);
-  vi.mocked(createPullRequest).mockResolvedValue({ number: 1 });
+  vi.mocked(createPullRequest).mockResolvedValue({
+    number: 1,
+    html_url: "https://github.example/owner/repo/pull/1",
+  });
   vi.mocked(mergePr).mockResolvedValue({ merged: true, sha: "merged" });
   vi.mocked(postPullRequestReview).mockResolvedValue({ id: 970 });
 });
@@ -261,16 +264,18 @@ test("a rebase has no merge message to carry a trailer in", async () => {
 test("pat mode adds no trailer, no assignee and no requested-by line", async () => {
   expect(
     await openPullRequest({ repo, head: "fix", base: "main", title: "fix: search", body: "Body." }),
-  ).toEqual(pr);
+  ).toEqual({ ...pr, url: "https://github.example/owner/repo/pull/1" });
   expect(createPullRequest).toHaveBeenCalledWith(expect.objectContaining({ body: "Body." }));
   expect(assignPullRequest).not.toHaveBeenCalled();
   await mergePullRequest(pr, "head", SQUASH);
   expect(vi.mocked(mergePr).mock.calls[0]?.[1].message).toBeUndefined();
 });
 
-test("app mode names the operator on the pull request it opens for them", async () => {
+test("app mode names the operator and returns the provider's URL", async () => {
   asApp();
-  await openPullRequest({ repo, head: "fix", base: "main", title: "fix: search", body: "Body." });
+  await expect(
+    openPullRequest({ repo, head: "fix", base: "main", title: "fix: search", body: "Body." }),
+  ).resolves.toEqual({ ...pr, url: "https://github.example/owner/repo/pull/1" });
   expect(createPullRequest).toHaveBeenCalledWith(
     expect.objectContaining({ body: "Requested by @salimhamed.\n\nBody." }),
   );

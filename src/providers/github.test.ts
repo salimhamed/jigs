@@ -451,8 +451,10 @@ test("a review with an empty comments array omits comments from the request", as
   expect(JSON.parse(String(init.body))).toEqual({ event: "COMMENT", body: "Summary" });
 });
 
-test("createPullRequest posts head, base, title and body and returns the number", async () => {
-  fetchMock.mockResolvedValueOnce(json({ number: 41 }));
+test("createPullRequest posts its fields and passes through GitHub's number and URL", async () => {
+  fetchMock.mockResolvedValueOnce(
+    json({ number: 41, html_url: "https://github.example/acme/api/pull/41" }),
+  );
   const created = await createPullRequest({
     owner: "acme",
     repo: "api",
@@ -462,7 +464,10 @@ test("createPullRequest posts head, base, title and body and returns the number"
     body: "the brief",
   });
 
-  expect(created).toEqual({ number: 41 });
+  expect(created).toEqual({
+    number: 41,
+    html_url: "https://github.example/acme/api/pull/41",
+  });
   const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
   expect(url).toBe("http://mock.test/github/repos/acme/api/pulls");
   expect(init.method).toBe("POST");
@@ -475,7 +480,9 @@ test("createPullRequest posts head, base, title and body and returns the number"
 });
 
 test("createPullRequest forwards draft when supplied", async () => {
-  fetchMock.mockResolvedValueOnce(json({ number: 42 }));
+  fetchMock.mockResolvedValueOnce(
+    json({ number: 42, html_url: "https://github.example/acme/api/pull/42" }),
+  );
   await createPullRequest({
     owner: "acme",
     repo: "api",
