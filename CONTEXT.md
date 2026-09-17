@@ -77,9 +77,22 @@ installed by the factory at versions compatible with jigs.
 _Avoid_: transitive deps, runtime deps, peer set
 
 **Scaffold**:
-The starting configuration, workflows and custom code a new factory receives.
-Those files become factory-owned; generated integration is maintained separately.
-_Avoid_: generated integration (for factory-owned code)
+The bare starting point a new factory receives: configuration, generated
+integration and one trivial workflow. It presumes no process; recipes are
+copied in separately. Those files become factory-owned.
+_Avoid_: generated integration (for factory-owned code), starter kit
+
+**Recipe**:
+A complete workflow jigs ships as source and a factory copies in when it
+wants that process. Once copied it is factory code, edited freely. The ship
+process is a recipe.
+_Avoid_: template (for a whole workflow), built-in workflow, example
+
+**Run resource**:
+Something a run creates or holds that jigs records against the run: a
+worktree, a run directory, a pull request, a branch, a ticket comment. The
+record is what listing and release read.
+_Avoid_: artifact, side effect (for the thing itself), output
 
 **Generated integration**:
 The committed factory-local connection between shipped blocks and their
@@ -114,9 +127,16 @@ _Avoid_: failure, abort
 
 **Worktree**:
 The working copy an agent uses, provisioned from a binding’s clone for a run.
-A workflow can remove it after success; leftovers remain available for inspection
-and sweep.
+A workflow releases it as its last act, under a policy the factory defaults
+and the workflow may override; leftovers remain available for inspection and
+sweep.
 _Avoid_: checkout, clone, workspace
+
+**Release**:
+The end of a run resource a workflow requests once its work is done, applied
+under the factory's default policy or the workflow's own. Release never
+deletes a branch holding commits the remote lacks.
+_Avoid_: teardown (for the request), cleanup, gc
 
 **Worktree registry**:
 The record of worktrees managed by jigs, including their owning runs and
@@ -175,8 +195,8 @@ _Avoid_: intake, triage
 **Delivery**:
 The whole of carrying a work item to a merged or closed pull request:
 implementation, code review, publication, pull-request feedback, CI repair and
-merge or closure, under factory-selected policy. Coordinated by
-`deliverChange`, whose phases are also usable on their own.
+merge or closure, under factory-selected policy. It is a process a recipe
+describes, not a block jigs ships.
 _Avoid_: shipping, the pipeline, the review loop (for the whole)
 
 **Review loop**:
