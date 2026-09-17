@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.9](https://github.com/salimhamed/jigs/compare/jigs-v0.29.8...jigs-v0.29.9) (2026-09-17)
+
+
+### Features
+
+* **ticket:** add acquire ticket prelude block ([7a32936](https://github.com/salimhamed/jigs/commit/7a3293646f33b7cccbd1cf4cf06152797b2f6f9c))
+
 ## [0.29.8](https://github.com/salimhamed/jigs/compare/jigs-v0.29.7...jigs-v0.29.8) (2026-09-17)
 
 
