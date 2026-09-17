@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { type CheckReport, formatFailures } from "../../checks/catalog.ts";
 import { JigsError } from "../../errors.ts";
+import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 import { serviceBehindSources } from "./service-lifecycle.ts";
 
@@ -10,6 +11,8 @@ export interface LaunchDeps extends ServiceDeps {
   // An explicit --service is some other factory's, and this factory's sources
   // say nothing about it.
   factoryCwd?: string;
+  /** Tests replace the delay; the command uses the fixed short poll window. */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export interface LaunchResult {
@@ -163,7 +166,45 @@ export async function launchRun(
   deps.out(`run ${result.runId}`);
   deps.out(`workflow ${result.workflow}`);
   deps.out(`logs: ${result.logs}`);
+  await reportEarlyFailure(result.runId, deps);
   return result;
+}
+
+interface RunStatus {
+  status: string;
+  error?: string;
+}
+
+const POLL_INTERVAL_MS = 1_250;
+const POLL_WINDOW_MS = 3_000;
+
+async function reportEarlyFailure(runId: string, deps: LaunchDeps): Promise<void> {
+  const sleep = deps.sleep ?? ((ms: number) => new Promise((done) => setTimeout(done, ms)));
+  const deadline = Date.now() + POLL_WINDOW_MS;
+
+  for (let poll = 0; poll < 2; poll++) {
+    await sleep(POLL_INTERVAL_MS);
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return;
+
+    let run: RunStatus;
+    try {
+      const res = await serviceFetch(deps.serviceUrl, `/api/runs/${encodeURIComponent(runId)}`, {
+        signal: AbortSignal.timeout(remaining),
+      });
+      if (!res.ok) return;
+      run = (await res.json()) as RunStatus;
+    } catch {
+      // This is a best-effort glimpse, not another condition of launching.
+      return;
+    }
+
+    if (!TERMINAL_RUN_STATUSES.has(run.status)) continue;
+    if (run.status === "completed") return;
+    deps.out(`status ${run.status}`);
+    if (run.error !== undefined) deps.out(`error ${run.error}`);
+    throw new JigsError(`run ${runId} ${run.status}`);
+  }
 }
 
 // A warning, not a refusal: the previous bundle is still a workflow, and the

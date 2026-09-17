@@ -27,6 +27,7 @@ afterEach(() => {
 const deps = () => ({
   out: (line: string) => lines.push(line),
   serviceUrl: "http://svc.test:8990",
+  sleep: async () => {},
 });
 
 const inputsSchema = z.toJSONSchema(
@@ -53,6 +54,13 @@ const respondStarted = () =>
       { status: 201 },
     ),
   );
+
+const respondStatus = (status: string, error?: string) =>
+  fetchMock.mockResolvedValueOnce(
+    new Response(JSON.stringify({ status, ...(error === undefined ? {} : { error }) })),
+  );
+
+const launchAndPoll = () => launchRun("deliver-feature", ["ticket=AGE-346"], deps());
 
 // A factory whose build lands `offsetMs` after its sources: negative for the
 // edit `jigs up` has yet to pick up.
@@ -210,6 +218,52 @@ test("a started run prints its id, workflow and log pointer", async () => {
   expect(JSON.parse(String(trigger?.[1]?.body))).toEqual({
     inputs: { ticket: "AGE-346" },
   });
+});
+
+test("a run that fails within the poll window prints its status and error and fails", async () => {
+  respondSchema();
+  respondStarted();
+  respondStatus("failed", "Error: bad binding");
+
+  const err = await failure(launchAndPoll());
+
+  expect(err?.message).toBe("run wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM failed");
+  expect(lines).toContain("status failed");
+  expect(lines).toContain("error Error: bad binding");
+});
+
+test("a run still running after the poll window keeps the launch successful", async () => {
+  respondSchema();
+  respondStarted();
+  respondStatus("running");
+  respondStatus("running");
+
+  await expect(launchAndPoll()).resolves.toMatchObject({
+    workflow: "deliver-feature",
+  });
+  expect(lines).toHaveLength(3);
+});
+
+test("a run completed within the poll window keeps the launch successful", async () => {
+  respondSchema();
+  respondStarted();
+  respondStatus("completed");
+
+  await expect(launchAndPoll()).resolves.toMatchObject({
+    workflow: "deliver-feature",
+  });
+  expect(lines).toHaveLength(3);
+});
+
+test("an unreachable status poll keeps the launch successful", async () => {
+  respondSchema();
+  respondStarted();
+  fetchMock.mockRejectedValueOnce(new TypeError("fetch failed"));
+
+  await expect(launchAndPoll()).resolves.toMatchObject({
+    workflow: "deliver-feature",
+  });
+  expect(lines).toHaveLength(3);
 });
 
 test("a misspelled --input key is refused before the launch is paid for", async () => {
