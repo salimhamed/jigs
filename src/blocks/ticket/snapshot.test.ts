@@ -89,3 +89,10 @@ test("renderSnapshot includes every section a reviewing agent needs", () => {
   expect(rendered).toContain("## Sub-issues");
   expect(rendered).toContain("AGE-400 sub");
 });
+
+test("renderSnapshot explicitly identifies an empty comment thread", () => {
+  const rendered = renderSnapshot(
+    toSnapshot(rawIssue({ comments: { nodes: [] } }), "2026-08-26T13:00:00Z"),
+  );
+  expect(rendered).toContain("## Comments\n\n_(none)_");
+});

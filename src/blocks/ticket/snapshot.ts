@@ -94,12 +94,16 @@ export function renderSnapshot(snapshot: TicketSnapshot): string {
     "## Description",
     "",
     snapshot.description === "" ? "_(empty)_" : snapshot.description,
-    ...section(
-      "Comments",
-      snapshot.comments.map((comment) =>
-        [`### ${comment.author ?? "unknown"} — ${comment.createdAt}`, "", comment.body].join("\n"),
-      ),
-    ),
+    "",
+    "## Comments",
+    "",
+    ...(snapshot.comments.length === 0
+      ? ["_(none)_"]
+      : snapshot.comments.map((comment) =>
+          [`### ${comment.author ?? "unknown"} — ${comment.createdAt}`, "", comment.body].join(
+            "\n",
+          ),
+        )),
     ...section("Blocked by", refLines(snapshot.blockedBy)),
     ...section("Blocks", refLines(snapshot.blocks)),
     ...section(
