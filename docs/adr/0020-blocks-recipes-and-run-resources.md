@@ -1,10 +1,10 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Blocks, recipes and run resources: the workflow API after the six prototypes
 
-Amended 2026-09-17 after Salim's review: model-only halt interpretation with
+Accepted by Salim on 2026-09-17. Amended after his review: model-only halt interpretation with
 no default model, `readPatch` beside `readChange`, identity facts without
 enforcement, kind-then-topic exports, explicit release with automatic release
 deferred, and run resources on SDK attributes after v5 instead of a jigs table.
