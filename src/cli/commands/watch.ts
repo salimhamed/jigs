@@ -25,7 +25,6 @@ export interface WatchEvent {
   workflow: string;
   ticket: string | null;
   status: string;
-  pullRequest: string | null;
   detail: string;
 }
 
@@ -127,7 +126,6 @@ function event(run: PsRun, at: string, name: WatchEventName, detail: string): Wa
     workflow: run.workflow,
     ticket: run.ticket,
     status: run.status,
-    pullRequest: run.pullRequest,
     detail,
   };
 }
@@ -139,7 +137,6 @@ const unreachable = (at: string, error: unknown): WatchEvent => ({
   workflow: "",
   ticket: null,
   status: "",
-  pullRequest: null,
   detail: error instanceof JigsError ? error.message : String(error),
 });
 

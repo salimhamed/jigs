@@ -28,7 +28,6 @@ const result = (over: Partial<LogsResult> = {}): LogsResult => ({
   status: "running",
   trigger: "manual",
   ticket: null,
-  pullRequest: null,
   createdAt: "2026-09-04T10:00:00.000Z",
   lastActivityAt: "2026-09-04T10:09:00.000Z",
   steps: 0,
@@ -81,12 +80,12 @@ test("logs says what the run waits for, where to act, and what was asked", async
   ]);
 });
 
-test("a failed run prints its status and pull request", async () => {
-  respond(result({ status: "failed", pullRequest: "acme/api#41" }));
+test("a failed run prints its status without a pull request header", async () => {
+  respond(result({ status: "failed" }));
   respond({ steps: [], deadJobs: [] });
   await showLogs(RUN, deps(), { now: NOW });
   expect(lines[1]).toBe("status failed");
-  expect(lines[3]).toBe("pull request acme/api#41");
+  expect(lines.some((line) => line.startsWith("pull request "))).toBe(false);
 });
 
 test("logs prints live pull-request gate state under its suspension", async () => {
@@ -159,6 +158,7 @@ test("--json prints one document with the run, its suspensions and its timeline"
     steps: [{ name: "claimTicket", status: "completed" }],
     deadJobs: [],
   });
+  expect(document).not.toHaveProperty("pullRequest");
 });
 
 test("a scheduled run names the schedule that fired it", async () => {
@@ -213,6 +213,28 @@ test("a completed run prints a compact object result", async () => {
     "  findings: [2 items]",
     "  note: null",
   ]);
+});
+
+test.each([
+  [
+    "an object-shaped pull request and URL",
+    { pr: { owner: "acme", repo: "api", number: 41 }, url: "https://github.com/acme/api/pull/41" },
+    "links: acme/api#41 → https://github.com/acme/api/pull/41",
+  ],
+  ["a string pull request", { pr: "acme/api#41" }, "links: acme/api#41"],
+  ["a URL", { url: "https://example.test/report" }, "links: https://example.test/report"],
+])("a completed run links %s from its result", async (_label, returnValue, expected) => {
+  respond(result({ status: "completed", returnValue }));
+  respond({ steps: [], deadJobs: [] });
+  await showLogs(RUN, deps(), { now: NOW });
+  expect(lines).toContain(expected);
+});
+
+test("a completed object result without a pull request or URL prints no links line", async () => {
+  respond(result({ status: "completed", returnValue: { status: "done" } }));
+  respond({ steps: [], deadJobs: [] });
+  await showLogs(RUN, deps(), { now: NOW });
+  expect(lines.some((line) => line.startsWith("links:"))).toBe(false);
 });
 
 test("result keys and scalar values stay on one terminal line", async () => {

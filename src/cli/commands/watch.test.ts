@@ -23,7 +23,6 @@ const run = (over: Partial<PsRun> = {}): PsRun => ({
   status: "running",
   trigger: "manual",
   ticket: "AGE-317",
-  pullRequest: null,
   createdAt: "2026-08-26T11:30:00.000Z",
   lastActivityAt: "2026-08-26T11:59:00.000Z",
   steps: 1,
@@ -54,7 +53,6 @@ test("a finished step and the park that follows it are two lines, in that order"
     suspended: true,
     steps: 2,
     lastStep: { name: "openPullRequest", status: "completed", at: "2026-08-26T12:00:00.000Z" },
-    pullRequest: "acme/api#41",
     suspensions: [
       {
         token: "github:pr:acme/api#41",
@@ -113,6 +111,7 @@ test("--json emits one JSON event per line", async () => {
     ticket: "AGE-317",
     status: "running",
   });
+  expect(JSON.parse(lines[0] ?? "")).not.toHaveProperty("pullRequest");
 });
 
 test("a service that goes away is one line, not the end of the watch", async () => {

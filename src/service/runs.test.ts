@@ -565,7 +565,7 @@ const storedLaunch = (fields: Record<string, string>) => [
   ...Object.values(fields),
 ];
 
-test("a run names the ticket it was launched with and the pull request it holds", async () => {
+test("a run names its ticket and keeps its parked pull request in WAITING", async () => {
   const githubRead = vi.spyOn(github, "fetchPrSnapshot");
   world({
     runs: [worldRun({ input: storedLaunch({ ticket: "AGE-317", triggerId: "manual" }) })],
@@ -573,16 +573,16 @@ test("a run names the ticket it was launched with and the pull request it holds"
   });
   const row = (await listRuns(factory))[0];
   expect(row?.ticket).toBe("AGE-317");
-  expect(row?.pullRequest).toBe("acme/api#41");
   expect(row?.suspensions[0]?.reason).toBe(
     "waiting for an approving review and green CI on acme/api#41",
   );
+  expect(row?.suspensions[0]?.url).toBe("https://github.com/acme/api/pull/41");
   // The listing behind ps and watch stays provider-free; only the single-run
   // route calls enrichSuspensions.
   expect(githubRead).not.toHaveBeenCalled();
 });
 
-test("a merged run still names its pull request, from the result it returned", async () => {
+test("a terminal run uses its completion time without interpreting its result", async () => {
   world({
     runs: [
       worldRun({
@@ -600,7 +600,6 @@ test("a merged run still names its pull request, from the result it returned", a
     ],
   });
   const row = (await listRuns(factory))[0];
-  expect(row?.pullRequest).toBe("acme/api#41");
   expect(row?.lastActivityAt).toBe("2026-08-26T12:00:00.000Z");
 });
 

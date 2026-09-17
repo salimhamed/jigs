@@ -30,7 +30,6 @@ const run = (over: Partial<PsRun> = {}): PsRun => ({
   status: "running",
   trigger: "manual",
   ticket: null,
-  pullRequest: null,
   createdAt: "2026-08-26T11:30:00.000Z",
   lastActivityAt: "2026-08-26T11:59:00.000Z",
   steps: 0,
@@ -46,13 +45,12 @@ test("an empty service prints no runs", async () => {
   expect(lines).toEqual(["no runs"]);
 });
 
-test("a suspended run names its ticket, its pull request and what it waits for", async () => {
+test("a suspended run names its ticket and what it waits for", async () => {
   respond({
     runs: [
       run({
         status: "suspended",
         ticket: "AGE-317",
-        pullRequest: "acme/api#41",
         suspended: true,
         suspensions: [
           {
@@ -69,10 +67,10 @@ test("a suspended run names its ticket, its pull request and what it waits for",
   });
   await showRuns(deps(), { now: NOW });
   expect(lines[0]).toBe(
-    "RUN                              WORKFLOW         TICKET   STATUS     PR           TRIGGER  AGE  ACTIVITY  WAITING",
+    "RUN                              WORKFLOW         TICKET   STATUS     TRIGGER  AGE  ACTIVITY  WAITING",
   );
   expect(lines[1]).toBe(
-    `${RUN}  deliver-feature  AGE-317  suspended  acme/api#41  manual   30m  1m        waiting for an approving review and green CI on acme/api#41 → https://github.com/acme/api/pull/41`,
+    `${RUN}  deliver-feature  AGE-317  suspended  manual   30m  1m        waiting for an approving review and green CI on acme/api#41 → https://github.com/acme/api/pull/41`,
   );
 });
 

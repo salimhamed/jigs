@@ -733,12 +733,13 @@ service's own log then names what it scheduled:
 [schedule] monday-report scheduled: 0 9 * * 1 → weekly-report, next 2026-09-07T09:00:00.000Z
 ```
 
-`jigs ps` then prints a schedule table under the runs, and every run the
-schedule fired carries its name in the `TRIGGER` column:
+`jigs ps` prints `RUN WORKFLOW TICKET STATUS TRIGGER AGE ACTIVITY WAITING`, then
+a schedule table under the runs. Every run the schedule fired carries its name
+in the `TRIGGER` column:
 
 ```
-RUN                              WORKFLOW       STATUS   TRIGGER                  AGE
-wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM  weekly-report  running  schedule:monday-report   2m
+RUN                              WORKFLOW       TICKET  STATUS   TRIGGER                 AGE  ACTIVITY  WAITING
+wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM  weekly-report  -       running  schedule:monday-report  2m   10s       -
 
 SCHEDULE       WORKFLOW       CRON       NEXT                      ACTIVE
 monday-report  weekly-report  0 9 * * 1  2026-09-14T09:00:00.000Z  wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM
