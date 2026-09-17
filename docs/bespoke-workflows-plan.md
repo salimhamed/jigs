@@ -5,6 +5,11 @@ at the time of this document. Recorded 2026-09-12. This is the handoff for futur
 sessions changing jigs or either factory. It distinguishes user-confirmed
 constraints from capabilities to prove; it does not supersede existing ADRs.
 
+Update 2026-09-17: the six prototype workflows ran (AGE-448). Stage 6, the
+API extraction, is recorded as [ADR 0020](adr/0020-blocks-recipes-and-run-resources.md),
+which revises one point below: delivery becomes a recipe a factory copies in,
+not an optional library block.
+
 ## Objective
 
 An agent can author a bespoke TypeScript workflow in a factory, build and deploy
