@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, expect, test, vi } from "vitest";
 import { HookNotFoundError, WorkflowRunNotFoundError } from "workflow/errors";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
@@ -18,6 +18,21 @@ import {
   type WorldRun,
 } from "./runs.ts";
 import * as stalls from "./stalls.ts";
+
+const ambientWorkflowEnv = vi.hoisted(() => {
+  const targetWorld = process.env.WORKFLOW_TARGET_WORLD;
+  const postgresUrl = process.env.WORKFLOW_POSTGRES_URL;
+  delete process.env.WORKFLOW_TARGET_WORLD;
+  delete process.env.WORKFLOW_POSTGRES_URL;
+  return { targetWorld, postgresUrl };
+});
+
+afterAll(() => {
+  if (ambientWorkflowEnv.targetWorld === undefined) delete process.env.WORKFLOW_TARGET_WORLD;
+  else process.env.WORKFLOW_TARGET_WORLD = ambientWorkflowEnv.targetWorld;
+  if (ambientWorkflowEnv.postgresUrl === undefined) delete process.env.WORKFLOW_POSTGRES_URL;
+  else process.env.WORKFLOW_POSTGRES_URL = ambientWorkflowEnv.postgresUrl;
+});
 
 const RUN_A = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 const RUN_B = "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ";

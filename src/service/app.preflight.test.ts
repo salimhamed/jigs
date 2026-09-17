@@ -25,6 +25,9 @@ vi.mock("workflow/api", () => ({
   resumeHook: async () => ({}),
 }));
 
+vi.stubEnv("WORKFLOW_TARGET_WORLD", undefined);
+vi.stubEnv("WORKFLOW_POSTGRES_URL", undefined);
+
 const { createApp } = await import("./app.ts");
 
 // A fixture rather than a demo: what preflight owes the trigger path is the
@@ -91,6 +94,8 @@ beforeEach(() => {
   start.mockClear();
   vi.unstubAllEnvs();
   vi.stubEnv("WORKFLOW_LOCAL_DATA_DIR", tmp);
+  vi.stubEnv("WORKFLOW_TARGET_WORLD", undefined);
+  vi.stubEnv("WORKFLOW_POSTGRES_URL", undefined);
   vi.stubEnv("JIGS_CLAUDE_EXECUTABLE", claudeStub);
 });
 afterEach(() => {

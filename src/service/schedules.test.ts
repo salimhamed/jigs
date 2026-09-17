@@ -1,9 +1,24 @@
-import { expect, test } from "vitest";
+import { afterAll, expect, test, vi } from "vitest";
 import { z } from "zod";
 import type { Factory, Schedule } from "../blocks/factory.ts";
 import type { RunRow } from "./runs.ts";
 import { fireSchedule, listSchedules, scheduleChecks, startSchedules } from "./schedules.ts";
 import type { StartRunResult } from "./trigger.ts";
+
+const ambientWorkflowEnv = vi.hoisted(() => {
+  const targetWorld = process.env.WORKFLOW_TARGET_WORLD;
+  const postgresUrl = process.env.WORKFLOW_POSTGRES_URL;
+  delete process.env.WORKFLOW_TARGET_WORLD;
+  delete process.env.WORKFLOW_POSTGRES_URL;
+  return { targetWorld, postgresUrl };
+});
+
+afterAll(() => {
+  if (ambientWorkflowEnv.targetWorld === undefined) delete process.env.WORKFLOW_TARGET_WORLD;
+  else process.env.WORKFLOW_TARGET_WORLD = ambientWorkflowEnv.targetWorld;
+  if (ambientWorkflowEnv.postgresUrl === undefined) delete process.env.WORKFLOW_POSTGRES_URL;
+  else process.env.WORKFLOW_POSTGRES_URL = ambientWorkflowEnv.postgresUrl;
+});
 
 const RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 
