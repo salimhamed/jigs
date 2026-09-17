@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.5](https://github.com/salimhamed/jigs/compare/jigs-v0.29.4...jigs-v0.29.5) (2026-09-17)
+
+
+### Features
+
+* **worktrees:** discard cancelled run worktrees ([87a7131](https://github.com/salimhamed/jigs/commit/87a713111f6f78420978a2949e7da14d764dabac))
+
 ## [0.29.4](https://github.com/salimhamed/jigs/compare/jigs-v0.29.3...jigs-v0.29.4) (2026-09-17)
 
 
