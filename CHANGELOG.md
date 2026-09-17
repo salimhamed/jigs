@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.7](https://github.com/salimhamed/jigs/compare/jigs-v0.29.6...jigs-v0.29.7) (2026-09-17)
+
+
+### Reverts
+
+* report immediate jigs run failures ([#249](https://github.com/salimhamed/jigs/issues/249)) ([08d4b65](https://github.com/salimhamed/jigs/commit/08d4b6517b64629f01b3a805fe29f08a2be246d9))
+
 ## [0.29.6](https://github.com/salimhamed/jigs/compare/jigs-v0.29.5...jigs-v0.29.6) (2026-09-17)
 
 
