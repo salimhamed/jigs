@@ -6,18 +6,24 @@ import type { Factory } from "../blocks/factory.ts";
 import { prToken } from "../blocks/pull-request/gate.ts";
 import { ticketToken } from "../blocks/ticket/claim.ts";
 import { needsHumanToken } from "../blocks/ticket/halt-for-human.ts";
+import * as config from "../config/factory-config.ts";
+import * as root from "../config/factory-root.ts";
+import * as github from "../providers/github.ts";
 import * as linear from "../providers/linear.ts";
+import type { RunSuspension } from "../run-suspension.ts";
 import * as sql from "../steps/worktree/sql.ts";
 import * as queue from "./queue.ts";
 import {
   describeRun,
   describeSuspension,
+  enrichSuspensions,
   listRuns,
   resolveRunRef,
   scheduleTriggerId,
   type WorldRun,
 } from "./runs.ts";
 import * as stalls from "./stalls.ts";
+import { clearWakes, recordWake } from "./wake-note.ts";
 
 const ambientWorkflowEnv = vi.hoisted(() => {
   const targetWorld = process.env.WORKFLOW_TARGET_WORLD;
@@ -41,10 +47,99 @@ const RUN_B = "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ";
 // what a test stands up — the same seam app.test.ts uses. The dead-job read
 // would otherwise open a real connection to the operator's own World.
 beforeEach(() => {
+  clearWakes();
   vi.spyOn(sql, "registrySql").mockReturnValue({} as never);
   vi.spyOn(queue, "listJobRunIds").mockResolvedValue({ dead: [], live: [] });
   world();
 });
+
+const prSnapshot = (patch: Partial<github.PrSnapshot> = {}): github.PrSnapshot => ({
+  state: "open",
+  merged: false,
+  draft: false,
+  headSha: "1234567890abcdef",
+  mergeState: "clean",
+  labels: [],
+  mergeCommitSha: null,
+  reviews: [
+    {
+      id: 1,
+      state: "APPROVED",
+      body: "",
+      user: "reviewer",
+      submittedAt: "2026-09-16T10:00:00Z",
+      commitSha: "1234567890abcdef",
+    },
+  ],
+  reviewThreads: [],
+  conversationComments: [],
+  ci: "green",
+  failingChecks: [],
+  ...patch,
+});
+
+// The factory's approval signal decides what "approved" means, so the
+// enrichment reads the same config the merge gate does.
+function reviewApproval(): void {
+  vi.spyOn(root, "factoryRoot").mockReturnValue("/factory");
+  vi.spyOn(config, "readFactoryConfig").mockReturnValue({
+    bindings: {},
+    service: { port: 8990, dashboardPort: 9090 },
+    github: { identity: { mode: "pat" } },
+    merge: { by: "human", method: "squash", approval: { kind: "review" } },
+  });
+}
+
+function parkedOnPr(): RunSuspension {
+  const suspension = describeSuspension(PARK_TOKEN);
+  if (suspension === null) throw new Error("expected a pull-request suspension");
+  return suspension;
+}
+
+test.each([
+  ["green and approved", {}, "nothing — it can merge", "approved"],
+  ["CI red", { ci: "red" as const }, "CI is red", "approved"],
+  ["branch conflicting", { mergeState: "dirty" }, "the branch conflicts with its base", "approved"],
+  ["draft", { draft: true }, "the pull request is a draft", "approved"],
+  ["no approving review", { reviews: [] }, "no approving review yet", "none"],
+])("pull-request enrichment reports %s", async (_case, patch, blocker, approval) => {
+  reviewApproval();
+  vi.spyOn(github, "fetchPrSnapshot").mockResolvedValue(prSnapshot(patch));
+  expect((await enrichSuspensions([parkedOnPr()], RUN_A))[0]).toMatchObject({
+    headSha: "1234567",
+    ci: prSnapshot(patch).ci,
+    approval,
+    draft: prSnapshot(patch).draft,
+    mergeState: prSnapshot(patch).mergeState,
+    blocker,
+  });
+  expect(github.fetchPrSnapshot).toHaveBeenCalledExactlyOnceWith({
+    owner: "acme",
+    repo: "api",
+    number: 41,
+  });
+});
+
+test("a run reads the wake it was sent, and never another run's", async () => {
+  reviewApproval();
+  vi.spyOn(github, "fetchPrSnapshot").mockResolvedValue(prSnapshot());
+  recordWake(PARK_TOKEN, RUN_B, "github check_suite", new Date("2026-09-16T10:05:00Z"));
+  expect((await enrichSuspensions([parkedOnPr()], RUN_A))[0]?.lastWake).toBeUndefined();
+
+  recordWake(PARK_TOKEN, RUN_A, "nudge sweep", new Date("2026-09-16T10:06:00Z"));
+  expect((await enrichSuspensions([parkedOnPr()], RUN_A))[0]?.lastWake).toEqual({
+    kind: "nudge sweep",
+    at: "2026-09-16T10:06:00.000Z",
+  });
+});
+
+test("a failed GitHub enrichment returns the original suspension", async () => {
+  reviewApproval();
+  vi.spyOn(github, "fetchPrSnapshot").mockRejectedValue(new Error("GitHub unavailable"));
+  const original = parkedOnPr();
+  expect(await enrichSuspensions([original], RUN_A)).toEqual([original]);
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
   setWorld(undefined);
@@ -471,6 +566,7 @@ const storedLaunch = (fields: Record<string, string>) => [
 ];
 
 test("a run names the ticket it was launched with and the pull request it holds", async () => {
+  const githubRead = vi.spyOn(github, "fetchPrSnapshot");
   world({
     runs: [worldRun({ input: storedLaunch({ ticket: "AGE-317", triggerId: "manual" }) })],
     hooks: [{ runId: RUN_A, token: PARK_TOKEN }],
@@ -481,6 +577,9 @@ test("a run names the ticket it was launched with and the pull request it holds"
   expect(row?.suspensions[0]?.reason).toBe(
     "waiting for an approving review and green CI on acme/api#41",
   );
+  // The listing behind ps and watch stays provider-free; only the single-run
+  // route calls enrichSuspensions.
+  expect(githubRead).not.toHaveBeenCalled();
 });
 
 test("a merged run still names its pull request, from the result it returned", async () => {

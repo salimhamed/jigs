@@ -2,6 +2,13 @@ import type { PrReview, PrSnapshot } from "../../providers/github.ts";
 import type { ApprovalSignal } from "./policy.ts";
 
 /**
+ * How the operator's consent reads right now. `stale` is an approval that
+ * named an earlier commit — a different thing to tell an operator than a pull
+ * request nobody has approved.
+ */
+export type ApprovalState = "approved" | "changes-requested" | "stale" | "none";
+
+/**
  * Is the operator's consent recorded on the pull request, as this factory
  * asked for it?
  *
@@ -11,8 +18,10 @@ import type { ApprovalSignal } from "./policy.ts";
  * - `label`: the label is on the pull request. It means "merge whenever
  *   ready", so it survives later pushes and jigs never removes it.
  */
-export function isApprovalSatisfied(snapshot: PrSnapshot, approval: ApprovalSignal): boolean {
-  if (approval.kind === "label") return snapshot.labels.includes(approval.name);
+export function approvalState(snapshot: PrSnapshot, approval: ApprovalSignal): ApprovalState {
+  if (approval.kind === "label") {
+    return snapshot.labels.includes(approval.name) ? "approved" : "none";
+  }
   const latest = new Map<string, PrReview>();
   for (const review of [...snapshot.reviews].sort(
     (a, b) => a.submittedAt.localeCompare(b.submittedAt) || a.id - b.id,
@@ -22,10 +31,29 @@ export function isApprovalSatisfied(snapshot: PrSnapshot, approval: ApprovalSign
     }
   }
   const reviews = [...latest.values()];
-  return (
-    !reviews.some((review) => review.state === "CHANGES_REQUESTED") &&
-    reviews.some((review) => review.state === "APPROVED" && review.commitSha === snapshot.headSha)
-  );
+  if (reviews.some((review) => review.state === "CHANGES_REQUESTED")) return "changes-requested";
+  const approved = reviews.filter((review) => review.state === "APPROVED");
+  if (approved.some((review) => review.commitSha === snapshot.headSha)) return "approved";
+  return approved.length === 0 ? "none" : "stale";
+}
+
+/** {@link approvalState} as the single question a merge asks of it. */
+export function isApprovalSatisfied(snapshot: PrSnapshot, approval: ApprovalSignal): boolean {
+  return approvalState(snapshot, approval) === "approved";
+}
+
+// Written for the operator reading a parked pull request: this sentence is
+// also the `blocker` line `jigs logs` prints.
+function approvalMissing(
+  state: ApprovalState,
+  approval: ApprovalSignal,
+  expectedHeadSha: string,
+): string {
+  if (state === "changes-requested") return "a review requests changes";
+  if (state === "stale") return `the approval does not cover ${expectedHeadSha}`;
+  return approval.kind === "label"
+    ? `the ${approval.name} label is not on the pull request`
+    : "no approving review yet";
 }
 
 /** Why a merge did not happen, and whether a later wake could change it. */
@@ -83,14 +111,15 @@ export function mergeRefusal(
   }
   // Approving again is all this takes, and the approval names this same
   // commit, so the wake that carries it is the one that merges.
-  if (!isApprovalSatisfied(snapshot, approval)) {
-    return { reason: `the approval does not cover ${expectedHeadSha}`, transient: true };
+  const consent = approvalState(snapshot, approval);
+  if (consent !== "approved") {
+    return { reason: approvalMissing(consent, approval, expectedHeadSha), transient: true };
   }
   if (snapshot.mergeState !== "clean") {
     return { reason: `GitHub reports the merge state as ${snapshot.mergeState}`, transient: true };
   }
   if (snapshot.ci !== "green") {
-    return { reason: `the build for ${expectedHeadSha} is ${snapshot.ci}`, transient: true };
+    return { reason: `CI is ${snapshot.ci}`, transient: true };
   }
   return null;
 }

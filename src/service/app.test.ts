@@ -16,6 +16,7 @@ import * as linear from "../providers/linear.ts";
 import * as sql from "../steps/worktree/sql.ts";
 import { makeFakeSql } from "../steps/worktree/test-fixtures.ts";
 import * as queue from "./queue.ts";
+import { clearWakes, lastWake } from "./wake-note.ts";
 
 const ambientWorkflowEnv = vi.hoisted(() => {
   const targetWorld = process.env.WORKFLOW_TARGET_WORLD;
@@ -650,6 +651,16 @@ test("poke wakes the hooks that name a resource, never the needs-human marker", 
   // The reply that ends a needs-human halt lands on the ticket claim, so the
   // marker names no channel and resuming it would wake nothing.
   expect(await res.json()).toMatchObject({ poked: [{ token: CLAIM }] });
+});
+
+test("a poke that landed is the wake the run's logs report", async () => {
+  clearWakes();
+  runHolding(CLAIM);
+  delivers();
+
+  await app.request(`/api/runs/${RUN}/poke`, { method: "POST" });
+
+  expect(lastWake(CLAIM, RUN)?.kind).toBe("poke");
 });
 
 test("cancel names the resources it released, and not the marker", async () => {
