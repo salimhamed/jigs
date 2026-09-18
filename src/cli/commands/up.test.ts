@@ -43,6 +43,7 @@ function up(
       execFile: io.exec.execFile,
       processes: io.procs.processes,
       prepare: vi.fn(),
+      migrate: vi.fn(),
       readyTimeoutMs: 500,
       ...extra,
     },
@@ -99,7 +100,12 @@ test("bootstrap is handed the World URL from .env explicitly", async () => {
   const root = factory({ port });
   const io = { exec: fakeExec(), procs: fakeProcesses() };
 
-  await up(root, io);
+  const migrate = vi.fn(async (url: string) => {
+    expect(io.exec.calls.some((call) => path.basename(call.file) === "bootstrap")).toBe(true);
+    expect(url).toBe("postgres://jigs:jigs@localhost:5555/jigs");
+  });
+  await up(root, io, { migrate });
+  expect(migrate).toHaveBeenCalledOnce();
 
   const bootstrap = io.exec.calls.find((call) => path.basename(call.file) === "bootstrap");
   expect(bootstrap?.options.env?.WORKFLOW_POSTGRES_URL).toBe(
@@ -422,4 +428,19 @@ test("a failing build is nitro's failure, echoed, and nothing starts", async () 
   expect(statuses(result).at(-1)).toBe("build:failed");
   expect(lines).toContain("  ERROR could not resolve ./jigs.config");
   expect(io.procs.spawns).toHaveLength(0);
+});
+
+test("a jigs migration failure stops bootstrap before the build or service start", async () => {
+  const port = await fakeService();
+  const root = factory({ port });
+  const io = { exec: fakeExec(), procs: fakeProcesses() };
+  const result = await up(root, io, {
+    migrate: async () => {
+      throw new Error("migration failed");
+    },
+  });
+  expect(result.ok).toBe(false);
+  expect(statuses(result).at(-1)).toBe("bootstrap:failed");
+  expect(result.steps.some((step) => step.name === "build")).toBe(false);
+  expect(lines.join("\n")).toContain("migration failed");
 });

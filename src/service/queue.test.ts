@@ -1,4 +1,5 @@
-import type { ISql } from "postgres";
+import { drizzle } from "drizzle-orm/node-postgres";
+import type { Pool, QueryConfig } from "pg";
 import { expect, test } from "vitest";
 import { deleteRunJobs, listJobRunIds, listRunDeadJobs, RunJobsLockedError } from "./queue.ts";
 
@@ -9,7 +10,7 @@ const payloadFor = (runId: string) => ({
   data: Buffer.from(`\x82\x01x\x1f${runId}`, "latin1").toString("base64"),
 });
 
-const fakeSql = (rows: unknown[]) => (async () => rows) as unknown as ISql;
+const fakeSql = (rows: unknown[]) => drizzle({ query: async () => ({ rows }) } as unknown as Pool);
 
 const job = (over: Record<string, unknown> = {}) => ({
   id: "4128",
@@ -38,19 +39,21 @@ const queued = (over: Partial<QueuedRow> = {}): QueuedRow => ({
  *  test can move a row under cleanup's feet the way a worker does. */
 function fakeQueue(rows: QueuedRow[], onScan: (rows: QueuedRow[]) => void = () => undefined) {
   let present = [...rows];
-  const sql = ((strings: TemplateStringsArray, ...values: unknown[]) => {
-    if (!strings.join("").includes("DELETE")) {
-      const scanned = [...present];
-      onScan(present);
-      return Promise.resolve(scanned);
-    }
-    const [ids, staleBefore] = values as [string[], Date];
-    const removable = (row: QueuedRow) =>
-      ids.includes(row.id) && (row.lockedAt === null || row.lockedAt < staleBefore);
-    const removed = present.filter(removable);
-    present = present.filter((row) => !removable(row));
-    return Promise.resolve(removed.map((row) => ({ id: row.id })));
-  }) as unknown as ISql;
+  const sql = drizzle({
+    query: (config: QueryConfig, values: unknown[]) => {
+      if (!config.text.includes("DELETE")) {
+        const scanned = [...present];
+        onScan(present);
+        return Promise.resolve({ rows: scanned });
+      }
+      const [ids, staleBefore] = values as [string[], Date];
+      const removable = (row: QueuedRow) =>
+        ids.includes(row.id) && (row.lockedAt === null || row.lockedAt < staleBefore);
+      const removed = present.filter(removable);
+      present = present.filter((row) => !removable(row));
+      return Promise.resolve({ rows: removed.map((row) => ({ id: row.id })) });
+    },
+  } as unknown as Pool);
   return { sql, remaining: () => present };
 }
 

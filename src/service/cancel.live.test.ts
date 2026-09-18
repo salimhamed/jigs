@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { createWorld } from "@workflow/world-postgres";
-import postgres from "postgres";
+import { Pool } from "pg";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
@@ -18,8 +18,8 @@ const database = `jigs_cancel_${crypto.randomUUID().replaceAll("-", "")}`;
 const testUrl = new URL(adminUrl);
 testUrl.pathname = `/${database}`;
 
-const admin = postgres(adminUrl.toString(), { max: 1 });
-const sql = postgres(testUrl.toString(), { max: 1, transform: postgres.camel });
+const admin = new Pool({ connectionString: adminUrl.toString(), max: 1 });
+const sql = new Pool({ connectionString: testUrl.toString(), max: 1 });
 const requests: Array<() => void> = [];
 const server = createServer(async (req, res) => {
   await req.toArray();
@@ -39,7 +39,7 @@ let oldBaseUrl: string | undefined;
 let oldPostgresUrl: string | undefined;
 
 beforeAll(async () => {
-  await admin`CREATE DATABASE ${admin(database)}`;
+  await admin.query(`CREATE DATABASE "${database}"`);
   execFileSync("node_modules/.bin/bootstrap", [], {
     env: { ...process.env, WORKFLOW_POSTGRES_URL: testUrl.toString() },
     stdio: "ignore",
@@ -61,14 +61,23 @@ beforeAll(async () => {
 afterAll(async () => {
   for (const release of requests.splice(0)) release();
   await world?.close?.();
-  await registrySql().end();
+  await registrySql().$client.end();
   setWorld(undefined);
   await new Promise<void>((resolve) => {
     server.close(() => resolve());
     server.closeAllConnections();
   });
   await sql.end();
-  await admin.unsafe(`DROP DATABASE ${database} WITH (FORCE)`);
+  // pg pool.end() can resolve before PostgreSQL observes every socket close.
+  // Let the server finish disconnecting instead of terminating those clients.
+  await until(async () => {
+    const { rows } = await admin.query(
+      "SELECT count(*)::int AS count FROM pg_stat_activity WHERE datname = $1",
+      [database],
+    );
+    return rows[0].count === 0;
+  }, "cancel fixture database still has connected clients after shutdown");
+  await admin.query(`DROP DATABASE "${database}"`);
   await admin.end();
   if (oldBaseUrl === undefined) delete process.env.WORKFLOW_LOCAL_BASE_URL;
   else process.env.WORKFLOW_LOCAL_BASE_URL = oldBaseUrl;
@@ -97,12 +106,17 @@ async function queue(runId: string, delaySeconds?: number): Promise<string> {
 }
 
 async function jobsFor(runId: string) {
-  return await sql<{ id: string; attempts: number; lockedAt: Date | null }[]>`
-    SELECT jobs.id, jobs.attempts, jobs.locked_at
+  return (
+    await sql.query<{ id: string; attempts: number; lockedAt: Date | null }>(
+      `
+    SELECT jobs.id, jobs.attempts, jobs.locked_at AS "lockedAt"
     FROM graphile_worker.jobs
     JOIN graphile_worker._private_jobs AS body ON body.id = jobs.id
-    WHERE convert_from(decode(body.payload->>'data', 'base64'), 'LATIN1') LIKE ${`%${runId}%`}
-  `;
+    WHERE convert_from(decode(body.payload->>'data', 'base64'), 'LATIN1') LIKE $1
+  `,
+      [`%${runId}%`],
+    )
+  ).rows;
 }
 
 async function until(check: () => Promise<boolean>, message: string): Promise<void> {
@@ -117,11 +131,14 @@ test("the cancel endpoint removes an actual run's pending and exhausted jobs", a
   const runId = await createRun();
   await queue(runId, 60);
   const exhausted = await queue(runId, 60);
-  await sql`
+  await sql.query(
+    `
     UPDATE graphile_worker._private_jobs
     SET attempts = max_attempts, last_error = 'already exhausted'
-    WHERE key = ${exhausted}
-  `;
+    WHERE key = $1
+  `,
+    [exhausted],
+  );
 
   const res = await app.request(`/api/runs/${runId}/cancel`, { method: "POST" });
 

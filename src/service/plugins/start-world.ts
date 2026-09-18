@@ -1,6 +1,6 @@
-import type { ISql } from "postgres";
 import type { HarnessKind, HarnessRuntime } from "../../checks/harness-runtime.ts";
 import type { BindingClone } from "../../steps/worktree/clone.ts";
+import type { RegistrySql } from "../../steps/worktree/registry.ts";
 import { READY_PHASE, setBootPhase } from "../readiness.ts";
 import { installShutdown, onShutdown, startOwningSignals } from "../shutdown.ts";
 
@@ -54,8 +54,8 @@ export async function gateOnHarnessRuntimes(deps: HarnessRuntimeGateDeps = {}): 
 }
 
 export interface RegistryGateDeps {
-  sql?: () => ISql;
-  ensure?: (sql: ISql) => Promise<void>;
+  sql?: () => RegistrySql;
+  ensure?: (sql: RegistrySql) => Promise<void>;
   exit?: (code: number) => void;
   log?: (line: string) => void;
   error?: (line: string) => void;

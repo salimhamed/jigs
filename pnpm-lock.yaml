@@ -26,15 +26,18 @@ importers:
       croner:
         specifier: 10.0.1
         version: 10.0.1
+      drizzle-orm:
+        specifier: 0.45.2
+        version: 0.45.2(@types/pg@8.23.1)(pg@8.20.0)(postgres@3.4.9)
       hono:
         specifier: ^4.13.4
         version: 4.13.4
       jiti:
         specifier: ^2.7.0
         version: 2.7.0
-      postgres:
-        specifier: ^3.4.7
-        version: 3.4.9
+      pg:
+        specifier: 8.20.0
+        version: 8.20.0
       semver:
         specifier: ^7.8.5
         version: 7.8.5
@@ -60,6 +63,9 @@ importers:
       '@types/node':
         specifier: ^26.2.0
         version: 26.2.0
+      '@types/pg':
+        specifier: 8.23.1
+        version: 8.23.1
       '@types/semver':
         specifier: ^7.8.0
         version: 7.8.0
@@ -6441,7 +6447,8 @@ snapshots:
     dependencies:
       xtend: 4.0.2
 
-  postgres@3.4.9: {}
+  postgres@3.4.9:
+    optional: true
 
   pretty-ms@9.3.0:
     dependencies:

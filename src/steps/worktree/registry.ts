@@ -1,11 +1,12 @@
-import postgres, { type ISql, type Options, type PostgresType, type Sql } from "postgres";
+import { fileURLToPath } from "node:url";
+import { desc, eq, sql } from "drizzle-orm";
+import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { Pool, type PoolConfig } from "pg";
+import { worktrees } from "./schema.ts";
 
-// The worktree registry holds state, never config: which run owns a worktree
-// and what state it is in. Bindings stay in jigs.config.ts. It lives in the same
-// Postgres as the World; the table prefix keeps clear of the SDK's own tables.
-// It holds live worktrees only — teardown deletes the row. States: active,
-// provision-failed, abandoned-dirty.
-
+// Live worktrees only: bindings remain factory configuration and teardown
+// deletes the row. Column names are mapped by the schema, not by the driver.
 export interface WorktreeRow {
   path: string;
   branch: string;
@@ -14,112 +15,91 @@ export interface WorktreeRow {
   repoDir: string;
 }
 
-// Single construction point: the camel transform is what lets queries return
-// WorktreeRow-shaped rows straight from snake_case columns.
-export function connectRegistry(
-  url: string,
-  options: Options<Record<string, PostgresType>> = {},
-): Sql {
-  return postgres(url, { transform: postgres.camel, ...options });
+export type RegistrySql = NodePgDatabase & { $client: Pool };
+
+/** The caller owns this pool; registrySql() owns the shared process pool. */
+export function connectRegistry(url: string, options: PoolConfig = {}): RegistrySql {
+  const pool = new Pool({ ...options, connectionString: url });
+  // pg removes failed idle clients itself. Listen so a lost idle connection
+  // is reported instead of becoming an unhandled error that kills the service.
+  pool.on("error", (error) => {
+    console.error(`[registry] idle PostgreSQL connection failed: ${error.message}`);
+  });
+  return drizzle(pool);
 }
 
-const REGISTRY_COLUMNS = [
-  "path",
-  "branch",
-  "owner_run_id",
-  "state",
-  "repo_dir",
-  "created_at",
-  "updated_at",
-];
+export async function ensureWorktreeRegistry(db: RegistrySql): Promise<void> {
+  // Resolve the installed package, not the service chunk Nitro may inline us
+  // into. The SQL and journal ship beside dist/, also when installed by pnpm.
+  const migrationsFolder = fileURLToPath(
+    new URL("../migrations/", import.meta.resolve("@salimhamed/jigs")),
+  );
+  await migrate(db, {
+    migrationsFolder,
+    migrationsTable: "jigs_migrations",
+    migrationsSchema: "jigs_drizzle",
+  });
+}
 
-export async function ensureWorktreeRegistry(sql: ISql): Promise<void> {
-  await sql`
-    CREATE TABLE IF NOT EXISTS jigs_worktrees (
-      path text PRIMARY KEY,
-      branch text NOT NULL,
-      owner_run_id text NOT NULL,
-      state text NOT NULL,
-      repo_dir text NOT NULL,
-      created_at timestamptz NOT NULL DEFAULT now(),
-      updated_at timestamptz NOT NULL DEFAULT now()
-    )
-  `;
-  // CREATE TABLE IF NOT EXISTS is silent about a table of an older shape, and
-  // every query would then fail one layer deeper, mid-run.
-  const columns = await sql<{ columnName: string }[]>`
-    SELECT column_name FROM information_schema.columns
-    WHERE table_name = 'jigs_worktrees'
-    ORDER BY ordinal_position
-  `;
-  const actual = new Set(columns.map((column) => column.columnName));
-  const missing = REGISTRY_COLUMNS.filter((column) => !actual.has(column));
-  const extra = [...actual].filter((column) => !REGISTRY_COLUMNS.includes(column));
-  if (missing.length > 0 || extra.length > 0) {
-    const diff = [
-      missing.length > 0 ? `missing ${missing.join(", ")}` : null,
-      extra.length > 0 ? `unexpected ${extra.join(", ")}` : null,
-    ]
-      .filter((part) => part !== null)
-      .join("; ");
-    throw new Error(
-      `jigs_worktrees has an older shape (${diff}), so the service refuses ` +
-        "to start. The registry holds live worktrees only and start recreates " +
-        "it, so the repair is to drop it: " +
-        "psql \"$WORKFLOW_POSTGRES_URL\" -c 'DROP TABLE jigs_worktrees'",
-    );
+/** CLI bootstrap owns a short-lived pool; never end the service's shared pool. */
+export async function migrateRegistry(url: string): Promise<void> {
+  const db = connectRegistry(url, { max: 1 });
+  try {
+    await ensureWorktreeRegistry(db);
+  } finally {
+    await db.$client.end();
   }
 }
 
-export async function getWorktree(sql: ISql, path: string): Promise<WorktreeRow | null> {
-  const rows = await sql<WorktreeRow[]>`
-    SELECT path, branch, owner_run_id, state, repo_dir
-    FROM jigs_worktrees
-    WHERE path = ${path}
-  `;
+const fields = {
+  path: worktrees.path,
+  branch: worktrees.branch,
+  ownerRunId: worktrees.ownerRunId,
+  state: worktrees.state,
+  repoDir: worktrees.repoDir,
+};
+
+export async function getWorktree(db: RegistrySql, path: string): Promise<WorktreeRow | null> {
+  const rows = await db.select(fields).from(worktrees).where(eq(worktrees.path, path));
   return rows[0] ?? null;
 }
 
-export async function listWorktrees(sql: ISql): Promise<WorktreeRow[]> {
-  return sql<WorktreeRow[]>`
-    SELECT path, branch, owner_run_id, state, repo_dir
-    FROM jigs_worktrees
-    ORDER BY updated_at DESC
-  `;
+export async function listWorktrees(db: RegistrySql): Promise<WorktreeRow[]> {
+  return db.select(fields).from(worktrees).orderBy(desc(worktrees.updatedAt));
 }
 
-export async function listWorktreesForRun(sql: ISql, runId: string): Promise<WorktreeRow[]> {
-  return sql<WorktreeRow[]>`
-    SELECT path, branch, owner_run_id, state, repo_dir
-    FROM jigs_worktrees
-    WHERE owner_run_id = ${runId}
-    ORDER BY updated_at DESC
-  `;
+export async function listWorktreesForRun(db: RegistrySql, runId: string): Promise<WorktreeRow[]> {
+  return db
+    .select(fields)
+    .from(worktrees)
+    .where(eq(worktrees.ownerRunId, runId))
+    .orderBy(desc(worktrees.updatedAt));
 }
 
-export async function upsertWorktree(sql: ISql, row: WorktreeRow): Promise<void> {
-  await sql`
-    INSERT INTO jigs_worktrees
-      (path, branch, owner_run_id, state, repo_dir)
-    VALUES
-      (${row.path}, ${row.branch}, ${row.ownerRunId}, ${row.state},
-       ${row.repoDir})
-    ON CONFLICT (path) DO UPDATE SET
-      branch = EXCLUDED.branch,
-      owner_run_id = EXCLUDED.owner_run_id,
-      state = EXCLUDED.state,
-      repo_dir = EXCLUDED.repo_dir,
-      updated_at = now()
-  `;
+export async function upsertWorktree(db: RegistrySql, row: WorktreeRow): Promise<void> {
+  await db
+    .insert(worktrees)
+    .values(row)
+    .onConflictDoUpdate({
+      target: worktrees.path,
+      set: {
+        branch: row.branch,
+        ownerRunId: row.ownerRunId,
+        state: row.state,
+        repoDir: row.repoDir,
+        updatedAt: sql`now()`,
+      },
+    });
 }
 
-export async function setWorktreeState(sql: ISql, path: string, state: string): Promise<void> {
-  await sql`
-    UPDATE jigs_worktrees SET state = ${state}, updated_at = now()
-    WHERE path = ${path}
-  `;
+export async function setWorktreeState(
+  db: RegistrySql,
+  path: string,
+  state: string,
+): Promise<void> {
+  await db.update(worktrees).set({ state, updatedAt: sql`now()` }).where(eq(worktrees.path, path));
 }
 
-export async function deleteWorktree(sql: ISql, path: string): Promise<void> {
-  await sql`DELETE FROM jigs_worktrees WHERE path = ${path}`;
+export async function deleteWorktree(db: RegistrySql, path: string): Promise<void> {
+  await db.delete(worktrees).where(eq(worktrees.path, path));
 }

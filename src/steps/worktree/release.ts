@@ -1,5 +1,4 @@
 import { existsSync } from "node:fs";
-import type { Sql } from "postgres";
 import {
   type ReleasePolicy,
   type ReleaseReport,
@@ -9,6 +8,7 @@ import { removeManagedCodexHome } from "../agent/harnesses/codex-home.ts";
 import type { RunMetadata } from "../run-context.ts";
 import { removeRunDirectory, runDirectory } from "../run-directory/index.ts";
 import { fetchOriginDefault } from "./create.ts";
+import type { RegistrySql } from "./registry.ts";
 import { deleteWorktree, listWorktreesForRun, setWorktreeState } from "./registry.ts";
 import { registrySql } from "./sql.ts";
 import {
@@ -22,7 +22,7 @@ import {
 export async function releaseRunResources(
   policy: ReleasePolicy,
   metadata: RunMetadata,
-  sql: Sql = registrySql(),
+  sql: RegistrySql = registrySql(),
 ): Promise<ReleaseReport> {
   releaseSchema.parse(policy);
   const rows = await listWorktreesForRun(sql, metadata.workflowRunId);
