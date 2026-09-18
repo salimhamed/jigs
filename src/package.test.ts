@@ -158,6 +158,9 @@ test("the factory template pins the same versions this package peers on", async 
 const BARREL_EXPORTS: Record<string, string[]> = {
   "index.ts": ["defineFactory", "ticketInput", "JigsError"],
   "blocks/index.ts": [
+    "parseNameStatus",
+    "parseNumstat",
+    "renderChangeSummary",
     "acquireTicket",
     "runAgent",
     "agentOrHalt",
@@ -315,6 +318,8 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "reviewerNotes",
   ],
   "steps/index.ts": [
+    "readChange",
+    "readPatch",
     "createRunDirectory",
     "removeRunDirectory",
     "resolveLinearIssue",

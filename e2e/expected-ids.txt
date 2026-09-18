@@ -20,6 +20,8 @@ step//./jigs//provisionWorktree
 step//./jigs//pushApprovedChange
 step//./jigs//pushBranch
 step//./jigs//readBranchState
+step//./jigs//readChange
+step//./jigs//readPatch
 step//./jigs//readWorktreeDiff
 step//./jigs//removeMergedRunWorktrees
 step//./jigs//removeRunDirectory
