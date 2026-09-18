@@ -3,10 +3,10 @@ import path from "node:path";
 import { createJiti } from "jiti";
 
 import { z } from "zod";
-import { type MergePolicy, mergeSchema } from "../blocks/pull-request/policy.ts";
+import { type MergePolicy, mergeSchema } from "../blocks/pull-requests/policy.ts";
 import { releaseSchema } from "../blocks/runtime/release.ts";
 import { JigsError } from "../errors.ts";
-import { factorySlug } from "../steps/worktree/layout.ts";
+import { factorySlug } from "../steps/workspaces/layout.ts";
 
 export const FACTORY_CONFIG_FILE = "jigs.config.ts";
 

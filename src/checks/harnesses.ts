@@ -1,9 +1,9 @@
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { promisify } from "node:util";
-import { realCodexAuthPath } from "../steps/agent/harnesses/codex-home.ts";
-import { stringEnv } from "../steps/agent/harnesses/env.ts";
-import { resolveClaudeExecutable } from "../steps/agent/harnesses/executables.ts";
+import { realCodexAuthPath } from "../steps/agents/harnesses/codex-home.ts";
+import { stringEnv } from "../steps/agents/harnesses/env.ts";
+import { resolveClaudeExecutable } from "../steps/agents/harnesses/executables.ts";
 import { type Check, type CheckResult, PROBE_TIMEOUT_MS } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 import { type HarnessKind, type HarnessRuntimeDeps, harnessRuntime } from "./harness-runtime.ts";

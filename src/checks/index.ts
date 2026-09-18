@@ -1,4 +1,4 @@
-import type { AgentWire } from "../blocks/agent/plan.ts";
+import type { AgentWire } from "../blocks/agents/plan.ts";
 import { defaultMergePolicy, readFactoryConfig } from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";
 import { getAuthenticatedUser } from "../providers/github.ts";

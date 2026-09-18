@@ -24,8 +24,8 @@ import {
   ensureWebhookSecret,
   parseGithubRemote,
 } from "../../providers/github-webhook.ts";
-import { hasBindingClone } from "../../steps/worktree/clone.ts";
-import { bindingDir, bindingRepoDir } from "../../steps/worktree/layout.ts";
+import { hasBindingClone } from "../../steps/workspaces/clone.ts";
+import { bindingDir, bindingRepoDir } from "../../steps/workspaces/layout.ts";
 
 const BINDING_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 

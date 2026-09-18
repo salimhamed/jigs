@@ -1,11 +1,11 @@
-import type { GateWake, PrRef } from "@salimhamed/jigs/pull-requests";
+import type { GateWake, PrRef } from "@salimhamed/jigs/blocks/pull-requests";
 
 type CheckRun = Extract<GateWake, { kind: "ci-red" }>["failing"][number];
 type ReviewThread = Extract<GateWake, { kind: "review-comments" }>["threads"][number];
 
 import type { WorktreeFacts } from "@salimhamed/jigs";
-import type { AgentSession, HarnessConfig } from "@salimhamed/jigs/agents";
-import type { MergePolicy } from "@salimhamed/jigs/pull-requests";
+import type { AgentSession, HarnessConfig } from "@salimhamed/jigs/blocks/agents";
+import type { MergePolicy } from "@salimhamed/jigs/blocks/pull-requests";
 import type { PullRequestDescription } from "./outputs.ts";
 import type { FindingResponse, ReviewFinding, ReviewRound } from "./review.ts";
 

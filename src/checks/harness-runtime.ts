@@ -4,8 +4,8 @@ import semver from "semver";
 import {
   resolveClaudeExecutable,
   resolveCodexExecutable,
-} from "../steps/agent/harnesses/executables.ts";
-import { DEFAULT_MIN_CODEX_VERSION } from "../steps/agent/harnesses/index.ts";
+} from "../steps/agents/harnesses/executables.ts";
+import { DEFAULT_MIN_CODEX_VERSION } from "../steps/agents/harnesses/index.ts";
 import { PROBE_TIMEOUT_MS } from "./catalog.ts";
 
 // Are the harness CLIs installed, and is codex new enough? The service's

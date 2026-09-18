@@ -5,7 +5,7 @@ import { readFactoryEnv } from "../../config/factory-env.ts";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
-import { stringEnv } from "../../steps/agent/harnesses/env.ts";
+import { stringEnv } from "../../steps/agents/harnesses/env.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
 import { buildFactoryService, type Prepare } from "./build.ts";
 import { runDoctor } from "./doctor.ts";
@@ -116,7 +116,7 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
     await runner.run("bootstrap", async () => {
       const url = await bootstrapWorld(execFile, factoryRoot, env, deps.out);
       const migrate =
-        deps.migrate ?? (await import("../../steps/worktree/registry.ts")).migrateRegistry;
+        deps.migrate ?? (await import("../../steps/workspaces/registry.ts")).migrateRegistry;
       await migrate(url);
     });
 

@@ -3,7 +3,7 @@
 // token versus an App whose key, installation or permissions are wrong — so
 // each gets its own checks and its own repair.
 
-import type { MergePolicy } from "../blocks/pull-request/policy.ts";
+import type { MergePolicy } from "../blocks/pull-requests/policy.ts";
 import {
   type AppIdentity,
   type BindingEntry,

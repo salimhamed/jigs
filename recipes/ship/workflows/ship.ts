@@ -1,5 +1,5 @@
 import type { WorkflowEntry, WorkflowInputs } from "@salimhamed/jigs";
-import { claude, selectHarness } from "@salimhamed/jigs/agents";
+import { claude, selectHarness } from "@salimhamed/jigs/blocks/agents";
 import { z } from "zod";
 import { deliverChange } from "#blocks/delivery/delivery";
 import { acquireLinearTicket, workItemFromHandoff } from "#blocks/tickets/linear";

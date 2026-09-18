@@ -21,7 +21,7 @@ import { readFactoryEnv } from "../../config/factory-env.ts";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { jigsDataDir } from "../../config/paths.ts";
 import { JigsError } from "../../errors.ts";
-import { stringEnv } from "../../steps/agent/harnesses/env.ts";
+import { stringEnv } from "../../steps/agents/harnesses/env.ts";
 import { type SystemdUserManager, systemdUserManager } from "./systemd-user.ts";
 
 // Supervision remains a pidfile under the jigs data dir, keyed by factory

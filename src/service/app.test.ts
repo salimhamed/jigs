@@ -8,13 +8,13 @@ import { HookNotFoundError } from "workflow/errors";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
 import { type Factory, ticketInput } from "../blocks/factory.ts";
-import { prToken } from "../blocks/pull-request/gate.ts";
-import { ticketToken } from "../blocks/ticket/claim.ts";
-import { needsHumanToken } from "../blocks/ticket/halt-for-human.ts";
+import { ticketToken } from "../blocks/linear/claim.ts";
+import { needsHumanToken } from "../blocks/linear/halt-for-human.ts";
+import { prToken } from "../blocks/pull-requests/gate.ts";
 import { resetGithubAuth } from "../providers/github-auth.ts";
 import * as linear from "../providers/linear.ts";
-import * as sql from "../steps/worktree/sql.ts";
-import { makeFakeSql } from "../steps/worktree/test-fixtures.ts";
+import * as sql from "../steps/workspaces/sql.ts";
+import { makeFakeSql } from "../steps/workspaces/test-fixtures.ts";
 import * as queue from "./queue.ts";
 import { clearWakes, lastWake } from "./wake-note.ts";
 

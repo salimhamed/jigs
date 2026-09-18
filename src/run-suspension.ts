@@ -1,4 +1,4 @@
-import type { ApprovalState } from "./blocks/pull-request/merge-ready.ts";
+import type { ApprovalState } from "./blocks/pull-requests/merge-ready.ts";
 import type { WakeNote } from "./service/wake-note.ts";
 
 /**

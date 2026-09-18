@@ -4,7 +4,7 @@
 // here is tsc, through `pnpm typecheck`.
 
 import type { WorktreeFacts } from "@salimhamed/jigs";
-import type { HarnessConfig } from "@salimhamed/jigs/agents";
+import type { HarnessConfig } from "@salimhamed/jigs/blocks/agents";
 import { expect, test } from "vitest";
 import * as delivery from "./delivery.ts";
 import type {

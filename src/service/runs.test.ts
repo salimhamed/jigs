@@ -3,15 +3,15 @@ import { HookNotFoundError, WorkflowRunNotFoundError } from "workflow/errors";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
 import type { Factory } from "../blocks/factory.ts";
-import { prToken } from "../blocks/pull-request/gate.ts";
-import { ticketToken } from "../blocks/ticket/claim.ts";
-import { needsHumanToken } from "../blocks/ticket/halt-for-human.ts";
+import { ticketToken } from "../blocks/linear/claim.ts";
+import { needsHumanToken } from "../blocks/linear/halt-for-human.ts";
+import { prToken } from "../blocks/pull-requests/gate.ts";
 import * as config from "../config/factory-config.ts";
 import * as root from "../config/factory-root.ts";
 import * as github from "../providers/github.ts";
 import * as linear from "../providers/linear.ts";
 import type { RunSuspension } from "../run-suspension.ts";
-import * as sql from "../steps/worktree/sql.ts";
+import * as sql from "../steps/workspaces/sql.ts";
 import * as queue from "./queue.ts";
 import {
   describeRun,

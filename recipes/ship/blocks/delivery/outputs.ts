@@ -1,4 +1,4 @@
-import type { ThreadAnswers } from "@salimhamed/jigs/pull-requests";
+import type { ThreadAnswers } from "@salimhamed/jigs/blocks/pull-requests";
 import { z } from "zod";
 
 // threadId null means the pull request conversation: a review body has no
@@ -13,7 +13,7 @@ export const threadAnswers = z.strictObject({
   commitExplanation: z.string().min(1).nullable(),
 }) satisfies z.ZodType<ThreadAnswers>;
 
-export type { ThreadAnswers } from "@salimhamed/jigs/pull-requests";
+export type { ThreadAnswers } from "@salimhamed/jigs/blocks/pull-requests";
 
 export const pullRequestDescription = z.strictObject({
   title: z.string().min(1),

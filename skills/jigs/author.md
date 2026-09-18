@@ -32,6 +32,12 @@ Names and paths can be improved, but changing them changes durable addresses:
 check active and parked runs before deploying a rename, and arrange their
 completion or cancellation with the operator.
 
+Import reusable library code from `@salimhamed/jigs/blocks/<topic>`. The seven
+topics are `agents`, `human`, `linear`, `pull-requests`, `workspaces`, `git`
+and `runtime`. Implementations under `steps/<topic>` belong inside durable
+wrapper bodies. The generated wrappers preserve their names when library
+implementation paths move.
+
 ## Add a workflow
 
 1. Write `workflows/<name>.ts` with a zod input schema and an exported async
@@ -102,8 +108,10 @@ one custom block wrapping the shipped block, with defaults before the spread
 of caller options so a call site can override them.
 
 For different durable behavior, write a named custom `"use step"` function and
-bind the appropriate module: `bindAgentSteps`, `bindLinearSteps`,
-or `bindPullRequestSteps`. Generated integration exports each
+bind the appropriate module: `bindAgentSteps` from
+`@salimhamed/jigs/blocks/agents`, `bindLinearSteps` from
+`@salimhamed/jigs/blocks/linear`, or `bindPullRequestSteps` from
+`@salimhamed/jigs/blocks/pull-requests`. Generated integration exports each
 module's dependencies for selective replacement. Keep functions workflow-side;
 never send a prompt or callback through a durable step argument.
 

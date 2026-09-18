@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from "vitest";
-import type { MergePolicy } from "../blocks/pull-request/policy.ts";
+import type { MergePolicy } from "../blocks/pull-requests/policy.ts";
 import type { AppIdentity } from "../config/factory-config.ts";
 import { GithubApiError } from "../providers/github-api.ts";
 import { runChecks } from "./catalog.ts";

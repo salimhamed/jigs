@@ -100,7 +100,7 @@ Pass the returned `base` and `head` to `readPatch(worktreePath, base, head, path
 to inspect named files from that same change. Paths are literal, not globs;
 empty paths are rejected. Patch text shares a 200,000-character budget across
 files, with its own `truncated` flag. `renderChangeSummary` from
-`@salimhamed/jigs/blocks` renders the summary and displays at most 60 file rows,
+`@salimhamed/jigs/blocks/git` renders the summary and displays at most 60 file rows,
 with an “and N more” tail for the remaining rows.
 
 Wrappers pass run metadata to jigs, which handles run-specific details such as
@@ -319,37 +319,30 @@ folders are the public import paths.
 
 ```
 src/
-  blocks/      workflow-side code: the blocks a workflow calls.
-               May import other blocks, zod, the workflow SDK, and `import
-               type` from anywhere. May not import a value from a node
-               built-in, the environment, the network, or steps/, service/,
-               cli/, checks/, config/ or providers/.
-    agent/          how a workflow calls an agent
-    ticket/         claim a ticket, review it, shape its snapshot, and halt
-                    the run for a human
-    pull-request/   the pull request gate, waiting on it, the answers posted
-                    back to it, and the hidden markers those answers carry
-    factory.ts      the types a factory declares its workflows with
-    worktree.ts     the WorktreeFacts type a workflow passes around
-  steps/       step implementations: the real work. May import providers/,
-               config/, checks/, errors.ts and blocks/.
-    run-directory/  scratch directories owned by a run
-    agent/          run an agent or a plain model call, and take the worktree
-                    lock
-    ticket/         fetch a ticket snapshot, post and read Linear comments,
-                    create and find Linear issues
-    pull-request/   branch state, push, open, comment, reply, merge
-    worktree/       provision, create, clone, tear down, registry, sweep
-  service/     the long-running process: app, routes, ingress, schedules,
-               readiness, shutdown, the Nitro config and the build.
-  cli/         the `jigs` command and its subcommands.
-  checks/      the requirement checks, shared by preflight, `jigs doctor` and
-               the just-in-time checks a step runs.
-  providers/   raw clients with no jigs knowledge: git, GitHub, Linear.
-  config/      the factory's config file, root, environment and paths.
-  errors.ts
-  run-status.ts  which run statuses are terminal; cli/, service/ and steps/
-                 all read it.
+  blocks/                replay-safe orchestration and shared domain shapes
+    agents/              agent/model calls, harness configuration and sessions
+    human/               provider-neutral question and option schemas
+    linear/              ticket claims, clarification and human-input transport
+    pull-requests/       GitHub gates, review answers and comment markers
+    workspaces/          Git worktree facts
+    git/                 change summaries and patch shapes
+    runtime/             explicit run release and control-flow helpers
+    factory.ts           factory/workflow configuration types
+  steps/                 effectful implementations, under the same seven topics
+    agents/              agent and model execution
+    human/               reserved topic; no provider-neutral execution yet
+    linear/              Linear snapshots, issues and comments
+    pull-requests/       GitHub API operations
+    workspaces/          worktree provisioning, registry and teardown mechanics
+    git/                 local branch state, pushes, diffs and patches
+    runtime/             run directories, run context and release operations
+  service/               app, routes, ingress, schedules, readiness and shutdown
+  cli/                   commands and subcommands
+  checks/                preflight, doctor and just-in-time requirement checks
+  providers/             raw Git, GitHub and Linear clients
+  config/                factory config, root, environment and paths
+  run-status.ts          private terminal-state classification
+  run-suspension.ts      private run-wait inspection
 ```
 
 One rule decides where a type goes: a type used by one module stays in that
@@ -361,23 +354,23 @@ still exported, so a factory can read one or pass its own instead.
 
 ### Import paths
 
-Workflow-side modules are available independently:
+Import by code kind, then topic: `@salimhamed/jigs/blocks/<topic>` for
+workflow-side code and `@salimhamed/jigs/steps/<topic>` for implementations
+called inside factory `"use step"` wrappers. The topics are `agents`, `human`,
+`linear`, `pull-requests`, `workspaces`, `git` and `runtime`; folders match them.
+Blocks stay free of Node built-ins, environment reads and network calls.
+Generated `jigs.ts` imports each operation from its topic and keeps the durable
+wrapper names stable. Workflows normally call those wrappers through `#jigs`.
 
-- `/agents`: agent and model calls, harness configuration, and sessions.
-- `/linear`: ticket acquisition, clarification, and human replies.
-- `/pull-requests`: watching GitHub review and CI state.
+`human` holds provider-neutral question/option schemas and JSON prompt values.
+The current halt, comment-shaped reply, ticket claim and reply checking remain
+in `linear`: separating that transport requires a future API design. Accordingly,
+`steps/human` currently exports no operations. Run status and suspension inspection
+remain private service/CLI implementation details.
 
-The broader paths remain available:
-
-- `@salimhamed/jigs/blocks` is everything a workflow or a factory's own block
-  may call. Nothing behind it touches a node built-in, the environment or the
-  network.
-- `@salimhamed/jigs/steps` is the implementations a factory wraps in its own
-  `"use step"` functions. Every one of them does touch one of those three,
-  which is why it is a step. A workflow never imports this path.
-
-The package root, `@salimhamed/jigs`, carries the handful of types a factory
-names in its own code plus `ticketInput` and `defineFactory`.
+The package root, `@salimhamed/jigs`, keeps factory configuration, `WorkflowEntry`,
+`defineFactory`, `ticketInput`, `JigsError` and its existing shared types.
+Flat topic aliases and catch-all block/step paths have been removed.
 
 The remaining subpaths belong to the service the factory builds:
 `@salimhamed/jigs/app`, `/nitro`, `/schedules`, `/build`,
