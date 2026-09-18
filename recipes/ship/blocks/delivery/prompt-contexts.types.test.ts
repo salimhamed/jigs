@@ -3,19 +3,17 @@
 // compiles clean and only shows up in someone else's factory — so the guard
 // here is tsc, through `pnpm typecheck`.
 
+import type { WorktreeFacts } from "@salimhamed/jigs";
+import type { HarnessConfig } from "@salimhamed/jigs/agents";
 import { expect, test } from "vitest";
-import type { HarnessConfig } from "../agent/harness-config.ts";
-import type { WorktreeFacts } from "../worktree.ts";
-import { bindDeliverySteps } from "./bind.ts";
+import * as delivery from "./delivery.ts";
 import type {
   CiRepairPromptContext,
-  DeliverySteps,
   DescriptionPromptContext,
   ImplementationPromptContext,
   ReviewPromptContext,
 } from "./types.ts";
 
-declare const steps: DeliverySteps;
 declare const worktree: WorktreeFacts;
 declare const harness: HarnessConfig;
 
@@ -29,7 +27,6 @@ const incident = {
 
 /** No explicit generic argument and no cast, from the context or the result. */
 async function customTaskFieldsAreReachable(): Promise<string> {
-  const delivery = bindDeliverySteps(steps);
   const result = await delivery.deliverChange({
     task: incident,
     worktree,

@@ -4,6 +4,7 @@ export {
   postPullRequestNote,
   postReviewAnswers,
   renderChecks,
+  type ThreadAnswers,
 } from "./answers.ts";
 export {
   type Attend,

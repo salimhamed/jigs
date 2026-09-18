@@ -13,7 +13,6 @@ import type {
   TicketNote,
 } from "@salimhamed/jigs/blocks";
 import { bindReleaseSteps } from "@salimhamed/jigs/blocks";
-import { bindDeliverySteps } from "@salimhamed/jigs/delivery";
 import { bindLinearSteps } from "@salimhamed/jigs/linear";
 import { bindPullRequestSteps } from "@salimhamed/jigs/pull-requests";
 import type { GithubRepoRef, WorktreeRequest } from "@salimhamed/jigs/steps";
@@ -266,32 +265,3 @@ const pullRequests = bindPullRequestSteps(pullRequestSteps);
 
 /** Watch pull-request reviews, CI results, and closure for a marker scope. */
 export const pullRequestGate = pullRequests.pullRequestGate;
-
-/** Operations used by delivery blocks; replace any with your own factory operation. */
-export const deliverySteps = {
-  runAgent,
-  pullRequestGate,
-  postTicketNote,
-  readBranchState,
-  readWorktreeDiff,
-  pushBranch,
-  pushApprovedChange,
-  resolveRepository,
-  openPullRequest,
-  commentOnPullRequest,
-  replyToPullRequestReviewThread,
-  mergePullRequest,
-};
-const delivery = bindDeliverySteps(deliverySteps);
-
-/** Implement a task and follow its pull request through review and merge. Keeps your task's own fields. */
-export const deliverChange = delivery.deliverChange;
-
-/** Implement a task and review its commits within your round budget. Keeps your task's own fields. */
-export const implementAndReview = delivery.implementAndReview;
-
-/** Publish the approved commit of a reviewed change as a pull request. Keeps your task's own fields. */
-export const publishApprovedChange = delivery.publishApprovedChange;
-
-/** Address pull-request feedback and CI failures until it merges, closes, or reaches a limit. Keeps your task's own fields. */
-export const followPullRequest = delivery.followPullRequest;

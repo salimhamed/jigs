@@ -63,10 +63,6 @@
     "./pull-requests": {
       "types": "./dist/blocks/pull-request/index.d.ts",
       "default": "./dist/blocks/pull-request/index.js"
-    },
-    "./delivery": {
-      "types": "./dist/blocks/delivery/index.d.ts",
-      "default": "./dist/blocks/delivery/index.js"
     }
   },
   "files": [

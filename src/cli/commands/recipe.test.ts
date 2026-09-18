@@ -23,6 +23,16 @@ test("lists ship and installs its source, reporting manual registration", async 
   const config = readFileSync(path.join(deps.cwd, "jigs.config.ts"), "utf8");
   expect(recipeNames()).toContain("ship");
   expect(addRecipe("ship", deps).created).toEqual([
+    "blocks/delivery/approval.types.test.ts",
+    "blocks/delivery/delivery.test.ts",
+    "blocks/delivery/delivery.ts",
+    "blocks/delivery/doc-examples.types.test.ts",
+    "blocks/delivery/outputs.ts",
+    "blocks/delivery/prompt-contexts.types.test.ts",
+    "blocks/delivery/prompts.test.ts",
+    "blocks/delivery/prompts.ts",
+    "blocks/delivery/review.ts",
+    "blocks/delivery/types.ts",
     "blocks/tickets/linear.ts",
     "workflows/ship.test.ts",
     "workflows/ship.ts",
@@ -39,7 +49,7 @@ test("keeps edited files when a recipe is added again", async () => {
   writeFileSync(path.join(deps.cwd, "workflows/ship.ts"), "// factory customization\n");
   const result = addRecipe("ship", deps);
   expect(result.created).toEqual([]);
-  expect(result.skipped).toHaveLength(3);
+  expect(result.skipped).toHaveLength(13);
   expect(deps.lines).toContain("kept    workflows/ship.ts");
   expect(readFileSync(path.join(deps.cwd, "workflows/ship.ts"), "utf8")).toBe(
     "// factory customization\n",

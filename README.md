@@ -76,7 +76,7 @@ The factory separates its configuration, generated integration, and custom code:
 - `workflows/hello.ts` creates and removes a run directory, then returns its input.
   It needs no repository binding or integration credentials.
 - `blocks/` holds factory-specific prompts, ticket acquisition, and domain decisions.
-- The optional delivery module supplies `deliverChange` and its independently usable phases.
+- The optional ship recipe supplies factory-owned delivery phases, prompts, and tests.
 - `steps/` holds any custom durable operations a factory adds.
 - Prompts are typed functions beside the code that uses them. Pass a prompt
   override to a block; keep shared factory defaults in a custom block.
@@ -228,7 +228,8 @@ is never generated.
 
 ## Factory control
 
-See [the delivery guide](docs/delivery.md) for role/model selection, budgets,
+Run `jigs recipe add ship`, then edit the copied code. See
+[the ship recipe guide](docs/delivery.md) for role/model selection, budgets,
 prompt overrides, custom ticket sources, and composing individual phases. Generic
 agent workflows use the same core without adopting any delivery concepts.
 
@@ -324,9 +325,6 @@ src/
                built-in, the environment, the network, or steps/, service/,
                cli/, checks/, config/ or providers/.
     agent/          how a workflow calls an agent
-    delivery/       configurable delivery phases and role/session tracking
-    builder-agent/  the moves the builder agent makes: implement, answer a
-                    review, fix CI, describe a PR
     ticket/         claim a ticket, review it, shape its snapshot, and halt
                     the run for a human
     pull-request/   the pull request gate, waiting on it, the answers posted
@@ -368,7 +366,6 @@ Workflow-side modules are available independently:
 - `/agents`: agent and model calls, harness configuration, and sessions.
 - `/linear`: ticket acquisition, clarification, and human replies.
 - `/pull-requests`: watching GitHub review and CI state.
-- `/delivery`: `deliverChange` and its individual phases.
 
 The broader paths remain available:
 

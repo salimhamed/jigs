@@ -1,40 +1,10 @@
 // The type half of what the barrels export. package.test.ts asserts the value
 // names with a runtime import, which cannot see a type at all: a `TicketRef` or
 // a `JsonValue` dropped from blocks/index.ts would pass every test in this repo
-// and break a factory on install. `/delivery` is almost entirely types, so a
-// rename there is invisible to every runtime assertion. Here the guard is tsc —
+// and break a factory on install. Here the guard is tsc —
 // `pnpm typecheck` fails when one of these names stops being exported.
 
 import { expect, test } from "vitest";
-import type {
-  ApprovedChange,
-  CiRepairAgent,
-  CiRepairPromptContext,
-  DeliverChangeOptions,
-  DeliveryAgent,
-  DeliveryAttempts,
-  DeliveryChange,
-  DeliveryLimits,
-  DeliveryPhase,
-  DeliveryResult,
-  DeliverySteps,
-  DescriptionAgent,
-  DescriptionPromptContext,
-  FollowPullRequestOptions,
-  ImplementAndReviewOptions,
-  ImplementAndReviewResult,
-  ImplementationAgent,
-  ImplementationPromptContext,
-  LimitDecision,
-  LimitReached,
-  OnDeliveryLimit,
-  PublishApprovedChangeOptions,
-  PullRequestRevisionAgent,
-  PullRequestRevisionPromptContext,
-  ReviewAgent,
-  ReviewPromptContext,
-  WorkItem,
-} from "./blocks/delivery/index.ts";
 import type {
   AgentFn,
   AgentOrHaltDeps,
@@ -42,27 +12,16 @@ import type {
   AgentStepConfig,
   AgentStepResult,
   AgentWire,
-  AnswerReviewOptions,
-  AnswerReviewPrompt,
-  AnswerReviewPromptInput,
   AskStepConfig,
   AskWire,
   Attend,
   CheckForTicketHumanReply,
   ClaudeHarnessConfig,
   ClaudeHarnessOptions,
-  CodeReviewPrompt,
-  CodeReviewPromptInput,
   CodexHarnessConfig,
   CodexHarnessOptions,
-  DescribePullRequestOptions,
   ExecuteAgentStep,
   ExecuteModelRequestStep,
-  FixCiFreshPrompt,
-  FixCiFreshPromptInput,
-  FixCiOptions,
-  FixCiPrompt,
-  FixCiPromptInput,
   GateFn,
   GateWake,
   Halt,
@@ -75,10 +34,6 @@ import type {
   HarnessName,
   HarnessOptions,
   HumanReply,
-  ImplementOptions,
-  ImplementPrompt,
-  ImplementPromptInput,
-  ImplementResult,
   JsonValue,
   MarkerKind,
   MarkerLedger,
@@ -94,7 +49,6 @@ import type {
   PrMarker,
   PrRef,
   PrState,
-  PullRequestDescription,
   RebuildContextPrompt,
   RebuildContextPromptInput,
   ResumeOrRebuildOptions,
@@ -132,24 +86,13 @@ type BlocksTypeSurface = {
   agentStepConfig: AgentStepConfig;
   agentStepResult: AgentStepResult;
   agentWire: AgentWire;
-  answerReviewOptions: AnswerReviewOptions;
-  answerReviewPrompt: AnswerReviewPrompt;
-  answerReviewPromptInput: AnswerReviewPromptInput;
   askStepConfig: AskStepConfig;
   askWire: AskWire;
   attend: Attend<number>;
   checkForTicketHumanReply: CheckForTicketHumanReply;
   claudeHarnessConfig: ClaudeHarnessConfig;
-  codeReviewPrompt: CodeReviewPrompt;
-  codeReviewPromptInput: CodeReviewPromptInput;
   codexHarnessConfig: CodexHarnessConfig;
   codexHarnessOptions: CodexHarnessOptions;
-  describePrOptions: DescribePullRequestOptions;
-  fixCiFreshPrompt: FixCiFreshPrompt;
-  fixCiFreshPromptInput: FixCiFreshPromptInput;
-  fixCiOptions: FixCiOptions;
-  fixCiPrompt: FixCiPrompt;
-  fixCiPromptInput: FixCiPromptInput;
   gateFn: GateFn;
   gateWake: GateWake;
   markerKind: MarkerKind;
@@ -169,10 +112,6 @@ type BlocksTypeSurface = {
   harnessOptions: HarnessOptions;
   claudeHarnessOptions: ClaudeHarnessOptions;
   humanReply: HumanReply;
-  implementOptions: ImplementOptions;
-  implementPrompt: ImplementPrompt;
-  implementPromptInput: ImplementPromptInput;
-  implementResult: ImplementResult;
   jsonValue: JsonValue;
   mcpHttpServer: McpHttpServer;
   mcpProbe: McpProbe;
@@ -181,7 +120,6 @@ type BlocksTypeSurface = {
   postTicketHumanInputRequest: PostTicketHumanInputRequest;
   postPullRequestNoteOptions: PostPullRequestNoteOptions;
   postReviewAnswersOptions: PostReviewAnswersOptions;
-  pullRequestDescription: PullRequestDescription;
   postTicketNote: PostTicketNote;
   prRef: PrRef;
   rebuildContextPrompt: RebuildContextPrompt;
@@ -205,36 +143,6 @@ type BlocksTypeSurface = {
   wireJsonSchema: WireJsonSchema;
 };
 
-type DeliveryTypeSurface = {
-  approvedChange: ApprovedChange;
-  ciRepairAgent: CiRepairAgent;
-  ciRepairPromptContext: CiRepairPromptContext;
-  deliverChangeOptions: DeliverChangeOptions;
-  deliveryAgent: DeliveryAgent<ImplementationPromptContext>;
-  deliveryAttempts: DeliveryAttempts;
-  deliveryChange: DeliveryChange;
-  deliveryLimits: DeliveryLimits;
-  deliveryPhase: DeliveryPhase;
-  deliveryResult: DeliveryResult;
-  deliverySteps: DeliverySteps;
-  descriptionAgent: DescriptionAgent;
-  descriptionPromptContext: DescriptionPromptContext;
-  followPullRequestOptions: FollowPullRequestOptions;
-  implementAndReviewOptions: ImplementAndReviewOptions;
-  implementAndReviewResult: ImplementAndReviewResult;
-  implementationAgent: ImplementationAgent;
-  implementationPromptContext: ImplementationPromptContext;
-  limitDecision: LimitDecision;
-  limitReached: LimitReached;
-  onDeliveryLimit: OnDeliveryLimit;
-  publishApprovedChangeOptions: PublishApprovedChangeOptions;
-  pullRequestRevisionAgent: PullRequestRevisionAgent;
-  pullRequestRevisionPromptContext: PullRequestRevisionPromptContext;
-  reviewAgent: ReviewAgent;
-  reviewPromptContext: ReviewPromptContext;
-  workItem: WorkItem;
-};
-
 type StepsTypeSurface = {
   executeDeps: ExecuteDeps;
   linearIssueMatch: LinearIssueMatch;
@@ -247,10 +155,6 @@ type StepsTypeSurface = {
 };
 
 test("every barrel still exports every type a factory names", () => {
-  const surfaces: Array<BlocksTypeSurface | DeliveryTypeSurface | StepsTypeSurface | undefined> = [
-    undefined,
-    undefined,
-    undefined,
-  ];
-  expect(surfaces).toHaveLength(3);
+  const surfaces: Array<BlocksTypeSurface | StepsTypeSurface | undefined> = [undefined, undefined];
+  expect(surfaces).toHaveLength(2);
 });

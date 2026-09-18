@@ -22,7 +22,7 @@ import type {
   commentOnPullRequest,
   replyToPullRequestReviewThread,
 } from "../../steps/pull-request/pr.ts";
-import type { ThreadAnswers } from "../builder-agent/answer-review.ts";
+
 import {
   assertUsableScope,
   carriesMarker,
@@ -33,6 +33,12 @@ import {
   type StatusReason,
 } from "./marker.ts";
 import { currentRunId } from "./writer.ts";
+
+/** Answers routed back to pull-request threads and an optional commit explanation. */
+export interface ThreadAnswers {
+  answers: Array<{ threadId: number | null; body: string }>;
+  commitExplanation: string | null;
+}
 
 export interface PostReviewAnswersOptions {
   replyToPullRequestReviewThread: typeof replyToPullRequestReviewThread;
