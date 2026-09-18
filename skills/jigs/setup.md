@@ -47,7 +47,7 @@ inside a factory, `jigs` means `pnpm exec jigs`.
 ```sh
 mkdir my-factory && cd my-factory && git init
 pnpm dlx @salimhamed/jigs init                  # jigs acts as the operator
-pnpm dlx @salimhamed/jigs init --identity app   # jigs acts as a GitHub App
+pnpm dlx @salimhamed/jigs init --github-identity-mode app   # jigs acts as a GitHub App
 ```
 
 Choose the identity now: it is written into `jigs.config.ts` as
@@ -159,7 +159,7 @@ The first failing step prints `FAIL <step>: <why>` and its repair on the next
 line, and `up` exits 1 there. Show the human both lines and follow the repair;
 then run `jigs up` again — an unchanged factory installs, migrates and
 restarts nothing. `jigs up` is also the command after every change to the
-factory's code. `--restart` forces a restart, `--force` skips the question
+factory's code. `--restart-service` forces a restart, `--force` skips the question
 about in-flight runs, `--no-doctor` skips the last step. A `FAIL ready` names
 the log when the service exited during boot (a binding it could not clone, a
 World it could not open); one after five minutes leaves the process running,
@@ -250,7 +250,7 @@ just needs `jigs poke <run>` to notice its answer.
 ## Upgrading a factory later
 
 ```sh
-jigs upgrade                # or: jigs upgrade --to <version>
+jigs upgrade                # or: jigs upgrade --to-version <version>
 ```
 
 normalizes jigs' release-age exclusion, then bumps `@salimhamed/jigs` and runs

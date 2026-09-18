@@ -380,6 +380,9 @@ test("App maps and lists normalize and reject ambiguous account ownership", asyn
     appId: 1,
     installationId: 10,
   });
+  expect(installationFor(config.github.identities, "junglescout")).not.toHaveProperty(
+    "installations",
+  );
   const identities = [app, { ...app, appId: 2, installations: { Other: 20 } }];
   expect(withSettings({ github: { identities } }).github.identities).toEqual(identities);
   expect(() =>

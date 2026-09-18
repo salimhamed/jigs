@@ -124,13 +124,18 @@ export const githubSchema = z
   }));
 
 /** Resolve one account; legacy installationId intentionally covers every account. */
-export function installationFor(identities: GithubIdentity[], account: string): GithubIdentity {
+export function installationFor(
+  identities: GithubIdentity[],
+  account: string,
+): ResolvedGithubIdentity {
   for (const identity of identities) {
-    if (identity.mode === "pat" || identity.installationId !== undefined) return identity;
-    const entry = Object.entries(identity.installations ?? {}).find(
+    if (identity.mode === "pat") return identity;
+    const { installations, installationId, ...app } = identity;
+    if (installationId !== undefined) return { ...app, installationId };
+    const entry = Object.entries(installations ?? {}).find(
       ([login]) => login.toLowerCase() === account.toLowerCase(),
     );
-    if (entry) return { ...identity, installationId: entry[1] };
+    if (entry) return { ...app, installationId: entry[1] };
   }
   throw new JigsError(
     `no GitHub App installation configured for account ${account}`,
@@ -162,6 +167,12 @@ export type BindingEntry = z.output<typeof bindingSchema>;
 export type FactoryConfig = z.output<typeof factoryConfigSchema>;
 export type GithubIdentity = z.output<typeof githubIdentitySchema>;
 export type AppIdentity = Extract<GithubIdentity, { mode: "app" }>;
+/** Credentials selected for one installation, after resolving the configured account map. */
+export type ResolvedAppIdentity = Omit<AppIdentity, "installations" | "installationId"> & {
+  installationId: number;
+};
+export type ResolvedGithubIdentity = Extract<GithubIdentity, { mode: "pat" }> | ResolvedAppIdentity;
+
 /** The policy a factory that states none gets: a human merges, by squash, on an approving review. */
 export const defaultMergePolicy = (): MergePolicy => mergePolicySchema.parse({});
 

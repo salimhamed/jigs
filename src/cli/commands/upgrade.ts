@@ -53,7 +53,10 @@ export async function upgradeFactory(
   options: UpgradeOptions = {},
 ): Promise<UpgradeResult> {
   if (options.to !== undefined && !VERSION.test(options.to)) {
-    throw new JigsError(`--to takes an exact version, got ${options.to}`, "e.g. --to 0.3.0");
+    throw new JigsError(
+      `--to-version takes an exact version, got ${options.to}`,
+      "e.g. --to-version 0.3.0",
+    );
   }
   const execFile = deps.execFile ?? nodeExecFile;
   const runner = stepRunner<UpgradeStepName | UpStepName>(deps.out);

@@ -58,7 +58,7 @@ const outcome = async (
   bindings: Record<string, { remote: string }> = {},
 ) => {
   const report = await runChecks(
-    githubIdentityChecks(identity, merge, probes(overrides), env, bindings),
+    githubIdentityChecks([identity], merge, probes(overrides), env, bindings),
   );
   const found = report.checks.find((check) => check.id === id);
   if (found === undefined) throw new Error(`no check ${id}`);
@@ -689,4 +689,32 @@ test("doctor probes every installation and registration once per App", async () 
     detail:
       "jigs acts as jigs-app-dev[bot] on salimhamed, downstreamimpact, Junglescout; operator salimhamed",
   });
+});
+
+test("multi-App key repairs identify the App entry rather than the singular config shape", async () => {
+  const result = await outcome(APP, "github.identity", {
+    readPrivateKey: () => {
+      throw new Error("missing key");
+    },
+  });
+  expect(result).toMatchObject({ ok: false, repair: expect.stringContaining(`App ${APP.appId}`) });
+  if (!result.ok) {
+    expect(result.repair).toContain("privateKeyPath");
+    expect(result.repair).not.toContain("github.identity.");
+  }
+});
+
+test("missing permissions retain the installation that failed", async () => {
+  const { installationId: _, ...app } = APP;
+  const result = await outcome(
+    { ...app, installations: { first: 10, second: 20 } },
+    "github.identity",
+    {
+      installation: async ({ installationId }) => ({
+        permissions: installationId === 10 ? GRANTED : { ...GRANTED, contents: "read" },
+      }),
+    },
+  );
+  expect(result).toMatchObject({ ok: false, reason: expect.stringContaining("installation 20") });
+  if (!result.ok) expect(result.reason).not.toContain("installation 10");
 });

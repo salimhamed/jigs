@@ -9,6 +9,7 @@ import {
   type BindingEntry,
   bindingMergePolicy,
   type GithubIdentity,
+  type ResolvedAppIdentity,
 } from "../config/factory-config.ts";
 import { GithubApiError, githubGet } from "../providers/github-api.ts";
 import {
@@ -50,7 +51,7 @@ export interface GithubIdentityProbes {
   whoami(): Promise<{ login: string }>;
   readPrivateKey(file: string): ReturnType<typeof readAppPrivateKey>;
   installation(
-    identity: AppIdentity,
+    identity: ResolvedAppIdentity,
     key: string,
   ): Promise<{ permissions: Record<string, string> }>;
   registration(identity: AppIdentity, key: string): Promise<{ slug: string }>;
@@ -180,15 +181,15 @@ const isNotFound = (err: unknown) => err instanceof GithubApiError && err.status
 
 /** The identity check for the configured mode, plus the effective merge policy. */
 export function githubIdentityChecks(
-  identity: GithubIdentity | GithubIdentity[],
+  identities: GithubIdentity[],
   merge: MergePolicy,
   probes: GithubIdentityProbes,
   env: NodeJS.ProcessEnv = process.env,
   bindings: Record<string, Pick<BindingEntry, "remote" | "merge">> = {},
   mergeProbes: GithubMergePolicyProbes = realGithubMergePolicyProbes,
 ): Check[] {
-  const identities = Array.isArray(identity) ? identity : [identity];
-  const primary = identities[0] ?? { mode: "pat" as const };
+  const primary = identities[0];
+  if (!primary) throw new Error("GitHub identity checks require a nonempty normalized list");
   const checksBindingPolicies = Object.values(bindings).some(
     (binding) => bindingMergePolicy(merge, binding).by === "jigs",
   );
@@ -262,7 +263,7 @@ function appCheck(
         return {
           ok: false,
           reason: String(err),
-          repair: `download the App's private key, point github.identity.privateKeyPath at it, and: chmod 600 ${identity.privateKeyPath}`,
+          repair: `download App ${identity.appId}’s private key, set privateKeyPath in that App’s entry in jigs.config.ts, and: chmod 600 ${identity.privateKeyPath}`,
         };
       }
       // Before any network call: a key anyone can read is a credential to
@@ -274,19 +275,22 @@ function appCheck(
           repair: `chmod 600 ${identity.privateKeyPath}`,
         };
       }
-      let installations: Array<{ permissions: Record<string, string> }>;
+      const { installations: accountInstallations, installationId, ...app } = identity;
+      const installationIds =
+        installationId === undefined ? Object.values(accountInstallations ?? {}) : [installationId];
+      let installations: Array<{ installationId: number; permissions: Record<string, string> }>;
       let slug: string;
       try {
         // Both mint a JWT from the key, so a key the App does not recognise
         // and an installation that is gone are distinguished by the message.
         [installations, { slug }] = await Promise.all([
           Promise.all(
-            (identity.installationId === undefined
-              ? Object.values(identity.installations ?? {})
-              : [identity.installationId]
-            ).map(async (installationId) => {
+            installationIds.map(async (installationId) => {
               try {
-                return await probes.installation({ ...identity, installationId }, key);
+                return {
+                  installationId,
+                  ...(await probes.installation({ ...app, installationId }, key)),
+                };
               } catch (err) {
                 throw new Error(`installation ${installationId}: ${err}`);
               }
@@ -297,7 +301,7 @@ function appCheck(
       } catch (err) {
         return {
           ok: false,
-          reason: `App ${identity.appId} installation ${identity.installationId ?? Object.values(identity.installations ?? {}).join(", ")} did not answer: ${err}`,
+          reason: `App ${identity.appId} installation ${installationIds.join(", ")} did not answer: ${err}`,
           repair:
             "check the App entry’s appId and installations (or installationId) against the App's settings page and its installation, and that the private key belongs to that App",
         };
@@ -306,7 +310,7 @@ function appCheck(
         ...REQUIRED_PERMISSIONS,
         ...(checksBindingPolicies ? JIGS_MERGE_PERMISSIONS : []),
       ];
-      const missing = installations.flatMap(({ permissions }, index) =>
+      const missing = installations.flatMap(({ installationId, permissions }) =>
         requiredPermissions
           .filter(
             (required) =>
@@ -314,8 +318,7 @@ function appCheck(
           )
           .map((permission) => ({
             ...permission,
-            installationId:
-              identity.installationId ?? Object.values(identity.installations ?? {})[index],
+            installationId,
           })),
       );
       if (missing.length > 0) {

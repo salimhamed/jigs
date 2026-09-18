@@ -87,7 +87,7 @@ export async function bindRepo(
   if (!BINDING_NAME_PATTERN.test(name)) {
     throw new JigsError(
       `invalid binding name ${JSON.stringify(name)}`,
-      "names must match [A-Za-z0-9][A-Za-z0-9._-]* — pass --name to choose one",
+      "names must match [A-Za-z0-9][A-Za-z0-9._-]* — pass --binding-name to choose one",
     );
   }
 
@@ -127,7 +127,7 @@ export async function bindRepo(
   // approval is only one possible merge signal.
   const reBindCommand =
     options.name !== undefined || name !== derivedName
-      ? `jigs bind ${remoteUrl} --name ${name}`
+      ? `jigs bind ${remoteUrl} --binding-name ${name}`
       : `jigs bind ${remoteUrl}`;
   const webhook = await ensureWebhook({
     remoteUrl,

@@ -51,7 +51,7 @@ test("a red report prints the reason and repair for each failure and throws a Ji
         label: "binding api",
         ok: false,
         reason: "no binding named 'api'",
-        repair: "run: jigs bind <the-api-remote-url> --name api",
+        repair: "run: jigs bind <the-api-remote-url> --binding-name api",
       },
       {
         id: "harness.codex-auth",
@@ -72,7 +72,7 @@ test("a red report prints the reason and repair for each failure and throws a Ji
     "ok   systemd user service supervision",
     "ok   Linear API key",
     "FAIL binding api: no binding named 'api'",
-    "  → run: jigs bind <the-api-remote-url> --name api",
+    "  → run: jigs bind <the-api-remote-url> --binding-name api",
     "FAIL Codex subscription login: no Codex login found",
     "  → run: codex login",
   ]);

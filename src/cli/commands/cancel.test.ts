@@ -86,7 +86,7 @@ test("the released claim tokens are printed", async () => {
   ]);
 });
 
-test("--discard force-sweeps the cancelled run's worktrees and prints what it removed", async () => {
+test("--discard-worktrees force-sweeps the cancelled run's worktrees and prints what it removed", async () => {
   respondLookup(suspended);
   respondCancelWithWorktrees(["/data/wt/one", "/data/wt/two"]);
   fetchMock.mockResolvedValueOnce(
@@ -133,7 +133,7 @@ test("--discard force-sweeps the cancelled run's worktrees and prints what it re
   expect(lines.at(-1)).toBe("2 removed (1 branch kept), 0 held");
 });
 
-test("cancel without --discard still keeps and reports the run's worktree", async () => {
+test("cancel without --discard-worktrees still keeps and reports the run's worktree", async () => {
   respondLookup(suspended);
   respondCancelWithWorktrees(["/data/wt/one"]);
 

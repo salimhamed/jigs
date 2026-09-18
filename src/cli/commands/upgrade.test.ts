@@ -326,7 +326,7 @@ test("leaves a normalized exclusion byte-identical when jigs is not last", async
   expect(readFileSync(workspace, "utf8")).toBe(before);
 });
 
-test("--to pins jigs to that version instead of the latest", async () => {
+test("--to-version pins jigs to that version instead of the latest", async () => {
   const port = await fakeService();
   const root = factory(port);
   const io = { exec: fakeRegistry("0.3.0"), procs: fakeProcesses() };
@@ -340,11 +340,13 @@ test("--to pins jigs to that version instead of the latest", async () => {
   });
 });
 
-test("--to that is not an exact version is refused before anything runs", async () => {
+test("--to-version that is not an exact version is refused before anything runs", async () => {
   const root = factory(1);
   const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
 
-  await expect(upgrade(root, io, { to: "latest" })).rejects.toThrow("--to takes an exact version");
+  await expect(upgrade(root, io, { to: "latest" })).rejects.toThrow(
+    "--to-version takes an exact version",
+  );
   expect(io.exec.calls).toHaveLength(0);
 });
 
@@ -534,7 +536,7 @@ test("an @salimhamed scope not routed to GitHub Packages names the .npmrc line",
   expect(result.steps.at(-1)?.repair).toContain("@salimhamed:registry=https://npm.pkg.github.com");
 });
 
-test("a version the registry does not have is named with the --to that asked for it", async () => {
+test("a version the registry does not have is named with the --to-version that asked for it", async () => {
   const root = factory(1);
   const io = {
     exec: fakeRegistry("0.1.19", (call) =>

@@ -15,14 +15,14 @@ import { locateTemplates, packageRoot, TEMPLATE_SUFFIX } from "../templates.ts";
 /** Which GitHub credential the scaffolded factory is written for. */
 export type IdentityMode = "pat" | "app";
 
-/** The `--identity app` facts, which have no defaults jigs could invent. */
+/** The `--github-identity-mode app` facts, which have no defaults jigs could invent. */
 export interface AppIdentityOptions {
-  appId?: string;
-  installationId?: string;
-  installation?: string[];
-  privateKey?: string;
-  operator?: string;
-  coAuthor?: string;
+  githubAppId?: string;
+  githubAppInstallationId?: string;
+  githubAppInstallation?: string[];
+  githubAppPrivateKeyPath?: string;
+  githubOperatorLogin?: string;
+  gitCoAuthor?: string;
 }
 
 export interface InitDeps {
@@ -44,44 +44,57 @@ export function resolveIdentityOptions(
   options: AppIdentityOptions,
 ): GithubIdentity {
   if (mode === "pat") return { mode: "pat" };
-  const missing = (["appId", "installationId", "privateKey", "operator"] as const).filter(
+  const missing = (
+    [
+      "githubAppId",
+      "githubAppInstallationId",
+      "githubAppPrivateKeyPath",
+      "githubOperatorLogin",
+    ] as const
+  ).filter(
     (flag) =>
-      (flag !== "installationId" || !options.installation?.length) &&
+      (flag !== "githubAppInstallationId" || !options.githubAppInstallation?.length) &&
       (options[flag] === undefined || options[flag] === ""),
   );
   if (missing.length > 0) {
     throw new JigsError(
-      `jigs init --identity app needs ${missing.map((flag) => `--${FLAGS[flag]}`).join(", ")}`,
-      'jigs init --identity app --app-id 123 --installation your-github-login=456 --private-key github-app.private-key.pem --operator your-github-login [--co-author "Your Name <you@example.com>"]',
+      `jigs init --github-identity-mode app needs ${missing.map((flag) => `--${FLAGS[flag]}`).join(", ")}`,
+      'jigs init --github-identity-mode app --github-app-id 123 --github-app-installation your-github-login=456 --github-app-private-key-path github-app.private-key.pem --github-operator-login your-github-login [--git-co-author "Your Name <you@example.com>"]',
     );
   }
   const installations: Record<string, number> = {};
-  for (const entry of options.installation ?? []) {
+  for (const entry of options.githubAppInstallation ?? []) {
     const match = /^([a-zA-Z0-9-]+)=(\d+)$/.exec(entry);
-    if (!match) throw new JigsError(`--installation must be <account>=<id>, not ${entry}`);
+    if (!match)
+      throw new JigsError(`--github-app-installation must be <account>=<id>, not ${entry}`);
     const account = match[1] as string;
     if (Object.keys(installations).some((login) => login.toLowerCase() === account.toLowerCase()))
-      throw new JigsError(`duplicate --installation account ${account}`);
-    installations[account] = positiveInt(match[2], "--installation");
+      throw new JigsError(`duplicate --github-app-installation account ${account}`);
+    installations[account] = positiveInt(match[2], "--github-app-installation");
   }
   return githubIdentitySchema.parse({
     mode: "app",
-    appId: positiveInt(options.appId, "--app-id"),
-    ...(options.installationId === undefined
+    appId: positiveInt(options.githubAppId, "--github-app-id"),
+    ...(options.githubAppInstallationId === undefined
       ? {}
-      : { installationId: positiveInt(options.installationId, "--installation-id") }),
-    ...(options.installation?.length ? { installations } : {}),
-    privateKeyPath: String(options.privateKey),
-    operator: String(options.operator),
-    ...(options.coAuthor === undefined ? {} : { coAuthor: options.coAuthor }),
+      : {
+          installationId: positiveInt(
+            options.githubAppInstallationId,
+            "--github-app-installation-id",
+          ),
+        }),
+    ...(options.githubAppInstallation?.length ? { installations } : {}),
+    privateKeyPath: String(options.githubAppPrivateKeyPath),
+    operator: String(options.githubOperatorLogin),
+    ...(options.gitCoAuthor === undefined ? {} : { coAuthor: options.gitCoAuthor }),
   });
 }
 
 const FLAGS = {
-  appId: "app-id",
-  installationId: "installation-id",
-  privateKey: "private-key",
-  operator: "operator",
+  githubAppId: "github-app-id",
+  githubAppInstallationId: "github-app-installation-id",
+  githubAppPrivateKeyPath: "github-app-private-key-path",
+  githubOperatorLogin: "github-operator-login",
 } as const;
 
 function positiveInt(value: string | undefined, flag: string): number {

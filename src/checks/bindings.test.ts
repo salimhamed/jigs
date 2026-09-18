@@ -51,7 +51,7 @@ test("an undeclared binding fails with the exact jigs bind invocation", async ()
     reason: expect.stringContaining("no binding named 'api'"),
     repair: expect.stringContaining("jigs bind"),
   });
-  expect(outcome.ok === false && outcome.repair).toContain("--name api");
+  expect(outcome.ok === false && outcome.repair).toContain("--binding-name api");
   expect(outcome.ok === false && outcome.repair).toContain("remote-url");
 });
 

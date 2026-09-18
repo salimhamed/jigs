@@ -61,7 +61,7 @@ operator's `claude` and `codex` logins, the AWS SSO cache and the git clones
 ([ADR 0017](adr/0017-single-package.md)).
 
 **Upgrading.** `jigs upgrade` in the factory: it normalizes jigs' release-age
-exclusion, then moves the jigs pin to the latest release (`--to <version>`
+exclusion, then moves the jigs pin to the latest release (`--to-version <version>`
 picks one). It runs `jigs up`, whose upgrade path installs the release,
 regenerates `jigs.ts` with that installed CLI, and builds and starts the
 factory, then runs the factory's own typecheck. This is a single command even
@@ -230,7 +230,7 @@ these integration tokens; ship requires them.
 ### 2a. Which GitHub identity jigs uses
 
 `github.identity` in `jigs.config.ts` says who jigs is on GitHub. There are two
-modes, and they are chosen once, at `jigs init --identity pat|app`.
+modes, and they are chosen once, at `jigs init --github-identity-mode pat|app`.
 
 **`pat` — jigs is you.** The `GITHUB_TOKEN` in `.env` is your own personal
 access token, so every pull request jigs opens has you as its author.
@@ -263,15 +263,15 @@ github: {
 },
 ```
 
-To fill that block in — `jigs init --identity app` takes all of it on the
+To fill that block in — `jigs init --github-identity-mode app` takes all of it on the
 command line, so the scaffold loads on the first `jigs up`:
 
 ```sh
-jigs init --identity app \
-  --app-id 4958325 --installation salimhamed=162033982 \
-  --installation downstreamimpact=162665072 --installation Junglescout=162664894 \
-  --private-key github-app.private-key.pem --operator your-github-login \
-  --co-author "Your Name <you@example.com>"
+jigs init --github-identity-mode app \
+  --github-app-id 4958325 --github-app-installation salimhamed=162033982 \
+  --github-app-installation downstreamimpact=162665072 --github-app-installation Junglescout=162664894 \
+  --github-app-private-key-path github-app.private-key.pem --github-operator-login your-github-login \
+  --git-co-author "Your Name <you@example.com>"
 ```
 
 Where each value comes from:
@@ -336,8 +336,8 @@ list. Configure exactly one of `identity` or `identities`.
 Existing single-App factories can keep `installationId`: it continues to select
 that installation for every binding, and `jigs upgrade` requires no config edit.
 Configure exactly one of `installationId` or a nonempty `installations` map.
-`jigs init --installation <account>=<id>` is repeatable; the existing
-`--installation-id <id>` flag remains available for the legacy shorthand.
+`jigs init --github-app-installation <account>=<id>` is repeatable;
+`--github-app-installation-id <id>` scaffolds the legacy shorthand.
 
 In `app` mode jigs pushes over HTTPS with the installation token, supplied to
 that one `git push` and never written to `.git/config` or any log. In `pat`
@@ -487,7 +487,7 @@ my-factory-2286ac2a is up at http://localhost:8990 — dashboard http://localhos
   registers them.
 - **service** starts the service if none is running; if one is, it restarts
   it only when the built bundle differs from the one the process started from
-  (`--restart` forces it). A restart over in-flight runs asks first —
+  (`--restart-service` forces it). A restart over in-flight runs asks first —
   `--force` skips the question, and without a terminal it refuses instead.
 - **ready** waits for `/health` to report the service ready, printing each
   boot phase as it changes (`booting: cloning forge`) and watching the pid
@@ -540,7 +540,7 @@ A worktree admits one agent at a time: a second one is refused, not queued.
 ```sh
 jigs bind git@github.com:owner/repo.git
 jigs bindings
-jigs service restart      # or jigs up --restart
+jigs service restart      # or jigs up --restart-service
 ```
 
 A binding is a name in `jigs.config.ts` mapped to a target repo's **remote URL**.
@@ -548,9 +548,9 @@ jigs keeps its own bare clone per binding, at
 `~/.local/share/jigs/bindings/<factory>/<binding>/repo.git`, and cuts every
 agent worktree from it — your own checkout of the repo is not involved at all.
 Workflows name bindings; the runtime provisions worktrees from them.
-Without `--name`, bind reuses the first configured binding whose remote URL is
+Without `--binding-name`, bind reuses the first configured binding whose remote URL is
 an exact match; only an absent remote creates a repo-name-derived binding. An
-explicit `--name` bypasses remote matching and can create another binding for
+explicit `--binding-name` bypasses remote matching and can create another binding for
 the same remote.
 
 **The clones are made when the service starts**, not when a run asks for a
@@ -711,7 +711,7 @@ is too long to wait.
 jigs run <workflow> --input ticket=AGE-123
 jigs ps
 jigs logs <run>
-jigs cancel <run> [--force] [--discard]
+jigs cancel <run> [--force] [--discard-worktrees]
 jigs sweep [<path>] [--force]
 ```
 
@@ -723,7 +723,7 @@ Factories upgrading past 0.1.4 must pass the injected Linear `identifier` as
 the second argument to `claimTicket`, or adopt the `ticket=` input shown above.
 
 Every verb dials the service of the factory you are standing in;
-`--service <url>` / `JIGS_SERVICE_URL` overrides that. `--input` values are
+`--service-url <url>` / `JIGS_SERVICE_URL` overrides that. `--input` values are
 read as JSON with the raw string as the fallback, so `askHuman=true` is a
 boolean and `AGE-123` is a string; a value the workflow's `inputs` schema
 rejects fails in the CLI, before any run is created.
@@ -738,7 +738,7 @@ back for: cancelling releases every hook it claimed, so the same ticket can be
 launched again. A suspended run cancels silently — no process is involved —
 while a run still in flight is confirmed first, and `--force` skips that
 prompt when there is no terminal to answer it. By default, cancel names the
-worktrees it leaves behind. `--discard` also removes that run's worktrees after
+worktrees it leaves behind. `--discard-worktrees` also removes that run's worktrees after
 the cancellation succeeds; branches containing unmerged commits are kept.
 
 A workflow requests release as its last successful action with `await release()`.

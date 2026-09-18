@@ -11,6 +11,8 @@ import {
   type AppIdentity,
   type GithubIdentity,
   installationFor,
+  type ResolvedAppIdentity,
+  type ResolvedGithubIdentity,
   readFactoryConfig,
 } from "../config/factory-config.ts";
 import { factoryEnvValue } from "../config/factory-env.ts";
@@ -68,7 +70,7 @@ export function readAppPrivateKey(file: string): PrivateKeyFile {
   } catch (error) {
     throw new JigsError(
       `cannot read the GitHub App private key at ${file}: ${error instanceof Error ? error.message : String(error)}`,
-      `download the App's private key and point github.identity.privateKeyPath at it, then: chmod 600 ${file}`,
+      `download the App's private key and set privateKeyPath in the configured App entry to that file, then: chmod 600 ${file}`,
     );
   }
   if (!key.includes("PRIVATE KEY")) {
@@ -92,12 +94,10 @@ export type FetchLike = typeof fetch;
 
 /** Exchange the App JWT for a token scoped to one installation. */
 export async function mintInstallationToken(
-  identity: AppIdentity,
+  identity: ResolvedAppIdentity,
   privateKey: string,
   deps: { now?: () => number; fetch?: FetchLike } = {},
 ): Promise<MintedToken> {
-  if (identity.installationId === undefined)
-    throw new JigsError("resolve an account before minting an installation token");
   const now = deps.now ?? Date.now;
   const doFetch = deps.fetch ?? fetch;
   const jwt = mintAppJwt(identity.appId, privateKey, now());
@@ -115,7 +115,7 @@ export async function mintInstallationToken(
   if (!res.ok) {
     throw new JigsError(
       `GitHub refused an installation token for App ${identity.appId} installation ${identity.installationId} (HTTP ${res.status})`,
-      "check github.identity.appId, installationId and privateKeyPath, and that the App is still installed — jigs doctor names which one is wrong",
+      `check App ${identity.appId}’s entry in jigs.config.ts: appId, installations (or installationId) and privateKeyPath, and that installation ${identity.installationId} still exists — jigs doctor names which one is wrong`,
     );
   }
   const body = (await res.json()) as { token: string; expires_at: string };
@@ -124,7 +124,7 @@ export async function mintInstallationToken(
 
 /** Read the installation's granted permissions, for doctor. */
 export async function fetchAppInstallation(
-  identity: AppIdentity,
+  identity: ResolvedAppIdentity,
   privateKey: string,
   deps: { now?: () => number; fetch?: FetchLike } = {},
 ): Promise<AppInstallation> {
@@ -167,7 +167,7 @@ async function appJwtGet<T>(
 }
 
 export interface GithubAuth {
-  identity: GithubIdentity;
+  identity: ResolvedGithubIdentity;
   /** The bearer token for a REST or GraphQL call, minted or renewed as needed. */
   bearer(): Promise<string>;
 }
@@ -179,7 +179,10 @@ export interface GithubAuthDeps {
   patToken?: () => string | undefined;
 }
 
-export function createGithubAuth(identity: GithubIdentity, deps: GithubAuthDeps = {}): GithubAuth {
+export function createGithubAuth(
+  identity: ResolvedGithubIdentity,
+  deps: GithubAuthDeps = {},
+): GithubAuth {
   const now = deps.now ?? Date.now;
   const mint = async (): Promise<MintedToken> => {
     if (identity.mode !== "app") throw new Error("only an App identity mints tokens");
@@ -233,6 +236,7 @@ let factoryRootOverride: string | null = null;
 export function useFactoryRoot(root: string): void {
   factoryRootOverride = root;
   processAuth.clear();
+  processIdentities = null;
 }
 
 const currentFactoryRoot = (): string => factoryRootOverride ?? factoryRoot();
@@ -259,14 +263,16 @@ export function resolveGithubIdentities(root?: string): GithubIdentity[] {
   );
 }
 
-export function resolveGithubIdentity(account: string, root?: string): GithubIdentity {
+export function resolveGithubIdentity(account: string, root?: string): ResolvedGithubIdentity {
   return installationFor(resolveGithubIdentities(root), account);
 }
 
 const processAuth = new Map<string, GithubAuth>();
+let processIdentities: GithubIdentity[] | null = null;
 
 export function githubAuthFor(account: string): GithubAuth {
-  const identity = resolveGithubIdentity(account);
+  processIdentities ??= resolveGithubIdentities();
+  const identity = installationFor(processIdentities, account);
   const key = identity.mode === "pat" ? "pat" : `${identity.appId}:${identity.installationId}`;
   let auth = processAuth.get(key);
   if (!auth) {
@@ -279,5 +285,6 @@ export function githubAuthFor(account: string): GithubAuth {
 /** Drop cached credentials so the next call re-reads configuration. */
 export function resetGithubAuth(): void {
   processAuth.clear();
+  processIdentities = null;
   factoryRootOverride = null;
 }

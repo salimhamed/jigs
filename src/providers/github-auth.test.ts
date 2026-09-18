@@ -187,6 +187,11 @@ test("accounts select independent cached installation tokens across Apps", async
   useFactoryRoot(tmp);
   try {
     expect(await githubAuthFor("FIRST").bearer()).toBe("token-1");
+    // Existing authentication keeps one config snapshot until explicitly reset.
+    writeFileSync(
+      path.join(tmp, "jigs.config.ts"),
+      'export default { service: { dashboardPort: 9090 }, github: { identity: { mode: "pat" } } }',
+    );
     expect(await githubAuthFor("first").bearer()).toBe("token-1");
     expect(await githubAuthFor("Second").bearer()).toBe("token-2");
     expect(await githubAuthFor("Third").bearer()).toBe("token-3");
@@ -194,6 +199,8 @@ test("accounts select independent cached installation tokens across Apps", async
     expect(calls[0]).toContain("/installations/10/access_tokens");
     expect(calls[1]).toContain("/installations/20/access_tokens");
     expect(() => githubAuthFor("uncovered")).toThrow("account uncovered");
+    useFactoryRoot(tmp);
+    expect(githubAuthFor("uncovered").identity).toEqual({ mode: "pat" });
   } finally {
     resetGithubAuth();
     vi.unstubAllGlobals();

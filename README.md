@@ -135,7 +135,7 @@ integration credentials are configured, use plain `jigs up` and `jigs doctor`.
 
 
 `GITHUB_TOKEN` is the credential of the default `pat` identity, where jigs acts
-as you. `jigs init --identity app` scaffolds the other one, where jigs acts as
+as you. `jigs init --github-identity-mode app` scaffolds the other one, where jigs acts as
 a GitHub App and you can approve the pull requests it opens; it needs an App
 registration and its private key instead, and no `GITHUB_TOKEN`. Both, and the
 merge policy beside them, are in [setup](docs/setup.md).
@@ -172,19 +172,19 @@ and its agent harnesses. Bind a target repository before running it:
 ```sh
 pnpm exec jigs bind git@github.com:owner/repo.git
 pnpm exec jigs doctor # reports repository settings that need attention
-pnpm exec jigs up --restart
+pnpm exec jigs up --restart-service
 ```
 
 A **binding** maps a name to a target repo's remote URL and worktree provisioning
 settings. jigs keeps a clone per binding and creates agent worktrees from it.
 The service prepares those clones when it starts. Run `jigs up` after editing
 configuration; it rebuilds and restarts when the configuration changes.
-`--restart` can explicitly request a restart.
+`--restart-service` can explicitly request a restart.
 
 `jigs bind` edits a literal `bindings` object in `jigs.config.ts` using the
-TypeScript syntax tree. Without `--name`, an existing binding with the exact
+TypeScript syntax tree. Without `--binding-name`, an existing binding with the exact
 remote URL is reused; otherwise its name comes from the repo name. An explicit
-`--name` bypasses that match and can create another binding for the same remote.
+`--binding-name` bypasses that match and can create another binding for the same remote.
 Unsupported expressions produce a clear error before any file or webhook
 changes; those configurations can be edited manually.
 
@@ -220,7 +220,7 @@ pnpm exec jigs upgrade
 ```
 
 normalizes jigs' release-age exclusion, then bumps jigs to the latest release
-(`--to <version>` pins it) and runs `jigs up`. During that `up`, it installs
+(`--to-version <version>` pins it) and runs `jigs up`. During that `up`, it installs
 the release, regenerates `jigs.ts` through the installed CLI, then builds and
 starts the factory. Finally it typechecks the factory. Review and commit the
 regenerated `jigs.ts` and any `pnpm-workspace.yaml` normalization. Custom code

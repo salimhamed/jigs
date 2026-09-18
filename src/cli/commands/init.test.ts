@@ -351,34 +351,36 @@ test.each(["pat", "app"] as const)(
 );
 
 test("app mode is refused rather than stubbed when a fact is missing", () => {
-  expect(() => resolveIdentityOptions("app", {})).toThrow("--app-id");
-  expect(() => resolveIdentityOptions("app", { appId: "1" })).toThrow("--installation-id");
+  expect(() => resolveIdentityOptions("app", {})).toThrow("--github-app-id");
+  expect(() => resolveIdentityOptions("app", { githubAppId: "1" })).toThrow(
+    "--github-app-installation-id",
+  );
   expect(() =>
     resolveIdentityOptions("app", {
-      appId: "0",
-      installationId: "2",
-      privateKey: "k.pem",
-      operator: "salimhamed",
+      githubAppId: "0",
+      githubAppInstallationId: "2",
+      githubAppPrivateKeyPath: "k.pem",
+      githubOperatorLogin: "salimhamed",
     }),
-  ).toThrow("--app-id must be a positive whole number");
+  ).toThrow("--github-app-id must be a positive whole number");
   expect(resolveIdentityOptions("pat", {})).toEqual({ mode: "pat" });
   expect(
     resolveIdentityOptions("app", {
-      appId: "4958325",
-      installationId: "162033982",
-      privateKey: "github-app.private-key.pem",
-      operator: "salimhamed",
-      coAuthor: "Salim Hamed <salim@example.com>",
+      githubAppId: "4958325",
+      githubAppInstallationId: "162033982",
+      githubAppPrivateKeyPath: "github-app.private-key.pem",
+      githubOperatorLogin: "salimhamed",
+      gitCoAuthor: "Salim Hamed <salim@example.com>",
     }),
   ).toEqual({ ...APP, coAuthor: "Salim Hamed <salim@example.com>" });
 });
 
 test("repeatable installations scaffold a loadable account map", async () => {
   const options = {
-    appId: "1",
-    privateKey: "app.pem",
-    operator: "human",
-    installation: ["some-org=10", "Other=20"],
+    githubAppId: "1",
+    githubAppPrivateKeyPath: "app.pem",
+    githubOperatorLogin: "human",
+    githubAppInstallation: ["some-org=10", "Other=20"],
   };
   const identity = resolveIdentityOptions("app", options);
   expect(identity).toMatchObject({ installations: { "some-org": 10, Other: 20 } });
@@ -388,13 +390,13 @@ test("repeatable installations scaffold a loadable account map", async () => {
     parseFactoryConfig({ service: { dashboardPort: 9090 }, ...scaffoldedConfig(dir) }).github
       .identities,
   ).toEqual([identity]);
-  expect(() => resolveIdentityOptions("app", { ...options, installationId: "30" })).toThrow(
-    "exactly one",
-  );
   expect(() =>
-    resolveIdentityOptions("app", { ...options, installation: ["Other=1", "other=2"] }),
+    resolveIdentityOptions("app", { ...options, githubAppInstallationId: "30" }),
+  ).toThrow("exactly one");
+  expect(() =>
+    resolveIdentityOptions("app", { ...options, githubAppInstallation: ["Other=1", "other=2"] }),
   ).toThrow("duplicate");
-  expect(() => resolveIdentityOptions("app", { ...options, installation: ["bad"] })).toThrow(
-    "<account>=<id>",
-  );
+  expect(() =>
+    resolveIdentityOptions("app", { ...options, githubAppInstallation: ["bad"] }),
+  ).toThrow("<account>=<id>");
 });

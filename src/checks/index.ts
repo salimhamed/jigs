@@ -92,7 +92,7 @@ function githubChecks(checkBindings = false): Check[] {
     // A configuration that cannot be read is the binding checks' diagnosis;
     // the credential is still worth checking, against what a factory that
     // states nothing would get.
-    return githubIdentityChecks({ mode: "pat" }, defaultMergePolicy(), githubProbes);
+    return githubIdentityChecks([{ mode: "pat" }], defaultMergePolicy(), githubProbes);
   }
 }
 
