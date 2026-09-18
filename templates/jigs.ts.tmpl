@@ -2,17 +2,25 @@
 // Put custom steps and bindings in steps/ and blocks/.
 
 import type { Worktree } from "@salimhamed/jigs";
-import { type AgentRequest, type ModelRequest, bindAgentSteps } from "@salimhamed/jigs/blocks/agents";
+import {
+  type AgentRequest,
+  bindAgentSteps,
+  type ModelRequest,
+} from "@salimhamed/jigs/blocks/agents";
 import { bindLinearSteps, type Halt, type TicketNote } from "@salimhamed/jigs/blocks/linear";
-import { bindPullRequestSteps, type MergePolicy, type PullRequestRef } from "@salimhamed/jigs/blocks/pull-requests";
+import {
+  bindPullRequestSteps,
+  type MergePolicy,
+  type PullRequestRef,
+} from "@salimhamed/jigs/blocks/pull-requests";
 import { bindReleaseSteps, type ReleasePolicy } from "@salimhamed/jigs/blocks/runtime";
-import type { GitHubRepoRef } from "@salimhamed/jigs/steps/pull-requests";
-import type { WorktreeRequest } from "@salimhamed/jigs/steps/workspaces";
 import * as agentsOperations from "@salimhamed/jigs/steps/agents";
 import * as gitOperations from "@salimhamed/jigs/steps/git";
 import * as linearOperations from "@salimhamed/jigs/steps/linear";
+import type { GitHubRepoRef } from "@salimhamed/jigs/steps/pull-requests";
 import * as pullRequestsOperations from "@salimhamed/jigs/steps/pull-requests";
 import * as runtimeOperations from "@salimhamed/jigs/steps/runtime";
+import type { WorktreeRequest } from "@salimhamed/jigs/steps/workspaces";
 import * as workspacesOperations from "@salimhamed/jigs/steps/workspaces";
 import { getWorkflowMetadata } from "workflow";
 

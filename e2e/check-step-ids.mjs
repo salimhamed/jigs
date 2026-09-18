@@ -397,6 +397,16 @@ async function checkScaffold(name) {
   const expectedFile = path.join(here, `expected-ids.${name}.txt`);
   console.log(`\n=== scaffold: ${name}`);
   scaffold(name);
+  // Formatting generated code must not trigger the build's exact-content drift check.
+  const generated = readFileSync(path.join(factory, "jigs.ts"), "utf8");
+  const formatted = execFileSync(
+    path.join(repo, "node_modules", ".bin", "biome"),
+    ["check", "--write", "--stdin-file-path=jigs.ts"],
+    { cwd: repo, input: generated, encoding: "utf8" },
+  );
+  if (formatted !== generated) {
+    fail("generated jigs.ts changes under Biome", "format templates/jigs.ts.tmpl as TypeScript");
+  }
   // Exercise recipe discovery and copying from the installed tarball, including
   // the documented manual registration step. Both versions use these same files.
   installFromTarball(tarballs.bumped);
