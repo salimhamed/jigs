@@ -1,3 +1,10 @@
+vi.mock("#blocks/delivery/delivery", () => ({
+  deliverChange: vi.fn(async () => ({
+    change: {} as never,
+    pr: { owner: "acme", repo: "repo", number: 1 },
+  })),
+}));
+
 // The composition the unit tests cannot see: parsing an input, choosing a
 // harness from it, and what deliverChange is actually handed. A model left
 // unset has to arrive as the chosen harness's own default, and only running
@@ -18,10 +25,6 @@ vi.mock("#jigs", async (importOriginal) => ({
     by: "human" as const,
     method: "squash" as const,
     approval: { kind: "review" as const },
-  })),
-  deliverChange: vi.fn(async () => ({
-    change: {} as never,
-    pr: { owner: "acme", repo: "repo", number: 1 },
   })),
   release: vi.fn(async () => {}),
 }));
@@ -52,16 +55,17 @@ const claim = { issueId: snapshot.id, identifier: snapshot.identifier } as Ticke
 const handoff: Handoff = { brief: "Do the thing.", snapshot, assumptions: [] };
 
 const jigs = await import("#jigs");
+const delivery = await import("#blocks/delivery/delivery");
 const { default: entry, shipInputs, shipWorkflow } = await import("./ship.ts");
 
 async function deliveredFor(inputs: Record<string, unknown>) {
-  vi.mocked(jigs.deliverChange).mockClear();
+  vi.mocked(delivery.deliverChange).mockClear();
   vi.mocked(jigs.release).mockClear();
   await shipWorkflow({
     ...shipInputs.parse({ binding: "repo", ...inputs }),
     triggerId: "ship-test",
   });
-  const options = vi.mocked(jigs.deliverChange).mock.calls[0]?.[0];
+  const options = vi.mocked(delivery.deliverChange).mock.calls[0]?.[0];
   if (options === undefined) throw new Error("deliverChange was never called");
   return options;
 }
@@ -98,7 +102,7 @@ test("a successful delivery removes merged worktrees", async () => {
 
 test("a delivery that stops short rejects without removing its worktree", async () => {
   vi.mocked(jigs.release).mockClear();
-  vi.mocked(jigs.deliverChange).mockRejectedValueOnce(new Error("stopped short"));
+  vi.mocked(delivery.deliverChange).mockRejectedValueOnce(new Error("stopped short"));
 
   await expect(
     shipWorkflow({

@@ -8,14 +8,12 @@
 // the publication type gate the doc states in prose. Every other line is the
 // doc verbatim; change one and change the other.
 
+import type { WorktreeFacts } from "@salimhamed/jigs";
+import { claude, codex, selectHarness } from "@salimhamed/jigs/agents";
+import type { HaltForHumanFn, TicketClaim } from "@salimhamed/jigs/linear";
+import type { MergePolicy, PrRef } from "@salimhamed/jigs/pull-requests";
 import { expect, test } from "vitest";
-import { claude, codex, selectHarness } from "../agent/harness-config.ts";
-import type { PrRef } from "../pull-request/gate.ts";
-import type { MergePolicy } from "../pull-request/policy.ts";
-import type { TicketClaim } from "../ticket/claim.ts";
-import type { HaltForHumanFn } from "../ticket/halt-for-human.ts";
-import type { WorktreeFacts } from "../worktree.ts";
-import type { bindDeliverySteps } from "./bind.ts";
+import type * as delivery from "./delivery.ts";
 import type {
   ApprovedChange,
   DeliveryResult,
@@ -28,7 +26,7 @@ import type {
   WorkItem,
 } from "./types.ts";
 
-type Delivery = ReturnType<typeof bindDeliverySteps>;
+type Delivery = typeof delivery;
 declare const deliverChange: Delivery["deliverChange"];
 declare const implementAndReview: Delivery["implementAndReview"];
 declare const publishApprovedChange: Delivery["publishApprovedChange"];

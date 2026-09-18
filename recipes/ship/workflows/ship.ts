@@ -1,8 +1,9 @@
 import type { WorkflowEntry, WorkflowInputs } from "@salimhamed/jigs";
 import { claude, selectHarness } from "@salimhamed/jigs/agents";
 import { z } from "zod";
+import { deliverChange } from "#blocks/delivery/delivery";
 import { acquireLinearTicket, workItemFromHandoff } from "#blocks/tickets/linear";
-import { deliverChange, provisionWorktree, release, resolveMergePolicy, reviewTicket } from "#jigs";
+import { provisionWorktree, release, resolveMergePolicy, reviewTicket } from "#jigs";
 
 // This factory's model per harness. A model input left unset takes the default
 // of the harness that was actually chosen, so naming one never drags the

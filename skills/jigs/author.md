@@ -103,26 +103,21 @@ of caller options so a call site can override them.
 
 For different durable behavior, write a named custom `"use step"` function and
 bind the appropriate module: `bindAgentSteps`, `bindLinearSteps`,
-`bindPullRequestSteps`, or `bindDeliverySteps`. Generated integration exports each
+or `bindPullRequestSteps`. Generated integration exports each
 module's dependencies for selective replacement. Keep functions workflow-side;
 never send a prompt or callback through a durable step argument.
 
-For delivery, use `deliverChange` or compose `implementAndReview`,
-`publishApprovedChange`, and `followPullRequest`. Each role takes its own
-harness and prompt. The review role keeps its own session across rounds and
-blocks only on findings it marked blocking; the rest are appended to the pull
-request description. A budget that runs out with no `onLimit` pushes the branch
-and posts a ticket note before the run ends. Each budget — `implementationReviewRounds`, `ciFixAttempts`,
-`pullRequestRevisionRounds` — carries that name on the whole operation and on
-each phase. A delivery returns its approved change and pull request only after
-merge; it throws after preserving the branch and posting the ticket note when
-it stops short. A continuation comes from `onLimit`, which is workflow-side and may suspend on a
-human, typically through `haltForHuman` on the run's ticket.
+For delivery, run `jigs recipe add ship` and register the workflow as the
+command instructs. The copied `blocks/delivery/` contains the phases, types,
+prompts and renderers; these are factory code to edit, not library exports.
+`docs/delivery.md` in the jigs repository describes this recipe's graph, budgets
+and compiling examples. Read it when changing the ship process. Keep factory
+prompt overrides beside their callers.
 
-`docs/delivery.md` in the jigs repository holds the delivery graph, what each
-budget buys, and compiling examples of all of this. Read it before writing
-delivery configuration instead of reconstructing the shape from memory. Keep
-factory prompt overrides beside their callers.
+Extract a shipped block only when both a recipe and at least one concrete
+prototype use the same mechanism. Name both callers; single-caller composition
+stays in the recipe. Reuse existing blocks for comment scoping and agent-session
+rebuilding rather than duplicating their mechanics.
 
 ## Marker convention for bespoke pull request workflows
 
@@ -150,7 +145,7 @@ the wake rather than the run, so the next wake reposts what is still
 unanswered. A workflow that only reads a pull request must
 not call `pullRequestGate`: the `github:pr:` hook is an exclusive writer claim
 and a second holder fails. Read on a schedule with the snapshot step instead,
-under a scope of your own, and jigs' delivery comments will read as neither your
+under a scope of your own, and the ship recipe's comments will read as neither your
 feedback nor your completed work.
 
 ## Configuration and schedules

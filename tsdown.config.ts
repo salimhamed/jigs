@@ -12,7 +12,6 @@ export default defineConfig({
     "blocks/agent/index": "src/blocks/agent/index.ts",
     "blocks/ticket/index": "src/blocks/ticket/index.ts",
     "blocks/pull-request/index": "src/blocks/pull-request/index.ts",
-    "blocks/delivery/index": "src/blocks/delivery/index.ts",
     app: "src/service/app.ts",
     build: "src/service/build.ts",
     nitro: "src/service/nitro.ts",

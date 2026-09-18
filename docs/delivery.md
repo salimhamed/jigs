@@ -1,7 +1,10 @@
-# Delivery from a factory
+# The ship recipe
 
-The optional `/delivery` module implements software changes and follows their
-pull requests. **Delivery** is the whole of it: implementation, code review,
+The optional ship recipe implements software changes and follows their pull
+requests. Copy it with `jigs recipe add ship` and register its workflow as the
+command instructs. Its delivery phases, types, prompts, renderers and tests live
+in factory-owned `blocks/delivery/`; edit them directly. They are not package
+exports or generated `#jigs` bindings. **Delivery** is the whole of it: implementation, code review,
 publication, pull-request feedback, CI repair, and merge or closure, coordinated
 by `deliverChange`. The **review loop** is the narrower thing `implementAndReview`
 coordinates: implementation and code review repeated until approval or an
@@ -270,7 +273,7 @@ shows a run parked this way, and the operator answers it by replying to the
 comment — no separate console, and no second run.
 
 ```ts
-import type { LimitReached } from "@salimhamed/jigs/delivery";
+import type { LimitReached } from "#blocks/delivery/types";
 import type { TicketClaim } from "@salimhamed/jigs/linear";
 import { haltForHuman } from "#jigs";
 
@@ -311,7 +314,8 @@ file reaches at the same root-anchored specifier:
 
 ```ts
 import { claude, codex } from "@salimhamed/jigs/agents";
-import { deliverChange, resolveMergePolicy } from "#jigs";
+import { deliverChange } from "#blocks/delivery/delivery";
+import { resolveMergePolicy } from "#jigs";
 
 const result = await deliverChange({
   task,
@@ -336,7 +340,8 @@ other's default model along:
 
 ```ts
 import { claude, codex, selectHarness } from "@salimhamed/jigs/agents";
-import { deliverChange, resolveMergePolicy } from "#jigs";
+import { deliverChange } from "#blocks/delivery/delivery";
+import { resolveMergePolicy } from "#jigs";
 
 const defaultModels = { claude: "opus", codex: "gpt-5.6-sol" };
 
@@ -394,7 +399,7 @@ have sent for this attempt. Await it to extend the default:
 
 ```ts
 import { claude } from "@salimhamed/jigs/agents";
-import type { ReviewPromptContext } from "@salimhamed/jigs/delivery";
+import type { ReviewPromptContext } from "#blocks/delivery/types";
 
 const review = {
   harness: claude({ model: "opus" }),
@@ -410,7 +415,7 @@ role's own context is what a replacement is written against:
 
 ```ts
 import { codex } from "@salimhamed/jigs/agents";
-import type { ImplementationPromptContext } from "@salimhamed/jigs/delivery";
+import type { ImplementationPromptContext } from "#blocks/delivery/types";
 
 const implementation = {
   harness: codex({ model: "gpt-5.6-sol" }),
@@ -447,8 +452,9 @@ result, with no explicit generic argument and no cast:
 
 ```ts
 import { claude, codex } from "@salimhamed/jigs/agents";
-import type { WorkItem } from "@salimhamed/jigs/delivery";
-import { deliverChange, resolveMergePolicy } from "#jigs";
+import type { WorkItem } from "#blocks/delivery/types";
+import { deliverChange } from "#blocks/delivery/delivery";
+import { resolveMergePolicy } from "#jigs";
 
 interface Incident extends WorkItem {
   service: string;
@@ -510,7 +516,7 @@ publication accepts an `ApprovedChange` and nothing else, so a stopped result
 cannot reach it and no cast makes it fit.
 
 ```ts
-import { followPullRequest, implementAndReview, publishApprovedChange } from "#jigs";
+import { followPullRequest, implementAndReview, publishApprovedChange } from "#blocks/delivery/delivery";
 
 const built = await implementAndReview({
   task,
@@ -540,9 +546,9 @@ return followPullRequest({
 individual durable steps internally, so completed operations remain recorded
 across a suspension between phases.
 
-For different execution behavior, use `bindDeliverySteps` with the generated
-`deliverySteps` object and replace a named operation. Keep custom bindings in
-`blocks/`; regenerate `jigs.ts` rather than editing it.
+For different execution behavior, edit `blocks/delivery/delivery.ts`. It calls
+the durable wrappers and shared blocks from `#jigs` directly. Regenerate
+`jigs.ts` when upgrading the library; recipe code remains yours.
 
 ## Generic agent workflows
 

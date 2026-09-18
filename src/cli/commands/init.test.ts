@@ -50,6 +50,7 @@ test("scaffolds a factory that can be installed and built", async () => {
       "workflows/hello.ts",
       "pnpm-workspace.yaml",
       "tsconfig.json",
+      "vitest.config.ts",
     ].sort(),
   );
   // The SDK, its World and its dashboard are peers of jigs, loaded by name

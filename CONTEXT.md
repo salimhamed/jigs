@@ -200,10 +200,9 @@ describes, not a block jigs ships.
 _Avoid_: shipping, the pipeline, the review loop (for the whole)
 
 **Review loop**:
-The part of a delivery that repeats implementation and code review until the
-review approves or the round budget runs out. Coordinated by
-`implementAndReview`. The reviewer keeps one session across the rounds, so it
-judges the change as a whole rather than afresh each time.
+The part of the ship recipe that repeats implementation and code review until the
+review approves or the round budget runs out. The reviewer retains its session
+across rounds.
 _Avoid_: build loop, PR loop, the whole delivery
 
 **Blocking finding**:
@@ -215,31 +214,24 @@ description instead of failing the round.
 _Avoid_: nit, blocker, P1
 
 **Findings ledger**:
-Every round of one review loop in order: what the reviewer found, the verdict it
-reached and how the builder answered. Recorded on the change as `review`. It is
-the durable record, and the context a reviewer is rebuilt from when its session
-is gone.
+The ordered record of the ship recipe’s review rounds: findings, verdicts and
+builder responses. It supplies context when a reviewer’s session is lost.
 _Avoid_: history, transcript, review log
 
 **Budget**:
-The number of attempts a phase is allowed before it stops or asks a human.
-Each phase has its own — `implementationReviewRounds`, `ciFixAttempts` and
-`pullRequestRevisionRounds` — under those names at every layer, and an
-`onLimit` continuation grants more only to the phase that exhausted one.
+The number of rounds or attempts a phase of the ship recipe may spend before
+stopping or asking a human. A continuation extends only the exhausted phase’s
+budget.
 _Avoid_: limit (for the number), retries, max, quota
 
 **Round**:
-One implementation attempt plus the review of what it committed, or one batch
-of pull-request feedback answered. Counts against that phase's budget.
+One implementation attempt plus its review, or one batch of pull-request
+feedback answered, in the ship recipe. Each counts against its phase’s budget.
 _Avoid_: iteration, loop, pass
 
 **Attempt**:
-One try of a phase's agent. It is the unit only where a round is a single try —
-CI repair. A change's `attempts` are tallied under the same names as the
-budgets, so `attempts.implementationReviewRounds` and
-`attempts.pullRequestRevisionRounds` count rounds and
-`attempts.ciFixAttempts` counts attempts, each cumulatively for the life of
-the delivery.
+One try by a phase’s agent in the ship recipe. CI repair counts individual
+attempts; implementation review and pull-request feedback count rounds.
 _Avoid_: retry (for the first try), run
 
 **Brief**:

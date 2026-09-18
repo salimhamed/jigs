@@ -1,14 +1,12 @@
-import type { CheckRun, PrRef, ReviewThread } from "../../providers/github.ts";
-import type * as branch from "../../steps/pull-request/branch.ts";
-import type * as pr from "../../steps/pull-request/pr.ts";
-import type { HarnessConfig } from "../agent/harness-config.ts";
-import type { AgentSession } from "../agent/result.ts";
-import type { AgentFn } from "../agent/resume-or-rebuild.ts";
-import type { PullRequestDescription } from "../builder-agent/describe-pr.ts";
-import type { GateFn } from "../pull-request/gate.ts";
-import type { MergePolicy } from "../pull-request/policy.ts";
-import type { PostTicketNote } from "../ticket/review.ts";
-import type { WorktreeFacts } from "../worktree.ts";
+import type { GateWake, PrRef } from "@salimhamed/jigs/pull-requests";
+
+type CheckRun = Extract<GateWake, { kind: "ci-red" }>["failing"][number];
+type ReviewThread = Extract<GateWake, { kind: "review-comments" }>["threads"][number];
+
+import type { WorktreeFacts } from "@salimhamed/jigs";
+import type { AgentSession, HarnessConfig } from "@salimhamed/jigs/agents";
+import type { MergePolicy } from "@salimhamed/jigs/pull-requests";
+import type { PullRequestDescription } from "./outputs.ts";
 import type { FindingResponse, ReviewFinding, ReviewRound } from "./review.ts";
 
 /**
@@ -39,7 +37,7 @@ export type AgentRoleName = "implementation" | "review" | "ciRepair" | "pullRequ
 /**
  * What every role is told, whatever its job: the work item as the factory
  * wrote it, the worktree it is checked out in, which attempt of its phase this
- * is, and the prompt jigs would have sent if the role had no callback.
+ * is, and the prompt the recipe would have sent if the role had no callback.
  */
 interface RolePromptContext<TTask extends WorkItem> {
   task: TTask;
@@ -47,7 +45,7 @@ interface RolePromptContext<TTask extends WorkItem> {
   /** Counts attempts of this role's phase; 1 on the first one. */
   attempt: number;
   /**
-   * Renders the shipped default prompt for this attempt. Await it and add to
+   * Renders the recipe’s default prompt for this attempt. Await it and add to
    * the result to extend the default; ignore it and return a string of your
    * own to replace the default entirely. Either is a first-class use.
    */
@@ -116,7 +114,7 @@ export interface DescriptionPromptContext<TTask extends WorkItem = WorkItem> {
   worktree: WorktreeFacts;
   diff: string;
   /**
-   * Renders the shipped default prompt. Await it and add to the result to
+   * Renders the recipe’s default prompt. Await it and add to the result to
    * extend the default; ignore it and return a string of your own to replace
    * the default entirely. Either is a first-class use.
    */
@@ -308,21 +306,4 @@ export interface DeliverChangeOptions<TTask extends WorkItem = WorkItem>
   merge: MergePolicy;
   /** See {@link FollowPullRequestOptions.scope}. */
   scope?: string;
-}
-
-/** Supply the factory's durable functions once, then use the delivery operations. */
-export interface DeliverySteps {
-  runAgent: AgentFn;
-  /** How a delivery tells a person it stopped. Reached by the task's `key`. */
-  postTicketNote: PostTicketNote;
-  pullRequestGate: GateFn;
-  readBranchState: typeof branch.readBranchState;
-  readWorktreeDiff: typeof branch.readWorktreeDiff;
-  pushBranch: typeof branch.pushBranch;
-  pushApprovedChange: typeof branch.pushApprovedChange;
-  resolveRepository: typeof pr.resolveRepository;
-  openPullRequest: typeof pr.openPullRequest;
-  commentOnPullRequest: typeof pr.commentOnPullRequest;
-  replyToPullRequestReviewThread: typeof pr.replyToPullRequestReviewThread;
-  mergePullRequest: typeof pr.mergePullRequest;
 }
