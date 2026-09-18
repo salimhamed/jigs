@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.35.0](https://github.com/salimhamed/jigs/compare/jigs-v0.34.0...jigs-v0.35.0) (2026-09-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* adopt the renamed public API and regenerate factory integration; executeModel replaces the executeModelRequest durable step address.
+
+### Features
+
+* align public API names across topics ([#272](https://github.com/salimhamed/jigs/issues/272)) ([a562b3d](https://github.com/salimhamed/jigs/commit/a562b3dd23bd40709bfd1ec6cfaed749a96e6398))
+
 ## [0.34.0](https://github.com/salimhamed/jigs/compare/jigs-v0.33.1...jigs-v0.34.0) (2026-09-18)
 
 
