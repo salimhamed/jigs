@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.31.0](https://github.com/salimhamed/jigs/compare/jigs-v0.30.1...jigs-v0.31.0) (2026-09-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* Replace removeMergedRunWorktrees with release and finish or cancel affected active runs before deploying the renamed durable steps.
+
+### Features
+
+* add explicit policy-driven release of run resources ([#262](https://github.com/salimhamed/jigs/issues/262)) ([bb1ddeb](https://github.com/salimhamed/jigs/commit/bb1ddeb102538cf876bfeaaf4cf0630d19c39a10))
+
 ## [0.30.1](https://github.com/salimhamed/jigs/compare/jigs-v0.30.0...jigs-v0.30.1) (2026-09-18)
 
 
