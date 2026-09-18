@@ -29,7 +29,8 @@ export async function readChange(worktreePath: string, base: string): Promise<Ch
       [
         "log",
         `--max-count=${MAX_CHANGE_COMMITS + 1}`,
-        "--format=%H%x00%s",
+        "-z",
+        "--format=%H%x00%s%x00%an",
         `${baseSha}..${head}`,
         "--",
       ],
@@ -38,13 +39,15 @@ export async function readChange(worktreePath: string, base: string): Promise<Ch
   ]);
   const files = parseNameStatus(names);
   const counts = new Map(parseNumstat(stats).map((file) => [file.path, file]));
-  const commits =
-    log === ""
-      ? []
-      : log.split("\n").map((line) => {
-          const separator = line.indexOf("\0");
-          return { sha: line.slice(0, separator), subject: line.slice(separator + 1) };
-        });
+  const fields = log.split("\0");
+  const commits: ChangeSummary["commits"] = [];
+  for (let i = 0; i < fields.length - 1; i += 3) {
+    commits.push({
+      sha: fields[i] ?? "",
+      subject: fields[i + 1] ?? "",
+      authorName: fields[i + 2] ?? "",
+    });
+  }
   return {
     base: baseSha,
     head,

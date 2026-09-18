@@ -66,6 +66,33 @@ test("reads resolved commits, all subjects, statuses, binary counts and rename p
   });
 });
 
+test("reads raw author names independently of committers across multiple commits", async () => {
+  const dir = await repo();
+  const base = await git(["rev-parse", "HEAD"], dir);
+  await writeFile(
+    path.join(dir, ".mailmap"),
+    "Mapped Name <mapped@example.com> José da Silva <jose@example.com>\n",
+  );
+  await git(["config", "log.mailmap", "true"], dir);
+  await git(
+    ["commit", "--allow-empty", "--author=José da Silva <jose@example.com>", "-m", "first: résumé"],
+    dir,
+  );
+  const first = await git(["rev-parse", "HEAD"], dir);
+  await git(
+    ["commit", "--allow-empty", "--author=山田 太郎 <taro@example.com>", "-m", "second: 修正"],
+    dir,
+  );
+  const second = await git(["rev-parse", "HEAD"], dir);
+  expect(await git(["show", "-s", "--format=%cn", "HEAD"], dir)).toBe("Test");
+  const result = await readChange(dir, base);
+  expect(result).toMatchObject({ base, head: second, truncated: false });
+  expect(result.commits).toEqual([
+    { sha: second, subject: "second: 修正", authorName: "山田 太郎" },
+    { sha: first, subject: "first: résumé", authorName: "José da Silva" },
+  ]);
+});
+
 test("patches stay pinned after HEAD moves, use literal paths, and match diverged endpoint trees", async () => {
   const dir = await repo();
   await git(["checkout", "-b", "base"], dir);
