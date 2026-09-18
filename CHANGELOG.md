@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.1](https://github.com/salimhamed/jigs/compare/jigs-v0.30.0...jigs-v0.30.1) (2026-09-18)
+
+
+### Features
+
+* add structured Git change and patch reads ([#260](https://github.com/salimhamed/jigs/issues/260)) ([0cebe9c](https://github.com/salimhamed/jigs/commit/0cebe9c020a54a72a551957027a888a78b04146a))
+
 ## [0.30.0](https://github.com/salimhamed/jigs/compare/jigs-v0.29.9...jigs-v0.30.0) (2026-09-17)
 
 
