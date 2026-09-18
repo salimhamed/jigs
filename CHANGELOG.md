@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.35.2](https://github.com/salimhamed/jigs/compare/jigs-v0.35.1...jigs-v0.35.2) (2026-09-18)
+
+
+### Features
+
+* expose commit author names in readChange ([#277](https://github.com/salimhamed/jigs/issues/277)) ([ba75dab](https://github.com/salimhamed/jigs/commit/ba75dab3383effe9406aa5c827334564e944cb7a))
+
 ## [0.35.1](https://github.com/salimhamed/jigs/compare/jigs-v0.35.0...jigs-v0.35.1) (2026-09-18)
 
 
