@@ -1,7 +1,7 @@
-import type { ISql } from "postgres";
 import { afterEach, expect, test, vi } from "vitest";
 import type { HarnessRuntime } from "../../checks/harness-runtime.ts";
 import { JigsError } from "../../errors.ts";
+import type { RegistrySql } from "../../steps/worktree/registry.ts";
 import {
   gateOnBindingClones,
   gateOnHarnessRuntimes,
@@ -11,7 +11,7 @@ import {
 
 // Nitro never awaits a plugin, so the only thing that can stop the service is
 // the plugin itself.
-const connected = () => ({}) as ISql;
+const connected = () => ({}) as RegistrySql;
 
 afterEach(() => {
   vi.unstubAllEnvs();

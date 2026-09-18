@@ -1,12 +1,12 @@
 import { existsSync, rmdirSync, rmSync } from "node:fs";
 import path from "node:path";
-import type { Sql } from "postgres";
 import { defaultReleasePolicy } from "../../blocks/runtime/release.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { removeManagedCodexHome } from "../agent/harnesses/codex-home.ts";
 import { listRunDirectories, removeRunDirectory } from "../run-directory/index.ts";
 import { fetchOriginDefault } from "./create.ts";
 import { type OwnerState, readOwner } from "./owner.ts";
+import type { RegistrySql } from "./registry.ts";
 import { deleteWorktree, listWorktrees, setWorktreeState, type WorktreeRow } from "./registry.ts";
 import {
   applyTeardown,
@@ -140,7 +140,7 @@ export interface SweepOptions {
 // `readOwner` reaches the World, the one external system this pass consults
 // that a test cannot stand up on disk.
 export interface SweepDeps {
-  sql: Sql;
+  sql: RegistrySql;
   readOwner?: (runId: string) => Promise<OwnerState>;
 }
 

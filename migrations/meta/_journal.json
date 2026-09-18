@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1789689600000,
+      "tag": "0000_worktree_registry",
+      "breakpoints": true
+    }
+  ]
+}

@@ -9,7 +9,6 @@
 // imported from inside a step body. `WorktreeRequest` is a type, so a
 // workflow-side `import type` of it is erased and stays safe.
 
-import type { Sql } from "postgres";
 import type { WorktreeFacts } from "../../blocks/worktree.ts";
 import { resolveBinding } from "../../config/factory-config.ts";
 import { factoryRoot } from "../../config/factory-root.ts";
@@ -20,6 +19,7 @@ import { createWorktree, worktreeStatus } from "./create.ts";
 import { bindingRepoDir, worktreePath } from "./layout.ts";
 import { type OwnerState, readOwner } from "./owner.ts";
 import { provisionWorktree as provisionWorktreeFiles } from "./provision.ts";
+import type { RegistrySql } from "./registry.ts";
 import { getWorktree, setWorktreeState, upsertWorktree } from "./registry.ts";
 import { assertReusable, WorktreeOwnedError } from "./reuse.ts";
 import { registrySql } from "./sql.ts";
@@ -32,7 +32,7 @@ export interface WorktreeRequest {
 // `sql` and `readOwner` wrap the two external systems this path consults —
 // the registry and the World — and nothing else here is an option.
 export interface ProvisionWorktreeDeps {
-  sql?: Sql;
+  sql?: RegistrySql;
   readOwner?: (runId: string) => Promise<OwnerState>;
 }
 

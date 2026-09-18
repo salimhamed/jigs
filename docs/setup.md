@@ -443,7 +443,9 @@ my-factory-2286ac2a is up at http://localhost:8990 — dashboard http://localhos
 - **compose** is `docker compose up -d --wait`: this factory's own Postgres
   World, on the port `jigs init` chose.
 - **bootstrap** applies the SDK's migrations and the queue schema to that
-  World, with the URL from `.env` handed to it explicitly. Idempotent.
+  World, with the URL from `.env` handed to it explicitly, then applies jigs’
+  versioned SQL from its packaged `migrations/` directory using the separate
+  `jigs_drizzle.jigs_migrations` history. Both are idempotent.
 - **build** is `jigs build`: this factory's workflows compiled into
   `.output/server/index.mjs` with the factory's own nitro and its own copy of
   the SDK — the copy that compiles the step ids has to be the copy that

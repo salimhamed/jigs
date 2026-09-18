@@ -60,6 +60,7 @@ export interface UpDeps {
   processes?: ServiceProcesses;
   prepare?: Prepare;
   generate?: () => Promise<void>;
+  migrate?: (url: string) => Promise<void>;
   confirm?: (question: string) => Promise<boolean>;
   readyTimeoutMs?: number;
 }
@@ -112,7 +113,12 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
 
     await runner.run("compose", () => composeUp(execFile, factoryRoot, deps.out));
 
-    await runner.run("bootstrap", () => bootstrapWorld(execFile, factoryRoot, env, deps.out));
+    await runner.run("bootstrap", async () => {
+      const url = await bootstrapWorld(execFile, factoryRoot, env, deps.out);
+      const migrate =
+        deps.migrate ?? (await import("../../steps/worktree/registry.ts")).migrateRegistry;
+      await migrate(url);
+    });
 
     await runner.run("build", () =>
       buildFactoryService({
@@ -235,7 +241,7 @@ async function bootstrapWorld(
   factoryRoot: string,
   env: Record<string, string>,
   out: (line: string) => void,
-): Promise<void> {
+): Promise<string> {
   const url = env.WORKFLOW_POSTGRES_URL;
   if (url === undefined || url === "") {
     throw new JigsError(
@@ -270,6 +276,7 @@ async function bootstrapWorld(
           : new JigsError("bootstrap failed", "the output above is @workflow/world-postgres's"),
     },
   );
+  return url;
 }
 
 function redactPassword(url: string): string {

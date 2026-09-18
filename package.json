@@ -68,7 +68,8 @@
   "files": [
     "dist",
     "templates",
-    "recipes"
+    "recipes",
+    "migrations"
   ],
   "publishConfig": {
     "registry": "https://npm.pkg.github.com",
@@ -93,9 +94,10 @@
     "ai-sdk-provider-codex-cli": "2.2.1",
     "commander": "^15.0.0",
     "croner": "10.0.1",
+    "drizzle-orm": "0.45.2",
     "hono": "^4.13.4",
     "jiti": "^2.7.0",
-    "postgres": "^3.4.7",
+    "pg": "8.20.0",
     "semver": "^7.8.5",
     "smol-toml": "^1.8.0",
     "tinyglobby": "^0.2.17",
@@ -118,6 +120,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.9",
     "@types/node": "^26.2.0",
+    "@types/pg": "8.23.1",
     "@types/semver": "^7.8.0",
     "@workflow/web": "4.1.20",
     "@workflow/world-postgres": "4.3.4",

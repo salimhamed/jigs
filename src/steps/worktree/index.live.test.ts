@@ -6,6 +6,7 @@ import { provisionWorktree } from "./index.ts";
 import { bindingDir, worktreePath } from "./layout.ts";
 import {
   connectRegistry,
+  deleteWorktree,
   ensureWorktreeRegistry,
   getWorktree,
   upsertWorktree,
@@ -36,8 +37,8 @@ writeFileSync(
 );
 
 afterAll(async () => {
-  await sql`DELETE FROM jigs_worktrees WHERE path = ${testPath}`;
-  await sql.end();
+  await deleteWorktree(sql, testPath);
+  await sql.$client.end();
   vi.unstubAllEnvs();
   removeTmpDir(tmp);
 });

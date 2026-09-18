@@ -82,6 +82,7 @@ function upgrade(
       execFile: io.exec.execFile,
       processes: io.procs.processes,
       prepare: vi.fn(),
+      migrate: vi.fn(),
       readyTimeoutMs: 500,
       ...extra,
     },

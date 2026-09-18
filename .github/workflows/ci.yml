@@ -23,8 +23,7 @@ jobs:
   step-ids:
     runs-on: ubuntu-latest
     # The boot half of the check starts the built service, whose registry gate
-    # creates its tables in this database (CREATE TABLE IF NOT EXISTS, so a
-    # fresh one needs no bootstrap). The World itself is a stub; only the
+    # applies jigs migrations in this database. The World itself is a stub; only the
     # registry touches Postgres. Without the URL the check skips the boot.
     services:
       postgres:
@@ -55,6 +54,9 @@ jobs:
       # Unpinned: the check reads the minimum codex version from the provider.
       # No login needed — the check only runs `--version`.
       - run: npm install --global @anthropic-ai/claude-code @openai/codex
+      - run: pnpm exec vitest run --config vitest.live.config.ts src/steps/worktree/registry.live.test.ts
+        env:
+          WORKFLOW_POSTGRES_URL: postgres://jigs:jigs@localhost:5432/jigs
       - run: pnpm e2e
         env:
           WORKFLOW_POSTGRES_URL: postgres://jigs:jigs@localhost:5432/jigs
