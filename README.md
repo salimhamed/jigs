@@ -73,7 +73,8 @@ The factory separates its configuration, generated integration, and custom code:
 - `jigs.ts` is generated, committed integration code: named durable step wrappers
   and ready-to-call jigs blocks. Never put custom code here. `jigs generate`
   refreshes it from the installed library; `jigs build` reports stale code.
-- `workflows/ship.ts` is the starter workflow: a ticket to a merged pull request.
+- `workflows/hello.ts` creates and removes a run directory, then returns its input.
+  It needs no repository binding or integration credentials.
 - `blocks/` holds factory-specific prompts, ticket acquisition, and domain decisions.
 - The optional delivery module supplies `deliverChange` and its independently usable phases.
 - `steps/` holds any custom durable operations a factory adds.
@@ -119,10 +120,10 @@ Both workflow and step function paths and names contribute to durable IDs.
 Renames are supported breaking changes: finish or cancel affected active runs
 before deploying them. Ordinary library version bumps do not change these IDs.
 
-### 4. Tokens, then up
+### 4. Start the service
 
 ```sh
-cp .env.example .env      # fill in LINEAR_API_KEY and GITHUB_TOKEN
+cp .env.example .env      # configure credentials when a workflow needs them
 pnpm install              # puts the factory's own jigs in node_modules/.bin
 pnpm exec jigs up
 ```
@@ -142,7 +143,25 @@ unchanged factory installs, migrates and restarts nothing.
 From here every `jigs` is the factory's own: `pnpm exec jigs …` (or
 `pnpm jigs …`).
 
-### 5. Bind a target repo
+### 5. Add a recipe when you want a process
+
+`jigs init` starts bare. To adopt the ship process, copy the recipe:
+
+```sh
+pnpm exec jigs recipe list
+pnpm exec jigs recipe add ship
+```
+
+The command reports created and kept files, preserving existing code. It prints
+this line to add manually under `workflows` in `jigs.config.ts`:
+
+```ts
+ship: () => import("./workflows/ship.ts"),
+```
+
+The copied workflow, tests, and Linear block become factory code. Edit them
+freely; upgrades do not overwrite them. Ship needs Linear/GitHub credentials
+and its agent harnesses. Bind a target repository before running it:
 
 ```sh
 pnpm exec jigs bind git@github.com:owner/repo.git
@@ -166,7 +185,9 @@ changes; those configurations can be edited manually.
 ### 6. Run
 
 ```sh
-pnpm exec jigs run <workflow> --input ticket=AGE-123
+pnpm exec jigs run hello --input message=hello
+# After adding ship and configuring its integrations:
+pnpm exec jigs run ship --input ticket=AGE-123 --input binding=repo
 pnpm exec jigs ps
 pnpm exec jigs logs <run>
 pnpm exec jigs watch
@@ -230,7 +251,8 @@ argument and routes it to one of four guides:
 ## Layout
 
 jigs is one root package, published as `@salimhamed/jigs`. `src/` contains
-its implementation and `templates/` contains the factory scaffold.
+its implementation, `templates/` contains the bare factory scaffold, and
+`recipes/` contains optional workflows copied into factories.
 `pnpm-workspace.yaml` holds dependency build permissions; there are no workspace members.
 
 ### Four words
@@ -274,9 +296,9 @@ process a factory builds and starts: the webhook routes, the scheduler, the
 run endpoints and the dashboard. It never runs inside a workflow at all.
 
 What goes into that sandboxed bundle is decided by the two Workflow SDK
-markers, and both live only in the factory: `"use workflow"` on each workflow,
-`"use step"` on each wrapper. No file in this repo carries either: a directive
-here would put this package's version inside every durable step id, and bumping
+markers, and both live in factory code (including copied recipes): `"use workflow"` on each workflow,
+`"use step"` on each wrapper. No library file under `src/` carries either: a directive
+in the library would put this package's version inside every durable step id, and bumping
 it would orphan parked runs. Everything between the two
 markers, jigs blocks and factory blocks alike, is plain code that gets pulled
 into the bundle because the workflow imports it — which is why a single stray
@@ -373,7 +395,7 @@ Requires Node 24 or newer and pnpm.
 pnpm install
 pnpm dev        # run the CLI from source
 pnpm check      # lint + typecheck + test + build
-pnpm e2e        # jigs init into a temp dir, install from packed tarballs, build twice, diff ids
+pnpm e2e        # bare + ship factories, packed installs, two versions each, diff ids
                 # (with WORKFLOW_POSTGRES_URL set: boot the service and stop it too)
 ```
 

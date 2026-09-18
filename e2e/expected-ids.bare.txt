@@ -1,0 +1,35 @@
+# Workflow and step ids emitted by the named scaffold (bare or ship recipe).
+# Recorded by: node e2e/check-step-ids.mjs --record
+#
+# These addresses come from the factory's named workflow and step functions.
+# Renaming a factory file or function deliberately changes its address; merely
+# upgrading the jigs library must not. Review intended renames before recording.
+step//./jigs//checkForTicketHumanReply
+step//./jigs//commentOnPullRequest
+step//./jigs//createRunDirectory
+step//./jigs//executeAgent
+step//./jigs//executeModelRequest
+step//./jigs//fetchPullRequestState
+step//./jigs//fetchTicketSnapshot
+step//./jigs//markPullRequestReady
+step//./jigs//mergePullRequest
+step//./jigs//openPullRequest
+step//./jigs//postTicketHumanInputRequest
+step//./jigs//postTicketNote
+step//./jigs//provisionWorktree
+step//./jigs//pushApprovedChange
+step//./jigs//pushBranch
+step//./jigs//readBranchState
+step//./jigs//readChange
+step//./jigs//readPatch
+step//./jigs//readWorktreeDiff
+step//./jigs//releaseRunResources
+step//./jigs//removeRunDirectory
+step//./jigs//replyToPullRequestReviewThread
+step//./jigs//resolveLinearIssue
+step//./jigs//resolveMergePolicy
+step//./jigs//resolveReleasePolicy
+step//./jigs//resolveRepository
+step//./jigs//reviewPullRequest
+step//workflow@4.8.4//fetch
+workflow//./workflows/hello//helloWorkflow

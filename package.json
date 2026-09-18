@@ -71,7 +71,8 @@
   },
   "files": [
     "dist",
-    "templates"
+    "templates",
+    "recipes"
   ],
   "publishConfig": {
     "registry": "https://npm.pkg.github.com",

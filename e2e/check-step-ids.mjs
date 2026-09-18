@@ -1,5 +1,5 @@
 // The only check that can see a broken @salimhamed/jigs packaging, and the
-// only one that compiles the factory `jigs init` scaffolds.
+// only one that compiles both the bare scaffold and the optional ship recipe.
 //
 // No jigs package carries a directive, so every durable step id is derived at
 // compile time from the factory-local path of the file that declares it — and
@@ -44,13 +44,12 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.join(here, "..");
 const cli = path.join(repo, "dist", "cli.js");
-const expectedFile = path.join(here, "expected-ids.txt");
 const jigsPackage = path.join(repo, "package.json");
 const JIGS = "@salimhamed/jigs";
 const FAKE_VERSION = "9.9.9-e2e";
 
-const HEADER = `# The workflow and step ids \`jigs build\` emits for the factory \`jigs init\`
-# scaffolds. Recorded by: node e2e/check-step-ids.mjs --record
+const HEADER = `# Workflow and step ids emitted by the named scaffold (bare or ship recipe).
+# Recorded by: node e2e/check-step-ids.mjs --record
 #
 # These addresses come from the factory's named workflow and step functions.
 # Renaming a factory file or function deliberately changes its address; merely
@@ -84,16 +83,14 @@ function pack() {
   return { jigs: into("jigs"), bumped: into(`jigs-${FAKE_VERSION}`) };
 }
 
-function scaffold() {
+function scaffold(name) {
   if (!existsSync(cli)) {
     fail(
       `no built CLI at ${cli}`,
       "pnpm build first — jigs init runs from the CLI's dist, the way a factory's does",
     );
   }
-  scratch = mkdtempSync(path.join(tmpdir(), "jigs-e2e-"));
-  tarballs = pack();
-  factory = path.join(scratch, "factory");
+  factory = path.join(scratch, name);
   mkdirSync(factory);
   execFileSync(process.execPath, [cli, "init"], {
     cwd: factory,
@@ -396,129 +393,137 @@ function reportDiff(expected, actual) {
   return { missing, unexpected };
 }
 
-console.log("\n=== scaffold: pack the package, jigs init into an empty directory");
-scaffold();
+async function checkScaffold(name) {
+  const expectedFile = path.join(here, `expected-ids.${name}.txt`);
+  console.log(`\n=== scaffold: ${name}`);
+  scaffold(name);
+  // Exercise recipe discovery and copying from the installed tarball, including
+  // the documented manual registration step. Both versions use these same files.
+  installFromTarball(tarballs.bumped);
+  if (name === "ship") {
+    run(path.join(factory, "node_modules", ".bin", "jigs"), ["recipe", "add", "ship"]);
+    const config = path.join(factory, "jigs.config.ts");
+    writeFileSync(
+      config,
+      readFileSync(config, "utf8").replace(
+        "workflows: {",
+        'workflows: {\n    ship: () => import("./workflows/ship.ts"),',
+      ),
+    );
+  }
 
-console.log("\n=== cli: the bundle a factory installs the service from");
-checkCliBundle();
+  // Bumped first so the tree is left holding a build of the real version.
+  console.log(`\n=== build 1/2: ${JIGS} at ${FAKE_VERSION}`);
+  build();
+  const bumpedIds = emittedIds();
 
-if (process.argv[2] === "--record") {
+  console.log(`\n=== build 2/2: ${JIGS} at its committed version`);
   installFromTarball(tarballs.jigs);
   build();
   const ids = emittedIds();
-  writeFileSync(expectedFile, `${HEADER}${ids.join("\n")}\n`);
-  console.log(`recorded ${ids.length} id(s) in ${expectedFile}`);
-  cleanup();
-  process.exit(0);
-}
 
-// Bumped first so the tree is left holding a build of the real version.
-console.log(`\n=== build 1/2: ${JIGS} at ${FAKE_VERSION}`);
-installFromTarball(tarballs.bumped);
-build();
-const bumpedIds = emittedIds();
+  const leaked = [...new Set(workflowBundle().match(/"node:[a-z/]+"/g) ?? [])];
+  if (leaked.length > 0) {
+    for (const builtin of leaked) console.error(`  ${builtin}`);
+    fail(
+      `the workflow bundle reaches ${leaked.length} node builtin(s)`,
+      "a wrapper's module-scope import survived the directive transform — the step-side module it names is reachable from the workflow half now",
+    );
+  }
 
-console.log(`\n=== build 2/2: ${JIGS} at its committed version`);
-installFromTarball(tarballs.jigs);
-build();
-const ids = emittedIds();
+  // The other half of the same property: workflow-side code cannot read the
+  // environment either. Reported with line context because, unlike a `"node:fs"`
+  // specifier, a bare `process.env` says nothing about which module it came from.
+  const envReads = workflowBundle()
+    .split("\n")
+    .filter((line) => line.includes("process.env"));
+  if (envReads.length > 0) {
+    for (const line of envReads.slice(0, 5)) console.error(`  ${line.trim()}`);
+    fail(
+      `the workflow bundle reads process.env in ${envReads.length} place(s)`,
+      "workflow-side code cannot read the environment — the read belongs in a step, or a step-side module crossed into a block",
+    );
+  }
 
-const leaked = [...new Set(workflowBundle().match(/"node:[a-z/]+"/g) ?? [])];
-if (leaked.length > 0) {
-  for (const builtin of leaked) console.error(`  ${builtin}`);
-  fail(
-    `the workflow bundle reaches ${leaked.length} node builtin(s)`,
-    "a wrapper's module-scope import survived the directive transform — the step-side module it names is reachable from the workflow half now",
-  );
-}
+  // The scaffold imports through its package.json `imports` map, so this build
+  // is where the map is resolved by everything that has to resolve it: tsc, the
+  // workflows pass' esbuild, nitro's bundler, and vitest below. A specifier that
+  // survives into the emitted output was never resolved — the module it names is
+  // gone, and the failure only surfaces when the code path runs in production.
+  // The entry alone is not the output: nitro splits the factory's own modules
+  // into `_chunks/`, and `_chunks/ship.mjs` is where the compiled workflow — and
+  // every `#jigs` import site in it — actually lands.
+  const scan = (files) => files.flatMap((file) => unresolvedSpecifiers(readFileSync(file, "utf8")));
 
-// The other half of the same property: workflow-side code cannot read the
-// environment either. Reported with line context because, unlike a `"node:fs"`
-// specifier, a bare `process.env` says nothing about which module it came from.
-const envReads = workflowBundle()
-  .split("\n")
-  .filter((line) => line.includes("process.env"));
-if (envReads.length > 0) {
-  for (const line of envReads.slice(0, 5)) console.error(`  ${line.trim()}`);
-  fail(
-    `the workflow bundle reads process.env in ${envReads.length} place(s)`,
-    "workflow-side code cannot read the environment — the read belongs in a step, or a step-side module crossed into a block",
-  );
-}
+  const emitted = factoryModules();
 
-// The scaffold imports through its package.json `imports` map, so this build
-// is where the map is resolved by everything that has to resolve it: tsc, the
-// workflows pass' esbuild, nitro's bundler, and vitest below. A specifier that
-// survives into the emitted output was never resolved — the module it names is
-// gone, and the failure only surfaces when the code path runs in production.
-// The entry alone is not the output: nitro splits the factory's own modules
-// into `_chunks/`, and `_chunks/ship.mjs` is where the compiled workflow — and
-// every `#jigs` import site in it — actually lands.
-const scan = (files) => files.flatMap((file) => unresolvedSpecifiers(readFileSync(file, "utf8")));
+  // A clean scan means nothing until the scan is shown to catch what it is
+  // looking for, in the place it was widened to look: a specifier planted in a
+  // chunk must come back, or every clean result below is vacuous. The plant is
+  // the one case that has to re-walk, because the sample is a file the walk
+  // above could not have seen.
+  const chunks = emitted.filter((file) => path.dirname(file).endsWith("_chunks"));
+  if (chunks.length === 0) {
+    fail(
+      "no `_chunks/` module among the emitted ones to scan",
+      "the split moved or is gone, and this scan would be reading the entry alone again — which is the hole it was widened to close",
+    );
+  }
+  const sample = path.join(path.dirname(chunks[0]), "__scan-sample.mjs");
+  writeFileSync(sample, 'import { deliverChange } from "#jigs";\n');
+  const caught = scan(factoryModules()).some((specifier) => specifier.includes("#jigs"));
+  rmSync(sample);
+  if (!caught) {
+    fail(
+      "the unresolved-specifier scan missed a planted specifier in an emitted chunk",
+      "the scan is not reading what it claims to read — fix it before trusting a clean run",
+    );
+  }
 
-const emitted = factoryModules();
+  const unresolved = [...new Set(scan(emitted))];
+  if (unresolved.length > 0) {
+    for (const specifier of unresolved) console.error(`  ${specifier}`);
+    fail(
+      `the emitted output carries ${unresolved.length} unresolved root-anchored specifier(s) across ${emitted.length} module(s)`,
+      "the factory's package.json `imports` map no longer covers them, or the bundler stopped reading it — a conditional target the workflows pass cannot match does exactly this",
+    );
+  }
 
-// A clean scan means nothing until the scan is shown to catch what it is
-// looking for, in the place it was widened to look: a specifier planted in a
-// chunk must come back, or every clean result below is vacuous. The plant is
-// the one case that has to re-walk, because the sample is a file the walk
-// above could not have seen.
-const chunks = emitted.filter((file) => path.dirname(file).endsWith("_chunks"));
-if (chunks.length === 0) {
-  fail(
-    "no `_chunks/` module among the emitted ones to scan",
-    "the split moved or is gone, and this scan would be reading the entry alone again — which is the hole it was widened to close",
-  );
-}
-const sample = path.join(path.dirname(chunks[0]), "__scan-sample.mjs");
-writeFileSync(sample, 'import { deliverChange } from "#jigs";\n');
-const caught = scan(factoryModules()).some((specifier) => specifier.includes("#jigs"));
-rmSync(sample);
-if (!caught) {
-  fail(
-    "the unresolved-specifier scan missed a planted specifier in an emitted chunk",
-    "the scan is not reading what it claims to read — fix it before trusting a clean run",
-  );
-}
+  if (process.argv[2] === "--record") {
+    writeFileSync(expectedFile, `${HEADER}${ids.join("\n")}\n`);
+    console.log(`recorded ${ids.length} id(s) in ${expectedFile}`);
+  } else {
+    const expected = readFileSync(expectedFile, "utf8")
+      .split("\n")
+      .filter((line) => line !== "" && !line.startsWith("#"));
 
-const unresolved = [...new Set(scan(emitted))];
-if (unresolved.length > 0) {
-  for (const specifier of unresolved) console.error(`  ${specifier}`);
-  fail(
-    `the emitted output carries ${unresolved.length} unresolved root-anchored specifier(s) across ${emitted.length} module(s)`,
-    "the factory's package.json `imports` map no longer covers them, or the bundler stopped reading it — a conditional target the workflows pass cannot match does exactly this",
-  );
-}
+    const drift = reportDiff(expected, ids);
+    if (drift.missing.length > 0 || drift.unexpected.length > 0) {
+      fail(
+        `the emitted step ids are not the recorded ones (${drift.missing.length} missing, ${drift.unexpected.length} unexpected)`,
+        "if the change is intended, re-record with: node e2e/check-step-ids.mjs --record",
+      );
+    }
+  }
 
-const expected = readFileSync(expectedFile, "utf8")
-  .split("\n")
-  .filter((line) => line !== "" && !line.startsWith("#"));
+  const moved = reportDiff(ids, bumpedIds);
+  if (moved.missing.length > 0 || moved.unexpected.length > 0) {
+    // Both sides of a rename, so the count is the larger side, not the sum.
+    const count = Math.max(moved.missing.length, moved.unexpected.length);
+    fail(
+      `versioning ${JIGS} moved ${count} step id(s)`,
+      "a directive is back inside the jigs package: its ids carry the package's version, and bumping it orphans every parked run",
+    );
+  }
 
-const drift = reportDiff(expected, ids);
-if (drift.missing.length > 0 || drift.unexpected.length > 0) {
-  fail(
-    `the emitted step ids are not the recorded ones (${drift.missing.length} missing, ${drift.unexpected.length} unexpected)`,
-    "if the change is intended, re-record with: node e2e/check-step-ids.mjs --record",
-  );
-}
-
-const moved = reportDiff(ids, bumpedIds);
-if (moved.missing.length > 0 || moved.unexpected.length > 0) {
-  // Both sides of a rename, so the count is the larger side, not the sum.
-  const count = Math.max(moved.missing.length, moved.unexpected.length);
-  fail(
-    `versioning ${JIGS} moved ${count} step id(s)`,
-    "a directive is back inside the jigs package: its ids carry the package's version, and bumping it orphans every parked run",
-  );
-}
-
-// Exercise policy lookup with a real compiler-stamped workflow export. Source
-// unit tests cannot prove that the compiled module retains workflowId.
-console.log("\n=== release: compiled workflow policy overrides the factory default");
-run(process.execPath, [
-  "--input-type=module",
-  "--eval",
-  `
+  // Exercise policy lookup with a real compiler-stamped workflow export. Source
+  // unit tests cannot prove that the compiled module retains workflowId.
+  if (name === "ship") {
+    console.log("\n=== release: compiled workflow policy overrides the factory default");
+    run(process.execPath, [
+      "--input-type=module",
+      "--eval",
+      `
   import assert from "node:assert/strict";
   import entry from "./.output/server/_chunks/ship.mjs";
   import { resolveReleasePolicy } from "@salimhamed/jigs/steps";
@@ -531,19 +536,32 @@ run(process.execPath, [
   );
   assert.deepEqual(policy, entry.release);
 `,
-]);
+    ]);
+  }
 
-// The scaffold's own checks, run the way a new factory runs them on day one:
-// the typecheck covers the generated entry, the workflow, and the blocks and
-// prompts scaffolded beside them, and the scaffolded tests cover the shape of
-// every id the same build emitted (the exact list is this file's business,
-// above) and what the workflow body hands delivery. Both read the scaffold
-// through its `imports` map, so this is also where tsc and vitest are held to
-// resolving it.
-console.log("\n=== scaffold: typecheck, then the scaffolded tests");
-run("pnpm", ["typecheck"]);
-run("pnpm", ["test"]);
+  // The scaffold's own checks, run the way a new factory runs them on day one:
+  // the typecheck covers the generated entry, the workflow, and the blocks and
+  // prompts scaffolded beside them, and the scaffolded tests cover the shape of
+  // every id the same build emitted (the exact list is this file's business,
+  // above) and what the workflow body hands delivery. Both read the scaffold
+  // through its `imports` map, so this is also where tsc and vitest are held to
+  // resolving it.
+  console.log("\n=== scaffold: typecheck, then the scaffolded tests");
+  run("pnpm", ["typecheck"]);
+  run("pnpm", ["test"]);
 
+  console.log(
+    `\n${name}: ${ids.length} step/workflow id(s) match ${expectedFile}, and are unchanged with ${JIGS} at ${FAKE_VERSION}`,
+  );
+}
+
+scratch = mkdtempSync(path.join(tmpdir(), "jigs-e2e-"));
+tarballs = pack();
+checkCliBundle();
+for (const name of ["bare", "ship"]) await checkScaffold(name);
+
+// Boot the recipe scaffold once: it registers hello and ship, exercising the
+// optional recipe's deferred registration as well as all runtime peers.
 const postgresUrl = process.env.WORKFLOW_POSTGRES_URL;
 if (postgresUrl === undefined || postgresUrl === "") {
   console.log(
@@ -571,9 +589,6 @@ if (postgresUrl === undefined || postgresUrl === "") {
   }
 }
 
-console.log(
-  `\n${ids.length} step/workflow id(s) match ${expectedFile}, and are unchanged with ${JIGS} at ${FAKE_VERSION}`,
-);
 cleanup();
 
 function cleanup() {

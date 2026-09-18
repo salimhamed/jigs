@@ -41,15 +41,13 @@ test("scaffolds a factory that can be installed and built", async () => {
       ".gitignore",
       ".npmrc",
       "README.md",
-      "blocks/tickets/linear.ts",
       "docker-compose.yml",
       "jigs.config.test.ts",
       "jigs.config.ts",
       "jigs.ts",
       "nitro.config.ts",
       "package.json",
-      "workflows/ship.ts",
-      "workflows/ship.test.ts",
+      "workflows/hello.ts",
       "pnpm-workspace.yaml",
       "tsconfig.json",
     ].sort(),
@@ -123,11 +121,11 @@ test("the scaffold's imports map mirrors its layout with plain .ts targets", asy
     expect(typeof target, String(target)).toBe("string");
     expect(String(target).endsWith(".ts"), String(target)).toBe(true);
   }
-  // Each mapping resolves to the real file at the path it mirrors. steps/ is
-  // the exception: factories add it, and a mapping with nothing behind it is
+  // jigs resolves immediately; factories add blocks/ and steps/ later.
+  // A mapping with nothing behind it is
   // inert — nothing resolves it, so nothing complains about it.
   expect(existsSync(path.join(dir, "jigs.ts"))).toBe(true);
-  expect(existsSync(path.join(dir, "blocks", "tickets", "linear.ts"))).toBe(true);
+  expect(existsSync(path.join(dir, "blocks", "tickets", "linear.ts"))).toBe(false);
   expect(existsSync(path.join(dir, "steps"))).toBe(false);
 });
 
@@ -140,7 +138,7 @@ test("the relative-import guard catches both import spellings", () => {
   expect('import { a } from "../jigs.ts";').toMatch(RELATIVE_PARENT_IMPORT);
   expect('const a = await import("../jigs.ts");').toMatch(RELATIVE_PARENT_IMPORT);
   expect('import { a } from "#jigs";').not.toMatch(RELATIVE_PARENT_IMPORT);
-  expect('const a = await import("./workflows/ship.ts");').not.toMatch(RELATIVE_PARENT_IMPORT);
+  expect('const a = await import("./workflows/hello.ts");').not.toMatch(RELATIVE_PARENT_IMPORT);
 });
 
 // The factory code scaffolded beside the map has to be written in it, or the
@@ -149,7 +147,7 @@ test("the scaffolded factory code imports through the root-anchored map", async 
   const dir = scaffold("kappa");
   await init(dir);
 
-  const authored = ["workflows/ship.ts", "workflows/ship.test.ts", "blocks/tickets/linear.ts"];
+  const authored = ["workflows/hello.ts"];
   for (const file of authored) {
     const source = readFileSync(path.join(dir, file), "utf8");
     expect(source, file).not.toMatch(RELATIVE_PARENT_IMPORT);
@@ -158,7 +156,7 @@ test("the scaffolded factory code imports through the root-anchored map", async 
   // The deferred loaders are registrations rather than import sites, and stay
   // relative on purpose.
   expect(readFileSync(path.join(dir, "jigs.config.ts"), "utf8")).toContain(
-    'import("./workflows/ship.ts")',
+    'import("./workflows/hello.ts")',
   );
 });
 
@@ -176,7 +174,7 @@ test("the tsconfig compiles the code this factory starts with", async () => {
 
 // Each exported "use step" function's name is half a durable step id, so the
 // scaffold's wrappers are the ids every factory's World records. e2e reads
-// them back out of a real build and diffs them against e2e/expected-ids.txt;
+// them back out of a real build and diffs them against e2e/expected-ids.ship.txt;
 // here the template is held to that same recorded list without a build.
 test("the wrappers scaffolded are the step ids this repo has recorded", async () => {
   const dir = scaffold("theta");
@@ -187,7 +185,7 @@ test("the wrappers scaffolded are the step ids this repo has recorded", async ()
     .map((match) => `step//./jigs//${match[1]}`)
     .sort();
   expect(steps).toHaveLength(27);
-  const recorded = readFileSync(path.join(packageRoot(), "e2e", "expected-ids.txt"), "utf8")
+  const recorded = readFileSync(path.join(packageRoot(), "e2e", "expected-ids.ship.txt"), "utf8")
     .split("\n")
     .filter((line) => line.startsWith("step//./jigs//"))
     .sort();
@@ -260,10 +258,10 @@ test("the next steps are printed, not run", async () => {
 
   const printed = lines.join("\n");
   expect(printed).toContain("jigs.ts is generated");
-  expect(printed).toContain("LINEAR_API_KEY and GITHUB_TOKEN");
+  expect(printed).toContain("credentials for workflows you add");
   expect(printed).toContain("jigs up");
   expect(printed).toContain("read:packages");
-  expect(printed).toContain("jigs bind");
+  expect(printed).toContain("jigs run hello");
   // `jigs up` owns the machine-touching commands now, one step at a time.
   expect(printed).not.toContain("docker compose");
   expect(printed).not.toContain("pnpm exec bootstrap");
@@ -292,7 +290,7 @@ test("the scaffold states an identity and the approval signal that matches it", 
   expect(app).toContain('approval: { kind: "review" }');
   // App mode needs no GITHUB_TOKEN, and does need the key locked down.
   expect(lines.join("\n")).toContain("chmod 600 github-app.private-key.pem");
-  expect(lines.join("\n")).not.toContain("fill in LINEAR_API_KEY and GITHUB_TOKEN");
+  expect(lines.join("\n")).toContain("the App needs no GITHUB_TOKEN");
   // The App's private key is a credential, and a scaffolded repo is a git repo.
   expect(readFileSync(path.join(appFactory, ".gitignore"), "utf8")).toContain("*.private-key.pem");
 });

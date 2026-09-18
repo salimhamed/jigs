@@ -17,6 +17,7 @@ import {
 import { showLogs } from "./commands/logs.ts";
 import { pokeRun } from "./commands/poke.ts";
 import { showRuns } from "./commands/ps.ts";
+import { addRecipe, recipeNames } from "./commands/recipe.ts";
 import { launchRun } from "./commands/run.ts";
 import { resolveServiceUrl, usesFactoryService } from "./commands/service-client.ts";
 import {
@@ -86,6 +87,20 @@ program
       out,
       identity: resolveIdentityOptions(options.identity, options),
     });
+  });
+
+const recipe = program.command("recipe").description("copy a shipped workflow into this factory");
+recipe
+  .command("list")
+  .description("list shipped recipes")
+  .action(() => {
+    for (const name of recipeNames()) out(name);
+  });
+recipe
+  .command("add <name>")
+  .description("copy a recipe, preserving existing files")
+  .action((name: string) => {
+    addRecipe(name, { cwd: process.cwd(), out });
   });
 
 program

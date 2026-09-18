@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { interpolate } from "../../blocks/interpolate.ts";
 import type { MergePolicy } from "../../blocks/pull-request/policy.ts";
 import type { GithubIdentity } from "../../config/factory-config.ts";
 import { JigsError } from "../../errors.ts";
+import { copyFiles, reportCopied } from "../copy-files.ts";
 import { locateTemplates, packageRoot, TEMPLATE_SUFFIX } from "../templates.ts";
 
 // Scaffolds infrastructure, editable factory code, and the committed generated
@@ -104,24 +105,11 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
     MERGE_EXPECTED: literal({ ...merge }, "  "),
   };
 
-  const created: string[] = [];
-  const skipped: string[] = [];
-  for (const relative of templateFiles(templates)) {
-    const destination = path.join(root, relative.slice(0, -TEMPLATE_SUFFIX.length));
-    if (existsSync(destination)) {
-      skipped.push(path.relative(root, destination));
-      continue;
-    }
-    mkdirSync(path.dirname(destination), { recursive: true });
-    writeFileSync(
-      destination,
-      interpolate(readFileSync(path.join(templates, relative), "utf8"), values),
-    );
-    created.push(path.relative(root, destination));
-  }
-
-  for (const file of created.sort()) deps.out(`created ${file}`);
-  for (const file of skipped.sort()) deps.out(`kept    ${file}`);
+  const { created, skipped } = copyFiles(templates, root, {
+    suffix: TEMPLATE_SUFFIX,
+    contents: (source) => interpolate(source, values),
+  });
+  reportCopied({ created, skipped }, deps.out);
 
   deps.out("");
   deps.out(
@@ -142,18 +130,18 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   deps.out(
     identity.mode === "app"
       ? `  chmod 600 ${identity.privateKeyPath}   # and keep it out of git`
-      : "  cp .env.example .env    # then fill in LINEAR_API_KEY and GITHUB_TOKEN",
+      : "  cp .env.example .env    # credentials for workflows you add",
   );
   if (identity.mode === "app") {
     deps.out(
-      "  cp .env.example .env    # then fill in LINEAR_API_KEY (the App needs no GITHUB_TOKEN)",
+      "  cp .env.example .env    # credentials for workflows you add (the App needs no GITHUB_TOKEN)",
     );
   }
   deps.out("  # the install reads @salimhamed/* from GitHub Packages — ~/.npmrc needs");
   deps.out("  #   //npm.pkg.github.com/:_authToken=<a token with read:packages>");
   deps.out("  jigs up                 # install, World, bootstrap, build, start, doctor");
   deps.out("  jigs doctor             # confirms the credential and prints the merge policy");
-  deps.out("  jigs bind <remote-url>  # then jigs service restart to clone it");
+  deps.out("  jigs run hello --input message=hello");
 
   return { created, skipped, ...ports };
 }
@@ -231,14 +219,6 @@ function factoryName(factoryRoot: string): string {
     );
   }
   return name;
-}
-
-function templateFiles(dir: string, prefix = ""): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const relative = path.join(prefix, entry.name);
-    if (entry.isDirectory()) return templateFiles(path.join(dir, entry.name), relative);
-    return entry.name.endsWith(TEMPLATE_SUFFIX) ? [relative] : [];
-  });
 }
 
 // Pinned to the exact version of the CLI that scaffolded it, never a range:

@@ -1,5 +1,5 @@
-import { claimTicket, type Handoff, renderSnapshot } from "@salimhamed/jigs/linear";
 import type { WorkItem } from "@salimhamed/jigs/delivery";
+import { claimTicket, type Handoff, renderSnapshot } from "@salimhamed/jigs/linear";
 import { fetchTicketSnapshot, resolveLinearIssue } from "#jigs";
 
 /** Claim a Linear ticket and read its current requirements. */

@@ -1,12 +1,13 @@
 # jigs — agent guide
 
 See `README.md` for what jigs is and the dev commands (`pnpm check` runs lint,
-typecheck, test, and build). `pnpm check` covers no workflow directive — no
-workflow lives here — so run `pnpm e2e` too: it scaffolds a factory with
-`jigs init` into a temp dir, builds it, and diffs its emitted step ids against
-`e2e/expected-ids.txt`. With `WORKFLOW_POSTGRES_URL` set it also boots the
-built service, waits for it to be ready, and requires a clean exit on SIGTERM;
-CI provides that Postgres, and without the URL the boot is skipped.
+typecheck, test, and build). `pnpm check` covers no workflow directive: library
+code has none, and recipes compile inside factories. Run `pnpm e2e` too: it
+builds a bare `jigs init` factory and one with `jigs recipe add ship` plus manual
+workflow registration. Their emitted IDs are pinned in `e2e/expected-ids.bare.txt`
+and `e2e/expected-ids.ship.txt`. With `WORKFLOW_POSTGRES_URL` set it also boots
+the recipe factory service, waits for readiness, and requires a clean exit on
+SIGTERM. CI provides Postgres; without the URL the boot is skipped.
 
 PR titles are conventional commits, enforced by CI — the squashed title is what
 release-please reads to cut a release
@@ -34,8 +35,8 @@ to keep:
   the blocks/steps line lives in `blocks/`, under the same topic. There is no
   shared types folder.
 
-No file here carries a `"use workflow"` or `"use step"` directive; both live in
-a factory ([ADR 0013](docs/adr/0013-factory-owned-steps.md)). `pnpm e2e` is
+No file under `src/` carries a `"use workflow"` or `"use step"` directive; both
+live in factory code, including the copied recipes ([ADR 0013](docs/adr/0013-factory-owned-steps.md)). `pnpm e2e` is
 what proves it, and it also scans the built workflow bundle for `node:`
 specifiers and `process.env`.
 
