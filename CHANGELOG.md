@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.1](https://github.com/salimhamed/jigs/compare/jigs-v0.33.0...jigs-v0.33.1) (2026-09-18)
+
+
+### Features
+
+* adopt versioned Drizzle migrations for the registry ([#268](https://github.com/salimhamed/jigs/issues/268)) ([94c500a](https://github.com/salimhamed/jigs/commit/94c500aceed3e2a1dedde0d7124facfc9dca5b05))
+
 ## [0.33.0](https://github.com/salimhamed/jigs/compare/jigs-v0.32.0...jigs-v0.33.0) (2026-09-18)
 
 
