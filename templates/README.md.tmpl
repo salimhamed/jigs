@@ -7,9 +7,15 @@ A [jigs](https://github.com/salimhamed/jigs) factory: workflows and the service 
 ```sh
 cp .env.example .env
 pnpm install
-pnpm exec jigs up
+pnpm exec jigs up --no-doctor
 pnpm exec jigs run hello --input message=hello
 ```
+
+For bare hello setup, `--no-doctor` skips the final doctor pass, which checks
+GitHub credentials even when the workflow does not use GitHub. Postgres and the
+service's machine prerequisites (including both agent CLIs) still apply. Once
+integration credentials are configured, use plain `jigs up` and `jigs doctor`.
+
 
 `hello` creates and removes a run directory, then returns its input. It needs no
 repository binding, Linear token, GitHub token, or agent. The service still needs

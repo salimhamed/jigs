@@ -139,8 +139,10 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   }
   deps.out("  # the install reads @salimhamed/* from GitHub Packages — ~/.npmrc needs");
   deps.out("  #   //npm.pkg.github.com/:_authToken=<a token with read:packages>");
-  deps.out("  jigs up                 # install, World, bootstrap, build, start, doctor");
-  deps.out("  jigs doctor             # confirms the credential and prints the merge policy");
+  deps.out("  jigs up --no-doctor     # bare hello needs no integration credentials");
+  deps.out(
+    "  # doctor checks GitHub credentials; use plain jigs up after configuring integrations",
+  );
   deps.out("  jigs run hello --input message=hello");
 
   return { created, skipped, ...ports };

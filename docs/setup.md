@@ -409,8 +409,14 @@ and rulesets and names the relevant GitHub settings page for every mismatch.
 
 ```sh
 pnpm install              # once: the factory's own jigs lands in node_modules/.bin
-pnpm exec jigs up
+pnpm exec jigs up --no-doctor
 ```
+
+For bare hello setup, `--no-doctor` skips the final doctor pass, which checks
+GitHub credentials even when the workflow does not use GitHub. Postgres and the
+service's machine prerequisites (including both agent CLIs) still apply. Once
+integration credentials are configured, use plain `jigs up` and `jigs doctor`.
+
 
 `jigs up` is the commands a human used to type after `jigs init`, run in
 order, each idempotent, each its own line:
@@ -425,7 +431,7 @@ ok   bootstrap (1.3s)
 ok   build (1.9s)
 ok   service (12ms)
 ok   ready (1.8s)
-ok   doctor (0.4s)
+skip doctor — --no-doctor
 my-factory-2286ac2a is up at http://localhost:8990 — dashboard http://localhost:9090
 ```
 

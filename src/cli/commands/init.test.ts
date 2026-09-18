@@ -259,7 +259,8 @@ test("the next steps are printed, not run", async () => {
   const printed = lines.join("\n");
   expect(printed).toContain("jigs.ts is generated");
   expect(printed).toContain("credentials for workflows you add");
-  expect(printed).toContain("jigs up");
+  expect(printed).toContain("jigs up --no-doctor");
+  expect(printed).toContain("doctor checks GitHub credentials");
   expect(printed).toContain("read:packages");
   expect(printed).toContain("jigs run hello");
   // `jigs up` owns the machine-touching commands now, one step at a time.
