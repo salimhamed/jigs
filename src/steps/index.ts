@@ -11,6 +11,7 @@ export {
   realDeps,
 } from "./agent/execute-agent.ts";
 export { executeModelRequest } from "./agent/execute-model-request.ts";
+export { readChange, readPatch } from "./git/change.ts";
 export {
   pushApprovedChange,
   pushBranch,

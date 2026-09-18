@@ -104,6 +104,15 @@ export {
   type ImplementResult,
   implementUntilCodeReviewApproves,
 } from "./builder-agent/implement.ts";
+export {
+  type ChangePatch,
+  type ChangeStatus,
+  type ChangeSummary,
+  type FileChange,
+  parseNameStatus,
+  parseNumstat,
+  renderChangeSummary,
+} from "./git/change.ts";
 export { interpolate } from "./interpolate.ts";
 export {
   type PostPullRequestNoteOptions,

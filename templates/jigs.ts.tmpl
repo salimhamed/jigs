@@ -141,6 +141,18 @@ export async function readWorktreeDiff(worktreePath: string, baseSha: string) {
   return steps.readWorktreeDiff(worktreePath, baseSha);
 }
 
+/** Read committed file changes and commit subjects between base and HEAD. */
+export async function readChange(worktreePath: string, base: string) {
+  "use step";
+  return steps.readChange(worktreePath, base);
+}
+
+/** Read capped patches for literal named paths between the summary's commits. */
+export async function readPatch(worktreePath: string, base: string, head: string, paths: string[]) {
+  "use step";
+  return steps.readPatch(worktreePath, base, head, paths);
+}
+
 /** Open a pull request for a branch that has already been pushed. */
 export async function openPullRequest(request: {
   repo: GithubRepoRef;

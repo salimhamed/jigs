@@ -90,6 +90,18 @@ for a reply. Their JSDoc explains when to use them. The durable wrappers use
 explicit parameter names and the library's named types; every wrapper and its
 implementation carry the same name, so `steps.executeAgent` does the work for
 `executeAgent` and `steps.openPullRequest` for `openPullRequest`.
+For committed Git changes, call `readChange(worktreePath, base)` from `#jigs`.
+It resolves `base` and `HEAD` once, compares their trees directly, and returns
+file statuses, per-file line counts, and commits reachable from head but not
+base. It returns at most 1,000 files and 1,000 commits; `truncated` means some
+results were omitted. Binary files contribute zero line counts.
+Pass the returned `base` and `head` to `readPatch(worktreePath, base, head, paths)`
+to inspect named files from that same change. Paths are literal, not globs;
+empty paths are rejected. Patch text shares a 200,000-character budget across
+files, with its own `truncated` flag. `renderChangeSummary` from
+`@salimhamed/jigs/blocks` renders the summary and displays at most 60 file rows,
+with an “and N more” tail for the remaining rows.
+
 Wrappers pass run metadata to jigs, which handles run-specific details such as
 dashboard links. Call `removeMergedRunWorktrees` only after a successful merge.
 
