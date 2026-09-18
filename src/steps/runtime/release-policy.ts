@@ -6,7 +6,7 @@ import {
 } from "../../blocks/runtime/release.ts";
 import { readFactoryConfig } from "../../config/factory-config.ts";
 import { factoryRoot } from "../../config/factory-root.ts";
-import type { NamedRunMetadata } from "../run-context.ts";
+import type { NamedRunMetadata } from "./run-context.ts";
 
 /** Match the compiled ID the SDK records, not the factory's friendly key. */
 export function workflowReleasePolicy(

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { interpolate } from "../../blocks/interpolate.ts";
-import type { MergePolicy } from "../../blocks/pull-request/policy.ts";
+import type { MergePolicy } from "../../blocks/pull-requests/policy.ts";
 import type { GithubIdentity } from "../../config/factory-config.ts";
 import { JigsError } from "../../errors.ts";
 import { copyFiles, reportCopied } from "../copy-files.ts";

@@ -3,7 +3,7 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { GithubMergePolicyProbes } from "../../checks/github-identity.ts";
 import { GithubApiError } from "../../providers/github-api.ts";
-import { bindingRepoDir } from "../../steps/worktree/layout.ts";
+import { bindingRepoDir } from "../../steps/workspaces/layout.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import { type BindDeps, bindRepo } from "./bind.ts";
 import { unbindRepo } from "./unbind.ts";

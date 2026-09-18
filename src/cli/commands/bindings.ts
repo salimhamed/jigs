@@ -2,8 +2,8 @@ import { readFactoryConfig } from "../../config/factory-config.ts";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
 import { deriveDefaultBranch, resolveRemoteUrl } from "../../providers/git.ts";
-import { hasBindingClone } from "../../steps/worktree/clone.ts";
-import { bindingRepoDir } from "../../steps/worktree/layout.ts";
+import { hasBindingClone } from "../../steps/workspaces/clone.ts";
+import { bindingRepoDir } from "../../steps/workspaces/layout.ts";
 import { formatTable } from "../table.ts";
 
 export interface BindingsDeps {

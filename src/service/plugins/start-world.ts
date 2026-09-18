@@ -1,6 +1,6 @@
 import type { HarnessKind, HarnessRuntime } from "../../checks/harness-runtime.ts";
-import type { BindingClone } from "../../steps/worktree/clone.ts";
-import type { RegistrySql } from "../../steps/worktree/registry.ts";
+import type { BindingClone } from "../../steps/workspaces/clone.ts";
+import type { RegistrySql } from "../../steps/workspaces/registry.ts";
 import { READY_PHASE, setBootPhase } from "../readiness.ts";
 import { installShutdown, onShutdown, startOwningSignals } from "../shutdown.ts";
 
@@ -71,10 +71,10 @@ export async function gateOnWorktreeRegistry(deps: RegistryGateDeps = {}): Promi
     // Opening the connection belongs inside the try: a missing or malformed
     // WORKFLOW_POSTGRES_URL throws synchronously, and that escape is the very
     // thing this gate exists to stop.
-    const resolveSql = deps.sql ?? (await import("../../steps/worktree/sql.ts")).registrySql;
+    const resolveSql = deps.sql ?? (await import("../../steps/workspaces/sql.ts")).registrySql;
     const sql = resolveSql();
     const ensure =
-      deps.ensure ?? (await import("../../steps/worktree/registry.ts")).ensureWorktreeRegistry;
+      deps.ensure ?? (await import("../../steps/workspaces/registry.ts")).ensureWorktreeRegistry;
     await ensure(sql);
   } catch (err) {
     const error = deps.error ?? ((line: string) => console.error(line));
@@ -117,7 +117,7 @@ export async function gateOnBindingClones(deps: BindingCloneGateDeps = {}): Prom
   try {
     // Inside the try: reading the factory config is itself fallible, and a
     // service that cannot tell what is bound must not start.
-    const jigs = await import("../../steps/worktree/clone.ts");
+    const jigs = await import("../../steps/workspaces/clone.ts");
     ensure = deps.ensure ?? jigs.ensureBindingClone;
     if (deps.bindings !== undefined) {
       declared = deps.bindings();

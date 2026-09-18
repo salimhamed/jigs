@@ -9,9 +9,9 @@
 // doc verbatim; change one and change the other.
 
 import type { WorktreeFacts } from "@salimhamed/jigs";
-import { claude, codex, selectHarness } from "@salimhamed/jigs/agents";
-import type { HaltForHumanFn, TicketClaim } from "@salimhamed/jigs/linear";
-import type { MergePolicy, PrRef } from "@salimhamed/jigs/pull-requests";
+import { claude, codex, selectHarness } from "@salimhamed/jigs/blocks/agents";
+import type { HaltForHumanFn, TicketClaim } from "@salimhamed/jigs/blocks/linear";
+import type { MergePolicy, PrRef } from "@salimhamed/jigs/blocks/pull-requests";
 import { expect, test } from "vitest";
 import type * as delivery from "./delivery.ts";
 import type {

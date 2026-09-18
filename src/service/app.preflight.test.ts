@@ -2,8 +2,8 @@ import { chmodSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
-import { ensureBindingClone } from "../steps/worktree/clone.ts";
-import { bindingRepoDir } from "../steps/worktree/layout.ts";
+import { ensureBindingClone } from "../steps/workspaces/clone.ts";
+import { bindingRepoDir } from "../steps/workspaces/layout.ts";
 // Real git fixtures, reached by path: they are test-only, so they stay out
 // of the package's export map.
 import {

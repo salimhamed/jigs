@@ -1,7 +1,7 @@
 import { removeBinding } from "../../config/binding-edit.ts";
 import { readFactoryConfigText, writeFactoryConfigText } from "../../config/factory-config.ts";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
-import { bindingDir } from "../../steps/worktree/layout.ts";
+import { bindingDir } from "../../steps/workspaces/layout.ts";
 
 export interface UnbindDeps {
   cwd: string;

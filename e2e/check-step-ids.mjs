@@ -526,7 +526,7 @@ async function checkScaffold(name) {
       `
   import assert from "node:assert/strict";
   import entry from "./.output/server/_chunks/ship.mjs";
-  import { resolveReleasePolicy } from "@salimhamed/jigs/steps";
+  import { resolveReleasePolicy } from "@salimhamed/jigs/steps/runtime";
   const workflowName = "workflow//./workflows/ship//shipWorkflow";
   assert.equal(entry.workflow.workflowId, workflowName);
   entry.release = { onSuccess: "keep", onFailure: "release" };

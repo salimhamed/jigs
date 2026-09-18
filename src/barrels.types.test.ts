@@ -1,6 +1,6 @@
 // The type half of what the barrels export. package.test.ts asserts the value
 // names with a runtime import, which cannot see a type at all: a `TicketRef` or
-// a `JsonValue` dropped from blocks/index.ts would pass every test in this repo
+// a `JsonValue` dropped from a topic index would pass every test in this repo
 // and break a factory on install. Here the guard is tsc —
 // `pnpm typecheck` fails when one of these names stops being exported.
 
@@ -14,51 +14,40 @@ import type {
   AgentWire,
   AskStepConfig,
   AskWire,
-  Attend,
-  CheckForTicketHumanReply,
   ClaudeHarnessConfig,
   ClaudeHarnessOptions,
   CodexHarnessConfig,
   CodexHarnessOptions,
   ExecuteAgentStep,
   ExecuteModelRequestStep,
-  GateFn,
-  GateWake,
-  Halt,
-  HaltForHumanDeps,
-  HaltForHumanFn,
-  HaltOption,
-  HaltQuestion,
-  Handoff,
   HarnessConfig,
   HarnessName,
   HarnessOptions,
-  HumanReply,
-  JsonValue,
-  MarkerKind,
-  MarkerLedger,
   McpHttpServer,
   McpProbe,
   McpServerConfig,
   McpStdioServer,
-  MergeRefusal,
-  PostPullRequestNoteOptions,
-  PostReviewAnswersOptions,
-  PostTicketHumanInputRequest,
-  PostTicketNote,
-  PrMarker,
-  PrRef,
-  PrState,
   RebuildContextPrompt,
   RebuildContextPromptInput,
   ResumeOrRebuildOptions,
   ResumeOrRebuildResult,
-  ReviewTicketOptions,
-  SnapshotComment,
-  StatusReason,
   StepResult,
   StepUsage,
-  ThreadAnswers,
+  WireJsonSchema,
+} from "./blocks/agents/index.ts";
+import type { ChangePatch, ChangeStatus, ChangeSummary, FileChange } from "./blocks/git/index.ts";
+import type { HaltOption, HaltQuestion, JsonValue } from "./blocks/human/index.ts";
+import type {
+  CheckForTicketHumanReply,
+  Halt,
+  HaltForHumanDeps,
+  HaltForHumanFn,
+  Handoff,
+  HumanReply,
+  PostTicketHumanInputRequest,
+  PostTicketNote,
+  ReviewTicketOptions,
+  SnapshotComment,
   TicketClaim,
   TicketLink,
   TicketNote,
@@ -66,20 +55,48 @@ import type {
   TicketReviewPrompt,
   TicketReviewPromptInput,
   TicketSnapshot,
-  WireJsonSchema,
-} from "./blocks/index.ts";
+} from "./blocks/linear/index.ts";
 import type {
-  ExecuteDeps,
+  Attend,
+  GateFn,
+  GateWake,
+  MarkerKind,
+  MarkerLedger,
+  MergeRefusal,
+  PostPullRequestNoteOptions,
+  PostReviewAnswersOptions,
+  PrMarker,
+  PrRef,
+  PrState,
+  StatusReason,
+  ThreadAnswers,
+} from "./blocks/pull-requests/index.ts";
+import type { ReleasePolicy, ReleaseReport, ReleaseSteps } from "./blocks/runtime/index.ts";
+import type { WorktreeFacts } from "./blocks/workspaces/index.ts";
+import type { ExecuteDeps } from "./steps/agents/index.ts";
+import type {
   LinearIssueMatch,
   NeedsHumanContext,
-  ProvisionWorktreeDeps,
   RenderNeedsHumanComment,
   RenderTicketNote,
   TicketParticipants,
-  WorktreeRequest,
-} from "./steps/index.ts";
+} from "./steps/linear/index.ts";
+import type {
+  GithubRepoRef,
+  MergeOutcome,
+  OpenedPullRequest,
+} from "./steps/pull-requests/index.ts";
+import type { ProvisionWorktreeDeps, WorktreeRequest } from "./steps/workspaces/index.ts";
 
 type BlocksTypeSurface = {
+  changePatch: ChangePatch;
+  changeStatus: ChangeStatus;
+  changeSummary: ChangeSummary;
+  fileChange: FileChange;
+  releasePolicy: ReleasePolicy;
+  releaseReport: ReleaseReport;
+  releaseSteps: ReleaseSteps;
+  worktreeFacts: WorktreeFacts;
   agentFn: AgentFn;
   agentOrHaltDeps: AgentOrHaltDeps;
   agentSession: AgentSession;
@@ -144,6 +161,9 @@ type BlocksTypeSurface = {
 };
 
 type StepsTypeSurface = {
+  githubRepoRef: GithubRepoRef;
+  mergeOutcome: MergeOutcome;
+  openedPullRequest: OpenedPullRequest;
   executeDeps: ExecuteDeps;
   linearIssueMatch: LinearIssueMatch;
   needsHumanContext: NeedsHumanContext;

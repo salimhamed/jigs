@@ -54,7 +54,7 @@ jobs:
       # Unpinned: the check reads the minimum codex version from the provider.
       # No login needed — the check only runs `--version`.
       - run: npm install --global @anthropic-ai/claude-code @openai/codex
-      - run: pnpm exec vitest run --config vitest.live.config.ts src/steps/worktree/registry.live.test.ts
+      - run: pnpm exec vitest run --config vitest.live.config.ts src/steps/workspaces/registry.live.test.ts
         env:
           WORKFLOW_POSTGRES_URL: postgres://jigs:jigs@localhost:5432/jigs
       - run: pnpm e2e

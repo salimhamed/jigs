@@ -2,7 +2,7 @@
 // queue inspection and cancellation share this one read/decode boundary.
 
 import { sql } from "drizzle-orm";
-import type { RegistrySql } from "../steps/worktree/registry.ts";
+import type { RegistrySql } from "../steps/workspaces/registry.ts";
 
 export interface DeadJobView {
   id: string;

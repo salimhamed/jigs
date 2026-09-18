@@ -7,7 +7,7 @@
 
 import { resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
-import { PR_TOKEN_PREFIX } from "../blocks/pull-request/gate.ts";
+import { PR_TOKEN_PREFIX } from "../blocks/pull-requests/gate.ts";
 import { listWorldHooks } from "./runs.ts";
 import { runsWithActiveStep } from "./stalls.ts";
 import { recordWake } from "./wake-note.ts";

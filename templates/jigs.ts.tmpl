@@ -2,41 +2,38 @@
 // Put custom steps and bindings in steps/ and blocks/.
 
 import type { WorktreeFacts } from "@salimhamed/jigs";
-import { bindAgentSteps } from "@salimhamed/jigs/agents";
-import type {
-  AgentWire,
-  AskWire,
-  Halt,
-  MergePolicy,
-  PrRef,
-  ReleasePolicy,
-  TicketNote,
-} from "@salimhamed/jigs/blocks";
-import { bindReleaseSteps } from "@salimhamed/jigs/blocks";
-import { bindLinearSteps } from "@salimhamed/jigs/linear";
-import { bindPullRequestSteps } from "@salimhamed/jigs/pull-requests";
-import type { GithubRepoRef, WorktreeRequest } from "@salimhamed/jigs/steps";
-import * as steps from "@salimhamed/jigs/steps";
+import { type AgentWire, type AskWire, bindAgentSteps } from "@salimhamed/jigs/blocks/agents";
+import { bindLinearSteps, type Halt, type TicketNote } from "@salimhamed/jigs/blocks/linear";
+import { bindPullRequestSteps, type MergePolicy, type PrRef } from "@salimhamed/jigs/blocks/pull-requests";
+import { bindReleaseSteps, type ReleasePolicy } from "@salimhamed/jigs/blocks/runtime";
+import type { GithubRepoRef } from "@salimhamed/jigs/steps/pull-requests";
+import type { WorktreeRequest } from "@salimhamed/jigs/steps/workspaces";
+import * as agentsOperations from "@salimhamed/jigs/steps/agents";
+import * as gitOperations from "@salimhamed/jigs/steps/git";
+import * as linearOperations from "@salimhamed/jigs/steps/linear";
+import * as pullRequestsOperations from "@salimhamed/jigs/steps/pull-requests";
+import * as runtimeOperations from "@salimhamed/jigs/steps/runtime";
+import * as workspacesOperations from "@salimhamed/jigs/steps/workspaces";
 import { getWorkflowMetadata } from "workflow";
 
 /** Prepare a worktree for this run, reusing it when the run resumes. */
 export async function provisionWorktree(request: WorktreeRequest): Promise<WorktreeFacts> {
   "use step";
   const metadata = getWorkflowMetadata();
-  return steps.provisionWorktree(request, metadata);
+  return workspacesOperations.provisionWorktree(request, metadata);
 }
 
 /** Release finished run resources. Never call from finally or catch: suspension throws too. */
 export async function releaseRunResources(policy: ReleasePolicy) {
   "use step";
-  return steps.releaseRunResources(policy, getWorkflowMetadata());
+  return runtimeOperations.releaseRunResources(policy, getWorkflowMetadata());
 }
 
 /** Resolve this workflow's release policy before its final successful action. */
 export async function resolveReleasePolicy() {
   "use step";
   const { default: definition } = await import("./jigs.config.ts");
-  return steps.resolveReleasePolicy(getWorkflowMetadata(), definition);
+  return runtimeOperations.resolveReleasePolicy(getWorkflowMetadata(), definition);
 }
 
 export const { release } = bindReleaseSteps({ resolveReleasePolicy, releaseRunResources });
@@ -45,27 +42,27 @@ export const { release } = bindReleaseSteps({ resolveReleasePolicy, releaseRunRe
 export async function executeAgent(request: AgentWire) {
   "use step";
   const metadata = getWorkflowMetadata();
-  return steps.executeAgent(request, metadata);
+  return agentsOperations.executeAgent(request, metadata);
 }
 
 /** Execute a model request without tools. Use askModel() to pass an output schema and parse its answer. */
 export async function executeModelRequest(request: AskWire) {
   "use step";
   const metadata = getWorkflowMetadata();
-  return steps.executeModelRequest(request, metadata);
+  return agentsOperations.executeModelRequest(request, metadata);
 }
 
 /** Post a request for human input on the ticket. Use haltForHuman() to also wait for a reply. */
 export async function postTicketHumanInputRequest(issueId: string, halt: Halt) {
   "use step";
   const metadata = getWorkflowMetadata();
-  return steps.postTicketHumanInputRequest(issueId, halt, metadata);
+  return linearOperations.postTicketHumanInputRequest(issueId, halt, metadata);
 }
 
 /** Post a note on the ticket that asks for nothing and waits for nothing. */
 export async function postTicketNote(issueId: string, note: TicketNote) {
   "use step";
-  return steps.postTicketNote(issueId, note);
+  return linearOperations.postTicketNote(issueId, note);
 }
 
 /** Look for a human reply since the last check, excluding the run's own question. */
@@ -75,63 +72,63 @@ export async function checkForTicketHumanReply(
   postedCommentId: string,
 ) {
   "use step";
-  return steps.checkForTicketHumanReply(issueId, sinceIso, postedCommentId);
+  return linearOperations.checkForTicketHumanReply(issueId, sinceIso, postedCommentId);
 }
 
 /** Read a pull request's reviews, comments, CI results, and merge state. */
 export async function fetchPullRequestState(pullRequest: PrRef) {
   "use step";
-  return steps.fetchPullRequestState(pullRequest);
+  return pullRequestsOperations.fetchPullRequestState(pullRequest);
 }
 
 /** Read the ticket's current details, comments, and related issues from Linear. */
 export async function fetchTicketSnapshot(issueId: string) {
   "use step";
-  return steps.fetchTicketSnapshot(issueId);
+  return linearOperations.fetchTicketSnapshot(issueId);
 }
 
 /** Resolve a Linear ticket identifier or issue ID before claiming it. */
 export async function resolveLinearIssue(reference: string) {
   "use step";
-  return steps.resolveLinearIssue(reference);
+  return linearOperations.resolveLinearIssue(reference);
 }
 
 /** Prepare this run's scratch directory, preserving it when the run resumes. */
 export async function createRunDirectory() {
   "use step";
   const metadata = getWorkflowMetadata();
-  return steps.createRunDirectory(metadata);
+  return runtimeOperations.createRunDirectory(metadata);
 }
 
 /** Remove this run's scratch directory after its work is complete. */
 export async function removeRunDirectory() {
   "use step";
   const metadata = getWorkflowMetadata();
-  return steps.removeRunDirectory(metadata);
+  return runtimeOperations.removeRunDirectory(metadata);
 }
 
 /** Find the GitHub repository configured for a factory binding. */
 export async function resolveRepository(binding: string) {
   "use step";
-  return steps.resolveRepository(binding);
+  return pullRequestsOperations.resolveRepository(binding);
 }
 
 /** Read the effective merge policy for a factory binding. */
 export async function resolveMergePolicy(binding: string) {
   "use step";
-  return steps.resolveMergePolicy(binding);
+  return pullRequestsOperations.resolveMergePolicy(binding);
 }
 
 /** Check commits since the base, the branch's current commit, and uncommitted changes. */
 export async function readBranchState(worktreePath: string, baseSha: string) {
   "use step";
-  return steps.readBranchState(worktreePath, baseSha);
+  return gitOperations.readBranchState(worktreePath, baseSha);
 }
 
 /** Push the worktree's branch to its remote, including any newly committed changes. */
 export async function pushBranch(worktreePath: string, branch: string) {
   "use step";
-  return steps.pushBranch(worktreePath, branch);
+  return gitOperations.pushBranch(worktreePath, branch);
 }
 
 /** Recheck approval and push only the reviewed commit, including on retries. */
@@ -141,25 +138,25 @@ export async function pushApprovedChange(
   approvedCommit: string,
 ) {
   "use step";
-  return steps.pushApprovedChange(worktreePath, branch, approvedCommit);
+  return gitOperations.pushApprovedChange(worktreePath, branch, approvedCommit);
 }
 
 /** Read committed changes since the base commit. Large diffs are truncated. */
 export async function readWorktreeDiff(worktreePath: string, baseSha: string) {
   "use step";
-  return steps.readWorktreeDiff(worktreePath, baseSha);
+  return gitOperations.readWorktreeDiff(worktreePath, baseSha);
 }
 
 /** Read committed file changes and commit subjects between base and HEAD. */
 export async function readChange(worktreePath: string, base: string) {
   "use step";
-  return steps.readChange(worktreePath, base);
+  return gitOperations.readChange(worktreePath, base);
 }
 
 /** Read capped patches for literal named paths between the summary's commits. */
 export async function readPatch(worktreePath: string, base: string, head: string, paths: string[]) {
   "use step";
-  return steps.readPatch(worktreePath, base, head, paths);
+  return gitOperations.readPatch(worktreePath, base, head, paths);
 }
 
 /** Open a pull request for a branch that has already been pushed. */
@@ -172,7 +169,7 @@ export async function openPullRequest(request: {
   draft?: boolean;
 }) {
   "use step";
-  return steps.openPullRequest(request);
+  return pullRequestsOperations.openPullRequest(request);
 }
 
 /** Reply to an existing code-review thread on a pull request. */
@@ -182,7 +179,7 @@ export async function replyToPullRequestReviewThread(
   body: string,
 ) {
   "use step";
-  return steps.replyToPullRequestReviewThread(pullRequest, rootCommentId, body);
+  return pullRequestsOperations.replyToPullRequestReviewThread(pullRequest, rootCommentId, body);
 }
 
 // One attempt: a POST whose response is lost may already have posted, and a
@@ -192,7 +189,7 @@ replyToPullRequestReviewThread.maxRetries = 0;
 /** Add a comment to the pull request's main conversation. */
 export async function commentOnPullRequest(pullRequest: PrRef, body: string) {
   "use step";
-  return steps.commentOnPullRequest(pullRequest, body);
+  return pullRequestsOperations.commentOnPullRequest(pullRequest, body);
 }
 
 // One attempt, for the reason above.
@@ -208,7 +205,7 @@ export async function reviewPullRequest(
   },
 ) {
   "use step";
-  return steps.reviewPullRequest(pullRequest, review);
+  return pullRequestsOperations.reviewPullRequest(pullRequest, review);
 }
 
 // One attempt: a lost POST response may already have posted the review.
@@ -217,7 +214,7 @@ reviewPullRequest.maxRetries = 0;
 /** Mark a draft pull request ready for review and return its current state. */
 export async function markPullRequestReady(pullRequest: PrRef) {
   "use step";
-  return steps.markPullRequestReady(pullRequest);
+  return pullRequestsOperations.markPullRequestReady(pullRequest);
 }
 
 /** Merge the pull request with the configured method, pinned to the approved head. */
@@ -227,7 +224,7 @@ export async function mergePullRequest(
   policy: MergePolicy,
 ) {
   "use step";
-  return steps.mergePullRequest(pullRequest, expectedHeadSha, policy);
+  return pullRequestsOperations.mergePullRequest(pullRequest, expectedHeadSha, policy);
 }
 
 /** Durable operations used by agent blocks. */

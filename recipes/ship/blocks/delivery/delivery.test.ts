@@ -1,18 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 
 type PrSnapshot = Awaited<
-  ReturnType<typeof import("@salimhamed/jigs/steps").fetchPullRequestState>
+  ReturnType<typeof import("@salimhamed/jigs/steps/pull-requests").fetchPullRequestState>
 >;
 type PrComment = PrSnapshot["conversationComments"][number];
 type ReviewThread = PrSnapshot["reviewThreads"][number];
 
-import type { AgentFn } from "@salimhamed/jigs/agents";
-import { unwrapAgentStep } from "@salimhamed/jigs/agents";
+import type { AgentFn } from "@salimhamed/jigs/blocks/agents";
+import { unwrapAgentStep } from "@salimhamed/jigs/blocks/agents";
 
 const resumeFailed = (detail: string) => unwrapAgentStep({ resumeFailed: detail });
 
-import type { GateWake, MergePolicy } from "@salimhamed/jigs/pull-requests";
-import { parseMarkers, pullRequestGate } from "@salimhamed/jigs/pull-requests";
+import type { GateWake, MergePolicy } from "@salimhamed/jigs/blocks/pull-requests";
+import { parseMarkers, pullRequestGate } from "@salimhamed/jigs/blocks/pull-requests";
 import * as jigs from "#jigs";
 import * as delivery from "./delivery.ts";
 import { pullRequestDescription } from "./outputs.ts";
@@ -27,8 +27,8 @@ interface DeliverySteps {
   pushApprovedChange: typeof jigs.pushApprovedChange;
   resolveRepository: typeof jigs.resolveRepository;
   openPullRequest: typeof jigs.openPullRequest;
-  commentOnPullRequest: typeof import("@salimhamed/jigs/steps").commentOnPullRequest;
-  replyToPullRequestReviewThread: typeof import("@salimhamed/jigs/steps").replyToPullRequestReviewThread;
+  commentOnPullRequest: typeof import("@salimhamed/jigs/steps/pull-requests").commentOnPullRequest;
+  replyToPullRequestReviewThread: typeof import("@salimhamed/jigs/steps/pull-requests").replyToPullRequestReviewThread;
   mergePullRequest: typeof jigs.mergePullRequest;
 }
 vi.mock("#jigs", () => ({

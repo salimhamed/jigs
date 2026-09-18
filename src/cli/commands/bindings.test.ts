@@ -1,7 +1,7 @@
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { ensureBindingClone } from "../../steps/worktree/clone.ts";
-import { bindingRepoDir } from "../../steps/worktree/layout.ts";
+import { ensureBindingClone } from "../../steps/workspaces/clone.ts";
+import { bindingRepoDir } from "../../steps/workspaces/layout.ts";
 import {
   git,
   makeFactoryRepo,

@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import type { HarnessRuntime } from "../../checks/harness-runtime.ts";
 import { JigsError } from "../../errors.ts";
-import type { RegistrySql } from "../../steps/worktree/registry.ts";
+import type { RegistrySql } from "../../steps/workspaces/registry.ts";
 import {
   gateOnBindingClones,
   gateOnHarnessRuntimes,

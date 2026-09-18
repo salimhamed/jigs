@@ -9,7 +9,7 @@ vi.mock("#blocks/delivery/delivery", () => ({
 // harness from it, and what deliverChange is actually handed. A model left
 // unset has to arrive as the chosen harness's own default, and only running
 // the workflow body against mocked durable steps shows that it does.
-import type { Handoff, TicketClaim, TicketSnapshot } from "@salimhamed/jigs/linear";
+import type { Handoff, TicketClaim, TicketSnapshot } from "@salimhamed/jigs/blocks/linear";
 import { expect, test, vi } from "vitest";
 
 vi.mock("#jigs", async (importOriginal) => ({

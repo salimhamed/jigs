@@ -7,8 +7,8 @@ import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
 import type { Factory } from "../blocks/factory.ts";
-import { ensureWorktreeRegistry } from "../steps/worktree/registry.ts";
-import { registrySql } from "../steps/worktree/sql.ts";
+import { ensureWorktreeRegistry } from "../steps/workspaces/registry.ts";
+import { registrySql } from "../steps/workspaces/sql.ts";
 import { createApp } from "./app.ts";
 
 const adminUrl = new URL(

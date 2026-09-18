@@ -122,7 +122,8 @@ workflow bundle because the workflow imports it.
 Three things, and none of them is a lint rule.
 
 1. The folders, which make a wrong import visible in a diff.
-2. The exports map, which points `./blocks` and `./steps` at those folders, so
+2. The exports map (now kind-then-topic under ADR 0020; the catch-all paths
+   below describe the original decision), which points `./blocks` and `./steps` at those folders, so
    a factory cannot reach a step implementation through the blocks path.
 3. `pnpm e2e`, which builds the scaffolded factory and scans the emitted
    workflow bundle for `node:` specifiers and for `process.env`. Either one is
@@ -134,6 +135,10 @@ costs something, which is a node built-in or an environment read reaching the
 sandbox, and it catches it whatever route the import took.
 
 ## Consequences
+
+Update: [ADR 0020](0020-blocks-recipes-and-run-resources.md) changed the export
+list to `./blocks/<topic>` and `./steps/<topic>`; the catch-all `./blocks` and
+`./steps` exports are gone. The code-kind boundary and factory-local IDs remain.
 
 - **The public surface is named by kind.** The exports map is the root,
   `./blocks`, `./steps`, and the service paths. Gone: `./checks`,
