@@ -52,7 +52,7 @@ const claim = { issueId: snapshot.id, identifier: snapshot.identifier } as Ticke
 const handoff: Handoff = { brief: "Do the thing.", snapshot, assumptions: [] };
 
 const jigs = await import("#jigs");
-const { shipInputs, shipWorkflow } = await import("./ship.ts");
+const { default: entry, shipInputs, shipWorkflow } = await import("./ship.ts");
 
 async function deliveredFor(inputs: Record<string, unknown>) {
   vi.mocked(jigs.deliverChange).mockClear();
@@ -107,4 +107,21 @@ test("a delivery that stops short rejects without removing its worktree", async 
     }),
   ).rejects.toThrow("stopped short");
   expect(jigs.release).not.toHaveBeenCalled();
+});
+
+test("ship accepts ticket identifiers and IDs and declares its integrations", () => {
+  for (const ticket of ["ABC-123", crypto.randomUUID()]) {
+    expect(entry.inputs.parse({ ticket, binding: "repo" })).toMatchObject({ ticket });
+  }
+  expect(entry.inputs.safeParse({ ticket: "", binding: "repo" }).success).toBe(false);
+  expect(entry.requires).toEqual({
+    harnesses: ["claude", "codex"],
+    integrations: ["linear", "github"],
+  });
+});
+
+test("omitted models stay unset until the workflow chooses harness defaults", () => {
+  const parsed = shipInputs.parse({ ticket: "ABC-123", binding: "repo" });
+  expect(parsed.implementationModel).toBeUndefined();
+  expect(parsed.reviewModel).toBeUndefined();
 });

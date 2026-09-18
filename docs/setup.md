@@ -131,8 +131,9 @@ pnpm dlx @salimhamed/jigs init
 ```
 
 `jigs init` writes `jigs.config.ts`, the pinned package manifest, build and
-infrastructure settings, `workflows/ship.ts`, and the factory's ticket-source
-block. Prompts live beside the blocks that use them. Existing files are kept.
+infrastructure settings, generated `jigs.ts`, and `workflows/hello.ts`.
+Hello creates and removes a run directory, then returns its input, without
+repository bindings or integration credentials. Existing files are kept.
 
 `jigs.config.ts` combines operating settings and deferred workflow registrations:
 
@@ -142,7 +143,7 @@ import { defineFactory } from "@salimhamed/jigs";
 export default defineFactory({
   service: { port: 8990, dashboardPort: 9090 },
   bindings: {},
-  workflows: { ship: () => import("./workflows/ship.ts") },
+  workflows: { hello: () => import("./workflows/hello.ts") },
 });
 ```
 
@@ -152,10 +153,9 @@ Each workflow module exports its declaration as default:
 import type { WorkflowEntry } from "@salimhamed/jigs";
 
 export default {
-  workflow: shipWorkflow,
-  inputs: shipInputs,
-  requires: { harnesses: ["claude", "codex"] },
-} satisfies WorkflowEntry<typeof shipInputs>;
+  workflow: helloWorkflow,
+  inputs: helloInputs,
+} satisfies WorkflowEntry<typeof helloInputs>;
 ```
 
 The deferred import lets CLI commands read settings without evaluating workflows.
@@ -181,7 +181,13 @@ Renaming a workflow or durable step changes its address. Finish or cancel affect
 runs before deploying such a change. Library version bumps alone do not rename
 factory-local addresses.
 
-The starter workflow explicitly resolves and claims its Linear ticket, then calls
+To add the ship recipe, run `jigs recipe add ship`. The command preserves
+existing files and reports created/kept paths. Register it manually under
+`workflows` with the printed line:
+`ship: () => import("./workflows/ship.ts"),`. The workflow, tests, and Linear
+block are now factory source to edit freely.
+
+The ship recipe explicitly resolves and claims its Linear ticket, then calls
 the library's `deliverChange`. Set implementation and review harnesses/models
 separately — a model left unset takes the chosen harness's own default — and choose
 the `implementationReviewRounds`, `ciFixAttempts`, and `pullRequestRevisionRounds`
@@ -189,7 +195,7 @@ budgets. A delivery returns only after merge; reaching a limit preserves the
 branch, posts a ticket note and fails the run. For custom prompts,
 ticket sources, human intervention, and individual phases, see [delivery](delivery.md).
 
-The starter `ship` workflow requires a `binding` input and takes its effective
+The copied `ship` workflow requires a `binding` input and takes its effective
 merge policy from the factory default plus that binding's optional `merge.by`
 and `merge.method` overrides in `jigs.config.ts`.
 After binding a repository, you can make it the input default and add its name to
@@ -199,7 +205,7 @@ other workflows do not need Linear or GitHub credentials merely to use agents.
 ### 2. Tokens
 
 ```sh
-cp .env.example .env      # then fill in LINEAR_API_KEY / GITHUB_TOKEN
+cp .env.example .env      # set integration credentials when workflows need them
 ```
 
 `.env` is this factory's environment file: the service loads it when it
@@ -217,8 +223,8 @@ registry-less mode. (At `workflow@4.8.4` the filesystem World would not start
 from a production bundle anyway: `Invalid version string: "bundled"`.)
 
 Skipping the copy is allowed — `jigs up` copies `.env.example` itself when
-there is no `.env` and tells you which slots are empty — but a run cannot be
-created until both tokens are in.
+there is no `.env` and tells you which slots are empty. Hello can run without
+these integration tokens; ship requires them.
 
 #### Which GitHub identity jigs uses
 
@@ -403,8 +409,14 @@ and rulesets and names the relevant GitHub settings page for every mismatch.
 
 ```sh
 pnpm install              # once: the factory's own jigs lands in node_modules/.bin
-pnpm exec jigs up
+pnpm exec jigs up --no-doctor
 ```
+
+For bare hello setup, `--no-doctor` skips the final doctor pass, which checks
+GitHub credentials even when the workflow does not use GitHub. Postgres and the
+service's machine prerequisites (including both agent CLIs) still apply. Once
+integration credentials are configured, use plain `jigs up` and `jigs doctor`.
+
 
 `jigs up` is the commands a human used to type after `jigs init`, run in
 order, each idempotent, each its own line:
@@ -419,7 +431,7 @@ ok   bootstrap (1.3s)
 ok   build (1.9s)
 ok   service (12ms)
 ok   ready (1.8s)
-ok   doctor (0.4s)
+skip doctor — --no-doctor
 my-factory-2286ac2a is up at http://localhost:8990 — dashboard http://localhost:9090
 ```
 

@@ -11,7 +11,7 @@ const workflows: Factory["workflows"] = Object.fromEntries(
 );
 
 test("every entry carries a zod inputs schema and a workflow", () => {
-  expect(Object.keys(workflows)).toContain("ship");
+  expect(Object.keys(workflows)).toContain("hello");
   for (const entry of Object.values(workflows)) {
     expect(entry.inputs.safeParse).toBeTypeOf("function");
     expect(entry.workflow).toBeTypeOf("function");
@@ -24,32 +24,6 @@ test("the scaffold names its GitHub identity and merge policy outright", () => {
   // factory was scaffolded for should still be the one it declares.
   expect(factory.github).toEqual({{GITHUB_EXPECTED}});
   expect(factory.merge).toEqual({{MERGE_EXPECTED}});
-});
-
-test("ship takes a ticket in either form and declares its needs", () => {
-  const entry = workflows.ship;
-  const launch = { binding: "repo" };
-  expect(entry?.inputs.parse({ ticket: crypto.randomUUID(), ...launch })).toMatchObject({
-    ticket: expect.any(String),
-    ...launch,
-  });
-  expect(entry?.inputs.parse({ ticket: "ABC-123", ...launch })).toMatchObject({
-    ticket: "ABC-123",
-    ...launch,
-  });
-  expect(entry?.inputs.safeParse({ ticket: "", ...launch }).success).toBe(false);
-  expect(entry?.requires).toEqual({ harnesses: ["claude", "codex"], integrations: ["linear", "github"] });
-});
-
-test("an omitted model stays unset, so the chosen harness supplies its own default", () => {
-  const parsed = workflows.ship?.inputs.parse({
-    ticket: "ABC-123",
-    binding: "repo",
-    implementationHarness: "claude",
-  });
-  expect(parsed).toMatchObject({ implementationHarness: "claude" });
-  expect(parsed?.implementationModel).toBeUndefined();
-  expect(parsed?.reviewModel).toBeUndefined();
 });
 
 // Inspect compiled IDs; source imports do not determine the emitted addresses.

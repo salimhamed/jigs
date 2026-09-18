@@ -1,5 +1,5 @@
-# The workflow and step ids `jigs build` emits for the factory `jigs init`
-# scaffolds. Recorded by: node e2e/check-step-ids.mjs --record
+# Workflow and step ids emitted by the named scaffold (bare or ship recipe).
+# Recorded by: node e2e/check-step-ids.mjs --record
 #
 # These addresses come from the factory's named workflow and step functions.
 # Renaming a factory file or function deliberately changes its address; merely
@@ -32,4 +32,5 @@ step//./jigs//resolveReleasePolicy
 step//./jigs//resolveRepository
 step//./jigs//reviewPullRequest
 step//workflow@4.8.4//fetch
+workflow//./workflows/hello//helloWorkflow
 workflow//./workflows/ship//shipWorkflow

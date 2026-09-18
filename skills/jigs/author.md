@@ -2,7 +2,11 @@
 
 Work in the factory repo. Read its `jigs.config.ts`, generated `jigs.ts`, and
 existing `workflows/`, `blocks/`, and `steps/` before editing. The installed
-`node_modules/@salimhamed/jigs/templates/` is the scaffold for that version.
+`node_modules/@salimhamed/jigs/templates/` is the bare scaffold for that version; its only workflow is `hello`.
+For the ship process, run `jigs recipe add ship`, then manually add the printed
+`ship: () => import("./workflows/ship.ts"),` line to the config's `workflows` map.
+The command preserves existing files and reports created/kept paths. Recipes
+become editable factory source; upgrades only regenerate `jigs.ts`.
 
 ## Code responsibilities
 

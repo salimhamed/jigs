@@ -57,7 +57,7 @@ covers both. Changing it later is a config edit, not a re-scaffold.
 
 `jigs init` writes `jigs.config.ts`, a package manifest pinned to the CLI's
 version, build settings, Docker Compose, `.env.example`, and the factory's
-starter workflow and ticket-source block. Prompts live beside their callers.
+trivial `hello` workflow. Optional recipes are copied in separately.
 It also writes the committed generated integration, `jigs.ts`.
 
 The printed ports are derived from the factory path. Two factories can still
@@ -74,7 +74,8 @@ Finish or cancel affected runs before deploying workflow or step renames.
 cp .env.example .env
 ```
 
-Fill in `LINEAR_API_KEY` and, in `pat` mode, `GITHUB_TOKEN` before the first
+The scaffold's `hello` workflow needs no integration credentials.
+Fill in `LINEAR_API_KEY` and, in `pat` mode, `GITHUB_TOKEN` before the first ship
 run: a workflow that declares either integration cannot start a run without a
 working credential. `WORKFLOW_TARGET_WORLD` and `WORKFLOW_POSTGRES_URL` come
 filled in and should be left alone.
@@ -125,8 +126,14 @@ ok   merge policy: repo: jigs merges with squash once GitHub reports it mergeabl
 
 ```sh
 pnpm install          # once, so the factory's own jigs exists
-pnpm exec jigs up
+pnpm exec jigs up --no-doctor
 ```
+
+For bare hello setup, `--no-doctor` skips the final doctor pass, which checks
+GitHub credentials even when the workflow does not use GitHub. Postgres and the
+service's machine prerequisites (including both agent CLIs) still apply. Once
+integration credentials are configured, use plain `jigs up` and `jigs doctor`.
+
 
 `jigs up` runs, in order, each on its own line: env (copies `.env.example` if
 there is no `.env`, reports empty credential slots), install, compose (the
@@ -144,7 +151,7 @@ ok   bootstrap (1.3s)
 ok   build (1.9s)
 ok   service (12ms)
 ok   ready (1.8s)
-ok   doctor (0.4s)
+skip doctor — --no-doctor
 my-factory-2286ac2a is up at http://localhost:9010 — dashboard http://localhost:9110
 ```
 
@@ -164,7 +171,15 @@ Confirm the dashboard URL answers, then:
 jigs ps       # "no runs" is the right answer here
 ```
 
-## 4. Bind the target repos
+## 4. Add a recipe and bind its target repos
+
+The bare scaffold registers `hello`, which creates and removes a run directory
+and echoes its input: `jigs run hello --input message=hello`.
+For ticket delivery, run `jigs recipe add ship` (or `jigs recipe list` to list
+choices). It copies source and reports created/kept files without overwriting.
+Manually add its printed registration under `workflows` in `jigs.config.ts`:
+`ship: () => import("./workflows/ship.ts"),`. Configure the recipe's integration
+credentials and harnesses, then bind a target. Copied recipes are factory code.
 
 ```sh
 jigs bind git@github.com:owner/repo.git

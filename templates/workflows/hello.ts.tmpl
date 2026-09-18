@@ -1,0 +1,19 @@
+import type { WorkflowEntry, WorkflowInputs } from "@salimhamed/jigs";
+import { z } from "zod";
+import { createRunDirectory, removeRunDirectory } from "#jigs";
+
+export const helloInputs = z.object({ message: z.string() });
+
+/** Exercise durable steps without a repository, ticket source, or credentials. */
+export async function helloWorkflow(inputs: WorkflowInputs<typeof helloInputs>) {
+  "use workflow";
+
+  await createRunDirectory();
+  await removeRunDirectory();
+  return inputs;
+}
+
+export default {
+  workflow: helloWorkflow,
+  inputs: helloInputs,
+} satisfies WorkflowEntry<typeof helloInputs>;
