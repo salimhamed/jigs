@@ -31,8 +31,8 @@ test("renderer names every commit, tallies file statuses and shows per-file coun
     head: "head",
     truncated: false,
     commits: [
-      { sha: "one", subject: "remove scaffolding" },
-      { sha: "two", subject: "update readme" },
+      { sha: "one", subject: "remove scaffolding", authorName: "First Author" },
+      { sha: "two", subject: "update readme", authorName: "Second Author" },
     ],
     files: [
       { path: "old", status: "deleted", additions: 0, deletions: 47 },

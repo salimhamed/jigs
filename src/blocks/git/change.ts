@@ -12,8 +12,8 @@ export interface ChangeSummary {
   base: string;
   head: string;
   files: FileChange[];
-  /** Commits reachable from head but not base, newest first. */
-  commits: { sha: string; subject: string }[];
+  /** Commits reachable from head but not base, newest first; authorName is Git's raw author name. */
+  commits: { sha: string; subject: string; authorName: string }[];
   truncated: boolean;
 }
 
