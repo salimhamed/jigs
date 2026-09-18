@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.36.0](https://github.com/salimhamed/jigs/compare/jigs-v0.35.2...jigs-v0.36.0) (2026-09-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* Configure GitHub through `github.identities` with explicit App installation maps; singular identity and installationId configuration are removed, and CLI flags are renamed as listed above.
+
+### Features
+
+* support multi-account GitHub Apps and clarify CLI flags ([#276](https://github.com/salimhamed/jigs/issues/276)) ([6b7322d](https://github.com/salimhamed/jigs/commit/6b7322d964afa9e955c623d8ae976695003ca39c))
+
 ## [0.35.2](https://github.com/salimhamed/jigs/compare/jigs-v0.35.1...jigs-v0.35.2) (2026-09-18)
 
 
