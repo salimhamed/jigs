@@ -104,6 +104,7 @@ beforeEach(() => {
   vi.spyOn(queue, "listRunDeadJobs").mockResolvedValue([]);
   vi.spyOn(queue, "deleteRunJobs").mockResolvedValue(0);
   vi.stubEnv("WORKFLOW_LOCAL_DATA_DIR", dataDir);
+  vi.stubEnv("XDG_DATA_HOME", path.join(dataDir, "resources"));
   vi.stubEnv("WORKFLOW_TARGET_WORLD", undefined);
   vi.stubEnv("WORKFLOW_POSTGRES_URL", undefined);
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "gh-hook-secret");
