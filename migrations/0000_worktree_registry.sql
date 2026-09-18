@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS "jigs_worktrees" (
+CREATE TABLE "jigs_worktrees" (
   "path" text PRIMARY KEY,
   "branch" text NOT NULL,
   "owner_run_id" text NOT NULL,

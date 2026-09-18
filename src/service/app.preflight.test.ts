@@ -158,7 +158,7 @@ test("the undeclared-binding failure names the exact jigs bind invocation", asyn
   const body = (await (await trigger()).json()) as { failures: Failure[] };
   const binding = body.failures.find((failure) => failure.id === "binding.api");
   expect(binding?.repair).toContain("jigs bind");
-  expect(binding?.repair).toContain("--name api");
+  expect(binding?.repair).toContain("--binding-name api");
 });
 
 test("an input-driven workflow preflights the binding named by the run", async () => {

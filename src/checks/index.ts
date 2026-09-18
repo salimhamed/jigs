@@ -2,7 +2,7 @@ import type { AgentRequest } from "../blocks/agents/plan.ts";
 import { defaultMergePolicy, readFactoryConfig } from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";
 import { getAuthenticatedUser } from "../providers/github.ts";
-import { resolveGithubIdentity } from "../providers/github-auth.ts";
+import { resolveGithubIdentities } from "../providers/github-auth.ts";
 import { getViewer } from "../providers/linear.ts";
 import { awsCredentialsCheck } from "./aws.ts";
 import { bindingChecks } from "./bindings.ts";
@@ -82,7 +82,7 @@ function githubChecks(checkBindings = false): Check[] {
   try {
     const { merge, bindings } = readFactoryConfig(factoryRoot());
     return githubIdentityChecks(
-      resolveGithubIdentity(),
+      resolveGithubIdentities(),
       merge,
       githubProbes,
       process.env,
@@ -92,7 +92,7 @@ function githubChecks(checkBindings = false): Check[] {
     // A configuration that cannot be read is the binding checks' diagnosis;
     // the credential is still worth checking, against what a factory that
     // states nothing would get.
-    return githubIdentityChecks({ mode: "pat" }, defaultMergePolicy(), githubProbes);
+    return githubIdentityChecks([{ mode: "pat" }], defaultMergePolicy(), githubProbes);
   }
 }
 

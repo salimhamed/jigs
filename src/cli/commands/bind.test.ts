@@ -54,7 +54,7 @@ test("bind reuses an alias whose remote already matches", async () => {
   expect(lines).toContain(`gambit already points at ${remote}`);
 });
 
-test("--name creates a separate binding even when another name has the remote", async () => {
+test("--binding-name creates a separate binding even when another name has the remote", async () => {
   await bindRepo(API, deps(), { name: "gambit" });
 
   const result = await bindRepo(API, deps(), { name: "forge" });
@@ -64,7 +64,7 @@ test("--name creates a separate binding even when another name has the remote", 
   expect(jigsConfig()).toContain("forge:");
 });
 
-test("an invalid --name errors even when another name has the remote", async () => {
+test("an invalid --binding-name errors even when another name has the remote", async () => {
   await bindRepo(API, deps(), { name: "gambit" });
 
   await expect(bindRepo(API, deps(), { name: "bad name!" })).rejects.toThrow(
@@ -187,7 +187,7 @@ test("a name already bound to another remote is refused, hinting unbind", async 
   expect(jigsConfig()).not.toContain("api-moved");
 });
 
-test("--name overrides the derived name", async () => {
+test("--binding-name overrides the derived name", async () => {
   const result = await bindRepo(API, deps(), { name: "forge" });
   expect(result.name).toBe("forge");
   expect(jigsConfig()).toContain("forge:");
@@ -439,12 +439,14 @@ test("no GITHUB_TOKEN anywhere fails with the repair, and the retry ensures the 
   expect(lines).toContain("restart the service to clone api: jigs service restart");
 });
 
-test("the repair carries --name, so the retry lands on the same binding", async () => {
+test("the repair carries --binding-name, so the retry lands on the same binding", async () => {
   stubWebhookEnv();
   vi.stubEnv("GITHUB_TOKEN", "");
   makeIngressFactory();
   const failure = await bindRepo(API, deps(), { name: "forge" }).catch((err: unknown) => err);
-  expect((failure as { hint?: string }).hint).toContain(`re-run: jigs bind ${API} --name forge`);
+  expect((failure as { hint?: string }).hint).toContain(
+    `re-run: jigs bind ${API} --binding-name forge`,
+  );
 });
 
 test("an alias match is named in the repair command", async () => {
@@ -459,7 +461,9 @@ test("an alias match is named in the repair command", async () => {
 
   const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
 
-  expect((failure as { hint?: string }).hint).toContain(`re-run: jigs bind ${API} --name gambit`);
+  expect((failure as { hint?: string }).hint).toContain(
+    `re-run: jigs bind ${API} --binding-name gambit`,
+  );
 });
 
 test("a failure GitHub did not lay on the token does not send the operator after one", async () => {
@@ -588,4 +592,32 @@ test("unsupported bindings fail before modifying files or registering webhooks",
   await expect(bindRepo(API, deps())).rejects.toThrow("Cannot edit bindings in jigs.config.ts");
   expect(jigsConfig()).toBe(text);
   expect(fetch).not.toHaveBeenCalled();
+});
+
+test("bind refuses an uncovered account before editing config or provisioning furniture", async () => {
+  writeFileSync(
+    path.join(factory, "jigs.config.ts"),
+    `export default ${JSON.stringify({
+      service: { dashboardPort: 9090 },
+      bindings: {},
+      github: {
+        identities: [
+          {
+            mode: "app",
+            appId: 1,
+            privateKeyPath: "key.pem",
+            operator: "human",
+            installations: { other: 10 },
+          },
+        ],
+      },
+    })}`,
+  );
+  const before = jigsConfig();
+  await expect(bindRepo(API, deps())).rejects.toMatchObject({
+    message: "no GitHub App installation configured for account acme",
+    hint: expect.stringContaining('"acme": <installation-id>'),
+  });
+  expect(jigsConfig()).toBe(before);
+  expect(lines).toEqual([]);
 });

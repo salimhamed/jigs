@@ -13,7 +13,7 @@ import {
   pushCommit,
   resolveRemoteUrl,
 } from "../../providers/git.ts";
-import { githubAuth } from "../../providers/github-auth.ts";
+import { githubAuthFor } from "../../providers/github-auth.ts";
 import { parseGithubRemote } from "../../providers/github-webhook.ts";
 import { isWorktreeDirty } from "../workspaces/teardown.ts";
 
@@ -24,10 +24,10 @@ import { isWorktreeDirty } from "../workspaces/teardown.ts";
 // is redirected: the binding's clone and every fetch still use its own remote,
 // as the operator.
 async function pushTarget(worktreePath: string): Promise<PushTarget> {
-  const auth = githubAuth();
-  if (auth.identity.mode === "pat") return DEFAULT_PUSH_TARGET;
   const { url } = await resolveRemoteUrl(worktreePath);
   const ref = parseGithubRemote(url);
+  const auth = githubAuthFor(ref?.owner ?? "");
+  if (auth.identity.mode === "pat") return DEFAULT_PUSH_TARGET;
   if (ref === null) {
     throw new Error(
       `${worktreePath} pushes to ${url}, which is not a github.com remote — a GitHub App installation token can only push to GitHub`,

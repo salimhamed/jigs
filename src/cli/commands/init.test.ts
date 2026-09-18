@@ -9,7 +9,7 @@ import { initFactory, resolveIdentityOptions } from "./init.ts";
 const APP = {
   mode: "app",
   appId: 4958325,
-  installationId: 162033982,
+  installations: { salimhamed: 162033982 },
   privateKeyPath: "github-app.private-key.pem",
   operator: "salimhamed",
 } as const;
@@ -276,7 +276,7 @@ test("the scaffold states an identity and the approval signal that matches it", 
   const patFactory = scaffold("pat-factory");
   await init(patFactory);
   const pat = readFileSync(path.join(patFactory, "jigs.config.ts"), "utf8");
-  expect(pat).toContain('identity: { mode: "pat" }');
+  expect(pat).toContain('identities: [{ mode: "pat" }]');
   // jigs is the pull request's author under a personal token, and GitHub
   // refuses to let an author approve their own, so a label is the consent.
   expect(pat).toContain('approval: { kind: "label", name: "jigs:approved" }');
@@ -287,7 +287,7 @@ test("the scaffold states an identity and the approval signal that matches it", 
   await initFactory({ cwd: appFactory, out: (line) => lines.push(line), identity: APP });
   const app = readFileSync(path.join(appFactory, "jigs.config.ts"), "utf8");
   expect(app).toContain('mode: "app"');
-  expect(app).toContain("installationId: 162033982");
+  expect(app).toContain("installations: { salimhamed: 162033982 }");
   expect(app).toContain('operator: "salimhamed"');
   expect(app).toContain('approval: { kind: "review" }');
   // App mode needs no GITHUB_TOKEN, and does need the key locked down.
@@ -351,24 +351,49 @@ test.each(["pat", "app"] as const)(
 );
 
 test("app mode is refused rather than stubbed when a fact is missing", () => {
-  expect(() => resolveIdentityOptions("app", {})).toThrow("--app-id");
-  expect(() => resolveIdentityOptions("app", { appId: "1" })).toThrow("--installation-id");
+  expect(() => resolveIdentityOptions("app", {})).toThrow("--github-app-id");
+  expect(() => resolveIdentityOptions("app", { githubAppId: "1" })).toThrow(
+    "--github-app-installation",
+  );
   expect(() =>
     resolveIdentityOptions("app", {
-      appId: "0",
-      installationId: "2",
-      privateKey: "k.pem",
-      operator: "salimhamed",
+      githubAppId: "0",
+      githubAppInstallation: ["salimhamed=2"],
+      githubAppPrivateKeyPath: "k.pem",
+      githubOperatorLogin: "salimhamed",
     }),
-  ).toThrow("--app-id must be a positive whole number");
+  ).toThrow("--github-app-id must be a positive whole number");
   expect(resolveIdentityOptions("pat", {})).toEqual({ mode: "pat" });
   expect(
     resolveIdentityOptions("app", {
-      appId: "4958325",
-      installationId: "162033982",
-      privateKey: "github-app.private-key.pem",
-      operator: "salimhamed",
-      coAuthor: "Salim Hamed <salim@example.com>",
+      githubAppId: "4958325",
+      githubAppInstallation: ["salimhamed=162033982"],
+      githubAppPrivateKeyPath: "github-app.private-key.pem",
+      githubOperatorLogin: "salimhamed",
+      gitCoAuthor: "Salim Hamed <salim@example.com>",
     }),
   ).toEqual({ ...APP, coAuthor: "Salim Hamed <salim@example.com>" });
+});
+
+test("repeatable installations scaffold a loadable account map", async () => {
+  const options = {
+    githubAppId: "1",
+    githubAppPrivateKeyPath: "app.pem",
+    githubOperatorLogin: "human",
+    githubAppInstallation: ["some-org=10", "Other=20"],
+  };
+  const identity = resolveIdentityOptions("app", options);
+  expect(identity).toMatchObject({ installations: { "some-org": 10, Other: 20 } });
+  const dir = scaffold("installation-map");
+  await initFactory({ cwd: dir, out: () => {}, identity });
+  expect(
+    parseFactoryConfig({ service: { dashboardPort: 9090 }, ...scaffoldedConfig(dir) }).github
+      .identities,
+  ).toEqual([identity]);
+  expect(() =>
+    resolveIdentityOptions("app", { ...options, githubAppInstallation: ["Other=1", "other=2"] }),
+  ).toThrow("duplicate");
+  expect(() =>
+    resolveIdentityOptions("app", { ...options, githubAppInstallation: ["bad"] }),
+  ).toThrow("<account>=<id>");
 });

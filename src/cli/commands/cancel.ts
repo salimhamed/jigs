@@ -63,7 +63,7 @@ export async function cancelRun(ref: string, deps: CancelDeps): Promise<CancelRe
   deps.out(`cancelled ${result.runId}`);
   deps.out(`removed ${result.deletedJobs} remaining queue jobs`);
   for (const token of result.releasedTokens) deps.out(`released ${token}`);
-  const worktrees = result.worktrees ?? [];
+  const worktrees = result.worktrees;
   if (deps.discard === true && worktrees.length > 0) {
     await runSweep(deps, { paths: worktrees });
   } else {

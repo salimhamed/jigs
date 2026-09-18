@@ -61,7 +61,7 @@ operator's `claude` and `codex` logins, the AWS SSO cache and the git clones
 ([ADR 0017](adr/0017-single-package.md)).
 
 **Upgrading.** `jigs upgrade` in the factory: it normalizes jigs' release-age
-exclusion, then moves the jigs pin to the latest release (`--to <version>`
+exclusion, then moves the jigs pin to the latest release (`--to-version <version>`
 picks one). It runs `jigs up`, whose upgrade path installs the release,
 regenerates `jigs.ts` with that installed CLI, and builds and starts the
 factory, then runs the factory's own typecheck. This is a single command even
@@ -227,16 +227,16 @@ Skipping the copy is allowed — `jigs up` copies `.env.example` itself when
 there is no `.env` and tells you which slots are empty. Hello can run without
 these integration tokens; ship requires them.
 
-#### Which GitHub identity jigs uses
+### 2a. Which GitHub identity jigs uses
 
-`github.identity` in `jigs.config.ts` says who jigs is on GitHub. There are two
-modes, and they are chosen once, at `jigs init --identity pat|app`.
+`github.identities` in `jigs.config.ts` says who jigs is on GitHub. There are two
+modes, and they are chosen once, at `jigs init --github-identity-mode pat|app`.
 
 **`pat` — jigs is you.** The `GITHUB_TOKEN` in `.env` is your own personal
 access token, so every pull request jigs opens has you as its author.
 
 ```ts
-github: { identity: { mode: "pat" } },
+github: { identities: [{ mode: "pat" }] },
 ```
 
 GitHub refuses to let an author approve or request changes on their own pull
@@ -252,25 +252,26 @@ approve them like anyone else's.
 
 ```ts
 github: {
-  identity: {
+  identities: [{
     mode: "app",
     appId: 4958325,
-    installationId: 162033982,
+    installations: { salimhamed: 162033982, downstreamimpact: 162665072, Junglescout: 162664894 },
     privateKeyPath: "github-app.private-key.pem",
     operator: "your-github-login",
     coAuthor: "Your Name <you@example.com>",
-  },
+  }],
 },
 ```
 
-To fill that block in — `jigs init --identity app` takes all of it on the
+To fill that block in — `jigs init --github-identity-mode app` takes all of it on the
 command line, so the scaffold loads on the first `jigs up`:
 
 ```sh
-jigs init --identity app \
-  --app-id 4958325 --installation-id 162033982 \
-  --private-key github-app.private-key.pem --operator your-github-login \
-  --co-author "Your Name <you@example.com>"
+jigs init --github-identity-mode app \
+  --github-app-id 4958325 --github-app-installation salimhamed=162033982 \
+  --github-app-installation downstreamimpact=162665072 --github-app-installation Junglescout=162664894 \
+  --github-app-private-key-path github-app.private-key.pem --github-operator-login your-github-login \
+  --git-co-author "Your Name <you@example.com>"
 ```
 
 Where each value comes from:
@@ -295,7 +296,7 @@ Where each value comes from:
    `*.private-key.pem`) and `chmod 600` it; `jigs doctor` fails on a looser
    mode, because anyone who can read it can act as the App.
 5. **Install the App** on the repos you bind (App settings → Install App). The
-   installation's URL ends in its id: that is **`installationId`**. A
+   installation's URL ends in its id: add it under the account login in **`installations`**. A
    repository admin can install an App on repos they administer as long as it
    asks for no organization permissions and org policy allows it.
 6. **`operator`** is your own GitHub login. An installation token does not
@@ -303,6 +304,38 @@ Where each value comes from:
    assigns the pull request to and names in its first body line, `Requested by
    @you`. **`coAuthor`** is optional: `Name <email>` for a `Co-authored-by`
    trailer on the merge commit. Omit it and no trailer is added.
+
+The binding's remote selects its account: the owner in
+`git@github.com:owner/repo.git`, `https://github.com/owner/repo(.git)`, or
+`ssh://git@github.com/owner/repo.git`. Account matching ignores case. Every
+GitHub binding must have a covering installation; bind, doctor and run preflight
+name an uncovered account and the `installations` entry to add.
+
+To add another organization: install the App, copy the id from the installation
+URL, add one line to `installations`, then run `jigs up`.
+
+If organizations require different Apps, add entries to the same
+`github.identities` list:
+
+```ts
+github: {
+  identities: [
+    { mode: "app", appId: 4958325, privateKeyPath: "personal.private-key.pem",
+      installations: { salimhamed: 162033982 }, operator: "salimhamed" },
+    { mode: "app", appId: 1234567, privateKeyPath: "org.private-key.pem",
+      installations: { exampleOrg: 7654321 }, operator: "salimhamed",
+      coAuthor: "Salim Hamed <salimhamed@gmail.com>" },
+  ],
+},
+```
+
+Each App has its own key, a nonempty `installations` map, operator and optional
+co-author. No two entries may claim the same account. A PAT must be the only
+entry in the list. `github.identities` is the sole configuration entry point;
+there is no singular identity form or account-independent installation shorthand.
+
+`jigs init --github-app-installation <account>=<id>` is repeatable and writes
+a one-entry `github.identities` list. Add more App entries directly in the config.
 
 In `app` mode jigs pushes over HTTPS with the installation token, supplied to
 that one `git push` and never written to `.git/config` or any log. In `pat`
@@ -452,7 +485,7 @@ my-factory-2286ac2a is up at http://localhost:8990 — dashboard http://localhos
   registers them.
 - **service** starts the service if none is running; if one is, it restarts
   it only when the built bundle differs from the one the process started from
-  (`--restart` forces it). A restart over in-flight runs asks first —
+  (`--restart-service` forces it). A restart over in-flight runs asks first —
   `--force` skips the question, and without a terminal it refuses instead.
 - **ready** waits for `/health` to report the service ready, printing each
   boot phase as it changes (`booting: cloning forge`) and watching the pid
@@ -505,7 +538,7 @@ A worktree admits one agent at a time: a second one is refused, not queued.
 ```sh
 jigs bind git@github.com:owner/repo.git
 jigs bindings
-jigs service restart      # or jigs up --restart
+jigs service restart      # or jigs up --restart-service
 ```
 
 A binding is a name in `jigs.config.ts` mapped to a target repo's **remote URL**.
@@ -513,9 +546,9 @@ jigs keeps its own bare clone per binding, at
 `~/.local/share/jigs/bindings/<factory>/<binding>/repo.git`, and cuts every
 agent worktree from it — your own checkout of the repo is not involved at all.
 Workflows name bindings; the runtime provisions worktrees from them.
-Without `--name`, bind reuses the first configured binding whose remote URL is
+Without `--binding-name`, bind reuses the first configured binding whose remote URL is
 an exact match; only an absent remote creates a repo-name-derived binding. An
-explicit `--name` bypasses remote matching and can create another binding for
+explicit `--binding-name` bypasses remote matching and can create another binding for
 the same remote.
 
 **The clones are made when the service starts**, not when a run asks for a
@@ -676,7 +709,7 @@ is too long to wait.
 jigs run <workflow> --input ticket=AGE-123
 jigs ps
 jigs logs <run>
-jigs cancel <run> [--force] [--discard]
+jigs cancel <run> [--force] [--discard-worktrees]
 jigs sweep [<path>] [--force]
 ```
 
@@ -688,7 +721,7 @@ Factories upgrading past 0.1.4 must pass the injected Linear `identifier` as
 the second argument to `claimTicket`, or adopt the `ticket=` input shown above.
 
 Every verb dials the service of the factory you are standing in;
-`--service <url>` / `JIGS_SERVICE_URL` overrides that. `--input` values are
+`--service-url <url>` / `JIGS_SERVICE_URL` overrides that. `--input` values are
 read as JSON with the raw string as the fallback, so `askHuman=true` is a
 boolean and `AGE-123` is a string; a value the workflow's `inputs` schema
 rejects fails in the CLI, before any run is created.
@@ -703,7 +736,7 @@ back for: cancelling releases every hook it claimed, so the same ticket can be
 launched again. A suspended run cancels silently — no process is involved —
 while a run still in flight is confirmed first, and `--force` skips that
 prompt when there is no terminal to answer it. By default, cancel names the
-worktrees it leaves behind. `--discard` also removes that run's worktrees after
+worktrees it leaves behind. `--discard-worktrees` also removes that run's worktrees after
 the cancellation succeeds; branches containing unmerged commits are kept.
 
 A workflow requests release as its last successful action with `await release()`.

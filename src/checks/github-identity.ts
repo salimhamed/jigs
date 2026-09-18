@@ -9,6 +9,7 @@ import {
   type BindingEntry,
   bindingMergePolicy,
   type GithubIdentity,
+  type ResolvedAppIdentity,
 } from "../config/factory-config.ts";
 import { GithubApiError, githubGet } from "../providers/github-api.ts";
 import {
@@ -50,7 +51,7 @@ export interface GithubIdentityProbes {
   whoami(): Promise<{ login: string }>;
   readPrivateKey(file: string): ReturnType<typeof readAppPrivateKey>;
   installation(
-    identity: AppIdentity,
+    identity: ResolvedAppIdentity,
     key: string,
   ): Promise<{ permissions: Record<string, string> }>;
   registration(identity: AppIdentity, key: string): Promise<{ slug: string }>;
@@ -180,21 +181,41 @@ const isNotFound = (err: unknown) => err instanceof GithubApiError && err.status
 
 /** The identity check for the configured mode, plus the effective merge policy. */
 export function githubIdentityChecks(
-  identity: GithubIdentity,
+  identities: GithubIdentity[],
   merge: MergePolicy,
   probes: GithubIdentityProbes,
   env: NodeJS.ProcessEnv = process.env,
   bindings: Record<string, Pick<BindingEntry, "remote" | "merge">> = {},
   mergeProbes: GithubMergePolicyProbes = realGithubMergePolicyProbes,
 ): Check[] {
+  const primary = identities[0];
+  if (!primary) throw new Error("GitHub identity checks require a nonempty normalized list");
   const checksBindingPolicies = Object.values(bindings).some(
     (binding) => bindingMergePolicy(merge, binding).by === "jigs",
   );
+  const registrations = new Map<number, Promise<{ slug: string }>>();
+  const appProbes: GithubIdentityProbes = {
+    ...probes,
+    registration: (entry, key) => {
+      let pending = registrations.get(entry.appId);
+      if (!pending) {
+        pending = probes.registration(entry, key);
+        registrations.set(entry.appId, pending);
+      }
+      return pending;
+    },
+  };
   return [
-    identity.mode === "pat"
-      ? patCheck(probes, env)
-      : appCheck(identity, checksBindingPolicies, probes),
-    mergePolicyCheck(identity, merge, bindings, mergeProbes),
+    ...identities.map((entry, index) => {
+      const check =
+        entry.mode === "pat"
+          ? patCheck(probes, env)
+          : appCheck(entry, checksBindingPolicies, appProbes);
+      return identities.length === 1
+        ? check
+        : { ...check, id: `github.identity.${index}`, label: `GitHub identity ${index + 1}` };
+    }),
+    mergePolicyCheck(primary, merge, bindings, mergeProbes),
   ];
 }
 
@@ -207,7 +228,8 @@ function patCheck(probes: GithubIdentityProbes, env: NodeJS.ProcessEnv): Check {
       if (token === undefined || token === "") {
         return {
           ok: false,
-          reason: "github.identity is pat but GITHUB_TOKEN is not set in the service's environment",
+          reason:
+            "github.identities uses pat but GITHUB_TOKEN is not set in the service's environment",
           repair: `set GITHUB_TOKEN in ${SERVICE_ENV_FILE}, then: ${RESTART_SERVICE}`,
         };
       }
@@ -242,7 +264,7 @@ function appCheck(
         return {
           ok: false,
           reason: String(err),
-          repair: `download the App's private key, point github.identity.privateKeyPath at it, and: chmod 600 ${identity.privateKeyPath}`,
+          repair: `download App ${identity.appId}’s private key, set privateKeyPath in that App’s entry in jigs.config.ts, and: chmod 600 ${identity.privateKeyPath}`,
         };
       }
       // Before any network call: a key anyone can read is a credential to
@@ -254,47 +276,70 @@ function appCheck(
           repair: `chmod 600 ${identity.privateKeyPath}`,
         };
       }
-      let permissions: Record<string, string>;
+      const { installations: accountInstallations, ...app } = identity;
+      const installationIds = Object.values(accountInstallations);
+      let installations: Array<{ installationId: number; permissions: Record<string, string> }>;
       let slug: string;
       try {
         // Both mint a JWT from the key, so a key the App does not recognise
         // and an installation that is gone are distinguished by the message.
-        [{ permissions }, { slug }] = await Promise.all([
-          probes.installation(identity, key),
+        [installations, { slug }] = await Promise.all([
+          Promise.all(
+            installationIds.map(async (installationId) => {
+              try {
+                return {
+                  installationId,
+                  ...(await probes.installation({ ...app, installationId }, key)),
+                };
+              } catch (err) {
+                throw new Error(`installation ${installationId}: ${err}`);
+              }
+            }),
+          ),
           probes.registration(identity, key),
         ]);
       } catch (err) {
         return {
           ok: false,
-          reason: `App ${identity.appId} installation ${identity.installationId} did not answer: ${err}`,
+          reason: `App ${identity.appId} installation ${installationIds.join(", ")} did not answer: ${err}`,
           repair:
-            "check github.identity.appId and installationId against the App's settings page and its installation, and that the private key belongs to that App",
+            "check the App entry’s appId and installations against the App's settings page and its installation, and that the private key belongs to that App",
         };
       }
       const requiredPermissions = [
         ...REQUIRED_PERMISSIONS,
         ...(checksBindingPolicies ? JIGS_MERGE_PERMISSIONS : []),
       ];
-      const missing = requiredPermissions.filter(
-        (required) =>
-          !(SATISFIES[required.level] ?? []).includes(permissions[required.name] ?? "none"),
+      const missing = installations.flatMap(({ installationId, permissions }) =>
+        requiredPermissions
+          .filter(
+            (required) =>
+              !(SATISFIES[required.level] ?? []).includes(permissions[required.name] ?? "none"),
+          )
+          .map((permission) => ({
+            ...permission,
+            installationId,
+          })),
       );
       if (missing.length > 0) {
         return {
           ok: false,
-          reason: `the installation is missing ${missing.map((p) => `${p.name}: ${p.level} (to ${p.why})`).join(", ")}`,
+          reason: `the installation is missing ${missing.map((p) => `${p.name}: ${p.level} (to ${p.why}; installation ${p.installationId})`).join(", ")}`,
           repair:
             "grant the permission on the App (Settings → Developer settings → GitHub Apps → Permissions — “Repository webhooks” is Read & write), then accept the updated permissions on the installation",
         };
       }
-      return { ok: true, detail: `jigs acts as ${slug}[bot]; operator ${identity.operator}` };
+      return {
+        ok: true,
+        detail: `jigs acts as ${slug}[bot] on ${Object.keys(identity.installations).join(", ")}; operator ${identity.operator}`,
+      };
     },
   };
 }
 
 // The effective policy per binding, plus repository facts that make one impossible.
 export function mergePolicyCheck(
-  identity: GithubIdentity,
+  identity: Pick<GithubIdentity, "mode">,
   merge: MergePolicy,
   bindings: Record<string, Pick<BindingEntry, "remote" | "merge">>,
   probes: GithubMergePolicyProbes,
@@ -346,7 +391,7 @@ function describeMergePolicy(merge: MergePolicy): string {
 async function inspectBindingWithin(
   bindingName: string,
   binding: Pick<BindingEntry, "remote">,
-  identity: GithubIdentity,
+  identity: Pick<GithubIdentity, "mode">,
   merge: MergePolicy,
   probes: GithubMergePolicyProbes,
   timeoutMs: number,
@@ -366,7 +411,7 @@ interface PolicyFinding {
 async function inspectBinding(
   bindingName: string,
   binding: Pick<BindingEntry, "remote">,
-  identity: GithubIdentity,
+  identity: Pick<GithubIdentity, "mode">,
   merge: MergePolicy,
   probes: GithubMergePolicyProbes,
 ): Promise<PolicyFinding[]> {
@@ -443,7 +488,7 @@ async function inspectBinding(
 function unreadableProtection(
   unread: ProtectionGap | "both",
   ref: { owner: string; repo: string },
-  identity: GithubIdentity,
+  identity: Pick<GithubIdentity, "mode">,
 ): Omit<PolicyFinding, "binding"> {
   const slug = `${ref.owner}/${ref.repo}`;
   const cannotVerify = "so jigs cannot verify that merges will be allowed";

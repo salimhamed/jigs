@@ -7,7 +7,7 @@ import { serviceBehindSources } from "./service-lifecycle.ts";
 export interface LaunchDeps extends ServiceDeps {
   // Set only when the run goes to the local factory's own service, so the
   // freshness warning speaks about the sources that service was built from.
-  // An explicit --service is some other factory's, and this factory's sources
+  // An explicit --service-url is some other factory's, and this factory's sources
   // say nothing about it.
   factoryCwd?: string;
 }

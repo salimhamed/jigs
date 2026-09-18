@@ -9,7 +9,7 @@ import {
   pushCommit,
   resolveRemoteUrl,
 } from "../../providers/git.ts";
-import { githubAuth } from "../../providers/github-auth.ts";
+import { githubAuthFor } from "../../providers/github-auth.ts";
 import { pushApprovedChange, pushBranch } from "../git/branch.ts";
 
 vi.mock("../../providers/git.ts", () => ({
@@ -22,7 +22,7 @@ vi.mock("../../providers/git.ts", () => ({
   pushCommit: vi.fn(),
   resolveRemoteUrl: vi.fn(),
 }));
-vi.mock("../../providers/github-auth.ts", () => ({ githubAuth: vi.fn() }));
+vi.mock("../../providers/github-auth.ts", () => ({ githubAuthFor: vi.fn() }));
 
 const APP = {
   mode: "app",
@@ -33,7 +33,7 @@ const APP = {
 } as const;
 
 const authAs = (identity: { mode: "pat" } | typeof APP, token = "ghs_installation") =>
-  vi.mocked(githubAuth).mockReturnValue({ identity, bearer: async () => token });
+  vi.mocked(githubAuthFor).mockReturnValue({ identity, bearer: async () => token });
 
 beforeEach(() => {
   vi.mocked(headSha).mockResolvedValue("approved");

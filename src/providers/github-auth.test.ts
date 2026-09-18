@@ -159,3 +159,50 @@ test("a failed mint is not cached, so the next caller tries again", async () => 
   await expect(auth.bearer()).rejects.toThrow();
   expect(await auth.bearer()).toBe("second-time");
 });
+
+test("accounts select independent cached installation tokens across Apps", async () => {
+  const { githubAuthFor, useFactoryRoot, resetGithubAuth } = await import("./github-auth.ts");
+  const { installationId: _, ...app } = APP;
+  writeFileSync(path.join(tmp, "key.pem"), privateKey, { mode: 0o600 });
+  writeFileSync(
+    path.join(tmp, "jigs.config.ts"),
+    `export default ${JSON.stringify({
+      service: { dashboardPort: 9090 },
+      github: {
+        identities: [
+          { ...app, privateKeyPath: "key.pem", installations: { First: 10, Second: 20 } },
+          { ...app, appId: 999, privateKeyPath: "key.pem", installations: { Third: 10 } },
+        ],
+      },
+    })}`,
+  );
+  const calls: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      calls.push(url);
+      return tokenResponse(`token-${calls.length}`, Date.now() + 3_600_000);
+    }),
+  );
+  useFactoryRoot(tmp);
+  try {
+    expect(await githubAuthFor("FIRST").bearer()).toBe("token-1");
+    // Existing authentication keeps one config snapshot until explicitly reset.
+    writeFileSync(
+      path.join(tmp, "jigs.config.ts"),
+      'export default { service: { dashboardPort: 9090 }, github: { identities: [{ mode: "pat" }] } }',
+    );
+    expect(await githubAuthFor("first").bearer()).toBe("token-1");
+    expect(await githubAuthFor("Second").bearer()).toBe("token-2");
+    expect(await githubAuthFor("Third").bearer()).toBe("token-3");
+    expect(calls).toHaveLength(3);
+    expect(calls[0]).toContain("/installations/10/access_tokens");
+    expect(calls[1]).toContain("/installations/20/access_tokens");
+    expect(() => githubAuthFor("uncovered")).toThrow("account uncovered");
+    useFactoryRoot(tmp);
+    expect(githubAuthFor("uncovered").identity).toEqual({ mode: "pat" });
+  } finally {
+    resetGithubAuth();
+    vi.unstubAllGlobals();
+  }
+});

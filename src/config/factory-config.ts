@@ -48,24 +48,72 @@ const serviceSchema = z.strictObject({
 // from `<app-slug>[bot]` and the operator can review them normally; the
 // operator login is named here because `GET /user` does not answer for an
 // installation token.
+const appIdentitySchema = z.strictObject({
+  mode: z.literal("app"),
+  appId: z.int().positive(),
+  installations: z
+    .record(z.string().regex(/^[a-zA-Z0-9-]+$/), z.int().positive())
+    .refine((entries) => Object.keys(entries).length > 0, "installations must not be empty"),
+  // Relative paths resolve against the factory root.
+  privateKeyPath: z.string().min(1),
+  operator: z.string().min(1),
+  coAuthor: z.string().min(1).optional(),
+});
+
 export const githubIdentitySchema = z.discriminatedUnion("mode", [
   z.strictObject({ mode: z.literal("pat") }),
-  z.strictObject({
-    mode: z.literal("app"),
-    appId: z.int().positive(),
-    installationId: z.int().positive(),
-    // Relative paths resolve against the factory root.
-    privateKeyPath: z.string().min(1),
-    /** The human's GitHub login: pull request assignee and "Requested by". */
-    operator: z.string().min(1),
-    /** `Name <email>` for the `Co-authored-by` trailer on squash or merge commits. */
-    coAuthor: z.string().min(1).optional(),
-  }),
+  appIdentitySchema,
 ]);
 
-export const githubSchema = z.strictObject({
-  identity: githubIdentitySchema.default({ mode: "pat" }),
-});
+export const githubSchema = z
+  .strictObject({
+    identities: z
+      .array(githubIdentitySchema)
+      .min(1)
+      .default([{ mode: "pat" }]),
+  })
+  .superRefine(({ identities }, ctx) => {
+    const accounts = new Set<string>();
+    for (const [index, identity] of identities.entries()) {
+      if (identity.mode === "pat") {
+        if (identities.length !== 1)
+          ctx.addIssue({
+            code: "custom",
+            path: ["identities", index],
+            message: "a PAT must be the only identity",
+          });
+        continue;
+      }
+      for (const account of Object.keys(identity.installations)) {
+        if (accounts.has(account.toLowerCase()))
+          ctx.addIssue({
+            code: "custom",
+            path: ["identities", index, "installations", account],
+            message: `account ${account} is claimed more than once`,
+          });
+        accounts.add(account.toLowerCase());
+      }
+    }
+  });
+
+/** Resolve the credentials for one account. */
+export function installationFor(
+  identities: GithubIdentity[],
+  account: string,
+): ResolvedGithubIdentity {
+  for (const identity of identities) {
+    if (identity.mode === "pat") return identity;
+    const { installations, ...app } = identity;
+    const entry = Object.entries(installations).find(
+      ([login]) => login.toLowerCase() === account.toLowerCase(),
+    );
+    if (entry) return { ...app, installationId: entry[1] };
+  }
+  throw new JigsError(
+    `no GitHub App installation configured for account ${account}`,
+    `add "${account}": <installation-id> to the App's installations in github.identities in jigs.config.ts, then: jigs up`,
+  );
+}
 
 const factoryConfigSchema = z.looseObject({
   bindings: z.record(z.string(), bindingSchema).default({}),
@@ -91,6 +139,12 @@ export type BindingEntry = z.output<typeof bindingSchema>;
 export type FactoryConfig = z.output<typeof factoryConfigSchema>;
 export type GithubIdentity = z.output<typeof githubIdentitySchema>;
 export type AppIdentity = Extract<GithubIdentity, { mode: "app" }>;
+/** Credentials selected for one installation, after resolving the configured account map. */
+export type ResolvedAppIdentity = Omit<AppIdentity, "installations"> & {
+  installationId: number;
+};
+export type ResolvedGithubIdentity = Extract<GithubIdentity, { mode: "pat" }> | ResolvedAppIdentity;
+
 /** The policy a factory that states none gets: a human merges, by squash, on an approving review. */
 export const defaultMergePolicy = (): MergePolicy => mergePolicySchema.parse({});
 
@@ -104,7 +158,7 @@ export function parseFactoryConfig(value: unknown): FactoryConfig {
         issue.path.at(-1) === "merge" &&
         issue.keys.includes("approval")
       ) {
-        return `${path}.approval: approval is factory-level because it follows github.identity; a binding may only override merge.by and merge.method`;
+        return `${path}.approval: approval is factory-level because it follows github.identities; a binding may only override merge.by and merge.method`;
       }
       return `${path}: ${issue.message}`;
     });

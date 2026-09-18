@@ -8,7 +8,7 @@ delegated to answers and approves as well — see **Delegated operator**.
 
 Run commands address one factory's service, located through the nearest
 `jigs.config.ts`. Lifecycle and binding commands also operate on local files. So `cd` into
-the factory repo first. `--service <url>` or `JIGS_SERVICE_URL` overrides it.
+the factory repo first. `--service-url <url>` or `JIGS_SERVICE_URL` overrides it.
 
 Every command acts on that one factory, so a run belongs to the factory whose
 service lists it: `jigs ps` from a factory root is the test, and a run id from
@@ -71,7 +71,7 @@ jigs logs <run>    # one run in full, with the link to act on
 finishes, a run suspends, resumes, reaches a terminal state, or a new run
 appears, plus one line per live run when it starts. It is a single long-lived
 process, so it costs one node start-up rather than one per poll, and it says
-`unreachable` and keeps going while the service restarts. `--interval` sets the
+`unreachable` and keeps going while the service restarts. `--poll-interval-seconds` sets the
 poll.
 
 `jigs ps` is the snapshot: `RUN WORKFLOW TICKET STATUS TRIGGER AGE
@@ -192,7 +192,7 @@ Merging a jigs change leaves a release pull request open. Merge that, wait for
 that exact version to be published, then in each factory root:
 
 ```sh
-pnpm exec jigs upgrade --to <version>
+pnpm exec jigs upgrade --to-version <version>
 ```
 
 which bumps the package, rebuilds, restarts and ends in `jigs doctor`. Then
@@ -227,7 +227,7 @@ Confirm these actions when the current request has not already authorized them:
 - `jigs cancel` — it releases every resource the run claims, and the run is over.
 - `jigs sweep --force` — it deletes every eligible worktree without asking,
   dirty ones included.
-- `jigs service restart`, `jigs service stop`, `jigs up --restart` or
+- `jigs service restart`, `jigs service stop`, `jigs up --restart-service` or
   `jigs upgrade` while `jigs ps` shows a running or suspended run. `up` and
   `upgrade` ask before restarting over one; `--force` is the human's call.
 - Editing the `bindings` block in `jigs.config.ts` — changing a `remote:` repoints

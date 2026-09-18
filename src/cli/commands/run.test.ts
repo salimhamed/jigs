@@ -161,7 +161,7 @@ test("a refused launch prints every preflight failure with its repair", async ()
             label: "binding api",
             ok: false,
             reason: "no binding named 'api'",
-            repair: "run: jigs bind <the-api-remote-url> --name api",
+            repair: "run: jigs bind <the-api-remote-url> --binding-name api",
           },
           {
             id: "harness.codex-auth",
@@ -180,7 +180,7 @@ test("a refused launch prints every preflight failure with its repair", async ()
   expect(lines.join("\n")).toBe(
     [
       "binding api: no binding named 'api'",
-      "  → run: jigs bind <the-api-remote-url> --name api",
+      "  → run: jigs bind <the-api-remote-url> --binding-name api",
       "Codex subscription login: no Codex login found",
       "  → run: codex login",
     ].join("\n"),

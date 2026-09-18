@@ -2,9 +2,12 @@ import path from "node:path";
 import {
   type BindingEntry,
   FACTORY_CONFIG_FILE,
+  installationFor,
   readFactoryConfig,
 } from "../config/factory-config.ts";
+import { JigsError } from "../errors.ts";
 import { probeRemoteAuth } from "../providers/git.ts";
+import { parseGithubRemote } from "../providers/github-webhook.ts";
 import { hasBindingClone } from "../steps/workspaces/clone.ts";
 import { bindingRepoDir } from "../steps/workspaces/layout.ts";
 import { type Check, type CheckResult, failedCheck, PROBE_TIMEOUT_MS } from "./catalog.ts";
@@ -64,8 +67,23 @@ async function checkBinding(
       reason: `no binding named '${name}' in ${FACTORY_CONFIG_FILE}`,
       // The remote is genuinely not knowable from the manifest; the name is,
       // so the invocation is as exact as it can be.
-      repair: `run: jigs bind <the-${name}-remote-url> --name ${name}`,
+      repair: `run: jigs bind <the-${name}-remote-url> --binding-name ${name}`,
     };
+  }
+
+  const account = parseGithubRemote(binding.remote)?.owner;
+  if (account) {
+    try {
+      installationFor(readFactoryConfig(factoryRoot).github.identities, account);
+    } catch (err) {
+      if (err instanceof JigsError)
+        return {
+          ok: false,
+          reason: err.message,
+          repair: err.hint ?? "repair github installations",
+        };
+      throw err;
+    }
   }
 
   // A binding declared while the service was running has no clone, and the

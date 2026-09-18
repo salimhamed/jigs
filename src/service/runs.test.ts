@@ -87,7 +87,7 @@ function reviewApproval(): void {
   vi.spyOn(config, "readFactoryConfig").mockReturnValue({
     bindings: {},
     service: { port: 8990, dashboardPort: 9090 },
-    github: { identity: { mode: "pat" } },
+    github: { identities: [{ mode: "pat" }] },
     merge: { by: "human", method: "squash", approval: { kind: "review" } },
   });
 }

@@ -51,7 +51,7 @@ test("an undeclared binding fails with the exact jigs bind invocation", async ()
     reason: expect.stringContaining("no binding named 'api'"),
     repair: expect.stringContaining("jigs bind"),
   });
-  expect(outcome.ok === false && outcome.repair).toContain("--name api");
+  expect(outcome.ok === false && outcome.repair).toContain("--binding-name api");
   expect(outcome.ok === false && outcome.repair).toContain("remote-url");
 });
 
@@ -118,4 +118,26 @@ test("a workflow requiring no bindings needs no factory config at all", () => {
       names: [],
     }),
   ).toEqual([]);
+});
+
+test("an uncovered GitHub binding fails before clone checks with an installations repair", async () => {
+  const factory = makeFactoryRepo(tmp, {
+    bindings: { api: { remote: "ssh://git@github.com/Uncovered/api.git" } },
+    github: {
+      identities: [
+        {
+          mode: "app",
+          appId: 1,
+          privateKeyPath: "key.pem",
+          operator: "human",
+          installations: { Covered: 10 },
+        },
+      ],
+    },
+  });
+  expect(await check(factory, "api")).toMatchObject({
+    ok: false,
+    reason: "no GitHub App installation configured for account Uncovered",
+    repair: expect.stringContaining('"Uncovered": <installation-id>'),
+  });
 });

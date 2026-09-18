@@ -129,7 +129,7 @@ test("a second up on an unchanged factory leaves the running service alone", asy
   expect(lines.join("\n")).toMatch(/^ok {3}service .* — unchanged, not restarted$/m);
 });
 
-test("a changed bundle restarts the service; --restart forces one", async () => {
+test("a changed bundle restarts the service; --restart-service forces one", async () => {
   const port = await fakeService();
   const root = factory({ port });
   const io = { exec: fakeExec(), procs: fakeProcesses() };

@@ -63,7 +63,7 @@ export async function openPullRequest(request: {
   draft?: boolean;
 }): Promise<OpenedPullRequest> {
   const { repo, head, base, title, body, draft } = request;
-  const identity = resolveGithubIdentity();
+  const identity = resolveGithubIdentity(repo.owner);
   // In App mode the pull request's author is the bot, which is what lets the
   // operator approve it. The assignee and the opening line are how the
   // operator still shows up on it — GitHub has no second author field.
@@ -205,7 +205,7 @@ async function suppliedCommitMessageBody(
   pr: PullRequestRef,
   method: MergePolicy["method"],
 ): Promise<undefined | string> {
-  const identity = resolveGithubIdentity();
+  const identity = resolveGithubIdentity(pr.owner);
   if (method === "rebase" || identity.mode !== "app" || identity.coAuthor === undefined) {
     return undefined;
   }

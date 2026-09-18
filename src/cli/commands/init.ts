@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { interpolate } from "../../blocks/interpolate.ts";
 import type { MergePolicy } from "../../blocks/pull-requests/policy.ts";
-import type { GithubIdentity } from "../../config/factory-config.ts";
+import { type GithubIdentity, githubIdentitySchema } from "../../config/factory-config.ts";
 import { JigsError } from "../../errors.ts";
 import { copyFiles, reportCopied } from "../copy-files.ts";
 import { locateTemplates, packageRoot, TEMPLATE_SUFFIX } from "../templates.ts";
@@ -15,13 +15,13 @@ import { locateTemplates, packageRoot, TEMPLATE_SUFFIX } from "../templates.ts";
 /** Which GitHub credential the scaffolded factory is written for. */
 export type IdentityMode = "pat" | "app";
 
-/** The `--identity app` facts, which have no defaults jigs could invent. */
+/** The `--github-identity-mode app` facts, which have no defaults jigs could invent. */
 export interface AppIdentityOptions {
-  appId?: string;
-  installationId?: string;
-  privateKey?: string;
-  operator?: string;
-  coAuthor?: string;
+  githubAppId?: string;
+  githubAppInstallation?: string[];
+  githubAppPrivateKeyPath?: string;
+  githubOperatorLogin?: string;
+  gitCoAuthor?: string;
 }
 
 export interface InitDeps {
@@ -43,30 +43,45 @@ export function resolveIdentityOptions(
   options: AppIdentityOptions,
 ): GithubIdentity {
   if (mode === "pat") return { mode: "pat" };
-  const missing = (["appId", "installationId", "privateKey", "operator"] as const).filter(
-    (flag) => options[flag] === undefined || options[flag] === "",
-  );
+  const missing = (
+    [
+      "githubAppId",
+      "githubAppInstallation",
+      "githubAppPrivateKeyPath",
+      "githubOperatorLogin",
+    ] as const
+  ).filter((flag) => !options[flag]?.length);
   if (missing.length > 0) {
     throw new JigsError(
-      `jigs init --identity app needs ${missing.map((flag) => `--${FLAGS[flag]}`).join(", ")}`,
-      'jigs init --identity app --app-id 123 --installation-id 456 --private-key github-app.private-key.pem --operator your-github-login [--co-author "Your Name <you@example.com>"]',
+      `jigs init --github-identity-mode app needs ${missing.map((flag) => `--${FLAGS[flag]}`).join(", ")}`,
+      'jigs init --github-identity-mode app --github-app-id 123 --github-app-installation your-github-login=456 --github-app-private-key-path github-app.private-key.pem --github-operator-login your-github-login [--git-co-author "Your Name <you@example.com>"]',
     );
   }
-  return {
+  const installations: Record<string, number> = {};
+  for (const entry of options.githubAppInstallation ?? []) {
+    const match = /^([a-zA-Z0-9-]+)=(\d+)$/.exec(entry);
+    if (!match)
+      throw new JigsError(`--github-app-installation must be <account>=<id>, not ${entry}`);
+    const account = match[1] as string;
+    if (Object.keys(installations).some((login) => login.toLowerCase() === account.toLowerCase()))
+      throw new JigsError(`duplicate --github-app-installation account ${account}`);
+    installations[account] = positiveInt(match[2], "--github-app-installation");
+  }
+  return githubIdentitySchema.parse({
     mode: "app",
-    appId: positiveInt(options.appId, "--app-id"),
-    installationId: positiveInt(options.installationId, "--installation-id"),
-    privateKeyPath: String(options.privateKey),
-    operator: String(options.operator),
-    ...(options.coAuthor === undefined ? {} : { coAuthor: options.coAuthor }),
-  };
+    appId: positiveInt(options.githubAppId, "--github-app-id"),
+    installations,
+    privateKeyPath: String(options.githubAppPrivateKeyPath),
+    operator: String(options.githubOperatorLogin),
+    ...(options.gitCoAuthor === undefined ? {} : { coAuthor: options.gitCoAuthor }),
+  });
 }
 
 const FLAGS = {
-  appId: "app-id",
-  installationId: "installation-id",
-  privateKey: "private-key",
-  operator: "operator",
+  githubAppId: "github-app-id",
+  githubAppInstallation: "github-app-installation",
+  githubAppPrivateKeyPath: "github-app-private-key-path",
+  githubOperatorLogin: "github-operator-login",
 } as const;
 
 function positiveInt(value: string | undefined, flag: string): number {
@@ -97,11 +112,11 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
     SERVICE_PORT: String(ports.servicePort),
     DASHBOARD_PORT: String(ports.dashboardPort),
     POSTGRES_PORT: String(ports.postgresPort),
-    GITHUB_IDENTITY: `  github: {\n${IDENTITY_COMMENT[identity.mode]}\n    identity: ${literal(identity, "    ")},\n  },`,
+    GITHUB_IDENTITY: `  github: {\n${IDENTITY_COMMENT[identity.mode]}\n    identities: [${literal(identity, "    ")}],\n  },`,
     MERGE_POLICY: `  merge: ${literal({ ...merge }, "  ", MERGE_COMMENT[identity.mode])},`,
     // The scaffolded test asserts what the scaffolded config declares, and both
     // are written from the one value here, so neither mode can scaffold red.
-    GITHUB_EXPECTED: literal({ identity }, "  "),
+    GITHUB_EXPECTED: literal({ identities: [identity] }, "  "),
     MERGE_EXPECTED: literal({ ...merge }, "  "),
   };
 
@@ -174,16 +189,20 @@ const MERGE_COMMENT: Record<IdentityMode, Record<string, string>> = {
   app: { approval: "// An approving review of the commit; a push withdraws it." },
 };
 
+const literalKey = (key: string): string =>
+  /^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key);
+
 // A TypeScript literal of a plain settings object, on one line while it fits.
 function literal(value: unknown, indent: string, comments: Record<string, string> = {}): string {
   if (typeof value !== "object" || value === null) return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map((entry) => literal(entry, indent)).join(", ")}]`;
   const entries = Object.entries(value);
-  const flat = `{ ${entries.map(([key, nested]) => `${key}: ${JSON.stringify(nested)}`).join(", ")} }`;
+  const flat = `{ ${entries.map(([key, nested]) => `${literalKey(key)}: ${JSON.stringify(nested)}`).join(", ")} }`;
   const plain = entries.every(([, nested]) => typeof nested !== "object");
   if (plain && flat.length <= 72 && Object.keys(comments).length === 0) return flat;
   const lines = entries.flatMap(([key, nested]) => [
     ...(comments[key] === undefined ? [] : [`${indent}  ${comments[key]}`]),
-    `${indent}  ${key}: ${literal(nested, `${indent}  `)},`,
+    `${indent}  ${literalKey(key)}: ${literal(nested, `${indent}  `)},`,
   ]);
   return `{\n${lines.join("\n")}\n${indent}}`;
 }

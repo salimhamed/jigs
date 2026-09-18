@@ -38,7 +38,7 @@ import { watchRuns } from "./commands/watch.ts";
 // Every action resolves it instead, inside the error handling.
 const serviceOption = () =>
   new Option(
-    "--service <url>",
+    "--service-url <url>",
     "jigs service URL (default: this factory's service.port in jigs.config.ts)",
   ).env("JIGS_SERVICE_URL");
 
@@ -70,22 +70,36 @@ program
   .command("init")
   .description("scaffold a factory repo in the current directory")
   .addOption(
-    new Option("--identity <mode>", "which GitHub credential this factory is written for")
+    new Option(
+      "--github-identity-mode <mode>",
+      "which GitHub credential this factory is written for",
+    )
       .choices(["pat", "app"])
       .default("pat"),
   )
-  // Required together by --identity app, and refused there as a set rather
+  // Required together by --github-identity-mode app, and refused there as a set rather
   // than defaulted: a scaffold with placeholder ids does not load.
-  .option("--app-id <id>", "GitHub App id (--identity app)")
-  .option("--installation-id <id>", "the App's installation id (--identity app)")
-  .option("--private-key <path>", "the App's private key .pem (--identity app)")
-  .option("--operator <login>", "your GitHub login (--identity app)")
-  .option("--co-author <author>", '"Name <email>" for merge commit trailers (--identity app)')
-  .action(async (options: { identity: IdentityMode } & AppIdentityOptions) => {
+  .option("--github-app-id <id>", "GitHub App id (--github-identity-mode app)")
+  .option(
+    "--github-app-installation <account=installation-id>",
+    "App installation by account (repeatable)",
+    (value: string, previous: string[]) => [...previous, value],
+    [],
+  )
+  .option(
+    "--github-app-private-key-path <path>",
+    "the App's private key .pem (--github-identity-mode app)",
+  )
+  .option("--github-operator-login <login>", "your GitHub login (--github-identity-mode app)")
+  .option(
+    "--git-co-author <author>",
+    '"Name <email>" for merge commit trailers (--github-identity-mode app)',
+  )
+  .action(async (options: { githubIdentityMode: IdentityMode } & AppIdentityOptions) => {
     await initFactory({
       cwd: process.cwd(),
       out,
-      identity: resolveIdentityOptions(options.identity, options),
+      identity: resolveIdentityOptions(options.githubIdentityMode, options),
     });
   });
 
@@ -122,13 +136,16 @@ program
   .description(
     "take this factory from any state to a running service (env, install, compose, bootstrap, build, start, doctor)",
   )
-  .option("--restart", "restart the service even when the bundle is unchanged")
+  .option("--restart-service", "restart the service even when the bundle is unchanged")
   .option("--force", "restart over in-flight runs without asking")
   .option("--no-doctor", "skip the doctor pass once the service is up")
-  .action(async (options: { restart?: boolean; force?: boolean; doctor: boolean }) => {
+  .action(async (options: { restartService?: boolean; force?: boolean; doctor: boolean }) => {
     // Every step has already printed its own FAIL line and repair, so the
     // exit code is the only thing left to say.
-    const result = await upFactory({ cwd: process.cwd(), out, confirm: makeConfirm() }, options);
+    const result = await upFactory(
+      { cwd: process.cwd(), out, confirm: makeConfirm() },
+      { ...options, restart: options.restartService },
+    );
     if (!result.ok) process.exitCode = 1;
   });
 
@@ -137,13 +154,13 @@ program
   .description(
     "move this factory to a newer jigs: bump the package, then up, then the factory's typecheck",
   )
-  .option("--to <version>", "pin jigs to this version instead of the latest release")
+  .option("--to-version <version>", "pin jigs to this version instead of the latest release")
   .option("--force", "restart over in-flight runs without asking")
   .option("--no-doctor", "skip the doctor pass once the service is up")
-  .action(async (options: { to?: string; force?: boolean; doctor: boolean }) => {
+  .action(async (options: { toVersion?: string; force?: boolean; doctor: boolean }) => {
     const result = await upgradeFactory(
       { cwd: process.cwd(), out, confirm: makeConfirm() },
-      options,
+      { ...options, to: options.toVersion },
     );
     if (!result.ok) process.exitCode = 1;
   });
@@ -153,17 +170,17 @@ program
   .description("bind a target repo by its remote URL")
   .argument("<remote-url>", "the target repo's git remote (e.g. git@github.com:owner/repo.git)")
   .option(
-    "--name <name>",
+    "--binding-name <name>",
     "binding name (default: an existing exact-remote match, else the repo name lowercased)",
   )
-  .action(async (remoteUrl: string, options: { name?: string }) => {
-    await bindRepo(remoteUrl, { cwd: process.cwd(), out }, { name: options.name });
+  .action(async (remoteUrl: string, options: { bindingName?: string }) => {
+    await bindRepo(remoteUrl, { cwd: process.cwd(), out }, { name: options.bindingName });
   });
 
 program
   .command("unbind")
   .description("remove a binding")
-  .argument("<name>", "binding name")
+  .argument("<binding-name>", "binding name")
   .action((name: string) => {
     unbindRepo(name, { cwd: process.cwd(), out });
   });
@@ -171,19 +188,19 @@ program
 program
   .command("run")
   .description("launch a workflow")
-  .argument("<workflow>", "workflow name")
+  .argument("<workflow-name>", "workflow name")
   .option(
-    "--input <pair>",
+    "--input <key=value>",
     "workflow input as key=value (repeatable)",
     (pair: string, previous: string[]) => [...previous, pair],
     [] as string[],
   )
   .addOption(serviceOption())
-  .action(async (workflow: string, options: { input: string[]; service?: string }) => {
+  .action(async (workflow: string, options: { input: string[]; serviceUrl?: string }) => {
     await launchRun(workflow, options.input, {
       out,
-      factoryCwd: usesFactoryService(options.service) ? process.cwd() : undefined,
-      serviceUrl: serviceUrl(options.service),
+      factoryCwd: usesFactoryService(options.serviceUrl) ? process.cwd() : undefined,
+      serviceUrl: serviceUrl(options.serviceUrl),
     });
   });
 
@@ -192,8 +209,8 @@ program
   .description("list runs with their ticket, status and what they wait on")
   .option("--json", "print one JSON document instead of the tables")
   .addOption(serviceOption())
-  .action(async (options: { json?: boolean; service?: string }) => {
-    await showRuns({ out, serviceUrl: serviceUrl(options.service) }, { json: options.json });
+  .action(async (options: { json?: boolean; serviceUrl?: string }) => {
+    await showRuns({ out, serviceUrl: serviceUrl(options.serviceUrl) }, { json: options.json });
   });
 
 program
@@ -202,38 +219,51 @@ program
     "follow every run in this factory: one line per step, suspension, resume, terminal state and new run",
   )
   .option("--json", "emit one JSON event per line instead of text")
-  .option("--interval <seconds>", "how often to poll the service (default: 5)", (raw) => {
-    const seconds = Number(raw);
-    if (!Number.isFinite(seconds) || seconds <= 0) {
-      throw new JigsError(`--interval must be a positive number of seconds, got ${raw}`);
-    }
-    return seconds;
-  })
+  .option(
+    "--poll-interval-seconds <seconds>",
+    "how often to poll the service (default: 5)",
+    (raw) => {
+      const seconds = Number(raw);
+      if (!Number.isFinite(seconds) || seconds <= 0) {
+        throw new JigsError(
+          `--poll-interval-seconds must be a positive number of seconds, got ${raw}`,
+        );
+      }
+      return seconds;
+    },
+  )
   .addOption(serviceOption())
-  .action(async (options: { json?: boolean; interval?: number; service?: string }) => {
-    await watchRuns(
-      { out, serviceUrl: serviceUrl(options.service) },
-      {
-        json: options.json,
-        ...(options.interval === undefined ? {} : { intervalMs: options.interval * 1000 }),
-      },
-    );
-  });
+  .action(
+    async (options: { json?: boolean; pollIntervalSeconds?: number; serviceUrl?: string }) => {
+      await watchRuns(
+        { out, serviceUrl: serviceUrl(options.serviceUrl) },
+        {
+          json: options.json,
+          ...(options.pollIntervalSeconds === undefined
+            ? {}
+            : { intervalMs: options.pollIntervalSeconds * 1000 }),
+        },
+      );
+    },
+  );
 
 program
   .command("cancel")
   .description("cancel a run, releasing every resource it claims")
   .argument("<run>", "run id, unique id prefix, or ticket (`AGE-123` or its UUID)")
-  .option("--discard", "remove the run's worktrees after cancelling")
+  .option("--discard-worktrees", "remove the run's worktrees after cancelling")
   .option("--force", "skip the confirmation for an in-flight run")
   .addOption(serviceOption())
   .action(
-    async (run: string, options: { discard?: boolean; force?: boolean; service?: string }) => {
+    async (
+      run: string,
+      options: { discardWorktrees?: boolean; force?: boolean; serviceUrl?: string },
+    ) => {
       await cancelRun(run, {
         out,
-        serviceUrl: serviceUrl(options.service),
+        serviceUrl: serviceUrl(options.serviceUrl),
         confirm: makeConfirm(),
-        discard: options.discard,
+        discard: options.discardWorktrees,
         force: options.force,
       });
     },
@@ -245,8 +275,12 @@ program
   .argument("<run>", "run id, unique id prefix, or ticket (`AGE-123` or its UUID)")
   .option("--json", "print one JSON document instead of the report")
   .addOption(serviceOption())
-  .action(async (run: string, options: { json?: boolean; service?: string }) => {
-    await showLogs(run, { out, serviceUrl: serviceUrl(options.service) }, { json: options.json });
+  .action(async (run: string, options: { json?: boolean; serviceUrl?: string }) => {
+    await showLogs(
+      run,
+      { out, serviceUrl: serviceUrl(options.serviceUrl) },
+      { json: options.json },
+    );
   });
 
 program
@@ -254,27 +288,27 @@ program
   .description("manually wake a suspended run (the missed-delivery fallback)")
   .argument("<run>", "run id, unique id prefix, or ticket (`AGE-123` or its UUID)")
   .addOption(serviceOption())
-  .action(async (runId: string, options: { service?: string }) => {
-    await pokeRun(runId, { out, serviceUrl: serviceUrl(options.service) });
+  .action(async (runId: string, options: { serviceUrl?: string }) => {
+    await pokeRun(runId, { out, serviceUrl: serviceUrl(options.serviceUrl) });
   });
 
 program
   .command("doctor")
   .description("run the check catalog against the service, without launching")
   .addOption(serviceOption())
-  .action(async (options: { service?: string }) => {
-    await runDoctor({ out, serviceUrl: serviceUrl(options.service) });
+  .action(async (options: { serviceUrl?: string }) => {
+    await runDoctor({ out, serviceUrl: serviceUrl(options.serviceUrl) });
   });
 
 program
   .command("sweep")
   .description("reconcile worktrees on disk against the registry and run states")
-  .argument("[path]", "remove only this worktree")
+  .argument("[resource-path]", "remove only this worktree or run directory")
   .option("--force", "delete every eligible worktree without asking, dirty ones included")
   .addOption(serviceOption())
-  .action(async (path: string | undefined, options: { force?: boolean; service?: string }) => {
+  .action(async (path: string | undefined, options: { force?: boolean; serviceUrl?: string }) => {
     await runSweep(
-      { out, confirm: makeConfirm(), serviceUrl: serviceUrl(options.service) },
+      { out, confirm: makeConfirm(), serviceUrl: serviceUrl(options.serviceUrl) },
       {
         force: options.force,
         ...(path === undefined ? {} : { paths: [path] }),

@@ -15,7 +15,7 @@ afterEach(() => {
 
 // The env var reaches this function as `explicit`: commander's `.env()`
 // fills the option before the action runs.
-test("an explicit --service / JIGS_SERVICE_URL wins over the factory config", () => {
+test("an explicit --service-url / JIGS_SERVICE_URL wins over the factory config", () => {
   const factory = makeFactoryRepo(tmp, {
     service: { port: 9100, dashboardPort: 9200 },
   });
@@ -31,7 +31,7 @@ test("without an explicit url the factory the user stands in names its service",
 
 // One rule decides both where the run goes and whose sources the freshness
 // warning speaks about, so `JIGS_SERVICE_URL=` has to read as unset in both.
-test("an empty --service / JIGS_SERVICE_URL names no service at all", () => {
+test("an empty --service-url / JIGS_SERVICE_URL names no service at all", () => {
   const factory = makeFactoryRepo(tmp, {
     service: { port: 9100, dashboardPort: 9200 },
   });
