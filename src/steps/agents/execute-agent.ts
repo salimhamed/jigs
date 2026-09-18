@@ -1,7 +1,7 @@
 // The step side of runAgent(): what the factory's "use step" wrapper delegates
 // to. Runs the JIT checks, hydrates live providers from wire config (nothing
 // live crossed the boundary), and normalizes the generation into the uniform
-// AgentStepResult.
+// AgentResult.
 //
 // Everything here reaches node builtins, so this module must only ever be
 // imported from inside a step body — a workflow-side import of it fails the
@@ -14,12 +14,12 @@ import type { CodexExecSettings } from "ai-sdk-provider-codex-cli";
 // The wrapper type is the one declaration of what crosses the step boundary.
 import type { ExecuteAgentStep } from "../../blocks/agents/agent.ts";
 import type { McpServerConfig } from "../../blocks/agents/harness-config.ts";
-import type { AgentWire } from "../../blocks/agents/plan.ts";
+import type { AgentRequest } from "../../blocks/agents/plan.ts";
 import {
-  type AgentStepResult,
+  type AgentResult,
   extractAgentSession,
-  type StepGeneration,
-  toStepResult,
+  type ModelGeneration,
+  toModelResult,
 } from "../../blocks/agents/result.ts";
 import {
   type FailedCheck,
@@ -38,12 +38,12 @@ import { FileLockTimeoutError, lockPathFor, withFileLock } from "./lock.ts";
 
 // Exported for ./execute-model-request.ts, which shares the executor seam; not part of the
 // ./steps/run subpath.
-export type ExecutorGeneration = StepGeneration & { output?: unknown };
+export type ExecutorGeneration = ModelGeneration & { output?: unknown };
 
 // The provider declares but does not export its MCP config type.
 type CodexMcpServerConfig = NonNullable<CodexExecSettings["mcpServers"]>[string];
 
-export interface ExecuteDeps {
+export interface AgentExecutionDependencies {
   generateText(options: {
     model: LanguageModel;
     prompt: string;
@@ -57,10 +57,10 @@ export interface ExecuteDeps {
   withCodexAppServer: typeof withCodexAppServer;
   // Seamed like the harness calls beside it: a test hydrating a wire that
   // declares MCP servers must not spawn them.
-  jitFailures(wire: AgentWire): Promise<FailedCheck[] | undefined>;
+  jitFailures(wire: AgentRequest): Promise<FailedCheck[] | undefined>;
 }
 
-export const realDeps: ExecuteDeps = {
+export const defaultAgentExecutionDependencies: AgentExecutionDependencies = {
   generateText: (options) => generateText(options),
   ensureCodexHome: (runId) => ensureManagedCodexHome(runId),
   withCodexAppServer,
@@ -128,9 +128,9 @@ const LOCK_STALE_MS = 4 * 60 * 60_000 + 60_000;
 
 /** Run an agent in its worktree, checking required tools before it starts. */
 export async function executeAgent(
-  wire: AgentWire,
+  wire: AgentRequest,
   metadata: RunMetadata,
-  deps: ExecuteDeps = realDeps,
+  deps: AgentExecutionDependencies = defaultAgentExecutionDependencies,
 ): ReturnType<ExecuteAgentStep> {
   const runId = metadata.workflowRunId;
   // JIT checks first — this is the last honest moment before agent turns
@@ -172,10 +172,10 @@ export async function executeAgent(
 }
 
 async function generateAgentStep(
-  wire: AgentWire,
+  wire: AgentRequest,
   runId: string,
-  deps: ExecuteDeps,
-): Promise<AgentStepResult<unknown> | { resumeFailed: string }> {
+  deps: AgentExecutionDependencies,
+): Promise<AgentResult<unknown> | { resumeFailed: string }> {
   const harness = wire.harness;
   const env = scrubbedEnv();
   const output = outputSpec(wire.outputSchema);
@@ -258,7 +258,7 @@ async function generateAgentStep(
 
   const session = extractAgentSession(harness.kind, generation.providerMetadata);
   return {
-    ...toStepResult(generation, wire.outputSchema !== undefined ? generation.output : undefined),
+    ...toModelResult(generation, wire.outputSchema !== undefined ? generation.output : undefined),
     ...(session !== undefined ? { session } : {}),
   };
 }

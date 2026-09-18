@@ -1,16 +1,16 @@
 import { expect, test } from "vitest";
 import {
   extractAgentSession,
-  type StepGeneration,
-  type StepUsage,
-  toStepResult,
+  type ModelGeneration,
+  type ModelUsage,
+  toModelResult,
 } from "./result.ts";
 
-const usage = { inputTokens: 12, outputTokens: 34 } as unknown as StepUsage;
+const usage = { inputTokens: 12, outputTokens: 34 } as unknown as ModelUsage;
 
-test("toStepResult maps text and usage into the uniform shape", () => {
-  const generation: StepGeneration = { text: "done", usage };
-  expect(toStepResult(generation, { parsed: true })).toEqual({
+test("toModelResult maps text and usage into the uniform shape", () => {
+  const generation: ModelGeneration = { text: "done", usage };
+  expect(toModelResult(generation, { parsed: true })).toEqual({
     text: "done",
     output: { parsed: true },
     usage,

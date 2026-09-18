@@ -3,7 +3,7 @@
 
 import { z } from "zod";
 
-export type WireJsonSchema = Record<string, unknown>;
+export type OutputJsonSchema = Record<string, unknown>;
 
 // OpenAI's strict structured output accepts a subset of JSON Schema and
 // rejects the schema outright for anything outside it. Dropping a constraint
@@ -100,11 +100,11 @@ function strictNode(node: unknown): unknown {
  * every property required, the ones zod marks optional made nullable,
  * `additionalProperties: false` on every object, unsupported keywords gone.
  */
-export function toWireSchema(output: z.ZodType): WireJsonSchema {
+export function toOutputJsonSchema(output: z.ZodType): OutputJsonSchema {
   // The Claude CLI rejects zod's $schema meta-declaration outright ("no
   // schema with key or ref"); neither harness needs it.
-  const { $schema: _dropped, ...schema } = z.toJSONSchema(output) as WireJsonSchema;
-  return strictNode(schema) as WireJsonSchema;
+  const { $schema: _dropped, ...schema } = z.toJSONSchema(output) as OutputJsonSchema;
+  return strictNode(schema) as OutputJsonSchema;
 }
 
 function accepts(schema: z.ZodType, value: unknown): boolean {
@@ -117,7 +117,7 @@ function unwrap(schema: z.ZodType): z.ZodType {
 }
 
 /**
- * Undoes {@link toWireSchema}'s nullable rewrite: a `null` the model sent for
+ * Undoes {@link toOutputJsonSchema}'s nullable rewrite: a `null` the model sent for
  * a property zod marks optional becomes `undefined`, so the field parses as
  * absent rather than as a type error.
  */

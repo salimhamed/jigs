@@ -239,10 +239,10 @@ The implementation plan produced by ticket review. The ticket remains the
 authoritative definition of done.
 _Avoid_: plan, spec
 
-**Handoff**:
+**Ticket handoff**:
 The brief and the ticket snapshot from which it was produced, passed together
 to builder blocks. The ticket takes precedence when they conflict.
-_Avoid_: context, payload, the brief (for the pair)
+_Avoid_: handoff (without ticket context), context, payload, the brief (for the pair)
 
 **Preflight**:
 Verification that a workflow’s declared requirements and service credentials

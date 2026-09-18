@@ -1,6 +1,6 @@
 export {
-  type ExecuteDeps,
+  type AgentExecutionDependencies,
+  defaultAgentExecutionDependencies,
   executeAgent,
-  realDeps,
 } from "./execute-agent.ts";
-export { executeModelRequest } from "./execute-model-request.ts";
+export { executeModel } from "./execute-model-request.ts";

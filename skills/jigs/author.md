@@ -136,12 +136,12 @@ and the `source` it answers — a comment as `id@updatedAt`, or a commit sha. A
 down, so nothing tries it again, while `merge-retry` only records that a
 refusal jigs is waiting out was already reported and leaves the commit
 merge-ready.
-`classifyPrState(snapshot, scope)` derives what is outstanding from a fresh
+`classifyPullRequestState(snapshot, scope)` derives what is outstanding from a fresh
 snapshot and those markers, so nothing is remembered between wakes and a
 replacement run continues where the last one stopped.
 
 Writing your own pull request workflow: choose one scope and keep it, since it
-is what "already answered" is measured against. `defaultPrScope(ticketKey)`,
+is what "already answered" is measured against. `defaultPullRequestScope(ticketKey)`,
 which every delivery uses unless you pass `scope`, is the workflow function's
 own name plus that key — so renaming the function changes the scope and a pull
 request parked mid-conversation stops recognising its own answers, the same

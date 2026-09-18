@@ -1,17 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 
-type PrSnapshot = Awaited<
+type PullRequestSnapshot = Awaited<
   ReturnType<typeof import("@salimhamed/jigs/steps/pull-requests").fetchPullRequestState>
 >;
-type PrComment = PrSnapshot["conversationComments"][number];
-type ReviewThread = PrSnapshot["reviewThreads"][number];
+type PullRequestComment = PullRequestSnapshot["conversationComments"][number];
+type ReviewThread = PullRequestSnapshot["reviewThreads"][number];
 
-import type { AgentFn } from "@salimhamed/jigs/blocks/agents";
+import type { RunAgentFn } from "@salimhamed/jigs/blocks/agents";
 import { unwrapAgentStep } from "@salimhamed/jigs/blocks/agents";
 
 const resumeFailed = (detail: string) => unwrapAgentStep({ resumeFailed: detail });
 
-import type { GateWake, MergePolicy } from "@salimhamed/jigs/blocks/pull-requests";
+import type { MergePolicy, PullRequestWake } from "@salimhamed/jigs/blocks/pull-requests";
 import { parseMarkers, pullRequestGate } from "@salimhamed/jigs/blocks/pull-requests";
 import * as jigs from "#jigs";
 import * as delivery from "./delivery.ts";
@@ -115,7 +115,7 @@ const HUMAN_MERGE: MergePolicy = {
 };
 const JIGS_MERGE: MergePolicy = { ...HUMAN_MERGE, by: "jigs" };
 
-const openSnapshot = (overrides: Partial<PrSnapshot> = {}): PrSnapshot => ({
+const openSnapshot = (overrides: Partial<PullRequestSnapshot> = {}): PullRequestSnapshot => ({
   state: "open",
   merged: false,
   draft: false,
@@ -145,19 +145,19 @@ const options: DeliverChangeOptions = {
   merge: HUMAN_MERGE,
 };
 
-function setup(wakes: GateWake[] = [{ kind: "closed", merged: true }]) {
+function setup(wakes: PullRequestWake[] = [{ kind: "closed", merged: true }]) {
   const calls: Array<{
     harness: { kind: string; model: string };
     prompt: string;
     resume?: unknown;
   }> = [];
-  const runAgent: AgentFn = async <T>(config: Parameters<AgentFn>[0]) => {
+  const runAgent: RunAgentFn = async <T>(config: Parameters<RunAgentFn>[0]) => {
     calls.push(config);
     const output = config.output?.parse(answerFor(config.output)) as T;
     return { text: "", output, session: { harness: config.harness.kind, id: "session" } };
   };
   const closed = vi.fn();
-  async function* gate(): AsyncGenerator<GateWake, void, undefined> {
+  async function* gate(): AsyncGenerator<PullRequestWake, void, undefined> {
     try {
       for (const wake of wakes) yield wake;
     } finally {
@@ -192,13 +192,13 @@ const approved: ApprovedChange = {
 
 const publish = { change: approved, binding: "repo", implementation: options.implementation };
 
-const mergeReady = (headSha: string, retryNoted = false): GateWake => ({
+const mergeReady = (headSha: string, retryNoted = false): PullRequestWake => ({
   kind: "merge-ready",
   headSha,
   retryNoted,
 });
 
-const red = (headSha: string): GateWake => ({
+const red = (headSha: string): PullRequestWake => ({
   kind: "ci-red",
   headSha,
   failing: [],
@@ -252,7 +252,7 @@ describe("delivery", () => {
             output: wants(config.output, implementationReport)
               ? { responses: [] }
               : answerFor(config.output),
-          }) as AgentFn;
+          }) as RunAgentFn;
     const result = await useSteps(steps).deliverChange(options);
     expect(result.pr).toEqual(pr);
     // One round: the preferences did not send it back to the builder.
@@ -287,7 +287,7 @@ describe("delivery", () => {
             output: wants(config.output, implementationReport)
               ? { responses: [] }
               : answerFor(config.output),
-          }) as AgentFn;
+          }) as RunAgentFn;
     const result = await useSteps(steps).deliverChange(options);
     expect(result.change.attempts.implementationReviewRounds).toBe(2);
     expect(vi.mocked(steps.openPullRequest).mock.calls[0]?.[0].body).not.toContain(
@@ -319,7 +319,7 @@ describe("delivery", () => {
         },
         session: { harness: "codex" as const, id: "builder-session" },
       };
-    }) as AgentFn;
+    }) as RunAgentFn;
     const result = await useSteps(steps).implementAndReview({
       ...options,
       limits: { implementationReviewRounds: 2 },
@@ -372,7 +372,7 @@ describe("delivery", () => {
         },
         session: { harness: "codex" as const, id: "builder-session" },
       };
-    }) as AgentFn;
+    }) as RunAgentFn;
     const result = await useSteps(steps).implementAndReview({
       ...options,
       limits: { implementationReviewRounds: 2 },
@@ -401,7 +401,7 @@ describe("delivery", () => {
               { summary: "Reorder the doc sentences", blocking: false },
             ],
           },
-    })) as AgentFn;
+    })) as RunAgentFn;
     await expect(useSteps(steps).deliverChange(options)).rejects.toThrow(
       "The work is pushed on branch fix",
     );
@@ -427,7 +427,7 @@ describe("delivery", () => {
       output: wants(config.output, implementationReport)
         ? { responses: [] }
         : blocking("Missing test"),
-    })) as AgentFn;
+    })) as RunAgentFn;
     await expect(
       useSteps(steps).deliverChange({
         ...options,
@@ -447,7 +447,7 @@ describe("delivery", () => {
         text: "",
         output: wants(config.output, implementationReport) ? { responses: [] } : blocking("Test"),
       };
-    }) as AgentFn;
+    }) as RunAgentFn;
     const onLimit = vi
       .fn()
       .mockResolvedValueOnce({
@@ -516,7 +516,7 @@ describe("delivery", () => {
               commitExplanation: "No changes were needed. The bind tests passed.",
             }),
           }
-        : original(config)) as AgentFn;
+        : original(config)) as RunAgentFn;
     const result = await useSteps(steps).deliverChange(options);
     expect(result.pr).toEqual(pr);
     expect(steps.replyToPullRequestReviewThread).toHaveBeenCalledOnce();
@@ -562,7 +562,7 @@ describe("delivery", () => {
         answers: [{ threadId: 4, body: "Fixed." }],
         commitExplanation: "Changed the lookup and ran the bind tests.",
       }),
-    })) as AgentFn;
+    })) as RunAgentFn;
 
     const result = await useSteps(steps).followPullRequest({
       change: { ...approved, attempts: { ...approved.attempts }, sessions: {}, review: [] },
@@ -589,7 +589,7 @@ describe("delivery", () => {
   // arrives under the same id. followPullRequest must not treat that id as
   // already handled, or the edited feedback is silently dropped.
   it("runs a revision round again for an edited conversation comment", async () => {
-    const edited = (body: string): GateWake => ({
+    const edited = (body: string): PullRequestWake => ({
       kind: "review-comments",
       threads: [
         {
@@ -652,8 +652,8 @@ describe("delivery", () => {
         },
       ],
     };
-    const conversation: PrComment[] = [];
-    const state = (): PrSnapshot =>
+    const conversation: PullRequestComment[] = [];
+    const state = (): PullRequestSnapshot =>
       openSnapshot({
         reviewThreads: [{ ...thread, comments: [...thread.comments] }],
         conversationComments: [...conversation],
@@ -673,7 +673,7 @@ describe("delivery", () => {
             }),
           }
         : result;
-    }) as AgentFn;
+    }) as RunAgentFn;
     steps.commentOnPullRequest = async (_target, body) => {
       conversation.push({
         id: 6,
@@ -805,7 +805,7 @@ describe("delivery", () => {
         output: { responses: [] },
         session: { harness: "codex", id: "saved" },
       };
-    }) as AgentFn;
+    }) as RunAgentFn;
     const result = await useSteps(steps).implementAndReview({
       ...options,
       limits: { implementationReviewRounds: 2 },
@@ -857,7 +857,7 @@ describe("delivery", () => {
   });
 
   it("spends one revision round per feedback wake and stops at the budget", async () => {
-    const summary: GateWake = { kind: "review-comments", threads: [], body: "Fix search" };
+    const summary: PullRequestWake = { kind: "review-comments", threads: [], body: "Fix search" };
     const { steps, calls } = setup([summary, summary]);
     await expect(
       useSteps(steps).deliverChange({
@@ -1163,7 +1163,7 @@ describe("delivery", () => {
     steps.runAgent = (async (config) =>
       wants(config.output, reviewVerdict)
         ? { text: "", output: reviewVerdict.parse({ verdict: "yes" }) }
-        : original(config)) as AgentFn;
+        : original(config)) as RunAgentFn;
     await expect(
       useSteps(steps).deliverChange({
         ...options,
@@ -1177,7 +1177,7 @@ describe("delivery", () => {
     steps.runAgent = (async (config) => ({
       text: "",
       output: wants(config.output, implementationReport) ? { responses: [] } : blocking("Test"),
-    })) as AgentFn;
+    })) as RunAgentFn;
     const incident = { ...options.task, service: "bucket-a", impact: "unexpected growth" };
     const seen: string[] = [];
     await expect(

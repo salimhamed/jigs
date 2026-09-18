@@ -2,7 +2,7 @@
 // the life of a run, so reading it workflow-side replays identically.
 
 import { getWorkflowMetadata } from "workflow";
-import { prScope } from "./marker.ts";
+import { pullRequestScope } from "./marker.ts";
 
 /** The run a marker records as its provenance. */
 export function currentRunId(): string {
@@ -23,6 +23,6 @@ const workflowFunctionName = (workflowName: string): string =>
  * Pass an explicit scope to continue another workflow's work, or to review a
  * pull request independently of the run delivering it.
  */
-export function defaultPrScope(subject: string): string {
-  return prScope(workflowFunctionName(getWorkflowMetadata().workflowName), subject);
+export function defaultPullRequestScope(subject: string): string {
+  return pullRequestScope(workflowFunctionName(getWorkflowMetadata().workflowName), subject);
 }

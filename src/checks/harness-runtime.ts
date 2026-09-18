@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import semver from "semver";
+import type { HarnessKind } from "../blocks/agents/harness-config.ts";
 import {
   resolveClaudeExecutable,
   resolveCodexExecutable,
@@ -12,7 +13,7 @@ import { PROBE_TIMEOUT_MS } from "./catalog.ts";
 // startup gate and `jigs doctor` share this so they cannot disagree. The
 // minimum comes from the codex provider; claude has none.
 
-export type HarnessKind = "claude" | "codex";
+export type { HarnessKind } from "../blocks/agents/harness-config.ts";
 
 /** `line` is the one line to show an operator, pass or fail. */
 export type HarnessRuntime =

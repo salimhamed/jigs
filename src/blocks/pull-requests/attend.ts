@@ -5,7 +5,7 @@
 // generator is returned. An onWake that throws would otherwise leak a durable
 // PR-scoped lock that blocks every later run on that pull request.
 
-import type { GateWake } from "./gate.ts";
+import type { PullRequestWake } from "./gate.ts";
 
 export type Attend<T> = { listen: true } | { finished: T };
 
@@ -14,8 +14,8 @@ export const listen = (): Attend<never> => ({ listen: true });
 export const finished = <T>(value: T): Attend<T> => ({ finished: value });
 
 export async function attend<T>(
-  wakes: AsyncGenerator<GateWake, void, undefined>,
-  onWake: (wake: GateWake) => Promise<Attend<T>> | Attend<T>,
+  wakes: AsyncGenerator<PullRequestWake, void, undefined>,
+  onWake: (wake: PullRequestWake) => Promise<Attend<T>> | Attend<T>,
   describe?: string,
 ): Promise<T> {
   try {

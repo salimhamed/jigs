@@ -1,1 +1,1 @@
-export type { WorktreeFacts } from "./worktree.ts";
+export type { Worktree } from "./worktree.ts";

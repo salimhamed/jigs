@@ -1,6 +1,6 @@
 import { mkdirSync, realpathSync } from "node:fs";
 import path from "node:path";
-import type { WorktreeFacts } from "../../blocks/workspaces/worktree.ts";
+import type { Worktree } from "../../blocks/workspaces/worktree.ts";
 import { JigsError } from "../../errors.ts";
 import { deriveDefaultBranch, git, tryGit } from "../../providers/git.ts";
 
@@ -62,7 +62,7 @@ interface CutOptions {
   branch: string;
 }
 
-export async function createWorktree(options: CutOptions): Promise<WorktreeFacts> {
+export async function createWorktree(options: CutOptions): Promise<Worktree> {
   const { repoDir, worktreePath, branch } = options;
   const defaultBranch = await resolveDefaultBranch(repoDir);
   await fetchFreshness(repoDir, defaultBranch, branch);

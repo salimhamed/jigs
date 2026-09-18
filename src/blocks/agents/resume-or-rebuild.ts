@@ -7,8 +7,8 @@
 
 import type { z } from "zod";
 import type { HarnessConfig } from "./harness-config.ts";
-import type { AgentStepConfig } from "./plan.ts";
-import type { AgentSession, AgentStepResult } from "./result.ts";
+import type { RunAgentOptions } from "./plan.ts";
+import type { AgentResult, AgentSession } from "./result.ts";
 
 // Private on purpose: `instanceof` only means something on this side of the
 // step boundary, and only to the fallback below.
@@ -25,10 +25,10 @@ export function resumeFailed(detail: string): never {
 }
 
 /** Run an agent through the factory’s bound step wrapper. */
-export type AgentFn = <T = undefined>(config: AgentStepConfig<T>) => Promise<AgentStepResult<T>>;
+export type RunAgentFn = <T = undefined>(config: RunAgentOptions<T>) => Promise<AgentResult<T>>;
 
 export interface ResumeOrRebuildOptions<T> {
-  runAgent: AgentFn;
+  runAgent: RunAgentFn;
   harness: HarnessConfig;
   cwd: string;
   session?: AgentSession;

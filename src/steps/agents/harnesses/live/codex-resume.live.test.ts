@@ -1,8 +1,12 @@
 import path from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { claude, codex } from "../../../../blocks/agents/harness-config.ts";
-import { buildAgentWire } from "../../../../blocks/agents/plan.ts";
-import { type ExecuteDeps, executeAgent, realDeps } from "../../execute-agent.ts";
+import { buildAgentRequest } from "../../../../blocks/agents/plan.ts";
+import {
+  type AgentExecutionDependencies,
+  defaultAgentExecutionDependencies,
+  executeAgent,
+} from "../../execute-agent.ts";
 import { ensureManagedCodexHome } from "../codex-home.ts";
 import { stripApiCredentials } from "../env.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
@@ -14,13 +18,13 @@ import { assertLivePreconditions, makeScratchRepo } from "./fixtures/live-env.ts
 // a silently fresh session pretending to hold the context.
 
 let tmp: string;
-let deps: ExecuteDeps;
+let deps: AgentExecutionDependencies;
 beforeAll(() => {
   assertLivePreconditions();
   stripApiCredentials();
   tmp = makeTmpDir();
   deps = {
-    ...realDeps,
+    ...defaultAgentExecutionDependencies,
     ensureCodexHome: (runId) =>
       ensureManagedCodexHome(runId, {
         baseDir: path.join(tmp, "codex-homes"),
@@ -32,7 +36,7 @@ afterAll(() => {
 });
 
 test("a codex thread id with no rollout behind it reports resumeFailed", async () => {
-  const wire = buildAgentWire({
+  const wire = buildAgentRequest({
     harness: codex({ model: "gpt-5.5" }),
     cwd: makeScratchRepo(tmp, "codex-resume"),
     prompt: "Reply with exactly OK and nothing else.",
@@ -50,7 +54,7 @@ test("a codex thread id with no rollout behind it reports resumeFailed", async (
 });
 
 test("a claude session id with no transcript behind it reports resumeFailed", async () => {
-  const wire = buildAgentWire({
+  const wire = buildAgentRequest({
     harness: claude({ model: "sonnet" }),
     cwd: makeScratchRepo(tmp, "claude-resume"),
     prompt: "Reply with exactly OK and nothing else.",

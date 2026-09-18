@@ -9,7 +9,7 @@
 // imported from inside a step body. `WorktreeRequest` is a type, so a
 // workflow-side `import type` of it is erased and stays safe.
 
-import type { WorktreeFacts } from "../../blocks/workspaces/worktree.ts";
+import type { Worktree } from "../../blocks/workspaces/worktree.ts";
 import { resolveBinding } from "../../config/factory-config.ts";
 import { factoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
@@ -31,7 +31,7 @@ export interface WorktreeRequest {
 
 // `sql` and `readOwner` wrap the two external systems this path consults —
 // the registry and the World — and nothing else here is an option.
-export interface ProvisionWorktreeDeps {
+export interface ProvisionWorktreeDependencies {
   sql?: RegistrySql;
   readOwner?: (runId: string) => Promise<OwnerState>;
 }
@@ -41,8 +41,8 @@ export interface ProvisionWorktreeDeps {
 export async function provisionWorktree(
   request: WorktreeRequest,
   metadata: RunMetadata,
-  deps: ProvisionWorktreeDeps = {},
-): Promise<WorktreeFacts> {
+  deps: ProvisionWorktreeDependencies = {},
+): Promise<Worktree> {
   const runId = metadata.workflowRunId;
   const sql = deps.sql ?? registrySql();
   const owner = deps.readOwner ?? readOwner;
@@ -77,7 +77,7 @@ export async function provisionWorktree(
   // A registry row with no directory is just a branch with no worktree —
   // fall through to three-way resolution.
   if (disk !== null) assertReusable({ path: target, sameOwner, disk });
-  const facts: WorktreeFacts =
+  const facts: Worktree =
     disk === null
       ? await createWorktree(cut)
       : {

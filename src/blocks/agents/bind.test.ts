@@ -8,20 +8,20 @@ const unused = async (): Promise<never> => {
 };
 
 test("a factory can override a named step and retain typed output parsing", async () => {
-  const executeModelRequest = vi.fn<AgentSteps["executeModelRequest"]>(async () => ({
+  const executeModel = vi.fn<AgentSteps["executeModel"]>(async () => ({
     text: "",
     output: { count: 3 },
   }));
-  const bound = bindAgentSteps({ executeAgent: unused, executeModelRequest });
+  const bound = bindAgentSteps({ executeAgent: unused, executeModel });
   const result = await bound.askModel({
     harness: claude({ model: "sonnet" }),
     prompt: "Count",
     output: z.object({ count: z.number() }),
   });
   expect(result.output.count).toBe(3);
-  expect(executeModelRequest).toHaveBeenCalledOnce();
+  expect(executeModel).toHaveBeenCalledOnce();
 
-  executeModelRequest.mockResolvedValueOnce({ text: "", output: { count: "invalid" } });
+  executeModel.mockResolvedValueOnce({ text: "", output: { count: "invalid" } });
   await expect(
     bound.askModel({
       harness: claude({ model: "sonnet" }),
@@ -32,13 +32,11 @@ test("a factory can override a named step and retain typed output parsing", asyn
 });
 
 test("generic agents require no ticket or pull-request steps", async () => {
-  const executeModelRequest = vi.fn<AgentSteps["executeModelRequest"]>(async function (
-    this: unknown,
-  ) {
+  const executeModel = vi.fn<AgentSteps["executeModel"]>(async function (this: unknown) {
     expect(this).toBeUndefined();
     return { text: "", output: { finding: "unused" } };
   });
-  const bound = bindAgentSteps({ executeAgent: unused, executeModelRequest });
+  const bound = bindAgentSteps({ executeAgent: unused, executeModel });
   expect(
     await bound.askModel({
       harness: claude({ model: "sonnet" }),
@@ -46,5 +44,5 @@ test("generic agents require no ticket or pull-request steps", async () => {
       output: z.object({ finding: z.string() }),
     }),
   ).toMatchObject({ output: { finding: "unused" } });
-  expect(executeModelRequest).toHaveBeenCalledOnce();
+  expect(executeModel).toHaveBeenCalledOnce();
 });

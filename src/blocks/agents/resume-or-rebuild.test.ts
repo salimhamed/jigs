@@ -2,9 +2,9 @@ import { expect, test } from "vitest";
 import { z } from "zod";
 import { unwrapAgentStep } from "./agent.ts";
 import { claude } from "./harness-config.ts";
-import { type AgentStepConfig, parseOutput } from "./plan.ts";
-import type { AgentStepResult } from "./result.ts";
-import { type AgentFn, resumeOrRebuild } from "./resume-or-rebuild.ts";
+import { parseOutput, type RunAgentOptions } from "./plan.ts";
+import type { AgentResult } from "./result.ts";
+import { type RunAgentFn, resumeOrRebuild } from "./resume-or-rebuild.ts";
 
 const verdict = z.strictObject({ note: z.string() });
 
@@ -12,9 +12,9 @@ const verdict = z.strictObject({ note: z.string() });
 // marker, ./agent.ts turns it into the throw — so these cases prove the whole
 // chain, not just that the fallback catches what it itself constructs.
 function recorder(options: { staleResume?: boolean } = {}) {
-  const calls: AgentStepConfig<unknown>[] = [];
-  const runAgent: AgentFn = async <T>(config: AgentStepConfig<T>) => {
-    calls.push(config as AgentStepConfig<unknown>);
+  const calls: RunAgentOptions<unknown>[] = [];
+  const runAgent: RunAgentFn = async <T>(config: RunAgentOptions<T>) => {
+    calls.push(config as RunAgentOptions<unknown>);
     const result = unwrapAgentStep(
       options.staleResume === true && config.resume !== undefined
         ? { resumeFailed: "no rollout found for thread id 0199-gone" }
@@ -27,7 +27,7 @@ function recorder(options: { staleResume?: boolean } = {}) {
     return {
       ...result,
       output: parseOutput(config.output, result.output),
-    } as AgentStepResult<T>;
+    } as AgentResult<T>;
   };
   return { calls, runAgent };
 }
@@ -92,7 +92,7 @@ test("with no session at all the fresh context is entered directly", async () =>
 });
 
 test("an error that is not a resume failure is not swallowed", async () => {
-  const runAgent: AgentFn = async () => {
+  const runAgent: RunAgentFn = async () => {
     throw new Error("the harness fell over");
   };
   await expect(
@@ -107,7 +107,7 @@ test("an error that is not a resume failure is not swallowed", async () => {
 
 test("a successful resume retains its session when the harness omits session metadata", async () => {
   const session = { harness: "claude" as const, id: "s-retained" };
-  const runAgent: AgentFn = async <T>() => ({ text: "", output: undefined as T });
+  const runAgent: RunAgentFn = async <T>() => ({ text: "", output: undefined as T });
   const result = await resumeOrRebuild({
     ...base,
     runAgent,

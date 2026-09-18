@@ -11,16 +11,16 @@ export type JsonValue =
 
 // Declared as zod rather than as a bare type so a model step can emit a
 // question directly, as ticket review does.
-export const haltOption = z.strictObject({
+export const haltOptionSchema = z.strictObject({
   label: z.string().min(1),
   recommended: z.boolean().optional(),
 });
 
-export const haltQuestion = z.strictObject({
+export const haltQuestionSchema = z.strictObject({
   question: z.string().min(1),
   context: z.string().optional(),
-  options: z.array(haltOption).optional(),
+  options: z.array(haltOptionSchema).optional(),
 });
 
-export type HaltOption = z.infer<typeof haltOption>;
-export type HaltQuestion = z.infer<typeof haltQuestion>;
+export type HaltOption = z.infer<typeof haltOptionSchema>;
+export type HaltQuestion = z.infer<typeof haltQuestionSchema>;

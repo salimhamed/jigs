@@ -1,9 +1,9 @@
-import type { GateWake, PrRef } from "@salimhamed/jigs/blocks/pull-requests";
+import type { PullRequestRef, PullRequestWake } from "@salimhamed/jigs/blocks/pull-requests";
 
-type CheckRun = Extract<GateWake, { kind: "ci-red" }>["failing"][number];
-type ReviewThread = Extract<GateWake, { kind: "review-comments" }>["threads"][number];
+type CheckRun = Extract<PullRequestWake, { kind: "ci-red" }>["failing"][number];
+type ReviewThread = Extract<PullRequestWake, { kind: "review-comments" }>["threads"][number];
 
-import type { WorktreeFacts } from "@salimhamed/jigs";
+import type { Worktree } from "@salimhamed/jigs";
 import type { AgentSession, HarnessConfig } from "@salimhamed/jigs/blocks/agents";
 import type { MergePolicy } from "@salimhamed/jigs/blocks/pull-requests";
 import type { PullRequestDescription } from "./outputs.ts";
@@ -41,7 +41,7 @@ export type AgentRoleName = "implementation" | "review" | "ciRepair" | "pullRequ
  */
 interface RolePromptContext<TTask extends WorkItem> {
   task: TTask;
-  worktree: WorktreeFacts;
+  worktree: Worktree;
   /** Counts attempts of this role's phase; 1 on the first one. */
   attempt: number;
   /**
@@ -87,7 +87,7 @@ export interface ReviewPromptContext<TTask extends WorkItem = WorkItem>
 export interface CiRepairPromptContext<TTask extends WorkItem = WorkItem>
   extends RolePromptContext<TTask> {
   failing: CheckRun[];
-  pr: PrRef;
+  pr: PullRequestRef;
   /** Direction an `onLimit` continuation supplied; empty until a limit is extended. */
   instructions: string;
   /** Read the diff when needed; available only for a fresh or rebuilt session. */
@@ -101,7 +101,7 @@ export interface PullRequestRevisionPromptContext<TTask extends WorkItem = WorkI
   threads: ReviewThread[];
   /** The summary of the review that requested changes, when it had one. */
   reviewBody?: string;
-  pr: PrRef;
+  pr: PullRequestRef;
   /** Direction an `onLimit` continuation supplied; empty until a limit is extended. */
   instructions: string;
   /** Read the diff when needed; available only for a fresh or rebuilt session. */
@@ -111,7 +111,7 @@ export interface PullRequestRevisionPromptContext<TTask extends WorkItem = WorkI
 /** Describe the approved change. Runs once, against the commit about to be published. */
 export interface DescriptionPromptContext<TTask extends WorkItem = WorkItem> {
   task: TTask;
-  worktree: WorktreeFacts;
+  worktree: Worktree;
   diff: string;
   /**
    * Renders the recipe’s default prompt. Await it and add to the result to
@@ -189,9 +189,9 @@ export interface LimitReached<TTask extends WorkItem = WorkItem> {
   /** Why the phase is still unfinished: review findings, failing checks, or the review summary. */
   findings: string[];
   task: TTask;
-  worktree: WorktreeFacts;
+  worktree: Worktree;
   /** Present once the change is published, so the two post-publication phases carry it. */
-  pr?: PrRef;
+  pr?: PullRequestRef;
 }
 
 /** What `onLimit` returns: keep going on stated direction, or end the delivery here. */
@@ -220,7 +220,7 @@ export type OnDeliveryLimit<TTask extends WorkItem = WorkItem> = (
  */
 export interface DeliveryChange<TTask extends WorkItem = WorkItem> {
   task: TTask;
-  worktree: WorktreeFacts;
+  worktree: Worktree;
   attempts: DeliveryAttempts;
   /**
    * Each role's live agent session, kept so the next attempt resumes rather
@@ -251,13 +251,13 @@ export type ImplementAndReviewResult<TTask extends WorkItem = WorkItem> = {
 /** A delivery returns only after its pull request merged. */
 export type DeliveryResult<TTask extends WorkItem = WorkItem> = {
   change: ApprovedChange<TTask>;
-  pr: PrRef;
+  pr: PullRequestRef;
 };
 
 export interface ImplementAndReviewOptions<TTask extends WorkItem = WorkItem> {
   /** Recorded durably, so keep it plain serializable data. */
   task: TTask;
-  worktree: WorktreeFacts;
+  worktree: Worktree;
   implementation: ImplementationAgent<TTask>;
   review: ReviewAgent<TTask>;
   limits: Pick<DeliveryLimits, "implementationReviewRounds">;
@@ -273,7 +273,7 @@ export interface PublishApprovedChangeOptions<TTask extends WorkItem = WorkItem>
 }
 export interface FollowPullRequestOptions<TTask extends WorkItem = WorkItem> {
   change: ApprovedChange<TTask>;
-  pr: PrRef;
+  pr: PullRequestRef;
   /**
    * The continuation identity written into every comment this delivery posts,
    * and the one it reads back to see what it has already done. Defaults to

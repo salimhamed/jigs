@@ -3,7 +3,7 @@
 // the "." export — while the lifecycle that produces it in
 // ../steps/workspaces/index.ts is step-side and full of node builtins.
 
-export interface WorktreeFacts {
+export interface Worktree {
   path: string;
   branch: string;
   defaultBranch: string;

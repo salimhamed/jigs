@@ -7,10 +7,10 @@ import { resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
-import { type Factory, ticketInput } from "../blocks/factory.ts";
+import { type Factory, ticketInputSchema } from "../blocks/factory.ts";
 import { ticketToken } from "../blocks/linear/claim.ts";
 import { needsHumanToken } from "../blocks/linear/halt-for-human.ts";
-import { prToken } from "../blocks/pull-requests/gate.ts";
+import { pullRequestToken } from "../blocks/pull-requests/gate.ts";
 import { resetGithubAuth } from "../providers/github-auth.ts";
 import * as linear from "../providers/linear.ts";
 import * as sql from "../steps/workspaces/sql.ts";
@@ -38,7 +38,7 @@ const fixture = {
     plain: {
       workflow: async () => undefined,
       inputs: z.object({
-        ticket: ticketInput,
+        ticket: ticketInputSchema,
         askHuman: z.boolean().default(false),
       }),
     },
@@ -288,8 +288,8 @@ test("a signed status delivery resolves every matching PR and routes by base rep
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ delivered: true });
   expect(resumeHookMock.mock.calls.map(([token]) => token)).toEqual([
-    prToken({ owner: "acme", repo: "api", number: 41 }),
-    prToken({ owner: "acme", repo: "web", number: 7 }),
+    pullRequestToken({ owner: "acme", repo: "api", number: 41 }),
+    pullRequestToken({ owner: "acme", repo: "web", number: 7 }),
   ]);
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
@@ -565,7 +565,7 @@ test("GET /api/runs/:ref reports a stalled run as stalled, like `jigs ps` does",
 
 const CLAIM = ticketToken("68bc9696-35d5-442d-ab56-214c8cfefbec");
 const MARKER = needsHumanToken("68bc9696-35d5-442d-ab56-214c8cfefbec", "c1");
-const PR = prToken({ owner: "acme", repo: "api", number: 41 });
+const PR = pullRequestToken({ owner: "acme", repo: "api", number: 41 });
 
 // A running run holding exactly these hooks. The routes below read no other
 // world surface, so anything they touch beyond `hooks.list` rejects and is

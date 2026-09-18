@@ -6,13 +6,13 @@
 import type { MergePolicy } from "../blocks/pull-requests/policy.ts";
 import { GithubApiError, githubGet, githubGetAll, githubRequest } from "./github-api.ts";
 
-export type PrRef = {
+export type PullRequestRef = {
   owner: string;
   repo: string;
   number: number;
 };
 
-export interface PrReview {
+export interface PullRequestReview {
   id: number;
   state: string;
   body: string;
@@ -46,7 +46,7 @@ export interface ReviewThread {
 }
 
 /** A comment on the pull request conversation, which hangs off no thread. */
-export interface PrComment {
+export interface PullRequestComment {
   id: number;
   body: string;
   user: string;
@@ -63,7 +63,7 @@ export interface CheckRun {
   url: string;
 }
 
-export interface PrSnapshot {
+export interface PullRequestSnapshot {
   state: "open" | "closed";
   merged: boolean;
   draft: boolean;
@@ -79,9 +79,9 @@ export interface PrSnapshot {
   labels: string[];
   /** The merge commit, once GitHub has made one. */
   mergeCommitSha: string | null;
-  reviews: PrReview[];
+  reviews: PullRequestReview[];
   reviewThreads: ReviewThread[];
-  conversationComments: PrComment[];
+  conversationComments: PullRequestComment[];
   ci: "red" | "green" | "pending";
   failingChecks: CheckRun[];
 }
@@ -94,9 +94,9 @@ export async function getAuthenticatedUser(): Promise<{ login: string }> {
 
 /** Resolve a commit-status delivery to every open PR currently headed by that commit. */
 export async function findOpenPullRequestsByHeadSha(
-  repository: Pick<PrRef, "owner" | "repo">,
+  repository: Pick<PullRequestRef, "owner" | "repo">,
   sha: string,
-): Promise<PrRef[]> {
+): Promise<PullRequestRef[]> {
   const pulls = await githubGetAll<{
     number: number;
     state: string;
@@ -188,7 +188,7 @@ function groupThreads(
   return [...byRoot.values()];
 }
 
-export async function fetchPrSnapshot(pr: PrRef): Promise<PrSnapshot> {
+export async function fetchPrSnapshot(pr: PullRequestRef): Promise<PullRequestSnapshot> {
   const repoPath = `/repos/${pr.owner}/${pr.repo}`;
   const prPath = `${repoPath}/pulls/${pr.number}`;
   const pull = await githubGet<{
@@ -302,7 +302,7 @@ export async function fetchPrSnapshot(pr: PrRef): Promise<PrSnapshot> {
 }
 
 export async function replyToReviewThread(
-  pr: PrRef,
+  pr: PullRequestRef,
   rootId: number,
   body: string,
 ): Promise<{ id: number }> {
@@ -315,7 +315,7 @@ export async function replyToReviewThread(
 
 // The PR conversation, not a thread: what a review-body answer and the CI
 // escalation both land on.
-export async function postPrComment(pr: PrRef, body: string): Promise<{ id: number }> {
+export async function postPrComment(pr: PullRequestRef, body: string): Promise<{ id: number }> {
   return githubRequest<{ id: number }>(
     "POST",
     `/repos/${pr.owner}/${pr.repo}/issues/${pr.number}/comments`,
@@ -336,7 +336,7 @@ const REVIEW_EVENTS = {
 } as const satisfies Record<PullRequestReviewRequest["event"], string>;
 
 export async function postPullRequestReview(
-  pr: PrRef,
+  pr: PullRequestRef,
   review: PullRequestReviewRequest,
 ): Promise<{ id: number }> {
   return githubRequest<{ id: number }>(
@@ -370,7 +370,7 @@ export interface CreatePullRequest {
 }
 
 /** Mark a draft pull request ready for review. Safe when it is already ready. */
-export async function markPrReady(pr: PrRef): Promise<void> {
+export async function markPrReady(pr: PullRequestRef): Promise<void> {
   // The ready-for-review mutation requires a node id, so resolve it through
   // the existing REST pull-request endpoint before calling GraphQL.
   const { node_id: pullRequestId } = await githubGet<{ node_id: string }>(
@@ -405,14 +405,14 @@ export async function createPullRequest(
 }
 
 /** The commit messages on the branch, in the order GitHub lists them. */
-export async function fetchPrCommitMessages(pr: PrRef): Promise<string[]> {
+export async function fetchPrCommitMessages(pr: PullRequestRef): Promise<string[]> {
   const commits = await githubGetAll<{ commit: { message: string } }>(
     `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}/commits`,
   );
   return commits.map((entry) => entry.commit.message);
 }
 
-export async function fetchPrTitle(pr: PrRef): Promise<string> {
+export async function fetchPrTitle(pr: PullRequestRef): Promise<string> {
   const pull = await githubGet<{ title: string }>(
     `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}`,
   );
@@ -431,7 +431,7 @@ export interface MergeRequest {
 // PUT, and `sha` is the guard: GitHub answers 409 rather than merging a commit
 // the caller never saw. A rebase rewrites the commits, so it takes no message.
 export async function mergePr(
-  pr: PrRef,
+  pr: PullRequestRef,
   request: MergeRequest,
 ): Promise<{ merged: boolean; sha: string }> {
   return githubRequest<{ merged: boolean; sha: string }>(
@@ -451,7 +451,7 @@ export async function mergePr(
 }
 
 /** Put the operator's name on a pull request the App opened for them. */
-export async function assignPullRequest(pr: PrRef, logins: string[]): Promise<void> {
+export async function assignPullRequest(pr: PullRequestRef, logins: string[]): Promise<void> {
   await githubRequest("POST", `/repos/${pr.owner}/${pr.repo}/issues/${pr.number}/assignees`, {
     assignees: logins,
   });

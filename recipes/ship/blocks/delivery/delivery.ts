@@ -3,7 +3,7 @@ import { resumeOrRebuild } from "@salimhamed/jigs/blocks/agents";
 import type { StatusReason } from "@salimhamed/jigs/blocks/pull-requests";
 import {
   attend,
-  defaultPrScope,
+  defaultPullRequestScope,
   finished,
   listen,
   postPullRequestNote,
@@ -330,7 +330,7 @@ export async function followPullRequest<TTask extends WorkItem = WorkItem>(
   validateLimit(options.limits.ciFixAttempts, "ciFixAttempts");
   validateLimit(options.limits.pullRequestRevisionRounds, "pullRequestRevisionRounds");
   const { change, pr } = options;
-  const scope = options.scope ?? defaultPrScope(change.task.key);
+  const scope = options.scope ?? defaultPullRequestScope(change.task.key);
   const budgets = { ...options.limits };
   const instructions = { ciFixAttempts: "", pullRequestRevisionRounds: "" };
   const note = (reason: StatusReason, headSha: string, body: string) =>

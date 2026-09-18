@@ -4,14 +4,14 @@ import {
   carriesMarker,
   commentSource,
   markBody,
-  type PrMarker,
+  type PullRequestMarker,
   parseMarkers,
-  prScope,
+  pullRequestScope,
   readLedger,
   renderMarker,
 } from "./marker.ts";
 
-const marker: PrMarker = {
+const marker: PullRequestMarker = {
   scope: "ship/AGE-123",
   run: "wrun_01M2EKJSDQHC87BCEYCAV4GVKJ",
   kind: "reply",
@@ -56,7 +56,7 @@ test("a quoted marker is a quotation, not jigs' own words", () => {
 });
 
 test("round-trips a value carrying quotes, angle brackets and newlines", () => {
-  const awkward: PrMarker = {
+  const awkward: PullRequestMarker = {
     scope: 'review "outstanding" 100% <b>\nnow',
     run: "wrun_1",
     kind: "completion",
@@ -78,7 +78,7 @@ test("the one sequence a value may not carry is the comment terminator", () => {
   expect(() => assertUsableScope("")).toThrow("empty");
   // The scope is the only value a caller supplies, so it is checked where it
   // enters rather than where it breaks a comment open.
-  expect(() => prScope("ship", "a-->b")).toThrow('"-->"');
+  expect(() => pullRequestScope("ship", "a-->b")).toThrow('"-->"');
 });
 
 test("reads several markers out of one body and ignores the prose around them", () => {
@@ -144,5 +144,5 @@ test("a comment's source changes when it is edited", () => {
 });
 
 test("the default scope names the workflow and its subject", () => {
-  expect(prScope("ship", "AGE-123")).toBe("ship/AGE-123");
+  expect(pullRequestScope("ship", "AGE-123")).toBe("ship/AGE-123");
 });

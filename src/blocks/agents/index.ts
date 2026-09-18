@@ -5,8 +5,8 @@ export {
   runAgent,
   unwrapAgentStep,
 } from "./agent.ts";
-export { type AgentOrHaltDeps, agentOrHalt } from "./agent-or-halt.ts";
-export { askModel, type ExecuteModelRequestStep } from "./ask-model.ts";
+export { type RunAgentOrHaltDependencies, runAgentOrHalt } from "./agent-or-halt.ts";
+export { askModel, type ExecuteModelStep } from "./ask-model.ts";
 export { type AgentSteps, bindAgentSteps } from "./bind.ts";
 export {
   type ClaudeHarnessConfig,
@@ -16,23 +16,23 @@ export {
   claude,
   codex,
   type HarnessConfig,
-  type HarnessName,
+  type HarnessKind,
   type HarnessOptions,
-  type McpHttpServer,
-  type McpProbe,
+  type McpHttpServerConfig,
   type McpServerConfig,
-  type McpStdioServer,
+  type McpStdioServerConfig,
+  type McpToolProbe,
   selectHarness,
 } from "./harness-config.ts";
 export {
-  type AgentStepConfig,
-  type AgentWire,
-  type AskStepConfig,
-  type AskWire,
-  buildAgentWire,
-  buildAskWire,
+  type AgentRequest,
+  type AskModelOptions,
+  buildAgentRequest,
+  buildModelRequest,
+  type ModelRequest,
+  type OutputJsonSchema,
   parseOutput,
-  type WireJsonSchema,
+  type RunAgentOptions,
 } from "./plan.ts";
 export {
   type RebuildContextPrompt,
@@ -40,14 +40,14 @@ export {
   rebuildContextPrompt,
 } from "./rebuild-context.prompt.ts";
 export type {
+  AgentResult,
   AgentSession,
-  AgentStepResult,
-  StepResult,
-  StepUsage,
+  ModelResult,
+  ModelUsage,
 } from "./result.ts";
 export {
-  type AgentFn,
   type ResumeOrRebuildOptions,
   type ResumeOrRebuildResult,
+  type RunAgentFn,
   resumeOrRebuild,
 } from "./resume-or-rebuild.ts";

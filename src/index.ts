@@ -18,15 +18,15 @@ export {
   defineFactory,
   type Factory,
   type FactoryDefinition,
-  type GithubDefinition,
+  type GitHubDefinition,
   type MergeDefinition,
   type Schedule,
   type TicketWorkflowInputs,
-  ticketInput,
+  ticketInputSchema,
   type WorkflowEntry,
   type WorkflowInputs,
 } from "./blocks/factory.ts";
-export type { WorktreeFacts } from "./blocks/workspaces/worktree.ts";
+export type { Worktree } from "./blocks/workspaces/worktree.ts";
 // The threads the pull request gate delivers and the builder answers. Named
 // here rather than on either subpath because both carry it.
 export type { ReviewThread } from "./providers/github.ts";

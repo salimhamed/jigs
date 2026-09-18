@@ -5,22 +5,22 @@
 
 import { z } from "zod";
 import type { HarnessConfig } from "../agents/harness-config.ts";
-import type { AgentFn } from "../agents/resume-or-rebuild.ts";
-import { haltQuestion } from "../human/index.ts";
+import type { RunAgentFn } from "../agents/resume-or-rebuild.ts";
+import { haltQuestionSchema } from "../human/index.ts";
 import type { TicketClaim } from "./claim.ts";
 import type { HaltForHumanFn } from "./halt-for-human.ts";
-import { renderSnapshot, type TicketSnapshot } from "./snapshot.ts";
+import { renderTicketSnapshot, type TicketSnapshot } from "./snapshot.ts";
 import { type TicketReviewPrompt, ticketReviewPrompt } from "./ticket-review.prompt.ts";
 
 // strictObject so the harness's native structured output carries
 // additionalProperties:false and a malformed verdict throws at the
 // workflow-side parse rather than degrading into a guess.
-export const ticketReviewVerdict = z.strictObject({
+export const ticketReviewVerdictSchema = z.strictObject({
   verdict: z.enum(["proceed", "needs-human"]),
   brief: z.string().min(1),
   // What the ticket is about, in plain words, for whoever reads the comment.
   about: z.string(),
-  questions: z.array(haltQuestion),
+  questions: z.array(haltQuestionSchema),
   assumptions: z.array(z.string()),
 });
 
@@ -55,14 +55,14 @@ export type PostTicketNote = (issueId: string, note: TicketNote) => Promise<void
  * `assumptions` is what the review decided for itself rather than asked
  * about. It is posted to the ticket, so a human can still correct it.
  */
-export type Handoff = {
+export type TicketHandoff = {
   brief: string;
   snapshot: TicketSnapshot;
   assumptions: string[];
 };
 
 export interface ReviewTicketOptions {
-  runAgent: AgentFn;
+  runAgent: RunAgentFn;
   haltForHuman: HaltForHumanFn;
   postTicketNote: PostTicketNote;
   // Re-read between rounds: a human's reply lands on the ticket, not in the
@@ -80,7 +80,7 @@ export interface ReviewTicketOptions {
   prompt?: TicketReviewPrompt;
 }
 
-export async function reviewTicket(options: ReviewTicketOptions): Promise<Handoff> {
+export async function reviewTicket(options: ReviewTicketOptions): Promise<TicketHandoff> {
   const { runAgent, haltForHuman, fetchTicketSnapshot, postTicketNote } = options;
   let snapshot = options.snapshot;
 
@@ -89,9 +89,9 @@ export async function reviewTicket(options: ReviewTicketOptions): Promise<Handof
       harness: options.harness,
       cwd: options.cwd,
       prompt: (options.prompt ?? ticketReviewPrompt)({
-        ticket: renderSnapshot(snapshot),
+        ticket: renderTicketSnapshot(snapshot),
       }),
-      output: ticketReviewVerdict,
+      output: ticketReviewVerdictSchema,
     });
     const { verdict, brief, about, questions, assumptions } = review.output;
     console.log(

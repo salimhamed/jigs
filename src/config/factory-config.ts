@@ -3,7 +3,7 @@ import path from "node:path";
 import { createJiti } from "jiti";
 
 import { z } from "zod";
-import { type MergePolicy, mergeSchema } from "../blocks/pull-requests/policy.ts";
+import { type MergePolicy, mergePolicySchema } from "../blocks/pull-requests/policy.ts";
 import { releaseSchema } from "../blocks/runtime/release.ts";
 import { JigsError } from "../errors.ts";
 import { factorySlug } from "../steps/workspaces/layout.ts";
@@ -84,7 +84,7 @@ const factoryConfigSchema = z.looseObject({
   // This factory's merge policy: who merges, by which of GitHub's three merge
   // methods, and what signal permits it.
   release: releaseSchema.optional(),
-  merge: z.preprocess((block) => block ?? {}, mergeSchema),
+  merge: z.preprocess((block) => block ?? {}, mergePolicySchema),
 });
 
 export type BindingEntry = z.output<typeof bindingSchema>;
@@ -92,7 +92,7 @@ export type FactoryConfig = z.output<typeof factoryConfigSchema>;
 export type GithubIdentity = z.output<typeof githubIdentitySchema>;
 export type AppIdentity = Extract<GithubIdentity, { mode: "app" }>;
 /** The policy a factory that states none gets: a human merges, by squash, on an approving review. */
-export const defaultMergePolicy = (): MergePolicy => mergeSchema.parse({});
+export const defaultMergePolicy = (): MergePolicy => mergePolicySchema.parse({});
 
 export function parseFactoryConfig(value: unknown): FactoryConfig {
   const result = factoryConfigSchema.safeParse(value);
