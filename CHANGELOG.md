@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.34.0](https://github.com/salimhamed/jigs/compare/jigs-v0.33.1...jigs-v0.34.0) (2026-09-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* replace flat and catch-all imports with kind-then-topic block and step paths.
+
+### Features
+
+* organize public imports by code kind and topic ([#270](https://github.com/salimhamed/jigs/issues/270)) ([3c68a8f](https://github.com/salimhamed/jigs/commit/3c68a8f157c4c7d25a15ccc72556ac2f5e0a760b))
+
 ## [0.33.1](https://github.com/salimhamed/jigs/compare/jigs-v0.33.0...jigs-v0.33.1) (2026-09-18)
 
 
