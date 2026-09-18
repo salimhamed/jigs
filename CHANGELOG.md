@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.33.0](https://github.com/salimhamed/jigs/compare/jigs-v0.32.0...jigs-v0.33.0) (2026-09-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* Delivery composition and builder-agent APIs are no longer exported by the library; use the ship recipe.
+
+### Features
+
+* move delivery composition into the ship recipe ([#266](https://github.com/salimhamed/jigs/issues/266)) ([7e3437f](https://github.com/salimhamed/jigs/commit/7e3437ff5f23567a570001f72bf124ad50d19e99))
+
 ## [0.32.0](https://github.com/salimhamed/jigs/compare/jigs-v0.31.0...jigs-v0.32.0) (2026-09-18)
 
 
