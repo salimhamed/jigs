@@ -180,21 +180,41 @@ const isNotFound = (err: unknown) => err instanceof GithubApiError && err.status
 
 /** The identity check for the configured mode, plus the effective merge policy. */
 export function githubIdentityChecks(
-  identity: GithubIdentity,
+  identity: GithubIdentity | GithubIdentity[],
   merge: MergePolicy,
   probes: GithubIdentityProbes,
   env: NodeJS.ProcessEnv = process.env,
   bindings: Record<string, Pick<BindingEntry, "remote" | "merge">> = {},
   mergeProbes: GithubMergePolicyProbes = realGithubMergePolicyProbes,
 ): Check[] {
+  const identities = Array.isArray(identity) ? identity : [identity];
+  const primary = identities[0] ?? { mode: "pat" as const };
   const checksBindingPolicies = Object.values(bindings).some(
     (binding) => bindingMergePolicy(merge, binding).by === "jigs",
   );
+  const registrations = new Map<number, Promise<{ slug: string }>>();
+  const appProbes: GithubIdentityProbes = {
+    ...probes,
+    registration: (entry, key) => {
+      let pending = registrations.get(entry.appId);
+      if (!pending) {
+        pending = probes.registration(entry, key);
+        registrations.set(entry.appId, pending);
+      }
+      return pending;
+    },
+  };
   return [
-    identity.mode === "pat"
-      ? patCheck(probes, env)
-      : appCheck(identity, checksBindingPolicies, probes),
-    mergePolicyCheck(identity, merge, bindings, mergeProbes),
+    ...identities.map((entry, index) => {
+      const check =
+        entry.mode === "pat"
+          ? patCheck(probes, env)
+          : appCheck(entry, checksBindingPolicies, appProbes);
+      return identities.length === 1
+        ? check
+        : { ...check, id: `github.identity.${index}`, label: `GitHub identity ${index + 1}` };
+    }),
+    mergePolicyCheck(primary, merge, bindings, mergeProbes),
   ];
 }
 
@@ -254,40 +274,62 @@ function appCheck(
           repair: `chmod 600 ${identity.privateKeyPath}`,
         };
       }
-      let permissions: Record<string, string>;
+      let installations: Array<{ permissions: Record<string, string> }>;
       let slug: string;
       try {
         // Both mint a JWT from the key, so a key the App does not recognise
         // and an installation that is gone are distinguished by the message.
-        [{ permissions }, { slug }] = await Promise.all([
-          probes.installation(identity, key),
+        [installations, { slug }] = await Promise.all([
+          Promise.all(
+            (identity.installationId === undefined
+              ? Object.values(identity.installations ?? {})
+              : [identity.installationId]
+            ).map(async (installationId) => {
+              try {
+                return await probes.installation({ ...identity, installationId }, key);
+              } catch (err) {
+                throw new Error(`installation ${installationId}: ${err}`);
+              }
+            }),
+          ),
           probes.registration(identity, key),
         ]);
       } catch (err) {
         return {
           ok: false,
-          reason: `App ${identity.appId} installation ${identity.installationId} did not answer: ${err}`,
+          reason: `App ${identity.appId} installation ${identity.installationId ?? Object.values(identity.installations ?? {}).join(", ")} did not answer: ${err}`,
           repair:
-            "check github.identity.appId and installationId against the App's settings page and its installation, and that the private key belongs to that App",
+            "check the App entry’s appId and installations (or installationId) against the App's settings page and its installation, and that the private key belongs to that App",
         };
       }
       const requiredPermissions = [
         ...REQUIRED_PERMISSIONS,
         ...(checksBindingPolicies ? JIGS_MERGE_PERMISSIONS : []),
       ];
-      const missing = requiredPermissions.filter(
-        (required) =>
-          !(SATISFIES[required.level] ?? []).includes(permissions[required.name] ?? "none"),
+      const missing = installations.flatMap(({ permissions }, index) =>
+        requiredPermissions
+          .filter(
+            (required) =>
+              !(SATISFIES[required.level] ?? []).includes(permissions[required.name] ?? "none"),
+          )
+          .map((permission) => ({
+            ...permission,
+            installationId:
+              identity.installationId ?? Object.values(identity.installations ?? {})[index],
+          })),
       );
       if (missing.length > 0) {
         return {
           ok: false,
-          reason: `the installation is missing ${missing.map((p) => `${p.name}: ${p.level} (to ${p.why})`).join(", ")}`,
+          reason: `the installation is missing ${missing.map((p) => `${p.name}: ${p.level} (to ${p.why}; installation ${p.installationId})`).join(", ")}`,
           repair:
             "grant the permission on the App (Settings → Developer settings → GitHub Apps → Permissions — “Repository webhooks” is Read & write), then accept the updated permissions on the installation",
         };
       }
-      return { ok: true, detail: `jigs acts as ${slug}[bot]; operator ${identity.operator}` };
+      return {
+        ok: true,
+        detail: `jigs acts as ${slug}[bot]${identity.installations ? ` on ${Object.keys(identity.installations).join(", ")}` : ""}; operator ${identity.operator}`,
+      };
     },
   };
 }

@@ -119,3 +119,23 @@ test("a workflow requiring no bindings needs no factory config at all", () => {
     }),
   ).toEqual([]);
 });
+
+test("an uncovered GitHub binding fails before clone checks with an installations repair", async () => {
+  const factory = makeFactoryRepo(tmp, {
+    bindings: { api: { remote: "ssh://git@github.com/Uncovered/api.git" } },
+    github: {
+      identity: {
+        mode: "app",
+        appId: 1,
+        privateKeyPath: "key.pem",
+        operator: "human",
+        installations: { Covered: 10 },
+      },
+    },
+  });
+  expect(await check(factory, "api")).toMatchObject({
+    ok: false,
+    reason: "no GitHub App installation configured for account Uncovered",
+    repair: expect.stringContaining('"Uncovered": <installation-id>'),
+  });
+});

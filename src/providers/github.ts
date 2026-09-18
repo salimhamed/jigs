@@ -376,14 +376,19 @@ export async function markPrReady(pr: PullRequestRef): Promise<void> {
   const { node_id: pullRequestId } = await githubGet<{ node_id: string }>(
     `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}`,
   );
-  const result = await githubRequest<{ errors?: Array<{ message: string }> }>("POST", "/graphql", {
-    query: `mutation MarkPullRequestReadyForReview($pullRequestId: ID!) {
+  const result = await githubRequest<{ errors?: Array<{ message: string }> }>(
+    "POST",
+    "/graphql",
+    {
+      query: `mutation MarkPullRequestReadyForReview($pullRequestId: ID!) {
       markPullRequestReadyForReview(input: { pullRequestId: $pullRequestId }) {
         pullRequest { id }
       }
     }`,
-    variables: { pullRequestId },
-  });
+      variables: { pullRequestId },
+    },
+    pr.owner,
+  );
   if (result.errors !== undefined && result.errors.length > 0) {
     throw new GithubApiError(
       200,

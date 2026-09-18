@@ -667,3 +667,26 @@ test.each([
     ),
   ).toMatchObject({ ok: false, repair: expect.stringContaining(repair) });
 });
+
+test("doctor probes every installation and registration once per App", async () => {
+  const { installationId: _, ...app } = APP;
+  const installation = vi.fn(async () => ({ permissions: GRANTED }));
+  const registration = vi.fn(async () => ({ slug: "jigs-app-dev" }));
+  const report = await runChecks(
+    githubIdentityChecks(
+      [
+        { ...app, installations: { salimhamed: 1, downstreamimpact: 2, Junglescout: 3 } },
+        { ...app, appId: 5, installations: { Other: 4 } },
+      ],
+      SQUASH_REVIEW,
+      probes({ installation, registration }),
+    ),
+  );
+  expect(report.ok).toBe(true);
+  expect(installation.mock.calls).toHaveLength(4);
+  expect(registration.mock.calls).toHaveLength(2);
+  expect(report.checks[0]).toMatchObject({
+    detail:
+      "jigs acts as jigs-app-dev[bot] on salimhamed, downstreamimpact, Junglescout; operator salimhamed",
+  });
+});

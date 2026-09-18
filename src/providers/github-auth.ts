@@ -10,6 +10,7 @@ import path from "node:path";
 import {
   type AppIdentity,
   type GithubIdentity,
+  installationFor,
   readFactoryConfig,
 } from "../config/factory-config.ts";
 import { factoryEnvValue } from "../config/factory-env.ts";
@@ -95,6 +96,8 @@ export async function mintInstallationToken(
   privateKey: string,
   deps: { now?: () => number; fetch?: FetchLike } = {},
 ): Promise<MintedToken> {
+  if (identity.installationId === undefined)
+    throw new JigsError("resolve an account before minting an installation token");
   const now = deps.now ?? Date.now;
   const doFetch = deps.fetch ?? fetch;
   const jwt = mintAppJwt(identity.appId, privateKey, now());
@@ -229,7 +232,7 @@ let factoryRootOverride: string | null = null;
 
 export function useFactoryRoot(root: string): void {
   factoryRootOverride = root;
-  processAuth = null;
+  processAuth.clear();
 }
 
 const currentFactoryRoot = (): string => factoryRootOverride ?? factoryRoot();
@@ -239,30 +242,42 @@ const currentFactoryRoot = (): string => factoryRootOverride ?? factoryRoot();
  * resolved against the factory root. Outside a factory there is no config to
  * read and the personal token is the only credential there is.
  */
-export function resolveGithubIdentity(root?: string): GithubIdentity {
+export function resolveGithubIdentities(root?: string): GithubIdentity[] {
   let dir: string;
   try {
     dir = root ?? currentFactoryRoot();
   } catch {
-    return { mode: "pat" };
+    return [{ mode: "pat" }];
   }
-  const identity = readFactoryConfig(dir).github.identity;
-  if (identity.mode === "pat") return identity;
-  return { ...identity, privateKeyPath: path.resolve(dir, identity.privateKeyPath) };
+  return readFactoryConfig(dir).github.identities.map((identity) =>
+    identity.mode === "pat"
+      ? identity
+      : {
+          ...identity,
+          privateKeyPath: path.resolve(dir, identity.privateKeyPath),
+        },
+  );
 }
 
-// One auth per process: renewing the installation token is the point of
-// holding it, and a changed identity needs a service restart anyway, because
-// the token in flight was minted for the old one.
-let processAuth: GithubAuth | null = null;
-
-export function githubAuth(): GithubAuth {
-  processAuth ??= createGithubAuth(resolveGithubIdentity());
-  return processAuth;
+export function resolveGithubIdentity(account: string, root?: string): GithubIdentity {
+  return installationFor(resolveGithubIdentities(root), account);
 }
 
-/** Drop the process-wide auth, so the next call re-reads the configuration. */
+const processAuth = new Map<string, GithubAuth>();
+
+export function githubAuthFor(account: string): GithubAuth {
+  const identity = resolveGithubIdentity(account);
+  const key = identity.mode === "pat" ? "pat" : `${identity.appId}:${identity.installationId}`;
+  let auth = processAuth.get(key);
+  if (!auth) {
+    auth = createGithubAuth(identity);
+    processAuth.set(key, auth);
+  }
+  return auth;
+}
+
+/** Drop cached credentials so the next call re-reads configuration. */
 export function resetGithubAuth(): void {
-  processAuth = null;
+  processAuth.clear();
   factoryRootOverride = null;
 }

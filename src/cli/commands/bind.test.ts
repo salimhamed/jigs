@@ -589,3 +589,29 @@ test("unsupported bindings fail before modifying files or registering webhooks",
   expect(jigsConfig()).toBe(text);
   expect(fetch).not.toHaveBeenCalled();
 });
+
+test("bind refuses an uncovered account before editing config or provisioning furniture", async () => {
+  writeFileSync(
+    path.join(factory, "jigs.config.ts"),
+    `export default ${JSON.stringify({
+      service: { dashboardPort: 9090 },
+      bindings: {},
+      github: {
+        identity: {
+          mode: "app",
+          appId: 1,
+          privateKeyPath: "key.pem",
+          operator: "human",
+          installations: { other: 10 },
+        },
+      },
+    })}`,
+  );
+  const before = jigsConfig();
+  await expect(bindRepo(API, deps())).rejects.toMatchObject({
+    message: "no GitHub App installation configured for account acme",
+    hint: expect.stringContaining('"acme": <installation-id>'),
+  });
+  expect(jigsConfig()).toBe(before);
+  expect(lines).toEqual([]);
+});

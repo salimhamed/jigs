@@ -300,7 +300,7 @@ const withSettings = (extra: Record<string, unknown>) =>
 
 test("a factory that states no identity or policy gets the defaults", () => {
   const config = withSettings({});
-  expect(config.github.identity).toEqual({ mode: "pat" });
+  expect(config.github.identities[0]).toEqual({ mode: "pat" });
   expect(config.merge).toEqual({
     by: "human",
     method: "squash",
@@ -316,7 +316,7 @@ test("an app identity needs every fact a token cannot be minted without", () => 
     privateKeyPath: "key.pem",
     operator: "salimhamed",
   };
-  expect(withSettings({ github: { identity: app } }).github.identity).toEqual(app);
+  expect(withSettings({ github: { identity: app } }).github.identities[0]).toEqual(app);
   for (const missing of ["appId", "installationId", "privateKeyPath", "operator"]) {
     const { [missing as keyof typeof app]: _dropped, ...rest } = app;
     expect(() => withSettings({ github: { identity: rest } })).toThrow(missing);
@@ -358,10 +358,52 @@ test("identity and policy are independent: any pairing parses", () => {
     },
     merge: { by: "jigs", method: "rebase", approval: { kind: "label", name: "ship-it" } },
   });
-  expect(config.github.identity.mode).toBe("app");
+  expect(config.github.identities[0]?.mode).toBe("app");
   expect(config.merge).toEqual({
     by: "jigs",
     method: "rebase",
     approval: { kind: "label", name: "ship-it" },
   });
+});
+
+test("App maps and lists normalize and reject ambiguous account ownership", async () => {
+  const { installationFor } = await import("./factory-config.ts");
+  const app = {
+    mode: "app",
+    appId: 1,
+    privateKeyPath: "key.pem",
+    operator: "human",
+    installations: { Junglescout: 10 },
+  };
+  const config = withSettings({ github: { identity: app } });
+  expect(installationFor(config.github.identities, "junglescout")).toMatchObject({
+    appId: 1,
+    installationId: 10,
+  });
+  const identities = [app, { ...app, appId: 2, installations: { Other: 20 } }];
+  expect(withSettings({ github: { identities } }).github.identities).toEqual(identities);
+  expect(() =>
+    withSettings({ github: { identities: [app, { ...app, installations: { JUNGLESCOUT: 30 } }] } }),
+  ).toThrow("claimed more than once");
+  expect(() => withSettings({ github: { identity: { ...app, installations: {} } } })).toThrow(
+    "must not be empty",
+  );
+  expect(() => withSettings({ github: { identity: { ...app, installationId: 20 } } })).toThrow(
+    "exactly one",
+  );
+  expect(() => withSettings({ github: { identity: app, identities } })).toThrow("exactly one");
+  expect(() => withSettings({ github: { identities: [{ mode: "pat" }] } })).toThrow(
+    "github.identities",
+  );
+  expect(() => withSettings({ github: { identities: [] } })).toThrow("github.identities");
+  const { installations: _, ...legacy } = app;
+  expect(
+    installationFor(
+      withSettings({ github: { identity: { ...legacy, installationId: 42 } } }).github.identities,
+      "any-account",
+    ),
+  ).toMatchObject({ installationId: 42 });
+  expect(() =>
+    withSettings({ github: { identities: [{ ...legacy, installationId: 42 }] } }),
+  ).toThrow("require installations");
 });

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { interpolate } from "../../blocks/interpolate.ts";
 import type { MergePolicy } from "../../blocks/pull-requests/policy.ts";
-import type { GithubIdentity } from "../../config/factory-config.ts";
+import { type GithubIdentity, githubIdentitySchema } from "../../config/factory-config.ts";
 import { JigsError } from "../../errors.ts";
 import { copyFiles, reportCopied } from "../copy-files.ts";
 import { locateTemplates, packageRoot, TEMPLATE_SUFFIX } from "../templates.ts";
@@ -19,6 +19,7 @@ export type IdentityMode = "pat" | "app";
 export interface AppIdentityOptions {
   appId?: string;
   installationId?: string;
+  installation?: string[];
   privateKey?: string;
   operator?: string;
   coAuthor?: string;
@@ -44,22 +45,36 @@ export function resolveIdentityOptions(
 ): GithubIdentity {
   if (mode === "pat") return { mode: "pat" };
   const missing = (["appId", "installationId", "privateKey", "operator"] as const).filter(
-    (flag) => options[flag] === undefined || options[flag] === "",
+    (flag) =>
+      (flag !== "installationId" || !options.installation?.length) &&
+      (options[flag] === undefined || options[flag] === ""),
   );
   if (missing.length > 0) {
     throw new JigsError(
       `jigs init --identity app needs ${missing.map((flag) => `--${FLAGS[flag]}`).join(", ")}`,
-      'jigs init --identity app --app-id 123 --installation-id 456 --private-key github-app.private-key.pem --operator your-github-login [--co-author "Your Name <you@example.com>"]',
+      'jigs init --identity app --app-id 123 --installation your-github-login=456 --private-key github-app.private-key.pem --operator your-github-login [--co-author "Your Name <you@example.com>"]',
     );
   }
-  return {
+  const installations: Record<string, number> = {};
+  for (const entry of options.installation ?? []) {
+    const match = /^([a-zA-Z0-9-]+)=(\d+)$/.exec(entry);
+    if (!match) throw new JigsError(`--installation must be <account>=<id>, not ${entry}`);
+    const account = match[1] as string;
+    if (Object.keys(installations).some((login) => login.toLowerCase() === account.toLowerCase()))
+      throw new JigsError(`duplicate --installation account ${account}`);
+    installations[account] = positiveInt(match[2], "--installation");
+  }
+  return githubIdentitySchema.parse({
     mode: "app",
     appId: positiveInt(options.appId, "--app-id"),
-    installationId: positiveInt(options.installationId, "--installation-id"),
+    ...(options.installationId === undefined
+      ? {}
+      : { installationId: positiveInt(options.installationId, "--installation-id") }),
+    ...(options.installation?.length ? { installations } : {}),
     privateKeyPath: String(options.privateKey),
     operator: String(options.operator),
     ...(options.coAuthor === undefined ? {} : { coAuthor: options.coAuthor }),
-  };
+  });
 }
 
 const FLAGS = {
@@ -174,16 +189,19 @@ const MERGE_COMMENT: Record<IdentityMode, Record<string, string>> = {
   app: { approval: "// An approving review of the commit; a push withdraws it." },
 };
 
+const literalKey = (key: string): string =>
+  /^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key);
+
 // A TypeScript literal of a plain settings object, on one line while it fits.
 function literal(value: unknown, indent: string, comments: Record<string, string> = {}): string {
   if (typeof value !== "object" || value === null) return JSON.stringify(value);
   const entries = Object.entries(value);
-  const flat = `{ ${entries.map(([key, nested]) => `${key}: ${JSON.stringify(nested)}`).join(", ")} }`;
+  const flat = `{ ${entries.map(([key, nested]) => `${literalKey(key)}: ${JSON.stringify(nested)}`).join(", ")} }`;
   const plain = entries.every(([, nested]) => typeof nested !== "object");
   if (plain && flat.length <= 72 && Object.keys(comments).length === 0) return flat;
   const lines = entries.flatMap(([key, nested]) => [
     ...(comments[key] === undefined ? [] : [`${indent}  ${comments[key]}`]),
-    `${indent}  ${key}: ${literal(nested, `${indent}  `)},`,
+    `${indent}  ${literalKey(key)}: ${literal(nested, `${indent}  `)},`,
   ]);
   return `{\n${lines.join("\n")}\n${indent}}`;
 }

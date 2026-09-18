@@ -77,6 +77,12 @@ program
   // Required together by --identity app, and refused there as a set rather
   // than defaulted: a scaffold with placeholder ids does not load.
   .option("--app-id <id>", "GitHub App id (--identity app)")
+  .option(
+    "--installation <account=id>",
+    "App installation by account (repeatable)",
+    (value: string, previous: string[]) => [...previous, value],
+    [],
+  )
   .option("--installation-id <id>", "the App's installation id (--identity app)")
   .option("--private-key <path>", "the App's private key .pem (--identity app)")
   .option("--operator <login>", "your GitHub login (--identity app)")

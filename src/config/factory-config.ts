@@ -48,24 +48,95 @@ const serviceSchema = z.strictObject({
 // from `<app-slug>[bot]` and the operator can review them normally; the
 // operator login is named here because `GET /user` does not answer for an
 // installation token.
-export const githubIdentitySchema = z.discriminatedUnion("mode", [
-  z.strictObject({ mode: z.literal("pat") }),
-  z.strictObject({
+const appIdentitySchema = z
+  .strictObject({
     mode: z.literal("app"),
     appId: z.int().positive(),
-    installationId: z.int().positive(),
+    installationId: z.int().positive().optional(),
+    installations: z.record(z.string().regex(/^[a-zA-Z0-9-]+$/), z.int().positive()).optional(),
     // Relative paths resolve against the factory root.
     privateKeyPath: z.string().min(1),
-    /** The human's GitHub login: pull request assignee and "Requested by". */
     operator: z.string().min(1),
-    /** `Name <email>` for the `Co-authored-by` trailer on squash or merge commits. */
     coAuthor: z.string().min(1).optional(),
-  }),
+  })
+  .superRefine((identity, ctx) => {
+    if ((identity.installationId === undefined) === (identity.installations === undefined)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["installations"],
+        message: "provide exactly one of installationId or installations",
+      });
+    }
+    if (identity.installations !== undefined && Object.keys(identity.installations).length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["installations"],
+        message: "installations must not be empty",
+      });
+    }
+  });
+
+export const githubIdentitySchema = z.discriminatedUnion("mode", [
+  z.strictObject({ mode: z.literal("pat") }),
+  appIdentitySchema,
 ]);
 
-export const githubSchema = z.strictObject({
-  identity: githubIdentitySchema.default({ mode: "pat" }),
-});
+export const githubSchema = z
+  .strictObject({
+    identity: githubIdentitySchema.optional(),
+    identities: z.array(appIdentitySchema).min(1).optional(),
+  })
+  .superRefine((github, ctx) => {
+    if (github.identity !== undefined && github.identities !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["identities"],
+        message: "provide exactly one of identity or identities",
+      });
+    }
+    const accounts = new Set<string>();
+    for (const [index, identity] of (
+      github.identities ?? (github.identity ? [github.identity] : [])
+    ).entries()) {
+      if (identity.mode !== "app") continue;
+      if (github.identities && identity.installations === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["identities", index, "installations"],
+          message: "identities entries require installations",
+        });
+      }
+      for (const account of Object.keys(identity.installations ?? {})) {
+        if (accounts.has(account.toLowerCase()))
+          ctx.addIssue({
+            code: "custom",
+            path: github.identities
+              ? ["identities", index, "installations", account]
+              : ["identity", "installations", account],
+            message: `account ${account} is claimed more than once`,
+          });
+        accounts.add(account.toLowerCase());
+      }
+    }
+  })
+  .transform((github) => ({
+    identities: github.identities ?? [github.identity ?? { mode: "pat" as const }],
+  }));
+
+/** Resolve one account; legacy installationId intentionally covers every account. */
+export function installationFor(identities: GithubIdentity[], account: string): GithubIdentity {
+  for (const identity of identities) {
+    if (identity.mode === "pat" || identity.installationId !== undefined) return identity;
+    const entry = Object.entries(identity.installations ?? {}).find(
+      ([login]) => login.toLowerCase() === account.toLowerCase(),
+    );
+    if (entry) return { ...identity, installationId: entry[1] };
+  }
+  throw new JigsError(
+    `no GitHub App installation configured for account ${account}`,
+    `add "${account}": <installation-id> to the App's installations in github.identity or github.identities in jigs.config.ts, then: jigs up`,
+  );
+}
 
 const factoryConfigSchema = z.looseObject({
   bindings: z.record(z.string(), bindingSchema).default({}),

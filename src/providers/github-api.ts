@@ -2,7 +2,7 @@
 // decided in exactly one place. GITHUB_API_URL override is a test seam.
 
 import { JigsError } from "../errors.ts";
-import { GITHUB_API_BASE, githubAuth } from "./github-auth.ts";
+import { GITHUB_API_BASE, githubAuthFor } from "./github-auth.ts";
 
 // Carries the status and body so a caller can tell a rejected token from an
 // unreachable repo, a rate limit, or a merge GitHub currently refuses.
@@ -21,8 +21,16 @@ export async function githubRequest<T>(
   method: string,
   apiPath: string,
   body?: unknown,
+  account?: string,
 ): Promise<T> {
-  const token = await githubAuth().bearer();
+  const owner = /^\/repos\/([^/?#]+)\/[^/?#]+(?:[/?]|$)/.exec(apiPath)?.[1];
+  const target = owner ?? account;
+  if (!target && apiPath !== "/user")
+    throw new JigsError(`GitHub request ${apiPath} requires an account`);
+  const auth = githubAuthFor(target ?? "");
+  if (apiPath === "/user" && auth.identity.mode !== "pat")
+    throw new JigsError("/user requires a PAT identity");
+  const token = await auth.bearer();
   const res = await fetch(`${GITHUB_API_BASE()}${apiPath}`, {
     method,
     headers: {

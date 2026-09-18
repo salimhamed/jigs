@@ -33,7 +33,8 @@ export function webhookChecks(options: WebhookChecksOptions): Check[] {
                 binding.remote,
                 ingressUrl,
                 repo,
-                options.identity ?? resolveGithubIdentity,
+                options.identity ??
+                  (() => resolveGithubIdentity(repo.owner, options.factoryRoot())),
               ),
           },
         ];

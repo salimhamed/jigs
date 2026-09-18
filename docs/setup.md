@@ -227,7 +227,7 @@ Skipping the copy is allowed — `jigs up` copies `.env.example` itself when
 there is no `.env` and tells you which slots are empty. Hello can run without
 these integration tokens; ship requires them.
 
-#### Which GitHub identity jigs uses
+### 2a. Which GitHub identity jigs uses
 
 `github.identity` in `jigs.config.ts` says who jigs is on GitHub. There are two
 modes, and they are chosen once, at `jigs init --identity pat|app`.
@@ -255,7 +255,7 @@ github: {
   identity: {
     mode: "app",
     appId: 4958325,
-    installationId: 162033982,
+    installations: { salimhamed: 162033982, downstreamimpact: 162665072, Junglescout: 162664894 },
     privateKeyPath: "github-app.private-key.pem",
     operator: "your-github-login",
     coAuthor: "Your Name <you@example.com>",
@@ -268,7 +268,8 @@ command line, so the scaffold loads on the first `jigs up`:
 
 ```sh
 jigs init --identity app \
-  --app-id 4958325 --installation-id 162033982 \
+  --app-id 4958325 --installation salimhamed=162033982 \
+  --installation downstreamimpact=162665072 --installation Junglescout=162664894 \
   --private-key github-app.private-key.pem --operator your-github-login \
   --co-author "Your Name <you@example.com>"
 ```
@@ -295,7 +296,7 @@ Where each value comes from:
    `*.private-key.pem`) and `chmod 600` it; `jigs doctor` fails on a looser
    mode, because anyone who can read it can act as the App.
 5. **Install the App** on the repos you bind (App settings → Install App). The
-   installation's URL ends in its id: that is **`installationId`**. A
+   installation's URL ends in its id: add it under the account login in **`installations`**. A
    repository admin can install an App on repos they administer as long as it
    asks for no organization permissions and org policy allows it.
 6. **`operator`** is your own GitHub login. An installation token does not
@@ -303,6 +304,40 @@ Where each value comes from:
    assigns the pull request to and names in its first body line, `Requested by
    @you`. **`coAuthor`** is optional: `Name <email>` for a `Co-authored-by`
    trailer on the merge commit. Omit it and no trailer is added.
+
+The binding's remote selects its account: the owner in
+`git@github.com:owner/repo.git`, `https://github.com/owner/repo(.git)`, or
+`ssh://git@github.com/owner/repo.git`. Account matching ignores case. Every
+GitHub binding must have a covering installation; bind, doctor and run preflight
+name an uncovered account and the `installations` entry to add.
+
+To add another organization: install the App, copy the id from the installation
+URL, add one line to `installations`, then run `jigs up`.
+
+If organizations require different Apps, replace `github.identity` with
+`github.identities`, a nonempty list of App entries:
+
+```ts
+github: {
+  identities: [
+    { mode: "app", appId: 4958325, privateKeyPath: "personal.private-key.pem",
+      installations: { salimhamed: 162033982 }, operator: "salimhamed" },
+    { mode: "app", appId: 1234567, privateKeyPath: "org.private-key.pem",
+      installations: { exampleOrg: 7654321 }, operator: "salimhamed",
+      coAuthor: "Salim Hamed <salimhamed@gmail.com>" },
+  ],
+},
+```
+
+Each App has its own key, installations, operator and optional co-author. No two
+entries may claim the same account, and PAT identities cannot appear in the
+list. Configure exactly one of `identity` or `identities`.
+
+Existing single-App factories can keep `installationId`: it continues to select
+that installation for every binding, and `jigs upgrade` requires no config edit.
+Configure exactly one of `installationId` or a nonempty `installations` map.
+`jigs init --installation <account>=<id>` is repeatable; the existing
+`--installation-id <id>` flag remains available for the legacy shorthand.
 
 In `app` mode jigs pushes over HTTPS with the installation token, supplied to
 that one `git push` and never written to `.git/config` or any log. In `pat`

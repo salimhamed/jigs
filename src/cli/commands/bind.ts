@@ -9,6 +9,7 @@ import {
 import { upsertBinding } from "../../config/binding-edit.ts";
 import {
   bindingMergePolicy,
+  installationFor,
   readFactoryConfig,
   readFactoryConfigText,
   writeFactoryConfigText,
@@ -75,6 +76,8 @@ export async function bindRepo(
   }
 
   const config = readFactoryConfig(factoryRoot);
+  const account = parseGithubRemote(remoteUrl)?.owner;
+  if (account) installationFor(config.github.identities, account);
   const matchingBindings = Object.entries(config.bindings).filter(
     ([, binding]) => binding.remote === remoteUrl,
   );
@@ -148,7 +151,7 @@ export async function bindRepo(
   );
   const report = await runChecks([
     mergePolicyCheck(
-      resolveGithubIdentity(factoryRoot),
+      resolveGithubIdentity(account ?? "", factoryRoot),
       config.merge,
       { [name]: binding },
       deps.mergePolicyProbes ?? realGithubMergePolicyProbes,
@@ -172,7 +175,7 @@ async function ensureApprovalLabel(
     return;
   }
   const slug = `${repoRef.owner}/${repoRef.repo}`;
-  const identity = resolveGithubIdentity(factoryRoot);
+  const identity = resolveGithubIdentity(repoRef.owner, factoryRoot);
   const credentialRepair =
     identity.mode === "app"
       ? `grant the App "Issues: read & write", accept it on the installation for ${slug}, then re-run: ${reBindCommand}`
@@ -232,7 +235,7 @@ async function ensureWebhook({
     return "skipped";
   }
   const slug = `${repoRef.owner}/${repoRef.repo}`;
-  const identity = resolveGithubIdentity(factoryRoot);
+  const identity = resolveGithubIdentity(repoRef.owner, factoryRoot);
   // Creating a webhook is hook administration, which each identity holds
   // differently — and in App mode not at all until the permission is granted.
   const credentialRepair =

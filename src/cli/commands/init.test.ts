@@ -344,9 +344,9 @@ test.each(["pat", "app"] as const)(
     expect(config.github).toEqual(expectations.github);
     expect(config.merge).toEqual(expectations.merge);
     // And what it declares is what jigs accepts, so the first `jigs up` loads.
-    expect(parseFactoryConfig({ service: { dashboardPort: 9090 }, ...config }).github).toEqual(
-      expectations.github,
-    );
+    expect(parseFactoryConfig({ service: { dashboardPort: 9090 }, ...config }).github).toEqual({
+      identities: [(expectations.github as { identity: unknown }).identity],
+    });
   },
 );
 
@@ -371,4 +371,30 @@ test("app mode is refused rather than stubbed when a fact is missing", () => {
       coAuthor: "Salim Hamed <salim@example.com>",
     }),
   ).toEqual({ ...APP, coAuthor: "Salim Hamed <salim@example.com>" });
+});
+
+test("repeatable installations scaffold a loadable account map", async () => {
+  const options = {
+    appId: "1",
+    privateKey: "app.pem",
+    operator: "human",
+    installation: ["some-org=10", "Other=20"],
+  };
+  const identity = resolveIdentityOptions("app", options);
+  expect(identity).toMatchObject({ installations: { "some-org": 10, Other: 20 } });
+  const dir = scaffold("installation-map");
+  await initFactory({ cwd: dir, out: () => {}, identity });
+  expect(
+    parseFactoryConfig({ service: { dashboardPort: 9090 }, ...scaffoldedConfig(dir) }).github
+      .identities,
+  ).toEqual([identity]);
+  expect(() => resolveIdentityOptions("app", { ...options, installationId: "30" })).toThrow(
+    "exactly one",
+  );
+  expect(() =>
+    resolveIdentityOptions("app", { ...options, installation: ["Other=1", "other=2"] }),
+  ).toThrow("duplicate");
+  expect(() => resolveIdentityOptions("app", { ...options, installation: ["bad"] })).toThrow(
+    "<account>=<id>",
+  );
 });
