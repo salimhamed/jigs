@@ -190,3 +190,28 @@ test("interactive sweep with every answer no removes nothing", async () => {
   expect(fetchMock).toHaveBeenCalledTimes(1);
   expect(lines.at(-1)).toBe("nothing approved — nothing removed");
 });
+
+test("scratch entries are labeled and a policy-kept clean directory is not described as dirty", async () => {
+  respond({
+    entries: [
+      entry({
+        kind: "run-directory",
+        path: "/data/scratch/run_failed",
+        branch: "",
+        policyKept: true,
+        reason: "onFailure policy keeps resources until explicit confirmation or --force",
+      }),
+    ],
+    removed: [],
+    removedDirs: [],
+  });
+  const questions: string[] = [];
+  await runSweep(
+    deps(async (question) => {
+      questions.push(question);
+      return false;
+    }),
+  );
+  expect(lines.join("\n")).toContain("run-directory");
+  expect(questions[0]).not.toContain("UNCOMMITTED");
+});

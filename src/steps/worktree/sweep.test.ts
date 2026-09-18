@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { managedCodexHomePath } from "../agent/harnesses/codex-home.ts";
+import { createRunDirectory } from "../run-directory/index.ts";
 import * as create from "./create.ts";
 import type { OwnerState } from "./owner.ts";
 import type { WorktreeRow } from "./registry.ts";
@@ -344,7 +345,16 @@ test("a failed owner's unmerged branch stays as insurance", async () => {
   const failed = addWorktree("failed");
   commit(failed, "unshipped.txt");
   register(failed, "failed");
-  await sweepWorktrees({ clean: true }, deps({ run_failed: { terminal: true, status: "failed" } }));
+  await sweepWorktrees(
+    { clean: true },
+    deps({
+      run_failed: {
+        terminal: true,
+        status: "failed",
+        release: { onSuccess: "release", onFailure: "release" },
+      },
+    }),
+  );
   expect(existsSync(failed)).toBe(false);
   expect(git(repoDir, "rev-parse", "--verify", "refs/heads/failed")).toMatch(/^[0-9a-f]{40}$/);
 });
@@ -357,7 +367,13 @@ test("a cancelled run's empty branch goes with its worktree", async () => {
 
   await sweepWorktrees(
     { clean: true },
-    deps({ run_stopped: { terminal: true, status: "cancelled" } }),
+    deps({
+      run_stopped: {
+        terminal: true,
+        status: "cancelled",
+        release: { onSuccess: "release", onFailure: "release" },
+      },
+    }),
   );
 
   expect(existsSync(stopped)).toBe(false);
@@ -374,7 +390,13 @@ test("a cancelled run's redundant branch keeps its remote", async () => {
 
   await sweepWorktrees(
     { clean: true },
-    deps({ run_stopped: { terminal: true, status: "cancelled" } }),
+    deps({
+      run_stopped: {
+        terminal: true,
+        status: "cancelled",
+        release: { onSuccess: "release", onFailure: "release" },
+      },
+    }),
   );
 
   expect(() => git(repoDir, "rev-parse", "--verify", "refs/heads/stopped")).toThrow();
@@ -389,7 +411,13 @@ test("a cancelled run's dirty tree survives its empty branch", async () => {
 
   await sweepWorktrees(
     { clean: true },
-    deps({ run_stopped: { terminal: true, status: "cancelled" } }),
+    deps({
+      run_stopped: {
+        terminal: true,
+        status: "cancelled",
+        release: { onSuccess: "release", onFailure: "release" },
+      },
+    }),
   );
 
   expect(existsSync(stopped)).toBe(true);
@@ -408,7 +436,13 @@ test("a cancelled run's branch stays when the ancestry cannot be proven", async 
 
   const report = await sweepWorktrees(
     { clean: true },
-    deps({ run_stopped: { terminal: true, status: "cancelled" } }),
+    deps({
+      run_stopped: {
+        terminal: true,
+        status: "cancelled",
+        release: { onSuccess: "release", onFailure: "release" },
+      },
+    }),
   );
 
   expect(report.removed).toEqual([stopped]);
@@ -442,4 +476,63 @@ test("a binding's empty worktrees directory goes, its clone stays", async () => 
   expect(report.removedDirs).toContain(worktreesDir);
   expect(existsSync(worktreesDir)).toBe(false);
   expect(existsSync(repoDir)).toBe(true);
+});
+
+test("default failure policy keeps even a clean worktree until explicit manual approval", async () => {
+  const target = addWorktree("failed");
+  register(target, "failed");
+  const dependencies = deps({ run_failed: { terminal: true, status: "failed" } });
+  const report = await sweepWorktrees({ clean: true }, dependencies);
+  expect(report.removed).toEqual([]);
+  expect(report.entries[0]).toMatchObject({ policyKept: true, requiresForce: false });
+  expect(report.entries[0]?.reason).toContain("onFailure");
+  const approved = await sweepWorktrees(
+    { clean: true, force: true, paths: [target] },
+    dependencies,
+  );
+  expect(approved.removed).toEqual([target]);
+});
+
+test("manual sweep discovers scratch-only runs and preserves live, suspended, unknown and cross-factory directories", async () => {
+  const failed = await createRunDirectory({ workflowRunId: "run_failed" });
+  const completed = await createRunDirectory({ workflowRunId: "run_completed" });
+  const active = await createRunDirectory({ workflowRunId: "run_active" });
+  const suspended = await createRunDirectory({ workflowRunId: "run_suspended" });
+  const unknown = await createRunDirectory({ workflowRunId: "run_other_factory" });
+  const dependencies = deps({
+    run_failed: { terminal: true, status: "failed" },
+    run_completed: { terminal: true, status: "completed" },
+    run_active: { terminal: false, status: "running" },
+    run_suspended: { terminal: false, status: "running" },
+  });
+  const report = await sweepWorktrees({}, dependencies);
+  expect(report.entries).toHaveLength(5);
+  expect(report.entries.every((entry) => entry.kind === "run-directory")).toBe(true);
+  expect(report.removed).toEqual([]);
+  const cleaned = await sweepWorktrees({ clean: true }, dependencies);
+  expect(cleaned.removed).toEqual([completed]);
+  expect(existsSync(failed)).toBe(true);
+  const forced = await sweepWorktrees({ clean: true, force: true }, dependencies);
+  expect(forced.removed).toEqual([failed]);
+  for (const directory of [active, suspended, unknown]) expect(existsSync(directory)).toBe(true);
+});
+
+test("failure release policy permits a requested clean pass for scratch and scoped approval selects only its path", async () => {
+  const first = await createRunDirectory({ workflowRunId: "run_first" });
+  const second = await createRunDirectory({ workflowRunId: "run_second" });
+  const dependencies = deps({
+    run_first: {
+      terminal: true,
+      status: "failed",
+      release: { onSuccess: "release", onFailure: "release" },
+    },
+    run_second: {
+      terminal: true,
+      status: "failed",
+      release: { onSuccess: "release", onFailure: "release" },
+    },
+  });
+  const report = await sweepWorktrees({ clean: true, paths: [first] }, dependencies);
+  expect(report.removed).toEqual([first]);
+  expect(existsSync(second)).toBe(true);
 });

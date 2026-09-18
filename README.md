@@ -103,7 +103,17 @@ files, with its own `truncated` flag. `renderChangeSummary` from
 with an “and N more” tail for the remaining rows.
 
 Wrappers pass run metadata to jigs, which handles run-specific details such as
-dashboard links. Call `removeMergedRunWorktrees` only after a successful merge.
+dashboard links. Call `await release()` from `#jigs` as the last successful
+workflow action. It releases this run's worktrees and scratch directory under
+`release: { onSuccess: "release", onFailure: "keep" }` by default. A workflow's
+entry can override the factory's policy; an explicit `release(policy)` argument
+wins over both. The returned report explains retained resources and branches.
+Dirty unmerged work stays; a branch is deleted only with positive evidence that
+the remote default branch contains its commits. Squash-merged branch refs may
+therefore remain. Failed runs leave files for manual `jigs sweep`; waiting runs
+keep them. Never put release in `finally` or a catch: waiting throws too.
+Sweep uses the current workflow/factory policy, not a past callsite override;
+confirmation or `--force` overrides keep only for terminal resources.
 
 Both workflow and step function paths and names contribute to durable IDs.
 Renames are supported breaking changes: finish or cancel affected active runs

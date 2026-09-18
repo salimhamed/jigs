@@ -1,8 +1,10 @@
 import { existsSync, rmdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import type { Sql } from "postgres";
+import { defaultReleasePolicy } from "../../blocks/runtime/release.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { removeManagedCodexHome } from "../agent/harnesses/codex-home.ts";
+import { listRunDirectories, removeRunDirectory } from "../run-directory/index.ts";
 import { fetchOriginDefault } from "./create.ts";
 import { type OwnerState, readOwner } from "./owner.ts";
 import { deleteWorktree, listWorktrees, setWorktreeState, type WorktreeRow } from "./registry.ts";
@@ -48,6 +50,8 @@ export interface BranchOutcome {
 export interface SweepEntry {
   path: string;
   branch: string;
+  kind?: "worktree" | "run-directory";
+  policyKept?: boolean;
   state: SweepState;
   eligible: boolean;
   requiresForce: boolean;
@@ -152,11 +156,13 @@ export async function sweepWorktrees(options: SweepOptions, deps: SweepDeps): Pr
   const owner = deps.readOwner ?? readOwner;
 
   const rows = await listWorktrees(deps.sql);
+  const directories = await listRunDirectories();
   const owners = new Map<string, OwnerState>();
-  for (const row of rows) {
-    if (!owners.has(row.ownerRunId)) {
-      owners.set(row.ownerRunId, await owner(row.ownerRunId));
-    }
+  for (const runId of new Set([
+    ...rows.map((row) => row.ownerRunId),
+    ...directories.map((dir) => dir.runId),
+  ])) {
+    owners.set(runId, await owner(runId));
   }
 
   const classified: Array<{ row: WorktreeRow; entry: SweepEntry }> = [];
@@ -175,7 +181,30 @@ export async function sweepWorktrees(options: SweepOptions, deps: SweepDeps): Pr
       }),
     });
   }
-  const entries = classified.map((item) => item.entry);
+  for (const { row, entry } of classified) {
+    if (entry.eligible && entry.state !== "missing")
+      applyKeepPolicy(entry, owners.get(row.ownerRunId));
+  }
+  const directoryEntries: SweepEntry[] = directories.map((dir) => {
+    const state = owners.get(dir.runId);
+    // A directory has no registry owner. Positive World evidence is required, even with --force.
+    const terminal = state?.terminal === true && TERMINAL_RUN_STATUSES.has(state.status);
+    const entry: SweepEntry = {
+      path: dir.path,
+      branch: "",
+      ownerRunId: dir.runId,
+      kind: "run-directory",
+      state: terminal ? "abandoned" : "held",
+      eligible: terminal,
+      requiresForce: false,
+      reason: terminal
+        ? "the owning run is terminal; run directory retained"
+        : "owning run is active, suspended, or unknown",
+    };
+    if (terminal) applyKeepPolicy(entry, state);
+    return entry;
+  });
+  const entries = [...classified.map((item) => item.entry), ...directoryEntries];
 
   // `removed` counts paths reconciled away — a directory deleted, a stale row
   // dropped, or both.
@@ -183,10 +212,11 @@ export async function sweepWorktrees(options: SweepOptions, deps: SweepDeps): Pr
   if (!clean) return { entries, removed, removedDirs: [] };
 
   const approved = options.paths === undefined ? null : new Set(options.paths);
-  const fetched = new Set<string>();
+  const fetched = new Map<string, boolean>();
   for (const { row, entry } of classified) {
     if (!entry.eligible) continue;
     if (approved !== null && !approved.has(entry.path)) continue;
+    if (entry.policyKept && !force) continue;
     const { repoDir } = row;
     const status = owners.get(row.ownerRunId)?.status ?? "unknown";
     const dirtyTree = entry.state === "abandoned-dirty";
@@ -204,16 +234,18 @@ export async function sweepWorktrees(options: SweepOptions, deps: SweepDeps): Pr
     // trees earlier in the loop are already gone, and the stale ref reads
     // unmerged, which keeps the branch as insurance.
     if (askMerged && !fetched.has(repoDir)) {
-      fetched.add(repoDir);
       try {
         await fetchOriginDefault(repoDir);
+        fetched.set(repoDir, true);
       } catch (err) {
+        fetched.set(repoDir, false);
         console.log(`[sweep] could not fetch the default branch of ${repoDir}: ${String(err)}`);
       }
     }
-    const unmerged = askMerged ? await countUnmergedCommits(repoDir, entry.branch) : null;
+    const unmerged =
+      askMerged && fetched.get(repoDir) ? await countUnmergedCommits(repoDir, entry.branch) : null;
     const merged = unmerged === 0;
-    let plan = decideTeardown({ dirty: dirtyTree, merged });
+    let plan = decideTeardown({ dirty: dirtyTree, unmergedCommits: unmerged });
     // Only a completed run's teardown reaches the remote. A cancelled or
     // failed run's pushed branch is somebody's open PR whatever its ancestry,
     // and an empty branch was never pushed at all.
@@ -241,30 +273,41 @@ export async function sweepWorktrees(options: SweepOptions, deps: SweepDeps): Pr
       // the branches stay.
       const branchesStay = entry.state === "provision-failed";
       const applied = branchesStay ? DISCARD_TREE : plan;
-      await applyTeardown(applied, {
-        repoDir,
-        worktreePath: entry.path,
-        branch: entry.branch,
-      });
-      // git refuses to remove a directory it never registered as a worktree.
-      rmSync(entry.path, { recursive: true, force: true });
-      entry.branchOutcome = {
-        deleted: applied.deleteLocalBranch,
-        ...(unmerged === null ? {} : { unmergedCommits: unmerged }),
-      };
+      try {
+        // Only an explicitly approved half-provisioned directory may bypass Git removal.
+        if (branchesStay) rmSync(entry.path, { recursive: true, force: true });
+        const outcome = await applyTeardown(applied, {
+          repoDir,
+          worktreePath: entry.path,
+          branch: entry.branch,
+        });
+        entry.branchOutcome = {
+          deleted: outcome.localBranchDeleted,
+          ...(unmerged === null ? {} : { unmergedCommits: unmerged }),
+        };
+      } catch (error) {
+        entry.reason = `removal failed; retained for inspection: ${String(error)}`;
+        continue;
+      }
     }
     await deleteWorktree(deps.sql, entry.path);
+    removed.push(entry.path);
+  }
+
+  for (const entry of directoryEntries) {
+    if (!entry.eligible || (entry.policyKept && !force)) continue;
+    if (approved !== null && !approved.has(entry.path)) continue;
+    await removeRunDirectory({ workflowRunId: entry.ownerRunId as string });
     removed.push(entry.path);
   }
 
   const removedDirs = removeEmptyParentDirs(new Set(rows.map((row) => path.dirname(row.path))));
 
   const gone = new Set(removed);
-  // Known gap: a terminal run that never requested a worktree still leaks its
-  // managed Codex home — no pass would ever notice it.
+  // Remove managed agent state only after every discovered resource is gone.
   for (const [runId, state] of owners) {
     if (!state.terminal) continue;
-    const held = rows.some((row) => row.ownerRunId === runId && !gone.has(row.path));
+    const held = entries.some((entry) => entry.ownerRunId === runId && !gone.has(entry.path));
     if (!held) removeManagedCodexHome(runId);
   }
 
@@ -285,4 +328,15 @@ function removeEmptyParentDirs(parents: Iterable<string>): string[] {
     }
   }
   return gone;
+}
+
+function applyKeepPolicy(entry: SweepEntry, owner: OwnerState | undefined): void {
+  // Unknown registry owners retain the existing worktree reclaim path. Scratch requires proof above.
+  if (!owner || !TERMINAL_RUN_STATUSES.has(owner.status)) return;
+  const policy = owner.release ?? defaultReleasePolicy();
+  const key = owner.status === "completed" ? "onSuccess" : "onFailure";
+  if (policy[key] === "keep") {
+    entry.policyKept = true;
+    entry.reason += `; ${key} policy keeps resources until explicit confirmation or --force`;
+  }
 }

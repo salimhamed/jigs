@@ -11,6 +11,7 @@ import { doctorChecks, failedChecks, runChecks } from "../checks/index.ts";
 import { factoryRoot } from "../config/factory-root.ts";
 import { findOpenPullRequestsByHeadSha } from "../providers/github.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
+import { readOwner } from "../steps/worktree/owner.ts";
 import { listWorktreesForRun } from "../steps/worktree/registry.ts";
 import { registrySql } from "../steps/worktree/sql.ts";
 import { sweepWorktrees } from "../steps/worktree/sweep.ts";
@@ -113,7 +114,7 @@ export function createApp(factory: Factory): Hono {
             ? { paths: body.paths.filter((p) => typeof p === "string") }
             : {}),
         },
-        { sql: registrySql() },
+        { sql: registrySql(), readOwner: (runId) => readOwner(runId, factory) },
       ),
     );
   });
@@ -238,7 +239,10 @@ export function createApp(factory: Factory): Hono {
   app.get("/api/runs", async (c) => {
     const [runs, worktrees] = await Promise.all([
       listRuns(factory),
-      sweepWorktrees({ clean: false }, { sql: registrySql() }).then((report) => report.entries),
+      sweepWorktrees(
+        { clean: false },
+        { sql: registrySql(), readOwner: (runId) => readOwner(runId, factory) },
+      ).then((report) => report.entries.filter((entry) => entry.kind !== "run-directory")),
     ]);
     // The schedules ride along on the same run listing the table above
     // renders, so ps stays one round trip and the two tables can never

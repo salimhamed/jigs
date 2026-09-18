@@ -5,7 +5,7 @@ import { acquireLinearTicket, workItemFromHandoff } from "#blocks/tickets/linear
 import {
   deliverChange,
   provisionWorktree,
-  removeMergedRunWorktrees,
+  release,
   resolveMergePolicy,
   reviewTicket,
 } from "#jigs";
@@ -65,7 +65,7 @@ export async function shipWorkflow(inputs: ShipInputs) {
     merge: await resolveMergePolicy(inputs.binding),
   });
 
-  await removeMergedRunWorktrees();
+  await release();
   return result;
 }
 

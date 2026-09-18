@@ -23,6 +23,7 @@ export interface SweepDeps extends ServiceDeps {
 export interface SweepEntry {
   path: string;
   branch: string;
+  kind?: "worktree" | "run-directory";
   state: string;
   eligible: boolean;
   requiresForce: boolean;
@@ -131,7 +132,7 @@ function printEntries(entries: SweepEntry[], out: (line: string) => void) {
   for (const entry of entries) {
     const owner = entry.ownerRunId ?? "-";
     out(
-      `${entry.state.padEnd(width)}  ${entry.path}  ${owner}  ${entry.reason}${describeBranch(entry)}`,
+      `${entry.state.padEnd(width)}  ${entry.kind === "run-directory" ? "run-directory  " : ""}${entry.path}  ${owner}  ${entry.reason}${describeBranch(entry)}`,
     );
   }
 }

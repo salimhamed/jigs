@@ -6,6 +6,7 @@ import type { WorkflowRequires } from "../checks/index.ts";
 // second hand-written copy of either would drift from what jigs accepts.
 import type { githubSchema } from "../config/factory-config.ts";
 import type { mergeSchema } from "./pull-request/policy.ts";
+import type { ReleasePolicy } from "./runtime/release.ts";
 
 export const ticketInput = z.union([z.uuid(), z.string().regex(/^[A-Z][A-Z0-9]*-\d+$/)]);
 
@@ -23,6 +24,7 @@ export interface WorkflowEntry<S extends z.ZodType = z.ZodType> {
   inputs: S;
   // The manifest half of preflight's computed check list.
   requires?: WorkflowRequires;
+  release?: ReleasePolicy;
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: heterogeneous schemas per entry
@@ -60,6 +62,7 @@ export interface FactoryDefinition {
   ingressUrl?: string;
   github?: GithubDefinition;
   merge?: MergeDefinition;
+  release?: ReleasePolicy;
   bindings?: Record<
     string,
     {

@@ -512,6 +512,27 @@ if (moved.missing.length > 0 || moved.unexpected.length > 0) {
   );
 }
 
+// Exercise policy lookup with a real compiler-stamped workflow export. Source
+// unit tests cannot prove that the compiled module retains workflowId.
+console.log("\n=== release: compiled workflow policy overrides the factory default");
+run(process.execPath, [
+  "--input-type=module",
+  "--eval",
+  `
+  import assert from "node:assert/strict";
+  import entry from "./.output/server/_chunks/ship.mjs";
+  import { resolveReleasePolicy } from "@salimhamed/jigs/steps";
+  const workflowName = "workflow//./workflows/ship//shipWorkflow";
+  assert.equal(entry.workflow.workflowId, workflowName);
+  entry.release = { onSuccess: "keep", onFailure: "release" };
+  const policy = await resolveReleasePolicy(
+    { workflowRunId: "run_policy_check", workflowName },
+    { workflows: { differentConfigKey: async () => ({ default: entry }) } },
+  );
+  assert.deepEqual(policy, entry.release);
+`,
+]);
+
 // The scaffold's own checks, run the way a new factory runs them on day one:
 // the typecheck covers the generated entry, the workflow, and the blocks and
 // prompts scaffolded beside them, and the scaffolded tests cover the shape of

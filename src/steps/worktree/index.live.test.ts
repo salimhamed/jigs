@@ -1,6 +1,7 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, expect, test, vi } from "vitest";
+import { createRunDirectory } from "../run-directory/index.ts";
 import { provisionWorktree } from "./index.ts";
 import { bindingDir, worktreePath } from "./layout.ts";
 import {
@@ -9,6 +10,7 @@ import {
   getWorktree,
   upsertWorktree,
 } from "./registry.ts";
+import { releaseRunResources } from "./release.ts";
 import { git, makeClonedBinding, makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
 const sql = connectRegistry(
@@ -90,4 +92,26 @@ test("a live owner read back from the registry refuses the second run by name", 
     ),
   ).rejects.toThrow(/run_live/);
   expect((await getWorktree(sql, testPath))?.ownerRunId).toBe("run_live");
+});
+
+test("policy release keeps then removes resources through the real registry", async () => {
+  const metadata = { workflowRunId: "run_release" };
+  await provisionWorktree(request, metadata, {
+    sql,
+    readOwner: async () => ({ terminal: true, status: "completed" }),
+  });
+  const directory = await createRunDirectory(metadata);
+  const kept = await releaseRunResources({ onSuccess: "keep", onFailure: "keep" }, metadata, sql);
+  expect(kept.worktrees[0]?.removed).toBe(false);
+  expect((await getWorktree(sql, testPath))?.ownerRunId).toBe("run_release");
+  expect(existsSync(directory)).toBe(true);
+  const released = await releaseRunResources(
+    { onSuccess: "release", onFailure: "keep" },
+    metadata,
+    sql,
+  );
+  expect(released.worktrees[0]).toMatchObject({ removed: true, localBranchDeleted: false });
+  expect(await getWorktree(sql, testPath)).toBeNull();
+  expect(existsSync(testPath)).toBe(false);
+  expect(existsSync(directory)).toBe(false);
 });

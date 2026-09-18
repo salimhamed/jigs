@@ -23,7 +23,7 @@ vi.mock("#jigs", async (importOriginal) => ({
     change: {} as never,
     pr: { owner: "acme", repo: "repo", number: 1 },
   })),
-  removeMergedRunWorktrees: vi.fn(async () => {}),
+  release: vi.fn(async () => {}),
 }));
 
 vi.mock("#blocks/tickets/linear", async (importOriginal) => ({
@@ -56,7 +56,7 @@ const { shipInputs, shipWorkflow } = await import("./ship.ts");
 
 async function deliveredFor(inputs: Record<string, unknown>) {
   vi.mocked(jigs.deliverChange).mockClear();
-  vi.mocked(jigs.removeMergedRunWorktrees).mockClear();
+  vi.mocked(jigs.release).mockClear();
   await shipWorkflow({
     ...shipInputs.parse({ binding: "repo", ...inputs }),
     triggerId: "ship-test",
@@ -93,11 +93,11 @@ test("the work item delivered carries the ticket and the implementation brief", 
 
 test("a successful delivery removes merged worktrees", async () => {
   await deliveredFor({ ticket: "ABC-123" });
-  expect(jigs.removeMergedRunWorktrees).toHaveBeenCalledOnce();
+  expect(jigs.release).toHaveBeenCalledOnce();
 });
 
 test("a delivery that stops short rejects without removing its worktree", async () => {
-  vi.mocked(jigs.removeMergedRunWorktrees).mockClear();
+  vi.mocked(jigs.release).mockClear();
   vi.mocked(jigs.deliverChange).mockRejectedValueOnce(new Error("stopped short"));
 
   await expect(
@@ -106,5 +106,5 @@ test("a delivery that stops short rejects without removing its worktree", async 
       triggerId: "ship-test",
     }),
   ).rejects.toThrow("stopped short");
-  expect(jigs.removeMergedRunWorktrees).not.toHaveBeenCalled();
+  expect(jigs.release).not.toHaveBeenCalled();
 });

@@ -40,9 +40,27 @@ completion or cancellation with the operator.
    workflow code.
 5. Build and test the factory. Its config test checks the emitted durable IDs.
 
-Teardown is a plain last call, never a `finally`: suspension can throw, and a
-parked run must retain its worktree. Configuration values vary by factory;
-requirements belong to the workflow declaration next to its input schema.
+Call `await release()` from `#jigs` as the workflow's last successful action.
+It returns a report for worktrees, branch refs and the run directory, explaining
+anything retained. The default is `{ onSuccess: "release", onFailure: "keep" }`.
+Set `release` on the factory config or workflow entry; `release(policy)` wins
+over both when a successful workflow chooses from its inputs.
+
+Failed runs retain files until manual `jigs sweep`. Its `onFailure` setting
+uses the current workflow/factory config; a callsite override is not persisted
+for later sweep. `keep` requires operator confirmation or `--force`; `release`
+permits a requested clean pass. Neither starts background cleanup. Live and
+suspended runs retain resources regardless of force.
+
+Release is success-only: never call it from `finally` or a catch, because
+suspension throws too. Dirty unmerged work stays, and branches are deleted only
+when their commits are proven present on the remote default branch. Squash
+merges may therefore retain branches. Inspect the report when resource removal
+fails. Before upgrading across the renamed release step, finish or cancel
+active and parked runs with the operator.
+
+Configuration values vary by factory; requirements belong to the workflow
+declaration next to its input schema.
 
 ### Claim before protected work
 

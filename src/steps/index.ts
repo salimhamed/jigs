@@ -33,6 +33,7 @@ export {
 } from "./pull-request/pr.ts";
 export { dashboardRunUrl } from "./run-context.ts";
 export { createRunDirectory, removeRunDirectory } from "./run-directory/index.ts";
+export { resolveReleasePolicy } from "./runtime/release-policy.ts";
 export { fetchTicketSnapshot } from "./ticket/fetch-snapshot.ts";
 export {
   type CreateIssueInProjectInput,
@@ -58,6 +59,6 @@ export { resolveLinearIssue } from "./ticket/resolve.ts";
 export {
   type ProvisionWorktreeDeps,
   provisionWorktree,
-  removeMergedRunWorktrees,
+  releaseRunResources,
   type WorktreeRequest,
 } from "./worktree/index.ts";

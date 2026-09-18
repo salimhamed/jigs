@@ -691,19 +691,31 @@ prompt when there is no terminal to answer it. By default, cancel names the
 worktrees it leaves behind. `--discard` also removes that run's worktrees after
 the cancellation succeeds; branches containing unmerged commits are kept.
 
-Leftover worktrees are removed only by an explicit sweep, whether invoked
-directly or by `jigs cancel --discard`; nothing runs in the background. A run
-whose PR merged tears its own worktree down (the workflow's last line); every
-other ending leaves the tree on disk, visible in `jigs ps` as `abandoned`. On a
-terminal, `jigs sweep` asks per worktree, with a louder warning for trees
-holding uncommitted work; without a terminal it only reports, and
-`jigs sweep --force` removes everything eligible without asking — dirty trees
-included, so it is the flag for cron, not for habit.
-`jigs sweep <path>` force-removes just the named eligible worktree, including
-when it is dirty.
-Each removed line says what became of the branch: deleted when the default
-branch already contains it, kept — with the commit count it holds — when it is
-the only copy of unmerged work.
+A workflow requests release as its last successful action with `await release()`.
+The factory's `release: { onSuccess: "release", onFailure: "keep" }` default can
+be overridden by a workflow entry, then by a callsite policy. Release reports
+which worktrees, branch refs and scratch directory were removed or retained.
+Dirty unmerged work stays; only a proven zero unmerged-commit count permits
+branch deletion. Squash-merged branch refs may remain because ancestry does
+not prove their work landed.
+
+Failed runs leave their files until manual `jigs sweep`; waiting runs keep
+them. Sweep includes scratch directories even for runs with no worktree, and
+requires positive terminal-run evidence before removing a scratch directory.
+It never removes a live or suspended run's resources. Nothing runs in the
+background, and release belongs in neither `finally` nor a catch.
+
+Sweep reads the current workflow/factory policy; callsite overrides are not
+persisted for later cleanup. `onFailure: "keep"` retains terminal resources
+until explicit confirmation or force. `onFailure: "release"` permits an
+operator-requested clean pass; it does not schedule one. Worktrees remain
+visible in `jigs ps`; sweep labels scratch entries as `run-directory`.
+On a terminal, `jigs sweep` asks per resource, with a stronger warning for
+uncommitted work. Without a terminal it reports only. `jigs sweep --force`
+removes eligible terminal resources without asking, including dirty trees;
+`jigs sweep <path>` scopes that approval to one resource. Branches still need
+positive ancestry evidence even with force. Each removed worktree line reports
+whether its branch was deleted or kept, including its unmerged commit count.
 
 **Recurring runs.** A workflow can also fire on a schedule this factory
 declares beside its workflows, in `jigs.config.ts`:
