@@ -1,6 +1,6 @@
 // The step side of the worktree lifecycle: what the factory's "use step"
 // wrappers delegate to. The runtime creates a worktree and registers it; the
-// workflow calls teardown as a plain sequential line after a merged delivery —
+// workflow calls release as its last successful action —
 // never in a `finally`, which would fire on every suspension, and a suspended
 // run keeps its worktree. Every other ending
 // leaves the tree for the operator's `jigs sweep`.
@@ -23,7 +23,6 @@ import { provisionWorktree as provisionWorktreeFiles } from "./provision.ts";
 import { getWorktree, setWorktreeState, upsertWorktree } from "./registry.ts";
 import { assertReusable, WorktreeOwnedError } from "./reuse.ts";
 import { registrySql } from "./sql.ts";
-import { teardownMergedRun as teardownMerged } from "./teardown.ts";
 
 export interface WorktreeRequest {
   binding: string;
@@ -114,9 +113,4 @@ export async function provisionWorktree(
   return facts;
 }
 
-// The per-run teardown, called by the workflow after a merged delivery. The
-// operator's `jigs sweep` is the net for runs that never get there.
-/** Remove this run’s worktrees and branches after its pull requests have merged. */
-export async function removeMergedRunWorktrees(metadata: RunMetadata): Promise<string[]> {
-  return teardownMerged(metadata.workflowRunId, registrySql());
-}
+export { releaseRunResources } from "./release.ts";

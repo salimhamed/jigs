@@ -9,8 +9,10 @@ import type {
   Halt,
   MergePolicy,
   PrRef,
+  ReleasePolicy,
   TicketNote,
 } from "@salimhamed/jigs/blocks";
+import { bindReleaseSteps } from "@salimhamed/jigs/blocks";
 import { bindDeliverySteps } from "@salimhamed/jigs/delivery";
 import { bindLinearSteps } from "@salimhamed/jigs/linear";
 import { bindPullRequestSteps } from "@salimhamed/jigs/pull-requests";
@@ -25,12 +27,20 @@ export async function provisionWorktree(request: WorktreeRequest): Promise<Workt
   return steps.provisionWorktree(request, metadata);
 }
 
-/** Remove this run's worktrees after a successful merge. Never call from a finally block. */
-export async function removeMergedRunWorktrees() {
+/** Release finished run resources. Never call from finally or catch: suspension throws too. */
+export async function releaseRunResources(policy: ReleasePolicy) {
   "use step";
-  const metadata = getWorkflowMetadata();
-  return steps.removeMergedRunWorktrees(metadata);
+  return steps.releaseRunResources(policy, getWorkflowMetadata());
 }
+
+/** Resolve this workflow's release policy before its final successful action. */
+export async function resolveReleasePolicy() {
+  "use step";
+  const { default: definition } = await import("./jigs.config.ts");
+  return steps.resolveReleasePolicy(getWorkflowMetadata(), definition);
+}
+
+export const { release } = bindReleaseSteps({ resolveReleasePolicy, releaseRunResources });
 
 /** Execute an agent in a working directory. Use runAgent() to pass an output schema and parse its answer. */
 export async function executeAgent(request: AgentWire) {

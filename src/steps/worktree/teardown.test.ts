@@ -3,20 +3,20 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { managedCodexHomePath } from "../agent/harnesses/codex-home.ts";
+import { createRunDirectory } from "../run-directory/index.ts";
 import type { WorktreeRow } from "./registry.ts";
+import { releaseRunResources } from "./release.ts";
 import {
   applyTeardown,
   countUnmergedCommits,
   decideTeardown,
   isWorktreeDirty,
-  teardownMergedRun,
 } from "./teardown.ts";
 import { git, makeClonedBinding, makeFakeSql } from "./test-fixtures.ts";
 
 // The teardown matrix three ways: the pure decision as a table, its git
-// execution against a real worktree, then the merged recipe teardownMergedRun
-// runs against a faked registry — what a merged run removes, and that it never
-// asks whether the tree is dirty.
+// execution against a real worktree, then policy-driven release against a
+// faked registry: what is removed, preserved, and reported.
 
 let tmp: string;
 let repoDir: string;
@@ -58,6 +58,16 @@ function runWorktree(branch: string, runId = "run_1"): string {
 }
 
 const registry = () => makeFakeSql(store);
+const release = () =>
+  releaseRunResources(
+    { onSuccess: "release", onFailure: "keep" },
+    { workflowRunId: "run_1" },
+    registry(),
+  );
+function merge(branch: string) {
+  git(repoDir, "push", "-q", "origin", `${branch}:main`);
+  git(repoDir, "fetch", "-q", "origin");
+}
 
 function codexHome(runId: string): string {
   const home = managedCodexHomePath(runId);
@@ -75,7 +85,7 @@ test("a merged branch removes the worktree and deletes both branches", () => {
   expect(
     decideTeardown({
       dirty: false,
-      merged: true,
+      unmergedCommits: 0,
     }),
   ).toEqual({
     removeWorktree: true,
@@ -87,8 +97,8 @@ test("a merged branch removes the worktree and deletes both branches", () => {
 });
 
 test("the merged row outranks dirtiness", () => {
-  expect(decideTeardown({ dirty: true, merged: true })).toEqual(
-    decideTeardown({ dirty: false, merged: true }),
+  expect(decideTeardown({ dirty: true, unmergedCommits: 0 })).toEqual(
+    decideTeardown({ dirty: false, unmergedCommits: 0 }),
   );
 });
 
@@ -96,7 +106,7 @@ test("an unmerged clean tree removes the worktree and keeps the branches", () =>
   expect(
     decideTeardown({
       dirty: false,
-      merged: false,
+      unmergedCommits: 1,
     }),
   ).toEqual({
     removeWorktree: true,
@@ -111,7 +121,7 @@ test("an unmerged dirty tree is preserved as abandoned-dirty", () => {
   expect(
     decideTeardown({
       dirty: true,
-      merged: false,
+      unmergedCommits: 1,
     }),
   ).toEqual({
     removeWorktree: false,
@@ -134,12 +144,13 @@ const featRemote = () => git(repoDir, "ls-remote", "--heads", "origin", "feat") 
 
 test("applying the merged row removes the worktree and deletes the local and remote branches", async () => {
   const worktree = runWorktree("feat");
+  merge("feat");
   // Untracked build output is the normal state of a finished worktree.
   writeFileSync(path.join(worktree, "build.log"), "noise\n");
   await applyTeardown(
     decideTeardown({
       dirty: false,
-      merged: true,
+      unmergedCommits: 0,
     }),
     featTarget(worktree),
   );
@@ -150,16 +161,17 @@ test("applying the merged row removes the worktree and deletes the local and rem
 
 test("the remote delete is idempotent when GitHub already deleted the branch on merge", async () => {
   const worktree = runWorktree("feat");
+  merge("feat");
   git(remoteDir, "update-ref", "-d", "refs/heads/feat");
   await expect(
     applyTeardown(
       decideTeardown({
         dirty: false,
-        merged: true,
+        unmergedCommits: 0,
       }),
       featTarget(worktree),
     ),
-  ).resolves.toBeUndefined();
+  ).resolves.toMatchObject({ localBranchDeleted: true });
   expect(existsSync(worktree)).toBe(false);
   expect(() => featLocal()).toThrow();
 });
@@ -169,9 +181,10 @@ test("a merged teardown prunes the tracking ref delete-on-merge left behind", as
   // The push in runWorktree wrote refs/remotes/origin/feat; GitHub deleting
   // the branch on merge is what leaves it with nothing behind it.
   expect(git(repoDir, "rev-parse", "refs/remotes/origin/feat")).not.toBe("");
+  merge("feat");
   git(remoteDir, "update-ref", "-d", "refs/heads/feat");
 
-  await applyTeardown(decideTeardown({ dirty: false, merged: true }), featTarget(worktree));
+  await applyTeardown(decideTeardown({ dirty: false, unmergedCommits: 0 }), featTarget(worktree));
   expect(() => git(repoDir, "rev-parse", "refs/remotes/origin/feat")).toThrow();
 });
 
@@ -180,7 +193,7 @@ test("a failed run with a clean tree keeps both branches as insurance", async ()
   await applyTeardown(
     decideTeardown({
       dirty: false,
-      merged: false,
+      unmergedCommits: 1,
     }),
     featTarget(worktree),
   );
@@ -196,7 +209,7 @@ test("a failed run with a dirty tree preserves the worktree untouched and never 
   await applyTeardown(
     decideTeardown({
       dirty: true,
-      merged: false,
+      unmergedCommits: 1,
     }),
     featTarget(worktree),
   );
@@ -210,7 +223,7 @@ test("removing a worktree prunes the admin entry so the same path can be re-adde
   await applyTeardown(
     decideTeardown({
       dirty: false,
-      merged: false,
+      unmergedCommits: 1,
     }),
     featTarget(worktree),
   );
@@ -236,19 +249,20 @@ test("a clone with no resolvable default branch answers nothing", async () => {
   expect(await countUnmergedCommits(repoDir, "feat")).toBeNull();
 });
 
-test("a clean worktree reads not-dirty and a missing directory does too", async () => {
+test("a clean worktree reads not-dirty; unreadable or missing directories are not assumed clean", async () => {
   const worktree = runWorktree("feat");
   expect(await isWorktreeDirty(worktree)).toBe(false);
-  expect(await isWorktreeDirty(path.join(tmp, "nowhere"))).toBe(false);
+  expect(await isWorktreeDirty(path.join(tmp, "nowhere"))).toBe(true);
 });
 
 test("a merged run removes the worktree, both branches, and its Codex home", async () => {
   const target = runWorktree("feature");
   const home = codexHome("run_1");
+  merge("feature");
 
-  const removed = await teardownMergedRun("run_1", registry());
+  const removed = await release();
 
-  expect(removed).toEqual([target]);
+  expect(removed.worktrees.map((resource) => resource.removed && resource.path)).toEqual([target]);
   expect(existsSync(target)).toBe(false);
   expect(localBranches().split("\n")).not.toContain("feature");
   expect(remoteBranches()).not.toContain("refs/heads/feature");
@@ -257,7 +271,7 @@ test("a merged run removes the worktree, both branches, and its Codex home", asy
   expect(existsSync(home)).toBe(false);
 });
 
-test("a squash-merged branch is torn down even though it is not an ancestor of the default branch", async () => {
+test("a squash-merged clean worktree is released but its unproven branches remain", async () => {
   const target = runWorktree("feature");
   // A squash merge on origin: the work lands, the branch tip does not, so
   // `merge-base --is-ancestor` would answer false and the done row would
@@ -276,18 +290,19 @@ test("a squash-merged branch is torn down even though it is not an ancestor of t
   git(repoDir, "fetch", "-q", "origin");
   expect(() => git(repoDir, "merge-base", "--is-ancestor", "feature", "origin/main")).toThrow();
 
-  await teardownMergedRun("run_1", registry());
+  await release();
 
   expect(existsSync(target)).toBe(false);
-  expect(localBranches().split("\n")).not.toContain("feature");
-  expect(remoteBranches()).not.toContain("refs/heads/feature");
+  expect(localBranches().split("\n")).toContain("feature");
+  expect(remoteBranches()).toContain("refs/heads/feature");
 });
 
-test("a merged run's dirty tree still goes: the recipe never reads dirtiness", async () => {
+test("a proven merged run's dirty tree still follows the merged matrix row", async () => {
   const target = runWorktree("feature");
   writeFileSync(path.join(target, "build.log"), "output\n");
+  merge("feature");
 
-  await teardownMergedRun("run_1", registry());
+  await release();
 
   expect(existsSync(target)).toBe(false);
   expect(localBranches().split("\n")).not.toContain("feature");
@@ -297,9 +312,99 @@ test("only the run's own worktrees are torn down", async () => {
   const mine = runWorktree("mine", "run_1");
   const theirs = runWorktree("theirs", "run_2");
 
-  await teardownMergedRun("run_1", registry());
+  await release();
 
   expect(existsSync(mine)).toBe(false);
   expect(existsSync(theirs)).toBe(true);
   expect([...store.keys()]).toEqual([theirs]);
+});
+
+test.each([null, 1, 5])("%s unmerged commits never permit branch deletion", (unmergedCommits) => {
+  for (const dirty of [true, false]) {
+    const plan = decideTeardown({ dirty, unmergedCommits });
+    expect(plan.deleteLocalBranch).toBe(false);
+    expect(plan.deleteRemoteBranch).toBe(false);
+  }
+});
+
+test("keep policy preserves every run resource and reports why", async () => {
+  const target = runWorktree("feature");
+  const directory = await createRunDirectory({ workflowRunId: "run_1" });
+  const result = await releaseRunResources(
+    { onSuccess: "keep", onFailure: "release" },
+    { workflowRunId: "run_1" },
+    registry(),
+  );
+  expect(result.worktrees[0]).toMatchObject({
+    path: target,
+    removed: false,
+    reason: "onSuccess policy keeps run resources",
+  });
+  expect(result.runDirectory.removed).toBe(false);
+  expect(existsSync(directory)).toBe(true);
+  expect(store.size).toBe(1);
+});
+
+test("success releases its run directory even with no worktree", async () => {
+  const directory = await createRunDirectory({ workflowRunId: "run_1" });
+  const result = await release();
+  expect(result.runDirectory).toMatchObject({ path: directory, removed: true });
+  expect(existsSync(directory)).toBe(false);
+});
+
+test("unmerged dirty work is preserved and explained", async () => {
+  const target = runWorktree("feature");
+  writeFileSync(path.join(target, "wip"), "in progress");
+  const result = await release();
+  expect(result.worktrees[0]).toMatchObject({ removed: false, unmergedCommits: 1 });
+  expect(result.worktrees[0]?.reason).toContain("uncommitted");
+  expect(store.get(target)?.state).toBe("abandoned-dirty");
+  expect(existsSync(target)).toBe(true);
+});
+
+test("failed removal retains the directory and registry row", async () => {
+  const target = runWorktree("feature");
+  git(repoDir, "worktree", "lock", target);
+  const result = await release();
+  expect(result.worktrees[0]?.removed).toBe(false);
+  expect(result.worktrees[0]?.reason).toContain("release incomplete");
+  expect(existsSync(target)).toBe(true);
+  expect(store.has(target)).toBe(true);
+});
+
+test("failed fetch cannot authorize branch deletion using a stale merged ref", async () => {
+  const target = runWorktree("feature");
+  merge("feature");
+  git(repoDir, "remote", "set-url", "origin", path.join(tmp, "missing.git"));
+  const result = await release();
+  expect(result.worktrees[0]).toMatchObject({
+    removed: true,
+    localBranchDeleted: false,
+    remoteBranchDeleted: false,
+    unmergedCommits: null,
+  });
+  expect(existsSync(target)).toBe(false);
+  expect(localBranches()).toContain("feature");
+});
+
+test("a remotely advanced branch stays even when the local branch is merged", async () => {
+  runWorktree("feature");
+  merge("feature");
+  const sha = git(
+    repoDir,
+    "commit-tree",
+    "feature^{tree}",
+    "-p",
+    "feature",
+    "-m",
+    "remote-only work",
+  );
+  git(repoDir, "push", "-q", "origin", `${sha}:feature`);
+  const result = await release();
+  expect(result.worktrees[0]).toMatchObject({
+    removed: true,
+    localBranchDeleted: true,
+    remoteBranchDeleted: false,
+  });
+  expect(remoteBranches()).toContain("refs/heads/feature");
 });

@@ -169,6 +169,13 @@ export {
 } from "./pull-request/policy.ts";
 export { currentRunId, defaultPrScope } from "./pull-request/writer.ts";
 export {
+  bindReleaseSteps,
+  type ReleasePolicy,
+  type ReleaseReport,
+  type ReleaseSteps,
+  release,
+} from "./runtime/release.ts";
+export {
   type BoundReviewTicketOptions,
   bindLinearSteps,
   type LinearSteps,

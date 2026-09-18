@@ -4,6 +4,7 @@ import { createJiti } from "jiti";
 
 import { z } from "zod";
 import { type MergePolicy, mergeSchema } from "../blocks/pull-request/policy.ts";
+import { releaseSchema } from "../blocks/runtime/release.ts";
 import { JigsError } from "../errors.ts";
 import { factorySlug } from "../steps/worktree/layout.ts";
 
@@ -82,6 +83,7 @@ const factoryConfigSchema = z.looseObject({
   github: z.preprocess((block) => block ?? {}, githubSchema),
   // This factory's merge policy: who merges, by which of GitHub's three merge
   // methods, and what signal permits it.
+  release: releaseSchema.optional(),
   merge: z.preprocess((block) => block ?? {}, mergeSchema),
 });
 
