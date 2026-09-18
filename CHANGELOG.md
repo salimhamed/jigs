@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.32.0](https://github.com/salimhamed/jigs/compare/jigs-v0.31.0...jigs-v0.32.0) (2026-09-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* jigs init now scaffolds hello instead of ship; add the ship recipe and register it explicitly when adopting that process.
+
+### Features
+
+* scaffold bare factories and install ship as a recipe ([#264](https://github.com/salimhamed/jigs/issues/264)) ([3a6e30a](https://github.com/salimhamed/jigs/commit/3a6e30a662aefa60b8e724f95a5f424a95178439))
+
 ## [0.31.0](https://github.com/salimhamed/jigs/compare/jigs-v0.30.1...jigs-v0.31.0) (2026-09-18)
 
 
