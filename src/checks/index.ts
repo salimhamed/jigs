@@ -1,4 +1,4 @@
-import type { AgentWire } from "../blocks/agents/plan.ts";
+import type { AgentRequest } from "../blocks/agents/plan.ts";
 import { defaultMergePolicy, readFactoryConfig } from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";
 import { getAuthenticatedUser } from "../providers/github.ts";
@@ -142,7 +142,7 @@ export const JIT_TIMEOUT_MS = 3 * CHECK_TIMEOUT_MS + 5_000;
 // Preflight's backstop: everything a step can only learn at hydration, once
 // the body has built its harness config — which no manifest could declare
 // ahead of the run.
-export function jitChecks(wire: AgentWire): Check[] {
+export function jitChecks(wire: AgentRequest): Check[] {
   const harness = wire.harness;
   return [
     ...(harness.kind === "codex" ? [codexWorktreeConfigCheck(wire.cwd)] : []),

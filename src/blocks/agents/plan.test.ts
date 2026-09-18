@@ -1,15 +1,15 @@
 import { expect, test } from "vitest";
 import { z } from "zod";
 import { claude, codex } from "./harness-config.ts";
-import { buildAgentWire, buildAskWire, parseOutput } from "./plan.ts";
+import { buildAgentRequest, buildModelRequest, parseOutput } from "./plan.ts";
 
 const verdict = z.object({
   approved: z.boolean(),
   note: z.string(),
 });
 
-test("buildAgentWire converts the zod output schema into a wire JSON schema", () => {
-  const wire = buildAgentWire({
+test("buildAgentRequest converts the zod output schema into a wire JSON schema", () => {
+  const wire = buildAgentRequest({
     harness: claude({ model: "sonnet" }),
     cwd: "/work/tree",
     prompt: "review it",
@@ -28,7 +28,7 @@ test("buildAgentWire converts the zod output schema into a wire JSON schema", ()
 });
 
 test("without an output schema the wire omits it", () => {
-  const wire = buildAskWire({
+  const wire = buildModelRequest({
     harness: codex({ model: "gpt-5.5" }),
     prompt: "what changed?",
   });
@@ -37,7 +37,7 @@ test("without an output schema the wire omits it", () => {
 
 test("askModel() rejects a harness descriptor carrying mcpServers", () => {
   expect(() =>
-    buildAskWire({
+    buildModelRequest({
       harness: claude({
         model: "sonnet",
         mcpServers: { probe: { command: "node", probe: { tool: "ping" } } },
@@ -48,7 +48,7 @@ test("askModel() rejects a harness descriptor carrying mcpServers", () => {
 });
 
 test("every builder wire survives structuredClone — builders never inject live values", () => {
-  const agentWire = buildAgentWire({
+  const agentWire = buildAgentRequest({
     harness: codex({
       model: "gpt-5.5",
       mcpServers: {
@@ -65,7 +65,7 @@ test("every builder wire survives structuredClone — builders never inject live
   });
   expect(structuredClone(agentWire)).toEqual(agentWire);
 
-  const askWire = buildAskWire({
+  const askWire = buildModelRequest({
     harness: claude({ model: "sonnet" }),
     prompt: "summarize",
     system: "be terse",

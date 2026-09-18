@@ -1,4 +1,8 @@
-import { claimTicket, type Handoff, renderSnapshot } from "@salimhamed/jigs/blocks/linear";
+import {
+  claimTicket,
+  renderTicketSnapshot,
+  type TicketHandoff,
+} from "@salimhamed/jigs/blocks/linear";
 import type { WorkItem } from "#blocks/delivery/types";
 import { fetchTicketSnapshot, resolveLinearIssue } from "#jigs";
 
@@ -11,12 +15,12 @@ export async function acquireLinearTicket(reference: string) {
 }
 
 /** Keep the ticket requirements and implementation brief together for delivery. */
-export function workItemFromHandoff(handoff: Handoff): WorkItem {
+export function workItemFromHandoff(handoff: TicketHandoff): WorkItem {
   return {
     id: handoff.snapshot.id,
     key: handoff.snapshot.identifier,
     title: handoff.snapshot.title,
     url: handoff.snapshot.url,
-    instructions: `${renderSnapshot(handoff.snapshot)}\n\n## Implementation brief\n${handoff.brief}\n\nThe ticket requirements take precedence over the brief.`,
+    instructions: `${renderTicketSnapshot(handoff.snapshot)}\n\n## Implementation brief\n${handoff.brief}\n\nThe ticket requirements take precedence over the brief.`,
   };
 }

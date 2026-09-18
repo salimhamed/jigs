@@ -1,14 +1,14 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import { claude } from "../agents/harness-config.ts";
-import { type AgentStepConfig, parseOutput } from "../agents/plan.ts";
-import type { AgentFn } from "../agents/resume-or-rebuild.ts";
+import { parseOutput, type RunAgentOptions } from "../agents/plan.ts";
+import type { RunAgentFn } from "../agents/resume-or-rebuild.ts";
 import type { TicketClaim } from "./claim.ts";
 import type { Halt, HaltForHumanFn, HumanReply } from "./halt-for-human.ts";
 import {
   type PostTicketNote,
   reviewTicket,
   type TicketNote,
-  ticketReviewVerdict,
+  ticketReviewVerdictSchema,
 } from "./review.ts";
 import type { TicketSnapshot } from "./snapshot.ts";
 import type { TicketReviewPrompt } from "./ticket-review.prompt.ts";
@@ -36,7 +36,7 @@ const snapshot: TicketSnapshot = {
   subIssues: [],
 };
 
-let agentCalls: AgentStepConfig<unknown>[] = [];
+let agentCalls: RunAgentOptions<unknown>[] = [];
 let verdicts: unknown[] = [];
 let humanCalls: Array<{ claim: TicketClaim; halt: Halt }> = [];
 let noteCalls: Array<{ issueId: string } & TicketNote> = [];
@@ -51,8 +51,8 @@ const reply: HumanReply = {
 
 // Applies parseOutput exactly as the real runAgent() does, so the verdict schema
 // is exercised through the production path rather than around it.
-const fakeAgent: AgentFn = async <T>(config: AgentStepConfig<T>) => {
-  agentCalls.push(config as AgentStepConfig<unknown>);
+const fakeAgent: RunAgentFn = async <T>(config: RunAgentOptions<T>) => {
+  agentCalls.push(config as RunAgentOptions<unknown>);
   return {
     text: "",
     output: parseOutput(config.output, verdicts.shift()),
@@ -106,13 +106,13 @@ test("a malformed verdict object fails the schema", () => {
     questions: [],
     assumptions: [],
   };
-  expect(() => ticketReviewVerdict.parse(good)).not.toThrow();
-  expect(() => ticketReviewVerdict.parse({ ...good, verdict: "maybe" })).toThrow();
-  expect(() => ticketReviewVerdict.parse({ ...good, brief: "" })).toThrow();
-  expect(() => ticketReviewVerdict.parse({ ...good, confidence: 0.8 })).toThrow();
+  expect(() => ticketReviewVerdictSchema.parse(good)).not.toThrow();
+  expect(() => ticketReviewVerdictSchema.parse({ ...good, verdict: "maybe" })).toThrow();
+  expect(() => ticketReviewVerdictSchema.parse({ ...good, brief: "" })).toThrow();
+  expect(() => ticketReviewVerdictSchema.parse({ ...good, confidence: 0.8 })).toThrow();
   // A question is a question and up to three plain choices — nothing else.
   expect(() =>
-    ticketReviewVerdict.parse({
+    ticketReviewVerdictSchema.parse({
       ...good,
       questions: [{ question: "which?", options: [{ label: "a", why: "no" }] }],
     }),
@@ -274,6 +274,6 @@ test("a caller-supplied prompt replaces the one shipped beside the block", async
 test("the verdict schema is declared on the agent step so the harness emits it natively", async () => {
   verdicts = [proceed()];
   await review();
-  expect(agentCalls[0]?.output).toBe(ticketReviewVerdict);
+  expect(agentCalls[0]?.output).toBe(ticketReviewVerdictSchema);
   expect(agentCalls[0]?.cwd).toBe("/tmp/worktree");
 });

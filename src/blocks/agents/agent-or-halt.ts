@@ -6,23 +6,23 @@
 import type { TicketClaim } from "../linear/claim.ts";
 import type { HaltForHumanFn } from "../linear/halt-for-human.ts";
 import { JitCheckError } from "./agent.ts";
-import type { AgentStepConfig } from "./plan.ts";
-import type { AgentStepResult } from "./result.ts";
-import type { AgentFn } from "./resume-or-rebuild.ts";
+import type { RunAgentOptions } from "./plan.ts";
+import type { AgentResult } from "./result.ts";
+import type { RunAgentFn } from "./resume-or-rebuild.ts";
 
-export interface AgentOrHaltDeps {
-  runAgent: AgentFn;
+export interface RunAgentOrHaltDependencies {
+  runAgent: RunAgentFn;
   haltForHuman: HaltForHumanFn;
 }
 
 // Unbounded on purpose: the halt is a pause the human ends, and each loop
 // iteration is a fresh step slot, which is what makes the retry a re-run
 // from zero rather than a replay of the memoized failure.
-export async function agentOrHalt<T = undefined>(
+export async function runAgentOrHalt<T = undefined>(
   claim: TicketClaim,
-  config: AgentStepConfig<T>,
-  deps: AgentOrHaltDeps,
-): Promise<AgentStepResult<T>> {
+  config: RunAgentOptions<T>,
+  deps: RunAgentOrHaltDependencies,
+): Promise<AgentResult<T>> {
   for (;;) {
     try {
       return await deps.runAgent(config);

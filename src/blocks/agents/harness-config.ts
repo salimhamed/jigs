@@ -9,25 +9,25 @@ import type { CodexAppServerSettings } from "ai-sdk-provider-codex-cli";
 // their own server list — and no tool is universally side-effect-free, so the
 // step declares which one the JIT check may call. Required: TypeScript is the
 // enforcement, not plan-time validation code.
-export type McpProbe = {
+export type McpToolProbe = {
   tool: string;
   arguments?: Record<string, unknown>;
 };
 
-export type McpStdioServer = {
+export type McpStdioServerConfig = {
   command: string;
   args?: string[];
   env?: Record<string, string>;
-  probe: McpProbe;
+  probe: McpToolProbe;
 };
 
-export type McpHttpServer = {
+export type McpHttpServerConfig = {
   url: string;
   headers?: Record<string, string>;
-  probe: McpProbe;
+  probe: McpToolProbe;
 };
 
-export type McpServerConfig = McpStdioServer | McpHttpServer;
+export type McpServerConfig = McpStdioServerConfig | McpHttpServerConfig;
 
 type SharedHarnessOptions = {
   model: string;
@@ -62,7 +62,7 @@ export function codex(options: Omit<CodexHarnessOptions, "kind">): CodexHarnessC
   return { kind: "codex", ...options };
 }
 
-export type HarnessName = HarnessConfig["kind"];
+export type HarnessKind = HarnessConfig["kind"];
 
 const harnesses = { claude, codex } as const;
 
@@ -71,8 +71,8 @@ const harnesses = { claude, codex } as const;
  * own default model. The map is the factory's: jigs knows no model names.
  */
 export function selectHarness(
-  harness: HarnessName,
-  defaultModels: Record<HarnessName, string>,
+  harness: HarnessKind,
+  defaultModels: Record<HarnessKind, string>,
   model?: string,
 ): HarnessConfig {
   return harnesses[harness]({ model: model ?? defaultModels[harness] });

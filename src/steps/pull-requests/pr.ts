@@ -20,22 +20,22 @@ import {
   fetchPrTitle,
   markPrReady,
   mergePr,
-  type PrRef,
-  type PrSnapshot,
+  type PullRequestRef,
   type PullRequestReviewRequest,
+  type PullRequestSnapshot,
   postPrComment,
   postPullRequestReview,
   replyToReviewThread,
 } from "../../providers/github.ts";
 import { GithubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity } from "../../providers/github-auth.ts";
-import { type GithubRepoRef, parseGithubRemote } from "../../providers/github-webhook.ts";
+import { type GitHubRepoRef, parseGithubRemote } from "../../providers/github-webhook.ts";
 
-export type OpenedPullRequest = PrRef & { url: string };
+export type OpenedPullRequest = PullRequestRef & { url: string };
 
 // The binding is the remote now, so this is a config read: no git subprocess.
 /** Find the GitHub repository configured for a binding. */
-export async function resolveRepository(binding: string): Promise<GithubRepoRef> {
+export async function resolveRepository(binding: string): Promise<GitHubRepoRef> {
   const { remote } = resolveBinding(factoryRoot(), binding);
   const ref = parseGithubRemote(remote);
   if (ref === null) {
@@ -55,7 +55,7 @@ export async function resolveMergePolicy(binding: string): Promise<MergePolicy> 
 
 /** Open a pull request from the working branch into the base branch. */
 export async function openPullRequest(request: {
-  repo: GithubRepoRef;
+  repo: GitHubRepoRef;
   head: string;
   base: string;
   title: string;
@@ -83,7 +83,7 @@ export async function openPullRequest(request: {
 }
 
 /** Mark a draft pull request ready and return its freshly read state. */
-export async function markPullRequestReady(pr: PrRef): Promise<PrSnapshot> {
+export async function markPullRequestReady(pr: PullRequestRef): Promise<PullRequestSnapshot> {
   await markPrReady(pr);
   return fetchPrSnapshot(pr);
 }
@@ -93,7 +93,7 @@ export async function markPullRequestReady(pr: PrRef): Promise<PrSnapshot> {
 // caller that wants to name it in a log.
 /** Reply to a review thread and return the posted comment id. */
 export async function replyToPullRequestReviewThread(
-  pr: PrRef,
+  pr: PullRequestRef,
   rootId: number,
   body: string,
 ): Promise<{ id: number }> {
@@ -101,7 +101,10 @@ export async function replyToPullRequestReviewThread(
 }
 
 /** Post a comment on the pull request conversation and return its id. */
-export async function commentOnPullRequest(pr: PrRef, body: string): Promise<{ id: number }> {
+export async function commentOnPullRequest(
+  pr: PullRequestRef,
+  body: string,
+): Promise<{ id: number }> {
   return postPrComment(pr, body);
 }
 
@@ -111,7 +114,7 @@ export async function commentOnPullRequest(pr: PrRef, body: string): Promise<{ i
  * GitHub's GithubApiError surface unchanged.
  */
 export async function reviewPullRequest(
-  pr: PrRef,
+  pr: PullRequestRef,
   review: PullRequestReviewRequest,
 ): Promise<{ id: number }> {
   return postPullRequestReview(pr, review);
@@ -145,7 +148,7 @@ const STATE_CHANGED = new Set([405, 409]);
  * reports `merged` only if GitHub says so.
  */
 export async function mergePullRequest(
-  pr: PrRef,
+  pr: PullRequestRef,
   expectedHeadSha: string,
   policy: MergePolicy,
 ): Promise<MergeOutcome> {
@@ -199,7 +202,7 @@ export async function mergePullRequest(
  * rewrites the branch's commits and accepts no merge message at all.
  */
 async function suppliedCommitMessageBody(
-  pr: PrRef,
+  pr: PullRequestRef,
   method: MergePolicy["method"],
 ): Promise<undefined | string> {
   const identity = resolveGithubIdentity();

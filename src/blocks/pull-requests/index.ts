@@ -14,16 +14,16 @@ export {
 } from "./attend.ts";
 export { bindPullRequestSteps } from "./bind.ts";
 export {
-  classifyPrState,
-  type GateFn,
-  type GateWake,
-  PR_TOKEN_PREFIX,
-  type PrRef,
-  type PrState,
-  prToken,
+  classifyPullRequestState,
+  PULL_REQUEST_TOKEN_PREFIX,
+  type PullRequestGateFn,
+  type PullRequestRef,
+  type PullRequestState,
+  type PullRequestWake,
   pullRequestGate,
-  readPrLedger,
-  tokenFromGithubPayload,
+  pullRequestToken,
+  readPullRequestLedger,
+  tokenFromGitHubPayload,
 } from "./gate.ts";
 export {
   carriesMarker,
@@ -31,9 +31,9 @@ export {
   type MarkerKind,
   type MarkerLedger,
   markBody,
-  type PrMarker,
+  type PullRequestMarker,
   parseMarkers,
-  prScope,
+  pullRequestScope,
   readLedger,
   renderMarker,
   type StatusReason,
@@ -48,8 +48,8 @@ export {
 } from "./merge-ready.ts";
 export {
   type ApprovalSignal,
-  approvalSchema,
+  approvalSignalSchema,
   type MergePolicy,
-  mergeSchema,
+  mergePolicySchema,
 } from "./policy.ts";
-export { currentRunId, defaultPrScope } from "./writer.ts";
+export { currentRunId, defaultPullRequestScope } from "./writer.ts";

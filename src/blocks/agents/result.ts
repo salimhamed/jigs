@@ -4,20 +4,20 @@ import type { HarnessConfig } from "./harness-config.ts";
 // Type aliases, not interfaces: aliases carry an implicit index signature,
 // which keeps step returns assignable to the SDK's Serializable types.
 
-export type StepUsage = LanguageModelUsage;
+export type ModelUsage = LanguageModelUsage;
 
 export type AgentSession = {
   harness: HarnessConfig["kind"];
   id: string;
 };
 
-export type StepResult<T = unknown> = {
+export type ModelResult<T = unknown> = {
   text: string;
   output: T;
-  usage?: StepUsage;
+  usage?: ModelUsage;
 };
 
-export type AgentStepResult<T = unknown> = StepResult<T> & {
+export type AgentResult<T = unknown> = ModelResult<T> & {
   session?: AgentSession;
 };
 
@@ -25,13 +25,13 @@ type ProviderMetadataLike = Record<string, Record<string, unknown>> | null;
 
 // The structural slice of an AI SDK GenerateTextResult the normalizer needs —
 // what the executor deps seam fakes in tests.
-export type StepGeneration = {
+export type ModelGeneration = {
   text: string;
-  usage: StepUsage;
+  usage: ModelUsage;
   providerMetadata?: ProviderMetadataLike;
 };
 
-export function toStepResult(generation: StepGeneration, output: unknown): StepResult<unknown> {
+export function toModelResult(generation: ModelGeneration, output: unknown): ModelResult<unknown> {
   return { text: generation.text, output, usage: generation.usage };
 }
 

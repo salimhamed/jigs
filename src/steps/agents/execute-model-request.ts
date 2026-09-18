@@ -5,14 +5,14 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { AskWire } from "../../blocks/agents/plan.ts";
-import { type StepResult, toStepResult } from "../../blocks/agents/result.ts";
+import type { ModelRequest } from "../../blocks/agents/plan.ts";
+import { type ModelResult, toModelResult } from "../../blocks/agents/result.ts";
 import type { RunMetadata } from "../runtime/run-context.ts";
 import {
-  type ExecuteDeps,
+  type AgentExecutionDependencies,
+  defaultAgentExecutionDependencies,
   type ExecutorGeneration,
   outputSpec,
-  realDeps,
 } from "./execute-agent.ts";
 import { codexExecStepSettings } from "./harnesses/codex.ts";
 import { scrubbedEnv } from "./harnesses/env.ts";
@@ -20,11 +20,11 @@ import { resolveClaudeExecutable } from "./harnesses/executables.ts";
 import { claudeCode, codexExec } from "./harnesses/index.ts";
 
 /** Ask a model a question without giving it a worktree or tools. */
-export async function executeModelRequest(
-  wire: AskWire,
+export async function executeModel(
+  wire: ModelRequest,
   metadata: RunMetadata,
-  deps: ExecuteDeps = realDeps,
-): Promise<StepResult> {
+  deps: AgentExecutionDependencies = defaultAgentExecutionDependencies,
+): Promise<ModelResult> {
   const runId = metadata.workflowRunId;
   const harness = wire.harness;
   const env = scrubbedEnv();
@@ -72,5 +72,5 @@ export async function executeModelRequest(
     }
   }
 
-  return toStepResult(generation, wire.outputSchema !== undefined ? generation.output : undefined);
+  return toModelResult(generation, wire.outputSchema !== undefined ? generation.output : undefined);
 }

@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
-import type { PrSnapshot } from "../../providers/github.ts";
-import { classifyPrState } from "./gate.ts";
+import type { PullRequestSnapshot } from "../../providers/github.ts";
+import { classifyPullRequestState } from "./gate.ts";
 import { markBody } from "./marker.ts";
 import {
   approvalState,
@@ -14,7 +14,7 @@ const SCOPE = "ship/AGE-402";
 const REVIEW: ApprovalSignal = { kind: "review" };
 const LABEL: ApprovalSignal = { kind: "label", name: "jigs:approved" };
 
-const snapshot: PrSnapshot = {
+const snapshot: PullRequestSnapshot = {
   state: "open",
   merged: false,
   draft: false,
@@ -52,7 +52,7 @@ test("a clean pull request with no build is not ready, whatever GitHub says", ()
   expect(isPullRequestMergeReady({ ...snapshot, ci: "red" }, REVIEW)).toBe(false);
   const labelled = { ...snapshot, reviews: [], labels: ["jigs:approved"], ci: "pending" as const };
   expect(isPullRequestMergeReady(labelled, LABEL)).toBe(false);
-  expect(classifyPrState(labelled, SCOPE, LABEL).wakes).toEqual([]);
+  expect(classifyPullRequestState(labelled, SCOPE, LABEL).wakes).toEqual([]);
 });
 
 test("a draft, a closed and an already merged pull request are never ready", () => {
@@ -71,7 +71,7 @@ test("a review approval names a commit, so a push withdraws it", () => {
 // approval that named an earlier commit says so rather than reading as one
 // nobody ever gave.
 test("an unmet approval names which of the four things is missing", () => {
-  const refusalFor = (patch: Partial<PrSnapshot>, signal: ApprovalSignal = REVIEW) =>
+  const refusalFor = (patch: Partial<PullRequestSnapshot>, signal: ApprovalSignal = REVIEW) =>
     mergeRefusal({ ...snapshot, ...patch }, "new", signal)?.reason;
   const approval = snapshot.reviews[0];
   if (approval === undefined) throw new Error("Missing fixture approval");
@@ -91,7 +91,7 @@ test("an unmet approval names which of the four things is missing", () => {
 test("latest effective reviewer decision supersedes historical approvals", () => {
   const approval = snapshot.reviews[0];
   if (approval === undefined) throw new Error("Missing fixture approval");
-  const withReviews = (reviews: PrSnapshot["reviews"]) => ({ ...snapshot, reviews });
+  const withReviews = (reviews: PullRequestSnapshot["reviews"]) => ({ ...snapshot, reviews });
   expect(
     isApprovalSatisfied(
       withReviews([approval, { ...approval, id: 2, submittedAt: "2", state: "CHANGES_REQUESTED" }]),
@@ -123,28 +123,30 @@ test("a label approval is the pull request's, not a commit's, so it survives a p
 });
 
 test("the configured signal is the one the gate classifies with", () => {
-  const labelled: PrSnapshot = { ...snapshot, reviews: [], labels: ["jigs:approved"] };
-  expect(classifyPrState(labelled, SCOPE, REVIEW).wakes).toEqual([]);
-  expect(classifyPrState(labelled, SCOPE, LABEL).wakes).toEqual([
+  const labelled: PullRequestSnapshot = { ...snapshot, reviews: [], labels: ["jigs:approved"] };
+  expect(classifyPullRequestState(labelled, SCOPE, REVIEW).wakes).toEqual([]);
+  expect(classifyPullRequestState(labelled, SCOPE, LABEL).wakes).toEqual([
     { kind: "merge-ready", headSha: "new", retryNoted: false },
   ]);
 });
 
 test("a pull request GitHub is not ready to merge becomes merge-ready when it is", () => {
-  expect(classifyPrState({ ...snapshot, mergeState: "unstable" }, SCOPE, REVIEW).wakes).toEqual([]);
-  expect(classifyPrState(snapshot, SCOPE, REVIEW).wakes).toEqual([
+  expect(
+    classifyPullRequestState({ ...snapshot, mergeState: "unstable" }, SCOPE, REVIEW).wakes,
+  ).toEqual([]);
+  expect(classifyPullRequestState(snapshot, SCOPE, REVIEW).wakes).toEqual([
     { kind: "merge-ready", headSha: "new", retryNoted: false },
   ]);
 });
 
 test("closed snapshots yield no agent or merge work", () => {
-  expect(classifyPrState({ ...snapshot, state: "closed", ci: "red" }, SCOPE, REVIEW).wakes).toEqual(
-    [{ kind: "closed", merged: false }],
-  );
+  expect(
+    classifyPullRequestState({ ...snapshot, state: "closed", ci: "red" }, SCOPE, REVIEW).wakes,
+  ).toEqual([{ kind: "closed", merged: false }]);
 });
 
 test("a stood-down head does not ask to be merged again", () => {
-  const stoodDown: PrSnapshot = {
+  const stoodDown: PullRequestSnapshot = {
     ...snapshot,
     conversationComments: [
       {
@@ -159,10 +161,10 @@ test("a stood-down head does not ask to be merged again", () => {
       },
     ],
   };
-  expect(classifyPrState(stoodDown, SCOPE, REVIEW).wakes).toEqual([]);
+  expect(classifyPullRequestState(stoodDown, SCOPE, REVIEW).wakes).toEqual([]);
   // A push moves the head, and the approval of that new head is new work.
   expect(
-    classifyPrState(
+    classifyPullRequestState(
       {
         ...stoodDown,
         headSha: "newer",
@@ -175,7 +177,7 @@ test("a stood-down head does not ask to be merged again", () => {
 });
 
 test("a refusal jigs can wait out is kept apart from one only a new commit fixes", () => {
-  const refusal = (patch: Partial<PrSnapshot>, head = "new") =>
+  const refusal = (patch: Partial<PullRequestSnapshot>, head = "new") =>
     mergeRefusal({ ...snapshot, ...patch }, head, REVIEW);
   expect(refusal({})).toBeNull();
   for (const mergeState of ["unstable", "blocked", "behind", "unknown", "has_hooks"]) {
@@ -197,7 +199,7 @@ test("a refusal jigs can wait out is kept apart from one only a new commit fixes
 });
 
 test("a merge jigs will retry leaves the head merge-ready, and is only noted once", () => {
-  const noted = (reason: "merge" | "merge-retry"): PrSnapshot => ({
+  const noted = (reason: "merge" | "merge-retry"): PullRequestSnapshot => ({
     ...snapshot,
     conversationComments: [
       {
@@ -212,8 +214,8 @@ test("a merge jigs will retry leaves the head merge-ready, and is only noted onc
       },
     ],
   });
-  expect(classifyPrState(noted("merge-retry"), SCOPE, REVIEW).wakes).toEqual([
+  expect(classifyPullRequestState(noted("merge-retry"), SCOPE, REVIEW).wakes).toEqual([
     { kind: "merge-ready", headSha: "new", retryNoted: true },
   ]);
-  expect(classifyPrState(noted("merge"), SCOPE, REVIEW).wakes).toEqual([]);
+  expect(classifyPullRequestState(noted("merge"), SCOPE, REVIEW).wakes).toEqual([]);
 });

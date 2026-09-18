@@ -6,49 +6,49 @@
 
 import { expect, test } from "vitest";
 import type {
-  AgentFn,
-  AgentOrHaltDeps,
+  AgentRequest,
+  AgentResult,
   AgentSession,
-  AgentStepConfig,
-  AgentStepResult,
-  AgentWire,
-  AskStepConfig,
-  AskWire,
+  AskModelOptions,
   ClaudeHarnessConfig,
   ClaudeHarnessOptions,
   CodexHarnessConfig,
   CodexHarnessOptions,
   ExecuteAgentStep,
-  ExecuteModelRequestStep,
+  ExecuteModelStep,
   HarnessConfig,
-  HarnessName,
+  HarnessKind,
   HarnessOptions,
-  McpHttpServer,
-  McpProbe,
+  McpHttpServerConfig,
   McpServerConfig,
-  McpStdioServer,
+  McpStdioServerConfig,
+  McpToolProbe,
+  ModelRequest,
+  ModelResult,
+  ModelUsage,
+  OutputJsonSchema,
   RebuildContextPrompt,
   RebuildContextPromptInput,
   ResumeOrRebuildOptions,
   ResumeOrRebuildResult,
-  StepResult,
-  StepUsage,
-  WireJsonSchema,
+  RunAgentFn,
+  RunAgentOptions,
+  RunAgentOrHaltDependencies,
 } from "./blocks/agents/index.ts";
 import type { ChangePatch, ChangeStatus, ChangeSummary, FileChange } from "./blocks/git/index.ts";
 import type { HaltOption, HaltQuestion, JsonValue } from "./blocks/human/index.ts";
 import type {
   CheckForTicketHumanReply,
   Halt,
-  HaltForHumanDeps,
+  HaltForHumanDependencies,
   HaltForHumanFn,
-  Handoff,
   HumanReply,
   PostTicketHumanInputRequest,
   PostTicketNote,
   ReviewTicketOptions,
-  SnapshotComment,
   TicketClaim,
+  TicketComment,
+  TicketHandoff,
   TicketLink,
   TicketNote,
   TicketRef,
@@ -58,22 +58,22 @@ import type {
 } from "./blocks/linear/index.ts";
 import type {
   Attend,
-  GateFn,
-  GateWake,
   MarkerKind,
   MarkerLedger,
   MergeRefusal,
   PostPullRequestNoteOptions,
   PostReviewAnswersOptions,
-  PrMarker,
-  PrRef,
-  PrState,
+  PullRequestGateFn,
+  PullRequestMarker,
+  PullRequestRef,
+  PullRequestState,
+  PullRequestWake,
   StatusReason,
   ThreadAnswers,
 } from "./blocks/pull-requests/index.ts";
 import type { ReleasePolicy, ReleaseReport, ReleaseSteps } from "./blocks/runtime/index.ts";
-import type { WorktreeFacts } from "./blocks/workspaces/index.ts";
-import type { ExecuteDeps } from "./steps/agents/index.ts";
+import type { Worktree } from "./blocks/workspaces/index.ts";
+import type { AgentExecutionDependencies } from "./steps/agents/index.ts";
 import type {
   LinearIssueMatch,
   NeedsHumanContext,
@@ -82,11 +82,11 @@ import type {
   TicketParticipants,
 } from "./steps/linear/index.ts";
 import type {
-  GithubRepoRef,
+  GitHubRepoRef,
   MergeOutcome,
   OpenedPullRequest,
 } from "./steps/pull-requests/index.ts";
-import type { ProvisionWorktreeDeps, WorktreeRequest } from "./steps/workspaces/index.ts";
+import type { ProvisionWorktreeDependencies, WorktreeRequest } from "./steps/workspaces/index.ts";
 
 type BlocksTypeSurface = {
   changePatch: ChangePatch;
@@ -96,59 +96,59 @@ type BlocksTypeSurface = {
   releasePolicy: ReleasePolicy;
   releaseReport: ReleaseReport;
   releaseSteps: ReleaseSteps;
-  worktreeFacts: WorktreeFacts;
-  agentFn: AgentFn;
-  agentOrHaltDeps: AgentOrHaltDeps;
+  worktreeFacts: Worktree;
+  agentFn: RunAgentFn;
+  agentOrHaltDeps: RunAgentOrHaltDependencies;
   agentSession: AgentSession;
-  agentStepConfig: AgentStepConfig;
-  agentStepResult: AgentStepResult;
-  agentWire: AgentWire;
-  askStepConfig: AskStepConfig;
-  askWire: AskWire;
+  agentStepConfig: RunAgentOptions;
+  agentStepResult: AgentResult;
+  agentWire: AgentRequest;
+  askStepConfig: AskModelOptions;
+  askWire: ModelRequest;
   attend: Attend<number>;
   checkForTicketHumanReply: CheckForTicketHumanReply;
   claudeHarnessConfig: ClaudeHarnessConfig;
   codexHarnessConfig: CodexHarnessConfig;
   codexHarnessOptions: CodexHarnessOptions;
-  gateFn: GateFn;
-  gateWake: GateWake;
+  gateFn: PullRequestGateFn;
+  gateWake: PullRequestWake;
   markerKind: MarkerKind;
   markerLedger: MarkerLedger;
   mergeRefusal: MergeRefusal;
-  prMarker: PrMarker;
-  prState: PrState;
+  prMarker: PullRequestMarker;
+  prState: PullRequestState;
   statusReason: StatusReason;
-  haltForHumanDeps: HaltForHumanDeps;
+  haltForHumanDeps: HaltForHumanDependencies;
   haltForHumanFn: HaltForHumanFn;
-  handoff: Handoff;
+  handoff: TicketHandoff;
   harnessConfig: HarnessConfig;
-  harnessName: HarnessName;
+  harnessName: HarnessKind;
   halt: Halt;
-  haltOption: HaltOption;
-  haltQuestion: HaltQuestion;
+  haltOptionSchema: HaltOption;
+  haltQuestionSchema: HaltQuestion;
   harnessOptions: HarnessOptions;
   claudeHarnessOptions: ClaudeHarnessOptions;
   humanReply: HumanReply;
   jsonValue: JsonValue;
-  mcpHttpServer: McpHttpServer;
-  mcpProbe: McpProbe;
+  mcpHttpServer: McpHttpServerConfig;
+  mcpProbe: McpToolProbe;
   mcpServerConfig: McpServerConfig;
-  mcpStdioServer: McpStdioServer;
+  mcpStdioServer: McpStdioServerConfig;
   postTicketHumanInputRequest: PostTicketHumanInputRequest;
   postPullRequestNoteOptions: PostPullRequestNoteOptions;
   postReviewAnswersOptions: PostReviewAnswersOptions;
   postTicketNote: PostTicketNote;
-  prRef: PrRef;
+  prRef: PullRequestRef;
   rebuildContextPrompt: RebuildContextPrompt;
   rebuildContextPromptInput: RebuildContextPromptInput;
   resumeOrRebuildOptions: ResumeOrRebuildOptions<undefined>;
   resumeOrRebuildResult: ResumeOrRebuildResult<undefined>;
   reviewTicketOptions: ReviewTicketOptions;
   executeAgentStep: ExecuteAgentStep;
-  executeModelRequestStep: ExecuteModelRequestStep;
-  snapshotComment: SnapshotComment;
-  stepResult: StepResult;
-  stepUsage: StepUsage;
+  executeModelRequestStep: ExecuteModelStep;
+  snapshotComment: TicketComment;
+  stepResult: ModelResult;
+  stepUsage: ModelUsage;
   threadAnswers: ThreadAnswers;
   ticketClaim: TicketClaim;
   ticketLink: TicketLink;
@@ -157,17 +157,17 @@ type BlocksTypeSurface = {
   ticketReviewPrompt: TicketReviewPrompt;
   ticketReviewPromptInput: TicketReviewPromptInput;
   ticketSnapshot: TicketSnapshot;
-  wireJsonSchema: WireJsonSchema;
+  wireJsonSchema: OutputJsonSchema;
 };
 
 type StepsTypeSurface = {
-  githubRepoRef: GithubRepoRef;
+  githubRepoRef: GitHubRepoRef;
   mergeOutcome: MergeOutcome;
   openedPullRequest: OpenedPullRequest;
-  executeDeps: ExecuteDeps;
+  executeDeps: AgentExecutionDependencies;
   linearIssueMatch: LinearIssueMatch;
   needsHumanContext: NeedsHumanContext;
-  provisionRunWorktreeDeps: ProvisionWorktreeDeps;
+  provisionRunWorktreeDeps: ProvisionWorktreeDependencies;
   renderNeedsHumanComment: RenderNeedsHumanComment;
   renderTicketNote: RenderTicketNote;
   ticketParticipants: TicketParticipants;

@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { type ExecuteAgentStep, JitCheckError, runAgent } from "../../blocks/agents/agent.ts";
 import { claude } from "../../blocks/agents/harness-config.ts";
-import { buildAgentWire } from "../../blocks/agents/plan.ts";
+import { buildAgentRequest } from "../../blocks/agents/plan.ts";
 import { executeAgent } from "./execute-agent.ts";
 
 // Stands in for a factory's wrapper, minus the directive: it delegates to
@@ -9,7 +9,7 @@ import { executeAgent } from "./execute-agent.ts";
 const runStep: ExecuteAgentStep = (wire) => executeAgent(wire, { workflowRunId: "run-under-test" });
 
 test("an agent step whose declared MCP server cannot start returns the JIT failure instead of throwing", async () => {
-  const wire = buildAgentWire({
+  const wire = buildAgentRequest({
     harness: claude({
       model: "sonnet",
       mcpServers: {

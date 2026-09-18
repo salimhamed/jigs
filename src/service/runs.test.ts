@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { Factory } from "../blocks/factory.ts";
 import { ticketToken } from "../blocks/linear/claim.ts";
 import { needsHumanToken } from "../blocks/linear/halt-for-human.ts";
-import { prToken } from "../blocks/pull-requests/gate.ts";
+import { pullRequestToken } from "../blocks/pull-requests/gate.ts";
 import * as config from "../config/factory-config.ts";
 import * as root from "../config/factory-root.ts";
 import * as github from "../providers/github.ts";
@@ -53,7 +53,9 @@ beforeEach(() => {
   world();
 });
 
-const prSnapshot = (patch: Partial<github.PrSnapshot> = {}): github.PrSnapshot => ({
+const prSnapshot = (
+  patch: Partial<github.PullRequestSnapshot> = {},
+): github.PullRequestSnapshot => ({
   state: "open",
   merged: false,
   draft: false,
@@ -313,7 +315,7 @@ test("a full-length run id nobody minted falls through to unknown", async () => 
 // one, and a test carrying its own copy of the prefix would stay green.
 test("a ticket claim is not a park, and every other hook explains itself", () => {
   expect(describeSuspension(ticketToken(crypto.randomUUID()))).toBeNull();
-  expect(describeSuspension(prToken({ owner: "acme", repo: "api", number: 41 }))).toEqual({
+  expect(describeSuspension(pullRequestToken({ owner: "acme", repo: "api", number: 41 }))).toEqual({
     token: "github:pr:acme/api#41",
     kind: "pull-request",
     reason: "waiting for an approving review and green CI on acme/api#41",
@@ -388,7 +390,7 @@ const worldRun = (over: Partial<StoredRun> = {}): StoredRun => ({
 // written down, and what the listing has to read it back out of.
 const storedArgs = (triggerId: string) => [[1], { triggerId: 2 }, triggerId];
 
-const PARK_TOKEN = prToken({ owner: "acme", repo: "api", number: 41 });
+const PARK_TOKEN = pullRequestToken({ owner: "acme", repo: "api", number: 41 });
 
 test("a non-terminal run holding a park hook is reported suspended", async () => {
   world({

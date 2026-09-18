@@ -16,7 +16,7 @@ export type StatusReason = "merge" | "ci" | "merge-retry";
 const KINDS = new Set<string>(["reply", "completion", "status"]);
 const REASONS = new Set<string>(["merge", "ci", "merge-retry"]);
 
-export interface PrMarker {
+export interface PullRequestMarker {
   /**
    * The continuation identity. It survives run replacement, so a later run
    * answering for the same scope sees this work as its own and does not redo
@@ -60,7 +60,7 @@ export function assertUsableScope(scope: string): void {
 }
 
 /** The hidden line jigs appends to everything it posts on a pull request. */
-export function renderMarker(marker: PrMarker): string {
+export function renderMarker(marker: PullRequestMarker): string {
   if (marker.kind === "status" && marker.reason === undefined) {
     throw new Error("a status marker has to say why it was written");
   }
@@ -83,7 +83,7 @@ export function renderMarker(marker: PrMarker): string {
  * always — an unmarked comment of jigs' own reads as human feedback and buys
  * itself a revision round.
  */
-export function markBody(body: string, markers: PrMarker[]): string {
+export function markBody(body: string, markers: PullRequestMarker[]): string {
   if (markers.length === 0) {
     throw new Error("every comment jigs posts on a pull request carries a marker");
   }
@@ -105,8 +105,8 @@ const text = (value: unknown): string | undefined =>
   typeof value === "string" ? value : undefined;
 
 /** Every marker in one comment body, in the order they appear. */
-export function parseMarkers(body: string): PrMarker[] {
-  const markers: PrMarker[] = [];
+export function parseMarkers(body: string): PullRequestMarker[] {
+  const markers: PullRequestMarker[] = [];
   for (const match of body.matchAll(MARKER)) {
     const payload = match[1];
     if (payload === undefined || quoted(body, match.index)) continue;
@@ -184,7 +184,7 @@ export function commentSource(comment: { id: number; updatedAt: string }): strin
 }
 
 /** The default continuation identity: the workflow, and what it is working on. */
-export function prScope(workflow: string, subject: string): string {
+export function pullRequestScope(workflow: string, subject: string): string {
   const scope = `${workflow}/${subject}`;
   assertUsableScope(scope);
   return scope;

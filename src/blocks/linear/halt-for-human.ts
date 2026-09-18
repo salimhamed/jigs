@@ -54,7 +54,7 @@ export type CheckForTicketHumanReply = (
   postedCommentId: string,
 ) => Promise<{ reply: HumanReply | null; cursor: string }>;
 
-export type HaltForHumanDeps = {
+export type HaltForHumanDependencies = {
   postTicketHumanInputRequest: PostTicketHumanInputRequest;
   checkForTicketHumanReply: CheckForTicketHumanReply;
 };
@@ -69,7 +69,7 @@ export type HaltForHumanFn = (claim: TicketClaim, halt: Halt) => Promise<HumanRe
 export async function haltForHuman(
   claim: TicketClaim,
   halt: Halt,
-  deps: HaltForHumanDeps,
+  deps: HaltForHumanDependencies,
 ): Promise<HumanReply> {
   // Destructured, never invoked as `deps.postTicketHumanInputRequest(...)`: the SDK
   // serializes a step call's receiver along with its arguments, and this

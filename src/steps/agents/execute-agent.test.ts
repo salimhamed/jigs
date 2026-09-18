@@ -10,10 +10,10 @@ import type {
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { claude, codex } from "../../blocks/agents/harness-config.ts";
-import { buildAgentWire, buildAskWire } from "../../blocks/agents/plan.ts";
-import type { AgentStepResult, StepUsage } from "../../blocks/agents/result.ts";
-import { type ExecuteDeps, executeAgent } from "./execute-agent.ts";
-import { executeModelRequest } from "./execute-model-request.ts";
+import { buildAgentRequest, buildModelRequest } from "../../blocks/agents/plan.ts";
+import type { AgentResult, ModelUsage } from "../../blocks/agents/result.ts";
+import { type AgentExecutionDependencies, executeAgent } from "./execute-agent.ts";
+import { executeModel } from "./execute-model-request.ts";
 import { makeTmpDir, removeTmpDir } from "./harnesses/test-fixtures.ts";
 
 // The settings look for the CLI eagerly, so these tests would need a codex
@@ -23,7 +23,7 @@ vi.mock("./harnesses/executables.ts", async (importOriginal) => ({
   resolveCodexExecutable: () => "/fake/codex",
 }));
 
-const usage = { inputTokens: 12, outputTokens: 34 } as unknown as StepUsage;
+const usage = { inputTokens: 12, outputTokens: 34 } as unknown as ModelUsage;
 
 let tmp: string;
 // The claude provider validates cwd existence at model construction.
@@ -51,18 +51,20 @@ afterAll(() => {
 });
 
 type Captured = {
-  options?: Parameters<ExecuteDeps["generateText"]>[0];
+  options?: Parameters<AgentExecutionDependencies["generateText"]>[0];
   codexModel?: string;
   codexSettings?: CodexAppServerSettings;
   homeRunIds: string[];
 };
 
-function makeDeps(generation: Partial<Awaited<ReturnType<ExecuteDeps["generateText"]>>> = {}): {
-  deps: ExecuteDeps;
+function makeDeps(
+  generation: Partial<Awaited<ReturnType<AgentExecutionDependencies["generateText"]>>> = {},
+): {
+  deps: AgentExecutionDependencies;
   captured: Captured;
 } {
   const captured: Captured = { homeRunIds: [] };
-  const deps: ExecuteDeps = {
+  const deps: AgentExecutionDependencies = {
     generateText: async (options) => {
       captured.options = options;
       return { text: "done", usage, ...generation };
@@ -88,9 +90,7 @@ function makeDeps(generation: Partial<Awaited<ReturnType<ExecuteDeps["generateTe
 
 // executeAgent answers a union; every test but the resume-failure ones wants the
 // successful arm.
-async function agentStep(
-  ...args: Parameters<typeof executeAgent>
-): Promise<AgentStepResult<unknown>> {
+async function agentStep(...args: Parameters<typeof executeAgent>): Promise<AgentResult<unknown>> {
   const result = await executeAgent(...args);
   if ("jitFailure" in result) {
     throw new Error(`unexpected JIT failure: ${JSON.stringify(result.jitFailure)}`);
@@ -111,7 +111,7 @@ function claudeSettingsOf(captured: Captured): ClaudeCodeSettings {
 const verdict = z.object({ ok: z.boolean() });
 
 test("claude agent step hydrates from wire config with the harness invariants forced", async () => {
-  const wire = buildAgentWire({
+  const wire = buildAgentRequest({
     harness: claude({
       model: "sonnet",
       effort: "medium",
@@ -150,7 +150,7 @@ test("claude agent step hydrates from wire config with the harness invariants fo
 });
 
 test("codex agent step runs on the app-server under the managed home with fixed policies", async () => {
-  const wire = buildAgentWire({
+  const wire = buildAgentRequest({
     harness: codex({
       model: "gpt-5.5",
       effort: "xhigh",
@@ -181,7 +181,7 @@ test("codex agent step runs on the app-server under the managed home with fixed 
 test("omitting effort leaves both providers' settings unset", async () => {
   const claudeRun = makeDeps();
   await agentStep(
-    buildAgentWire({
+    buildAgentRequest({
       harness: claude({ model: "sonnet" }),
       cwd: worktree,
       prompt: "implement it",
@@ -193,7 +193,7 @@ test("omitting effort leaves both providers' settings unset", async () => {
 
   const codexRun = makeDeps();
   await agentStep(
-    buildAgentWire({
+    buildAgentRequest({
       harness: codex({ model: "gpt-5.5" }),
       cwd: worktree,
       prompt: "implement it",
@@ -205,7 +205,7 @@ test("omitting effort leaves both providers' settings unset", async () => {
 });
 
 test("a declared output schema becomes an AI SDK output spec and the raw output is returned", async () => {
-  const wire = buildAgentWire({
+  const wire = buildAgentRequest({
     harness: claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "judge it",
@@ -220,7 +220,7 @@ test("a declared output schema becomes an AI SDK output spec and the raw output 
 });
 
 test("without an output schema no output spec is passed and output is undefined", async () => {
-  const wire = buildAgentWire({
+  const wire = buildAgentRequest({
     harness: claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "just do it",
@@ -234,7 +234,7 @@ test("without an output schema no output spec is passed and output is undefined"
 });
 
 test("usage passes through and the Claude session pointer is captured", async () => {
-  const wire = buildAgentWire({
+  const wire = buildAgentRequest({
     harness: claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "go",
@@ -250,7 +250,7 @@ test("usage passes through and the Claude session pointer is captured", async ()
 });
 
 test("the Codex threadId is captured, and a missing pointer is omitted, never an error", async () => {
-  const codexWire = buildAgentWire({
+  const codexWire = buildAgentRequest({
     harness: codex({ model: "gpt-5.5" }),
     cwd: worktree,
     prompt: "go",
@@ -269,7 +269,7 @@ test("the Codex threadId is captured, and a missing pointer is omitted, never an
 });
 
 test("a claude resume rides on the settings' resume field", async () => {
-  const wire = buildAgentWire({
+  const wire = buildAgentRequest({
     harness: claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "answer the review",
@@ -284,7 +284,7 @@ test("a claude resume rides on the settings' resume field", async () => {
 });
 
 test("a codex resume rides on providerOptions['codex-app-server'].threadId", async () => {
-  const wire = buildAgentWire({
+  const wire = buildAgentRequest({
     harness: codex({ model: "gpt-5.5" }),
     cwd: worktree,
     prompt: "answer the review",
@@ -302,7 +302,7 @@ test("a codex resume rides on providerOptions['codex-app-server'].threadId", asy
 });
 
 test("a session pointer recorded on the other harness reports resumeFailed, not a silently fresh session", async () => {
-  const wire = buildAgentWire({
+  const wire = buildAgentRequest({
     harness: claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "answer the review",
@@ -322,7 +322,7 @@ test("a session pointer recorded on the other harness reports resumeFailed, not 
 });
 
 test("Claude steps always run with bypass", async () => {
-  const wire = buildAgentWire({
+  const wire = buildAgentRequest({
     harness: claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "judge it",
@@ -337,7 +337,7 @@ test("Claude steps always run with bypass", async () => {
 });
 
 test("a failed resume returns the resumeFailed marker instead of throwing", async () => {
-  const wire = buildAgentWire({
+  const wire = buildAgentRequest({
     harness: codex({ model: "gpt-5.5" }),
     cwd: worktree,
     prompt: "answer the review",
@@ -358,7 +358,7 @@ test("a failed resume returns the resumeFailed marker instead of throwing", asyn
 });
 
 test("a failure with no resume to blame still throws", async () => {
-  const wire = buildAgentWire({
+  const wire = buildAgentRequest({
     harness: claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "go",
@@ -374,7 +374,7 @@ test("a failure with no resume to blame still throws", async () => {
 });
 
 test("a second agent in the same worktree is refused while the first is running", async () => {
-  const wire = buildAgentWire({
+  const wire = buildAgentRequest({
     harness: claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "implement it",
@@ -420,7 +420,7 @@ test("a busy worktree does not block an agent in another one", async () => {
   };
 
   const inFlight = agentStep(
-    buildAgentWire({
+    buildAgentRequest({
       harness: claude({ model: "sonnet" }),
       cwd: worktree,
       prompt: "implement it",
@@ -432,7 +432,7 @@ test("a busy worktree does not block an agent in another one", async () => {
 
   const elsewhere = makeDeps();
   await agentStep(
-    buildAgentWire({
+    buildAgentRequest({
       harness: claude({ model: "sonnet" }),
       cwd: other,
       prompt: "implement it elsewhere",
@@ -449,7 +449,7 @@ test("a busy worktree does not block an agent in another one", async () => {
 test("the step env is a scrubbed copy: no API credentials, process.env untouched", async () => {
   process.env.ANTHROPIC_API_KEY = "sk-test-scrub";
   try {
-    const wire = buildAgentWire({
+    const wire = buildAgentRequest({
       harness: claude({ model: "sonnet" }),
       cwd: worktree,
       prompt: "go",
@@ -466,7 +466,7 @@ test("the step env is a scrubbed copy: no API credentials, process.env untouched
 });
 
 test("a failed JIT check returns the marker before the harness is reached", async () => {
-  const wire = buildAgentWire({
+  const wire = buildAgentRequest({
     harness: claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "never reached — the JIT check fails first",
@@ -497,14 +497,14 @@ test("a failed JIT check returns the marker before the harness is reached", asyn
 });
 
 test("claude ask step sees no MCP universe and loads no filesystem settings", async () => {
-  const wire = buildAskWire({
+  const wire = buildModelRequest({
     harness: claude({ model: "sonnet" }),
     prompt: "summarize",
     system: "be terse",
   });
   const { deps, captured } = makeDeps();
 
-  await executeModelRequest(wire, { workflowRunId: "run-1" }, deps);
+  await executeModel(wire, { workflowRunId: "run-1" }, deps);
 
   const settings = claudeSettingsOf(captured);
   expect(settings.strictMcpConfig).toBe(true);
@@ -515,13 +515,13 @@ test("claude ask step sees no MCP universe and loads no filesystem settings", as
 });
 
 test("codex ask step uses read-only exec in a scratch cwd it cleans up", async () => {
-  const wire = buildAskWire({
+  const wire = buildModelRequest({
     harness: codex({ model: "gpt-5.5" }),
     prompt: "what is 2+2?",
   });
   const { deps, captured } = makeDeps();
 
-  const result = await executeModelRequest(wire, { workflowRunId: "run-9" }, deps);
+  const result = await executeModel(wire, { workflowRunId: "run-9" }, deps);
 
   const model = captured.options?.model as { settings?: CodexExecSettings };
   const settings = model.settings;

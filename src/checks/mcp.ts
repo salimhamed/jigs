@@ -2,7 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type { McpProbe, McpServerConfig } from "../blocks/agents/harness-config.ts";
+import type { McpServerConfig, McpToolProbe } from "../blocks/agents/harness-config.ts";
 import { checkWorktreeCodexMcpConfig } from "../steps/agents/harnesses/codex-config-guard.ts";
 import { scrubbedEnv } from "../steps/agents/harnesses/env.ts";
 import { CHECK_TIMEOUT_MS, type Check, type CheckResult } from "./catalog.ts";
@@ -42,7 +42,7 @@ async function checkMcpServer(
 ): Promise<CheckResult> {
   // Typed required, still guarded: this check is the last thing standing
   // between a JSON-shaped caller and an unproven server.
-  const probe: McpProbe | undefined = server.probe;
+  const probe: McpToolProbe | undefined = server.probe;
   if (probe === undefined || probe.tool === "") {
     return {
       ok: false,

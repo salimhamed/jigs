@@ -1,4 +1,4 @@
-import type { PrReview, PrSnapshot } from "../../providers/github.ts";
+import type { PullRequestReview, PullRequestSnapshot } from "../../providers/github.ts";
 import type { ApprovalSignal } from "./policy.ts";
 
 /**
@@ -18,11 +18,14 @@ export type ApprovalState = "approved" | "changes-requested" | "stale" | "none";
  * - `label`: the label is on the pull request. It means "merge whenever
  *   ready", so it survives later pushes and jigs never removes it.
  */
-export function approvalState(snapshot: PrSnapshot, approval: ApprovalSignal): ApprovalState {
+export function approvalState(
+  snapshot: PullRequestSnapshot,
+  approval: ApprovalSignal,
+): ApprovalState {
   if (approval.kind === "label") {
     return snapshot.labels.includes(approval.name) ? "approved" : "none";
   }
-  const latest = new Map<string, PrReview>();
+  const latest = new Map<string, PullRequestReview>();
   for (const review of [...snapshot.reviews].sort(
     (a, b) => a.submittedAt.localeCompare(b.submittedAt) || a.id - b.id,
   )) {
@@ -38,7 +41,10 @@ export function approvalState(snapshot: PrSnapshot, approval: ApprovalSignal): A
 }
 
 /** {@link approvalState} as the single question a merge asks of it. */
-export function isApprovalSatisfied(snapshot: PrSnapshot, approval: ApprovalSignal): boolean {
+export function isApprovalSatisfied(
+  snapshot: PullRequestSnapshot,
+  approval: ApprovalSignal,
+): boolean {
   return approvalState(snapshot, approval) === "approved";
 }
 
@@ -90,7 +96,7 @@ export interface MergeRefusal {
  * repository with no CI, and such a repository needs `merge.by: "human"`.
  */
 export function mergeRefusal(
-  snapshot: PrSnapshot,
+  snapshot: PullRequestSnapshot,
   expectedHeadSha: string,
   approval: ApprovalSignal,
 ): MergeRefusal | null {
@@ -125,6 +131,9 @@ export function mergeRefusal(
 }
 
 /** May this pull request merge now? {@link mergeRefusal} for why it may not. */
-export function isPullRequestMergeReady(snapshot: PrSnapshot, approval: ApprovalSignal): boolean {
+export function isPullRequestMergeReady(
+  snapshot: PullRequestSnapshot,
+  approval: ApprovalSignal,
+): boolean {
   return mergeRefusal(snapshot, snapshot.headSha, approval) === null;
 }

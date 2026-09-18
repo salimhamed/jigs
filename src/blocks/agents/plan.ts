@@ -4,10 +4,10 @@
 
 import type { z } from "zod";
 import type { HarnessConfig } from "./harness-config.ts";
-import { dropNullOptionals, toWireSchema, type WireJsonSchema } from "./output-schema.ts";
+import { dropNullOptionals, type OutputJsonSchema, toOutputJsonSchema } from "./output-schema.ts";
 import type { AgentSession } from "./result.ts";
 
-export type AgentStepConfig<T = undefined> = {
+export type RunAgentOptions<T = undefined> = {
   harness: HarnessConfig;
   cwd: string;
   prompt: string;
@@ -18,7 +18,7 @@ export type AgentStepConfig<T = undefined> = {
   output?: z.ZodType<T>;
 };
 
-export type AskStepConfig<T = undefined> = {
+export type AskModelOptions<T = undefined> = {
   harness: HarnessConfig;
   prompt: string;
   system?: string;
@@ -29,23 +29,23 @@ export type AskStepConfig<T = undefined> = {
 // the worktree via the forced settingSources ['project'], so there is nothing
 // for the builder to do until the worktree/jig ticket lands.
 
-export type { WireJsonSchema } from "./output-schema.ts";
+export type { OutputJsonSchema } from "./output-schema.ts";
 
-export type AgentWire = Omit<AgentStepConfig, "output"> & {
-  outputSchema?: WireJsonSchema;
+export type AgentRequest = Omit<RunAgentOptions, "output"> & {
+  outputSchema?: OutputJsonSchema;
 };
 
-export type AskWire = Omit<AskStepConfig, "output"> & {
-  outputSchema?: WireJsonSchema;
+export type ModelRequest = Omit<AskModelOptions, "output"> & {
+  outputSchema?: OutputJsonSchema;
 };
 
-export function buildAgentWire<T>(config: AgentStepConfig<T>): AgentWire {
+export function buildAgentRequest<T>(config: RunAgentOptions<T>): AgentRequest {
   const { output, ...wire } = config;
-  const outputSchema = output === undefined ? undefined : toWireSchema(output);
+  const outputSchema = output === undefined ? undefined : toOutputJsonSchema(output);
   return outputSchema === undefined ? wire : { ...wire, outputSchema };
 }
 
-export function buildAskWire<T>(config: AskStepConfig<T>): AskWire {
+export function buildModelRequest<T>(config: AskModelOptions<T>): ModelRequest {
   // A model step sees no MCP universe at all — declaring servers it can never
   // reach would be a silent lie, so it fails here instead.
   if (config.harness.mcpServers !== undefined) {
@@ -54,7 +54,7 @@ export function buildAskWire<T>(config: AskStepConfig<T>): AskWire {
     );
   }
   const { output, ...wire } = config;
-  const outputSchema = output === undefined ? undefined : toWireSchema(output);
+  const outputSchema = output === undefined ? undefined : toOutputJsonSchema(output);
   return outputSchema === undefined ? wire : { ...wire, outputSchema };
 }
 

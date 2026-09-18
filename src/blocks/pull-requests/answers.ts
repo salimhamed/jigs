@@ -17,7 +17,7 @@
 // failure is therefore delayed by at most one nudge interval, never dropped
 // and never doubled.
 
-import type { CheckRun, PrRef, ReviewThread } from "../../providers/github.ts";
+import type { CheckRun, PullRequestRef, ReviewThread } from "../../providers/github.ts";
 import type {
   commentOnPullRequest,
   replyToPullRequestReviewThread,
@@ -29,7 +29,7 @@ import {
   commentSource,
   type MarkerKind,
   markBody,
-  type PrMarker,
+  type PullRequestMarker,
   type StatusReason,
 } from "./marker.ts";
 import { currentRunId } from "./writer.ts";
@@ -43,7 +43,7 @@ export interface ThreadAnswers {
 export interface PostReviewAnswersOptions {
   replyToPullRequestReviewThread: typeof replyToPullRequestReviewThread;
   commentOnPullRequest: typeof commentOnPullRequest;
-  pr: PrRef;
+  pr: PullRequestRef;
   /** The continuation identity these answers belong to. */
   scope: string;
   answers: ThreadAnswers;
@@ -56,7 +56,7 @@ export interface PostReviewAnswersOptions {
 
 export interface PostPullRequestNoteOptions {
   commentOnPullRequest: typeof commentOnPullRequest;
-  pr: PrRef;
+  pr: PullRequestRef;
   scope: string;
   /** The commit the note is about: a red head, or a head it could not merge. */
   headSha: string;
@@ -79,7 +79,7 @@ function threadSources(thread: ReviewThread): string[] {
 // landed, so retrying it now could double-post, and failing the run would
 // throw away a delivery the next wake can finish. Ending the wake is the
 // cheapest correct thing to do.
-function postFailed(pr: PrRef, what: string, error: unknown): void {
+function postFailed(pr: PullRequestRef, what: string, error: unknown): void {
   console.log(
     `[pullRequest] ${pr.owner}/${pr.repo}#${pr.number} could not post ${what}: ${String(error)} — ending this wake; the next one reposts it unless it landed`,
   );
@@ -104,7 +104,7 @@ export async function postReviewAnswers(options: PostReviewAnswersOptions): Prom
       `[postReviewAnswers] ${options.threads.length - known.size} thread(s) share a rootId with another in this wake`,
     );
   }
-  const mark = (kind: MarkerKind, sources: Array<string | undefined>): PrMarker[] =>
+  const mark = (kind: MarkerKind, sources: Array<string | undefined>): PullRequestMarker[] =>
     sources.map((source) => ({
       scope: options.scope,
       run,

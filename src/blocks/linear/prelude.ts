@@ -3,7 +3,7 @@ import type { resolveLinearIssue } from "../../steps/linear/resolve.ts";
 import { claimTicket, type TicketClaim } from "./claim.ts";
 import type { TicketSnapshot } from "./snapshot.ts";
 
-export interface TicketPreludeSteps {
+export interface AcquireTicketSteps {
   resolveLinearIssue: typeof resolveLinearIssue;
   fetchTicketSnapshot: typeof fetchTicketSnapshot;
 }
@@ -14,7 +14,7 @@ export interface TicketPreludeSteps {
  */
 export async function acquireTicket(
   reference: string,
-  steps: TicketPreludeSteps,
+  steps: AcquireTicketSteps,
 ): Promise<{ claim: TicketClaim; snapshot: TicketSnapshot }> {
   const issue = await steps.resolveLinearIssue(reference);
   const claim = await claimTicket(issue.id, issue.identifier);

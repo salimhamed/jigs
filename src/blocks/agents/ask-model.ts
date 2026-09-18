@@ -1,17 +1,17 @@
 // The workflow side of a plain model request: one model call with no worktree
 // and no MCP universe. ../../steps/agents/execute-model-request.ts is the step side.
 
-import { type AskStepConfig, type AskWire, buildAskWire, parseOutput } from "./plan.ts";
-import type { StepResult } from "./result.ts";
+import { type AskModelOptions, buildModelRequest, type ModelRequest, parseOutput } from "./plan.ts";
+import type { ModelResult } from "./result.ts";
 
-/** The factory's `"use step"` wrapper around `executeModelRequest`. */
-export type ExecuteModelRequestStep = (wire: AskWire) => Promise<StepResult>;
+/** The factory's `"use step"` wrapper around `executeModel`. */
+export type ExecuteModelStep = (wire: ModelRequest) => Promise<ModelResult>;
 
 export async function askModel<T = undefined>(
-  config: AskStepConfig<T>,
-  executeModelRequest: ExecuteModelRequestStep,
-): Promise<StepResult<T>> {
-  const wire = buildAskWire(config);
-  const result = await executeModelRequest(wire);
+  config: AskModelOptions<T>,
+  executeModel: ExecuteModelStep,
+): Promise<ModelResult<T>> {
+  const wire = buildModelRequest(config);
+  const result = await executeModel(wire);
   return { ...result, output: parseOutput(config.output, result.output) };
 }

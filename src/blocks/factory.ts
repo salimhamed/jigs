@@ -5,10 +5,10 @@ import type { WorkflowRequires } from "../checks/index.ts";
 // The schemas that validate these blocks, named for their types alone: a
 // second hand-written copy of either would drift from what jigs accepts.
 import type { githubSchema } from "../config/factory-config.ts";
-import type { mergeSchema } from "./pull-requests/policy.ts";
+import type { mergePolicySchema } from "./pull-requests/policy.ts";
 import type { ReleasePolicy } from "./runtime/release.ts";
 
-export const ticketInput = z.union([z.uuid(), z.string().regex(/^[A-Z][A-Z0-9]*-\d+$/)]);
+export const ticketInputSchema = z.union([z.uuid(), z.string().regex(/^[A-Z][A-Z0-9]*-\d+$/)]);
 
 /** Metadata supplied to every workflow run. */
 export type Injected = { triggerId: string };
@@ -51,16 +51,16 @@ export interface Factory {
 }
 
 /** Who jigs is on GitHub: the operator's own token, or a GitHub App installation. */
-export type GithubDefinition = z.input<typeof githubSchema>;
+export type GitHubDefinition = z.input<typeof githubSchema>;
 
 /** Who merges, by which of GitHub's three methods, and what signal permits it. */
-export type MergeDefinition = z.input<typeof mergeSchema>;
+export type MergeDefinition = z.input<typeof mergePolicySchema>;
 
 /** Operating settings and deferred workflow modules declared by a factory. */
 export interface FactoryDefinition {
   service: { port?: number; dashboardPort: number };
   ingressUrl?: string;
-  github?: GithubDefinition;
+  github?: GitHubDefinition;
   merge?: MergeDefinition;
   release?: ReleasePolicy;
   bindings?: Record<

@@ -13,7 +13,7 @@ export type TicketRef = {
   title: string;
 };
 
-export type SnapshotComment = {
+export type TicketComment = {
   id: string;
   body: string;
   createdAt: string;
@@ -35,14 +35,14 @@ export type TicketSnapshot = {
   branchName: string;
   state: string;
   labels: string[];
-  comments: SnapshotComment[];
+  comments: TicketComment[];
   blockedBy: TicketRef[];
   blocks: TicketRef[];
   links: TicketLink[];
   subIssues: TicketRef[];
 };
 
-export function toSnapshot(raw: RawIssueSnapshot, fetchedAt: string): TicketSnapshot {
+export function toTicketSnapshot(raw: RawIssueSnapshot, fetchedAt: string): TicketSnapshot {
   return {
     fetchedAt,
     id: raw.id,
@@ -83,7 +83,7 @@ function section(heading: string, lines: string[]): string[] {
   return lines.length === 0 ? [] : ["", `## ${heading}`, "", ...lines];
 }
 
-export function renderSnapshot(snapshot: TicketSnapshot): string {
+export function renderTicketSnapshot(snapshot: TicketSnapshot): string {
   const lines = [
     `# ${snapshot.identifier} ${snapshot.title}`,
     "",

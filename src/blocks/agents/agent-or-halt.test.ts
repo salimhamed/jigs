@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import type { TicketClaim } from "../linear/claim.ts";
 import type { Halt, HumanReply } from "../linear/halt-for-human.ts";
 import { JitCheckError } from "./agent.ts";
-import { type AgentOrHaltDeps, agentOrHalt } from "./agent-or-halt.ts";
+import { type RunAgentOrHaltDependencies, runAgentOrHalt } from "./agent-or-halt.ts";
 import { claude } from "./harness-config.ts";
 
 const claim = {
@@ -26,7 +26,7 @@ const reply: HumanReply = {
 
 const stepResult = { text: "done", output: undefined };
 
-test("agentOrHalt posts the repair through haltForHuman and re-runs the step after the reply", async () => {
+test("runAgentOrHalt posts the repair through haltForHuman and re-runs the step after the reply", async () => {
   const halts: Halt[] = [];
   let attempts = 0;
   const deps = {
@@ -56,9 +56,9 @@ test("agentOrHalt posts the repair through haltForHuman and re-runs the step aft
       halts.push(halt);
       return reply;
     },
-  } as unknown as AgentOrHaltDeps;
+  } as unknown as RunAgentOrHaltDependencies;
 
-  const result = await agentOrHalt(claim, config, deps);
+  const result = await runAgentOrHalt(claim, config, deps);
 
   // One plain line per failure, repair included, and any reply retries the
   // step: nobody is being asked to choose between options here.
@@ -78,7 +78,7 @@ test("agentOrHalt posts the repair through haltForHuman and re-runs the step aft
   expect(result).toEqual(stepResult);
 });
 
-test("agentOrHalt rethrows a non-JIT step failure instead of halting", async () => {
+test("runAgentOrHalt rethrows a non-JIT step failure instead of halting", async () => {
   let halts = 0;
   const deps = {
     runAgent: async () => {
@@ -88,8 +88,8 @@ test("agentOrHalt rethrows a non-JIT step failure instead of halting", async () 
       halts += 1;
       return reply;
     },
-  } as unknown as AgentOrHaltDeps;
+  } as unknown as RunAgentOrHaltDependencies;
 
-  await expect(agentOrHalt(claim, config, deps)).rejects.toThrow("could not build the project");
+  await expect(runAgentOrHalt(claim, config, deps)).rejects.toThrow("could not build the project");
   expect(halts).toBe(0);
 });

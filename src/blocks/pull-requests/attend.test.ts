@@ -1,17 +1,17 @@
 import { expect, test } from "vitest";
 import { attend, finished, listen } from "./attend.ts";
-import type { GateWake } from "./gate.ts";
+import type { PullRequestWake } from "./gate.ts";
 
-const red = (headSha: string): GateWake => ({
+const red = (headSha: string): PullRequestWake => ({
   kind: "ci-red",
   headSha,
   failing: [],
   mentionLogin: null,
 });
 
-function gate(wakes: GateWake[]) {
+function gate(wakes: PullRequestWake[]) {
   const trail: string[] = [];
-  async function* deliver(): AsyncGenerator<GateWake, void, undefined> {
+  async function* deliver(): AsyncGenerator<PullRequestWake, void, undefined> {
     try {
       for (const wake of wakes) yield wake;
       trail.push("ran out");

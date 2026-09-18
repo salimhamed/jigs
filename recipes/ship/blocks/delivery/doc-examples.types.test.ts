@@ -8,10 +8,10 @@
 // the publication type gate the doc states in prose. Every other line is the
 // doc verbatim; change one and change the other.
 
-import type { WorktreeFacts } from "@salimhamed/jigs";
+import type { Worktree } from "@salimhamed/jigs";
 import { claude, codex, selectHarness } from "@salimhamed/jigs/blocks/agents";
 import type { HaltForHumanFn, TicketClaim } from "@salimhamed/jigs/blocks/linear";
-import type { MergePolicy, PrRef } from "@salimhamed/jigs/blocks/pull-requests";
+import type { MergePolicy, PullRequestRef } from "@salimhamed/jigs/blocks/pull-requests";
 import { expect, test } from "vitest";
 import type * as delivery from "./delivery.ts";
 import type {
@@ -36,7 +36,7 @@ declare const haltForHuman: HaltForHumanFn;
 declare const resolveMergePolicy: (binding: string) => Promise<MergePolicy>;
 
 declare const task: WorkItem;
-declare const worktree: WorktreeFacts;
+declare const worktree: Worktree;
 declare const implementation: ImplementationAgent;
 declare const review: ReviewAgent;
 declare const checkSecurity: (change: ApprovedChange) => Promise<void>;
@@ -142,7 +142,7 @@ interface Incident extends WorkItem {
 }
 
 declare const incident: Incident;
-declare const notifyOncall: (service: string, pr: PrRef) => Promise<void>;
+declare const notifyOncall: (service: string, pr: PullRequestRef) => Promise<void>;
 
 async function customTaskFieldsSurvive() {
   const result = await deliverChange({

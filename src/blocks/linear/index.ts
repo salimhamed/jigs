@@ -14,7 +14,7 @@ export {
 export {
   type CheckForTicketHumanReply,
   type Halt,
-  type HaltForHumanDeps,
+  type HaltForHumanDependencies,
   type HaltForHumanFn,
   type HumanReply,
   haltForHuman,
@@ -22,22 +22,22 @@ export {
   needsHumanToken,
   type PostTicketHumanInputRequest,
 } from "./halt-for-human.ts";
-export { acquireTicket, type TicketPreludeSteps } from "./prelude.ts";
+export { type AcquireTicketSteps, acquireTicket } from "./prelude.ts";
 export {
-  type Handoff,
   type PostTicketNote,
   type ReviewTicketOptions,
   reviewTicket,
+  type TicketHandoff,
   type TicketNote,
-  ticketReviewVerdict,
+  ticketReviewVerdictSchema,
 } from "./review.ts";
 export {
-  renderSnapshot,
-  type SnapshotComment,
+  renderTicketSnapshot,
+  type TicketComment,
   type TicketLink,
   type TicketRef,
   type TicketSnapshot,
-  toSnapshot,
+  toTicketSnapshot,
 } from "./snapshot.ts";
 export {
   type TicketReviewPrompt,

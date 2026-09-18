@@ -8,11 +8,11 @@ import { getWorld } from "workflow/runtime";
 import type { Factory } from "../blocks/factory.ts";
 import { TICKET_TOKEN_PREFIX, ticketToken } from "../blocks/linear/claim.ts";
 import { NEEDS_HUMAN_TOKEN_PREFIX } from "../blocks/linear/halt-for-human.ts";
-import { PR_TOKEN_PREFIX } from "../blocks/pull-requests/gate.ts";
+import { PULL_REQUEST_TOKEN_PREFIX } from "../blocks/pull-requests/gate.ts";
 import { approvalState, mergeRefusal } from "../blocks/pull-requests/merge-ready.ts";
 import { readFactoryConfig } from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";
-import { fetchPrSnapshot, type PrRef } from "../providers/github.ts";
+import { fetchPrSnapshot, type PullRequestRef } from "../providers/github.ts";
 import { getComment, resolveIssueRef } from "../providers/linear.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import type { RunSuspension } from "../run-suspension.ts";
@@ -146,9 +146,9 @@ export function describeSuspension(token: string, ticket?: string | null): RunSu
 
 /** `github:pr:owner/repo#N` as the two things an operator needs from it. A
  *  slug this shape does not fit names no page to link to. */
-function prFromToken(token: string): { slug: string; url?: string; pr?: PrRef } | null {
-  if (!token.startsWith(PR_TOKEN_PREFIX)) return null;
-  const slug = token.slice(PR_TOKEN_PREFIX.length);
+function prFromToken(token: string): { slug: string; url?: string; pr?: PullRequestRef } | null {
+  if (!token.startsWith(PULL_REQUEST_TOKEN_PREFIX)) return null;
+  const slug = token.slice(PULL_REQUEST_TOKEN_PREFIX.length);
   const parsed = /^([^/]+)\/([^#]+)#(\d+)$/.exec(slug);
   if (parsed === null) return { slug };
   const [, owner, repo, number] = parsed;
@@ -197,7 +197,7 @@ export async function enrichSuspensions(
  */
 async function withPrState(
   suspension: RunSuspension,
-  pr: PrRef,
+  pr: PullRequestRef,
   runId: string,
 ): Promise<RunSuspension> {
   const wake = lastWake(suspension.token, runId);

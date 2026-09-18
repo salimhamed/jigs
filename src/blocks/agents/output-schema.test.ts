@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { z } from "zod";
-import { ticketReviewVerdict } from "../linear/review.ts";
-import { dropNullOptionals, toWireSchema } from "./output-schema.ts";
+import { ticketReviewVerdictSchema } from "../linear/review.ts";
+import { dropNullOptionals, toOutputJsonSchema } from "./output-schema.ts";
 
 const shape = z.object({
   note: z.string().optional(),
@@ -42,7 +42,7 @@ function isNullable(schema: unknown): boolean {
 }
 
 test("every object lists all its properties as required and forbids extras", () => {
-  const wire = toWireSchema(shape);
+  const wire = toOutputJsonSchema(shape);
   const found = objects(wire);
   expect(found).toHaveLength(2);
   for (const object of found) {
@@ -52,7 +52,7 @@ test("every object lists all its properties as required and forbids extras", () 
 });
 
 test("optional properties become nullable at every level", () => {
-  const wire = toWireSchema(shape);
+  const wire = toOutputJsonSchema(shape);
   expect(isNullable(at(wire, "properties.note"))).toBe(true);
   expect(isNullable(at(wire, "properties.email"))).toBe(true);
   expect(isNullable(at(wire, "properties.mood"))).toBe(false);
@@ -62,24 +62,24 @@ test("optional properties become nullable at every level", () => {
 });
 
 test("an already-nullable property is not wrapped twice", () => {
-  const owner = at(toWireSchema(shape), "properties.owner");
+  const owner = at(toOutputJsonSchema(shape), "properties.owner");
   expect(owner.anyOf).toEqual([{ type: "string" }, { type: "null" }]);
 });
 
 test("keywords strict mode rejects are stripped", () => {
-  const serialized = JSON.stringify(toWireSchema(shape));
+  const serialized = JSON.stringify(toOutputJsonSchema(shape));
   for (const keyword of ["format", "pattern", "minLength", "maxLength", "default"]) {
     expect(serialized).not.toContain(`"${keyword}"`);
   }
 });
 
 test("the enum's values survive the strict rewrite", () => {
-  const mood = at(toWireSchema(shape), "properties.mood");
+  const mood = at(toOutputJsonSchema(shape), "properties.mood");
   expect(mood.enum).toEqual(["good", "bad"]);
 });
 
 test("the ticket-review verdict converts to a strict-valid schema", () => {
-  const wire = toWireSchema(ticketReviewVerdict);
+  const wire = toOutputJsonSchema(ticketReviewVerdictSchema);
   const option = at(wire, "properties.questions.items.properties.options.anyOf.0.items");
   expect(option.required).toEqual(["label", "recommended"]);
   expect(option.additionalProperties).toBe(false);
@@ -107,7 +107,9 @@ test("a null the model sent for an optional field parses back as absent", () => 
     ],
     assumptions: [],
   };
-  const parsed = ticketReviewVerdict.parse(dropNullOptionals(ticketReviewVerdict, reply));
+  const parsed = ticketReviewVerdictSchema.parse(
+    dropNullOptionals(ticketReviewVerdictSchema, reply),
+  );
   const [question] = parsed.questions;
   expect(question?.context).toBeUndefined();
   expect(question && "context" in question).toBe(false);

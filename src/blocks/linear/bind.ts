@@ -1,5 +1,5 @@
-import { agentOrHalt as agentOrHaltBlock } from "../agents/agent-or-halt.ts";
-import type { AgentStepConfig } from "../agents/plan.ts";
+import { runAgentOrHalt as agentOrHaltBlock } from "../agents/agent-or-halt.ts";
+import type { RunAgentOptions } from "../agents/plan.ts";
 import type { TicketClaim } from "./claim.ts";
 import {
   type CheckForTicketHumanReply,
@@ -29,7 +29,7 @@ export function bindLinearSteps(steps: LinearSteps) {
       postTicketHumanInputRequest: steps.postTicketHumanInputRequest,
       checkForTicketHumanReply: steps.checkForTicketHumanReply,
     });
-  function agentOrHalt<T = undefined>(claim: TicketClaim, config: AgentStepConfig<T>) {
+  function runAgentOrHalt<T = undefined>(claim: TicketClaim, config: RunAgentOptions<T>) {
     return agentOrHaltBlock(claim, config, { runAgent, haltForHuman });
   }
   function reviewTicket(options: BoundReviewTicketOptions) {
@@ -41,5 +41,5 @@ export function bindLinearSteps(steps: LinearSteps) {
       fetchTicketSnapshot: steps.fetchTicketSnapshot,
     });
   }
-  return { haltForHuman, agentOrHalt, reviewTicket };
+  return { haltForHuman, runAgentOrHalt, reviewTicket };
 }

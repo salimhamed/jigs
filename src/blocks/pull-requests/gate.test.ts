@@ -1,11 +1,11 @@
 import { beforeEach, expect, test, vi } from "vitest";
-import type { PrSnapshot, ReviewThread } from "../../providers/github.ts";
+import type { PullRequestSnapshot, ReviewThread } from "../../providers/github.ts";
 import {
-  classifyPrState,
-  type GateWake,
-  prToken,
+  classifyPullRequestState,
+  type PullRequestWake,
   pullRequestGate,
-  tokenFromGithubPayload,
+  pullRequestToken,
+  tokenFromGitHubPayload,
 } from "./gate.ts";
 import { type MarkerKind, markBody, type StatusReason } from "./marker.ts";
 import type { ApprovalSignal } from "./policy.ts";
@@ -51,7 +51,7 @@ const AT = "2026-08-26T12:00:00Z";
 
 const APPROVAL: ApprovalSignal = { kind: "review" };
 
-const snapshot = (overrides: Partial<PrSnapshot> = {}): PrSnapshot => ({
+const snapshot = (overrides: Partial<PullRequestSnapshot> = {}): PullRequestSnapshot => ({
   state: "open",
   merged: false,
   draft: false,
@@ -119,11 +119,11 @@ const pr = { owner: "acme", repo: "app", number: 7 };
 
 const check = (name: string) => ({ name, conclusion: "failure", url: "http://ci.test/1" });
 
-const wakesOf = (state: PrSnapshot, scope = SCOPE): GateWake[] =>
-  classifyPrState(state, scope, APPROVAL).wakes;
+const wakesOf = (state: PullRequestSnapshot, scope = SCOPE): PullRequestWake[] =>
+  classifyPullRequestState(state, scope, APPROVAL).wakes;
 
 test("a pull request with nothing outstanding yields no wakes", () => {
-  const state = classifyPrState(snapshot(), SCOPE, APPROVAL);
+  const state = classifyPullRequestState(snapshot(), SCOPE, APPROVAL);
   expect(state.wakes).toEqual([]);
   expect(state.done).toBe(false);
 });
@@ -165,7 +165,7 @@ test("another scope's marker is jigs' own comment, but answers nothing of ours",
     comment(900, "reviewer"),
     comment(901, "salim", answering("900@2026-08-26T12:00:00Z", "reply", "review/outstanding")),
   ]);
-  const state = classifyPrState(snapshot({ reviewThreads: [other] }), SCOPE, APPROVAL);
+  const state = classifyPullRequestState(snapshot({ reviewThreads: [other] }), SCOPE, APPROVAL);
   expect(state.wakes).toHaveLength(1);
   // Its own comment is never read back as feedback, whoever wrote it.
   expect(state.wakes[0]).toEqual({ kind: "review-comments", threads: [other] });
@@ -223,7 +223,7 @@ test("a bot's conversation comment, and an empty one, wake nobody", () => {
 });
 
 test("a conversation comment jigs posted is never feedback", () => {
-  const state = classifyPrState(
+  const state = classifyPullRequestState(
     snapshot({
       conversationComments: [conversationComment(503, "salim", standingDown("head-9", "ci"))],
     }),
@@ -314,7 +314,7 @@ test("a failed commit status wakes ci-red and its successful recovery clears it"
     ci: "red",
     failingChecks: [check("AWS CodeBuild us-west-2")],
   });
-  expect(classifyPrState(failed, SCOPE, APPROVAL)).toMatchObject({
+  expect(classifyPullRequestState(failed, SCOPE, APPROVAL)).toMatchObject({
     wakes: [{ kind: "ci-red", headSha: "head-1" }],
     done: false,
   });
@@ -323,7 +323,7 @@ test("a failed commit status wakes ci-red and its successful recovery clears it"
   // success the snapshot is ci-green and the old red work is no longer due.
   const recovered = { ...failed, ci: "green" as const, failingChecks: [] };
   expect(recovered.ci).toBe("green");
-  expect(classifyPrState(recovered, SCOPE, APPROVAL)).toMatchObject({
+  expect(classifyPullRequestState(recovered, SCOPE, APPROVAL)).toMatchObject({
     wakes: [],
     done: false,
   });
@@ -381,7 +381,7 @@ test("a human quoting jigs' reply is a human, and is answered again", () => {
     comment(901, "salim", answering(`900@${AT}`)),
     comment(902, "reviewer", quoted),
   ]);
-  const state = classifyPrState(snapshot({ reviewThreads: [followed] }), SCOPE, APPROVAL);
+  const state = classifyPullRequestState(snapshot({ reviewThreads: [followed] }), SCOPE, APPROVAL);
   expect(state.wakes).toHaveLength(1);
   // Only the real reply counts as jigs' own; the quotation of it does not.
   expect(state.ownComments).toBe(1);
@@ -399,7 +399,7 @@ test("the identical snapshot classifies identically, every time", () => {
 
 test("a closed PR yields closed with the merged flag and finishes the gate", () => {
   for (const merged of [true, false]) {
-    const state = classifyPrState(snapshot({ state: "closed", merged }), SCOPE, APPROVAL);
+    const state = classifyPullRequestState(snapshot({ state: "closed", merged }), SCOPE, APPROVAL);
     expect(state.wakes).toEqual([{ kind: "closed", merged }]);
     expect(state.done).toBe(true);
   }
@@ -454,7 +454,7 @@ test("a pr another run already holds is a claim conflict, never fetched", async 
   expect(hook.disposed).toBe(1);
 });
 test("pr token, including dots and dashes in names", () => {
-  expect(prToken({ owner: "acme-inc", repo: "api.v2", number: 41 })).toBe(
+  expect(pullRequestToken({ owner: "acme-inc", repo: "api.v2", number: 41 })).toBe(
     "github:pr:acme-inc/api.v2#41",
   );
 });
@@ -470,25 +470,25 @@ test("a pull_request_review payload reconstructs the exact pr token", () => {
       owner: { login: "acme-inc" },
     },
   };
-  expect(tokenFromGithubPayload(payload)).toBe(
-    prToken({ owner: "acme-inc", repo: "api.v2", number: 41 }),
+  expect(tokenFromGitHubPayload(payload)).toBe(
+    pullRequestToken({ owner: "acme-inc", repo: "api.v2", number: 41 }),
   );
 });
 
 test("an issue_comment on a pull request routes to the pr token", () => {
   const repository = { name: "api", owner: { login: "acme" } };
   expect(
-    tokenFromGithubPayload({
+    tokenFromGitHubPayload({
       action: "created",
       issue: { number: 41, pull_request: { url: "https://api/pulls/41" } },
       comment: { id: 5, body: "one more thing" },
       repository,
     }),
-  ).toBe(prToken({ owner: "acme", repo: "api", number: 41 }));
+  ).toBe(pullRequestToken({ owner: "acme", repo: "api", number: 41 }));
 
   // The same event shape on a plain issue names no pull request.
   expect(
-    tokenFromGithubPayload({
+    tokenFromGitHubPayload({
       action: "created",
       issue: { number: 41 },
       comment: { id: 5, body: "one more thing" },
@@ -499,9 +499,9 @@ test("an issue_comment on a pull request routes to the pr token", () => {
 
 test("check_suite and check_run route through their pull_requests list", () => {
   const repository = { name: "api", owner: { login: "acme" } };
-  const expected = prToken({ owner: "acme", repo: "api", number: 41 });
+  const expected = pullRequestToken({ owner: "acme", repo: "api", number: 41 });
   expect(
-    tokenFromGithubPayload({
+    tokenFromGitHubPayload({
       action: "completed",
       check_suite: {
         id: 9,
@@ -512,7 +512,7 @@ test("check_suite and check_run route through their pull_requests list", () => {
     }),
   ).toBe(expected);
   expect(
-    tokenFromGithubPayload({
+    tokenFromGitHubPayload({
       action: "completed",
       check_run: {
         id: 9,
@@ -526,7 +526,7 @@ test("check_suite and check_run route through their pull_requests list", () => {
 
 test("a check_suite belonging to no pull request is unroutable", () => {
   expect(
-    tokenFromGithubPayload({
+    tokenFromGitHubPayload({
       action: "completed",
       check_suite: { id: 9, conclusion: "success", pull_requests: [] },
       repository: { name: "api", owner: { login: "acme" } },
@@ -536,13 +536,13 @@ test("a check_suite belonging to no pull request is unroutable", () => {
 
 test("a github ping payload is unroutable", () => {
   expect(
-    tokenFromGithubPayload({
+    tokenFromGitHubPayload({
       zen: "Keep it logically awesome.",
       hook_id: 1,
       repository: { name: "api", owner: { login: "acme" } },
     }),
   ).toBe(null);
-  expect(tokenFromGithubPayload(null)).toBe(null);
-  expect(tokenFromGithubPayload("pull_request")).toBe(null);
-  expect(tokenFromGithubPayload({ pull_request: { number: "41" }, repository: {} })).toBe(null);
+  expect(tokenFromGitHubPayload(null)).toBe(null);
+  expect(tokenFromGitHubPayload("pull_request")).toBe(null);
+  expect(tokenFromGitHubPayload({ pull_request: { number: "41" }, repository: {} })).toBe(null);
 });

@@ -6,7 +6,7 @@ import { z } from "zod";
 import type { Factory } from "../blocks/factory.ts";
 import { tokenFromLinearPayload } from "../blocks/linear/claim.ts";
 import { NEEDS_HUMAN_TOKEN_PREFIX } from "../blocks/linear/halt-for-human.ts";
-import { tokenFromGithubPayload } from "../blocks/pull-requests/gate.ts";
+import { tokenFromGitHubPayload } from "../blocks/pull-requests/gate.ts";
 import { doctorChecks, failedChecks, runChecks } from "../checks/index.ts";
 import { factoryRoot } from "../config/factory-root.ts";
 import { findOpenPullRequestsByHeadSha } from "../providers/github.ts";
@@ -164,7 +164,7 @@ export function createApp(factory: Factory): Hono {
       }
       const tokens = prs
         .map((pr) =>
-          tokenFromGithubPayload({
+          tokenFromGitHubPayload({
             pull_request: { number: pr.number },
             repository: { name: pr.repo, owner: { login: pr.owner } },
           }),
@@ -172,7 +172,7 @@ export function createApp(factory: Factory): Hono {
         .filter((token): token is string => token !== null);
       return resumeAndLog(c, "github", tokens, event, resumeHook);
     }
-    const token = tokenFromGithubPayload(payload);
+    const token = tokenFromGitHubPayload(payload);
     if (token === null) {
       console.log(`[ingress] github ignored reason=unrecognized-event event=${event}`);
       return c.json({ ignored: true });

@@ -369,7 +369,7 @@ in `linear`: separating that transport requires a future API design. Accordingly
 remain private service/CLI implementation details.
 
 The package root, `@salimhamed/jigs`, keeps factory configuration, `WorkflowEntry`,
-`defineFactory`, `ticketInput`, `JigsError` and its existing shared types.
+`defineFactory`, `ticketInputSchema`, `JigsError` and its existing shared types.
 Flat topic aliases and catch-all block/step paths have been removed.
 
 The remaining subpaths belong to the service the factory builds:

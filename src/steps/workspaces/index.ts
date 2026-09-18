@@ -1,5 +1,5 @@
 export {
-  type ProvisionWorktreeDeps,
+  type ProvisionWorktreeDependencies,
   provisionWorktree,
   type WorktreeRequest,
 } from "./provision-worktree.ts";

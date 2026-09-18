@@ -8,10 +8,10 @@
 import { createHook } from "workflow";
 import type {
   CheckRun,
-  PrComment,
-  PrRef,
-  PrReview,
-  PrSnapshot,
+  PullRequestComment,
+  PullRequestRef,
+  PullRequestReview,
+  PullRequestSnapshot,
   ReviewThread,
 } from "../../providers/github.ts";
 import { ClaimConflictError } from "../linear/claim.ts";
@@ -21,12 +21,12 @@ import type { ApprovalSignal } from "./policy.ts";
 
 // The gate's hook token names the pull request, never the run: owning it is
 // the exclusivity lock. The ingress has only a webhook payload to go on, so it
-// reconstructs the token through prToken below — build and parse cannot drift
+// reconstructs the token through pullRequestToken below — build and parse cannot drift
 // while they share the one constructor.
-export const PR_TOKEN_PREFIX = "github:pr:";
+export const PULL_REQUEST_TOKEN_PREFIX = "github:pr:";
 
-export function prToken(pr: PrRef): string {
-  return `${PR_TOKEN_PREFIX}${pr.owner}/${pr.repo}#${pr.number}`;
+export function pullRequestToken(pr: PullRequestRef): string {
+  return `${PULL_REQUEST_TOKEN_PREFIX}${pr.owner}/${pr.repo}#${pr.number}`;
 }
 
 type GithubPayload = {
@@ -53,7 +53,7 @@ function prNumber(payload: GithubPayload): number | null {
 // pull_request and pull_request_review carry it directly, issue_comment
 // carries it only on a PR, and the check events carry it in a list. Everything
 // else (ping included) is not.
-export function tokenFromGithubPayload(payload: unknown): string | null {
+export function tokenFromGitHubPayload(payload: unknown): string | null {
   if (typeof payload !== "object" || payload === null) return null;
   const { repository } = payload as GithubPayload;
   const repo = repository?.name;
@@ -62,12 +62,12 @@ export function tokenFromGithubPayload(payload: unknown): string | null {
   if (number === null || typeof repo !== "string" || typeof owner !== "string") {
     return null;
   }
-  return prToken({ owner, repo, number });
+  return pullRequestToken({ owner, repo, number });
 }
 
 // Re-exported: a factory's composition names the pull request the gate listens
 // on, and this is the subpath it already reaches for the gate itself.
-export type { PrRef };
+export type { PullRequestRef };
 
 /**
  * What is outstanding on the pull request right now. Every wake describes
@@ -82,7 +82,7 @@ export type { PrRef };
  *   this head, so the retry is silent.
  * - `closed`: terminal.
  */
-export type GateWake =
+export type PullRequestWake =
   | { kind: "merge-ready"; headSha: string; retryNoted: boolean }
   // `body` is the summary of the CHANGES_REQUESTED review these threads were
   // submitted with, when they came together. A thread with `origin:
@@ -117,15 +117,15 @@ function conversationThread(rootId: number, body: string, user: string, at: stri
 
 // A review body is not editable through the reviews API in a way the listing
 // reports, so its submission time is its version.
-const reviewBodyThread = (review: PrReview): ReviewThread =>
+const reviewBodyThread = (review: PullRequestReview): ReviewThread =>
   conversationThread(review.id, review.body, review.user, review.submittedAt);
 
-const commentThread = (comment: PrComment): ReviewThread =>
+const commentThread = (comment: PullRequestComment): ReviewThread =>
   conversationThread(comment.id, comment.body, comment.user, comment.updatedAt);
 
 // Every comment body on the pull request, wherever it hangs: the markers in
 // them are the whole record of what jigs has done here.
-function bodies(snapshot: PrSnapshot): string[] {
+function bodies(snapshot: PullRequestSnapshot): string[] {
   return [
     ...snapshot.reviews.map((review) => review.body),
     ...snapshot.reviewThreads.flatMap((thread) => thread.comments.map((comment) => comment.body)),
@@ -134,16 +134,16 @@ function bodies(snapshot: PrSnapshot): string[] {
 }
 
 /** What this scope has already done here, as the pull request records it. */
-export function readPrLedger(snapshot: PrSnapshot, scope: string): MarkerLedger {
+export function readPullRequestLedger(snapshot: PullRequestSnapshot, scope: string): MarkerLedger {
   return readLedger(bodies(snapshot), scope);
 }
 
-function lastHumanReviewer(snapshot: PrSnapshot): string | null {
+function lastHumanReviewer(snapshot: PullRequestSnapshot): string | null {
   return snapshot.reviews.findLast((review) => !carriesMarker(review.body))?.user ?? null;
 }
 
-export interface PrState {
-  wakes: GateWake[];
+export interface PullRequestState {
+  wakes: PullRequestWake[];
   done: boolean;
   /** Comments on the pull request that any jigs workflow wrote. */
   ownComments: number;
@@ -155,17 +155,17 @@ export interface PrState {
  * identical snapshots classify identically, and a snapshot whose comments
  * already carry this scope's answers yields nothing.
  */
-export function classifyPrState(
-  snapshot: PrSnapshot,
+export function classifyPullRequestState(
+  snapshot: PullRequestSnapshot,
   scope: string,
   approval: ApprovalSignal,
-): PrState {
+): PullRequestState {
   const ownComments = bodies(snapshot).filter(carriesMarker).length;
   if (snapshot.state === "closed") {
     return { wakes: [{ kind: "closed", merged: snapshot.merged }], done: true, ownComments };
   }
-  const ledger = readPrLedger(snapshot, scope);
-  const wakes: GateWake[] = [];
+  const ledger = readPullRequestLedger(snapshot, scope);
+  const wakes: PullRequestWake[] = [];
   const threads: ReviewThread[] = [];
 
   const outstanding = (comment: { id: number; updatedAt: string; body: string }): boolean =>
@@ -242,14 +242,14 @@ export function classifyPrState(
 // Declared here rather than written as `typeof fetchPullRequestState`: declaring the
 // contract block-side typechecks the step against the block and keeps this
 // side free of any value import into steps/.
-export type FetchPrState = (pr: PrRef) => Promise<PrSnapshot>;
+export type FetchPrState = (pr: PullRequestRef) => Promise<PullRequestSnapshot>;
 
 /** {@link pullRequestGate} with its step already bound. */
-export type GateFn = (
-  pr: PrRef,
+export type PullRequestGateFn = (
+  pr: PullRequestRef,
   scope: string,
   approval: ApprovalSignal,
-) => AsyncGenerator<GateWake, void, undefined>;
+) => AsyncGenerator<PullRequestWake, void, undefined>;
 
 // One hook per PR, held across the whole review until the PR closes — the
 // token is never released mid-review. Holding it is the single-writer rule; a
@@ -257,12 +257,12 @@ export type GateFn = (
 // own schedule. The first round runs before the hook is ever awaited, so a PR
 // already approved before the gate started is caught without a webhook.
 export async function* pullRequestGate(
-  pr: PrRef,
+  pr: PullRequestRef,
   fetchState: FetchPrState,
   scope: string,
   approval: ApprovalSignal,
-): AsyncGenerator<GateWake, void, undefined> {
-  const token = prToken(pr);
+): AsyncGenerator<PullRequestWake, void, undefined> {
+  const token = pullRequestToken(pr);
   const hook = createHook<unknown>({ token });
   try {
     const conflict = await hook.getConflict();
@@ -270,7 +270,7 @@ export async function* pullRequestGate(
       throw new ClaimConflictError(token, conflict.runId);
     }
     while (true) {
-      const round = classifyPrState(await fetchState(pr), scope, approval);
+      const round = classifyPullRequestState(await fetchState(pr), scope, approval);
       console.log(
         `[prGate] ${pr.owner}/${pr.repo}#${pr.number} scope=${scope} wakes=${round.wakes.length} jigs-comments=${round.ownComments}`,
       );

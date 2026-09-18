@@ -23,7 +23,7 @@ export const WEBHOOK_EVENTS = [
   "status",
 ];
 
-export interface GithubRepoRef {
+export interface GitHubRepoRef {
   owner: string;
   repo: string;
 }
@@ -34,7 +34,7 @@ const REMOTE_PATTERNS = [
   /^https:\/\/github\.com\/([^/]+)\/(.+?)(?:\.git)?\/?$/,
 ];
 
-export function parseGithubRemote(url: string): GithubRepoRef | null {
+export function parseGithubRemote(url: string): GitHubRepoRef | null {
   for (const pattern of REMOTE_PATTERNS) {
     const match = pattern.exec(url.trim());
     const [, owner, repo] = match ?? [];
@@ -59,7 +59,7 @@ export function ensureWebhookSecret(dataDir: string = jigsDataDir()): string {
   return secret;
 }
 
-export interface EnsureRepoWebhookOptions extends GithubRepoRef {
+export interface EnsureRepoWebhookOptions extends GitHubRepoRef {
   ingressUrl: string;
   secret: string;
 }

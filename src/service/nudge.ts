@@ -7,7 +7,7 @@
 
 import { resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
-import { PR_TOKEN_PREFIX } from "../blocks/pull-requests/gate.ts";
+import { PULL_REQUEST_TOKEN_PREFIX } from "../blocks/pull-requests/gate.ts";
 import { listWorldHooks } from "./runs.ts";
 import { runsWithActiveStep } from "./stalls.ts";
 import { recordWake } from "./wake-note.ts";
@@ -58,7 +58,7 @@ export async function nudgePullRequests(deps: NudgeDeps = {}): Promise<NudgeRepo
   const report: NudgeReport = { held: 0, nudged: 0, busy: 0, gone: 0, failed: 0 };
   try {
     const held = (await (deps.hooks ?? listWorldHooks)()).filter((hook) =>
-      hook.token.startsWith(PR_TOKEN_PREFIX),
+      hook.token.startsWith(PULL_REQUEST_TOKEN_PREFIX),
     );
     report.held = held.length;
     if (held.length === 0) {

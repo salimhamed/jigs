@@ -1,4 +1,4 @@
-export type { GithubRepoRef } from "../../providers/github-webhook.ts";
+export type { GitHubRepoRef } from "../../providers/github-webhook.ts";
 export { fetchPullRequestState } from "./fetch-state.ts";
 export {
   commentOnPullRequest,

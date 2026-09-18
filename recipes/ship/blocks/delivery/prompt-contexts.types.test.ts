@@ -3,7 +3,7 @@
 // compiles clean and only shows up in someone else's factory — so the guard
 // here is tsc, through `pnpm typecheck`.
 
-import type { WorktreeFacts } from "@salimhamed/jigs";
+import type { Worktree } from "@salimhamed/jigs";
 import type { HarnessConfig } from "@salimhamed/jigs/blocks/agents";
 import { expect, test } from "vitest";
 import * as delivery from "./delivery.ts";
@@ -14,7 +14,7 @@ import type {
   ReviewPromptContext,
 } from "./types.ts";
 
-declare const worktree: WorktreeFacts;
+declare const worktree: Worktree;
 declare const harness: HarnessConfig;
 
 const incident = {

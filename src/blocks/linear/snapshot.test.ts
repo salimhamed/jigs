@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { RawIssueSnapshot } from "../../providers/linear.ts";
-import { renderSnapshot, toSnapshot } from "./snapshot.ts";
+import { renderTicketSnapshot, toTicketSnapshot } from "./snapshot.ts";
 
 const comment = (id: string, body: string) => ({
   id,
@@ -50,8 +50,8 @@ function rawIssue(overrides: Partial<RawIssueSnapshot> = {}): RawIssueSnapshot {
   };
 }
 
-test("toSnapshot splits blocking relations, keeps links and sub-issues, and drops nothing else", () => {
-  const snapshot = toSnapshot(rawIssue(), "2026-08-26T13:00:00Z");
+test("toTicketSnapshot splits blocking relations, keeps links and sub-issues, and drops nothing else", () => {
+  const snapshot = toTicketSnapshot(rawIssue(), "2026-08-26T13:00:00Z");
   expect(snapshot.fetchedAt).toBe("2026-08-26T13:00:00Z");
   expect(snapshot.branchName).toBe("salimhamed/age-313-ticket-snapshot");
   expect(snapshot.state).toBe("Todo");
@@ -71,13 +71,13 @@ test("toSnapshot splits blocking relations, keeps links and sub-issues, and drop
 });
 
 test("a null description normalizes rather than leaking null into the prompt", () => {
-  const snapshot = toSnapshot(rawIssue({ description: null }), "2026-08-26T13:00:00Z");
+  const snapshot = toTicketSnapshot(rawIssue({ description: null }), "2026-08-26T13:00:00Z");
   expect(snapshot.description).toBe("");
-  expect(renderSnapshot(snapshot)).not.toContain("null");
+  expect(renderTicketSnapshot(snapshot)).not.toContain("null");
 });
 
-test("renderSnapshot includes every section a reviewing agent needs", () => {
-  const rendered = renderSnapshot(toSnapshot(rawIssue(), "2026-08-26T13:00:00Z"));
+test("renderTicketSnapshot includes every section a reviewing agent needs", () => {
+  const rendered = renderTicketSnapshot(toTicketSnapshot(rawIssue(), "2026-08-26T13:00:00Z"));
   expect(rendered).toContain("AGE-313 Ticket snapshot and the reviewTicket jig");
   expect(rendered).toContain("Fetch the ticket on each activation.");
   expect(rendered).toContain("ready-for-agent");
@@ -90,9 +90,9 @@ test("renderSnapshot includes every section a reviewing agent needs", () => {
   expect(rendered).toContain("AGE-400 sub");
 });
 
-test("renderSnapshot explicitly identifies an empty comment thread", () => {
-  const rendered = renderSnapshot(
-    toSnapshot(rawIssue({ comments: { nodes: [] } }), "2026-08-26T13:00:00Z"),
+test("renderTicketSnapshot explicitly identifies an empty comment thread", () => {
+  const rendered = renderTicketSnapshot(
+    toTicketSnapshot(rawIssue({ comments: { nodes: [] } }), "2026-08-26T13:00:00Z"),
   );
   expect(rendered).toContain("## Comments\n\n_(none)_");
 });

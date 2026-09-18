@@ -1,28 +1,35 @@
 import path from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { codex } from "../../../blocks/agents/harness-config.ts";
-import { type AgentStepConfig, buildAskWire, parseOutput } from "../../../blocks/agents/plan.ts";
-import type { AgentFn } from "../../../blocks/agents/resume-or-rebuild.ts";
+import {
+  buildModelRequest,
+  parseOutput,
+  type RunAgentOptions,
+} from "../../../blocks/agents/plan.ts";
+import type { RunAgentFn } from "../../../blocks/agents/resume-or-rebuild.ts";
 import type { TicketClaim } from "../../../blocks/linear/claim.ts";
 import type { HaltForHumanFn, HumanReply } from "../../../blocks/linear/halt-for-human.ts";
 import { reviewTicket } from "../../../blocks/linear/review.ts";
 import type { TicketSnapshot } from "../../../blocks/linear/snapshot.ts";
-import { type ExecuteDeps, realDeps } from "../execute-agent.ts";
-import { executeModelRequest } from "../execute-model-request.ts";
+import {
+  type AgentExecutionDependencies,
+  defaultAgentExecutionDependencies,
+} from "../execute-agent.ts";
+import { executeModel } from "../execute-model-request.ts";
 import { ensureManagedCodexHome } from "../harnesses/codex-home.ts";
 import { stripApiCredentials } from "../harnesses/env.ts";
 import { assertLivePreconditions } from "../harnesses/live/fixtures/live-env.ts";
 import { makeTmpDir, removeTmpDir } from "../harnesses/test-fixtures.ts";
 
 let tmp: string;
-let deps: ExecuteDeps;
+let deps: AgentExecutionDependencies;
 
 beforeAll(() => {
   assertLivePreconditions();
   stripApiCredentials();
   tmp = makeTmpDir();
   deps = {
-    ...realDeps,
+    ...defaultAgentExecutionDependencies,
     ensureCodexHome: (runId) =>
       ensureManagedCodexHome(runId, { baseDir: path.join(tmp, "codex-homes") }),
   };
@@ -67,9 +74,9 @@ const answeredSnapshot: TicketSnapshot = {
 
 test("ticket review asks every knowable decision in one needs-human round", async () => {
   const runId = `live-ticket-review-${crypto.randomUUID().slice(0, 8)}`;
-  const runAgent: AgentFn = async <T>(config: AgentStepConfig<T>) => {
-    const result = await executeModelRequest(
-      buildAskWire({
+  const runAgent: RunAgentFn = async <T>(config: RunAgentOptions<T>) => {
+    const result = await executeModel(
+      buildModelRequest({
         harness: config.harness,
         prompt: config.prompt,
         ...(config.output === undefined ? {} : { output: config.output }),

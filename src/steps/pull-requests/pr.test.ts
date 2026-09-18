@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { beforeEach, expect, test, vi } from "vitest";
 import type { MergePolicy } from "../../blocks/pull-requests/policy.ts";
-import type { PrSnapshot } from "../../providers/github.ts";
+import type { PullRequestSnapshot } from "../../providers/github.ts";
 import {
   assignPullRequest,
   createPullRequest,
@@ -51,7 +51,7 @@ const asApp = (coAuthor?: string) =>
     ...(coAuthor === undefined ? {} : { coAuthor }),
   });
 
-const snapshot: PrSnapshot = {
+const snapshot: PullRequestSnapshot = {
   state: "open",
   merged: false,
   draft: false,
