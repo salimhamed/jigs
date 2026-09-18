@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.35.1](https://github.com/salimhamed/jigs/compare/jigs-v0.35.0...jigs-v0.35.1) (2026-09-18)
+
+
+### Bug Fixes
+
+* keep generated integration stable under formatting ([#274](https://github.com/salimhamed/jigs/issues/274)) ([e1b7ef7](https://github.com/salimhamed/jigs/commit/e1b7ef754ad8cefaa3807cb172e86bd1447fe8e3))
+
 ## [0.35.0](https://github.com/salimhamed/jigs/compare/jigs-v0.34.0...jigs-v0.35.0) (2026-09-18)
 
 
