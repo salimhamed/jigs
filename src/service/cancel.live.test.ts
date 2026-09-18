@@ -68,7 +68,16 @@ afterAll(async () => {
     server.closeAllConnections();
   });
   await sql.end();
-  await admin.query(`DROP DATABASE ${database} WITH (FORCE)`);
+  // pg pool.end() can resolve before PostgreSQL observes every socket close.
+  // Let the server finish disconnecting instead of terminating those clients.
+  await until(async () => {
+    const { rows } = await admin.query(
+      "SELECT count(*)::int AS count FROM pg_stat_activity WHERE datname = $1",
+      [database],
+    );
+    return rows[0].count === 0;
+  }, "cancel fixture database still has connected clients after shutdown");
+  await admin.query(`DROP DATABASE "${database}"`);
   await admin.end();
   if (oldBaseUrl === undefined) delete process.env.WORKFLOW_LOCAL_BASE_URL;
   else process.env.WORKFLOW_LOCAL_BASE_URL = oldBaseUrl;

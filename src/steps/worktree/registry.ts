@@ -19,7 +19,13 @@ export type RegistrySql = NodePgDatabase & { $client: Pool };
 
 /** The caller owns this pool; registrySql() owns the shared process pool. */
 export function connectRegistry(url: string, options: PoolConfig = {}): RegistrySql {
-  return drizzle(new Pool({ ...options, connectionString: url }));
+  const pool = new Pool({ ...options, connectionString: url });
+  // pg removes failed idle clients itself. Listen so a lost idle connection
+  // is reported instead of becoming an unhandled error that kills the service.
+  pool.on("error", (error) => {
+    console.error(`[registry] idle PostgreSQL connection failed: ${error.message}`);
+  });
+  return drizzle(pool);
 }
 
 export async function ensureWorktreeRegistry(db: RegistrySql): Promise<void> {
