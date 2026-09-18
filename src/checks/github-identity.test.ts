@@ -22,7 +22,7 @@ beforeEach(() => githubGetMock.mockReset());
 const APP: AppIdentity = {
   mode: "app",
   appId: 4958325,
-  installationId: 162033982,
+  installations: { salimhamed: 162033982 },
   privateKeyPath: "/factory/github-app.private-key.pem",
   operator: "salimhamed",
 };
@@ -85,7 +85,7 @@ test("pat mode fails before probing when there is no token", async () => {
 test("app mode names the bot it acts as and the operator it acts for", async () => {
   expect(await outcome(APP, "github.identity")).toMatchObject({
     ok: true,
-    detail: "jigs acts as jigs-app-dev[bot]; operator salimhamed",
+    detail: "jigs acts as jigs-app-dev[bot] on salimhamed; operator salimhamed",
   });
 });
 
@@ -125,7 +125,7 @@ test("an installation that does not answer names the three facts that address it
   ).toMatchObject({
     ok: false,
     reason: expect.stringContaining("162033982"),
-    repair: expect.stringContaining("installationId"),
+    repair: expect.stringContaining("installations"),
   });
 });
 
@@ -669,7 +669,7 @@ test.each([
 });
 
 test("doctor probes every installation and registration once per App", async () => {
-  const { installationId: _, ...app } = APP;
+  const app = APP;
   const installation = vi.fn(async () => ({ permissions: GRANTED }));
   const registration = vi.fn(async () => ({ slug: "jigs-app-dev" }));
   const report = await runChecks(
@@ -705,7 +705,7 @@ test("multi-App key repairs identify the App entry rather than the singular conf
 });
 
 test("missing permissions retain the installation that failed", async () => {
-  const { installationId: _, ...app } = APP;
+  const app = APP;
   const result = await outcome(
     { ...app, installations: { first: 10, second: 20 } },
     "github.identity",

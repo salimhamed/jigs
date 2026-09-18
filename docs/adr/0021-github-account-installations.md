@@ -8,11 +8,10 @@ exclusive account ownership. Explicit configuration makes a missing installation
 an actionable preflight failure without needing discovery credentials or an API
 request to decide which App should authenticate.
 
-The existing `installationId` shorthand remains a wildcard for all bindings,
-by explicit compatibility requirement for this feature. This is an exception
-to the repository's usual no-compatibility policy: upgrading a published factory
-must not force a config edit. It is only available in `github.identity`; entries
-in `github.identities` require account maps so selection cannot be ambiguous.
-Tokens are cached by App and installation together; the selected App also owns
-PR operator attribution and optional co-author credit. Merge policy stays
-explicit factory configuration.
+`github.identities` is the only entry point: either one PAT entry, or one or
+more App entries with explicit account maps. There is no singular identity sugar,
+installation wildcard or compatibility path. This follows the repository's
+no-compatibility policy; the two owned factories adopt the new shape when they
+upgrade. Tokens are cached by App and installation together; the selected App
+also owns PR operator attribution and optional co-author credit. Merge policy
+stays explicit factory configuration.

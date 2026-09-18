@@ -15,7 +15,7 @@ test("repository paths and GraphQL select their target accounts", async () => {
   const dir = makeTmpDir();
   writeFileSync(
     `${dir}/jigs.config.ts`,
-    `export default { service: { dashboardPort: 9090 }, github: { identity: { mode: "app", appId: 1, privateKeyPath: "absent.pem", operator: "human", installations: { covered: 10 } } } }`,
+    `export default { service: { dashboardPort: 9090 }, github: { identities: [{ mode: "app", appId: 1, privateKeyPath: "absent.pem", operator: "human", installations: { covered: 10 } }] } }`,
   );
   const fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);

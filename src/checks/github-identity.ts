@@ -228,7 +228,8 @@ function patCheck(probes: GithubIdentityProbes, env: NodeJS.ProcessEnv): Check {
       if (token === undefined || token === "") {
         return {
           ok: false,
-          reason: "github.identity is pat but GITHUB_TOKEN is not set in the service's environment",
+          reason:
+            "github.identities uses pat but GITHUB_TOKEN is not set in the service's environment",
           repair: `set GITHUB_TOKEN in ${SERVICE_ENV_FILE}, then: ${RESTART_SERVICE}`,
         };
       }
@@ -275,9 +276,8 @@ function appCheck(
           repair: `chmod 600 ${identity.privateKeyPath}`,
         };
       }
-      const { installations: accountInstallations, installationId, ...app } = identity;
-      const installationIds =
-        installationId === undefined ? Object.values(accountInstallations ?? {}) : [installationId];
+      const { installations: accountInstallations, ...app } = identity;
+      const installationIds = Object.values(accountInstallations);
       let installations: Array<{ installationId: number; permissions: Record<string, string> }>;
       let slug: string;
       try {
@@ -303,7 +303,7 @@ function appCheck(
           ok: false,
           reason: `App ${identity.appId} installation ${installationIds.join(", ")} did not answer: ${err}`,
           repair:
-            "check the App entry’s appId and installations (or installationId) against the App's settings page and its installation, and that the private key belongs to that App",
+            "check the App entry’s appId and installations against the App's settings page and its installation, and that the private key belongs to that App",
         };
       }
       const requiredPermissions = [
@@ -331,7 +331,7 @@ function appCheck(
       }
       return {
         ok: true,
-        detail: `jigs acts as ${slug}[bot]${identity.installations ? ` on ${Object.keys(identity.installations).join(", ")}` : ""}; operator ${identity.operator}`,
+        detail: `jigs acts as ${slug}[bot] on ${Object.keys(identity.installations).join(", ")}; operator ${identity.operator}`,
       };
     },
   };
@@ -339,7 +339,7 @@ function appCheck(
 
 // The effective policy per binding, plus repository facts that make one impossible.
 export function mergePolicyCheck(
-  identity: GithubIdentity,
+  identity: Pick<GithubIdentity, "mode">,
   merge: MergePolicy,
   bindings: Record<string, Pick<BindingEntry, "remote" | "merge">>,
   probes: GithubMergePolicyProbes,
@@ -391,7 +391,7 @@ function describeMergePolicy(merge: MergePolicy): string {
 async function inspectBindingWithin(
   bindingName: string,
   binding: Pick<BindingEntry, "remote">,
-  identity: GithubIdentity,
+  identity: Pick<GithubIdentity, "mode">,
   merge: MergePolicy,
   probes: GithubMergePolicyProbes,
   timeoutMs: number,
@@ -411,7 +411,7 @@ interface PolicyFinding {
 async function inspectBinding(
   bindingName: string,
   binding: Pick<BindingEntry, "remote">,
-  identity: GithubIdentity,
+  identity: Pick<GithubIdentity, "mode">,
   merge: MergePolicy,
   probes: GithubMergePolicyProbes,
 ): Promise<PolicyFinding[]> {
@@ -488,7 +488,7 @@ async function inspectBinding(
 function unreadableProtection(
   unread: ProtectionGap | "both",
   ref: { owner: string; repo: string },
-  identity: GithubIdentity,
+  identity: Pick<GithubIdentity, "mode">,
 ): Omit<PolicyFinding, "binding"> {
   const slug = `${ref.owner}/${ref.repo}`;
   const cannotVerify = "so jigs cannot verify that merges will be allowed";

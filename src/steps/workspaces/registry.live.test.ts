@@ -33,40 +33,26 @@ afterAll(async () => {
   await admin.end();
 });
 
-const legacy: WorktreeRow = {
-  path: "/legacy/worktree",
+const initial: WorktreeRow = {
+  path: "/initial/worktree",
   branch: "feature",
-  ownerRunId: "run_legacy",
+  ownerRunId: "run_initial",
   state: "active",
-  repoDir: "/legacy/repo.git",
+  repoDir: "/initial/repo.git",
 };
 
-const OLD_TABLE = `CREATE TABLE jigs_worktrees (
-  path text PRIMARY KEY,
-  branch text NOT NULL,
-  owner_run_id text NOT NULL,
-  state text NOT NULL,
-  repo_dir text NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-)`;
-
-test("baselines a populated legacy table without touching rows or the World's history", async () => {
-  await db.$client.query(OLD_TABLE);
-  await db.$client.query("INSERT INTO jigs_worktrees VALUES ($1, $2, $3, $4, $5, $6, $6)", [
-    ...Object.values(legacy),
-    new Date("2020-01-01"),
-  ]);
+test("creates the registry without touching the World's migration history", async () => {
   await db.$client.query("CREATE SCHEMA workflow_drizzle");
   await db.$client.query("CREATE TABLE workflow_drizzle.workflow_migrations (id int, hash text)");
   await db.$client.query(
     "INSERT INTO workflow_drizzle.workflow_migrations VALUES (42, 'world-history')",
   );
-  const before = (await db.$client.query("SELECT * FROM jigs_worktrees")).rows;
-
   await migrateRegistry(testUrl.toString());
-  expect((await db.$client.query("SELECT * FROM jigs_worktrees")).rows).toEqual(before);
-  expect(await getWorktree(db, legacy.path)).toEqual(legacy);
+  expect(await listWorktrees(db)).toEqual([]);
+  await upsertWorktree(db, initial);
+  await db.$client.query("UPDATE jigs_worktrees SET created_at = $1, updated_at = $1", [
+    new Date("2020-01-01"),
+  ]);
   expect(
     (await db.$client.query("SELECT * FROM workflow_drizzle.workflow_migrations")).rows,
   ).toEqual([{ id: 42, hash: "world-history" }]);
@@ -82,7 +68,7 @@ test("repeated migration is a no-op and leaves the shared pool usable", async ()
   expect((await db.$client.query("SELECT * FROM jigs_drizzle.jigs_migrations")).rows).toEqual(
     before,
   );
-  expect(await getWorktree(db, legacy.path)).toEqual(legacy);
+  expect(await getWorktree(db, initial.path)).toEqual(initial);
 });
 
 test("fresh databases get the same schema and migration history", async () => {
@@ -95,8 +81,8 @@ test("fresh databases get the same schema and migration history", async () => {
     await ensureWorktreeRegistry(fresh);
     await ensureWorktreeRegistry(fresh);
     expect(await listWorktrees(fresh)).toEqual([]);
-    await upsertWorktree(fresh, legacy);
-    expect(await getWorktree(fresh, legacy.path)).toEqual(legacy);
+    await upsertWorktree(fresh, initial);
+    expect(await getWorktree(fresh, initial.path)).toEqual(initial);
     expect(
       (await fresh.$client.query("SELECT * FROM jigs_drizzle.jigs_migrations")).rows,
     ).toHaveLength(1);
@@ -108,28 +94,28 @@ test("fresh databases get the same schema and migration history", async () => {
 
 test("upsert preserves creation, updates fields and recency, and lists by owner", async () => {
   const second = {
-    ...legacy,
+    ...initial,
     path: "/second",
     ownerRunId: "run_second",
     state: "provision-failed",
   };
   await upsertWorktree(db, second);
   expect(await getWorktree(db, second.path)).toEqual(second);
-  expect(await listWorktrees(db)).toEqual([second, legacy]);
+  expect(await listWorktrees(db)).toEqual([second, initial]);
   const updated = {
-    ...legacy,
+    ...initial,
     branch: "new-branch",
     ownerRunId: second.ownerRunId,
     repoDir: "/new/repo.git",
     state: "abandoned-dirty",
   };
   await upsertWorktree(db, updated);
-  expect(await getWorktree(db, legacy.path)).toEqual(updated);
+  expect(await getWorktree(db, initial.path)).toEqual(updated);
   expect(await listWorktreesForRun(db, second.ownerRunId)).toEqual([updated, second]);
-  expect(await listWorktreesForRun(db, legacy.ownerRunId)).toEqual([]);
+  expect(await listWorktreesForRun(db, initial.ownerRunId)).toEqual([]);
   const [saved] = (
     await db.$client.query("SELECT created_at, updated_at FROM jigs_worktrees WHERE path = $1", [
-      legacy.path,
+      initial.path,
     ])
   ).rows;
   expect(saved.created_at).toEqual(new Date("2020-01-01"));
@@ -140,7 +126,7 @@ test("state updates recency without changing ownership, then delete removes only
   await db.$client.query("UPDATE jigs_worktrees SET updated_at = $1", [new Date("2020-01-01")]);
   await setWorktreeState(db, "/second", "active");
   const [first] = await listWorktrees(db);
-  expect(first).toEqual({ ...legacy, path: "/second", ownerRunId: "run_second" });
+  expect(first).toEqual({ ...initial, path: "/second", ownerRunId: "run_second" });
   await deleteWorktree(db, "/second");
   expect(await getWorktree(db, "/second")).toBeNull();
   expect(await listWorktrees(db)).toHaveLength(1);

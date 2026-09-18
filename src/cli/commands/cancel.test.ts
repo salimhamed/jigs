@@ -29,7 +29,9 @@ const respondLookup = (body: unknown, status = 200) =>
 
 const respondCancel = (releasedTokens: string[], deletedJobs = 0) =>
   fetchMock.mockResolvedValueOnce(
-    new Response(JSON.stringify({ runId: RUN, cancelled: true, deletedJobs, releasedTokens })),
+    new Response(
+      JSON.stringify({ runId: RUN, cancelled: true, deletedJobs, releasedTokens, worktrees: [] }),
+    ),
   );
 
 const respondCancelWithWorktrees = (worktrees: string[]) =>

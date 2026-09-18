@@ -601,13 +601,15 @@ test("bind refuses an uncovered account before editing config or provisioning fu
       service: { dashboardPort: 9090 },
       bindings: {},
       github: {
-        identity: {
-          mode: "app",
-          appId: 1,
-          privateKeyPath: "key.pem",
-          operator: "human",
-          installations: { other: 10 },
-        },
+        identities: [
+          {
+            mode: "app",
+            appId: 1,
+            privateKeyPath: "key.pem",
+            operator: "human",
+            installations: { other: 10 },
+          },
+        ],
       },
     })}`,
   );

@@ -51,7 +51,7 @@ pnpm dlx @salimhamed/jigs init --github-identity-mode app   # jigs acts as a Git
 ```
 
 Choose the identity now: it is written into `jigs.config.ts` as
-`github.identity`, together with the `merge.approval` signal that works with it
+`github.identities`, together with the `merge.approval` signal that works with it
 (a `jigs:approved` label for `pat`, a GitHub review for `app`). Section 2a
 covers both. Changing it later is a config edit, not a re-scaffold.
 
@@ -93,7 +93,7 @@ an author approve their own pull request, so `merge.approval` is a label:
 it survives later pushes and jigs never removes it.
 
 **`app`** — jigs is `<app-slug>[bot]` and the operator approves its pull
-requests normally. It needs, in `github.identity`: `appId`, `installationId`,
+requests normally. Each App entry in `github.identities` needs `appId`, an `installations` map from account login to installation ID,
 `privateKeyPath` (the `.pem`, `chmod 600`, gitignored) and `operator` (the
 human's login — an installation token cannot answer `GET /user`). Optional
 `coAuthor` is `Name <email>` for a `Co-authored-by` trailer on merge commits.
@@ -118,7 +118,7 @@ one, `merge.by: "jigs"` in `pat` mode never fires. A `behind` pull request
 the identity and the effective policy per binding:
 
 ```
-ok   GitHub identity: jigs acts as jigs-app-dev[bot]; operator salimhamed
+ok   GitHub identity: jigs acts as jigs-app-dev[bot] on salimhamed; operator salimhamed
 ok   merge policy: repo: jigs merges with squash once GitHub reports it mergeable and an approving GitHub review of the current commit is present
 ```
 

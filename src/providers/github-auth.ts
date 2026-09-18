@@ -115,7 +115,7 @@ export async function mintInstallationToken(
   if (!res.ok) {
     throw new JigsError(
       `GitHub refused an installation token for App ${identity.appId} installation ${identity.installationId} (HTTP ${res.status})`,
-      `check App ${identity.appId}’s entry in jigs.config.ts: appId, installations (or installationId) and privateKeyPath, and that installation ${identity.installationId} still exists — jigs doctor names which one is wrong`,
+      `check App ${identity.appId}’s entry in jigs.config.ts: appId, installations and privateKeyPath, and that installation ${identity.installationId} still exists — jigs doctor names which one is wrong`,
     );
   }
   const body = (await res.json()) as { token: string; expires_at: string };
@@ -138,7 +138,7 @@ export async function fetchAppInstallation(
 
 /** Read the App registration, whose slug is the `<slug>[bot]` login jigs posts as. */
 export async function fetchAppRegistration(
-  identity: AppIdentity,
+  identity: Pick<AppIdentity, "appId">,
   privateKey: string,
   deps: { now?: () => number; fetch?: FetchLike } = {},
 ): Promise<AppRegistration> {
@@ -147,7 +147,7 @@ export async function fetchAppRegistration(
 
 async function appJwtGet<T>(
   apiPath: string,
-  identity: AppIdentity,
+  identity: Pick<AppIdentity, "appId">,
   privateKey: string,
   deps: { now?: () => number; fetch?: FetchLike },
 ): Promise<T> {

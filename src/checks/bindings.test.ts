@@ -124,13 +124,15 @@ test("an uncovered GitHub binding fails before clone checks with an installation
   const factory = makeFactoryRepo(tmp, {
     bindings: { api: { remote: "ssh://git@github.com/Uncovered/api.git" } },
     github: {
-      identity: {
-        mode: "app",
-        appId: 1,
-        privateKeyPath: "key.pem",
-        operator: "human",
-        installations: { Covered: 10 },
-      },
+      identities: [
+        {
+          mode: "app",
+          appId: 1,
+          privateKeyPath: "key.pem",
+          operator: "human",
+          installations: { Covered: 10 },
+        },
+      ],
     },
   });
   expect(await check(factory, "api")).toMatchObject({

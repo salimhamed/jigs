@@ -87,10 +87,6 @@ program
     [],
   )
   .option(
-    "--github-app-installation-id <id>",
-    "the App's installation id (--github-identity-mode app)",
-  )
-  .option(
     "--github-app-private-key-path <path>",
     "the App's private key .pem (--github-identity-mode app)",
   )

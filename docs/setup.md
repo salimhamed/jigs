@@ -229,14 +229,14 @@ these integration tokens; ship requires them.
 
 ### 2a. Which GitHub identity jigs uses
 
-`github.identity` in `jigs.config.ts` says who jigs is on GitHub. There are two
+`github.identities` in `jigs.config.ts` says who jigs is on GitHub. There are two
 modes, and they are chosen once, at `jigs init --github-identity-mode pat|app`.
 
 **`pat` — jigs is you.** The `GITHUB_TOKEN` in `.env` is your own personal
 access token, so every pull request jigs opens has you as its author.
 
 ```ts
-github: { identity: { mode: "pat" } },
+github: { identities: [{ mode: "pat" }] },
 ```
 
 GitHub refuses to let an author approve or request changes on their own pull
@@ -252,14 +252,14 @@ approve them like anyone else's.
 
 ```ts
 github: {
-  identity: {
+  identities: [{
     mode: "app",
     appId: 4958325,
     installations: { salimhamed: 162033982, downstreamimpact: 162665072, Junglescout: 162664894 },
     privateKeyPath: "github-app.private-key.pem",
     operator: "your-github-login",
     coAuthor: "Your Name <you@example.com>",
-  },
+  }],
 },
 ```
 
@@ -314,8 +314,8 @@ name an uncovered account and the `installations` entry to add.
 To add another organization: install the App, copy the id from the installation
 URL, add one line to `installations`, then run `jigs up`.
 
-If organizations require different Apps, replace `github.identity` with
-`github.identities`, a nonempty list of App entries:
+If organizations require different Apps, add entries to the same
+`github.identities` list:
 
 ```ts
 github: {
@@ -329,15 +329,13 @@ github: {
 },
 ```
 
-Each App has its own key, installations, operator and optional co-author. No two
-entries may claim the same account, and PAT identities cannot appear in the
-list. Configure exactly one of `identity` or `identities`.
+Each App has its own key, a nonempty `installations` map, operator and optional
+co-author. No two entries may claim the same account. A PAT must be the only
+entry in the list. `github.identities` is the sole configuration entry point;
+there is no singular identity form or account-independent installation shorthand.
 
-Existing single-App factories can keep `installationId`: it continues to select
-that installation for every binding, and `jigs upgrade` requires no config edit.
-Configure exactly one of `installationId` or a nonempty `installations` map.
-`jigs init --github-app-installation <account>=<id>` is repeatable;
-`--github-app-installation-id <id>` scaffolds the legacy shorthand.
+`jigs init --github-app-installation <account>=<id>` is repeatable and writes
+a one-entry `github.identities` list. Add more App entries directly in the config.
 
 In `app` mode jigs pushes over HTTPS with the installation token, supplied to
 that one `git push` and never written to `.git/config` or any log. In `pat`

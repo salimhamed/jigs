@@ -190,7 +190,7 @@ test("accounts select independent cached installation tokens across Apps", async
     // Existing authentication keeps one config snapshot until explicitly reset.
     writeFileSync(
       path.join(tmp, "jigs.config.ts"),
-      'export default { service: { dashboardPort: 9090 }, github: { identity: { mode: "pat" } } }',
+      'export default { service: { dashboardPort: 9090 }, github: { identities: [{ mode: "pat" }] } }',
     );
     expect(await githubAuthFor("first").bearer()).toBe("token-1");
     expect(await githubAuthFor("Second").bearer()).toBe("token-2");

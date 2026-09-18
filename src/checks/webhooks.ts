@@ -1,4 +1,4 @@
-import type { GithubIdentity } from "../config/factory-config.ts";
+import type { ResolvedGithubIdentity } from "../config/factory-config.ts";
 import { readFactoryConfig } from "../config/factory-config.ts";
 import { GithubApiError } from "../providers/github-api.ts";
 import { resolveGithubIdentity } from "../providers/github-auth.ts";
@@ -7,7 +7,7 @@ import type { Check, CheckResult } from "./catalog.ts";
 
 export interface WebhookChecksOptions {
   factoryRoot: () => string;
-  identity?: () => GithubIdentity;
+  identity?: () => ResolvedGithubIdentity;
 }
 
 export function webhookChecks(options: WebhookChecksOptions): Check[] {
@@ -46,7 +46,7 @@ export function webhookChecks(options: WebhookChecksOptions): Check[] {
 // webhooks: read & write" granted and accepted on the installation.
 function hookPermissionRepair(
   repo: { owner: string; repo: string },
-  identity: GithubIdentity,
+  identity: ResolvedGithubIdentity,
   status: number,
 ): string {
   if (identity.mode !== "app")
@@ -60,7 +60,7 @@ async function checkWebhook(
   remote: string,
   ingressUrl: string,
   repo: { owner: string; repo: string },
-  resolveIdentity: () => GithubIdentity,
+  resolveIdentity: () => ResolvedGithubIdentity,
 ): Promise<CheckResult> {
   const bindRepair = `run: jigs bind ${remote}`;
   try {

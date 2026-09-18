@@ -18,7 +18,6 @@ export type IdentityMode = "pat" | "app";
 /** The `--github-identity-mode app` facts, which have no defaults jigs could invent. */
 export interface AppIdentityOptions {
   githubAppId?: string;
-  githubAppInstallationId?: string;
   githubAppInstallation?: string[];
   githubAppPrivateKeyPath?: string;
   githubOperatorLogin?: string;
@@ -47,15 +46,11 @@ export function resolveIdentityOptions(
   const missing = (
     [
       "githubAppId",
-      "githubAppInstallationId",
+      "githubAppInstallation",
       "githubAppPrivateKeyPath",
       "githubOperatorLogin",
     ] as const
-  ).filter(
-    (flag) =>
-      (flag !== "githubAppInstallationId" || !options.githubAppInstallation?.length) &&
-      (options[flag] === undefined || options[flag] === ""),
-  );
+  ).filter((flag) => !options[flag]?.length);
   if (missing.length > 0) {
     throw new JigsError(
       `jigs init --github-identity-mode app needs ${missing.map((flag) => `--${FLAGS[flag]}`).join(", ")}`,
@@ -75,15 +70,7 @@ export function resolveIdentityOptions(
   return githubIdentitySchema.parse({
     mode: "app",
     appId: positiveInt(options.githubAppId, "--github-app-id"),
-    ...(options.githubAppInstallationId === undefined
-      ? {}
-      : {
-          installationId: positiveInt(
-            options.githubAppInstallationId,
-            "--github-app-installation-id",
-          ),
-        }),
-    ...(options.githubAppInstallation?.length ? { installations } : {}),
+    installations,
     privateKeyPath: String(options.githubAppPrivateKeyPath),
     operator: String(options.githubOperatorLogin),
     ...(options.gitCoAuthor === undefined ? {} : { coAuthor: options.gitCoAuthor }),
@@ -92,7 +79,7 @@ export function resolveIdentityOptions(
 
 const FLAGS = {
   githubAppId: "github-app-id",
-  githubAppInstallationId: "github-app-installation-id",
+  githubAppInstallation: "github-app-installation",
   githubAppPrivateKeyPath: "github-app-private-key-path",
   githubOperatorLogin: "github-operator-login",
 } as const;
@@ -125,11 +112,11 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
     SERVICE_PORT: String(ports.servicePort),
     DASHBOARD_PORT: String(ports.dashboardPort),
     POSTGRES_PORT: String(ports.postgresPort),
-    GITHUB_IDENTITY: `  github: {\n${IDENTITY_COMMENT[identity.mode]}\n    identity: ${literal(identity, "    ")},\n  },`,
+    GITHUB_IDENTITY: `  github: {\n${IDENTITY_COMMENT[identity.mode]}\n    identities: [${literal(identity, "    ")}],\n  },`,
     MERGE_POLICY: `  merge: ${literal({ ...merge }, "  ", MERGE_COMMENT[identity.mode])},`,
     // The scaffolded test asserts what the scaffolded config declares, and both
     // are written from the one value here, so neither mode can scaffold red.
-    GITHUB_EXPECTED: literal({ identity }, "  "),
+    GITHUB_EXPECTED: literal({ identities: [identity] }, "  "),
     MERGE_EXPECTED: literal({ ...merge }, "  "),
   };
 
@@ -208,6 +195,7 @@ const literalKey = (key: string): string =>
 // A TypeScript literal of a plain settings object, on one line while it fits.
 function literal(value: unknown, indent: string, comments: Record<string, string> = {}): string {
   if (typeof value !== "object" || value === null) return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map((entry) => literal(entry, indent)).join(", ")}]`;
   const entries = Object.entries(value);
   const flat = `{ ${entries.map(([key, nested]) => `${literalKey(key)}: ${JSON.stringify(nested)}`).join(", ")} }`;
   const plain = entries.every(([, nested]) => typeof nested !== "object");
