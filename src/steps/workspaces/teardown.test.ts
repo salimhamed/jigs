@@ -96,10 +96,14 @@ test("a merged branch removes the worktree and deletes both branches", () => {
   });
 });
 
-test("the merged row outranks dirtiness", () => {
-  expect(decideTeardown({ dirty: true, unmergedCommits: 0 })).toEqual(
-    decideTeardown({ dirty: false, unmergedCommits: 0 }),
-  );
+test("dirtiness outranks a merged branch", () => {
+  expect(decideTeardown({ dirty: true, unmergedCommits: 0 })).toEqual({
+    removeWorktree: false,
+    force: false,
+    deleteLocalBranch: false,
+    deleteRemoteBranch: false,
+    preserve: "abandoned-dirty",
+  });
 });
 
 test("an unmerged clean tree removes the worktree and keeps the branches", () => {
@@ -297,15 +301,16 @@ test("a squash-merged clean worktree is released but its unproven branches remai
   expect(remoteBranches()).toContain("refs/heads/feature");
 });
 
-test("a proven merged run's dirty tree still follows the merged matrix row", async () => {
+test("a proven merged run still preserves a dirty tree", async () => {
   const target = runWorktree("feature");
   writeFileSync(path.join(target, "build.log"), "output\n");
   merge("feature");
 
   await release();
 
-  expect(existsSync(target)).toBe(false);
-  expect(localBranches().split("\n")).not.toContain("feature");
+  expect(existsSync(target)).toBe(true);
+  expect(localBranches().split("\n")).toContain("feature");
+  expect(store.get(target)?.state).toBe("abandoned-dirty");
 });
 
 test("only the run's own worktrees are torn down", async () => {

@@ -24,6 +24,7 @@ import {
   listRunResources,
   listRuns,
   type RunRef,
+  readRunCleanup,
   resolveRunRef,
 } from "./runs.ts";
 import { listSchedules, scheduleChecks } from "./schedules.ts";
@@ -333,6 +334,7 @@ export function createApp(factory: Factory): Hono {
     const body: Record<string, unknown> = {
       ...described,
       resources: await listRunResources(ref.runId),
+      cleanup: await readRunCleanup(ref.runId),
       suspensions: await enrichSuspensions(described.suspensions, ref.runId),
       logs: logsPointer(ref.runId),
     };

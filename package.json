@@ -32,6 +32,10 @@
       "types": "./dist/schedules.d.ts",
       "default": "./dist/schedules.js"
     },
+    "./automatic-release": {
+      "types": "./dist/automatic-release.d.ts",
+      "default": "./dist/automatic-release.js"
+    },
     "./build": {
       "types": "./dist/build.d.ts",
       "default": "./dist/build.js"

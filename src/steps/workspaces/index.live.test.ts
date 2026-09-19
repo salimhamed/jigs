@@ -1,6 +1,17 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, expect, test, vi } from "vitest";
+import type { Factory } from "../../blocks/factory.ts";
+import {
+  CLEANUP_DIRECTIVE_ATTRIBUTE,
+  CLEANUP_STATE_ATTRIBUTE,
+  encodeCleanupProgress,
+} from "../../blocks/runtime/cleanup.ts";
+import {
+  type AutomaticReleaseDeps,
+  type CleanupRun,
+  reconcileAutomaticRelease,
+} from "../../service/automatic-release.ts";
 import { createRunDirectory } from "../runtime/run-directory/index.ts";
 import { provisionWorktree } from "./index.ts";
 import { bindingDir, worktreePath } from "./layout.ts";
@@ -9,7 +20,9 @@ import {
   deleteWorktree,
   ensureWorktreeRegistry,
   getWorktree,
+  listWorktreesForRun,
   upsertWorktree,
+  withRunResourceLock,
 } from "./registry.ts";
 import { releaseRunResources } from "./release.ts";
 import { git, makeClonedBinding, makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
@@ -31,6 +44,7 @@ vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
 const dirs = { factoryRoot, bindingName: "api" };
 const { repoDir, remoteDir } = makeClonedBinding(tmp, bindingDir(dirs));
 const testPath = worktreePath({ ...dirs, branch: "feat" });
+const dirtyPath = worktreePath({ ...dirs, branch: "automatic-dirty" });
 writeFileSync(
   path.join(factoryRoot, "jigs.config.ts"),
   `export default ${JSON.stringify({ bindings: { api: { remote: remoteDir } }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} })};`,
@@ -38,6 +52,7 @@ writeFileSync(
 
 afterAll(async () => {
   await deleteWorktree(sql, testPath);
+  await deleteWorktree(sql, dirtyPath);
   await sql.$client.end();
   vi.unstubAllEnvs();
   removeTmpDir(tmp);
@@ -115,4 +130,57 @@ test("policy release keeps then removes resources through the real registry", as
   expect(await getWorktree(sql, testPath)).toBeNull();
   expect(existsSync(testPath)).toBe(false);
   expect(existsSync(directory)).toBe(false);
+});
+
+test("automatic release preserves dirty work through real Postgres and Git", async () => {
+  const metadata = { workflowRunId: "run_automatic_dirty" };
+  await provisionWorktree({ binding: "api", branch: "automatic-dirty" }, metadata, {
+    sql,
+    readOwner: async () => ({ terminal: true, status: "completed" }),
+  });
+  writeFileSync(path.join(dirtyPath, "uncommitted.txt"), "keep me\n");
+  const terminal: CleanupRun = {
+    runId: metadata.workflowRunId,
+    status: "completed",
+    workflowName: "workflow//./workflows/ship//ship",
+    attributes: {
+      [CLEANUP_DIRECTIVE_ATTRIBUTE]: "automatic",
+      [CLEANUP_STATE_ATTRIBUTE]: encodeCleanupProgress({ status: "waiting" }),
+    },
+  };
+  const deps: AutomaticReleaseDeps = {
+    listRuns: async () => [terminal],
+    waitForTerminal: async () => terminal,
+    hasActiveStep: async () => false,
+    policy: () => "release",
+    withLock: (runId, action) => withRunResourceLock(sql, runId, action),
+    worktreeCount: async (runId, lockedSql) => (await listWorktreesForRun(lockedSql, runId)).length,
+    release: (run, action, outcome, lockedSql) =>
+      releaseRunResources(
+        { onSuccess: action, onFailure: action },
+        { workflowRunId: run.runId },
+        lockedSql,
+        outcome,
+      ),
+    writeProgress: async (_runId, value) => {
+      terminal.attributes[CLEANUP_STATE_ATTRIBUTE] = encodeCleanupProgress(value);
+    },
+    ready: () => true,
+    log: () => undefined,
+    warn: () => undefined,
+    setTimer: () => () => undefined,
+  };
+
+  expect((await reconcileAutomaticRelease({ workflows: {} } as Factory, deps)).released).toBe(1);
+  expect(existsSync(path.join(dirtyPath, "uncommitted.txt"))).toBe(true);
+  expect(await getWorktree(sql, dirtyPath)).toMatchObject({ state: "abandoned-dirty" });
+
+  // Leave no fixture behind after proving preservation.
+  git(dirtyPath, "clean", "-fd");
+  await releaseRunResources(
+    { onSuccess: "release", onFailure: "release" },
+    metadata,
+    sql,
+    "success",
+  );
 });

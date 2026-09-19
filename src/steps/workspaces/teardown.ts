@@ -28,9 +28,8 @@ const MERGED: TeardownPlan = {
 };
 
 export function decideTeardown(decision: TeardownDecision): TeardownPlan {
-  // "Done" is the merged row, not merely the finished one: a run that
-  // completed without merging still holds the only copy of its work.
-  if (decision.unmergedCommits === 0) return { ...MERGED };
+  // Automatic release never trades uncommitted work for a merged branch.
+  // Dirtiness wins even when every commit is already on the default branch.
   if (decision.dirty) {
     return {
       removeWorktree: false,
@@ -40,6 +39,9 @@ export function decideTeardown(decision: TeardownDecision): TeardownPlan {
       preserve: "abandoned-dirty",
     };
   }
+  // "Done" is the merged row, not merely the finished one: a run that
+  // completed without merging still holds the only copy of its work.
+  if (decision.unmergedCommits === 0) return { ...MERGED };
   // Branches stay as the only cheap copy of unmerged agent work.
   return {
     removeWorktree: true,

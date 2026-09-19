@@ -61,6 +61,32 @@ test("a closer that rejects is logged and does not stop the others", async () =>
   expect(h.errors).toEqual(["[service] shutdown step failed: pool already ended"]);
 });
 
+test("quiesce operations drain before dependency closers begin", async () => {
+  const h = harness();
+  let release!: () => void;
+  let worldClosed = false;
+  h.shutdown.onShutdown(() => {
+    worldClosed = true;
+  });
+  h.shutdown.onShutdown(
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    { phase: "quiesce" },
+  );
+  h.install();
+
+  h.signals.emit("SIGTERM");
+  await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+  expect(worldClosed).toBe(false);
+  release();
+  await exited(h.exits);
+
+  expect(worldClosed).toBe(true);
+  expect(h.exits).toEqual([0]);
+});
+
 test("a closer that hangs trips the backstop, which exits 1", async () => {
   vi.useFakeTimers();
   const h = harness();
@@ -102,6 +128,7 @@ test("a repeated signal mid-drain is ignored, and the listener stays registered"
   h.signals.emit("SIGTERM");
   h.signals.emit("SIGINT");
   expect(h.exits).toEqual([]);
+  await vi.waitFor(() => expect(release).toBeTypeOf("function"));
   release();
   await exited(h.exits);
 

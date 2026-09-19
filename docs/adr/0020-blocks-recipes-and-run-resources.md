@@ -225,12 +225,11 @@ completion, keep on failure) and a workflow's entry overrides it, so two
 workflows in one factory can differ and a workflow can decide from its
 inputs. Sweep remains the reclaim for everything else.
 
-Applying release automatically when a run ends was considered and deferred.
-The SDK exposes no signal for a run reaching a terminal state, only polling,
-so it would be a timer, and ADR 0007 records why a timer that deletes state
-under an operator was rejected once already. If the explicit block proves
-too easy to forget, the policy version is revisited after the v5 upgrade,
-and if it costs more than it saves the requirement is reconsidered.
+AGE-464 later adopted automatic policy-driven release after the v5 upgrade.
+The service combines the World's terminal-status wait with startup and periodic
+reconciliation, persists progress on run attributes, and waits for active
+operations under a run-scoped lock. See
+[Automatic release lifecycle](../automatic-resource-release.md).
 
 Conflict resolution on a parked pull request is opt-in and off by default
 ([AGE-463](https://linear.app/salboogie/issue/AGE-463)). When a factory
@@ -274,7 +273,6 @@ new head as unapproved.
   is right but not urgent: no prototype hit it. Revisit when one does.
 - **An effects log** (question posted, reply accepted, fix pushed) beside the
   resources record. Deferred until a workflow needs it.
-- **Automatic release on terminal state.** See Release.
 
 ## Consequences
 

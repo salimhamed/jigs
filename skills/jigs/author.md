@@ -50,24 +50,22 @@ implementation paths move.
    workflow code.
 5. Build and test the factory. Its config test checks the emitted durable IDs.
 
-Call `await release()` from `#jigs` as the workflow's last successful action.
-It returns a report for worktrees, branch refs and the run directory, explaining
-anything retained. The default is `{ onSuccess: "release", onFailure: "keep" }`.
-Set `release` on the factory config or workflow entry; `release(policy)` wins
-over both when a successful workflow chooses from its inputs.
+The service automatically applies the effective release policy after a run is
+terminal. The default is `{ onSuccess: "release", onFailure: "keep" }`; set
+`release` on the factory config or workflow entry. Failed and cancelled runs
+both use `onFailure`. Live and suspended runs retain their resources.
 
-Failed runs retain files until manual `jigs sweep`. Its `onFailure` setting
-uses the current workflow/factory config; a callsite override is not persisted
-for later sweep. `keep` requires operator confirmation or `--force`; `release`
-permits a requested clean pass. Neither starts background cleanup. Live and
-suspended runs retain resources regardless of force.
+Call `await release()` from `#jigs` as the workflow's last successful action
+when it needs a report before returning. `release(policy)` persists the
+callsite's success choice, so an explicit keep is not reversed by automatic
+cleanup. Failed cleanup stays visible in `jigs logs`, is retried by the
+service, and remains reclaimable with manual `jigs sweep`.
 
 Release is success-only: never call it from `finally` or a catch, because
 suspension throws too. Dirty unmerged work stays, and branches are deleted only
 when their commits are proven present on the remote default branch. Squash
 merges may therefore retain branches. Inspect the report when resource removal
-fails. Before upgrading across the renamed release step, finish or cancel
-active and parked runs with the operator.
+fails.
 
 Configuration values vary by factory; requirements belong to the workflow
 declaration next to its input schema.

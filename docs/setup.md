@@ -741,25 +741,31 @@ to empty the queue. By default, cancel names the worktrees it leaves behind.
 `--discard-worktrees` also removes that run's worktrees after the cancellation
 succeeds; branches containing unmerged commits are kept.
 
-A workflow requests release as its last successful action with `await release()`.
-The factory's `release: { onSuccess: "release", onFailure: "keep" }` default can
-be overridden by a workflow entry, then by a callsite policy. Release reports
+The service automatically releases eligible managed-local resources after a
+run becomes terminal. The factory's
+`release: { onSuccess: "release", onFailure: "keep" }` default can be overridden
+by a workflow entry. Completed runs use `onSuccess`; failed and cancelled runs
+use `onFailure`. A workflow may still request release as its last successful
+action with `await release()` when it needs the report before returning. A
+callsite policy is persisted, so its explicit keep or release choice remains
+authoritative during later automatic cleanup. Release reports
 which worktrees, branch refs and scratch directory were removed or retained.
 Dirty unmerged work stays; only a proven zero unmerged-commit count permits
 branch deletion. Squash-merged branch refs may remain because ancestry does
 not prove their work landed.
 
-Failed runs leave their files until manual `jigs sweep`; waiting runs keep
-them. Sweep includes scratch directories even for runs with no worktree, and
+The default keeps failed and cancelled runs; waiting runs always keep their
+resources. Sweep includes scratch directories even for runs with no worktree, and
 requires positive terminal-run evidence before removing a scratch directory.
 It never removes a live or suspended run's resources. Nothing runs in the
-background, and release belongs in neither `finally` nor a catch.
+background for live runs. Explicit release belongs in neither `finally` nor a catch.
+The service waits for active steps to drain before terminal cleanup, retries
+missed or failed cleanup after restart, and reports cleanup state and counts in
+`jigs logs`. Unknown resource kinds remain visible and are never deleted.
 
-Sweep reads the current workflow/factory policy; callsite overrides are not
-persisted for later cleanup. `onFailure: "keep"` retains terminal resources
-until explicit confirmation or force. `onFailure: "release"` permits an
-operator-requested clean pass; it does not schedule one. Worktrees remain
-visible in `jigs ps`; sweep labels scratch entries as `run-directory`.
+`jigs sweep` remains the manual reclaim path for policy-kept and safety-kept
+resources. Worktrees remain visible in `jigs ps`; sweep labels scratch entries
+as `run-directory`.
 On a terminal, `jigs sweep` asks per resource, with a stronger warning for
 uncommitted work. Without a terminal it reports only. `jigs sweep --force`
 removes eligible terminal resources without asking, including dirty trees;
