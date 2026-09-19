@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.38.0](https://github.com/salimhamed/jigs/compare/jigs-v0.37.0...jigs-v0.38.0) (2026-09-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* rely on public Workflow cancellation (AGE-482) ([#282](https://github.com/salimhamed/jigs/issues/282))
+
+### Bug Fixes
+
+* rely on public Workflow cancellation (AGE-482) ([#282](https://github.com/salimhamed/jigs/issues/282)) ([1556b3f](https://github.com/salimhamed/jigs/commit/1556b3f5e2c84aef8c2d9815554f34069c0c23a6))
+
 ## [0.37.0](https://github.com/salimhamed/jigs/compare/jigs-v0.36.0...jigs-v0.37.0) (2026-09-19)
 
 
