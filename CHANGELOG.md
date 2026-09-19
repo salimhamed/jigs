@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.38.1](https://github.com/salimhamed/jigs/compare/jigs-v0.38.0...jigs-v0.38.1) (2026-09-19)
+
+
+### Features
+
+* record run resources in SDK attributes (AGE-465) ([#284](https://github.com/salimhamed/jigs/issues/284)) ([ef6fec4](https://github.com/salimhamed/jigs/commit/ef6fec40897ed9cec073d0ce51ba2aeb81f0755e))
+
 ## [0.38.0](https://github.com/salimhamed/jigs/compare/jigs-v0.37.0...jigs-v0.38.0) (2026-09-19)
 
 
