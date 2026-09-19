@@ -182,30 +182,49 @@ test("a factory with no bindings clones nothing and still starts", async () => {
   expect(logs).toEqual([]);
 });
 
-// The World's start is the last gate: left to nitro, its rejection is a
-// console.error and a process that stays up, never ready.
-test("a World that fails to start exits the process with the reason", async () => {
+// Resolution is part of the last gate too: an invalid WORKFLOW_TARGET_WORLD
+// rejects from getWorld() before there is a World whose start() can be called.
+test("a World target that cannot resolve exits the process with the reason", async () => {
   const exits: number[] = [];
   const errors: string[] = [];
+  const own = vi.fn();
 
   const proceed = await gateOnWorldStart({
-    start: () => Promise.reject(new Error('Invalid version string: "bundled"')),
+    getWorld: () =>
+      Promise.reject(
+        new Error("Cannot find package '@workflow/missing-world' imported from workflow/runtime"),
+      ),
+    own,
     exit: (code) => exits.push(code),
     error: (line) => errors.push(line),
   });
 
   expect(proceed).toBe(false);
+  expect(own).not.toHaveBeenCalled();
   expect(exits).toEqual([1]);
-  expect(errors).toEqual(['[service] world failed to start: Invalid version string: "bundled"']);
+  expect(errors).toEqual([
+    "[service] world failed to start: Cannot find package '@workflow/missing-world' imported from workflow/runtime",
+  ]);
 });
 
-test("a World that starts lets the boot finish", async () => {
+test("the resolved World is shared by startup and application-managed shutdown", async () => {
   const exits: number[] = [];
+  const world = {
+    start: vi.fn(async () => {}),
+    close: vi.fn(async () => {}),
+  };
+  let closeOwnedWorld: (() => Promise<void> | undefined) | undefined;
   const proceed = await gateOnWorldStart({
-    start: async () => {},
+    getWorld: async () => world,
+    own: (resolved) => {
+      closeOwnedWorld = () => resolved.close?.();
+    },
     exit: (code) => exits.push(code),
   });
+  await closeOwnedWorld?.();
   expect(proceed).toBe(true);
+  expect(world.start).toHaveBeenCalledOnce();
+  expect(world.close).toHaveBeenCalledOnce();
   expect(exits).toEqual([]);
 });
 

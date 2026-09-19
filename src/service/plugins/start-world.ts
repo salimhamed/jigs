@@ -147,8 +147,14 @@ export async function gateOnBindingClones(deps: BindingCloneGateDeps = {}): Prom
   return true;
 }
 
+interface ServiceWorld {
+  start?: () => Promise<void>;
+  close?: () => Promise<void>;
+}
+
 export interface WorldStartGateDeps {
-  start: () => Promise<void>;
+  getWorld: () => Promise<ServiceWorld>;
+  own: (world: ServiceWorld) => void;
   exit?: (code: number) => void;
   error?: (line: string) => void;
 }
@@ -160,7 +166,9 @@ export interface WorldStartGateDeps {
 // whole budget on it.
 export async function gateOnWorldStart(deps: WorldStartGateDeps): Promise<boolean> {
   try {
-    await deps.start();
+    const world = await deps.getWorld();
+    deps.own(world);
+    await world.start?.();
   } catch (err) {
     const error = deps.error ?? ((line: string) => console.error(line));
     error(`[service] world failed to start: ${describe(err)}`);
@@ -199,12 +207,13 @@ export default async function startWorld() {
   // Postgres World not to install Graphile's competing signal handlers before
   // the SDK resolves and caches it. Other World implementations ignore this.
   process.env.WORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN ??= "1";
-  const { getWorld } = await import("workflow/runtime");
-  const world = await getWorld();
   setBootPhase("world");
-  onShutdown(() => world.close?.());
   const started = await gateOnWorldStart({
-    start: async () => world.start?.(),
+    getWorld: async () => {
+      const { getWorld } = await import("workflow/runtime");
+      return getWorld();
+    },
+    own: (world) => onShutdown(() => world.close?.()),
   });
   if (!started) return;
   console.log(`[service] world started: ${process.env.WORKFLOW_TARGET_WORLD ?? "local (default)"}`);
