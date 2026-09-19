@@ -25,6 +25,8 @@ Configure integration credentials only when adding workflows that use them.
 Every `jigs` below means `pnpm exec jigs`. The service listens on
 `:{{SERVICE_PORT}}`, its dashboard on `:{{DASHBOARD_PORT}}`, and Postgres on
 `:{{POSTGRES_PORT}}`. `jigs ps` lists runs; `jigs logs <run>` opens run details.
+Logs also list resources recorded by the generated `registerResource` step,
+independently of a workflow's return value.
 
 ## Layout and authoring
 

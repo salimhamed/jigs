@@ -21,6 +21,7 @@ import {
   pushBranch,
   readBranchState,
   readWorktreeDiff,
+  registerResource,
   replyToPullRequestReviewThread,
   resolveRepository,
   runAgent,
@@ -314,13 +315,19 @@ export async function publishApprovedChange<TTask extends WorkItem = WorkItem>(
     notes.length === 0
       ? description.body
       : `${description.body}\n\n## Reviewer notes\n\nThe reviewer approved this change and left these non-blocking observations:\n\n${notes.map((note) => `- ${note}`).join("\n")}`;
-  return openPullRequest({
+  const pullRequest = await openPullRequest({
     repo: repository,
     head: branch,
     base: defaultBranch,
     title: description.title,
     body,
   });
+  await registerResource({
+    kind: "pull-request",
+    identity: `${pullRequest.owner}/${pullRequest.repo}#${pullRequest.number}`,
+    url: pullRequest.url,
+  });
+  return pullRequest;
 }
 
 /** Address CI and review feedback until merge, closure, or an exhausted attempt budget. */

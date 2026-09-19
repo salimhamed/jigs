@@ -409,6 +409,8 @@ function installRuntimeFixture() {
     workflow,
     `import { appendFileSync, readFileSync } from "node:fs";
 import type { WorkflowEntry, WorkflowInputs } from "@salimhamed/jigs";
+import { registerResource as registerResourceInsideStep } from "@salimhamed/jigs/steps/runtime";
+import { registerResource } from "#jigs";
 import { defineHook, sleep } from "workflow";
 import { z } from "zod";
 
@@ -433,6 +435,15 @@ async function markerLines(marker: string): Promise<string[]> {
   return readFileSync(marker, "utf8").trim().split("\\n");
 }
 
+async function registerCustomResource(resource: {
+  kind: string;
+  identity: string;
+  url: string;
+}) {
+  "use step";
+  return registerResourceInsideStep(resource);
+}
+
 export async function runtimeE2eWorkflow(
   inputs: WorkflowInputs<typeof runtimeE2eInputs>,
 ) {
@@ -443,6 +454,23 @@ export async function runtimeE2eWorkflow(
     recordedStep(inputs.marker, "parallel-a", 250),
     recordedStep(inputs.marker, "parallel-b", 250),
   ]);
+  await Promise.all([
+    registerResource({
+      kind: "custom-report",
+      identity: "audit/7",
+      url: "https://example.test/reports/audit-7",
+    }),
+    registerCustomResource({
+      kind: "custom-dashboard",
+      identity: "operations",
+      url: "https://example.test/dashboards/operations",
+    }),
+  ]);
+  await registerResource({
+    kind: "custom-report",
+    identity: "audit/7",
+    url: "https://example.test/reports/audit-7-final",
+  });
   const hook = restartHook.create({ token: inputs.token });
   await hook;
   const resumed = await recordedStep(inputs.marker, "resumed");
@@ -564,8 +592,14 @@ async function runtimeScenario(postgresUrl) {
       RUNTIME_TIMEOUT_MS + LONG_STEP_MS,
     );
 
+    const resourcesBeforeRestart = (await runtimeRun(runId)).resources;
+    assertRuntimeResources(resourcesBeforeRestart, runId, "before restart");
+
     await stopRuntimeService(service);
     service = await startRuntimeService(postgresUrl);
+
+    const resourcesAfterRestart = (await runtimeRun(runId)).resources;
+    assertRuntimeResources(resourcesAfterRestart, runId, "after restart");
 
     execFileSync(
       process.execPath,
@@ -625,12 +659,32 @@ async function runtimeScenario(postgresUrl) {
       throw new Error(`unexpected runtime return value: ${JSON.stringify(terminal.returnValue)}`);
     }
     console.log(
-      `run ${runId} completed after ${LONG_STEP_MS}ms step, durable sleep, overlapping parallel steps, restart, and hook resume; dashboard answered`,
+      `run ${runId} completed after ${LONG_STEP_MS}ms step, concurrent resource registration, URL update, durable sleep, restart persistence, hook resume, and dashboard response`,
     );
   } finally {
     if (service.child.exitCode === null && service.child.signalCode === null) {
       await stopRuntimeService(service);
     }
+  }
+}
+
+function assertRuntimeResources(resources, runId, stage) {
+  const expected = [
+    {
+      kind: "custom-dashboard",
+      identity: "operations",
+      url: "https://example.test/dashboards/operations",
+    },
+    {
+      kind: "custom-report",
+      identity: "audit/7",
+      url: "https://example.test/reports/audit-7-final",
+    },
+  ];
+  if (JSON.stringify(resources) !== JSON.stringify(expected)) {
+    throw new Error(
+      `runtime workflow ${runId} resources ${stage} were ${JSON.stringify(resources)}, expected ${JSON.stringify(expected)}`,
+    );
   }
 }
 

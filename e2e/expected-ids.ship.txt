@@ -23,6 +23,7 @@ step//./jigs//readBranchState
 step//./jigs//readChange
 step//./jigs//readPatch
 step//./jigs//readWorktreeDiff
+step//./jigs//registerResource
 step//./jigs//releaseRunResources
 step//./jigs//removeRunDirectory
 step//./jigs//replyToPullRequestReviewThread

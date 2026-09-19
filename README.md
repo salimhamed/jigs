@@ -209,6 +209,13 @@ a halt asked. For a run parked on a pull request it reads GitHub as well and
 prints the head commit, CI, approval, draft and mergeable state, what is
 blocking the merge, and when the service last woke the run. `jigs ps` and
 `jigs watch` never read GitHub.
+It also lists the run's recorded resources as kind, identity and URL. Resources
+come from run attributes, independently of the workflow's return value; a run
+without any says `resources none`. `--json` returns the same records in a
+`resources` array.
+Generated worktree and run-directory steps register their local resources. The
+ship recipe also registers GitHub branches when it pushes them and pull requests
+after creation.
 `jigs watch` is one long-lived process that follows every run in
 the factory, a line per step, suspension, resume, terminal state and new run.
 All three take `--json`.
@@ -232,6 +239,41 @@ Run `jigs recipe add ship`, then edit the copied code. See
 [the ship recipe guide](docs/delivery.md) for role/model selection, budgets,
 prompt overrides, custom ticket sources, and composing individual phases. Generic
 agent workflows use the same core without adopting any delivery concepts.
+
+### Register resources from custom workflows
+
+The generated `registerResource` step records any resource kind without adding
+provider policy to jigs:
+
+```ts
+import { registerResource } from "#jigs";
+
+await registerResource({
+  kind: "s3-report",
+  identity: "quarterly/2026-Q3",
+  url: "https://reports.example.com/quarterly/2026-Q3",
+});
+```
+
+Kind plus identity is the stable identity. Repeating the same record is
+idempotent; registering a different URL for that identity replaces its URL.
+If two writers update the same identity concurrently, the last committed
+attribute event wins. Use distinct identities when both resources must remain.
+Each distinct identity uses one SDK run attribute, so concurrent registrations
+compose. The Workflow SDK permits 64 attributes per run, including unrelated
+and reserved attributes, keys up to 256 characters, and values up to 256 UTF-8
+bytes. jigs reports the exact limit and never truncates an identity or URL.
+
+When resource creation is an external write that is not itself idempotent, put
+creation and registration in separate durable steps: await the creator first,
+then call `registerResource`. A retry reuses the recorded creator result and
+retries only registration. Inside an idempotent custom `"use step"` function,
+the same implementation is available as `registerResource` from
+`@salimhamed/jigs/steps/runtime`.
+
+A registration is an observability record. It grants no permission to delete
+the resource. Cleanup must separately recognize a managed local kind and apply
+that kind's own policy; an arbitrary custom URL is never deletion authority.
 
 ## The `/jigs` skill
 

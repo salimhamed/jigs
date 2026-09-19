@@ -7,6 +7,7 @@ import type { Factory } from "../blocks/factory.ts";
 import { ticketToken } from "../blocks/linear/claim.ts";
 import { needsHumanToken } from "../blocks/linear/halt-for-human.ts";
 import { pullRequestToken } from "../blocks/pull-requests/gate.ts";
+import { resourceAttribute } from "../blocks/runtime/resources.ts";
 import * as config from "../config/factory-config.ts";
 import * as root from "../config/factory-root.ts";
 import * as github from "../providers/github.ts";
@@ -18,6 +19,7 @@ import {
   describeRun,
   describeSuspension,
   enrichSuspensions,
+  listRunResources,
   listRuns,
   resolveRunRef,
   scheduleTriggerId,
@@ -215,6 +217,27 @@ const NO_LINEAR = () =>
 test("a full run id resolves to itself", async () => {
   world({ runs: [worldRun(), worldRun({ runId: RUN_B })] });
   expect(await resolveRunRef(RUN_A)).toEqual({ kind: "found", runId: RUN_A });
+});
+
+test("run resources are decoded from attributes without reading workflow output", async () => {
+  const resource = {
+    kind: "custom-report",
+    identity: "quarter:2026-Q3",
+    url: "https://example.test/reports/2026-Q3",
+  };
+  const attribute = resourceAttribute(resource);
+  world({
+    runs: [
+      worldRun({
+        attributes: {
+          phase: "complete",
+          $parentRunId: RUN_B,
+          [attribute.key]: attribute.value,
+        },
+      }),
+    ],
+  });
+  expect(await listRunResources(RUN_A)).toEqual([resource]);
 });
 
 test("a unique ULID prefix resolves, case-insensitively and bare", async () => {

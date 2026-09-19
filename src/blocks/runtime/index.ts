@@ -6,3 +6,4 @@ export {
   type ReleaseSteps,
   release,
 } from "./release.ts";
+export type { RunResource } from "./resources.ts";

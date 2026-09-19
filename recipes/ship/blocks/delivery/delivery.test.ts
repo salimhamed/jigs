@@ -27,6 +27,7 @@ interface DeliverySteps {
   pushApprovedChange: typeof jigs.pushApprovedChange;
   resolveRepository: typeof jigs.resolveRepository;
   openPullRequest: typeof jigs.openPullRequest;
+  registerResource: typeof jigs.registerResource;
   commentOnPullRequest: typeof import("@salimhamed/jigs/steps/pull-requests").commentOnPullRequest;
   replyToPullRequestReviewThread: typeof import("@salimhamed/jigs/steps/pull-requests").replyToPullRequestReviewThread;
   mergePullRequest: typeof jigs.mergePullRequest;
@@ -41,6 +42,7 @@ vi.mock("#jigs", () => ({
   pushApprovedChange: vi.fn(),
   resolveRepository: vi.fn(),
   openPullRequest: vi.fn(),
+  registerResource: vi.fn(),
   commentOnPullRequest: vi.fn(),
   replyToPullRequestReviewThread: vi.fn(),
   mergePullRequest: vi.fn(),
@@ -55,6 +57,7 @@ function useSteps(steps: DeliverySteps) {
   vi.mocked(jigs.pushApprovedChange).mockImplementation(steps.pushApprovedChange);
   vi.mocked(jigs.resolveRepository).mockImplementation(steps.resolveRepository);
   vi.mocked(jigs.openPullRequest).mockImplementation(steps.openPullRequest);
+  vi.mocked(jigs.registerResource).mockImplementation(steps.registerResource);
   vi.mocked(jigs.commentOnPullRequest).mockImplementation(steps.commentOnPullRequest);
   vi.mocked(jigs.replyToPullRequestReviewThread).mockImplementation(
     steps.replyToPullRequestReviewThread,
@@ -86,7 +89,12 @@ vi.mock("workflow", () => ({
   }),
 }));
 
-const pr = { owner: "owner", repo: "repo", number: 1 };
+const pr = {
+  owner: "owner",
+  repo: "repo",
+  number: 1,
+  url: "https://github.com/owner/repo/pull/1",
+};
 
 // Keyed on the schema the operation asked for, not on the prompt: a role that
 // replaces its prompt entirely still owes the same answer shape.
@@ -174,6 +182,7 @@ function setup(wakes: PullRequestWake[] = [{ kind: "closed", merged: true }]) {
     pushApprovedChange: vi.fn().mockResolvedValue({ headSha: "new" }),
     resolveRepository: vi.fn().mockResolvedValue({ owner: "owner", repo: "repo" }),
     openPullRequest: vi.fn().mockResolvedValue(pr),
+    registerResource: vi.fn().mockResolvedValue(undefined),
     commentOnPullRequest: vi.fn().mockResolvedValue({ id: 8800 }),
     replyToPullRequestReviewThread: vi.fn().mockResolvedValue({ id: 77 }),
     mergePullRequest: vi.fn().mockResolvedValue({ merged: true, sha: "merged" }),
@@ -951,8 +960,25 @@ describe("delivery", () => {
       title: "fix: search",
       body: "Fixed and tested",
     });
+    expect(steps.registerResource).toHaveBeenCalledWith({
+      kind: "pull-request",
+      identity: "owner/repo#1",
+      url: "https://github.com/owner/repo/pull/1",
+    });
     expect(calls).toHaveLength(1);
     expect(calls[0]?.prompt).toContain("Write a concise");
+  });
+
+  it("keeps pull-request creation separate when resource registration fails", async () => {
+    const { steps } = setup();
+    vi.mocked(steps.registerResource).mockRejectedValue(new Error("attribute write failed"));
+
+    await expect(useSteps(steps).publishApprovedChange(publish)).rejects.toThrow(
+      "attribute write failed",
+    );
+
+    expect(steps.openPullRequest).toHaveBeenCalledOnce();
+    expect(steps.registerResource).toHaveBeenCalledOnce();
   });
   it("lets a factory retain its own task fields and use them in prompt functions", async () => {
     const { steps, calls } = setup();

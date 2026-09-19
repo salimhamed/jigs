@@ -88,7 +88,9 @@ and green CI on acme/api#41 → <pull request url>`. A needs-human halt reads
 `waiting for a human reply on AGE-123` with no link, because the comment URL
 costs a Linear round trip the listing will not pay per poll. `jigs logs <run>`
 is where that URL and the question the halt asked come from; it also prints the
-run's error and the step timeline.
+run's error, its resources as kind/identity/URL rows, and the step timeline.
+`resources none` is an explicit empty set; `jigs logs --json` carries the same
+records in `resources`, independently of `returnValue`.
 
 Prefer `--json` to the tables: `jigs ps --json` is `{runs, worktrees,
 schedules}`, `jigs logs --json` is the run's fields plus its timeline, and

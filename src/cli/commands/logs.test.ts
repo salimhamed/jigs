@@ -35,6 +35,7 @@ const result = (over: Partial<LogsResult> = {}): LogsResult => ({
   suspended: false,
   suspensions: [],
   logs: "",
+  resources: [],
   ...over,
 });
 
@@ -71,6 +72,7 @@ test("logs says what the run waits for, where to act, and what was asked", async
     "trigger manual",
     "ticket AGE-317",
     "last activity 1m ago (2026-09-04T10:09:00.000Z)",
+    "resources none",
     "waiting for a human reply on AGE-317 → https://linear.app/acme/issue/AGE-317#comment-comment-1",
     "asked:",
     "  Which binding?",
@@ -111,7 +113,7 @@ test("logs prints live pull-request gate state under its suspension", async () =
   );
   respond({ steps: [], deadJobs: [] });
   await showLogs(RUN, deps(), { now: NOW });
-  expect(lines.slice(4, 12)).toEqual([
+  expect(lines.slice(5, 13)).toEqual([
     "waiting for an approving review and green CI on acme/api#41",
     "  head sha: 1234567",
     "  CI: red",
@@ -139,7 +141,7 @@ test("a pull request GitHub could not be asked about prints as it always did", a
   );
   respond({ steps: [], deadJobs: [] });
   await showLogs(RUN, deps(), { now: NOW });
-  expect(lines.slice(4)).toEqual([
+  expect(lines.slice(5)).toEqual([
     "waiting for an approving review and green CI on acme/api#41",
     "",
   ]);
@@ -154,6 +156,7 @@ test("--json prints one document with the run, its suspensions and its timeline"
   expect(document.ticket).toBe("AGE-317");
   expect(document.logs).toBe(DASHBOARD);
   expect(document.returnValue).toEqual({ status: "gave-up" });
+  expect(document.resources).toEqual([]);
   expect(document.timeline).toEqual({
     steps: [{ name: "claimTicket", status: "completed" }],
     deadJobs: [],
@@ -183,6 +186,7 @@ test("a failed run's error is printed above the log pointer", async () => {
     "status failed",
     "trigger manual",
     "last activity 1m ago (2026-09-04T10:09:00.000Z)",
+    "resources none",
     "error ClaimConflictError: linear:ticket:… is already claimed",
     DASHBOARD,
   ]);
@@ -204,7 +208,7 @@ test("a completed run prints a compact object result", async () => {
   );
   respond({ steps: [], deadJobs: [] });
   await showLogs(RUN, deps(), { now: NOW });
-  expect(lines.slice(4, 11)).toEqual([
+  expect(lines.slice(5, 12)).toEqual([
     "result:",
     "  status: gave-up",
     "  attempts: 3",
@@ -215,38 +219,33 @@ test("a completed run prints a compact object result", async () => {
   ]);
 });
 
-test.each([
-  [
-    "an object-shaped pull request and URL",
-    {
-      pr: {
-        owner: "acme",
-        repo: "api",
-        number: 41,
-        url: "https://github.com/acme/api/pull/41",
-      },
-    },
-    "links: acme/api#41 → https://github.com/acme/api/pull/41",
-  ],
-  [
-    "an object-shaped pull request and top-level URL",
-    { pr: { owner: "acme", repo: "api", number: 41 }, url: "https://example.test/change" },
-    "links: acme/api#41 → https://example.test/change",
-  ],
-  ["a string pull request", { pr: "acme/api#41" }, "links: acme/api#41"],
-  ["a URL", { url: "https://example.test/report" }, "links: https://example.test/report"],
-])("a completed run links %s from its result", async (_label, returnValue, expected) => {
-  respond(result({ status: "completed", returnValue }));
+test("resources are listed independently of the workflow return shape", async () => {
+  respond(
+    result({
+      status: "completed",
+      returnValue: "done",
+      resources: [
+        {
+          kind: "pull-request",
+          identity: "acme/api#41",
+          url: "https://github.com/acme/api/pull/41",
+        },
+        {
+          kind: "custom-report",
+          identity: "quarterly\nsummary",
+          url: "https://example.test/report\nunsafe",
+        },
+      ],
+    }),
+  );
   respond({ steps: [], deadJobs: [] });
   await showLogs(RUN, deps(), { now: NOW });
-  expect(lines).toContain(expected);
-});
-
-test("a completed object result without a pull request or URL prints no links line", async () => {
-  respond(result({ status: "completed", returnValue: { status: "done" } }));
-  respond({ steps: [], deadJobs: [] });
-  await showLogs(RUN, deps(), { now: NOW });
-  expect(lines.some((line) => line.startsWith("links:"))).toBe(false);
+  expect(lines.slice(4, 7)).toEqual([
+    "resources:",
+    "  pull-request acme/api#41 → https://github.com/acme/api/pull/41",
+    "  custom-report quarterly\\nsummary → https://example.test/report\\nunsafe",
+  ]);
+  expect(lines).toContain("result: done");
 });
 
 test("result keys and scalar values stay on one terminal line", async () => {
@@ -260,7 +259,7 @@ test("result keys and scalar values stay on one terminal line", async () => {
   );
   respond({ steps: [], deadJobs: [] });
   await showLogs(RUN, deps(), { now: NOW });
-  expect(lines.slice(4, 6)).toEqual([
+  expect(lines.slice(5, 7)).toEqual([
     "result:",
     "  multi\\nline: one\\ntwo\\rthree\\u2028four\\u2029five",
   ]);
@@ -270,7 +269,7 @@ test("a multiline scalar result stays on the result line", async () => {
   respond(result({ status: "completed", returnValue: "one\ntwo" }));
   respond({ steps: [], deadJobs: [] });
   await showLogs(RUN, deps(), { now: NOW });
-  expect(lines[4]).toBe("result: one\\ntwo");
+  expect(lines[5]).toBe("result: one\\ntwo");
 });
 
 test.each([
@@ -280,7 +279,7 @@ test.each([
   respond(result({ status: "completed", returnValue }));
   respond({ steps: [], deadJobs: [] });
   await showLogs(RUN, deps(), { now: NOW });
-  expect(lines[4]).toBe(expected);
+  expect(lines[5]).toBe(expected);
 });
 
 test.each([
@@ -295,6 +294,7 @@ test.each([
     "status completed",
     "trigger manual",
     "last activity 1m ago (2026-09-04T10:09:00.000Z)",
+    "resources none",
     "",
   ]);
 });
@@ -310,7 +310,7 @@ test("an object result is capped and reports its omitted keys", async () => {
   );
   respond({ steps: [], deadJobs: [] });
   await showLogs(RUN, deps(), { now: NOW });
-  expect(lines.slice(4, 18)).toEqual([
+  expect(lines.slice(5, 19)).toEqual([
     "result:",
     ...Array.from({ length: 12 }, (_, index) => `  key${index + 1}: ${index + 1}`),
     "  … 3 more keys",
@@ -342,7 +342,7 @@ test("the step timeline reports a duration, a step still running, and its error"
     deadJobs: [],
   });
   await showLogs(RUN, deps(), { now: NOW });
-  expect(lines.slice(5)).toEqual([
+  expect(lines.slice(6)).toEqual([
     "",
     "STEP                             STATUS     ATTEMPT  STARTED                   TOOK     ERROR",
     "step//./steps/jigs//claimTicket  completed  1        2026-09-04T10:00:00.000Z  2.5s     ",
@@ -365,7 +365,7 @@ test("a dead job is printed with its error's first line and a copy-pasteable req
     ],
   });
   await showLogs(RUN, deps(), { now: NOW });
-  expect(lines.slice(5)).toEqual([
+  expect(lines.slice(6)).toEqual([
     "",
     "dead job 4128 (jigs:workflow) after 3 attempts: Queue execution failed (404): Not Found",
     "  requeue: select graphile_worker.reschedule_jobs(array[4128]::bigint[], run_at := now(), attempts := 0)",
@@ -381,6 +381,7 @@ test("a timeline the service cannot read says so rather than reading as no steps
     "status running",
     "trigger manual",
     "last activity 1m ago (2026-09-04T10:09:00.000Z)",
+    "resources none",
     "",
     "timeline unavailable: HTTP 503",
   ]);

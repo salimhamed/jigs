@@ -176,14 +176,33 @@ is generic by construction: it knows kinds, not pull requests, so a run with
 three pull requests, one Linear issue or an S3 report records them the same
 way.
 
-Where it lives follows what the runtime offers. The installed Workflow SDK
-(4.8.4, world 4.4.0) has no persisted run attributes; the v5 line does
-(`setAttributes`, `start({ attributes })`, an `attr_set` event, needing a
-newer world). jigs does not add a table of its own for this. The record is
-built on run attributes after the v5 upgrade
-([AGE-422](https://linear.app/salboogie/issue/AGE-422)), and until then a
-finished run's resources are visible only through its return value in
-`jigs logs`. If jigs ever does need a table beyond `jigs_worktrees`, it
+Where it lives follows what the runtime offers. Workflow SDK 5.0.0-beta.53 and
+world-postgres 5.0.0-beta.44 persist native attributes through `attr_set`
+events, so jigs adds no table of its own. One reserved attribute key encodes
+the resource kind and identity; its exact URL is the value. Distinct resources
+therefore use distinct keys and the Postgres World's atomic JSONB merge
+preserves simultaneous registrations. Repeating the same key and URL is a
+no-op; a new URL for the same kind and identity replaces the old URL. Concurrent
+updates to that same identity are last-committed-wins, matching the World's
+ordered attribute events.
+
+The selected SDK permits 64 total keys per run, 256 UTF-8 bytes per value and
+8 KiB of JSON event data. jigs writes one resource per event, rejects an
+encoded key longer than 256 characters, rejects a URL longer than 256 UTF-8
+bytes, and never truncates either. Existing user and reserved attributes count
+toward the same 64-key cap and are reported when capacity is exhausted.
+
+External creation and registration are separate durable steps unless creation
+is already idempotent. A lost registration response can therefore retry the
+stable attribute without repeating a pull-request creation. Registration is
+only an observability record; it grants no deletion authority over the URL.
+Cleanup dispatches only kinds whose managed-local semantics it knows.
+Generated idempotent steps register worktrees and run directories, shipped git
+pushes register GitHub branches, and the ship recipe registers a pull request
+in a separate durable step after creation. Ticket effects remain deferred to
+AGE-395 as described below.
+
+If jigs ever does need a table beyond `jigs_worktrees`, it
 adopts the world's own tooling, drizzle over `pg` with versioned migration
 files and a migrations table, rather than the boot-time column check and
 "drop the table" repair the registry uses today, which is acceptable only
@@ -191,7 +210,9 @@ because that registry is rebuilt from disk.
 
 `jigs ps` becomes generic: run, workflow, the claim it holds, status, age,
 what it waits on. A pull-request column presumes one pull request per run
-and goes. Resources appear as rows, kind and link, in `jigs logs`.
+and goes. Resources appear as kind, identity and URL rows in `jigs logs`,
+including custom kinds and multiple resources of one kind. They are read
+independently of the workflow return value.
 
 ### Release
 
