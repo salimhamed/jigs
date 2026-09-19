@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.38.2](https://github.com/salimhamed/jigs/compare/jigs-v0.38.1...jigs-v0.38.2) (2026-09-19)
+
+
+### Features
+
+* automatically release terminal run resources ([#286](https://github.com/salimhamed/jigs/issues/286)) ([3661f83](https://github.com/salimhamed/jigs/commit/3661f83c5faca16ced7273054d366d01b7b3b5c4))
+
 ## [0.38.1](https://github.com/salimhamed/jigs/compare/jigs-v0.38.0...jigs-v0.38.1) (2026-09-19)
 
 
