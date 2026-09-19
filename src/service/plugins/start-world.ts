@@ -2,7 +2,7 @@ import type { HarnessKind, HarnessRuntime } from "../../checks/harness-runtime.t
 import type { BindingClone } from "../../steps/workspaces/clone.ts";
 import type { RegistrySql } from "../../steps/workspaces/registry.ts";
 import { READY_PHASE, setBootPhase } from "../readiness.ts";
-import { installShutdown, onShutdown, startOwningSignals } from "../shutdown.ts";
+import { installShutdown, onShutdown } from "../shutdown.ts";
 
 // Why every import below is dynamic: this module's top level has to stay free
 // of postgres, the factory config and the workflow runtime — the gate tests
@@ -147,8 +147,14 @@ export async function gateOnBindingClones(deps: BindingCloneGateDeps = {}): Prom
   return true;
 }
 
+interface ServiceWorld {
+  start?: () => Promise<void>;
+  close?: () => Promise<void>;
+}
+
 export interface WorldStartGateDeps {
-  start: () => Promise<void>;
+  getWorld: () => Promise<ServiceWorld>;
+  own: (world: ServiceWorld) => void;
   exit?: (code: number) => void;
   error?: (line: string) => void;
 }
@@ -160,7 +166,9 @@ export interface WorldStartGateDeps {
 // whole budget on it.
 export async function gateOnWorldStart(deps: WorldStartGateDeps): Promise<boolean> {
   try {
-    await deps.start();
+    const world = await deps.getWorld();
+    deps.own(world);
+    await world.start?.();
   } catch (err) {
     const error = deps.error ?? ((line: string) => console.error(line));
     error(`[service] world failed to start: ${describe(err)}`);
@@ -179,12 +187,6 @@ export default async function startWorld() {
   // completion; acceptable.
   installShutdown();
 
-  // Before the World starts polling: the queue's very first step dispatch has
-  // to go out on the scoped dispatcher, not node's five-minute default.
-  const { describeStepCeiling, raiseStepCeiling } = await import("../step-ceiling.ts");
-  raiseStepCeiling();
-  console.log(`[service] step ceiling: ${describeStepCeiling()}`);
-
   // First, because it is local and fast: no point cloning for a service that
   // cannot run an agent.
   setBootPhase("harnesses");
@@ -200,18 +202,18 @@ export default async function startWorld() {
   // cost rather than an agent's.
   if (!(await gateOnBindingClones())) return;
 
-  const { getWorld } = await import("workflow/runtime");
   // The service owns its exit: on SIGTERM `world.close()` drains the queue
-  // and ends the pool, and the process leaves once that is done. The World's
-  // start is where graphile-worker would install handlers of its own, so it
-  // runs stripped of them — see startOwningSignals.
+  // and ends the pool, and the process leaves once that is done. Tell the
+  // Postgres World not to install Graphile's competing signal handlers before
+  // the SDK resolves and caches it. Other World implementations ignore this.
+  process.env.WORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN ??= "1";
   setBootPhase("world");
-  onShutdown(() => getWorld().close?.());
   const started = await gateOnWorldStart({
-    start: () =>
-      startOwningSignals(async () => {
-        await getWorld().start?.();
-      }),
+    getWorld: async () => {
+      const { getWorld } = await import("workflow/runtime");
+      return getWorld();
+    },
+    own: (world) => onShutdown(() => world.close?.()),
   });
   if (!started) return;
   console.log(`[service] world started: ${process.env.WORKFLOW_TARGET_WORLD ?? "local (default)"}`);

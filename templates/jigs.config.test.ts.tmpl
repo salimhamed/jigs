@@ -30,16 +30,6 @@ test("the scaffold names its GitHub identity and merge policy outright", () => {
 
 const BUNDLE = new URL("./.output/server/index.mjs", import.meta.url);
 
-// The SDK owns this ID and includes its package version.
-const SDK_BUILTIN_STEP = `step//workflow@${workflowVersion()}//fetch`;
-
-function workflowVersion(): string {
-  const manifest = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")) as {
-    dependencies: Record<string, string>;
-  };
-  return manifest.dependencies.workflow;
-}
-
 function emittedIds(): string[] {
   let bundle: string;
   try {
@@ -49,15 +39,21 @@ function emittedIds(): string[] {
       `no build at ${fileURLToPath(BUNDLE)} to read ids from — run pnpm exec jigs build first`,
     );
   }
-  return [...new Set(bundle.match(/(?:workflow|step)\/\/[^"']+/g) ?? [])].sort();
+  return [
+    ...new Set(
+      (bundle.match(/"(?:workflow|step)\/\/[^"]+"/g) ?? [])
+        .map((id) => id.slice(1, -1))
+        .filter((id) => /^(?:workflow|step)\/\/\.\/(?!node_modules\/)/.test(id)),
+    ),
+  ].sort();
 }
 
-test("no emitted id carries a package version, bar the SDK's own step", () => {
-  expect(emittedIds().filter((id) => id.includes("@"))).toEqual([SDK_BUILTIN_STEP]);
+test("no emitted factory id carries a package version", () => {
+  expect(emittedIds().filter((id) => id.includes("@"))).toEqual([]);
 });
 
 test("every id this factory owns is addressed by a path inside it", () => {
-  const owned = emittedIds().filter((id) => id !== SDK_BUILTIN_STEP);
+  const owned = emittedIds();
   expect(owned.length).toBeGreaterThan(0);
   for (const id of owned) {
     expect(id).toMatch(/^(?:workflow|step)\/\/\.\/(?:(?:workflows|steps)\/|jigs\/\/)/);
@@ -70,7 +66,7 @@ test("every workflow this factory registers emitted a workflow id", () => {
 });
 
 test("every step id is declared under workflows/ or steps/", () => {
-  const steps = emittedIds().filter((id) => id.startsWith("step//") && id !== SDK_BUILTIN_STEP);
+  const steps = emittedIds().filter((id) => id.startsWith("step//"));
   expect(steps.length).toBeGreaterThan(0);
   for (const id of steps) {
     expect(id).toMatch(/^step\/\/\.\/(?:(?:workflows|steps)\/[^/]+|jigs)\/\/\w+$/);

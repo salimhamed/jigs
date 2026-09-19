@@ -33,19 +33,12 @@ export function createShutdown(): Shutdown {
     const log = deps.log ?? ((line: string) => console.log(line));
     const error = deps.error ?? ((line: string) => console.error(line));
     const exit = deps.exit ?? process.exit;
-    const signals = deps.signals ?? process;
     if (shuttingDown) {
       log(`[service] ${signal} ignored: already shutting down`);
       return;
     }
     shuttingDown = true;
     log(`[service] ${signal} received, shutting down`);
-    if (signals.listeners(signal).some(isGraphileHandler)) {
-      log(
-        `[service] graphile-worker still handles ${signal}: its queue started outside the World's start, so it drains beside us`,
-      );
-    }
-
     const backstopMs = deps.backstopMs ?? SHUTDOWN_BACKSTOP_MS;
     const backstop = setTimeout(() => {
       error(`[service] shutdown still running after ${backstopMs}ms — exiting`);
@@ -92,33 +85,3 @@ export function createShutdown(): Shutdown {
 const shutdown = createShutdown();
 export const onShutdown: Shutdown["onShutdown"] = shutdown.onShutdown;
 export const installShutdown: Shutdown["install"] = shutdown.install;
-
-const isGraphileHandler = (listener: (...args: unknown[]) => void) =>
-  listener.name === "gracefulHandler";
-
-/**
- * Runs `start` and drops every SIGTERM/SIGINT listener it registered.
- * graphile-worker, under @workflow/world-postgres, installs its own with no
- * option this service can reach. Left in place they fire in the same signal
- * dispatch as ours and start the drain first — unawaited by anyone here, and
- * leaving `world.close()` to throw "Runner is already stopped" — so the
- * service takes the signals back and the drain is its own to await.
- *
- * This assumes the runner starts inside `start()`, which world-postgres does
- * only when its 200ms loopback probe of the service port succeeds; a runner
- * started later lands outside the strip, and the shutdown log says so when
- * that happens. graphile's stdout/stderr "error" hooks are left in place, as
- * they always were.
- */
-export async function startOwningSignals(
-  start: () => Promise<void>,
-  signals: Pick<NodeJS.EventEmitter, "listeners" | "removeListener"> = process,
-): Promise<void> {
-  const before = SIGNALS.map((signal) => new Set(signals.listeners(signal)));
-  await start();
-  SIGNALS.forEach((signal, i) => {
-    for (const listener of signals.listeners(signal)) {
-      if (!before[i]?.has(listener)) signals.removeListener(signal, listener);
-    }
-  });
-}

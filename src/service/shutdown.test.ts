@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { afterEach, expect, test, vi } from "vitest";
-import { createShutdown, SHUTDOWN_BACKSTOP_MS, startOwningSignals } from "./shutdown.ts";
+import { createShutdown, SHUTDOWN_BACKSTOP_MS } from "./shutdown.ts";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -134,37 +134,4 @@ test("SIGINT shuts down the same way", async () => {
   expect(closed).toBe(true);
   expect(h.exits).toEqual([0]);
   expect(h.logs[0]).toBe("[service] SIGINT received, shutting down");
-});
-
-// What graphile-worker does inside the World's start, and what the service
-// has to undo to be the one that drains the queue.
-test("a start that registers its own signal handlers loses them, and ours stay", async () => {
-  const signals = new EventEmitter();
-  const ours = () => {};
-  const theirs = () => {};
-  signals.on("SIGTERM", ours);
-  signals.on("SIGINT", ours);
-
-  await startOwningSignals(async () => {
-    signals.on("SIGTERM", theirs);
-    signals.on("SIGINT", theirs);
-    signals.on("SIGHUP", theirs);
-  }, signals);
-
-  expect(signals.listeners("SIGTERM")).toEqual([ours]);
-  expect(signals.listeners("SIGINT")).toEqual([ours]);
-  // Only the two the service answers to; the rest stay theirs.
-  expect(signals.listeners("SIGHUP")).toEqual([theirs]);
-});
-
-test("a graphile handler the strip missed is named in the shutdown log", async () => {
-  const h = harness();
-  const gracefulHandler = () => {};
-  h.install();
-  h.signals.on("SIGTERM", gracefulHandler);
-
-  h.signals.emit("SIGTERM");
-  await exited(h.exits);
-
-  expect(h.logs[1]).toContain("graphile-worker still handles SIGTERM");
 });

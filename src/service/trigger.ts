@@ -24,7 +24,7 @@ export async function startRun(
   }
 
   // zod-parsed plain JSON is also the serialization guard: unserializable
-  // workflow args leave a run stuck `running` forever (workflow@4.8.4).
+  // Unserializable workflow args can leave a run stuck `running` forever.
   const parsed = entry.inputs.safeParse(inputs ?? {});
   if (!parsed.success) {
     return { kind: "invalid-inputs", issues: parsed.error.issues };

@@ -1,3 +1,4 @@
+import { SPEC_VERSION_CURRENT } from "@workflow/world";
 import { afterAll, afterEach, expect, test, vi } from "vitest";
 import { setWorld } from "workflow/runtime";
 import { listRunSteps, runsWithActiveStep } from "./stalls.ts";
@@ -38,6 +39,7 @@ const step = (over: Record<string, unknown> = {}) => ({
 
 const worldWithSteps = (steps: Array<Record<string, unknown>>) =>
   setWorld({
+    specVersion: SPEC_VERSION_CURRENT,
     steps: { list: async () => ({ data: steps }) },
   } as unknown as World);
 

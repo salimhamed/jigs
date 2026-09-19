@@ -15,7 +15,7 @@ export default async function startDashboard() {
   // Nitro does not await its plugins, so touching the World through the
   // runtime is what makes the SDK's resolution win the process-global cache.
   const { getWorld } = await import("workflow/runtime");
-  getWorld();
+  await getWorld();
   const { startServer } = await import(dashboardEntry());
   const server: Server = await startServer(port);
   onShutdown(() => closeServer(server));

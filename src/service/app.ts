@@ -443,7 +443,7 @@ async function resumeAndLog(
 // on, and what a poke can wake. The needs-human marker is neither — the reply
 // that ends that halt lands on the ticket claim beside it.
 async function runResourceTokens(runId: string): Promise<string[]> {
-  const hooks = await getWorld().hooks.list({ runId });
+  const hooks = await (await getWorld()).hooks.list({ runId });
   return hooks.data
     .map((hook) => hook.token)
     .filter((token) => !token.startsWith(NEEDS_HUMAN_TOKEN_PREFIX));

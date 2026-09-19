@@ -220,8 +220,7 @@ without a launch.
 `WORKFLOW_TARGET_WORLD=@workflow/world-postgres` and `WORKFLOW_POSTGRES_URL`
 come filled in; leave them. The service refuses to start when the URL is
 unset: the worktree registry lives in that database, so there is no
-registry-less mode. (At `workflow@4.8.4` the filesystem World would not start
-from a production bundle anyway: `Invalid version string: "bundled"`.)
+registry-less mode.
 
 Skipping the copy is allowed — `jigs up` copies `.env.example` itself when
 there is no `.env` and tells you which slots are empty. Hello can run without
@@ -515,21 +514,17 @@ the backstop and the queue retries the job later. `jigs service logs` is the
 service's own stdout, which is not a run's history (step 6). `jigs service
 status` prints the service and dashboard URLs whenever you need them again.
 
-#### Step ceiling
+#### Long steps
 
-A step runs **for as long as it takes**. The service prints the ceiling it
-started with:
+A step runs **for as long as it takes**. Workflow SDK v5's Postgres World
+delivers steps over its own loopback HTTP client with both the response-header
+and response-body deadlines disabled by default. A slow healthy delivery is
+therefore not declared dead and redelivered while its first execution is still
+running. Operators can set `WORKFLOW_POSTGRES_HEADERS_TIMEOUT_MS` and
+`WORKFLOW_POSTGRES_BODY_TIMEOUT_MS` explicitly when they prefer a deadline.
 
-```
-[service] step ceiling: uncapped on the step route at http://localhost:8990; undici defaults elsewhere
-```
-
-The World runs every step over HTTP against the service's own port, and node's
-five-minute default was cutting long agent steps off and launching a second
-agent into a worktree the first was still working in. The service scopes a
-no-timeout HTTP dispatcher to its own origin — so the step self-invocation
-waits, and every other request it makes (GitHub, Linear, the agent providers)
-keeps node's defaults and still fails against a wedged server.
+Jigs does not replace Node's process-wide HTTP dispatcher. GitHub, Linear and
+agent-provider requests keep the timeout behavior of their own clients.
 
 A worktree admits one agent at a time: a second one is refused, not queued.
 

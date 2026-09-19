@@ -1,3 +1,4 @@
+import { SPEC_VERSION_CURRENT } from "@workflow/world";
 import { afterAll, afterEach, beforeEach, expect, test, vi } from "vitest";
 import { HookNotFoundError, WorkflowRunNotFoundError } from "workflow/errors";
 import { setWorld } from "workflow/runtime";
@@ -171,6 +172,7 @@ function world(fixture: Fixture = {}): void {
   const hooks = fixture.hooks ?? [];
   const steps = fixture.steps ?? {};
   setWorld({
+    specVersion: SPEC_VERSION_CURRENT,
     steps: {
       list: async ({ runId }: { runId: string }) => ({ data: steps[runId] ?? [] }),
     },

@@ -218,6 +218,10 @@ function childEnv(factoryRoot: string, service: ResolvedService): Record<string,
     PORT: String(service.port),
     JIGS_DASHBOARD_PORT: String(service.dashboardPort),
     WORKFLOW_LOCAL_BASE_URL: service.serviceUrl,
+    // The v5 Postgres package reads this when its module-level World is
+    // created. Set it on the child itself, before any bundled module runs;
+    // setting it only in the Nitro startup plugin can be too late.
+    WORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN: "1",
   };
 }
 
