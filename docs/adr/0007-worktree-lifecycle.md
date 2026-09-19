@@ -58,17 +58,15 @@ cancelled with a dirty tree** preserves the worktree, marks it abandoned-dirty
 in the registry, and surfaces it in `ps`/`sweep` — never an automatic WIP
 commit, which would push half-states onto the Linear/GitHub-keyed branch name.
 
-There is no background sweep timer, and no block calls teardown itself. The
-first mid-stream cancellation showed a timer deleting state between two
-commands an operator was reading — automation nobody asked for. The lifecycle
-is: a merged run's workflow calls `teardownMergedRun` as its own last line (a
-plain sequential call, never a `finally` — suspension is a thrown error);
-every other ending leaves the worktree on disk, `jigs ps` shows it as
-`abandoned` via the same classifier sweep uses, and the operator reclaims it
-through `jigs sweep` — interactive per worktree on a terminal, report-only
-otherwise, `--force` as the explicit unattended yes. `jigs cancel` names the
-worktrees it leaves behind. Every worktree the sweep can see came from a
-registry row, so there is no `unregistered` orphan state to classify.
+AGE-464 revised the invocation after the v5 upgrade: the service applies the
+configured policy when a run becomes terminal. It waits for active steps to
+drain and shares a run-scoped lock with provisioning through safety inspection
+and deletion, so cancellation cannot delete state under an in-flight operation.
+Startup and periodic reconciliation recover missed signals and retry failures;
+progress is recorded on run attributes. Suspended runs are untouched. The
+explicit release block remains available for a workflow that needs its report,
+and `jigs sweep` remains the operator path for policy-kept or safety-kept
+resources. See [Automatic release lifecycle](../automatic-resource-release.md).
 
 The sweep asks its `merge-base --is-ancestor` question of **every terminal
 run**, not only a completed one, fetching `origin/<default>` explicitly first.
@@ -81,10 +79,9 @@ whether the run completed, failed, or was cancelled. Three limits on that:
 - **The remote branch stays** outside the done row. A cancelled or failed
   run's pushed branch is somebody's open PR whatever its ancestry, and an
   empty branch was never pushed at all.
-- **Dirty trees are unchanged.** The merged exemption that lets an untracked
-  build artifact not cost a completed run its teardown stays scoped to
-  completed; anywhere else a dirty tree is still preserved, marked
-  abandoned-dirty, and reclaimable only with `--force`.
+- **Dirty trees are unchanged.** Automatic release preserves every dirty tree,
+  including one whose committed tip is already merged, marks it
+  abandoned-dirty, and leaves it reclaimable only with `--force`.
 - **No answer means unmerged.** A failed fetch of `origin/<default>`, an
   unresolvable default branch, or a run the World no longer knows about all
   keep the branch: deletion needs positive evidence.

@@ -1,4 +1,5 @@
 export { unreachable } from "../unreachable.ts";
+export type { CleanupProgress, CleanupView } from "./cleanup.ts";
 export {
   bindReleaseSteps,
   type ReleasePolicy,

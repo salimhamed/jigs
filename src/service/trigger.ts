@@ -1,6 +1,11 @@
 import { start } from "workflow/api";
 import type { z } from "zod";
 import type { Factory, Injected } from "../blocks/factory.ts";
+import {
+  CLEANUP_DIRECTIVE_ATTRIBUTE,
+  CLEANUP_STATE_ATTRIBUTE,
+  encodeCleanupProgress,
+} from "../blocks/runtime/cleanup.ts";
 import { type CheckReport, preflightChecks, runChecks } from "../checks/index.ts";
 
 export type StartRunResult =
@@ -37,6 +42,12 @@ export async function startRun(
 
   const injection = { triggerId } satisfies Injected;
 
-  const run = await start(entry.workflow, [{ ...parsed.data, ...injection }]);
+  const run = await start(entry.workflow, [{ ...parsed.data, ...injection }], {
+    attributes: {
+      [CLEANUP_DIRECTIVE_ATTRIBUTE]: "automatic",
+      [CLEANUP_STATE_ATTRIBUTE]: encodeCleanupProgress({ status: "waiting" }),
+    },
+    allowReservedAttributes: true,
+  });
   return { kind: "started", runId: run.runId };
 }

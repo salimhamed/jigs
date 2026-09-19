@@ -5,7 +5,7 @@ import { provisionWorktree } from "./index.ts";
 import { bindingDir, worktreePath } from "./layout.ts";
 import type { OwnerState } from "./owner.ts";
 import { PostCreateFailedError } from "./provision.ts";
-import type { WorktreeRow } from "./registry.ts";
+import type { RegistrySql, WorktreeRow } from "./registry.ts";
 import { WorktreeOwnedError } from "./reuse.ts";
 import { git, makeClonedBinding, makeFakeSql, makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
@@ -55,11 +55,14 @@ function writeBinding(provisioning: Record<string, unknown> = {}): void {
   );
 }
 
-const registry = () => ({ sql: makeFakeSql(store) });
+const immediateLock = async <T>(_runId: string, action: (sql: RegistrySql) => Promise<T>) =>
+  action(makeFakeSql(store));
+const registry = () => ({ sql: makeFakeSql(store), withLock: immediateLock });
 
 // The owner read is the World, the one external system this path consults.
 const ownedBy = (runId: string, owner: OwnerState = { terminal: true, status: "completed" }) => ({
   sql: makeFakeSql(store),
+  withLock: immediateLock,
   readOwner: async (asked: string) => {
     expect(asked).toBe(runId);
     return owner;
@@ -157,6 +160,7 @@ test("the owning run re-enters its own dirty worktree without asking whether it 
     { workflowRunId: "run_owner" },
     {
       sql: makeFakeSql(store),
+      withLock: immediateLock,
       readOwner: () => {
         throw new Error("the owner's own liveness is beside the point");
       },

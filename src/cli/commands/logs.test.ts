@@ -36,6 +36,7 @@ const result = (over: Partial<LogsResult> = {}): LogsResult => ({
   suspensions: [],
   logs: "",
   resources: [],
+  cleanup: { status: "waiting", directive: "automatic" },
   ...over,
 });
 
@@ -88,6 +89,32 @@ test("a failed run prints its status without a pull request header", async () =>
   await showLogs(RUN, deps(), { now: NOW });
   expect(lines[1]).toBe("status failed");
   expect(lines.some((line) => line.startsWith("pull request "))).toBe(false);
+});
+
+test("cleanup progress and all resource counts remain visible", async () => {
+  respond(
+    result({
+      status: "completed",
+      cleanup: {
+        status: "failed",
+        directive: "release",
+        outcome: "success",
+        released: 1,
+        kept: 2,
+        failed: 1,
+        unknown: 1,
+        detail: "temporary\nGit failure",
+      },
+    }),
+  );
+  respond({ steps: [], deadJobs: [] });
+
+  await showLogs(RUN, deps(), { now: NOW });
+
+  expect(lines).toContain(
+    "cleanup failed (release, success; 1 released, 2 kept, 1 failed, 1 unknown)",
+  );
+  expect(lines).toContain("  temporary\\nGit failure");
 });
 
 test("logs prints live pull-request gate state under its suspension", async () => {

@@ -1,3 +1,4 @@
+import type { CleanupView } from "../../blocks/runtime/cleanup.ts";
 import type { RunResource } from "../../blocks/runtime/resources.ts";
 import { JigsError } from "../../errors.ts";
 import { formatTable } from "../table.ts";
@@ -13,6 +14,7 @@ export interface LogsResult extends Omit<PsRun, "workflow"> {
   returnValue?: unknown;
   logs: string;
   resources: RunResource[];
+  cleanup: CleanupView;
 }
 
 interface StepRow {
@@ -70,6 +72,7 @@ export async function showLogs(
   if (result.ticket !== null) deps.out(`ticket ${result.ticket}`);
   deps.out(`last activity ${age(result.lastActivityAt, now)} ago (${result.lastActivityAt})`);
   showResources(result.resources, deps);
+  showCleanup(result.cleanup, deps);
   if (result.error !== undefined) deps.out(`error ${result.error}`);
   if (result.status === "completed") {
     showResult(result.returnValue, deps);
@@ -100,6 +103,23 @@ export async function showLogs(
   deps.out(result.logs);
   showTimeline(timeline, deps);
   return result;
+}
+
+function showCleanup(cleanup: CleanupView, deps: ServiceDeps): void {
+  if (cleanup.status === "waiting") return;
+  const counts = [
+    ["released", cleanup.released],
+    ["kept", cleanup.kept],
+    ["failed", cleanup.failed],
+    ["unknown", cleanup.unknown],
+  ]
+    .filter((entry): entry is [string, number] => entry[1] !== undefined)
+    .map(([label, count]) => `${count} ${label}`)
+    .join(", ");
+  deps.out(
+    `cleanup ${cleanup.status} (${cleanup.directive}${cleanup.outcome === undefined ? "" : `, ${cleanup.outcome}`}${counts === "" ? "" : `; ${counts}`})`,
+  );
+  if (cleanup.detail !== undefined) deps.out(`  ${singleLine(cleanup.detail)}`);
 }
 
 const RESULT_KEY_LIMIT = 12;

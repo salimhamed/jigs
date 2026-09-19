@@ -1,4 +1,4 @@
-export { releaseRunResources } from "../workspaces/release.ts";
+export { releaseRunResources } from "./release.ts";
 export { resolveReleasePolicy } from "./release-policy.ts";
 export { registerResource } from "./resources.ts";
 export { dashboardRunUrl } from "./run-context.ts";

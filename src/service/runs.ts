@@ -10,6 +10,7 @@ import { TICKET_TOKEN_PREFIX, ticketToken } from "../blocks/linear/claim.ts";
 import { NEEDS_HUMAN_TOKEN_PREFIX } from "../blocks/linear/halt-for-human.ts";
 import { PULL_REQUEST_TOKEN_PREFIX } from "../blocks/pull-requests/gate.ts";
 import { approvalState, mergeRefusal } from "../blocks/pull-requests/merge-ready.ts";
+import { type CleanupView, cleanupFromAttributes } from "../blocks/runtime/cleanup.ts";
 import { type RunResource, resourcesFromAttributes } from "../blocks/runtime/resources.ts";
 import { readFactoryConfig } from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";
@@ -434,6 +435,11 @@ const worldRun = async (runId: string): Promise<WorldRun> =>
 /** Resources are an observability read, independent of workflow output. */
 export async function listRunResources(runId: string): Promise<RunResource[]> {
   return resourcesFromAttributes((await worldRun(runId)).attributes);
+}
+
+/** Persistent automatic-cleanup progress, independent of workflow output. */
+export async function readRunCleanup(runId: string): Promise<CleanupView> {
+  return cleanupFromAttributes((await worldRun(runId)).attributes);
 }
 
 // `resolveData: "all"` above is what makes the trigger readable at all — a

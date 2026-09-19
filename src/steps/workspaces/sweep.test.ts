@@ -270,12 +270,12 @@ test("one fetch serves every completed run sharing a clone", async () => {
   expect(fetches.mock.calls).toEqual([[repoDir]]);
 });
 
-test("an untracked file does not cost a merged worktree its teardown", async () => {
+test("an untracked file preserves even a merged worktree", async () => {
   const done = addWorktree("done");
   commit(done, "shipped.txt");
   git(done, "push", "-q", "origin", "done:main");
   git(repoDir, "fetch", "-q", "origin");
-  // Build output, not work: the branch is merged, so the tree still goes.
+  // Automatic cleanup cannot distinguish build output from work worth keeping.
   dirty(done);
   register(done, "done");
 
@@ -283,9 +283,9 @@ test("an untracked file does not cost a merged worktree its teardown", async () 
     { clean: true },
     deps({ run_done: { terminal: true, status: "completed" } }),
   );
-  expect(existsSync(done)).toBe(false);
-  expect(store.size).toBe(0);
-  expect(() => git(repoDir, "rev-parse", "--verify", "refs/heads/done")).toThrow();
+  expect(existsSync(done)).toBe(true);
+  expect(store.get(done)?.state).toBe("abandoned-dirty");
+  expect(git(repoDir, "rev-parse", "--verify", "refs/heads/done")).not.toBe("");
 });
 
 test("the merge check sees work pushed since the clone last fetched", async () => {

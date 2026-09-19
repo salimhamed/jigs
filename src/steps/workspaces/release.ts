@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import type { CleanupOutcome } from "../../blocks/runtime/cleanup.ts";
 import {
   type ReleasePolicy,
   type ReleaseReport,
@@ -18,13 +19,15 @@ import {
   isWorktreeDirty,
 } from "./teardown.ts";
 
-/** Success-only release. Failed and suspended executions never reach this last step. */
+/** Apply one resolved policy outcome. Callers own terminal/active synchronization. */
 export async function releaseRunResources(
   policy: ReleasePolicy,
   metadata: RunMetadata,
   sql: RegistrySql = registrySql(),
+  outcome: CleanupOutcome = "success",
 ): Promise<ReleaseReport> {
   releaseSchema.parse(policy);
+  const action = outcome === "success" ? policy.onSuccess : policy.onFailure;
   const rows = await listWorktreesForRun(sql, metadata.workflowRunId);
   const report: ReleaseReport = {
     policy,
@@ -32,7 +35,7 @@ export async function releaseRunResources(
     runDirectory: {
       path: runDirectory(metadata),
       removed: false,
-      reason: "onSuccess policy keeps run resources",
+      reason: `${outcome === "success" ? "onSuccess" : "onFailure"} policy keeps run resources`,
     },
   };
   const fetched = new Map<string, boolean>();
@@ -44,10 +47,10 @@ export async function releaseRunResources(
       localBranchDeleted: false,
       remoteBranchDeleted: false,
       unmergedCommits: null,
-      reason: "onSuccess policy keeps run resources",
+      reason: `${outcome === "success" ? "onSuccess" : "onFailure"} policy keeps run resources`,
     };
     report.worktrees.push(resource);
-    if (policy.onSuccess === "keep") continue;
+    if (action === "keep") continue;
     try {
       if (!fetched.has(row.repoDir)) {
         try {
@@ -96,12 +99,12 @@ export async function releaseRunResources(
       resource.reason = `release incomplete; inspect before manual sweep: ${String(error)}`;
     }
   }
-  if (policy.onSuccess === "release") {
+  if (action === "release") {
     await removeRunDirectory(metadata);
     report.runDirectory = {
       path: runDirectory(metadata),
       removed: true,
-      reason: "successful run directory released",
+      reason: `${outcome} run directory released`,
     };
     if (report.worktrees.every((resource) => resource.removed))
       removeManagedCodexHome(metadata.workflowRunId);

@@ -32,9 +32,17 @@ test("a ticket field is ordinary input and never triggers Linear resolution", as
   preflightChecks.mockClear();
   const result = await startRun(factory, "run", { ticket: "abc" }, "trig_manual");
   expect(result).toEqual({ kind: "started", runId: "wrun_test" });
-  expect(start).toHaveBeenCalledExactlyOnceWith(factory.workflows.run.workflow, [
-    { ticket: "abc", attempts: 3, triggerId: "trig_manual" },
-  ]);
+  expect(start).toHaveBeenCalledExactlyOnceWith(
+    factory.workflows.run.workflow,
+    [{ ticket: "abc", attempts: 3, triggerId: "trig_manual" }],
+    {
+      attributes: {
+        "$jigs.cleanup.v1.directive": "automatic",
+        "$jigs.cleanup.v1.state": '{"status":"waiting"}',
+      },
+      allowReservedAttributes: true,
+    },
+  );
   expect(resolveIssueRef).not.toHaveBeenCalled();
   expect(preflightChecks).toHaveBeenCalledExactlyOnceWith({}, { ticket: "abc", attempts: 3 });
 });

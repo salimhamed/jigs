@@ -232,7 +232,7 @@ export default async function startWorld() {
   });
   await nudgePullRequests();
 
-  // No background worktree sweep: a run that finishes cleanly tears itself down, and
-  // everything else stays on disk, visible in `jigs ps`, until the operator
-  // reclaims it through `jigs sweep` — nothing deletes behind their back.
+  // The generated factory plugin starts automatic release after this plugin
+  // reaches readiness. It imports the compiled factory so per-workflow policy
+  // stays available to the coordinator.
 }

@@ -25,6 +25,7 @@ export default defineConfig({
     build: "src/service/build.ts",
     nitro: "src/service/nitro.ts",
     schedules: "src/service/schedules.ts",
+    "automatic-release": "src/service/automatic-release.ts",
     // nitro.ts resolves both by file URL rather than by subpath, but the entry
     // has to exist for that path to be there to resolve.
     "plugins/start-dashboard": "src/service/plugins/start-dashboard.ts",

@@ -103,3 +103,22 @@ export async function setWorktreeState(
 export async function deleteWorktree(db: RegistrySql, path: string): Promise<void> {
   await db.delete(worktrees).where(eq(worktrees.path, path));
 }
+
+/** Serialize managed-state mutations for one run across service processes. */
+export async function withRunResourceLock<T>(
+  db: RegistrySql,
+  runId: string,
+  action: (locked: RegistrySql) => Promise<T>,
+): Promise<T> {
+  const client = await db.$client.connect();
+  try {
+    await client.query("select pg_advisory_lock(hashtextextended($1, 464))", [runId]);
+    return await action(drizzle(client) as unknown as RegistrySql);
+  } finally {
+    try {
+      await client.query("select pg_advisory_unlock(hashtextextended($1, 464))", [runId]);
+    } finally {
+      client.release();
+    }
+  }
+}

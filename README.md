@@ -104,17 +104,19 @@ files, with its own `truncated` flag. `renderChangeSummary` from
 with an “and N more” tail for the remaining rows.
 
 Wrappers pass run metadata to jigs, which handles run-specific details such as
-dashboard links. Call `await release()` from `#jigs` as the last successful
-workflow action. It releases this run's worktrees and scratch directory under
+dashboard links. The service automatically releases a terminal run's eligible
+managed-local resources under
 `release: { onSuccess: "release", onFailure: "keep" }` by default. A workflow's
-entry can override the factory's policy; an explicit `release(policy)` argument
-wins over both. The returned report explains retained resources and branches.
+entry can override the factory's policy. `failed` and `cancelled` both use
+`onFailure`; suspended runs keep everything. Call `await release()` from `#jigs`
+as the last successful workflow action when the workflow needs the report
+before returning. An explicit `release(policy)` argument is persisted and wins
+over later automatic cleanup, including an explicit `keep`.
 Dirty unmerged work stays; a branch is deleted only with positive evidence that
 the remote default branch contains its commits. Squash-merged branch refs may
-therefore remain. Failed runs leave files for manual `jigs sweep`; waiting runs
-keep them. Never put release in `finally` or a catch: waiting throws too.
-Sweep uses the current workflow/factory policy, not a past callsite override;
-confirmation or `--force` overrides keep only for terminal resources.
+therefore remain. Failed cleanup is visible in `jigs logs` and retried by the
+service; `jigs sweep` remains the explicit/manual reclaim path. Never put
+release in `finally` or a catch: waiting throws too.
 
 Both workflow and step function paths and names contribute to durable IDs.
 Renames are supported breaking changes: finish or cancel affected active runs
