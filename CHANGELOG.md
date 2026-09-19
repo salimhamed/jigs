@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.37.0](https://github.com/salimhamed/jigs/compare/jigs-v0.36.0...jigs-v0.37.0) (2026-09-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* upgrade Workflow SDK to v5 (AGE-481) ([#280](https://github.com/salimhamed/jigs/issues/280))
+
+### Features
+
+* upgrade Workflow SDK to v5 (AGE-481) ([#280](https://github.com/salimhamed/jigs/issues/280)) ([06bb22b](https://github.com/salimhamed/jigs/commit/06bb22b4beed870b70572c75618792ff07dd2135))
+
 ## [0.36.0](https://github.com/salimhamed/jigs/compare/jigs-v0.35.2...jigs-v0.36.0) (2026-09-18)
 
 
