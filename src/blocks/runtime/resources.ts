@@ -17,6 +17,10 @@ export const RUN_ATTRIBUTE_COUNT_LIMIT = 64;
 
 const encoder = new TextEncoder();
 
+const characters = (count: number): string =>
+  `${count} ${count === 1 ? "character" : "characters"}`;
+const bytes = (count: number): string => `${count} UTF-8 ${count === 1 ? "byte" : "bytes"}`;
+
 function nonEmpty(value: string, field: "kind" | "identity" | "url"): void {
   if (value.length === 0) throw new JigsError(`resource ${field} must not be empty`);
   if (!value.isWellFormed()) {
@@ -35,10 +39,20 @@ export function resourceAttribute(resource: RunResource): { key: string; value: 
   const identity = encodedPart(resource.identity, "identity");
   const key = `${RESOURCE_ATTRIBUTE_PREFIX}${kind}:${identity}`;
   if (key.length > RUN_ATTRIBUTE_KEY_LIMIT) {
+    const componentBudget = RUN_ATTRIBUTE_KEY_LIMIT - RESOURCE_ATTRIBUTE_PREFIX.length - 1;
+    const kindBytes = encoder.encode(resource.kind).length;
     const identityBytes = encoder.encode(resource.identity).length;
+    const oversized =
+      kind.length > componentBudget && identity.length > componentBudget
+        ? "kind and identity are each too long"
+        : kind.length > componentBudget
+          ? "kind is too long"
+          : identity.length > componentBudget
+            ? "identity is too long"
+            : "kind and identity are too long together";
     throw new JigsError(
-      `resource identity is too long to register: ${identityBytes} UTF-8 bytes produce a ${key.length}-character attribute key (limit ${RUN_ATTRIBUTE_KEY_LIMIT})`,
-      "use a shorter stable identity; jigs never truncates resource identities",
+      `resource ${oversized} to register: encoded kind uses ${characters(kind.length)} from ${bytes(kindBytes)} and encoded identity uses ${characters(identity.length)} from ${bytes(identityBytes)}; together they have a ${componentBudget}-character budget and produce a ${key.length}-character attribute key (limit ${RUN_ATTRIBUTE_KEY_LIMIT})`,
+      `shorten the resource kind, identity, or both until their encoded lengths total at most ${componentBudget} characters; jigs never truncates either component`,
     );
   }
 
