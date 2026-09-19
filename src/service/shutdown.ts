@@ -5,6 +5,11 @@
 // stop` gave up and killed it.
 
 type Closer = () => Promise<void> | void;
+type ShutdownPhase = "quiesce" | "close";
+
+export interface ShutdownRegistration {
+  phase?: ShutdownPhase;
+}
 
 export interface ShutdownDeps {
   signals?: Pick<NodeJS.EventEmitter, "on" | "listeners">;
@@ -20,11 +25,12 @@ export const SHUTDOWN_BACKSTOP_MS = 8_000;
 const SIGNALS: NodeJS.Signals[] = ["SIGTERM", "SIGINT"];
 
 export interface Shutdown {
-  onShutdown(closer: Closer): void;
+  onShutdown(closer: Closer, registration?: ShutdownRegistration): void;
   install(deps?: ShutdownDeps): void;
 }
 
 export function createShutdown(): Shutdown {
+  const quiescers: Closer[] = [];
   const closers: Closer[] = [];
   let installed = false;
   let shuttingDown = false;
@@ -46,24 +52,29 @@ export function createShutdown(): Shutdown {
     }, backstopMs);
     backstop.unref();
 
-    await Promise.all(
-      closers.map(async (closer) => {
-        try {
-          await closer();
-        } catch (err) {
-          error(
-            `[service] shutdown step failed: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        }
-      }),
-    );
+    const runClosers = (registered: Closer[]) =>
+      Promise.all(
+        registered.map(async (closer) => {
+          try {
+            await closer();
+          } catch (err) {
+            error(
+              `[service] shutdown step failed: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        }),
+      );
+    // Quiescers stop admitting work and drain operations that still need the
+    // World. Only after they settle may ordinary closers tear dependencies down.
+    await runClosers(quiescers);
+    await runClosers(closers);
     clearTimeout(backstop);
     exit(0);
   }
 
   return {
-    onShutdown(closer) {
-      closers.push(closer);
+    onShutdown(closer, registration = {}) {
+      (registration.phase === "quiesce" ? quiescers : closers).push(closer);
     },
     // `on`, not `once`: node restores the default disposition when the last
     // listener goes, so a `once` handler already removed leaves a second

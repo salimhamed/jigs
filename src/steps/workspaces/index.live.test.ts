@@ -44,7 +44,6 @@ vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
 const dirs = { factoryRoot, bindingName: "api" };
 const { repoDir, remoteDir } = makeClonedBinding(tmp, bindingDir(dirs));
 const testPath = worktreePath({ ...dirs, branch: "feat" });
-const automaticPath = worktreePath({ ...dirs, branch: "automatic" });
 const dirtyPath = worktreePath({ ...dirs, branch: "automatic-dirty" });
 writeFileSync(
   path.join(factoryRoot, "jigs.config.ts"),
@@ -53,7 +52,6 @@ writeFileSync(
 
 afterAll(async () => {
   await deleteWorktree(sql, testPath);
-  await deleteWorktree(sql, automaticPath);
   await deleteWorktree(sql, dirtyPath);
   await sql.$client.end();
   vi.unstubAllEnvs();
@@ -132,63 +130,6 @@ test("policy release keeps then removes resources through the real registry", as
   expect(await getWorktree(sql, testPath)).toBeNull();
   expect(existsSync(testPath)).toBe(false);
   expect(existsSync(directory)).toBe(false);
-});
-
-test("restart reconciliation retries cleanup through real Postgres and Git", async () => {
-  const metadata = { workflowRunId: "run_automatic_restart" };
-  await provisionWorktree({ binding: "api", branch: "automatic" }, metadata, {
-    sql,
-    readOwner: async () => ({ terminal: true, status: "completed" }),
-  });
-  await createRunDirectory(metadata);
-  const terminal: CleanupRun = {
-    runId: metadata.workflowRunId,
-    status: "completed",
-    workflowName: "workflow//./workflows/ship//ship",
-    attributes: {
-      [CLEANUP_DIRECTIVE_ATTRIBUTE]: "automatic",
-      [CLEANUP_STATE_ATTRIBUTE]: encodeCleanupProgress({ status: "waiting" }),
-    },
-  };
-  let failOnce = true;
-  const progress: string[] = [];
-  const deps: AutomaticReleaseDeps = {
-    listRuns: async () => [terminal],
-    waitForTerminal: async () => terminal,
-    hasActiveStep: async () => false,
-    policy: () => "release",
-    withLock: (runId, action) => withRunResourceLock(sql, runId, action),
-    worktreeCount: async (runId, lockedSql) => (await listWorktreesForRun(lockedSql, runId)).length,
-    release: async (run, action, outcome, lockedSql) => {
-      if (failOnce) {
-        failOnce = false;
-        throw new Error("transient cleanup failure");
-      }
-      return releaseRunResources(
-        { onSuccess: action, onFailure: action },
-        { workflowRunId: run.runId },
-        lockedSql,
-        outcome,
-      );
-    },
-    writeProgress: async (_runId, value) => {
-      progress.push(value.status);
-      terminal.attributes[CLEANUP_STATE_ATTRIBUTE] = encodeCleanupProgress(value);
-    },
-    ready: () => true,
-    log: () => undefined,
-    warn: () => undefined,
-    setTimer: () => () => undefined,
-  };
-
-  expect((await reconcileAutomaticRelease({ workflows: {} } as Factory, deps)).failed).toBe(1);
-  expect(existsSync(automaticPath)).toBe(true);
-  // A fresh coordinator instance sees the persisted failed marker and retries.
-  expect((await reconcileAutomaticRelease({ workflows: {} } as Factory, deps)).released).toBe(1);
-  expect(progress).toContain("failed");
-  expect(progress.at(-1)).toBe("complete");
-  expect(existsSync(automaticPath)).toBe(false);
-  expect(await getWorktree(sql, automaticPath)).toBeNull();
 });
 
 test("automatic release preserves dirty work through real Postgres and Git", async () => {

@@ -80,6 +80,7 @@ export function automaticReleaseAction(
 export async function reconcileAutomaticRelease(
   factory: Factory,
   deps: AutomaticReleaseDeps = defaultDeps(),
+  options: { canStart?: () => boolean } = {},
 ): Promise<AutomaticReleaseReport> {
   const report: AutomaticReleaseReport = {
     considered: 0,
@@ -90,6 +91,7 @@ export async function reconcileAutomaticRelease(
   };
   const runs = (await deps.listRuns()).filter((run) => TERMINAL_RUN_STATUSES.has(run.status));
   for (const run of runs) {
+    if (options.canStart?.() === false) break;
     const prior = cleanupFromAttributes(run.attributes);
     if (prior.status === "complete" || prior.status === "kept") continue;
     report.considered += 1;
@@ -169,15 +171,25 @@ async function cleanupTerminalRun(
 export function startAutomaticRelease(
   factory: Factory,
   deps: AutomaticReleaseDeps = defaultDeps(),
-): { stop: () => void } {
+): { stop: () => Promise<void> } {
   let stopped = false;
   let cancelTimer: (() => void) | null = null;
+  let stopPromise: Promise<void> | null = null;
   const watches = new Map<string, AbortController>();
+  const tasks = new Set<Promise<void>>();
+
+  const track = (task: Promise<void>) => {
+    tasks.add(task);
+    void task.then(
+      () => tasks.delete(task),
+      () => tasks.delete(task),
+    );
+  };
 
   const schedule = (ms = AUTOMATIC_RELEASE_INTERVAL_MS) => {
     if (stopped) return;
     cancelTimer?.();
-    cancelTimer = deps.setTimer(() => void scan(), ms);
+    cancelTimer = deps.setTimer(launchScan, ms);
   };
   const watch = (run: CleanupRun) => {
     if (watches.has(run.runId) || stopped) return;
@@ -185,10 +197,9 @@ export function startAutomaticRelease(
     watches.set(run.runId, controller);
     void deps
       .waitForTerminal(run.runId, controller.signal)
-      .then(async (settled) => {
-        if (TERMINAL_RUN_STATUSES.has(settled.status)) {
-          await cleanupTerminalRun(factory, settled, deps);
-        }
+      .then((settled) => {
+        if (stopped || !TERMINAL_RUN_STATUSES.has(settled.status)) return;
+        track(cleanupTerminalRun(factory, settled, deps).then(() => undefined));
       })
       .catch((error) => {
         if (!controller.signal.aborted)
@@ -204,11 +215,19 @@ export function startAutomaticRelease(
     }
     try {
       const runs = await deps.listRuns();
+      if (stopped) return;
       for (const run of runs) if (!TERMINAL_RUN_STATUSES.has(run.status)) watch(run);
-      const report = await reconcileAutomaticRelease(factory, {
-        ...deps,
-        listRuns: async () => runs,
-      });
+      const report = await reconcileAutomaticRelease(
+        factory,
+        {
+          ...deps,
+          listRuns: async () => runs,
+        },
+        {
+          canStart: () => !stopped,
+        },
+      );
+      if (stopped) return;
       deps.log(
         `[cleanup] reconciled ${report.considered}: ${report.released} released, ${report.kept} kept, ${report.busy} active, ${report.failed} failed`,
       );
@@ -218,14 +237,24 @@ export function startAutomaticRelease(
       schedule();
     }
   };
-  void scan();
-  const stop = () => {
+  function launchScan() {
+    if (stopped) return;
+    track(scan());
+  }
+  launchScan();
+  const stop = (): Promise<void> => {
+    if (stopPromise !== null) return stopPromise;
     stopped = true;
     cancelTimer?.();
     for (const controller of watches.values()) controller.abort();
     watches.clear();
+    // Aborted waiters are deliberately not awaited: a World implementation
+    // may ignore AbortSignal. Every scan or destructive attempt admitted
+    // before stopped flipped is tracked and must drain before World shutdown.
+    stopPromise = Promise.allSettled([...tasks]).then(() => undefined);
+    return stopPromise;
   };
-  onShutdown(stop);
+  onShutdown(stop, { phase: "quiesce" });
   return { stop };
 }
 

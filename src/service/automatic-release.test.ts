@@ -15,6 +15,7 @@ import {
   automaticReleaseAction,
   type CleanupRun,
   reconcileAutomaticRelease,
+  startAutomaticRelease,
 } from "./automatic-release.ts";
 
 const factory = { workflows: {} } as Factory;
@@ -230,3 +231,94 @@ test("unknown resource kinds remain visible and are counted without dispatch", a
   expect(h.progress.at(-1)?.value).toMatchObject({ status: "complete", unknown: 1 });
   expect(h.release).toHaveBeenCalledTimes(1);
 });
+
+test("a terminal notification racing stop cannot admit new cleanup", async () => {
+  const running = run("running");
+  const terminal = { ...running, status: "completed" };
+  const notification = deferred<CleanupRun>();
+  const waiting = vi.fn(() => notification.promise);
+  const h = harness([running]);
+  h.deps.waitForTerminal = waiting;
+
+  const coordinator = startAutomaticRelease(factory, h.deps);
+  await vi.waitFor(() => expect(waiting).toHaveBeenCalledOnce());
+  await coordinator.stop();
+  notification.resolve(terminal);
+  await Promise.resolve();
+  await Promise.resolve();
+
+  expect(h.release).not.toHaveBeenCalled();
+  expect(h.progress).toEqual([]);
+});
+
+test("stop drains a destructive attempt already admitted by startup reconciliation", async () => {
+  const release = deferred<Awaited<ReturnType<AutomaticReleaseDeps["release"]>>>();
+  const h = harness([run("completed")], { release: () => release.promise });
+  const coordinator = startAutomaticRelease(factory, h.deps);
+  await vi.waitFor(() => expect(h.release).toHaveBeenCalledOnce());
+
+  let stopped = false;
+  const stopping = coordinator.stop().then(() => {
+    stopped = true;
+  });
+  await Promise.resolve();
+  expect(stopped).toBe(false);
+
+  release.resolve({
+    worktrees: [{ removed: true, reason: "worktree released" }],
+    runDirectory: { removed: true },
+  });
+  await stopping;
+  expect(stopped).toBe(true);
+  expect(h.progress.at(-1)?.value.status).toBe("complete");
+});
+
+test("timer reconciliation is tracked and cancelled during shutdown", async () => {
+  const runs: CleanupRun[] = [];
+  const h = harness(runs);
+  let fire: (() => void) | undefined;
+  const cancel = vi.fn();
+  h.deps.setTimer = (scheduled) => {
+    fire = scheduled;
+    return cancel;
+  };
+  const coordinator = startAutomaticRelease(factory, h.deps);
+  await vi.waitFor(() => expect(fire).toBeTypeOf("function"));
+
+  runs.push(run("completed"));
+  fire?.();
+  await vi.waitFor(() => expect(h.release).toHaveBeenCalledOnce());
+  await coordinator.stop();
+
+  expect(cancel).toHaveBeenCalled();
+  expect(h.progress.at(-1)?.value.status).toBe("complete");
+});
+
+test("a failed in-flight scan cannot wedge shutdown", async () => {
+  const listed = deferred<CleanupRun[]>();
+  const h = harness([]);
+  h.deps.listRuns = () => listed.promise;
+  const coordinator = startAutomaticRelease(factory, h.deps);
+  const stopping = coordinator.stop();
+
+  listed.reject(new Error("World closed early"));
+
+  await expect(stopping).resolves.toBeUndefined();
+  expect(h.deps.warn).toHaveBeenCalledWith(
+    "[cleanup] reconciliation failed: Error: World closed early",
+  );
+});
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (error: unknown) => void;
+} {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((onResolve, onReject) => {
+    resolve = onResolve;
+    reject = onReject;
+  });
+  return { promise, resolve, reject };
+}

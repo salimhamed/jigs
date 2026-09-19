@@ -80,6 +80,13 @@ tip is proved contained by the fetched remote default branch, and an
 unreachable remote, unresolved ref, changed ref, or failed push preserves the
 branch. Automatic cleanup never pushes work to make it deletable.
 
+On service shutdown the coordinator first stops timers and aborts terminal
+waits, then drains every reconciliation or destructive attempt it already
+admitted. This quiesce phase finishes before the World and registry-owning
+service dependencies begin closing. A World implementation that ignores an
+aborted terminal wait cannot hold shutdown open, and a late notification
+cannot admit cleanup after shutdown starts.
+
 Manual `jigs sweep` remains the operator path for intentionally reclaiming
 kept or unsafe resources. It uses the same registry and Git decision machinery
 as automatic and explicit release.
