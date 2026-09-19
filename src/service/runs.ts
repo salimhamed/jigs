@@ -312,8 +312,9 @@ export async function describeRun(runId: string, facts: RunFacts = {}): Promise<
     suspended: false,
     suspensions: [],
   };
-  // A terminal run's hooks are already deleted, and a dead job it left behind
-  // does not restate its status, so neither is worth reading. Its steps are
+  // A terminal run's ordinary hooks are already deleted (minimum-retention
+  // hooks are not part of jigs), and a dead job it left behind does not restate
+  // its status, so neither is worth reading. Its steps are
   // history, and the listing does not pay to read them — it says null rather
   // than a count it never took. A caller holding them says how far the run got.
   if (TERMINAL_RUN_STATUSES.has(run.status)) {

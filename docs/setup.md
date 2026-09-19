@@ -727,12 +727,19 @@ its identifier (`AGE-123`) is resolved against Linear first, since the claim
 itself is keyed on the issue's UUID.
 
 `jigs cancel` is the escape hatch when a run holds a resource nobody is coming
-back for: cancelling releases every hook it claimed, so the same ticket can be
-launched again. A suspended run cancels silently — no process is involved —
-while a run still in flight is confirmed first, and `--force` skips that
-prompt when there is no terminal to answer it. By default, cancel names the
-worktrees it leaves behind. `--discard-worktrees` also removes that run's worktrees after
-the cancellation succeeds; branches containing unmerged commits are kept.
+back for. It uses the Workflow SDK's run cancellation, which makes the run
+terminal and releases jigs' resource hooks so the same ticket can be launched
+again. A custom hook created with the SDK's minimum-retention option remains
+owned until that retention expires, and cancel reports it as retained. A
+suspended run cancels silently — no process is involved — while a run
+still in flight is confirmed first, and `--force` skips that prompt when there
+is no terminal to answer it. An already-running step may finish its external
+work, but its result cannot advance the cancelled workflow. Pending or delayed
+queue deliveries may remain until the worker consumes them, and exhausted
+deliveries remain available as diagnostic history; cancellation does not claim
+to empty the queue. By default, cancel names the worktrees it leaves behind.
+`--discard-worktrees` also removes that run's worktrees after the cancellation
+succeeds; branches containing unmerged commits are kept.
 
 A workflow requests release as its last successful action with `await release()`.
 The factory's `release: { onSuccess: "release", onFailure: "keep" }` default can

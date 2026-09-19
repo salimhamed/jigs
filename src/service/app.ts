@@ -16,7 +16,7 @@ import { listWorktreesForRun } from "../steps/workspaces/registry.ts";
 import { registrySql } from "../steps/workspaces/sql.ts";
 import { sweepWorktrees } from "../steps/workspaces/sweep.ts";
 import { githubWebhookSecret, verifyGithubSignature, verifyLinearSignature } from "./ingress.ts";
-import { deleteRunJobs, listRunDeadJobs, RunJobsLockedError } from "./queue.ts";
+import { listRunDeadJobs } from "./queue.ts";
 import { bootPhase, isReady } from "./readiness.ts";
 import { describeRun, enrichSuspensions, listRuns, type RunRef, resolveRunRef } from "./runs.ts";
 import { listSchedules, scheduleChecks } from "./schedules.ts";
@@ -253,9 +253,9 @@ export function createApp(factory: Factory): Hono {
     return c.json({ runs, worktrees, schedules });
   });
 
-  // The escape hatch for a zombie claim owner. Cancelling releases every hook
-  // the run holds — the world deletes them on run_cancelled — so the tokens are
-  // captured before the cancel, not after.
+  // The escape hatch for a zombie claim owner. Jigs' hooks request no minimum
+  // retention, so the World removes them on run_cancelled. Capture their names
+  // before the public cancellation call so the response can say what changed.
   app.post("/api/runs/:runId/cancel", async (c) => {
     const ref = await resolveRunRef(c.req.param("runId"));
     if (ref.kind !== "found") return unresolvedRunResponse(c, ref);
@@ -264,17 +264,27 @@ export function createApp(factory: Factory): Hono {
     if (TERMINAL_RUN_STATUSES.has(status) && status !== "cancelled") {
       return c.json({ error: `run ${ref.runId} is already ${status}`, status }, 409);
     }
-    const releasedTokens = await runResourceTokens(ref.runId);
-    if (status !== "cancelled") await run.cancel();
-    let deletedJobs: number;
-    try {
-      deletedJobs = await deleteRunJobs(registrySql(), ref.runId);
-    } catch (error) {
-      if (error instanceof RunJobsLockedError) {
-        return c.json({ error: error.message, retryable: true }, 503);
+    const claimedTokens = await runResourceTokens(ref.runId);
+    if (status !== "cancelled") {
+      try {
+        await run.cancel();
+      } catch (error) {
+        // Completion can win after the status read but before cancellation's
+        // terminal event. Report that terminal outcome like the preflight
+        // branch above instead of turning a healthy race into a 500.
+        const settledStatus = await run.status;
+        if (TERMINAL_RUN_STATUSES.has(settledStatus) && settledStatus !== "cancelled") {
+          return c.json(
+            { error: `run ${ref.runId} is already ${settledStatus}`, status: settledStatus },
+            409,
+          );
+        }
+        throw error;
       }
-      throw error;
     }
+    const retainedTokens = await runResourceTokens(ref.runId);
+    const retained = new Set(retainedTokens);
+    const releasedTokens = claimedTokens.filter((token) => !retained.has(token));
     // Cancel leaves the worktree behind: name what stays so the operator knows
     // where it is and that `jigs sweep` is the way to reclaim it.
     const worktrees = (await listWorktreesForRun(registrySql(), ref.runId)).map((row) => row.path);
@@ -286,8 +296,8 @@ export function createApp(factory: Factory): Hono {
     return c.json({
       runId: ref.runId,
       cancelled: true,
-      deletedJobs,
       releasedTokens,
+      retainedTokens,
       worktrees,
     });
   });
