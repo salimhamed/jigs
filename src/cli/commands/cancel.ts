@@ -14,9 +14,8 @@ export interface CancelDeps extends ServiceDeps {
 export interface CancelResult {
   runId: string;
   cancelled: boolean;
-  /** Rows removed by this request; a cleanup retry counts the rows still present. */
-  deletedJobs: number;
   releasedTokens: string[];
+  retainedTokens: string[];
   worktrees: string[];
 }
 
@@ -61,8 +60,8 @@ export async function cancelRun(ref: string, deps: CancelDeps): Promise<CancelRe
   }
   const result = (await res.json()) as CancelResult;
   deps.out(`cancelled ${result.runId}`);
-  deps.out(`removed ${result.deletedJobs} remaining queue jobs`);
   for (const token of result.releasedTokens) deps.out(`released ${token}`);
+  for (const token of result.retainedTokens) deps.out(`retained ${token}`);
   const worktrees = result.worktrees;
   if (deps.discard === true && worktrees.length > 0) {
     await runSweep(deps, { paths: worktrees });

@@ -103,7 +103,6 @@ beforeEach(() => {
   vi.spyOn(sql, "registrySql").mockReturnValue(makeFakeSql(new Map()));
   vi.spyOn(queue, "listJobRunIds").mockResolvedValue({ dead: [], live: [] });
   vi.spyOn(queue, "listRunDeadJobs").mockResolvedValue([]);
-  vi.spyOn(queue, "deleteRunJobs").mockResolvedValue(0);
   vi.stubEnv("WORKFLOW_LOCAL_DATA_DIR", dataDir);
   vi.stubEnv("XDG_DATA_HOME", path.join(dataDir, "resources"));
   vi.stubEnv("WORKFLOW_TARGET_WORLD", undefined);
@@ -576,13 +575,22 @@ const PR = pullRequestToken({ owner: "acme", repo: "api", number: 41 });
 // world surface, so anything they touch beyond `hooks.list` rejects and is
 // reported rather than thrown.
 const runHolding = (...tokens: string[]) =>
-  setWorld({
-    specVersion: SPEC_VERSION_CURRENT,
-    runs: { get: async () => ({ status: "running", createdAt: new Date() }) },
-    steps: { list: async () => ({ data: [] }) },
-    hooks: { list: async () => ({ data: tokens.map((token) => ({ token })) }) },
-    events: { create: async () => undefined },
-  } as unknown as Parameters<typeof setWorld>[0]);
+  (() => {
+    let status = "running";
+    let held = [...tokens];
+    return setWorld({
+      specVersion: SPEC_VERSION_CURRENT,
+      runs: { get: async () => ({ status, createdAt: new Date() }) },
+      steps: { list: async () => ({ data: [] }) },
+      hooks: { list: async () => ({ data: held.map((token) => ({ token })) }) },
+      events: {
+        create: async () => {
+          status = "cancelled";
+          held = [];
+        },
+      },
+    } as unknown as Parameters<typeof setWorld>[0]);
+  })();
 
 test("GET /api/runs/:ref says what each park is waiting for, and where to act", async () => {
   runHolding(CLAIM, MARKER, PR);
@@ -670,60 +678,33 @@ test("a poke that landed is the wake the run's logs report", async () => {
   expect(lastWake(CLAIM, RUN)?.kind).toBe("poke");
 });
 
-test("cancel names the resources it released, and not the marker", async () => {
+test("cancel reports observed hook release, retained worktrees, and no queue-deletion count", async () => {
   runHolding(CLAIM, MARKER);
-  vi.mocked(queue.deleteRunJobs).mockResolvedValueOnce(3);
 
   const res = await app.request(`/api/runs/${RUN}/cancel`, { method: "POST" });
 
   expect(res.status).toBe(200);
-  expect(await res.json()).toMatchObject({ deletedJobs: 3, releasedTokens: [CLAIM] });
-  expect(queue.deleteRunJobs).toHaveBeenCalledWith(expect.anything(), RUN);
+  expect(await res.json()).toEqual({
+    runId: RUN,
+    cancelled: true,
+    releasedTokens: [CLAIM],
+    retainedTokens: [],
+    worktrees: [],
+  });
 });
 
-test("cancel retries queue cleanup when the first cleanup failed after cancellation", async () => {
-  let status = "running";
+test("cancel reports a hook the World retains", async () => {
   setWorld({
     specVersion: SPEC_VERSION_CURRENT,
-    runs: { get: async () => ({ status, createdAt: new Date() }) },
-    hooks: { list: async () => ({ data: [] }) },
-    events: {
-      create: async () => {
-        status = "cancelled";
-      },
-    },
+    runs: { get: async () => ({ status: "running", createdAt: new Date() }) },
+    hooks: { list: async () => ({ data: [{ token: CLAIM }] }) },
+    events: { create: async () => undefined },
   } as unknown as Parameters<typeof setWorld>[0]);
-  vi.mocked(queue.deleteRunJobs)
-    .mockRejectedValueOnce(new Error("database connection dropped"))
-    .mockResolvedValueOnce(2);
-  const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
-
-  const failed = await app.request(`/api/runs/${RUN}/cancel`, { method: "POST" });
-  expect(failed.status).toBe(500);
-
-  const retried = await app.request(`/api/runs/${RUN}/cancel`, { method: "POST" });
-
-  expect(retried.status).toBe(200);
-  expect(await retried.json()).toMatchObject({ cancelled: true, deletedJobs: 2 });
-  expect(queue.deleteRunJobs).toHaveBeenCalledTimes(2);
-  expect(errors).toHaveBeenCalled();
-});
-
-test("cancel reports an active queue delivery as retryable", async () => {
-  setWorld({
-    specVersion: SPEC_VERSION_CURRENT,
-    runs: { get: async () => ({ status: "cancelled", createdAt: new Date() }) },
-    hooks: { list: async () => ({ data: [] }) },
-  } as unknown as Parameters<typeof setWorld>[0]);
-  vi.mocked(queue.deleteRunJobs).mockRejectedValueOnce(new queue.RunJobsLockedError(RUN));
 
   const res = await app.request(`/api/runs/${RUN}/cancel`, { method: "POST" });
 
-  expect(res.status).toBe(503);
-  expect(await res.json()).toEqual({
-    error: `queue jobs for ${RUN} are still running; retry cancellation`,
-    retryable: true,
-  });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({ releasedTokens: [], retainedTokens: [CLAIM] });
 });
 
 test("GET /api/schedules answers with what the factory declared, and what is next", async () => {

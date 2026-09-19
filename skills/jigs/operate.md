@@ -224,7 +224,9 @@ see the never list.
 
 Confirm these actions when the current request has not already authorized them:
 
-- `jigs cancel` — it releases every resource the run claims, and the run is over.
+- `jigs cancel` — it makes the run terminal and releases ordinary jigs hooks.
+  Minimum-retention hooks can remain claimed and are printed as `retained`;
+  worktrees remain unless `--discard-worktrees` is set.
 - `jigs sweep --force` — it deletes every eligible worktree without asking,
   dirty ones included.
 - `jigs service restart`, `jigs service stop`, `jigs up --restart-service` or

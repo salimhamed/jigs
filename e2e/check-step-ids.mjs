@@ -845,7 +845,7 @@ if (postgresUrl === undefined || postgresUrl === "") {
     "\nboot check skipped: WORKFLOW_POSTGRES_URL unset (CI runs it against a service container)",
   );
 } else {
-  console.log("\n=== cancel: pending and exhausted queue jobs are deleted in Postgres");
+  console.log("\n=== cancel: v5 cancellation behavior against Postgres");
   execFileSync(
     "pnpm",
     ["vitest", "run", "--config", "vitest.live.config.ts", "src/service/cancel.live.test.ts"],

@@ -249,7 +249,9 @@ program
 
 program
   .command("cancel")
-  .description("cancel a run, releasing every resource it claims")
+  .description(
+    "make a run terminal; release ordinary jigs hooks and report claimed minimum-retention hooks",
+  )
   .argument("<run>", "run id, unique id prefix, or ticket (`AGE-123` or its UUID)")
   .option("--discard-worktrees", "remove the run's worktrees after cancelling")
   .option("--force", "skip the confirmation for an in-flight run")

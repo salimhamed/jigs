@@ -1,6 +1,5 @@
 // The step half of stall diagnosis: what the World recorded and whether any
-// operation is still in flight. Queue evidence lives in queue.ts, beside the
-// cancellation cleanup that consumes the same Graphile rows and payloads.
+// operation is still in flight. Read-only queue evidence lives in queue.ts.
 
 import { getWorld } from "workflow/runtime";
 

@@ -27,10 +27,16 @@ const deps = (over: Record<string, unknown> = {}) => ({
 const respondLookup = (body: unknown, status = 200) =>
   fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(body), { status }));
 
-const respondCancel = (releasedTokens: string[], deletedJobs = 0) =>
+const respondCancel = (releasedTokens: string[]) =>
   fetchMock.mockResolvedValueOnce(
     new Response(
-      JSON.stringify({ runId: RUN, cancelled: true, deletedJobs, releasedTokens, worktrees: [] }),
+      JSON.stringify({
+        runId: RUN,
+        cancelled: true,
+        releasedTokens,
+        retainedTokens: [],
+        worktrees: [],
+      }),
     ),
   );
 
@@ -40,8 +46,8 @@ const respondCancelWithWorktrees = (worktrees: string[]) =>
       JSON.stringify({
         runId: RUN,
         cancelled: true,
-        deletedJobs: 0,
         releasedTokens: [],
+        retainedTokens: [],
         worktrees,
       }),
     ),
@@ -76,16 +82,34 @@ test("a suspended run cancels with no confirmation prompt", async () => {
   expect(fetchMock.mock.calls[1]?.[0]).toBe(`http://svc.test:8990/api/runs/${RUN}/cancel`);
 });
 
-test("the released claim tokens are printed", async () => {
+test("the released claim tokens are printed without promising queue cleanup", async () => {
   respondLookup(suspended);
-  respondCancel(["linear:ticket:AGE-317", "github:pr:acme/api#41"], 3);
+  respondCancel(["linear:ticket:AGE-317", "github:pr:acme/api#41"]);
   await cancelRun("AGE-317", deps());
   expect(lines).toEqual([
     `cancelled ${RUN}`,
-    "removed 3 remaining queue jobs",
     "released linear:ticket:AGE-317",
     "released github:pr:acme/api#41",
   ]);
+});
+
+test("a minimum-retention hook is reported as retained", async () => {
+  respondLookup(suspended);
+  fetchMock.mockResolvedValueOnce(
+    new Response(
+      JSON.stringify({
+        runId: RUN,
+        cancelled: true,
+        releasedTokens: [],
+        retainedTokens: ["linear:ticket:AGE-317"],
+        worktrees: [],
+      }),
+    ),
+  );
+
+  await cancelRun("AGE-317", deps());
+
+  expect(lines).toEqual([`cancelled ${RUN}`, "retained linear:ticket:AGE-317"]);
 });
 
 test("--discard-worktrees force-sweeps the cancelled run's worktrees and prints what it removed", async () => {
@@ -167,7 +191,7 @@ test("--force skips the prompt", async () => {
   const confirm = vi.fn();
   await cancelRun(RUN, deps({ confirm, force: true }));
   expect(confirm).not.toHaveBeenCalled();
-  expect(lines).toEqual([`cancelled ${RUN}`, "removed 0 remaining queue jobs"]);
+  expect(lines).toEqual([`cancelled ${RUN}`]);
 });
 
 test("no TTY and no --force refuses with a hint", async () => {
@@ -178,13 +202,13 @@ test("no TTY and no --force refuses with a hint", async () => {
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
-test("cancelling an already-cancelled run retries cleanup", async () => {
+test("cancelling an already-cancelled run is idempotent", async () => {
   respondLookup({ runId: RUN, status: "cancelled" });
-  respondCancel([], 2);
+  respondCancel([]);
 
-  await expect(cancelRun(RUN, deps({ force: true }))).resolves.toMatchObject({ deletedJobs: 2 });
+  await expect(cancelRun(RUN, deps({ force: true }))).resolves.toMatchObject({ cancelled: true });
   expect(fetchMock).toHaveBeenCalledTimes(2);
-  expect(lines).toEqual([`cancelled ${RUN}`, "removed 2 remaining queue jobs"]);
+  expect(lines).toEqual([`cancelled ${RUN}`]);
 });
 
 test("an ambiguous ref lists the candidates in the hint", async () => {
