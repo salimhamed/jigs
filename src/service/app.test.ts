@@ -12,6 +12,7 @@ import { type Factory, ticketInputSchema } from "../blocks/factory.ts";
 import { ticketToken } from "../blocks/linear/claim.ts";
 import { needsHumanToken } from "../blocks/linear/halt-for-human.ts";
 import { pullRequestToken } from "../blocks/pull-requests/gate.ts";
+import { resourceAttribute } from "../blocks/runtime/resources.ts";
 import { resetGithubAuth } from "../providers/github-auth.ts";
 import * as linear from "../providers/linear.ts";
 import * as sql from "../steps/workspaces/sql.ts";
@@ -565,6 +566,39 @@ test("GET /api/runs/:ref reports a stalled run as stalled, like `jigs ps` does",
     status: "stalled",
     suspended: false,
   });
+});
+
+test("GET /api/runs/:ref includes zero or many resources independently of output", async () => {
+  const first = {
+    kind: "pull-request",
+    identity: "acme/api#41",
+    url: "https://github.com/acme/api/pull/41",
+  };
+  const second = {
+    kind: "custom-report",
+    identity: "audit-7",
+    url: "https://example.test/reports/audit-7",
+  };
+  const a = resourceAttribute(first);
+  const b = resourceAttribute(second);
+  setWorld({
+    specVersion: SPEC_VERSION_CURRENT,
+    runs: {
+      get: async () => ({
+        status: "running",
+        createdAt: new Date(),
+        attributes: { unrelated: "kept", [a.key]: a.value, [b.key]: b.value },
+      }),
+    },
+    steps: { list: async () => ({ data: [] }) },
+    hooks: { list: async () => ({ data: [] }) },
+  } as unknown as Parameters<typeof setWorld>[0]);
+
+  const res = await app.request(`/api/runs/${RUN}`);
+  const body = (await res.json()) as { resources: unknown };
+
+  expect(res.status).toBe(200);
+  expect(body.resources).toEqual([second, first]);
 });
 
 const CLAIM = ticketToken("68bc9696-35d5-442d-ab56-214c8cfefbec");

@@ -15,6 +15,7 @@ import {
 } from "../../providers/git.ts";
 import { githubAuthFor } from "../../providers/github-auth.ts";
 import { parseGithubRemote } from "../../providers/github-webhook.ts";
+import { registerResource } from "../runtime/resources.ts";
 import { isWorktreeDirty } from "../workspaces/teardown.ts";
 
 // A binding's remote is an SSH URL, which authenticates as whoever owns the
@@ -37,6 +38,17 @@ async function pushTarget(worktreePath: string): Promise<PushTarget> {
     remote: `https://github.com/${ref.owner}/${ref.repo}.git`,
     token: await auth.bearer(),
   };
+}
+
+async function registerGithubBranch(worktreePath: string, branch: string): Promise<void> {
+  const { url } = await resolveRemoteUrl(worktreePath);
+  const ref = parseGithubRemote(url);
+  if (ref === null) return;
+  await registerResource({
+    kind: "branch",
+    identity: `${ref.owner}/${ref.repo}:${branch}`,
+    url: `https://github.com/${ref.owner}/${ref.repo}/tree/${encodeURIComponent(branch)}`,
+  });
 }
 
 // Three reads and no side effect, so a caller can ask what is on the branch
@@ -62,6 +74,7 @@ export async function pushBranch(
   branch: string,
 ): Promise<{ headSha: string }> {
   await gitPushBranch(worktreePath, branch, await pushTarget(worktreePath));
+  await registerGithubBranch(worktreePath, branch);
   return { headSha: await headSha(worktreePath) };
 }
 
@@ -84,6 +97,7 @@ export async function pushApprovedChange(
     );
   }
   await pushCommit(worktreePath, branch, approvedCommit, await pushTarget(worktreePath));
+  await registerGithubBranch(worktreePath, branch);
   return { headSha: approvedCommit };
 }
 

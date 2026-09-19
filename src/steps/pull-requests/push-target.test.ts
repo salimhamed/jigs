@@ -11,6 +11,7 @@ import {
 } from "../../providers/git.ts";
 import { githubAuthFor } from "../../providers/github-auth.ts";
 import { pushApprovedChange, pushBranch } from "../git/branch.ts";
+import { registerResource } from "../runtime/resources.ts";
 
 vi.mock("../../providers/git.ts", () => ({
   commitsAhead: vi.fn(),
@@ -23,6 +24,7 @@ vi.mock("../../providers/git.ts", () => ({
   resolveRemoteUrl: vi.fn(),
 }));
 vi.mock("../../providers/github-auth.ts", () => ({ githubAuthFor: vi.fn() }));
+vi.mock("../runtime/resources.ts", () => ({ registerResource: vi.fn() }));
 
 const APP = {
   mode: "app",
@@ -49,6 +51,11 @@ test("pat mode pushes to the binding's own remote, over SSH as the operator", as
   expect(pushCommit).toHaveBeenCalledWith("/work", "feature", "approved", { remote: "origin" });
   await pushBranch("/work", "feature");
   expect(gitPushBranch).toHaveBeenCalledWith("/work", "feature", { remote: "origin" });
+  expect(registerResource).toHaveBeenCalledWith({
+    kind: "branch",
+    identity: "acme/api:feature",
+    url: "https://github.com/acme/api/tree/feature",
+  });
 });
 
 test("app mode pushes over HTTPS, with the token beside the URL rather than in it", async () => {

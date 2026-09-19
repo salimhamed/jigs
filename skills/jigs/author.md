@@ -115,6 +115,27 @@ bind the appropriate module: `bindAgentSteps` from
 module's dependencies for selective replacement. Keep functions workflow-side;
 never send a prompt or callback through a durable step argument.
 
+### Record a custom resource
+
+After a workflow creates something an operator may need to find, call the
+generated `registerResource({ kind, identity, url })` step from `#jigs`. Kind
+plus identity is stable: retrying the same URL is idempotent, while a later URL
+updates that identity. `jigs logs` reads these records independently of the
+workflow's result.
+
+Keep a non-idempotent external creator and registration as two durable steps.
+Await the creator, then register what it returned; replay reuses the creator's
+recorded result and retries registration without recreating the external
+resource. An idempotent custom step may instead import `registerResource` from
+`@salimhamed/jigs/steps/runtime` and call it before returning.
+
+Use a short stable identity and an absolute URL. The SDK allows 64 total run
+attributes, including other user and reserved keys, a 256-character encoded
+key, and a 256 UTF-8-byte value. Registration reports these constraints and
+preserves the original strings. Treat the record as observability only:
+deletion requires separate kind-specific ownership and policy; a recorded URL
+does not authorize cleanup.
+
 For delivery, run `jigs recipe add ship` and register the workflow as the
 command instructs. The copied `blocks/delivery/` contains the phases, types,
 prompts and renderers; these are factory code to edit, not library exports.

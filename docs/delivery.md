@@ -11,6 +11,13 @@ coordinates: implementation and code review repeated until approval or an
 exhausted round budget. Other workflows can use `/blocks/agents` without any delivery
 concepts. All examples run inside a factory workflow or a replay-safe block.
 
+The generated `registerResource({ kind, identity, url })` step records custom
+resources for `jigs logs`. Keep it after a separate non-idempotent external
+creation step so a registration retry cannot repeat the external write. The
+shipped publication block follows that boundary when it registers the pull
+request returned by `openPullRequest`. Its idempotent push steps register the
+GitHub branch they create or update.
+
 ## The delivery graph
 
 Delivery is a **workflow graph, not a DAG**. Three of its edges run backwards,

@@ -10,6 +10,7 @@ import { TICKET_TOKEN_PREFIX, ticketToken } from "../blocks/linear/claim.ts";
 import { NEEDS_HUMAN_TOKEN_PREFIX } from "../blocks/linear/halt-for-human.ts";
 import { PULL_REQUEST_TOKEN_PREFIX } from "../blocks/pull-requests/gate.ts";
 import { approvalState, mergeRefusal } from "../blocks/pull-requests/merge-ready.ts";
+import { type RunResource, resourcesFromAttributes } from "../blocks/runtime/resources.ts";
 import { readFactoryConfig } from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";
 import { fetchPrSnapshot, type PullRequestRef } from "../providers/github.ts";
@@ -75,6 +76,7 @@ export interface WorldRun {
   /** The run's own arguments and return value, in the world's serialized form. */
   input?: unknown;
   output?: unknown;
+  attributes?: Record<string, string>;
   // Lifted out of the run's stored inputs by the listing below, so callers
   // (and their fakes) never handle the world's serialized form.
   triggerId?: string;
@@ -428,6 +430,11 @@ async function worldRuns(): Promise<WorldRun[]> {
 
 const worldRun = async (runId: string): Promise<WorldRun> =>
   withTriggerId(await (await getWorld()).runs.get(runId, { resolveData: "all" }));
+
+/** Resources are an observability read, independent of workflow output. */
+export async function listRunResources(runId: string): Promise<RunResource[]> {
+  return resourcesFromAttributes((await worldRun(runId)).attributes);
+}
 
 // `resolveData: "all"` above is what makes the trigger readable at all — a
 // run's triggerId lives in its stored inputs and the world has no index on

@@ -18,7 +18,14 @@ import { sweepWorktrees } from "../steps/workspaces/sweep.ts";
 import { githubWebhookSecret, verifyGithubSignature, verifyLinearSignature } from "./ingress.ts";
 import { listRunDeadJobs } from "./queue.ts";
 import { bootPhase, isReady } from "./readiness.ts";
-import { describeRun, enrichSuspensions, listRuns, type RunRef, resolveRunRef } from "./runs.ts";
+import {
+  describeRun,
+  enrichSuspensions,
+  listRunResources,
+  listRuns,
+  type RunRef,
+  resolveRunRef,
+} from "./runs.ts";
 import { listSchedules, scheduleChecks } from "./schedules.ts";
 import { listRunSteps } from "./stalls.ts";
 import { startRun } from "./trigger.ts";
@@ -325,6 +332,7 @@ export function createApp(factory: Factory): Hono {
     const described = await describeRun(ref.runId, { steps: await listRunSteps(ref.runId) });
     const body: Record<string, unknown> = {
       ...described,
+      resources: await listRunResources(ref.runId),
       suspensions: await enrichSuspensions(described.suspensions, ref.runId),
       logs: logsPointer(ref.runId),
     };

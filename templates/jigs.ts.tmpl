@@ -13,7 +13,11 @@ import {
   type MergePolicy,
   type PullRequestRef,
 } from "@salimhamed/jigs/blocks/pull-requests";
-import { bindReleaseSteps, type ReleasePolicy } from "@salimhamed/jigs/blocks/runtime";
+import {
+  bindReleaseSteps,
+  type ReleasePolicy,
+  type RunResource,
+} from "@salimhamed/jigs/blocks/runtime";
 import * as agentsOperations from "@salimhamed/jigs/steps/agents";
 import * as gitOperations from "@salimhamed/jigs/steps/git";
 import * as linearOperations from "@salimhamed/jigs/steps/linear";
@@ -24,11 +28,23 @@ import type { WorktreeRequest } from "@salimhamed/jigs/steps/workspaces";
 import * as workspacesOperations from "@salimhamed/jigs/steps/workspaces";
 import { getWorkflowMetadata } from "workflow";
 
+function localFileUrl(path: string): string {
+  const url = new URL("file://");
+  url.pathname = path;
+  return url.href;
+}
+
 /** Prepare a worktree for this run, reusing it when the run resumes. */
 export async function provisionWorktree(request: WorktreeRequest): Promise<Worktree> {
   "use step";
   const metadata = getWorkflowMetadata();
-  return workspacesOperations.provisionWorktree(request, metadata);
+  const worktree = await workspacesOperations.provisionWorktree(request, metadata);
+  await runtimeOperations.registerResource({
+    kind: "worktree",
+    identity: worktree.path,
+    url: localFileUrl(worktree.path),
+  });
+  return worktree;
 }
 
 /** Release finished run resources. Never call from finally or catch: suspension throws too. */
@@ -105,7 +121,19 @@ export async function resolveLinearIssue(reference: string) {
 export async function createRunDirectory() {
   "use step";
   const metadata = getWorkflowMetadata();
-  return runtimeOperations.createRunDirectory(metadata);
+  const directory = await runtimeOperations.createRunDirectory(metadata);
+  await runtimeOperations.registerResource({
+    kind: "run-directory",
+    identity: metadata.workflowRunId,
+    url: localFileUrl(directory),
+  });
+  return directory;
+}
+
+/** Record a resource on this run independently of the workflow's return value. */
+export async function registerResource(resource: RunResource) {
+  "use step";
+  return runtimeOperations.registerResource(resource);
 }
 
 /** Remove this run's scratch directory after its work is complete. */

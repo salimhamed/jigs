@@ -274,6 +274,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
   "steps/runtime/index.ts": [
     "dashboardRunUrl",
     "createRunDirectory",
+    "registerResource",
     "removeRunDirectory",
     "resolveReleasePolicy",
     "releaseRunResources",
