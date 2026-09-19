@@ -440,8 +440,8 @@ export async function runtimeE2eWorkflow(
   const sequential = await recordedStep(inputs.marker, "long", inputs.delayMs);
   await sleep("1s");
   const parallel = await Promise.all([
-    recordedStep(inputs.marker, "parallel-a"),
-    recordedStep(inputs.marker, "parallel-b"),
+    recordedStep(inputs.marker, "parallel-a", 250),
+    recordedStep(inputs.marker, "parallel-b", 250),
   ]);
   const hook = restartHook.create({ token: inputs.token });
   await hook;
@@ -597,10 +597,24 @@ async function runtimeScenario(postgresUrl) {
       "start resumed",
       "end resumed",
     ];
-    const actualLines = [...terminal.returnValue.lines].sort();
-    if (JSON.stringify(actualLines) !== JSON.stringify([...expectedLines].sort())) {
+    const lines = terminal.returnValue.lines;
+    if (JSON.stringify([...lines].sort()) !== JSON.stringify([...expectedLines].sort())) {
       throw new Error(
-        `step marker mismatch (duplicate or missing execution): ${JSON.stringify(terminal.returnValue.lines)}`,
+        `step marker mismatch (duplicate or missing execution): ${JSON.stringify(lines)}`,
+      );
+    }
+    const at = (line) => lines.indexOf(line);
+    const parallelStarts = [at("start parallel-a"), at("start parallel-b")];
+    const parallelEnds = [at("end parallel-a"), at("end parallel-b")];
+    const ordered =
+      at("start long") === 0 &&
+      at("end long") === 1 &&
+      Math.max(...parallelStarts) < Math.min(...parallelEnds) &&
+      Math.max(...parallelEnds) < at("start resumed") &&
+      at("start resumed") < at("end resumed");
+    if (!ordered) {
+      throw new Error(
+        `step ordering or parallel overlap was not preserved: ${JSON.stringify(lines)}`,
       );
     }
     if (
@@ -611,7 +625,7 @@ async function runtimeScenario(postgresUrl) {
       throw new Error(`unexpected runtime return value: ${JSON.stringify(terminal.returnValue)}`);
     }
     console.log(
-      `run ${runId} completed after ${LONG_STEP_MS}ms step, durable sleep, parallel steps, restart, and hook resume; dashboard answered`,
+      `run ${runId} completed after ${LONG_STEP_MS}ms step, durable sleep, overlapping parallel steps, restart, and hook resume; dashboard answered`,
     );
   } finally {
     if (service.child.exitCode === null && service.child.signalCode === null) {
