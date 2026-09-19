@@ -2,7 +2,7 @@ import type { HarnessKind, HarnessRuntime } from "../../checks/harness-runtime.t
 import type { BindingClone } from "../../steps/workspaces/clone.ts";
 import type { RegistrySql } from "../../steps/workspaces/registry.ts";
 import { READY_PHASE, setBootPhase } from "../readiness.ts";
-import { installShutdown, onShutdown, startOwningSignals } from "../shutdown.ts";
+import { installShutdown, onShutdown } from "../shutdown.ts";
 
 // Why every import below is dynamic: this module's top level has to stay free
 // of postgres, the factory config and the workflow runtime — the gate tests
@@ -179,12 +179,6 @@ export default async function startWorld() {
   // completion; acceptable.
   installShutdown();
 
-  // Before the World starts polling: the queue's very first step dispatch has
-  // to go out on the scoped dispatcher, not node's five-minute default.
-  const { describeStepCeiling, raiseStepCeiling } = await import("../step-ceiling.ts");
-  raiseStepCeiling();
-  console.log(`[service] step ceiling: ${describeStepCeiling()}`);
-
   // First, because it is local and fast: no point cloning for a service that
   // cannot run an agent.
   setBootPhase("harnesses");
@@ -200,18 +194,17 @@ export default async function startWorld() {
   // cost rather than an agent's.
   if (!(await gateOnBindingClones())) return;
 
-  const { getWorld } = await import("workflow/runtime");
   // The service owns its exit: on SIGTERM `world.close()` drains the queue
-  // and ends the pool, and the process leaves once that is done. The World's
-  // start is where graphile-worker would install handlers of its own, so it
-  // runs stripped of them — see startOwningSignals.
+  // and ends the pool, and the process leaves once that is done. Tell the
+  // Postgres World not to install Graphile's competing signal handlers before
+  // the SDK resolves and caches it. Other World implementations ignore this.
+  process.env.WORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN ??= "1";
+  const { getWorld } = await import("workflow/runtime");
+  const world = await getWorld();
   setBootPhase("world");
-  onShutdown(() => getWorld().close?.());
+  onShutdown(() => world.close?.());
   const started = await gateOnWorldStart({
-    start: () =>
-      startOwningSignals(async () => {
-        await getWorld().start?.();
-      }),
+    start: async () => world.start?.(),
   });
   if (!started) return;
   console.log(`[service] world started: ${process.env.WORKFLOW_TARGET_WORLD ?? "local (default)"}`);

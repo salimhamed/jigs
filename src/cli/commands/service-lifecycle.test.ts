@@ -181,6 +181,7 @@ test("the child is told where to host its dashboard and where its queue delivers
   // Every queue worker in the child, the dashboard's included, dispatches to
   // the service's own workflow routes rather than a guessed port.
   expect(io.spawns[0]?.env.WORKFLOW_LOCAL_BASE_URL).toBe("http://localhost:9100");
+  expect(io.spawns[0]?.env.WORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN).toBe("1");
   expect(lines).toContain("dashboard: http://localhost:9200");
 });
 

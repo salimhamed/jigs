@@ -138,15 +138,14 @@
     "smol-toml": "^1.8.0",
     "tinyglobby": "^0.2.17",
     "ts-morph": "^28.0.0",
-    "undici": "^7.28.0",
     "yaml": "^2.9.0"
   },
   "peerDependencies": {
-    "@workflow/web": "4.1.20",
-    "@workflow/world-postgres": "4.3.4",
+    "@workflow/web": "5.0.0-beta.53",
+    "@workflow/world-postgres": "5.0.0-beta.44",
     "nitro": "3.0.260610-beta",
-    "workflow": "4.8.4",
-    "zod": "^4.4.3"
+    "workflow": "5.0.0-beta.53",
+    "zod": "4.5.4"
   },
   "peerDependenciesMeta": {
     "nitro": {
@@ -158,14 +157,15 @@
     "@types/node": "^26.2.0",
     "@types/pg": "8.23.1",
     "@types/semver": "^7.8.0",
-    "@workflow/web": "4.1.20",
-    "@workflow/world-postgres": "4.3.4",
+    "@workflow/web": "5.0.0-beta.53",
+    "@workflow/world": "5.0.0-beta.36",
+    "@workflow/world-postgres": "5.0.0-beta.44",
     "nitro": "3.0.260610-beta",
     "tsdown": "^0.22.14",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10",
-    "workflow": "4.8.4",
-    "zod": "^4.4.3"
+    "workflow": "5.0.0-beta.53",
+    "zod": "4.5.4"
   },
   "packageManager": "pnpm@11.21.0"
 }

@@ -220,8 +220,7 @@ without a launch.
 `WORKFLOW_TARGET_WORLD=@workflow/world-postgres` and `WORKFLOW_POSTGRES_URL`
 come filled in; leave them. The service refuses to start when the URL is
 unset: the worktree registry lives in that database, so there is no
-registry-less mode. (At `workflow@4.8.4` the filesystem World would not start
-from a production bundle anyway: `Invalid version string: "bundled"`.)
+registry-less mode.
 
 Skipping the copy is allowed — `jigs up` copies `.env.example` itself when
 there is no `.env` and tells you which slots are empty. Hello can run without

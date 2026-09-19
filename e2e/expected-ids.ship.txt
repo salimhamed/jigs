@@ -31,6 +31,5 @@ step//./jigs//resolveMergePolicy
 step//./jigs//resolveReleasePolicy
 step//./jigs//resolveRepository
 step//./jigs//reviewPullRequest
-step//workflow@4.8.4//fetch
 workflow//./workflows/hello//helloWorkflow
 workflow//./workflows/ship//shipWorkflow

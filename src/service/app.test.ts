@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { SPEC_VERSION_CURRENT } from "@workflow/world";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
@@ -287,10 +288,12 @@ test("a signed status delivery resolves every matching PR and routes by base rep
 
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ delivered: true });
-  expect(resumeHookMock.mock.calls.map(([token]) => token)).toEqual([
-    pullRequestToken({ owner: "acme", repo: "api", number: 41 }),
-    pullRequestToken({ owner: "acme", repo: "web", number: 7 }),
-  ]);
+  expect(resumeHookMock.mock.calls.map(([token]) => token).sort()).toEqual(
+    [
+      pullRequestToken({ owner: "acme", repo: "api", number: 41 }),
+      pullRequestToken({ owner: "acme", repo: "web", number: 7 }),
+    ].sort(),
+  );
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
@@ -499,6 +502,7 @@ test("GET /api/runs answers with empty runs and worktrees when nothing has launc
 
 test("GET /api/runs/:ref/steps answers with the run's steps and its dead jobs", async () => {
   setWorld({
+    specVersion: SPEC_VERSION_CURRENT,
     runs: { get: async () => ({}) },
     steps: {
       list: async () => ({
@@ -544,6 +548,7 @@ test("GET /api/runs/:ref reports a stalled run as stalled, like `jigs ps` does",
   // `jigs ps` and `jigs logs` must not disagree about the same run, so both
   // read the one derivation in runs.ts.
   setWorld({
+    specVersion: SPEC_VERSION_CURRENT,
     runs: { get: async () => ({ status: "running", createdAt: new Date() }) },
     steps: { list: async () => ({ data: [] }) },
     hooks: { list: async () => ({ data: [] }) },
@@ -572,6 +577,7 @@ const PR = pullRequestToken({ owner: "acme", repo: "api", number: 41 });
 // reported rather than thrown.
 const runHolding = (...tokens: string[]) =>
   setWorld({
+    specVersion: SPEC_VERSION_CURRENT,
     runs: { get: async () => ({ status: "running", createdAt: new Date() }) },
     steps: { list: async () => ({ data: [] }) },
     hooks: { list: async () => ({ data: tokens.map((token) => ({ token })) }) },
@@ -678,6 +684,7 @@ test("cancel names the resources it released, and not the marker", async () => {
 test("cancel retries queue cleanup when the first cleanup failed after cancellation", async () => {
   let status = "running";
   setWorld({
+    specVersion: SPEC_VERSION_CURRENT,
     runs: { get: async () => ({ status, createdAt: new Date() }) },
     hooks: { list: async () => ({ data: [] }) },
     events: {
@@ -704,6 +711,7 @@ test("cancel retries queue cleanup when the first cleanup failed after cancellat
 
 test("cancel reports an active queue delivery as retryable", async () => {
   setWorld({
+    specVersion: SPEC_VERSION_CURRENT,
     runs: { get: async () => ({ status: "cancelled", createdAt: new Date() }) },
     hooks: { list: async () => ({ data: [] }) },
   } as unknown as Parameters<typeof setWorld>[0]);

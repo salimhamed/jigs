@@ -92,7 +92,7 @@ async function createRun(): Promise<string> {
       deploymentId: "postgres",
       workflowName: "cancelTest",
       input: new Uint8Array(),
-      executionContext: { workflowCoreVersion: "4.8.4", workflowVm: "node" },
+      executionContext: { workflowCoreVersion: "5.0.0-beta.53", workflowVm: "node" },
     },
   });
   if (created.run === undefined) throw new Error("run_created returned no run");

@@ -63,7 +63,8 @@ test("optional properties become nullable at every level", () => {
 
 test("an already-nullable property is not wrapped twice", () => {
   const owner = at(toOutputJsonSchema(shape), "properties.owner");
-  expect(owner.anyOf).toEqual([{ type: "string" }, { type: "null" }]);
+  expect(owner.type).toEqual(["string", "null"]);
+  expect(owner.anyOf).toBeUndefined();
 });
 
 test("keywords strict mode rejects are stripped", () => {

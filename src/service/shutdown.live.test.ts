@@ -1,7 +1,6 @@
 import { type AddressInfo, createServer } from "node:net";
 import { createWorld } from "@workflow/world-postgres";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { startOwningSignals } from "./shutdown.ts";
 
 // Its own database, bootstrapped with @workflow/world-postgres's `bootstrap`:
 // starting this World creates the workflow schema and graphile's tables, which
@@ -11,7 +10,7 @@ const url =
 
 // world-postgres starts graphile's runner inside start() only when it can
 // reach the service port within 200ms; a bare listener stands in for the
-// service so the runner — and its signal handlers — appear inside the strip.
+// service so the runner starts and the shutdown contract is exercised.
 const service = createServer();
 const baseUrlBefore = process.env.WORKFLOW_LOCAL_BASE_URL;
 beforeAll(async () => {
@@ -28,17 +27,15 @@ afterAll(async () => {
 const handlerNames = (signal: NodeJS.Signals) =>
   process.listeners(signal).map((listener) => listener.name);
 
-test("the World's start leaves no graphile signal handler behind, and close() is clean", async () => {
-  const world = createWorld({ connectionString: url });
-  let duringStart: string[] = [];
+test("application-managed shutdown adds no graphile signal handler, and close() is clean", async () => {
+  const world = createWorld({ connectionString: url, applicationManagedShutdown: true });
+  const beforeTerm = handlerNames("SIGTERM");
+  const beforeInt = handlerNames("SIGINT");
 
-  await startOwningSignals(async () => {
-    await world.start();
-    duringStart = handlerNames("SIGTERM");
-  });
+  await world.start();
 
-  // Without this the strip had nothing to strip and the test proves nothing.
-  expect(duringStart).toContain("gracefulHandler");
+  expect(handlerNames("SIGTERM")).toEqual(beforeTerm);
+  expect(handlerNames("SIGINT")).toEqual(beforeInt);
   expect(handlerNames("SIGTERM")).not.toContain("gracefulHandler");
   expect(handlerNames("SIGINT")).not.toContain("gracefulHandler");
 

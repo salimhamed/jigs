@@ -418,7 +418,7 @@ const linearIssueId = (ref: string) =>
 // One page, deliberately: both the prefix scan and `jigs ps` are
 // conveniences over a developer-scale run table, not indexes to page through.
 async function worldRuns(): Promise<WorldRun[]> {
-  const page = await getWorld().runs.list({
+  const page = await (await getWorld()).runs.list({
     resolveData: "all",
     pagination: { limit: 1000 },
   });
@@ -426,7 +426,7 @@ async function worldRuns(): Promise<WorldRun[]> {
 }
 
 const worldRun = async (runId: string): Promise<WorldRun> =>
-  withTriggerId(await getWorld().runs.get(runId, { resolveData: "all" }));
+  withTriggerId(await (await getWorld()).runs.get(runId, { resolveData: "all" }));
 
 // `resolveData: "all"` above is what makes the trigger readable at all — a
 // run's triggerId lives in its stored inputs and the world has no index on
@@ -438,7 +438,7 @@ function withTriggerId(run: WorldRun): WorldRun {
 }
 
 async function worldRunTokens(runId: string): Promise<string[]> {
-  const page = await getWorld().hooks.list({ runId });
+  const page = await (await getWorld()).hooks.list({ runId });
   return page.data.map((hook) => hook.token);
 }
 
@@ -483,7 +483,7 @@ const worldRunIds = () => worldRuns().then((runs) => runs.map((r) => r.runId));
 // oldest-first, and two pages taken from opposite ends stop overlapping.
 /** Every hook the world holds, whichever run owns it. */
 export async function listWorldHooks(): Promise<Array<{ runId: string; token: string }>> {
-  const page = await getWorld().hooks.list({
+  const page = await (await getWorld()).hooks.list({
     pagination: { limit: 1000, sortOrder: "desc" },
   });
   return page.data.map((hook) => ({ runId: hook.runId, token: hook.token }));

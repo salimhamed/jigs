@@ -1,5 +1,5 @@
 // What "the saved session is unusable" means, in one place. A step never
-// rejects on it — workflow@4.8.4 would retry a rejection three times — so the
+// rejects on it — the workflow runtime retries a rejected step — so the
 // step returns a marker, this module is where the marker becomes a throw, and
 // `resumeOrRebuild` is the only thing that catches it. A pointer recorded on
 // the other harness arrives as the same marker as a stale one, so no caller

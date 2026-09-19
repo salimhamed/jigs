@@ -140,7 +140,7 @@ const unresolvedSpecifiers = (source) =>
 // The CLI half of a package that is now also the service (ADR 0017). `jigs
 // init` runs from `pnpm dlx` on a machine that has installed nothing, and the
 // four runtime peers are the factory's to supply, so `dist/cli.js` must reach
-// none of the service runtime — nitro, hono, postgres, croner, undici, the
+// none of the service runtime — nitro, hono, postgres, croner, the
 // SDK. Two packages used to make that the package manager's business; one
 // package makes it import discipline, and a static import that crosses the
 // line is silent: the bundle grows, and `jigs init` starts needing packages
@@ -197,9 +197,16 @@ function emittedIds() {
   } catch {
     fail(`no bundle at ${bundle()}`, "the build above did not produce one");
   }
-  return [...new Set(source.match(/"(?:workflow|step)\/\/[^"]+"/g) ?? [])]
-    .map((quoted) => quoted.slice(1, -1))
-    .sort();
+  return (
+    [...new Set(source.match(/"(?:workflow|step)\/\/[^"]+"/g) ?? [])]
+      .map((quoted) => quoted.slice(1, -1))
+      // v5's combined host bundle also registers SDK-owned Run methods and
+      // builtins. Their package-versioned addresses are the SDK's contract;
+      // this assertion owns only the factory-local addresses whose stability
+      // jigs' generated-wrapper design promises.
+      .filter((id) => /^(?:workflow|step)\/\/\.\/(?!node_modules\/)/.test(id))
+      .sort()
+  );
 }
 
 // The workflow bundle is embedded in the server bundle as a string: it is
@@ -210,7 +217,13 @@ function emittedIds() {
 function workflowBundle() {
   const lines = readFileSync(bundle(), "utf8").split("\n");
   const start = lines.findIndex((line) => line.includes("workflowEntrypoint(`"));
-  const end = lines.indexOf("`);", start);
+  const end = lines.findIndex((line, index) => {
+    if (index <= start) return false;
+    const trimmed = line.trim();
+    // v4 ended the call after the bundle string. The v5 combined handler
+    // follows that string with entrypoint options in the same call.
+    return trimmed === "`);" || trimmed.startsWith("`, {");
+  });
   if (start === -1 || end === -1) {
     fail(
       "could not find the workflow bundle in the emitted server bundle",
@@ -247,7 +260,7 @@ function withFakeVersion(packJigs) {
 // bundle starts, in someone else's repo, with ERR_MODULE_NOT_FOUND naming the
 // package. Booting it once here is the only place this repo can see it, so
 // this check is about module resolution and the service coming up — not
-// about the World. The boot runs on the stub in e2e-world.cjs beside this
+// about the World. The boot runs on the stub in e2e-world.mjs beside this
 // file: it starts, it closes, it touches no database, and the service reaches
 // `ready` on it the way it does on Postgres. (The SDK's filesystem World
 // cannot stand in: from a bundle its start rejects, and a World that fails to
@@ -277,11 +290,16 @@ const READY_POLL_MS = 100;
 // delivery lost while the service was down: if it stops running, nothing else
 // in this repo notices.
 const BOOT_MARKERS = ["Listening on:", "[service] dashboard:", "[nudge] pull requests:"];
-const BOOT_WORLD = path.join(here, "e2e-world.cjs");
+const BOOT_WORLD = path.join(here, "e2e-world.mjs");
 // A top-level import that cannot resolve exits the process; one behind a
 // plugin's dynamic import is caught by nitro and only costs the dashboard, so
 // the message is what identifies it either way.
 const BOOT_UNRESOLVED = /ERR_MODULE_NOT_FOUND|Cannot find (?:module|package)/;
+
+const RUNTIME_PORT = 18992;
+const RUNTIME_DASHBOARD_PORT = 18993;
+const RUNTIME_TIMEOUT_MS = 90_000;
+const LONG_STEP_MS = Number(process.env.JIGS_E2E_LONG_STEP_MS ?? "25");
 
 function bootOutcome(postgresUrl) {
   // The World is the stub whatever the shell says; the URL is the registry's.
@@ -383,6 +401,241 @@ async function ready() {
   } catch {
     return false;
   }
+}
+
+function installRuntimeFixture() {
+  const workflow = path.join(factory, "workflows", "runtime-e2e.ts");
+  writeFileSync(
+    workflow,
+    `import { appendFileSync, readFileSync } from "node:fs";
+import type { WorkflowEntry, WorkflowInputs } from "@salimhamed/jigs";
+import { defineHook, sleep } from "workflow";
+import { z } from "zod";
+
+export const runtimeE2eInputs = z.object({
+  delayMs: z.number().int().nonnegative(),
+  marker: z.string(),
+  token: z.string(),
+});
+
+const restartHook = defineHook<void>();
+
+async function recordedStep(marker: string, name: string, delayMs = 0): Promise<string> {
+  "use step";
+  appendFileSync(marker, \`start \${name}\\n\`);
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
+  appendFileSync(marker, \`end \${name}\\n\`);
+  return name;
+}
+
+async function markerLines(marker: string): Promise<string[]> {
+  "use step";
+  return readFileSync(marker, "utf8").trim().split("\\n");
+}
+
+export async function runtimeE2eWorkflow(
+  inputs: WorkflowInputs<typeof runtimeE2eInputs>,
+) {
+  "use workflow";
+  const sequential = await recordedStep(inputs.marker, "long", inputs.delayMs);
+  await sleep("1s");
+  const parallel = await Promise.all([
+    recordedStep(inputs.marker, "parallel-a"),
+    recordedStep(inputs.marker, "parallel-b"),
+  ]);
+  const hook = restartHook.create({ token: inputs.token });
+  await hook;
+  const resumed = await recordedStep(inputs.marker, "resumed");
+  return { sequential, parallel: parallel.sort(), resumed, lines: await markerLines(inputs.marker) };
+}
+
+export default {
+  workflow: runtimeE2eWorkflow,
+  inputs: runtimeE2eInputs,
+} satisfies WorkflowEntry<typeof runtimeE2eInputs>;
+`,
+  );
+  const config = path.join(factory, "jigs.config.ts");
+  writeFileSync(
+    config,
+    readFileSync(config, "utf8").replace(
+      "workflows: {",
+      'workflows: {\n    runtimeE2e: () => import("./workflows/runtime-e2e.ts"),',
+    ),
+  );
+}
+
+function runtimeEnv(postgresUrl) {
+  return {
+    ...process.env,
+    PORT: String(RUNTIME_PORT),
+    JIGS_DASHBOARD_PORT: String(RUNTIME_DASHBOARD_PORT),
+    WORKFLOW_LOCAL_BASE_URL: `http://127.0.0.1:${RUNTIME_PORT}`,
+    WORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN: "1",
+    WORKFLOW_POSTGRES_URL: postgresUrl,
+    WORKFLOW_TARGET_WORLD: "@workflow/world-postgres",
+  };
+}
+
+async function startRuntimeService(postgresUrl) {
+  const child = spawn(process.execPath, [bundle()], {
+    cwd: factory,
+    env: runtimeEnv(postgresUrl),
+  });
+  let output = "";
+  child.stdout.setEncoding("utf8").on("data", (chunk) => {
+    output += chunk;
+  });
+  child.stderr.setEncoding("utf8").on("data", (chunk) => {
+    output += chunk;
+  });
+  await until(
+    async () => {
+      if (child.exitCode !== null || child.signalCode !== null) {
+        throw new Error(`runtime service exited before readiness\n${output}`);
+      }
+      try {
+        const [health, dashboard] = await Promise.all([
+          fetch(`http://127.0.0.1:${RUNTIME_PORT}/health`, {
+            signal: AbortSignal.timeout(1_000),
+          }),
+          fetch(`http://127.0.0.1:${RUNTIME_DASHBOARD_PORT}/`, {
+            signal: AbortSignal.timeout(1_000),
+          }),
+        ]);
+        return health.ok && (await health.json()).ready === true && dashboard.ok;
+      } catch {
+        return false;
+      }
+    },
+    "runtime service and dashboard did not become ready",
+    RUNTIME_TIMEOUT_MS,
+  );
+  return { child, output: () => output };
+}
+
+async function stopRuntimeService(service) {
+  const closed = new Promise((resolve) =>
+    service.child.once("close", (code, signal) => resolve({ code, signal })),
+  );
+  service.child.kill("SIGTERM");
+  const outcome = await Promise.race([
+    closed,
+    new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), SHUTDOWN_TIMEOUT_MS)),
+  ]);
+  if ("timeout" in outcome) {
+    service.child.kill("SIGKILL");
+    throw new Error(`runtime service did not stop cleanly\n${service.output()}`);
+  }
+  if (outcome.code !== 0) {
+    throw new Error(
+      `runtime service exited with code ${outcome.code} (signal ${outcome.signal})\n${service.output()}`,
+    );
+  }
+}
+
+async function runtimeScenario(postgresUrl) {
+  installRuntimeFixture();
+  build();
+  run(path.join(factory, "node_modules", ".bin", "bootstrap"), []);
+
+  const marker = path.join(scratch, "runtime-step-markers.txt");
+  const token = `runtime-e2e-${crypto.randomUUID()}`;
+  let service = await startRuntimeService(postgresUrl);
+  try {
+    const started = await fetch(`http://127.0.0.1:${RUNTIME_PORT}/api/workflows/runtimeE2e/runs`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ inputs: { delayMs: LONG_STEP_MS, marker, token } }),
+    });
+    if (started.status !== 201) {
+      throw new Error(`runtime workflow start returned ${started.status}: ${await started.text()}`);
+    }
+    const { runId } = await started.json();
+    await until(
+      async () => {
+        const run = await runtimeRun(runId);
+        if (run.status === "failed" || run.status === "cancelled") {
+          throw new Error(`runtime workflow ${runId} became ${run.status}: ${JSON.stringify(run)}`);
+        }
+        return run.suspensions.length > 0;
+      },
+      `runtime workflow ${runId} never parked on its hook`,
+      RUNTIME_TIMEOUT_MS + LONG_STEP_MS,
+    );
+
+    await stopRuntimeService(service);
+    service = await startRuntimeService(postgresUrl);
+
+    execFileSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "--eval",
+        'import { resumeHook } from "workflow/api"; import { getWorld } from "workflow/runtime"; await resumeHook(process.argv[1], undefined); await (await getWorld()).close?.();',
+        token,
+      ],
+      { cwd: factory, env: runtimeEnv(postgresUrl), stdio: "inherit" },
+    );
+
+    let terminal;
+    await until(
+      async () => {
+        terminal = await runtimeRun(runId);
+        return terminal.status === "completed";
+      },
+      `runtime workflow ${runId} did not complete after restart`,
+      RUNTIME_TIMEOUT_MS,
+    );
+    const expectedLines = [
+      "start long",
+      "end long",
+      "start parallel-a",
+      "end parallel-a",
+      "start parallel-b",
+      "end parallel-b",
+      "start resumed",
+      "end resumed",
+    ];
+    const actualLines = [...terminal.returnValue.lines].sort();
+    if (JSON.stringify(actualLines) !== JSON.stringify([...expectedLines].sort())) {
+      throw new Error(
+        `step marker mismatch (duplicate or missing execution): ${JSON.stringify(terminal.returnValue.lines)}`,
+      );
+    }
+    if (
+      terminal.returnValue.sequential !== "long" ||
+      terminal.returnValue.resumed !== "resumed" ||
+      JSON.stringify(terminal.returnValue.parallel) !== JSON.stringify(["parallel-a", "parallel-b"])
+    ) {
+      throw new Error(`unexpected runtime return value: ${JSON.stringify(terminal.returnValue)}`);
+    }
+    console.log(
+      `run ${runId} completed after ${LONG_STEP_MS}ms step, durable sleep, parallel steps, restart, and hook resume; dashboard answered`,
+    );
+  } finally {
+    if (service.child.exitCode === null && service.child.signalCode === null) {
+      await stopRuntimeService(service);
+    }
+  }
+}
+
+async function runtimeRun(runId) {
+  const response = await fetch(`http://127.0.0.1:${RUNTIME_PORT}/api/runs/${runId}`, {
+    signal: AbortSignal.timeout(2_000),
+  });
+  if (!response.ok)
+    throw new Error(`run lookup returned ${response.status}: ${await response.text()}`);
+  return response.json();
+}
+
+async function until(check, message, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await check()) return;
+    await new Promise((resolve) => setTimeout(resolve, READY_POLL_MS));
+  }
+  throw new Error(message);
 }
 
 function reportDiff(expected, actual) {
@@ -597,6 +850,10 @@ if (postgresUrl === undefined || postgresUrl === "") {
       `if the output above names a package it cannot find, the factory loads it by name at run time: it belongs in ${JIGS}'s peerDependencies and the factory package.json template`,
     );
   }
+  console.log(
+    `\n=== runtime: real Postgres steps, sleep, parallel work, restart recovery, hook resume, and dashboard (${LONG_STEP_MS}ms long step)`,
+  );
+  await runtimeScenario(postgresUrl);
 }
 
 cleanup();

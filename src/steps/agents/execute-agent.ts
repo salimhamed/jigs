@@ -151,7 +151,7 @@ export async function executeAgent(
 
   // One agent per worktree, always. The World re-queues a step whose
   // HTTP dispatch was cut short while the step itself is still running, and
-  // workflow@4.8.4 neither cancels the first execution nor dedupes the second —
+  // the workflow runtime neither cancels the first execution nor dedupes the second —
   // two agents in one worktree is a state its data model permits. This advisory
   // lock is what forbids it. Fail-fast rather than queue: a second agent that
   // waited its turn would only corrupt the worktree later.
@@ -247,7 +247,7 @@ async function generateAgentStep(
           );
   } catch (err) {
     if (resume === undefined) throw err;
-    // Returned, not thrown: workflow@4.8.4 retries a rejected step three times
+    // Returned, not thrown: the workflow runtime retries a rejected step
     // by default, so a session that is simply gone would burn three paid
     // attempts before the fresh-context fallback ever ran. Any error is
     // staleness — codex 0.149.1 reports it as a raw JSON-RPC "no rollout found
