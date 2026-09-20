@@ -21,6 +21,8 @@ vi.mock("#jigs", async (importOriginal) => ({
     baseSha: "0".repeat(40),
   })),
   reviewTicket: vi.fn(async (): Promise<TicketHandoff> => handoff),
+  setTicketStatus: vi.fn(async () => ({})),
+  postTicketNote: vi.fn(async () => {}),
   resolveMergePolicy: vi.fn(async () => ({
     by: "human" as const,
     method: "squash" as const,
@@ -56,11 +58,15 @@ const handoff: TicketHandoff = { brief: "Do the thing.", snapshot, assumptions: 
 
 const jigs = await import("#jigs");
 const delivery = await import("#blocks/delivery/delivery");
+const tickets = await import("#blocks/tickets/linear");
 const { default: entry, shipInputs, shipWorkflow } = await import("./ship.ts");
 
 async function deliveredFor(inputs: Record<string, unknown>) {
   vi.mocked(delivery.deliverChange).mockClear();
   vi.mocked(jigs.release).mockClear();
+  vi.mocked(jigs.setTicketStatus).mockClear();
+  vi.mocked(jigs.postTicketNote).mockClear();
+  vi.mocked(tickets.acquireLinearTicket).mockClear();
   await shipWorkflow({
     ...shipInputs.parse({ binding: "repo", ...inputs }),
     triggerId: "ship-test",
@@ -93,6 +99,26 @@ test("the work item delivered carries the ticket and the implementation brief", 
   expect(options.task.key).toBe("ABC-123");
   expect(options.task.instructions).toContain("Implementation brief");
   expect(jigs.resolveMergePolicy).toHaveBeenCalledWith("repo");
+});
+
+test("ship moves its ticket as the recipe progresses", async () => {
+  const options = await deliveredFor({ ticket: "ABC-123" });
+  expect(jigs.setTicketStatus).toHaveBeenCalledTimes(1);
+  expect(jigs.setTicketStatus).toHaveBeenCalledWith(snapshot.id, "In Progress");
+  expect(vi.mocked(jigs.setTicketStatus).mock.invocationCallOrder[0]).toBeGreaterThan(
+    vi.mocked(tickets.acquireLinearTicket).mock.invocationCallOrder[0] ?? Infinity,
+  );
+  await options.on?.pullRequestOpened?.({ owner: "acme", repo: "repo", number: 1 });
+  await options.on?.merged?.({ owner: "acme", repo: "repo", number: 1 });
+  await options.on?.stopped?.("stopped short");
+  expect(jigs.setTicketStatus).toHaveBeenCalledWith(snapshot.id, "In Review");
+  expect(jigs.setTicketStatus).toHaveBeenCalledWith(snapshot.id, "Done");
+  expect(jigs.setTicketStatus).toHaveBeenCalledWith(snapshot.id, "Todo");
+  expect(jigs.postTicketNote).toHaveBeenCalledWith(snapshot.id, {
+    headline: "jigs finished work on ABC-123.",
+    notes: ["Merged in acme/repo#1."],
+    closing: "",
+  });
 });
 
 test("a successful delivery removes merged worktrees", async () => {

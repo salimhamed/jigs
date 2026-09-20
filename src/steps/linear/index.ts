@@ -20,3 +20,4 @@ export {
   type TicketParticipants,
 } from "./render-comment.ts";
 export { resolveLinearIssue } from "./resolve.ts";
+export { setTicketStatus, type TicketStatusResult } from "./status.ts";

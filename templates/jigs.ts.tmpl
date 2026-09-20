@@ -111,6 +111,12 @@ export async function fetchTicketSnapshot(issueId: string) {
   return linearOperations.fetchTicketSnapshot(issueId);
 }
 
+/** Move a ticket to a named state when this workflow's policy says to. */
+export async function setTicketStatus(issueId: string, stateName: string) {
+  "use step";
+  return linearOperations.setTicketStatus(issueId, stateName);
+}
+
 /** Resolve a Linear ticket identifier or issue ID before claiming it. */
 export async function resolveLinearIssue(reference: string) {
   "use step";

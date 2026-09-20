@@ -80,6 +80,7 @@ import type {
   RenderNeedsHumanComment,
   RenderTicketNote,
   TicketParticipants,
+  TicketStatusResult,
 } from "./steps/linear/index.ts";
 import type {
   GitHubRepoRef,
@@ -171,6 +172,7 @@ type StepsTypeSurface = {
   renderNeedsHumanComment: RenderNeedsHumanComment;
   renderTicketNote: RenderTicketNote;
   ticketParticipants: TicketParticipants;
+  ticketStatusResult: TicketStatusResult;
   worktreeRequest: WorktreeRequest;
 };
 
