@@ -11,18 +11,24 @@ Run it locally when changing the Workflow SDK, Postgres World, service startup,
 or delivery and transport code. Docker must be available:
 
 ```sh
-docker run --detach --rm \
-  --name jigs-age-488-postgres \
-  --publish 127.0.0.1:55490:5432 \
-  --env POSTGRES_USER=jigs \
-  --env POSTGRES_PASSWORD=jigs \
-  --env POSTGRES_DB=jigs \
-  postgres:17-alpine
-trap 'docker stop jigs-age-488-postgres >/dev/null' EXIT
-until docker exec jigs-age-488-postgres pg_isready -U jigs -d jigs >/dev/null 2>&1; do sleep 1; done
-JIGS_E2E_LONG_STEP_MS=301000 \
-  WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@127.0.0.1:55490/jigs \
-  pnpm e2e
+(
+  set -e
+  cleanup() {
+    docker stop jigs-age-488-postgres >/dev/null 2>&1 || true
+  }
+  trap cleanup EXIT
+  docker run --detach --rm \
+    --name jigs-age-488-postgres \
+    --publish 127.0.0.1:55490:5432 \
+    --env POSTGRES_USER=jigs \
+    --env POSTGRES_PASSWORD=jigs \
+    --env POSTGRES_DB=jigs \
+    postgres:17-alpine
+  until docker exec jigs-age-488-postgres pg_isready -U jigs -d jigs >/dev/null 2>&1; do sleep 1; done
+  JIGS_E2E_LONG_STEP_MS=301000 \
+    WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@127.0.0.1:55490/jigs \
+    pnpm e2e
+)
 ```
 
 The test takes at least five minutes plus build and startup time. The command
