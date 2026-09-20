@@ -1,4 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { WorkflowRunNotFoundError } from "workflow/errors";
 import type { HarnessRuntime } from "../../checks/harness-runtime.ts";
 import { JigsError } from "../../errors.ts";
 import type { RegistrySql } from "../../steps/workspaces/registry.ts";
@@ -12,10 +13,13 @@ import {
 
 const RUN = "wrun_01M2Z000000000000000000000";
 
-function queueFenceHarness(status: string, message: unknown = { runId: RUN }) {
+function queueFenceHarness(status: string | Error, message: unknown = { runId: RUN }) {
   let wrapped: ((message: unknown, metadata: unknown) => Promise<unknown>) | undefined;
   const downstream = vi.fn(async () => ({ timeoutSeconds: 7 }));
-  const get = vi.fn(async () => ({ status }));
+  const get = vi.fn(async () => {
+    if (status instanceof Error) throw status;
+    return { status };
+  });
   const world = {
     runs: { get },
     createQueueHandler: vi.fn((_prefix, handler) => {
@@ -63,6 +67,52 @@ test("health checks and other messages without a run id bypass the run fence", a
 
   expect(harness.get).not.toHaveBeenCalled();
   expect(harness.downstream).toHaveBeenCalledWith(message, { attempt: 1 });
+});
+
+test("a valid health check carrying its future run id bypasses the run fence", async () => {
+  const message = { __healthCheck: true, correlationId: "health", runId: RUN };
+  const harness = queueFenceHarness("cancelled", message);
+
+  await expect(harness.invoke()).resolves.toEqual({ timeoutSeconds: 7 });
+
+  expect(harness.get).not.toHaveBeenCalled();
+  expect(harness.downstream).toHaveBeenCalledWith(message, { attempt: 1 });
+});
+
+test("a resilient first delivery may materialize a run missing from storage", async () => {
+  const message = {
+    runId: RUN,
+    runInput: {
+      input: new Uint8Array(),
+      deploymentId: "postgres",
+      workflowName: "cancelE2e",
+      specVersion: 5,
+    },
+  };
+  const harness = queueFenceHarness(new WorkflowRunNotFoundError(RUN), message);
+
+  await expect(harness.invoke()).resolves.toEqual({ timeoutSeconds: 7 });
+
+  expect(harness.get).toHaveBeenCalledWith(RUN);
+  expect(harness.downstream).toHaveBeenCalledWith(message, { attempt: 1 });
+});
+
+test("an ordinary delivery for a missing run delegates its semantics to the SDK", async () => {
+  const error = new WorkflowRunNotFoundError(RUN);
+  const harness = queueFenceHarness(error);
+
+  await expect(harness.invoke()).resolves.toEqual({ timeoutSeconds: 7 });
+
+  expect(harness.downstream).toHaveBeenCalledWith({ runId: RUN }, { attempt: 1 });
+});
+
+test("a transient run status read rejects so the queue retries without executing", async () => {
+  const error = new Error("storage unavailable");
+  const harness = queueFenceHarness(error);
+
+  await expect(harness.invoke()).rejects.toBe(error);
+
+  expect(harness.downstream).not.toHaveBeenCalled();
 });
 
 test("installing the terminal delivery fence twice wraps a handler once", async () => {

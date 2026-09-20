@@ -1,4 +1,5 @@
 import type { World } from "@workflow/world";
+import { WorkflowRunNotFoundError } from "workflow/errors";
 import type { HarnessKind, HarnessRuntime } from "../../checks/harness-runtime.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import type { BindingClone } from "../../steps/workspaces/clone.ts";
@@ -175,10 +176,19 @@ export function fenceTerminalWorkflowDeliveries(world: ServiceWorld): void {
 
   world.createQueueHandler = (prefix, handler) =>
     createQueueHandler.call(world, prefix, async (message, metadata) => {
+      if (isHealthCheckDelivery(message)) return handler(message, metadata);
       const runId = deliveryRunId(message);
       if (runId !== null) {
-        const run = await getRun.call(world.runs, runId);
-        if (run !== null && TERMINAL_RUN_STATUSES.has(run.status)) return;
+        try {
+          const run = await getRun.call(world.runs, runId);
+          if (TERMINAL_RUN_STATUSES.has(run.status)) return;
+        } catch (error) {
+          // The SDK owns missing-run semantics: runInput may resiliently create
+          // the run, while an ordinary invocation produces its normal missing-
+          // run rejection and telemetry. Only unrelated status-read failures
+          // stay at this seam so Graphile retries without executing the handler.
+          if (!WorkflowRunNotFoundError.is(error)) throw error;
+        }
       }
       return handler(message, metadata);
     });
@@ -188,6 +198,18 @@ export function fenceTerminalWorkflowDeliveries(world: ServiceWorld): void {
 function deliveryRunId(message: unknown): string | null {
   if (typeof message !== "object" || message === null || !("runId" in message)) return null;
   return typeof message.runId === "string" ? message.runId : null;
+}
+
+// Mirrors the SDK's public HealthCheckPayload shape. A cross-deployment start
+// includes the future runId so its target can derive the run's public key
+// before run creation; that id must never turn the probe into a status lookup.
+// Keep this structural: @workflow/world is a type-only dependency of this
+// package, while factories supply workflow and their concrete World at runtime.
+function isHealthCheckDelivery(message: unknown): boolean {
+  if (typeof message !== "object" || message === null) return false;
+  if (!("__healthCheck" in message) || message.__healthCheck !== true) return false;
+  if (!("correlationId" in message) || typeof message.correlationId !== "string") return false;
+  return !("runId" in message) || message.runId === undefined || typeof message.runId === "string";
 }
 
 export interface WorldStartGateDeps {

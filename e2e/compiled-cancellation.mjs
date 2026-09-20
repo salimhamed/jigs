@@ -29,7 +29,7 @@ import { z } from "zod";
 export const cancelE2eInputs = z.object({
   gate: z.string(),
   marker: z.string(),
-  mode: z.enum(["active", "pending", "retry", "turbo"]),
+  mode: z.enum(["active", "pending", "resilient", "retry", "turbo"]),
 });
 
 async function record(marker: string, line: string): Promise<void> {
@@ -66,6 +66,10 @@ export async function cancelE2eWorkflow(inputs: WorkflowInputs<typeof cancelE2eI
   if (inputs.mode === "pending") {
     await sleep(1);
     await record(inputs.marker, "pending-body");
+    return;
+  }
+  if (inputs.mode === "resilient") {
+    await record(inputs.marker, "resilient-first-effect");
     return;
   }
   await record(inputs.marker, "turbo-first-effect");
@@ -201,6 +205,22 @@ export async function runCompiledCancellationMatrix({
       return jobs.length === 1 && jobs[0].lockedAt === null;
     }, "default-turbo delivery was not held behind the active inline step");
 
+    const resilientMarker = path.join(fixtureRoot, "resilient.markers");
+    const resilientLaunch = await launchInlineRun(
+      { mode: "resilient", marker: resilientMarker, gate: "unused" },
+      ports.service,
+      db,
+    );
+    const resilientRunId = resilientLaunch.runId;
+    await until(async () => {
+      const jobs = await jobsFor(db, resilientRunId);
+      return jobs.length === 1 && jobs[0].lockedAt === null;
+    }, "resilient first delivery was not held behind the active inline step");
+    // start() publishes run_created and the runInput-bearing delivery in
+    // parallel. Remove the synthetic run's completed write to deterministically
+    // emulate that write being lost while retaining the real generated payload.
+    await forgetRunCreation(db, resilientRunId);
+
     cancel(pendingRunId);
     cancel(turboRunId);
     cancel(activeRunId);
@@ -215,6 +235,7 @@ export async function runCompiledCancellationMatrix({
     assert.deepEqual(lines(activeMarker), ["active-entered"]);
     assert.deepEqual(lines(pendingMarker), []);
     assert.deepEqual(lines(turboMarker), []);
+    assert.deepEqual(lines(resilientMarker), []);
     console.log(
       "cancellation matrix: active, pending, and default-turbo runs are terminal-cancelled",
     );
@@ -263,19 +284,35 @@ await (await getWorld()).close?.();`,
       async () => (await jobsFor(db, activeRunId)).length === 0,
       "active delivery did not finish after cancellation",
     );
+    await until(
+      () => lines(resilientMarker).includes("resilient-first-effect"),
+      "runInput delivery did not recreate and execute its missing run",
+    );
+    await until(
+      async () => (await jobsFor(db, resilientRunId)).length === 0,
+      "resilient first delivery did not drain after recreating its run",
+    );
+    await until(
+      async () => (await runtimeRun(resilientRunId, ports.service)).status === "completed",
+      "recreated resilient run did not reach completed status",
+    );
 
-    const [activeStarted, pendingStarted, turboStarted] = await Promise.all([
+    const [activeStarted, pendingStarted, turboStarted, resilientStarted] = await Promise.all([
       activeLaunch.completion,
       pendingLaunch.completion,
       turboLaunch.completion,
+      resilientLaunch.completion,
     ]);
     assertLaunchMatches(activeStarted, activeRunId);
     assertLaunchMatches(pendingStarted, pendingRunId);
     assertLaunchMatches(turboStarted, turboRunId);
+    assertLaunchMatches(resilientStarted, resilientRunId);
 
     assert.deepEqual(lines(activeMarker), ["active-entered", "active-effect"]);
     assert.deepEqual(lines(pendingMarker), []);
     assert.deepEqual(lines(turboMarker), []);
+    assert.deepEqual(lines(resilientMarker), ["resilient-first-effect"]);
+    assert.equal((await runtimeRun(resilientRunId, ports.service)).status, "completed");
     const activeTimeline = await runtimeTimeline(activeRunId, ports.service);
     assert.equal(
       activeTimeline.steps.filter((step) => step.name.includes("gatedEffect")).length,
@@ -312,10 +349,12 @@ await (await getWorld()).close?.();`,
     assert.deepEqual(lines(activeMarker), ["active-entered", "active-effect"]);
     assert.deepEqual(lines(pendingMarker), []);
     assert.deepEqual(lines(turboMarker), []);
+    assert.deepEqual(lines(resilientMarker), ["resilient-first-effect"]);
     assert.equal((await jobsFor(db, delayed.runId)).length, 0);
     assert.equal((await jobsFor(db, pendingRunId)).length, 0);
     assert.equal((await jobsFor(db, turboRunId)).length, 0);
     assert.equal((await jobsFor(db, activeRunId)).length, 0);
+    assert.equal((await jobsFor(db, resilientRunId)).length, 0);
     const exhaustedAfterDrain = onlyJob(await jobsFor(db, exhausted.runId), exhausted.runId);
     assert.deepEqual(exhaustedAfterDrain, exhaustedBefore);
 
@@ -367,7 +406,7 @@ await (await getWorld()).close?.();`,
 
     const elapsedMs = Date.now() - startedAt;
     console.log(
-      `compiled cancellation matrix passed in ${elapsedMs}ms: pending, retry-scheduled, exhausted, active inline, default-turbo race, restart/redelivery, cleanup fencing, and offline kept-resource prune`,
+      `compiled cancellation matrix passed in ${elapsedMs}ms: pending, retry-scheduled, exhausted, active inline, default-turbo race, resilient first delivery, restart/redelivery, cleanup fencing, and offline kept-resource prune`,
     );
     return { elapsedMs };
   } finally {
@@ -569,6 +608,30 @@ async function wakeRun(db, runId) {
     [`%${runId}%`],
   );
   assert.equal(result.rowCount, 1, `could not wake the generated delivery for ${runId}`);
+}
+
+async function forgetRunCreation(db, runId) {
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const events = await client.query(`DELETE FROM workflow.workflow_events WHERE run_id = $1`, [
+      runId,
+    ]);
+    const slots = await client.query(
+      `DELETE FROM workflow.workflow_event_slots WHERE run_id = $1`,
+      [runId],
+    );
+    const runs = await client.query(`DELETE FROM workflow.workflow_runs WHERE id = $1`, [runId]);
+    assert.equal(events.rowCount, 1, `expected one run_created event for ${runId}`);
+    assert.equal(slots.rowCount, 1, `expected one event-slot marker for ${runId}`);
+    assert.equal(runs.rowCount, 1, `expected one run projection for ${runId}`);
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function historySnapshot(db, runId) {
