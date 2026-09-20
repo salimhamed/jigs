@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.39.2](https://github.com/salimhamed/jigs/compare/jigs-v0.39.1...jigs-v0.39.2) (2026-09-20)
+
+
+### Features
+
+* move ship tickets through Linear statuses ([#298](https://github.com/salimhamed/jigs/issues/298)) ([4f00d52](https://github.com/salimhamed/jigs/commit/4f00d520b5dcc3fdfc87683d9fda09655dc4ad5c))
+
 ## [0.39.1](https://github.com/salimhamed/jigs/compare/jigs-v0.39.0...jigs-v0.39.1) (2026-09-20)
 
 
