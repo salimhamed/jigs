@@ -148,3 +148,15 @@ test("an incomplete continuation page fails closed", async () => {
     "World returned hasMore=true without a continuation cursor",
   );
 });
+
+test("an omitted continuation cursor also fails closed", async () => {
+  setWorld({
+    specVersion: SPEC_VERSION_CURRENT,
+    steps: {
+      list: async () => ({ data: [step()], hasMore: true }),
+    },
+  } as unknown as World);
+  await expect(listRunSteps(RUN_A)).rejects.toThrow(
+    "World returned hasMore=true without a continuation cursor",
+  );
+});

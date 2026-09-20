@@ -28,7 +28,7 @@ export async function listRunSteps(runId: string): Promise<StepView[]> {
     });
     steps.push(...page.data);
     if (page.hasMore) {
-      if (page.cursor === null) {
+      if (page.cursor == null) {
         throw new Error("World returned hasMore=true without a continuation cursor");
       }
       cursor = page.cursor;
