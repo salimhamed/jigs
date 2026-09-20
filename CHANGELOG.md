@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.40.2](https://github.com/salimhamed/jigs/compare/jigs-v0.40.1...jigs-v0.40.2) (2026-09-20)
+
+
+### Features
+
+* ship generated API reference ([#309](https://github.com/salimhamed/jigs/issues/309)) ([709b4e2](https://github.com/salimhamed/jigs/commit/709b4e2a6147029081b022284fbe889d53113f11))
+
 ## [0.40.1](https://github.com/salimhamed/jigs/compare/jigs-v0.40.0...jigs-v0.40.1) (2026-09-20)
 
 
