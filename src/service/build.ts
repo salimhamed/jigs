@@ -14,8 +14,11 @@ export { generateFactoryIntegration } from "../cli/integration.ts";
  *  root. `nitro.ts` imports them to point its route and plugin at the same
  *  files. */
 export const GENERATED_DIR = ".jigs";
+/** Generated Nitro route filename within the factory's `.jigs` directory. */
 export const GENERATED_ENTRY_FILE = "server.ts";
+/** Generated schedule plugin filename within the factory's `.jigs` directory. */
 export const GENERATED_SCHEDULES_FILE = "schedules.ts";
+/** Generated automatic-release plugin filename within the factory's `.jigs` directory. */
 export const GENERATED_CLEANUP_FILE = "automatic-release.ts";
 
 // A real entry file, never a nitro alias: the workflow builder runs its own

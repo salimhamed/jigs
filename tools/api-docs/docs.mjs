@@ -2,8 +2,8 @@ import { copyFile, mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promise
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Application } from "typedoc";
-import { intentionallyNotDocumented, typedocOptions } from "./typedoc.config.mjs";
+import { Application, ReflectionKind } from "typedoc";
+import { typedocOptions } from "./typedoc.config.mjs";
 
 const toolDir = path.dirname(fileURLToPath(import.meta.url));
 export const rootDir = path.resolve(toolDir, "../..");
@@ -63,6 +63,37 @@ export function hasPackageDocumentation(source) {
   return /^\s*\/\*\*[\s\S]*?\*\//.exec(source)?.[0].includes("@packageDocumentation") ?? false;
 }
 
+function hasSummary(reflection) {
+  const target = reflection.isReference() ? reflection.getTargetReflectionDeep() : reflection;
+  const comments = [
+    target.comment,
+    ...(target.signatures ?? []).map((signature) => signature.comment),
+  ];
+  return comments.some((comment) => comment?.summary?.some((part) => part.text.trim().length > 0));
+}
+
+/** Return directly exported declarations that do not have a summary. */
+export function directExportSummaryFailures(project) {
+  const modules = project.children?.every((child) => child.kindOf(ReflectionKind.Module))
+    ? project.children
+    : [project];
+  return modules.flatMap((module) =>
+    (module.children ?? [])
+      .filter((reflection) => !hasSummary(reflection))
+      .map((reflection) => `${module === project ? project.name : module.name}.${reflection.name}`),
+  );
+}
+
+/** Require a summary on every declaration exported directly from an entry point. */
+export function assertDirectExportSummaries(project) {
+  const undocumented = directExportSummaryFailures(project);
+  if (undocumented.length) {
+    throw new Error(
+      `Direct exports missing a summary:\n${undocumented.map((name) => `- ${name}`).join("\n")}`,
+    );
+  }
+}
+
 async function repositoryConfig() {
   const manifest = JSON.parse(await readFile(path.join(rootDir, "package.json"), "utf8"));
   const { default: buildConfig } = await import(path.join(rootDir, "tsdown.config.ts"));
@@ -93,7 +124,6 @@ export async function convert(entryPoints, options = {}) {
   const app = await Application.bootstrapWithPlugins({
     ...typedocOptions,
     entryPoints,
-    intentionallyNotDocumented,
     name: "@salimhamed/jigs",
     plugin: ["typedoc-plugin-markdown"],
     tsconfig: path.join(rootDir, "tsconfig.json"),
@@ -108,6 +138,7 @@ async function validate(entries) {
   await checkRepositoryRules(entries);
   const { app, project } = await convert(entries.map((entry) => path.join(rootDir, entry.source)));
   app.validate(project);
+  assertDirectExportSummaries(project);
   if (app.logger.hasErrors() || app.logger.hasWarnings()) {
     throw new Error("TypeDoc validation failed");
   }
@@ -117,8 +148,7 @@ export async function renderEntry(entry, destination) {
   const temporary = await mkdtemp(path.join(os.tmpdir(), "jigs-api-docs-"));
   try {
     const { app, project } = await convert([path.join(rootDir, entry.source)], {
-      intentionallyNotDocumented: [],
-      validation: { ...typedocOptions.validation, notDocumented: false },
+      validation: typedocOptions.validation,
     });
     await app.outputs.writeOutput({ name: "markdown", path: temporary }, project);
     if (app.logger.hasErrors() || app.logger.hasWarnings()) {

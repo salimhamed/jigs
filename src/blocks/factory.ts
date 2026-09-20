@@ -8,6 +8,7 @@ import type { githubSchema } from "../config/factory-config.ts";
 import type { mergePolicySchema } from "./pull-requests/policy.ts";
 import type { ReleasePolicy } from "./runtime/release.ts";
 
+/** Accept a Linear issue UUID or an uppercase team-and-number ticket identifier. */
 export const ticketInputSchema = z.union([z.uuid(), z.string().regex(/^[A-Z][A-Z0-9]*-\d+$/)]);
 
 /** Plaintext run metadata used by read-only tooling to resolve ticket selectors. */
@@ -22,6 +23,7 @@ export type WorkflowInputs<S extends z.ZodType> = z.output<S> & Injected;
 /** Ticket references are ordinary inputs; resolve them explicitly in a step. */
 export type TicketWorkflowInputs<S extends z.ZodType<{ ticket: string }>> = WorkflowInputs<S>;
 
+/** A factory-owned workflow together with its input schema and runtime requirements. */
 export interface WorkflowEntry<S extends z.ZodType = z.ZodType> {
   workflow: (inputs: WorkflowInputs<S>) => Promise<unknown>;
   inputs: S;
@@ -30,6 +32,7 @@ export interface WorkflowEntry<S extends z.ZodType = z.ZodType> {
   release?: ReleasePolicy;
 }
 
+/** A workflow entry used where a factory contains several different input schemas. */
 // biome-ignore lint/suspicious/noExplicitAny: heterogeneous schemas per entry
 export type AnyWorkflowEntry = WorkflowEntry<any>;
 

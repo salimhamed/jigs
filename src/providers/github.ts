@@ -34,6 +34,7 @@ export interface ReviewComment {
   updatedAt: string;
 }
 
+/** A pull request review conversation, with its optional file location. */
 export interface ReviewThread {
   rootId: number;
   path: string;

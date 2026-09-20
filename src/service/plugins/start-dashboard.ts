@@ -12,6 +12,7 @@ import { onShutdown } from "../shutdown.ts";
 
 // Hosted here rather than run standalone: a second process opening this World
 // runs a second queue worker, which steals the service's jobs.
+/** Start the optional Workflow dashboard and register its shutdown cleanup. */
 export default async function startDashboard() {
   const port = Number(process.env.JIGS_DASHBOARD_PORT);
   if (!Number.isInteger(port) || port <= 0) {

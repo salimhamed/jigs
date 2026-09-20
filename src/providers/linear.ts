@@ -263,6 +263,7 @@ async function resolveProject(ref: string): Promise<RawProject> {
   return project;
 }
 
+/** Fields used to create a Linear ticket in a project's first team. */
 export interface CreateIssueInProjectInput {
   project: string;
   title: string;
@@ -312,6 +313,7 @@ interface RawIssueMatch {
   trashed: boolean | null;
 }
 
+/** A matching Linear ticket returned by a project title search. */
 export interface LinearIssueMatch {
   id: string;
   identifier: string;

@@ -8,11 +8,13 @@ import {
   type PostTicketHumanInputRequest,
 } from "./halt-for-human.ts";
 import { type ReviewTicketOptions, reviewTicket as reviewBlock } from "./review.ts";
+/** Ticket-review options left after the factory's durable steps are bound. */
 export type BoundReviewTicketOptions = Omit<
   ReviewTicketOptions,
   "runAgent" | "haltForHuman" | "fetchTicketSnapshot" | "postTicketNote"
 >;
 
+/** Durable wrappers a factory supplies for Linear and agent operations. */
 export interface LinearSteps {
   runAgent: ReviewTicketOptions["runAgent"];
   postTicketHumanInputRequest: PostTicketHumanInputRequest;

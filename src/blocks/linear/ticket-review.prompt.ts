@@ -1,8 +1,11 @@
 import { plainLanguage } from "./plain-language.prompt.ts";
 
+/** The rendered ticket supplied to a ticket-review prompt. */
 export type TicketReviewPromptInput = { ticket: string };
+/** Renders instructions for an agent to turn a ticket into an actionable handoff. */
 export type TicketReviewPrompt = (input: TicketReviewPromptInput) => string;
 
+/** The default prompt for reviewing a Linear ticket before implementation begins. */
 export const ticketReviewPrompt: TicketReviewPrompt = ({ ticket }) => `# Ticket review
 
 You are reviewing a Linear ticket before a builder agent starts on it.

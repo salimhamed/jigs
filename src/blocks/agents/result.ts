@@ -4,19 +4,23 @@ import type { HarnessConfig } from "./harness-config.ts";
 // Type aliases, not interfaces: aliases carry an implicit index signature,
 // which keeps step returns assignable to the SDK's Serializable types.
 
+/** Token usage reported by the underlying model provider. */
 export type ModelUsage = LanguageModelUsage;
 
+/** A provider session pointer that can resume the same harness. */
 export type AgentSession = {
   harness: HarnessConfig["kind"];
   id: string;
 };
 
+/** Text, structured output and usage returned by a model call. */
 export type ModelResult<T = unknown> = {
   text: string;
   output: T;
   usage?: ModelUsage;
 };
 
+/** A model result with the optional session pointer from an agent harness. */
 export type AgentResult<T = unknown> = ModelResult<T> & {
   session?: AgentSession;
 };

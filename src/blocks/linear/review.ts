@@ -15,6 +15,7 @@ import { type TicketReviewPrompt, ticketReviewPrompt } from "./ticket-review.pro
 // strictObject so the harness's native structured output carries
 // additionalProperties:false and a malformed verdict throws at the
 // workflow-side parse rather than degrading into a guess.
+/** Structured verdict returned by the agent that reviews a ticket before work starts. */
 export const ticketReviewVerdictSchema = z.strictObject({
   verdict: z.enum(["proceed", "needs-human"]),
   brief: z.string().min(1),
@@ -61,6 +62,7 @@ export type TicketHandoff = {
   assumptions: string[];
 };
 
+/** Agent, ticket and durable operations used by the ticket-review loop. */
 export interface ReviewTicketOptions {
   runAgent: RunAgentFn;
   haltForHuman: HaltForHumanFn;
@@ -85,6 +87,7 @@ export interface ReviewTicketOptions {
   };
 }
 
+/** Review a ticket until it is actionable, asking a human when a decision is missing. */
 export async function reviewTicket(options: ReviewTicketOptions): Promise<TicketHandoff> {
   const { runAgent, haltForHuman, fetchTicketSnapshot, postTicketNote } = options;
   let snapshot = options.snapshot;

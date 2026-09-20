@@ -38,6 +38,9 @@ and `runtime`. Implementations under `steps/<topic>` belong inside durable
 wrapper bodies. The generated wrappers preserve their names when library
 implementation paths move.
 
+Read the installed API reference at `node_modules/@salimhamed/jigs/docs/api/`;
+its Markdown paths mirror the package import paths.
+
 ## Add a workflow
 
 1. Write `workflows/<name>.ts` with a zod input schema and an exported async

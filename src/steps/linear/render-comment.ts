@@ -36,12 +36,14 @@ export type NeedsHumanContext = {
   dashboardUrl?: string;
 };
 
+/** Renders the Linear comment that asks a person to unblock a run. */
 export type RenderNeedsHumanComment = (
   halt: Halt,
   context: NeedsHumanContext,
   participants: TicketParticipants,
 ) => string;
 
+/** Renders a non-blocking Linear note for ticket participants. */
 export type RenderTicketNote = (note: TicketNote, participants: TicketParticipants) => string;
 
 // Creator and assignee, in that order, each named once. Either may be absent;
@@ -92,6 +94,7 @@ function footer(halt: Halt, context: NeedsHumanContext): string {
   return `<sub>${parts.join(" · ")}</sub>`;
 }
 
+/** Render the default human-input request as Linear Markdown. */
 export const renderNeedsHumanComment: RenderNeedsHumanComment = (halt, context, participants) => {
   const blocks = [greet(participants, halt.headline)];
   if (halt.about !== undefined && halt.about !== "") {
@@ -113,6 +116,7 @@ export const renderNeedsHumanComment: RenderNeedsHumanComment = (halt, context, 
   return `${blocks.join("\n\n")}\n`;
 };
 
+/** Render the default non-blocking ticket note as Linear Markdown. */
 export const renderTicketNote: RenderTicketNote = (note, participants) =>
   `${[
     greet(participants, note.headline),

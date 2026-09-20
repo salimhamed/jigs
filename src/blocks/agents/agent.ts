@@ -18,6 +18,7 @@ import { resumeFailed } from "./resume-or-rebuild.ts";
 // The failures travel as the catalog's own records. A caller that has to write
 // them for a human reads the fields; only the message is a rendering, and it
 // exists because an Error has to have one.
+/** A failed just-in-time tool check, with repair details for each failure. */
 export class JitCheckError extends Error {
   readonly failures: FailedCheck[];
 
@@ -35,6 +36,7 @@ export type ExecuteAgentStep = (
 
 // Where the step's returned markers become errors: workflow-side, so no
 // retries are spent and `instanceof` still means something to the caller.
+/** Convert returned execution failure markers into workflow-side errors. */
 export function unwrapAgentStep(result: Awaited<ReturnType<ExecuteAgentStep>>): AgentResult {
   if ("jitFailure" in result) throw new JitCheckError(result.jitFailure);
   // Same shape, same reason as the JIT marker, but the error it becomes is
@@ -43,6 +45,7 @@ export function unwrapAgentStep(result: Awaited<ReturnType<ExecuteAgentStep>>): 
   return result;
 }
 
+/** Run an agent through a durable wrapper and parse its optional structured output. */
 export async function runAgent<T = undefined>(
   config: RunAgentOptions<T>,
   executeAgent: ExecuteAgentStep,
