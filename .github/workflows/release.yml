@@ -10,17 +10,10 @@ permissions:
   issues: write
   # For the publish job: GITHUB_TOKEN writes this repo's GitHub Packages.
   packages: write
-  # For GITHUB_TOKEN's read of the release PR's check rollup below. `gh pr
-  # checks` also resolves each check's workflowRun over GraphQL, which is an
-  # Actions read — without it every node in the reply errors and the poll
-  # never sees a name.
-  checks: read
-  statuses: read
-  actions: read
 
 # Main pushes share a group, so they queue instead of racing release-please.
-# The release branch uses its own group so its docs check can run while the
-# main run waits for that check before merging the release PR.
+# The release branch uses its own group so generated docs can be committed
+# independently of release-please updating the PR.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
@@ -43,31 +36,22 @@ jobs:
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
-      # `gh pr merge --auto` needs branch protection: GitHub only offers
-      # auto-merge on a PR that cannot merge immediately, and this one always
-      # can. Watching the checks by hand is the same wait, spelled out.
+      # Required checks in the default-branch ruleset gate the current PR
+      # head, including a later generated-docs commit. GitHub waits and merges.
       # Not gated on the action's prs_created output: that is false when the
       # release PR already existed unchanged, which is exactly the state a
       # failed earlier run leaves behind — the PR would sit unmerged until an
       # unrelated release-worthy commit updated it. Looking the PR up by its
       # well-known head branch makes every run a chance to finish the job.
-      - name: Merge the release PR
+      - name: Enable auto-merge for the release PR
         env:
           # `gh` reads the repository from `--repo`, then `GH_REPO`, then the
           # working directory's git remote — never from GITHUB_REPOSITORY. The
           # action above talks to the API and checks nothing out, so without
           # this every `gh` call below aborts on "not a git repository".
           GH_REPO: ${{ github.repository }}
-          # Reads use GITHUB_TOKEN: the fine-grained PAT cannot read
-          # statusCheckRollup without a Checks grant, and a read triggers
-          # nothing, so the anti-loop rule costs nothing here. Only the merge
-          # itself needs the PAT (its push must re-run this workflow).
-          GH_TOKEN: ${{ github.token }}
-          MERGE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-          # Every check run the release PR must pass, as GitHub names them
-          # (a job id in .github/workflows/). A job added there and not here
-          # is a check this step can merge past.
-          EXPECTED_CHECKS: api-docs ci step-ids pr-title
+          # The eventual merge must trigger release-please on main.
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
         run: |
           set -euo pipefail
           pr="$(gh pr list --head release-please--branches--main --state open \
@@ -78,30 +62,7 @@ jobs:
           fi
           echo "release PR: #$pr"
 
-          # `--watch` waits only on the checks already in the rollup, and check
-          # runs enter it as their workflow runs are created rather than all at
-          # once — a rollup holding pr-title alone reads as green. So wait for
-          # every expected run to register first, which also covers the empty
-          # rollup `gh pr checks` fails outright on.
-          missing="?"
-          for _ in $(seq 30); do
-            registered="$(gh pr checks "$pr" --json name --jq '.[].name' || true)"
-            missing=""
-            for want in $EXPECTED_CHECKS; do
-              grep -qxF "$want" <<<"$registered" || missing="$missing $want"
-            done
-            [ -n "$missing" ] || break
-            echo "waiting for check run(s):$missing"
-            sleep 10
-          done
-          if [ -n "$missing" ]; then
-            echo "check run(s) never registered:$missing" >&2
-            exit 1
-          fi
-
-          gh pr checks "$pr" --watch --fail-fast --interval 15
-
-          GH_TOKEN="$MERGE_TOKEN" gh pr merge "$pr" --squash --delete-branch
+          gh pr merge "$pr" --auto --squash --delete-branch
 
   # release-please first writes the bumped version to its branch. This job runs
   # on that branch push and commits the reference generated from that exact

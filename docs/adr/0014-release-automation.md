@@ -4,7 +4,8 @@ Versions move on their own from here. A PR title is a conventional commit —
 `.github/workflows/pr-title.yml` fails the PR when it is not — and every squash
 onto `main` runs release-please, which keeps one open release PR carrying the
 next version, the CHANGELOG entries earned since the last release, and nothing
-else. That PR waits on its own `ci` and `step-ids` runs and then merges itself;
+else. GitHub auto-merges that PR after its required `ci`, `step-ids`, and
+`pr-title` checks pass on the current commit;
 the merge re-runs release-please, which writes the tags and the GitHub
 Releases. Nobody edits a `version` field by hand, and nobody decides whether a
 change was a patch or a minor — the titles already said.
@@ -65,23 +66,13 @@ Packages links the package to it and lets the repo-scoped token publish.
   two moments, gets a working first release and then `Bad pull request title`
   forever
   ([release-please#2306](https://github.com/googleapis/release-please/issues/2306)).
-- **The merge step polls, because `--auto` cannot work here.** GitHub offers
-  auto-merge only on a PR that cannot merge immediately, which means a branch
-  protection rule with required checks. `main` has none, so the release PR is
-  mergeable the moment it exists and `gh pr merge --auto` exits non-zero. The
-  workflow waits with `gh pr checks --watch --fail-fast` and then merges
-  outright — the same wait, spelled out. If `main` ever grows protection with
-  `ci` and `step-ids` required, this becomes a one-line change.
-- **The merge step names the checks it is waiting for.** `--watch` waits on
-  the checks already in the PR's rollup and has no notion of one that has not
-  been created yet; check runs enter the rollup as their workflow runs are
-  created, not atomically across workflows. A rollup holding only a finished
-  `pr-title` therefore reads as green, and the merge fires with `ci` and
-  `step-ids` never having run. So the step first polls until every name in
-  `EXPECTED_CHECKS` (`api-docs`, `ci`, `step-ids`, `pr-title`) is registered, and only then
-  watches — which also covers the empty rollup `gh pr checks` fails outright
-  on. The cost is a list that must track the job ids in `.github/workflows/`:
-  a job added there and not here is a check the release PR can merge past.
+- **GitHub owns the merge gate.** The default-branch ruleset requires `ci`,
+  `step-ids`, and `pr-title` from GitHub Actions, and repository auto-merge is
+  enabled. The release workflow requests `gh pr merge --auto --squash` with
+  the PAT, then exits. GitHub waits for the current commit's required checks.
+  A generated-docs commit must pass its own checks before merging. Delayed
+  check registration no longer runs into a shell polling deadline, and no
+  script can accidentally merge a newer head after watching older checks.
 - **The `gh` calls need `GH_REPO`.** Nothing is checked out in that job —
   `release-please-action` only talks to the API — and `gh` resolves the
   repository from `--repo`, then `GH_REPO`, then the working directory's git
@@ -108,10 +99,13 @@ Packages links the package to it and lets the repo-scoped token publish.
   release-please writes the bumped version, a branch-only `api-docs` job
   generates and commits `docs/api` with the same PAT. The follow-up branch push
   reruns the PR checks; generating no diff succeeds without another commit.
-  The merge step waits for `api-docs`, so published code and committed reference
-  share a version. Workflow concurrency is scoped by ref: main pushes still
-  serialize, while the release-branch job can run during the main run that is
-  waiting for it.
+  For release PRs, `ci` regenerates the reference and fails if the committed
+  files differ, including added or removed pages. A successful generation job
+  on an older commit therefore cannot unlock a merge. The branch-only
+  `api-docs` job is not a required check: ordinary PRs do not run it.
+  Workflow concurrency is scoped by ref: main pushes still
+  serialize, while the release-branch job can generate documentation
+  independently of release-please updating the PR.
 
 ## Considered options
 
@@ -146,11 +140,7 @@ Packages links the package to it and lets the repo-scoped token publish.
   checkout, whose version the registry already held, which the idempotent skip
   reported as success while 0.4.2 never shipped. Main's ref-scoped `concurrency`
   group keeps overlapping pushes from racing at all.
-- **The merge step's expected-checks list is a second copy of the job ids.**
-  There is no "wait for the checks to exist" flag, so the wait has to name
-  what it is waiting for, and nothing enforces that the list and
-  `.github/workflows/` agree. A stale name fails the release loudly after five
-  minutes of polling — the release PR is left open and unmerged, recoverable
-  by hand and the direction this fails in. A *missing* name is the quiet one:
-  the merge no longer waits on that check. Adding a CI job means adding it
-  here.
+- **Required-check names are repository configuration.** Renaming a required
+  job means updating the default-branch ruleset too. Missing or failed checks
+  leave auto-merge pending; they do not permit an unchecked merge. Only checks
+  reported for every PR belong in that ruleset.
