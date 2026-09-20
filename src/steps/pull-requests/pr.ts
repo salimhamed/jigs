@@ -208,10 +208,9 @@ export async function mergePullRequest(
  * so jigs applies its own preservation policy before adding the trailer: for a
  * one-commit branch it keeps that commit's body, and for several commits it
  * keeps every subject and body in a bulleted list. This preserves such content
- * as the `BREAKING CHANGE:` footers release-please reads
- * ([ADR 0014](../../../docs/adr/0014-release-automation.md)). With no co-author
- * configured jigs sends no body and leaves its generation to GitHub. A rebase
- * rewrites the branch's commits and accepts no merge message at all.
+ * as the `BREAKING CHANGE:` footers release automation reads. With no
+ * co-author configured jigs sends no body and leaves its generation to GitHub.
+ * A rebase rewrites the branch's commits and accepts no merge message at all.
  */
 async function suppliedCommitMessageBody(
   pr: PullRequestRef,

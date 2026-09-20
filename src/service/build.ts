@@ -1,3 +1,9 @@
+/**
+ * Generate and build the service files that host a factory.
+ *
+ * @packageDocumentation
+ */
+
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { checkFactoryIntegration } from "../cli/integration.ts";

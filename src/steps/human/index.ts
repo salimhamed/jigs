@@ -1,2 +1,9 @@
-// Human transport is provider-specific; neutral execution operations do not exist yet.
+/**
+ * Reserved for provider-neutral human interaction steps.
+ *
+ * Wrap steps in a factory-owned `"use step"` file. Never call them directly from a workflow.
+ *
+ * @packageDocumentation
+ */
+
 export {};

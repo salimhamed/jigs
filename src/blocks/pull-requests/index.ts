@@ -1,3 +1,9 @@
+/**
+ * Compose pull request creation, review, approval and merge gates inside a workflow.
+ *
+ * @packageDocumentation
+ */
+
 export {
   type PostPullRequestNoteOptions,
   type PostReviewAnswersOptions,

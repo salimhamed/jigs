@@ -2,7 +2,7 @@ name: release
 
 on:
   push:
-    branches: [main]
+    branches: [main, release-please--branches--main]
 
 permissions:
   contents: write
@@ -18,14 +18,16 @@ permissions:
   statuses: read
   actions: read
 
-# A fixed group, so two pushes landing close together queue instead of racing
-# release-please, which decides from GitHub's state rather than the checkout.
+# Main pushes share a group, so they queue instead of racing release-please.
+# The release branch uses its own group so its docs check can run while the
+# main run waits for that check before merging the release PR.
 concurrency:
-  group: release
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   release-please:
+    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     outputs:
       releases_created: ${{ steps.release.outputs.releases_created }}
@@ -65,7 +67,7 @@ jobs:
           # Every check run the release PR must pass, as GitHub names them
           # (a job id in .github/workflows/). A job added there and not here
           # is a check this step can merge past.
-          EXPECTED_CHECKS: ci step-ids pr-title
+          EXPECTED_CHECKS: api-docs ci step-ids pr-title
         run: |
           set -euo pipefail
           pr="$(gh pr list --head release-please--branches--main --state open \
@@ -100,6 +102,38 @@ jobs:
           gh pr checks "$pr" --watch --fail-fast --interval 15
 
           GH_TOKEN="$MERGE_TOKEN" gh pr merge "$pr" --squash --delete-branch
+
+  # release-please first writes the bumped version to its branch. This job runs
+  # on that branch push and commits the reference generated from that exact
+  # version. Its PAT-authenticated push starts the PR checks again; the second
+  # pass has no diff and succeeds without another commit.
+  api-docs:
+    if: ${{ github.ref == 'refs/heads/release-please--branches--main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm docs
+      - name: Commit the generated API reference
+        run: |
+          set -euo pipefail
+          git add -f docs/api
+          if git diff --cached --quiet; then
+            echo "API reference is current"
+            exit 0
+          fi
+          version="$(node -p "require('./package.json').version")"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "docs: generate API reference for $version"
+          git push origin HEAD:release-please--branches--main
 
   # Only the run that cut the Releases publishes — the one the release PR's
   # squash triggered. Every other push to main leaves releases_created unset.

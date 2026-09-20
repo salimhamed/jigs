@@ -124,8 +124,10 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
+    "docs": "node tools/api-docs/docs.mjs",
+    "docs:check": "node tools/api-docs/docs.mjs --check",
     "e2e": "node e2e/check-step-ids.mjs",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm docs:check"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

@@ -1,3 +1,9 @@
+/**
+ * Configure Nitro to build and host a jigs factory service.
+ *
+ * @packageDocumentation
+ */
+
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { NitroConfig } from "nitro/types";

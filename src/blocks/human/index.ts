@@ -1,3 +1,9 @@
+/**
+ * Describe structured questions and JSON values exchanged with a human.
+ *
+ * @packageDocumentation
+ */
+
 import { z } from "zod";
 
 /** Interpolated into a prompt or a comment; never rendered as one. */
