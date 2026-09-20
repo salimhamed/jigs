@@ -1,10 +1,12 @@
-# @salimhamed/jigs v0.40.1
+# @salimhamed/jigs v0.40.2
 
 Reconcile resources that a completed factory run asked jigs to release automatically.
 
 ## Interfaces
 
 ### AutomaticReleaseDeps
+
+Injectable operations used by automatic release reconciliation.
 
 #### Properties
 
@@ -222,6 +224,8 @@ Reconcile resources that a completed factory run asked jigs to release automatic
 
 ### AutomaticReleaseReport
 
+Counts from one automatic release reconciliation pass.
+
 #### Properties
 
 ##### busy
@@ -248,6 +252,8 @@ Reconcile resources that a completed factory run asked jigs to release automatic
 
 ### CleanupRun
 
+The run fields used to decide and record automatic resource cleanup.
+
 #### Properties
 
 ##### attributes
@@ -272,11 +278,15 @@ Reconcile resources that a completed factory run asked jigs to release automatic
 
 > `const` **AUTOMATIC\_RELEASE\_INTERVAL\_MS**: `60000` = `60_000`
 
+Recovery interval for discovering terminal runs that still need cleanup.
+
 ## Functions
 
 ### automaticReleaseAction()
 
 > **automaticReleaseAction**(`factory`, `workflowName`, `outcome`, `factoryPolicy?`): `CleanupAction`
+
+Resolve the cleanup action for a workflow outcome and its effective release policy.
 
 #### Parameters
 
@@ -298,9 +308,13 @@ Reconcile resources that a completed factory run asked jigs to release automatic
 
 `"release"` \| `"keep"` = `...`
 
+What to do with eligible resources after a failed or cancelled run.
+
 ###### onSuccess
 
 `"release"` \| `"keep"` = `...`
+
+What to do with eligible resources after a completed run.
 
 #### Returns
 

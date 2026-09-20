@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.40.1
+# @salimhamed/jigs v0.40.2
 
 Read run context and update run resources outside workflow code.
 
@@ -71,7 +71,7 @@ identities occupy distinct atomic keys.
 
 > **releaseRunResources**(`policy`, `metadata`): `Promise`\<`ReleaseReport`\>
 
-The explicit durable step path: persist its choice and share the automatic lock.
+Persist an explicit success action, release under the run lock and return the result.
 
 #### Parameters
 
@@ -81,9 +81,13 @@ The explicit durable step path: persist its choice and share the automatic lock.
 
 `"release"` \| `"keep"` = `...`
 
+What to do with eligible resources after a failed or cancelled run.
+
 ###### onSuccess
 
 `"release"` \| `"keep"` = `...`
+
+What to do with eligible resources after a completed run.
 
 ##### metadata
 
@@ -117,7 +121,7 @@ Remove this run's working directory after its work is finished, never while paus
 
 > **resolveReleasePolicy**(`metadata`, `definition`): `Promise`\<\{ `onFailure`: `"release"` \| `"keep"`; `onSuccess`: `"release"` \| `"keep"`; \}\>
 
-Definition imports are compiled factory modules, supplied by the generated step wrapper.
+Resolve the workflow policy, then the factory policy, then the built-in release/keep default.
 
 #### Parameters
 

@@ -1,10 +1,12 @@
-# @salimhamed/jigs v0.40.1
+# @salimhamed/jigs v0.40.2
 
 Describe a worktree provisioned for a workflow run.
 
 ## Interfaces
 
 ### Worktree
+
+A provisioned repository worktree and the commit it was cut from.
 
 #### Properties
 

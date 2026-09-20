@@ -1,10 +1,12 @@
-# @salimhamed/jigs v0.40.1
+# @salimhamed/jigs v0.40.2
 
 Compose agent and model calls inside a workflow, including harness selection and halts.
 
 ## Classes
 
 ### JitCheckError
+
+A failed just-in-time tool check, with repair details for each failure.
 
 #### Extends
 
@@ -220,6 +222,8 @@ The raw durable wrappers a factory supplies, one per execution role.
 
 ### ResumeOrRebuildOptions
 
+Inputs for resuming an agent session with a fresh-session fallback.
+
 #### Type Parameters
 
 ##### T
@@ -273,6 +277,8 @@ Deferred so that rendering it costs nothing when the rebuild is taken.
 
 ### ResumeOrRebuildResult
 
+Output and resumable session from whichever execution path completed.
+
 #### Type Parameters
 
 ##### T
@@ -295,6 +301,8 @@ The session holding the completed work, whether resumed or newly created.
 
 ### RunAgentOrHaltDependencies
 
+Bound operations used to turn agent startup failures into human halts.
+
 #### Properties
 
 ##### haltForHuman
@@ -311,6 +319,8 @@ The session holding the completed work, whether resumed or newly created.
 
 > **AgentRequest** = `Omit`\<[`RunAgentOptions`](#runagentoptions), `"output"`\> & `object`
 
+Serializable agent request passed to a durable step.
+
 #### Type Declaration
 
 ##### outputSchema?
@@ -322,6 +332,8 @@ The session holding the completed work, whether resumed or newly created.
 ### AgentResult
 
 > **AgentResult**\<`T`\> = [`ModelResult`](#modelresult)\<`T`\> & `object`
+
+A model result with the optional session pointer from an agent harness.
 
 #### Type Declaration
 
@@ -341,6 +353,8 @@ The session holding the completed work, whether resumed or newly created.
 
 > **AgentSession** = `object`
 
+A provider session pointer that can resume the same harness.
+
 #### Properties
 
 ##### harness
@@ -356,6 +370,8 @@ The session holding the completed work, whether resumed or newly created.
 ### AskModelOptions
 
 > **AskModelOptions**\<`T`\> = `object`
+
+Workflow-side options for one model call without tools or a worktree.
 
 #### Type Parameters
 
@@ -387,11 +403,15 @@ The session holding the completed work, whether resumed or newly created.
 
 > **ClaudeHarnessConfig** = [`ClaudeHarnessOptions`](#claudeharnessoptions)
 
+A complete Claude Code harness descriptor.
+
 ***
 
 ### ClaudeHarnessOptions
 
 > **ClaudeHarnessOptions** = `SharedHarnessOptions` & `object`
+
+Serializable options for the Claude Code harness.
 
 #### Type Declaration
 
@@ -409,11 +429,15 @@ The session holding the completed work, whether resumed or newly created.
 
 > **CodexHarnessConfig** = [`CodexHarnessOptions`](#codexharnessoptions)
 
+A complete Codex harness descriptor.
+
 ***
 
 ### CodexHarnessOptions
 
 > **CodexHarnessOptions** = `SharedHarnessOptions` & `object`
+
+Serializable options for the Codex harness.
 
 #### Type Declaration
 
@@ -467,11 +491,15 @@ The factory's `"use step"` wrapper around `executeModel`.
 
 > **HarnessConfig** = [`ClaudeHarnessConfig`](#claudeharnessconfig) \| [`CodexHarnessConfig`](#codexharnessconfig)
 
+A complete descriptor for a supported agent harness.
+
 ***
 
 ### HarnessKind
 
 > **HarnessKind** = [`HarnessConfig`](#harnessconfig)\[`"kind"`\]
+
+The stable name of a supported agent harness.
 
 ***
 
@@ -479,11 +507,15 @@ The factory's `"use step"` wrapper around `executeModel`.
 
 > **HarnessOptions** = [`ClaudeHarnessOptions`](#claudeharnessoptions) \| [`CodexHarnessOptions`](#codexharnessoptions)
 
+Options accepted by either supported agent harness.
+
 ***
 
 ### McpHttpServerConfig
 
 > **McpHttpServerConfig** = `object`
+
+Configuration for an MCP server reached over HTTP.
 
 #### Properties
 
@@ -505,11 +537,15 @@ The factory's `"use step"` wrapper around `executeModel`.
 
 > **McpServerConfig** = [`McpStdioServerConfig`](#mcpstdioserverconfig) \| [`McpHttpServerConfig`](#mcphttpserverconfig)
 
+An MCP server an agent harness can expose to the model.
+
 ***
 
 ### McpStdioServerConfig
 
 > **McpStdioServerConfig** = `object`
+
+Configuration for an MCP server launched as a child process.
 
 #### Properties
 
@@ -535,6 +571,8 @@ The factory's `"use step"` wrapper around `executeModel`.
 
 > **McpToolProbe** = `object`
 
+A harmless MCP tool call used to prove that a configured server is available.
+
 #### Properties
 
 ##### arguments?
@@ -551,6 +589,8 @@ The factory's `"use step"` wrapper around `executeModel`.
 
 > **ModelRequest** = `Omit`\<[`AskModelOptions`](#askmodeloptions), `"output"`\> & `object`
 
+Serializable plain-model request passed to a durable step.
+
 #### Type Declaration
 
 ##### outputSchema?
@@ -562,6 +602,8 @@ The factory's `"use step"` wrapper around `executeModel`.
 ### ModelResult
 
 > **ModelResult**\<`T`\> = `object`
+
+Text, structured output and usage returned by a model call.
 
 #### Type Parameters
 
@@ -589,17 +631,23 @@ The factory's `"use step"` wrapper around `executeModel`.
 
 > **ModelUsage** = `LanguageModelUsage`
 
+Token usage reported by the underlying model provider.
+
 ***
 
 ### OutputJsonSchema
 
 > **OutputJsonSchema** = `Record`\<`string`, `unknown`\>
 
+The serializable JSON Schema sent across the workflow-step boundary.
+
 ***
 
 ### RebuildContextPrompt()
 
 > **RebuildContextPrompt** = (`input`) => `string`
+
+Renders instructions for rebuilding an agent's working context.
 
 #### Parameters
 
@@ -616,6 +664,8 @@ The factory's `"use step"` wrapper around `executeModel`.
 ### RebuildContextPromptInput
 
 > **RebuildContextPromptInput** = `object`
+
+Material a fresh agent needs to continue work after a session cannot resume.
 
 #### Properties
 
@@ -665,6 +715,8 @@ Run an agent through the factory’s bound step wrapper.
 
 > **RunAgentOptions**\<`T`\> = `object`
 
+Workflow-side options for an agent that works inside a directory.
+
 #### Type Parameters
 
 ##### T
@@ -699,11 +751,15 @@ Run an agent through the factory’s bound step wrapper.
 
 > `const` **rebuildContextPrompt**: [`RebuildContextPrompt`](#rebuildcontextprompt)
 
+The default prompt for continuing reviewed work in a fresh agent session.
+
 ## Functions
 
 ### askModel()
 
 > **askModel**\<`T`\>(`config`, `executeModel`): `Promise`\<[`ModelResult`](#modelresult)\<`T`\>\>
+
+Make one model call without a worktree or tools and parse its optional structured output.
 
 #### Type Parameters
 
@@ -789,6 +845,8 @@ Connect agent calls to durable steps without requiring a ticket integration.
 
 > **buildAgentRequest**\<`T`\>(`config`): [`AgentRequest`](#agentrequest)
 
+Convert workflow-side agent options into their durable wire form.
+
 #### Type Parameters
 
 ##### T
@@ -810,6 +868,8 @@ Connect agent calls to durable steps without requiring a ticket integration.
 ### buildModelRequest()
 
 > **buildModelRequest**\<`T`\>(`config`): [`ModelRequest`](#modelrequest)
+
+Convert workflow-side model options into their durable wire form.
 
 #### Type Parameters
 
@@ -833,6 +893,8 @@ Connect agent calls to durable steps without requiring a ticket integration.
 
 > **claude**(`options`): [`ClaudeHarnessOptions`](#claudeharnessoptions)
 
+Build a Claude Code harness descriptor.
+
 #### Parameters
 
 ##### options
@@ -849,6 +911,8 @@ Connect agent calls to durable steps without requiring a ticket integration.
 
 > **codex**(`options`): [`CodexHarnessOptions`](#codexharnessoptions)
 
+Build a Codex harness descriptor.
+
 #### Parameters
 
 ##### options
@@ -864,6 +928,8 @@ Connect agent calls to durable steps without requiring a ticket integration.
 ### interpolate()
 
 > **interpolate**(`template`, `values`): `string`
+
+Replace named `{{ placeholders }}` once, leaving unknown names unchanged.
 
 #### Parameters
 
@@ -884,6 +950,8 @@ Connect agent calls to durable steps without requiring a ticket integration.
 ### parseOutput()
 
 > **parseOutput**\<`T`\>(`schema`, `raw`): `T`
+
+Validate recorded structured output with the caller's original zod schema.
 
 #### Type Parameters
 
@@ -937,6 +1005,8 @@ both arms answer the same shape.
 
 > **runAgent**\<`T`\>(`config`, `executeAgent`): `Promise`\<[`AgentResult`](#agentresult)\<`T`\>\>
 
+Run an agent through a durable wrapper and parse its optional structured output.
+
 #### Type Parameters
 
 ##### T
@@ -962,6 +1032,8 @@ both arms answer the same shape.
 ### runAgentOrHalt()
 
 > **runAgentOrHalt**\<`T`\>(`claim`, `config`, `deps`): `Promise`\<[`AgentResult`](#agentresult)\<`T`\>\>
+
+Run an agent, pausing on its ticket until a human repairs failed tool checks.
 
 #### Type Parameters
 
@@ -1019,6 +1091,8 @@ own default model. The map is the factory's: jigs knows no model names.
 ### unwrapAgentStep()
 
 > **unwrapAgentStep**(`result`): [`AgentResult`](#agentresult)
+
+Convert returned execution failure markers into workflow-side errors.
 
 #### Parameters
 

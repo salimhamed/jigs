@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.40.1
+# @salimhamed/jigs v0.40.2
 
 Generate and build the service files that host a factory.
 
@@ -7,6 +7,8 @@ Generate and build the service files that host a factory.
 ### GENERATED\_CLEANUP\_FILE
 
 > `const` **GENERATED\_CLEANUP\_FILE**: `"automatic-release.ts"` = `"automatic-release.ts"`
+
+Generated automatic-release plugin filename within the factory's `.jigs` directory.
 
 ***
 
@@ -24,11 +26,15 @@ Where `prepare()` writes the generated sources, relative to the factory
 
 > `const` **GENERATED\_ENTRY\_FILE**: `"server.ts"` = `"server.ts"`
 
+Generated Nitro route filename within the factory's `.jigs` directory.
+
 ***
 
 ### GENERATED\_SCHEDULES\_FILE
 
 > `const` **GENERATED\_SCHEDULES\_FILE**: `"schedules.ts"` = `"schedules.ts"`
+
+Generated schedule plugin filename within the factory's `.jigs` directory.
 
 ## Functions
 

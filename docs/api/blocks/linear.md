@@ -1,10 +1,12 @@
-# @salimhamed/jigs v0.40.1
+# @salimhamed/jigs v0.40.2
 
 Compose ticket claiming, review, snapshots and human handoffs inside a workflow.
 
 ## Classes
 
 ### ClaimConflictError
+
+A ticket-claim failure that identifies the run already holding the ticket.
 
 #### Extends
 
@@ -212,6 +214,8 @@ https://v8.dev/docs/stack-trace-api#customizing-stack-traces
 
 ### AcquireTicketSteps
 
+Durable ticket lookups required before a workflow starts protected work.
+
 #### Properties
 
 ##### fetchTicketSnapshot()
@@ -250,6 +254,8 @@ Resolve a Linear identifier or issue ID before claiming or reading the ticket.
 
 ### HumanReply
 
+The first human ticket reply that wakes a halted run.
+
 #### Properties
 
 ##### author
@@ -279,6 +285,8 @@ Resolve a Linear identifier or issue ID before claiming or reading the ticket.
 ***
 
 ### LinearSteps
+
+Durable wrappers a factory supplies for Linear and agent operations.
 
 #### Properties
 
@@ -315,6 +323,8 @@ Resolve a Linear identifier or issue ID before claiming or reading the ticket.
 ***
 
 ### ReviewTicketOptions
+
+Agent, ticket and durable operations used by the ticket-review loop.
 
 #### Properties
 
@@ -390,6 +400,8 @@ Optional workflow policy around a human clarification.
 
 ### TicketClaim
 
+A ticket held exclusively by the current workflow run.
+
 #### Properties
 
 ##### hook
@@ -414,11 +426,15 @@ Optional workflow policy around a human clarification.
 
 > **BoundReviewTicketOptions** = `Omit`\<[`ReviewTicketOptions`](#reviewticketoptions), `"runAgent"` \| `"haltForHuman"` \| `"fetchTicketSnapshot"` \| `"postTicketNote"`\>
 
+Ticket-review options left after the factory's durable steps are bound.
+
 ***
 
 ### CheckForTicketHumanReply()
 
 > **CheckForTicketHumanReply** = (`issueId`, `sinceIso`, `postedCommentId`) => `Promise`\<\{ `cursor`: `string`; `reply`: [`HumanReply`](#humanreply) \| `null`; \}\>
+
+Durable step contract for finding a human reply after a cursor.
 
 #### Parameters
 
@@ -483,6 +499,8 @@ or repair something and let the step run again ("retry").
 
 > **HaltForHumanDependencies** = `object`
 
+Durable operations required to post and resume a human halt.
+
 #### Properties
 
 ##### checkForTicketHumanReply
@@ -520,6 +538,8 @@ or repair something and let the step run again ("retry").
 ### PostTicketHumanInputRequest()
 
 > **PostTicketHumanInputRequest** = (`issueId`, `halt`) => `Promise`\<\{ `commentId`: `string`; `postedAt`: `string`; \}\>
+
+Durable step contract for posting a question and recording its cursor.
 
 #### Parameters
 
@@ -564,6 +584,8 @@ reason the halt's step contracts are: the block side owns the contract.
 ### TicketComment
 
 > **TicketComment** = `object`
+
+A Linear ticket comment captured in a workflow snapshot.
 
 #### Properties
 
@@ -618,6 +640,8 @@ about. It is posted to the ticket, so a human can still correct it.
 
 > **TicketLink** = `object`
 
+A named external link attached to a Linear ticket.
+
 #### Properties
 
 ##### title
@@ -664,6 +688,8 @@ The bullet lines under it.
 
 > **TicketRef** = `object`
 
+A compact reference to a related Linear ticket.
+
 #### Properties
 
 ##### id
@@ -684,6 +710,8 @@ The bullet lines under it.
 
 > **TicketReviewPrompt** = (`input`) => `string`
 
+Renders instructions for an agent to turn a ticket into an actionable handoff.
+
 #### Parameters
 
 ##### input
@@ -700,6 +728,8 @@ The bullet lines under it.
 
 > **TicketReviewPromptInput** = `object`
 
+The rendered ticket supplied to a ticket-review prompt.
+
 #### Properties
 
 ##### ticket
@@ -711,6 +741,8 @@ The bullet lines under it.
 ### TicketSnapshot
 
 > **TicketSnapshot** = `object`
+
+The fixed ticket state shared by every step in one workflow activation.
 
 #### Properties
 
@@ -776,11 +808,15 @@ The bullet lines under it.
 
 > `const` **NEEDS\_HUMAN\_TOKEN\_PREFIX**: `"jigs:needs-human:"` = `"jigs:needs-human:"`
 
+Prefix for marker hooks that tell operators which ticket comment needs an answer.
+
 ***
 
 ### TICKET\_TOKEN\_PREFIX
 
 > `const` **TICKET\_TOKEN\_PREFIX**: `"linear:ticket:"` = `"linear:ticket:"`
+
+Prefix for the durable hook that gives one run exclusive ownership of a ticket.
 
 ***
 
@@ -788,11 +824,15 @@ The bullet lines under it.
 
 > `const` **ticketReviewPrompt**: [`TicketReviewPrompt`](#ticketreviewprompt)
 
+The default prompt for reviewing a Linear ticket before implementation begins.
+
 ***
 
 ### ticketReviewVerdictSchema
 
 > `const` **ticketReviewVerdictSchema**: `ZodObject`\<\{ `about`: `ZodString`; `assumptions`: `ZodArray`\<`ZodString`\>; `brief`: `ZodString`; `questions`: `ZodArray`\<`ZodObject`\<\{ `context`: `ZodOptional`\<`ZodString`\>; `options`: `ZodOptional`\<`ZodArray`\<`ZodObject`\<\{ `label`: `ZodString`; `recommended`: `ZodOptional`\<`ZodBoolean`\>; \}, `$strict`\>\>\>; `question`: `ZodString`; \}, `$strict`\>\>; `verdict`: `ZodEnum`\<\{ `needs-human`: `"needs-human"`; `proceed`: `"proceed"`; \}\>; \}, `$strict`\>
+
+Structured verdict returned by the agent that reviews a ticket before work starts.
 
 ## Functions
 
@@ -883,6 +923,8 @@ Connect Linear clarification and review to the factory's durable steps.
 
 > **claimTicket**(`issueId`, `identifier`): `Promise`\<[`TicketClaim`](#ticketclaim)\>
 
+Claim a Linear ticket for the lifetime of the current workflow run.
+
 #### Parameters
 
 ##### issueId
@@ -902,6 +944,8 @@ Connect Linear clarification and review to the factory's durable steps.
 ### haltForHuman()
 
 > **haltForHuman**(`claim`, `halt`, `deps`): `Promise`\<[`HumanReply`](#humanreply)\>
+
+Post a ticket question and suspend until a human replies to the claim hook.
 
 #### Parameters
 
@@ -927,6 +971,8 @@ Connect Linear clarification and review to the factory's durable steps.
 
 > **needsHumanToken**(`issueId`, `commentId`): `string`
 
+Build the marker token for a run's unanswered ticket comment.
+
 #### Parameters
 
 ##### issueId
@@ -947,6 +993,8 @@ Connect Linear clarification and review to the factory's durable steps.
 
 > **renderTicketSnapshot**(`snapshot`): `string`
 
+Render a ticket snapshot as Markdown for an agent prompt.
+
 #### Parameters
 
 ##### snapshot
@@ -962,6 +1010,8 @@ Connect Linear clarification and review to the factory's durable steps.
 ### reviewTicket()
 
 > **reviewTicket**(`options`): `Promise`\<[`TicketHandoff`](#tickethandoff)\>
+
+Review a ticket until it is actionable, asking a human when a decision is missing.
 
 #### Parameters
 
@@ -979,6 +1029,8 @@ Connect Linear clarification and review to the factory's durable steps.
 
 > **ticketToken**(`issueId`): `string`
 
+Build the durable hook token for a Linear issue ID.
+
 #### Parameters
 
 ##### issueId
@@ -995,6 +1047,8 @@ Connect Linear clarification and review to the factory's durable steps.
 
 > **tokenFromLinearPayload**(`payload`): `string` \| `null`
 
+Derive a claimed ticket's hook token from a Linear comment webhook.
+
 #### Parameters
 
 ##### payload
@@ -1010,6 +1064,8 @@ Connect Linear clarification and review to the factory's durable steps.
 ### toTicketSnapshot()
 
 > **toTicketSnapshot**(`raw`, `fetchedAt`): [`TicketSnapshot`](#ticketsnapshot)
+
+Normalize a provider response into the stable workflow-side ticket shape.
 
 #### Parameters
 

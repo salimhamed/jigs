@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.40.1
+# @salimhamed/jigs v0.40.2
 
 Create the HTTP application that serves a factory's workflow and webhook endpoints.
 
@@ -7,6 +7,8 @@ Create the HTTP application that serves a factory's workflow and webhook endpoin
 ### createApp()
 
 > **createApp**(`factory`): `Hono`
+
+Build the service HTTP application for one factory's workflows and webhooks.
 
 #### Parameters
 

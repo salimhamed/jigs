@@ -1,10 +1,12 @@
-# @salimhamed/jigs v0.40.1
+# @salimhamed/jigs v0.40.2
 
 Start and inspect the recurring schedules declared by a factory.
 
 ## Interfaces
 
 ### ScheduleDeps
+
+Injectable run operations and logging used by the schedule service.
 
 #### Properties
 
@@ -65,6 +67,8 @@ Start and inspect the recurring schedules declared by a factory.
 ***
 
 ### ScheduleView
+
+Operator-facing state for one declared recurring schedule.
 
 #### Properties
 

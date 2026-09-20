@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.40.1
+# @salimhamed/jigs v0.40.2
 
 Execute agent and model requests outside workflow code.
 
@@ -7,6 +7,8 @@ Wrap steps in a factory-owned `"use step"` file. Never call them directly from a
 ## Interfaces
 
 ### AgentExecutionDependencies
+
+Injectable provider and environment operations used by agent execution.
 
 #### Properties
 
@@ -97,6 +99,8 @@ Wrap steps in a factory-owned `"use step"` file. Never call them directly from a
 ### defaultAgentExecutionDependencies
 
 > `const` **defaultAgentExecutionDependencies**: [`AgentExecutionDependencies`](#agentexecutiondependencies)
+
+Production dependencies for executing Claude Code and Codex requests.
 
 ## Functions
 

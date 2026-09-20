@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.40.1
+# @salimhamed/jigs v0.40.2
 
 Provision a repository worktree outside workflow code.
 
@@ -7,6 +7,8 @@ Wrap steps in a factory-owned `"use step"` file. Never call them directly from a
 ## Interfaces
 
 ### ProvisionWorktreeDependencies
+
+Injectable registry and ownership operations used while provisioning a worktree.
 
 #### Properties
 
@@ -55,6 +57,8 @@ Wrap steps in a factory-owned `"use step"` file. Never call them directly from a
 ***
 
 ### WorktreeRequest
+
+The binding and branch used to provision a run's worktree.
 
 #### Properties
 
