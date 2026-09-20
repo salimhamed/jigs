@@ -1,10 +1,12 @@
-# @salimhamed/jigs v0.40.1
+# @salimhamed/jigs v0.40.2
 
 Start the Workflow runtime and the jigs services that depend on it.
 
 ## Interfaces
 
 ### BindingCloneGateDeps
+
+Injectable binding operations and output used by the clone startup gate.
 
 #### Properties
 
@@ -82,6 +84,8 @@ Start the Workflow runtime and the jigs services that depend on it.
 
 ### HarnessRuntimeGateDeps
 
+Injectable runtime checks and output used by the harness startup gate.
+
 #### Properties
 
 ##### error()?
@@ -137,6 +141,8 @@ Start the Workflow runtime and the jigs services that depend on it.
 ***
 
 ### RegistryGateDeps
+
+Injectable database operations and output used by the registry startup gate.
 
 #### Properties
 
@@ -208,6 +214,8 @@ Start the Workflow runtime and the jigs services that depend on it.
 
 ### WorldStartGateDeps
 
+Workflow World operations used by the final service startup gate.
+
 #### Properties
 
 ##### error()?
@@ -266,6 +274,8 @@ Start the Workflow runtime and the jigs services that depend on it.
 
 > **default**(): `Promise`\<`void`\>
 
+Run the ordered service startup gates, then enable readiness and reconciliation.
+
 #### Returns
 
 `Promise`\<`void`\>
@@ -275,6 +285,8 @@ Start the Workflow runtime and the jigs services that depend on it.
 ### fenceTerminalWorkflowDeliveries()
 
 > **fenceTerminalWorkflowDeliveries**(`world`): `void`
+
+Prevent queued step deliveries from entering runs that are already terminal.
 
 #### Parameters
 
@@ -292,6 +304,8 @@ Start the Workflow runtime and the jigs services that depend on it.
 
 > **gateOnBindingClones**(`deps`): `Promise`\<`boolean`\>
 
+Ensure every configured repository binding has a usable local clone.
+
 #### Parameters
 
 ##### deps
@@ -307,6 +321,8 @@ Start the Workflow runtime and the jigs services that depend on it.
 ### gateOnHarnessRuntimes()
 
 > **gateOnHarnessRuntimes**(`deps`): `Promise`\<`boolean`\>
+
+Refuse service startup when a required agent harness is unavailable.
 
 #### Parameters
 
@@ -324,6 +340,8 @@ Start the Workflow runtime and the jigs services that depend on it.
 
 > **gateOnWorktreeRegistry**(`deps`): `Promise`\<`boolean`\>
 
+Refuse service startup when the worktree registry cannot be prepared.
+
 #### Parameters
 
 ##### deps
@@ -339,6 +357,8 @@ Start the Workflow runtime and the jigs services that depend on it.
 ### gateOnWorldStart()
 
 > **gateOnWorldStart**(`deps`): `Promise`\<`boolean`\>
+
+Start and take ownership of the Workflow World, exiting cleanly on failure.
 
 #### Parameters
 

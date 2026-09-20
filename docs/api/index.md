@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.40.1
+# @salimhamed/jigs v0.40.2
 
 Define a factory and describe its workflows, schedules, bindings and merge policy.
 
@@ -260,13 +260,25 @@ Operating settings and deferred workflow modules declared by a factory.
 
 > `optional` **approval**: \{ `kind`: `"review"`; \} \| \{ `kind`: `"label"`; `name`: `string`; \}
 
+The signal that authorizes an automatic merge.
+
+###### Type Declaration
+
+\{ `kind`: `"review"`; \}
+
+\{ `kind`: `"label"`; `name`: `string`; \}
+
 ###### by?
 
 > `optional` **by**: `"jigs"` \| `"human"`
 
+Whether jigs merges an eligible pull request or waits for a person to merge it.
+
 ###### method?
 
 > `optional` **method**: `"squash"` \| `"merge"` \| `"rebase"`
+
+The GitHub merge method to use when jigs performs the merge.
 
 ##### release?
 
@@ -276,9 +288,13 @@ Operating settings and deferred workflow modules declared by a factory.
 
 > **onFailure**: `"release"` \| `"keep"`
 
+What to do with eligible resources after a failed or cancelled run.
+
 ###### onSuccess
 
 > **onSuccess**: `"release"` \| `"keep"`
+
+What to do with eligible resources after a completed run.
 
 ##### schedules?
 
@@ -303,6 +319,8 @@ Operating settings and deferred workflow modules declared by a factory.
 ***
 
 ### ReviewThread
+
+A pull request review conversation, with its optional file location.
 
 #### Properties
 
@@ -353,6 +371,8 @@ Five fields, evaluated in the service host's local time zone.
 
 ### WorkflowEntry
 
+A factory-owned workflow together with its input schema and runtime requirements.
+
 #### Type Parameters
 
 ##### S
@@ -373,9 +393,13 @@ Five fields, evaluated in the service host's local time zone.
 
 > **onFailure**: `"release"` \| `"keep"`
 
+What to do with eligible resources after a failed or cancelled run.
+
 ###### onSuccess
 
 > **onSuccess**: `"release"` \| `"keep"`
+
+What to do with eligible resources after a completed run.
 
 ##### requires?
 
@@ -398,6 +422,8 @@ Five fields, evaluated in the service host's local time zone.
 ***
 
 ### Worktree
+
+A provisioned repository worktree and the commit it was cut from.
 
 #### Properties
 
@@ -422,6 +448,8 @@ Five fields, evaluated in the service host's local time zone.
 ### AnyWorkflowEntry
 
 > **AnyWorkflowEntry** = [`WorkflowEntry`](#workflowentry)\<`any`\>
+
+A workflow entry used where a factory contains several different input schemas.
 
 ***
 
@@ -472,6 +500,8 @@ Parsed workflow inputs with the trigger that started the run.
 ### ticketInputSchema
 
 > `const` **ticketInputSchema**: `ZodUnion`\<readonly \[`ZodUUID`, `ZodString`\]\>
+
+Accept a Linear issue UUID or an uppercase team-and-number ticket identifier.
 
 ## Functions
 

@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.40.1
+# @salimhamed/jigs v0.40.2
 
 Read and update GitHub pull requests outside workflow code.
 
@@ -8,15 +8,21 @@ Wrap steps in a factory-owned `"use step"` file. Never call them directly from a
 
 ### GitHubRepoRef
 
+Identifies a GitHub repository by its owner and name.
+
 #### Properties
 
 ##### owner
 
 > **owner**: `string`
 
+The GitHub organization or account that owns the repository.
+
 ##### repo
 
 > **repo**: `string`
+
+The repository name.
 
 ## Type Aliases
 
@@ -28,17 +34,39 @@ What GitHub did, and when it did not, why — and whether asking again could
 change the answer, which is what decides between standing the commit down
 and leaving it merge-ready.
 
+#### Type Declaration
+
+\{ `mergeCommitSha`: `string` \| `null`; `merged`: `true`; \}
+
+##### mergeCommitSha
+
+> **mergeCommitSha**: `string` \| `null`
+
+The merge commit, or `null` when GitHub has not reported it yet.
+
+##### merged
+
+> **merged**: `true`
+
+Confirms that GitHub reports the pull request merged.
+
+`object` & `MergeRefusal`
+
 ***
 
 ### OpenedPullRequest
 
 > **OpenedPullRequest** = `PullRequestRef` & `object`
 
+A newly opened or adopted pull request and its browser URL.
+
 #### Type Declaration
 
 ##### url
 
 > **url**: `string`
+
+The pull request's browser URL.
 
 ## Variables
 
@@ -120,13 +148,19 @@ reports `merged` only if GitHub says so.
 
 \{ `kind`: `"review"`; \} \| \{ `kind`: `"label"`; `name`: `string`; \} = `...`
 
+The signal that authorizes an automatic merge.
+
 ###### by
 
 `"jigs"` \| `"human"` = `...`
 
+Whether jigs merges an eligible pull request or waits for a person to merge it.
+
 ###### method
 
 `"squash"` \| `"merge"` \| `"rebase"` = `...`
+
+The GitHub merge method to use when jigs performs the merge.
 
 #### Returns
 

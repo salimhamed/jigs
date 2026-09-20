@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.40.1
+# @salimhamed/jigs v0.40.2
 
 Compose pull request creation, review, approval and merge gates inside a workflow.
 
@@ -34,6 +34,8 @@ Why a merge did not happen, and whether a later wake could change it.
 
 > **reason**: `string`
 
+A human-readable explanation of the state that prevented the merge.
+
 ##### transient
 
 > **transient**: `boolean`
@@ -49,15 +51,21 @@ down until a new commit or a change to the repository moves it.
 
 ### PostPullRequestNoteOptions
 
+Inputs for posting one commit-scoped pull request status note.
+
 #### Properties
 
 ##### body
 
 > **body**: `string`
 
+The Markdown note body.
+
 ##### commentOnPullRequest()
 
 > **commentOnPullRequest**: (`pr`, `body`) => `Promise`\<\{ `id`: `number`; \}\>
+
+Factory-owned step used to post on the pull request conversation.
 
 Post a comment on the pull request conversation and return its id.
 
@@ -65,7 +73,7 @@ Post a comment on the pull request conversation and return its id.
 
 ###### pr
 
-[`PullRequestRef`](#pullrequestref)
+`PullRequestRef`
 
 ###### body
 
@@ -83,7 +91,9 @@ The commit the note is about: a red head, or a head it could not merge.
 
 ##### pr
 
-> **pr**: [`PullRequestRef`](#pullrequestref)
+> **pr**: `PullRequestRef`
+
+The pull request receiving the note.
 
 ##### reason
 
@@ -97,9 +107,13 @@ already reported a refusal it is waiting out.
 
 > **scope**: `string`
 
+The continuation identity that owns the note.
+
 ***
 
 ### PostReviewAnswersOptions
+
+Inputs for posting one revision round's answers.
 
 #### Properties
 
@@ -107,9 +121,13 @@ already reported a refusal it is waiting out.
 
 > **answers**: [`ThreadAnswers`](#threadanswers)
 
+Replies and optional commit explanation produced for this revision round.
+
 ##### commentOnPullRequest()
 
 > **commentOnPullRequest**: (`pr`, `body`) => `Promise`\<\{ `id`: `number`; \}\>
+
+Factory-owned step used to post on the pull request conversation.
 
 Post a comment on the pull request conversation and return its id.
 
@@ -117,7 +135,7 @@ Post a comment on the pull request conversation and return its id.
 
 ###### pr
 
-[`PullRequestRef`](#pullrequestref)
+`PullRequestRef`
 
 ###### body
 
@@ -135,11 +153,15 @@ The commit the round pushed, when it pushed one; the explanation names it.
 
 ##### pr
 
-> **pr**: [`PullRequestRef`](#pullrequestref)
+> **pr**: `PullRequestRef`
+
+The pull request receiving the answers.
 
 ##### replyToPullRequestReviewThread()
 
 > **replyToPullRequestReviewThread**: (`pr`, `rootId`, `body`) => `Promise`\<\{ `id`: `number`; \}\>
+
+Factory-owned step used to reply to an inline review thread.
 
 Reply to a review thread and return the posted comment id.
 
@@ -147,7 +169,7 @@ Reply to a review thread and return the posted comment id.
 
 ###### pr
 
-[`PullRequestRef`](#pullrequestref)
+`PullRequestRef`
 
 ###### rootId
 
@@ -171,9 +193,13 @@ The continuation identity these answers belong to.
 
 > **threads**: `ReviewThread`[]
 
+The wake's known threads, used to reject invented anchors and route each answer.
+
 ***
 
 ### PullRequestMarker
+
+Hidden progress metadata stored in a pull request comment.
 
 #### Properties
 
@@ -217,11 +243,15 @@ What this answers: a comment as `id@updatedAt`, or a commit sha.
 
 ### PullRequestState
 
+The actionable wakes and terminal state derived from a pull request snapshot.
+
 #### Properties
 
 ##### done
 
 > **done**: `boolean`
+
+Whether the pull request is closed and the gate may finish.
 
 ##### ownComments
 
@@ -232,6 +262,8 @@ Comments on the pull request that any jigs workflow wrote.
 ##### wakes
 
 > **wakes**: [`PullRequestWake`](#pullrequestwake)[]
+
+Actions currently owed to the pull request.
 
 ***
 
@@ -245,23 +277,33 @@ Answers routed back to pull-request threads and an optional commit explanation.
 
 > **answers**: `object`[]
 
+Replies to post, using `null` to answer feedback on the pull request conversation.
+
 ###### body
 
 > **body**: `string`
+
+The Markdown reply body.
 
 ###### threadId
 
 > **threadId**: `number` \| `null`
 
+The review thread root to answer, or `null` for conversation feedback.
+
 ##### commitExplanation
 
 > **commitExplanation**: `string` \| `null`
+
+A note explaining the pushed commit, or `null` when no explanation should be posted.
 
 ## Type Aliases
 
 ### ApprovalSignal
 
 > **ApprovalSignal** = `z.output`\<*typeof* [`approvalSignalSchema`](#approvalsignalschema)\>
+
+The review or label signal that authorizes an automatic merge.
 
 ***
 
@@ -279,11 +321,31 @@ request nobody has approved.
 
 > **Attend**\<`T`\> = \{ `listen`: `true`; \} \| \{ `finished`: `T`; \}
 
+Tells [attend](#attend-1) to wait for another wake or finish with a value.
+
 #### Type Parameters
 
 ##### T
 
 `T`
+
+#### Type Declaration
+
+\{ `listen`: `true`; \}
+
+##### listen
+
+> **listen**: `true`
+
+Continue listening for pull request activity.
+
+\{ `finished`: `T`; \}
+
+##### finished
+
+> **finished**: `T`
+
+Stop listening and return this value.
 
 ***
 
@@ -291,11 +353,15 @@ request nobody has approved.
 
 > **MarkerKind** = `"reply"` \| `"completion"` \| `"status"`
 
+The work recorded by a hidden marker in a pull request comment.
+
 ***
 
 ### MergePolicy
 
 > **MergePolicy** = `z.output`\<*typeof* [`mergePolicySchema`](#mergepolicyschema)\>
+
+The effective pull request merge behavior for a binding.
 
 ***
 
@@ -329,19 +395,27 @@ request nobody has approved.
 
 > **PullRequestRef** = `object`
 
+Identifies a pull request by repository owner, repository name and number.
+
 #### Properties
 
 ##### number
 
 > **number**: `number`
 
+The repository-local pull request number.
+
 ##### owner
 
 > **owner**: `string`
 
+The GitHub organization or account that owns the repository.
+
 ##### repo
 
 > **repo**: `string`
+
+The repository name.
 
 ***
 
@@ -361,6 +435,88 @@ leaves evidence on the pull request that it is done with it:
   this head, so the retry is silent.
 - `closed`: terminal.
 
+#### Type Declaration
+
+\{ `headSha`: `string`; `kind`: `"merge-ready"`; `retryNoted`: `boolean`; \}
+
+##### headSha
+
+> **headSha**: `string`
+
+The reviewed commit that the merge must still target.
+
+##### kind
+
+> **kind**: `"merge-ready"`
+
+Identifies a pull request that is ready for an attempted merge.
+
+##### retryNoted
+
+> **retryNoted**: `boolean`
+
+Whether a transient refusal for this commit was already reported.
+
+\{ `body?`: `string`; `kind`: `"review-comments"`; `threads`: `ReviewThread`[]; \}
+
+##### body?
+
+> `optional` **body**: `string`
+
+The changes-requested review summary, when the feedback included one.
+
+##### kind
+
+> **kind**: `"review-comments"`
+
+Identifies unanswered review feedback.
+
+##### threads
+
+> **threads**: `ReviewThread`[]
+
+Inline and conversation threads that still need answers.
+
+\{ `failing`: `CheckRun`[]; `headSha`: `string`; `kind`: `"ci-red"`; `mentionLogin`: `string` \| `null`; \}
+
+##### failing
+
+> **failing**: `CheckRun`[]
+
+Failed checks reported by the provider.
+
+##### headSha
+
+> **headSha**: `string`
+
+The commit whose checks failed.
+
+##### kind
+
+> **kind**: `"ci-red"`
+
+Identifies a failed build on the current commit.
+
+##### mentionLogin
+
+> **mentionLogin**: `string` \| `null`
+
+The most recent human reviewer to notify when repair cannot continue.
+
+\{ `kind`: `"closed"`; `merged`: `boolean`; \}
+
+##### kind
+
+> **kind**: `"closed"`
+
+Identifies a terminal, closed pull request.
+
+##### merged
+
+> **merged**: `boolean`
+
+Whether the pull request closed by merging.
+
 ***
 
 ### StatusReason
@@ -377,17 +533,29 @@ refusal was already reported, and leaves the commit merge-ready.
 
 > `const` **approvalSignalSchema**: `ZodDiscriminatedUnion`\<\[`ZodObject`\<\{ `kind`: `ZodLiteral`\<`"review"`\>; \}, `$strict`\>, `ZodObject`\<\{ `kind`: `ZodLiteral`\<`"label"`\>; `name`: `ZodString`; \}, `$strict`\>\], `"kind"`\>
 
+Selects how the operator authorizes an automatic merge.
+
 ***
 
 ### mergePolicySchema
 
 > `const` **mergePolicySchema**: `ZodObject`\<\{ `approval`: `ZodDefault`\<`ZodDiscriminatedUnion`\<\[`ZodObject`\<\{ `kind`: `ZodLiteral`\<`"review"`\>; \}, `$strict`\>, `ZodObject`\<\{ `kind`: `ZodLiteral`\<`"label"`\>; `name`: `ZodString`; \}, `$strict`\>\], `"kind"`\>\>; `by`: `ZodDefault`\<`ZodEnum`\<\{ `human`: `"human"`; `jigs`: `"jigs"`; \}\>\>; `method`: `ZodDefault`\<`ZodEnum`\<\{ `merge`: `"merge"`; `rebase`: `"rebase"`; `squash`: `"squash"`; \}\>\>; \}, `$strict`\>
 
+Configures who merges a pull request, how it is merged and how approval is recorded.
+
+#### Remarks
+
+`by` chooses an automatic jigs merge or a human merge. `method` selects squash, merge-commit or
+rebase behavior. `approval` requires either a review of the current commit or a named label that
+remains valid after later pushes.
+
 ***
 
 ### PULL\_REQUEST\_TOKEN\_PREFIX
 
 > `const` **PULL\_REQUEST\_TOKEN\_PREFIX**: `"github:pr:"` = `"github:pr:"`
+
+The durable hook-token prefix for pull request activity.
 
 ## Functions
 
@@ -412,7 +580,29 @@ asked for it?
 
 ##### approval
 
-\{ `kind`: `"review"`; \} | \{ `kind`: `"label"`; `name`: `string`; \}
+\{ `kind`: `"review"`; \}
+
+###### kind
+
+`"review"` = `...`
+
+Require an approving review of the current commit.
+
+|
+
+\{ `kind`: `"label"`; `name`: `string`; \}
+
+###### kind
+
+`"label"` = `...`
+
+Require a named label, which remains valid after later pushes.
+
+###### name
+
+`string` = `...`
+
+The label that authorizes merging whenever the pull request is ready.
 
 #### Returns
 
@@ -423,6 +613,8 @@ asked for it?
 ### attend()
 
 > **attend**\<`T`\>(`wakes`, `onWake`, `describe?`): `Promise`\<`T`\>
+
+Consume pull request wakes until the handler finishes with a value.
 
 #### Type Parameters
 
@@ -448,6 +640,11 @@ asked for it?
 
 `Promise`\<`T`\>
 
+#### Remarks
+
+The gate is always closed when the handler returns or throws, which releases its pull request
+lock. If the gate ends before the pull request closes, this function throws.
+
 ***
 
 ### bindPullRequestSteps()
@@ -466,11 +663,11 @@ Connect pull-request waiting to the factory's durable state reader.
 
 #### Returns
 
-`object`
-
 ##### pullRequestGate
 
 > **pullRequestGate**: [`PullRequestGateFn`](#pullrequestgatefn) = `gate`
+
+Wait for actionable changes to one pull request.
 
 ***
 
@@ -515,7 +712,29 @@ already carry this scope's answers yields nothing.
 
 ##### approval
 
-\{ `kind`: `"review"`; \} | \{ `kind`: `"label"`; `name`: `string`; \}
+\{ `kind`: `"review"`; \}
+
+###### kind
+
+`"review"` = `...`
+
+Require an approving review of the current commit.
+
+|
+
+\{ `kind`: `"label"`; `name`: `string`; \}
+
+###### kind
+
+`"label"` = `...`
+
+Require a named label, which remains valid after later pushes.
+
+###### name
+
+`string` = `...`
+
+The label that authorizes merging whenever the pull request is ready.
 
 #### Returns
 
@@ -586,6 +805,8 @@ pull request independently of the run delivering it.
 
 > **finished**\<`T`\>(`value`): [`Attend`](#attend)\<`T`\>
 
+Finish attending and return a value from the loop.
+
 #### Type Parameters
 
 ##### T
@@ -618,7 +839,29 @@ pull request independently of the run delivering it.
 
 ##### approval
 
-\{ `kind`: `"review"`; \} | \{ `kind`: `"label"`; `name`: `string`; \}
+\{ `kind`: `"review"`; \}
+
+###### kind
+
+`"review"` = `...`
+
+Require an approving review of the current commit.
+
+|
+
+\{ `kind`: `"label"`; `name`: `string`; \}
+
+###### kind
+
+`"label"` = `...`
+
+Require a named label, which remains valid after later pushes.
+
+###### name
+
+`string` = `...`
+
+The label that authorizes merging whenever the pull request is ready.
 
 #### Returns
 
@@ -640,7 +883,29 @@ May this pull request merge now? [mergeRefusal](#mergerefusal-1) for why it may 
 
 ##### approval
 
-\{ `kind`: `"review"`; \} | \{ `kind`: `"label"`; `name`: `string`; \}
+\{ `kind`: `"review"`; \}
+
+###### kind
+
+`"review"` = `...`
+
+Require an approving review of the current commit.
+
+|
+
+\{ `kind`: `"label"`; `name`: `string`; \}
+
+###### kind
+
+`"label"` = `...`
+
+Require a named label, which remains valid after later pushes.
+
+###### name
+
+`string` = `...`
+
+The label that authorizes merging whenever the pull request is ready.
 
 #### Returns
 
@@ -651,6 +916,8 @@ May this pull request merge now? [mergeRefusal](#mergerefusal-1) for why it may 
 ### listen()
 
 > **listen**(): [`Attend`](#attend)\<`never`\>
+
+Keep attending to pull request activity.
 
 #### Returns
 
@@ -716,7 +983,29 @@ repository with no CI, and such a repository needs `merge.by: "human"`.
 
 ##### approval
 
-\{ `kind`: `"review"`; \} | \{ `kind`: `"label"`; `name`: `string`; \}
+\{ `kind`: `"review"`; \}
+
+###### kind
+
+`"review"` = `...`
+
+Require an approving review of the current commit.
+
+|
+
+\{ `kind`: `"label"`; `name`: `string`; \}
+
+###### kind
+
+`"label"` = `...`
+
+Require a named label, which remains valid after later pushes.
+
+###### name
+
+`string` = `...`
+
+The label that authorizes merging whenever the pull request is ready.
 
 #### Returns
 
@@ -788,6 +1077,8 @@ unanswered comes back on the next wake.
 
 > **pullRequestGate**(`pr`, `fetchState`, `scope`, `approval`): `AsyncGenerator`\<[`PullRequestWake`](#pullrequestwake), `void`, `undefined`\>
 
+Yield actionable pull request state, then wait for webhook activity until the pull request closes.
+
 #### Parameters
 
 ##### pr
@@ -804,11 +1095,38 @@ unanswered comes back on the next wake.
 
 ##### approval
 
-\{ `kind`: `"review"`; \} | \{ `kind`: `"label"`; `name`: `string`; \}
+\{ `kind`: `"review"`; \}
+
+###### kind
+
+`"review"` = `...`
+
+Require an approving review of the current commit.
+
+|
+
+\{ `kind`: `"label"`; `name`: `string`; \}
+
+###### kind
+
+`"label"` = `...`
+
+Require a named label, which remains valid after later pushes.
+
+###### name
+
+`string` = `...`
+
+The label that authorizes merging whenever the pull request is ready.
 
 #### Returns
 
 `AsyncGenerator`\<[`PullRequestWake`](#pullrequestwake), `void`, `undefined`\>
+
+#### Remarks
+
+Only one run can hold a pull request's token. The injected state reader must be wrapped in a
+factory-owned `"use step"` function so each snapshot is durable and workflow replay stays pure.
 
 ***
 
@@ -838,6 +1156,8 @@ The default continuation identity: the workflow, and what it is working on.
 
 > **pullRequestToken**(`pr`): `string`
 
+Build the durable hook token shared by a pull request gate and webhook ingress.
+
 #### Parameters
 
 ##### pr
@@ -853,6 +1173,8 @@ The default continuation identity: the workflow, and what it is working on.
 ### readLedger()
 
 > **readLedger**(`bodies`, `scope`): [`MarkerLedger`](#markerledger)
+
+Read the completed work and settled commits recorded for one continuation scope.
 
 #### Parameters
 
@@ -896,6 +1218,8 @@ What this scope has already done here, as the pull request records it.
 
 > **renderChecks**(`failing`): `string`
 
+Render failed checks as a Markdown list for a pull request note.
+
 #### Parameters
 
 ##### failing
@@ -929,6 +1253,8 @@ The hidden line jigs appends to everything it posts on a pull request.
 ### tokenFromGitHubPayload()
 
 > **tokenFromGitHubPayload**(`payload`): `string` \| `null`
+
+Return the pull request hook token named by a supported GitHub webhook payload.
 
 #### Parameters
 

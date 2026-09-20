@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.40.1
+# @salimhamed/jigs v0.40.2
 
 Read and update Linear issues outside workflow code.
 
@@ -7,6 +7,8 @@ Wrap steps in a factory-owned `"use step"` file. Never call them directly from a
 ## Interfaces
 
 ### CreateIssueInProjectInput
+
+Fields used to create a Linear ticket in a project's first team.
 
 #### Properties
 
@@ -25,6 +27,8 @@ Wrap steps in a factory-owned `"use step"` file. Never call them directly from a
 ***
 
 ### LinearIssueMatch
+
+A matching Linear ticket returned by a project title search.
 
 #### Properties
 
@@ -55,6 +59,8 @@ Wrap steps in a factory-owned `"use step"` file. Never call them directly from a
 ***
 
 ### TicketStatusResult
+
+The before-and-after state names from a ticket status update.
 
 #### Properties
 
@@ -102,6 +108,8 @@ halt's, not the context's: only the block that raised it knows.
 
 > **RenderNeedsHumanComment** = (`halt`, `context`, `participants`) => `string`
 
+Renders the Linear comment that asks a person to unblock a run.
+
 #### Parameters
 
 ##### halt
@@ -125,6 +133,8 @@ halt's, not the context's: only the block that raised it knows.
 ### RenderTicketNote()
 
 > **RenderTicketNote** = (`note`, `participants`) => `string`
+
+Renders a non-blocking Linear note for ticket participants.
 
 #### Parameters
 
@@ -172,11 +182,15 @@ Look for a reply since the last check, excluding the run’s own question.
 
 > `const` **renderNeedsHumanComment**: [`RenderNeedsHumanComment`](#renderneedshumancomment)
 
+Render the default human-input request as Linear Markdown.
+
 ***
 
 ### renderTicketNote
 
 > `const` **renderTicketNote**: [`RenderTicketNote`](#renderticketnote)
+
+Render the default non-blocking ticket note as Linear Markdown.
 
 ## Functions
 
