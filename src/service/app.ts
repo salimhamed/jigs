@@ -14,7 +14,7 @@ import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import { readOwner } from "../steps/workspaces/owner.ts";
 import { listWorktreesForRun } from "../steps/workspaces/registry.ts";
 import { registrySql } from "../steps/workspaces/sql.ts";
-import { sweepWorktrees } from "../steps/workspaces/sweep.ts";
+import { listWorktreeStates } from "../steps/workspaces/worktree-state.ts";
 import { githubWebhookSecret, verifyGithubSignature, verifyLinearSignature } from "./ingress.ts";
 import { listRunDeadJobs } from "./queue.ts";
 import { bootPhase, isReady } from "./readiness.ts";
@@ -107,25 +107,6 @@ export function createApp(factory: Factory): Hono {
   app.get("/api/doctor", async (c) =>
     c.json(await runChecks([...doctorChecks(), ...scheduleChecks(factory)])),
   );
-
-  // `jigs sweep` is an HTTP client of this route. `paths` scopes a clean to
-  // the worktrees an operator approved one by one.
-  app.post("/api/worktrees/sweep", async (c) => {
-    type SweepBody = { clean?: boolean; force?: boolean; paths?: string[] };
-    const body = await c.req.json<SweepBody>().catch(() => ({}) as SweepBody);
-    return c.json(
-      await sweepWorktrees(
-        {
-          clean: body.clean === true,
-          force: body.force === true,
-          ...(Array.isArray(body.paths)
-            ? { paths: body.paths.filter((p) => typeof p === "string") }
-            : {}),
-        },
-        { sql: registrySql(), readOwner: (runId) => readOwner(runId, factory) },
-      ),
-    );
-  });
 
   // The ingress is stateless: verify, reconstruct the token, resume. A
   // delivery nobody is listening to is acknowledged and dropped — no mapping
@@ -242,15 +223,11 @@ export function createApp(factory: Factory): Hono {
   });
 
   // Everything `jigs ps` renders: the SDK's runs overlaid with jigs' suspended
-  // status, plus the worktrees as the sweep classifier sees them — the one
-  // deriver of worktree state, so ps and sweep can never disagree.
+  // status, plus the registry's current worktree state.
   app.get("/api/runs", async (c) => {
     const [runs, worktrees] = await Promise.all([
       listRuns(factory),
-      sweepWorktrees(
-        { clean: false },
-        { sql: registrySql(), readOwner: (runId) => readOwner(runId, factory) },
-      ).then((report) => report.entries.filter((entry) => entry.kind !== "run-directory")),
+      listWorktreeStates(registrySql(), (runId) => readOwner(runId, factory)),
     ]);
     // The schedules ride along on the same run listing the table above
     // renders, so ps stays one round trip and the two tables can never
@@ -294,13 +271,12 @@ export function createApp(factory: Factory): Hono {
     const retained = new Set(retainedTokens);
     const releasedTokens = claimedTokens.filter((token) => !retained.has(token));
     // Cancel leaves the worktree behind: name what stays so the operator knows
-    // where it is and that `jigs sweep` is the way to reclaim it.
+    // where it is and that offline resource prune is the way to reclaim it.
     const worktrees = (await listWorktreesForRun(registrySql(), ref.runId)).map((row) => row.path);
     // A merged run's workflow tears its own worktree down; everything else —
-    // cancel included — leaves the tree on disk for the operator's `jigs
-    // sweep`. A cancelled run's dirty tree is exactly the wreckage the sweep
-    // exists to surface, and reuse already stops naming a cancelled run as an
-    // owner.
+    // cancel included — leaves the tree on disk for the operator's offline
+    // resource prune. A cancelled run's dirty tree is diagnosis evidence that
+    // prune surfaces but will not delete.
     return c.json({
       runId: ref.runId,
       cancelled: true,

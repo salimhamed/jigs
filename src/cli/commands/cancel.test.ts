@@ -112,61 +112,16 @@ test("a minimum-retention hook is reported as retained", async () => {
   expect(lines).toEqual([`cancelled ${RUN}`, "retained linear:ticket:AGE-317"]);
 });
 
-test("--discard-worktrees force-sweeps the cancelled run's worktrees and prints what it removed", async () => {
-  respondLookup(suspended);
-  respondCancelWithWorktrees(["/data/wt/one", "/data/wt/two"]);
-  fetchMock.mockResolvedValueOnce(
-    new Response(
-      JSON.stringify({
-        entries: [
-          {
-            path: "/data/wt/one",
-            branch: "one",
-            state: "abandoned-dirty",
-            eligible: true,
-            requiresForce: true,
-            ownerRunId: RUN,
-            reason: "the tree holds uncommitted work",
-            branchOutcome: { deleted: false, unmergedCommits: 1 },
-          },
-          {
-            path: "/data/wt/two",
-            branch: "two",
-            state: "abandoned",
-            eligible: true,
-            requiresForce: false,
-            ownerRunId: RUN,
-            reason: "the owning run is terminal and the tree is clean",
-            branchOutcome: { deleted: true },
-          },
-        ],
-        removed: ["/data/wt/one", "/data/wt/two"],
-        removedDirs: [],
-      }),
-    ),
-  );
-
-  await cancelRun("AGE-317", deps({ discard: true }));
-
-  expect(fetchMock.mock.calls[2]?.[1].body).toBe(
-    JSON.stringify({
-      clean: true,
-      force: true,
-      paths: ["/data/wt/one", "/data/wt/two"],
-    }),
-  );
-  expect(lines).not.toContain("worktree kept at /data/wt/one — jigs sweep to review");
-  expect(lines.at(-1)).toBe("2 removed (1 branch kept), 0 held");
-});
-
-test("cancel without --discard-worktrees still keeps and reports the run's worktree", async () => {
+test("cancel keeps and points each worktree at offline resource pruning", async () => {
   respondLookup(suspended);
   respondCancelWithWorktrees(["/data/wt/one"]);
 
   await cancelRun("AGE-317", deps());
 
   expect(fetchMock).toHaveBeenCalledTimes(2);
-  expect(lines.at(-1)).toBe("worktree kept at /data/wt/one — jigs sweep to review");
+  expect(lines.at(-1)).toBe(
+    `worktree kept at /data/wt/one — jigs resources prune --run ${RUN} to review`,
+  );
 });
 
 test("an in-flight run asks before cancelling", async () => {

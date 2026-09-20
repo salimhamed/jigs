@@ -13,6 +13,7 @@ import { factorySlug } from "../../steps/workspaces/layout.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import type { ServiceHealth, ServiceProcesses, SpawnSpec } from "./service-lifecycle.ts";
 import {
+  acquireServiceExclusion,
   awaitServiceReady,
   builtBundleHash,
   restartService,
@@ -23,6 +24,7 @@ import {
   serviceLogs,
   servicePidfilePath,
   serviceStatus,
+  serviceSupervisionPath,
   staleWorkflowSources,
   startService,
   stopService,
@@ -108,7 +110,12 @@ const deps = (
   out: (line: string) => lines.push(line),
   processes: io.processes,
   probe: io.probe,
-  systemd: { available: () => false, linger: () => undefined, stopScope: () => undefined },
+  systemd: {
+    available: () => false,
+    linger: () => undefined,
+    scopeState: () => "unknown",
+    stopScope: () => undefined,
+  },
   // The fake answers at once; the wait between probes is for a real boot.
   startPollMs: 0,
   ...timeouts,
@@ -125,6 +132,7 @@ test("start clears a stale systemd scope before reusing its transient unit name"
     systemd: {
       available: () => true,
       linger: () => true,
+      scopeState: () => "inactive",
       stopScope: (unit) => stopped.push(unit),
     },
   });
@@ -138,6 +146,23 @@ test("start clears a stale systemd scope before reusing its transient unit name"
     process.execPath,
     SERVICE_ENTRY,
   ]);
+  expect(readFileSync(serviceSupervisionPath(factorySlug(root)), "utf8").trim()).toBe(
+    "systemd-scope",
+  );
+});
+
+test("resource maintenance exclusion closes the service restart race", async () => {
+  const root = builtFactory();
+  const io = fake();
+  const release = acquireServiceExclusion(factorySlug(root), "resources-prune");
+  try {
+    await expect(startService(deps(root, io))).rejects.toThrow(
+      "maintenance exclusion is already held",
+    );
+    expect(io.spawns).toHaveLength(0);
+  } finally {
+    release();
+  }
 });
 
 const failure = (run: Promise<void>) =>
@@ -205,6 +230,9 @@ test("start records the pid in a pidfile keyed by factory slug", async () => {
   await startService(deps(root, fake()));
   const pidfile = servicePidfilePath(factorySlug(root));
   expect(readFileSync(pidfile, "utf8").trim()).toBe("4242");
+  expect(readFileSync(serviceSupervisionPath(factorySlug(root)), "utf8").trim()).toBe(
+    "unsupervised",
+  );
 });
 
 test("start records which bundle the process runs, and a dead pid runs none", async () => {

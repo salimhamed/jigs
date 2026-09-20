@@ -87,6 +87,10 @@ service dependencies begin closing. A World implementation that ignores an
 aborted terminal wait cannot hold shutdown open, and a late notification
 cannot admit cleanup after shutdown starts.
 
-Manual `jigs sweep` remains the operator path for intentionally reclaiming
-kept or unsafe resources. It uses the same registry and Git decision machinery
-as automatic and explicit release.
+Manual `jigs resources prune` remains the operator path for intentionally
+reclaiming kept resources. It is preview-only until `--apply`, requires offline
+service-and-child quiescence, and uses the same registry, run lock and Git
+decision machinery as automatic and explicit release. Apply also requires a
+record that the factory's last service start used the current systemd scope
+supervisor; when that record is missing, start and stop the service once before
+retrying. Dirty or unmerged work has no force bypass.

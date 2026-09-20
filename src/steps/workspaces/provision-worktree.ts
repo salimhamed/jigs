@@ -1,7 +1,7 @@
 // The step side of the worktree lifecycle: what the factory's "use step"
 // wrappers delegate to. The runtime creates and registers worktrees; explicit
 // and automatic release share the run-scoped lock below. A suspended run keeps
-// its worktree, and safety-kept work remains available to `jigs sweep`.
+// its worktree, and safety-kept work remains available to resource inventory.
 //
 // Everything below reaches node builtins, so this module must only ever be
 // imported from inside a step body. `WorktreeRequest` is a type, so a

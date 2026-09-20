@@ -78,3 +78,22 @@ test("renamed value flags reach validation instead of falling back to defaults",
   );
   expect(run(cwd, "ps", "--service-url", "not-a-url").stderr).toContain("not-a-url");
 });
+
+test("resource maintenance help exposes preview, apply, run, JSON and kept-resource controls", () => {
+  const cwd = tmpdir();
+  const root = run(cwd, "resources", "--help");
+  expect(root.status).toBe(0);
+  expect(root.stdout).toContain("list");
+  expect(root.stdout).toContain("prune");
+
+  const list = run(cwd, "resources", "list", "--help");
+  expect(list.stdout).toContain("--run <run-id>");
+  expect(list.stdout).toContain("--json");
+
+  const prune = run(cwd, "resources", "prune", "--help");
+  expect(prune.stdout).toContain("preview safe local resource cleanup");
+  expect(prune.stdout).toContain("--apply");
+  expect(prune.stdout).toContain("--include-kept");
+  expect(prune.stdout).toContain("--run <run-id>");
+  expect(prune.stdout).toContain("--json");
+});

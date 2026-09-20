@@ -99,6 +99,51 @@ export function serviceBundlePath(slug: string): string {
   return path.join(jigsDataDir(), "services", `${slug}.bundle`);
 }
 
+export function serviceExclusionPath(slug: string): string {
+  return path.join(jigsDataDir(), "services", `${slug}.maintenance-lock`);
+}
+
+export function serviceSupervisionPath(slug: string): string {
+  return path.join(jigsDataDir(), "services", `${slug}.supervision`);
+}
+
+export function serviceSupervision(slug: string): "systemd-scope" | "unsupervised" | undefined {
+  const file = serviceSupervisionPath(slug);
+  if (!existsSync(file)) return undefined;
+  const value = readFileSync(file, "utf8").trim();
+  return value === "systemd-scope" || value === "unsupervised" ? value : undefined;
+}
+
+/**
+ * Excludes service startup from offline resource maintenance. The directory
+ * creation is the cross-process compare-and-set; a crashed holder is left in
+ * place deliberately because guessing that a maintenance pass is gone would
+ * reopen the startup/removal race.
+ */
+export function acquireServiceExclusion(
+  slug: string,
+  purpose: "start" | "resources-prune",
+): () => void {
+  const lock = serviceExclusionPath(slug);
+  mkdirSync(path.dirname(lock), { recursive: true });
+  try {
+    mkdirSync(lock);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+      throw new JigsError(
+        `factory maintenance exclusion is already held at ${lock}`,
+        "wait for the other command to finish; if it crashed, inspect that directory before removing it",
+      );
+    }
+    throw error;
+  }
+  writeFileSync(
+    path.join(lock, "owner.json"),
+    `${JSON.stringify({ pid: process.pid, purpose })}\n`,
+  );
+  return () => rmSync(lock, { recursive: true, force: true });
+}
+
 function serviceRunStatePath(slug: string): string {
   return path.join(jigsDataDir(), "services", `${slug}.run.json`);
 }
@@ -233,47 +278,55 @@ export async function startService(
   const factoryRoot = locateFactoryRoot(deps.cwd);
   const service = resolveService(factoryRoot);
   const { slug, serviceUrl, dashboardUrl } = service;
+  const releaseExclusion = acquireServiceExclusion(slug, "start");
+  try {
+    const running = livePid(slug, processes);
+    if (running !== undefined) {
+      out(`already running: pid ${running} at ${serviceUrl}`);
+      return;
+    }
 
-  const running = livePid(slug, processes);
-  if (running !== undefined) {
-    out(`already running: pid ${running} at ${serviceUrl}`);
-    return;
-  }
+    const entry = path.join(factoryRoot, SERVICE_ENTRY);
+    if (!existsSync(entry)) {
+      throw new JigsError(
+        `no built service at ${entry}`,
+        `build this factory's service first: jigs build in ${factoryRoot}`,
+      );
+    }
 
-  const entry = path.join(factoryRoot, SERVICE_ENTRY);
-  if (!existsSync(entry)) {
-    throw new JigsError(
-      `no built service at ${entry}`,
-      `build this factory's service first: jigs build in ${factoryRoot}`,
+    const logFile = serviceLogPath(slug);
+    const logOffset = existsSync(logFile) ? statSync(logFile).size : 0;
+    const supervised = systemd.available();
+    if (supervised) systemd.stopScope(`jigs-${slug}`);
+    const pid = processes.spawn({
+      command: supervised ? "systemd-run" : process.execPath,
+      args: supervised
+        ? ["--user", "--scope", `--unit=jigs-${slug}`, process.execPath, SERVICE_ENTRY]
+        : [SERVICE_ENTRY],
+      cwd: factoryRoot,
+      env: childEnv(factoryRoot, service),
+      logPath: logFile,
+    });
+    if (pid === undefined) {
+      throw new JigsError(`the service process for ${slug} did not start`, `check ${logFile}`);
+    }
+
+    const pidfile = servicePidfilePath(slug);
+    mkdirSync(path.dirname(pidfile), { recursive: true });
+    writeFileSync(pidfile, `${pid}\n`);
+    writeFileSync(
+      serviceSupervisionPath(slug),
+      `${supervised ? "systemd-scope" : "unsupervised"}\n`,
     );
+    writeFileSync(serviceRunStatePath(slug), `${JSON.stringify({ logOffset })}\n`);
+    writeFileSync(serviceBundlePath(slug), `${builtBundleHash(factoryRoot)}\n`);
+    if (options.awaitReady !== false) await awaitReady(deps, slug, serviceUrl, pid);
+    out(`started ${slug}: pid ${pid} at ${serviceUrl}`);
+    out(`dashboard: ${dashboardUrl}`);
+    out(`logs: ${logFile}`);
+  } finally {
+    releaseExclusion();
   }
-
-  const logFile = serviceLogPath(slug);
-  const logOffset = existsSync(logFile) ? statSync(logFile).size : 0;
-  const supervised = systemd.available();
-  if (supervised) systemd.stopScope(`jigs-${slug}`);
-  const pid = processes.spawn({
-    command: supervised ? "systemd-run" : process.execPath,
-    args: supervised
-      ? ["--user", "--scope", `--unit=jigs-${slug}`, process.execPath, SERVICE_ENTRY]
-      : [SERVICE_ENTRY],
-    cwd: factoryRoot,
-    env: childEnv(factoryRoot, service),
-    logPath: logFile,
-  });
-  if (pid === undefined) {
-    throw new JigsError(`the service process for ${slug} did not start`, `check ${logFile}`);
-  }
-
-  const pidfile = servicePidfilePath(slug);
-  mkdirSync(path.dirname(pidfile), { recursive: true });
-  writeFileSync(pidfile, `${pid}\n`);
-  writeFileSync(serviceRunStatePath(slug), `${JSON.stringify({ logOffset })}\n`);
-  writeFileSync(serviceBundlePath(slug), `${builtBundleHash(factoryRoot)}\n`);
-  if (options.awaitReady !== false) await awaitReady(deps, slug, serviceUrl, pid);
-  out(`started ${slug}: pid ${pid} at ${serviceUrl}`);
-  out(`dashboard: ${dashboardUrl}`);
-  out(`logs: ${logFile}`);
 }
 
 /**
