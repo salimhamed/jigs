@@ -6,10 +6,10 @@
  * @packageDocumentation
  */
 
-export type { GitHubRepoRef } from "../../providers/github-webhook.ts";
 export { fetchPullRequestState } from "./fetch-state.ts";
 export {
   commentOnPullRequest,
+  type GitHubRepoRef,
   type MergeOutcome,
   markPullRequestReady,
   mergePullRequest,

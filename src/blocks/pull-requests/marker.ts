@@ -1,9 +1,4 @@
-// Where a pull request's progress is written down: inside the comments jigs
-// posts. GitHub renders an HTML comment as nothing and returns it from the
-// API, so a marker is invisible to a reader and readable by the next run.
-// Pure by construction — render, parse, and read a ledger out of the bodies a
-// snapshot carries.
-
+/** The work recorded by a hidden marker in a pull request comment. */
 export type MarkerKind = "reply" | "completion" | "status";
 
 /**
@@ -16,6 +11,7 @@ export type StatusReason = "merge" | "ci" | "merge-retry";
 const KINDS = new Set<string>(["reply", "completion", "status"]);
 const REASONS = new Set<string>(["merge", "ci", "merge-retry"]);
 
+/** Hidden progress metadata stored in a pull request comment. */
 export interface PullRequestMarker {
   /**
    * The continuation identity. It survives run replacement, so a later run
@@ -157,6 +153,7 @@ export interface MarkerLedger {
   settled: Readonly<Record<StatusReason, ReadonlySet<string>>>;
 }
 
+/** Read the completed work and settled commits recorded for one continuation scope. */
 export function readLedger(bodies: Iterable<string>, scope: string): MarkerLedger {
   const answered = new Set<string>();
   const settled = {

@@ -1,18 +1,29 @@
-// Driving the pull request gate by hand. What lives here is the mechanics —
-// the loop, the disposal, and returning a value out of it — so a factory's
-// loop is only its switch. The whole loop is inside the try: the gate holds
-// one hook per PR and disposes it in its own finally, which only runs if the
-// generator is returned. An onWake that throws would otherwise leak a durable
-// PR-scoped lock that blocks every later run on that pull request.
-
 import type { PullRequestWake } from "./gate.ts";
 
-export type Attend<T> = { listen: true } | { finished: T };
+/** Tells {@link attend} to wait for another wake or finish with a value. */
+export type Attend<T> =
+  | {
+      /** Continue listening for pull request activity. */
+      listen: true;
+    }
+  | {
+      /** Stop listening and return this value. */
+      finished: T;
+    };
 
+/** Keep attending to pull request activity. */
 export const listen = (): Attend<never> => ({ listen: true });
 
+/** Finish attending and return a value from the loop. */
 export const finished = <T>(value: T): Attend<T> => ({ finished: value });
 
+/**
+ * Consume pull request wakes until the handler finishes with a value.
+ *
+ * @remarks
+ * The gate is always closed when the handler returns or throws, which releases its pull request
+ * lock. If the gate ends before the pull request closes, this function throws.
+ */
 export async function attend<T>(
   wakes: AsyncGenerator<PullRequestWake, void, undefined>,
   onWake: (wake: PullRequestWake) => Promise<Attend<T>> | Attend<T>,

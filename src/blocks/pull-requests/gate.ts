@@ -1,15 +1,7 @@
-// Determinism rule for this module: the provider fetch lives in
-// ../../steps/pull-requests/fetch-state.ts, which the factory wraps as a step
-// and injects; the generator body only passes memoized snapshots through the
-// pure classifier. Nothing is carried between rounds — what jigs has already
-// done is written on the pull request itself, as markers, so a snapshot alone
-// decides what is still outstanding.
-
 import { createHook } from "workflow";
 import type {
   CheckRun,
   PullRequestComment,
-  PullRequestRef,
   PullRequestReview,
   PullRequestSnapshot,
   ReviewThread,
@@ -19,12 +11,10 @@ import { carriesMarker, commentSource, type MarkerLedger, readLedger } from "./m
 import { isPullRequestMergeReady } from "./merge-ready.ts";
 import type { ApprovalSignal } from "./policy.ts";
 
-// The gate's hook token names the pull request, never the run: owning it is
-// the exclusivity lock. The ingress has only a webhook payload to go on, so it
-// reconstructs the token through pullRequestToken below — build and parse cannot drift
-// while they share the one constructor.
+/** The durable hook-token prefix for pull request activity. */
 export const PULL_REQUEST_TOKEN_PREFIX = "github:pr:";
 
+/** Build the durable hook token shared by a pull request gate and webhook ingress. */
 export function pullRequestToken(pr: PullRequestRef): string {
   return `${PULL_REQUEST_TOKEN_PREFIX}${pr.owner}/${pr.repo}#${pr.number}`;
 }
@@ -49,10 +39,7 @@ function prNumber(payload: GithubPayload): number | null {
   return number ?? null;
 }
 
-// Any GitHub event that names a pull request and a repository is routable:
-// pull_request and pull_request_review carry it directly, issue_comment
-// carries it only on a PR, and the check events carry it in a list. Everything
-// else (ping included) is not.
+/** Return the pull request hook token named by a supported GitHub webhook payload. */
 export function tokenFromGitHubPayload(payload: unknown): string | null {
   if (typeof payload !== "object" || payload === null) return null;
   const { repository } = payload as GithubPayload;
@@ -65,9 +52,15 @@ export function tokenFromGitHubPayload(payload: unknown): string | null {
   return pullRequestToken({ owner, repo, number });
 }
 
-// Re-exported: a factory's composition names the pull request the gate listens
-// on, and this is the subpath it already reaches for the gate itself.
-export type { PullRequestRef };
+/** Identifies a pull request by repository owner, repository name and number. */
+export type PullRequestRef = {
+  /** The GitHub organization or account that owns the repository. */
+  owner: string;
+  /** The repository name. */
+  repo: string;
+  /** The repository-local pull request number. */
+  number: number;
+};
 
 /**
  * What is outstanding on the pull request right now. Every wake describes
@@ -83,21 +76,44 @@ export type { PullRequestRef };
  * - `closed`: terminal.
  */
 export type PullRequestWake =
-  | { kind: "merge-ready"; headSha: string; retryNoted: boolean }
+  | {
+      /** Identifies a pull request that is ready for an attempted merge. */
+      kind: "merge-ready";
+      /** The reviewed commit that the merge must still target. */
+      headSha: string;
+      /** Whether a transient refusal for this commit was already reported. */
+      retryNoted: boolean;
+    }
   // `body` is the summary of the CHANGES_REQUESTED review these threads were
   // submitted with, when they came together. A thread with `origin:
   // "conversation"` is not an inline thread at all: it is a review's body or a
   // pull request conversation comment, carried in the same shape.
-  | { kind: "review-comments"; threads: ReviewThread[]; body?: string }
   | {
+      /** Identifies unanswered review feedback. */
+      kind: "review-comments";
+      /** Inline and conversation threads that still need answers. */
+      threads: ReviewThread[];
+      /** The changes-requested review summary, when the feedback included one. */
+      body?: string;
+    }
+  | {
+      /** Identifies a failed build on the current commit. */
       kind: "ci-red";
+      /** The commit whose checks failed. */
       headSha: string;
+      /** Failed checks reported by the provider. */
       failing: CheckRun[];
       // Who to escalate to when the fix bound runs out: the most recent human
       // reviewer. Only the snapshot knows, so the wake carries it.
+      /** The most recent human reviewer to notify when repair cannot continue. */
       mentionLogin: string | null;
     }
-  | { kind: "closed"; merged: boolean };
+  | {
+      /** Identifies a terminal, closed pull request. */
+      kind: "closed";
+      /** Whether the pull request closed by merging. */
+      merged: boolean;
+    };
 
 // A review summary and a conversation comment both arrive without an inline
 // anchor. Carrying them as single-comment threads gives the builder one shape
@@ -142,8 +158,11 @@ function lastHumanReviewer(snapshot: PullRequestSnapshot): string | null {
   return snapshot.reviews.findLast((review) => !carriesMarker(review.body))?.user ?? null;
 }
 
+/** The actionable wakes and terminal state derived from a pull request snapshot. */
 export interface PullRequestState {
+  /** Actions currently owed to the pull request. */
   wakes: PullRequestWake[];
+  /** Whether the pull request is closed and the gate may finish. */
   done: boolean;
   /** Comments on the pull request that any jigs workflow wrote. */
   ownComments: number;
@@ -256,6 +275,13 @@ export type PullRequestGateFn = (
 // workflow that only reads a pull request registers no hook and reads on its
 // own schedule. The first round runs before the hook is ever awaited, so a PR
 // already approved before the gate started is caught without a webhook.
+/**
+ * Yield actionable pull request state, then wait for webhook activity until the pull request closes.
+ *
+ * @remarks
+ * Only one run can hold a pull request's token. The injected state reader must be wrapped in a
+ * factory-owned `"use step"` function so each snapshot is durable and workflow replay stays pure.
+ */
 export async function* pullRequestGate(
   pr: PullRequestRef,
   fetchState: FetchPrState,

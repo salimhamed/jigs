@@ -1,6 +1,3 @@
-// Who is writing on the pull request. The SDK's run metadata is constant for
-// the life of a run, so reading it workflow-side replays identically.
-
 import { getWorkflowMetadata } from "workflow";
 import { pullRequestScope } from "./marker.ts";
 

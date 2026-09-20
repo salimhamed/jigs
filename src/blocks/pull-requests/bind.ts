@@ -4,5 +4,8 @@ import { type FetchPrState, type PullRequestGateFn, pullRequestGate } from "./ga
 export function bindPullRequestSteps(steps: { fetchPullRequestState: FetchPrState }) {
   const gate: PullRequestGateFn = (pr, scope, approval) =>
     pullRequestGate(pr, steps.fetchPullRequestState, scope, approval);
-  return { pullRequestGate: gate };
+  return {
+    /** Wait for actionable changes to one pull request. */
+    pullRequestGate: gate,
+  };
 }

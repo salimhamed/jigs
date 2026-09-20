@@ -1,6 +1,3 @@
-// The gate's one provider call, wrapped as a step by the factory so every
-// snapshot the generator classifies is a memoized step result.
-
 import type { FetchPrState } from "../../blocks/pull-requests/gate.ts";
 import { fetchPrSnapshot, type PullRequestRef } from "../../providers/github.ts";
 

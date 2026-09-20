@@ -1,9 +1,3 @@
-// The pull-request side of the review loop's step surface: thin
-// implementations over the GitHub provider, which the factory wraps as steps
-// and injects. This module reaches the network, so it is only ever imported
-// from inside a step body — the errors these raise workflow-side live in the
-// factory's own composition, never here.
-
 import { type MergeRefusal, mergeRefusal } from "../../blocks/pull-requests/merge-ready.ts";
 import type { MergePolicy } from "../../blocks/pull-requests/policy.ts";
 import {
@@ -30,11 +24,22 @@ import {
 } from "../../providers/github.ts";
 import { GithubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity } from "../../providers/github-auth.ts";
-import { type GitHubRepoRef, parseGithubRemote } from "../../providers/github-webhook.ts";
+import { parseGithubRemote } from "../../providers/github-webhook.ts";
 
-export type OpenedPullRequest = PullRequestRef & { url: string };
+/** Identifies a GitHub repository by its owner and name. */
+export interface GitHubRepoRef {
+  /** The GitHub organization or account that owns the repository. */
+  owner: string;
+  /** The repository name. */
+  repo: string;
+}
 
-// The binding is the remote now, so this is a config read: no git subprocess.
+/** A newly opened or adopted pull request and its browser URL. */
+export type OpenedPullRequest = PullRequestRef & {
+  /** The pull request's browser URL. */
+  url: string;
+};
+
 /** Find the GitHub repository configured for a binding. */
 export async function resolveRepository(binding: string): Promise<GitHubRepoRef> {
   const { remote } = resolveBinding(factoryRoot(), binding);
@@ -100,15 +105,15 @@ export async function markPullRequestReady(pr: PullRequestRef): Promise<PullRequ
   return fetchPrSnapshot(pr);
 }
 
-// A plain POST: the body already carries the marker that says what it answers,
-// so nothing here reads or writes progress. The posted id is returned for a
-// caller that wants to name it in a log.
 /** Reply to a review thread and return the posted comment id. */
 export async function replyToPullRequestReviewThread(
   pr: PullRequestRef,
   rootId: number,
   body: string,
-): Promise<{ id: number }> {
+): Promise<{
+  /** The posted comment id. */
+  id: number;
+}> {
   return replyToReviewThread(pr, rootId, body);
 }
 
@@ -116,7 +121,10 @@ export async function replyToPullRequestReviewThread(
 export async function commentOnPullRequest(
   pr: PullRequestRef,
   body: string,
-): Promise<{ id: number }> {
+): Promise<{
+  /** The posted comment id. */
+  id: number;
+}> {
   return postPrComment(pr, body);
 }
 
@@ -128,7 +136,10 @@ export async function commentOnPullRequest(
 export async function reviewPullRequest(
   pr: PullRequestRef,
   review: PullRequestReviewRequest,
-): Promise<{ id: number }> {
+): Promise<{
+  /** The posted review id. */
+  id: number;
+}> {
   return postPullRequestReview(pr, review);
 }
 
@@ -140,7 +151,16 @@ export async function reviewPullRequest(
 export type MergeOutcome =
   // `null` when GitHub has not reported the commit yet, which a re-read after
   // an ambiguous answer can leave open.
-  { merged: true; mergeCommitSha: string | null } | ({ merged: false } & MergeRefusal);
+  | {
+      /** Confirms that GitHub reports the pull request merged. */
+      merged: true;
+      /** The merge commit, or `null` when GitHub has not reported it yet. */
+      mergeCommitSha: string | null;
+    }
+  | ({
+      /** Indicates that the merge did not happen. */
+      merged: false;
+    } & MergeRefusal);
 
 // GitHub answers 405 for a merge it cannot perform and 409 for a head that
 // moved under the pinned sha. Neither is a failure of jigs and neither is
