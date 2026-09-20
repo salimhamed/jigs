@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Application, ReflectionKind } from "typedoc";
-import { typedocOptions } from "./typedoc.config.mjs";
+import { sharedOptions, typedocOptions } from "./typedoc.config.mjs";
 
 const toolDir = path.dirname(fileURLToPath(import.meta.url));
 export const rootDir = path.resolve(toolDir, "../..");
@@ -120,12 +120,12 @@ async function checkRepositoryRules(entries) {
   if (failures.length) throw new Error(failures.join("\n"));
 }
 
-export async function convert(entryPoints, options = {}) {
+export async function convert(entryPoints, { format = "markdown", ...options } = {}) {
   const app = await Application.bootstrapWithPlugins({
-    ...typedocOptions,
+    ...(format === "html" ? sharedOptions : typedocOptions),
     entryPoints,
     name: "@salimhamed/jigs",
-    plugin: ["typedoc-plugin-markdown"],
+    plugin: format === "html" ? [] : ["typedoc-plugin-markdown"],
     tsconfig: path.join(rootDir, "tsconfig.json"),
     ...options,
   });
@@ -176,8 +176,29 @@ export async function run({ write = false, destination = path.join(rootDir, "doc
   await Promise.all(entries.map((entry) => renderEntry(entry, destination)));
 }
 
+export async function renderSite(destination = path.join(rootDir, "docs-site")) {
+  const { entries } = await repositoryConfig();
+  await checkRepositoryRules(entries);
+  const { app, project } = await convert(
+    entries.map((entry) => path.join(rootDir, entry.source)),
+    { format: "html", githubPages: true },
+  );
+  app.validate(project);
+  assertDirectExportSummaries(project);
+  if (app.logger.hasErrors() || app.logger.hasWarnings()) {
+    throw new Error("TypeDoc validation failed");
+  }
+  await app.outputs.writeOutput({ name: "html", path: destination }, project);
+  if (app.logger.hasErrors() || app.logger.hasWarnings()) {
+    throw new Error("TypeDoc site rendering failed");
+  }
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  run({ write: !process.argv.includes("--check") }).catch((error) => {
+  const operation = process.argv.includes("--site")
+    ? renderSite()
+    : run({ write: !process.argv.includes("--check") });
+  operation.catch((error) => {
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 1;
   });

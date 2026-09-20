@@ -1,16 +1,12 @@
-export const typedocOptions = {
+export const sharedOptions = {
   blockTags: ["@example", "@remarks"],
   disableSources: true,
-  entryFileName: "index",
   entryPointStrategy: "resolve",
   excludeInternal: true,
   githubPages: false,
-  hideBreadcrumbs: true,
-  hidePageHeader: true,
   includeVersion: true,
   inlineTags: ["@link"],
   modifierTags: ["@internal", "@packageDocumentation"],
-  outputFileStrategy: "modules",
   readme: "none",
   treatValidationWarningsAsErrors: true,
   treatWarningsAsErrors: true,
@@ -22,6 +18,14 @@ export const typedocOptions = {
     rewrittenLink: true,
     unusedMergeModuleWith: true,
   },
+};
+
+export const typedocOptions = {
+  ...sharedOptions,
+  entryFileName: "index",
+  hideBreadcrumbs: true,
+  hidePageHeader: true,
+  outputFileStrategy: "modules",
 };
 
 export default typedocOptions;
