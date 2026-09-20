@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.41.1
+# @salimhamed/jigs v0.41.2
 
 Compose ticket claiming, review, snapshots and human handoffs inside a workflow.
 

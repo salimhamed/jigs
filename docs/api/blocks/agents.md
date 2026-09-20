@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.41.1
+# @salimhamed/jigs v0.41.2
 
 Compose agent and model calls inside a workflow, including harness selection and halts.
 
