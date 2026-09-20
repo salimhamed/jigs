@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -76,7 +76,56 @@ test("renamed value flags reach validation instead of falling back to defaults",
   expect(run(cwd, "watch", "--poll-interval-seconds", "0").stderr).toContain(
     "--poll-interval-seconds must be a positive number",
   );
-  expect(run(cwd, "ps", "--service-url", "not-a-url").stderr).toContain("not-a-url");
+  expect(run(cwd, "status", "--service-url", "not-a-url").stderr).toContain("not-a-url");
+});
+
+test("root and no-argument help are side-effect-free, grouped and exact", () => {
+  const cwd = mkdtempSync(path.join(tmpdir(), "jigs-help-"));
+  try {
+    const noArgs = run(cwd);
+    const explicit = run(cwd, "--help");
+    expect(noArgs.status).toBe(0);
+    expect(noArgs.stderr).toBe("");
+    expect(noArgs.stdout).toBe(explicit.stdout);
+    expect(noArgs.stdout).toContain("Everyday commands:");
+    expect(noArgs.stdout).toContain("Connecting code repositories:");
+    expect(noArgs.stdout).toContain("Ready-made workflows:");
+    expect(noArgs.stdout).toContain("Inspecting and cleaning working files:");
+    expect(noArgs.stdout).toContain("Background service:");
+    expect(noArgs.stdout).toContain("Advanced commands:");
+    expect(noArgs.stdout).toContain("jigs run ship --input ticket=AGE-123");
+    expect(noArgs.stdout).toContain("each workflow defines its own inputs");
+    expect(noArgs.stdout.indexOf("jigs init")).toBeLessThan(noArgs.stdout.indexOf("jigs bind"));
+    expect(noArgs.stdout).not.toMatch(/jigs (ps|sweep)\b/);
+    expect(noArgs.stdout).not.toMatch(/^\s*jigs logs\b/m);
+    expect(existsSync(path.join(cwd, "package.json"))).toBe(false);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("command help uses explicit placeholders and explains run selectors", () => {
+  const cwd = tmpdir();
+  expect(run(cwd, "run", "--help").stdout).toContain("<workflow-name>");
+  expect(run(cwd, "status", "--help").stdout).toContain("[run-id]");
+  expect(run(cwd, "status", "--help").stdout).toContain("unique ID prefix");
+  expect(run(cwd, "watch", "--help").stdout).toContain("[run-id]");
+  expect(run(cwd, "cancel", "--help").stdout).toContain("<run-id>");
+  expect(run(cwd, "bind", "--help").stdout).toContain("<remote-url>");
+  expect(run(cwd, "bind", "--help").stdout).toContain("<binding-name>");
+  expect(run(cwd, "unbind", "--help").stdout).toContain("<binding-name>");
+  expect(run(cwd, "recipe", "add", "--help").stdout).toContain("<recipe-name>");
+  expect(run(cwd, "upgrade", "--help").stdout).toContain("<version>");
+  expect(run(cwd, "service", "logs", "--help").stdout).toContain("<line-count>");
+});
+
+test("removed commands are not registered", () => {
+  const cwd = tmpdir();
+  for (const command of ["ps", "logs", "sweep"]) {
+    const result = run(cwd, command);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(`unknown command '${command}'`);
+  }
 });
 
 test("resource maintenance help exposes preview, apply, run, JSON and kept-resource controls", () => {

@@ -1,10 +1,10 @@
 import { JigsError } from "../../errors.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
-import { listFactoryRuns, type PsRun, suspensionLine, waitingCell } from "./ps.ts";
-import type { ServiceDeps } from "./service-client.ts";
+import { listFactoryRuns, type RunListRun, suspensionLine, waitingCell } from "./run-list.ts";
+import { readErrorBody, runRefError, type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 // One long-lived process for the whole factory: a watcher that re-ran `jigs
-// ps` would pay a node start-up per poll, and the service hosts no event
+// status` would pay a node start-up per poll, and the service hosts no event
 // stream to subscribe to. The poll reads the one listing route; every event
 // below is a difference between two of its answers.
 
@@ -31,6 +31,7 @@ export interface WatchEvent {
 export interface WatchOptions {
   json?: boolean;
   intervalMs?: number;
+  selector?: string;
   /** Stop after this many polls. The CLI passes none and runs until killed. */
   polls?: number;
 }
@@ -46,12 +47,14 @@ export async function watchRuns(deps: WatchDeps, options: WatchOptions = {}): Pr
   const intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS;
   const sleep = deps.sleep ?? ((ms: number) => new Promise((done) => setTimeout(done, ms)));
   const now = deps.now ?? (() => new Date());
-  let previous: Map<string, PsRun> | undefined;
+  const selectedRunId =
+    options.selector === undefined ? undefined : await resolveWatchedRun(options.selector, deps);
+  let previous: Map<string, RunListRun> | undefined;
 
   for (let poll = 0; options.polls === undefined || poll < options.polls; poll++) {
     if (poll > 0) await sleep(intervalMs);
     const at = now().toISOString();
-    let runs: PsRun[];
+    let runs: RunListRun[];
     try {
       ({ runs } = await listFactoryRuns(deps));
     } catch (error) {
@@ -64,26 +67,46 @@ export async function watchRuns(deps: WatchDeps, options: WatchOptions = {}): Pr
     // listing a run that was deleted, and a deletion is not something that
     // happened to the pipeline.
     for (const run of runs) {
+      if (selectedRunId !== undefined && run.runId !== selectedRunId) continue;
       for (const event of previous === undefined
         ? opening(run, at)
         : runEvents(previous.get(run.runId), run, at)) {
         emit(deps, options, event);
       }
     }
-    previous = new Map(runs.map((run) => [run.runId, run]));
+    previous = new Map(
+      runs
+        .filter((run) => selectedRunId === undefined || run.runId === selectedRunId)
+        .map((run) => [run.runId, run]),
+    );
   }
+}
+
+async function resolveWatchedRun(selector: string, deps: ServiceDeps): Promise<string> {
+  const res = await serviceFetch(deps.serviceUrl, `/api/runs/${encodeURIComponent(selector)}`);
+  if (res.status === 404 || res.status === 409) {
+    throw runRefError(selector, await readErrorBody(res));
+  }
+  if (!res.ok) {
+    throw new JigsError(`watch failed: HTTP ${res.status} ${await res.text()}`);
+  }
+  return ((await res.json()) as { runId: string }).runId;
 }
 
 /** What the factory looks like the moment a watch starts: every run still in
  *  play, so nothing has to be read from a table first. */
-function opening(run: PsRun, at: string): WatchEvent[] {
+function opening(run: RunListRun, at: string): WatchEvent[] {
   if (TERMINAL_RUN_STATUSES.has(run.status)) return [];
   return [event(run, at, "watching", waitingCell(run))];
 }
 
 /** Every difference between two answers about one run, in the order it
  *  happened: the step finished first, then the run parked on what comes next. */
-export function runEvents(previous: PsRun | undefined, next: PsRun, at: string): WatchEvent[] {
+export function runEvents(
+  previous: RunListRun | undefined,
+  next: RunListRun,
+  at: string,
+): WatchEvent[] {
   if (previous === undefined) {
     const appeared = event(next, at, "appeared", next.ticket ?? next.workflow);
     // A run that started and ended between two polls has to be as loud as one
@@ -102,7 +125,7 @@ export function runEvents(previous: PsRun | undefined, next: PsRun, at: string):
   return events;
 }
 
-function statusEvent(previous: PsRun, next: PsRun, at: string): WatchEvent {
+function statusEvent(previous: RunListRun, next: RunListRun, at: string): WatchEvent {
   if (TERMINAL_RUN_STATUSES.has(next.status)) {
     return event(next, at, "finished", finishedDetail(next));
   }
@@ -113,12 +136,12 @@ function statusEvent(previous: PsRun, next: PsRun, at: string): WatchEvent {
   return event(next, at, "status", next.status);
 }
 
-const finishedDetail = (run: PsRun): string => run.status;
+const finishedDetail = (run: RunListRun): string => run.status;
 
-const stepKey = (run: PsRun): string =>
+const stepKey = (run: RunListRun): string =>
   `${run.steps}:${run.lastStep?.name ?? ""}:${run.lastStep?.status ?? ""}:${run.lastStep?.at ?? ""}`;
 
-function event(run: PsRun, at: string, name: WatchEventName, detail: string): WatchEvent {
+function event(run: RunListRun, at: string, name: WatchEventName, detail: string): WatchEvent {
   return {
     at,
     event: name,

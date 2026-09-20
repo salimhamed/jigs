@@ -10,6 +10,9 @@ import type { ReleasePolicy } from "./runtime/release.ts";
 
 export const ticketInputSchema = z.union([z.uuid(), z.string().regex(/^[A-Z][A-Z0-9]*-\d+$/)]);
 
+/** Plaintext run metadata used by read-only tooling to resolve ticket selectors. */
+export const RUN_TICKET_ATTRIBUTE = "$jigs.ticket";
+
 /** Metadata supplied to every workflow run. */
 export type Injected = { triggerId: string };
 
@@ -42,7 +45,7 @@ export interface Schedule {
 /**
  * What a factory repo hands the service: its workflows, keyed by name, and
  * the schedules that fire them. A schedule is keyed by its own name rather
- * than nested under a workflow — the name is what runs, logs and `jigs
+ * than nested under a workflow — the name is what runs, status and `jigs
  * doctor` refer to, and one workflow can carry several.
  */
 export interface Factory {

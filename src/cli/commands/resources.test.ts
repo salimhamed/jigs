@@ -4,6 +4,7 @@ import path from "node:path";
 import { drizzle } from "drizzle-orm/node-postgres";
 import type { Pool, QueryConfig } from "pg";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { RUN_TICKET_ATTRIBUTE } from "../../blocks/factory.ts";
 import { resourceAttribute } from "../../blocks/runtime/resources.ts";
 import { factorySlug } from "../../steps/workspaces/layout.ts";
 import type { RegistrySql } from "../../steps/workspaces/registry.ts";
@@ -35,7 +36,7 @@ afterEach(() => {
   rmSync(tmp, { recursive: true, force: true });
 });
 
-function database(status = "completed"): RegistrySql {
+function database(status = "completed", ticket?: string): RegistrySql {
   const resource = resourceAttribute({
     kind: "pull-request",
     identity: "acme/repo#1",
@@ -51,7 +52,39 @@ function database(status = "completed"): RegistrySql {
               id: RUN,
               name: WORKFLOW,
               status,
-              attributes: { [resource.key]: resource.value },
+              attributes: {
+                [resource.key]: resource.value,
+                ...(ticket === undefined ? {} : { [RUN_TICKET_ATTRIBUTE]: ticket }),
+              },
+            },
+          ],
+        };
+      }
+      return { rows: [] };
+    },
+    async end() {},
+  };
+  return drizzle(pool as unknown as Pool);
+}
+
+function ambiguousTicketDatabase(): RegistrySql {
+  const pool = {
+    async query(config: string | (QueryConfig & { rowMode?: string })) {
+      const text = typeof config === "string" ? config : config.text;
+      if (text.includes('"workflow"."workflow_runs"')) {
+        return {
+          rows: [
+            {
+              id: RUN,
+              name: WORKFLOW,
+              status: "completed",
+              attributes: { [RUN_TICKET_ATTRIBUTE]: "AGE-317" },
+            },
+            {
+              id: "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ",
+              name: WORKFLOW,
+              status: "failed",
+              attributes: { [RUN_TICKET_ATTRIBUTE]: "AGE-317" },
             },
           ],
         };
@@ -73,6 +106,37 @@ test("list supports run selection and JSON without mutating", async () => {
     entries: [{ runId: RUN, kind: "pull-request", exists: null, eligible: false }],
   });
   expect(JSON.parse(lines.join("\n"))).toEqual(report);
+});
+
+test("list resolves a recorded ticket selector without starting the service", async () => {
+  const report = await listResources(
+    {
+      cwd: root,
+      out: (line) => lines.push(line),
+      connect: () => database("completed", "AGE-317"),
+    },
+    { run: "age-317", json: true },
+  );
+  expect(report.entries).toEqual(
+    expect.arrayContaining([expect.objectContaining({ runId: RUN, kind: "pull-request" })]),
+  );
+});
+
+test("a ticket naming multiple runs is actionable and never guesses", async () => {
+  await expect(
+    listResources(
+      {
+        cwd: root,
+        out: (line) => lines.push(line),
+        connect: () => ambiguousTicketDatabase(),
+      },
+      { run: "AGE-317" },
+    ),
+  ).rejects.toMatchObject({
+    message: "run ref AGE-317 is ambiguous",
+    hint: expect.stringContaining("use a run ID or unique prefix"),
+  });
+  expect(lines).toEqual([]);
 });
 
 test("a workflow database read failure reports that nothing changed", async () => {

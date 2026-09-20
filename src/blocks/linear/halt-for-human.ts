@@ -77,7 +77,7 @@ export async function haltForHuman(
   const { checkForTicketHumanReply, postTicketHumanInputRequest } = deps;
   const posted = await postTicketHumanInputRequest(claim.issueId, halt);
   // The halt's only signal: the claim hook is held for the run's whole life,
-  // so this marker is what tells `jigs ps` the run is parked on a human. Never
+  // so this marker is what tells `jigs status` the run is parked on a human. Never
   // awaited — it registers when the run suspends on the claim hook below.
   const marker = createHook<never>({
     token: needsHumanToken(claim.issueId, posted.commentId),

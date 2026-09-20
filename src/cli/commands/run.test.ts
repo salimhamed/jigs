@@ -48,7 +48,7 @@ const respondStarted = () =>
       JSON.stringify({
         runId: "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
         workflow: "deliver-feature",
-        logs: "http://localhost:9090/run/wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
+        dashboard: "http://localhost:9090/run/wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
       }),
       { status: 201 },
     ),
@@ -194,7 +194,7 @@ test("a started run prints its id, workflow and log pointer", async () => {
       JSON.stringify({
         runId: "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
         workflow: "deliver-feature",
-        logs: "http://localhost:9090/run/wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
+        dashboard: "http://localhost:9090/run/wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
       }),
       { status: 201 },
     ),
@@ -203,7 +203,8 @@ test("a started run prints its id, workflow and log pointer", async () => {
   expect(lines).toEqual([
     "run wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
     "workflow deliver-feature",
-    "logs: http://localhost:9090/run/wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
+    "inspect: jigs status wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
+    "dashboard: http://localhost:9090/run/wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
   ]);
   const [, trigger] = fetchMock.mock.calls;
   expect(trigger?.[0]).toBe("http://svc.test:8990/api/workflows/deliver-feature/runs");

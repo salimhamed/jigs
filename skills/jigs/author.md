@@ -58,7 +58,7 @@ both use `onFailure`. Live and suspended runs retain their resources.
 Call `await release()` from `#jigs` as the workflow's last successful action
 when it needs a report before returning. `release(policy)` persists the
 callsite's success choice, so an explicit keep is not reversed by automatic
-cleanup. Failed cleanup stays visible in `jigs logs`, is retried by the
+cleanup. Failed cleanup stays visible in `jigs status <run-id>`, is retried by the
 service, and remains inspectable with `jigs resources list` and preview-first
 `jigs resources prune`.
 
@@ -119,7 +119,7 @@ never send a prompt or callback through a durable step argument.
 After a workflow creates something an operator may need to find, call the
 generated `registerResource({ kind, identity, url })` step from `#jigs`. Kind
 plus identity is stable: retrying the same URL is idempotent, while a later URL
-updates that identity. `jigs logs` reads these records independently of the
+updates that identity. `jigs status <run-id>` reads these records independently of the
 workflow's result.
 
 Keep a non-idempotent external creator and registration as two durable steps.

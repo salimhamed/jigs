@@ -52,11 +52,11 @@ Only read-only ones, and only when the question is about this factory's current
 state:
 
 ```sh
-jigs ps               # runs, worktrees, schedules
+jigs status           # runs, worktrees, schedules
 jigs doctor           # the check catalog against the running service
 jigs service status   # is it up, and on which ports
 jigs bindings         # the target repos this factory knows
-jigs logs <run>       # one run's state, timeline and dashboard link
+jigs status <run-id>  # one run's state, timeline and dashboard link
 jigs --help
 ```
 

@@ -165,12 +165,14 @@ interface StoredStep {
 
 interface Fixture {
   runs?: StoredRun[];
+  runPages?: StoredRun[][];
   hooks?: Array<{ runId: string; token: string }>;
   steps?: Record<string, StoredStep[]>;
 }
 
 function world(fixture: Fixture = {}): void {
   const runs = fixture.runs ?? [];
+  const runPages = fixture.runPages ?? [runs];
   const hooks = fixture.hooks ?? [];
   const steps = fixture.steps ?? {};
   setWorld({
@@ -184,7 +186,16 @@ function world(fixture: Fixture = {}): void {
         if (run === undefined) throw new WorkflowRunNotFoundError(runId);
         return run;
       },
-      list: async () => ({ data: runs }),
+      list: async ({ pagination }: { pagination?: { cursor?: string } } = {}) => {
+        const pageIndex =
+          pagination?.cursor === undefined ? 0 : Number(pagination.cursor.slice("page-".length));
+        const next = pageIndex + 1;
+        return {
+          data: runPages[pageIndex] ?? [],
+          hasMore: next < runPages.length,
+          cursor: next < runPages.length ? `page-${next}` : null,
+        };
+      },
     },
     hooks: {
       getByToken: async (token: string) => {
@@ -256,6 +267,14 @@ test("the same prefix resolves with the wrun_ prefix typed out", async () => {
   });
 });
 
+test("prefix resolution follows every SDK cursor before deciding uniqueness", async () => {
+  world({
+    runs: [worldRun({ runId: RUN_B }), worldRun()],
+    runPages: [[worldRun({ runId: RUN_B })], [worldRun()]],
+  });
+  expect(await resolveRunRef("01K3ANBZ")).toEqual({ kind: "found", runId: RUN_A });
+});
+
 test("a prefix matching two runs is ambiguous and names both", async () => {
   world({ runs: [worldRun(), worldRun({ runId: RUN_B })] });
   const ref = await resolveRunRef("01K3AN");
@@ -264,6 +283,51 @@ test("a prefix matching two runs is ambiguous and names both", async () => {
 });
 
 const ISSUE_317 = "68bc9696-35d5-442d-ab56-214c8cfefbec";
+const storedTicket = (ticket: string) => [[1], { ticket: 2 }, ticket];
+
+test("a terminal run remains selectable by its stored ticket identifier", async () => {
+  world({ runs: [worldRun({ status: "completed", input: storedTicket("AGE-317") })] });
+  linearPlaces({ "AGE-317": ISSUE_317 });
+  expect(await resolveRunRef("age-317")).toEqual({ kind: "found", runId: RUN_A });
+});
+
+test("multiple executions for one ticket are ambiguous", async () => {
+  world({
+    runs: [
+      worldRun({ status: "completed", input: storedTicket("AGE-317") }),
+      worldRun({ runId: RUN_B, input: storedTicket("AGE-317") }),
+    ],
+  });
+  linearPlaces({ "AGE-317": ISSUE_317 });
+  expect(await resolveRunRef("AGE-317")).toEqual({
+    kind: "ambiguous",
+    candidates: [RUN_A, RUN_B],
+  });
+});
+
+test("a historical ticket match and its current claim owner are ambiguous", async () => {
+  world({
+    runs: [
+      worldRun({ status: "completed", input: storedTicket("AGE-317") }),
+      worldRun({ runId: RUN_B }),
+    ],
+    hooks: [{ runId: RUN_B, token: ticketToken(ISSUE_317) }],
+  });
+  linearPlaces({ "AGE-317": ISSUE_317 });
+  expect(await resolveRunRef("AGE-317")).toEqual({
+    kind: "ambiguous",
+    candidates: [RUN_A, RUN_B],
+  });
+});
+
+test("a terminal run remains selectable by its stored ticket UUID", async () => {
+  world({ runs: [worldRun({ status: "failed", input: storedTicket(ISSUE_317) })] });
+  NO_LINEAR();
+  expect(await resolveRunRef(ISSUE_317.toUpperCase())).toEqual({
+    kind: "found",
+    runId: RUN_A,
+  });
+});
 
 test("a ticket identifier resolves through Linear, then the claim hook", async () => {
   world({
@@ -486,7 +550,7 @@ test("a dead job left behind by a terminal run does not restate its status", asy
 
 // The run route reads describeRun for one run and lets it fetch; the listing
 // above reads it for every run off facts it already holds. Same answers.
-test("describeRun is the one thing `jigs ps` and the run route both read", async () => {
+test("describeRun is the one thing status list and detail both read", async () => {
   const describe = (status: string, tokens: string[], stalled: boolean) =>
     describeRun(RUN_A, { run: worldRun({ status }), tokens, stalled });
   const PARK = [PARK_TOKEN];
@@ -512,8 +576,7 @@ test("describeRun is the one thing `jigs ps` and the run route both read", async
     status: "pending",
   });
   // The disagreement this replaced: the run route derived a status only for a
-  // `running` run, so a parked `pending` one read `suspended` in `jigs ps` and
-  // `pending` in `jigs logs`.
+  // `running` run, so list and detail once disagreed about a parked pending run.
   expect(await describe("pending", PARK, false)).toMatchObject({
     status: "suspended",
     suspended: true,

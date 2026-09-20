@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { JigsError } from "../../errors.ts";
-import { type LogsResult, showLogs } from "./logs.ts";
+import { type StatusResult, showRunStatus } from "./status.ts";
 
 const fetchMock = vi.fn();
 let lines: string[];
@@ -23,7 +23,7 @@ const deps = () => ({
   serviceUrl: "http://svc.test:8990",
 });
 
-const result = (over: Partial<LogsResult> = {}): LogsResult => ({
+const result = (over: Partial<StatusResult> = {}): StatusResult => ({
   runId: RUN,
   status: "running",
   trigger: "manual",
@@ -34,7 +34,7 @@ const result = (over: Partial<LogsResult> = {}): LogsResult => ({
   lastStep: null,
   suspended: false,
   suspensions: [],
-  logs: "",
+  dashboard: "",
   resources: [],
   cleanup: { status: "waiting", directive: "automatic" },
   ...over,
@@ -43,13 +43,13 @@ const result = (over: Partial<LogsResult> = {}): LogsResult => ({
 const respond = (body: unknown) =>
   fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(body)));
 
-test("logs says what the run waits for, where to act, and what was asked", async () => {
+test("status says what the run waits for, where to act, and what was asked", async () => {
   respond(
     result({
       status: "suspended",
       ticket: "AGE-317",
       suspended: true,
-      logs: DASHBOARD,
+      dashboard: DASHBOARD,
       suspensions: [
         {
           token: "jigs:needs-human:issue-1:comment-1",
@@ -62,7 +62,7 @@ test("logs says what the run waits for, where to act, and what was asked", async
     }),
   );
   respond({ steps: [], deadJobs: [] });
-  await showLogs("AGE-317", deps(), { now: NOW });
+  await showRunStatus("AGE-317", deps(), { now: NOW });
   expect(fetchMock.mock.calls[0]?.[0]).toBe("http://svc.test:8990/api/runs/AGE-317");
   // The timeline is asked for by the run id the first call resolved, never by
   // the ref the operator typed.
@@ -86,7 +86,7 @@ test("logs says what the run waits for, where to act, and what was asked", async
 test("a failed run prints its status without a pull request header", async () => {
   respond(result({ status: "failed" }));
   respond({ steps: [], deadJobs: [] });
-  await showLogs(RUN, deps(), { now: NOW });
+  await showRunStatus(RUN, deps(), { now: NOW });
   expect(lines[1]).toBe("status failed");
   expect(lines.some((line) => line.startsWith("pull request "))).toBe(false);
 });
@@ -109,7 +109,7 @@ test("cleanup progress and all resource counts remain visible", async () => {
   );
   respond({ steps: [], deadJobs: [] });
 
-  await showLogs(RUN, deps(), { now: NOW });
+  await showRunStatus(RUN, deps(), { now: NOW });
 
   expect(lines).toContain(
     "cleanup failed (release, success; 1 released, 2 kept, 1 failed, 1 unknown)",
@@ -117,7 +117,7 @@ test("cleanup progress and all resource counts remain visible", async () => {
   expect(lines).toContain("  temporary\\nGit failure");
 });
 
-test("logs prints live pull-request gate state under its suspension", async () => {
+test("status prints live pull-request gate state under its suspension", async () => {
   respond(
     result({
       status: "suspended",
@@ -139,7 +139,7 @@ test("logs prints live pull-request gate state under its suspension", async () =
     }),
   );
   respond({ steps: [], deadJobs: [] });
-  await showLogs(RUN, deps(), { now: NOW });
+  await showRunStatus(RUN, deps(), { now: NOW });
   expect(lines.slice(5, 13)).toEqual([
     "waiting for an approving review and green CI on acme/api#41",
     "  head sha: 1234567",
@@ -167,7 +167,7 @@ test("a pull request GitHub could not be asked about prints as it always did", a
     }),
   );
   respond({ steps: [], deadJobs: [] });
-  await showLogs(RUN, deps(), { now: NOW });
+  await showRunStatus(RUN, deps(), { now: NOW });
   expect(lines.slice(5)).toEqual([
     "waiting for an approving review and green CI on acme/api#41",
     "",
@@ -175,13 +175,13 @@ test("a pull request GitHub could not be asked about prints as it always did", a
 });
 
 test("--json prints one document with the run, its suspensions and its timeline", async () => {
-  respond(result({ ticket: "AGE-317", logs: DASHBOARD, returnValue: { status: "gave-up" } }));
+  respond(result({ ticket: "AGE-317", dashboard: DASHBOARD, returnValue: { status: "gave-up" } }));
   respond({ steps: [{ name: "claimTicket", status: "completed" }], deadJobs: [] });
-  await showLogs(RUN, deps(), { json: true, now: NOW });
+  await showRunStatus(RUN, deps(), { json: true, now: NOW });
   expect(lines).toHaveLength(1);
   const document = JSON.parse(lines[0] ?? "") as Record<string, unknown>;
   expect(document.ticket).toBe("AGE-317");
-  expect(document.logs).toBe(DASHBOARD);
+  expect(document.dashboard).toBe(DASHBOARD);
   expect(document.returnValue).toEqual({ status: "gave-up" });
   expect(document.resources).toEqual([]);
   expect(document.timeline).toEqual({
@@ -194,7 +194,7 @@ test("--json prints one document with the run, its suspensions and its timeline"
 test("a scheduled run names the schedule that fired it", async () => {
   respond(result({ trigger: "schedule:nightly-audit" }));
   respond({ steps: [], deadJobs: [] });
-  await showLogs(RUN, deps(), { now: NOW });
+  await showRunStatus(RUN, deps(), { now: NOW });
   expect(lines[2]).toBe("trigger schedule:nightly-audit");
 });
 
@@ -203,11 +203,11 @@ test("a failed run's error is printed above the log pointer", async () => {
     result({
       status: "failed",
       error: "ClaimConflictError: linear:ticket:… is already claimed",
-      logs: DASHBOARD,
+      dashboard: DASHBOARD,
     }),
   );
   respond({ steps: [], deadJobs: [] });
-  await showLogs(RUN, deps(), { now: NOW });
+  await showRunStatus(RUN, deps(), { now: NOW });
   expect(lines).toEqual([
     `run ${RUN}`,
     "status failed",
@@ -234,7 +234,7 @@ test("a completed run prints a compact object result", async () => {
     }),
   );
   respond({ steps: [], deadJobs: [] });
-  await showLogs(RUN, deps(), { now: NOW });
+  await showRunStatus(RUN, deps(), { now: NOW });
   expect(lines.slice(5, 12)).toEqual([
     "result:",
     "  status: gave-up",
@@ -266,7 +266,7 @@ test("resources are listed independently of the workflow return shape", async ()
     }),
   );
   respond({ steps: [], deadJobs: [] });
-  await showLogs(RUN, deps(), { now: NOW });
+  await showRunStatus(RUN, deps(), { now: NOW });
   expect(lines.slice(4, 7)).toEqual([
     "resources:",
     "  pull-request acme/api#41 → https://github.com/acme/api/pull/41",
@@ -285,7 +285,7 @@ test("result keys and scalar values stay on one terminal line", async () => {
     }),
   );
   respond({ steps: [], deadJobs: [] });
-  await showLogs(RUN, deps(), { now: NOW });
+  await showRunStatus(RUN, deps(), { now: NOW });
   expect(lines.slice(5, 7)).toEqual([
     "result:",
     "  multi\\nline: one\\ntwo\\rthree\\u2028four\\u2029five",
@@ -295,7 +295,7 @@ test("result keys and scalar values stay on one terminal line", async () => {
 test("a multiline scalar result stays on the result line", async () => {
   respond(result({ status: "completed", returnValue: "one\ntwo" }));
   respond({ steps: [], deadJobs: [] });
-  await showLogs(RUN, deps(), { now: NOW });
+  await showRunStatus(RUN, deps(), { now: NOW });
   expect(lines[5]).toBe("result: one\\ntwo");
 });
 
@@ -305,7 +305,7 @@ test.each([
 ])("a completed run prints %s result on the result line", async (_label, returnValue, expected) => {
   respond(result({ status: "completed", returnValue }));
   respond({ steps: [], deadJobs: [] });
-  await showLogs(RUN, deps(), { now: NOW });
+  await showRunStatus(RUN, deps(), { now: NOW });
   expect(lines[5]).toBe(expected);
 });
 
@@ -315,7 +315,7 @@ test.each([
 ])("a completed run with %s for its result prints nothing new", async (_label, returnValue) => {
   respond(result({ status: "completed", returnValue }));
   respond({ steps: [], deadJobs: [] });
-  await showLogs(RUN, deps(), { now: NOW });
+  await showRunStatus(RUN, deps(), { now: NOW });
   expect(lines).toEqual([
     `run ${RUN}`,
     "status completed",
@@ -336,7 +336,7 @@ test("an object result is capped and reports its omitted keys", async () => {
     }),
   );
   respond({ steps: [], deadJobs: [] });
-  await showLogs(RUN, deps(), { now: NOW });
+  await showRunStatus(RUN, deps(), { now: NOW });
   expect(lines.slice(5, 19)).toEqual([
     "result:",
     ...Array.from({ length: 12 }, (_, index) => `  key${index + 1}: ${index + 1}`),
@@ -368,7 +368,7 @@ test("the step timeline reports a duration, a step still running, and its error"
     ],
     deadJobs: [],
   });
-  await showLogs(RUN, deps(), { now: NOW });
+  await showRunStatus(RUN, deps(), { now: NOW });
   expect(lines.slice(6)).toEqual([
     "",
     "STEP                             STATUS     ATTEMPT  STARTED                   TOOK     ERROR",
@@ -391,7 +391,7 @@ test("a dead job is printed with its error's first line and a copy-pasteable req
       },
     ],
   });
-  await showLogs(RUN, deps(), { now: NOW });
+  await showRunStatus(RUN, deps(), { now: NOW });
   expect(lines.slice(6)).toEqual([
     "",
     "dead job 4128 (jigs:workflow) after 3 attempts: Queue execution failed (404): Not Found",
@@ -402,7 +402,7 @@ test("a dead job is printed with its error's first line and a copy-pasteable req
 test("a timeline the service cannot read says so rather than reading as no steps", async () => {
   respond(result());
   fetchMock.mockResolvedValueOnce(new Response("nope", { status: 503 }));
-  await showLogs(RUN, deps(), { now: NOW });
+  await showRunStatus(RUN, deps(), { now: NOW });
   expect(lines).toEqual([
     `run ${RUN}`,
     "status running",
@@ -418,7 +418,7 @@ test("an unresolvable ref fails before the pointer is printed", async () => {
   fetchMock.mockResolvedValueOnce(
     new Response(JSON.stringify({ error: "not found" }), { status: 404 }),
   );
-  const err = await showLogs("AGE-999", deps()).then(
+  const err = await showRunStatus("AGE-999", deps()).then(
     () => null,
     (thrown: unknown) => thrown as JigsError,
   );

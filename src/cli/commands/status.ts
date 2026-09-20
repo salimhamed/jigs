@@ -2,17 +2,17 @@ import type { CleanupView } from "../../blocks/runtime/cleanup.ts";
 import type { RunResource } from "../../blocks/runtime/resources.ts";
 import { JigsError } from "../../errors.ts";
 import { formatTable } from "../table.ts";
-import { age, type PsRun, suspensionLine } from "./ps.ts";
+import { age, type RunListRun, suspensionLine } from "./run-list.ts";
 import { readErrorBody, runRefError, type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 // jigs contributes the two things the dashboard cannot — resolving a ticket id
 // or a ULID prefix to a run, and the queue jobs that died holding its resume —
 // then points at the run's page on the dashboard the service hosts.
 
-export interface LogsResult extends Omit<PsRun, "workflow"> {
+export interface StatusResult extends Omit<RunListRun, "workflow"> {
   error?: string;
   returnValue?: unknown;
-  logs: string;
+  dashboard: string;
   resources: RunResource[];
   cleanup: CleanupView;
 }
@@ -40,24 +40,24 @@ interface Timeline {
   error?: string;
 }
 
-export interface LogsOptions {
+export interface StatusOptions {
   json?: boolean;
   now?: Date;
 }
 
-export async function showLogs(
+export async function showRunStatus(
   ref: string,
   deps: ServiceDeps,
-  options: LogsOptions = {},
-): Promise<LogsResult> {
+  options: StatusOptions = {},
+): Promise<StatusResult> {
   const res = await serviceFetch(deps.serviceUrl, `/api/runs/${encodeURIComponent(ref)}`);
   if (res.status === 404 || res.status === 409) {
     throw runRefError(ref, await readErrorBody(res));
   }
   if (!res.ok) {
-    throw new JigsError(`logs failed: HTTP ${res.status} ${await res.text()}`);
+    throw new JigsError(`status failed: HTTP ${res.status} ${await res.text()}`);
   }
-  const result = (await res.json()) as LogsResult;
+  const result = (await res.json()) as StatusResult;
   const timeline = await fetchTimeline(result.runId, deps);
 
   if (options.json === true) {
@@ -100,7 +100,7 @@ export async function showLogs(
       for (const line of suspension.question.split("\n")) deps.out(`  ${line}`);
     }
   }
-  deps.out(result.logs);
+  deps.out(result.dashboard);
   showTimeline(timeline, deps);
   return result;
 }

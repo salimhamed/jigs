@@ -14,12 +14,11 @@ import {
   initFactory,
   resolveIdentityOptions,
 } from "./commands/init.ts";
-import { showLogs } from "./commands/logs.ts";
 import { pokeRun } from "./commands/poke.ts";
-import { showRuns } from "./commands/ps.ts";
 import { addRecipe, recipeNames } from "./commands/recipe.ts";
 import { listResources, runResourcesPrune } from "./commands/resources.ts";
 import { launchRun } from "./commands/run.ts";
+import { showRuns } from "./commands/run-list.ts";
 import { resolveServiceUrl, usesFactoryService } from "./commands/service-client.ts";
 import {
   restartService,
@@ -28,10 +27,12 @@ import {
   startService,
   stopService,
 } from "./commands/service-lifecycle.ts";
+import { showRunStatus } from "./commands/status.ts";
 import { unbindRepo } from "./commands/unbind.ts";
 import { upFactory } from "./commands/up.ts";
 import { upgradeFactory } from "./commands/upgrade.ts";
 import { watchRuns } from "./commands/watch.ts";
+import { listWorkflows } from "./commands/workflows.ts";
 
 // No `.default()`: commander evaluates defaults eagerly, so resolving the
 // factory's service URL here would walk the filesystem on `jigs --help`.
@@ -62,9 +63,74 @@ function makeConfirm(): ((question: string) => Promise<boolean>) | undefined {
 
 const out = (line: string) => console.log(line);
 
+const RUN_SELECTOR_HELP =
+  "complete run ID, unique ID prefix, ticket ID (AGE-123), or supported ticket UUID";
+
+const ROOT_HELP = `Usage: jigs <command> [options]
+
+Guides coding agents through repeatable workflows
+
+Everyday commands:
+  jigs init                         Set up a new factory in the current directory.
+  jigs up                           Prepare, build and start the factory, then check readiness.
+  jigs workflows                    List workflows available to run and their inputs.
+  jigs run <workflow-name>          Start a workflow.
+  jigs status [run-id]              Show all runs, or full detail for one run.
+  jigs watch [run-id]               Follow all runs, or only the selected run.
+  jigs cancel <run-id>              Cancel a run.
+  jigs doctor                       Check configuration, connections and required tools.
+  jigs upgrade                      Update jigs, prepare and start, then typecheck.
+
+Connecting code repositories:
+  jigs bind <remote-url>            Connect a target Git repository to this factory.
+  jigs bindings                     List connected repositories and local clone state.
+  jigs unbind <binding-name>        Remove a connection without deleting the remote.
+
+Ready-made workflows:
+  jigs recipe list                  List available workflow templates.
+  jigs recipe add <recipe-name>     Copy a template while preserving existing files.
+
+Inspecting and cleaning working files:
+  jigs resources list               Show this factory's run resources and working folders.
+  jigs resources prune              Preview safe resource cleanup.
+  jigs resources prune --apply      Perform eligible cleanup after safety checks.
+
+Background service:
+  jigs service start                Start the service using the existing build.
+  jigs service stop                 Stop the service.
+  jigs service restart              Stop and start the service.
+  jigs service status               Report whether the service is running.
+  jigs service logs                 Show recent service output.
+
+Advanced commands:
+  jigs build                        Compile workflows into the runnable service.
+  jigs generate                     Refresh the generated jigs.ts integration.
+  jigs poke <run-id>                Ask a suspended run to evaluate again.
+
+Getting started:
+  jigs up
+  jigs workflows
+  jigs run ship --input ticket=AGE-123
+  jigs status <run-id>
+  jigs watch <run-id>
+
+The ship workflow must be installed and registered first. AGE-123 is an example
+input for ship; each workflow defines its own inputs.
+
+Run selectors accept a complete run ID, unique ID prefix, ticket ID such as
+AGE-123, or a supported ticket UUID. Run jigs <command> --help for options.
+
+Options:
+  -h, --help                         Display help.
+`;
+
 const program = new Command("jigs")
   .description("Guides coding agents through repeatable workflows")
   .showHelpAfterError("(add --help for additional information)");
+
+// Root help is a user journey rather than Commander's registration order.
+// Overriding only this command leaves every command's generated help intact.
+program.helpInformation = () => ROOT_HELP;
 
 program
   .command("init")
@@ -111,7 +177,7 @@ recipe
     for (const name of recipeNames()) out(name);
   });
 recipe
-  .command("add <name>")
+  .command("add <recipe-name>")
   .description("copy a recipe, preserving existing files")
   .action((name: string) => {
     addRecipe(name, { cwd: process.cwd(), out });
@@ -170,7 +236,7 @@ program
   .description("bind a target repo by its remote URL")
   .argument("<remote-url>", "the target repo's git remote (e.g. git@github.com:owner/repo.git)")
   .option(
-    "--binding-name <name>",
+    "--binding-name <binding-name>",
     "binding name (default: an existing exact-remote match, else the repo name lowercased)",
   )
   .action(async (remoteUrl: string, options: { bindingName?: string }) => {
@@ -205,19 +271,29 @@ program
   });
 
 program
-  .command("ps")
-  .description("list runs with their ticket, status and what they wait on")
-  .option("--json", "print one JSON document instead of the tables")
+  .command("workflows")
+  .description("list the workflows this built factory can run and their inputs")
   .addOption(serviceOption())
-  .action(async (options: { json?: boolean; serviceUrl?: string }) => {
-    await showRuns({ out, serviceUrl: serviceUrl(options.serviceUrl) }, { json: options.json });
+  .action(async (options: { serviceUrl?: string }) => {
+    await listWorkflows({ out, serviceUrl: serviceUrl(options.serviceUrl) });
+  });
+
+program
+  .command("status")
+  .description("show all runs, or one run's status, steps, results, resources and dashboard link")
+  .argument("[run-id]", RUN_SELECTOR_HELP)
+  .option("--json", "print one JSON document instead of text output")
+  .addOption(serviceOption())
+  .action(async (runId: string | undefined, options: { json?: boolean; serviceUrl?: string }) => {
+    const deps = { out, serviceUrl: serviceUrl(options.serviceUrl) };
+    if (runId === undefined) await showRuns(deps, { json: options.json });
+    else await showRunStatus(runId, deps, { json: options.json });
   });
 
 program
   .command("watch")
-  .description(
-    "follow every run in this factory: one line per step, suspension, resume, terminal state and new run",
-  )
+  .description("follow all runs, or only one selected run: one line per change")
+  .argument("[run-id]", RUN_SELECTOR_HELP)
   .option("--json", "emit one JSON event per line instead of text")
   .option(
     "--poll-interval-seconds <seconds>",
@@ -234,11 +310,15 @@ program
   )
   .addOption(serviceOption())
   .action(
-    async (options: { json?: boolean; pollIntervalSeconds?: number; serviceUrl?: string }) => {
+    async (
+      runId: string | undefined,
+      options: { json?: boolean; pollIntervalSeconds?: number; serviceUrl?: string },
+    ) => {
       await watchRuns(
         { out, serviceUrl: serviceUrl(options.serviceUrl) },
         {
           json: options.json,
+          selector: runId,
           ...(options.pollIntervalSeconds === undefined
             ? {}
             : { intervalMs: options.pollIntervalSeconds * 1000 }),
@@ -249,10 +329,8 @@ program
 
 program
   .command("cancel")
-  .description(
-    "make a run terminal; release ordinary jigs hooks and report claimed minimum-retention hooks",
-  )
-  .argument("<run>", "run id, unique id prefix, or ticket (`AGE-123` or its UUID)")
+  .description("cancel a run; an operation or agent already executing may still finish")
+  .argument("<run-id>", RUN_SELECTOR_HELP)
   .option("--force", "skip the confirmation for an in-flight run")
   .addOption(serviceOption())
   .action(async (run: string, options: { force?: boolean; serviceUrl?: string }) => {
@@ -265,23 +343,9 @@ program
   });
 
 program
-  .command("logs")
-  .description("show a run's state, what it waits on, its step timeline, and dashboard link")
-  .argument("<run>", "run id, unique id prefix, or ticket (`AGE-123` or its UUID)")
-  .option("--json", "print one JSON document instead of the report")
-  .addOption(serviceOption())
-  .action(async (run: string, options: { json?: boolean; serviceUrl?: string }) => {
-    await showLogs(
-      run,
-      { out, serviceUrl: serviceUrl(options.serviceUrl) },
-      { json: options.json },
-    );
-  });
-
-program
   .command("poke")
-  .description("manually wake a suspended run (the missed-delivery fallback)")
-  .argument("<run>", "run id, unique id prefix, or ticket (`AGE-123` or its UUID)")
+  .description("ask a suspended run to evaluate again; does not bypass approvals or add answers")
+  .argument("<run-id>", RUN_SELECTOR_HELP)
   .addOption(serviceOption())
   .action(async (runId: string, options: { serviceUrl?: string }) => {
     await pokeRun(runId, { out, serviceUrl: serviceUrl(options.serviceUrl) });
@@ -302,7 +366,7 @@ const resources = program
 resources
   .command("list")
   .description("list registered resources without changing them")
-  .option("--run <run-id>", "limit the inventory to one run id or unique prefix")
+  .option("--run <run-id>", `limit the inventory to one ${RUN_SELECTOR_HELP}`)
   .option("--json", "print one JSON document")
   .action(async (options: { run?: string; json?: boolean }) => {
     await listResources({ cwd: process.cwd(), out }, options);
@@ -311,7 +375,7 @@ resources
 resources
   .command("prune")
   .description("preview safe local resource cleanup; --apply performs it offline")
-  .option("--run <run-id>", "limit the inventory to one run id or unique prefix")
+  .option("--run <run-id>", `limit the inventory to one ${RUN_SELECTOR_HELP}`)
   .option("--apply", "perform eligible cleanup after proving the service and children stopped")
   .option("--include-kept", "consider policy-kept resources, without bypassing Git safety")
   .option("--json", "print one JSON document")
@@ -356,7 +420,7 @@ service
 service
   .command("logs")
   .description("print the tail of the service process's output")
-  .option("--lines <n>", "how many lines to print (default: 50)", (raw) => {
+  .option("--lines <line-count>", "how many lines to print (default: 50)", (raw) => {
     const lines = Number(raw);
     if (!Number.isInteger(lines) || lines < 1) {
       throw new JigsError(`--lines must be a positive integer, got ${raw}`);
@@ -374,14 +438,18 @@ program
     await listBindings({ cwd: process.cwd(), out });
   });
 
-// Commander exits itself on its own parse errors; this catch sees only
-// action-handler failures (parseAsync wraps even synchronous throws).
-program.parseAsync().catch((err: unknown) => {
-  if (err instanceof JigsError) {
-    console.error(`jigs: ${err.message}`);
-    if (err.hint !== undefined) console.error(`  ${err.hint}`);
-  } else {
-    console.error(err);
-  }
-  process.exitCode = 1;
-});
+if (process.argv.length === 2) {
+  program.outputHelp();
+} else {
+  // Commander exits itself on its own parse errors; this catch sees only
+  // action-handler failures (parseAsync wraps even synchronous throws).
+  program.parseAsync().catch((err: unknown) => {
+    if (err instanceof JigsError) {
+      console.error(`jigs: ${err.message}`);
+      if (err.hint !== undefined) console.error(`  ${err.hint}`);
+    } else {
+      console.error(err);
+    }
+    process.exitCode = 1;
+  });
+}

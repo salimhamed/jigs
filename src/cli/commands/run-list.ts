@@ -3,9 +3,9 @@ import type { RunSuspension } from "../../run-suspension.ts";
 import { formatTable } from "../table.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 
-export type PsSuspension = RunSuspension;
+export type RunListSuspension = RunSuspension;
 
-export interface PsRun {
+export interface RunListRun {
   runId: string;
   workflow: string;
   status: string;
@@ -17,10 +17,10 @@ export interface PsRun {
   steps: number | null;
   lastStep: { name: string; status: string; at: string | null } | null;
   suspended: boolean;
-  suspensions: PsSuspension[];
+  suspensions: RunListSuspension[];
 }
 
-export interface PsSchedule {
+export interface RunListSchedule {
   name: string;
   workflow: string;
   cron: string;
@@ -28,33 +28,36 @@ export interface PsSchedule {
   active: string | null;
 }
 
-export interface PsWorktree {
+export interface RunListWorktree {
   path: string;
   branch: string;
   state: string;
   ownerRunId: string;
 }
 
-export interface PsResult {
-  runs: PsRun[];
-  worktrees: PsWorktree[];
-  schedules: PsSchedule[];
+export interface RunListResult {
+  runs: RunListRun[];
+  worktrees: RunListWorktree[];
+  schedules: RunListSchedule[];
 }
 
-export interface PsOptions {
+export interface RunListOptions {
   json?: boolean;
   now?: Date;
 }
 
-export async function listFactoryRuns(deps: ServiceDeps): Promise<PsResult> {
+export async function listFactoryRuns(deps: ServiceDeps): Promise<RunListResult> {
   const res = await serviceFetch(deps.serviceUrl, "/api/runs");
   if (!res.ok) {
-    throw new JigsError(`ps failed: HTTP ${res.status} ${await res.text()}`);
+    throw new JigsError(`status failed: HTTP ${res.status} ${await res.text()}`);
   }
-  return (await res.json()) as PsResult;
+  return (await res.json()) as RunListResult;
 }
 
-export async function showRuns(deps: ServiceDeps, options: PsOptions = {}): Promise<PsResult> {
+export async function showRuns(
+  deps: ServiceDeps,
+  options: RunListOptions = {},
+): Promise<RunListResult> {
   const result = await listFactoryRuns(deps);
   // The service's own answer, verbatim: a watcher reads fields the tables
   // below only render, and a second shape here would be a second contract.
@@ -119,11 +122,11 @@ export async function showRuns(deps: ServiceDeps, options: PsOptions = {}): Prom
   return result;
 }
 
-export function waitingCell(run: PsRun): string {
+export function waitingCell(run: RunListRun): string {
   return run.suspensions.map(suspensionLine).join("; ") || "-";
 }
 
-export const suspensionLine = (suspension: PsSuspension): string =>
+export const suspensionLine = (suspension: RunListSuspension): string =>
   suspension.url === undefined ? suspension.reason : `${suspension.reason} → ${suspension.url}`;
 
 export function age(at: string, now: Date): string {

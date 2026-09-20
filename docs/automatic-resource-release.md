@@ -49,7 +49,7 @@ either been released or deliberately kept. A failed worktree remains in the
 registry and its failure is recorded on the run, so the next reconciliation
 can retry it without changing the workflow's terminal result. Resource
 attributes are never erased by cleanup: released, kept, failed, and unknown
-kinds stay visible in `jigs logs`. Unknown kinds are reported as unknown and
+kinds stay visible in `jigs status <run-id>`. Unknown kinds are reported as unknown and
 never dispatched to deletion code.
 
 The progress marker is a checkpoint, not an exactly-once claim. On restart the

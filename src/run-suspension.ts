@@ -4,7 +4,7 @@ import type { WakeNote } from "./service/wake-note.ts";
 /**
  * One hook a run is currently parked on. Everything below `question` is read
  * from a provider, so it is present only on the single-run route: the listing
- * behind `jigs ps` and `jigs watch` describes a suspension from its token
+ * behind `jigs status` and `jigs watch` describes a suspension from its token
  * alone.
  */
 export interface RunSuspension {

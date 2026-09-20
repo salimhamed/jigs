@@ -15,7 +15,7 @@ export interface LaunchDeps extends ServiceDeps {
 export interface LaunchResult {
   runId: string;
   workflow: string;
-  logs: string;
+  dashboard: string;
 }
 
 // Flat on purpose: one coercion rule to hold in your head. A nested value
@@ -162,7 +162,8 @@ export async function launchRun(
   const result = (await res.json()) as LaunchResult;
   deps.out(`run ${result.runId}`);
   deps.out(`workflow ${result.workflow}`);
-  deps.out(`logs: ${result.logs}`);
+  deps.out(`inspect: jigs status ${result.runId}`);
+  deps.out(`dashboard: ${result.dashboard}`);
   return result;
 }
 

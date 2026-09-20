@@ -116,7 +116,7 @@ before returning. An explicit `release(policy)` argument is persisted and wins
 over later automatic cleanup, including an explicit `keep`.
 Dirty unmerged work stays; a branch is deleted only with positive evidence that
 the remote default branch contains its commits. Squash-merged branch refs may
-therefore remain. Failed cleanup is visible in `jigs logs` and retried by the
+therefore remain. Failed cleanup is visible in `jigs status <run-id>` and retried by the
 service; `jigs resources list` and preview-first `jigs resources prune` are the
 explicit maintenance path. Never put
 release in `finally` or a catch: waiting throws too.
@@ -199,20 +199,23 @@ changes; those configurations can be edited manually.
 pnpm exec jigs run hello --input message=hello
 # After adding ship and configuring its integrations:
 pnpm exec jigs run ship --input ticket=AGE-123 --input binding=repo
-pnpm exec jigs ps
-pnpm exec jigs logs <run>
-pnpm exec jigs watch
+pnpm exec jigs workflows
+pnpm exec jigs status
+pnpm exec jigs status <run-id>
+pnpm exec jigs watch [run-id]
 ```
 
-`<run>` is a run id, a unique prefix of one, or the ticket the run claimed.
-`jigs logs` prints the run's page on the dashboard `jigs up` named.
+`<run-id>` may be a complete run ID, a unique prefix, or the ticket the run
+claimed (`AGE-123` or its supported UUID). `jigs workflows` lists the launch
+names actually registered in the running factory and the input metadata their
+existing schemas provide.
 
-`jigs ps` names each run's ticket, status, trigger, how long since it last moved
+`jigs status` names each run's ticket, status, trigger, how long since it last moved
 and, for a parked run, what it is waiting for and the link to act on.
-`jigs logs` says the same for one run and adds the question
+`jigs status <run-id>` says the same for one run and adds the question
 a halt asked. For a run parked on a pull request it reads GitHub as well and
 prints the head commit, CI, approval, draft and mergeable state, what is
-blocking the merge, and when the service last woke the run. `jigs ps` and
+blocking the merge, and when the service last woke the run. `jigs status` and
 `jigs watch` never read GitHub.
 It also lists the run's recorded resources as kind, identity and URL. Resources
 come from run attributes, independently of the workflow's return value; a run
@@ -223,7 +226,9 @@ ship recipe also registers GitHub branches when it pushes them and pull requests
 after creation.
 `jigs watch` is one long-lived process that follows every run in
 the factory, a line per step, suspension, resume, terminal state and new run.
-All three take `--json`.
+Pass a selector to follow only that run.
+Both forms of `jigs status` take `--json`; `jigs watch --json` emits one JSON
+event per line with or without a selector.
 
 ### Upgrading later
 

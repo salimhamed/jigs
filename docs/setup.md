@@ -505,7 +505,7 @@ happen only if the bundle moved.
 
 The pieces are still there on their own — `jigs build`, `jigs service
 start|stop|restart|status|logs` — for when you want one of them without the
-rest. `start` does the same wait `ready` does, so a `jigs ps` or `jigs doctor`
+rest. `start` does the same wait `ready` does, so a `jigs status` or `jigs doctor`
 fired straight after it reaches a working service. `stop` sends SIGTERM: the
 service stops taking work, waits up to eight seconds for what is in flight,
 and exits; the CLI escalates to SIGKILL only past ten. An agent step still
@@ -619,7 +619,7 @@ and `jigs unbind` leaves the clone on disk for you to `rm -rf`.
 
 The service's `/ingress/github` and `/ingress/linear` routes receive provider
 webhooks: signature-verified, stateless, and safe to miss — every wake is
-re-checked against the provider, and `jigs poke <run>` covers any delivery
+re-checked against the provider, and `jigs poke <run-id>` covers any delivery
 that never arrived.
 
 #### Tunnel (one-time per factory, manual)
@@ -692,7 +692,7 @@ that is happening, no lost delivery is recovered, so it is worth reading. A run
 that is mid-turn is left alone and swept on the next pass.
 
 ```sh
-jigs poke <run>
+jigs poke <run-id>
 ```
 
 still wakes a suspended run by hand, over the same code path, when five minutes
@@ -701,15 +701,15 @@ is too long to wait.
 ### 6. Operating runs
 
 ```sh
-jigs run <workflow> --input ticket=AGE-123
-jigs ps
-jigs logs <run>
-jigs cancel <run> [--force]
+jigs run <workflow-name> --input ticket=AGE-123
+jigs status
+jigs status <run-id>
+jigs cancel <run-id> [--force]
 jigs resources list [--run <run-id>] [--json]
 jigs resources prune [--run <run-id>] [--include-kept] [--apply] [--json]
 ```
 
-jigs narrates every workflow milestone in `jigs logs`. A workflow body that
+jigs narrates every workflow milestone in `jigs status <run-id>`. A workflow body that
 needs `console.log` is missing a jigs-side line; file a ticket instead of
 adding one to the workflow.
 
@@ -722,10 +722,10 @@ read as JSON with the raw string as the fallback, so `askHuman=true` is a
 boolean and `AGE-123` is a string; a value the workflow's `inputs` schema
 rejects fails in the CLI, before any run is created.
 
-`<run>` is a run id, a unique id prefix, or the ticket the run claimed — an
-ambiguous prefix lists its candidates instead of guessing. A ticket named by
-its identifier (`AGE-123`) is resolved against Linear first, since the claim
-itself is keyed on the issue's UUID.
+`<run-id>` is a complete run id, a unique id prefix, or the ticket the run claimed — an
+ambiguous prefix or ticket lists its candidates instead of guessing. Ticket
+selectors use the launch input retained with the run; an active claim also
+supports the provider UUID it is keyed by.
 
 `jigs cancel` is the escape hatch when a run holds a resource nobody is coming
 back for. It uses the Workflow SDK's run cancellation, which makes the run
@@ -762,13 +762,14 @@ runs in the background for live runs. Explicit release belongs in neither
 `finally` nor a catch.
 The service waits for active steps to drain before terminal cleanup, retries
 missed or failed cleanup after restart, and reports cleanup state and counts in
-`jigs logs`. Unknown resource kinds remain visible and are never deleted.
+`jigs status <run-id>`. Unknown resource kinds remain visible and are never deleted.
 
 `jigs resources list` reads the selected factory's run attributes, registry and
 local disk without changing them. It reports the owning run and status, kind,
 URL or path, existence, ownership evidence and why the resource is retained or
 eligible. `--json` emits the same inventory with a `complete` flag and explicit
-read errors. `--run` accepts a full run id or unique id prefix.
+read errors. `--run` accepts a complete run ID, unique prefix, or a ticket
+identifier/UUID recorded by the current jigs version when the run started.
 
 `jigs resources prune` is always a preview unless `--apply` is present. Apply
 never confirms interactively, stops a service, kills a child, cancels a run,
@@ -822,7 +823,7 @@ service's own log then names what it scheduled:
 [schedule] monday-report scheduled: 0 9 * * 1 → weekly-report, next 2026-09-07T09:00:00.000Z
 ```
 
-`jigs ps` prints `RUN WORKFLOW TICKET STATUS TRIGGER AGE ACTIVITY WAITING`, then
+`jigs status` prints `RUN WORKFLOW TICKET STATUS TRIGGER AGE ACTIVITY WAITING`, then
 a schedule table under the runs. Every run the schedule fired carries its name
 in the `TRIGGER` column:
 
@@ -863,8 +864,8 @@ started my-factory-2286ac2a: pid 91234 at http://localhost:8990
 dashboard: http://localhost:9090
 ```
 
-`jigs run` and `jigs logs <run>` print the run's own page there
-(`http://localhost:9090/run/<run>`), and `jigs logs` follows it with the step
+`jigs run` and `jigs status <run-id>` print the run's own page there
+(`http://localhost:9090/run/<run-id>`), and `jigs status <run-id>` follows it with the step
 timeline and any queue job that died holding the run's resume, each with the
 SQL that puts it back on the queue:
 
@@ -876,7 +877,7 @@ dead job 4128 (jigs:workflow) after 3 attempts: Queue execution failed (404): No
   requeue: select graphile_worker.reschedule_jobs(array[4128]::bigint[], run_at := now(), attempts := 0)
 ```
 
-`jigs ps` and `jigs logs` both report such a run as `stalled` rather than
+Both forms of `jigs status` report such a run as `stalled` rather than
 `running`: it holds no suspension, has no step in flight, and nothing is
 coming to move it.
 

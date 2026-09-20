@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { PsRun } from "./ps.ts";
+import type { RunListRun } from "./run-list.ts";
 import { runEvents, watchRuns } from "./watch.ts";
 
 const fetchMock = vi.fn();
@@ -17,7 +17,7 @@ afterEach(() => {
 const RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 const AT = "2026-08-26T12:00:00.000Z";
 
-const run = (over: Partial<PsRun> = {}): PsRun => ({
+const run = (over: Partial<RunListRun> = {}): RunListRun => ({
   runId: RUN,
   workflow: "deliver-feature",
   status: "running",
@@ -82,7 +82,7 @@ test("a finished event carries only the run status", () => {
   expect(completed[0]?.detail).toBe("completed");
 });
 
-const respond = (runs: PsRun[]) =>
+const respond = (runs: RunListRun[]) =>
   fetchMock.mockResolvedValueOnce(
     new Response(JSON.stringify({ runs, worktrees: [], schedules: [] })),
   );
@@ -112,6 +112,47 @@ test("--json emits one JSON event per line", async () => {
     status: "running",
   });
   expect(JSON.parse(lines[0] ?? "")).not.toHaveProperty("pullRequest");
+});
+
+test("a selector resolves once and no unrelated run event leaks", async () => {
+  const other = run({ runId: "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ", ticket: "AGE-999" });
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(run())));
+  respond([other, run()]);
+
+  await watchRuns(deps(), { polls: 1, selector: "AGE-317" });
+
+  expect(fetchMock.mock.calls[0]?.[0]).toBe("http://svc.test:8990/api/runs/AGE-317");
+  expect(lines).toEqual([`${AT} ${RUN} AGE-317 watching -`]);
+  expect(lines.join("\n")).not.toContain("AGE-999");
+});
+
+test("a selected watch keeps newline-delimited JSON", async () => {
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(run())));
+  respond([run(), run({ runId: "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ" })]);
+
+  await watchRuns(deps(), { polls: 1, selector: "01K3ANBZ", json: true });
+
+  expect(lines).toHaveLength(1);
+  expect(JSON.parse(lines[0] ?? "")).toMatchObject({ runId: RUN, event: "watching" });
+});
+
+test("unknown and ambiguous selectors fail actionably before polling", async () => {
+  fetchMock.mockResolvedValueOnce(
+    new Response(JSON.stringify({ error: "not found" }), { status: 404 }),
+  );
+  await expect(watchRuns(deps(), { polls: 1, selector: "AGE-999" })).rejects.toThrow(
+    "run AGE-999 not found",
+  );
+
+  fetchMock.mockResolvedValueOnce(
+    new Response(JSON.stringify({ candidates: [RUN, "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ"] }), {
+      status: 409,
+    }),
+  );
+  await expect(watchRuns(deps(), { polls: 1, selector: "01K3AN" })).rejects.toMatchObject({
+    message: "run ref 01K3AN is ambiguous",
+    hint: expect.stringContaining("use more characters"),
+  });
 });
 
 test("a service that goes away is one line, not the end of the watch", async () => {
