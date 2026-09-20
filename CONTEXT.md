@@ -129,7 +129,7 @@ _Avoid_: failure, abort
 The working copy an agent uses, provisioned from a binding’s clone for a run.
 A workflow releases it as its last act, under a policy the factory defaults
 and the workflow may override; leftovers remain available for inspection and
-sweep.
+resource pruning.
 _Avoid_: checkout, clone, workspace
 
 **Release**:
@@ -143,14 +143,16 @@ The record of worktrees managed by jigs, including their owning runs and
 states. It supports reuse and reconciliation.
 _Avoid_: worktree list, worktree cache
 
-**Sweep**:
-The reconciliation of worktrees on disk with their owning runs. It reports
-leftovers and removes eligible worktrees when requested.
-_Avoid_: gc, prune, cleanup job
+**Resource prune**:
+The explicit maintenance of recorded run resources after inspection. Preview
+reports what is eligible or preserved; apply removes only resources that pass
+the ownership and safety checks.
+_Avoid_: sweep, gc, cleanup job
 
 **Abandoned worktree**:
 A worktree remaining after its owning run ended or was interrupted.
-It is eligible for sweep; a suspended run’s worktree is not abandoned.
+It may be eligible for resource pruning; a suspended run’s worktree is not
+abandoned.
 _Avoid_: orphan, stale worktree
 
 **Harness**:

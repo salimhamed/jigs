@@ -716,7 +716,7 @@ test("poke wakes the hooks that name a resource, never the needs-human marker", 
   expect(await res.json()).toMatchObject({ poked: [{ token: CLAIM }] });
 });
 
-test("a poke that landed is the wake the run's logs report", async () => {
+test("a poke that landed is the wake the run's status reports", async () => {
   clearWakes();
   runHolding(CLAIM);
   delivers();

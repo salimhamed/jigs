@@ -667,7 +667,7 @@ test("a run names its ticket and keeps its parked pull request in WAITING", asyn
     "waiting for an approving review and green CI on acme/api#41",
   );
   expect(row?.suspensions[0]?.url).toBe("https://github.com/acme/api/pull/41");
-  // The listing behind ps and watch stays provider-free; only the single-run
+  // The listing behind status and watch stays provider-free; only the single-run
   // route calls enrichSuspensions.
   expect(githubRead).not.toHaveBeenCalled();
 });

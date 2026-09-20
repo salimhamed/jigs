@@ -22,7 +22,7 @@ export async function removeRunDirectory(metadata: RunMetadata): Promise<void> {
   await rm(runDirectory(metadata), { recursive: true, force: true });
 }
 
-/** Only direct real directories with valid run IDs are candidates for manual sweep. */
+/** Only direct real directories with valid run IDs are candidates for resource pruning. */
 export async function listRunDirectories(): Promise<{ path: string; runId: string }[]> {
   const root = path.join(jigsDataDir(), "scratch");
   const entries = await readdir(root, { withFileTypes: true }).catch(

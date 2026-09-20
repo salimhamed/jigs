@@ -12,8 +12,8 @@ add that, set this up — go back to `SKILL.md` and take the route it belongs to
    github.com/salimhamed/jigs), for what a word means. It is the
    glossary: workflow, block, step, step id, step wrapper, run, binding,
    factory repo, suspension, satisfier, gate, needs-human halt, worktree,
-   sweep, harness, snapshot, preflight, service, dashboard, trigger, schedule,
-   World.
+   resource prune, harness, snapshot, preflight, service, dashboard, trigger,
+   schedule, World.
    Each entry also lists the words the project deliberately avoids — use the
    glossary's term, not a synonym.
 2. **`docs/adr/`** in the jigs repo, for *why* something works the way it
@@ -60,8 +60,8 @@ jigs status <run-id>  # one run's state, timeline and dashboard link
 jigs --help
 ```
 
-Nothing that changes state. Not `jigs run`, `cancel`, `poke`, `sweep`, `bind`,
-`unbind`, `generate`, `build`, `up`, `upgrade`, or any `jigs service` verb other than
-`status`. No edits to `jigs.config.ts`, `.env`, or any file. If the answer would
-require one of those, say what you would need to do and let the human ask for
-it.
+Nothing that changes state. Not `jigs run`, `cancel`, `poke`, `resources prune
+--apply`, `bind`, `unbind`, `generate`, `build`, `up`, `upgrade`, or any `jigs
+service` verb other than `status`. No edits to `jigs.config.ts`, `.env`, or any
+file. If the answer would require one of those, say what you would need to do
+and let the human ask for it.

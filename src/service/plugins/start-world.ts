@@ -284,8 +284,8 @@ export default async function startWorld() {
   // Startup reconciliation, then the floor under the webhook: every parked
   // pull request is re-read now, in case a delivery was lost while the service
   // was down, and every five minutes after that. After readiness, not before:
-  // a slow sweep must not hold `jigs service start` on a service that is
-  // already answering.
+  // a slow pull-request nudge pass must not hold `jigs service start` on a
+  // service that is already answering.
   const { nudgePullRequests, startPullRequestNudge } = await import("../nudge.ts");
   const nudge = startPullRequestNudge();
   onShutdown(() => {
