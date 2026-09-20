@@ -17,12 +17,20 @@ const ACTIVE_STEP_STATUSES: ReadonlySet<string> = new Set(["running", "pending"]
 /** The steps a run recorded, oldest first. The World's own listing sorts by
  *  step id, which is only creation order while the ids are ULIDs. */
 export async function listRunSteps(runId: string): Promise<StepView[]> {
-  const page = await (await getWorld()).steps.list({
-    runId,
-    resolveData: "none",
-    pagination: { limit: 1000 },
-  });
-  return [...page.data]
+  const world = await getWorld();
+  const steps = [];
+  let cursor: string | undefined;
+  do {
+    const page = await world.steps.list({
+      runId,
+      resolveData: "none",
+      pagination: { limit: 1000, ...(cursor === undefined ? {} : { cursor }) },
+    });
+    steps.push(...page.data);
+    cursor = page.hasMore && page.cursor !== null ? page.cursor : undefined;
+  } while (cursor !== undefined);
+
+  return steps
     .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
     .map((step) => ({
       name: step.stepName,
