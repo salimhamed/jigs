@@ -112,6 +112,60 @@ export async function findOpenPullRequestsByHeadSha(
     }));
 }
 
+/**
+ * The open pull request already headed by a branch, or null.
+ *
+ * Closed and merged pull requests are out of scope by construction: a closed
+ * one means a human decided, so a fresh pull request is the right answer. A
+ * head outside this repository is never adopted — GitHub's `head=owner:branch`
+ * filter names only the owner, so a sibling repository or a fork under the same
+ * owner can come back and has to be rejected here.
+ */
+export async function findOpenPullRequestByBranch(
+  repository: Pick<PullRequestRef, "owner" | "repo">,
+  head: string,
+  base: string,
+): Promise<(PullRequestRef & { url: string }) | null> {
+  const query = new URLSearchParams({
+    state: "open",
+    head: `${repository.owner}:${head}`,
+    base,
+  });
+  const pulls = await githubGetAll<{
+    number: number;
+    state: string;
+    html_url: string;
+    head: { ref: string; repo: { full_name: string } | null };
+    base: { ref: string; repo: { full_name: string } };
+  }>(`/repos/${repository.owner}/${repository.repo}/pulls?${query.toString()}`);
+  // Owner logins and repository names are case-insensitive on GitHub; branch
+  // names are not.
+  const fullName = `${repository.owner}/${repository.repo}`.toLowerCase();
+  const isThisRepo = (repo: { full_name: string } | null) =>
+    repo?.full_name.toLowerCase() === fullName;
+  const matches = pulls.filter(
+    (pull) =>
+      pull.state === "open" &&
+      pull.head.ref === head &&
+      pull.base.ref === base &&
+      isThisRepo(pull.head.repo) &&
+      isThisRepo(pull.base.repo),
+  );
+  if (matches.length > 1) {
+    throw new Error(
+      `GitHub reports ${matches.length} open pull requests for ${repository.owner}/${repository.repo} ${head} into ${base}: ${matches.map((pull) => `#${pull.number}`).join(", ")}`,
+    );
+  }
+  const [match] = matches;
+  if (match === undefined) return null;
+  return {
+    owner: repository.owner,
+    repo: repository.repo,
+    number: match.number,
+    url: match.html_url,
+  };
+}
+
 // A completed run in any of these is a red build; everything else that
 // completed counts as green.
 const RED_CONCLUSIONS = new Set([

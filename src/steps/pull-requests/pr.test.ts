@@ -9,6 +9,7 @@ import {
   fetchPrCommitMessages,
   fetchPrSnapshot,
   fetchPrTitle,
+  findOpenPullRequestByBranch,
   markPrReady,
   mergePr,
   postPullRequestReview,
@@ -31,6 +32,7 @@ vi.mock("../../providers/github.ts", () => ({
   fetchPrCommitMessages: vi.fn(),
   fetchPrSnapshot: vi.fn(),
   fetchPrTitle: vi.fn(),
+  findOpenPullRequestByBranch: vi.fn(),
   markPrReady: vi.fn(),
   mergePr: vi.fn(),
   postPullRequestReview: vi.fn(),
@@ -99,6 +101,7 @@ beforeEach(() => {
   vi.mocked(fetchPrCommitMessages).mockResolvedValue([
     "fix: title\n\nThe body.\n\nBREAKING CHANGE: the shape moved.",
   ]);
+  vi.mocked(findOpenPullRequestByBranch).mockResolvedValue(null);
   vi.mocked(createPullRequest).mockResolvedValue({
     number: 1,
     html_url: "https://github.example/owner/repo/pull/1",
@@ -265,6 +268,7 @@ test("pat mode adds no trailer, no assignee and no requested-by line", async () 
   expect(
     await openPullRequest({ repo, head: "fix", base: "main", title: "fix: search", body: "Body." }),
   ).toEqual({ ...pr, url: "https://github.example/owner/repo/pull/1" });
+  expect(findOpenPullRequestByBranch).toHaveBeenCalledExactlyOnceWith(repo, "fix", "main");
   expect(createPullRequest).toHaveBeenCalledWith(expect.objectContaining({ body: "Body." }));
   expect(assignPullRequest).not.toHaveBeenCalled();
   await mergePullRequest(pr, "head", SQUASH);
@@ -276,6 +280,7 @@ test("app mode names the operator and returns the provider's URL", async () => {
   await expect(
     openPullRequest({ repo, head: "fix", base: "main", title: "fix: search", body: "Body." }),
   ).resolves.toEqual({ ...pr, url: "https://github.example/owner/repo/pull/1" });
+  expect(findOpenPullRequestByBranch).toHaveBeenCalledExactlyOnceWith(repo, "fix", "main");
   expect(createPullRequest).toHaveBeenCalledWith(
     expect.objectContaining({ body: "Requested by @salimhamed.\n\nBody." }),
   );
@@ -302,6 +307,32 @@ test("openPullRequest forwards draft only when supplied", async () => {
     title: "fix: search",
     body: "Body.",
   });
+});
+
+test("an open pull request for the branch is adopted instead of created again", async () => {
+  asApp();
+  vi.mocked(findOpenPullRequestByBranch).mockResolvedValue({
+    ...pr,
+    number: 7,
+    url: "https://github.example/owner/repo/pull/7",
+  });
+
+  await expect(
+    openPullRequest({ repo, head: "fix", base: "main", title: "fix: search", body: "Body." }),
+  ).resolves.toEqual({ ...pr, number: 7, url: "https://github.example/owner/repo/pull/7" });
+  expect(findOpenPullRequestByBranch).toHaveBeenCalledExactlyOnceWith(repo, "fix", "main");
+  expect(createPullRequest).not.toHaveBeenCalled();
+  expect(assignPullRequest).toHaveBeenCalledWith({ ...pr, number: 7 }, ["salimhamed"]);
+});
+
+test("a failed assignment is not swallowed", async () => {
+  asApp();
+  vi.mocked(assignPullRequest).mockRejectedValue(new GithubApiError(403, "/assignees", "no"));
+
+  await expect(
+    openPullRequest({ repo, head: "fix", base: "main", title: "fix: search", body: "Body." }),
+  ).rejects.toThrow("no");
+  expect(createPullRequest).toHaveBeenCalledOnce();
 });
 
 test("markPullRequestReady mutates before returning a fresh snapshot", async () => {

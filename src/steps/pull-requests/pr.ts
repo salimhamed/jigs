@@ -18,6 +18,7 @@ import {
   fetchPrCommitMessages,
   fetchPrSnapshot,
   fetchPrTitle,
+  findOpenPullRequestByBranch,
   markPrReady,
   mergePr,
   type PullRequestRef,
@@ -53,7 +54,14 @@ export async function resolveMergePolicy(binding: string): Promise<MergePolicy> 
   return bindingMergePolicy(merge, resolveBinding(root, binding));
 }
 
-/** Open a pull request from the working branch into the base branch. */
+/**
+ * Open a pull request from the working branch into the base branch.
+ *
+ * The lookup comes first because this is one step: a create that succeeded
+ * before the assignment failed, or whose response was lost, leaves a pull
+ * request GitHub will refuse to open twice. The retry adopts that pull request
+ * and re-attempts only what did not finish.
+ */
 export async function openPullRequest(request: {
   repo: GitHubRepoRef;
   head: string;
@@ -68,18 +76,22 @@ export async function openPullRequest(request: {
   // operator approve it. The assignee and the opening line are how the
   // operator still shows up on it — GitHub has no second author field.
   const operator = identity.mode === "app" ? identity.operator : null;
-  const { number, html_url } = await createPullRequest({
-    owner: repo.owner,
-    repo: repo.repo,
-    head,
-    base,
-    title,
-    body: operator === null ? body : `Requested by @${operator}.\n\n${body}`,
-    ...(draft === undefined ? {} : { draft }),
-  });
-  const pr = { owner: repo.owner, repo: repo.repo, number };
+  let opened = await findOpenPullRequestByBranch(repo, head, base);
+  if (opened === null) {
+    const { number, html_url } = await createPullRequest({
+      owner: repo.owner,
+      repo: repo.repo,
+      head,
+      base,
+      title,
+      body: operator === null ? body : `Requested by @${operator}.\n\n${body}`,
+      ...(draft === undefined ? {} : { draft }),
+    });
+    opened = { owner: repo.owner, repo: repo.repo, number, url: html_url };
+  }
+  const pr = { owner: opened.owner, repo: opened.repo, number: opened.number };
   if (operator !== null) await assignPullRequest(pr, [operator]);
-  return { ...pr, url: html_url };
+  return opened;
 }
 
 /** Mark a draft pull request ready and return its freshly read state. */
