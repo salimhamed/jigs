@@ -303,7 +303,7 @@ argument and routes it to one of four guides:
 ## Where to read next
 
 - [`CONTEXT.md`](CONTEXT.md) — the vocabulary. Every term above is defined there.
-- [API reference](https://salimhamed.github.io/jigs/) — functions and types in the latest stable release.
+- [Documentation](https://salimhamed.github.io/jigs/) — get started, build workflows, and browse the API for the latest stable release.
 - [`docs/setup.md`](docs/setup.md) — the full runbook.
 - [`docs/adr/`](docs/adr/) — one file per decision.
 
@@ -443,7 +443,8 @@ Requires Node 24 or newer and pnpm.
 pnpm install
 pnpm dev        # run the CLI from source
 pnpm check      # lint + typecheck + test + build
-pnpm docs:site  # generate the API website in docs-site/
+pnpm docs:site  # build the guides and API website in docs-site/
+pnpm docs:preview # preview the built website locally
 pnpm e2e        # bare + ship factories, packed installs, two versions each, diff ids
                 # (with WORKFLOW_POSTGRES_URL set: boot the service and stop it too)
 ```

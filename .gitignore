@@ -2,6 +2,8 @@ node_modules/
 dist/
 docs/api/
 docs-site/
+site/api/
+site/.vitepress/cache/
 *.tsbuildinfo
 .env
 .nitro/

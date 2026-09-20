@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Application, ReflectionKind } from "typedoc";
-import { sharedOptions, typedocOptions } from "./typedoc.config.mjs";
+import { typedocOptions } from "./typedoc.config.mjs";
 
 const toolDir = path.dirname(fileURLToPath(import.meta.url));
 export const rootDir = path.resolve(toolDir, "../..");
@@ -122,10 +122,13 @@ async function checkRepositoryRules(entries) {
 
 export async function convert(entryPoints, { format = "markdown", ...options } = {}) {
   const app = await Application.bootstrapWithPlugins({
-    ...(format === "html" ? sharedOptions : typedocOptions),
+    ...typedocOptions,
     entryPoints,
     name: "@salimhamed/jigs",
-    plugin: format === "html" ? [] : ["typedoc-plugin-markdown"],
+    plugin:
+      format === "vitepress"
+        ? ["typedoc-plugin-markdown", "typedoc-vitepress-theme"]
+        : ["typedoc-plugin-markdown"],
     tsconfig: path.join(rootDir, "tsconfig.json"),
     ...options,
   });
@@ -181,17 +184,27 @@ export async function renderSite(destination = path.join(rootDir, "docs-site")) 
   await checkRepositoryRules(entries);
   const { app, project } = await convert(
     entries.map((entry) => path.join(rootDir, entry.source)),
-    { format: "html", githubPages: true },
+    {
+      format: "vitepress",
+      docsRoot: path.join(rootDir, "site"),
+      out: path.join(rootDir, "site/api"),
+      sidebar: { collapsed: true },
+    },
   );
   app.validate(project);
   assertDirectExportSummaries(project);
   if (app.logger.hasErrors() || app.logger.hasWarnings()) {
     throw new Error("TypeDoc validation failed");
   }
-  await app.outputs.writeOutput({ name: "html", path: destination }, project);
+  await app.outputs.writeOutput(
+    { name: "markdown", path: path.join(rootDir, "site/api") },
+    project,
+  );
   if (app.logger.hasErrors() || app.logger.hasWarnings()) {
     throw new Error("TypeDoc site rendering failed");
   }
+  const { build } = await import("vitepress");
+  await build(path.join(rootDir, "site"), { outDir: destination });
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
