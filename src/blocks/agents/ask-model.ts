@@ -7,6 +7,7 @@ import type { ModelResult } from "./result.ts";
 /** The factory's `"use step"` wrapper around `executeModel`. */
 export type ExecuteModelStep = (wire: ModelRequest) => Promise<ModelResult>;
 
+/** Make one model call without a worktree or tools and parse its optional structured output. */
 export async function askModel<T = undefined>(
   config: AskModelOptions<T>,
   executeModel: ExecuteModelStep,

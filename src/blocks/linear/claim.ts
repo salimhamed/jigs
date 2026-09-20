@@ -5,12 +5,15 @@ import { createHook, type Hook } from "workflow";
 // reconstructs the token through ticketToken below — build and parse cannot
 // drift while they share the one constructor. Linear Comment payloads carry
 // issueId as a UUID, so the token does too.
+/** Prefix for the durable hook that gives one run exclusive ownership of a ticket. */
 export const TICKET_TOKEN_PREFIX = "linear:ticket:";
 
+/** Build the durable hook token for a Linear issue ID. */
 export function ticketToken(issueId: string): string {
   return `${TICKET_TOKEN_PREFIX}${issueId}`;
 }
 
+/** Derive a claimed ticket's hook token from a Linear comment webhook. */
 export function tokenFromLinearPayload(payload: unknown): string | null {
   if (typeof payload !== "object" || payload === null) return null;
   const { type, data } = payload as {
@@ -23,6 +26,7 @@ export function tokenFromLinearPayload(payload: unknown): string | null {
   return ticketToken(issueId);
 }
 
+/** A ticket-claim failure that identifies the run already holding the ticket. */
 export class ClaimConflictError extends Error {
   readonly resource: string;
   readonly owningRunId: string;
@@ -37,6 +41,7 @@ export class ClaimConflictError extends Error {
   }
 }
 
+/** A ticket held exclusively by the current workflow run. */
 export interface TicketClaim {
   issueId: string;
   identifier: string;
@@ -53,6 +58,7 @@ export interface TicketClaim {
 // One hook, on the issue's UUID: an operator naming a run by its ticket
 // identifier is resolved through Linear by the run-ref resolver, so a second
 // hook keyed on the identifier would index nothing.
+/** Claim a Linear ticket for the lifetime of the current workflow run. */
 export async function claimTicket(issueId: string, identifier: string): Promise<TicketClaim> {
   const token = ticketToken(issueId);
   const hook = createHook<unknown>({ token });

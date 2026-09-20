@@ -10,6 +10,7 @@ import type { RunAgentOptions } from "./plan.ts";
 import type { AgentResult } from "./result.ts";
 import type { RunAgentFn } from "./resume-or-rebuild.ts";
 
+/** Bound operations used to turn agent startup failures into human halts. */
 export interface RunAgentOrHaltDependencies {
   runAgent: RunAgentFn;
   haltForHuman: HaltForHumanFn;
@@ -18,6 +19,7 @@ export interface RunAgentOrHaltDependencies {
 // Unbounded on purpose: the halt is a pause the human ends, and each loop
 // iteration is a fresh step slot, which is what makes the retry a re-run
 // from zero rather than a replay of the memoized failure.
+/** Run an agent, pausing on its ticket until a human repairs failed tool checks. */
 export async function runAgentOrHalt<T = undefined>(
   claim: TicketClaim,
   config: RunAgentOptions<T>,

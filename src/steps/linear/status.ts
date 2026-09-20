@@ -1,6 +1,7 @@
 import { JigsError } from "../../errors.ts";
 import { fetchIssueStates, updateIssueState } from "../../providers/linear.ts";
 
+/** The before-and-after state names from a ticket status update. */
 export interface TicketStatusResult {
   from: string;
   to: string;

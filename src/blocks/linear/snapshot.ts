@@ -7,12 +7,14 @@
 
 import type { RawIssueSnapshot } from "../../providers/linear.ts";
 
+/** A compact reference to a related Linear ticket. */
 export type TicketRef = {
   id: string;
   identifier: string;
   title: string;
 };
 
+/** A Linear ticket comment captured in a workflow snapshot. */
 export type TicketComment = {
   id: string;
   body: string;
@@ -20,11 +22,13 @@ export type TicketComment = {
   author: string | null;
 };
 
+/** A named external link attached to a Linear ticket. */
 export type TicketLink = {
   title: string;
   url: string;
 };
 
+/** The fixed ticket state shared by every step in one workflow activation. */
 export type TicketSnapshot = {
   fetchedAt: string;
   id: string;
@@ -42,6 +46,7 @@ export type TicketSnapshot = {
   subIssues: TicketRef[];
 };
 
+/** Normalize a provider response into the stable workflow-side ticket shape. */
 export function toTicketSnapshot(raw: RawIssueSnapshot, fetchedAt: string): TicketSnapshot {
   return {
     fetchedAt,
@@ -83,6 +88,7 @@ function section(heading: string, lines: string[]): string[] {
   return lines.length === 0 ? [] : ["", `## ${heading}`, "", ...lines];
 }
 
+/** Render a ticket snapshot as Markdown for an agent prompt. */
 export function renderTicketSnapshot(snapshot: TicketSnapshot): string {
   const lines = [
     `# ${snapshot.identifier} ${snapshot.title}`,

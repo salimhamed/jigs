@@ -14,7 +14,9 @@
 - [`blocks/` and `steps/` import paths](api/)
 
 The API reference is generated from the package exports and describes the latest
-published version. Run `pnpm run docs` for a local preview.
+published version. Every directly exported declaration has a summary; its rendered
+TypeScript signature shows nested fields and members. Run `pnpm run docs` for a
+local preview.
 
 ## Architecture decisions
 

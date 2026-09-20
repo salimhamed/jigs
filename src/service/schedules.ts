@@ -18,6 +18,7 @@ import { type StartRunResult, startRun } from "./trigger.ts";
 // because a field shifted is not a mistake to leave available.
 const CRON_MODE = "5-part";
 
+/** Operator-facing state for one declared recurring schedule. */
 export interface ScheduleView {
   name: string;
   workflow: string;
@@ -26,6 +27,7 @@ export interface ScheduleView {
   active: string | null;
 }
 
+/** Injectable run operations and logging used by the schedule service. */
 export interface ScheduleDeps {
   startRun?: typeof startRun;
   listRuns?: typeof listRuns;

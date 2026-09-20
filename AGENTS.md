@@ -54,7 +54,10 @@ Write `/** */` comments for users with limited context, in plain language and as
 briefly as clarity allows. Use summary prose, `@remarks` for longer rationale and
 `@example` when it helps; use `@internal` to exclude an implementation detail.
 Do not use `@param`, `@returns`, unknown tags, Linear tickets, ADR numbers or
-`docs/adr/` paths. Every public entry point starts with `@packageDocumentation`.
+`docs/adr/` paths. Every declaration exported directly from a package entry point
+has a summary; nested members rely on their rendered TypeScript signatures unless
+their meaning needs explanation. Every public entry point starts with
+`@packageDocumentation`.
 Maintainer `//` comments may cite an ADR, but never a Linear ticket.
 
 ## Agent skills

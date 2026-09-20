@@ -10,8 +10,10 @@ import type { TicketClaim } from "./claim.ts";
 
 // The halt's marker hook. It names no external resource and nothing resumes
 // it: the reply that ends the halt lands on the ticket claim.
+/** Prefix for marker hooks that tell operators which ticket comment needs an answer. */
 export const NEEDS_HUMAN_TOKEN_PREFIX = "jigs:needs-human:";
 
+/** Build the marker token for a run's unanswered ticket comment. */
 export function needsHumanToken(issueId: string, commentId: string): string {
   return `${NEEDS_HUMAN_TOKEN_PREFIX}${issueId}:${commentId}`;
 }
@@ -33,6 +35,7 @@ export type Halt = {
   onReply: "continue" | "retry";
 };
 
+/** The first human ticket reply that wakes a halted run. */
 export interface HumanReply {
   commentId: string;
   body: string;
@@ -43,17 +46,20 @@ export interface HumanReply {
 // Declared here rather than written as `typeof postTicketHumanInputRequest`:
 // declaring the contract block-side typechecks the step against the block and
 // keeps this side free of any value import into steps/.
+/** Durable step contract for posting a question and recording its cursor. */
 export type PostTicketHumanInputRequest = (
   issueId: string,
   halt: Halt,
 ) => Promise<{ commentId: string; postedAt: string }>;
 
+/** Durable step contract for finding a human reply after a cursor. */
 export type CheckForTicketHumanReply = (
   issueId: string,
   sinceIso: string,
   postedCommentId: string,
 ) => Promise<{ reply: HumanReply | null; cursor: string }>;
 
+/** Durable operations required to post and resume a human halt. */
 export type HaltForHumanDependencies = {
   postTicketHumanInputRequest: PostTicketHumanInputRequest;
   checkForTicketHumanReply: CheckForTicketHumanReply;
@@ -66,6 +72,7 @@ export type HaltForHumanFn = (claim: TicketClaim, halt: Halt) => Promise<HumanRe
 // then suspends on the claim hook. Wakes are hints: each one re-checks the
 // actual comment thread and re-suspends when no human has replied — no agent
 // step executes on an unsatisfied wake.
+/** Post a ticket question and suspend until a human replies to the claim hook. */
 export async function haltForHuman(
   claim: TicketClaim,
   halt: Halt,

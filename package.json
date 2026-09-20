@@ -107,6 +107,9 @@
   },
   "files": [
     "dist",
+    "docs/api",
+    "docs/README.md",
+    "llms.txt",
     "templates",
     "recipes",
     "migrations"

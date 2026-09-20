@@ -29,8 +29,10 @@ import { isReady } from "./readiness.ts";
 import { onShutdown } from "./shutdown.ts";
 import { runsWithActiveStep } from "./stalls.ts";
 
+/** Recovery interval for discovering terminal runs that still need cleanup. */
 export const AUTOMATIC_RELEASE_INTERVAL_MS = 60_000;
 
+/** The run fields used to decide and record automatic resource cleanup. */
 export interface CleanupRun {
   runId: string;
   status: string;
@@ -38,6 +40,7 @@ export interface CleanupRun {
   attributes: Record<string, string>;
 }
 
+/** Injectable operations used by automatic release reconciliation. */
 export interface AutomaticReleaseDeps {
   listRuns: () => Promise<CleanupRun[]>;
   waitForTerminal: (runId: string, signal: AbortSignal) => Promise<CleanupRun>;
@@ -61,6 +64,7 @@ export interface AutomaticReleaseDeps {
   setTimer: (fire: () => void, ms: number) => () => void;
 }
 
+/** Counts from one automatic release reconciliation pass. */
 export interface AutomaticReleaseReport {
   considered: number;
   released: number;
@@ -69,6 +73,7 @@ export interface AutomaticReleaseReport {
   failed: number;
 }
 
+/** Resolve the cleanup action for a workflow outcome and its effective release policy. */
 export function automaticReleaseAction(
   factory: Factory,
   workflowName: string,

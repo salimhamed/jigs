@@ -27,6 +27,7 @@ export function resumeFailed(detail: string): never {
 /** Run an agent through the factory’s bound step wrapper. */
 export type RunAgentFn = <T = undefined>(config: RunAgentOptions<T>) => Promise<AgentResult<T>>;
 
+/** Inputs for resuming an agent session with a fresh-session fallback. */
 export interface ResumeOrRebuildOptions<T> {
   runAgent: RunAgentFn;
   harness: HarnessConfig;
@@ -48,6 +49,7 @@ export interface ResumeOrRebuildOptions<T> {
   label: string;
 }
 
+/** Output and resumable session from whichever execution path completed. */
 export interface ResumeOrRebuildResult<T> {
   output: T;
   /** The session holding the completed work, whether resumed or newly created. */

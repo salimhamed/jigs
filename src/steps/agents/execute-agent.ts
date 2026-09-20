@@ -43,6 +43,7 @@ export type ExecutorGeneration = ModelGeneration & { output?: unknown };
 // The provider declares but does not export its MCP config type.
 type CodexMcpServerConfig = NonNullable<CodexExecSettings["mcpServers"]>[string];
 
+/** Injectable provider and environment operations used by agent execution. */
 export interface AgentExecutionDependencies {
   generateText(options: {
     model: LanguageModel;
@@ -60,6 +61,7 @@ export interface AgentExecutionDependencies {
   jitFailures(wire: AgentRequest): Promise<FailedCheck[] | undefined>;
 }
 
+/** Production dependencies for executing Claude Code and Codex requests. */
 export const defaultAgentExecutionDependencies: AgentExecutionDependencies = {
   generateText: (options) => generateText(options),
   ensureCodexHome: (runId) => ensureManagedCodexHome(runId),

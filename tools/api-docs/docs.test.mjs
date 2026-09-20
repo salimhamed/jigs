@@ -6,7 +6,9 @@ import { afterAll, expect, test } from "vitest";
 import { parse } from "yaml";
 import {
   apiEntries,
+  assertDirectExportSummaries,
   convert,
+  directExportSummaryFailures,
   hasPackageDocumentation,
   internalReferences,
   renderEntry,
@@ -70,24 +72,24 @@ test("the comment gate reads only doc comments and rejects internal references",
 test("TypeDoc rejects parameter, return and unknown block tags", async () => {
   const fixture = fileURLToPath(new URL("fixtures/restricted-tags.ts", import.meta.url));
   const { app } = await convert([fixture], {
-    intentionallyNotDocumented: [],
     tsconfig: fileURLToPath(new URL("fixtures/tsconfig.json", import.meta.url)),
-    validation: { ...typedocOptions.validation, notDocumented: false },
+    validation: typedocOptions.validation,
   });
   expect(app.logger.warningCount).toBeGreaterThanOrEqual(3);
 });
 
-test("TypeDoc rejects stale intentionally-not-documented entries", async () => {
-  const fixture = fileURLToPath(new URL("fixtures/restricted-tags.ts", import.meta.url));
-  const { app, project } = await convert([fixture], {
-    blockTags: ["@param", "@returns", "@mystery"],
-    intentionallyNotDocumented: ["does.not.exist"],
+test("the summary gate checks direct exports but not their nested members", async () => {
+  const fixture = fileURLToPath(new URL("fixtures/direct-export-summary.ts", import.meta.url));
+  const { project } = await convert([fixture], {
     tsconfig: fileURLToPath(new URL("fixtures/tsconfig.json", import.meta.url)),
-    validation: { ...typedocOptions.validation, notDocumented: true },
+    validation: typedocOptions.validation,
   });
-  app.logger.resetWarnings();
-  app.validate(project);
-  expect(app.logger.validationWarningCount).toBe(1);
+  expect(directExportSummaryFailures(project)).toEqual([
+    "@salimhamed/jigs.undocumentedDirectExport",
+  ]);
+  expect(() => assertDirectExportSummaries(project)).toThrow(
+    "Direct exports missing a summary:\n- @salimhamed/jigs.undocumentedDirectExport",
+  );
 });
 
 test("the real renderer writes stable subpath pages with the package version", async () => {

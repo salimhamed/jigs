@@ -1,4 +1,4 @@
 {
   "extends": "../../../tsconfig.json",
-  "include": ["restricted-tags.ts"]
+  "include": ["*.ts"]
 }

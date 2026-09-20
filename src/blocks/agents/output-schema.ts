@@ -3,6 +3,7 @@
 
 import { z } from "zod";
 
+/** The serializable JSON Schema sent across the workflow-step boundary. */
 export type OutputJsonSchema = Record<string, unknown>;
 
 // OpenAI's strict structured output accepts a subset of JSON Schema and

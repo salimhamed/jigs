@@ -22,6 +22,7 @@ import { installShutdown, onShutdown } from "../shutdown.ts";
 // Both, because the service hosts every workflow the factory declares.
 const HARNESSES: HarnessKind[] = ["claude", "codex"];
 
+/** Injectable runtime checks and output used by the harness startup gate. */
 export interface HarnessRuntimeGateDeps {
   runtimes?: () => Promise<HarnessRuntime[]>;
   exit?: (code: number) => void;
@@ -31,6 +32,7 @@ export interface HarnessRuntimeGateDeps {
 
 // Without this, a missing or too-old CLI is found by the first agent step of
 // the first run, long after the queue, the preflight and a worktree.
+/** Refuse service startup when a required agent harness is unavailable. */
 export async function gateOnHarnessRuntimes(deps: HarnessRuntimeGateDeps = {}): Promise<boolean> {
   const log = deps.log ?? ((line: string) => console.log(line));
   const resolve =
@@ -62,6 +64,7 @@ export async function gateOnHarnessRuntimes(deps: HarnessRuntimeGateDeps = {}): 
   return true;
 }
 
+/** Injectable database operations and output used by the registry startup gate. */
 export interface RegistryGateDeps {
   sql?: () => RegistrySql;
   ensure?: (sql: RegistrySql) => Promise<void>;
@@ -74,6 +77,7 @@ export interface RegistryGateDeps {
 // unhandled rejection, so a throw out of here would leave the service up with
 // the World already polling against a registry it cannot use. Exiting is the
 // point; the boolean is for an injected exit that returns.
+/** Refuse service startup when the worktree registry cannot be prepared. */
 export async function gateOnWorktreeRegistry(deps: RegistryGateDeps = {}): Promise<boolean> {
   const log = deps.log ?? ((line: string) => console.log(line));
   try {
@@ -97,6 +101,7 @@ export async function gateOnWorktreeRegistry(deps: RegistryGateDeps = {}): Promi
   return true;
 }
 
+/** Injectable binding operations and output used by the clone startup gate. */
 export interface BindingCloneGateDeps {
   bindings?: () => BindingClone[];
   ensure?: (options: { repoDir: string; remote: string }) => Promise<void>;
@@ -116,6 +121,7 @@ function describe(err: unknown): string {
 // Cloning at start rather than when a run asks for a worktree is what keeps a
 // minute of `git fetch` out of that run, and puts a remote jigs cannot reach
 // in front of the operator at start instead of mid-agent.
+/** Ensure every configured repository binding has a usable local clone. */
 export async function gateOnBindingClones(deps: BindingCloneGateDeps = {}): Promise<boolean> {
   const log = deps.log ?? ((line: string) => console.log(line));
   const error = deps.error ?? ((line: string) => console.error(line));
@@ -173,6 +179,7 @@ type FencedWorld = ServiceWorld & { [TERMINAL_FENCE]?: boolean };
 // that body. Fence at the World's public handler seam: terminal deliveries are
 // acknowledged without entering the generated runtime, while a delivery that
 // was live when handling began keeps the SDK's documented active-work behavior.
+/** Prevent queued step deliveries from entering runs that are already terminal. */
 export function fenceTerminalWorkflowDeliveries(world: ServiceWorld): void {
   const fenced = world as FencedWorld;
   if (fenced[TERMINAL_FENCE]) return;
@@ -218,6 +225,7 @@ function isHealthCheckDelivery(message: unknown): boolean {
   return !("runId" in message) || message.runId === undefined || typeof message.runId === "string";
 }
 
+/** Workflow World operations used by the final service startup gate. */
 export interface WorldStartGateDeps {
   getWorld: () => Promise<ServiceWorld>;
   own: (world: ServiceWorld) => void;
@@ -230,6 +238,7 @@ export interface WorldStartGateDeps {
 // registry gate — would otherwise be a console.error from nitro and a process
 // that stays up with `ready` never true, so `jigs service start` waits out its
 // whole budget on it.
+/** Start and take ownership of the Workflow World, exiting cleanly on failure. */
 export async function gateOnWorldStart(deps: WorldStartGateDeps): Promise<boolean> {
   try {
     const world = await deps.getWorld();
@@ -247,6 +256,7 @@ export async function gateOnWorldStart(deps: WorldStartGateDeps): Promise<boolea
 
 // The documented defineNitroPlugin subpath doesn't exist at nitro 3.0.260610-beta;
 // a plain default export works.
+/** Run the ordered service startup gates, then enable readiness and reconciliation. */
 export default async function startWorld() {
   // First of all, ahead of any gate that can hold the boot: a `jigs service
   // stop` during a first clone or against a hanging Postgres has to end in an

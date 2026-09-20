@@ -40,6 +40,7 @@ import { noteWake, recordWake } from "./wake-note.ts";
 
 // The app is library code: a factory repo installs this package and hands in
 // its own workflows, so nothing here may import a workflow module.
+/** Build the service HTTP application for one factory's workflows and webhooks. */
 export function createApp(factory: Factory): Hono {
   const app = new Hono();
 

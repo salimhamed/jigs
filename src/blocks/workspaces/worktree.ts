@@ -3,6 +3,7 @@
 // the "." export — while the lifecycle that produces it in
 // ../steps/workspaces/index.ts is step-side and full of node builtins.
 
+/** A provisioned repository worktree and the commit it was cut from. */
 export interface Worktree {
   path: string;
   branch: string;
