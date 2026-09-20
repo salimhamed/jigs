@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.40.1](https://github.com/salimhamed/jigs/compare/jigs-v0.40.0...jigs-v0.40.1) (2026-09-20)
+
+
+### Features
+
+* **docs:** add generated API reference gate ([#302](https://github.com/salimhamed/jigs/issues/302)) ([4066fb3](https://github.com/salimhamed/jigs/commit/4066fb3e3ca5e0459e3c99f6067fa2bb7c79069d))
+
+
+### Bug Fixes
+
+* **docs:** run API generator through package script ([#304](https://github.com/salimhamed/jigs/issues/304)) ([77d02fa](https://github.com/salimhamed/jigs/commit/77d02fa80e1d62b7fca96eb052260f06b089ef5f))
+
 ## [0.40.0](https://github.com/salimhamed/jigs/compare/jigs-v0.39.2...jigs-v0.40.0) (2026-09-20)
 
 
