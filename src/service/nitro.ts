@@ -51,9 +51,6 @@ export function defineJigsService(): NitroConfig {
     // The workflow builder's scan directory stays at its default (the whole
     // root): bounding it to workflows/ would make a misfiled workflow
     // silently invisible, which is worse than scanning a little extra.
-    // jiti loads factory TypeScript at runtime. Keep its CommonJS loader intact
-    // rather than bundling its filesystem/module internals into the ESM service.
-    traceDeps: ["jiti*"],
     rolldownConfig: { external: [OPTIONAL_TELEMETRY] },
     routes: { "/**": `./${GENERATED_DIR}/${GENERATED_ENTRY_FILE}` },
   };

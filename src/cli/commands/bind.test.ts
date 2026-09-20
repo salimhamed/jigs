@@ -31,6 +31,11 @@ function deps(overrides: Partial<BindDeps> = {}): BindDeps {
 
 const jigsConfig = () => readFileSync(path.join(factory, "jigs.config.ts"), "utf8");
 const API = "git@github.com:acme/Api.git";
+const writeConfig = (bindings: string, extra = "") =>
+  writeFileSync(
+    path.join(factory, "jigs.config.ts"),
+    `export default { ${extra}service: { port: 8990, dashboardPort: 9090 }, bindings: { ${bindings} }, workflows: {} };`,
+  );
 
 test("bind writes the remote under a name derived from the repo", async () => {
   const result = await bindRepo(API, deps());
@@ -41,15 +46,13 @@ test("bind writes the remote under a name derived from the repo", async () => {
 
 test("bind reuses an alias whose remote already matches", async () => {
   const remote = "git@github.com:acme/gambit-infrastructure.git";
-  await bindRepo(remote, deps(), { name: "gambit" });
-  const withComment = `// keep this alias\n${jigsConfig()}`;
-  writeFileSync(path.join(factory, "jigs.config.ts"), withComment);
+  writeConfig(`// keep this alias\n gambit: { remote: ${JSON.stringify(remote)} }`);
+  const before = jigsConfig();
 
-  lines = [];
   const result = await bindRepo(remote, deps());
 
   expect(result.name).toBe("gambit");
-  expect(jigsConfig()).toBe(withComment);
+  expect(jigsConfig()).toBe(before);
   expect(jigsConfig()).not.toContain("gambitinfrastructure");
   expect(lines).toContain(`gambit already points at ${remote}`);
 });
@@ -73,15 +76,15 @@ test("an invalid --binding-name errors even when another name has the remote", a
 });
 
 test("an invalid alias from config is refused", async () => {
-  await bindRepo(API, deps());
-  writeFileSync(path.join(factory, "jigs.config.ts"), jigsConfig().replace("api:", '"bad name!":'));
+  writeConfig(`"bad name!": { remote: ${JSON.stringify(API)} }`);
 
   await expect(bindRepo(API, deps())).rejects.toThrow("invalid binding name");
 });
 
 test("an implicit name uses the first binding when a remote is bound more than once", async () => {
-  await bindRepo(API, deps(), { name: "gambit" });
-  await bindRepo(API, deps(), { name: "forge" });
+  writeConfig(
+    `gambit: { remote: ${JSON.stringify(API)} }, forge: { remote: ${JSON.stringify(API)} }`,
+  );
 
   const result = await bindRepo(API, deps());
 
@@ -123,9 +126,9 @@ test("bind creates a derived-name entry when no binding has the remote", async (
   expect(jigsConfig()).toContain(`remote: "${API}"`);
 });
 
-test("a new binding says the restart that clones it", async () => {
+test("a new binding says jigs up applies and clones it", async () => {
   await bindRepo(API, deps());
-  expect(lines).toContain("restart the service to clone api: jigs service restart");
+  expect(lines).toContain("run jigs up to apply the config and clone api");
 });
 
 test("a non-github remote's name comes from the last path segment", async () => {
@@ -134,13 +137,11 @@ test("a non-github remote's name comes from the last path segment", async () => 
 });
 
 test("re-bind is idempotent: no duplicate entries, comments preserved, bytes unchanged", async () => {
-  await bindRepo(API, deps());
-  const withComment = `// keep me\n${jigsConfig()}`;
-  writeFileSync(path.join(factory, "jigs.config.ts"), withComment);
+  writeConfig(`// keep me\n api: { remote: ${JSON.stringify(API)} }`);
+  const before = jigsConfig();
 
-  lines = [];
   await bindRepo(API, deps());
-  expect(jigsConfig()).toBe(withComment);
+  expect(jigsConfig()).toBe(before);
   expect(lines.some((l) => l.includes("already points at"))).toBe(true);
 });
 
@@ -155,27 +156,25 @@ function markCloned(bindingName: string): void {
 
 test("a binding whose clone is already on disk needs no restart", async () => {
   vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
-  await bindRepo(API, deps());
+  writeConfig(`api: { remote: ${JSON.stringify(API)} }`);
   markCloned("api");
 
-  lines = [];
   await bindRepo(API, deps());
-  expect(lines.some((l) => l.includes("restart the service"))).toBe(false);
+  expect(lines.some((l) => l.includes("jigs up"))).toBe(false);
 });
 
-test("a name re-bound after an unbind says the restart the old clone hides", async () => {
+test("a name re-bound after an unbind says jigs up applies the changed config", async () => {
   vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
-  await bindRepo(API, deps());
+  writeConfig(`api: { remote: ${JSON.stringify(API)} }`);
   markCloned("api");
   unbindRepo("api", deps());
 
-  lines = [];
   await bindRepo("git@github.com:acme/api-moved.git", deps(), { name: "api" });
-  expect(lines).toContain("restart the service to clone api: jigs service restart");
+  expect(lines).toContain("run jigs up to apply the config and clone api");
 });
 
 test("a name already bound to another remote is refused, hinting unbind", async () => {
-  await bindRepo(API, deps());
+  writeConfig(`api: { remote: ${JSON.stringify(API)} }`);
   const failure = await bindRepo("git@github.com:acme/api-moved.git", deps(), {
     name: "api",
   }).then(
@@ -436,7 +435,7 @@ test("no GITHUB_TOKEN anywhere fails with the repair, and the retry ensures the 
   const retry = await bindRepo(API, deps());
   expect(retry.webhook).toBe("created");
   // The failed run wrote the binding but nothing cloned it.
-  expect(lines).toContain("restart the service to clone api: jigs service restart");
+  expect(lines).toContain("run jigs up to apply the config and clone api");
 });
 
 test("the repair carries --binding-name, so the retry lands on the same binding", async () => {
@@ -452,12 +451,10 @@ test("the repair carries --binding-name, so the retry lands on the same binding"
 test("an alias match is named in the repair command", async () => {
   stubWebhookEnv();
   vi.stubEnv("GITHUB_TOKEN", "");
-  await bindRepo(API, deps(), { name: "gambit" });
-  const withIngress = jigsConfig().replace(
-    "export default {",
-    'export default { ingressUrl: "https://factory.example.ts.net",',
+  writeConfig(
+    `gambit: { remote: ${JSON.stringify(API)} }`,
+    'ingressUrl: "https://factory.example.ts.net", ',
   );
-  writeFileSync(path.join(factory, "jigs.config.ts"), withIngress);
 
   const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
 

@@ -533,7 +533,7 @@ A worktree admits one agent at a time: a second one is refused, not queued.
 ```sh
 jigs bind git@github.com:owner/repo.git
 jigs bindings
-jigs service restart      # or jigs up --restart-service
+jigs up                   # rebuild and restart for the changed configuration
 ```
 
 A binding is a name in `jigs.config.ts` mapped to a target repo's **remote URL**.
