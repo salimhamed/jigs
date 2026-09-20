@@ -27,7 +27,14 @@ export async function listRunSteps(runId: string): Promise<StepView[]> {
       pagination: { limit: 1000, ...(cursor === undefined ? {} : { cursor }) },
     });
     steps.push(...page.data);
-    cursor = page.hasMore && page.cursor !== null ? page.cursor : undefined;
+    if (page.hasMore) {
+      if (page.cursor === null) {
+        throw new Error("World returned hasMore=true without a continuation cursor");
+      }
+      cursor = page.cursor;
+    } else {
+      cursor = undefined;
+    }
   } while (cursor !== undefined);
 
   return steps

@@ -45,10 +45,12 @@ const worldWithSteps = (steps: Array<Record<string, unknown>>) =>
 
 function worldWithPages(pages: Array<Array<Record<string, unknown>>>, failure?: Error) {
   let page = 0;
+  const cursors: Array<string | undefined> = [];
   setWorld({
     specVersion: SPEC_VERSION_CURRENT,
     steps: {
       list: async (_params: { pagination?: { cursor?: string } }) => {
+        cursors.push(_params.pagination?.cursor);
         if (failure !== undefined && page === pages.length - 1) throw failure;
         const data = pages[page] ?? [];
         const hasMore = page < pages.length - 1;
@@ -57,6 +59,7 @@ function worldWithPages(pages: Array<Array<Record<string, unknown>>>, failure?: 
       },
     },
   } as unknown as World);
+  return cursors;
 }
 
 test("a run's steps are reported oldest first, with a null for what has not happened", async () => {
@@ -102,8 +105,12 @@ test("a pending step counts as in flight, like a running one", async () => {
 });
 
 test("an active step on a later page counts as in flight", async () => {
-  worldWithPages([[step({ stepName: "first" })], [step({ stepName: "later", status: "running" })]]);
+  const cursors = worldWithPages([
+    [step({ stepName: "first" })],
+    [step({ stepName: "later", status: "running" })],
+  ]);
   expect(await runsWithActiveStep([RUN_A])).toEqual([RUN_A]);
+  expect(cursors).toEqual([undefined, "cursor-1"]);
 });
 
 test("all completed steps across pages have no active step", async () => {
@@ -128,4 +135,16 @@ test("a later-page listing failure is propagated", async () => {
   const failure = new Error("later page unavailable");
   worldWithPages([[step()], []], failure);
   await expect(listRunSteps(RUN_A)).rejects.toThrow(failure);
+});
+
+test("an incomplete continuation page fails closed", async () => {
+  setWorld({
+    specVersion: SPEC_VERSION_CURRENT,
+    steps: {
+      list: async () => ({ data: [step()], cursor: null, hasMore: true }),
+    },
+  } as unknown as World);
+  await expect(listRunSteps(RUN_A)).rejects.toThrow(
+    "World returned hasMore=true without a continuation cursor",
+  );
 });
