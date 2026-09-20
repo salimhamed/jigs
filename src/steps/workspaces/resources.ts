@@ -54,6 +54,13 @@ export interface ResourceInventoryInput {
   runId?: string;
 }
 
+interface ResourceRunRow {
+  id: string;
+  name: string;
+  status: string;
+  attributes: Record<string, string> | null;
+}
+
 interface ClassifiedResource {
   entry: ResourceEntry;
   row?: WorktreeRow;
@@ -357,6 +364,26 @@ export async function inventoryResources(
   return { complete: true, errors: [], entries: (await classify(input)).map(({ entry }) => entry) };
 }
 
+/** Read the deletion authority from the client that holds the run resource lock. */
+export async function readResourceRun(
+  sql: RegistrySql,
+  runId: string,
+): Promise<ResourceRun | null> {
+  const result = await sql.$client.query<ResourceRunRow>(
+    'select id, name, status, attributes from "workflow"."workflow_runs" where id = $1',
+    [runId],
+  );
+  const row = result.rows[0];
+  return row === undefined
+    ? null
+    : {
+        runId: row.id,
+        workflowName: row.name,
+        status: row.status,
+        attributes: row.attributes ?? {},
+      };
+}
+
 export async function pruneResources(
   input: ResourceInventoryInput,
   sql: RegistrySql,
@@ -365,6 +392,7 @@ export async function pruneResources(
     runId: string,
     action: (locked: RegistrySql) => Promise<T>,
   ) => Promise<T> = (database, runId, action) => withRunResourceLock(database, runId, action),
+  readRun: (sql: RegistrySql, runId: string) => Promise<ResourceRun | null> = readResourceRun,
 ): Promise<ResourceInventory> {
   const initial = await classify(input);
   const results: ResourceEntry[] = [];
@@ -375,9 +403,14 @@ export async function pruneResources(
     }
     try {
       const applied = await withLock(sql, candidate.entry.runId, async (locked) => {
+        // Preview state is observability only. Status, retention attributes,
+        // resource registration and registry ownership all come from the
+        // authoritative database client after this run's advisory lock is held.
+        const freshRun = await readRun(locked, candidate.entry.runId as string);
         const freshRows = await listWorktrees(locked);
         const fresh = await classify({
           ...input,
+          runs: freshRun === null ? [] : [freshRun],
           worktrees: freshRows,
           runId: candidate.entry.runId as string,
         });

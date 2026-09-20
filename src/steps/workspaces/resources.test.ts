@@ -84,6 +84,9 @@ const unlocked = async <T>(
   action: (locked: ReturnType<typeof makeFakeSql>) => Promise<T>,
 ) => action(sql);
 
+const reread = (runs: ResourceRun[]) => async (_sql: unknown, runId: string) =>
+  runs.find((candidate) => candidate.runId === runId) ?? null;
+
 test("preview is immutable and a repeated apply safely converges", async () => {
   const target = addWorktree("merged");
   const runs = [run("merged", target)];
@@ -94,12 +97,17 @@ test("preview is immutable and a repeated apply safely converges", async () => {
   expect(store.has(target)).toBe(true);
 
   const sql = makeFakeSql(store);
-  const applied = await pruneResources(input(runs), sql, unlocked);
+  const applied = await pruneResources(input(runs), sql, unlocked, reread(runs));
   expect(applied.entries).toMatchObject([{ action: "remove", reason: "removed" }]);
   expect(existsSync(target)).toBe(false);
   expect(store.has(target)).toBe(false);
 
-  const again = await pruneResources({ ...input(runs), worktrees: [] }, sql, unlocked);
+  const again = await pruneResources(
+    { ...input(runs), worktrees: [] },
+    sql,
+    unlocked,
+    reread(runs),
+  );
   expect(again.entries[0]).toMatchObject({ eligible: false, action: "skip" });
 });
 
@@ -118,7 +126,7 @@ test("apply removes the stale registry row for an already absent worktree", asyn
   ]);
 
   const sql = makeFakeSql(store);
-  const applied = await pruneResources(input(runs), sql, unlocked);
+  const applied = await pruneResources(input(runs), sql, unlocked, reread(runs));
   expect(applied.entries).toMatchObject([{ action: "remove" }]);
   expect(store.has(target)).toBe(false);
 });
@@ -252,7 +260,7 @@ test("only the exact registered scratch directory is removable", async () => {
     },
   };
   const sql = makeFakeSql(store);
-  const report = await pruneResources(input([scratchRun]), sql, unlocked);
+  const report = await pruneResources(input([scratchRun]), sql, unlocked, reread([scratchRun]));
   expect(report.entries).toMatchObject([{ action: "remove" }]);
   expect(existsSync(scratch)).toBe(false);
 });
@@ -292,7 +300,7 @@ test("apply reports a partial failure and continues with independent resources",
     return action(database);
   };
 
-  const report = await pruneResources(input(runs), sql, failFirst);
+  const report = await pruneResources(input(runs), sql, failFirst, reread(runs));
 
   expect(report.complete).toBe(false);
   expect(report.entries.find((entry) => entry.runId === first)).toMatchObject({
@@ -304,4 +312,38 @@ test("apply reports a partial failure and continues with independent resources",
   });
   expect(existsSync(path.join(dataDir, "scratch", first))).toBe(true);
   expect(existsSync(path.join(dataDir, "scratch", second))).toBe(false);
+});
+
+test("a locked run reread failure preserves the resource", async () => {
+  const runId = "wrun_scratch_read_failed";
+  const scratch = path.join(dataDir, "scratch", runId);
+  mkdirSync(scratch, { recursive: true });
+  const resource = resourceAttribute({
+    kind: "run-directory",
+    identity: runId,
+    url: pathToFileURL(scratch).href,
+  });
+  const run: ResourceRun = {
+    runId,
+    workflowName: "workflow//./workflows/ship//shipWorkflow",
+    status: "completed",
+    attributes: {
+      [resource.key]: resource.value,
+      [CLEANUP_STATE_ATTRIBUTE]: encodeCleanupProgress({
+        status: "running",
+        outcome: "failure",
+        action: "release",
+      }),
+    },
+  };
+
+  const report = await pruneResources(input([run]), makeFakeSql(store), unlocked, async () => {
+    throw new Error("workflow run reread failed");
+  });
+
+  expect(report).toMatchObject({
+    complete: false,
+    entries: [{ action: "skip", error: "Error: workflow run reread failed" }],
+  });
+  expect(existsSync(scratch)).toBe(true);
 });
