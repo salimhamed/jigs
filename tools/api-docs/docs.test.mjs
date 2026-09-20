@@ -123,7 +123,8 @@ test("the release branch generates docs without waiting on the merge job", async
   expect(docsJob.if).toContain("release-please--branches--main");
   const serialized = JSON.stringify(docsJob);
   expect(serialized).toContain("RELEASE_PLEASE_TOKEN");
-  expect(serialized).toContain("pnpm docs");
+  const generateStep = docsJob.steps.find((step) => step.run?.includes("docs"));
+  expect(generateStep?.run).toBe("pnpm run docs");
   expect(serialized).toContain("git diff --cached --quiet");
   expect(serialized).toContain("git add -f docs/api");
 
