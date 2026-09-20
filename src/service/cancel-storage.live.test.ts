@@ -1,3 +1,6 @@
+// Storage/transport scope: these focused fixtures drive World events through a
+// minimal HTTP consumer. The compiled-factory E2E suite owns generated runtime
+// behavior, turbo races, and user-visible cancellation assertions.
 import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";

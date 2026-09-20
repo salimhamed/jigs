@@ -1,4 +1,6 @@
+import type { World } from "@workflow/world";
 import type { HarnessKind, HarnessRuntime } from "../../checks/harness-runtime.ts";
+import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import type { BindingClone } from "../../steps/workspaces/clone.ts";
 import type { RegistrySql } from "../../steps/workspaces/registry.ts";
 import { READY_PHASE, setBootPhase } from "../readiness.ts";
@@ -148,8 +150,44 @@ export async function gateOnBindingClones(deps: BindingCloneGateDeps = {}): Prom
 }
 
 interface ServiceWorld {
+  createQueueHandler?: World["createQueueHandler"];
+  runs?: World["runs"];
   start?: () => Promise<void>;
   close?: () => Promise<void>;
+}
+
+const TERMINAL_FENCE = Symbol("jigs.terminal-delivery-fence");
+
+type FencedWorld = ServiceWorld & { [TERMINAL_FENCE]?: boolean };
+
+// Workflow v5 turbo starts an attempt-1 step body before its backgrounded
+// run_started write confirms that the run is still live. A delivery held in a
+// real queue can therefore be cancelled before its first attempt and still run
+// that body. Fence at the World's public handler seam: terminal deliveries are
+// acknowledged without entering the generated runtime, while a delivery that
+// was live when handling began keeps the SDK's documented active-work behavior.
+export function fenceTerminalWorkflowDeliveries(world: ServiceWorld): void {
+  const fenced = world as FencedWorld;
+  if (fenced[TERMINAL_FENCE]) return;
+  const createQueueHandler = world.createQueueHandler;
+  const getRun = world.runs?.get;
+  if (createQueueHandler === undefined || getRun === undefined) return;
+
+  world.createQueueHandler = (prefix, handler) =>
+    createQueueHandler.call(world, prefix, async (message, metadata) => {
+      const runId = deliveryRunId(message);
+      if (runId !== null) {
+        const run = await getRun.call(world.runs, runId);
+        if (run !== null && TERMINAL_RUN_STATUSES.has(run.status)) return;
+      }
+      return handler(message, metadata);
+    });
+  fenced[TERMINAL_FENCE] = true;
+}
+
+function deliveryRunId(message: unknown): string | null {
+  if (typeof message !== "object" || message === null || !("runId" in message)) return null;
+  return typeof message.runId === "string" ? message.runId : null;
 }
 
 export interface WorldStartGateDeps {
@@ -167,6 +205,7 @@ export interface WorldStartGateDeps {
 export async function gateOnWorldStart(deps: WorldStartGateDeps): Promise<boolean> {
   try {
     const world = await deps.getWorld();
+    fenceTerminalWorkflowDeliveries(world);
     deps.own(world);
     await world.start?.();
   } catch (err) {

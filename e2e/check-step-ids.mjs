@@ -40,6 +40,10 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  installCompiledCancellationFixture,
+  runCompiledCancellationMatrix,
+} from "./compiled-cancellation.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.join(here, "..");
@@ -47,6 +51,7 @@ const cli = path.join(repo, "dist", "cli.js");
 const jigsPackage = path.join(repo, "package.json");
 const JIGS = "@salimhamed/jigs";
 const FAKE_VERSION = "9.9.9-e2e";
+const PNPM = process.env.JIGS_E2E_PNPM ?? "pnpm";
 
 const HEADER = `# Workflow and step ids emitted by the named scaffold (bare or ship recipe).
 # Recorded by: node e2e/check-step-ids.mjs --record
@@ -64,6 +69,7 @@ const HEADER = `# Workflow and step ids emitted by the named scaffold (bare or s
 let factory;
 let scratch;
 let tarballs;
+const factories = new Map();
 
 // The tarball stands in for the registry, so this check needs no token. pnpm
 // records a file: tarball by its integrity, which changes with any source
@@ -74,7 +80,7 @@ function pack() {
   mkdirSync(dir);
   const into = (name) => path.join(dir, `${name}.tgz`);
   const packInto = (file) =>
-    execFileSync("pnpm", ["pack", "--out", file], {
+    execFileSync(PNPM, ["pack", "--out", file], {
       cwd: repo,
       stdio: "inherit",
     });
@@ -112,7 +118,7 @@ function installFromTarball(tarball) {
   }
   manifest.dependencies[JIGS] = `file:${tarball}`;
   writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-  run("pnpm", ["install", "--no-frozen-lockfile"]);
+  run(PNPM, ["install", "--no-frozen-lockfile"]);
 }
 
 const bundle = () => path.join(factory, ".output", "server", "index.mjs");
@@ -747,6 +753,7 @@ async function checkScaffold(name) {
   const expectedFile = path.join(here, `expected-ids.${name}.txt`);
   console.log(`\n=== scaffold: ${name}`);
   scaffold(name);
+  factories.set(name, factory);
   // Formatting generated code must not trigger the build's exact-content drift check.
   const generated = readFileSync(path.join(factory, "jigs.ts"), "utf8");
   const formatted = execFileSync(
@@ -849,7 +856,7 @@ async function checkScaffold(name) {
     );
   }
 
-  if (process.argv[2] === "--record") {
+  if (process.argv.includes("--record")) {
     writeFileSync(expectedFile, `${HEADER}${ids.join("\n")}\n`);
     console.log(`recorded ${ids.length} id(s) in ${expectedFile}`);
   } else {
@@ -907,8 +914,8 @@ async function checkScaffold(name) {
   // through its `imports` map, so this is also where tsc and vitest are held to
   // resolving it.
   console.log("\n=== scaffold: typecheck, then the scaffolded tests");
-  run("pnpm", ["typecheck"]);
-  run("pnpm", ["test"]);
+  run(PNPM, ["typecheck"]);
+  run(PNPM, ["test"]);
 
   console.log(
     `\n${name}: ${ids.length} step/workflow id(s) match ${expectedFile}, and are unchanged with ${JIGS} at ${FAKE_VERSION}`,
@@ -918,7 +925,8 @@ async function checkScaffold(name) {
 scratch = mkdtempSync(path.join(tmpdir(), "jigs-e2e-"));
 tarballs = pack();
 checkCliBundle();
-for (const name of ["bare", "ship"]) await checkScaffold(name);
+const cancellationOnly = process.argv.includes("--cancellation-only");
+for (const name of cancellationOnly ? ["bare"] : ["bare", "ship"]) await checkScaffold(name);
 
 // Boot the recipe scaffold once: it registers hello and ship, exercising the
 // optional recipe's deferred registration as well as all runtime peers.
@@ -928,29 +936,55 @@ if (postgresUrl === undefined || postgresUrl === "") {
     "\nboot check skipped: WORKFLOW_POSTGRES_URL unset (CI runs it against a service container)",
   );
 } else {
-  console.log("\n=== cancel: v5 cancellation behavior against Postgres");
-  execFileSync(
-    "pnpm",
-    ["vitest", "run", "--config", "vitest.live.config.ts", "src/service/cancel.live.test.ts"],
-    { cwd: repo, stdio: "inherit" },
-  );
-  console.log(
-    "\n=== boot: the built bundle resolves every import, becomes ready, and exits on SIGTERM",
-  );
-  const boot = await bootOutcome(postgresUrl);
-  if (boot.problem === null) {
-    console.log(`ready after ${boot.readyMs}ms; exited 0 ${boot.exitMs}ms after SIGTERM`);
-  } else {
-    console.error(boot.output);
-    fail(
-      `the built service did not start and stop cleanly: ${boot.problem}`,
-      `if the output above names a package it cannot find, the factory loads it by name at run time: it belongs in ${JIGS}'s peerDependencies and the factory package.json template`,
+  if (!cancellationOnly) {
+    console.log("\n=== cancel storage/transport scope: Postgres fencing and queue diagnostics");
+    execFileSync(
+      PNPM,
+      [
+        "vitest",
+        "run",
+        "--config",
+        "vitest.live.config.ts",
+        "src/service/cancel-storage.live.test.ts",
+      ],
+      { cwd: repo, stdio: "inherit" },
     );
+    console.log(
+      "\n=== boot: the built bundle resolves every import, becomes ready, and exits on SIGTERM",
+    );
+    const boot = await bootOutcome(postgresUrl);
+    if (boot.problem === null) {
+      console.log(`ready after ${boot.readyMs}ms; exited 0 ${boot.exitMs}ms after SIGTERM`);
+    } else {
+      console.error(boot.output);
+      fail(
+        `the built service did not start and stop cleanly: ${boot.problem}`,
+        `if the output above names a package it cannot find, the factory loads it by name at run time: it belongs in ${JIGS}'s peerDependencies and the factory package.json template`,
+      );
+    }
+    console.log(
+      `\n=== runtime: real Postgres steps, sleep, parallel work, restart recovery, hook resume, and dashboard (${LONG_STEP_MS}ms long step)`,
+    );
+    await runtimeScenario(postgresUrl);
   }
+
   console.log(
-    `\n=== runtime: real Postgres steps, sleep, parallel work, restart recovery, hook resume, and dashboard (${LONG_STEP_MS}ms long step)`,
+    "\n=== cancellation: generated v5 handler, Postgres queue states, restart drain, and offline resource prune",
   );
-  await runtimeScenario(postgresUrl);
+  factory = factories.get("bare");
+  if (factory === undefined) throw new Error("bare scaffold was not retained for cancellation e2e");
+  installCompiledCancellationFixture(factory, {
+    service: RUNTIME_PORT + 2,
+    dashboard: RUNTIME_DASHBOARD_PORT + 2,
+  });
+  build();
+  await runCompiledCancellationMatrix({
+    adminPostgresUrl: postgresUrl,
+    cli,
+    factory,
+    ports: { service: RUNTIME_PORT + 2, dashboard: RUNTIME_DASHBOARD_PORT + 2 },
+    scratch,
+  });
 }
 
 cleanup();
