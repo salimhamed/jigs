@@ -33,9 +33,9 @@ so it can show and release it. Decided with Salim on 2026-09-17.
   step that reports what changed (`readWorktreeDiff` is a raw patch truncated
   at 200k characters, no file list, no subjects) and no step that runs a
   command in a worktree.
-- Every run that opened a pull request shows `-` in `jigs ps` once it ends,
-  because the listing recognises only a return value shaped
-  `{ pr: { owner, repo, number } }`, a contract written nowhere.
+- Before run resources, every run that opened a pull request showed `-` in the
+  run listing once it ended, because the listing recognised only a return value
+  shaped `{ pr: { owner, repo, number } }`, a contract written nowhere.
 - Every run left its worktree on disk. The teardown step exists, but the
   workflow has to call it, and only a merged delivery ever did.
 - `reviewPullRequest` accepts `approve` and `request-changes`, GitHub refuses
@@ -167,7 +167,7 @@ this ADR is most likely to cause, and the two-caller rule is the guard.
   may use any credentials the factory has; or from the agent itself, given an
   MCP server for the CI provider. jigs ships no per-provider CI code.
 
-### Run resources ride on SDK run attributes, and `jigs ps` stops guessing
+### Run resources ride on SDK run attributes, and `jigs status` stops guessing
 
 A run's resources, worktree, run directory, pull request, branch, ticket
 comment, are recorded against the run as kind, identity and URL, by the step
@@ -208,11 +208,11 @@ files and a migrations table, rather than the boot-time column check and
 "drop the table" repair the registry uses today, which is acceptable only
 because that registry is rebuilt from disk.
 
-`jigs ps` becomes generic: run, workflow, the claim it holds, status, age,
-what it waits on. A pull-request column presumes one pull request per run
-and goes. Resources appear as kind, identity and URL rows in `jigs logs`,
-including custom kinds and multiple resources of one kind. They are read
-independently of the workflow return value.
+`jigs status` becomes generic: run, workflow, the claim it holds, status, age,
+what it waits on. A pull-request column presumes one pull request per run and
+goes. Resources appear as kind, identity and URL rows in `jigs status
+<run-id>`, including custom kinds and multiple resources of one kind. They are
+read independently of the workflow return value.
 
 ### Release
 
@@ -223,7 +223,7 @@ the remote lacks. What changes is how it is invoked. jigs offers one explicit
 which suspension would fire; the factory sets a default policy (release on
 completion, keep on failure) and a workflow's entry overrides it, so two
 workflows in one factory can differ and a workflow can decide from its
-inputs. Sweep remains the reclaim for everything else.
+inputs. `jigs resources prune` remains the reclaim for everything else.
 
 AGE-464 later adopted automatic policy-driven release after the v5 upgrade.
 The service combines the World's terminal-status wait with startup and periodic
@@ -246,7 +246,7 @@ new head as unapproved.
   Salim. A recipe presumes a way of working; a new factory should start bare
   and copy in what it wants. The Codex review preferred a starter recipe and
   was overruled on this point.
-- **Fixing the missing pull request in `jigs ps` by documenting the return
+- **Fixing the missing pull request in `jigs status` by documenting the return
   shape.** Rejected. It keeps a delivery-shaped contract on every workflow,
   including ones that open several issues and no pull request.
 - **Per-provider CI adapters in jigs (CodeBuild, GitHub Actions, ...).**
@@ -284,7 +284,7 @@ new head as unapproved.
 - The first slice is the part with the least design risk and the most
   duplicated code: export `JigsError`, return the pull request URL,
   `readChange` and `readPatch`, the ticket-prelude block, the explicit
-  `release` block, and the generic `jigs ps`. The recipe move and the
+  `release` block, and the generic `jigs status`. The recipe move and the
   kind-then-topic exports follow, each with its own ticket, as one breaking
   release. Model-interpreted halts, PR observation and CI evidence come when
   the next factory workflow needs them; run attributes wait for AGE-422.

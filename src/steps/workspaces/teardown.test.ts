@@ -78,9 +78,9 @@ function codexHome(runId: string): string {
 const localBranches = () => git(repoDir, "branch", "--list", "--format=%(refname:short)");
 const remoteBranches = () => git(repoDir, "ls-remote", "--heads", "origin");
 
-// Merged, not completed: the sweep asks the ancestry question of every
+// Merged, not completed: resource release asks the ancestry question of every
 // terminal run, so a cancelled run's empty branch reaches this row too — with
-// the remote delete suppressed there, which is the sweep's to withhold.
+// the remote delete suppressed there, which release must withhold.
 test("a merged branch removes the worktree and deletes both branches", () => {
   expect(
     decideTeardown({

@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { RUN_TICKET_ATTRIBUTE } from "../../blocks/factory.ts";
 import { factoryEnvValue } from "../../config/factory-env.ts";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { jigsDataDir } from "../../config/paths.ts";
@@ -38,7 +39,11 @@ interface RunRow {
   attributes: Record<string, string> | null;
 }
 
-async function readRuns(sql: RegistrySql): Promise<ResourceRun[]> {
+interface SelectableResourceRun extends ResourceRun {
+  ticket: string | null;
+}
+
+async function readRuns(sql: RegistrySql): Promise<SelectableResourceRun[]> {
   const result = await sql.$client.query<RunRow>(
     'select id, name, status, attributes from "workflow"."workflow_runs" order by created_at desc',
   );
@@ -47,6 +52,7 @@ async function readRuns(sql: RegistrySql): Promise<ResourceRun[]> {
     workflowName: row.name,
     status: row.status,
     attributes: row.attributes ?? {},
+    ticket: row.attributes?.[RUN_TICKET_ATTRIBUTE] ?? null,
   }));
 }
 
@@ -61,7 +67,7 @@ function emittedWorkflowIds(factoryRoot: string): Set<string> {
   );
 }
 
-function resolveRun(runs: ResourceRun[], ref: string | undefined): string | undefined {
+function resolveRun(runs: SelectableResourceRun[], ref: string | undefined): string | undefined {
   if (ref === undefined) return undefined;
   const exact = runs.find((run) => run.runId === ref);
   if (exact !== undefined) return exact.runId;
@@ -74,7 +80,16 @@ function resolveRun(runs: ResourceRun[], ref: string | undefined): string | unde
       `matches: ${matches.map((run) => run.runId).join(", ")}`,
     );
   }
-  throw new JigsError(`no run matches ${ref}`);
+  const normalized = ref.toLowerCase();
+  const ticketMatches = runs.filter((run) => run.ticket?.toLowerCase() === normalized);
+  if (ticketMatches.length === 1) return ticketMatches[0]?.runId;
+  if (ticketMatches.length > 1) {
+    throw new JigsError(
+      `run ref ${ref} is ambiguous`,
+      `matches: ${ticketMatches.map((run) => run.runId).join(", ")} — use a run ID or unique prefix`,
+    );
+  }
+  throw new JigsError(`run ${ref} not found`);
 }
 
 async function readInventory(

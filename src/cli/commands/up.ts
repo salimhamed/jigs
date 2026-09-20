@@ -9,7 +9,7 @@ import { stringEnv } from "../../steps/agents/harnesses/env.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
 import { buildFactoryService, type Prepare } from "./build.ts";
 import { runDoctor } from "./doctor.ts";
-import { type PsRun, showRuns } from "./ps.ts";
+import { type RunListRun, showRuns } from "./run-list.ts";
 import { resolveServiceUrl } from "./service-client.ts";
 import {
   awaitServiceReady,
@@ -305,7 +305,7 @@ async function confirmRestart(
   if (deps.confirm === undefined) {
     throw new JigsError(
       `refusing to restart ${service.slug} over ${inFlight.length} run(s) in flight without confirmation`,
-      "re-run with --force, or jigs cancel <run> first",
+      "re-run with --force, or jigs cancel <run-id> first",
     );
   }
   const question = `restart ${service.slug} over ${inFlight.length} in-flight run(s)?`;
@@ -319,10 +319,10 @@ async function confirmRestart(
 
 // Empty when the service is unreachable: a service nobody can reach is
 // holding no run this restart could cut off.
-async function listRunsInFlight(factoryRoot: string): Promise<PsRun[]> {
-  let runs: PsRun[];
+async function listRunsInFlight(factoryRoot: string): Promise<RunListRun[]> {
+  let runs: RunListRun[];
   try {
-    // `jigs ps` already knows how to find them; it prints, so it is handed a
+    // `jigs status` already knows how to find them; it prints, so it is handed a
     // sink and read for its return value.
     ({ runs } = await showRuns({
       serviceUrl: resolveServiceUrl(factoryRoot),

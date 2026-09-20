@@ -62,7 +62,8 @@ removes the worktree and deletes the local branch and, idempotently, the
 remote branch (tolerating GitHub's delete-on-merge having got there first);
 **failed or cancelled with a clean tree** removes the worktree; **failed or
 cancelled with a dirty tree** preserves the worktree, marks it abandoned-dirty
-in the registry, and surfaces it in `ps`/`sweep` — never an automatic WIP
+in the registry, and surfaces it in `jigs status` and `jigs resources list` —
+never an automatic WIP
 commit, which would push half-states onto the Linear/GitHub-keyed branch name.
 
 AGE-464 revised the invocation after the v5 upgrade: the service applies the
@@ -110,7 +111,7 @@ fixed recipe for exactly that reason.
   entirely.
 - **Deleting branches of failed runs unconditionally**: rejected — the branch
   is the only cheap copy of unmerged agent work; unmerged jigs branches are
-  listed by sweep for explicit deletion instead.
+  listed by `jigs resources list` for explicit review before pruning instead.
 - **Auto-WIP-committing dirty failed worktrees**: rejected — pushes half-states
   under the ticket-keyed branch name; dirty-worktree preservation (sandcastle's
   rule) keeps the evidence in place instead.
@@ -129,8 +130,9 @@ fixed recipe for exactly that reason.
 - The TS glob implementation must match dotfiles (Python's `pathlib.glob`
   does; most JS globbers default to ignoring them) or `.env`-class copies
   silently vanish.
-- Registry states include `abandoned-dirty`; `jigs ps` surfaces it so
-  preserved wreckage is visible, not just discoverable.
+- Registry states include `abandoned-dirty`; `jigs status` and
+  `jigs resources list` surface it so preserved wreckage is visible, not just
+  discoverable.
 - These are git-substrate policies, deliberately runtime-agnostic: only the
   placement of the teardown hook depends on the execution engine; the matrix,
   sweep and freshness rules stand.

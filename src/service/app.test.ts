@@ -463,6 +463,20 @@ test("an unknown workflow's inputs route is a 404 naming the known workflows", a
   expect(body.knownWorkflows).toEqual(["plain", "dated"]);
 });
 
+test("workflow discovery returns actual launch names and their existing input metadata", async () => {
+  const res = await app.request("/api/workflows");
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as {
+    workflows: Array<{ name: string; inputs: { properties: Record<string, unknown> } }>;
+  };
+  expect(body.workflows.map((workflow) => workflow.name)).toEqual(["plain", "dated"]);
+  expect(body.workflows[0]?.inputs.properties.ticket).toBeDefined();
+  expect(body.workflows[0]?.inputs.properties.askHuman).toMatchObject({
+    type: "boolean",
+    default: false,
+  });
+});
+
 test("health names the factory that answers here, and the injected workflows", async () => {
   vi.stubEnv("JIGS_FACTORY_ROOT", "/factories/acme");
   const res = await app.request("/health");
@@ -544,8 +558,8 @@ test("a steps request for a run nobody launched answers on the ref", async () =>
   expect(res.status).toBe(404);
 });
 
-test("GET /api/runs/:ref reports a stalled run as stalled, like `jigs ps` does", async () => {
-  // `jigs ps` and `jigs logs` must not disagree about the same run, so both
+test("GET /api/runs/:ref reports a stalled run as stalled, like `jigs status` does", async () => {
+  // Status list and detail must not disagree about the same run, so both
   // read the one derivation in runs.ts.
   setWorld({
     specVersion: SPEC_VERSION_CURRENT,
@@ -702,7 +716,7 @@ test("poke wakes the hooks that name a resource, never the needs-human marker", 
   expect(await res.json()).toMatchObject({ poked: [{ token: CLAIM }] });
 });
 
-test("a poke that landed is the wake the run's logs report", async () => {
+test("a poke that landed is the wake the run's status reports", async () => {
   clearWakes();
   runHolding(CLAIM);
   delivers();

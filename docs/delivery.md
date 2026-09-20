@@ -12,7 +12,7 @@ exhausted round budget. Other workflows can use `/blocks/agents` without any del
 concepts. All examples run inside a factory workflow or a replay-safe block.
 
 The generated `registerResource({ kind, identity, url })` step records custom
-resources for `jigs logs`. Keep it after a separate non-idempotent external
+resources for `jigs status <run-id>`. Keep it after a separate non-idempotent external
 creation step so a registration retry cannot repeat the external write. The
 shipped publication block follows that boundary when it registers the pull
 request returned by `openPullRequest`. Its idempotent push steps register the
@@ -229,7 +229,7 @@ with no build at all — so **jigs never merges in a repository with no CI**, an
 such a repository wants `merge.by: "human"`. `behind`, `blocked`, `has_hooks`
 and `unknown` are all "not yet, ask again". The merge call pins the commit the
 wake named, so a push that lands in between is refused rather than merged over;
-jigs logs the refusal, posts a marked stand-down, and re-reads the pull request
+jigs records the refusal, posts a marked stand-down, and re-reads the pull request
 on the next wake.
 
 ## Budgets
@@ -277,7 +277,7 @@ The **halt-for-human ticket channel** is how a human actually reaches that
 callback. `onLimit` runs workflow-side, so it may suspend: the starter factory's
 bound `haltForHuman` posts the question as a comment on the run's Linear ticket,
 mentioning the ticket's creator and assignee, and suspends the run until a human
-replies there. The reply body becomes the continuation's instructions. `jigs ps`
+replies there. The reply body becomes the continuation's instructions. `jigs status`
 shows a run parked this way, and the operator answers it by replying to the
 comment — no separate console, and no second run.
 

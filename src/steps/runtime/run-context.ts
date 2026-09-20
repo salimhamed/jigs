@@ -6,7 +6,7 @@ export type NamedRunMetadata = Pick<WorkflowMetadata, "workflowRunId" | "workflo
 // What a step can tell a human about the run it is inside. The Workflow SDK's
 // metadata carries the run id and the workflow name; the dashboard link is
 // jigs', and only the service process knows it — the port the service was
-// started on, which is also what `jigs logs` prints.
+// started on, which is also what `jigs status <run-id>` prints.
 
 /**
  * The run's page on the dashboard this service hosts, or undefined when the

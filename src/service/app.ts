@@ -73,6 +73,20 @@ export function createApp(factory: Factory): Hono {
     });
   });
 
+  // The launch registry itself is the authority for what this built service
+  // can run. Expose its existing input schemas for read-only CLI discovery.
+  app.get("/api/workflows", (c) =>
+    c.json({
+      workflows: Object.entries(factory.workflows).map(([name, entry]) => ({
+        name,
+        inputs: z.toJSONSchema(entry.inputs, {
+          io: "input",
+          unrepresentable: "any",
+        }),
+      })),
+    }),
+  );
+
   // The manual half of the trigger path; the schedule ticker fires the same
   // function, so preflight cannot differ between them.
   app.post("/api/workflows/:name/runs", async (c) => {
@@ -91,7 +105,7 @@ export function createApp(factory: Factory): Hono {
           {
             runId: result.runId,
             workflow: name,
-            logs: logsPointer(result.runId),
+            dashboard: dashboardPointer(result.runId),
           },
           201,
         );
@@ -222,7 +236,7 @@ export function createApp(factory: Factory): Hono {
     return c.json({ runId: run.runId, poked });
   });
 
-  // Everything `jigs ps` renders: the SDK's runs overlaid with jigs' suspended
+  // Everything `jigs status` renders: the SDK's runs overlaid with jigs' suspended
   // status, plus the registry's current worktree state.
   app.get("/api/runs", async (c) => {
     const [runs, worktrees] = await Promise.all([
@@ -230,7 +244,7 @@ export function createApp(factory: Factory): Hono {
       listWorktreeStates(registrySql(), (runId) => readOwner(runId, factory)),
     ]);
     // The schedules ride along on the same run listing the table above
-    // renders, so ps stays one round trip and the two tables can never
+    // renders, so status stays one round trip and the two tables can never
     // disagree about which schedule is busy.
     const schedules = await listSchedules(factory, {
       listRuns: async () => runs,
@@ -287,7 +301,7 @@ export function createApp(factory: Factory): Hono {
   });
 
   // What the run's own status cannot say: which steps ran, and whether a queue
-  // job died holding its resume. Both are what `jigs logs` renders as a
+  // job died holding its resume. Both are what `jigs status <run-id>` renders as a
   // timeline, and the second is the only sign of a stall.
   app.get("/api/runs/:runId/steps", async (c) => {
     const ref = await resolveRunRef(c.req.param("runId"));
@@ -299,7 +313,7 @@ export function createApp(factory: Factory): Hono {
     return c.json({ steps, deadJobs });
   });
 
-  // The run described by the one function `jigs ps` reads, or the two verbs
+  // The run described by the one function `jigs status` reads, or list and detail
   // answer differently about the same run. One run is worth what the listing
   // will not spend on every run: its steps, terminal or not, and a round trip
   // per halt to read the comment back from Linear.
@@ -312,7 +326,7 @@ export function createApp(factory: Factory): Hono {
       resources: await listRunResources(ref.runId),
       cleanup: await readRunCleanup(ref.runId),
       suspensions: await enrichSuspensions(described.suspensions, ref.runId),
-      logs: logsPointer(ref.runId),
+      dashboard: dashboardPointer(ref.runId),
     };
     // Read only where there is one: a running run's return value is a promise
     // that settles long after this response.
@@ -358,7 +372,7 @@ function unresolvedRunResponse(c: Context, ref: Exclude<RunRef, { kind: "found" 
 // without a dashboard port has none to point at, and the answer is not to name
 // a standalone `workflow web`: run against a live World it opens a second queue
 // worker and steals the jobs this run is waiting on.
-function logsPointer(runId: string): string {
+function dashboardPointer(runId: string): string {
   const port = process.env.JIGS_DASHBOARD_PORT;
   return port === undefined || port === ""
     ? "dashboard: not configured"

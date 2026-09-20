@@ -13,7 +13,7 @@ export async function pokeRun(runId: string, deps: ServiceDeps): Promise<PokeRes
   if (res.status === 404 || res.status === 409) {
     const body = await readErrorBody(res);
     if (res.status === 409 && body.candidates === undefined) {
-      throw new JigsError("run has no suspensions to poke", `inspect it: jigs logs ${runId}`);
+      throw new JigsError("run has no suspensions to poke", `inspect it: jigs status ${runId}`);
     }
     throw runRefError(runId, body);
   }

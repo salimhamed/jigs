@@ -56,7 +56,7 @@ test("a 409 becomes a JigsError with an inspection hint", async () => {
   );
   expect(failure).toBeInstanceOf(JigsError);
   expect((failure as JigsError).message).toBe("run has no suspensions to poke");
-  expect((failure as JigsError).hint).toContain("jigs logs wr_done");
+  expect((failure as JigsError).hint).toContain("jigs status wr_done");
 });
 
 test("a connection failure surfaces the shared unreachable error", async () => {

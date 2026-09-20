@@ -49,8 +49,8 @@ async function fetchFreshness(
   }
 }
 
-// The sweep's merge check reads refs/remotes/origin/<default>, and nothing
-// else in that pass refreshes it.
+// Resource release and pruning read refs/remotes/origin/<default>, and nothing
+// else in those passes refreshes it.
 export async function fetchOriginDefault(repoDir: string): Promise<void> {
   const defaultBranch = await resolveDefaultBranch(repoDir);
   await git(["fetch", "origin", defaultBranch], repoDir);

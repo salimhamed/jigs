@@ -49,7 +49,7 @@ export function isApprovalSatisfied(
 }
 
 // Written for the operator reading a parked pull request: this sentence is
-// also the `blocker` line `jigs logs` prints.
+// also the `blocker` line `jigs status <run-id>` prints.
 function approvalMissing(
   state: ApprovalState,
   approval: ApprovalSignal,

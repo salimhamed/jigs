@@ -72,8 +72,8 @@ export async function releaseRunResources(
       if (row.state === "provision-failed" || plan.preserve !== null) {
         resource.reason =
           row.state === "provision-failed"
-            ? "provisioning evidence kept for manual sweep"
-            : "uncommitted work kept for manual sweep";
+            ? "provisioning evidence kept for jigs resources prune"
+            : "uncommitted work kept for jigs resources prune";
         if (plan.preserve !== null) await setWorktreeState(sql, row.path, plan.preserve);
         continue;
       }
@@ -96,7 +96,7 @@ export async function releaseRunResources(
               ? `worktree released; branches kept with ${unmerged} unmerged commit(s)`
               : "worktree released; any remaining branch was absent, changed, or could not be deleted";
     } catch (error) {
-      resource.reason = `release incomplete; inspect before manual sweep: ${String(error)}`;
+      resource.reason = `release incomplete; inspect with jigs resources list before jigs resources prune: ${String(error)}`;
     }
   }
   if (action === "release") {

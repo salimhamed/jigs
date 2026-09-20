@@ -168,7 +168,7 @@ so `jigs service status` before repairing anything.
 Confirm the dashboard URL answers, then:
 
 ```sh
-jigs ps       # "no runs" is the right answer here
+jigs status   # "no runs" is the right answer here
 ```
 
 ## 4. Add a recipe and bind its target repos
@@ -245,7 +245,7 @@ wake on its own. Run a tunnel, put the URL in `jigs.config.ts` as `ingressUrl`,
 re-bind each target repo (hook-administration rights required), and create a Linear webhook
 for `Comment` resources. `docs/setup.md` has the exact commands and the
 org-level alternative. Without ingress everything still works; a suspended run
-just needs `jigs poke <run>` to notice its answer.
+just needs `jigs poke <run-id>` to notice its answer.
 
 ## Upgrading a factory later
 

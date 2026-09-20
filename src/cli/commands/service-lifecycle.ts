@@ -500,7 +500,7 @@ function signalSince(log: string, offset: number): string | undefined {
     .find((value) => value !== undefined);
 }
 
-// `jigs logs <run>` is about a run — it resolves the ref and points at the
+// `jigs status <run-id>` is about a run — it resolves the ref and points at the
 // run's page on the dashboard the service hosts. This is about the process:
 // the stdout the supervisor redirects, which no dashboard can know about.
 // Different subject, so the `service` namespace keeps them apart rather than

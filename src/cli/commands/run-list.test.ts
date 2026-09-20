@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { type PsRun, showRuns } from "./ps.ts";
+import { type RunListRun, showRuns } from "./run-list.ts";
 
 const fetchMock = vi.fn();
 let lines: string[];
@@ -24,7 +24,7 @@ const RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 const respond = (body: unknown) =>
   fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(body)));
 
-const run = (over: Partial<PsRun> = {}): PsRun => ({
+const run = (over: Partial<RunListRun> = {}): RunListRun => ({
   runId: RUN,
   workflow: "deliver-feature",
   status: "running",

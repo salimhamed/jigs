@@ -1,4 +1,4 @@
-// Run identity and the run listing behind `jigs ps`. Resolution lives here,
+// Run identity and the run listing behind `jigs status`. Resolution lives here,
 // server-side, because every route that names a run needs it — a CLI-side
 // resolver would need its own index and a second round trip.
 
@@ -55,17 +55,38 @@ export async function resolveRunRef(ref: string): Promise<RunRef> {
     }
     if (matches.length > 1) return { kind: "ambiguous", candidates: matches };
   }
-  // The ticket claim is already the one-active-run-per-ticket index: it is
-  // every run's first act, and the world deletes hooks at terminal state, so
-  // the token resolves exactly the run that currently holds the ticket. It is
-  // keyed on the issue's UUID, so an identifier first costs the same Linear
-  // lookup the trigger already makes to start a run — upper-cased, because
-  // Linear keys identifiers by upper-case team key.
+  // Stored launch inputs keep ticket selection useful after terminal cleanup
+  // removes the ticket claim. Multiple executions for one ticket are
+  // intentionally ambiguous: choosing the newest one would hide history.
+  const runs = await worldRuns();
+  const candidates = new Set(ticketRunIds(runs, ref));
+
+  // Ticket claims are keyed by provider UUID. Resolve an identifier only
+  // after reading stored inputs, then consider both historical UUID inputs
+  // and the active claim owner before deciding whether the selector is unique.
   const issueId = TICKET_IDENTIFIER.test(ref) ? await linearIssueId(ref.toUpperCase()) : ref;
-  if (issueId === null) return { kind: "unknown" };
-  const owner = await worldHookRunId(ticketToken(issueId));
-  return owner === null ? { kind: "unknown" } : { kind: "found", runId: owner };
+  if (issueId !== null) {
+    for (const runId of ticketRunIds(runs, issueId)) candidates.add(runId);
+    const owner = await worldHookRunId(ticketToken(issueId));
+    if (owner !== null) candidates.add(owner);
+  }
+  const matches = [...candidates];
+  if (matches.length === 1) return { kind: "found", runId: matches[0] as string };
+  return matches.length > 1 ? { kind: "ambiguous", candidates: matches } : { kind: "unknown" };
 }
+
+const ticketRunIds = (runs: WorldRun[], ref: string): string[] => {
+  const normalized = TICKET_IDENTIFIER.test(ref) ? ref.toUpperCase() : ref.toLowerCase();
+  return runs
+    .filter((run) => {
+      const ticket = ticketOf(run.input);
+      if (ticket === null) return false;
+      return TICKET_IDENTIFIER.test(ref)
+        ? ticket.toUpperCase() === normalized
+        : ticket.toLowerCase() === normalized;
+    })
+    .map((run) => run.runId);
+};
 
 export interface WorldRun {
   runId: string;
@@ -112,8 +133,8 @@ export type { RunSuspension } from "../run-suspension.ts";
  * park at all. The token is the whole answer: it names what the run is waiting
  * on, so nothing has to be written down beside it. The ticket claim is held for
  * the run's whole life and so says nothing about waiting; every other hook is
- * something the run waits on, including a token jigs has never seen. `jigs ps`,
- * `jigs logs` and `jigs cancel` all read this one function, or a run one calls
+ * something the run waits on, including a token jigs has never seen. `jigs status`,
+ * `jigs watch` and `jigs cancel` all read this one function, or a run one calls
  * suspended is one another refuses to confirm.
  *
  * `ticket` is the identifier the run was launched with, so a halt names the
@@ -293,7 +314,7 @@ interface StepFacts {
  * What this run is, past what the world stored: the SDK has neither
  * `suspended` nor `stalled`, so a run parked on a hook other than its ticket
  * claim reads `running` while it waits, and one whose resume job died reads
- * `running` forever. `jigs ps` and `jigs logs` ask this one function, or the
+ * `running` forever. Both forms of `jigs status` ask this one function, or the
  * two verbs answer differently about the same run.
  *
  * Suspended wins over stalled: a parked run is waiting on the world, not on a
@@ -419,14 +440,19 @@ const linearIssueId = (ref: string) =>
     () => null,
   );
 
-// One page, deliberately: both the prefix scan and `jigs ps` are
-// conveniences over a developer-scale run table, not indexes to page through.
 async function worldRuns(): Promise<WorldRun[]> {
-  const page = await (await getWorld()).runs.list({
-    resolveData: "all",
-    pagination: { limit: 1000 },
-  });
-  return page.data.map(withTriggerId);
+  const runs: WorldRun[] = [];
+  const seen = new Set<string>();
+  let cursor: string | undefined;
+  do {
+    const page = await (await getWorld()).runs.list({
+      resolveData: "all",
+      pagination: { limit: 1000, ...(cursor === undefined ? {} : { cursor }) },
+    });
+    runs.push(...page.data.map(withTriggerId));
+    cursor = nextCursor(page, seen, "runs");
+  } while (cursor !== undefined);
+  return runs;
 }
 
 const worldRun = async (runId: string): Promise<WorldRun> =>
@@ -493,12 +519,35 @@ const ticketOf = (input: unknown): string | null =>
 
 const worldRunIds = () => worldRuns().then((runs) => runs.map((r) => r.runId));
 
-// Descending explicitly: the runs list is newest-first, hooks default to
-// oldest-first, and two pages taken from opposite ends stop overlapping.
 /** Every hook the world holds, whichever run owns it. */
 export async function listWorldHooks(): Promise<Array<{ runId: string; token: string }>> {
-  const page = await (await getWorld()).hooks.list({
-    pagination: { limit: 1000, sortOrder: "desc" },
-  });
-  return page.data.map((hook) => ({ runId: hook.runId, token: hook.token }));
+  const hooks: Array<{ runId: string; token: string }> = [];
+  const seen = new Set<string>();
+  let cursor: string | undefined;
+  do {
+    const page = await (await getWorld()).hooks.list({
+      pagination: {
+        limit: 1000,
+        sortOrder: "desc",
+        ...(cursor === undefined ? {} : { cursor }),
+      },
+    });
+    hooks.push(...page.data.map((hook) => ({ runId: hook.runId, token: hook.token })));
+    cursor = nextCursor(page, seen, "hooks");
+  } while (cursor !== undefined);
+  return hooks;
+}
+
+function nextCursor(
+  page: { hasMore?: boolean; cursor?: string | null },
+  seen: Set<string>,
+  resource: string,
+): string | undefined {
+  if (page.hasMore !== true) return undefined;
+  if (page.cursor === undefined || page.cursor === null || page.cursor === "") {
+    throw new Error(`${resource} pagination says more data exists but returned no cursor`);
+  }
+  if (seen.has(page.cursor)) throw new Error(`${resource} pagination repeated its cursor`);
+  seen.add(page.cursor);
+  return page.cursor;
 }

@@ -11,7 +11,7 @@ Run commands address one factory's service, located through the nearest
 the factory repo first. `--service-url <url>` or `JIGS_SERVICE_URL` overrides it.
 
 Every command acts on that one factory, so a run belongs to the factory whose
-service lists it: `jigs ps` from a factory root is the test, and a run id from
+service lists it: `jigs status` from a factory root is the test, and a run id from
 another factory is unknown there. `jigs service status` names the factory path
 and ports the service answers for.
 
@@ -55,16 +55,16 @@ factory /home/you/my-factory
 
 ## Naming a run
 
-`<run>` is a run id, a unique prefix of one, or the ticket the run claimed —
+`<run-id>` is a complete run id, a unique prefix of one, or the ticket the run claimed —
 its Linear identifier (`AGE-123`) or its UUID. An ambiguous prefix lists the
 candidates instead of guessing; pass a longer one.
 
 ## Watching
 
 ```sh
-jigs watch         # follow everything, one line per event, until killed
-jigs ps            # the whole factory at a glance
-jigs logs <run>    # one run in full, with the link to act on
+jigs watch [run-id]  # follow everything or one selected run until killed
+jigs status          # the whole factory at a glance
+jigs status <run-id> # one run in full, with the link to act on
 ```
 
 `jigs watch` is the one command that follows a factory: a line when a step
@@ -74,7 +74,7 @@ process, so it costs one node start-up rather than one per poll, and it says
 `unreachable` and keeps going while the service restarts. `--poll-interval-seconds` sets the
 poll.
 
-`jigs ps` is the snapshot: `RUN WORKFLOW TICKET STATUS TRIGGER AGE
+`jigs status` is the snapshot: `RUN WORKFLOW TICKET STATUS TRIGGER AGE
 ACTIVITY WAITING`, then the worktrees the registry holds, then the schedules if
 the factory declares any. `TICKET` is the ticket the run was launched with, as
 the operator typed it. `TRIGGER` says how the run started; a
@@ -86,14 +86,14 @@ worth looking at, where a 20-second one is an ordinary gap between steps.
 token names a page — with the link to act on: `waiting for an approving review
 and green CI on acme/api#41 → <pull request url>`. A needs-human halt reads
 `waiting for a human reply on AGE-123` with no link, because the comment URL
-costs a Linear round trip the listing will not pay per poll. `jigs logs <run>`
+costs a Linear round trip the listing will not pay per poll. `jigs status <run-id>`
 is where that URL and the question the halt asked come from; it also prints the
 run's error, its resources as kind/identity/URL rows, and the step timeline.
-`resources none` is an explicit empty set; `jigs logs --json` carries the same
+`resources none` is an explicit empty set; `jigs status <run-id> --json` carries the same
 records in `resources`, independently of `returnValue`.
 
-Prefer `--json` to the tables: `jigs ps --json` is `{runs, worktrees,
-schedules}`, `jigs logs --json` is the run's fields plus its timeline, and
+Prefer `--json` to the tables: `jigs status --json` is `{runs, worktrees,
+schedules}`, `jigs status <run-id> --json` is the run's fields plus its timeline, and
 `jigs watch --json` is one JSON event per line. Read fields rather than parsing
 columns.
 
@@ -113,12 +113,12 @@ Anything else is **external** and prints its own token.
 ## Diagnosing
 
 ```sh
-jigs ps            # which run, and what status it is really in
-jigs logs <run>    # the run itself
+jigs status          # which run, and what status it is really in
+jigs status <run-id> # the run itself
 jigs service logs  # the service process's own stdout, which is a different thing
 ```
 
-`jigs logs` also prints the run's page on the dashboard
+`jigs status <run-id>` also prints the run's page on the dashboard
 (`http://localhost:<dashboardPort>/run/<runId>`) and any queue job that died
 holding the run's resume, each with the SQL that puts it back on the queue.
 Print the SQL to the human; do not run it for them.
@@ -128,7 +128,7 @@ Statuses worth knowing:
 - **suspended** — the run is parked on a satisfier and is fine. See below.
 - **stalled** — the queue gave up on a job of this run's, holds no live one to
   replace it, and no step is in flight. Nothing is coming to move it. This is
-  the status that means the run is genuinely stuck, and `jigs logs` names the
+  the status that means the run is genuinely stuck, and `jigs status <run-id>` names the
   dead job.
 - **running** with no step in flight is an ordinary gap between steps, not a
   stall.
@@ -142,7 +142,7 @@ comments on the Linear ticket, mentioning its creator and its assignee. The
 comment says in plain words what paused and why, what the ticket is about, and
 either numbered questions to choose between or what to repair before retrying;
 its footer names the run, where it paused, and links its dashboard page.
-`jigs ps` shows the run as `suspended`; `jigs logs <run>` prints the question
+`jigs status` shows the run as `suspended`; `jigs status <run-id>` prints the question
 itself and the comment URL.
 
 The answer goes **on the ticket**, in that comment thread — with option letters
@@ -154,7 +154,7 @@ re-checked against Linear, and the run continues.
 If the reply is there and the run has not moved, the delivery was missed:
 
 ```sh
-jigs poke <run>
+jigs poke <run-id>
 ```
 
 which wakes the run over the same code path a webhook uses. An unsatisfied wake
@@ -181,7 +181,7 @@ nothing else. Holding it:
   and a rename in the new release moves the durable addresses that run resumes
   against. Finish or cancel it first.
 - **Take over a delivery that stopped short.** The run fails after jigs pushes
-  the branch and notes it on the ticket. `jigs logs <run>` shows the failure
+  the branch and notes it on the ticket. `jigs status <run-id>` shows the failure
   message naming the branch. Settle the findings there by hand; relaunching the
   ticket starts the work over and leaves the first worktree behind.
 - **Escalate design-level surprises** as a question to the human rather than
@@ -236,7 +236,7 @@ Confirm these actions when the current request has not already authorized them:
 - `jigs resources prune --apply` — it removes the preview's eligible local
   resources after proving the factory service and child scope are stopped.
 - `jigs service restart`, `jigs service stop`, `jigs up --restart-service` or
-  `jigs upgrade` while `jigs ps` shows a running or suspended run. `up` and
+  `jigs upgrade` while `jigs status` shows a running or suspended run. `up` and
   `upgrade` ask before restarting over one; `--force` is the human's call.
 - Editing the `bindings` block in `jigs.config.ts` — changing a `remote:` repoints
   that binding's clone, and a new binding is not cloned until the next
