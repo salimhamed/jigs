@@ -7,18 +7,29 @@ export type CleanupAction = "keep" | "release";
 export type CleanupOutcome = "success" | "failure";
 export type CleanupStatus = "waiting" | "pending" | "running" | "kept" | "complete" | "failed";
 
+/** Persisted progress for automatic or explicitly requested release of a run's resources. */
 export interface CleanupProgress {
+  /** The current phase or final result of resource release. */
   status: CleanupStatus;
+  /** Whether the run completed successfully or ended by failure or cancellation. */
   outcome?: CleanupOutcome;
+  /** Whether the resolved policy chose to keep or release resources. */
   action?: CleanupAction;
+  /** The number of managed resources that were removed. */
   released?: number;
+  /** The number of managed resources preserved by policy or a safety check. */
   kept?: number;
+  /** The number of managed resources whose release did not complete. */
   failed?: number;
+  /** The number of registered resources whose kinds jigs does not release. */
   unknown?: number;
+  /** A diagnostic message when the release attempt itself failed. */
   detail?: string;
 }
 
+/** Resource-release progress together with the source of the chosen action. */
 export interface CleanupView extends CleanupProgress {
+  /** An explicit action recorded by a workflow, or `automatic` when policy still decides. */
   directive: "automatic" | CleanupAction;
 }
 

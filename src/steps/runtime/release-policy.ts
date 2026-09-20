@@ -25,7 +25,7 @@ export function effectiveReleasePolicy(
   return releaseSchema.parse(workflow ?? factory ?? defaultReleasePolicy());
 }
 
-/** Definition imports are compiled factory modules, supplied by the generated step wrapper. */
+/** Resolve the workflow policy, then the factory policy, then the built-in release/keep default. */
 export async function resolveReleasePolicy(
   metadata: NamedRunMetadata,
   definition: FactoryDefinition,
