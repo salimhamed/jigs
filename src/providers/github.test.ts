@@ -4,6 +4,7 @@ import {
   fetchPrCommitMessages,
   fetchPrSnapshot,
   fetchPrTitle,
+  findOpenPullRequestByBranch,
   findOpenPullRequestsByHeadSha,
   markPrReady,
   mergePr,
@@ -88,6 +89,82 @@ test("findOpenPullRequestsByHeadSha returns matching open PRs using their base r
   expect(urls()).toEqual([
     "http://mock.test/github/repos/fork-owner/fork/commits/status-sha/pulls?per_page=100&page=1",
   ]);
+});
+
+function openPull(fixture: {
+  number: number;
+  state?: string;
+  headRef?: string;
+  headRepo?: string;
+  baseRef?: string;
+  baseRepo?: string;
+}) {
+  return {
+    number: fixture.number,
+    state: fixture.state ?? "open",
+    html_url: `https://github.test/acme/api/pull/${fixture.number}`,
+    head: {
+      ref: fixture.headRef ?? "jigs/change",
+      repo: { full_name: fixture.headRepo ?? "acme/api" },
+    },
+    base: {
+      ref: fixture.baseRef ?? "main",
+      repo: { full_name: fixture.baseRepo ?? "acme/api" },
+    },
+  };
+}
+
+test("findOpenPullRequestByBranch adopts the one open PR for the branch", async () => {
+  fetchMock.mockResolvedValueOnce(json([openPull({ number: 41 })]));
+
+  await expect(
+    findOpenPullRequestByBranch({ owner: "acme", repo: "api" }, "jigs/change", "main"),
+  ).resolves.toEqual({
+    owner: "acme",
+    repo: "api",
+    number: 41,
+    url: "https://github.test/acme/api/pull/41",
+  });
+  expect(urls()).toEqual([
+    "http://mock.test/github/repos/acme/api/pulls?state=open&head=acme%3Ajigs%2Fchange&base=main&per_page=100&page=1",
+  ]);
+});
+
+test("findOpenPullRequestByBranch skips every PR that is not this branch on this repo", async () => {
+  fetchMock.mockResolvedValueOnce(
+    json([
+      openPull({ number: 41, state: "closed" }),
+      openPull({ number: 42, headRepo: "contributor/api" }),
+      // A sibling repository under the same owner: GitHub's head filter names
+      // only the owner, so this comes back and must not be adopted.
+      openPull({ number: 43, headRepo: "acme/api-fork" }),
+      openPull({ number: 44, baseRepo: "acme/other" }),
+      openPull({ number: 45, headRef: "jigs/other" }),
+      openPull({ number: 46, baseRef: "release" }),
+    ]),
+  );
+
+  await expect(
+    findOpenPullRequestByBranch({ owner: "acme", repo: "api" }, "jigs/change", "main"),
+  ).resolves.toBeNull();
+});
+
+test("findOpenPullRequestByBranch matches the repository whatever case GitHub reports", async () => {
+  fetchMock.mockResolvedValueOnce(
+    json([openPull({ number: 41, headRepo: "Acme/API", baseRepo: "Acme/API" })]),
+  );
+
+  await expect(
+    findOpenPullRequestByBranch({ owner: "acme", repo: "api" }, "jigs/change", "main"),
+  ).resolves.toMatchObject({ number: 41 });
+});
+
+test("findOpenPullRequestByBranch refuses to guess between several matches", async () => {
+  fetchMock.mockResolvedValueOnce(json([openPull({ number: 41 }), openPull({ number: 42 })]));
+
+  await expect(
+    findOpenPullRequestByBranch({ owner: "acme", repo: "api" }, "jigs/change", "main"),
+  ).rejects.toThrow("#41, #42");
 });
 
 test("fetchPrSnapshot shapes the PR, its reviews and the head sha", async () => {

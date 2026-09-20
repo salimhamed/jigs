@@ -16,7 +16,9 @@ resources for `jigs logs`. Keep it after a separate non-idempotent external
 creation step so a registration retry cannot repeat the external write. The
 shipped publication block follows that boundary when it registers the pull
 request returned by `openPullRequest`. Its idempotent push steps register the
-GitHub branch they create or update.
+GitHub branch they create or update. `openPullRequest` survives its own retry:
+it adopts the open pull request already on the branch rather than asking GitHub
+to open a second one.
 
 ## The delivery graph
 
