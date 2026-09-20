@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.40.0](https://github.com/salimhamed/jigs/compare/jigs-v0.39.2...jigs-v0.40.0) (2026-09-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cli:** flatten everyday commands ([#300](https://github.com/salimhamed/jigs/issues/300))
+
+### Features
+
+* **cli:** flatten everyday commands ([#300](https://github.com/salimhamed/jigs/issues/300)) ([95403f6](https://github.com/salimhamed/jigs/commit/95403f6450bd18c1aa9f1b9d12843a3ffc4dc78d))
+
 ## [0.39.2](https://github.com/salimhamed/jigs/compare/jigs-v0.39.1...jigs-v0.39.2) (2026-09-20)
 
 
