@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.41.1](https://github.com/salimhamed/jigs/compare/jigs-v0.41.0...jigs-v0.41.1) (2026-09-20)
+
+
+### Features
+
+* publish API documentation to GitHub Pages ([#313](https://github.com/salimhamed/jigs/issues/313)) ([0c49d70](https://github.com/salimhamed/jigs/commit/0c49d705bc4829293626f3bb130664ba49638c56))
+
 ## [0.41.0](https://github.com/salimhamed/jigs/compare/jigs-v0.40.2...jigs-v0.41.0) (2026-09-20)
 
 
