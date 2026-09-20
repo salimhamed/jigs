@@ -1,9 +1,10 @@
 /**
- * Compose run resource registration and release policy inside a workflow.
+ * Describe run-owned resources, inspect cleanup progress and request release from a workflow.
  *
  * @packageDocumentation
  */
 
+/** Fail an exhaustive branch if an unexpected value reaches it at runtime. */
 export { unreachable } from "../unreachable.ts";
 export type { CleanupProgress, CleanupView } from "./cleanup.ts";
 export {

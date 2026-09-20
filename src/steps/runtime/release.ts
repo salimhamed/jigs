@@ -7,7 +7,7 @@ import { registrySql } from "../workspaces/sql.ts";
 import { writeCleanupDirective, writeCleanupProgress } from "./cleanup-state.ts";
 import type { RunMetadata } from "./run-context.ts";
 
-/** The explicit durable step path: persist its choice and share the automatic lock. */
+/** Persist an explicit success action, release under the run lock and return the result. */
 export async function releaseRunResources(
   policy: ReleasePolicy,
   metadata: RunMetadata,
