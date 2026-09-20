@@ -1,4 +1,7 @@
+import type { World } from "@workflow/world";
+import { WorkflowRunNotFoundError } from "workflow/errors";
 import type { HarnessKind, HarnessRuntime } from "../../checks/harness-runtime.ts";
+import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import type { BindingClone } from "../../steps/workspaces/clone.ts";
 import type { RegistrySql } from "../../steps/workspaces/registry.ts";
 import { READY_PHASE, setBootPhase } from "../readiness.ts";
@@ -148,8 +151,65 @@ export async function gateOnBindingClones(deps: BindingCloneGateDeps = {}): Prom
 }
 
 interface ServiceWorld {
+  createQueueHandler?: World["createQueueHandler"];
+  runs?: World["runs"];
   start?: () => Promise<void>;
   close?: () => Promise<void>;
+}
+
+const TERMINAL_FENCE = Symbol("jigs.terminal-delivery-fence");
+
+type FencedWorld = ServiceWorld & { [TERMINAL_FENCE]?: boolean };
+
+// Workflow v5 turbo starts an attempt-1 step body before its backgrounded
+// run_started write confirms that the run is still live. A delivery held in a
+// real queue can therefore be cancelled before its first attempt and still run
+// that body. Fence at the World's public handler seam: terminal deliveries are
+// acknowledged without entering the generated runtime, while a delivery that
+// was live when handling began keeps the SDK's documented active-work behavior.
+export function fenceTerminalWorkflowDeliveries(world: ServiceWorld): void {
+  const fenced = world as FencedWorld;
+  if (fenced[TERMINAL_FENCE]) return;
+  const createQueueHandler = world.createQueueHandler;
+  const getRun = world.runs?.get;
+  if (createQueueHandler === undefined || getRun === undefined) return;
+
+  world.createQueueHandler = (prefix, handler) =>
+    createQueueHandler.call(world, prefix, async (message, metadata) => {
+      if (isHealthCheckDelivery(message)) return handler(message, metadata);
+      const runId = deliveryRunId(message);
+      if (runId !== null) {
+        try {
+          const run = await getRun.call(world.runs, runId);
+          if (TERMINAL_RUN_STATUSES.has(run.status)) return;
+        } catch (error) {
+          // The SDK owns missing-run semantics: runInput may resiliently create
+          // the run, while an ordinary invocation produces its normal missing-
+          // run rejection and telemetry. Only unrelated status-read failures
+          // stay at this seam so Graphile retries without executing the handler.
+          if (!WorkflowRunNotFoundError.is(error)) throw error;
+        }
+      }
+      return handler(message, metadata);
+    });
+  fenced[TERMINAL_FENCE] = true;
+}
+
+function deliveryRunId(message: unknown): string | null {
+  if (typeof message !== "object" || message === null || !("runId" in message)) return null;
+  return typeof message.runId === "string" ? message.runId : null;
+}
+
+// Mirrors the SDK's public HealthCheckPayload shape. A cross-deployment start
+// includes the future runId so its target can derive the run's public key
+// before run creation; that id must never turn the probe into a status lookup.
+// Keep this structural: @workflow/world is a type-only dependency of this
+// package, while factories supply workflow and their concrete World at runtime.
+function isHealthCheckDelivery(message: unknown): boolean {
+  if (typeof message !== "object" || message === null) return false;
+  if (!("__healthCheck" in message) || message.__healthCheck !== true) return false;
+  if (!("correlationId" in message) || typeof message.correlationId !== "string") return false;
+  return !("runId" in message) || message.runId === undefined || typeof message.runId === "string";
 }
 
 export interface WorldStartGateDeps {
@@ -167,6 +227,7 @@ export interface WorldStartGateDeps {
 export async function gateOnWorldStart(deps: WorldStartGateDeps): Promise<boolean> {
   try {
     const world = await deps.getWorld();
+    fenceTerminalWorkflowDeliveries(world);
     deps.own(world);
     await world.start?.();
   } catch (err) {
