@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.40.2
+# @salimhamed/jigs v0.41.0
 
 Inspect committed changes and push branches in a Git worktree.
 

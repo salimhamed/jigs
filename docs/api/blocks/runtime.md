@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.40.2
+# @salimhamed/jigs v0.41.0
 
 Describe run-owned resources, inspect cleanup progress and request release from a workflow.
 

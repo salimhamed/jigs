@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.41.0](https://github.com/salimhamed/jigs/compare/jigs-v0.40.2...jigs-v0.41.0) (2026-09-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* load factory config with Node TypeScript ([#311](https://github.com/salimhamed/jigs/issues/311))
+
+### Bug Fixes
+
+* load factory config with Node TypeScript ([#311](https://github.com/salimhamed/jigs/issues/311)) ([3f9f0d3](https://github.com/salimhamed/jigs/commit/3f9f0d39b617cf6c3b388f4991d5b11a61b28347))
+
 ## [0.40.2](https://github.com/salimhamed/jigs/compare/jigs-v0.40.1...jigs-v0.40.2) (2026-09-20)
 
 
