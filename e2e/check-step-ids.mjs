@@ -151,7 +151,7 @@ const unresolvedSpecifiers = (source) =>
 // package makes it import discipline, and a static import that crosses the
 // line is silent: the bundle grows, and `jigs init` starts needing packages
 // that are not there yet.
-const CLI_IMPORTS = ["commander", "jiti", "ts-morph", "yaml", "zod"];
+const CLI_IMPORTS = ["commander", "ts-morph", "yaml", "zod"];
 
 function cliBundleImports() {
   const seen = new Set();

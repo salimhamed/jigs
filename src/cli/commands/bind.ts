@@ -118,7 +118,7 @@ export async function bindRepo(
     existing === undefined ||
     !hasBindingClone(bindingRepoDir({ factoryRoot, bindingName: name }))
   ) {
-    deps.out(`restart the service to clone ${name}: jigs service restart`);
+    deps.out(`run jigs up to apply the config and clone ${name}`);
   }
 
   // Last, so furniture that cannot be ensured leaves the binding recorded and

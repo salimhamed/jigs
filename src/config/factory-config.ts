@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
-import { createJiti } from "jiti";
 
 import { z } from "zod";
 import { type MergePolicy, mergePolicySchema } from "../blocks/pull-requests/policy.ts";
@@ -9,6 +9,8 @@ import { JigsError } from "../errors.ts";
 import { factorySlug } from "../steps/workspaces/layout.ts";
 
 export const FACTORY_CONFIG_FILE = "jigs.config.ts";
+
+const require = createRequire(import.meta.url);
 
 // A binding is a name, a remote URL, repository-specific policy, and how a
 // worktree cut from that remote is provisioned — the single place that story
@@ -167,13 +169,12 @@ export function parseFactoryConfig(value: unknown): FactoryConfig {
   return result.data;
 }
 
-/** Load configuration without invoking its deferred workflow imports. Disable
- * both caches so a long-running process sees edits, including imported settings. */
+/** Load and validate the factory configuration. Node caches the TypeScript
+ * module graph, so a process keeps the configuration it started with. */
 export function readFactoryConfig(factoryRoot: string): FactoryConfig {
   const filename = factoryConfigPath(factoryRoot);
   try {
-    const load = createJiti(filename, { moduleCache: false, fsCache: false });
-    const module = load(filename) as { default?: unknown };
+    const module = require(filename) as { default?: unknown };
     return parseFactoryConfig(module.default ?? module);
   } catch (error) {
     if (error instanceof JigsError) throw error;

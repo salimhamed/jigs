@@ -177,14 +177,13 @@ and its agent harnesses. Bind a target repository before running it:
 ```sh
 pnpm exec jigs bind git@github.com:owner/repo.git
 pnpm exec jigs doctor # reports repository settings that need attention
-pnpm exec jigs up --restart-service
+pnpm exec jigs up
 ```
 
 A **binding** maps a name to a target repo's remote URL and worktree provisioning
 settings. jigs keeps a clone per binding and creates agent worktrees from it.
 The service prepares those clones when it starts. Run `jigs up` after editing
 configuration; it rebuilds and restarts when the configuration changes.
-`--restart-service` can explicitly request a restart.
 
 `jigs bind` edits a literal `bindings` object in `jigs.config.ts` using the
 TypeScript syntax tree. Without `--binding-name`, an existing binding with the exact

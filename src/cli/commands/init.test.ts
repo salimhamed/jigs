@@ -171,6 +171,7 @@ test("the tsconfig compiles the code this factory starts with", async () => {
   expect(tsconfig).toContain('"blocks"');
   expect(tsconfig).toContain('"jigs.ts"');
   expect(tsconfig).toContain('"jigs.config.test.ts"');
+  expect(tsconfig).toContain('"erasableSyntaxOnly": true');
 });
 
 // Each exported "use step" function's name is half a durable step id, so the

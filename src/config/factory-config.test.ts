@@ -1,5 +1,7 @@
+import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, expect, test } from "vitest";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { removeBinding, upsertBinding } from "./binding-edit.ts";
@@ -281,18 +283,31 @@ test("config loading supports computed settings without invoking workflow loader
   expect(resolveBinding(root, "api").remote).toBe("url");
 });
 
-test("config and imported settings changes are observed in the same process", () => {
+test("native TypeScript config is one snapshot per process and a new process sees edits", () => {
   const root = factory(`import service from "./settings.ts"; export default { service };`);
   const settings = path.join(root, "settings.ts");
-  writeFileSync(settings, "export default { dashboardPort: 9090 };");
+  writeFileSync(
+    settings,
+    "const service: { dashboardPort: number } = { dashboardPort: 9090 }; export default service;",
+  );
   expect(resolveService(root).dashboardPort).toBe(9090);
   writeFileSync(settings, "export default { dashboardPort: 9091 };");
-  expect(resolveService(root).dashboardPort).toBe(9091);
-  writeFileSync(
-    path.join(root, "jigs.config.ts"),
-    "export default { service: { dashboardPort: 9092 } };",
+  expect(resolveService(root).dashboardPort).toBe(9090);
+
+  const moduleUrl = pathToFileURL(
+    fileURLToPath(new URL("./factory-config.ts", import.meta.url)),
+  ).href;
+  const output = execFileSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "--eval",
+      `import { readFactoryConfig } from ${JSON.stringify(moduleUrl)}; console.log(JSON.stringify(readFactoryConfig(process.argv[1])));`,
+      root,
+    ],
+    { encoding: "utf8" },
   );
-  expect(resolveService(root).dashboardPort).toBe(9092);
+  expect(JSON.parse(output).service.dashboardPort).toBe(9091);
 });
 
 const withSettings = (extra: Record<string, unknown>) =>

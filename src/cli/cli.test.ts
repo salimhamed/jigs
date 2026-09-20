@@ -42,7 +42,16 @@ test("explicit GitHub flags reach the scaffold through the CLI parser", () => {
         "const defineFactory = (factory) => factory;",
       ),
     );
-    expect(readFactoryConfig(cwd).github.identities).toEqual([
+    const bound = run(
+      cwd,
+      "bind",
+      "git@github.com:some-org/example.git",
+      "--binding-name",
+      "example-alias",
+    );
+    expect(bound.status).toBe(0);
+    const config = readFactoryConfig(cwd);
+    expect(config.github.identities).toEqual([
       {
         mode: "app",
         appId: 123,
@@ -52,17 +61,7 @@ test("explicit GitHub flags reach the scaffold through the CLI parser", () => {
         coAuthor: "Human <human@example.com>",
       },
     ]);
-    const bound = run(
-      cwd,
-      "bind",
-      "git@github.com:some-org/example.git",
-      "--binding-name",
-      "example-alias",
-    );
-    expect(bound.status).toBe(0);
-    expect(readFactoryConfig(cwd).bindings["example-alias"]?.remote).toBe(
-      "git@github.com:some-org/example.git",
-    );
+    expect(config.bindings["example-alias"]?.remote).toBe("git@github.com:some-org/example.git");
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
