@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { cleanupFromAttributes } from "../../blocks/runtime/cleanup.ts";
 import { type RunResource, resourcesFromAttributes } from "../../blocks/runtime/resources.ts";
+import { tryGit } from "../../providers/git.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { factorySlug } from "./layout.ts";
 import {
@@ -202,6 +203,14 @@ async function classifyWorktree(
     entry.reason = "registry paths do not belong to this factory binding";
     return { entry, row, path: target };
   }
+  const repoSafety = diskSafety(row.repoDir, managedRoot);
+  if (!repoSafety.safe || !repoSafety.exists) {
+    entry.reason = repoSafety.safe
+      ? "registry repository is absent and cannot prove ownership"
+      : `registry repository is unsafe: ${repoSafety.reason}`;
+    entry.exists = existsSync(target);
+    return { entry, row, path: target };
+  }
   const safety = diskSafety(target, managedRoot);
   entry.exists = safety.exists;
   if (!safety.safe) {
@@ -225,6 +234,19 @@ async function classifyWorktree(
   if (!safety.exists) {
     entry.eligible = true;
     entry.reason = "registered worktree is absent; its stale registry row can be removed";
+    return { entry, row, path: target };
+  }
+  const commonDir = await tryGit(
+    ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    target,
+  );
+  try {
+    if (commonDir === null || realpathSync(commonDir) !== realpathSync(row.repoDir)) {
+      entry.reason = "worktree Git common directory does not match its registry repository";
+      return { entry, row, path: target };
+    }
+  } catch {
+    entry.reason = "worktree Git common directory could not be verified";
     return { entry, row, path: target };
   }
   if (await isWorktreeDirty(target)) {

@@ -14,6 +14,7 @@ let tmp: string;
 let dataDir: string;
 let factoryRoot: string;
 let repoDir: string;
+let remoteDir: string;
 let worktreesDir: string;
 let store: Map<string, WorktreeRow>;
 
@@ -23,7 +24,7 @@ beforeEach(() => {
   factoryRoot = path.join(tmp, "factory");
   mkdirSync(factoryRoot, { recursive: true });
   const binding = path.join(dataDir, "bindings", factorySlug(factoryRoot), "api");
-  ({ repoDir, worktreesDir } = makeClonedBinding(tmp, binding));
+  ({ repoDir, remoteDir, worktreesDir } = makeClonedBinding(tmp, binding));
   store = new Map();
 });
 
@@ -235,6 +236,125 @@ test("a registry row from another factory cannot authorize deletion", async () =
       reason: "registry paths do not belong to this factory binding",
     },
   ]);
+});
+
+test("a stale local default ref cannot prove that a branch is merged", async () => {
+  const target = addWorktree("stale-default");
+  const originalDefault = git(repoDir, "rev-parse", "refs/remotes/origin/main");
+  writeFileSync(path.join(target, "merged.txt"), "merged before remote rewrite\n");
+  git(target, "add", "merged.txt");
+  git(
+    target,
+    "-c",
+    "user.name=jigs",
+    "-c",
+    "user.email=jigs@test",
+    "commit",
+    "-q",
+    "-m",
+    "feature",
+  );
+  const feature = git(target, "rev-parse", "HEAD");
+  git(target, "push", "-q", "origin", "HEAD:refs/heads/stale-default");
+  git(remoteDir, "update-ref", "refs/heads/main", feature);
+  git(repoDir, "fetch", "-q", "origin", "main");
+  expect(git(repoDir, "rev-list", "--count", "stale-default", "^origin/main")).toBe("0");
+  const runs = [run("stale-default", target)];
+  expect(await inventoryResources(input(runs))).toMatchObject({
+    entries: [{ eligible: true }],
+  });
+
+  const rewriteAfterLock = async <T>(
+    sql: ReturnType<typeof makeFakeSql>,
+    _runId: string,
+    action: (locked: ReturnType<typeof makeFakeSql>) => Promise<T>,
+  ) => {
+    // Rewrites the actual remote without refreshing this clone's tracking ref.
+    git(remoteDir, "update-ref", "refs/heads/main", originalDefault);
+    return action(sql);
+  };
+  const report = await pruneResources(
+    input(runs),
+    makeFakeSql(store),
+    rewriteAfterLock,
+    reread(runs),
+  );
+
+  expect(report.entries).toMatchObject([
+    {
+      identity: target,
+      action: "skip",
+      eligible: false,
+      reason: "branch ancestry could not be verified",
+    },
+  ]);
+  expect(git(repoDir, "rev-parse", "refs/remotes/origin/main")).toBe(feature);
+  expect(existsSync(target)).toBe(true);
+});
+
+test("a symlinked registry repository cannot escape the factory binding root", async () => {
+  const externalParent = path.join(tmp, "external-symlink");
+  mkdirSync(externalParent);
+  const external = makeClonedBinding(externalParent, path.join(externalParent, "binding"));
+  const binding = path.join(dataDir, "bindings", factorySlug(factoryRoot), "escaped-repo");
+  const escapedRepo = path.join(binding, "repo.git");
+  const target = path.join(binding, "worktrees", "escaped-repo");
+  mkdirSync(path.dirname(escapedRepo), { recursive: true });
+  mkdirSync(target, { recursive: true });
+  symlinkSync(external.repoDir, escapedRepo, "dir");
+  store.set(target, {
+    path: target,
+    branch: "escaped-repo",
+    ownerRunId: "wrun_escaped-repo",
+    state: "active",
+    repoDir: escapedRepo,
+  });
+
+  const report = await inventoryResources(input([run("escaped-repo", target)]));
+
+  expect(report.entries).toMatchObject([
+    {
+      identity: target,
+      eligible: false,
+      reason: "registry repository is unsafe: path is a symbolic link",
+    },
+  ]);
+  expect(existsSync(target)).toBe(true);
+});
+
+test("a worktree from a different Git common directory cannot be deleted", async () => {
+  const externalParent = path.join(tmp, "external-common-dir");
+  mkdirSync(externalParent);
+  const external = makeClonedBinding(externalParent, path.join(externalParent, "binding"));
+  const target = path.join(worktreesDir, "wrong-common-dir");
+  git(
+    external.repoDir,
+    "worktree",
+    "add",
+    "-q",
+    target,
+    "-b",
+    "wrong-common-dir",
+    "refs/remotes/origin/main",
+  );
+  store.set(target, {
+    path: target,
+    branch: "wrong-common-dir",
+    ownerRunId: "wrun_wrong-common-dir",
+    state: "active",
+    repoDir,
+  });
+
+  const report = await inventoryResources(input([run("wrong-common-dir", target)]));
+
+  expect(report.entries).toMatchObject([
+    {
+      identity: target,
+      eligible: false,
+      reason: "worktree Git common directory does not match its registry repository",
+    },
+  ]);
+  expect(existsSync(target)).toBe(true);
 });
 
 test("only the exact registered scratch directory is removable", async () => {
