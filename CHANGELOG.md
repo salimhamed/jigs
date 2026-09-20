@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.39.1](https://github.com/salimhamed/jigs/compare/jigs-v0.39.0...jigs-v0.39.1) (2026-09-20)
+
+
+### Bug Fixes
+
+* **runtime:** fence cancelled queued deliveries ([#294](https://github.com/salimhamed/jigs/issues/294)) ([ad6695d](https://github.com/salimhamed/jigs/commit/ad6695d2e4e46a6c0a7c6aa1b65f6700d4a80214))
+
 ## [0.39.0](https://github.com/salimhamed/jigs/compare/jigs-v0.38.4...jigs-v0.39.0) (2026-09-20)
 
 
