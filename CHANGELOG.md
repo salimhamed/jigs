@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.41.2](https://github.com/salimhamed/jigs/compare/jigs-v0.41.1...jigs-v0.41.2) (2026-09-20)
+
+
+### Bug Fixes
+
+* gate release auto-merge with required checks ([#315](https://github.com/salimhamed/jigs/issues/315)) ([fe83237](https://github.com/salimhamed/jigs/commit/fe832379f6ef5b4f75c73f782c21fa069a1b3c66))
+
 ## [0.41.1](https://github.com/salimhamed/jigs/compare/jigs-v0.41.0...jigs-v0.41.1) (2026-09-20)
 
 
