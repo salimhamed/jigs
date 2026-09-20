@@ -1,4 +1,6 @@
-import { expect, test, vi } from "vitest";
+import { SPEC_VERSION_CURRENT } from "@workflow/world";
+import { afterEach, expect, test, vi } from "vitest";
+import { setWorld } from "workflow/runtime";
 import { z } from "zod";
 import type { Factory } from "../blocks/factory.ts";
 import {
@@ -17,8 +19,11 @@ import {
   reconcileAutomaticRelease,
   startAutomaticRelease,
 } from "./automatic-release.ts";
+import { runsWithActiveStep } from "./stalls.ts";
 
 const factory = { workflows: {} } as Factory;
+
+afterEach(() => setWorld(undefined));
 
 test("workflow policy overrides the factory policy for automatic cleanup", () => {
   const workflow = Object.assign(async () => undefined, {
@@ -155,6 +160,63 @@ test("active work is checked again under the lock before cleanup", async () => {
   const h = harness([run("cancelled")], { active: () => observations.shift() ?? false });
 
   expect((await reconcileAutomaticRelease(factory, h.deps)).busy).toBe(1);
+  expect(h.release).not.toHaveBeenCalled();
+  expect(h.progress).toEqual([]);
+});
+
+test("a later-page active step keeps the cleanup coordinator busy under the lock", async () => {
+  const terminal = run("cancelled");
+  const completed = {
+    runId: terminal.runId,
+    stepId: "step-completed",
+    stepName: "completed",
+    status: "completed",
+    attempt: 1,
+    createdAt: new Date("2026-09-04T10:00:00.000Z"),
+    updatedAt: new Date("2026-09-04T10:00:01.000Z"),
+    startedAt: new Date("2026-09-04T10:00:00.000Z"),
+    completedAt: new Date("2026-09-04T10:00:01.000Z"),
+  };
+  const active = { ...completed, stepId: "step-active", status: "running" };
+  let check = 0;
+  let activeCheck = false;
+  setWorld({
+    specVersion: SPEC_VERSION_CURRENT,
+    steps: {
+      list: async (params: { pagination?: { cursor?: string } }) => {
+        if (params.pagination?.cursor === undefined) {
+          activeCheck = ++check > 1;
+          return { data: [completed], cursor: "later", hasMore: true };
+        }
+        return { data: [activeCheck ? active : completed], cursor: null, hasMore: false };
+      },
+    },
+  } as never);
+  const h = harness([terminal]);
+  h.deps.hasActiveStep = async (runId) => (await runsWithActiveStep([runId])).length > 0;
+
+  expect((await reconcileAutomaticRelease(factory, h.deps)).busy).toBe(1);
+  expect(h.release).not.toHaveBeenCalled();
+  expect(h.progress).toEqual([]);
+});
+
+test("a later-page listing failure cannot authorize cleanup", async () => {
+  const terminal = run("cancelled");
+  setWorld({
+    specVersion: SPEC_VERSION_CURRENT,
+    steps: {
+      list: async (params: { pagination?: { cursor?: string } }) => {
+        if (params.pagination?.cursor !== undefined) throw new Error("later page unavailable");
+        return { data: [], cursor: "later", hasMore: true };
+      },
+    },
+  } as never);
+  const h = harness([terminal]);
+  h.deps.hasActiveStep = async (runId) => (await runsWithActiveStep([runId])).length > 0;
+
+  await expect(reconcileAutomaticRelease(factory, h.deps)).rejects.toThrow(
+    "later page unavailable",
+  );
   expect(h.release).not.toHaveBeenCalled();
   expect(h.progress).toEqual([]);
 });

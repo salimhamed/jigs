@@ -40,8 +40,27 @@ const step = (over: Record<string, unknown> = {}) => ({
 const worldWithSteps = (steps: Array<Record<string, unknown>>) =>
   setWorld({
     specVersion: SPEC_VERSION_CURRENT,
-    steps: { list: async () => ({ data: steps }) },
+    steps: { list: async () => ({ data: steps, cursor: null, hasMore: false }) },
   } as unknown as World);
+
+function worldWithPages(pages: Array<Array<Record<string, unknown>>>, failure?: Error) {
+  let page = 0;
+  const cursors: Array<string | undefined> = [];
+  setWorld({
+    specVersion: SPEC_VERSION_CURRENT,
+    steps: {
+      list: async (_params: { pagination?: { cursor?: string } }) => {
+        cursors.push(_params.pagination?.cursor);
+        if (failure !== undefined && page === pages.length - 1) throw failure;
+        const data = pages[page] ?? [];
+        const hasMore = page < pages.length - 1;
+        page += 1;
+        return { data, cursor: hasMore ? `cursor-${page}` : null, hasMore };
+      },
+    },
+  } as unknown as World);
+  return cursors;
+}
 
 test("a run's steps are reported oldest first, with a null for what has not happened", async () => {
   worldWithSteps([
@@ -83,4 +102,61 @@ test("a run whose every step is terminal has nothing in flight", async () => {
 test("a pending step counts as in flight, like a running one", async () => {
   worldWithSteps([step({ status: "pending" })]);
   expect(await runsWithActiveStep([RUN_A])).toEqual([RUN_A]);
+});
+
+test("an active step on a later page counts as in flight", async () => {
+  const cursors = worldWithPages([
+    [step({ stepName: "first" })],
+    [step({ stepName: "later", status: "running" })],
+  ]);
+  expect(await runsWithActiveStep([RUN_A])).toEqual([RUN_A]);
+  expect(cursors).toEqual([undefined, "cursor-1"]);
+});
+
+test("all completed steps across pages have no active step", async () => {
+  worldWithPages([[step()], [step({ stepName: "later", status: "failed" })]]);
+  expect(await runsWithActiveStep([RUN_A])).toEqual([]);
+});
+
+test("a pending step on a later page counts as in flight", async () => {
+  worldWithPages([[step()], [step({ stepName: "later", status: "pending" })]]);
+  expect(await runsWithActiveStep([RUN_A])).toEqual([RUN_A]);
+});
+
+test("empty and single pages are handled", async () => {
+  worldWithPages([[]]);
+  expect(await listRunSteps(RUN_A)).toEqual([]);
+
+  worldWithPages([[step()]]);
+  expect(await listRunSteps(RUN_A)).toHaveLength(1);
+});
+
+test("a later-page listing failure is propagated", async () => {
+  const failure = new Error("later page unavailable");
+  worldWithPages([[step()], []], failure);
+  await expect(listRunSteps(RUN_A)).rejects.toThrow(failure);
+});
+
+test("an incomplete continuation page fails closed", async () => {
+  setWorld({
+    specVersion: SPEC_VERSION_CURRENT,
+    steps: {
+      list: async () => ({ data: [step()], cursor: null, hasMore: true }),
+    },
+  } as unknown as World);
+  await expect(listRunSteps(RUN_A)).rejects.toThrow(
+    "World returned hasMore=true without a continuation cursor",
+  );
+});
+
+test("an omitted continuation cursor also fails closed", async () => {
+  setWorld({
+    specVersion: SPEC_VERSION_CURRENT,
+    steps: {
+      list: async () => ({ data: [step()], hasMore: true }),
+    },
+  } as unknown as World);
+  await expect(listRunSteps(RUN_A)).rejects.toThrow(
+    "World returned hasMore=true without a continuation cursor",
+  );
 });
