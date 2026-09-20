@@ -6,9 +6,12 @@
     "check": "node docs.mjs --check",
     "docs": "node docs.mjs"
   },
-  "dependencies": {
+  "devDependencies": {
+    "react": "18.3.1",
     "typedoc": "0.28.20",
     "typedoc-plugin-markdown": "4.9.0",
-    "typescript": "5.9.3"
+    "typedoc-vitepress-theme": "1.1.0",
+    "typescript": "5.9.3",
+    "vitepress": "1.6.4"
   }
 }

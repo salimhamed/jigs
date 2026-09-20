@@ -13,7 +13,6 @@ import {
   hasPackageDocumentation,
   internalReferences,
   renderEntry,
-  renderSite,
   rootDir,
 } from "./docs.mjs";
 import { typedocOptions } from "./typedoc.config.mjs";
@@ -190,27 +189,50 @@ test.each(["unchanged", "changed", "added", "deleted"])(
 
 test("the website covers every public entry and keeps links inside the Pages subpath", async () => {
   const destination = await tempDir();
-  await renderSite(destination);
+  // Run the real build in Node so VitePress uses its own Vite version,
+  // independently of Vitest's module loader.
+  execFileSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "--eval",
+      `import { renderSite } from ${JSON.stringify(new URL("./docs.mjs", import.meta.url).href)}; await renderSite(${JSON.stringify(destination)});`,
+    ],
+    { cwd: rootDir, stdio: "pipe" },
+  );
   const manifest = JSON.parse(await readFile(path.join(rootDir, "package.json"), "utf8"));
   const generated = await readdir(destination, { recursive: true });
   const files = new Set(generated);
   expect(files.has("index.html")).toBe(true);
-  expect(files.has(".nojekyll")).toBe(true);
-  const modulePages = generated.filter((file) => /^modules\/[^/]+\.html$/.test(file));
+  expect(files.has("api/index.html")).toBe(true);
+  expect(files.has("guide/getting-started.html")).toBe(true);
+  const modulePages = generated.filter(
+    (file) => file.startsWith("api/") && file.endsWith(".html") && file !== "api/index.html",
+  );
   expect(modulePages).toHaveLength(Object.keys(manifest.exports).length);
 
   const landing = await readFile(path.join(destination, "index.html"), "utf8");
-  expect(landing).toContain(`@salimhamed/jigs - v${manifest.version}`);
-  expect(landing).toContain("assets/search.js");
+  expect(landing).toContain(`v${manifest.version}`);
+  expect(landing).toContain("VPHomeHero");
+  expect(landing).toContain("Search");
+  expect(generated.some((file) => /assets\/.*localSearchIndex.*\.js$/.test(file))).toBe(true);
   for (const file of generated.filter((file) => file.endsWith(".html"))) {
     const html = await readFile(path.join(destination, file), "utf8");
     for (const [, href] of html.matchAll(/(?:href|src)="([^"]+)"/g)) {
       if (/^(?:[a-z][a-z\d+.-]*:|#)/i.test(href)) continue;
-      expect(href, `${file}: ${href} must be relative to the Pages project`).not.toMatch(/^\//);
+      if (href.startsWith("/")) {
+        expect(href, `${file}: ${href} must stay inside the Pages project`).toMatch(/^\/jigs\//);
+      }
       const target = decodeURIComponent(href.split(/[?#]/)[0]);
       if (!target) continue;
-      const relative = path.normalize(path.join(path.dirname(file), target));
+      const relative = target.startsWith("/jigs/")
+        ? target.slice("/jigs/".length)
+        : path.normalize(path.join(path.dirname(file), target));
+      if (!relative || relative.endsWith("/")) {
+        expect(files.has(`${relative}index.html`), `${file}: missing ${href}`).toBe(true);
+        continue;
+      }
       expect(files.has(relative), `${file}: missing ${href}`).toBe(true);
     }
   }
-}, 30_000);
+}, 60_000);
