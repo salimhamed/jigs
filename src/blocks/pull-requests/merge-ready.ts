@@ -64,6 +64,7 @@ function approvalMissing(
 
 /** Why a merge did not happen, and whether a later wake could change it. */
 export interface MergeRefusal {
+  /** A human-readable explanation of the state that prevented the merge. */
   reason: string;
   /**
    * Whether the same head could still merge. A transient refusal is a state

@@ -1,22 +1,3 @@
-// Everything jigs writes onto a pull request: the builder's answers routed to
-// the thread each one belongs to, the notes that record a commit or a
-// stand-down, and the failing-check table those notes embed. Every body
-// carries at least one marker.
-//
-// **Post-once.** jigs posts each answer at most once because every wake reads
-// GitHub first: the classifier that produced the wake has already seen which
-// comments carry an answer of this scope, and yields only what is still
-// outstanding. There is no second check here — nothing is read before posting,
-// and nothing is compared. That is also why the two POST steps the factory
-// wraps are single-attempt (`maxRetries = 0` in the generated `jigs.ts`): jigs
-// never retries a write it cannot tell apart from a success. A post whose
-// response is lost ends the wake here, quietly; the next wake — a webhook, or
-// the five-minute nudge at worst — reads the pull request again and either
-// finds the marker, in which case the answer is delivered and nothing more is
-// owed, or does not, in which case it posts. A reply lost to a transport
-// failure is therefore delayed by at most one nudge interval, never dropped
-// and never doubled.
-
 import type { CheckRun, PullRequestRef, ReviewThread } from "../../providers/github.ts";
 import type {
   commentOnPullRequest,
@@ -36,27 +17,42 @@ import { currentRunId } from "./writer.ts";
 
 /** Answers routed back to pull-request threads and an optional commit explanation. */
 export interface ThreadAnswers {
-  answers: Array<{ threadId: number | null; body: string }>;
+  /** Replies to post, using `null` to answer feedback on the pull request conversation. */
+  answers: Array<{
+    /** The review thread root to answer, or `null` for conversation feedback. */
+    threadId: number | null;
+    /** The Markdown reply body. */
+    body: string;
+  }>;
+  /** A note explaining the pushed commit, or `null` when no explanation should be posted. */
   commitExplanation: string | null;
 }
 
+/** Inputs for posting one revision round's answers. */
 export interface PostReviewAnswersOptions {
+  /** Factory-owned step used to reply to an inline review thread. */
   replyToPullRequestReviewThread: typeof replyToPullRequestReviewThread;
+  /** Factory-owned step used to post on the pull request conversation. */
   commentOnPullRequest: typeof commentOnPullRequest;
+  /** The pull request receiving the answers. */
   pr: PullRequestRef;
   /** The continuation identity these answers belong to. */
   scope: string;
+  /** Replies and optional commit explanation produced for this revision round. */
   answers: ThreadAnswers;
   /** The commit the round pushed, when it pushed one; the explanation names it. */
   committedSha?: string;
-  // The wake's own threads: anything the model names outside them is invented,
-  // and replying into it 404s.
+  /** The wake's known threads, used to reject invented anchors and route each answer. */
   threads: ReviewThread[];
 }
 
+/** Inputs for posting one commit-scoped pull request status note. */
 export interface PostPullRequestNoteOptions {
+  /** Factory-owned step used to post on the pull request conversation. */
   commentOnPullRequest: typeof commentOnPullRequest;
+  /** The pull request receiving the note. */
   pr: PullRequestRef;
+  /** The continuation identity that owns the note. */
   scope: string;
   /** The commit the note is about: a red head, or a head it could not merge. */
   headSha: string;
@@ -66,6 +62,7 @@ export interface PostPullRequestNoteOptions {
    * already reported a refusal it is waiting out.
    */
   reason: StatusReason;
+  /** The Markdown note body. */
   body: string;
 }
 
@@ -194,6 +191,7 @@ export async function postPullRequestNote(options: PostPullRequestNoteOptions): 
   }
 }
 
+/** Render failed checks as a Markdown list for a pull request note. */
 export function renderChecks(failing: CheckRun[]): string {
   return failing.length === 0
     ? "_(the provider reported a red build without naming a check)_"
