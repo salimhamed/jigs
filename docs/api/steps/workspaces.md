@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.41.0
+# @salimhamed/jigs v0.41.1
 
 Provision a repository worktree outside workflow code.
 
