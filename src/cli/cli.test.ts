@@ -104,17 +104,27 @@ test("root and no-argument help are side-effect-free, grouped and exact", () => 
   }
 });
 
-test("command help uses explicit placeholders and explains run selectors", () => {
+test("workflow and run command help uses explicit placeholders", () => {
   const cwd = tmpdir();
   expect(run(cwd, "run", "--help").stdout).toContain("<workflow-name>");
-  expect(run(cwd, "status", "--help").stdout).toContain("[run-id]");
-  expect(run(cwd, "status", "--help").stdout).toContain("unique ID prefix");
+  const status = run(cwd, "status", "--help").stdout;
+  expect(status).toContain("[run-id]");
+  expect(status).toContain("unique ID prefix");
   expect(run(cwd, "watch", "--help").stdout).toContain("[run-id]");
   expect(run(cwd, "cancel", "--help").stdout).toContain("<run-id>");
-  expect(run(cwd, "bind", "--help").stdout).toContain("<remote-url>");
-  expect(run(cwd, "bind", "--help").stdout).toContain("<binding-name>");
+});
+
+test("repository and recipe command help uses explicit placeholders", () => {
+  const cwd = tmpdir();
+  const bind = run(cwd, "bind", "--help").stdout;
+  expect(bind).toContain("<remote-url>");
+  expect(bind).toContain("<binding-name>");
   expect(run(cwd, "unbind", "--help").stdout).toContain("<binding-name>");
   expect(run(cwd, "recipe", "add", "--help").stdout).toContain("<recipe-name>");
+});
+
+test("upgrade and service command help uses explicit placeholders", () => {
+  const cwd = tmpdir();
   expect(run(cwd, "upgrade", "--help").stdout).toContain("<version>");
   expect(run(cwd, "service", "logs", "--help").stdout).toContain("<line-count>");
 });
