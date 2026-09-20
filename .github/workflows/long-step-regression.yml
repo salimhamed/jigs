@@ -46,6 +46,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # `jigs init` and `jigs build` run from the CLI's dist, so the CLI has to
+      # exist as the built artifact the way it does in the normal step-ids job.
+      - name: Build jigs
+        run: pnpm build
+
+      # The built service loads both CLIs during startup. No login is needed;
+      # the check only runs their version probes inside the compiled factory.
+      - name: Install workflow CLI peers
+        run: npm install --global @anthropic-ai/claude-code @openai/codex
+
       - name: Record test provenance
         env:
           REQUESTED_REVISION: ${{ inputs.revision }}
