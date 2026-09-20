@@ -120,7 +120,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm docs
+      - run: pnpm run docs
       - name: Commit the generated API reference
         run: |
           set -euo pipefail
