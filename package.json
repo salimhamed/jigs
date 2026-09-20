@@ -128,6 +128,7 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "docs": "node tools/api-docs/docs.mjs",
+    "docs:site": "node tools/api-docs/docs.mjs --site",
     "docs:check": "node tools/api-docs/docs.mjs --check",
     "e2e": "node e2e/check-step-ids.mjs",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm docs:check"

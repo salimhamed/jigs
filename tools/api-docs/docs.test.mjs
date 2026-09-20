@@ -12,6 +12,7 @@ import {
   hasPackageDocumentation,
   internalReferences,
   renderEntry,
+  renderSite,
   rootDir,
 } from "./docs.mjs";
 import { typedocOptions } from "./typedoc.config.mjs";
@@ -135,3 +136,30 @@ test("the release branch generates docs without waiting on the merge job", async
   );
   expect(mergeStep.env.EXPECTED_CHECKS.split(" ")).toContain("api-docs");
 });
+
+test("the website covers every public entry and keeps links inside the Pages subpath", async () => {
+  const destination = await tempDir();
+  await renderSite(destination);
+  const manifest = JSON.parse(await readFile(path.join(rootDir, "package.json"), "utf8"));
+  const generated = await readdir(destination, { recursive: true });
+  const files = new Set(generated);
+  expect(files.has("index.html")).toBe(true);
+  expect(files.has(".nojekyll")).toBe(true);
+  const modulePages = generated.filter((file) => /^modules\/[^/]+\.html$/.test(file));
+  expect(modulePages).toHaveLength(Object.keys(manifest.exports).length);
+
+  const landing = await readFile(path.join(destination, "index.html"), "utf8");
+  expect(landing).toContain(`@salimhamed/jigs - v${manifest.version}`);
+  expect(landing).toContain("assets/search.js");
+  for (const file of generated.filter((file) => file.endsWith(".html"))) {
+    const html = await readFile(path.join(destination, file), "utf8");
+    for (const [, href] of html.matchAll(/(?:href|src)="([^"]+)"/g)) {
+      if (/^(?:[a-z][a-z\d+.-]*:|#)/i.test(href)) continue;
+      expect(href, `${file}: ${href} must be relative to the Pages project`).not.toMatch(/^\//);
+      const target = decodeURIComponent(href.split(/[?#]/)[0]);
+      if (!target) continue;
+      const relative = path.normalize(path.join(path.dirname(file), target));
+      expect(files.has(relative), `${file}: missing ${href}`).toBe(true);
+    }
+  }
+}, 30_000);

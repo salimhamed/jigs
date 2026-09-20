@@ -10,6 +10,7 @@
 
 ## API reference
 
+- [Website](https://salimhamed.github.io/jigs/) — the latest stable release.
 - [Package root](api/index.md)
 - [`blocks/` and `steps/` import paths](api/)
 
@@ -17,6 +18,28 @@ The API reference is generated from the package exports and describes the latest
 published version. Every directly exported declaration has a summary; its rendered
 TypeScript signature shows nested fields and members. Run `pnpm run docs` for a
 local preview.
+
+### Publishing the website
+
+Run `pnpm docs:site` to generate the HTML reference in `docs-site/`, which is
+gitignored. The existing `pnpm docs` command still generates the Markdown
+reference shipped with the package.
+
+The Pages workflow publishes after a stable GitHub release is published. It
+builds the released tag, not unreleased changes on `main`. Each deployment
+replaces the whole site; there is no version history or publishing branch.
+Release PRs continue to generate Markdown through the existing release workflow.
+
+In **Settings → Pages → Build and deployment → Source**, select **GitHub Actions**.
+The site address is <https://salimhamed.github.io/jigs/>. This repository is
+already configured to use that source.
+The `github-pages` deployment environment allows the `main` branch for manual
+runs and tags matching `jigs-v*` for releases.
+
+To rebuild the site, open the Pages workflow in **Actions** and choose
+**Run workflow** on `main`. Manual runs also build the latest stable release.
+The first deployment needs a release containing the website generator; older
+releases cannot build the new site.
 
 ## Architecture decisions
 

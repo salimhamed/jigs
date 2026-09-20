@@ -1,6 +1,7 @@
 node_modules/
 dist/
 docs/api/
+docs-site/
 *.tsbuildinfo
 .env
 .nitro/
