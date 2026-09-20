@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.38.4](https://github.com/salimhamed/jigs/compare/jigs-v0.38.3...jigs-v0.38.4) (2026-09-20)
+
+
+### Bug Fixes
+
+* **steps:** recover pull request creation on retry (AGE-426) ([#291](https://github.com/salimhamed/jigs/issues/291)) ([bc06a89](https://github.com/salimhamed/jigs/commit/bc06a89239119c4b54e95448828daacfb690c79f))
+
 ## [0.38.3](https://github.com/salimhamed/jigs/compare/jigs-v0.38.2...jigs-v0.38.3) (2026-09-20)
 
 
