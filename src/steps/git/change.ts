@@ -15,7 +15,13 @@ function resolveCommit(worktreePath: string, ref: string): Promise<string> {
   return git(["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`], worktreePath);
 }
 
-/** Read the direct base-to-head tree difference and commits unique to head. */
+/**
+ * Describe committed changes between a base ref and the worktree's current HEAD.
+ *
+ * @remarks
+ * Resolves both endpoints once, compares their trees directly and lists commits reachable only
+ * from HEAD. Returns at most 1,000 files and 1,000 commits; `truncated` reports omitted results.
+ */
 export async function readChange(worktreePath: string, base: string): Promise<ChangeSummary> {
   const [baseSha, head] = await Promise.all([
     resolveCommit(worktreePath, base),
@@ -61,7 +67,13 @@ export async function readChange(worktreePath: string, base: string): Promise<Ch
   };
 }
 
-/** Read literal named paths between two commits, with a shared text budget. */
+/**
+ * Read patches for selected literal paths between two commits.
+ *
+ * @remarks
+ * Pass the resolved `base` and `head` from `readChange` to inspect that exact change. Paths are
+ * deduplicated, empty paths are rejected and all returned patches share a 200,000-character limit.
+ */
 export async function readPatch(
   worktreePath: string,
   base: string,
