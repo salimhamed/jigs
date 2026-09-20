@@ -1,3 +1,11 @@
+/**
+ * Read and update Linear issues outside workflow code.
+ *
+ * Wrap steps in a factory-owned `"use step"` file. Never call them directly from a workflow.
+ *
+ * @packageDocumentation
+ */
+
 export { fetchTicketSnapshot } from "./fetch-snapshot.ts";
 export {
   type CreateIssueInProjectInput,

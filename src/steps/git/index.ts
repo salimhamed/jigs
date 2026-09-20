@@ -1,3 +1,11 @@
+/**
+ * Read, commit and push changes in a Git worktree.
+ *
+ * Wrap steps in a factory-owned `"use step"` file. Never call them directly from a workflow.
+ *
+ * @packageDocumentation
+ */
+
 export {
   pushApprovedChange,
   pushBranch,

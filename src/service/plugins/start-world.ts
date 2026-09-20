@@ -1,3 +1,9 @@
+/**
+ * Start the Workflow runtime and the jigs services that depend on it.
+ *
+ * @packageDocumentation
+ */
+
 import type { World } from "@workflow/world";
 import { WorkflowRunNotFoundError } from "workflow/errors";
 import type { HarnessKind, HarnessRuntime } from "../../checks/harness-runtime.ts";

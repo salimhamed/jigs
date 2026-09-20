@@ -1,3 +1,9 @@
+/**
+ * Reconcile resources that a completed factory run asked jigs to release automatically.
+ *
+ * @packageDocumentation
+ */
+
 import { getWorld } from "workflow/runtime";
 import type { Factory } from "../blocks/factory.ts";
 import {

@@ -48,6 +48,15 @@ deprecation paths, fallbacks for old callers or dual code paths. A breaking
 change is a `!` in the PR title and one footer line in the commit, nothing more.
 Factories adopt a release by upgrading and fixing what breaks.
 
+## Doc comments
+
+Write `/** */` comments for users with limited context, in plain language and as
+briefly as clarity allows. Use summary prose, `@remarks` for longer rationale and
+`@example` when it helps; use `@internal` to exclude an implementation detail.
+Do not use `@param`, `@returns`, unknown tags, Linear tickets, ADR numbers or
+`docs/adr/` paths. Every public entry point starts with `@packageDocumentation`.
+Maintainer `//` comments may cite an ADR, but never a Linear ticket.
+
 ## Agent skills
 
 ### Issue tracker

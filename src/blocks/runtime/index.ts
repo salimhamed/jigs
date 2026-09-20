@@ -1,3 +1,9 @@
+/**
+ * Compose run resource registration and release policy inside a workflow.
+ *
+ * @packageDocumentation
+ */
+
 export { unreachable } from "../unreachable.ts";
 export type { CleanupProgress, CleanupView } from "./cleanup.ts";
 export {

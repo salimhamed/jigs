@@ -1,3 +1,6 @@
+packages:
+  - tools/api-docs
+
 allowBuilds:
   '@swc/core': true
   cbor-extract: true

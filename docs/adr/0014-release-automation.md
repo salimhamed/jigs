@@ -78,7 +78,7 @@ Packages links the package to it and lets the repo-scoped token publish.
   created, not atomically across workflows. A rollup holding only a finished
   `pr-title` therefore reads as green, and the merge fires with `ci` and
   `step-ids` never having run. So the step first polls until every name in
-  `EXPECTED_CHECKS` (`ci`, `step-ids`, `pr-title`) is registered, and only then
+  `EXPECTED_CHECKS` (`api-docs`, `ci`, `step-ids`, `pr-title`) is registered, and only then
   watches — which also covers the empty rollup `gh pr checks` fails outright
   on. The cost is a list that must track the job ids in `.github/workflows/`:
   a job added there and not here is a check the release PR can merge past.
@@ -104,6 +104,14 @@ Packages links the package to it and lets the repo-scoped token publish.
   with `read:packages` in `~/.npmrc`, and the scaffolded `.npmrc` carries only
   the scope-to-registry line. The dependency shape and the consumer side are
   [ADR 0017](./0017-single-package.md).
+- **The release branch owns generated API reference updates.** Once
+  release-please writes the bumped version, a branch-only `api-docs` job
+  generates and commits `docs/api` with the same PAT. The follow-up branch push
+  reruns the PR checks; generating no diff succeeds without another commit.
+  The merge step waits for `api-docs`, so published code and committed reference
+  share a version. Workflow concurrency is scoped by ref: main pushes still
+  serialize, while the release-branch job can run during the main run that is
+  waiting for it.
 
 ## Considered options
 
@@ -136,8 +144,8 @@ Packages links the package to it and lets the repo-scoped token publish.
   before it exits — release-please decides from GitHub's state, so a run
   triggered by an earlier push could cut the tag and then build the *older*
   checkout, whose version the registry already held, which the idempotent skip
-  reported as success while 0.4.2 never shipped. A fixed `concurrency` group
-  keeps overlapping pushes from racing at all.
+  reported as success while 0.4.2 never shipped. Main's ref-scoped `concurrency`
+  group keeps overlapping pushes from racing at all.
 - **The merge step's expected-checks list is a second copy of the job ids.**
   There is no "wait for the checks to exist" flag, so the wait has to name
   what it is waiting for, and nothing enforces that the list and

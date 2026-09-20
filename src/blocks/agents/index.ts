@@ -1,3 +1,9 @@
+/**
+ * Compose agent and model calls inside a workflow, including harness selection and halts.
+ *
+ * @packageDocumentation
+ */
+
 export { interpolate } from "../interpolate.ts";
 export {
   type ExecuteAgentStep,

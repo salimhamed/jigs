@@ -1,3 +1,9 @@
+/**
+ * Compose ticket claiming, review, snapshots and human handoffs inside a workflow.
+ *
+ * @packageDocumentation
+ */
+
 export {
   type BoundReviewTicketOptions,
   bindLinearSteps,

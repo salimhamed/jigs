@@ -1,3 +1,9 @@
+/**
+ * Create the HTTP application that serves a factory's workflow and webhook endpoints.
+ *
+ * @packageDocumentation
+ */
+
 import { type Context, Hono } from "hono";
 import { getRun, resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";

@@ -1,7 +1,8 @@
-// The service's clock: one croner job per declared schedule, each firing
-// through the same trigger path a `jigs run` takes. croner computes every
-// next occurrence from now, so a tick missed while the service was down is
-// skipped by construction — there is no catch-up.
+/**
+ * Start and inspect the recurring schedules declared by a factory.
+ *
+ * @packageDocumentation
+ */
 
 import { Cron } from "croner";
 import type { z } from "zod";

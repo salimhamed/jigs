@@ -1,3 +1,11 @@
+/**
+ * Execute agent and model requests outside workflow code.
+ *
+ * Wrap steps in a factory-owned `"use step"` file. Never call them directly from a workflow.
+ *
+ * @packageDocumentation
+ */
+
 export {
   type AgentExecutionDependencies,
   defaultAgentExecutionDependencies,

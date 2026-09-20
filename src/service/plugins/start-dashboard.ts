@@ -1,3 +1,9 @@
+/**
+ * Start the factory's Workflow dashboard when its port is configured.
+ *
+ * @packageDocumentation
+ */
+
 import type { Server } from "node:http";
 import { createRequire } from "node:module";
 import path from "node:path";

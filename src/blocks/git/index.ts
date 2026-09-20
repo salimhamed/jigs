@@ -1,3 +1,9 @@
+/**
+ * Read and render bounded descriptions of changes in a Git worktree.
+ *
+ * @packageDocumentation
+ */
+
 export {
   type ChangePatch,
   type ChangeStatus,
