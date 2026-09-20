@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.41.3](https://github.com/salimhamed/jigs/compare/jigs-v0.41.2...jigs-v0.41.3) (2026-09-20)
+
+
+### Features
+
+* add approachable VitePress documentation site ([#317](https://github.com/salimhamed/jigs/issues/317)) ([da55985](https://github.com/salimhamed/jigs/commit/da55985a433ab70fe1f1348e79013b4418942c50))
+
 ## [0.41.2](https://github.com/salimhamed/jigs/compare/jigs-v0.41.1...jigs-v0.41.2) (2026-09-20)
 
 

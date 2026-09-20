@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.41.2
+# @salimhamed/jigs v0.41.3
 
 Define a factory and describe its workflows, schedules, bindings and merge policy.
 
