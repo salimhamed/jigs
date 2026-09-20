@@ -13,6 +13,14 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The release branch's generation job pushes a new commit. Requiring
+      # ci makes GitHub wait for that commit to contain the complete reference.
+      - name: Verify the release API reference is current
+        if: ${{ github.head_ref == 'release-please--branches--main' }}
+        run: |
+          pnpm run docs
+          git add -f docs/api
+          git diff --cached --exit-code
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test

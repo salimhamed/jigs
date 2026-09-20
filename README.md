@@ -454,5 +454,5 @@ its integration appear stale.
 
 A merge to `main` with a releasable title opens or updates the release PR;
 its merge tags the release and publishes to GitHub Packages. The
-[setup runbook](docs/setup.md#part-1--the-machine-once) has the two console
+[setup runbook](docs/setup.md#part-1--the-machine-once) has the repository
 settings that make it work.

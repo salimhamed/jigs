@@ -1,4 +1,5 @@
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -114,7 +115,7 @@ test("the real renderer writes stable subpath pages with the package version", a
   expect(firstPage).toBe(secondPage);
 }, 20_000);
 
-test("the release branch generates docs without waiting on the merge job", async () => {
+test("release docs generate independently while GitHub gates auto-merge", async () => {
   const workflow = parse(
     await readFile(path.join(rootDir, ".github/workflows/release.yml"), "utf8"),
   );
@@ -132,10 +133,60 @@ test("the release branch generates docs without waiting on the merge job", async
   expect(serialized).toContain("git add -f docs/api");
 
   const mergeStep = workflow.jobs["release-please"].steps.find(
-    (step) => step.name === "Merge the release PR",
+    (step) => step.name === "Enable auto-merge for the release PR",
   );
-  expect(mergeStep.env.EXPECTED_CHECKS.split(" ")).toContain("api-docs");
+  expect(mergeStep.env.GH_TOKEN).toContain("RELEASE_PLEASE_TOKEN");
+  expect(mergeStep.run).toContain("gh pr list --head release-please--branches--main");
+  expect(mergeStep.run).toContain('gh pr merge "$pr" --auto --squash');
+  expect(mergeStep.run).not.toContain("gh pr checks");
+  expect(mergeStep.if).toBeUndefined();
 });
+
+test.each(["unchanged", "changed", "added", "deleted"])(
+  "the release CI docs gate handles %s generated pages",
+  async (change) => {
+    const workflow = parse(await readFile(path.join(rootDir, ".github/workflows/ci.yml"), "utf8"));
+    const gate = workflow.jobs.ci.steps.find(
+      (step) => step.name === "Verify the release API reference is current",
+    );
+    expect(gate.if).toContain("github.head_ref == 'release-please--branches--main'");
+    expect(gate.run).toContain("pnpm run docs");
+
+    const directory = await tempDir();
+    const git = (...args) => execFileSync("git", args, { cwd: directory, stdio: "pipe" });
+    git("init", "--quiet");
+    await writeFile(path.join(directory, ".gitignore"), "docs/api/\n");
+    await mkdir(path.join(directory, "docs/api"), { recursive: true });
+    const page = path.join(directory, "docs/api/index.md");
+    await writeFile(page, "Released reference\n");
+    git("add", "-f", ".gitignore", "docs/api");
+    git(
+      "-c",
+      "user.name=Docs test",
+      "-c",
+      "user.email=docs@example.com",
+      "commit",
+      "-qm",
+      "Release",
+    );
+
+    if (change === "changed") await writeFile(page, "Next release reference\n");
+    if (change === "added") {
+      await writeFile(path.join(directory, "docs/api/new-entry.md"), "New API\n");
+    }
+    if (change === "deleted") await rm(page);
+
+    // Rendering is exercised above; run the actual workflow's Git guard
+    // against tracked changes and ignored new files in an isolated checkout.
+    const check = () =>
+      execFileSync("bash", ["-e", "-c", gate.run.replace("pnpm run docs", "true")], {
+        cwd: directory,
+        stdio: "pipe",
+      });
+    if (change === "unchanged") expect(check).not.toThrow();
+    else expect(check).toThrow();
+  },
+);
 
 test("the website covers every public entry and keeps links inside the Pages subpath", async () => {
   const destination = await tempDir();

@@ -12,7 +12,7 @@ World. Nothing below is global except part 1.
 - **docker**, with the daemon running. Each factory brings up its own Postgres
   container; nothing is shared between them.
 - **A token that reads GitHub Packages.** jigs ships as `@salimhamed/jigs` on
-  GitHub Packages, private like this repo, so pnpm needs a scope route and a
+  GitHub Packages with restricted access, so pnpm needs a scope route and a
   token in `~/.npmrc`:
 
   ```
@@ -96,10 +96,16 @@ Packages. The number is a coordinate for `jigs upgrade` and a signal to
 you, never an input to a run: no step id carries a jigs version, so a release
 does not rename an address just by changing the package version
 ([ADR 0013](adr/0013-factory-owned-steps.md)), which is what makes automating
-it safe ([ADR 0014](adr/0014-release-automation.md)). Two prerequisites live
-in GitHub's console rather than in the tree, and the release workflow is inert
-without either:
+it safe ([ADR 0014](adr/0014-release-automation.md)). The following repository
+settings support the release workflow:
 
+- **Settings → General → Allow auto-merge.** The release workflow requests
+  auto-merge and lets GitHub wait for validation on the current commit.
+- **Settings → Rules → Rulesets → default.** Require `ci`, `step-ids`, and
+  `pr-title` from GitHub Actions on the default branch. Keep the existing
+  pull-request and squash-merge rules. Do not require the branch-only
+  `api-docs` job: ordinary PRs never run it. For release PRs, `ci` checks that
+  the committed generated documentation matches the release version.
 - **A `RELEASE_PLEASE_TOKEN` repository secret.** A fine-grained PAT on this
   repo with **Contents: read and write** (the tags, the CHANGELOGs, the
   version bumps), **Pull requests: read and write** (open and merge the
