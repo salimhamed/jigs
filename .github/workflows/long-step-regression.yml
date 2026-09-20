@@ -1,0 +1,77 @@
+name: Long step regression
+
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: Commit, branch, or tag to test (the workflow file runs from the default branch)
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  long-step:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: jigs
+          POSTGRES_PASSWORD: jigs
+          POSTGRES_DB: jigs
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U jigs -d jigs"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - name: Check out requested revision
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.revision }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Record test provenance
+        env:
+          REQUESTED_REVISION: ${{ inputs.revision }}
+        run: |
+          commit="$(git rev-parse HEAD)"
+          sdk_versions="$(node -e 'for (const name of ["workflow", "@workflow/world-postgres", "@workflow/web"]) console.log(`${name}@${require(`./node_modules/${name}/package.json`).version}`)')"
+          printf 'checked-out commit: %s\n%s\n' "$commit" "$sdk_versions"
+          {
+            echo '## Long step regression provenance'
+            printf '%s\n' "- Requested revision: \`$REQUESTED_REVISION\`"
+            echo "- Checked-out commit: \`$commit\`"
+            echo '- Installed Workflow SDK packages:'
+            while IFS= read -r version; do
+              echo "  - \`$version\`"
+            done <<< "$sdk_versions"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run the five-minute compiled-runtime regression
+        env:
+          JIGS_E2E_LONG_STEP_MS: 301000
+          WORKFLOW_POSTGRES_URL: postgres://jigs:jigs@localhost:5432/jigs
+        run: pnpm e2e
+
+      - name: Preserve failure diagnostics
+        if: ${{ failure() }}
+        run: |
+          git status --short
+          git log -1 --oneline --decorate
+          pnpm list --depth 0 --json
