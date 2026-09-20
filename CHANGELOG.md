@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.38.3](https://github.com/salimhamed/jigs/compare/jigs-v0.38.2...jigs-v0.38.3) (2026-09-20)
+
+
+### Bug Fixes
+
+* **service:** paginate run step listings (AGE-485) ([#288](https://github.com/salimhamed/jigs/issues/288)) ([a9762c5](https://github.com/salimhamed/jigs/commit/a9762c520057f6ed0cd75cd674cdbbf103672b0a))
+
 ## [0.38.2](https://github.com/salimhamed/jigs/compare/jigs-v0.38.1...jigs-v0.38.2) (2026-09-19)
 
 
