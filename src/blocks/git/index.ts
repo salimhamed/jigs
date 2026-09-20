@@ -1,5 +1,5 @@
 /**
- * Read and render bounded descriptions of changes in a Git worktree.
+ * Describe and render committed Git changes for review.
  *
  * @packageDocumentation
  */

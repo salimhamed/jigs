@@ -1,24 +1,49 @@
+/** How a file differs between the base and head trees. */
 export type ChangeStatus = "added" | "modified" | "deleted" | "renamed" | "other";
 
+/** One file changed between the base and head trees. */
 export interface FileChange {
+  /** The changed path. Renames use the path in the head tree. */
   path: string;
+  /** How the path differs between the two trees. */
   status: ChangeStatus;
+  /** The number of added lines, or zero for a binary file. */
   additions: number;
+  /** The number of deleted lines, or zero for a binary file. */
   deletions: number;
 }
 
+/** A bounded description of the committed changes between two Git refs. */
 export interface ChangeSummary {
-  /** Resolved endpoint commits. Files describe the direct difference between their trees. */
+  /** The resolved base commit. */
   base: string;
+  /** The resolved head commit. */
   head: string;
+  /** Files that differ directly between the base and head trees. */
   files: FileChange[];
-  /** Commits reachable from head but not base, newest first; authorName is Git's raw author name. */
-  commits: { sha: string; subject: string; authorName: string }[];
+  /** Commits reachable from head but not base, newest first. */
+  commits: {
+    /** The full commit SHA. */
+    sha: string;
+    /** The first line of the commit message. */
+    subject: string;
+    /** The author name recorded by Git, without mailmap rewriting. */
+    authorName: string;
+  }[];
+  /** Whether file or commit limits caused results to be omitted. */
   truncated: boolean;
 }
 
+/** Patches for selected paths between two resolved commits. */
 export interface ChangePatch {
-  patches: { path: string; text: string }[];
+  /** Patch text for each selected path, in first-requested order. */
+  patches: {
+    /** The literal path that was selected. */
+    path: string;
+    /** The Git patch for this path, which may be empty or truncated. */
+    text: string;
+  }[];
+  /** Whether the shared text limit cut off any patch text. */
   truncated: boolean;
 }
 
@@ -29,7 +54,7 @@ const STATUS_WORDS: Record<string, ChangeStatus> = {
   R: "renamed",
 };
 
-/** Parse git diff --name-status -z; NUL separators preserve unusual filenames. */
+/** Parse NUL-delimited Git name-status output without losing unusual filenames. */
 export function parseNameStatus(output: string): Pick<FileChange, "status" | "path">[] {
   const fields = output.split("\0");
   const files: Pick<FileChange, "status" | "path">[] = [];
@@ -43,7 +68,7 @@ export function parseNameStatus(output: string): Pick<FileChange, "status" | "pa
   return files;
 }
 
-/** Parse git diff --numstat -z. Binary '-' counts contribute zero lines. */
+/** Parse NUL-delimited Git line counts, treating binary-file counts as zero. */
 export function parseNumstat(
   output: string,
 ): Pick<FileChange, "path" | "additions" | "deletions">[] {
@@ -68,9 +93,9 @@ export function parseNumstat(
   return files;
 }
 
-// Beyond this the comment stops being readable and the tally carries the rest.
 const MAX_LISTED_FILES = 60;
 
+/** Render a Markdown review summary with commits, totals and up to 60 changed-file rows. */
 export function renderChangeSummary(summary: ChangeSummary): string {
   const listed = summary.files.slice(0, MAX_LISTED_FILES);
   const hidden = summary.files.length - listed.length;
