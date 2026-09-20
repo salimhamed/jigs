@@ -48,6 +48,13 @@ registry-marked for diagnosis — under a single overridable
 
 ## Teardown
 
+AGE-486 replaced the original online `jigs sweep` operation described below
+with `jigs resources list` and preview-first, offline `jigs resources prune`.
+The replacement has no dirty or unmerged force bypass and never deletes remote
+branches. The historical matrix still describes automatic and explicit
+release; [Automatic release lifecycle](../automatic-resource-release.md) and
+[setup](../setup.md) describe the current maintenance command.
+
 Teardown is runtime-owned (authors never call a destructor; an author
 `finally` would fire on suspension too) and applies only to terminal states —
 a suspended run holds its worktree. The decide/apply matrix: **done (merged)**
@@ -65,7 +72,7 @@ and deletion, so cancellation cannot delete state under an in-flight operation.
 Startup and periodic reconciliation recover missed signals and retry failures;
 progress is recorded on run attributes. Suspended runs are untouched. The
 explicit release block remains available for a workflow that needs its report,
-and `jigs sweep` remains the operator path for policy-kept or safety-kept
+and `jigs resources prune` remains the operator path for policy-kept or safety-kept
 resources. See [Automatic release lifecycle](../automatic-resource-release.md).
 
 The sweep asks its `merge-base --is-ancestor` question of **every terminal

@@ -4,6 +4,7 @@ import { userInfo } from "node:os";
 export interface SystemdUserManager {
   available(): boolean;
   linger(): boolean | undefined;
+  scopeState(unit: string): string;
   stopScope(unit: string): void;
 }
 
@@ -29,6 +30,15 @@ export const systemdUserManager: SystemdUserManager = {
     });
     if (result.status !== 0) return undefined;
     return result.stdout.trim() === "yes";
+  },
+  scopeState(unit) {
+    const result = spawnSync("systemctl", ["--user", "is-active", `${unit}.scope`], {
+      encoding: "utf8",
+    });
+    const state = result.stdout.trim();
+    if (state === "active" || state === "activating" || state === "deactivating") return "active";
+    if (state === "inactive" || state === "failed") return "inactive";
+    return "unknown";
   },
   stopScope(unit) {
     spawnSync("systemctl", ["--user", "stop", `${unit}.scope`], { stdio: "ignore" });

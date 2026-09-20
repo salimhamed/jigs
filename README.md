@@ -115,7 +115,8 @@ over later automatic cleanup, including an explicit `keep`.
 Dirty unmerged work stays; a branch is deleted only with positive evidence that
 the remote default branch contains its commits. Squash-merged branch refs may
 therefore remain. Failed cleanup is visible in `jigs logs` and retried by the
-service; `jigs sweep` remains the explicit/manual reclaim path. Never put
+service; `jigs resources list` and preview-first `jigs resources prune` are the
+explicit maintenance path. Never put
 release in `finally` or a catch: waiting throws too.
 
 Both workflow and step function paths and names contribute to durable IDs.
@@ -286,7 +287,7 @@ npx skills add salimhamed/jigs
 installs a skill your coding agent can run as `/jigs`. It takes a plain-language
 argument and routes it to one of four guides:
 
-- **operate** — run, watch, diagnose, cancel or sweep; answer a halt waiting on a
+- **operate** — run, watch, diagnose, cancel or inspect resources; answer a halt waiting on a
   human.
 - **author** — write a workflow, a step, a prompt, a schedule, or a `requires`
   manifest.

@@ -59,7 +59,8 @@ Call `await release()` from `#jigs` as the workflow's last successful action
 when it needs a report before returning. `release(policy)` persists the
 callsite's success choice, so an explicit keep is not reversed by automatic
 cleanup. Failed cleanup stays visible in `jigs logs`, is retried by the
-service, and remains reclaimable with manual `jigs sweep`.
+service, and remains inspectable with `jigs resources list` and preview-first
+`jigs resources prune`.
 
 Release is success-only: never call it from `finally` or a catch, because
 suspension throws too. Dirty unmerged work stays, and branches are deleted only

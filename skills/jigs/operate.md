@@ -203,10 +203,14 @@ wakes on its own.
 
 ## Parked runs and worktrees
 
-A suspended run holds its worktree because it will return to it. The starter
-workflow removes worktrees after merge; other endings leave them for
-`jigs sweep`. Nothing cleans up those leftovers in the background. On a terminal it asks per worktree, louder for a tree holding
-uncommitted work.
+A suspended run holds its worktree because it will return to it. Automatic
+release handles terminal runs when its policy and Git safety checks allow it.
+For leftovers, inspect `jigs resources list` and `jigs resources prune`; both
+are read-only. To apply a preview, first establish that the service and its
+agents are stopped, then run `jigs resources prune --apply`. Policy-kept
+resources also need `--include-kept`. Apply refuses when the current jigs
+service command has not yet recorded systemd scope supervision; start and stop
+the factory service once, then retry. Dirty and unmerged work remains.
 
 Parked runs are also why the names in `jigs.ts` and `workflows/` matter —
 see the never list.
@@ -228,9 +232,9 @@ Confirm these actions when the current request has not already authorized them:
 
 - `jigs cancel` — it makes the run terminal and releases ordinary jigs hooks.
   Minimum-retention hooks can remain claimed and are printed as `retained`;
-  worktrees remain unless `--discard-worktrees` is set.
-- `jigs sweep --force` — it deletes every eligible worktree without asking,
-  dirty ones included.
+  local resources remain for automatic release or offline maintenance.
+- `jigs resources prune --apply` — it removes the preview's eligible local
+  resources after proving the factory service and child scope are stopped.
 - `jigs service restart`, `jigs service stop`, `jigs up --restart-service` or
   `jigs upgrade` while `jigs ps` shows a running or suspended run. `up` and
   `upgrade` ask before restarting over one; `--force` is the human's call.

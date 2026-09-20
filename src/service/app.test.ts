@@ -768,17 +768,3 @@ test("a factory with no schedules answers an empty listing", async () => {
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual([]);
 });
-
-test("POST /api/worktrees/sweep answers an empty report when the registry holds nothing", async () => {
-  const res = await app.request("/api/worktrees/sweep", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ clean: false, force: false }),
-  });
-  expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({
-    entries: [],
-    removed: [],
-    removedDirs: [],
-  });
-});

@@ -18,6 +18,7 @@ import { showLogs } from "./commands/logs.ts";
 import { pokeRun } from "./commands/poke.ts";
 import { showRuns } from "./commands/ps.ts";
 import { addRecipe, recipeNames } from "./commands/recipe.ts";
+import { listResources, runResourcesPrune } from "./commands/resources.ts";
 import { launchRun } from "./commands/run.ts";
 import { resolveServiceUrl, usesFactoryService } from "./commands/service-client.ts";
 import {
@@ -27,7 +28,6 @@ import {
   startService,
   stopService,
 } from "./commands/service-lifecycle.ts";
-import { runSweep } from "./commands/sweep.ts";
 import { unbindRepo } from "./commands/unbind.ts";
 import { upFactory } from "./commands/up.ts";
 import { upgradeFactory } from "./commands/upgrade.ts";
@@ -253,23 +253,16 @@ program
     "make a run terminal; release ordinary jigs hooks and report claimed minimum-retention hooks",
   )
   .argument("<run>", "run id, unique id prefix, or ticket (`AGE-123` or its UUID)")
-  .option("--discard-worktrees", "remove the run's worktrees after cancelling")
   .option("--force", "skip the confirmation for an in-flight run")
   .addOption(serviceOption())
-  .action(
-    async (
-      run: string,
-      options: { discardWorktrees?: boolean; force?: boolean; serviceUrl?: string },
-    ) => {
-      await cancelRun(run, {
-        out,
-        serviceUrl: serviceUrl(options.serviceUrl),
-        confirm: makeConfirm(),
-        discard: options.discardWorktrees,
-        force: options.force,
-      });
-    },
-  );
+  .action(async (run: string, options: { force?: boolean; serviceUrl?: string }) => {
+    await cancelRun(run, {
+      out,
+      serviceUrl: serviceUrl(options.serviceUrl),
+      confirm: makeConfirm(),
+      force: options.force,
+    });
+  });
 
 program
   .command("logs")
@@ -302,21 +295,31 @@ program
     await runDoctor({ out, serviceUrl: serviceUrl(options.serviceUrl) });
   });
 
-program
-  .command("sweep")
-  .description("reconcile worktrees on disk against the registry and run states")
-  .argument("[resource-path]", "remove only this worktree or run directory")
-  .option("--force", "delete every eligible worktree without asking, dirty ones included")
-  .addOption(serviceOption())
-  .action(async (path: string | undefined, options: { force?: boolean; serviceUrl?: string }) => {
-    await runSweep(
-      { out, confirm: makeConfirm(), serviceUrl: serviceUrl(options.serviceUrl) },
-      {
-        force: options.force,
-        ...(path === undefined ? {} : { paths: [path] }),
-      },
-    );
+const resources = program
+  .command("resources")
+  .description("inspect and safely prune this factory's registered local resources");
+
+resources
+  .command("list")
+  .description("list registered resources without changing them")
+  .option("--run <run-id>", "limit the inventory to one run id or unique prefix")
+  .option("--json", "print one JSON document")
+  .action(async (options: { run?: string; json?: boolean }) => {
+    await listResources({ cwd: process.cwd(), out }, options);
   });
+
+resources
+  .command("prune")
+  .description("preview safe local resource cleanup; --apply performs it offline")
+  .option("--run <run-id>", "limit the inventory to one run id or unique prefix")
+  .option("--apply", "perform eligible cleanup after proving the service and children stopped")
+  .option("--include-kept", "consider policy-kept resources, without bypassing Git safety")
+  .option("--json", "print one JSON document")
+  .action(
+    async (options: { run?: string; apply?: boolean; includeKept?: boolean; json?: boolean }) => {
+      await runResourcesPrune({ cwd: process.cwd(), out }, options);
+    },
+  );
 
 const service = program
   .command("service")

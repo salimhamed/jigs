@@ -601,6 +601,35 @@ async function runtimeScenario(postgresUrl) {
     const resourcesAfterRestart = (await runtimeRun(runId)).resources;
     assertRuntimeResources(resourcesAfterRestart, runId, "after restart");
 
+    const listed = JSON.parse(
+      execFileSync(process.execPath, [cli, "resources", "list", "--run", runId, "--json"], {
+        cwd: factory,
+        env: runtimeEnv(postgresUrl),
+        encoding: "utf8",
+      }),
+    );
+    if (
+      listed.complete !== true ||
+      listed.entries.length !== 2 ||
+      listed.entries.some((entry) => entry.runId !== runId || entry.eligible !== false)
+    ) {
+      throw new Error(
+        `resource list CLI returned an unexpected inventory: ${JSON.stringify(listed)}`,
+      );
+    }
+    const preview = JSON.parse(
+      execFileSync(process.execPath, [cli, "resources", "prune", "--run", runId, "--json"], {
+        cwd: factory,
+        env: runtimeEnv(postgresUrl),
+        encoding: "utf8",
+      }),
+    );
+    if (preview.entries.some((entry) => entry.action === "remove" || entry.eligible !== false)) {
+      throw new Error(
+        `resource prune preview proposed a remote resource: ${JSON.stringify(preview)}`,
+      );
+    }
+
     execFileSync(
       process.execPath,
       [

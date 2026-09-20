@@ -704,8 +704,9 @@ is too long to wait.
 jigs run <workflow> --input ticket=AGE-123
 jigs ps
 jigs logs <run>
-jigs cancel <run> [--force] [--discard-worktrees]
-jigs sweep [<path>] [--force]
+jigs cancel <run> [--force]
+jigs resources list [--run <run-id>] [--json]
+jigs resources prune [--run <run-id>] [--include-kept] [--apply] [--json]
 ```
 
 jigs narrates every workflow milestone in `jigs logs`. A workflow body that
@@ -737,9 +738,8 @@ is no terminal to answer it. An already-running step may finish its external
 work, but its result cannot advance the cancelled workflow. Pending or delayed
 queue deliveries may remain until the worker consumes them, and exhausted
 deliveries remain available as diagnostic history; cancellation does not claim
-to empty the queue. By default, cancel names the worktrees it leaves behind.
-`--discard-worktrees` also removes that run's worktrees after the cancellation
-succeeds; branches containing unmerged commits are kept.
+to empty the queue. Cancel names the worktrees it leaves behind and points to
+the offline resource maintenance command.
 
 The service automatically releases eligible managed-local resources after a
 run becomes terminal. The factory's
@@ -755,23 +755,44 @@ branch deletion. Squash-merged branch refs may remain because ancestry does
 not prove their work landed.
 
 The default keeps failed and cancelled runs; waiting runs always keep their
-resources. Sweep includes scratch directories even for runs with no worktree, and
-requires positive terminal-run evidence before removing a scratch directory.
-It never removes a live or suspended run's resources. Nothing runs in the
-background for live runs. Explicit release belongs in neither `finally` nor a catch.
+resources. Resource maintenance includes registered scratch directories even
+for runs with no worktree and requires positive terminal-run evidence before
+removing one. It never removes a live or suspended run's resources. Nothing
+runs in the background for live runs. Explicit release belongs in neither
+`finally` nor a catch.
 The service waits for active steps to drain before terminal cleanup, retries
 missed or failed cleanup after restart, and reports cleanup state and counts in
 `jigs logs`. Unknown resource kinds remain visible and are never deleted.
 
-`jigs sweep` remains the manual reclaim path for policy-kept and safety-kept
-resources. Worktrees remain visible in `jigs ps`; sweep labels scratch entries
-as `run-directory`.
-On a terminal, `jigs sweep` asks per resource, with a stronger warning for
-uncommitted work. Without a terminal it reports only. `jigs sweep --force`
-removes eligible terminal resources without asking, including dirty trees;
-`jigs sweep <path>` scopes that approval to one resource. Branches still need
-positive ancestry evidence even with force. Each removed worktree line reports
-whether its branch was deleted or kept, including its unmerged commit count.
+`jigs resources list` reads the selected factory's run attributes, registry and
+local disk without changing them. It reports the owning run and status, kind,
+URL or path, existence, ownership evidence and why the resource is retained or
+eligible. `--json` emits the same inventory with a `complete` flag and explicit
+read errors. `--run` accepts a full run id or unique id prefix.
+
+`jigs resources prune` is always a preview unless `--apply` is present. Apply
+never confirms interactively, stops a service, kills a child, cancels a run,
+edits SDK history, polls the queue or resumes a workflow. First run `jigs
+service stop`. Apply then holds a per-factory startup exclusion and requires
+the factory's systemd user scope to be inactive, which proves that both the
+service and its descendants are gone. It refuses on hosts without that scope
+proof. A crashed maintenance command deliberately leaves its exclusion
+directory in place; inspect the path named by the error before removing it.
+
+Only an exact registered worktree with a matching factory-owned registry row,
+or the exact registered `scratch/<run-id>` directory, is eligible. Apply
+revalidates each target under the run's advisory lock. Dirty worktrees,
+unmerged or unverifiable branches, nonterminal and cross-factory runs, unknown
+owners, symlinks and path escapes remain. Remote resources, custom kinds,
+arbitrary file URLs, general temporary directories and `jigs-ask-*` directories
+are observations only. Policy-kept resources require `--include-kept`, which
+does not relax any other safety check.
+
+For a crash-abandoned terminal run, establish that its service and agents are
+stopped, inspect `jigs resources list --run <id>`, inspect `jigs resources prune
+--run <id>` (adding `--include-kept` when intentional retention should be
+overridden), then repeat with `--apply`. Stale pending or running SDK step rows
+remain as useful history; this command does not recover or rewrite them.
 
 **Recurring runs.** A workflow can also fire on a schedule this factory
 declares beside its workflows, in `jigs.config.ts`:
