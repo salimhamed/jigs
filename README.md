@@ -15,6 +15,8 @@ or automate another repeatable process. Factories own the process and policy.
   worktrees **cut from jigs' own clone of the target repo**.
 - The **dashboard** the service hosts shows every run's full step history.
 - **Schedules** declared in the factory fire workflows on a cron tick.
+- The optional ship recipe moves its ticket as work starts, a pull request opens,
+  and the delivery merges or stops.
 
 ## Quick start
 

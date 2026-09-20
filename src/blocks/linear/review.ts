@@ -78,6 +78,11 @@ export interface ReviewTicketOptions {
   // The words, which the factory owns: its own function in place of the one
   // shipped beside this block.
   prompt?: TicketReviewPrompt;
+  /** Optional workflow policy around a human clarification. */
+  on?: {
+    needsHuman?: () => Promise<void>;
+    humanReplied?: () => Promise<void>;
+  };
 }
 
 export async function reviewTicket(options: ReviewTicketOptions): Promise<TicketHandoff> {
@@ -114,6 +119,7 @@ export async function reviewTicket(options: ReviewTicketOptions): Promise<Ticket
     // The questions only: the comment is for the human and the record, never
     // the data path — the brief the next round writes is what reaches the
     // builder.
+    await options.on?.needsHuman?.();
     await haltForHuman(options.claim, {
       headline: `jigs paused work on **${snapshot.identifier}** and needs your answers before it writes any code.`,
       where: "ticket review",
@@ -121,6 +127,7 @@ export async function reviewTicket(options: ReviewTicketOptions): Promise<Ticket
       questions,
       onReply: "continue",
     });
+    await options.on?.humanReplied?.();
     snapshot = await fetchTicketSnapshot(snapshot.id);
   }
 }

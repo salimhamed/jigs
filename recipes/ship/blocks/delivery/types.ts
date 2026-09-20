@@ -262,6 +262,7 @@ export interface ImplementAndReviewOptions<TTask extends WorkItem = WorkItem> {
   review: ReviewAgent<TTask>;
   limits: Pick<DeliveryLimits, "implementationReviewRounds">;
   onLimit?: OnDeliveryLimit<TTask>;
+  on?: DeliveryCallbacks;
 }
 export interface PublishApprovedChangeOptions<TTask extends WorkItem = WorkItem> {
   change: ApprovedChange<TTask>;
@@ -270,6 +271,7 @@ export interface PublishApprovedChangeOptions<TTask extends WorkItem = WorkItem>
   /** Supplies the harness the description is written with when no description role is given. */
   implementation: ImplementationAgent<TTask>;
   pullRequestDescription?: DescriptionAgent<TTask>;
+  on?: DeliveryCallbacks;
 }
 export interface FollowPullRequestOptions<TTask extends WorkItem = WorkItem> {
   change: ApprovedChange<TTask>;
@@ -294,6 +296,14 @@ export interface FollowPullRequestOptions<TTask extends WorkItem = WorkItem> {
    */
   merge: MergePolicy;
   onLimit?: OnDeliveryLimit<TTask>;
+  on?: DeliveryCallbacks;
+}
+
+/** Workflow policy at the delivery lifecycle moments the recipe owns. */
+export interface DeliveryCallbacks {
+  pullRequestOpened?: (pr: PullRequestRef) => Promise<void>;
+  merged?: (pr: PullRequestRef) => Promise<void>;
+  stopped?: (reason: string) => Promise<void>;
 }
 export interface DeliverChangeOptions<TTask extends WorkItem = WorkItem>
   extends Omit<ImplementAndReviewOptions<TTask>, "limits"> {

@@ -87,6 +87,43 @@ export interface LinearIssueRef {
   identifier: string;
 }
 
+export interface LinearIssueState {
+  id: string;
+  name: string;
+  type: string;
+  position: number;
+}
+
+export interface LinearIssueStates {
+  state: { id: string; name: string };
+  team: { name: string; states: { nodes: LinearIssueState[] } };
+}
+
+/** Read an issue's current state and the states its team accepts. */
+export async function fetchIssueStates(issueId: string): Promise<LinearIssueStates> {
+  const data = await linearGraphql<{ issue: LinearIssueStates }>(
+    `query IssueStates($id: String!) {
+      issue(id: $id) {
+        state { id name }
+        team { name states { nodes { id name type position } } }
+      }
+    }`,
+    { id: issueId },
+  );
+  return data.issue;
+}
+
+/** Change an issue to a state its team owns. */
+export async function updateIssueState(issueId: string, stateId: string): Promise<void> {
+  const data = await linearGraphql<{ issueUpdate: { success: boolean } }>(
+    `mutation UpdateIssueState($issueId: String!, $stateId: String!) {
+      issueUpdate(id: $issueId, input: { stateId: $stateId }) { success }
+    }`,
+    { issueId, stateId },
+  );
+  if (!data.issueUpdate.success) throw new Error(`Linear issueUpdate failed for issue ${issueId}`);
+}
+
 export async function resolveIssueRef(ticket: string): Promise<LinearIssueRef> {
   const data = await linearGraphql<{ issue: LinearIssueRef | null }>(
     `query IssueRef($id: String!) {

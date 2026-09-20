@@ -48,6 +48,7 @@ import type {
   CiRepairPromptContext,
   DeliverChangeOptions,
   DeliveryAgent,
+  DeliveryCallbacks,
   DeliveryChange,
   DeliveryResult,
   FollowPullRequestOptions,
@@ -156,6 +157,7 @@ async function stopDelivery<TTask extends WorkItem>(
   change: DeliveryChange<TTask>,
   limit: LimitReached<TTask>,
   reason: string,
+  on?: DeliveryCallbacks,
 ): Promise<never> {
   await pushBranch(change.worktree.path, change.worktree.branch);
   await postTicketNote(change.task.id, {
@@ -167,6 +169,7 @@ async function stopDelivery<TTask extends WorkItem>(
     closing:
       "Nothing is waiting on a reply here. Settle the open findings and start the run again, or take the branch over by hand.",
   });
+  await on?.stopped?.(reason);
   throw new JigsError(
     `${reason} The work is pushed on branch ${change.worktree.branch}.`,
     limit.findings.length === 0 ? undefined : limit.findings.join("\n"),
@@ -203,6 +206,7 @@ export async function implementAndReview<TTask extends WorkItem = WorkItem>(
           change,
           limit,
           `jigs stopped work on ${change.task.key} after ${limit.attempts} implementation review round(s) without an approved change.`,
+          options.on,
         );
       budget += extension.additionalAttempts;
       instructions = extension.instructions;
@@ -241,6 +245,7 @@ export async function implementAndReview<TTask extends WorkItem = WorkItem>(
           findings: [reason],
         },
         `jigs stopped work on ${change.task.key} during implementation review round ${round}. ${reason}`,
+        options.on,
       );
     }
     const reviewed: PromptFields<ReviewPromptContext<TTask>> = {
@@ -327,6 +332,7 @@ export async function publishApprovedChange<TTask extends WorkItem = WorkItem>(
     identity: `${pullRequest.owner}/${pullRequest.repo}#${pullRequest.number}`,
     url: pullRequest.url,
   });
+  await options.on?.pullRequestOpened?.(pullRequest);
   return pullRequest;
 }
 
@@ -345,7 +351,10 @@ export async function followPullRequest<TTask extends WorkItem = WorkItem>(
   const gate = pullRequestGate(pr, scope, options.merge.approval);
   return attend<DeliveryResult<TTask>>(gate, async (wake) => {
     if (wake.kind === "closed") {
-      if (wake.merged) return finished({ change, pr });
+      if (wake.merged) {
+        await options.on?.merged?.(pr);
+        return finished({ change, pr });
+      }
       return stopDelivery(
         change,
         {
@@ -357,6 +366,7 @@ export async function followPullRequest<TTask extends WorkItem = WorkItem>(
           findings: [],
         },
         `jigs stopped work on ${change.task.key} because pull request ${pr.owner}/${pr.repo}#${pr.number} was closed unmerged.`,
+        options.on,
       );
     }
     if (wake.kind === "merge-ready") {
@@ -364,7 +374,10 @@ export async function followPullRequest<TTask extends WorkItem = WorkItem>(
       let refused: { reason: string; transient: boolean };
       try {
         const result = await mergePullRequest(pr, wake.headSha, options.merge);
-        if (result.merged) return finished({ change, pr });
+        if (result.merged) {
+          await options.on?.merged?.(pr);
+          return finished({ change, pr });
+        }
         refused = result;
       } catch (error) {
         // An unclassified error may pass, so leave the head eligible to retry.
@@ -417,6 +430,7 @@ export async function followPullRequest<TTask extends WorkItem = WorkItem>(
           change,
           limit,
           `jigs stopped work on ${change.task.key} after ${limit.attempts} ${phase} attempt(s).`,
+          options.on,
         );
       budgets[counter] += extension.additionalAttempts;
       instructions[counter] = extension.instructions;
@@ -463,6 +477,7 @@ export async function followPullRequest<TTask extends WorkItem = WorkItem>(
             findings: ["The CI repair did not produce a clean, new commit."],
           },
           `jigs stopped work on ${change.task.key} because CI repair attempt ${change.attempts[counter]} produced no new clean commit.`,
+          options.on,
         );
       }
       await pushBranch(change.worktree.path, change.worktree.branch);

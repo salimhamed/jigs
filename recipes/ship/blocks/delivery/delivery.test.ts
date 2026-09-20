@@ -226,6 +226,62 @@ describe("delivery", () => {
     expect(closed).toHaveBeenCalledOnce();
   });
 
+  it("calls lifecycle callbacks after opening and resource registration, on either merged return, and before a stop throws", async () => {
+    const events: string[] = [];
+    const on = {
+      pullRequestOpened: async () => {
+        events.push("opened");
+      },
+      merged: async () => {
+        events.push("merged");
+      },
+      stopped: async () => {
+        events.push("stopped");
+      },
+    };
+    const { steps } = setup([{ kind: "closed", merged: true }]);
+    vi.mocked(steps.openPullRequest).mockImplementation(async () => {
+      events.push("open");
+      return pr;
+    });
+    vi.mocked(steps.registerResource).mockImplementation(async (resource) => {
+      events.push("resource");
+      return resource;
+    });
+    await useSteps(steps).deliverChange({ ...options, on });
+    expect(events).toEqual(["open", "resource", "opened", "merged"]);
+
+    events.length = 0;
+    const stopped = setup([{ kind: "closed", merged: false }]);
+    vi.mocked(stopped.steps.openPullRequest).mockImplementation(async () => {
+      events.push("open");
+      return pr;
+    });
+    vi.mocked(stopped.steps.registerResource).mockImplementation(async (resource) => {
+      events.push("resource");
+      return resource;
+    });
+    await useSteps(stopped.steps)
+      .deliverChange({ ...options, on })
+      .catch((error: unknown) => {
+        expect(error).toBeInstanceOf(Error);
+        events.push("throw");
+      });
+    expect(events).toEqual(["open", "resource", "opened", "stopped", "throw"]);
+  });
+
+  it("does not require lifecycle callbacks", async () => {
+    const { steps } = setup([{ kind: "closed", merged: true }]);
+    await expect(useSteps(steps).deliverChange(options)).resolves.toMatchObject({ pr });
+  });
+
+  it("calls merged when jigs merges instead of waiting for the closed wake", async () => {
+    const merged = vi.fn(async () => {});
+    const { steps } = setup([mergeReady("new")]);
+    await useSteps(steps).deliverChange({ ...options, merge: JIGS_MERGE, on: { merged } });
+    expect(merged).toHaveBeenCalledWith(pr);
+  });
+
   it("fails at the round limit without opening a PR or implicitly retrying", async () => {
     const { steps } = setup();
     const runAgent = vi.fn().mockImplementation(async (config) => ({

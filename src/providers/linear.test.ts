@@ -3,12 +3,14 @@ import {
   createComment,
   createIssueInProject,
   fetchIssueSnapshot,
+  fetchIssueStates,
   findIssueInProject,
   getIssueParticipants,
   listCommentsSince,
   listWebhooks,
   mention,
   resolveIssueRef,
+  updateIssueState,
 } from "./linear.ts";
 
 const fetchMock = vi.fn();
@@ -90,6 +92,34 @@ test("fetchIssueSnapshot asks for the snapshot fields in one round trip", async 
     expect(body.query).toContain(field);
   }
   expect(body.variables).toEqual({ id: "issue-uuid" });
+});
+
+test("fetchIssueStates reads the current state and its team's available states", async () => {
+  respond({
+    issue: {
+      state: { id: "todo", name: "Todo" },
+      team: {
+        name: "Development",
+        states: { nodes: [{ id: "done", name: "Done", type: "completed", position: 4 }] },
+      },
+    },
+  });
+  await expect(fetchIssueStates("issue-uuid")).resolves.toMatchObject({
+    state: { id: "todo", name: "Todo" },
+    team: { name: "Development" },
+  });
+  const request = lastRequest().body;
+  expect(request.query).toContain("IssueStates");
+  expect(request.query).toContain("states { nodes { id name type position } }");
+  expect(request.variables).toEqual({ id: "issue-uuid" });
+});
+
+test("updateIssueState sends the issueUpdate mutation", async () => {
+  respond({ issueUpdate: { success: true } });
+  await expect(updateIssueState("issue-uuid", "done")).resolves.toBeUndefined();
+  const request = lastRequest().body;
+  expect(request.query).toContain("issueUpdate");
+  expect(request.variables).toEqual({ issueId: "issue-uuid", stateId: "done" });
 });
 
 test("resolveIssueRef normalizes either accepted Linear reference", async () => {

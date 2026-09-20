@@ -3,7 +3,14 @@ import { claude, selectHarness } from "@salimhamed/jigs/blocks/agents";
 import { z } from "zod";
 import { deliverChange } from "#blocks/delivery/delivery";
 import { acquireLinearTicket, workItemFromHandoff } from "#blocks/tickets/linear";
-import { provisionWorktree, release, resolveMergePolicy, reviewTicket } from "#jigs";
+import {
+  postTicketNote,
+  provisionWorktree,
+  release,
+  resolveMergePolicy,
+  reviewTicket,
+  setTicketStatus,
+} from "#jigs";
 
 // This factory's model per harness. A model input left unset takes the default
 // of the harness that was actually chosen, so naming one never drags the
@@ -30,6 +37,7 @@ export async function shipWorkflow(inputs: ShipInputs) {
   "use workflow";
 
   const { claim, snapshot } = await acquireLinearTicket(inputs.ticket);
+  await setTicketStatus(snapshot.id, "In Progress");
   const worktree = await provisionWorktree({
     binding: inputs.binding,
     branch: snapshot.branchName,
@@ -58,6 +66,22 @@ export async function shipWorkflow(inputs: ShipInputs) {
       pullRequestRevisionRounds: inputs.pullRequestRevisionRounds,
     },
     merge: await resolveMergePolicy(inputs.binding),
+    on: {
+      pullRequestOpened: async () => {
+        await setTicketStatus(snapshot.id, "In Review");
+      },
+      merged: async (pr) => {
+        await setTicketStatus(snapshot.id, "Done");
+        await postTicketNote(snapshot.id, {
+          headline: `jigs finished work on ${snapshot.identifier}.`,
+          notes: [`Merged in ${pr.owner}/${pr.repo}#${pr.number}.`],
+          closing: "",
+        });
+      },
+      stopped: async () => {
+        await setTicketStatus(snapshot.id, "Todo");
+      },
+    },
   });
 
   await release();

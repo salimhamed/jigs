@@ -223,6 +223,58 @@ test("a needs-human verdict with nothing to say about the ticket carries no abou
   expect(humanCalls[0]?.halt.about).toBeUndefined();
 });
 
+test("optional callbacks run around the human halt, never around proceed", async () => {
+  const events: string[] = [];
+  verdicts = [needsHuman(), proceed()];
+  await reviewTicket({
+    runAgent: fakeAgent,
+    haltForHuman: async (humanClaim, halt) => {
+      events.push("halt");
+      return fakeHaltForHuman(humanClaim, halt);
+    },
+    postTicketNote: fakePostTicketNote,
+    fetchTicketSnapshot: async (issueId) => {
+      events.push("refresh");
+      return fakeFetchSnapshot(issueId);
+    },
+    claim,
+    snapshot,
+    harness: claude({ model: "sonnet" }),
+    cwd: "/tmp/worktree",
+    on: {
+      needsHuman: async () => {
+        events.push("needs-human");
+      },
+      humanReplied: async () => {
+        events.push("human-replied");
+      },
+    },
+  });
+  expect(events).toEqual(["needs-human", "halt", "human-replied", "refresh"]);
+
+  events.length = 0;
+  verdicts = [proceed()];
+  await reviewTicket({
+    runAgent: fakeAgent,
+    haltForHuman: fakeHaltForHuman,
+    postTicketNote: fakePostTicketNote,
+    fetchTicketSnapshot: fakeFetchSnapshot,
+    claim,
+    snapshot,
+    harness: claude({ model: "sonnet" }),
+    cwd: "/tmp/worktree",
+    on: {
+      needsHuman: async () => {
+        events.push("needs-human");
+      },
+      humanReplied: async () => {
+        events.push("human-replied");
+      },
+    },
+  });
+  expect(events).toEqual([]);
+});
+
 test("the needs-human round re-reads the ticket, so the human's reply is what the next review sees", async () => {
   verdicts = [needsHuman(), needsHuman(), proceed({ brief: "the agreed plan" })];
   const result = await review();

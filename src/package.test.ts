@@ -258,6 +258,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "renderNeedsHumanComment",
     "renderTicketNote",
     "resolveLinearIssue",
+    "setTicketStatus",
   ],
   "steps/pull-requests/index.ts": [
     "fetchPullRequestState",

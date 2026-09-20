@@ -192,6 +192,11 @@ The block that turns a ticket into an implementation brief, asking a human
 when clarification is needed. It returns a handoff when review can proceed.
 _Avoid_: intake, triage
 
+**Ticket status**:
+The named state a workflow sets on its work item to reflect its own progress.
+The workflow owns both the names and when it changes them.
+_Avoid_: lifecycle state machine, tracker configuration
+
 **Delivery**:
 The whole of carrying a work item to a merged or closed pull request:
 implementation, code review, publication, pull-request feedback, CI repair and
