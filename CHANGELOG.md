@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.39.0](https://github.com/salimhamed/jigs/compare/jigs-v0.38.4...jigs-v0.39.0) (2026-09-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* replace sweep with offline resource pruning (AGE-486) ([#290](https://github.com/salimhamed/jigs/issues/290))
+
+### Features
+
+* replace sweep with offline resource pruning (AGE-486) ([#290](https://github.com/salimhamed/jigs/issues/290)) ([29c1fe6](https://github.com/salimhamed/jigs/commit/29c1fe6076f9b8cd6b9128f661e3eb396143b806))
+
 ## [0.38.4](https://github.com/salimhamed/jigs/compare/jigs-v0.38.3...jigs-v0.38.4) (2026-09-20)
 
 
