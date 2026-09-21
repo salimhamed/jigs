@@ -48,7 +48,31 @@ be absent when the selected endpoint does not return cost metadata.
 
 ## OpenAI-compatible
 
-OpenAI-compatible endpoints are model sources whose API driver is added separately.
+Use `models.openaiCompatible({ name, baseUrl, model, apiKeyEnv?, compat? })` with
+`askModel`. `baseUrl` must be the server's full OpenAI-compatible API base,
+including `/v1`, and `model` must be the id returned by its `/models` endpoint.
+`name` labels the provider in AI SDK messages and jigs diagnostics; it does not
+select a model.
+
+Most local servers need no credential. If the server requires a bearer token,
+set it in the factory repo's `.env` and name its variable with `apiKeyEnv`; the
+descriptor stores only the variable name. `compat.supportsDeveloperRole` and
+`compat.supportsReasoningEffort` describe capabilities the server cannot report.
+Both default to `false`.
+
+Structured output uses the same strict `response_format` and zod parse as other
+direct model calls. If a server ignores `response_format`, the zod parse fails;
+that is the correct failure rather than accepting an unvalidated answer. A local
+server has no cost, so its result has no `usage.costUsd`.
+
+`jigs doctor` skips OpenAI-compatible sources because they are configured at the
+call site and doctor has no workflow request from which to learn their URL.
+When a workflow runs, the source check probes `<baseUrl>/models` and confirms the
+configured model is served.
+
+The live test reads `JIGS_TEST_OPENAI_COMPATIBLE_BASE_URL` and
+`JIGS_TEST_OPENAI_COMPATIBLE_MODEL`. It skips when either is unset or the endpoint
+is unreachable.
 
 ## OpenAI Codex
 

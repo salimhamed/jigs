@@ -5,8 +5,8 @@ import { driverFor, drivers } from "./index.ts";
 test("driver lookup preserves installed kinds and rejects unregistered kinds", () => {
   expect(driverFor("claude")).toBe(drivers.claude);
   expect(driverFor("openrouter")).toBe(drivers.openrouter);
+  expect(driverFor("openai-compatible")).toBe(drivers["openai-compatible"]);
   expect(driverFor("pi")).toBeUndefined();
-  expect(driverFor("openai-compatible")).toBeUndefined();
 });
 
 test("every registered driver declares its operational contract and documentation", () => {
@@ -17,7 +17,7 @@ test("every registered driver declares its operational contract and documentatio
   for (const driver of Object.values(drivers)) {
     if (driver.family === "harness") expect(driver.runtimeChecks()).not.toHaveLength(0);
     else expect(driver.runtimeChecks()).toEqual([]);
-    expect(driver.authChecks()).not.toHaveLength(0);
+    if (driver.kind !== "openai-compatible") expect(driver.authChecks()).not.toHaveLength(0);
     expect(driver.envAllowlist()).toBeInstanceOf(Array);
     if (driver.family === "harness") {
       expect(driver.sessionPointer).toEqual({

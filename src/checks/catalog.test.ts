@@ -128,6 +128,11 @@ test("doctor checks the OpenRouter credential only when it is configured", () =>
   expect(doctorChecks().map((check) => check.id)).toContain("model.openrouter-api-key");
 });
 
+test("doctor omits checks that require a call-site model descriptor", () => {
+  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  expect(doctorChecks().map((check) => check.id)).not.toContain("model.openai-compatible-runtime");
+});
+
 test("doctor checks aws only when a profile is set, having no manifest to read", () => {
   // Doctor asks for every declared binding, so it reads a factory config;
   // this one does not exist, which collapses to a single failed check.

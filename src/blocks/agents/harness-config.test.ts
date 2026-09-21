@@ -25,10 +25,34 @@ test("descriptor namespaces build tagged plain data", () => {
       apiKeyEnv: "TEAM_OPENROUTER_KEY",
     },
   );
-  expect(models.openaiCompatible("local", { baseUrl: "http://localhost:1234/v1" })).toEqual({
+  expect(
+    models.openaiCompatible({
+      name: "north-desktop",
+      baseUrl: "http://localhost:1234/v1",
+      model: "local",
+    }),
+  ).toEqual({
     kind: "openai-compatible",
+    name: "north-desktop",
     model: "local",
     baseUrl: "http://localhost:1234/v1",
+    compat: { supportsDeveloperRole: false, supportsReasoningEffort: false },
+  });
+  expect(
+    models.openaiCompatible({
+      name: "secured-server",
+      baseUrl: "https://models.example/v1",
+      model: "served-model",
+      apiKeyEnv: "LOCAL_MODEL_KEY",
+      compat: { supportsDeveloperRole: true, supportsReasoningEffort: true },
+    }),
+  ).toEqual({
+    kind: "openai-compatible",
+    name: "secured-server",
+    baseUrl: "https://models.example/v1",
+    model: "served-model",
+    apiKeyEnv: "LOCAL_MODEL_KEY",
+    compat: { supportsDeveloperRole: true, supportsReasoningEffort: true },
   });
 });
 
