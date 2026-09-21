@@ -46,7 +46,17 @@ export type HarnessKind = Harness["kind"];
 /** An OpenRouter API model source. */
 export type OpenrouterSource = { kind: "openrouter"; model: string; apiKeyEnv: string };
 /** An OpenAI-compatible API model source. */
-export type OpenaiCompatibleSource = { kind: "openai-compatible"; model: string; baseUrl: string };
+export type OpenaiCompatibleSource = {
+  kind: "openai-compatible";
+  name: string;
+  baseUrl: string;
+  model: string;
+  apiKeyEnv?: string;
+  compat: {
+    supportsDeveloperRole: boolean;
+    supportsReasoningEffort: boolean;
+  };
+};
 /** The Codex subscription model source used only by the Pi harness. */
 export type OpenaiCodexSource = { kind: "openai-codex"; model: string };
 /** Any configured source from which a model can answer. */
@@ -61,8 +71,26 @@ export const models = {
   openrouter(model: string, options: { apiKeyEnv?: string } = {}): OpenrouterSource {
     return { kind: "openrouter", model, apiKeyEnv: options.apiKeyEnv ?? "OPENROUTER_API_KEY" };
   },
-  openaiCompatible(model: string, options: { baseUrl: string }): OpenaiCompatibleSource {
-    return { kind: "openai-compatible", model, ...options };
+  /** Build a source for an OpenAI-compatible server. Both compatibility hints default to false. */
+  openaiCompatible(options: {
+    name: string;
+    baseUrl: string;
+    model: string;
+    apiKeyEnv?: string;
+    compat?: {
+      supportsDeveloperRole?: boolean;
+      supportsReasoningEffort?: boolean;
+    };
+  }): OpenaiCompatibleSource {
+    const { compat, ...source } = options;
+    return {
+      kind: "openai-compatible",
+      ...source,
+      compat: {
+        supportsDeveloperRole: compat?.supportsDeveloperRole ?? false,
+        supportsReasoningEffort: compat?.supportsReasoningEffort ?? false,
+      },
+    };
   },
   openaiCodex(model: string): OpenaiCodexSource {
     return { kind: "openai-codex", model };

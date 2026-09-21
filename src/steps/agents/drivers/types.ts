@@ -33,7 +33,7 @@ export interface Driver<K extends HarnessKind | ModelKind> {
   ask?(request: AgentRequest | ModelRequest, context: DriverContext): Promise<ExecutorGeneration>;
   run?(request: AgentRequest, context: DriverContext): Promise<ExecutorGeneration>;
   decide?: undefined;
-  runtimeChecks(): Check[];
+  runtimeChecks(request?: AgentRequest | ModelRequest): Check[];
   authChecks(request?: AgentRequest | ModelRequest): Check[];
   jitChecks?(request: AgentRequest): Check[];
   envAllowlist(request?: AgentRequest | ModelRequest): readonly string[];

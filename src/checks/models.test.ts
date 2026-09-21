@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
-import { modelApiKeyCheck } from "./models.ts";
+import { modelApiKeyCheck, openaiCompatibleRuntimeCheck } from "./models.ts";
 
 test("an API model credential check requires the named environment variable without probing", async () => {
   const missing = await modelApiKeyCheck("OPENROUTER_API_KEY", {}).run();
@@ -13,4 +13,66 @@ test("an API model credential check requires the named environment variable with
   await expect(
     modelApiKeyCheck("TEAM_OPENROUTER_KEY", { TEAM_OPENROUTER_KEY: "configured" }).run(),
   ).resolves.toEqual({ ok: true });
+});
+
+const source = {
+  kind: "openai-compatible" as const,
+  name: "north-desktop",
+  baseUrl: "http://localhost:1234/v1",
+  model: "wanted-model",
+  compat: { supportsDeveloperRole: false, supportsReasoningEffort: false },
+};
+
+test("an OpenAI-compatible runtime check confirms the configured model is served", async () => {
+  let request: Request | undefined;
+  const check = openaiCompatibleRuntimeCheck(source, {
+    fetch: async (input, init) => {
+      request = new Request(input, init);
+      return new Response(JSON.stringify({ data: [{ id: "wanted-model" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+
+  await expect(check.run()).resolves.toEqual({
+    ok: true,
+    detail: "http://localhost:1234/v1/models serves wanted-model",
+  });
+  expect(request?.method).toBe("GET");
+  expect(request?.url).toBe("http://localhost:1234/v1/models");
+});
+
+test("an unreachable OpenAI-compatible endpoint has a reachability repair", async () => {
+  const check = openaiCompatibleRuntimeCheck(source, {
+    fetch: async () => {
+      throw new TypeError("fetch failed");
+    },
+  });
+
+  await expect(check.run()).resolves.toEqual({
+    ok: false,
+    reason: "north-desktop is unreachable at http://localhost:1234/v1/models: fetch failed",
+    repair:
+      "start north-desktop and make its OpenAI-compatible API available at http://localhost:1234/v1",
+  });
+});
+
+test("an OpenAI-compatible endpoint names a missing model and truncates its available list", async () => {
+  const check = openaiCompatibleRuntimeCheck(source, {
+    fetch: async () =>
+      new Response(
+        JSON.stringify({
+          data: ["one", "two", "three", "four", "five", "six", "seven"].map((id) => ({ id })),
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+  });
+
+  await expect(check.run()).resolves.toEqual({
+    ok: false,
+    reason:
+      "north-desktop does not serve wanted-model; http://localhost:1234/v1/models lists one, two, three, four, five, and 2 more",
+    repair: "load wanted-model in north-desktop or choose one of the models the endpoint serves",
+  });
 });

@@ -1,6 +1,7 @@
 import type { HarnessKind, ModelKind } from "../../../blocks/agents/harness-config.ts";
 import { claudeDriver } from "./claude.ts";
 import { codexDriver } from "./codex.ts";
+import { openaiCompatibleDriver } from "./openai-compatible.ts";
 import { openrouterDriver } from "./openrouter.ts";
 import type { Driver } from "./types.ts";
 
@@ -11,6 +12,7 @@ type DriverRegistry = Partial<{ [K in DriverKind]: Driver<K> }>;
 export const drivers = {
   claude: claudeDriver,
   codex: codexDriver,
+  "openai-compatible": openaiCompatibleDriver,
   openrouter: openrouterDriver,
 } as const;
 

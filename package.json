@@ -135,6 +135,7 @@
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm docs:check"
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "3.0.53",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openrouter/ai-sdk-provider": "3.1.0",
     "ai": "^7.0.79",
