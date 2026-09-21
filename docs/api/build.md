@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.42.2
+# @salimhamed/jigs v0.43.0
 
 Generate and build the service files that host a factory.
 

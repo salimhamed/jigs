@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.42.2
+# @salimhamed/jigs v0.43.0
 
 Execute agent and model requests outside workflow code.
 
