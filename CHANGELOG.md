@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.42.1](https://github.com/salimhamed/jigs/compare/jigs-v0.42.0...jigs-v0.42.1) (2026-09-21)
+
+
+### Features
+
+* report a cost estimate on model and agent results ([#321](https://github.com/salimhamed/jigs/issues/321)) ([f3e674a](https://github.com/salimhamed/jigs/commit/f3e674a98c51aa2be817bb0eae1dbddd58b57c8b))
+
 ## [0.42.0](https://github.com/salimhamed/jigs/compare/jigs-v0.41.3...jigs-v0.42.0) (2026-09-21)
 
 
