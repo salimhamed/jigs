@@ -1,20 +1,10 @@
-// Harness descriptors are tagged plain data: nothing live crosses the
-// workflow/step boundary, so a factory call returns options + a kind tag and
-// the step hydrates the real provider from it.
+// Descriptors are tagged plain data: nothing live crosses the workflow/step boundary.
 
 import type { ClaudeCodeSettings } from "ai-sdk-provider-claude-code";
 import type { CodexAppServerSettings } from "ai-sdk-provider-codex-cli";
 
-// A real tool call is the only honest availability evidence — agents misreport
-// their own server list — and no tool is universally side-effect-free, so the
-// step declares which one the JIT check may call. Required: TypeScript is the
-// enforcement, not plan-time validation code.
 /** A harmless MCP tool call used to prove that a configured server is available. */
-export type McpToolProbe = {
-  tool: string;
-  arguments?: Record<string, unknown>;
-};
-
+export type McpToolProbe = { tool: string; arguments?: Record<string, unknown> };
 /** Configuration for an MCP server launched as a child process. */
 export type McpStdioServerConfig = {
   command: string;
@@ -22,71 +12,72 @@ export type McpStdioServerConfig = {
   env?: Record<string, string>;
   probe: McpToolProbe;
 };
-
 /** Configuration for an MCP server reached over HTTP. */
 export type McpHttpServerConfig = {
   url: string;
   headers?: Record<string, string>;
   probe: McpToolProbe;
 };
-
 /** An MCP server an agent harness can expose to the model. */
 export type McpServerConfig = McpStdioServerConfig | McpHttpServerConfig;
 
-type SharedHarnessOptions = {
-  model: string;
-  mcpServers?: Record<string, McpServerConfig>;
-};
+type SharedHarness = { model: string; mcpServers?: Record<string, McpServerConfig> };
 
-/** Serializable options for the Claude Code harness. */
-export type ClaudeHarnessOptions = SharedHarnessOptions & {
+/** A Claude Code harness descriptor. */
+export type ClaudeHarness = SharedHarness & {
   kind: "claude";
   effort?: NonNullable<ClaudeCodeSettings["effort"]>;
 };
-
-/** Serializable options for the Codex harness. */
-export type CodexHarnessOptions = SharedHarnessOptions & {
+/** A Codex harness descriptor. */
+export type CodexHarness = SharedHarness & {
   kind: "codex";
   effort?: Extract<
     NonNullable<CodexAppServerSettings["effort"]>,
     "none" | "minimal" | "low" | "medium" | "high" | "xhigh"
   >;
 };
+/** A Pi harness descriptor. Its driver is supplied separately. */
+export type PiHarness = SharedHarness & { kind: "pi"; provider: OpenaiCodexSource };
+/** A serializable agent-program descriptor. */
+export type Harness = ClaudeHarness | CodexHarness | PiHarness;
+/** The stable name of an agent harness. */
+export type HarnessKind = Harness["kind"];
 
-/** Options accepted by either supported agent harness. */
-export type HarnessOptions = ClaudeHarnessOptions | CodexHarnessOptions;
+/** An OpenRouter API model source. */
+export type OpenrouterSource = { kind: "openrouter"; model: string };
+/** An OpenAI-compatible API model source. */
+export type OpenaiCompatibleSource = { kind: "openai-compatible"; model: string; baseUrl: string };
+/** The Codex subscription model source used only by the Pi harness. */
+export type OpenaiCodexSource = { kind: "openai-codex"; model: string };
+/** Any configured source from which a model can answer. */
+export type ModelSource = OpenrouterSource | OpenaiCompatibleSource | OpenaiCodexSource;
+/** A model source accepted by a direct model call. */
+export type AskableModelSource = Exclude<ModelSource, OpenaiCodexSource>;
+/** The stable name of a model source. */
+export type ModelKind = ModelSource["kind"];
 
-/** A complete Claude Code harness descriptor. */
-export type ClaudeHarnessConfig = ClaudeHarnessOptions;
-/** A complete Codex harness descriptor. */
-export type CodexHarnessConfig = CodexHarnessOptions;
+/** Constructors for model-source descriptors. */
+export const models = {
+  openrouter(model: string): OpenrouterSource {
+    return { kind: "openrouter", model };
+  },
+  openaiCompatible(model: string, options: { baseUrl: string }): OpenaiCompatibleSource {
+    return { kind: "openai-compatible", model, ...options };
+  },
+  openaiCodex(model: string): OpenaiCodexSource {
+    return { kind: "openai-codex", model };
+  },
+} as const;
 
-/** A complete descriptor for a supported agent harness. */
-export type HarnessConfig = ClaudeHarnessConfig | CodexHarnessConfig;
-
-/** Build a Claude Code harness descriptor. */
-export function claude(options: Omit<ClaudeHarnessOptions, "kind">): ClaudeHarnessConfig {
-  return { kind: "claude", ...options };
-}
-
-/** Build a Codex harness descriptor. */
-export function codex(options: Omit<CodexHarnessOptions, "kind">): CodexHarnessConfig {
-  return { kind: "codex", ...options };
-}
-
-/** The stable name of a supported agent harness. */
-export type HarnessKind = HarnessConfig["kind"];
-
-const harnesses = { claude, codex } as const;
-
-/**
- * Build a harness from the name a caller chose, falling back to that harness's
- * own default model. The map is the factory's: jigs knows no model names.
- */
-export function selectHarness(
-  harness: HarnessKind,
-  defaultModels: Record<HarnessKind, string>,
-  model?: string,
-): HarnessConfig {
-  return harnesses[harness]({ model: model ?? defaultModels[harness] });
-}
+/** Constructors for agent-harness descriptors. */
+export const harnesses = {
+  claude(model: string, options: Omit<ClaudeHarness, "kind" | "model"> = {}): ClaudeHarness {
+    return { kind: "claude", model, ...options };
+  },
+  codex(model: string, options: Omit<CodexHarness, "kind" | "model"> = {}): CodexHarness {
+    return { kind: "codex", model, ...options };
+  },
+  pi(model: string, options: Omit<PiHarness, "kind" | "model">): PiHarness {
+    return { kind: "pi", model, ...options };
+  },
+} as const;

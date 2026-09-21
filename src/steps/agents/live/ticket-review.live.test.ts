@@ -1,8 +1,8 @@
 import path from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { codex } from "../../../blocks/agents/harness-config.ts";
+import { harnesses } from "../../../blocks/agents/harness-config.ts";
 import {
-  buildModelRequest,
+  buildAskAgentRequest,
   parseOutput,
   type RunAgentOptions,
 } from "../../../blocks/agents/plan.ts";
@@ -14,8 +14,8 @@ import type { TicketSnapshot } from "../../../blocks/linear/snapshot.ts";
 import {
   type AgentExecutionDependencies,
   defaultAgentExecutionDependencies,
+  executeAgent,
 } from "../execute-agent.ts";
-import { executeModel } from "../execute-model-request.ts";
 import { ensureManagedCodexHome } from "../harnesses/codex-home.ts";
 import { stripApiCredentials } from "../harnesses/env.ts";
 import { assertLivePreconditions } from "../harnesses/live/fixtures/live-env.ts";
@@ -75,8 +75,8 @@ const answeredSnapshot: TicketSnapshot = {
 test("ticket review asks every knowable decision in one needs-human round", async () => {
   const runId = `live-ticket-review-${crypto.randomUUID().slice(0, 8)}`;
   const runAgent: RunAgentFn = async <T>(config: RunAgentOptions<T>) => {
-    const result = await executeModel(
-      buildModelRequest({
+    const result = await executeAgent(
+      buildAskAgentRequest({
         harness: config.harness,
         prompt: config.prompt,
         ...(config.output === undefined ? {} : { output: config.output }),
@@ -84,6 +84,8 @@ test("ticket review asks every knowable decision in one needs-human round", asyn
       { workflowRunId: runId },
       deps,
     );
+    if ("jitFailure" in result || "resumeFailed" in result)
+      throw new Error("unexpected agent marker");
     return {
       ...result,
       output: parseOutput(config.output, result.output),
@@ -119,7 +121,7 @@ test("ticket review asks every knowable decision in one needs-human round", asyn
       hook: {} as TicketClaim["hook"],
     },
     snapshot,
-    harness: codex({ model: "gpt-5.5" }),
+    harness: harnesses.codex("gpt-5.5"),
     cwd: "/tmp",
   });
 

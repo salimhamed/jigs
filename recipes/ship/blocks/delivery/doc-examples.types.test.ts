@@ -9,7 +9,7 @@
 // doc verbatim; change one and change the other.
 
 import type { Worktree } from "@salimhamed/jigs";
-import { claude, codex, selectHarness } from "@salimhamed/jigs/blocks/agents";
+import { harnesses } from "@salimhamed/jigs/blocks/agents";
 import type { HaltForHumanFn, TicketClaim } from "@salimhamed/jigs/blocks/linear";
 import type { MergePolicy, PullRequestRef } from "@salimhamed/jigs/blocks/pull-requests";
 import { expect, test } from "vitest";
@@ -47,8 +47,8 @@ async function chooseAgentsAndBudgets() {
     task,
     worktree,
     binding: "application",
-    implementation: { harness: codex({ model: "gpt-5.6-sol" }) },
-    review: { harness: claude({ model: "opus" }) },
+    implementation: { harness: harnesses.codex("gpt-5.6-sol") },
+    review: { harness: harnesses.claude("opus") },
     limits: {
       implementationReviewRounds: 5,
       ciFixAttempts: 3,
@@ -67,12 +67,12 @@ async function configureEachRoleIndependently() {
     task,
     worktree,
     binding: "application",
-    implementation: { harness: selectHarness("codex", defaultModels) },
-    review: { harness: selectHarness("claude", defaultModels) },
-    ciRepair: { harness: codex({ model: "gpt-5.6-sol-codex" }) },
-    pullRequestRevision: { harness: claude({ model: "sonnet" }) },
+    implementation: { harness: harnesses.codex(defaultModels.codex) },
+    review: { harness: harnesses.claude(defaultModels.claude) },
+    ciRepair: { harness: harnesses.codex("gpt-5.6-sol-codex") },
+    pullRequestRevision: { harness: harnesses.claude("sonnet") },
     pullRequestDescription: {
-      harness: claude({ model: "haiku" }),
+      harness: harnesses.claude("haiku"),
       transform: (description) => ({ ...description, title: `[factory] ${description.title}` }),
     },
     limits: {
@@ -87,7 +87,7 @@ async function configureEachRoleIndependently() {
 
 // "Own the prompts", extending the shipped default.
 const reviewExtendingTheDefault = {
-  harness: claude({ model: "opus" }),
+  harness: harnesses.claude("opus"),
   prompt: async (context: ReviewPromptContext) =>
     `${await context.renderDefaultPrompt()}
 
@@ -96,7 +96,7 @@ Also check authorization and migration compatibility.`,
 
 // "Own the prompts", replacing it outright from the role's own context.
 const implementationReplacingTheDefault = {
-  harness: codex({ model: "gpt-5.6-sol" }),
+  harness: harnesses.codex("gpt-5.6-sol"),
   prompt: (context: ImplementationPromptContext) => `
 Round ${context.attempt} on ${context.task.key}: ${context.task.title}
 
@@ -150,7 +150,7 @@ async function customTaskFieldsSurvive() {
     worktree,
     binding: "application",
     implementation: {
-      harness: codex({ model: "gpt-5.6-sol" }),
+      harness: harnesses.codex("gpt-5.6-sol"),
       prompt: async (context) =>
         [
           await context.renderDefaultPrompt(),
@@ -158,7 +158,7 @@ async function customTaskFieldsSurvive() {
           `Acceptance criteria:\n${context.task.acceptance.join("\n")}`,
         ].join("\n\n"),
     },
-    review: { harness: claude({ model: "opus" }) },
+    review: { harness: harnesses.claude("opus") },
     limits: {
       implementationReviewRounds: 5,
       ciFixAttempts: 3,

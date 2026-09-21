@@ -11,11 +11,11 @@ This is a fragment to use inside a factory workflow. `worktreePath` stands for
 the path of a worktree you have provisioned for this run:
 
 ```ts
-import { claude } from "@salimhamed/jigs/blocks/agents";
+import { harnesses } from "@salimhamed/jigs/blocks/agents";
 import { runAgent } from "#jigs";
 
 const result = await runAgent({
-  harness: claude({ model: "sonnet" }),
+  harness: harnesses.claude("sonnet"),
   cwd: worktreePath,
   prompt: "Read the README and summarize how to run this project's tests. Do not change files.",
 });

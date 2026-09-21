@@ -9,22 +9,22 @@ import type {
   AgentRequest,
   AgentResult,
   AgentSession,
+  AskAgentOptions,
   AskModelOptions,
-  ClaudeHarnessConfig,
-  ClaudeHarnessOptions,
-  CodexHarnessConfig,
-  CodexHarnessOptions,
+  ClaudeHarness,
+  CodexHarness,
   ExecuteAgentStep,
   ExecuteModelStep,
-  HarnessConfig,
+  Harness,
   HarnessKind,
-  HarnessOptions,
   McpHttpServerConfig,
   McpServerConfig,
   McpStdioServerConfig,
   McpToolProbe,
+  ModelKind,
   ModelRequest,
   ModelResult,
+  ModelSource,
   ModelUsage,
   OutputJsonSchema,
   RebuildContextPrompt,
@@ -105,12 +105,12 @@ type BlocksTypeSurface = {
   agentStepResult: AgentResult;
   agentWire: AgentRequest;
   askStepConfig: AskModelOptions;
+  askAgentConfig: AskAgentOptions;
   askWire: ModelRequest;
   attend: Attend<number>;
   checkForTicketHumanReply: CheckForTicketHumanReply;
-  claudeHarnessConfig: ClaudeHarnessConfig;
-  codexHarnessConfig: CodexHarnessConfig;
-  codexHarnessOptions: CodexHarnessOptions;
+  claudeHarnessConfig: ClaudeHarness;
+  codexHarnessConfig: CodexHarness;
   gateFn: PullRequestGateFn;
   gateWake: PullRequestWake;
   markerKind: MarkerKind;
@@ -122,13 +122,13 @@ type BlocksTypeSurface = {
   haltForHumanDeps: HaltForHumanDependencies;
   haltForHumanFn: HaltForHumanFn;
   handoff: TicketHandoff;
-  harnessConfig: HarnessConfig;
+  harnessConfig: Harness;
   harnessName: HarnessKind;
   halt: Halt;
   haltOptionSchema: HaltOption;
   haltQuestionSchema: HaltQuestion;
-  harnessOptions: HarnessOptions;
-  claudeHarnessOptions: ClaudeHarnessOptions;
+  modelKind: ModelKind;
+  modelSource: ModelSource;
   humanReply: HumanReply;
   jsonValue: JsonValue;
   mcpHttpServer: McpHttpServerConfig;

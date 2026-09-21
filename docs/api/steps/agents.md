@@ -10,6 +10,10 @@ Wrap steps in a factory-owned `"use step"` file. Never call them directly from a
 
 Injectable provider and environment operations used by agent execution.
 
+#### Extends
+
+- `DriverDependencies`
+
 #### Properties
 
 ##### withCodexAppServer()
@@ -32,6 +36,10 @@ Injectable provider and environment operations used by agent execution.
 
 `Promise`\<`T`\>
 
+###### Inherited from
+
+`DriverDependencies.withCodexAppServer`
+
 #### Methods
 
 ##### ensureCodexHome()
@@ -47,6 +55,10 @@ Injectable provider and environment operations used by agent execution.
 ###### Returns
 
 `string`
+
+###### Inherited from
+
+`DriverDependencies.ensureCodexHome`
 
 ##### generateText()
 
@@ -80,6 +92,10 @@ Injectable provider and environment operations used by agent execution.
 
 `Promise`\<`ExecutorGeneration`\>
 
+###### Inherited from
+
+`DriverDependencies.generateText`
+
 ##### jitFailures()
 
 > **jitFailures**(`wire`): `Promise`\<`object` & `object`[] \| `undefined`\>
@@ -100,7 +116,7 @@ Injectable provider and environment operations used by agent execution.
 
 > `const` **defaultAgentExecutionDependencies**: [`AgentExecutionDependencies`](#agentexecutiondependencies)
 
-Production dependencies for executing Claude Code and Codex requests.
+Production dependencies for executing harness requests.
 
 ## Functions
 
@@ -108,7 +124,7 @@ Production dependencies for executing Claude Code and Codex requests.
 
 > **executeAgent**(`wire`, `metadata`, `deps`): `Promise`\<`AgentResult` \| \{ `jitFailure`: `object` & `object`[]; \} \| \{ `resumeFailed`: `string`; \}\>
 
-Run an agent in its worktree, checking required tools before it starts.
+Run or ask an agent harness, checking worktree requirements before a run.
 
 #### Parameters
 
@@ -130,11 +146,29 @@ Run an agent in its worktree, checking required tools before it starts.
 
 ***
 
+### executeJev()
+
+> **executeJev**(`_wire`): `Promise`\<`never`\>
+
+Reserved durable wrapper target for judge/evaluate/verify requests.
+
+#### Parameters
+
+##### \_wire
+
+`unknown`
+
+#### Returns
+
+`Promise`\<`never`\>
+
+***
+
 ### executeModel()
 
 > **executeModel**(`wire`, `metadata`, `deps`): `Promise`\<`ModelResult`\>
 
-Ask a model a question without giving it a worktree or tools.
+Ask an API-backed model source.
 
 #### Parameters
 

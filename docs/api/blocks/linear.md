@@ -356,7 +356,7 @@ Agent, ticket and durable operations used by the ticket-review loop.
 
 ##### harness
 
-> **harness**: `HarnessConfig`
+> **harness**: `Harness`
 
 ##### on?
 

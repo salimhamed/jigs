@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { generateText } from "ai";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { claudeStepSettings } from "../claude.ts";
+import { claudeStepSettings } from "../../drivers/claude-support.ts";
 import { stripApiCredentials } from "../env.ts";
 import { claudeCode } from "../index.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
@@ -23,7 +23,7 @@ test("Claude Code smoke: subscription auth drives an agentic step, no API keys",
   const scratch = makeScratchRepo(tmp);
   const codeword = `JIGS-LIVE-${crypto.randomUUID().slice(0, 8)}`;
 
-  const model = claudeCode("sonnet", claudeStepSettings({ cwd: scratch }));
+  const model = claudeCode("haiku", claudeStepSettings({ cwd: scratch }));
   const result = await generateText({
     model,
     prompt: `Write a file live-probe.txt at the repo root containing exactly "${codeword}" on one line, then confirm what you wrote.`,

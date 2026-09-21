@@ -156,8 +156,34 @@ abandoned.
 _Avoid_: orphan, stale worktree
 
 **Harness**:
-The coding-agent runtime used by an agent step, such as Claude Code or Codex.
-_Avoid_: agent CLI, backend, sandbox
+An agent program jigs spawns, such as Claude Code, Codex or Pi. A harness owns
+the agent loop and may use tools, a worktree and a resumable session.
+_Avoid_: model, model source, backend, sandbox
+
+**Model source**:
+An API endpoint from which a model answers directly, without an agent program.
+_Avoid_: harness, provider CLI, agent
+
+**Driver**:
+The step-side implementation that hydrates one model source or harness,
+declaring its checks, environment allowlist, session metadata and execution verbs.
+_Avoid_: adapter, backend, provider
+
+**runAgent**:
+Run a harness with a working directory, tools and optional session continuation.
+_Avoid_: askAgent, askModel, askJev
+
+**askAgent**:
+Ask a harness for one answer without a working directory or tools.
+_Avoid_: runAgent, askModel, askJev
+
+**askModel**:
+Ask a model source directly through its API driver.
+_Avoid_: runAgent, askAgent, askJev
+
+**askJev**:
+Ask a model source to judge, evaluate or verify an artifact under a dedicated contract.
+_Avoid_: runAgent, askAgent, askModel
 
 **Activation**:
 One execution of a run’s workflow body following launch or a wake.

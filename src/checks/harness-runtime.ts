@@ -2,11 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import semver from "semver";
 import type { HarnessKind } from "../blocks/agents/harness-config.ts";
-import {
-  resolveClaudeExecutable,
-  resolveCodexExecutable,
-} from "../steps/agents/harnesses/executables.ts";
-import { DEFAULT_MIN_CODEX_VERSION } from "../steps/agents/harnesses/index.ts";
+import { drivers } from "../steps/agents/drivers/index.ts";
 import { PROBE_TIMEOUT_MS } from "./catalog.ts";
 
 // Are the harness CLIs installed, and is codex new enough? The service's
@@ -50,10 +46,16 @@ const execFileAsync = promisify(execFile);
 // Said on every failure: a working `codex --version` in a terminal is what
 // makes this easy to misread.
 const PATH_CAVEAT =
-  "service may not have the same PATH as your shell — start it from a shell where `claude` and `codex` both run";
+  "service may not have the same PATH as your shell — start it from a shell where each required harness runs";
 
-const resolveDefault = (harness: HarnessKind, env: NodeJS.ProcessEnv): string =>
-  harness === "claude" ? resolveClaudeExecutable(env) : resolveCodexExecutable(env);
+const resolveDefault = (harness: HarnessKind, env: NodeJS.ProcessEnv): string => {
+  const driver = (drivers as Record<string, (typeof drivers)[keyof typeof drivers] | undefined>)[
+    harness
+  ];
+  if (driver?.resolveExecutable === undefined)
+    throw new Error(`no runtime resolver for ${harness}`);
+  return driver.resolveExecutable(env);
+};
 
 export async function harnessRuntime(
   harness: HarnessKind,
@@ -62,7 +64,11 @@ export async function harnessRuntime(
   const resolve = deps.resolve ?? resolveDefault;
   const exec = deps.exec ?? execFileAsync;
   const env = deps.env ?? process.env;
-  const minimum = harness === "codex" ? DEFAULT_MIN_CODEX_VERSION : null;
+  const driver = (drivers as Record<string, (typeof drivers)[keyof typeof drivers] | undefined>)[
+    harness
+  ];
+  const minimum =
+    driver === undefined || !("minimumVersion" in driver) ? null : driver.minimumVersion;
   const floor = minimum === null ? "" : ` (minimum ${minimum})`;
   const fail = (path: string | null, version: string | null, line: string): HarnessRuntime => ({
     harness,

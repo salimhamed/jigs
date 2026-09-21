@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { withCodexAppServer } from "./codex.ts";
+import { withCodexAppServer } from "../drivers/codex-support.ts";
 
 const close = vi.fn(async () => {});
 

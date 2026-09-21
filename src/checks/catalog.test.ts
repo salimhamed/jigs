@@ -115,6 +115,10 @@ test("a workflow that does not require aws does not get it", () => {
   expect(preflightIds({ harnesses: ["claude"] })).not.toContain("aws.credentials");
 });
 
+test("model-source requirements are included in preflight", () => {
+  expect(preflightIds({ models: ["openrouter"] })).toContain("driver.openrouter");
+});
+
 test("doctor checks aws only when a profile is set, having no manifest to read", () => {
   // Doctor asks for every declared binding, so it reads a factory config;
   // this one does not exist, which collapses to a single failed check.

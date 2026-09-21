@@ -17,23 +17,47 @@ test("toModelResult maps text and usage into the uniform shape", () => {
   });
 });
 
-test("extractAgentSession reads the Claude sessionId", () => {
-  expect(extractAgentSession("claude", { "claude-code": { sessionId: "s-42" } })).toEqual({
+test("extractAgentSession reads the driver pointer", () => {
+  expect(
+    extractAgentSession(
+      "claude",
+      { "claude-code": { sessionId: "s-42" } },
+      { providerKey: "claude-code", field: "sessionId" },
+    ),
+  ).toEqual({
     harness: "claude",
     id: "s-42",
   });
 });
 
 test("extractAgentSession reads the Codex app-server threadId", () => {
-  expect(extractAgentSession("codex", { "codex-app-server": { threadId: "t-7" } })).toEqual({
+  expect(
+    extractAgentSession(
+      "codex",
+      { "codex-app-server": { threadId: "t-7" } },
+      { providerKey: "codex-app-server", field: "threadId" },
+    ),
+  ).toEqual({
     harness: "codex",
     id: "t-7",
   });
 });
 
 test("extractAgentSession is best-effort: absent or malformed metadata yields undefined", () => {
-  expect(extractAgentSession("claude", undefined)).toBeUndefined();
-  expect(extractAgentSession("claude", {})).toBeUndefined();
-  expect(extractAgentSession("codex", { "codex-app-server": { threadId: 9 } })).toBeUndefined();
-  expect(extractAgentSession("claude", { "claude-code": { sessionId: "" } })).toBeUndefined();
+  const pointer = { providerKey: "claude-code", field: "sessionId" };
+  expect(extractAgentSession("claude", undefined, pointer)).toBeUndefined();
+  expect(extractAgentSession("claude", {}, pointer)).toBeUndefined();
+  expect(
+    extractAgentSession(
+      "codex",
+      { "codex-app-server": { threadId: 9 } },
+      { providerKey: "codex-app-server", field: "threadId" },
+    ),
+  ).toBeUndefined();
+  expect(
+    extractAgentSession("claude", { "claude-code": { sessionId: "" } }, pointer),
+  ).toBeUndefined();
+  expect(
+    extractAgentSession("claude", { "claude-code": { sessionId: "s" } }, undefined),
+  ).toBeUndefined();
 });

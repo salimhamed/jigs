@@ -116,6 +116,14 @@ Injectable runtime checks and output used by the harness startup gate.
 
 `void`
 
+##### harnesses()?
+
+> `optional` **harnesses**: () => `Promise`\<(`"claude"` \| `"codex"` \| `"pi"`)[]\>
+
+###### Returns
+
+`Promise`\<(`"claude"` \| `"codex"` \| `"pi"`)[]\>
+
 ##### log()?
 
 > `optional` **log**: (`line`) => `void`
@@ -132,7 +140,13 @@ Injectable runtime checks and output used by the harness startup gate.
 
 ##### runtimes()?
 
-> `optional` **runtimes**: () => `Promise`\<`HarnessRuntime`[]\>
+> `optional` **runtimes**: (`kinds`) => `Promise`\<`HarnessRuntime`[]\>
+
+###### Parameters
+
+###### kinds
+
+(`"claude"` \| `"codex"` \| `"pi"`)[]
 
 ###### Returns
 
@@ -369,3 +383,21 @@ Start and take ownership of the Workflow World, exiting cleanly on failure.
 #### Returns
 
 `Promise`\<`boolean`\>
+
+***
+
+### requiredHarnesses()
+
+> **requiredHarnesses**(`entries`): (`"claude"` \| `"codex"` \| `"pi"`)[]
+
+Find the distinct harnesses required by the workflows a factory declares.
+
+#### Parameters
+
+##### entries
+
+`Iterable`\<`AnyWorkflowEntry`\>
+
+#### Returns
+
+(`"claude"` \| `"codex"` \| `"pi"`)[]

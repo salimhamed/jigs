@@ -4,7 +4,7 @@
 // here is tsc, through `pnpm typecheck`.
 
 import type { Worktree } from "@salimhamed/jigs";
-import type { HarnessConfig } from "@salimhamed/jigs/blocks/agents";
+import type { Harness } from "@salimhamed/jigs/blocks/agents";
 import { expect, test } from "vitest";
 import * as delivery from "./delivery.ts";
 import type {
@@ -15,7 +15,7 @@ import type {
 } from "./types.ts";
 
 declare const worktree: Worktree;
-declare const harness: HarnessConfig;
+declare const harness: Harness;
 
 const incident = {
   id: "68bc9696-35d5-442d-ab56-214c8cfefbec",

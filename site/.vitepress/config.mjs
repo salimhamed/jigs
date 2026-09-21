@@ -32,6 +32,7 @@ export default {
         items: [
           { text: "Run an agent", link: "/guide/agents" },
           { text: "Call a model", link: "/guide/models" },
+          { text: "Models and harnesses", link: "/guide/models-and-harnesses" },
           { text: "Request human approval", link: "/guide/human-approval" },
           { text: "Use the ship recipe", link: "/guide/ship" },
         ],

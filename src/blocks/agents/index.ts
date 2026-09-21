@@ -12,28 +12,34 @@ export {
   unwrapAgentStep,
 } from "./agent.ts";
 export { type RunAgentOrHaltDependencies, runAgentOrHalt } from "./agent-or-halt.ts";
+export { askAgent } from "./ask-agent.ts";
 export { askModel, type ExecuteModelStep } from "./ask-model.ts";
-export { type AgentSteps, bindAgentSteps } from "./bind.ts";
+export { type AgentSteps, bindAgentSteps, type ExecuteJevStep } from "./bind.ts";
 export {
-  type ClaudeHarnessConfig,
-  type ClaudeHarnessOptions,
-  type CodexHarnessConfig,
-  type CodexHarnessOptions,
-  claude,
-  codex,
-  type HarnessConfig,
+  type AskableModelSource,
+  type ClaudeHarness,
+  type CodexHarness,
+  type Harness,
   type HarnessKind,
-  type HarnessOptions,
+  harnesses,
   type McpHttpServerConfig,
   type McpServerConfig,
   type McpStdioServerConfig,
   type McpToolProbe,
-  selectHarness,
+  type ModelKind,
+  type ModelSource,
+  models,
+  type OpenaiCodexSource,
+  type OpenaiCompatibleSource,
+  type OpenrouterSource,
+  type PiHarness,
 } from "./harness-config.ts";
 export {
   type AgentRequest,
+  type AskAgentOptions,
   type AskModelOptions,
   buildAgentRequest,
+  buildAskAgentRequest,
   buildModelRequest,
   type ModelRequest,
   type OutputJsonSchema,

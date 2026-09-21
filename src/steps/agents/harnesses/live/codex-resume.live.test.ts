@@ -1,6 +1,6 @@
 import path from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { claude, codex } from "../../../../blocks/agents/harness-config.ts";
+import { harnesses } from "../../../../blocks/agents/harness-config.ts";
 import { buildAgentRequest } from "../../../../blocks/agents/plan.ts";
 import {
   type AgentExecutionDependencies,
@@ -37,7 +37,7 @@ afterAll(() => {
 
 test("a codex thread id with no rollout behind it reports resumeFailed", async () => {
   const wire = buildAgentRequest({
-    harness: codex({ model: "gpt-5.5" }),
+    harness: harnesses.codex("gpt-5.5"),
     cwd: makeScratchRepo(tmp, "codex-resume"),
     prompt: "Reply with exactly OK and nothing else.",
     resume: { harness: "codex", id: `0199${crypto.randomUUID().slice(4)}` },
@@ -55,7 +55,7 @@ test("a codex thread id with no rollout behind it reports resumeFailed", async (
 
 test("a claude session id with no transcript behind it reports resumeFailed", async () => {
   const wire = buildAgentRequest({
-    harness: claude({ model: "sonnet" }),
+    harness: harnesses.claude("sonnet"),
     cwd: makeScratchRepo(tmp, "claude-resume"),
     prompt: "Reply with exactly OK and nothing else.",
     resume: { harness: "claude", id: crypto.randomUUID() },

@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { type ExecuteAgentStep, JitCheckError, runAgent } from "../../blocks/agents/agent.ts";
-import { claude } from "../../blocks/agents/harness-config.ts";
+import { harnesses } from "../../blocks/agents/harness-config.ts";
 import { buildAgentRequest } from "../../blocks/agents/plan.ts";
 import { executeAgent } from "./execute-agent.ts";
 
@@ -10,8 +10,7 @@ const runStep: ExecuteAgentStep = (wire) => executeAgent(wire, { workflowRunId: 
 
 test("an agent step whose declared MCP server cannot start returns the JIT failure instead of throwing", async () => {
   const wire = buildAgentRequest({
-    harness: claude({
-      model: "sonnet",
+    harness: harnesses.claude("sonnet", {
       mcpServers: {
         linear: {
           command: "definitely-not-a-binary",
@@ -38,8 +37,7 @@ test("an agent step whose declared MCP server cannot start returns the JIT failu
 test("runAgent() turns a failed JIT check into a thrown JitCheckError carrying the repair text", async () => {
   const failing = runAgent(
     {
-      harness: claude({
-        model: "sonnet",
+      harness: harnesses.claude("sonnet", {
         mcpServers: {
           linear: {
             command: "definitely-not-a-binary",

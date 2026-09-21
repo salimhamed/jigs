@@ -9,12 +9,12 @@ This fragment belongs inside a factory workflow. It supplies all the text the
 model needs and asks for a structured answer:
 
 ```ts
-import { claude } from "@salimhamed/jigs/blocks/agents";
+import { models } from "@salimhamed/jigs/blocks/agents";
 import { z } from "zod";
 import { askModel } from "#jigs";
 
 const result = await askModel({
-  harness: claude({ model: "sonnet" }),
+  model: models.openrouter("anthropic/claude-haiku-4.5"),
   prompt: "Summarize this result in one sentence: The build passed, but two integration tests failed because the database was unavailable.",
   output: z.object({ summary: z.string() }),
 });
@@ -22,9 +22,9 @@ const result = await askModel({
 // result.output.summary is a string validated against the schema.
 ```
 
-The call uses your authenticated harness. Choose a model it supports. A model
-request can include a `system` instruction, but it cannot use MCP servers;
-configure tool access on `runAgent` instead.
+The call uses the model source's own API driver. A model request can include a
+`system` instruction, but it cannot use MCP servers; configure tool access on
+`runAgent` instead.
 
 The durable operation records the response. Your workflow receives `text`, the
 parsed `output` when you supplied a schema, and usage information when the
