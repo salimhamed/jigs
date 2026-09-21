@@ -41,7 +41,7 @@ test("a declared server that starts and answers its probe tool passes", async ()
   ).toEqual({ id: "mcp.linear", label: "MCP server linear", ok: true });
 });
 
-test("a server is spawned with the step's environment, not the SDK's minimal default", async () => {
+test("a server does not inherit ambient credential-shaped variables", async () => {
   vi.stubEnv("PROBE_TOKEN", "ambient");
   expect(
     await check({
@@ -49,7 +49,12 @@ test("a server is spawned with the step's environment, not the SDK's minimal def
       args: [PROBE_SERVER],
       probe: { tool: "get_probe_token" },
     }),
-  ).toEqual({ id: "mcp.linear", label: "MCP server linear", ok: true });
+  ).toMatchObject({
+    id: "mcp.linear",
+    label: "MCP server linear",
+    ok: false,
+    reason: expect.stringContaining("PROBE-TOKEN-UNSET"),
+  });
 });
 
 test("a server is spawned in the worktree, so a relative arg resolves the way the step will resolve it", async () => {

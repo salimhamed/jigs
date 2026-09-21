@@ -1,22 +1,20 @@
 import { expect, test } from "vitest";
-import { askModel } from "./ask-model.ts";
-import { claude } from "./harness-config.ts";
+import { askAgent } from "./ask-agent.ts";
+import { harnesses } from "./harness-config.ts";
 
-const refuse = (): never => {
-  throw new Error("the step was called");
-};
-
-test("askModel() rejects a harness descriptor carrying mcpServers before any step call", async () => {
+test("askAgent rejects MCP servers before calling its step", async () => {
+  const execute = async (): Promise<never> => {
+    throw new Error("step called");
+  };
   await expect(
-    askModel(
+    askAgent(
       {
-        harness: claude({
-          model: "sonnet",
+        harness: harnesses.claude("sonnet", {
           mcpServers: { probe: { command: "node", probe: { tool: "ping" } } },
         }),
-        prompt: "never runs",
+        prompt: "never",
       },
-      refuse,
+      execute,
     ),
   ).rejects.toThrow(/no MCP universe/);
 });

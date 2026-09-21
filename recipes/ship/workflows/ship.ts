@@ -1,5 +1,5 @@
 import type { WorkflowEntry, WorkflowInputs } from "@salimhamed/jigs";
-import { claude, selectHarness } from "@salimhamed/jigs/blocks/agents";
+import { type HarnessKind, harnesses } from "@salimhamed/jigs/blocks/agents";
 import { z } from "zod";
 import { deliverChange } from "#blocks/delivery/delivery";
 import { acquireLinearTicket, workItemFromHandoff } from "#blocks/tickets/linear";
@@ -17,6 +17,11 @@ import {
 // other's default along. Pass `effort` beside `model` to tune a particular
 // harness; omit it to keep that provider's default.
 const defaultModels = { claude: "opus", codex: "gpt-5.6-sol" };
+
+function harness(kind: Extract<HarnessKind, "claude" | "codex">, model?: string) {
+  const selected = model ?? defaultModels[kind];
+  return kind === "claude" ? harnesses.claude(selected) : harnesses.codex(selected);
+}
 
 export const shipInputs = z.object({
   ticket: z.string().min(1),
@@ -45,7 +50,7 @@ export async function shipWorkflow(inputs: ShipInputs) {
   const handoff = await reviewTicket({
     claim,
     snapshot,
-    harness: claude({ model: defaultModels.claude }),
+    harness: harnesses.claude(defaultModels.claude),
     cwd: worktree.path,
   });
   const result = await deliverChange({
@@ -53,13 +58,9 @@ export async function shipWorkflow(inputs: ShipInputs) {
     worktree,
     binding: inputs.binding,
     implementation: {
-      harness: selectHarness(
-        inputs.implementationHarness,
-        defaultModels,
-        inputs.implementationModel,
-      ),
+      harness: harness(inputs.implementationHarness, inputs.implementationModel),
     },
-    review: { harness: selectHarness(inputs.reviewHarness, defaultModels, inputs.reviewModel) },
+    review: { harness: harness(inputs.reviewHarness, inputs.reviewModel) },
     limits: {
       implementationReviewRounds: inputs.implementationReviewRounds,
       ciFixAttempts: inputs.ciFixAttempts,

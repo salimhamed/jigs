@@ -1,76 +1,36 @@
-// The step side of askModel(): one model call with no worktree, no MCP universe and
-// no session pointer. It shares the executor seam with ./execute-agent.ts so a
-// test hydrating either wire stubs one set of deps.
-
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import type { ModelRequest } from "../../blocks/agents/plan.ts";
 import { type ModelResult, toModelResult } from "../../blocks/agents/result.ts";
+import { JigsError } from "../../errors.ts";
 import type { RunMetadata } from "../runtime/run-context.ts";
+import { type Driver, drivers } from "./drivers/index.ts";
 import {
   type AgentExecutionDependencies,
   defaultAgentExecutionDependencies,
-  type ExecutorGeneration,
   outputSpec,
 } from "./execute-agent.ts";
-import { codexExecStepSettings } from "./harnesses/codex.ts";
 import { scrubbedEnv } from "./harnesses/env.ts";
-import { resolveClaudeExecutable } from "./harnesses/executables.ts";
-import { claudeCode, codexExec } from "./harnesses/index.ts";
 
-/** Ask a model a question without giving it a worktree or tools. */
+/** Ask an API-backed model source. */
 export async function executeModel(
   wire: ModelRequest,
   metadata: RunMetadata,
   deps: AgentExecutionDependencies = defaultAgentExecutionDependencies,
 ): Promise<ModelResult> {
-  const runId = metadata.workflowRunId;
-  const harness = wire.harness;
-  const env = scrubbedEnv();
-  const output = outputSpec(wire.outputSchema);
-  const request = {
-    prompt: wire.prompt,
-    ...(wire.system !== undefined ? { system: wire.system } : {}),
-    ...(output !== undefined ? { output } : {}),
-  };
+  const driver = (drivers as Record<string, Driver<keyof typeof drivers> | undefined>)[
+    wire.model.kind
+  ];
+  if (driver?.ask === undefined)
+    throw new JigsError(`no driver is registered for ${wire.model.kind}`);
+  const generation = await driver.ask(wire, {
+    metadata,
+    deps,
+    env: scrubbedEnv(driver.envAllowlist),
+    output: outputSpec(wire.outputSchema),
+  });
+  return toModelResult(generation, wire.outputSchema === undefined ? undefined : generation.output);
+}
 
-  let generation: ExecutorGeneration;
-  if (harness.kind === "claude") {
-    generation = await deps.generateText({
-      // Not claudeStepSettings: a plain model call loads no worktree
-      // settings and sees no MCP universe at all.
-      model: claudeCode(harness.model, {
-        strictMcpConfig: true,
-        mcpServers: {},
-        settingSources: [],
-        env,
-        pathToClaudeCodeExecutable: resolveClaudeExecutable(),
-      }),
-      ...request,
-    });
-  } else {
-    // codex exec needs a cwd even for a pure model call; a scratch tmp dir
-    // keeps a read-only sandbox pointed away from anything real.
-    const scratch = mkdtempSync(path.join(tmpdir(), "jigs-ask-"));
-    try {
-      generation = await deps.generateText({
-        model: codexExec(
-          harness.model,
-          codexExecStepSettings({
-            cwd: scratch,
-            codexHome: deps.ensureCodexHome(runId),
-            env,
-            approvalMode: "never",
-            sandboxMode: "read-only",
-          }),
-        ),
-        ...request,
-      });
-    } finally {
-      rmSync(scratch, { recursive: true, force: true });
-    }
-  }
-
-  return toModelResult(generation, wire.outputSchema !== undefined ? generation.output : undefined);
+/** Reserved durable wrapper target for judge/evaluate/verify requests. */
+export async function executeJev(_wire: unknown): Promise<never> {
+  throw new JigsError("askJev is not implemented");
 }

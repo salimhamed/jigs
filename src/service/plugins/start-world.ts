@@ -6,6 +6,7 @@
 
 import type { World } from "@workflow/world";
 import { WorkflowRunNotFoundError } from "workflow/errors";
+import type { AnyWorkflowEntry, FactoryDefinition } from "../../blocks/factory.ts";
 import type { HarnessKind, HarnessRuntime } from "../../checks/harness-runtime.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import type { BindingClone } from "../../steps/workspaces/clone.ts";
@@ -19,12 +20,27 @@ import { installShutdown, onShutdown } from "../shutdown.ts";
 // up to do it. Inside the plugin the deferral also orders the boot: nothing
 // fallible resolves until installShutdown() can turn its failure into an exit.
 
-// Both, because the service hosts every workflow the factory declares.
-const HARNESSES: HarnessKind[] = ["claude", "codex"];
+/** Find the distinct harnesses required by the workflows a factory declares. */
+export function requiredHarnesses(entries: Iterable<AnyWorkflowEntry>): HarnessKind[] {
+  return [...new Set([...entries].flatMap((entry) => entry.requires?.harnesses ?? []))];
+}
+
+async function configuredHarnesses(): Promise<HarnessKind[]> {
+  const [{ readFactoryConfig }, { factoryRoot }] = await Promise.all([
+    import("../../config/factory-config.ts"),
+    import("../../config/factory-root.ts"),
+  ]);
+  const definition = readFactoryConfig(factoryRoot()) as unknown as FactoryDefinition;
+  const entries = await Promise.all(
+    Object.values(definition.workflows).map(async (load) => (await load()).default),
+  );
+  return requiredHarnesses(entries);
+}
 
 /** Injectable runtime checks and output used by the harness startup gate. */
 export interface HarnessRuntimeGateDeps {
-  runtimes?: () => Promise<HarnessRuntime[]>;
+  runtimes?: (kinds: HarnessKind[]) => Promise<HarnessRuntime[]>;
+  harnesses?: () => Promise<HarnessKind[]>;
   exit?: (code: number) => void;
   log?: (line: string) => void;
   error?: (line: string) => void;
@@ -35,13 +51,13 @@ export interface HarnessRuntimeGateDeps {
 /** Refuse service startup when a required agent harness is unavailable. */
 export async function gateOnHarnessRuntimes(deps: HarnessRuntimeGateDeps = {}): Promise<boolean> {
   const log = deps.log ?? ((line: string) => console.log(line));
-  const resolve =
-    deps.runtimes ??
-    (async () => (await import("../../checks/harness-runtime.ts")).harnessRuntimes(HARNESSES));
-
   let runtimes: HarnessRuntime[];
   try {
-    runtimes = await resolve();
+    const kinds = await (deps.harnesses ?? configuredHarnesses)();
+    runtimes =
+      deps.runtimes === undefined
+        ? await (await import("../../checks/harness-runtime.ts")).harnessRuntimes(kinds)
+        : await deps.runtimes(kinds);
   } catch (err) {
     (deps.error ?? ((line: string) => console.error(line)))(
       `[service] could not check the harness CLIs: ${describe(err)}`,

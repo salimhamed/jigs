@@ -1,5 +1,9 @@
-const STRIP_PATTERNS = [/^ANTHROPIC_/, /^AI_GATEWAY/, /^CLAUDE_CODE_/];
-const STRIP_KEYS = new Set(["OPENAI_API_KEY", "CLAUDECODE", "CLAUDE_PID", "CLAUDE_EFFORT"]);
+const STRIP_PATTERNS = [
+  /(?:API_KEY|ACCESS_KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL)/i,
+  /^AI_GATEWAY/,
+  /^CLAUDE_CODE_/,
+];
+const STRIP_KEYS = new Set(["CLAUDECODE", "CLAUDE_PID", "CLAUDE_EFFORT"]);
 
 function shouldStrip(key: string): boolean {
   return STRIP_KEYS.has(key) || STRIP_PATTERNS.some((pattern) => pattern.test(key));
@@ -30,8 +34,14 @@ export function stringEnv(env: NodeJS.ProcessEnv = process.env): Record<string, 
 // The exact environment an agent step runs under, as a plain string map.
 // Shared with the preflight harness checks so a check and the step it guards
 // cannot drift.
-export function scrubbedEnv(base: NodeJS.ProcessEnv = process.env): Record<string, string> {
+export function scrubbedEnv(
+  allowlist: readonly string[] = [],
+  base: NodeJS.ProcessEnv = process.env,
+): Record<string, string> {
   const env: NodeJS.ProcessEnv = { ...base };
   stripApiCredentials(env);
+  for (const key of allowlist) {
+    if (base[key] !== undefined) env[key] = base[key];
+  }
   return stringEnv(env);
 }

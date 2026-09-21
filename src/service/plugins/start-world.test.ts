@@ -9,6 +9,7 @@ import {
   gateOnHarnessRuntimes,
   gateOnWorktreeRegistry,
   gateOnWorldStart,
+  requiredHarnesses,
 } from "./start-world.ts";
 
 const RUN = "wrun_01M2Z000000000000000000000";
@@ -374,6 +375,7 @@ test("a harness CLI the shared check rejects exits the boot before anything cost
   const errors: string[] = [];
 
   const proceed = await gateOnHarnessRuntimes({
+    harnesses: async () => ["codex", "claude"],
     runtimes: async () => [passing(), failing("claude", "claude not found on PATH")],
     exit: (code) => exits.push(code),
     error: (line) => errors.push(line),
@@ -392,6 +394,7 @@ test("harnesses the shared check accepts are logged and let the boot continue", 
   const exits: number[] = [];
 
   const proceed = await gateOnHarnessRuntimes({
+    harnesses: async () => ["codex", "claude"],
     runtimes: async () => [passing(), passing({ harness: "claude", minimum: null })],
     exit: (code) => exits.push(code),
     log: (line) => logs.push(line),
@@ -400,4 +403,36 @@ test("harnesses the shared check accepts are logged and let the boot continue", 
   expect(proceed).toBe(true);
   expect(exits).toEqual([]);
   expect(logs[0]).toContain("codex 0.153.4 at /usr/local/bin/codex");
+});
+
+test("the boot gate derives harnesses only from declared workflow requirements", async () => {
+  expect(
+    requiredHarnesses([
+      { workflow: async () => {}, inputs: {} as never, requires: { harnesses: ["claude"] } },
+      {
+        workflow: async () => {},
+        inputs: {} as never,
+        requires: { harnesses: ["codex", "claude"] },
+      },
+      { workflow: async () => {}, inputs: {} as never },
+    ]),
+  ).toEqual(["claude", "codex"]);
+  expect(requiredHarnesses([])).toEqual([]);
+});
+
+test("the boot gate checks exactly the harnesses derived from the factory", async () => {
+  const checked: string[][] = [];
+
+  await expect(
+    gateOnHarnessRuntimes({
+      harnesses: async () => ["claude"],
+      runtimes: async (kinds) => {
+        checked.push(kinds);
+        return [];
+      },
+      log: () => {},
+    }),
+  ).resolves.toBe(true);
+
+  expect(checked).toEqual([["claude"]]);
 });

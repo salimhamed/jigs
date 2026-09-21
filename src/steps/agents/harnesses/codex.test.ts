@@ -1,7 +1,11 @@
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
-import { codexAppServerStepSettings, codexExecStepSettings, withCodexAppServer } from "./codex.ts";
+import {
+  codexAppServerStepSettings,
+  codexExecStepSettings,
+  withCodexAppServer,
+} from "../drivers/codex-support.ts";
 import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
 // These settings look for the CLI eagerly, so every test that is not about

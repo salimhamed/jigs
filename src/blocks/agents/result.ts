@@ -1,5 +1,5 @@
 import type { LanguageModelUsage } from "ai";
-import type { HarnessConfig } from "./harness-config.ts";
+import type { Harness } from "./harness-config.ts";
 
 // Type aliases, not interfaces: aliases carry an implicit index signature,
 // which keeps step returns assignable to the SDK's Serializable types.
@@ -9,7 +9,7 @@ export type ModelUsage = LanguageModelUsage;
 
 /** A provider session pointer that can resume the same harness. */
 export type AgentSession = {
-  harness: HarnessConfig["kind"];
+  harness: Harness["kind"];
   id: string;
 };
 
@@ -39,18 +39,14 @@ export function toModelResult(generation: ModelGeneration, output: unknown): Mod
   return { text: generation.text, output, usage: generation.usage };
 }
 
-const SESSION_POINTERS = {
-  claude: { providerKey: "claude-code", field: "sessionId" },
-  codex: { providerKey: "codex-app-server", field: "threadId" },
-} as const;
-
 // Best-effort: session pointers are capturable only at step time, but a
 // missing one must never fail the step the agent just finished.
 export function extractAgentSession(
   harness: AgentSession["harness"],
   providerMetadata: ProviderMetadataLike | undefined,
+  pointer: { providerKey: string; field: string } | undefined,
 ): AgentSession | undefined {
-  const pointer = SESSION_POINTERS[harness];
+  if (pointer === undefined) return undefined;
   const id = providerMetadata?.[pointer.providerKey]?.[pointer.field];
   if (typeof id !== "string" || id === "") return undefined;
   return { harness, id };

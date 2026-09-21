@@ -6,7 +6,7 @@
 // argv: <cwd> <codexHome> <resultFile>
 import { writeFileSync } from "node:fs";
 import { generateText } from "ai";
-import { codexAppServerStepSettings, withCodexAppServer } from "../../codex.ts";
+import { codexAppServerStepSettings, withCodexAppServer } from "../../../drivers/codex-support.ts";
 import { stripApiCredentials } from "../../env.ts";
 
 const [cwd, codexHome, resultFile] = process.argv.slice(2);
@@ -19,7 +19,7 @@ stripApiCredentials();
 
 const result = await withCodexAppServer(async (provider) => {
   const model = provider(
-    "gpt-5.5",
+    "gpt-5.6-luna",
     codexAppServerStepSettings({
       cwd,
       codexHome,

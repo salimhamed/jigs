@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { generateText } from "ai";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { codexExecStepSettings } from "../codex.ts";
+import { codexExecStepSettings } from "../../drivers/codex-support.ts";
 import { stripApiCredentials } from "../env.ts";
 import { codexExec } from "../index.ts";
 import { makeTmpDir, managedCodexHomeState, removeTmpDir } from "../test-fixtures.ts";

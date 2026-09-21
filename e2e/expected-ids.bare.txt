@@ -8,6 +8,7 @@ step//./jigs//checkForTicketHumanReply
 step//./jigs//commentOnPullRequest
 step//./jigs//createRunDirectory
 step//./jigs//executeAgent
+step//./jigs//executeJev
 step//./jigs//executeModel
 step//./jigs//fetchPullRequestState
 step//./jigs//fetchTicketSnapshot

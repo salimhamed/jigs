@@ -6,7 +6,7 @@
 // owns a mismatch check of its own.
 
 import type { z } from "zod";
-import type { HarnessConfig } from "./harness-config.ts";
+import type { Harness } from "./harness-config.ts";
 import type { RunAgentOptions } from "./plan.ts";
 import type { AgentResult, AgentSession } from "./result.ts";
 
@@ -30,7 +30,7 @@ export type RunAgentFn = <T = undefined>(config: RunAgentOptions<T>) => Promise<
 /** Inputs for resuming an agent session with a fresh-session fallback. */
 export interface ResumeOrRebuildOptions<T> {
   runAgent: RunAgentFn;
-  harness: HarnessConfig;
+  harness: Harness;
   cwd: string;
   session?: AgentSession;
   /**

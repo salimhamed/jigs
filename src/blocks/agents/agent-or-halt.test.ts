@@ -3,7 +3,7 @@ import type { TicketClaim } from "../linear/claim.ts";
 import type { Halt, HumanReply } from "../linear/halt-for-human.ts";
 import { JitCheckError } from "./agent.ts";
 import { type RunAgentOrHaltDependencies, runAgentOrHalt } from "./agent-or-halt.ts";
-import { claude } from "./harness-config.ts";
+import { harnesses } from "./harness-config.ts";
 
 const claim = {
   issueId: "issue-1",
@@ -12,7 +12,7 @@ const claim = {
 } as TicketClaim;
 
 const config = {
-  harness: claude({ model: "sonnet" }),
+  harness: harnesses.claude("sonnet"),
   cwd: "/work/tree",
   prompt: "implement it",
 };

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { claudeStepSettings } from "./claude.ts";
+import { claudeStepSettings } from "../drivers/claude-support.ts";
 
 test("claudeStepSettings force-merges the invariants over caller options", () => {
   const settings = claudeStepSettings({

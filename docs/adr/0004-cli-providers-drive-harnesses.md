@@ -39,6 +39,8 @@ didn't discriminate, and the rest of the ledger is lopsided:
   fallback if either wrapper dies.
 - **Pi is not a v0 harness**: it has no community provider, and its harness
   adapter throws on structured output anyway. Post-v0 concern.
+  *Amended by ADR 0023: Pi is a declared harness and will run as its installed
+  subprocess rather than through an AI SDK `LanguageModel` adapter.*
 - The **Sandbox** construct leaves the domain model: nothing sits between a
   harness and its worktree. An agent step passes the worktree path as `cwd`.
 - AGE-286's findings (sandbox provider surface, lockstep pinning,

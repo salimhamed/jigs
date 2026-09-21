@@ -4,7 +4,7 @@
 // invocation is approval.
 
 import { z } from "zod";
-import type { HarnessConfig } from "../agents/harness-config.ts";
+import type { Harness } from "../agents/harness-config.ts";
 import type { RunAgentFn } from "../agents/resume-or-rebuild.ts";
 import { haltQuestionSchema } from "../human/index.ts";
 import type { TicketClaim } from "./claim.ts";
@@ -75,7 +75,7 @@ export interface ReviewTicketOptions {
   // per-activation snapshots and passes one in, which is what keeps every step
   // in an activation reading the same copy.
   snapshot: TicketSnapshot;
-  harness: HarnessConfig;
+  harness: Harness;
   cwd: string;
   // The words, which the factory owns: its own function in place of the one
   // shipped beside this block.

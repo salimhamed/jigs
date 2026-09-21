@@ -4,7 +4,7 @@ type CheckRun = Extract<PullRequestWake, { kind: "ci-red" }>["failing"][number];
 type ReviewThread = Extract<PullRequestWake, { kind: "review-comments" }>["threads"][number];
 
 import type { Worktree } from "@salimhamed/jigs";
-import type { AgentSession, HarnessConfig } from "@salimhamed/jigs/blocks/agents";
+import type { AgentSession, Harness } from "@salimhamed/jigs/blocks/agents";
 import type { MergePolicy } from "@salimhamed/jigs/blocks/pull-requests";
 import type { PullRequestDescription } from "./outputs.ts";
 import type { FindingResponse, ReviewFinding, ReviewRound } from "./review.ts";
@@ -123,7 +123,7 @@ export interface DescriptionPromptContext<TTask extends WorkItem = WorkItem> {
 
 /** A harness, and optionally the prompt its role is given instead of the default. */
 export interface DeliveryAgent<TContext> {
-  harness: HarnessConfig;
+  harness: Harness;
   prompt?: (context: TContext) => string | Promise<string>;
 }
 export type ImplementationAgent<TTask extends WorkItem = WorkItem> = DeliveryAgent<
@@ -226,7 +226,7 @@ export interface DeliveryChange<TTask extends WorkItem = WorkItem> {
    * Each role's live agent session, kept so the next attempt resumes rather
    * than rebuilds. Dropped for a role whose harness configuration changed.
    */
-  sessions: Partial<Record<AgentRoleName, { harness: HarnessConfig; session: AgentSession }>>;
+  sessions: Partial<Record<AgentRoleName, { harness: Harness; session: AgentSession }>>;
   /**
    * Every implementation-review round in order. It is what a rebuilt reviewer
    * is given in place of its lost session, and where the approving round's

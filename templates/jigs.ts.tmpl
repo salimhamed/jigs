@@ -76,6 +76,12 @@ export async function executeModel(request: ModelRequest) {
   return agentsOperations.executeModel(request, metadata);
 }
 
+/** Reserved durable wrapper for judge, evaluate and verify requests. */
+export async function executeJev(request: unknown) {
+  "use step";
+  return agentsOperations.executeJev(request);
+}
+
 /** Post a request for human input on the ticket. Use haltForHuman() to also wait for a reply. */
 export async function postTicketHumanInputRequest(issueId: string, halt: Halt) {
   "use step";
@@ -270,11 +276,14 @@ export async function mergePullRequest(
 }
 
 /** Durable operations used by agent blocks. */
-export const agentSteps = { executeAgent, executeModel };
+export const agentSteps = { executeAgent, executeJev, executeModel };
 const agents = bindAgentSteps(agentSteps);
 
 /** Run an agent with tools and validate its answer against your output schema. */
 export const runAgent = agents.runAgent;
+
+/** Ask an agent harness without tools or a worktree. */
+export const askAgent = agents.askAgent;
 
 /** Ask a model without tools and validate its answer against your output schema. */
 export const askModel = agents.askModel;

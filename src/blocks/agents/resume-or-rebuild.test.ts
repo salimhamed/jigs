@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { z } from "zod";
 import { unwrapAgentStep } from "./agent.ts";
-import { claude } from "./harness-config.ts";
+import { harnesses } from "./harness-config.ts";
 import { parseOutput, type RunAgentOptions } from "./plan.ts";
 import type { AgentResult } from "./result.ts";
 import { type RunAgentFn, resumeOrRebuild } from "./resume-or-rebuild.ts";
@@ -33,7 +33,7 @@ function recorder(options: { staleResume?: boolean } = {}) {
 }
 
 const base = {
-  harness: claude({ model: "sonnet" }),
+  harness: harnesses.claude("sonnet"),
   cwd: "/tmp/worktree",
   label: "test",
   resumePrompt: "you already hold the change",

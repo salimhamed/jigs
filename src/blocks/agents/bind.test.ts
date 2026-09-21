@@ -1,7 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { z } from "zod";
 import { type AgentSteps, bindAgentSteps } from "./bind.ts";
-import { claude } from "./harness-config.ts";
+import { models } from "./harness-config.ts";
 
 const unused = async (): Promise<never> => {
   throw new Error("unexpected step");
@@ -12,9 +12,9 @@ test("a factory can override a named step and retain typed output parsing", asyn
     text: "",
     output: { count: 3 },
   }));
-  const bound = bindAgentSteps({ executeAgent: unused, executeModel });
+  const bound = bindAgentSteps({ executeAgent: unused, executeModel, executeJev: unused });
   const result = await bound.askModel({
-    harness: claude({ model: "sonnet" }),
+    model: models.openrouter("anthropic/claude-haiku"),
     prompt: "Count",
     output: z.object({ count: z.number() }),
   });
@@ -24,7 +24,7 @@ test("a factory can override a named step and retain typed output parsing", asyn
   executeModel.mockResolvedValueOnce({ text: "", output: { count: "invalid" } });
   await expect(
     bound.askModel({
-      harness: claude({ model: "sonnet" }),
+      model: models.openrouter("anthropic/claude-haiku"),
       prompt: "Count",
       output: z.object({ count: z.number() }),
     }),
@@ -36,10 +36,10 @@ test("generic agents require no ticket or pull-request steps", async () => {
     expect(this).toBeUndefined();
     return { text: "", output: { finding: "unused" } };
   });
-  const bound = bindAgentSteps({ executeAgent: unused, executeModel });
+  const bound = bindAgentSteps({ executeAgent: unused, executeModel, executeJev: unused });
   expect(
     await bound.askModel({
-      harness: claude({ model: "sonnet" }),
+      model: models.openrouter("anthropic/claude-haiku"),
       prompt: "Summarize evidence",
       output: z.object({ finding: z.string() }),
     }),

@@ -1,9 +1,11 @@
+import type { ModelKind } from "../blocks/agents/harness-config.ts";
 import type { AgentRequest } from "../blocks/agents/plan.ts";
 import { defaultMergePolicy, readFactoryConfig } from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";
 import { getAuthenticatedUser } from "../providers/github.ts";
 import { resolveGithubIdentities } from "../providers/github-auth.ts";
 import { getViewer } from "../providers/linear.ts";
+import { type Driver, drivers } from "../steps/agents/drivers/index.ts";
 import { awsCredentialsCheck } from "./aws.ts";
 import { bindingChecks } from "./bindings.ts";
 import { CHECK_TIMEOUT_MS, type Check } from "./catalog.ts";
@@ -13,9 +15,9 @@ import {
   githubIdentityChecks,
   realGithubIdentityProbes,
 } from "./github-identity.ts";
-import { type HarnessKind, harnessChecks } from "./harnesses.ts";
+import { type HarnessKind, harnessChecks, missingDriverCheck } from "./harnesses.ts";
 import { linearWebhookChecks } from "./linear-webhook.ts";
-import { codexWorktreeConfigCheck, mcpServerChecks } from "./mcp.ts";
+import { mcpServerChecks } from "./mcp.ts";
 import { webhookChecks } from "./webhooks.ts";
 
 export { type BindingChecksOptions, bindingChecks } from "./bindings.ts";
@@ -67,6 +69,7 @@ export interface WorkflowRequires {
   integrations?: Integration[];
   bindings?: string[];
   harnesses?: HarnessKind[];
+  models?: ModelKind[];
   aws?: true;
 }
 
@@ -111,6 +114,14 @@ export function preflightChecks(
     ...(integrations.includes("github") ? githubChecks() : []),
     ...bindingChecks({ factoryRoot, names: bindings }),
     ...harnessChecks(requires.harnesses ?? []),
+    ...(requires.models ?? []).flatMap((kind) => {
+      const driver = (
+        drivers as Record<string, (typeof drivers)[keyof typeof drivers] | undefined>
+      )[kind];
+      return driver === undefined
+        ? [missingDriverCheck(kind)]
+        : [...driver.runtimeChecks(), ...driver.authChecks()];
+    }),
     ...(requires.aws ? [awsCredentialsCheck()] : []),
   ];
 }
@@ -128,7 +139,10 @@ export function doctorChecks(): Check[] {
     ...(integrations.includes("linear") ? linearWebhookChecks({ factoryRoot }) : []),
     ...bindingChecks({ factoryRoot }),
     ...webhookChecks({ factoryRoot }),
-    ...harnessChecks(["claude", "codex"]),
+    ...Object.values(drivers).flatMap((driver) => [
+      ...driver.runtimeChecks(),
+      ...driver.authChecks(),
+    ]),
     ...(profile !== undefined && profile !== "" ? [awsCredentialsCheck()] : []),
   ];
 }
@@ -144,8 +158,10 @@ export const JIT_TIMEOUT_MS = 3 * CHECK_TIMEOUT_MS + 5_000;
 // ahead of the run.
 export function jitChecks(wire: AgentRequest): Check[] {
   const harness = wire.harness;
+  if (wire.cwd === undefined) return [];
+  const driver = (drivers as Record<string, Driver<HarnessKind> | undefined>)[harness.kind];
   return [
-    ...(harness.kind === "codex" ? [codexWorktreeConfigCheck(wire.cwd)] : []),
+    ...(driver?.jitChecks?.(wire) ?? []),
     ...mcpServerChecks(harness.mcpServers ?? {}, wire.cwd),
   ];
 }

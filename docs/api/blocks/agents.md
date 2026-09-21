@@ -214,6 +214,10 @@ The raw durable wrappers a factory supplies, one per execution role.
 
 > **executeAgent**: [`ExecuteAgentStep`](#executeagentstep)
 
+##### executeJev
+
+> **executeJev**: [`ExecuteJevStep`](#executejevstep)
+
 ##### executeModel
 
 > **executeModel**: [`ExecuteModelStep`](#executemodelstep)
@@ -246,7 +250,7 @@ the resume is taken.
 
 ##### harness
 
-> **harness**: [`HarnessConfig`](#harnessconfig)
+> **harness**: [`Harness`](#harness-3)
 
 ##### label
 
@@ -317,15 +321,9 @@ Bound operations used to turn agent startup failures into human halts.
 
 ### AgentRequest
 
-> **AgentRequest** = `Omit`\<[`RunAgentOptions`](#runagentoptions), `"output"`\> & `object`
+> **AgentRequest** = `Omit`\<[`RunAgentOptions`](#runagentoptions), `"output"`\> & `object` \| `Omit`\<[`AskAgentOptions`](#askagentoptions), `"output"`\> & `object`
 
 Serializable agent request passed to a durable step.
-
-#### Type Declaration
-
-##### outputSchema?
-
-> `optional` **outputSchema**: [`OutputJsonSchema`](#outputjsonschema)
 
 ***
 
@@ -359,7 +357,7 @@ A provider session pointer that can resume the same harness.
 
 ##### harness
 
-> **harness**: [`HarnessConfig`](#harnessconfig)\[`"kind"`\]
+> **harness**: [`Harness`](#harness-3)\[`"kind"`\]
 
 ##### id
 
@@ -367,11 +365,19 @@ A provider session pointer that can resume the same harness.
 
 ***
 
-### AskModelOptions
+### AskableModelSource
 
-> **AskModelOptions**\<`T`\> = `object`
+> **AskableModelSource** = `Exclude`\<[`ModelSource`](#modelsource), [`OpenaiCodexSource`](#openaicodexsource)\>
 
-Workflow-side options for one model call without tools or a worktree.
+A model source accepted by a direct model call.
+
+***
+
+### AskAgentOptions
+
+> **AskAgentOptions**\<`T`\> = `object`
+
+Workflow-side options for one harness turn without tools or a worktree.
 
 #### Type Parameters
 
@@ -383,7 +389,7 @@ Workflow-side options for one model call without tools or a worktree.
 
 ##### harness
 
-> **harness**: [`HarnessConfig`](#harnessconfig)
+> **harness**: [`Harness`](#harness-3)
 
 ##### output?
 
@@ -399,19 +405,43 @@ Workflow-side options for one model call without tools or a worktree.
 
 ***
 
-### ClaudeHarnessConfig
+### AskModelOptions
 
-> **ClaudeHarnessConfig** = [`ClaudeHarnessOptions`](#claudeharnessoptions)
+> **AskModelOptions**\<`T`\> = `object`
 
-A complete Claude Code harness descriptor.
+Workflow-side options for one API model call.
+
+#### Type Parameters
+
+##### T
+
+`T` = `undefined`
+
+#### Properties
+
+##### model
+
+> **model**: [`AskableModelSource`](#askablemodelsource)
+
+##### output?
+
+> `optional` **output**: `z.ZodType`\<`T`\>
+
+##### prompt
+
+> **prompt**: `string`
+
+##### system?
+
+> `optional` **system**: `string`
 
 ***
 
-### ClaudeHarnessOptions
+### ClaudeHarness
 
-> **ClaudeHarnessOptions** = `SharedHarnessOptions` & `object`
+> **ClaudeHarness** = `SharedHarness` & `object`
 
-Serializable options for the Claude Code harness.
+A Claude Code harness descriptor.
 
 #### Type Declaration
 
@@ -425,19 +455,11 @@ Serializable options for the Claude Code harness.
 
 ***
 
-### CodexHarnessConfig
+### CodexHarness
 
-> **CodexHarnessConfig** = [`CodexHarnessOptions`](#codexharnessoptions)
+> **CodexHarness** = `SharedHarness` & `object`
 
-A complete Codex harness descriptor.
-
-***
-
-### CodexHarnessOptions
-
-> **CodexHarnessOptions** = `SharedHarnessOptions` & `object`
-
-Serializable options for the Codex harness.
+A Codex harness descriptor.
 
 #### Type Declaration
 
@@ -469,6 +491,24 @@ The factory's `"use step"` wrapper around `executeAgent`.
 
 ***
 
+### ExecuteJevStep()
+
+> **ExecuteJevStep** = (`wire`) => `Promise`\<`never`\>
+
+The factory's reserved wrapper for the future judge/evaluate/verify verb.
+
+#### Parameters
+
+##### wire
+
+`unknown`
+
+#### Returns
+
+`Promise`\<`never`\>
+
+***
+
 ### ExecuteModelStep()
 
 > **ExecuteModelStep** = (`wire`) => `Promise`\<[`ModelResult`](#modelresult)\>
@@ -487,27 +527,19 @@ The factory's `"use step"` wrapper around `executeModel`.
 
 ***
 
-### HarnessConfig
+### Harness
 
-> **HarnessConfig** = [`ClaudeHarnessConfig`](#claudeharnessconfig) \| [`CodexHarnessConfig`](#codexharnessconfig)
+> **Harness** = [`ClaudeHarness`](#claudeharness) \| [`CodexHarness`](#codexharness) \| [`PiHarness`](#piharness)
 
-A complete descriptor for a supported agent harness.
+A serializable agent-program descriptor.
 
 ***
 
 ### HarnessKind
 
-> **HarnessKind** = [`HarnessConfig`](#harnessconfig)\[`"kind"`\]
+> **HarnessKind** = [`Harness`](#harness-3)\[`"kind"`\]
 
-The stable name of a supported agent harness.
-
-***
-
-### HarnessOptions
-
-> **HarnessOptions** = [`ClaudeHarnessOptions`](#claudeharnessoptions) \| [`CodexHarnessOptions`](#codexharnessoptions)
-
-Options accepted by either supported agent harness.
+The stable name of an agent harness.
 
 ***
 
@@ -585,11 +617,19 @@ A harmless MCP tool call used to prove that a configured server is available.
 
 ***
 
+### ModelKind
+
+> **ModelKind** = [`ModelSource`](#modelsource)\[`"kind"`\]
+
+The stable name of a model source.
+
+***
+
 ### ModelRequest
 
 > **ModelRequest** = `Omit`\<[`AskModelOptions`](#askmodeloptions), `"output"`\> & `object`
 
-Serializable plain-model request passed to a durable step.
+Serializable API model request passed to a durable step.
 
 #### Type Declaration
 
@@ -627,6 +667,14 @@ Text, structured output and usage returned by a model call.
 
 ***
 
+### ModelSource
+
+> **ModelSource** = [`OpenrouterSource`](#openroutersource) \| [`OpenaiCompatibleSource`](#openaicompatiblesource) \| [`OpenaiCodexSource`](#openaicodexsource)
+
+Any configured source from which a model can answer.
+
+***
+
 ### ModelUsage
 
 > **ModelUsage** = `LanguageModelUsage`
@@ -635,11 +683,87 @@ Token usage reported by the underlying model provider.
 
 ***
 
+### OpenaiCodexSource
+
+> **OpenaiCodexSource** = `object`
+
+The Codex subscription model source used only by the Pi harness.
+
+#### Properties
+
+##### kind
+
+> **kind**: `"openai-codex"`
+
+##### model
+
+> **model**: `string`
+
+***
+
+### OpenaiCompatibleSource
+
+> **OpenaiCompatibleSource** = `object`
+
+An OpenAI-compatible API model source.
+
+#### Properties
+
+##### baseUrl
+
+> **baseUrl**: `string`
+
+##### kind
+
+> **kind**: `"openai-compatible"`
+
+##### model
+
+> **model**: `string`
+
+***
+
+### OpenrouterSource
+
+> **OpenrouterSource** = `object`
+
+An OpenRouter API model source.
+
+#### Properties
+
+##### kind
+
+> **kind**: `"openrouter"`
+
+##### model
+
+> **model**: `string`
+
+***
+
 ### OutputJsonSchema
 
 > **OutputJsonSchema** = `Record`\<`string`, `unknown`\>
 
 The serializable JSON Schema sent across the workflow-step boundary.
+
+***
+
+### PiHarness
+
+> **PiHarness** = `SharedHarness` & `object`
+
+A Pi harness descriptor. Its driver is supplied separately.
+
+#### Type Declaration
+
+##### kind
+
+> **kind**: `"pi"`
+
+##### provider
+
+> **provider**: [`OpenaiCodexSource`](#openaicodexsource)
 
 ***
 
@@ -731,7 +855,7 @@ Workflow-side options for an agent that works inside a directory.
 
 ##### harness
 
-> **harness**: [`HarnessConfig`](#harnessconfig)
+> **harness**: [`Harness`](#harness-3)
 
 ##### output?
 
@@ -747,6 +871,128 @@ Workflow-side options for an agent that works inside a directory.
 
 ## Variables
 
+### harnesses
+
+> `const` **harnesses**: `object`
+
+Constructors for agent-harness descriptors.
+
+#### Type Declaration
+
+##### claude()
+
+> `readonly` **claude**(`model`, `options`): [`ClaudeHarness`](#claudeharness)
+
+###### Parameters
+
+###### model
+
+`string`
+
+###### options
+
+`Omit`\<[`ClaudeHarness`](#claudeharness), `"kind"` \| `"model"`\> = `{}`
+
+###### Returns
+
+[`ClaudeHarness`](#claudeharness)
+
+##### codex()
+
+> `readonly` **codex**(`model`, `options`): [`CodexHarness`](#codexharness)
+
+###### Parameters
+
+###### model
+
+`string`
+
+###### options
+
+`Omit`\<[`CodexHarness`](#codexharness), `"kind"` \| `"model"`\> = `{}`
+
+###### Returns
+
+[`CodexHarness`](#codexharness)
+
+##### pi()
+
+> `readonly` **pi**(`model`, `options`): [`PiHarness`](#piharness)
+
+###### Parameters
+
+###### model
+
+`string`
+
+###### options
+
+`Omit`\<[`PiHarness`](#piharness), `"kind"` \| `"model"`\>
+
+###### Returns
+
+[`PiHarness`](#piharness)
+
+***
+
+### models
+
+> `const` **models**: `object`
+
+Constructors for model-source descriptors.
+
+#### Type Declaration
+
+##### openaiCodex()
+
+> `readonly` **openaiCodex**(`model`): [`OpenaiCodexSource`](#openaicodexsource)
+
+###### Parameters
+
+###### model
+
+`string`
+
+###### Returns
+
+[`OpenaiCodexSource`](#openaicodexsource)
+
+##### openaiCompatible()
+
+> `readonly` **openaiCompatible**(`model`, `options`): [`OpenaiCompatibleSource`](#openaicompatiblesource)
+
+###### Parameters
+
+###### model
+
+`string`
+
+###### options
+
+###### baseUrl
+
+`string`
+
+###### Returns
+
+[`OpenaiCompatibleSource`](#openaicompatiblesource)
+
+##### openrouter()
+
+> `readonly` **openrouter**(`model`): [`OpenrouterSource`](#openroutersource)
+
+###### Parameters
+
+###### model
+
+`string`
+
+###### Returns
+
+[`OpenrouterSource`](#openroutersource)
+
+***
+
 ### rebuildContextPrompt
 
 > `const` **rebuildContextPrompt**: [`RebuildContextPrompt`](#rebuildcontextprompt)
@@ -755,11 +1001,39 @@ The default prompt for continuing reviewed work in a fresh agent session.
 
 ## Functions
 
+### askAgent()
+
+> **askAgent**\<`T`\>(`config`, `executeAgent`): `Promise`\<[`AgentResult`](#agentresult)\<`T`\>\>
+
+Ask an agent harness without a worktree or tools.
+
+#### Type Parameters
+
+##### T
+
+`T` = `undefined`
+
+#### Parameters
+
+##### config
+
+[`AskAgentOptions`](#askagentoptions)\<`T`\>
+
+##### executeAgent
+
+[`ExecuteAgentStep`](#executeagentstep)
+
+#### Returns
+
+`Promise`\<[`AgentResult`](#agentresult)\<`T`\>\>
+
+***
+
 ### askModel()
 
 > **askModel**\<`T`\>(`config`, `executeModel`): `Promise`\<[`ModelResult`](#modelresult)\<`T`\>\>
 
-Make one model call without a worktree or tools and parse its optional structured output.
+Make one API model call and parse its optional structured output.
 
 #### Type Parameters
 
@@ -798,6 +1072,26 @@ Connect agent calls to durable steps without requiring a ticket integration.
 #### Returns
 
 `object`
+
+##### askAgent()
+
+> **askAgent**: \<`T`\>(`config`) => `Promise`\<[`AgentResult`](#agentresult)\<`T`\>\>
+
+###### Type Parameters
+
+###### T
+
+`T` = `undefined`
+
+###### Parameters
+
+###### config
+
+[`AskAgentOptions`](#askagentoptions)\<`T`\>
+
+###### Returns
+
+`Promise`\<[`AgentResult`](#agentresult)\<`T`\>\>
 
 ##### askModel()
 
@@ -845,7 +1139,7 @@ Connect agent calls to durable steps without requiring a ticket integration.
 
 > **buildAgentRequest**\<`T`\>(`config`): [`AgentRequest`](#agentrequest)
 
-Convert workflow-side agent options into their durable wire form.
+Convert workflow-side run options into their durable wire form.
 
 #### Type Parameters
 
@@ -858,6 +1152,30 @@ Convert workflow-side agent options into their durable wire form.
 ##### config
 
 [`RunAgentOptions`](#runagentoptions)\<`T`\>
+
+#### Returns
+
+[`AgentRequest`](#agentrequest)
+
+***
+
+### buildAskAgentRequest()
+
+> **buildAskAgentRequest**\<`T`\>(`config`): [`AgentRequest`](#agentrequest)
+
+Convert workflow-side harness-ask options into their durable wire form.
+
+#### Type Parameters
+
+##### T
+
+`T`
+
+#### Parameters
+
+##### config
+
+[`AskAgentOptions`](#askagentoptions)\<`T`\>
 
 #### Returns
 
@@ -886,42 +1204,6 @@ Convert workflow-side model options into their durable wire form.
 #### Returns
 
 [`ModelRequest`](#modelrequest)
-
-***
-
-### claude()
-
-> **claude**(`options`): [`ClaudeHarnessOptions`](#claudeharnessoptions)
-
-Build a Claude Code harness descriptor.
-
-#### Parameters
-
-##### options
-
-`Omit`\<[`ClaudeHarnessOptions`](#claudeharnessoptions), `"kind"`\>
-
-#### Returns
-
-[`ClaudeHarnessOptions`](#claudeharnessoptions)
-
-***
-
-### codex()
-
-> **codex**(`options`): [`CodexHarnessOptions`](#codexharnessoptions)
-
-Build a Codex harness descriptor.
-
-#### Parameters
-
-##### options
-
-`Omit`\<[`CodexHarnessOptions`](#codexharnessoptions), `"kind"`\>
-
-#### Returns
-
-[`CodexHarnessOptions`](#codexharnessoptions)
 
 ***
 
@@ -1058,33 +1340,6 @@ Run an agent, pausing on its ticket until a human repairs failed tool checks.
 #### Returns
 
 `Promise`\<[`AgentResult`](#agentresult)\<`T`\>\>
-
-***
-
-### selectHarness()
-
-> **selectHarness**(`harness`, `defaultModels`, `model?`): [`HarnessConfig`](#harnessconfig)
-
-Build a harness from the name a caller chose, falling back to that harness's
-own default model. The map is the factory's: jigs knows no model names.
-
-#### Parameters
-
-##### harness
-
-`"claude"` | `"codex"`
-
-##### defaultModels
-
-`Record`\<[`HarnessKind`](#harnesskind), `string`\>
-
-##### model?
-
-`string`
-
-#### Returns
-
-[`HarnessConfig`](#harnessconfig)
 
 ***
 

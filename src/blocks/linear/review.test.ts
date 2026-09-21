@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from "vitest";
-import { claude } from "../agents/harness-config.ts";
+import { harnesses } from "../agents/harness-config.ts";
 import { parseOutput, type RunAgentOptions } from "../agents/plan.ts";
 import type { RunAgentFn } from "../agents/resume-or-rebuild.ts";
 import type { TicketClaim } from "./claim.ts";
@@ -86,7 +86,7 @@ const review = () =>
     fetchTicketSnapshot: fakeFetchSnapshot,
     claim,
     snapshot,
-    harness: claude({ model: "sonnet" }),
+    harness: harnesses.claude("sonnet"),
     cwd: "/tmp/worktree",
   });
 
@@ -239,7 +239,7 @@ test("optional callbacks run around the human halt, never around proceed", async
     },
     claim,
     snapshot,
-    harness: claude({ model: "sonnet" }),
+    harness: harnesses.claude("sonnet"),
     cwd: "/tmp/worktree",
     on: {
       needsHuman: async () => {
@@ -261,7 +261,7 @@ test("optional callbacks run around the human halt, never around proceed", async
     fetchTicketSnapshot: fakeFetchSnapshot,
     claim,
     snapshot,
-    harness: claude({ model: "sonnet" }),
+    harness: harnesses.claude("sonnet"),
     cwd: "/tmp/worktree",
     on: {
       needsHuman: async () => {
@@ -312,7 +312,7 @@ test("a caller-supplied prompt replaces the one shipped beside the block", async
     fetchTicketSnapshot: fakeFetchSnapshot,
     claim,
     snapshot,
-    harness: claude({ model: "sonnet" }),
+    harness: harnesses.claude("sonnet"),
     cwd: "/tmp/worktree",
     prompt: factoryPrompt,
   });

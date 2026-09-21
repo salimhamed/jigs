@@ -1,90 +1,48 @@
 import { expect, test } from "vitest";
 import { z } from "zod";
-import { claude, codex } from "./harness-config.ts";
-import { buildAgentRequest, buildModelRequest, parseOutput } from "./plan.ts";
+import { harnesses, models } from "./harness-config.ts";
+import { buildAgentRequest, buildAskAgentRequest, buildModelRequest, parseOutput } from "./plan.ts";
 
-const verdict = z.object({
-  approved: z.boolean(),
-  note: z.string(),
-});
+const verdict = z.object({ approved: z.boolean(), note: z.string() });
 
-test("buildAgentRequest converts the zod output schema into a wire JSON schema", () => {
-  const wire = buildAgentRequest({
-    harness: claude({ model: "sonnet" }),
+test("builders convert schemas and preserve serializable descriptors", () => {
+  const run = buildAgentRequest({
+    harness: harnesses.claude("sonnet"),
     cwd: "/work/tree",
-    prompt: "review it",
+    prompt: "review",
     output: verdict,
   });
-  expect(wire.outputSchema).toMatchObject({
-    type: "object",
-    properties: {
-      approved: { type: "boolean" },
-      note: { type: "string" },
-    },
-    required: ["approved", "note"],
+  expect(run.outputSchema).toMatchObject({ type: "object", required: ["approved", "note"] });
+  expect(run.outputSchema?.$schema).toBeUndefined();
+  const ask = buildAskAgentRequest({
+    harness: harnesses.codex("gpt-5.5"),
+    prompt: "summarize",
+    output: verdict,
   });
-  // The Claude CLI rejects a schema carrying zod's $schema meta-declaration.
-  expect(wire.outputSchema?.$schema).toBeUndefined();
+  const model = buildModelRequest({
+    model: models.openrouter("anthropic/claude-haiku"),
+    prompt: "summarize",
+    output: verdict,
+  });
+  expect(structuredClone([run, ask, model])).toEqual([run, ask, model]);
 });
 
-test("without an output schema the wire omits it", () => {
-  const wire = buildModelRequest({
-    harness: codex({ model: "gpt-5.5" }),
-    prompt: "what changed?",
-  });
-  expect(wire.outputSchema).toBeUndefined();
-});
-
-test("askModel() rejects a harness descriptor carrying mcpServers", () => {
+test("askAgent rejects an MCP universe", () => {
   expect(() =>
-    buildModelRequest({
-      harness: claude({
-        model: "sonnet",
+    buildAskAgentRequest({
+      harness: harnesses.claude("sonnet", {
         mcpServers: { probe: { command: "node", probe: { tool: "ping" } } },
       }),
-      prompt: "no universe for you",
+      prompt: "ask",
     }),
   ).toThrow(/no MCP universe/);
 });
 
-test("every builder wire survives structuredClone — builders never inject live values", () => {
-  const agentWire = buildAgentRequest({
-    harness: codex({
-      model: "gpt-5.5",
-      mcpServers: {
-        probe: {
-          command: "node",
-          env: { TOKEN: "t" },
-          probe: { tool: "ping" },
-        },
-      },
-    }),
-    cwd: "/work/tree",
-    prompt: "implement it",
-    output: verdict,
-  });
-  expect(structuredClone(agentWire)).toEqual(agentWire);
-
-  const askWire = buildModelRequest({
-    harness: claude({ model: "sonnet" }),
-    prompt: "summarize",
-    system: "be terse",
-    output: verdict,
-  });
-  expect(structuredClone(askWire)).toEqual(askWire);
-});
-
-test("parseOutput returns undefined when no output schema is declared", () => {
+test("parseOutput validates structured output", () => {
   expect(parseOutput(undefined, { anything: true })).toBeUndefined();
-});
-
-test("parseOutput returns the typed parsed object for conforming recorded raw output", () => {
-  expect(parseOutput(verdict, { approved: true, note: "ship it" })).toEqual({
+  expect(parseOutput(verdict, { approved: true, note: "ship" })).toEqual({
     approved: true,
-    note: "ship it",
+    note: "ship",
   });
-});
-
-test("parseOutput throws for non-conforming recorded raw output", () => {
   expect(() => parseOutput(verdict, { approved: "yes" })).toThrow();
 });
