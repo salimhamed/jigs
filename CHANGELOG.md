@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.44.2](https://github.com/salimhamed/jigs/compare/jigs-v0.44.1...jigs-v0.44.2) (2026-09-21)
+
+
+### Features
+
+* add askJev for typed decisions with calibrated probabilities ([#332](https://github.com/salimhamed/jigs/issues/332)) ([09bfdba](https://github.com/salimhamed/jigs/commit/09bfdba7e917b0c5666b3a0ff75f992f43ce90d0))
+
 ## [0.44.1](https://github.com/salimhamed/jigs/compare/jigs-v0.44.0...jigs-v0.44.1) (2026-09-21)
 
 
