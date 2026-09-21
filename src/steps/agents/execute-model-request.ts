@@ -27,7 +27,11 @@ export async function executeModel(
     env: scrubbedEnv(driver.envAllowlist),
     output: outputSpec(wire.outputSchema),
   });
-  return toModelResult(generation, wire.outputSchema === undefined ? undefined : generation.output);
+  const costUsd = driver.cost(generation);
+  return toModelResult(
+    costUsd === undefined ? generation : { ...generation, costUsd },
+    wire.outputSchema === undefined ? undefined : generation.output,
+  );
 }
 
 /** Reserved durable wrapper target for judge/evaluate/verify requests. */

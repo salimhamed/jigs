@@ -65,8 +65,9 @@ export async function executeAgent(
       env: scrubbedEnv(driver.envAllowlist),
       output: outputSpec(wire.outputSchema),
     });
+    const costUsd = driver.cost(generation);
     return toModelResult(
-      generation,
+      costUsd === undefined ? generation : { ...generation, costUsd },
       wire.outputSchema === undefined ? undefined : generation.output,
     );
   }
@@ -96,6 +97,7 @@ export async function executeAgent(
           if (wire.resume === undefined) throw err;
           return { resumeFailed: String(err) };
         }
+        const costUsd = driver.cost(generation);
         const session = extractAgentSession(
           wire.harness.kind,
           generation.providerMetadata,
@@ -103,7 +105,7 @@ export async function executeAgent(
         );
         return {
           ...toModelResult(
-            generation,
+            costUsd === undefined ? generation : { ...generation, costUsd },
             wire.outputSchema === undefined ? undefined : generation.output,
           ),
           ...(session === undefined ? {} : { session }),

@@ -6,6 +6,11 @@ tools, a worktree and a resumable session. Plain serializable descriptors cross
 the workflow boundary. Step-side **drivers** own credentials, checks and live
 provider objects.
 
+Results include an optional `usage.costUsd` estimate from the driver that ran
+the call. It is the driver's estimate, not a bill: Claude Code reports real USD
+billing, Pi computes a notional amount from its model catalog for a subscription,
+and a local server has no cost.
+
 The execution API has four verbs:
 
 - `runAgent` runs a harness in a working directory.
