@@ -13,3 +13,5 @@ site/.vitepress/cache/
 .swc/
 .jigs/
 /.codex/config.toml
+.pi/
+
