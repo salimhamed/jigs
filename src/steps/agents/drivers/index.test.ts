@@ -1,12 +1,14 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
+import { harnesses, models } from "../../../blocks/agents/harness-config.ts";
+import { buildAskAgentRequest } from "../../../blocks/agents/plan.ts";
 import { driverFor, drivers } from "./index.ts";
 
 test("driver lookup preserves installed kinds and rejects unregistered kinds", () => {
   expect(driverFor("claude")).toBe(drivers.claude);
   expect(driverFor("openrouter")).toBe(drivers.openrouter);
   expect(driverFor("openai-compatible")).toBe(drivers["openai-compatible"]);
-  expect(driverFor("pi")).toBeUndefined();
+  expect(driverFor("pi")).toBe(drivers.pi);
 });
 
 test("every registered driver declares its operational contract and documentation", () => {
@@ -17,7 +19,6 @@ test("every registered driver declares its operational contract and documentatio
   for (const driver of Object.values(drivers)) {
     if (driver.family === "harness") expect(driver.runtimeChecks()).not.toHaveLength(0);
     else expect(driver.runtimeChecks()).toEqual([]);
-    if (driver.kind !== "openai-compatible") expect(driver.authChecks()).not.toHaveLength(0);
     expect(driver.envAllowlist()).toBeInstanceOf(Array);
     if (driver.family === "harness") {
       expect(driver.sessionPointer).toEqual({
@@ -48,4 +49,39 @@ test("Claude reports its provider cost and Codex has no cost estimate", () => {
   };
   expect(drivers.claude.cost(generation)).toBe(0.42);
   expect(drivers.codex.cost()).toBeUndefined();
+});
+
+test("Pi derives checks, environment and cost from its nested model source", () => {
+  const local = buildAskAgentRequest({
+    harness: harnesses.pi(
+      models.openaiCompatible({
+        name: "studio",
+        baseUrl: "http://localhost:1234/v1",
+        model: "local",
+        apiKeyEnv: "STUDIO_TOKEN",
+      }),
+    ),
+    prompt: "hello",
+  });
+  expect(drivers.pi.runtimeChecks(local).map((check) => check.id)).toEqual([
+    "harness.pi-cli",
+    "model.openai-compatible-runtime",
+  ]);
+  expect(drivers.pi.authChecks(local).map((check) => check.id)).toEqual(["model.studio-token"]);
+  expect(drivers.pi.envAllowlist(local)).toEqual(["STUDIO_TOKEN"]);
+
+  const codex = buildAskAgentRequest({
+    harness: harnesses.pi(models.openaiCodex("gpt-5.5")),
+    prompt: "hello",
+  });
+  expect(drivers.pi.authChecks(codex).map((check) => check.id)).toEqual([
+    "harness.pi-openai-codex-auth",
+  ]);
+  expect(
+    drivers.pi.cost({
+      text: "done",
+      usage: {} as never,
+      providerMetadata: { pi: { costUsd: 0.012 } },
+    }),
+  ).toBe(0.012);
 });

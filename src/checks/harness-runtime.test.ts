@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { MIN_PI_VERSION } from "../steps/agents/harnesses/executables.ts";
 import { DEFAULT_MIN_CODEX_VERSION } from "../steps/agents/harnesses/index.ts";
 import { harnessRuntime } from "./harness-runtime.ts";
 
@@ -75,6 +76,20 @@ test("claude is checked for presence with no floor to be below", async () => {
   });
   expect(runtime).toMatchObject({ ok: true, version: "2.1.270", minimum: null });
   expect(runtime.line).toBe("claude 2.1.270 at /home/dev/.local/bin/claude");
+});
+
+test("Pi uses its own minimum version", async () => {
+  const passing = await one("pi", {
+    resolve: found("/usr/local/bin/pi"),
+    exec: answers("0.85.1"),
+  });
+  expect(passing).toMatchObject({ ok: true, minimum: MIN_PI_VERSION, version: "0.85.1" });
+
+  const failing = await one("pi", {
+    resolve: found("/usr/local/bin/pi"),
+    exec: answers("0.85.0"),
+  });
+  expect(failing).toMatchObject({ ok: false, minimum: MIN_PI_VERSION, version: "0.85.0" });
 });
 
 // Some CLIs answer --version on stderr.

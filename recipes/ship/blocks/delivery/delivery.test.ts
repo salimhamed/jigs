@@ -155,7 +155,7 @@ const options: DeliverChangeOptions = {
 
 function setup(wakes: PullRequestWake[] = [{ kind: "closed", merged: true }]) {
   const calls: Array<{
-    harness: { kind: string; model: string };
+    harness: Parameters<RunAgentFn>[0]["harness"];
     prompt: string;
     resume?: unknown;
   }> = [];

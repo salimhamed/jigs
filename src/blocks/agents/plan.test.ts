@@ -36,6 +36,16 @@ test("askAgent rejects an MCP universe", () => {
       prompt: "ask",
     }),
   ).toThrow(/no MCP universe/);
+
+  expect(() =>
+    buildAskAgentRequest({
+      harness: {
+        ...harnesses.pi(models.openaiCodex("gpt-5.5")),
+        mcpServers: { probe: { command: "node", probe: { tool: "ping" } } },
+      },
+      prompt: "ask",
+    }),
+  ).toThrow(/no MCP universe/);
 });
 
 test("parseOutput validates structured output", () => {

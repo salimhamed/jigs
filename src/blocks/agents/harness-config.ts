@@ -36,8 +36,14 @@ export type CodexHarness = SharedHarness & {
     "none" | "minimal" | "low" | "medium" | "high" | "xhigh"
   >;
 };
-/** A Pi harness descriptor. Its driver is supplied separately. */
-export type PiHarness = SharedHarness & { kind: "pi"; provider: OpenaiCodexSource };
+/** A Pi harness descriptor backed by a nested model source. */
+export type PiHarness = {
+  kind: "pi";
+  model: ModelSource;
+  thinking?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+  tools?: string[];
+  mcpServers?: Record<string, McpServerConfig>;
+};
 /** A serializable agent-program descriptor. */
 export type Harness = ClaudeHarness | CodexHarness | PiHarness;
 /** The stable name of an agent harness. */
@@ -105,7 +111,10 @@ export const harnesses = {
   codex(model: string, options: Omit<CodexHarness, "kind" | "model"> = {}): CodexHarness {
     return { kind: "codex", model, ...options };
   },
-  pi(model: string, options: Omit<PiHarness, "kind" | "model">): PiHarness {
+  pi(
+    model: ModelSource,
+    options: { thinking?: PiHarness["thinking"]; tools?: string[] } = {},
+  ): PiHarness {
     return { kind: "pi", model, ...options };
   },
 } as const;

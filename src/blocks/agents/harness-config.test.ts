@@ -13,6 +13,21 @@ test("descriptor namespaces build tagged plain data", () => {
     model: "gpt-5.5",
     effort: "xhigh",
   });
+  expect(
+    harnesses.pi(models.openaiCodex("gpt-5.5"), {
+      thinking: "medium",
+      tools: ["read", "grep"],
+    }),
+  ).toEqual({
+    kind: "pi",
+    model: { kind: "openai-codex", model: "gpt-5.5" },
+    thinking: "medium",
+    tools: ["read", "grep"],
+  });
+  expect(harnesses.pi(models.openaiCodex("gpt-5.5"))).toEqual({
+    kind: "pi",
+    model: { kind: "openai-codex", model: "gpt-5.5" },
+  });
   expect(models.openrouter("anthropic/claude-haiku")).toEqual({
     kind: "openrouter",
     model: "anthropic/claude-haiku",
