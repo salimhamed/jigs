@@ -92,6 +92,8 @@ export async function executeAgent(
   }
   const run = driver.run;
   if (run === undefined) throw new JigsError(`the ${wire.harness.kind} driver cannot run`);
+  const callSiteReport = await runChecks(callSiteChecks(driver, wire));
+  if (!callSiteReport.ok) throw new JigsError(formatFailures(callSiteReport));
 
   try {
     return await withFileLock(

@@ -6,6 +6,7 @@ import {
   releaseSchema,
 } from "../../blocks/runtime/release.ts";
 import { removeManagedCodexHome } from "../agents/harnesses/codex-home.ts";
+import { removeManagedPiHome } from "../agents/harnesses/pi-home.ts";
 import type { RunMetadata } from "../runtime/run-context.ts";
 import { removeRunDirectory, runDirectory } from "../runtime/run-directory/index.ts";
 import { fetchOriginDefault } from "./create.ts";
@@ -106,8 +107,10 @@ export async function releaseRunResources(
       removed: true,
       reason: `${outcome} run directory released`,
     };
-    if (report.worktrees.every((resource) => resource.removed))
+    if (report.worktrees.every((resource) => resource.removed)) {
       removeManagedCodexHome(metadata.workflowRunId);
+      removeManagedPiHome(metadata.workflowRunId);
+    }
   }
   return report;
 }
