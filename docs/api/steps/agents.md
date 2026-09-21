@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.43.0
+# @salimhamed/jigs v0.44.0
 
 Execute agent and model requests outside workflow code.
 
@@ -33,6 +33,46 @@ Injectable provider and environment operations used by agent execution.
 ###### Inherited from
 
 `DriverDependencies.ensureCodexHome`
+
+##### ensurePiHome()
+
+> **ensurePiHome**(`runId`, `source`): `string`
+
+###### Parameters
+
+###### runId
+
+`string`
+
+###### source
+
+`ModelSource`
+
+###### Returns
+
+`string`
+
+###### Inherited from
+
+`DriverDependencies.ensurePiHome`
+
+##### executePi()
+
+> **executePi**(`options`): `Promise`\<`ExecutorGeneration`\>
+
+###### Parameters
+
+###### options
+
+`PiExecutionOptions`
+
+###### Returns
+
+`Promise`\<`ExecutorGeneration`\>
+
+###### Inherited from
+
+`DriverDependencies.executePi`
 
 ##### generateText()
 
