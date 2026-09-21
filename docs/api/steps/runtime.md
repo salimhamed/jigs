@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.44.0
+# @salimhamed/jigs v0.44.1
 
 Read run context and update run resources outside workflow code.
 

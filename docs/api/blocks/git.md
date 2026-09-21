@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.44.0
+# @salimhamed/jigs v0.44.1
 
 Describe and render committed Git changes for review.
 
