@@ -34,3 +34,11 @@ export function resolveCodexExecutable(env: NodeJS.ProcessEnv = process.env): st
   if (found !== undefined) return found;
   throw new Error("no `codex` executable found on PATH — install the Codex CLI");
 }
+
+export const MIN_PI_VERSION = "0.85.1";
+
+export function resolvePiExecutable(env: NodeJS.ProcessEnv = process.env): string {
+  const found = findOnPath("pi", env);
+  if (found !== undefined) return found;
+  throw new Error("no `pi` executable found on PATH — install @earendil-works/pi-coding-agent");
+}

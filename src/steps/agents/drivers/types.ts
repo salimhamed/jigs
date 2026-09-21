@@ -1,10 +1,11 @@
 import type { generateText, LanguageModel, OutputInterface } from "ai";
 import type { CodexAppServerProvider } from "ai-sdk-provider-codex-cli";
-import type { HarnessKind, ModelKind } from "../../../blocks/agents/harness-config.ts";
+import type { HarnessKind, ModelKind, ModelSource } from "../../../blocks/agents/harness-config.ts";
 import type { AgentRequest, ModelRequest } from "../../../blocks/agents/plan.ts";
 import type { ModelGeneration } from "../../../blocks/agents/result.ts";
 import type { Check } from "../../../checks/catalog.ts";
 import type { RunMetadata } from "../../runtime/run-context.ts";
+import type { PiExecutionOptions } from "../harnesses/pi.ts";
 
 export type ExecutorGeneration = ModelGeneration & { output?: unknown };
 
@@ -17,6 +18,8 @@ export interface DriverDependencies {
     providerOptions?: Parameters<typeof generateText>[0]["providerOptions"];
   }): Promise<ExecutorGeneration>;
   ensureCodexHome(runId: string): string;
+  ensurePiHome(runId: string, source: ModelSource): string;
+  executePi(options: PiExecutionOptions): Promise<ExecutorGeneration>;
   withCodexAppServer<T>(fn: (provider: CodexAppServerProvider) => Promise<T>): Promise<T>;
 }
 

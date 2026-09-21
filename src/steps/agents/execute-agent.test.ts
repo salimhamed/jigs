@@ -7,12 +7,14 @@ import type {
   CodexAppServerSettings,
   CodexExecSettings,
 } from "ai-sdk-provider-codex-cli";
-import { afterAll, beforeAll, expect, test, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
 import { z } from "zod";
-import { harnesses } from "../../blocks/agents/harness-config.ts";
+import { harnesses, models } from "../../blocks/agents/harness-config.ts";
 import { buildAgentRequest, buildAskAgentRequest } from "../../blocks/agents/plan.ts";
 import type { AgentResult, ModelUsage } from "../../blocks/agents/result.ts";
+import { drivers } from "./drivers/index.ts";
 import { type AgentExecutionDependencies, executeAgent } from "./execute-agent.ts";
+import type { PiExecutionOptions } from "./harnesses/pi.ts";
 import { makeTmpDir, removeTmpDir } from "./harnesses/test-fixtures.ts";
 
 // The settings look for the CLI eagerly, so these tests would need a codex
@@ -48,12 +50,19 @@ afterAll(() => {
   if (savedDataHome === undefined) delete process.env.XDG_DATA_HOME;
   else process.env.XDG_DATA_HOME = savedDataHome;
 });
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
 
 type Captured = {
   options?: Parameters<AgentExecutionDependencies["generateText"]>[0];
   codexModel?: string;
   codexSettings?: CodexAppServerSettings;
   homeRunIds: string[];
+  piOptions?: PiExecutionOptions;
+  piHome?: { runId: string; model: unknown };
 };
 
 function makeDeps(
@@ -71,6 +80,16 @@ function makeDeps(
     ensureCodexHome: (runId) => {
       captured.homeRunIds.push(runId);
       return path.join(tmp, "codex-home", runId);
+    },
+    ensurePiHome: (runId, model) => {
+      captured.piHome = { runId, model };
+      const home = path.join(tmp, "pi-home", runId);
+      mkdirSync(home, { recursive: true });
+      return home;
+    },
+    executePi: async (options) => {
+      captured.piOptions = options;
+      return { text: "done", usage, ...generation };
     },
     // The probe itself is covered in ./jit-marker.test.ts, against a server
     // that really cannot start.
@@ -530,4 +549,101 @@ test("codex ask step uses read-only exec in a scratch cwd it cleans up", async (
   expect(existsSync(settings?.cwd ?? "")).toBe(false);
   expect(result.text).toBe("done");
   expect("session" in result).toBe(false);
+});
+
+test("pi ask executes its nested model with isolated discovery and returns executor output", async () => {
+  vi.stubGlobal(
+    "fetch",
+    async () =>
+      new Response(JSON.stringify({ data: [{ id: "local-model" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+  );
+  const source = models.openaiCompatible({
+    name: "studio",
+    baseUrl: "http://127.0.0.1:1234/v1",
+    model: "local-model",
+  });
+  const wire = buildAskAgentRequest({
+    harness: harnesses.pi(source, { thinking: "medium" }),
+    prompt: "judge it",
+    output: verdict,
+  });
+  const { deps, captured } = makeDeps({
+    output: { ok: true },
+    providerMetadata: { pi: { sessionId: "pi-session", costUsd: 0.25 } },
+  });
+
+  const result = await agentStep(wire, { workflowRunId: "run-pi" }, deps);
+
+  expect(captured.piHome).toEqual({ runId: "run-pi", model: source });
+  expect(captured.piOptions?.args).toEqual([
+    "--mode",
+    "json",
+    "--no-tools",
+    "--model",
+    "studio/local-model",
+    "--thinking",
+    "medium",
+    "-ne",
+    "-ns",
+    "-np",
+    "--no-themes",
+    "-nc",
+    "--no-approve",
+    "-e",
+    expect.stringContaining("submit-result.ts"),
+    expect.stringContaining("Call submit_result"),
+  ]);
+  expect(captured.piOptions?.env.PI_CODING_AGENT_DIR).toBe(path.join(tmp, "pi-home", "run-pi"));
+  expect(existsSync(captured.piOptions?.cwd ?? "")).toBe(false);
+  expect(result).toEqual({
+    text: "done",
+    output: { ok: true },
+    usage: { ...usage, costUsd: 0.25 },
+  });
+});
+
+test("pi ask rejects an unreachable nested endpoint before executing Pi", async () => {
+  vi.stubGlobal("fetch", async () => {
+    throw new Error("connection refused");
+  });
+  const actualRuntimeChecks = drivers.pi.runtimeChecks;
+  vi.spyOn(drivers.pi, "runtimeChecks").mockImplementation((request) =>
+    actualRuntimeChecks(request).filter((check) => check.id === "model.openai-compatible-runtime"),
+  );
+  const { deps, captured } = makeDeps();
+  const wire = buildAskAgentRequest({
+    harness: harnesses.pi(
+      models.openaiCompatible({
+        name: "offline-studio",
+        baseUrl: "http://127.0.0.1:1/v1",
+        model: "local-model",
+      }),
+    ),
+    prompt: "hello",
+  });
+
+  await expect(executeAgent(wire, { workflowRunId: "run-pi" }, deps)).rejects.toThrow(
+    /offline-studio model endpoint: offline-studio is unreachable/,
+  );
+  expect(captured.piOptions).toBeUndefined();
+});
+
+test("pi ask rejects missing nested authentication before executing Pi", async () => {
+  vi.spyOn(drivers.pi, "runtimeChecks").mockReturnValue([]);
+  vi.stubEnv("PI_TEST_OPENROUTER_KEY", "");
+  const { deps, captured } = makeDeps();
+  const wire = buildAskAgentRequest({
+    harness: harnesses.pi(
+      models.openrouter("openai/gpt-oss", { apiKeyEnv: "PI_TEST_OPENROUTER_KEY" }),
+    ),
+    prompt: "hello",
+  });
+
+  await expect(executeAgent(wire, { workflowRunId: "run-pi" }, deps)).rejects.toThrow(
+    /PI_TEST_OPENROUTER_KEY credential: PI_TEST_OPENROUTER_KEY is not set/,
+  );
+  expect(captured.piOptions).toBeUndefined();
 });

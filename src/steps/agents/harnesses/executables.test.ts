@@ -1,7 +1,11 @@
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { resolveClaudeExecutable, resolveCodexExecutable } from "./executables.ts";
+import {
+  resolveClaudeExecutable,
+  resolveCodexExecutable,
+  resolvePiExecutable,
+} from "./executables.ts";
 import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
 let tmp: string;
@@ -14,7 +18,7 @@ beforeEach(() => {
   emptyDir = path.join(tmp, "empty");
   mkdirSync(fakeBin);
   mkdirSync(emptyDir);
-  for (const name of ["claude", "codex"]) {
+  for (const name of ["claude", "codex", "pi"]) {
     writeFileSync(path.join(fakeBin, name), "#!/bin/sh\n");
     chmodSync(path.join(fakeBin, name), 0o755);
   }
@@ -51,5 +55,12 @@ test("PATH scan finds an executable codex, skipping dirs without one", () => {
 test("no codex anywhere throws a repair error", () => {
   expect(() => resolveCodexExecutable({ PATH: emptyDir })).toThrow(
     "no `codex` executable found on PATH",
+  );
+});
+
+test("PATH scan finds Pi and reports its install package when absent", () => {
+  expect(resolvePiExecutable(withBin())).toBe(path.join(fakeBin, "pi"));
+  expect(() => resolvePiExecutable({ PATH: emptyDir })).toThrow(
+    "install @earendil-works/pi-coding-agent",
   );
 });

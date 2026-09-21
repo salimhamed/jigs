@@ -28,7 +28,31 @@ Use `harnesses.codex(model, options)` with `runAgent` or `askAgent`.
 
 ## Pi
 
-Pi is a harness whose driver is added separately.
+Use `harnesses.pi(model, options)` with `askAgent`. Pi runs in ask mode only;
+`runAgent` is not supported. The first argument is a model source such as
+`models.openaiCodex("gpt-5.5")`, `models.openrouter("...")`, or
+`models.openaiCompatible({ ... })`. `options.thinking` selects Pi's thinking
+level. `options.tools` is recorded for the future but ask mode disables tools.
+MCP servers are not accepted by `askAgent`.
+
+Each call gets a curated Pi home and scratch working directory. Jigs disables
+Pi's settings, package, prompt, theme, session, and extension discovery, then
+loads only its `submit_result` extension for structured output. Existing files
+outside that managed home are not discovered. OpenAI Codex subscription calls
+use a symlink to Pi's normal login at `~/.pi/agent/auth.json`; run `pi`, choose
+`/login`, then select OpenAI Codex before using that source. OpenRouter and
+credentialed OpenAI-compatible sources use the environment variable named by
+their model descriptor.
+
+Structured output first asks Pi to call `submit_result` with constrained JSON
+Schema sampling. If a compatible server completes without that tool call, Jigs
+parses the returned JSON and applies the workflow's normal zod validation.
+Pi's reported usage and catalog cost are retained in the result.
+
+Pi 0.85.1 or newer must be available on the service's `PATH`. Install it with
+`npm install --global @earendil-works/pi-coding-agent`. `jigs doctor` can check
+the Pi executable, but model and authentication checks happen at the call site
+because the nested model source is workflow configuration.
 
 ## OpenRouter
 

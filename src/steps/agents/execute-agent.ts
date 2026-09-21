@@ -1,10 +1,12 @@
 import { generateText, jsonSchema, Output, type OutputInterface } from "ai";
 import type { ExecuteAgentStep } from "../../blocks/agents/agent.ts";
+import type { HarnessKind } from "../../blocks/agents/harness-config.ts";
 import type { AgentRequest } from "../../blocks/agents/plan.ts";
 import { extractAgentSession, toModelResult } from "../../blocks/agents/result.ts";
 import {
   type FailedCheck,
   failedChecks,
+  formatFailures,
   JIT_TIMEOUT_MS,
   jitChecks,
   runChecks,
@@ -13,8 +15,11 @@ import { JigsError } from "../../errors.ts";
 import type { RunMetadata } from "../runtime/run-context.ts";
 import { withCodexAppServer } from "./drivers/codex-support.ts";
 import { type DriverDependencies, driverFor, type ExecutorGeneration } from "./drivers/index.ts";
+import type { Driver } from "./drivers/types.ts";
 import { ensureManagedCodexHome } from "./harnesses/codex-home.ts";
 import { scrubbedEnv } from "./harnesses/env.ts";
+import { executePi } from "./harnesses/pi.ts";
+import { ensureManagedPiHome } from "./harnesses/pi-home.ts";
 import { FileLockTimeoutError, lockPathFor, withFileLock } from "./lock.ts";
 
 /** Injectable provider and environment operations used by agent execution. */
@@ -26,6 +31,8 @@ export interface AgentExecutionDependencies extends DriverDependencies {
 export const defaultAgentExecutionDependencies: AgentExecutionDependencies = {
   generateText: (options) => generateText(options),
   ensureCodexHome: (runId) => ensureManagedCodexHome(runId),
+  ensurePiHome: (runId, source) => ensureManagedPiHome(runId, source),
+  executePi,
   withCodexAppServer,
   jitFailures: async (wire) => {
     const report = await runChecks(jitChecks(wire), JIT_TIMEOUT_MS);
@@ -41,6 +48,15 @@ export function outputSpec(
 
 const LOCK_STALE_MS = 4 * 60 * 60_000 + 60_000;
 
+function callSiteChecks(driver: Driver<HarnessKind>, wire: AgentRequest) {
+  const kindOnlyIds = new Set(
+    [...driver.runtimeChecks(), ...driver.authChecks()].map((check) => check.id),
+  );
+  return [...driver.runtimeChecks(wire), ...driver.authChecks(wire)].filter(
+    (check) => !kindOnlyIds.has(check.id),
+  );
+}
+
 /** Run or ask an agent harness, checking worktree requirements before a run. */
 export async function executeAgent(
   wire: AgentRequest,
@@ -52,6 +68,8 @@ export async function executeAgent(
   const isRun = wire.cwd !== undefined;
   if (!isRun) {
     if (driver.ask === undefined) throw new JigsError(`the ${wire.harness.kind} driver cannot ask`);
+    const callSiteReport = await runChecks(callSiteChecks(driver, wire));
+    if (!callSiteReport.ok) throw new JigsError(formatFailures(callSiteReport));
     const generation = await driver.ask(wire, {
       metadata,
       deps,

@@ -3,7 +3,12 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import type { CheckResult } from "./catalog.ts";
-import { claudeAuthCheck, codexAuthCheck, harnessRuntimeCheck } from "./harnesses.ts";
+import {
+  claudeAuthCheck,
+  codexAuthCheck,
+  harnessRuntimeCheck,
+  piOpenaiCodexAuthCheck,
+} from "./harnesses.ts";
 
 let tmp: string;
 
@@ -150,6 +155,17 @@ test("an expired-looking token is not gated on", async () => {
     last_refresh: "2024-01-01T00:00:00.000Z",
   });
   expect(await codexAuthCheck(file).run()).toEqual({ ok: true });
+});
+
+test("Pi OpenAI Codex auth requires the provider entry", async () => {
+  const present = authFile({ "openai-codex": { type: "oauth" } });
+  expect(await piOpenaiCodexAuthCheck(present).run()).toEqual({ ok: true });
+
+  const absent = authFile({ anthropic: { type: "oauth" } });
+  expect(await piOpenaiCodexAuthCheck(absent).run()).toMatchObject({
+    ok: false,
+    reason: expect.stringContaining("no OpenAI Codex login"),
+  });
 });
 
 // Doctor shows the same line the boot would have refused on.

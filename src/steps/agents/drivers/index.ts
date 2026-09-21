@@ -3,6 +3,7 @@ import { claudeDriver } from "./claude.ts";
 import { codexDriver } from "./codex.ts";
 import { openaiCompatibleDriver } from "./openai-compatible.ts";
 import { openrouterDriver } from "./openrouter.ts";
+import { piDriver } from "./pi.ts";
 import type { Driver } from "./types.ts";
 
 type DriverKind = HarnessKind | ModelKind;
@@ -14,6 +15,7 @@ export const drivers = {
   codex: codexDriver,
   "openai-compatible": openaiCompatibleDriver,
   openrouter: openrouterDriver,
+  pi: piDriver,
 } as const;
 
 const registry: DriverRegistry = drivers;

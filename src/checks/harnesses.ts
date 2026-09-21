@@ -1,13 +1,16 @@
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { promisify } from "node:util";
+import type { ModelSource } from "../blocks/agents/harness-config.ts";
 import { driverFor } from "../steps/agents/drivers/index.ts";
 import { realCodexAuthPath } from "../steps/agents/harnesses/codex-home.ts";
 import { stringEnv } from "../steps/agents/harnesses/env.ts";
 import { resolveClaudeExecutable } from "../steps/agents/harnesses/executables.ts";
+import { realPiAuthPath } from "../steps/agents/harnesses/pi-home.ts";
 import { type Check, type CheckResult, PROBE_TIMEOUT_MS } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 import { type HarnessKind, type HarnessRuntimeDeps, harnessRuntime } from "./harness-runtime.ts";
+import { modelApiKeyCheck } from "./models.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -144,6 +147,43 @@ export function codexAuthCheck(authPath = realCodexAuthPath()): Check {
       return { ok: true };
     },
   };
+}
+
+/** Check that Pi's shared login file contains an OpenAI Codex login. */
+export function piOpenaiCodexAuthCheck(authPath = realPiAuthPath()): Check {
+  return {
+    id: "harness.pi-openai-codex-auth",
+    label: "Pi OpenAI Codex login",
+    run: async (): Promise<CheckResult> => {
+      let auth: unknown;
+      try {
+        auth = JSON.parse(readFileSync(authPath, "utf8")) as unknown;
+      } catch {
+        return {
+          ok: false,
+          reason: `no readable Pi login found at ${authPath}`,
+          repair: "run: pi, then choose /login and OpenAI Codex",
+        };
+      }
+      if (typeof auth !== "object" || auth === null || !("openai-codex" in auth)) {
+        return {
+          ok: false,
+          reason: `${authPath} has no OpenAI Codex login`,
+          repair: "run: pi, then choose /login and OpenAI Codex",
+        };
+      }
+      return { ok: true };
+    },
+  };
+}
+
+/** Authentication checks selected by the model nested in a Pi call. */
+export function piAuthChecks(source: ModelSource | undefined): Check[] {
+  if (source?.kind === "openai-codex") return [piOpenaiCodexAuthCheck()];
+  if (source?.kind === "openrouter") return [modelApiKeyCheck(source.apiKeyEnv)];
+  if (source?.kind === "openai-compatible" && source.apiKeyEnv !== undefined)
+    return [modelApiKeyCheck(source.apiKeyEnv)];
+  return [];
 }
 
 /** The same check the service gates its boot on, so doctor cannot pass
