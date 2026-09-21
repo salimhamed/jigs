@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.44.1
+# @salimhamed/jigs v0.44.2
 
 Execute agent and model requests outside workflow code.
 
@@ -55,6 +55,40 @@ Injectable provider and environment operations used by agent execution.
 ###### Inherited from
 
 `DriverDependencies.ensurePiHome`
+
+##### evaluate()
+
+> **evaluate**\<`QUESTIONS`\>(`options`): `Promise`\<`EvaluationGeneration`\>
+
+###### Type Parameters
+
+###### QUESTIONS
+
+`QUESTIONS` *extends* `Record`\<`string`, `EvaluationModelV4Question`\>
+
+###### Parameters
+
+###### options
+
+###### model
+
+`EvaluationModel`
+
+###### questions
+
+`QUESTIONS`
+
+###### state
+
+`JevState`
+
+###### Returns
+
+`Promise`\<`EvaluationGeneration`\>
+
+###### Inherited from
+
+`DriverDependencies.evaluate`
 
 ##### executePi()
 
@@ -186,19 +220,33 @@ Run or ask an agent harness, checking worktree requirements before a run.
 
 ### executeJev()
 
-> **executeJev**(`_wire`): `Promise`\<`never`\>
+> **executeJev**\<`QUESTIONS`\>(`wire`, `metadata`, `deps`): `Promise`\<`JevResult`\<`QUESTIONS`\>\>
 
-Reserved durable wrapper target for judge/evaluate/verify requests.
+Evaluate typed questions with a decision-capable model.
+
+#### Type Parameters
+
+##### QUESTIONS
+
+`QUESTIONS` *extends* `JevQuestions`
 
 #### Parameters
 
-##### \_wire
+##### wire
 
-`unknown`
+`AskJevOptions`\<`QUESTIONS`\>
+
+##### metadata
+
+`RunMetadata`
+
+##### deps
+
+[`AgentExecutionDependencies`](#agentexecutiondependencies) = `defaultAgentExecutionDependencies`
 
 #### Returns
 
-`Promise`\<`never`\>
+`Promise`\<`JevResult`\<`QUESTIONS`\>\>
 
 ***
 
