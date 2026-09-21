@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.42.0](https://github.com/salimhamed/jigs/compare/jigs-v0.41.3...jigs-v0.42.0) (2026-09-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* split model sources from harnesses behind a driver registry ([#319](https://github.com/salimhamed/jigs/issues/319))
+
+### Features
+
+* split model sources from harnesses behind a driver registry ([#319](https://github.com/salimhamed/jigs/issues/319)) ([3935a15](https://github.com/salimhamed/jigs/commit/3935a155bfd40055466e63b19adb6067185de076))
+
 ## [0.41.3](https://github.com/salimhamed/jigs/compare/jigs-v0.41.2...jigs-v0.41.3) (2026-09-20)
 
 
