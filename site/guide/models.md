@@ -14,7 +14,7 @@ import { z } from "zod";
 import { askModel } from "#jigs";
 
 const result = await askModel({
-  model: models.openrouter("anthropic/claude-haiku-4.5"),
+  model: models.openrouter("google/gemini-2.5-flash-lite"),
   prompt: "Summarize this result in one sentence: The build passed, but two integration tests failed because the database was unavailable.",
   output: z.object({ summary: z.string() }),
 });

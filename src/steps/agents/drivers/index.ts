@@ -1,8 +1,25 @@
+import type { HarnessKind, ModelKind } from "../../../blocks/agents/harness-config.ts";
 import { claudeDriver } from "./claude.ts";
 import { codexDriver } from "./codex.ts";
+import { openrouterDriver } from "./openrouter.ts";
+import type { Driver } from "./types.ts";
+
+type DriverKind = HarnessKind | ModelKind;
+type DriverRegistry = Partial<{ [K in DriverKind]: Driver<K> }>;
 
 /** Every installed execution driver, keyed by its descriptor kind. */
-export const drivers = { claude: claudeDriver, codex: codexDriver } as const;
+export const drivers = {
+  claude: claudeDriver,
+  codex: codexDriver,
+  openrouter: openrouterDriver,
+} as const;
+
+const registry: DriverRegistry = drivers;
+
+/** Return the installed driver for a descriptor kind, if this release provides one. */
+export function driverFor<K extends DriverKind>(kind: K): Driver<K> | undefined {
+  return registry[kind];
+}
 
 export type RegisteredDriverKind = keyof typeof drivers;
 export type { Driver, DriverContext, DriverDependencies, ExecutorGeneration } from "./types.ts";

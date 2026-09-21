@@ -32,7 +32,19 @@ Pi is a harness whose driver is added separately.
 
 ## OpenRouter
 
-OpenRouter is a model source whose API driver is added separately.
+Use `models.openrouter(model)` with `askModel`. Set `OPENROUTER_API_KEY` in the
+factory repo's `.env`, then restart the service. A different variable can be
+named with `models.openrouter(model, { apiKeyEnv: "TEAM_OPENROUTER_KEY" })`;
+the descriptor records only that variable name, never its value.
+
+Direct model calls use strict JSON Schema structured output. OpenRouter models
+that do not support `structured_outputs` fail the call; use the
+[structured-output model filter](https://openrouter.ai/models?supported_parameters=structured_outputs)
+before selecting one.
+
+When OpenRouter returns usage accounting, jigs records its reported cost in
+`result.usage.costUsd`. This is an estimate from OpenRouter, not a bill, and may
+be absent when the selected endpoint does not return cost metadata.
 
 ## OpenAI-compatible
 

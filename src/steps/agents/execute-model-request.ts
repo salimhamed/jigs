@@ -2,7 +2,7 @@ import type { ModelRequest } from "../../blocks/agents/plan.ts";
 import { type ModelResult, toModelResult } from "../../blocks/agents/result.ts";
 import { JigsError } from "../../errors.ts";
 import type { RunMetadata } from "../runtime/run-context.ts";
-import { type Driver, drivers } from "./drivers/index.ts";
+import { driverFor } from "./drivers/index.ts";
 import {
   type AgentExecutionDependencies,
   defaultAgentExecutionDependencies,
@@ -16,15 +16,13 @@ export async function executeModel(
   metadata: RunMetadata,
   deps: AgentExecutionDependencies = defaultAgentExecutionDependencies,
 ): Promise<ModelResult> {
-  const driver = (drivers as Record<string, Driver<keyof typeof drivers> | undefined>)[
-    wire.model.kind
-  ];
+  const driver = driverFor(wire.model.kind);
   if (driver?.ask === undefined)
     throw new JigsError(`no driver is registered for ${wire.model.kind}`);
   const generation = await driver.ask(wire, {
     metadata,
     deps,
-    env: scrubbedEnv(driver.envAllowlist),
+    env: scrubbedEnv(driver.envAllowlist(wire)),
     output: outputSpec(wire.outputSchema),
   });
   const costUsd = driver.cost(generation);

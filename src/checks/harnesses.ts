@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { promisify } from "node:util";
-import { drivers } from "../steps/agents/drivers/index.ts";
+import { driverFor } from "../steps/agents/drivers/index.ts";
 import { realCodexAuthPath } from "../steps/agents/harnesses/codex-home.ts";
 import { stringEnv } from "../steps/agents/harnesses/env.ts";
 import { resolveClaudeExecutable } from "../steps/agents/harnesses/executables.ts";
@@ -149,9 +149,7 @@ export function codexAuthCheck(authPath = realCodexAuthPath()): Check {
 /** The same check the service gates its boot on, so doctor cannot pass
  *  something the service would refuse. */
 export function harnessRuntimeCheck(kind: HarnessKind, deps: HarnessRuntimeDeps = {}): Check {
-  const driver = (drivers as Record<string, (typeof drivers)[keyof typeof drivers] | undefined>)[
-    kind
-  ];
+  const driver = driverFor(kind);
   return {
     id: `harness.${kind}-cli`,
     label: `${driver?.displayName ?? kind} CLI`,
@@ -166,9 +164,7 @@ export function harnessRuntimeCheck(kind: HarnessKind, deps: HarnessRuntimeDeps 
 
 export function harnessChecks(kinds: HarnessKind[]): Check[] {
   return [...new Set(kinds)].flatMap((kind) => {
-    const driver = (drivers as Record<string, (typeof drivers)[keyof typeof drivers] | undefined>)[
-      kind
-    ];
+    const driver = driverFor(kind);
     return driver === undefined
       ? [missingDriverCheck(kind)]
       : [...driver.runtimeChecks(), ...driver.authChecks()];

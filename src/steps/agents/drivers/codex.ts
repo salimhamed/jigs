@@ -99,7 +99,7 @@ export const codexDriver = {
   authChecks: () => [codexAuthCheck()],
   jitChecks: (request) =>
     request.cwd === undefined ? [] : [codexWorktreeConfigCheck(request.cwd)],
-  envAllowlist: [],
+  envAllowlist: () => [],
   sessionPointer: { providerKey: "codex-app-server", field: "threadId" },
   docsAnchor: "codex",
   displayName: "Codex",

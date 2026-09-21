@@ -44,7 +44,7 @@ export type Harness = ClaudeHarness | CodexHarness | PiHarness;
 export type HarnessKind = Harness["kind"];
 
 /** An OpenRouter API model source. */
-export type OpenrouterSource = { kind: "openrouter"; model: string };
+export type OpenrouterSource = { kind: "openrouter"; model: string; apiKeyEnv: string };
 /** An OpenAI-compatible API model source. */
 export type OpenaiCompatibleSource = { kind: "openai-compatible"; model: string; baseUrl: string };
 /** The Codex subscription model source used only by the Pi harness. */
@@ -58,8 +58,8 @@ export type ModelKind = ModelSource["kind"];
 
 /** Constructors for model-source descriptors. */
 export const models = {
-  openrouter(model: string): OpenrouterSource {
-    return { kind: "openrouter", model };
+  openrouter(model: string, options: { apiKeyEnv?: string } = {}): OpenrouterSource {
+    return { kind: "openrouter", model, apiKeyEnv: options.apiKeyEnv ?? "OPENROUTER_API_KEY" };
   },
   openaiCompatible(model: string, options: { baseUrl: string }): OpenaiCompatibleSource {
     return { kind: "openai-compatible", model, ...options };

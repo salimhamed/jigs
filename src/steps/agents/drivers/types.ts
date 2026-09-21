@@ -1,4 +1,4 @@
-import type { LanguageModel, OutputInterface } from "ai";
+import type { generateText, LanguageModel, OutputInterface } from "ai";
 import type { CodexAppServerProvider } from "ai-sdk-provider-codex-cli";
 import type { HarnessKind, ModelKind } from "../../../blocks/agents/harness-config.ts";
 import type { AgentRequest, ModelRequest } from "../../../blocks/agents/plan.ts";
@@ -14,7 +14,7 @@ export interface DriverDependencies {
     prompt: string;
     system?: string;
     output?: OutputInterface<unknown, unknown, never>;
-    providerOptions?: Record<string, Record<string, string>>;
+    providerOptions?: Parameters<typeof generateText>[0]["providerOptions"];
   }): Promise<ExecutorGeneration>;
   ensureCodexHome(runId: string): string;
   withCodexAppServer<T>(fn: (provider: CodexAppServerProvider) => Promise<T>): Promise<T>;
@@ -34,9 +34,9 @@ export interface Driver<K extends HarnessKind | ModelKind> {
   run?(request: AgentRequest, context: DriverContext): Promise<ExecutorGeneration>;
   decide?: undefined;
   runtimeChecks(): Check[];
-  authChecks(): Check[];
+  authChecks(request?: AgentRequest | ModelRequest): Check[];
   jitChecks?(request: AgentRequest): Check[];
-  envAllowlist: readonly string[];
+  envAllowlist(request?: AgentRequest | ModelRequest): readonly string[];
   sessionPointer?: { providerKey: string; field: string };
   docsAnchor: string;
   displayName: string;
