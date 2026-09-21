@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.43.0
+# @salimhamed/jigs v0.44.0
 
 Compose agent and model calls inside a workflow, including harness selection and halts.
 
@@ -783,19 +783,31 @@ The serializable JSON Schema sent across the workflow-step boundary.
 
 ### PiHarness
 
-> **PiHarness** = `SharedHarness` & `object`
+> **PiHarness** = `object`
 
-A Pi harness descriptor. Its driver is supplied separately.
+A Pi harness descriptor backed by a nested model source.
 
-#### Type Declaration
+#### Properties
 
 ##### kind
 
 > **kind**: `"pi"`
 
-##### provider
+##### mcpServers?
 
-> **provider**: [`OpenaiCodexSource`](#openaicodexsource)
+> `optional` **mcpServers**: `Record`\<`string`, [`McpServerConfig`](#mcpserverconfig)\>
+
+##### model
+
+> **model**: [`ModelSource`](#modelsource)
+
+##### thinking?
+
+> `optional` **thinking**: `"off"` \| `"minimal"` \| `"low"` \| `"medium"` \| `"high"` \| `"xhigh"` \| `"max"`
+
+##### tools?
+
+> `optional` **tools**: `string`[]
 
 ***
 
@@ -955,11 +967,17 @@ Constructors for agent-harness descriptors.
 
 ###### model
 
-`string`
+[`ModelSource`](#modelsource)
 
 ###### options
 
-`Omit`\<[`PiHarness`](#piharness), `"kind"` \| `"model"`\>
+###### thinking?
+
+`"low"` \| `"medium"` \| `"high"` \| `"xhigh"` \| `"max"` \| `"minimal"` \| `"off"`
+
+###### tools?
+
+`string`[]
 
 ###### Returns
 

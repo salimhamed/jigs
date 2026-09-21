@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.43.0
+# @salimhamed/jigs v0.44.0
 
 Start and inspect the recurring schedules declared by a factory.
 
