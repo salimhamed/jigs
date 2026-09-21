@@ -35,6 +35,23 @@ export {
   type PiHarness,
 } from "./harness-config.ts";
 export {
+  type AskJevOptions,
+  askJev,
+  type ChoiceQuestion,
+  choice,
+  type JevAnswer,
+  type JevAnswers,
+  type JevQuestion,
+  type JevQuestions,
+  type JevResult,
+  type JevState,
+  type JevUsage,
+  type ScoreQuestion,
+  score,
+  type YesNoQuestion,
+  yesNo,
+} from "./jev.ts";
+export {
   type AgentRequest,
   type AskAgentOptions,
   type AskModelOptions,

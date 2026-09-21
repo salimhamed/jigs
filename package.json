@@ -138,7 +138,7 @@
     "@ai-sdk/openai-compatible": "3.0.53",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openrouter/ai-sdk-provider": "3.1.0",
-    "ai": "^7.0.79",
+    "ai": "^7.0.103",
     "ai-sdk-provider-claude-code": "4.3.1",
     "ai-sdk-provider-codex-cli": "2.2.1",
     "commander": "^15.0.0",

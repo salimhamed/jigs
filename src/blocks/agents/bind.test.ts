@@ -2,6 +2,7 @@ import { expect, test, vi } from "vitest";
 import { z } from "zod";
 import { type AgentSteps, bindAgentSteps } from "./bind.ts";
 import { models } from "./harness-config.ts";
+import { type ExecuteJevStep, yesNo } from "./jev.ts";
 
 const unused = async (): Promise<never> => {
   throw new Error("unexpected step");
@@ -45,4 +46,22 @@ test("generic agents require no ticket or pull-request steps", async () => {
     }),
   ).toMatchObject({ output: { finding: "unused" } });
   expect(executeModel).toHaveBeenCalledOnce();
+});
+
+test("a factory binding exposes typed decision questions", async () => {
+  let calls = 0;
+  const executeJev: ExecuteJevStep = async () => {
+    calls += 1;
+    throw new Error("decision step called");
+  };
+  const bound = bindAgentSteps({ executeAgent: unused, executeModel: unused, executeJev });
+
+  await expect(
+    bound.askJev({
+      model: models.openrouter("typesafe/jev-1.13"),
+      state: "CRM and billing records",
+      questions: { match: yesNo("Do they identify the same company?") },
+    }),
+  ).rejects.toThrow("decision step called");
+  expect(calls).toBe(1);
 });

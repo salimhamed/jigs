@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import { harnesses, models } from "./harness-config.ts";
+import { type AskJevOptions, yesNo } from "./jev.ts";
 import type { AskAgentOptions, AskModelOptions, RunAgentOptions } from "./plan.ts";
 
 test("descriptor namespaces build tagged plain data", () => {
@@ -80,5 +81,11 @@ test("verbs reject the wrong descriptor family at compile time", () => {
   const model: AskModelOptions = { model: harnesses.claude("sonnet"), prompt: "ask" };
   // @ts-expect-error the Codex subscription source is only meaningful inside the Pi harness
   const codex: AskModelOptions = { model: models.openaiCodex("gpt-5.5"), prompt: "ask" };
-  expect([run, agent, model, codex]).toHaveLength(4);
+  const jev: AskJevOptions<{ match: ReturnType<typeof yesNo> }> = {
+    // @ts-expect-error askJev accepts a model source, not a harness
+    model: harnesses.claude("sonnet"),
+    state: "records",
+    questions: { match: yesNo("Same?") },
+  };
+  expect([run, agent, model, codex, jev]).toHaveLength(5);
 });

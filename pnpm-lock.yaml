@@ -18,7 +18,7 @@ importers:
         specifier: 3.1.0
         version: 3.1.0(ai@7.0.107(zod@4.5.4))(zod@4.5.4)
       ai:
-        specifier: ^7.0.79
+        specifier: ^7.0.103
         version: 7.0.107(zod@4.5.4)
       ai-sdk-provider-claude-code:
         specifier: 4.3.1

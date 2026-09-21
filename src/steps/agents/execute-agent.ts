@@ -1,4 +1,4 @@
-import { generateText, jsonSchema, Output, type OutputInterface } from "ai";
+import { experimental_evaluate, generateText, jsonSchema, Output, type OutputInterface } from "ai";
 import type { ExecuteAgentStep } from "../../blocks/agents/agent.ts";
 import type { HarnessKind } from "../../blocks/agents/harness-config.ts";
 import type { AgentRequest } from "../../blocks/agents/plan.ts";
@@ -30,6 +30,7 @@ export interface AgentExecutionDependencies extends DriverDependencies {
 /** Production dependencies for executing harness requests. */
 export const defaultAgentExecutionDependencies: AgentExecutionDependencies = {
   generateText: (options) => generateText(options),
+  evaluate: (options) => experimental_evaluate(options),
   ensureCodexHome: (runId) => ensureManagedCodexHome(runId),
   ensurePiHome: (runId, source) => ensureManagedPiHome(runId, source),
   executePi,
