@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.43.0](https://github.com/salimhamed/jigs/compare/jigs-v0.42.2...jigs-v0.43.0) (2026-09-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* models.openaiCompatible now accepts the descriptor options object.
+
+### Features
+
+* add an OpenAI-compatible model source for local servers ([#326](https://github.com/salimhamed/jigs/issues/326)) ([a376bdb](https://github.com/salimhamed/jigs/commit/a376bdb4d543d61ba29254123be1a75a803f829b))
+
 ## [0.42.2](https://github.com/salimhamed/jigs/compare/jigs-v0.42.1...jigs-v0.42.2) (2026-09-21)
 
 
