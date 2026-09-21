@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.42.1
+# @salimhamed/jigs v0.42.2
 
 Compose agent and model calls inside a workflow, including harness selection and halts.
 
@@ -739,6 +739,10 @@ An OpenRouter API model source.
 
 #### Properties
 
+##### apiKeyEnv
+
+> **apiKeyEnv**: `string`
+
 ##### kind
 
 > **kind**: `"openrouter"`
@@ -987,11 +991,17 @@ Constructors for model-source descriptors.
 
 ##### openrouter()
 
-> `readonly` **openrouter**(`model`): [`OpenrouterSource`](#openroutersource)
+> `readonly` **openrouter**(`model`, `options`): [`OpenrouterSource`](#openroutersource)
 
 ###### Parameters
 
 ###### model
+
+`string`
+
+###### options
+
+###### apiKeyEnv?
 
 `string`
 
