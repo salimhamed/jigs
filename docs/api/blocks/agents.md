@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.44.1
+# @salimhamed/jigs v0.44.2
 
 Compose agent and model calls inside a workflow, including harness selection and halts.
 
@@ -405,6 +405,34 @@ Workflow-side options for one harness turn without tools or a worktree.
 
 ***
 
+### AskJevOptions
+
+> **AskJevOptions**\<`QUESTIONS`\> = `object`
+
+A decision request in workflow and durable wire form.
+
+#### Type Parameters
+
+##### QUESTIONS
+
+`QUESTIONS` *extends* [`JevQuestions`](#jevquestions)
+
+#### Properties
+
+##### model
+
+> **model**: [`ModelSource`](#modelsource)
+
+##### questions
+
+> **questions**: `QUESTIONS`
+
+##### state
+
+> **state**: [`JevState`](#jevstate)
+
+***
+
 ### AskModelOptions
 
 > **AskModelOptions**\<`T`\> = `object`
@@ -434,6 +462,34 @@ Workflow-side options for one API model call.
 ##### system?
 
 > `optional` **system**: `string`
+
+***
+
+### ChoiceQuestion
+
+> **ChoiceQuestion**\<`OPTIONS`\> = `object`
+
+A question answered with one named option.
+
+#### Type Parameters
+
+##### OPTIONS
+
+`OPTIONS` *extends* `Record`\<`string`, `string`\> = `Record`\<`string`, `string`\>
+
+#### Properties
+
+##### instructions
+
+> **instructions**: `string`
+
+##### options
+
+> **options**: `OPTIONS`
+
+##### type
+
+> **type**: `"choice"`
 
 ***
 
@@ -493,19 +549,25 @@ The factory's `"use step"` wrapper around `executeAgent`.
 
 ### ExecuteJevStep()
 
-> **ExecuteJevStep** = (`wire`) => `Promise`\<`never`\>
+> **ExecuteJevStep** = \<`QUESTIONS`\>(`request`) => `Promise`\<[`JevResult`](#jevresult)\<`QUESTIONS`\>\>
 
-The factory's reserved wrapper for the future judge/evaluate/verify verb.
+The factory's durable wrapper around the decision step.
+
+#### Type Parameters
+
+##### QUESTIONS
+
+`QUESTIONS` *extends* [`JevQuestions`](#jevquestions)
 
 #### Parameters
 
-##### wire
+##### request
 
-`unknown`
+[`AskJevOptions`](#askjevoptions)\<`QUESTIONS`\>
 
 #### Returns
 
-`Promise`\<`never`\>
+`Promise`\<[`JevResult`](#jevresult)\<`QUESTIONS`\>\>
 
 ***
 
@@ -540,6 +602,108 @@ A serializable agent-program descriptor.
 > **HarnessKind** = [`Harness`](#harness-3)\[`"kind"`\]
 
 The stable name of an agent harness.
+
+***
+
+### JevAnswer
+
+> **JevAnswer**\<`QUESTION`\> = `QUESTION` *extends* [`ChoiceQuestion`](#choicequestion)\<infer OPTIONS\> ? `object` : `QUESTION` *extends* [`ScoreQuestion`](#scorequestion) ? `object` : `object`
+
+The calibrated answer shape selected by one question descriptor.
+
+#### Type Parameters
+
+##### QUESTION
+
+`QUESTION` *extends* [`JevQuestion`](#jevquestion)
+
+***
+
+### JevAnswers
+
+> **JevAnswers**\<`QUESTIONS`\> = `{ [KEY in keyof QUESTIONS]: JevAnswer<QUESTIONS[KEY]> }`
+
+Answers narrowed independently for every named question.
+
+#### Type Parameters
+
+##### QUESTIONS
+
+`QUESTIONS` *extends* [`JevQuestions`](#jevquestions)
+
+***
+
+### JevQuestion
+
+> **JevQuestion** = [`YesNoQuestion`](#yesnoquestion) \| [`ChoiceQuestion`](#choicequestion) \| [`ScoreQuestion`](#scorequestion)
+
+Any question accepted by [askJev](#askjev).
+
+***
+
+### JevQuestions
+
+> **JevQuestions** = `Record`\<`string`, [`JevQuestion`](#jevquestion)\>
+
+Named decision questions evaluated against one shared state.
+
+***
+
+### JevResult
+
+> **JevResult**\<`QUESTIONS`\> = `object`
+
+A typed decision result.
+
+#### Type Parameters
+
+##### QUESTIONS
+
+`QUESTIONS` *extends* [`JevQuestions`](#jevquestions)
+
+#### Properties
+
+##### answers
+
+> **answers**: [`JevAnswers`](#jevanswers)\<`QUESTIONS`\>
+
+##### usage
+
+> **usage**: [`JevUsage`](#jevusage)
+
+***
+
+### JevState
+
+> **JevState** = `string` \| `JevJsonObject` \| `JevJsonValue`[]
+
+JSON-compatible evidence evaluated by a decision model.
+
+***
+
+### JevUsage
+
+> **JevUsage** = `object`
+
+Token use and provider-estimated cost for one decision request.
+
+#### Properties
+
+##### costUsd?
+
+> `optional` **costUsd**: `number`
+
+##### inputTokens
+
+> **inputTokens**: `number` \| `undefined`
+
+##### outputTokens
+
+> **outputTokens**: `number` \| `undefined`
+
+##### totalTokens
+
+> **totalTokens**: `number` \| `undefined`
 
 ***
 
@@ -913,6 +1077,46 @@ Workflow-side options for an agent that works inside a directory.
 
 > `optional` **resume**: [`AgentSession`](#agentsession)
 
+***
+
+### ScoreQuestion
+
+> **ScoreQuestion** = `object`
+
+A question scored over ordered levels, from lowest to highest.
+
+#### Properties
+
+##### instructions
+
+> **instructions**: `string`
+
+##### levels
+
+> **levels**: `string`[]
+
+##### type
+
+> **type**: `"score"`
+
+***
+
+### YesNoQuestion
+
+> **YesNoQuestion** = `object`
+
+A calibrated yes-or-no question.
+
+#### Properties
+
+##### instructions
+
+> **instructions**: `string`
+
+##### type
+
+> **type**: `"yes-no"`
+
 ## Variables
 
 ### harnesses
@@ -1107,6 +1311,34 @@ Ask an agent harness without a worktree or tools.
 
 ***
 
+### askJev()
+
+> **askJev**\<`QUESTIONS`\>(`options`, `executeJev`): `Promise`\<[`JevResult`](#jevresult)\<`QUESTIONS`\>\>
+
+Evaluate named typed questions against one shared state.
+
+#### Type Parameters
+
+##### QUESTIONS
+
+`QUESTIONS` *extends* [`JevQuestions`](#jevquestions)
+
+#### Parameters
+
+##### options
+
+[`AskJevOptions`](#askjevoptions)\<`QUESTIONS`\>
+
+##### executeJev
+
+[`ExecuteJevStep`](#executejevstep)
+
+#### Returns
+
+`Promise`\<[`JevResult`](#jevresult)\<`QUESTIONS`\>\>
+
+***
+
 ### askModel()
 
 > **askModel**\<`T`\>(`config`, `executeModel`): `Promise`\<[`ModelResult`](#modelresult)\<`T`\>\>
@@ -1170,6 +1402,26 @@ Connect agent calls to durable steps without requiring a ticket integration.
 ###### Returns
 
 `Promise`\<[`AgentResult`](#agentresult)\<`T`\>\>
+
+##### askJev()
+
+> **askJev**: \<`QUESTIONS`\>(`config`) => `Promise`\<[`JevResult`](#jevresult)\<`QUESTIONS`\>\>
+
+###### Type Parameters
+
+###### QUESTIONS
+
+`QUESTIONS` *extends* [`JevQuestions`](#jevquestions)
+
+###### Parameters
+
+###### config
+
+[`AskJevOptions`](#askjevoptions)\<`QUESTIONS`\>
+
+###### Returns
+
+`Promise`\<[`JevResult`](#jevresult)\<`QUESTIONS`\>\>
 
 ##### askModel()
 
@@ -1282,6 +1534,34 @@ Convert workflow-side model options into their durable wire form.
 #### Returns
 
 [`ModelRequest`](#modelrequest)
+
+***
+
+### choice()
+
+> **choice**\<`OPTIONS`\>(`instructions`, `options`): [`ChoiceQuestion`](#choicequestion)\<`OPTIONS`\>
+
+Build a question answered with one named option.
+
+#### Type Parameters
+
+##### OPTIONS
+
+`OPTIONS` *extends* `Record`\<`string`, `string`\>
+
+#### Parameters
+
+##### instructions
+
+`string`
+
+##### options
+
+`OPTIONS`
+
+#### Returns
+
+[`ChoiceQuestion`](#choicequestion)\<`OPTIONS`\>
 
 ***
 
@@ -1421,6 +1701,28 @@ Run an agent, pausing on its ticket until a human repairs failed tool checks.
 
 ***
 
+### score()
+
+> **score**(`instructions`, `levels`): [`ScoreQuestion`](#scorequestion)
+
+Build a question scored over ordered levels, from lowest to highest.
+
+#### Parameters
+
+##### instructions
+
+`string`
+
+##### levels
+
+`string`[]
+
+#### Returns
+
+[`ScoreQuestion`](#scorequestion)
+
+***
+
 ### unwrapAgentStep()
 
 > **unwrapAgentStep**(`result`): [`AgentResult`](#agentresult)
@@ -1436,3 +1738,21 @@ Convert returned execution failure markers into workflow-side errors.
 #### Returns
 
 [`AgentResult`](#agentresult)
+
+***
+
+### yesNo()
+
+> **yesNo**(`instructions`): [`YesNoQuestion`](#yesnoquestion)
+
+Build a calibrated yes-or-no question.
+
+#### Parameters
+
+##### instructions
+
+`string`
+
+#### Returns
+
+[`YesNoQuestion`](#yesnoquestion)

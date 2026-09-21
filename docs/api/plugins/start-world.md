@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.44.1
+# @salimhamed/jigs v0.44.2
 
 Start the Workflow runtime and the jigs services that depend on it.
 
