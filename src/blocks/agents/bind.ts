@@ -1,10 +1,15 @@
 import { type ExecuteAgentStep, runAgent as runAgentBlock } from "./agent.ts";
 import { askAgent as askAgentBlock } from "./ask-agent.ts";
 import { askModel as askModelBlock, type ExecuteModelStep } from "./ask-model.ts";
+import {
+  type AskJevOptions,
+  askJev as askJevBlock,
+  type ExecuteJevStep,
+  type JevQuestions,
+} from "./jev.ts";
 import type { AskAgentOptions, AskModelOptions, RunAgentOptions } from "./plan.ts";
 
-/** The factory's reserved wrapper for the future judge/evaluate/verify verb. */
-export type ExecuteJevStep = (wire: unknown) => Promise<never>;
+export type { ExecuteJevStep } from "./jev.ts";
 
 /** The raw durable wrappers a factory supplies, one per execution role. */
 export interface AgentSteps {
@@ -24,5 +29,8 @@ export function bindAgentSteps(steps: AgentSteps) {
   function askModel<T = undefined>(config: AskModelOptions<T>) {
     return askModelBlock(config, steps.executeModel);
   }
-  return { runAgent, askAgent, askModel };
+  function askJev<const QUESTIONS extends JevQuestions>(config: AskJevOptions<QUESTIONS>) {
+    return askJevBlock(config, steps.executeJev);
+  }
+  return { runAgent, askAgent, askModel, askJev };
 }

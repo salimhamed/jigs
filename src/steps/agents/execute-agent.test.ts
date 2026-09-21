@@ -84,6 +84,9 @@ function makeDeps(
       captured.options = options;
       return { text: "done", usage, ...generation };
     },
+    evaluate: async () => {
+      throw new Error("unexpected decision call");
+    },
     ensureCodexHome: (runId) => {
       captured.homeRunIds.push(runId);
       return path.join(tmp, "codex-home", runId);

@@ -79,6 +79,55 @@ When OpenRouter returns usage accounting, jigs records its reported cost in
 `result.usage.costUsd`. This is an estimate from OpenRouter, not a bill, and may
 be absent when the selected endpoint does not return cost metadata.
 
+## Jev decisions
+
+`askJev` asks an OpenRouter jev-class decision model named questions about one
+shared state. Unlike `askModel`, it sends no prompt and returns no prose. Each
+answer carries calibrated probabilities:
+
+- `yesNo(instructions)` returns `{ probability }`.
+- `choice(instructions, options)` returns the selected choice, a probability for
+  every option, and confidence.
+- `score(instructions, levels)` returns probabilities, confidence, a level
+  legend, and a numeric score. The score is the probability-weighted expected
+  value over the ordered level indexes, so it can be fractional.
+
+Use `models.openrouter("typesafe/jev-1.13")`. The model costs $0.042 per million
+input tokens and has no output-token charge; `usage.costUsd` contains
+OpenRouter's estimate.
+
+Entity alignment belongs in factory workflow code because its fields,
+candidates, and action thresholds are business policy. For example, a factory
+can ask one score question for a candidate pair and add field-specific checks:
+
+```ts
+import { models, score, yesNo } from "@salimhamed/jigs/blocks/agents";
+import { askJev } from "#jigs";
+
+const state = {
+  crm: { name: "Acme Labs", domain: "acme.example" },
+  billing: { name: "Acme Labs LLC", domain: "acme.example" },
+};
+
+const result = await askJev({
+  model: models.openrouter("typesafe/jev-1.13"),
+  state,
+  questions: {
+    candidatePair: score("How closely do these records align?", [
+      "Different companies",
+      "Possibly the same company",
+      "The same company",
+    ]),
+    nameMatches: yesNo("Do the company names refer to the same entity?"),
+    domainMatches: yesNo("Do the domains refer to the same entity?"),
+  },
+});
+```
+
+For several billing candidates, create one score question per candidate pair.
+The workflow decides how much probability is enough to link records or request
+human review; jigs supplies the typed answers, not that policy.
+
 ## OpenAI-compatible
 
 Use `models.openaiCompatible({ name, baseUrl, model, apiKeyEnv?, compat? })` with

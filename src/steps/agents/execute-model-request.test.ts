@@ -2,10 +2,11 @@ import { afterEach, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { askModel } from "../../blocks/agents/ask-model.ts";
 import { harnesses, models } from "../../blocks/agents/harness-config.ts";
+import { askJev, choice, type JevQuestions, score, yesNo } from "../../blocks/agents/jev.ts";
 import { buildAskAgentRequest, buildModelRequest } from "../../blocks/agents/plan.ts";
 import { drivers } from "./drivers/index.ts";
 import { defaultAgentExecutionDependencies } from "./execute-agent.ts";
-import { executeModel } from "./execute-model-request.ts";
+import { executeJev, executeModel } from "./execute-model-request.ts";
 
 const openaiCompatible = vi.hoisted(() => ({ create: vi.fn() }));
 
@@ -39,6 +40,261 @@ afterEach(() => {
 });
 
 const verdict = z.object({ ok: z.boolean() });
+
+test("askJev rejects a non-decision model by name", async () => {
+  await expect(
+    askJev(
+      {
+        model: models.openrouter("anthropic/claude-haiku"),
+        state: "evidence",
+        questions: { match: yesNo("Does it match?") },
+      },
+      (wire) => executeJev(wire, { workflowRunId: "run-1" }),
+    ),
+  ).rejects.toThrow(
+    "anthropic/claude-haiku is not a jev-class model; askJev accepts only jev-class models",
+  );
+});
+
+test("askJev rejects a model kind whose driver has no decision capability", async () => {
+  await expect(
+    executeJev(
+      {
+        model: models.openaiCompatible({
+          name: "local",
+          baseUrl: "http://127.0.0.1:1234/v1",
+          model: "local-chat",
+        }),
+        state: "evidence",
+        questions: { match: yesNo("Does it match?") },
+      },
+      { workflowRunId: "run-1" },
+    ),
+  ).rejects.toThrow("local-chat cannot be used with askJev");
+});
+
+test("askJev rejects cyclic state before calling the provider", async () => {
+  vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+  type CyclicState = { account: string; self?: CyclicState };
+  const state: CyclicState = { account: "Acme" };
+  state.self = state;
+  const evaluate = vi.fn();
+  await expect(
+    executeJev(
+      {
+        model: models.openrouter("typesafe/jev-1.13"),
+        state,
+        questions: { match: yesNo("Does it match?") },
+      },
+      { workflowRunId: "run-1" },
+      { ...defaultAgentExecutionDependencies, evaluate },
+    ),
+  ).rejects.toThrow("state must be JSON-compatible");
+  expect(evaluate).not.toHaveBeenCalled();
+});
+
+test("OpenRouter evaluates typed questions and normalizes metadata and cost", async () => {
+  vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+  const evaluate = vi.fn(async () => ({
+    answers: {
+      sameCompany: { type: "boolean" as const, probability: 0.96 },
+      disposition: {
+        type: "choice" as const,
+        choice: "match",
+        probabilities: { match: 0.9, review: 0.1 },
+      },
+      similarity: {
+        type: "score" as const,
+        score: 1.72,
+        probabilities: { "0": 0.03, "1": 0.22, "2": 0.75 },
+      },
+    },
+    usage: { inputTokens: 48, outputTokens: 5, totalTokens: 53 },
+    providerMetadata: {
+      openrouter: {
+        answers: {
+          disposition: { confidence: 0.81 },
+          similarity: {
+            confidence: 0.88,
+            legend: { "0": "Different", "1": "Possible", "2": "Same" },
+          },
+        },
+        usage: { cost: 0.000002016 },
+      },
+    },
+  }));
+  const result = await askJev(
+    {
+      model: models.openrouter("typesafe/jev-1.13"),
+      state: { crm: { name: "Acme" }, billing: { name: "ACME Inc." } },
+      questions: {
+        sameCompany: yesNo("Same company?"),
+        disposition: choice("What next?", { match: "Link", review: "Review" }),
+        similarity: score("Similarity?", ["Different", "Possible", "Same"]),
+      },
+    },
+    (wire) =>
+      executeJev(
+        wire,
+        { workflowRunId: "run-1" },
+        {
+          ...defaultAgentExecutionDependencies,
+          evaluate,
+        },
+      ),
+  );
+
+  expect(evaluate).toHaveBeenCalledWith(
+    expect.objectContaining({
+      model: expect.objectContaining({ modelId: "typesafe/jev-1.13" }),
+      state: { crm: { name: "Acme" }, billing: { name: "ACME Inc." } },
+      questions: {
+        sameCompany: { type: "boolean", instructions: "Same company?" },
+        disposition: {
+          type: "choice",
+          instructions: "What next?",
+          criteria: { match: "Link", review: "Review" },
+        },
+        similarity: {
+          type: "score",
+          instructions: "Similarity?",
+          criteria: ["Different", "Possible", "Same"],
+        },
+      },
+    }),
+  );
+  expect(result).toEqual({
+    answers: {
+      sameCompany: { probability: 0.96 },
+      disposition: {
+        choice: "match",
+        probabilities: { match: 0.9, review: 0.1 },
+        confidence: 0.81,
+      },
+      similarity: {
+        score: 1.72,
+        probabilities: { "0": 0.03, "1": 0.22, "2": 0.75 },
+        confidence: 0.88,
+        legend: { "0": "Different", "1": "Possible", "2": "Same" },
+      },
+    },
+    usage: { inputTokens: 48, outputTokens: 5, totalTokens: 53, costUsd: 0.000002016 },
+  });
+});
+
+test("a malformed question raises a JigsError naming its key before the provider call", async () => {
+  vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+  const evaluate = vi.fn(async () => {
+    throw new Error("provider must not run");
+  });
+  await expect(
+    executeJev(
+      {
+        model: models.openrouter("typesafe/jev-1.13"),
+        state: "evidence",
+        questions: {
+          accountRisk: {
+            type: "score",
+            instructions: "How risky is this account?",
+            levels: null as unknown as string[],
+          },
+        },
+      },
+      { workflowRunId: "run-1" },
+      { ...defaultAgentExecutionDependencies, evaluate },
+    ),
+  ).rejects.toThrow('question "accountRisk" is malformed');
+  expect(evaluate).not.toHaveBeenCalled();
+});
+
+test("a provider argument error is translated to the offending question key", async () => {
+  vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+  const providerError = new Error(
+    "Invalid argument for questions.disposition.criteria: descriptions are incomplete",
+  );
+  providerError.name = "AI_InvalidArgumentError";
+  await expect(
+    executeJev(
+      {
+        model: models.openrouter("typesafe/jev-1.13"),
+        state: "evidence",
+        questions: {
+          disposition: choice("What next?", { match: "Link", review: "Review" }),
+        },
+      },
+      { workflowRunId: "run-1" },
+      {
+        ...defaultAgentExecutionDependencies,
+        evaluate: async () => {
+          throw providerError;
+        },
+      },
+    ),
+  ).rejects.toThrow('question "disposition" is malformed');
+});
+
+const malformedProviderCases: Array<{
+  label: string;
+  questions: JevQuestions;
+  answers: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  key: string;
+}> = [
+  {
+    label: "missing answer",
+    questions: { match: yesNo("Match?") },
+    answers: {},
+    metadata: {},
+    key: "match",
+  },
+  {
+    label: "missing choice confidence",
+    questions: { disposition: choice("What next?", { match: "Link", review: "Review" }) },
+    answers: {
+      disposition: {
+        type: "choice",
+        choice: "match",
+        probabilities: { match: 0.8, review: 0.2 },
+      },
+    },
+    metadata: { disposition: {} },
+    key: "disposition",
+  },
+  {
+    label: "incomplete score legend",
+    questions: { similarity: score("Similarity?", ["Different", "Same"]) },
+    answers: {
+      similarity: { type: "score", score: 0.7, probabilities: { "0": 0.3, "1": 0.7 } },
+    },
+    metadata: { similarity: { confidence: 0.9, legend: { "0": "Different" } } },
+    key: "similarity",
+  },
+];
+
+test.each(malformedProviderCases)(
+  "a $label from the provider becomes a keyed JigsError",
+  async ({ questions, answers, metadata, key }) => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    await expect(
+      executeJev(
+        {
+          model: models.openrouter("typesafe/jev-1.13"),
+          state: "evidence",
+          questions,
+        },
+        { workflowRunId: "run-1" },
+        {
+          ...defaultAgentExecutionDependencies,
+          evaluate: async () => ({
+            answers,
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            providerMetadata: { openrouter: { answers: metadata } },
+          }),
+        },
+      ),
+    ).rejects.toThrow(`question "${key}" is malformed`);
+  },
+);
 
 test("the OpenRouter driver accepts only OpenRouter model descriptors", async () => {
   const context = {

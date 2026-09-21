@@ -4,7 +4,9 @@
 import type { Worktree } from "@salimhamed/jigs";
 import {
   type AgentRequest,
+  type AskJevOptions,
   bindAgentSteps,
+  type JevQuestions,
   type ModelRequest,
 } from "@salimhamed/jigs/blocks/agents";
 import { bindLinearSteps, type Halt, type TicketNote } from "@salimhamed/jigs/blocks/linear";
@@ -76,10 +78,13 @@ export async function executeModel(request: ModelRequest) {
   return agentsOperations.executeModel(request, metadata);
 }
 
-/** Reserved durable wrapper for judge, evaluate and verify requests. */
-export async function executeJev(request: unknown) {
+/** Execute typed decision questions against one shared state. */
+export function executeJev<const QUESTIONS extends JevQuestions>(
+  request: AskJevOptions<QUESTIONS>,
+): Promise<import("@salimhamed/jigs/blocks/agents").JevResult<QUESTIONS>>;
+export async function executeJev(request: AskJevOptions<JevQuestions>) {
   "use step";
-  return agentsOperations.executeJev(request);
+  return agentsOperations.executeJev(request, getWorkflowMetadata());
 }
 
 /** Post a request for human input on the ticket. Use haltForHuman() to also wait for a reply. */
@@ -287,6 +292,9 @@ export const askAgent = agents.askAgent;
 
 /** Ask a model without tools and validate its answer against your output schema. */
 export const askModel = agents.askModel;
+
+/** Ask a decision model named questions and receive calibrated typed answers. */
+export const askJev = agents.askJev;
 
 /** Durable operations used by Linear blocks. */
 export const linearSteps = {
