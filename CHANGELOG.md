@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.44.0](https://github.com/salimhamed/jigs/compare/jigs-v0.43.0...jigs-v0.44.0) (2026-09-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* harnesses.pi now accepts a nested ModelSource and optional Pi ask settings.
+
+### Features
+
+* add the pi harness in ask mode ([#328](https://github.com/salimhamed/jigs/issues/328)) ([4c96888](https://github.com/salimhamed/jigs/commit/4c96888eef3dbfa20b68f60a30bbba04be42fcbe))
+
 ## [0.43.0](https://github.com/salimhamed/jigs/compare/jigs-v0.42.2...jigs-v0.43.0) (2026-09-21)
 
 
