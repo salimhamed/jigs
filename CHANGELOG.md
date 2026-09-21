@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.42.2](https://github.com/salimhamed/jigs/compare/jigs-v0.42.1...jigs-v0.42.2) (2026-09-21)
+
+
+### Features
+
+* add an OpenRouter model source for askModel ([#324](https://github.com/salimhamed/jigs/issues/324)) ([09f7ce7](https://github.com/salimhamed/jigs/commit/09f7ce73d9964de6cc73ba7efc4f591a9c776e80))
+
 ## [0.42.1](https://github.com/salimhamed/jigs/compare/jigs-v0.42.0...jigs-v0.42.1) (2026-09-21)
 
 
