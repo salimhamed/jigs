@@ -28,14 +28,16 @@ Use `harnesses.codex(model, options)` with `runAgent` or `askAgent`.
 
 ## Pi
 
-Use `harnesses.pi(model, options)` with `askAgent`. Pi runs in ask mode only;
-`runAgent` is not supported. The first argument is a model source such as
+Use `harnesses.pi(model, options)` with `runAgent` or `askAgent`. The first
+argument is a model source such as
 `models.openaiCodex("gpt-5.5")`, `models.openrouter("...")`, or
 `models.openaiCompatible({ ... })`. `options.thinking` selects Pi's thinking
-level. `options.tools` is recorded for the future but ask mode disables tools.
-MCP servers are not accepted by `askAgent`.
+level. For `runAgent`, omit `options.tools` to use Pi's default tools or provide
+an allowlist such as `{ tools: ["read", "bash"] }`. Ask mode always disables
+tools. MCP servers are not accepted.
 
-Each call gets a curated Pi home and scratch working directory. Jigs disables
+Each call gets a curated Pi home; ask mode also gets a scratch working directory.
+Jigs disables
 Pi's settings, package, prompt, theme, session, and extension discovery, then
 loads only its `submit_result` extension for structured output. Existing files
 outside that managed home are not discovered. OpenAI Codex subscription calls
@@ -43,6 +45,13 @@ use a symlink to Pi's normal login at `~/.pi/agent/auth.json`; run `pi`, choose
 `/login`, then select OpenAI Codex before using that source. OpenRouter and
 credentialed OpenAI-compatible sources use the environment variable named by
 their model descriptor.
+
+`runAgent` runs Pi in the supplied worktree and stores its session in the
+run-scoped managed home. The returned session pointer can be passed back as
+`resume`; jigs verifies that its real session file still exists before spawning
+Pi. A missing session takes the normal `resumeOrRebuild` fresh-context path.
+The managed home and its sessions are removed when the run's worktrees are
+released, so they are not long-term conversation storage.
 
 Structured output first asks Pi to call `submit_result` with constrained JSON
 Schema sampling. If a compatible server completes without that tool call, Jigs

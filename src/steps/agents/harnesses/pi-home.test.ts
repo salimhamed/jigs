@@ -1,8 +1,15 @@
-import { lstatSync, mkdirSync, readFileSync, readlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readlinkSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { models } from "../../../blocks/agents/harness-config.ts";
-import { ensureManagedPiHome } from "./pi-home.ts";
+import { ensureManagedPiHome, removeManagedPiHome } from "./pi-home.ts";
 import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
 let tmp: string;
@@ -73,4 +80,14 @@ test("Codex-backed pi homes symlink the real login while other sources never tou
 
   ensureManagedPiHome("codex-run", models.openrouter("model"), options);
   expect(() => lstatSync(authPath)).toThrow();
+});
+
+test("removeManagedPiHome deletes the durable sessions with the run", () => {
+  const options = { baseDir: path.join(tmp, "pi-homes") };
+  const home = ensureManagedPiHome("run-1", models.openrouter("model"), options);
+  writeFileSync(path.join(home, "sessions", "session.jsonl"), "durable until teardown");
+
+  removeManagedPiHome("run-1", options);
+
+  expect(existsSync(home)).toBe(false);
 });

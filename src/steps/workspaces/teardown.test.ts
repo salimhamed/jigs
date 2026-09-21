@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { managedCodexHomePath } from "../agents/harnesses/codex-home.ts";
+import { managedPiHomePath } from "../agents/harnesses/pi-home.ts";
 import { createRunDirectory } from "../runtime/run-directory/index.ts";
 import type { WorktreeRow } from "./registry.ts";
 import { releaseRunResources } from "./release.ts";
@@ -259,9 +260,11 @@ test("a clean worktree reads not-dirty; unreadable or missing directories are no
   expect(await isWorktreeDirty(path.join(tmp, "nowhere"))).toBe(true);
 });
 
-test("a merged run removes the worktree, both branches, and its Codex home", async () => {
+test("a merged run removes the worktree, both branches, and its agent homes", async () => {
   const target = runWorktree("feature");
   const home = codexHome("run_1");
+  const piHome = managedPiHomePath("run_1");
+  mkdirSync(piHome, { recursive: true });
   merge("feature");
 
   const removed = await release();
@@ -273,6 +276,7 @@ test("a merged run removes the worktree, both branches, and its Codex home", asy
   expect(store.size).toBe(0);
   // The run is finishing: nothing will resume its Codex threads.
   expect(existsSync(home)).toBe(false);
+  expect(existsSync(piHome)).toBe(false);
 });
 
 test("a squash-merged clean worktree is released but its unproven branches remain", async () => {

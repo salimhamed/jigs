@@ -2,8 +2,10 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  readdirSync,
   readlinkSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -25,6 +27,27 @@ export function realPiAuthPath(home: string = homedir()): string {
 /** Return the durable per-run Pi home path. */
 export function managedPiHomePath(runId: string, options: PiHomeOptions = {}): string {
   return path.join(options.baseDir ?? path.join(jigsDataDir(), "pi-homes"), runId);
+}
+
+/** Remove the managed Pi home after all of a run's worktrees are released. */
+export function removeManagedPiHome(runId: string, options: PiHomeOptions = {}): void {
+  rmSync(managedPiHomePath(runId, options), { recursive: true, force: true });
+}
+
+/** Return the managed directory that holds a run's Pi sessions. */
+export function piSessionsDir(home: string): string {
+  return path.join(home, "sessions");
+}
+
+/** Find and stat the real Pi session file for an exact session id. */
+export function piSessionFile(home: string, sessionId: string): string | undefined {
+  const directory = piSessionsDir(home);
+  for (const name of readdirSync(directory)) {
+    if (!name.endsWith(`_${sessionId}.jsonl`)) continue;
+    const candidate = path.join(directory, name);
+    if (statSync(candidate).isFile()) return candidate;
+  }
+  return undefined;
 }
 
 function openaiCompatibleModels(source: OpenaiCompatibleSource): object {
@@ -53,7 +76,7 @@ export function ensureManagedPiHome(
   options: PiHomeOptions = {},
 ): string {
   const home = managedPiHomePath(runId, options);
-  mkdirSync(path.join(home, "sessions"), { recursive: true });
+  mkdirSync(piSessionsDir(home), { recursive: true });
   writeFileSync(path.join(home, "settings.json"), `${JSON.stringify({ packages: [] }, null, 2)}\n`);
   const modelsPath = path.join(home, "models.json");
   if (source.kind === "openai-compatible")

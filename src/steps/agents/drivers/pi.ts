@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -8,6 +9,7 @@ import { openaiCompatibleRuntimeCheck } from "../../../checks/models.ts";
 import { JigsError } from "../../../errors.ts";
 import { MIN_PI_VERSION, resolvePiExecutable } from "../harnesses/executables.ts";
 import { writePiSubmitResultExtension } from "../harnesses/pi-extension.ts";
+import { piSessionFile, piSessionsDir } from "../harnesses/pi-home.ts";
 import type { Driver, DriverContext, ExecutorGeneration } from "./types.ts";
 
 function descriptor(request: AgentRequest): PiHarness {
@@ -74,6 +76,53 @@ async function ask(request: AgentRequest, context: DriverContext): Promise<Execu
   }
 }
 
+async function run(request: AgentRequest, context: DriverContext): Promise<ExecutorGeneration> {
+  const harness = descriptor(request);
+  const home = context.deps.ensurePiHome(context.metadata.workflowRunId, harness.model);
+  const sessionDir = piSessionsDir(home);
+  const resume = "resume" in request ? request.resume : undefined;
+  const sessionId = resume?.id ?? `jigs-${randomUUID()}`;
+  if (resume !== undefined && piSessionFile(home, sessionId) === undefined) {
+    throw new Error(`Pi session ${sessionId} is missing from ${sessionDir}`);
+  }
+  const extension =
+    request.outputSchema === undefined
+      ? undefined
+      : writePiSubmitResultExtension(home, request.outputSchema);
+  const generation = await context.deps.executePi({
+    args: [
+      "--mode",
+      "json",
+      "--model",
+      modelName(harness.model),
+      ...(harness.thinking === undefined ? [] : ["--thinking", harness.thinking]),
+      ...(harness.tools === undefined ? [] : ["--tools", harness.tools.join(",")]),
+      "--session-id",
+      sessionId,
+      "--session-dir",
+      sessionDir,
+      "-ne",
+      "-ns",
+      "-np",
+      "--no-themes",
+      "-nc",
+      "--no-approve",
+      ...(extension === undefined ? [] : ["-e", extension]),
+      promptFor(request),
+    ],
+    cwd: request.cwd as string,
+    env: { ...context.env, PI_CODING_AGENT_DIR: home },
+  });
+  const reported = generation.providerMetadata?.pi?.sessionId;
+  if (reported !== sessionId) {
+    throw new Error(
+      `Pi reported session ${JSON.stringify(reported)} after jigs requested ${sessionId}`,
+    );
+  }
+  if (request.outputSchema === undefined || generation.output !== undefined) return generation;
+  return { ...generation, output: parseJsonFallback(generation.text) };
+}
+
 function nestedSource(request?: AgentRequest): ModelSource | undefined {
   return request?.harness.kind === "pi" ? request.harness.model : undefined;
 }
@@ -82,6 +131,7 @@ export const piDriver = {
   kind: "pi",
   family: "harness",
   ask,
+  run,
   runtimeChecks: (request?: AgentRequest) => {
     const source = nestedSource(request as AgentRequest | undefined);
     return [

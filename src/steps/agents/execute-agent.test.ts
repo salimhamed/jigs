@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ClaudeCodeSettings } from "ai-sdk-provider-claude-code";
@@ -9,9 +9,16 @@ import type {
 } from "ai-sdk-provider-codex-cli";
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
 import { z } from "zod";
+import { unwrapAgentStep } from "../../blocks/agents/agent.ts";
 import { harnesses, models } from "../../blocks/agents/harness-config.ts";
-import { buildAgentRequest, buildAskAgentRequest } from "../../blocks/agents/plan.ts";
+import {
+  buildAgentRequest,
+  buildAskAgentRequest,
+  parseOutput,
+  type RunAgentOptions,
+} from "../../blocks/agents/plan.ts";
 import type { AgentResult, ModelUsage } from "../../blocks/agents/result.ts";
+import { type RunAgentFn, resumeOrRebuild } from "../../blocks/agents/resume-or-rebuild.ts";
 import { drivers } from "./drivers/index.ts";
 import { type AgentExecutionDependencies, executeAgent } from "./execute-agent.ts";
 import type { PiExecutionOptions } from "./harnesses/pi.ts";
@@ -84,7 +91,7 @@ function makeDeps(
     ensurePiHome: (runId, model) => {
       captured.piHome = { runId, model };
       const home = path.join(tmp, "pi-home", runId);
-      mkdirSync(home, { recursive: true });
+      mkdirSync(path.join(home, "sessions"), { recursive: true });
       return home;
     },
     executePi: async (options) => {
@@ -645,5 +652,229 @@ test("pi ask rejects missing nested authentication before executing Pi", async (
   await expect(executeAgent(wire, { workflowRunId: "run-pi" }, deps)).rejects.toThrow(
     /PI_TEST_OPENROUTER_KEY credential: PI_TEST_OPENROUTER_KEY is not set/,
   );
+  expect(captured.piOptions).toBeUndefined();
+});
+
+test("pi run mints and records a matching session with tools in the worktree", async () => {
+  vi.spyOn(drivers.pi, "runtimeChecks").mockReturnValue([]);
+  vi.spyOn(drivers.pi, "authChecks").mockReturnValue([]);
+  const source = models.openaiCompatible({
+    name: "studio",
+    baseUrl: "http://127.0.0.1:1234/v1",
+    model: "local-model",
+  });
+  const wire = buildAgentRequest({
+    harness: harnesses.pi(source, { thinking: "high", tools: ["read", "bash"] }),
+    cwd: worktree,
+    prompt: "implement it",
+    output: verdict,
+  });
+  const { deps, captured } = makeDeps({ output: { ok: true } });
+  deps.executePi = async (options) => {
+    captured.piOptions = options;
+    const id = options.args[options.args.indexOf("--session-id") + 1];
+    return {
+      text: "done",
+      output: { ok: true },
+      usage,
+      providerMetadata: { pi: { sessionId: id } },
+    };
+  };
+
+  const result = await agentStep(wire, { workflowRunId: "run-pi-worktree" }, deps);
+
+  const args = captured.piOptions?.args ?? [];
+  const sessionId = args[args.indexOf("--session-id") + 1];
+  expect(sessionId).toMatch(/^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/);
+  expect(args).toContain("--tools");
+  expect(args[args.indexOf("--tools") + 1]).toBe("read,bash");
+  expect(args).not.toContain("--no-tools");
+  expect(args[args.indexOf("--session-dir") + 1]).toBe(
+    path.join(tmp, "pi-home", "run-pi-worktree", "sessions"),
+  );
+  expect(captured.piOptions?.cwd).toBe(worktree);
+  expect(result.session).toEqual({ harness: "pi", id: sessionId });
+  expect(result.output).toEqual({ ok: true });
+});
+
+test("pi run returns a stale resume marker before spawning Pi", async () => {
+  vi.spyOn(drivers.pi, "runtimeChecks").mockReturnValue([]);
+  vi.spyOn(drivers.pi, "authChecks").mockReturnValue([]);
+  const wire = buildAgentRequest({
+    harness: harnesses.pi(models.openrouter("openai/gpt-oss")),
+    cwd: worktree,
+    prompt: "continue",
+    resume: { harness: "pi", id: "missing-session" },
+  });
+  const { deps, captured } = makeDeps();
+
+  const result = await executeAgent(wire, { workflowRunId: "run-pi-stale" }, deps);
+
+  expect(result).toEqual({
+    resumeFailed: expect.stringMatching(/missing-session.*run-pi-stale\/sessions/),
+  });
+  expect(captured.piOptions).toBeUndefined();
+});
+
+test("pi run resumes only after finding the real session file", async () => {
+  vi.spyOn(drivers.pi, "runtimeChecks").mockReturnValue([]);
+  vi.spyOn(drivers.pi, "authChecks").mockReturnValue([]);
+  const sessionId = "existing-session";
+  const source = models.openrouter("openai/gpt-oss");
+  const wire = buildAgentRequest({
+    harness: harnesses.pi(source),
+    cwd: worktree,
+    prompt: "continue",
+    resume: { harness: "pi", id: sessionId },
+  });
+  const { deps, captured } = makeDeps();
+  const home = deps.ensurePiHome("run-pi-resume", source);
+  writeFileSync(path.join(home, "sessions", `2026-09-21T00-00-00_${sessionId}.jsonl`), "");
+  deps.executePi = async (options) => {
+    captured.piOptions = options;
+    return { text: "continued", usage, providerMetadata: { pi: { sessionId } } };
+  };
+
+  const result = await agentStep(wire, { workflowRunId: "run-pi-resume" }, deps);
+
+  expect(captured.piOptions?.args).toContain(sessionId);
+  expect(result.session).toEqual({ harness: "pi", id: sessionId });
+});
+
+test("pi run rejects a different session id reported by Pi", async () => {
+  vi.spyOn(drivers.pi, "runtimeChecks").mockReturnValue([]);
+  vi.spyOn(drivers.pi, "authChecks").mockReturnValue([]);
+  const wire = buildAgentRequest({
+    harness: harnesses.pi(models.openrouter("openai/gpt-oss")),
+    cwd: worktree,
+    prompt: "implement it",
+  });
+  const { deps } = makeDeps();
+  deps.executePi = async () => ({
+    text: "done",
+    usage,
+    providerMetadata: { pi: { sessionId: "different-session" } },
+  });
+
+  await expect(executeAgent(wire, { workflowRunId: "run-pi-mismatch" }, deps)).rejects.toThrow(
+    /Pi reported session.*different-session.*jigs-/,
+  );
+});
+
+test("pi run leaves Pi's default tools enabled when no allowlist is supplied", async () => {
+  vi.spyOn(drivers.pi, "runtimeChecks").mockReturnValue([]);
+  vi.spyOn(drivers.pi, "authChecks").mockReturnValue([]);
+  const wire = buildAgentRequest({
+    harness: harnesses.pi(models.openrouter("openai/gpt-oss")),
+    cwd: worktree,
+    prompt: "implement it",
+  });
+  const { deps, captured } = makeDeps();
+  deps.executePi = async (options) => {
+    captured.piOptions = options;
+    const id = options.args[options.args.indexOf("--session-id") + 1];
+    return { text: "done", usage, providerMetadata: { pi: { sessionId: id } } };
+  };
+
+  await agentStep(wire, { workflowRunId: "run-pi-default-tools" }, deps);
+
+  expect(captured.piOptions?.args).not.toContain("--tools");
+  expect(captured.piOptions?.args).not.toContain("--no-tools");
+});
+
+test("pi run rejects an unreachable nested endpoint before spawning Pi", async () => {
+  vi.stubGlobal("fetch", async () => {
+    throw new Error("connection refused");
+  });
+  const actualRuntimeChecks = drivers.pi.runtimeChecks;
+  vi.spyOn(drivers.pi, "runtimeChecks").mockImplementation((request) =>
+    actualRuntimeChecks(request).filter((check) => check.id === "model.openai-compatible-runtime"),
+  );
+  vi.spyOn(drivers.pi, "authChecks").mockReturnValue([]);
+  const wire = buildAgentRequest({
+    harness: harnesses.pi(
+      models.openaiCompatible({
+        name: "offline-studio",
+        baseUrl: "http://127.0.0.1:1/v1",
+        model: "local-model",
+      }),
+    ),
+    cwd: worktree,
+    prompt: "implement it",
+  });
+  const { deps, captured } = makeDeps();
+
+  await expect(executeAgent(wire, { workflowRunId: "run-pi-offline" }, deps)).rejects.toThrow(
+    /offline-studio model endpoint: offline-studio is unreachable/,
+  );
+  expect(captured.piOptions).toBeUndefined();
+});
+
+test("pi stale sessions take resumeOrRebuild's fresh arm", async () => {
+  vi.spyOn(drivers.pi, "runtimeChecks").mockReturnValue([]);
+  vi.spyOn(drivers.pi, "authChecks").mockReturnValue([]);
+  const harness = harnesses.pi(models.openrouter("openai/gpt-oss"));
+  const { deps } = makeDeps({ output: { ok: true } });
+  let spawned = 0;
+  deps.executePi = async (options) => {
+    spawned += 1;
+    const id = options.args[options.args.indexOf("--session-id") + 1];
+    return {
+      text: "done",
+      output: { ok: true },
+      usage,
+      providerMetadata: { pi: { sessionId: id } },
+    };
+  };
+  const runAgent: RunAgentFn = async <T>(config: RunAgentOptions<T>) => {
+    const stepResult = await executeAgent(
+      buildAgentRequest(config),
+      { workflowRunId: "run-pi-rebuild" },
+      deps,
+    );
+    const result = unwrapAgentStep(stepResult);
+    return { ...result, output: parseOutput(config.output, result.output) } as AgentResult<T>;
+  };
+
+  const result = await resumeOrRebuild({
+    runAgent,
+    harness,
+    cwd: worktree,
+    session: { harness: "pi", id: "gone" },
+    resumePrompt: "continue",
+    freshPrompt: "start again",
+    output: verdict,
+    label: "pi-test",
+  });
+
+  expect(spawned).toBe(1);
+  expect(result.output).toEqual({ ok: true });
+  expect(result.session?.harness).toBe("pi");
+  expect(result.session?.id).not.toBe("gone");
+});
+
+test("pi run honors JIT failure before creating its managed home or spawning", async () => {
+  const wire = buildAgentRequest({
+    harness: harnesses.pi(models.openrouter("openai/gpt-oss")),
+    cwd: worktree,
+    prompt: "implement it",
+  });
+  const { deps, captured } = makeDeps();
+  deps.jitFailures = async () => [
+    {
+      id: "github.marker",
+      label: "GitHub marker",
+      ok: false,
+      reason: "not ready",
+      repair: "wait",
+    },
+  ];
+
+  const result = await executeAgent(wire, { workflowRunId: "run-pi-jit" }, deps);
+
+  expect(result).toEqual({
+    jitFailure: [expect.objectContaining({ id: "github.marker", reason: "not ready" })],
+  });
+  expect(captured.piHome).toBeUndefined();
   expect(captured.piOptions).toBeUndefined();
 });
