@@ -1,4 +1,9 @@
+import { existsSync } from "node:fs";
+import { loadEnvFile } from "node:process";
 import { defineConfig } from "vitest/config";
+
+const localEnv = ".env.e2e.local";
+if (existsSync(localEnv)) loadEnvFile(localEnv);
 
 // Two kinds of live test, one run: the harness tests need a claude.ai login
 // and a ChatGPT-authed ~/.codex/auth.json (they strip every API-key env var

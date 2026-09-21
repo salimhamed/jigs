@@ -131,7 +131,7 @@
     "docs:site": "node tools/api-docs/docs.mjs --site",
     "docs:preview": "pnpm --filter @jigs/api-docs exec vitepress preview ../../site",
     "docs:check": "node tools/api-docs/docs.mjs --check",
-    "e2e": "node e2e/check-step-ids.mjs",
+    "e2e": "node --env-file-if-exists=.env.e2e.local e2e/check-step-ids.mjs",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm docs:check"
   },
   "dependencies": {
