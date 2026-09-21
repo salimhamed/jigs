@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.42.0
+# @salimhamed/jigs v0.42.1
 
 Compose agent and model calls inside a workflow, including harness selection and halts.
 
@@ -677,9 +677,17 @@ Any configured source from which a model can answer.
 
 ### ModelUsage
 
-> **ModelUsage** = `LanguageModelUsage`
+> **ModelUsage** = `LanguageModelUsage` & `object`
 
 Token usage reported by the underlying model provider.
+
+#### Type Declaration
+
+##### costUsd?
+
+> `optional` **costUsd**: `number`
+
+The driver's own estimate, not a bill.
 
 ***
 
