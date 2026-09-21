@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.42.2
+# @salimhamed/jigs v0.43.0
 
 Compose agent and model calls inside a workflow, including harness selection and halts.
 
@@ -717,9 +717,25 @@ An OpenAI-compatible API model source.
 
 #### Properties
 
+##### apiKeyEnv?
+
+> `optional` **apiKeyEnv**: `string`
+
 ##### baseUrl
 
 > **baseUrl**: `string`
+
+##### compat
+
+> **compat**: `object`
+
+###### supportsDeveloperRole
+
+> **supportsDeveloperRole**: `boolean`
+
+###### supportsReasoningEffort
+
+> **supportsReasoningEffort**: `boolean`
 
 ##### kind
 
@@ -728,6 +744,10 @@ An OpenAI-compatible API model source.
 ##### model
 
 > **model**: `string`
+
+##### name
+
+> **name**: `string`
 
 ***
 
@@ -971,17 +991,39 @@ Constructors for model-source descriptors.
 
 ##### openaiCompatible()
 
-> `readonly` **openaiCompatible**(`model`, `options`): [`OpenaiCompatibleSource`](#openaicompatiblesource)
+> `readonly` **openaiCompatible**(`options`): [`OpenaiCompatibleSource`](#openaicompatiblesource)
+
+Build a source for an OpenAI-compatible server. Both compatibility hints default to false.
 
 ###### Parameters
+
+###### options
+
+###### apiKeyEnv?
+
+`string`
+
+###### baseUrl
+
+`string`
+
+###### compat?
+
+\{ `supportsDeveloperRole?`: `boolean`; `supportsReasoningEffort?`: `boolean`; \}
+
+###### compat.supportsDeveloperRole?
+
+`boolean`
+
+###### compat.supportsReasoningEffort?
+
+`boolean`
 
 ###### model
 
 `string`
 
-###### options
-
-###### baseUrl
+###### name
 
 `string`
 
