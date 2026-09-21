@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.44.1](https://github.com/salimhamed/jigs/compare/jigs-v0.44.0...jigs-v0.44.1) (2026-09-21)
+
+
+### Features
+
+* run the pi harness in a worktree with tools and resumable sessions ([#330](https://github.com/salimhamed/jigs/issues/330)) ([7e7c669](https://github.com/salimhamed/jigs/commit/7e7c6696c37496c747ed2eea7e3b2ccc1731c39a))
+
 ## [0.44.0](https://github.com/salimhamed/jigs/compare/jigs-v0.43.0...jigs-v0.44.0) (2026-09-21)
 
 
