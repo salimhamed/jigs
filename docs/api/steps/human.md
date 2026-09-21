@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.42.1
+# @salimhamed/jigs v0.42.2
 
 Reserved for provider-neutral human interaction steps.
 

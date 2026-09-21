@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.42.1
+# @salimhamed/jigs v0.42.2
 
 Execute agent and model requests outside workflow code.
 
@@ -56,7 +56,7 @@ Injectable provider and environment operations used by agent execution.
 
 ###### providerOptions?
 
-`Record`\<`string`, `Record`\<`string`, `string`\>\>
+`SharedV4ProviderOptions`
 
 ###### system?
 
