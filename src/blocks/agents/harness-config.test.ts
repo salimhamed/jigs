@@ -16,7 +16,15 @@ test("descriptor namespaces build tagged plain data", () => {
   expect(models.openrouter("anthropic/claude-haiku")).toEqual({
     kind: "openrouter",
     model: "anthropic/claude-haiku",
+    apiKeyEnv: "OPENROUTER_API_KEY",
   });
+  expect(models.openrouter("anthropic/claude-haiku", { apiKeyEnv: "TEAM_OPENROUTER_KEY" })).toEqual(
+    {
+      kind: "openrouter",
+      model: "anthropic/claude-haiku",
+      apiKeyEnv: "TEAM_OPENROUTER_KEY",
+    },
+  );
   expect(models.openaiCompatible("local", { baseUrl: "http://localhost:1234/v1" })).toEqual({
     kind: "openai-compatible",
     model: "local",

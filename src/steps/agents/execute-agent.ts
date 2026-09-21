@@ -12,7 +12,7 @@ import {
 import { JigsError } from "../../errors.ts";
 import type { RunMetadata } from "../runtime/run-context.ts";
 import { withCodexAppServer } from "./drivers/codex-support.ts";
-import { type DriverDependencies, drivers, type ExecutorGeneration } from "./drivers/index.ts";
+import { type DriverDependencies, driverFor, type ExecutorGeneration } from "./drivers/index.ts";
 import { ensureManagedCodexHome } from "./harnesses/codex-home.ts";
 import { scrubbedEnv } from "./harnesses/env.ts";
 import { FileLockTimeoutError, lockPathFor, withFileLock } from "./lock.ts";
@@ -41,14 +41,6 @@ export function outputSpec(
 
 const LOCK_STALE_MS = 4 * 60 * 60_000 + 60_000;
 
-function driverFor(kind: string) {
-  const driver = (drivers as Record<string, (typeof drivers)[keyof typeof drivers] | undefined>)[
-    kind
-  ];
-  if (driver === undefined) throw new JigsError(`no driver is registered for ${kind}`);
-  return driver;
-}
-
 /** Run or ask an agent harness, checking worktree requirements before a run. */
 export async function executeAgent(
   wire: AgentRequest,
@@ -56,13 +48,14 @@ export async function executeAgent(
   deps: AgentExecutionDependencies = defaultAgentExecutionDependencies,
 ): ReturnType<ExecuteAgentStep> {
   const driver = driverFor(wire.harness.kind);
+  if (driver === undefined) throw new JigsError(`no driver is registered for ${wire.harness.kind}`);
   const isRun = wire.cwd !== undefined;
   if (!isRun) {
     if (driver.ask === undefined) throw new JigsError(`the ${wire.harness.kind} driver cannot ask`);
     const generation = await driver.ask(wire, {
       metadata,
       deps,
-      env: scrubbedEnv(driver.envAllowlist),
+      env: scrubbedEnv(driver.envAllowlist(wire)),
       output: outputSpec(wire.outputSchema),
     });
     const costUsd = driver.cost(generation);
@@ -79,7 +72,8 @@ export async function executeAgent(
       resumeFailed: `session ${wire.resume.id} was recorded on the ${wire.resume.harness} harness and this step runs on ${wire.harness.kind}`,
     };
   }
-  if (driver.run === undefined) throw new JigsError(`the ${wire.harness.kind} driver cannot run`);
+  const run = driver.run;
+  if (run === undefined) throw new JigsError(`the ${wire.harness.kind} driver cannot run`);
 
   try {
     return await withFileLock(
@@ -87,10 +81,10 @@ export async function executeAgent(
       async () => {
         let generation: ExecutorGeneration;
         try {
-          generation = await driver.run(wire, {
+          generation = await run(wire, {
             metadata,
             deps,
-            env: scrubbedEnv(driver.envAllowlist),
+            env: scrubbedEnv(driver.envAllowlist(wire)),
             output: outputSpec(wire.outputSchema),
           });
         } catch (err) {

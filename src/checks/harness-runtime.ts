@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import semver from "semver";
 import type { HarnessKind } from "../blocks/agents/harness-config.ts";
-import { drivers } from "../steps/agents/drivers/index.ts";
+import { driverFor } from "../steps/agents/drivers/index.ts";
 import { PROBE_TIMEOUT_MS } from "./catalog.ts";
 
 // Are the harness CLIs installed, and is codex new enough? The service's
@@ -49,9 +49,7 @@ const PATH_CAVEAT =
   "service may not have the same PATH as your shell — start it from a shell where each required harness runs";
 
 const resolveDefault = (harness: HarnessKind, env: NodeJS.ProcessEnv): string => {
-  const driver = (drivers as Record<string, (typeof drivers)[keyof typeof drivers] | undefined>)[
-    harness
-  ];
+  const driver = driverFor(harness);
   if (driver?.resolveExecutable === undefined)
     throw new Error(`no runtime resolver for ${harness}`);
   return driver.resolveExecutable(env);
@@ -64,11 +62,8 @@ export async function harnessRuntime(
   const resolve = deps.resolve ?? resolveDefault;
   const exec = deps.exec ?? execFileAsync;
   const env = deps.env ?? process.env;
-  const driver = (drivers as Record<string, (typeof drivers)[keyof typeof drivers] | undefined>)[
-    harness
-  ];
-  const minimum =
-    driver === undefined || !("minimumVersion" in driver) ? null : driver.minimumVersion;
+  const driver = driverFor(harness);
+  const minimum = driver?.minimumVersion ?? null;
   const floor = minimum === null ? "" : ` (minimum ${minimum})`;
   const fail = (path: string | null, version: string | null, line: string): HarnessRuntime => ({
     harness,

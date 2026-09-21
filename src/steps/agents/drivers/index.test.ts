@@ -1,6 +1,13 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
-import { drivers } from "./index.ts";
+import { driverFor, drivers } from "./index.ts";
+
+test("driver lookup preserves installed kinds and rejects unregistered kinds", () => {
+  expect(driverFor("claude")).toBe(drivers.claude);
+  expect(driverFor("openrouter")).toBe(drivers.openrouter);
+  expect(driverFor("pi")).toBeUndefined();
+  expect(driverFor("openai-compatible")).toBeUndefined();
+});
 
 test("every registered driver declares its operational contract and documentation", () => {
   const guide = readFileSync(
@@ -8,16 +15,17 @@ test("every registered driver declares its operational contract and documentatio
     "utf8",
   );
   for (const driver of Object.values(drivers)) {
-    expect(driver.runtimeChecks()).not.toHaveLength(0);
+    if (driver.family === "harness") expect(driver.runtimeChecks()).not.toHaveLength(0);
+    else expect(driver.runtimeChecks()).toEqual([]);
     expect(driver.authChecks()).not.toHaveLength(0);
-    expect(driver.envAllowlist).toBeInstanceOf(Array);
+    expect(driver.envAllowlist()).toBeInstanceOf(Array);
     if (driver.family === "harness") {
       expect(driver.sessionPointer).toEqual({
         providerKey: expect.any(String),
         field: expect.any(String),
       });
     } else {
-      expect(driver.sessionPointer).toBeUndefined();
+      expect("sessionPointer" in driver ? driver.sessionPointer : undefined).toBeUndefined();
     }
     const headings = [...guide.matchAll(/^## (.+)$/gm)].map((match) =>
       match[1]?.toLowerCase().replaceAll(" ", "-"),

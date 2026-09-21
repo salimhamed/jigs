@@ -5,7 +5,7 @@ import { factoryRoot } from "../config/factory-root.ts";
 import { getAuthenticatedUser } from "../providers/github.ts";
 import { resolveGithubIdentities } from "../providers/github-auth.ts";
 import { getViewer } from "../providers/linear.ts";
-import { type Driver, drivers } from "../steps/agents/drivers/index.ts";
+import { driverFor, drivers } from "../steps/agents/drivers/index.ts";
 import { awsCredentialsCheck } from "./aws.ts";
 import { bindingChecks } from "./bindings.ts";
 import { CHECK_TIMEOUT_MS, type Check } from "./catalog.ts";
@@ -115,9 +115,7 @@ export function preflightChecks(
     ...bindingChecks({ factoryRoot, names: bindings }),
     ...harnessChecks(requires.harnesses ?? []),
     ...(requires.models ?? []).flatMap((kind) => {
-      const driver = (
-        drivers as Record<string, (typeof drivers)[keyof typeof drivers] | undefined>
-      )[kind];
+      const driver = driverFor(kind);
       return driver === undefined
         ? [missingDriverCheck(kind)]
         : [...driver.runtimeChecks(), ...driver.authChecks()];
@@ -139,10 +137,15 @@ export function doctorChecks(): Check[] {
     ...(integrations.includes("linear") ? linearWebhookChecks({ factoryRoot }) : []),
     ...bindingChecks({ factoryRoot }),
     ...webhookChecks({ factoryRoot }),
-    ...Object.values(drivers).flatMap((driver) => [
-      ...driver.runtimeChecks(),
-      ...driver.authChecks(),
-    ]),
+    ...Object.values(drivers).flatMap((driver) => {
+      const includeAuth =
+        driver.family === "harness" ||
+        driver.envAllowlist().some((variable) => {
+          const value = process.env[variable];
+          return value !== undefined && value !== "";
+        });
+      return [...driver.runtimeChecks(), ...(includeAuth ? driver.authChecks() : [])];
+    }),
     ...(profile !== undefined && profile !== "" ? [awsCredentialsCheck()] : []),
   ];
 }
@@ -159,7 +162,7 @@ export const JIT_TIMEOUT_MS = 3 * CHECK_TIMEOUT_MS + 5_000;
 export function jitChecks(wire: AgentRequest): Check[] {
   const harness = wire.harness;
   if (wire.cwd === undefined) return [];
-  const driver = (drivers as Record<string, Driver<HarnessKind> | undefined>)[harness.kind];
+  const driver = driverFor(harness.kind);
   return [
     ...(driver?.jitChecks?.(wire) ?? []),
     ...mcpServerChecks(harness.mcpServers ?? {}, wire.cwd),

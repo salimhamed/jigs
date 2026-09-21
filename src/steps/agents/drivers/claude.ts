@@ -75,7 +75,7 @@ export const claudeDriver = {
   ask,
   runtimeChecks: () => [harnessRuntimeCheck("claude")],
   authChecks: () => [claudeAuthCheck()],
-  envAllowlist: [],
+  envAllowlist: () => [],
   sessionPointer: { providerKey: "claude-code", field: "sessionId" },
   docsAnchor: "claude-code",
   displayName: "Claude Code",

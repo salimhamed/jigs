@@ -116,7 +116,16 @@ test("a workflow that does not require aws does not get it", () => {
 });
 
 test("model-source requirements are included in preflight", () => {
-  expect(preflightIds({ models: ["openrouter"] })).toContain("driver.openrouter");
+  expect(preflightIds({ models: ["openrouter"] })).toContain("model.openrouter-api-key");
+});
+
+test("doctor checks the OpenRouter credential only when it is configured", () => {
+  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  vi.stubEnv("OPENROUTER_API_KEY", "");
+  expect(doctorChecks().map((check) => check.id)).not.toContain("model.openrouter-api-key");
+
+  vi.stubEnv("OPENROUTER_API_KEY", "configured");
+  expect(doctorChecks().map((check) => check.id)).toContain("model.openrouter-api-key");
 });
 
 test("doctor checks aws only when a profile is set, having no manifest to read", () => {
