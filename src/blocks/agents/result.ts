@@ -5,7 +5,10 @@ import type { Harness } from "./harness-config.ts";
 // which keeps step returns assignable to the SDK's Serializable types.
 
 /** Token usage reported by the underlying model provider. */
-export type ModelUsage = LanguageModelUsage;
+export type ModelUsage = LanguageModelUsage & {
+  /** The driver's own estimate, not a bill. */
+  costUsd?: number;
+};
 
 /** A provider session pointer that can resume the same harness. */
 export type AgentSession = {
@@ -32,11 +35,19 @@ type ProviderMetadataLike = Record<string, Record<string, unknown>> | null;
 export type ModelGeneration = {
   text: string;
   usage: ModelUsage;
+  costUsd?: number;
   providerMetadata?: ProviderMetadataLike;
 };
 
 export function toModelResult(generation: ModelGeneration, output: unknown): ModelResult<unknown> {
-  return { text: generation.text, output, usage: generation.usage };
+  return {
+    text: generation.text,
+    output,
+    usage:
+      generation.costUsd === undefined
+        ? generation.usage
+        : { ...generation.usage, costUsd: generation.costUsd },
+  };
 }
 
 // Best-effort: session pointers are capturable only at step time, but a

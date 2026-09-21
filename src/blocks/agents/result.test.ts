@@ -17,6 +17,22 @@ test("toModelResult maps text and usage into the uniform shape", () => {
   });
 });
 
+test("toModelResult adds a supplied driver cost to usage", () => {
+  const result = toModelResult({ text: "done", usage, costUsd: 1.25 }, undefined);
+  expect(result.usage).toEqual({ ...usage, costUsd: 1.25 });
+});
+
+test("toModelResult omits an absent driver cost", () => {
+  const result = toModelResult({ text: "done", usage }, undefined);
+  expect(result.usage).toEqual(usage);
+  expect(Object.hasOwn(result.usage ?? {}, "costUsd")).toBe(false);
+});
+
+test("toModelResult preserves a genuine zero driver cost", () => {
+  const result = toModelResult({ text: "done", usage, costUsd: 0 }, undefined);
+  expect(result.usage).toEqual({ ...usage, costUsd: 0 });
+});
+
 test("extractAgentSession reads the driver pointer", () => {
   expect(
     extractAgentSession(
