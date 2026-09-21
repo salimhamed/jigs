@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.41.3
+# @salimhamed/jigs v0.42.0
 
 Execute agent and model requests outside workflow code.
 
@@ -13,32 +13,6 @@ Injectable provider and environment operations used by agent execution.
 #### Extends
 
 - `DriverDependencies`
-
-#### Properties
-
-##### withCodexAppServer()
-
-> **withCodexAppServer**: \<`T`\>(`fn`) => `Promise`\<`T`\>
-
-###### Type Parameters
-
-###### T
-
-`T`
-
-###### Parameters
-
-###### fn
-
-(`provider`) => `Promise`\<`T`\>
-
-###### Returns
-
-`Promise`\<`T`\>
-
-###### Inherited from
-
-`DriverDependencies.withCodexAppServer`
 
 #### Methods
 
@@ -109,6 +83,30 @@ Injectable provider and environment operations used by agent execution.
 ###### Returns
 
 `Promise`\<`object` & `object`[] \| `undefined`\>
+
+##### withCodexAppServer()
+
+> **withCodexAppServer**\<`T`\>(`fn`): `Promise`\<`T`\>
+
+###### Type Parameters
+
+###### T
+
+`T`
+
+###### Parameters
+
+###### fn
+
+(`provider`) => `Promise`\<`T`\>
+
+###### Returns
+
+`Promise`\<`T`\>
+
+###### Inherited from
+
+`DriverDependencies.withCodexAppServer`
 
 ## Variables
 
