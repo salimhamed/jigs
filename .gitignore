@@ -6,6 +6,7 @@ site/api/
 site/.vitepress/cache/
 *.tsbuildinfo
 .env
+.env.e2e.local
 .nitro/
 .output/
 .workflow-data/

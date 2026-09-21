@@ -447,7 +447,14 @@ pnpm docs:site  # build the guides and API website in docs-site/
 pnpm docs:preview # preview the built website locally
 pnpm e2e        # bare + ship factories, packed installs, two versions each, diff ids
                 # (with WORKFLOW_POSTGRES_URL set: boot the service and stop it too)
+pnpm test:live   # live tests (requires their documented provider/auth setup)
 ```
+
+For local e2e or live-test environment values, copy `.env.e2e.example` to
+`.env.e2e.local`. The local file is gitignored. E2e Postgres must use a
+dedicated database and port; do not point it at a live factory World or a
+database used by another application. Values supplied explicitly in the shell
+or CI take precedence over values in the local file.
 
 Biome formats code with a line width of 100 characters. Keep the generated
 `jigs.ts` template formatted the same way so formatting a factory does not make
