@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.46.0](https://github.com/salimhamed/jigs/compare/jigs-v0.45.0...jigs-v0.46.0) (2026-09-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* localize driver dependencies and check phases ([#338](https://github.com/salimhamed/jigs/issues/338))
+
+### Bug Fixes
+
+* isolate Claude credentials at process launch ([#337](https://github.com/salimhamed/jigs/issues/337)) ([97edb60](https://github.com/salimhamed/jigs/commit/97edb6049a26532245019be45079ddd2ba815b63))
+
+
+### Code Refactoring
+
+* localize driver dependencies and check phases ([#338](https://github.com/salimhamed/jigs/issues/338)) ([458f4de](https://github.com/salimhamed/jigs/commit/458f4dee6e570cd734b14e542d31fbf9277eefd5))
+
 ## [0.45.0](https://github.com/salimhamed/jigs/compare/jigs-v0.44.2...jigs-v0.45.0) (2026-09-22)
 
 
