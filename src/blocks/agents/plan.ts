@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { JigsError } from "../errors.ts";
 import type { AskableHarness, AskableModelSource, Harness } from "./harness-config.ts";
 import { dropNullOptionals, type OutputJsonSchema, toOutputJsonSchema } from "./output-schema.ts";
 import type { AgentSession } from "./result.ts";
@@ -54,15 +55,15 @@ export function buildAgentRequest<T>(config: RunAgentOptions<T>): AgentRequest {
 /** Reject a harness that cannot answer an `askAgent` call without tools. */
 export function assertAskableHarness(harness: Harness): asserts harness is AskableHarness {
   if (harness.kind === "codex")
-    throw new Error(
+    throw new JigsError(
       "askAgent() cannot use the Codex harness — Codex has no mode without tools; use runAgent(), Claude Code or Pi",
     );
   if (harness.mcpServers !== undefined)
-    throw new Error(
+    throw new JigsError(
       "askAgent() has no MCP universe — mcpServers on the harness descriptor is only honored by runAgent()",
     );
   if (harness.kind === "pi" && harness.tools !== undefined)
-    throw new Error(
+    throw new JigsError(
       "askAgent() runs without tools — tools on the Pi harness descriptor is only honored by runAgent()",
     );
 }

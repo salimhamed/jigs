@@ -367,7 +367,7 @@ A provider session pointer that can resume the same harness.
 
 ### AskableHarness
 
-> **AskableHarness** = [`ClaudeHarness`](#claudeharness) \| [`PiHarness`](#piharness) & [`ToolFree`](#toolfree)
+> **AskableHarness** = [`ClaudeHarness`](#claudeharness) & [`ToolFree`](#toolfree) \| [`PiHarness`](#piharness) & [`ToolFree`](#toolfree)
 
 A harness `askAgent` can run with no tools: Claude Code or Pi, without MCP
 servers or a Pi tool allowlist. Codex has no mode without tools.
@@ -520,6 +520,14 @@ A Claude Code harness descriptor.
 
 ***
 
+### ClaudeHarnessOptions
+
+> **ClaudeHarnessOptions** = `Omit`\<[`ClaudeHarness`](#claudeharness), `"kind"` \| `"model"`\>
+
+Options for `harnesses.claude`.
+
+***
+
 ### CodexHarness
 
 > **CodexHarness** = `SharedHarness` & `object`
@@ -603,6 +611,26 @@ The factory's `"use step"` wrapper around `executeModel`.
 > **Harness** = [`ClaudeHarness`](#claudeharness) \| [`CodexHarness`](#codexharness) \| [`PiHarness`](#piharness)
 
 A serializable agent-program descriptor.
+
+***
+
+### HarnessForOptions
+
+> **HarnessForOptions**\<`H`, `O`\> = \[`Extract`\<keyof `O`, keyof [`ToolFree`](#toolfree)\>\] *extends* \[`never`\] ? `H` & [`ToolFree`](#toolfree) : `H`
+
+The descriptor a harness constructor returns for its options. It is also
+[ToolFree](#toolfree), so `askAgent` accepts it, when the options name no tools
+or MCP servers.
+
+#### Type Parameters
+
+##### H
+
+`H`
+
+##### O
+
+`O`
 
 ***
 
@@ -900,6 +928,21 @@ A Pi harness descriptor backed by a nested model source.
 
 ***
 
+### PiHarnessOptions
+
+> **PiHarnessOptions** = `Pick`\<[`PiHarness`](#piharness), `"thinking"` \| `"tools"` \| `"mcpServers"`\> & `object`
+
+Options for `harnesses.pi`. `compat` applies only to an OpenAI-compatible
+model source.
+
+#### Type Declaration
+
+##### compat?
+
+> `optional` **compat**: `Partial`\<[`PiOpenaiCompatibleOptions`](#piopenaicompatibleoptions)\>
+
+***
+
 ### PiMcpHttpServerConfig
 
 > **PiMcpHttpServerConfig** = `Omit`\<[`McpHttpServerConfig`](#mcphttpserverconfig), `"headers"`\> & `object` & \{ `auth`: `"oauth"`; `bearerTokenEnv?`: `never`; \} \| \{ `auth?`: `false`; `bearerTokenEnv?`: `never`; \} \| \{ `auth?`: `never`; `bearerTokenEnv`: `string`; \}
@@ -1178,7 +1221,7 @@ Constructors for agent-harness descriptors.
 
 ##### claude()
 
-> `readonly` **claude**: \<`O`\>(`model`, `options?`) => `Scoped`\<[`ClaudeHarness`](#claudeharness), `O`\> = `claudeHarness`
+> `readonly` **claude**: \<`O`\>(`model`, `options?`) => [`HarnessForOptions`](#harnessforoptions)\<[`ClaudeHarness`](#claudeharness), `O`\> = `claudeHarness`
 
 Build a Claude Code harness. Without `mcpServers` it also works with `askAgent`.
 
@@ -1186,7 +1229,7 @@ Build a Claude Code harness. Without `mcpServers` it also works with `askAgent`.
 
 ###### O
 
-`O` *extends* `ClaudeHarnessOptions` = `NoOptions`
+`O` *extends* [`ClaudeHarnessOptions`](#claudeharnessoptions) = `Record`\<`never`, `never`\>
 
 ###### Parameters
 
@@ -1200,15 +1243,15 @@ Build a Claude Code harness. Without `mcpServers` it also works with `askAgent`.
 
 ###### Returns
 
-`Scoped`\<[`ClaudeHarness`](#claudeharness), `O`\>
+[`HarnessForOptions`](#harnessforoptions)\<[`ClaudeHarness`](#claudeharness), `O`\>
 
 ##### pi()
 
-> `readonly` **pi**: \{\<`O`\>(`model`, `options?`): `Scoped`\<[`PiOpenaiCompatibleHarness`](#piopenaicompatibleharness), `O`\>; \<`O`\>(`model`, `options?`): `Scoped`\<[`PiOtherHarness`](#piotherharness), `O`\>; \<`M`, `O`\>(`model`, `options?`): `Scoped`\<[`PiHarness`](#piharness), `O`\>; \} = `piHarness`
+> `readonly` **pi**: \{\<`O`\>(`model`, `options?`): [`HarnessForOptions`](#harnessforoptions)\<[`PiOpenaiCompatibleHarness`](#piopenaicompatibleharness), `O`\>; \<`O`\>(`model`, `options?`): [`HarnessForOptions`](#harnessforoptions)\<[`PiOtherHarness`](#piotherharness), `O`\>; \<`M`, `O`\>(`model`, `options?`): [`HarnessForOptions`](#harnessforoptions)\<[`PiHarness`](#piharness), `O`\>; \} = `piHarness`
 
 ###### Call Signature
 
-> \<`O`\>(`model`, `options?`): `Scoped`\<[`PiOpenaiCompatibleHarness`](#piopenaicompatibleharness), `O`\>
+> \<`O`\>(`model`, `options?`): [`HarnessForOptions`](#harnessforoptions)\<[`PiOpenaiCompatibleHarness`](#piopenaicompatibleharness), `O`\>
 
 Build a Pi harness around a model source. `compat` applies only to an
 OpenAI-compatible source; each hint omitted from it defaults to `false`.
@@ -1218,7 +1261,7 @@ Without `tools` or `mcpServers` the harness also works with `askAgent`.
 
 ###### O
 
-`O` *extends* `PiHarnessOptions` & `PiCompatOptions` = `NoOptions`
+`O` *extends* [`PiHarnessOptions`](#piharnessoptions) = `Record`\<`never`, `never`\>
 
 ###### Parameters
 
@@ -1232,11 +1275,11 @@ Without `tools` or `mcpServers` the harness also works with `askAgent`.
 
 ###### Returns
 
-`Scoped`\<[`PiOpenaiCompatibleHarness`](#piopenaicompatibleharness), `O`\>
+[`HarnessForOptions`](#harnessforoptions)\<[`PiOpenaiCompatibleHarness`](#piopenaicompatibleharness), `O`\>
 
 ###### Call Signature
 
-> \<`O`\>(`model`, `options?`): `Scoped`\<[`PiOtherHarness`](#piotherharness), `O`\>
+> \<`O`\>(`model`, `options?`): [`HarnessForOptions`](#harnessforoptions)\<[`PiOtherHarness`](#piotherharness), `O`\>
 
 Build a Pi harness around a model source. `compat` applies only to an
 OpenAI-compatible source; each hint omitted from it defaults to `false`.
@@ -1246,7 +1289,7 @@ Without `tools` or `mcpServers` the harness also works with `askAgent`.
 
 ###### O
 
-`O` *extends* `PiHarnessOptions` = `NoOptions`
+`O` *extends* `Omit`\<[`PiHarnessOptions`](#piharnessoptions), `"compat"`\> = `Record`\<`never`, `never`\>
 
 ###### Parameters
 
@@ -1260,11 +1303,11 @@ Without `tools` or `mcpServers` the harness also works with `askAgent`.
 
 ###### Returns
 
-`Scoped`\<[`PiOtherHarness`](#piotherharness), `O`\>
+[`HarnessForOptions`](#harnessforoptions)\<[`PiOtherHarness`](#piotherharness), `O`\>
 
 ###### Call Signature
 
-> \<`M`, `O`\>(`model`, `options?`): `Scoped`\<[`PiHarness`](#piharness), `O`\>
+> \<`M`, `O`\>(`model`, `options?`): [`HarnessForOptions`](#harnessforoptions)\<[`PiHarness`](#piharness), `O`\>
 
 Build a Pi harness around a model source. `compat` applies only to an
 OpenAI-compatible source; each hint omitted from it defaults to `false`.
@@ -1278,7 +1321,7 @@ Without `tools` or `mcpServers` the harness also works with `askAgent`.
 
 ###### O
 
-`O` *extends* `PiHarnessOptions` & `object` = `NoOptions`
+`O` *extends* `Omit`\<[`PiHarnessOptions`](#piharnessoptions), `"compat"`\> & `object` = `Record`\<`never`, `never`\>
 
 ###### Parameters
 
@@ -1292,7 +1335,7 @@ Without `tools` or `mcpServers` the harness also works with `askAgent`.
 
 ###### Returns
 
-`Scoped`\<[`PiHarness`](#piharness), `O`\>
+[`HarnessForOptions`](#harnessforoptions)\<[`PiHarness`](#piharness), `O`\>
 
 ##### codex()
 
