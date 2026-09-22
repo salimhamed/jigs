@@ -67,6 +67,32 @@ test("Pi execution rejects a nonzero exit after a settled response", async () =>
   );
 });
 
+test("Pi execution rejects a process failure after an accepted submit_result", async () => {
+  const bin = writePi([
+    event({ type: "agent_start" }),
+    event({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        content: [{ type: "toolCall", id: "submit", name: "submit_result", arguments: {} }],
+        stopReason: "toolUse",
+      },
+    }),
+    event({
+      type: "tool_execution_end",
+      toolName: "submit_result",
+      result: { content: [], details: { ok: true } },
+      isError: false,
+    }),
+    event({ type: "agent_settled" }),
+    "exit 9",
+  ]);
+
+  await expect(
+    executePi({ args: [], cwd: tmp, env: { PATH: bin }, requireResult: true }),
+  ).rejects.toThrow("pi exited with code 9");
+});
+
 test("Pi execution rejects a signal the process does not handle", async () => {
   const bin = writePi(["kill -KILL $$"]);
 

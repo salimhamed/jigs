@@ -1,22 +1,9 @@
 import {
   type CodexAppServerProvider,
   type CodexAppServerSettings,
-  type CodexExecSettings,
   createCodexAppServer,
 } from "ai-sdk-provider-codex-cli";
 import { resolveCodexExecutable } from "../harnesses/executables.ts";
-
-export type CodexExecStepOptions = CodexExecSettings & { cwd: string; codexHome: string };
-
-export function codexExecStepSettings(options: CodexExecStepOptions): CodexExecSettings {
-  const { codexHome, ...settings } = options;
-  return {
-    skipGitRepoCheck: true,
-    ...settings,
-    codexPath: settings.codexPath ?? resolveCodexExecutable(),
-    env: { ...settings.env, CODEX_HOME: codexHome },
-  };
-}
 
 export type CodexAppServerStepOptions = CodexAppServerSettings & {
   cwd: string;

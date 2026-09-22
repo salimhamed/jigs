@@ -24,15 +24,20 @@ function textContent(content: unknown): string {
     .join("");
 }
 
+export type PiReduceOptions = {
+  /** The turn must end with an accepted `submit_result` call. */
+  requireResult?: boolean;
+  onDelta?: (delta: PiDelta) => void;
+};
+
 /** Reduce Pi's JSONL event stream into the common executor result. */
-export function reducePiJsonl(
-  jsonl: string,
-  onDelta?: (delta: PiDelta) => void,
-): ExecutorGeneration {
+export function reducePiJsonl(jsonl: string, options: PiReduceOptions = {}): ExecutorGeneration {
+  const { requireResult = false, onDelta } = options;
   let sessionId: string | undefined;
   let finalAssistant: AssistantOutcome | undefined;
   let output: unknown;
   let hasOutput = false;
+  let rejection: string | undefined;
   let started = false;
   let settled = false;
 
@@ -61,6 +66,7 @@ export function reducePiJsonl(
       if (beginsNewOperation) {
         output = undefined;
         hasOutput = false;
+        rejection = undefined;
       }
     } else if (event.type === "message_update") {
       const delta = record(event.assistantMessageEvent);
@@ -73,11 +79,17 @@ export function reducePiJsonl(
         errorMessage: message.errorMessage,
         text: textContent(message.content),
       };
-    } else if (event.type === "tool_execution_end" && event.toolName === "submit_result") {
+    } else if (
+      requireResult &&
+      event.type === "tool_execution_end" &&
+      event.toolName === "submit_result"
+    ) {
       const result = record(event.result);
       if (event.isError !== true && result !== undefined && "details" in result) {
         output = result.details;
         hasOutput = true;
+      } else {
+        rejection = textContent(result?.content) || "submit_result failed";
       }
     } else if (event.type === "agent_settled") {
       settled = true;
@@ -115,6 +127,13 @@ export function reducePiJsonl(
         `pi settled with invalid assistant stop reason ${JSON.stringify(finalAssistant.stopReason)}`,
       );
   }
+
+  if (requireResult && !hasOutput)
+    throw new Error(
+      rejection === undefined
+        ? "pi finished without calling submit_result"
+        : `pi finished without an accepted submit_result call: ${rejection}`,
+    );
 
   return {
     text: finalAssistant.text,

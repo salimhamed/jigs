@@ -249,23 +249,46 @@ export function piMcpToolNames(servers: Record<string, PiMcpServerConfig>): stri
   );
 }
 
-/** Write the one structured-result tool Pi may load for this request. */
+/** The structured-result tool the Pi driver loads when a request has an output schema. */
+export const SUBMIT_RESULT_TOOL = "submit_result";
+
+/**
+ * Write the structured-result tool for one Pi invocation. It accepts only
+ * arguments that already match the requested schema.
+ */
 export function writePiSubmitResultExtension(home: string, schema: OutputJsonSchema): string {
   const extension = path.join(home, "submit-result.ts");
   writeFileSync(
     extension,
     `import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { Compile } from "typebox/compile";
+
+const schema = ${JSON.stringify(schema)};
+const validator = Compile(schema);
 
 export default function (pi: ExtensionAPI) {
   pi.registerTool({
-    name: "submit_result",
+    name: ${JSON.stringify(SUBMIT_RESULT_TOOL)},
     label: "Submit result",
     description: "Submit the final structured answer.",
     promptSnippet: "Submit the final structured answer",
     promptGuidelines: ["Use submit_result as your final action and do not answer afterward."],
-    parameters: Type.Unsafe(${JSON.stringify(schema)}),
-    constrainedSampling: { type: "json_schema", strict: "require" },
+    parameters: Type.Unsafe(schema),
+    // Many OpenAI-compatible servers lack strict tool schemas; the check below
+    // enforces the schema wherever constrained sampling is unavailable.
+    constrainedSampling: { type: "json_schema", strict: "prefer" },
+    // Pi coerces arguments (such as "3" to 3) before its own check, so the
+    // model's raw arguments are validated here first.
+    prepareArguments(args) {
+      if (validator.Check(args)) return args;
+      const problems = validator
+        .Errors(args)
+        .map((error) => \`\${error.instancePath || "/"} \${error.message}\`);
+      throw new Error(
+        \`submit_result arguments do not match the requested schema: \${problems.join("; ")}\`,
+      );
+    },
     async execute(_toolCallId, params) {
       return {
         content: [{ type: "text", text: "Structured result submitted" }],

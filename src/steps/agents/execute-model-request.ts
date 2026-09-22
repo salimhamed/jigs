@@ -20,6 +20,8 @@ export async function executeModel(
   const driver = deps.resolveDriver(wire.model.kind);
   if (driver?.ask === undefined)
     throw new JigsError(`no driver is registered for ${wire.model.kind}`);
+  if (driver.family !== "model")
+    throw new JigsError(`${wire.model.kind} is an agent harness, not a model source`);
   const requestReport = await runChecks(driver.requestChecks(wire));
   if (!requestReport.ok) throw new JigsError(formatFailures(requestReport));
   const generation = await driver.ask(wire, {

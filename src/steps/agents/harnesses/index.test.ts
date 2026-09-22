@@ -9,8 +9,6 @@ test("claude re-exports are identity-equal to the provider's", () => {
 });
 
 test("codex re-exports are identity-equal to the provider's", () => {
-  expect(harnesses.codexExec).toBe(codexProvider.codexExec);
-  expect(harnesses.createCodexExec).toBe(codexProvider.createCodexExec);
   expect(harnesses.codexAppServer).toBe(codexProvider.codexAppServer);
   expect(harnesses.createCodexAppServer).toBe(codexProvider.createCodexAppServer);
 });

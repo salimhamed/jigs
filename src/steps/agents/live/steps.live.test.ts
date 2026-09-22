@@ -112,16 +112,3 @@ test("claude ask step: structured output round-trips typed", async () => {
 
   expect(verdict.parse(result.output)).toEqual({ ok: true, word: "sky" });
 });
-
-test("codex ask step: structured output round-trips typed", async () => {
-  const runId = `live-steps-ask-codex-${crypto.randomUUID().slice(0, 8)}`;
-  const wire = buildAskAgentRequest({
-    harness: harnesses.codex("gpt-5.6-luna"),
-    prompt: STRUCTURED_PROMPT,
-    output: verdict,
-  });
-
-  const result = await runAgent(wire, runId);
-
-  expect(verdict.parse(result.output)).toEqual({ ok: true, word: "sky" });
-});

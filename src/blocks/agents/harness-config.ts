@@ -114,6 +114,13 @@ export type PiOtherHarness = SharedPiHarness & {
 export type PiHarness = PiOpenaiCompatibleHarness | PiOtherHarness;
 /** A serializable agent-program descriptor. */
 export type Harness = ClaudeHarness | CodexHarness | PiHarness;
+/** Marks a descriptor that names no tools or MCP servers. */
+export type ToolFree = { tools?: never; mcpServers?: never };
+/**
+ * A harness `askAgent` can run with no tools: Claude Code or Pi, without MCP
+ * servers or a Pi tool allowlist. Codex has no mode without tools.
+ */
+export type AskableHarness = (ClaudeHarness | PiHarness) & ToolFree;
 /** The stable name of an agent harness. */
 export type HarnessKind = Harness["kind"];
 
@@ -137,29 +144,34 @@ export const models = {
 } as const;
 
 type PiHarnessOptions = Pick<SharedPiHarness, "thinking" | "tools" | "mcpServers">;
+type PiCompatOptions = { compat?: Partial<PiOpenaiCompatibleOptions> };
+type NoOptions = Record<never, never>;
+// Options that name no tools keep the descriptor tool-free, so askAgent accepts it.
+type Scoped<H, O> = [Extract<keyof O, keyof ToolFree>] extends [never] ? H & ToolFree : H;
 
 /**
  * Build a Pi harness around a model source. `compat` applies only to an
  * OpenAI-compatible source; each hint omitted from it defaults to `false`.
+ * Without `tools` or `mcpServers` the harness also works with `askAgent`.
  */
-function piHarness(
+function piHarness<O extends PiHarnessOptions & PiCompatOptions = NoOptions>(
   model: OpenaiCompatibleSource,
-  options?: PiHarnessOptions & { compat?: Partial<PiOpenaiCompatibleOptions> },
-): PiOpenaiCompatibleHarness;
-function piHarness(
+  options?: O,
+): Scoped<PiOpenaiCompatibleHarness, O>;
+function piHarness<O extends PiHarnessOptions = NoOptions>(
   model: Exclude<ModelSource, OpenaiCompatibleSource>,
-  options?: PiHarnessOptions,
-): PiOtherHarness;
+  options?: O,
+): Scoped<PiOtherHarness, O>;
 // A source chosen at runtime may be OpenAI-compatible, so `compat` stays allowed and is checked on call.
-function piHarness<M extends ModelSource>(
-  model: M,
-  options?: PiHarnessOptions & {
+function piHarness<
+  M extends ModelSource,
+  O extends PiHarnessOptions & {
     compat?: OpenaiCompatibleSource extends M ? Partial<PiOpenaiCompatibleOptions> : never;
-  },
-): PiHarness;
+  } = NoOptions,
+>(model: M, options?: O): Scoped<PiHarness, O>;
 function piHarness(
   model: ModelSource,
-  options: PiHarnessOptions & { compat?: Partial<PiOpenaiCompatibleOptions> } = {},
+  options: PiHarnessOptions & PiCompatOptions = {},
 ): PiHarness {
   const { compat, ...harnessOptions } = options;
   if (model.kind === "openai-compatible") {
@@ -178,11 +190,20 @@ function piHarness(
   return { kind: "pi", model, ...harnessOptions };
 }
 
+type ClaudeHarnessOptions = Omit<ClaudeHarness, "kind" | "model">;
+
+/** Build a Claude Code harness. Without `mcpServers` it also works with `askAgent`. */
+function claudeHarness<O extends ClaudeHarnessOptions = NoOptions>(
+  model: string,
+  options?: O,
+): Scoped<ClaudeHarness, O>;
+function claudeHarness(model: string, options: ClaudeHarnessOptions = {}): ClaudeHarness {
+  return { kind: "claude", model, ...options };
+}
+
 /** Constructors for agent-harness descriptors. */
 export const harnesses = {
-  claude(model: string, options: Omit<ClaudeHarness, "kind" | "model"> = {}): ClaudeHarness {
-    return { kind: "claude", model, ...options };
-  },
+  claude: claudeHarness,
   codex(model: string, options: Omit<CodexHarness, "kind" | "model"> = {}): CodexHarness {
     return { kind: "codex", model, ...options };
   },

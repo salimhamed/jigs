@@ -29,8 +29,10 @@ test("submit_result extension is written inside the invocation home with the wir
   expect(extension).toBe(path.join(tmp, "submit-result.ts"));
   const source = readFileSync(extension, "utf8");
   expect(source).toContain('name: "submit_result"');
-  expect(source).toContain('constrainedSampling: { type: "json_schema", strict: "require" }');
-  expect(source).toContain(JSON.stringify(schema));
+  expect(source).toContain('constrainedSampling: { type: "json_schema", strict: "prefer" }');
+  expect(source).toContain(`const schema = ${JSON.stringify(schema)};`);
+  expect(source).toContain('import { Compile } from "typebox/compile";');
+  expect(source).toContain("prepareArguments(args)");
   expect(source).toContain("details: params");
 });
 

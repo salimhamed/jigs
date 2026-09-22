@@ -16,6 +16,7 @@ export { askAgent } from "./ask-agent.ts";
 export { askModel, type ExecuteModelStep } from "./ask-model.ts";
 export { type AgentSteps, bindAgentSteps, type ExecuteJevStep } from "./bind.ts";
 export {
+  type AskableHarness,
   type AskableModelSource,
   type ClaudeHarness,
   type CodexHarness,
@@ -39,6 +40,7 @@ export {
   type PiOpenaiCompatibleHarness,
   type PiOpenaiCompatibleOptions,
   type PiOtherHarness,
+  type ToolFree,
 } from "./harness-config.ts";
 export {
   type AskJevOptions,

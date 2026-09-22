@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { AskableModelSource, Harness } from "./harness-config.ts";
+import type { AskableHarness, AskableModelSource, Harness } from "./harness-config.ts";
 import { dropNullOptionals, type OutputJsonSchema, toOutputJsonSchema } from "./output-schema.ts";
 import type { AgentSession } from "./result.ts";
 
@@ -13,7 +13,7 @@ export type RunAgentOptions<T = undefined> = {
 };
 /** Workflow-side options for one harness turn without tools or a worktree. */
 export type AskAgentOptions<T = undefined> = {
-  harness: Harness;
+  harness: AskableHarness;
   prompt: string;
   system?: string;
   output?: z.ZodType<T>;
@@ -51,12 +51,24 @@ export function buildAgentRequest<T>(config: RunAgentOptions<T>): AgentRequest {
   const { output, ...wire } = config;
   return withOutputSchema(wire, output);
 }
-/** Convert workflow-side harness-ask options into their durable wire form. */
-export function buildAskAgentRequest<T>(config: AskAgentOptions<T>): AgentRequest {
-  if (config.harness.mcpServers !== undefined)
+/** Reject a harness that cannot answer an `askAgent` call without tools. */
+export function assertAskableHarness(harness: Harness): asserts harness is AskableHarness {
+  if (harness.kind === "codex")
+    throw new Error(
+      "askAgent() cannot use the Codex harness — Codex has no mode without tools; use runAgent(), Claude Code or Pi",
+    );
+  if (harness.mcpServers !== undefined)
     throw new Error(
       "askAgent() has no MCP universe — mcpServers on the harness descriptor is only honored by runAgent()",
     );
+  if (harness.kind === "pi" && harness.tools !== undefined)
+    throw new Error(
+      "askAgent() runs without tools — tools on the Pi harness descriptor is only honored by runAgent()",
+    );
+}
+/** Convert workflow-side harness-ask options into their durable wire form. */
+export function buildAskAgentRequest<T>(config: AskAgentOptions<T>): AgentRequest {
+  assertAskableHarness(config.harness);
   const { output, ...wire } = config;
   return withOutputSchema(wire, output);
 }

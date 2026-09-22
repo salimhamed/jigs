@@ -184,6 +184,11 @@ test.skipIf(!hasSupportedPi())(
         body += chunk;
       });
       request.on("end", () => {
+        // A request whose client went away before sending its body is not a turn.
+        if (body === "") {
+          response.end();
+          return;
+        }
         const parsed = JSON.parse(body) as Record<string, unknown>;
         requests.push(parsed);
         if (requests.length === 1) {
@@ -275,6 +280,10 @@ test.skipIf(!hasSupportedPi())(
         body += chunk;
       });
       request.on("end", () => {
+        if (body === "") {
+          response.end();
+          return;
+        }
         requests.push(JSON.parse(body) as Record<string, unknown>);
         sse(response, { role: "assistant", content: "failure isolated" }, "stop");
       });

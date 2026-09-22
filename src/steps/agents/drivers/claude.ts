@@ -96,6 +96,8 @@ export function createClaudeDriver(
           harness.model,
           claudeStepSettings(
             {
+              // An empty MCP universe still leaves Claude Code's built-in tools.
+              tools: [],
               strictMcpConfig: true,
               mcpServers: {},
               settingSources: [],

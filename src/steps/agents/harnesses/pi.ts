@@ -1,14 +1,13 @@
 import { spawn } from "node:child_process";
 import type { ExecutorGeneration } from "../drivers/types.ts";
 import { resolvePiExecutable } from "./executables.ts";
-import { type PiDelta, reducePiJsonl } from "./pi-jsonl.ts";
+import { type PiReduceOptions, reducePiJsonl } from "./pi-jsonl.ts";
 
-export type PiExecutionOptions = {
+export type PiExecutionOptions = PiReduceOptions & {
   args: string[];
   cwd: string;
   env: Record<string, string>;
   signal?: AbortSignal;
-  onDelta?: (delta: PiDelta) => void;
 };
 
 const FORCE_KILL_DELAY_MS = 1_000;
@@ -139,7 +138,7 @@ export function executePi(options: PiExecutionOptions): Promise<ExecutorGenerati
         if (code === 143) throw new Error("pi was cancelled by SIGTERM (exit code 143)");
         if (code === 129) throw new Error("pi was cancelled by SIGHUP (exit code 129)");
         if (code !== 0) throw new Error(`pi exited with code ${code ?? "unknown"}`);
-        resolve(reducePiJsonl(stdout, options.onDelta));
+        resolve(reducePiJsonl(stdout, options));
       } catch (error) {
         reject(
           stderr.trim() === ""

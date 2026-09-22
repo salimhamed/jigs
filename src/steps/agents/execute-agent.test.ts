@@ -1,12 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ClaudeCodeSettings } from "ai-sdk-provider-claude-code";
-import type {
-  CodexAppServerProvider,
-  CodexAppServerSettings,
-  CodexExecSettings,
-} from "ai-sdk-provider-codex-cli";
+import type { CodexAppServerProvider, CodexAppServerSettings } from "ai-sdk-provider-codex-cli";
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { unwrapAgentStep } from "../../blocks/agents/agent.ts";
@@ -729,7 +724,7 @@ test("request checks run by phase even when an installation check has the same i
   expect(captured.options).toBeUndefined();
 });
 
-test("claude ask step sees no MCP universe and loads no filesystem settings", async () => {
+test("claude ask step disables built-in tools, sees no MCP universe and loads no filesystem settings", async () => {
   const wire = buildAskAgentRequest({
     harness: harnesses.claude("sonnet"),
     prompt: "summarize",
@@ -740,6 +735,7 @@ test("claude ask step sees no MCP universe and loads no filesystem settings", as
   await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
   const settings = claudeSettingsOf(captured);
+  expect(settings.tools).toEqual([]);
   expect(settings.strictMcpConfig).toBe(true);
   expect(settings.mcpServers).toEqual({});
   expect(settings.settingSources).toEqual([]);
@@ -747,27 +743,26 @@ test("claude ask step sees no MCP universe and loads no filesystem settings", as
   expect(captured.options?.system).toBe("be terse");
 });
 
-test("codex ask step uses read-only exec in a scratch cwd it cleans up", async () => {
-  const wire = buildAskAgentRequest({
-    harness: harnesses.codex("gpt-5.5"),
-    prompt: "what is 2+2?",
-  });
-  const { deps, captured } = makeDeps();
+test("askAgent rejects Codex, a Pi allowlist and a model source before any check or launch", async () => {
+  const { deps, captured } = makeDeps({}, { piRequestChecks: true });
+  const requestChecks = vi.spyOn(drivers.openrouter, "requestChecks");
+  const ask = (harness: unknown) =>
+    ({ harness, prompt: "never reached" }) as unknown as Parameters<typeof executeAgent>[0];
+  const metadata = { workflowRunId: "run-1" };
 
-  const result = await agentStep(wire, { workflowRunId: "run-9" }, deps);
-
-  const model = captured.options?.model as { settings?: CodexExecSettings };
-  const settings = model.settings;
-  expect(settings?.sandboxMode).toBe("read-only");
-  expect(settings?.approvalMode).toBe("never");
-  expect(settings?.skipGitRepoCheck).toBe(true);
-  expect(settings?.env?.CODEX_HOME).toMatch(
-    new RegExp(`^${path.join(tmp, "codex-home", "run-9")}/`),
+  await expect(executeAgent(ask(harnesses.codex("gpt-5.5")), metadata, deps)).rejects.toThrow(
+    "askAgent() cannot use the Codex harness",
   );
-  expect(settings?.cwd?.startsWith(path.join(tmpdir(), "jigs-ask-"))).toBe(true);
-  expect(existsSync(settings?.cwd ?? "")).toBe(false);
-  expect(result.text).toBe("done");
-  expect("session" in result).toBe(false);
+  await expect(
+    executeAgent(ask(harnesses.pi(models.openrouter("m"), { tools: ["read"] })), metadata, deps),
+  ).rejects.toThrow("askAgent() runs without tools");
+  await expect(executeAgent(ask(models.openrouter("m")), metadata, deps)).rejects.toThrow(
+    "openrouter is a model source, not an agent harness",
+  );
+  expect(requestChecks).not.toHaveBeenCalled();
+  expect(captured.homeRunIds).toEqual([]);
+  expect(captured.piHome).toBeUndefined();
+  expect(captured.options).toBeUndefined();
 });
 
 test("pi ask executes its nested model with isolated discovery and returns executor output", async () => {
@@ -801,7 +796,8 @@ test("pi ask executes its nested model with isolated discovery and returns execu
   expect(captured.piOptions?.args).toEqual([
     "--mode",
     "json",
-    "--no-tools",
+    "--tools",
+    "submit_result",
     "--model",
     "studio/local-model",
     "--thinking",
@@ -816,6 +812,7 @@ test("pi ask executes its nested model with isolated discovery and returns execu
     expect.stringContaining("submit-result.ts"),
     expect.stringContaining("Call submit_result"),
   ]);
+  expect(captured.piOptions?.requireResult).toBe(true);
   expect(captured.piOptions?.env.PI_CODING_AGENT_DIR).toMatch(
     new RegExp(`^${path.join(tmp, "pi-home", "run-pi")}/`),
   );
@@ -825,6 +822,24 @@ test("pi ask executes its nested model with isolated discovery and returns execu
     text: "done",
     output: { ok: true },
   });
+});
+
+test("pi plain ask disables every tool and loads no result tool", async () => {
+  const wire = buildAskAgentRequest({
+    harness: harnesses.pi(models.openaiCodex("gpt-5.5")),
+    prompt: "say hello",
+  });
+  const { deps, captured } = makeDeps({ text: "hello" });
+
+  const result = await agentStep(wire, { workflowRunId: "run-pi-plain" }, deps);
+
+  const args = captured.piOptions?.args ?? [];
+  expect(args).toContain("--no-tools");
+  expect(args).not.toContain("--tools");
+  expect(args).not.toContain("-e");
+  expect(args.at(-1)).toBe("say hello");
+  expect(captured.piOptions?.requireResult).toBe(false);
+  expect(result).toEqual({ text: "hello" });
 });
 
 test("pi ask rejects an unreachable nested endpoint before executing Pi", async () => {
@@ -921,6 +936,7 @@ test("pi run mints and records a matching session with tools in the worktree", a
   expect(captured.piOptions?.cwd).toBe(worktree);
   expect(result.session).toEqual({ harness: "pi", id: sessionId });
   expect(result.output).toEqual({ ok: true });
+  expect(captured.piOptions?.requireResult).toBe(true);
   const extension = args[args.indexOf("-e") + 1];
   if (extension === undefined) throw new Error("Pi output extension was not passed");
   expect(extension).toContain("submit-result.ts");
@@ -1037,7 +1053,7 @@ test("pi rejects unsupported MCP and ask configurations before probes or model c
   const ask = makeDeps({}, { piRequestChecks: true });
   await expect(
     executeAgent(invalidAsk, { workflowRunId: "invalid-ask" }, ask.deps),
-  ).rejects.toThrow("askAgent() cannot expose MCP servers");
+  ).rejects.toThrow("askAgent() has no MCP universe");
   expect(ask.captured.piHome).toBeUndefined();
 });
 

@@ -1,6 +1,6 @@
 import { experimental_evaluate, generateText, jsonSchema, Output, type OutputInterface } from "ai";
 import type { ExecuteAgentStep } from "../../blocks/agents/agent.ts";
-import type { AgentRequest } from "../../blocks/agents/plan.ts";
+import { type AgentRequest, assertAskableHarness } from "../../blocks/agents/plan.ts";
 import { extractAgentSession, toModelResult } from "../../blocks/agents/result.ts";
 import {
   type FailedCheck,
@@ -55,8 +55,11 @@ export async function executeAgent(
 ): ReturnType<ExecuteAgentStep> {
   const driver = deps.resolveDriver(wire.harness.kind);
   if (driver === undefined) throw new JigsError(`no driver is registered for ${wire.harness.kind}`);
+  if (driver.family !== "harness")
+    throw new JigsError(`${wire.harness.kind} is a model source, not an agent harness`);
   const isRun = wire.cwd !== undefined;
   if (!isRun) {
+    assertAskableHarness(wire.harness);
     if (driver.ask === undefined) throw new JigsError(`the ${wire.harness.kind} driver cannot ask`);
     const requestReport = await runChecks(driver.requestChecks(wire));
     if (!requestReport.ok) throw new JigsError(formatFailures(requestReport));

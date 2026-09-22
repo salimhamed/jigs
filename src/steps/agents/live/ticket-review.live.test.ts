@@ -2,6 +2,7 @@ import path from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { harnesses } from "../../../blocks/agents/harness-config.ts";
 import {
+  assertAskableHarness,
   buildAskAgentRequest,
   parseOutput,
   type RunAgentOptions,
@@ -83,9 +84,11 @@ const answeredSnapshot: TicketSnapshot = {
 test("ticket review asks every knowable decision in one needs-human round", async () => {
   const runId = `live-ticket-review-${crypto.randomUUID().slice(0, 8)}`;
   const runAgent: RunAgentFn = async <T>(config: RunAgentOptions<T>) => {
+    const { harness } = config;
+    assertAskableHarness(harness);
     const result = await executeAgent(
       buildAskAgentRequest({
-        harness: config.harness,
+        harness,
         prompt: config.prompt,
         ...(config.output === undefined ? {} : { output: config.output }),
       }),

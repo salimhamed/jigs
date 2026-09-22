@@ -1,11 +1,7 @@
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
-import {
-  codexAppServerStepSettings,
-  codexExecStepSettings,
-  withCodexAppServer,
-} from "../drivers/codex-support.ts";
+import { codexAppServerStepSettings, withCodexAppServer } from "../drivers/codex-support.ts";
 import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
 // These settings look for the CLI eagerly, so every test that is not about
@@ -14,19 +10,6 @@ const CODEX = "/fake/codex";
 
 afterEach(() => {
   vi.unstubAllEnvs();
-});
-
-test("exec settings inject CODEX_HOME and survive caller-supplied env", () => {
-  const settings = codexExecStepSettings({
-    cwd: "/worktree",
-    codexHome: "/homes/run-1",
-    codexPath: CODEX,
-    env: { FOO: "bar", CODEX_HOME: "/tampered" },
-  });
-  expect(settings.env).toEqual({ FOO: "bar", CODEX_HOME: "/homes/run-1" });
-  expect(settings.skipGitRepoCheck).toBe(true);
-  expect(settings.codexPath).toBe(CODEX);
-  expect("codexHome" in settings).toBe(false);
 });
 
 test("app-server settings force persistent threads and CODEX_HOME", () => {
@@ -44,7 +27,7 @@ test("app-server settings force persistent threads and CODEX_HOME", () => {
 
 // Never left to the provider, which would pick a copy from its own
 // node_modules before looking at PATH.
-test("both surfaces resolve the executable on PATH when the caller names none", () => {
+test("app-server settings resolve the executable on PATH when the caller names none", () => {
   const tmp = makeTmpDir();
   try {
     const bin = path.join(tmp, "bin");
@@ -54,7 +37,6 @@ test("both surfaces resolve the executable on PATH when the caller names none", 
     chmodSync(codex, 0o755);
     vi.stubEnv("PATH", bin);
 
-    expect(codexExecStepSettings({ cwd: "/worktree", codexHome: "/h" }).codexPath).toBe(codex);
     expect(codexAppServerStepSettings({ cwd: "/worktree", codexHome: "/h" }).codexPath).toBe(codex);
   } finally {
     removeTmpDir(tmp);
