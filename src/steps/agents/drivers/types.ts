@@ -7,12 +7,7 @@ import type {
 } from "ai";
 import type { CodexAppServerProvider } from "ai-sdk-provider-codex-cli";
 import type { HarnessKind, ModelKind, ModelSource } from "../../../blocks/agents/harness-config.ts";
-import type {
-  AskJevOptions,
-  JevAnswers,
-  JevQuestions,
-  JevUsage,
-} from "../../../blocks/agents/jev.ts";
+import type { AskJevOptions, JevAnswers, JevQuestions } from "../../../blocks/agents/jev.ts";
 import type { AgentRequest, ModelRequest } from "../../../blocks/agents/plan.ts";
 import type { ModelGeneration } from "../../../blocks/agents/result.ts";
 import type { Check } from "../../../checks/catalog.ts";
@@ -22,13 +17,11 @@ import type { PiExecutionOptions } from "../harnesses/pi.ts";
 export type ExecutorGeneration = ModelGeneration & { output?: unknown };
 export type DecisionGeneration<QUESTIONS extends JevQuestions = JevQuestions> = {
   answers: JevAnswers<QUESTIONS>;
-  usage: JevUsage;
   providerMetadata?: Record<string, Record<string, unknown>> | null;
 };
 
 export type EvaluationGeneration = {
   answers: Record<string, unknown>;
-  usage: JevUsage;
   providerMetadata?: Record<string, Record<string, unknown>> | null;
 };
 export type DriverRequest = AgentRequest | ModelRequest | AskJevOptions<JevQuestions>;
@@ -77,5 +70,4 @@ export interface Driver<K extends HarnessKind | ModelKind> {
   displayName: string;
   resolveExecutable?(env: NodeJS.ProcessEnv): string;
   minimumVersion?: string;
-  cost(generation: ExecutorGeneration | DecisionGeneration): number | undefined;
 }

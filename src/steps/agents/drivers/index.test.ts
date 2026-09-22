@@ -35,23 +35,7 @@ test("every registered driver declares its operational contract and documentatio
   }
 });
 
-test("Claude reports its provider cost and Codex has no cost estimate", () => {
-  const generation = {
-    text: "done",
-    usage: {
-      inputTokens: 1,
-      outputTokens: 2,
-      totalTokens: 3,
-      inputTokenDetails: { noCacheTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 },
-      outputTokenDetails: { textTokens: 2, reasoningTokens: 0 },
-    },
-    providerMetadata: { "claude-code": { costUsd: 0.42 } },
-  };
-  expect(drivers.claude.cost(generation)).toBe(0.42);
-  expect(drivers.codex.cost()).toBeUndefined();
-});
-
-test("Pi derives checks, environment and cost from its nested model source", () => {
+test("Pi derives checks and environment from its nested model source", () => {
   const local = buildAskAgentRequest({
     harness: harnesses.pi(
       models.openaiCompatible({
@@ -77,11 +61,4 @@ test("Pi derives checks, environment and cost from its nested model source", () 
   expect(drivers.pi.authChecks(codex).map((check) => check.id)).toEqual([
     "harness.pi-openai-codex-auth",
   ]);
-  expect(
-    drivers.pi.cost({
-      text: "done",
-      usage: {} as never,
-      providerMetadata: { pi: { costUsd: 0.012 } },
-    }),
-  ).toBe(0.012);
 });

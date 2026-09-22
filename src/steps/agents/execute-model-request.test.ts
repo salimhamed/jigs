@@ -93,7 +93,7 @@ test("askJev rejects cyclic state before calling the provider", async () => {
   expect(evaluate).not.toHaveBeenCalled();
 });
 
-test("OpenRouter evaluates typed questions and normalizes metadata and cost", async () => {
+test("OpenRouter evaluates typed questions and normalizes metadata", async () => {
   vi.stubEnv("OPENROUTER_API_KEY", "test-key");
   const evaluate = vi.fn(async () => ({
     answers: {
@@ -109,7 +109,6 @@ test("OpenRouter evaluates typed questions and normalizes metadata and cost", as
         probabilities: { "0": 0.03, "1": 0.22, "2": 0.75 },
       },
     },
-    usage: { inputTokens: 48, outputTokens: 5, totalTokens: 53 },
     providerMetadata: {
       openrouter: {
         answers: {
@@ -119,7 +118,6 @@ test("OpenRouter evaluates typed questions and normalizes metadata and cost", as
             legend: { "0": "Different", "1": "Possible", "2": "Same" },
           },
         },
-        usage: { cost: 0.000002016 },
       },
     },
   }));
@@ -178,7 +176,6 @@ test("OpenRouter evaluates typed questions and normalizes metadata and cost", as
         legend: { "0": "Different", "1": "Possible", "2": "Same" },
       },
     },
-    usage: { inputTokens: 48, outputTokens: 5, totalTokens: 53, costUsd: 0.000002016 },
   });
 });
 
@@ -287,7 +284,6 @@ test.each(malformedProviderCases)(
           ...defaultAgentExecutionDependencies,
           evaluate: async () => ({
             answers,
-            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
             providerMetadata: { openrouter: { answers: metadata } },
           }),
         },
@@ -376,7 +372,6 @@ test("an OpenAI-compatible source answers structured requests without requiring 
   );
 
   expect(result.output).toEqual({ ok: true });
-  expect(result.usage?.costUsd).toBeUndefined();
   expect(openaiCompatible.create).toHaveBeenCalledWith({
     baseURL: "http://localhost:1234/v1",
     name: "north-desktop",
@@ -450,7 +445,7 @@ test("an OpenAI-compatible source uses only its optional named credential", asyn
   expect(drivers["openai-compatible"].authChecks(withoutKey)).toEqual([]);
 });
 
-test("OpenRouter answers one structured request directly and reports its cost", async () => {
+test("OpenRouter answers one structured request directly", async () => {
   vi.stubEnv("OPENAI_API_KEY", "test-key");
   const requests: Array<{ input: Parameters<typeof fetch>[0]; init?: RequestInit }> = [];
   vi.stubGlobal("fetch", async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
@@ -472,8 +467,6 @@ test("OpenRouter answers one structured request directly and reports its cost", 
           prompt_tokens: 7,
           completion_tokens: 4,
           total_tokens: 11,
-          cost: 0.0000055,
-          cost_details: { upstream_inference_cost: 0.000004 },
         },
       }),
       { status: 200, headers: { "content-type": "application/json" } },
@@ -500,7 +493,6 @@ test("OpenRouter answers one structured request directly and reports its cost", 
   );
 
   expect(result.output).toEqual({ ok: true });
-  expect(result.usage?.costUsd).toBe(0.0000055);
   expect(requests).toHaveLength(1);
   const request = requests[0];
   const headers = new Headers(request?.init?.headers);
@@ -510,7 +502,6 @@ test("OpenRouter answers one structured request directly and reports its cost", 
   const body = JSON.parse(String(request?.init?.body)) as Record<string, unknown>;
   expect(body).toMatchObject({
     model: "google/gemini-2.5-flash-lite",
-    usage: { include: true },
     response_format: { type: "json_schema", json_schema: { strict: true } },
   });
   expect(boundaries.execFile).not.toHaveBeenCalled();

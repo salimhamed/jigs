@@ -36,6 +36,6 @@ test("Pi execution trusts a successful message_end rather than the child exit co
 
   await expect(executePi({ args: [], cwd: tmp, env: { PATH: bin } })).resolves.toMatchObject({
     text: "finished",
-    providerMetadata: { pi: { sessionId: "session-child", costUsd: 0.1 } },
+    providerMetadata: { pi: { sessionId: "session-child" } },
   });
 });

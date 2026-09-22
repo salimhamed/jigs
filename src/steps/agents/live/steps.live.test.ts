@@ -7,7 +7,7 @@ import {
   buildAgentRequest,
   buildAskAgentRequest,
 } from "../../../blocks/agents/plan.ts";
-import type { AgentResult, ModelUsage } from "../../../blocks/agents/result.ts";
+import type { AgentResult } from "../../../blocks/agents/result.ts";
 import {
   type AgentExecutionDependencies,
   defaultAgentExecutionDependencies,
@@ -45,11 +45,6 @@ const verdict = z.object({
 const STRUCTURED_PROMPT =
   "Answer as structured output: set ok to true and word to exactly 'sky'. Do not create or modify any files.";
 
-function assertUsage(usage: ModelUsage | undefined): void {
-  expect(usage).toBeDefined();
-  expect(usage?.outputTokens ?? 0).toBeGreaterThan(0);
-}
-
 // executeAgent answers a union; a step that declares no MCP servers and carries
 // no resume pointer can only take the successful arm.
 async function runAgent(wire: AgentRequest, runId: string): Promise<AgentResult<unknown>> {
@@ -63,7 +58,7 @@ async function runAgent(wire: AgentRequest, runId: string): Promise<AgentResult<
   return result;
 }
 
-test("claude agent step: structured output round-trips typed, usage and session captured", async () => {
+test("claude agent step: structured output round-trips typed, session captured", async () => {
   const runId = `live-steps-claude-${crypto.randomUUID().slice(0, 8)}`;
   const wire = buildAgentRequest({
     harness: harnesses.claude("haiku"),
@@ -76,12 +71,11 @@ test("claude agent step: structured output round-trips typed, usage and session 
   const parsed = verdict.parse(result.output);
 
   expect(parsed).toEqual({ ok: true, word: "sky" });
-  assertUsage(result.usage);
   expect(result.session?.harness).toBe("claude");
   expect(result.session?.id).toBeTruthy();
 });
 
-test("codex agent step: structured output round-trips typed, usage and threadId captured", async () => {
+test("codex agent step: structured output round-trips typed, threadId captured", async () => {
   const runId = `live-steps-codex-${crypto.randomUUID().slice(0, 8)}`;
   const wire = buildAgentRequest({
     harness: harnesses.codex("gpt-5.6-luna"),
@@ -94,12 +88,11 @@ test("codex agent step: structured output round-trips typed, usage and threadId 
   const parsed = verdict.parse(result.output);
 
   expect(parsed).toEqual({ ok: true, word: "sky" });
-  assertUsage(result.usage);
   expect(result.session?.harness).toBe("codex");
   expect(result.session?.id).toBeTruthy();
 });
 
-test("claude ask step: structured output round-trips typed with usage", async () => {
+test("claude ask step: structured output round-trips typed", async () => {
   const runId = `live-steps-ask-claude-${crypto.randomUUID().slice(0, 8)}`;
   const wire = buildAskAgentRequest({
     harness: harnesses.claude("haiku"),
@@ -110,10 +103,9 @@ test("claude ask step: structured output round-trips typed with usage", async ()
   const result = await runAgent(wire, runId);
 
   expect(verdict.parse(result.output)).toEqual({ ok: true, word: "sky" });
-  assertUsage(result.usage);
 });
 
-test("codex ask step: structured output round-trips typed with usage", async () => {
+test("codex ask step: structured output round-trips typed", async () => {
   const runId = `live-steps-ask-codex-${crypto.randomUUID().slice(0, 8)}`;
   const wire = buildAskAgentRequest({
     harness: harnesses.codex("gpt-5.6-luna"),
@@ -124,5 +116,4 @@ test("codex ask step: structured output round-trips typed with usage", async () 
   const result = await runAgent(wire, runId);
 
   expect(verdict.parse(result.output)).toEqual({ ok: true, word: "sky" });
-  assertUsage(result.usage);
 });

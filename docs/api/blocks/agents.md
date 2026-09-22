@@ -667,10 +667,6 @@ A typed decision result.
 
 > **answers**: [`JevAnswers`](#jevanswers)\<`QUESTIONS`\>
 
-##### usage
-
-> **usage**: [`JevUsage`](#jevusage)
-
 ***
 
 ### JevState
@@ -678,32 +674,6 @@ A typed decision result.
 > **JevState** = `string` \| `JevJsonObject` \| `JevJsonValue`[]
 
 JSON-compatible evidence evaluated by a decision model.
-
-***
-
-### JevUsage
-
-> **JevUsage** = `object`
-
-Token use and provider-estimated cost for one decision request.
-
-#### Properties
-
-##### costUsd?
-
-> `optional` **costUsd**: `number`
-
-##### inputTokens
-
-> **inputTokens**: `number` \| `undefined`
-
-##### outputTokens
-
-> **outputTokens**: `number` \| `undefined`
-
-##### totalTokens
-
-> **totalTokens**: `number` \| `undefined`
 
 ***
 
@@ -807,7 +777,7 @@ Serializable API model request passed to a durable step.
 
 > **ModelResult**\<`T`\> = `object`
 
-Text, structured output and usage returned by a model call.
+Text and structured output returned by a model call.
 
 #### Type Parameters
 
@@ -825,10 +795,6 @@ Text, structured output and usage returned by a model call.
 
 > **text**: `string`
 
-##### usage?
-
-> `optional` **usage**: [`ModelUsage`](#modelusage)
-
 ***
 
 ### ModelSource
@@ -836,22 +802,6 @@ Text, structured output and usage returned by a model call.
 > **ModelSource** = [`OpenrouterSource`](#openroutersource) \| [`OpenaiCompatibleSource`](#openaicompatiblesource) \| [`OpenaiCodexSource`](#openaicodexsource)
 
 Any configured source from which a model can answer.
-
-***
-
-### ModelUsage
-
-> **ModelUsage** = `LanguageModelUsage` & `object`
-
-Token usage reported by the underlying model provider.
-
-#### Type Declaration
-
-##### costUsd?
-
-> `optional` **costUsd**: `number`
-
-The driver's own estimate, not a bill.
 
 ***
 

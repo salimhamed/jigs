@@ -105,5 +105,4 @@ export const codexDriver = {
   displayName: "Codex",
   resolveExecutable: resolveCodexExecutable,
   minimumVersion: DEFAULT_MIN_CODEX_VERSION,
-  cost: () => undefined,
 } satisfies Driver<"codex">;

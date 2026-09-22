@@ -6,11 +6,6 @@ tools, a worktree and a resumable session. Plain serializable descriptors cross
 the workflow boundary. Step-side **drivers** own credentials, checks and live
 provider objects.
 
-Results include an optional `usage.costUsd` estimate from the driver that ran
-the call. It is the driver's estimate, not a bill: Claude Code reports real USD
-billing, Pi computes a notional amount from its model catalog for a subscription,
-and a local server has no cost.
-
 The execution API has four verbs:
 
 - `runAgent` runs a harness in a working directory.
@@ -56,7 +51,6 @@ released, so they are not long-term conversation storage.
 Structured output first asks Pi to call `submit_result` with constrained JSON
 Schema sampling. If a compatible server completes without that tool call, Jigs
 parses the returned JSON and applies the workflow's normal zod validation.
-Pi's reported usage and catalog cost are retained in the result.
 
 Pi 0.85.1 or newer must be available on the service's `PATH`. Install it with
 `npm install --global @earendil-works/pi-coding-agent`. `jigs doctor` can check
@@ -75,10 +69,6 @@ that do not support `structured_outputs` fail the call; use the
 [structured-output model filter](https://openrouter.ai/models?supported_parameters=structured_outputs)
 before selecting one.
 
-When OpenRouter returns usage accounting, jigs records its reported cost in
-`result.usage.costUsd`. This is an estimate from OpenRouter, not a bill, and may
-be absent when the selected endpoint does not return cost metadata.
-
 ## Jev decisions
 
 `askJev` asks an OpenRouter jev-class decision model named questions about one
@@ -92,9 +82,7 @@ answer carries calibrated probabilities:
   legend, and a numeric score. The score is the probability-weighted expected
   value over the ordered level indexes, so it can be fractional.
 
-Use `models.openrouter("typesafe/jev-1.13")`. The model costs $0.042 per million
-input tokens and has no output-token charge; `usage.costUsd` contains
-OpenRouter's estimate.
+Use `models.openrouter("typesafe/jev-1.13")`.
 
 Entity alignment belongs in factory workflow code because its fields,
 candidates, and action thresholds are business policy. For example, a factory
@@ -144,8 +132,7 @@ Both default to `false`.
 
 Structured output uses the same strict `response_format` and zod parse as other
 direct model calls. If a server ignores `response_format`, the zod parse fails;
-that is the correct failure rather than accepting an unvalidated answer. A local
-server has no cost, so its result has no `usage.costUsd`.
+that is the correct failure rather than accepting an unvalidated answer.
 
 `jigs doctor` skips OpenAI-compatible sources because they are configured at the
 call site and doctor has no workflow request from which to learn their URL.

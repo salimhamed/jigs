@@ -61,7 +61,6 @@ async function ask(request: AgentRequest | ModelRequest, context: DriverContext)
     prompt: request.prompt,
     ...("system" in request && request.system !== undefined ? { system: request.system } : {}),
     ...(context.output === undefined ? {} : { output: context.output }),
-    providerOptions: { openrouter: { usage: { include: true } } },
   });
 }
 
@@ -250,7 +249,7 @@ async function decide<const QUESTIONS extends JevQuestions>(
   const openrouterMetadata = record(evaluated.providerMetadata?.openrouter);
   const answerMetadata = record(openrouterMetadata.answers);
   const answers = normalizeAnswers(request.questions, evaluated.answers, answerMetadata);
-  return { answers, usage: evaluated.usage, providerMetadata: evaluated.providerMetadata };
+  return { answers, providerMetadata: evaluated.providerMetadata };
 }
 
 export const openrouterDriver = {
@@ -264,10 +263,4 @@ export const openrouterDriver = {
   envAllowlist: (request?: OpenRouterRequest) => [apiKeyEnv(request)],
   docsAnchor: "openrouter",
   displayName: "OpenRouter",
-  cost: (generation) => {
-    const usage = generation.providerMetadata?.openrouter?.usage;
-    if (typeof usage !== "object" || usage === null) return undefined;
-    const cost = (usage as { cost?: unknown }).cost;
-    return typeof cost === "number" ? cost : undefined;
-  },
 } satisfies Driver<"openrouter">;
