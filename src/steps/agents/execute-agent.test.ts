@@ -22,7 +22,6 @@ import { type RunAgentFn, resumeOrRebuild } from "../../blocks/agents/resume-or-
 import { createCodexDriver } from "./drivers/codex.ts";
 import { type DriverResolver, driverFor, drivers } from "./drivers/index.ts";
 import { createPiDriver, type PiDriverDependencies } from "./drivers/pi.ts";
-import type { Driver } from "./drivers/types.ts";
 import {
   type AgentExecutionDependencies,
   defaultAgentExecutionDependencies,
@@ -77,13 +76,15 @@ type Captured = {
   piHome?: { runId: string; model: unknown };
 };
 
+// Pi's request checks probe the nested model endpoint and credentials, which
+// most tests neither stub nor care about; the ones that do opt back in.
 function makeDeps(
   generation: Partial<Awaited<ReturnType<AgentExecutionDependencies["generateText"]>>> = {},
+  options: { piRequestChecks?: boolean } = {},
 ): {
   deps: AgentExecutionDependencies;
   captured: Captured;
   piDeps: PiDriverDependencies;
-  piDriver: Driver<"pi">;
 } {
   const captured: Captured = { homeRunIds: [] };
   const generateText: AgentExecutionDependencies["generateText"] = async (options) => {
@@ -119,9 +120,11 @@ function makeDeps(
         return fn(provider);
       },
     }),
-    pi: createPiDriver(piDeps),
+    pi: {
+      ...createPiDriver(piDeps),
+      ...(options.piRequestChecks === true ? {} : { requestChecks: () => [] }),
+    },
   };
-  testDrivers.pi.requestChecks = () => [];
   const deps: AgentExecutionDependencies = {
     generateText,
     evaluate: async () => {
@@ -136,7 +139,7 @@ function makeDeps(
     // that really cannot start.
     jitFailures: async () => undefined,
   };
-  return { deps, captured, piDeps, piDriver: testDrivers.pi };
+  return { deps, captured, piDeps };
 }
 
 // executeAgent answers a union; every test but the resume-failure ones wants the
@@ -696,8 +699,7 @@ test("pi ask rejects an unreachable nested endpoint before executing Pi", async 
   vi.stubGlobal("fetch", async () => {
     throw new Error("connection refused");
   });
-  const { deps, captured, piDriver } = makeDeps();
-  piDriver.requestChecks = drivers.pi.requestChecks;
+  const { deps, captured } = makeDeps({}, { piRequestChecks: true });
   const wire = buildAskAgentRequest({
     harness: harnesses.pi(
       models.openaiCompatible({
@@ -717,8 +719,7 @@ test("pi ask rejects an unreachable nested endpoint before executing Pi", async 
 
 test("pi ask rejects missing nested authentication before executing Pi", async () => {
   vi.stubEnv("PI_TEST_OPENROUTER_KEY", "");
-  const { deps, captured, piDriver } = makeDeps();
-  piDriver.requestChecks = drivers.pi.requestChecks;
+  const { deps, captured } = makeDeps({}, { piRequestChecks: true });
   const wire = buildAskAgentRequest({
     harness: harnesses.pi(
       models.openrouter("openai/gpt-oss", { apiKeyEnv: "PI_TEST_OPENROUTER_KEY" }),
@@ -862,8 +863,7 @@ test("pi run rejects an unreachable nested endpoint before spawning Pi", async (
     cwd: worktree,
     prompt: "implement it",
   });
-  const { deps, captured, piDriver } = makeDeps();
-  piDriver.requestChecks = drivers.pi.requestChecks;
+  const { deps, captured } = makeDeps({}, { piRequestChecks: true });
 
   await expect(executeAgent(wire, { workflowRunId: "run-pi-offline" }, deps)).rejects.toThrow(
     /offline-studio model endpoint: offline-studio is unreachable/,

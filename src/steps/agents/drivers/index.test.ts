@@ -17,9 +17,10 @@ test("every registered driver declares its operational contract and documentatio
     "utf8",
   );
   for (const driver of Object.values(drivers)) {
-    expect(driver.installationChecks()).toBeInstanceOf(Array);
+    const installationIds = driver.installationChecks().map((check) => check.id);
     expect(driver.envAllowlist()).toBeInstanceOf(Array);
     if (driver.family === "harness") {
+      expect(installationIds).toContain(`harness.${driver.kind}-cli`);
       expect(driver.sessionPointer).toEqual({
         providerKey: expect.any(String),
         field: expect.any(String),
