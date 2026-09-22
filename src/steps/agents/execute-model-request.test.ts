@@ -2,7 +2,14 @@ import { afterEach, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { askModel } from "../../blocks/agents/ask-model.ts";
 import { harnesses, models } from "../../blocks/agents/harness-config.ts";
-import { askJev, choice, type JevQuestions, score, yesNo } from "../../blocks/agents/jev.ts";
+import {
+  type AskJevOptions,
+  askJev,
+  choice,
+  type JevQuestions,
+  score,
+  yesNo,
+} from "../../blocks/agents/jev.ts";
 import { buildAskAgentRequest, buildModelRequest } from "../../blocks/agents/plan.ts";
 import { drivers } from "./drivers/index.ts";
 import { defaultAgentExecutionDependencies } from "./execute-agent.ts";
@@ -53,6 +60,22 @@ test("askJev rejects a non-decision model by name", async () => {
     ),
   ).rejects.toThrow(
     "anthropic/claude-haiku is not a jev-class model; askJev accepts only jev-class models",
+  );
+});
+
+test("executeJev rejects a durable payload whose model has no decision driver", async () => {
+  const stalePayload = {
+    model: models.openaiCompatible({
+      name: "old-local-model",
+      baseUrl: "http://localhost:1234/v1",
+      model: "local-model",
+    }),
+    state: "evidence",
+    questions: { match: yesNo("Does it match?") },
+  } as unknown as AskJevOptions<{ match: ReturnType<typeof yesNo> }>;
+
+  await expect(executeJev(stalePayload, { workflowRunId: "old-run" })).rejects.toThrow(
+    "local-model cannot be used with askJev: no decision driver exists",
   );
 });
 
@@ -338,7 +361,6 @@ test("an OpenAI-compatible source answers structured requests without requiring 
         name: "north-desktop",
         baseUrl: "http://localhost:1234/v1",
         model: "served-model",
-        pi: { supportsDeveloperRole: true, supportsReasoningEffort: true },
       }),
       prompt: "Return ok true.",
       system: "Follow the instructions.",
@@ -420,7 +442,7 @@ test("an OpenAI-compatible source uses only its optional named credential", asyn
     drivers["openai-compatible"]
       .requestChecks(buildModelRequest({ model: source, prompt: "x" }))
       .map((check) => check.id),
-  ).toEqual(["model.openai-compatible-runtime", "model.local-model-key"]);
+  ).toEqual(["model.openai-compatible-secured-server", "model.local-model-key"]);
   const withoutKey = buildModelRequest({
     model: models.openaiCompatible({
       name: "open-server",
@@ -431,7 +453,7 @@ test("an OpenAI-compatible source uses only its optional named credential", asyn
   });
   expect(drivers["openai-compatible"].envAllowlist(withoutKey)).toEqual([]);
   expect(drivers["openai-compatible"].requestChecks(withoutKey).map((check) => check.id)).toEqual([
-    "model.openai-compatible-runtime",
+    "model.openai-compatible-open-server",
   ]);
 });
 

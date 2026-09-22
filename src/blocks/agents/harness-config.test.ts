@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import type { PiHarness } from "./harness-config.ts";
 import { harnesses, models } from "./harness-config.ts";
 import { type AskJevOptions, yesNo } from "./jev.ts";
 import type { AskAgentOptions, AskModelOptions, RunAgentOptions } from "./plan.ts";
@@ -52,23 +53,26 @@ test("descriptor namespaces build tagged plain data", () => {
     name: "north-desktop",
     model: "local",
     baseUrl: "http://localhost:1234/v1",
-    pi: { supportsDeveloperRole: false, supportsReasoningEffort: false },
   });
-  expect(
-    models.openaiCompatible({
-      name: "secured-server",
-      baseUrl: "https://models.example/v1",
-      model: "served-model",
-      apiKeyEnv: "LOCAL_MODEL_KEY",
-      pi: { supportsDeveloperRole: true, supportsReasoningEffort: true },
-    }),
-  ).toEqual({
-    kind: "openai-compatible",
+  const local = models.openaiCompatible({
     name: "secured-server",
     baseUrl: "https://models.example/v1",
     model: "served-model",
     apiKeyEnv: "LOCAL_MODEL_KEY",
-    pi: { supportsDeveloperRole: true, supportsReasoningEffort: true },
+  });
+  expect(
+    harnesses.pi(local, {
+      compat: { supportsDeveloperRole: true, supportsReasoningEffort: true },
+    }),
+  ).toEqual({
+    kind: "pi",
+    model: local,
+    compat: { supportsDeveloperRole: true, supportsReasoningEffort: true },
+  });
+  expect(harnesses.pi(local)).toEqual({
+    kind: "pi",
+    model: local,
+    compat: { supportsDeveloperRole: false, supportsReasoningEffort: false },
   });
 });
 
@@ -97,5 +101,27 @@ test("verbs reject the wrong descriptor family at compile time", () => {
     state: "records",
     questions: { match: yesNo("Same?") },
   };
-  expect([run, agent, model, codex, jev, localJev]).toHaveLength(6);
+  const inertModelOption = models.openaiCompatible({
+    name: "local",
+    baseUrl: "http://localhost:1234/v1",
+    model: "local",
+    // @ts-expect-error Pi compatibility belongs to harnesses.pi, never askModel model sources
+    pi: { supportsReasoningEffort: true },
+  });
+  const inertHarnessOption: PiHarness = {
+    kind: "pi",
+    model: models.openrouter("model"),
+    // @ts-expect-error compatibility hints apply only to Pi's OpenAI-compatible source
+    compat: { supportsReasoningEffort: true },
+  };
+  expect([
+    run,
+    agent,
+    model,
+    codex,
+    jev,
+    localJev,
+    inertModelOption,
+    inertHarnessOption,
+  ]).toHaveLength(8);
 });

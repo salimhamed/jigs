@@ -1,4 +1,8 @@
-import type { ModelSource, OpenaiCompatibleSource } from "../../../blocks/agents/harness-config.ts";
+import type {
+  OpenaiCompatibleSource,
+  PiHarness,
+  PiOpenaiCompatibleOptions,
+} from "../../../blocks/agents/harness-config.ts";
 
 type PiCredential = { sourceEnv: string; targetEnv: string };
 type PiModels = {
@@ -8,7 +12,7 @@ type PiModels = {
       baseUrl: string;
       api: "openai-completions";
       apiKey: string;
-      compat: OpenaiCompatibleSource["pi"];
+      compat: PiOpenaiCompatibleOptions;
       models: Array<{
         id: string;
         cost: { input: 0; output: 0; cacheRead: 0; cacheWrite: 0 };
@@ -28,7 +32,8 @@ export type PiModelPlan = {
 };
 
 /** Translate one model descriptor into every provider-specific setting Pi needs. */
-export function planPiModel(source: ModelSource): PiModelPlan {
+export function planPiModel(harness: PiHarness): PiModelPlan {
+  const source = harness.model;
   switch (source.kind) {
     case "openrouter":
       return {
@@ -37,7 +42,10 @@ export function planPiModel(source: ModelSource): PiModelPlan {
         credential: { sourceEnv: source.apiKeyEnv, targetEnv: "OPENROUTER_API_KEY" },
         subscriptionAuth: false,
       };
-    case "openai-compatible":
+    case "openai-compatible": {
+      const compat = harness.compat;
+      if (compat === undefined)
+        throw new Error("Pi OpenAI-compatible models require compatibility settings");
       return {
         provider: source.name,
         model: source.model,
@@ -52,7 +60,7 @@ export function planPiModel(source: ModelSource): PiModelPlan {
               baseUrl: source.baseUrl,
               api: "openai-completions",
               apiKey: source.apiKeyEnv === undefined ? "jigs" : `$${source.apiKeyEnv}`,
-              compat: source.pi,
+              compat,
               models: [
                 {
                   id: source.model,
@@ -65,6 +73,7 @@ export function planPiModel(source: ModelSource): PiModelPlan {
         runtimeSource: source,
         subscriptionAuth: false,
       };
+    }
     case "openai-codex":
       return {
         provider: "openai-codex",

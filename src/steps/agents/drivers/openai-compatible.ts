@@ -5,9 +5,8 @@ import { modelApiKeyCheck, openaiCompatibleRuntimeCheck } from "../../../checks/
 import { JigsError } from "../../../errors.ts";
 import type { Driver, DriverContext, DriverRequest } from "./types.ts";
 
-function descriptor(request?: DriverRequest): OpenaiCompatibleSource | undefined {
-  if (request === undefined || !("model" in request) || request.model.kind !== "openai-compatible")
-    return undefined;
+function descriptor(request: DriverRequest): OpenaiCompatibleSource | undefined {
+  if (!("model" in request) || request.model.kind !== "openai-compatible") return undefined;
   return request.model;
 }
 
@@ -31,20 +30,24 @@ async function ask(request: AgentRequest | ModelRequest, context: DriverContext)
   });
 }
 
+function descriptorChecks(source: OpenaiCompatibleSource) {
+  return [
+    openaiCompatibleRuntimeCheck(source),
+    ...(source.apiKeyEnv === undefined ? [] : [modelApiKeyCheck(source.apiKeyEnv)]),
+  ];
+}
+
 export const openaiCompatibleDriver = {
   kind: "openai-compatible",
   family: "model",
   ask,
   installationChecks: () => [],
+  descriptorChecks,
   requestChecks: (request) => {
     const source = descriptor(request);
-    if (source === undefined) return [];
-    return [
-      openaiCompatibleRuntimeCheck(source),
-      ...(source.apiKeyEnv === undefined ? [] : [modelApiKeyCheck(source.apiKeyEnv)]),
-    ];
+    return source === undefined ? [] : descriptorChecks(source);
   },
-  envAllowlist: (request?: DriverRequest) => {
+  envAllowlist: (request: DriverRequest) => {
     const variable = descriptor(request)?.apiKeyEnv;
     return variable === undefined ? [] : [variable];
   },

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { ModelSource, PiHarness } from "../../../blocks/agents/harness-config.ts";
+import type { PiHarness } from "../../../blocks/agents/harness-config.ts";
 import type { AgentRequest } from "../../../blocks/agents/plan.ts";
 import { harnessRuntimeCheck, piOpenaiCodexAuthCheck } from "../../../checks/harnesses.ts";
 import { modelApiKeyCheck, openaiCompatibleRuntimeCheck } from "../../../checks/models.ts";
@@ -61,7 +61,7 @@ const defaultDependencies: PiDriverDependencies = {
 export function createPiDriver(deps: PiDriverDependencies = defaultDependencies): Driver<"pi"> {
   async function ask(request: AgentRequest, context: DriverContext): Promise<ExecutorGeneration> {
     const harness = descriptor(request);
-    const model = planPiModel(harness.model);
+    const model = planPiModel(harness);
     const scratch = mkdtempSync(path.join(tmpdir(), "jigs-pi-ask-"));
     try {
       const home = deps.ensurePiHome(context.metadata.workflowRunId, model);
@@ -101,7 +101,7 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
 
   async function run(request: AgentRequest, context: DriverContext): Promise<ExecutorGeneration> {
     const harness = descriptor(request);
-    const model = planPiModel(harness.model);
+    const model = planPiModel(harness);
     const home = deps.ensurePiHome(context.metadata.workflowRunId, model);
     const sessionDir = piSessionsDir(home);
     const resume = "resume" in request ? request.resume : undefined;
@@ -147,10 +147,8 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
     return { ...generation, output: parseJsonFallback(generation.text) };
   }
 
-  function nestedSource(request?: DriverRequest): ModelSource | undefined {
-    return request !== undefined && "harness" in request && request.harness.kind === "pi"
-      ? request.harness.model
-      : undefined;
+  function nestedHarness(request: DriverRequest): PiHarness | undefined {
+    return "harness" in request && request.harness.kind === "pi" ? request.harness : undefined;
   }
 
   return {
@@ -160,9 +158,9 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
     run,
     installationChecks: () => [harnessRuntimeCheck("pi")],
     requestChecks: (request) => {
-      const source = nestedSource(request);
-      if (source === undefined) return [];
-      const model = planPiModel(source);
+      const harness = nestedHarness(request);
+      if (harness === undefined) return [];
+      const model = planPiModel(harness);
       return [
         ...(model.runtimeSource === undefined
           ? []
@@ -171,10 +169,10 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
         ...(model.subscriptionAuth ? [piOpenaiCodexAuthCheck()] : []),
       ];
     },
-    envAllowlist: (request?: DriverRequest) => {
-      const source = nestedSource(request);
-      if (source === undefined) return [];
-      const credential = planPiModel(source).credential;
+    envAllowlist: (request: DriverRequest) => {
+      const harness = nestedHarness(request);
+      if (harness === undefined) return [];
+      const credential = planPiModel(harness).credential;
       return credential === undefined ? [] : [credential.sourceEnv];
     },
     sessionPointer: { providerKey: "pi", field: "sessionId" },

@@ -5,11 +5,12 @@ import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 
 /** Check that a model API credential is present without spending a request. */
 export function modelApiKeyCheck(variable: string, env: NodeJS.ProcessEnv = process.env): Check {
+  const credential = env[variable];
   return {
     id: `model.${variable.toLowerCase().replaceAll("_", "-")}`,
     label: `${variable} credential`,
     run: async (): Promise<CheckResult> =>
-      env[variable] === undefined || env[variable] === ""
+      credential === undefined || credential.trim() === ""
         ? {
             ok: false,
             reason: `${variable} is not set in the service's environment`,
@@ -38,8 +39,9 @@ export function openaiCompatibleRuntimeCheck(
   const request = dependencies.fetch ?? fetch;
   const env = dependencies.env ?? process.env;
   const endpoint = `${source.baseUrl.replace(/\/$/, "")}/models`;
+  const credential = source.apiKeyEnv === undefined ? undefined : env[source.apiKeyEnv];
   return {
-    id: "model.openai-compatible-runtime",
+    id: `model.openai-compatible-${source.name.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-")}`,
     label: `${source.name} model endpoint`,
     run: async (): Promise<CheckResult> => {
       let response: Response;
@@ -47,9 +49,9 @@ export function openaiCompatibleRuntimeCheck(
         response = await request(endpoint, {
           method: "GET",
           signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-          ...(source.apiKeyEnv === undefined || env[source.apiKeyEnv] === undefined
+          ...(credential === undefined || credential.trim() === ""
             ? {}
-            : { headers: { Authorization: `Bearer ${env[source.apiKeyEnv]}` } }),
+            : { headers: { Authorization: `Bearer ${credential}` } }),
         });
         if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`.trim());
       } catch (error) {

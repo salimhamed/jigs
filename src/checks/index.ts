@@ -117,10 +117,7 @@ export function preflightChecks(
     ...(requires.models ?? []).flatMap((source) => {
       const driver = driverFor(source.kind);
       if (driver === undefined) return [missingDriverCheck(source.kind)];
-      return [
-        ...driver.installationChecks(),
-        ...driver.requestChecks({ model: source, prompt: "preflight" }),
-      ];
+      return [...driver.installationChecks(), ...(driver.descriptorChecks?.(source) ?? [])];
     }),
     ...(requires.aws ? [awsCredentialsCheck()] : []),
   ];
@@ -139,15 +136,9 @@ export function doctorChecks(): Check[] {
     ...(integrations.includes("linear") ? linearWebhookChecks({ factoryRoot }) : []),
     ...bindingChecks({ factoryRoot }),
     ...webhookChecks({ factoryRoot }),
-    ...Object.values(drivers).flatMap((driver) => {
-      const configured =
-        driver.family === "harness" ||
-        driver.envAllowlist().some((variable) => {
-          const value = process.env[variable];
-          return value !== undefined && value !== "";
-        });
-      return configured ? driver.installationChecks() : [];
-    }),
+    ...Object.values(drivers).flatMap((driver) =>
+      driver.family === "harness" ? driver.installationChecks() : [],
+    ),
     ...(profile !== undefined && profile !== "" ? [awsCredentialsCheck()] : []),
   ];
 }

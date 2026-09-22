@@ -18,7 +18,6 @@ test("every registered driver declares its operational contract and documentatio
   );
   for (const driver of Object.values(drivers)) {
     const installationIds = driver.installationChecks().map((check) => check.id);
-    expect(driver.envAllowlist()).toBeInstanceOf(Array);
     if (driver.family === "harness") {
       expect(installationIds).toContain(`harness.${driver.kind}-cli`);
       expect(driver.sessionPointer).toEqual({
@@ -49,7 +48,7 @@ test("Pi derives checks and environment from its nested model source", () => {
   });
   expect(drivers.pi.installationChecks().map((check) => check.id)).toEqual(["harness.pi-cli"]);
   expect(drivers.pi.requestChecks(local).map((check) => check.id)).toEqual([
-    "model.openai-compatible-runtime",
+    "model.openai-compatible-studio",
     "model.studio-token",
   ]);
   expect(drivers.pi.envAllowlist(local)).toEqual(["STUDIO_TOKEN"]);

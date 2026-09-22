@@ -13,6 +13,9 @@ test("an API model credential check requires the named environment variable with
   await expect(
     modelApiKeyCheck("TEAM_OPENROUTER_KEY", { TEAM_OPENROUTER_KEY: "configured" }).run(),
   ).resolves.toEqual({ ok: true });
+  await expect(
+    modelApiKeyCheck("TEAM_OPENROUTER_KEY", { TEAM_OPENROUTER_KEY: "  " }).run(),
+  ).resolves.toMatchObject({ ok: false });
 });
 
 const source = {
@@ -20,7 +23,6 @@ const source = {
   name: "north-desktop",
   baseUrl: "http://localhost:1234/v1",
   model: "wanted-model",
-  pi: { supportsDeveloperRole: false, supportsReasoningEffort: false },
 };
 
 test("an OpenAI-compatible runtime check confirms the configured model is served", async () => {
@@ -35,6 +37,7 @@ test("an OpenAI-compatible runtime check confirms the configured model is served
     },
   });
 
+  expect(check.id).toBe("model.openai-compatible-north-desktop");
   await expect(check.run()).resolves.toEqual({
     ok: true,
     detail: "http://localhost:1234/v1/models serves wanted-model",

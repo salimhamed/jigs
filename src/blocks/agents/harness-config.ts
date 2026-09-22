@@ -36,18 +36,12 @@ export type CodexHarness = SharedHarness & {
     "none" | "minimal" | "low" | "medium" | "high" | "xhigh"
   >;
 };
-/** A Pi harness descriptor backed by a nested model source. */
-export type PiHarness = {
+type SharedPiHarness = {
   kind: "pi";
-  model: ModelSource;
   thinking?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   tools?: string[];
   mcpServers?: Record<string, McpServerConfig>;
 };
-/** A serializable agent-program descriptor. */
-export type Harness = ClaudeHarness | CodexHarness | PiHarness;
-/** The stable name of an agent harness. */
-export type HarnessKind = Harness["kind"];
 
 /** An OpenRouter API model source. */
 export type OpenrouterSource = { kind: "openrouter"; model: string; apiKeyEnv: string };
@@ -63,7 +57,6 @@ export type OpenaiCompatibleSource = {
   baseUrl: string;
   model: string;
   apiKeyEnv?: string;
-  pi: PiOpenaiCompatibleOptions;
 };
 /** The Codex subscription model source used only by the Pi harness. */
 export type OpenaiCodexSource = { kind: "openai-codex"; model: string };
@@ -74,33 +67,70 @@ export type AskableModelSource = Exclude<ModelSource, OpenaiCodexSource>;
 /** The stable name of a model source. */
 export type ModelKind = ModelSource["kind"];
 
+type PiOpenaiCompatibleHarness = SharedPiHarness & {
+  model: OpenaiCompatibleSource;
+  compat: PiOpenaiCompatibleOptions;
+};
+type PiOtherHarness = SharedPiHarness & {
+  model: Exclude<ModelSource, OpenaiCompatibleSource>;
+  compat?: never;
+};
+/** A Pi harness descriptor backed by a nested model source. */
+export type PiHarness = PiOpenaiCompatibleHarness | PiOtherHarness;
+/** A serializable agent-program descriptor. */
+export type Harness = ClaudeHarness | CodexHarness | PiHarness;
+/** The stable name of an agent harness. */
+export type HarnessKind = Harness["kind"];
+
 /** Constructors for model-source descriptors. */
 export const models = {
   openrouter(model: string, options: { apiKeyEnv?: string } = {}): OpenrouterSource {
     return { kind: "openrouter", model, apiKeyEnv: options.apiKeyEnv ?? "OPENROUTER_API_KEY" };
   },
-  /** Build a source for an OpenAI-compatible server. Pi compatibility hints default to false. */
+  /** Build a source for an OpenAI-compatible server. */
   openaiCompatible(options: {
     name: string;
     baseUrl: string;
     model: string;
     apiKeyEnv?: string;
-    pi?: Partial<PiOpenaiCompatibleOptions>;
   }): OpenaiCompatibleSource {
-    const { pi, ...source } = options;
-    return {
-      kind: "openai-compatible",
-      ...source,
-      pi: {
-        supportsDeveloperRole: pi?.supportsDeveloperRole ?? false,
-        supportsReasoningEffort: pi?.supportsReasoningEffort ?? false,
-      },
-    };
+    return { kind: "openai-compatible", ...options };
   },
   openaiCodex(model: string): OpenaiCodexSource {
     return { kind: "openai-codex", model };
   },
 } as const;
+
+type PiHarnessOptions = Pick<SharedPiHarness, "thinking" | "tools">;
+
+function piHarness(
+  model: OpenaiCompatibleSource,
+  options?: PiHarnessOptions & { compat?: Partial<PiOpenaiCompatibleOptions> },
+): PiOpenaiCompatibleHarness;
+function piHarness(
+  model: Exclude<ModelSource, OpenaiCompatibleSource>,
+  options?: PiHarnessOptions,
+): PiOtherHarness;
+function piHarness(
+  model: ModelSource,
+  options: PiHarnessOptions & { compat?: Partial<PiOpenaiCompatibleOptions> } = {},
+): PiHarness {
+  const { compat, ...harnessOptions } = options;
+  if (model.kind === "openai-compatible") {
+    return {
+      kind: "pi",
+      model,
+      ...harnessOptions,
+      compat: {
+        supportsDeveloperRole: compat?.supportsDeveloperRole ?? false,
+        supportsReasoningEffort: compat?.supportsReasoningEffort ?? false,
+      },
+    };
+  }
+  if (compat !== undefined)
+    throw new Error("Pi compatibility hints apply only to OpenAI-compatible model sources");
+  return { kind: "pi", model, ...harnessOptions };
+}
 
 /** Constructors for agent-harness descriptors. */
 export const harnesses = {
@@ -110,10 +140,5 @@ export const harnesses = {
   codex(model: string, options: Omit<CodexHarness, "kind" | "model"> = {}): CodexHarness {
     return { kind: "codex", model, ...options };
   },
-  pi(
-    model: ModelSource,
-    options: { thinking?: PiHarness["thinking"]; tools?: string[] } = {},
-  ): PiHarness {
-    return { kind: "pi", model, ...options };
-  },
+  pi: piHarness,
 } as const;

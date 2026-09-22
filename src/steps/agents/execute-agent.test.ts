@@ -658,8 +658,9 @@ test("pi ask executes its nested model with isolated discovery and returns execu
     baseUrl: "http://127.0.0.1:1234/v1",
     model: "local-model",
   });
+  const harness = harnesses.pi(source, { thinking: "medium" });
   const wire = buildAskAgentRequest({
-    harness: harnesses.pi(source, { thinking: "medium" }),
+    harness,
     prompt: "judge it",
     output: verdict,
   });
@@ -670,7 +671,7 @@ test("pi ask executes its nested model with isolated discovery and returns execu
 
   const result = await agentStep(wire, { workflowRunId: "run-pi" }, deps);
 
-  expect(captured.piHome).toEqual({ runId: "run-pi", model: planPiModel(source) });
+  expect(captured.piHome).toEqual({ runId: "run-pi", model: planPiModel(harness) });
   expect(captured.piOptions?.args).toEqual([
     "--mode",
     "json",
@@ -813,14 +814,15 @@ test("pi run returns a stale resume marker before spawning Pi", async () => {
 test("pi run resumes only after finding the real session file", async () => {
   const sessionId = "existing-session";
   const source = models.openrouter("openai/gpt-oss");
+  const harness = harnesses.pi(source);
   const wire = buildAgentRequest({
-    harness: harnesses.pi(source),
+    harness,
     cwd: worktree,
     prompt: "continue",
     resume: { harness: "pi", id: sessionId },
   });
   const { deps, captured, piDeps } = makeDeps();
-  const home = piDeps.ensurePiHome("run-pi-resume", planPiModel(source));
+  const home = piDeps.ensurePiHome("run-pi-resume", planPiModel(harness));
   writeFileSync(path.join(home, "sessions", `2026-09-21T00-00-00_${sessionId}.jsonl`), "");
   piDeps.executePi = async (options) => {
     captured.piOptions = options;

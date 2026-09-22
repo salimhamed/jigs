@@ -18,20 +18,23 @@ import type {
   EvaluationGeneration,
 } from "./types.ts";
 
-function descriptor(request?: DriverRequest): OpenrouterSource | undefined {
-  if (request === undefined || !("model" in request) || request.model.kind !== "openrouter")
-    return undefined;
+function descriptor(request: DriverRequest): OpenrouterSource | undefined {
+  if (!("model" in request) || request.model.kind !== "openrouter") return undefined;
   return request.model;
 }
 
 // Plain asks always reach OpenRouter; a decision reaches it only on a jev-class model.
-function acceptsRequest(request: DriverRequest | undefined): boolean {
-  if (request === undefined || !("questions" in request)) return true;
+function acceptsRequest(request: DriverRequest): boolean {
+  if (!("questions" in request)) return true;
   const source = descriptor(request);
   return (
     source !== undefined &&
     (source.model === "~typesafe/jev-latest" || source.model.startsWith("typesafe/jev-"))
   );
+}
+
+function descriptorChecks(source: OpenrouterSource) {
+  return [modelApiKeyCheck(source.apiKeyEnv)];
 }
 
 async function ask(request: AgentRequest | ModelRequest, context: DriverContext) {
@@ -240,13 +243,12 @@ export const openrouterDriver = {
   ask,
   decide,
   installationChecks: () => [],
+  descriptorChecks,
   requestChecks: (request) => {
     const source = descriptor(request);
-    return acceptsRequest(request) && source !== undefined
-      ? [modelApiKeyCheck(source.apiKeyEnv)]
-      : [];
+    return acceptsRequest(request) && source !== undefined ? descriptorChecks(source) : [];
   },
-  envAllowlist: (request?: DriverRequest) => {
+  envAllowlist: (request: DriverRequest) => {
     const source = descriptor(request);
     return source === undefined ? [] : [source.apiKeyEnv];
   },

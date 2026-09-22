@@ -53,7 +53,7 @@ test.skipIf(!localConfigured || !localReachable)(
       baseUrl: baseUrl as string,
       model: localModel as string,
     });
-    const controlHome = ensureManagedPiHome("control", planPiModel(source), {
+    const controlHome = ensureManagedPiHome("control", planPiModel(harnesses.pi(source)), {
       baseDir: path.join(tmp, "control-pi-homes"),
     });
     const extensions = path.join(controlHome, "extensions");
