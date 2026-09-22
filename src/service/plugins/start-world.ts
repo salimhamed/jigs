@@ -9,6 +9,7 @@ import { WorkflowRunNotFoundError } from "workflow/errors";
 import type { AnyWorkflowEntry, FactoryDefinition } from "../../blocks/factory.ts";
 import type { HarnessKind, HarnessRuntime } from "../../checks/harness-runtime.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
+import { stopPiProcesses } from "../../steps/agents/harnesses/pi.ts";
 import type { BindingClone } from "../../steps/workspaces/clone.ts";
 import type { RegistrySql } from "../../steps/workspaces/registry.ts";
 import { READY_PHASE, setBootPhase } from "../readiness.ts";
@@ -279,6 +280,9 @@ export default async function startWorld() {
   // exit, not the CLI's SIGKILL. A clone child mid-gate is orphaned to
   // completion; acceptable.
   installShutdown();
+  // Pi runs in its own process group, which a signal to the service never
+  // reaches. Stopping it lets its step settle while the World still drains.
+  onShutdown(stopPiProcesses);
 
   // First, because it is local and fast: no point cloning for a service that
   // cannot run an agent.

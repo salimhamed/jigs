@@ -1,7 +1,10 @@
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { executePi } from "./pi.ts";
+import { executePi, stopPiProcesses } from "./pi.ts";
 import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
 let tmp: string;
@@ -27,6 +30,8 @@ function pidIsRunning(pid: number): boolean {
     return false;
   }
 }
+
+const descendant = `'${process.execPath}' -e 'setTimeout(() => {}, 60000)'`;
 
 const event = (value: unknown): string => `printf '%s\\n' '${JSON.stringify(value)}'`;
 
@@ -75,7 +80,7 @@ test("Pi execution abort terminates Pi and its descendants", async () => {
   const descendantPidFile = path.join(tmp, "descendant.pid");
   const bin = writePi([
     `printf '%s' "$$" > '${piPidFile}'`,
-    "/usr/bin/sleep 60 &",
+    `${descendant} &`,
     `printf '%s' "$!" > '${descendantPidFile}'`,
     "wait",
   ]);
@@ -103,7 +108,7 @@ test("Pi execution reaps descendants after Pi is killed", async () => {
   const descendantPidFile = path.join(tmp, "killed-descendant.pid");
   const bin = writePi([
     `printf '%s' "$$" > '${piPidFile}'`,
-    "/usr/bin/sleep 60 &",
+    `${descendant} &`,
     `printf '%s' "$!" > '${descendantPidFile}'`,
     "wait",
   ]);
@@ -114,6 +119,41 @@ test("Pi execution reaps descendants after Pi is killed", async () => {
   process.kill(Number(readFileSync(piPidFile, "utf8")), "SIGKILL");
 
   await rejection;
+  const descendantPid = Number(readFileSync(descendantPidFile, "utf8"));
+  await expect.poll(() => pidIsRunning(descendantPid), { timeout: 2_000 }).toBe(false);
+});
+
+test("stopping Pi processes terminates every live Pi and its descendants", async () => {
+  const descendantPidFile = path.join(tmp, "stopped-descendant.pid");
+  const bin = writePi([`${descendant} &`, `printf '%s' "$!" > '${descendantPidFile}'`, "wait"]);
+  const execution = executePi({ args: [], cwd: tmp, env: { PATH: bin } });
+  const rejection = expect(execution).rejects.toThrow("pi terminated by signal SIGTERM");
+  await expect.poll(() => existsSync(descendantPidFile)).toBe(true);
+
+  await stopPiProcesses();
+
+  await rejection;
+  expect(pidIsRunning(Number(readFileSync(descendantPidFile, "utf8")))).toBe(false);
+});
+
+test("Pi processes do not outlive the process that started them", async () => {
+  const descendantPidFile = path.join(tmp, "orphan-descendant.pid");
+  const bin = writePi([`${descendant} &`, `printf '%s' "$!" > '${descendantPidFile}'`, "wait"]);
+  const script = path.join(tmp, "host.mjs");
+  writeFileSync(
+    script,
+    `import { existsSync } from "node:fs";
+import { executePi } from ${JSON.stringify(pathToFileURL(path.join(import.meta.dirname, "pi.ts")).href)};
+executePi({ args: [], cwd: ${JSON.stringify(tmp)}, env: { PATH: ${JSON.stringify(bin)} } }).catch(() => {});
+setInterval(() => {
+  if (existsSync(${JSON.stringify(descendantPidFile)})) process.exit(0);
+}, 20);
+`,
+  );
+  const host = spawn(process.execPath, [script], { stdio: "ignore" });
+  const [code] = (await once(host, "exit")) as [number | null];
+  expect(code).toBe(0);
+
   const descendantPid = Number(readFileSync(descendantPidFile, "utf8"));
   await expect.poll(() => pidIsRunning(descendantPid), { timeout: 2_000 }).toBe(false);
 });
