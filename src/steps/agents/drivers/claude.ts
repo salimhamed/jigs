@@ -72,7 +72,6 @@ async function ask(request: AgentRequest, context: DriverContext): Promise<Execu
           mcpServers: {},
           settingSources: [],
           env: context.env,
-          pathToClaudeCodeExecutable: resolveClaudeExecutable(),
         },
         claudeDriver.envAllowlist(request),
       ),
