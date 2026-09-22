@@ -8,26 +8,30 @@ import type {
   JevQuestions,
 } from "../../../blocks/agents/jev.ts";
 import type { AgentRequest, ModelRequest } from "../../../blocks/agents/plan.ts";
-import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../../../checks/core.ts";
 import { modelApiKeyCheck } from "../../../checks/models.ts";
 import { JigsError } from "../../../errors.ts";
-import type { DecisionGeneration, Driver, DriverContext, EvaluationGeneration } from "./types.ts";
-
-type OpenRouterRequest = AgentRequest | ModelRequest | AskJevOptions<JevQuestions>;
+import type {
+  DecisionGeneration,
+  Driver,
+  DriverContext,
+  DriverRequest,
+  EvaluationGeneration,
+} from "./types.ts";
 
 const DEFAULT_API_KEY_ENV = "OPENROUTER_API_KEY";
 
-function descriptor(request?: OpenRouterRequest): OpenrouterSource | undefined {
+function descriptor(request?: DriverRequest): OpenrouterSource | undefined {
   if (request === undefined || !("model" in request) || request.model.kind !== "openrouter")
     return undefined;
   return request.model;
 }
 
-function apiKeyEnv(request?: OpenRouterRequest): string {
+function apiKeyEnv(request?: DriverRequest): string {
   return descriptor(request)?.apiKeyEnv ?? DEFAULT_API_KEY_ENV;
 }
 
-function isEligibleDecisionRequest(request: OpenRouterRequest | undefined): boolean {
+// Plain asks always reach OpenRouter; a decision reaches it only on a jev-class model.
+function acceptsRequest(request: DriverRequest | undefined): boolean {
   if (request === undefined || !("questions" in request)) return true;
   const source = descriptor(request);
   return (
@@ -40,17 +44,8 @@ async function ask(request: AgentRequest | ModelRequest, context: DriverContext)
   const source = descriptor(request);
   if (source === undefined)
     throw new JigsError("the OpenRouter driver requires an OpenRouter model request");
-  const variable = source.apiKeyEnv;
-  const apiKey = context.env[variable];
-  if (apiKey === undefined || apiKey === "") {
-    throw new JigsError(
-      `${variable} is not set in the service's environment`,
-      `set ${variable} in ${SERVICE_ENV_FILE}, then: ${RESTART_SERVICE}`,
-    );
-  }
-
   const openrouter = createOpenRouter({
-    apiKey,
+    apiKey: context.env[source.apiKeyEnv],
     headers: {
       "HTTP-Referer": "https://github.com/salimhamed/jigs",
       "X-Title": "jigs",
@@ -214,19 +209,12 @@ async function decide<const QUESTIONS extends JevQuestions>(
   const source = descriptor(request);
   if (source === undefined)
     throw new JigsError("the OpenRouter driver requires an OpenRouter decision request");
-  if (!isEligibleDecisionRequest(request))
+  if (!acceptsRequest(request))
     throw new JigsError(
       `${source.model} is not a jev-class model; askJev accepts only jev-class models`,
     );
-  const apiKey = context.env[source.apiKeyEnv];
-  if (apiKey === undefined || apiKey === "") {
-    throw new JigsError(
-      `${source.apiKeyEnv} is not set in the service's environment`,
-      `set ${source.apiKeyEnv} in ${SERVICE_ENV_FILE}, then: ${RESTART_SERVICE}`,
-    );
-  }
   const openrouter = createOpenRouter({
-    apiKey,
+    apiKey: context.env[source.apiKeyEnv],
     headers: { "HTTP-Referer": "https://github.com/salimhamed/jigs", "X-Title": "jigs" },
   });
   let evaluated: EvaluationGeneration;
@@ -259,10 +247,8 @@ export const openrouterDriver = {
   decide,
   installationChecks: () => [modelApiKeyCheck(DEFAULT_API_KEY_ENV)],
   requestChecks: (request) =>
-    isEligibleDecisionRequest(request as OpenRouterRequest)
-      ? [modelApiKeyCheck(apiKeyEnv(request as OpenRouterRequest))]
-      : [],
-  envAllowlist: (request?: OpenRouterRequest) => [apiKeyEnv(request)],
+    acceptsRequest(request) ? [modelApiKeyCheck(apiKeyEnv(request))] : [],
+  envAllowlist: (request?: DriverRequest) => [apiKeyEnv(request)],
   docsAnchor: "openrouter",
   displayName: "OpenRouter",
 } satisfies Driver<"openrouter">;

@@ -12,7 +12,7 @@ import type { PiExecutionOptions } from "../harnesses/pi.ts";
 import { executePi } from "../harnesses/pi.ts";
 import { writePiSubmitResultExtension } from "../harnesses/pi-extension.ts";
 import { ensureManagedPiHome, piSessionFile, piSessionsDir } from "../harnesses/pi-home.ts";
-import type { Driver, DriverContext, ExecutorGeneration } from "./types.ts";
+import type { Driver, DriverContext, DriverRequest, ExecutorGeneration } from "./types.ts";
 
 function descriptor(request: AgentRequest): PiHarness {
   if (request.harness.kind !== "pi") throw new JigsError("the Pi driver requires a Pi request");
@@ -136,8 +136,10 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
     return { ...generation, output: parseJsonFallback(generation.text) };
   }
 
-  function nestedSource(request?: AgentRequest): ModelSource | undefined {
-    return request?.harness.kind === "pi" ? request.harness.model : undefined;
+  function nestedSource(request?: DriverRequest): ModelSource | undefined {
+    return request !== undefined && "harness" in request && request.harness.kind === "pi"
+      ? request.harness.model
+      : undefined;
   }
 
   return {
@@ -147,14 +149,14 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
     run,
     installationChecks: () => [harnessRuntimeCheck("pi")],
     requestChecks: (request) => {
-      const source = nestedSource(request as AgentRequest);
+      const source = nestedSource(request);
       return [
         ...(source?.kind === "openai-compatible" ? [openaiCompatibleRuntimeCheck(source)] : []),
         ...piAuthChecks(source),
       ];
     },
-    envAllowlist: (request?: AgentRequest) => {
-      const source = nestedSource(request as AgentRequest | undefined);
+    envAllowlist: (request?: DriverRequest) => {
+      const source = nestedSource(request);
       if (source?.kind === "openrouter") return [source.apiKeyEnv];
       return source?.kind === "openai-compatible" && source.apiKeyEnv !== undefined
         ? [source.apiKeyEnv]
