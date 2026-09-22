@@ -23,9 +23,23 @@ function spawnClaudeCode(options: SpawnOptions, env: Record<string, string>): Sp
   let exitCode: number | null = null;
   let signalCode: NodeJS.Signals | null = null;
   let childExited = false;
+  let stdoutEnded = false;
   let stderrClosed = false;
+  let killedByCaller = false;
 
-  child.stdout.pipe(stdout, { end: false });
+  // The SDK closes its reader after the result message, so a failure that
+  // lands on this stream afterwards has no listener. Keep it from becoming an
+  // uncaught exception; the SDK's own listener still sees it while reading.
+  stdout.on("error", () => {});
+  // Forward without pipe backpressure so the child's stdout always drains and
+  // ends, even once the SDK has stopped reading.
+  child.stdout.on("data", (chunk: Buffer) => {
+    stdout.write(chunk);
+  });
+  child.stdout.once("end", () => {
+    stdoutEnded = true;
+    finish();
+  });
   child.stderr.setEncoding("utf8");
   child.stderr.on("data", (data: string) => {
     stderr = `${stderr}${data}`.slice(-STDERR_LIMIT);
@@ -33,8 +47,9 @@ function spawnClaudeCode(options: SpawnOptions, env: Record<string, string>): Sp
   child.on("error", (error) => events.emit("error", error));
 
   const finish = () => {
-    if (!childExited || !stderrClosed) return;
-    const failed = !options.signal.aborted && (exitCode !== 0 || signalCode !== null);
+    if (!childExited || !stdoutEnded || !stderrClosed) return;
+    const torndown = options.signal.aborted || killedByCaller;
+    const failed = !torndown && (exitCode !== 0 || signalCode !== null);
     if (failed) {
       // The pinned SDK does not pass its stderr callback into a custom spawn
       // hook. Put the bounded stderr on the process failure so the provider's
@@ -44,6 +59,8 @@ function spawnClaudeCode(options: SpawnOptions, env: Record<string, string>): Sp
         : "Claude Code process failed";
       const error = Object.assign(new Error(message), { stderr });
       stdout.destroy(error);
+      // Report a clean exit so the SDK does not raise its own stderr-less
+      // exit error ahead of the one carrying the diagnostics.
       exitCode = 0;
       signalCode = null;
     } else {
@@ -75,7 +92,11 @@ function spawnClaudeCode(options: SpawnOptions, env: Record<string, string>): Sp
     get signalCode() {
       return signalCode;
     },
-    kill: child.kill.bind(child),
+    // The SDK tears a lingering CLI down through this after a normal result.
+    kill(signal) {
+      killedByCaller = true;
+      return child.kill(signal);
+    },
     on(event, listener) {
       events.on(event, listener);
     },
