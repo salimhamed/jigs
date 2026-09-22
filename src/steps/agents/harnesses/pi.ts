@@ -27,8 +27,12 @@ export function executePi(options: PiExecutionOptions): Promise<ExecutorGenerati
       stderr += chunk;
     });
     child.once("error", reject);
-    child.once("close", () => {
+    child.once("close", (code, signal) => {
       try {
+        if (signal !== null) throw new Error(`pi terminated by signal ${signal}`);
+        if (code === 143) throw new Error("pi was cancelled by SIGTERM (exit code 143)");
+        if (code === 129) throw new Error("pi was cancelled by SIGHUP (exit code 129)");
+        if (code !== 0) throw new Error(`pi exited with code ${code ?? "unknown"}`);
         resolve(reducePiJsonl(stdout, options.onDelta));
       } catch (error) {
         reject(
