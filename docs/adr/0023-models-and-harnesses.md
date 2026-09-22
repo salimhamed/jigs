@@ -27,6 +27,21 @@ harnesses; `askModel` and `askJev` take model sources.
   loop of its own: exhausted Pi work rejects the step, after which Workflow
   decides whether to replay that whole durable operation. Stopping a running
   agent process remains part of the separate run-cancellation contract.
+- Pi MCP support uses jigs' exact-pinned `pi-mcp-adapter`. Each run supplies a
+  complete invocation-private configuration and named direct-tool allowlists;
+  adapter proxy, scripting and ambient discovery surfaces remain disabled.
+  The generated extension strips and blocks the adapter's temporary cache-miss
+  proxy, disables resources, and starts stdio children from their declared
+  environment plus the MCP SDK's small stdio default set, so they do not
+  inherit Pi's model or sibling-server credentials.
+  OAuth is permitted only through credentials already held by the adapter's
+  secure store, and bearer secrets are resolved from named environment
+  variables in step-side execution. Stdio environment entries and HTTP headers
+  likewise map their target names to step-side source environment-variable
+  names; literal secret values never enter the durable descriptor.
+- Pi and its MCP children share a private process group. jigs stops the group
+  when Pi exits, when the service shuts down, and when the process exits. Run
+  cancellation does not yet reach a running Pi step.
 - Subscription logins remain first-class for harnesses. API keys are never
   inherited globally: each driver explicitly allowlists the credentials its
   subprocess or API client may receive. The Claude driver reapplies that

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ClaudeCodeSettings } from "ai-sdk-provider-claude-code";
@@ -331,7 +331,16 @@ test("a declared output schema becomes an AI SDK output spec and the raw output 
     prompt: "judge it",
     output: verdict,
   });
-  const { deps, captured } = makeDeps({ output: { ok: true } });
+  const { deps, captured, piDeps } = makeDeps({ output: { ok: true } });
+  piDeps.executePi = async (options) => {
+    captured.piOptions = options;
+    const id = options.args[options.args.indexOf("--session-id") + 1];
+    return {
+      text: "done",
+      output: { ok: true },
+      providerMetadata: { pi: { sessionId: id } },
+    };
+  };
 
   const result = await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
@@ -904,7 +913,7 @@ test("pi run mints and records a matching session with tools in the worktree", a
   const sessionId = args[args.indexOf("--session-id") + 1];
   expect(sessionId).toMatch(/^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/);
   expect(args).toContain("--tools");
-  expect(args[args.indexOf("--tools") + 1]).toBe("read,bash");
+  expect(args[args.indexOf("--tools") + 1]).toBe("read,bash,submit_result");
   expect(args).not.toContain("--no-tools");
   expect(args[args.indexOf("--session-dir") + 1]).toBe(
     path.join(tmp, "pi-home", "run-pi-worktree", "sessions"),
@@ -916,6 +925,204 @@ test("pi run mints and records a matching session with tools in the worktree", a
   if (extension === undefined) throw new Error("Pi output extension was not passed");
   expect(extension).toContain("submit-result.ts");
   expect(existsSync(extension)).toBe(false);
+});
+
+test("pi run translates its declared MCP universe into a private adapter extension", async () => {
+  vi.stubEnv("PI_TEST_MCP_TOKEN", "step-secret");
+  vi.stubEnv("PI_TEST_STDIO_TOKEN", "stdio-secret");
+  const harness = harnesses.pi(
+    models.openrouter("openai/gpt-oss", { apiKeyEnv: "PI_TEST_STDIO_TOKEN" }),
+    {
+      mcpServers: {
+        local: {
+          command: "node",
+          args: ["server.mjs"],
+          env: { TOKEN: "PI_TEST_STDIO_TOKEN" },
+          tools: ["ping"],
+          probe: { tool: "ping" },
+        },
+        remote: {
+          url: "https://mcp.example.test",
+          bearerTokenEnv: "PI_TEST_MCP_TOKEN",
+          tools: ["lookup"],
+          probe: { tool: "lookup" },
+        },
+      },
+    },
+  );
+  const wire = buildAgentRequest({ harness, cwd: worktree, prompt: "use MCP" });
+  const { deps, captured, piDeps } = makeDeps();
+  let source = "";
+  piDeps.executePi = async (options) => {
+    captured.piOptions = options;
+    const extension = options.args[options.args.indexOf("-e") + 1];
+    if (extension === undefined) throw new Error("Pi MCP extension was not passed");
+    source = readFileSync(extension, "utf8");
+    const id = options.args[options.args.indexOf("--session-id") + 1];
+    return { text: "done", providerMetadata: { pi: { sessionId: id } } };
+  };
+
+  await agentStep(wire, { workflowRunId: "run-pi-mcp" }, deps);
+
+  expect(source).toContain('"local":{"command":"node","args":["server.mjs"]');
+  expect(source).toContain('"env":{"TOKEN":"$env:PI_TEST_STDIO_TOKEN"}');
+  expect(source).toContain('"directTools":["ping"]');
+  expect(source).toContain('"remote":{"url":"https://mcp.example.test"');
+  expect(source).toContain('"bearerTokenEnv":"PI_TEST_MCP_TOKEN"');
+  expect(source).not.toContain("step-secret");
+  expect(source).not.toContain("stdio-secret");
+  expect(captured.piOptions?.env.PI_TEST_MCP_TOKEN).toBe("step-secret");
+  expect(captured.piOptions?.env.PI_TEST_STDIO_TOKEN).toBe("stdio-secret");
+  expect(captured.piOptions?.env.OPENROUTER_API_KEY).toBe("stdio-secret");
+});
+
+test("pi preserves explicit built-in tools while adding MCP and result tools", async () => {
+  const wire = buildAgentRequest({
+    harness: harnesses.pi(models.openrouter("openai/gpt-oss"), {
+      tools: ["read"],
+      mcpServers: {
+        allowed: { command: "node", tools: ["ping"], probe: { tool: "ping" } },
+      },
+    }),
+    cwd: worktree,
+    prompt: "use MCP",
+    output: verdict,
+  });
+  const { deps, captured, piDeps } = makeDeps({ output: { ok: true } });
+  piDeps.executePi = async (options) => {
+    captured.piOptions = options;
+    const id = options.args[options.args.indexOf("--session-id") + 1];
+    return {
+      text: "done",
+      output: { ok: true },
+      providerMetadata: { pi: { sessionId: id } },
+    };
+  };
+
+  await agentStep(wire, { workflowRunId: "run-pi-tool-filter" }, deps);
+
+  const args = captured.piOptions?.args ?? [];
+  expect(args[args.indexOf("--tools") + 1]).toBe("read,allowed_ping,submit_result");
+});
+
+test("pi rejects unsupported MCP and ask configurations before probes or model checks", async () => {
+  const invalidRun = buildAgentRequest({
+    harness: {
+      ...harnesses.pi(models.openrouter("openai/gpt-oss")),
+      mcpServers: {
+        invalid: { command: "node", tools: ["other"], probe: { tool: "ping" } },
+      },
+    },
+    cwd: worktree,
+    prompt: "never reached",
+  });
+  const run = makeDeps({}, { piRequestChecks: true });
+  run.deps.jitFailures = vi.fn(async () => undefined);
+
+  await expect(
+    executeAgent(invalidRun, { workflowRunId: "invalid-run" }, run.deps),
+  ).rejects.toThrow("must allow its probe tool 'ping'");
+  expect(run.deps.jitFailures).not.toHaveBeenCalled();
+  expect(run.captured.piHome).toBeUndefined();
+
+  const invalidAsk = {
+    harness: {
+      ...harnesses.pi(models.openrouter("openai/gpt-oss")),
+      mcpServers: {
+        probe: { command: "node", tools: ["ping"], probe: { tool: "ping" } },
+      },
+    },
+    prompt: "never reached",
+  } as unknown as Parameters<typeof executeAgent>[0];
+  const ask = makeDeps({}, { piRequestChecks: true });
+  await expect(
+    executeAgent(invalidAsk, { workflowRunId: "invalid-ask" }, ask.deps),
+  ).rejects.toThrow("askAgent() cannot expose MCP servers");
+  expect(ask.captured.piHome).toBeUndefined();
+});
+
+test("pi rejects missing step-side MCP credentials before probing a server", async () => {
+  vi.stubEnv("OPENROUTER_API_KEY", "model-secret");
+  vi.stubEnv("PI_MISSING_MCP_TOKEN", "");
+  const wire = buildAgentRequest({
+    harness: harnesses.pi(models.openrouter("openai/gpt-oss"), {
+      mcpServers: {
+        probe: {
+          command: "never-contacted",
+          env: { TOKEN: "PI_MISSING_MCP_TOKEN" },
+          tools: ["ping"],
+          probe: { tool: "ping" },
+        },
+      },
+    }),
+    cwd: worktree,
+    prompt: "never reached",
+  });
+  const run = makeDeps({}, { piRequestChecks: true });
+  run.deps.jitFailures = vi.fn(async () => undefined);
+
+  await expect(
+    executeAgent(wire, { workflowRunId: "missing-mcp-secret" }, run.deps),
+  ).rejects.toThrow("PI_MISSING_MCP_TOKEN");
+  expect(run.deps.jitFailures).not.toHaveBeenCalled();
+  expect(run.captured.piHome).toBeUndefined();
+});
+
+test("parallel pi runs keep different MCP universes in separate extensions", async () => {
+  const otherWorktree = path.join(tmp, "pi-parallel-worktree");
+  mkdirSync(otherWorktree);
+  const first = makeDeps();
+  const second = makeDeps();
+  let firstSource = "";
+  let secondSource = "";
+  first.piDeps.executePi = async (options) => {
+    const extension = options.args[options.args.indexOf("-e") + 1];
+    if (extension === undefined) throw new Error("first Pi MCP extension was not passed");
+    firstSource = readFileSync(extension, "utf8");
+    const id = options.args[options.args.indexOf("--session-id") + 1];
+    return { text: "first", providerMetadata: { pi: { sessionId: id } } };
+  };
+  second.piDeps.executePi = async (options) => {
+    const extension = options.args[options.args.indexOf("-e") + 1];
+    if (extension === undefined) throw new Error("second Pi MCP extension was not passed");
+    secondSource = readFileSync(extension, "utf8");
+    const id = options.args[options.args.indexOf("--session-id") + 1];
+    return { text: "second", providerMetadata: { pi: { sessionId: id } } };
+  };
+
+  await Promise.all([
+    agentStep(
+      buildAgentRequest({
+        harness: harnesses.pi(models.openrouter("openai/gpt-oss"), {
+          mcpServers: {
+            alpha: { command: "alpha", tools: ["one"], probe: { tool: "one" } },
+          },
+        }),
+        cwd: worktree,
+        prompt: "first",
+      }),
+      { workflowRunId: "same-pi-run" },
+      first.deps,
+    ),
+    agentStep(
+      buildAgentRequest({
+        harness: harnesses.pi(models.openrouter("openai/gpt-oss"), {
+          mcpServers: {
+            beta: { command: "beta", tools: ["two"], probe: { tool: "two" } },
+          },
+        }),
+        cwd: otherWorktree,
+        prompt: "second",
+      }),
+      { workflowRunId: "same-pi-run" },
+      second.deps,
+    ),
+  ]);
+
+  expect(firstSource).toContain('"alpha"');
+  expect(firstSource).not.toContain('"beta"');
+  expect(secondSource).toContain('"beta"');
+  expect(secondSource).not.toContain('"alpha"');
 });
 
 test("pi run returns a stale resume marker before spawning Pi", async () => {

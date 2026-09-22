@@ -146,6 +146,7 @@
     "drizzle-orm": "0.45.2",
     "hono": "^4.13.4",
     "pg": "8.20.0",
+    "pi-mcp-adapter": "2.36.0",
     "semver": "^7.8.5",
     "smol-toml": "^1.8.0",
     "tinyglobby": "^0.2.17",

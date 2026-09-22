@@ -14,15 +14,14 @@ import { CHECK_TIMEOUT_MS, type Check, type CheckResult } from "./catalog.ts";
 const DECLARED_PER_STEP =
   "MCP servers are declared per step in the workflow body, never repo-owned";
 
-function transportFor(server: McpServerConfig, cwd: string): Transport {
+function transportFor(server: McpServerConfig, cwd: string, inheritEnv: boolean): Transport {
   if ("command" in server) {
     return new StdioClientTransport({
       command: server.command,
       ...(server.args !== undefined ? { args: server.args } : {}),
-      // The step's own environment, not the SDK's six-variable default: the
-      // harness passes its env down to the servers it spawns, so a check
-      // spawning them any leaner fails servers the step would have run.
-      env: { ...scrubbedEnv(), ...server.env },
+      // Mirror the harness: Claude and Codex inherit the scrubbed step
+      // environment, while Pi's adapter starts each child from its declaration.
+      env: { ...(inheritEnv ? scrubbedEnv() : {}), ...server.env },
       // The worktree, for the same reason: a server whose command or args
       // resolve relative to the working tree is otherwise proven somewhere it
       // will never run.
@@ -30,8 +29,9 @@ function transportFor(server: McpServerConfig, cwd: string): Transport {
       stderr: "ignore",
     });
   }
+  const headers = { ...server.headers };
   return new StreamableHTTPClientTransport(new URL(server.url), {
-    ...(server.headers !== undefined ? { requestInit: { headers: server.headers } } : {}),
+    ...(Object.keys(headers).length === 0 ? {} : { requestInit: { headers } }),
   });
 }
 
@@ -39,6 +39,7 @@ async function checkMcpServer(
   name: string,
   server: McpServerConfig,
   cwd: string,
+  inheritEnv: boolean,
 ): Promise<CheckResult> {
   // Typed required, still guarded: this check is the last thing standing
   // between a JSON-shaped caller and an unproven server.
@@ -53,7 +54,7 @@ async function checkMcpServer(
 
   const client = new Client({ name: "jigs", version: "0" });
   try {
-    await client.connect(transportFor(server, cwd), {
+    await client.connect(transportFor(server, cwd, inheritEnv), {
       timeout: CHECK_TIMEOUT_MS,
     });
   } catch (err) {
@@ -100,11 +101,15 @@ async function checkMcpServer(
   }
 }
 
-export function mcpServerChecks(servers: Record<string, McpServerConfig>, cwd: string): Check[] {
+export function mcpServerChecks(
+  servers: Record<string, McpServerConfig>,
+  cwd: string,
+  options: { inheritEnv?: boolean } = {},
+): Check[] {
   return Object.entries(servers).map(([name, server]) => ({
     id: `mcp.${name}`,
     label: `MCP server ${name}`,
-    run: () => checkMcpServer(name, server, cwd),
+    run: () => checkMcpServer(name, server, cwd, options.inheritEnv ?? true),
   }));
 }
 

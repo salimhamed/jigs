@@ -891,6 +891,58 @@ A Pi harness descriptor backed by a nested model source.
 
 ***
 
+### PiMcpHttpServerConfig
+
+> **PiMcpHttpServerConfig** = `Omit`\<[`McpHttpServerConfig`](#mcphttpserverconfig), `"headers"`\> & `object` & \{ `auth`: `"oauth"`; `bearerTokenEnv?`: `never`; \} \| \{ `auth?`: `false`; `bearerTokenEnv?`: `never`; \} \| \{ `auth?`: `never`; `bearerTokenEnv`: `string`; \}
+
+An HTTP MCP server Pi exposes through an explicit direct-tool allowlist.
+
+#### Type Declaration
+
+##### headers?
+
+> `optional` **headers**: `Record`\<`string`, `string`\>
+
+Maps HTTP header names to step-side source environment variable names.
+
+##### tools
+
+> **tools**: `string`[]
+
+Raw MCP tool names the model may call. This must include the probe tool.
+
+***
+
+### PiMcpServerConfig
+
+> **PiMcpServerConfig** = [`PiMcpStdioServerConfig`](#pimcpstdioserverconfig) \| [`PiMcpHttpServerConfig`](#pimcphttpserverconfig)
+
+An explicitly configured MCP server accepted by the Pi harness.
+
+***
+
+### PiMcpStdioServerConfig
+
+> **PiMcpStdioServerConfig** = `Omit`\<[`McpStdioServerConfig`](#mcpstdioserverconfig), `"env"`\> & `object`
+
+A stdio MCP server Pi exposes through an explicit direct-tool allowlist.
+
+#### Type Declaration
+
+##### env?
+
+> `optional` **env**: `Record`\<`string`, `string`\>
+
+Maps child variable names to step-side source environment variable names.
+
+##### tools
+
+> **tools**: `string`[]
+
+Raw MCP tool names the model may call. This must include the probe tool.
+
+***
+
 ### PiOpenaiCompatibleHarness
 
 > **PiOpenaiCompatibleHarness** = `SharedPiHarness` & `object`

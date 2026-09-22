@@ -21,6 +21,39 @@ export type McpHttpServerConfig = {
 /** An MCP server an agent harness can expose to the model. */
 export type McpServerConfig = McpStdioServerConfig | McpHttpServerConfig;
 
+/** A stdio MCP server Pi exposes through an explicit direct-tool allowlist. */
+export type PiMcpStdioServerConfig = Omit<McpStdioServerConfig, "env"> & {
+  /** Maps child variable names to step-side source environment variable names. */
+  env?: Record<string, string>;
+  /** Raw MCP tool names the model may call. This must include the probe tool. */
+  tools: string[];
+};
+/** An HTTP MCP server Pi exposes through an explicit direct-tool allowlist. */
+export type PiMcpHttpServerConfig = Omit<McpHttpServerConfig, "headers"> & {
+  /** Maps HTTP header names to step-side source environment variable names. */
+  headers?: Record<string, string>;
+  /** Raw MCP tool names the model may call. This must include the probe tool. */
+  tools: string[];
+} & (
+    | {
+        /** Use OAuth credentials already held by the adapter's secure store. */
+        auth: "oauth";
+        bearerTokenEnv?: never;
+      }
+    | {
+        /** Disable OAuth auto-detection for this server. */
+        auth?: false;
+        bearerTokenEnv?: never;
+      }
+    | {
+        auth?: never;
+        /** Name of the step-side environment variable containing a bearer token. */
+        bearerTokenEnv: string;
+      }
+  );
+/** An explicitly configured MCP server accepted by the Pi harness. */
+export type PiMcpServerConfig = PiMcpStdioServerConfig | PiMcpHttpServerConfig;
+
 type SharedHarness = { model: string; mcpServers?: Record<string, McpServerConfig> };
 
 /** A Claude Code harness descriptor. */
@@ -40,7 +73,7 @@ type SharedPiHarness = {
   kind: "pi";
   thinking?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   tools?: string[];
-  mcpServers?: Record<string, McpServerConfig>;
+  mcpServers?: Record<string, PiMcpServerConfig>;
 };
 
 /** An OpenRouter API model source. */
@@ -103,7 +136,7 @@ export const models = {
   },
 } as const;
 
-type PiHarnessOptions = Pick<SharedPiHarness, "thinking" | "tools">;
+type PiHarnessOptions = Pick<SharedPiHarness, "thinking" | "tools" | "mcpServers">;
 
 /**
  * Build a Pi harness around a model source. `compat` applies only to an

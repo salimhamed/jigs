@@ -1,4 +1,4 @@
-# MCP deny-by-default: strict config on Claude, a managed Codex home
+# MCP deny-by-default across Claude, Codex and Pi
 
 An agent step's explicit `mcpServers` config is the entire MCP universe the
 agent sees; nothing is inherited from user-level config (the dev machine's
@@ -25,16 +25,39 @@ store, so removing temporary configuration cannot remove conversation history. D
 [AGE-294](https://linear.app/salboogie/issue/AGE-294/preflight-design),
 verified against the Codex source at `rust-v0.149.1`.
 
+Pi loads a generated invocation-private extension explicitly with `-e`. That
+extension imports jigs' exact-pinned `pi-mcp-adapter` and calls
+`createMcpAdapter({ config })`, whose `config` is a complete snapshot rather
+than a file-discovery layer. Every declared server has a required named-tool
+allowlist. The adapter exposes only those direct tools; its generic proxy,
+per-server namespace proxies, scripting mode, Jev integration, Agent Plugin
+paths, ancestor roots and host-config discovery are disabled. Pi still runs
+with extension, skill, prompt-template, theme and project-approval discovery
+disabled. The extension and its adapter runtime belong to one invocation, so
+parallel invocations cannot share configuration or MCP children.
+
+The adapter may temporarily register its generic `mcp` proxy while a direct
+tool server has no metadata cache. The invocation extension removes that proxy
+from the active tool set before every model turn and blocks the call as a
+backstop. Server resources are disabled. Stdio servers do not inherit Pi's
+environment; each receives its declared environment plus the MCP SDK's stdio
+defaults (`HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM` and `USER` on POSIX, when
+Pi has them), so model credentials and sibling-server credentials cannot cross
+that process boundary.
+
 ## Consequences
 
 - **A JIT guard fails any Codex step whose worktree carries a
   `.codex/config.toml` declaring `mcp_servers`**: `thread/start` auto-trusts
   a writable cwd (persisting trust), and project config can add servers even
   under the managed home — the guard is what makes deny-by-default hold.
-- **Step-declared MCP servers must use non-interactive auth** (env-var keys,
-  bearer tokens) in v0. A headless service cannot drive a browser OAuth
-  dance, and no repair instruction fixes one mid-run. Interactive OAuth can
-  return post-v0 with a token-broker design if the need appears.
+- **Step-declared MCP servers use step-side credentials.** Pi stdio environment
+  entries, HTTP headers and bearer descriptors name source environment
+  variables; their secrets are allowlisted into the invocation environment and
+  never enter the durable descriptor. Pi HTTP servers may
+  select OAuth only when the adapter already has credentials in its secure
+  store. Headless runs never start login flows. Claude and Codex keep their
+  existing non-interactive-auth restriction.
 - Codex's `config/mcpServer/reload` hot-refreshes servers into running
   threads by re-reading `config.toml` — under the managed home that file is
   the curated one, so the reload-into-live-threads race disarms itself.
@@ -56,11 +79,33 @@ verified against the Codex source at `rust-v0.149.1`.
 - MCP availability checks must exercise a real tool call: agents
   misreported their own MCP server list even when a server was demonstrably
   callable (AGE-305, probe 6).
+- Pi's deterministic adapter test inspects the actual model request as well as
+  invoking the stdio probe. This proves ambient servers and generic adapter
+  tools are absent rather than merely unused, including when an explicit server
+  fails and the adapter would otherwise retain its fallback proxy. OAuth probes
+  run through Pi itself because a second raw MCP client cannot reuse
+  adapter-owned secure credentials without becoming another integration path.
+- Pi and its MCP descendants run in a private process group. When Pi exits,
+  whatever is left of the group gets SIGTERM, then SIGKILL after a second if it
+  is still alive. Service shutdown stops every live group the same way, and a
+  process exit kills any group still left. Pi execution also accepts an abort
+  signal that triggers the same cleanup, but no production caller passes one
+  yet. The Workflow SDK does deliver an `AbortSignal` passed as a step argument
+  when workflow code calls `abort()` on its controller, but `jigs cancel` only
+  records `run_cancelled`: it neither aborts such a controller nor notifies the
+  executing step, and the cancelled run never replays to do so. A cancelled Pi
+  prompt therefore still runs to completion until cancellation can reach the
+  step.
 - Amends ADR 0004's "skills/config reach agents through the worktree": MCP
   servers are the exception — declared per step, never repo-owned.
 - *Amendment (2026-09-22)*: "managed Codex home" is now an **invocation
   home** — private, temporary configuration per invocation — plus a durable
   per-run session store it links to.
+- *Amendment (2026-09-22)*: Pi supports MCP only through an explicit
+  `pi-mcp-adapter` snapshot. Pi never imports the user's global MCP file or the
+  worktree's `.mcp.json` / `.pi/mcp.json`; a factory may read an operator-owned
+  definition while constructing step-side configuration, but it must select
+  and declare each server and tool itself.
 
 ## Considered options
 
