@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.45.0
+# @salimhamed/jigs v0.46.0
 
 Use these schemas and types for provider-neutral questions and JSON values exchanged with a human.
 
