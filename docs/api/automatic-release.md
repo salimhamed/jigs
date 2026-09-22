@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.46.0
+# @salimhamed/jigs v0.47.0
 
 Reconcile resources that a completed factory run asked jigs to release automatically.
 
