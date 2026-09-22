@@ -222,6 +222,10 @@ test.skipIf(!hasSupportedPi())(
     writeDecoyConfig(path.join(tmp, ".mcp.json"), projectDecoyPid, "project-decoy");
     writeDecoyConfig(path.join(tmp, ".config", "mcp", "mcp.json"), globalDecoyPid, "global-decoy");
     writeDecoyConfig(path.join(tmp, ".pi", "mcp.json"), piDecoyPid, "pi-decoy");
+    const agentDirDecoyPid = path.join(tmp, "agent-dir-decoy.pid");
+    const agentsDecoyPid = path.join(tmp, "agents-decoy.pid");
+    writeDecoyConfig(path.join(home, "mcp.json"), agentDirDecoyPid, "agent-dir-decoy");
+    writeDecoyConfig(path.join(tmp, ".agents", "mcp.json"), agentsDecoyPid, "agents-decoy");
     const extension = writeProbeExtension(home);
 
     try {
@@ -248,6 +252,8 @@ test.skipIf(!hasSupportedPi())(
       expect(existsSync(projectDecoyPid)).toBe(false);
       expect(existsSync(globalDecoyPid)).toBe(false);
       expect(existsSync(piDecoyPid)).toBe(false);
+      expect(existsSync(agentDirDecoyPid)).toBe(false);
+      expect(existsSync(agentsDecoyPid)).toBe(false);
     } finally {
       await closeServer(server);
     }
