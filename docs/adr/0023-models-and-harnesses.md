@@ -17,7 +17,16 @@ harnesses; `askModel` and `askJev` take model sources.
 
 - One step-side driver registry is the source of installed execution kinds.
 - Pi runs as a subprocess of the installed binary. jigs does not implement an
-  AI SDK `LanguageModel` for it; Pi itself owns its agent loop.
+  AI SDK `LanguageModel` for it; Pi itself owns its agent loop. Pi's native
+  request retries remain enabled, and jigs accepts a result only after Pi emits
+  `agent_settled`, the final assistant outcome is successful, and the process
+  closes normally. An earlier error that Pi recovers from does not poison the
+  settled result.
+- Pi's native retries, retries inside the AI SDK used by direct model calls,
+  and Workflow step replay are separate layers. The Pi driver adds no retry
+  loop of its own: exhausted Pi work rejects the step, after which Workflow
+  decides whether to replay that whole durable operation. Stopping a running
+  agent process remains part of the separate run-cancellation contract.
 - Subscription logins remain first-class for harnesses. API keys are never
   inherited globally: each driver explicitly allowlists the credentials its
   subprocess or API client may receive. The Claude driver reapplies that

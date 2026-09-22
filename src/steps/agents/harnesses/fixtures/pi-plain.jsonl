@@ -7,3 +7,4 @@
 {"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"Hello world"}],"stopReason":"stop","usage":{"input":4,"output":2,"cacheRead":2,"cacheWrite":0,"totalTokens":8,"cost":{"input":0.01,"output":0.04,"cacheRead":0.003,"cacheWrite":0,"total":0.053}}}}
 {"type":"turn_end","message":{"role":"assistant","content":[{"type":"text","text":"Hello world"}],"stopReason":"stop"},"toolResults":[]}
 {"type":"agent_end","messages":[]}
+{"type":"agent_settled"}

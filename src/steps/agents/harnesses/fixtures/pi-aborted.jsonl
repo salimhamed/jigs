@@ -1,0 +1,5 @@
+{"type":"session","version":3,"id":"session-aborted","timestamp":"2026-09-21T00:00:00.000Z","cwd":"/tmp/pi"}
+{"type":"agent_start"}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"partial"}],"stopReason":"aborted","errorMessage":"operation cancelled"}}
+{"type":"agent_end","messages":[],"willRetry":false}
+{"type":"agent_settled"}

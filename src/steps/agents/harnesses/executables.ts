@@ -35,6 +35,8 @@ export function resolveCodexExecutable(env: NodeJS.ProcessEnv = process.env): st
   throw new Error("no `codex` executable found on PATH — install the Codex CLI");
 }
 
+// agent_settled has been public since 0.80.4, so every supported Pi exposes
+// the completion boundary the JSON-mode driver requires.
 export const MIN_PI_VERSION = "0.85.1";
 
 export function resolvePiExecutable(env: NodeJS.ProcessEnv = process.env): string {

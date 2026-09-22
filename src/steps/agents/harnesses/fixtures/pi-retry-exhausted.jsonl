@@ -1,0 +1,10 @@
+{"type":"session","version":3,"id":"session-exhausted","timestamp":"2026-09-21T00:00:00.000Z","cwd":"/tmp/pi"}
+{"type":"agent_start"}
+{"type":"message_end","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"temporary overload"}}
+{"type":"agent_end","messages":[],"willRetry":true}
+{"type":"auto_retry_start","attempt":1,"maxAttempts":1,"delayMs":0,"errorMessage":"temporary overload"}
+{"type":"agent_start"}
+{"type":"message_end","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"provider remained unavailable"}}
+{"type":"agent_end","messages":[],"willRetry":false}
+{"type":"auto_retry_end","success":false,"attempt":1,"finalError":"provider remained unavailable"}
+{"type":"agent_settled"}

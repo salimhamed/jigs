@@ -28,18 +28,26 @@ World. Nothing below is global except part 1.
   to put on `PATH`: each factory installs its own, and `pnpm exec jigs` runs
   it.
 - **The agent harness CLIs** a factory's agent steps drive: the Claude Code
-  CLI (`claude` on `PATH`, or `JIGS_CLAUDE_EXECUTABLE` in a factory's `.env`)
-  and `codex`, each logged in to its subscription — `claude auth login`,
-  `codex login`. `jigs doctor` probes both; a trigger's preflight probes the
-  ones its workflow declares in `requires.harnesses`, and refuses the run when
-  one is missing or logged out.
+  CLI (`claude` on `PATH`, or `JIGS_CLAUDE_EXECUTABLE` in a factory's `.env`),
+  `codex`, and `pi` from `@earendil-works/pi-coding-agent`. Log subscription-backed
+  harnesses in before starting the service — `claude auth login`, `codex login`,
+  or run `pi` and choose `/login`. `jigs doctor` probes the installed harnesses; a trigger's
+  preflight probes the ones its workflow declares in `requires.harnesses`, and
+  refuses the run when one is missing, too old, or logged out.
 
-  Install both yourself and keep them on the `PATH` of whatever starts the
-  service. The service checks them before it reports ready: if either is
-  missing, or `codex` is older than the minimum version the message names, it
-  prints what it found and exits. A service does not always get the same
-  `PATH` as your shell, so start it from a shell where both CLIs run. There is
-  no codex equivalent of `JIGS_CLAUDE_EXECUTABLE`.
+  Install the harnesses yourself and keep them on the `PATH` of whatever starts the
+  service. The service checks them before it reports ready: if one is missing,
+  or `codex` or `pi` is older than the minimum version the message names, it
+  prints what it found and exits. Pi's minimum guarantees the JSON event stream
+  includes `agent_settled`, which jigs uses to wait through Pi's native retries
+  and queued continuations. A service does not always get the same `PATH` as
+  your shell, so start it from a shell where every required CLI runs. There is
+  no `codex` or `pi` equivalent of `JIGS_CLAUDE_EXECUTABLE`.
+
+  Pi keeps its native request retries. A recovered request completes the same
+  agent step; exhausting those retries rejects it, after which Workflow may
+  replay the whole step. Direct model calls instead use the AI SDK's retry
+  behavior. These layers are independent.
 - **The AWS CLI v2**, if any workflow declares `requires: { aws: true }`
   alongside its bindings and harnesses: preflight probes the service's
   `AWS_PROFILE` with `aws sts get-caller-identity` and refuses the run when it

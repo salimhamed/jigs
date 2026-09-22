@@ -2,6 +2,12 @@ import type { ExecutorGeneration } from "../drivers/types.ts";
 
 export type PiDelta = { type: string; [key: string]: unknown };
 
+type AssistantOutcome = {
+  stopReason: unknown;
+  errorMessage: unknown;
+  text: string;
+};
+
 function record(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -24,45 +30,95 @@ export function reducePiJsonl(
   onDelta?: (delta: PiDelta) => void,
 ): ExecutorGeneration {
   let sessionId: string | undefined;
-  let finalText = "";
+  let finalAssistant: AssistantOutcome | undefined;
   let output: unknown;
-  let completed = false;
+  let hasOutput = false;
+  let started = false;
+  let settled = false;
 
   for (const [index, line] of jsonl.split(/\r?\n/).entries()) {
     if (line.trim() === "") continue;
     let event: Record<string, unknown>;
     try {
-      event = JSON.parse(line) as Record<string, unknown>;
+      const parsed = record(JSON.parse(line) as unknown);
+      if (parsed === undefined || typeof parsed.type !== "string") throw new Error();
+      event = parsed;
     } catch {
-      throw new Error(`pi emitted invalid JSON on line ${index + 1}`);
+      throw new Error(`pi emitted invalid JSON event on line ${index + 1}`);
     }
 
     if (event.type === "session" && sessionId === undefined && typeof event.id === "string") {
       sessionId = event.id;
+    } else if (event.type === "agent_start") {
+      // A trusted extension can start another run after settlement. Anything
+      // collected for the older operation is then stale. Pi's own retry also
+      // emits agent_start, but it remains part of the same operation and must
+      // retain a submit_result already produced by that run.
+      const beginsNewOperation = settled;
+      started = true;
+      settled = false;
+      finalAssistant = undefined;
+      if (beginsNewOperation) {
+        output = undefined;
+        hasOutput = false;
+      }
     } else if (event.type === "message_update") {
       const delta = record(event.assistantMessageEvent);
       if (delta !== undefined) onDelta?.(delta as PiDelta);
     } else if (event.type === "message_end") {
       const message = record(event.message);
       if (message?.role !== "assistant") continue;
-      if (message.stopReason === "error") {
-        throw new Error(
-          typeof message.errorMessage === "string" ? message.errorMessage : "pi model turn failed",
-        );
-      }
-      completed = true;
-      finalText = textContent(message.content);
+      finalAssistant = {
+        stopReason: message.stopReason,
+        errorMessage: message.errorMessage,
+        text: textContent(message.content),
+      };
     } else if (event.type === "tool_execution_end" && event.toolName === "submit_result") {
       const result = record(event.result);
-      output = result?.details;
+      if (event.isError !== true && result !== undefined && "details" in result) {
+        output = result.details;
+        hasOutput = true;
+      }
+    } else if (event.type === "agent_settled") {
+      settled = true;
     }
   }
 
-  if (!completed) throw new Error("pi ended without an assistant message_end");
+  if (!started) throw new Error("pi ended without an agent_start");
+  if (!settled) throw new Error("pi ended before the agent settled");
+  if (finalAssistant === undefined) {
+    throw new Error("pi settled without a final assistant message");
+  }
+
+  switch (finalAssistant.stopReason) {
+    case "stop":
+      break;
+    case "toolUse":
+      if (!hasOutput) throw new Error("pi settled with an unresolved tool-only response");
+      break;
+    case "error":
+      throw new Error(
+        typeof finalAssistant.errorMessage === "string"
+          ? finalAssistant.errorMessage
+          : "pi model turn failed",
+      );
+    case "aborted":
+      throw new Error(
+        typeof finalAssistant.errorMessage === "string"
+          ? finalAssistant.errorMessage
+          : "pi model turn was aborted",
+      );
+    case "length":
+      throw new Error("pi final response was truncated");
+    default:
+      throw new Error(
+        `pi settled with invalid assistant stop reason ${JSON.stringify(finalAssistant.stopReason)}`,
+      );
+  }
 
   return {
-    text: finalText,
-    ...(output === undefined ? {} : { output }),
+    text: finalAssistant.text,
+    ...(hasOutput ? { output } : {}),
     providerMetadata: {
       pi: {
         ...(sessionId === undefined ? {} : { sessionId }),

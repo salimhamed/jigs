@@ -8,3 +8,4 @@
 {"type":"tool_execution_end","toolCallId":"call-1","toolName":"submit_result","result":{"content":[{"type":"text","text":"Structured result submitted"}],"details":{"word":"sky","count":3}},"isError":false}
 {"type":"turn_end","message":{"role":"assistant","content":[],"stopReason":"toolUse"},"toolResults":[]}
 {"type":"agent_end","messages":[]}
+{"type":"agent_settled"}

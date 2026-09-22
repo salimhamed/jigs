@@ -5,3 +5,4 @@
 {"type":"message_end","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"model server rejected the request","usage":{"input":2,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":2,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}}}}
 {"type":"turn_end","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"model server rejected the request"},"toolResults":[]}
 {"type":"agent_end","messages":[]}
+{"type":"agent_settled"}
