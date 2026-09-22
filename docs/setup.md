@@ -208,6 +208,8 @@ and `merge.method` overrides in `jigs.config.ts`.
 After binding a repository, you can make it the input default and add its name to
 `requires.bindings`. Declare credential integrations under `requires.integrations`;
 other workflows do not need Linear or GitHub credentials merely to use agents.
+Declare API model descriptors under `requires.models`; preflight then checks the
+exact credential variable, endpoint, and model selected by the workflow.
 
 ### 2. Tokens
 

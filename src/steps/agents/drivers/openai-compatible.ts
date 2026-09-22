@@ -22,7 +22,6 @@ async function ask(request: AgentRequest | ModelRequest, context: DriverContext)
     name: source.name,
     ...(apiKey === undefined ? {} : { apiKey }),
     supportsStructuredOutputs: true,
-    ...source.compat,
   });
   return context.deps.generateText({
     model: provider.chatModel(source.model),

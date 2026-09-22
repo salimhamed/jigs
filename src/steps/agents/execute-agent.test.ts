@@ -28,6 +28,7 @@ import {
   executeAgent,
 } from "./execute-agent.ts";
 import type { PiExecutionOptions } from "./harnesses/pi.ts";
+import { planPiModel } from "./harnesses/pi-model.ts";
 import { makeTmpDir, removeTmpDir } from "./harnesses/test-fixtures.ts";
 
 // The settings look for the CLI eagerly, so these tests would need a codex
@@ -669,7 +670,7 @@ test("pi ask executes its nested model with isolated discovery and returns execu
 
   const result = await agentStep(wire, { workflowRunId: "run-pi" }, deps);
 
-  expect(captured.piHome).toEqual({ runId: "run-pi", model: source });
+  expect(captured.piHome).toEqual({ runId: "run-pi", model: planPiModel(source) });
   expect(captured.piOptions?.args).toEqual([
     "--mode",
     "json",
@@ -732,6 +733,25 @@ test("pi ask rejects missing nested authentication before executing Pi", async (
     /PI_TEST_OPENROUTER_KEY credential: PI_TEST_OPENROUTER_KEY is not set/,
   );
   expect(captured.piOptions).toBeUndefined();
+});
+
+test("pi maps only the selected OpenRouter credential to the provider variable", async () => {
+  vi.stubEnv("TEAM_OPENROUTER_KEY", "selected-secret");
+  vi.stubEnv("OPENROUTER_API_KEY", "unrelated-secret");
+  const wire = buildAskAgentRequest({
+    harness: harnesses.pi(
+      models.openrouter("openai/gpt-oss", { apiKeyEnv: "TEAM_OPENROUTER_KEY" }),
+    ),
+    prompt: "hello",
+  });
+  const { deps, captured } = makeDeps({}, { piRequestChecks: true });
+
+  await agentStep(wire, { workflowRunId: "run-pi-custom-key" }, deps);
+
+  expect(captured.piOptions?.env.OPENROUTER_API_KEY).toBe("selected-secret");
+  expect(captured.piOptions?.env).not.toHaveProperty("TEAM_OPENROUTER_KEY");
+  expect(JSON.stringify(wire)).not.toContain("selected-secret");
+  expect(JSON.stringify(captured.piHome)).not.toContain("selected-secret");
 });
 
 test("pi run mints and records a matching session with tools in the worktree", async () => {
@@ -800,7 +820,7 @@ test("pi run resumes only after finding the real session file", async () => {
     resume: { harness: "pi", id: sessionId },
   });
   const { deps, captured, piDeps } = makeDeps();
-  const home = piDeps.ensurePiHome("run-pi-resume", source);
+  const home = piDeps.ensurePiHome("run-pi-resume", planPiModel(source));
   writeFileSync(path.join(home, "sessions", `2026-09-21T00-00-00_${sessionId}.jsonl`), "");
   piDeps.executePi = async (options) => {
     captured.piOptions = options;

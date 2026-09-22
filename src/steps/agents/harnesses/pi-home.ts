@@ -11,8 +11,8 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
-import type { ModelSource, OpenaiCompatibleSource } from "../../../blocks/agents/harness-config.ts";
 import { jigsDataDir } from "../../../config/paths.ts";
+import type { PiModelPlan } from "./pi-model.ts";
 
 export interface PiHomeOptions {
   baseDir?: string;
@@ -50,39 +50,20 @@ export function piSessionFile(home: string, sessionId: string): string | undefin
   return undefined;
 }
 
-function openaiCompatibleModels(source: OpenaiCompatibleSource): object {
-  return {
-    providers: {
-      [source.name]: {
-        baseUrl: source.baseUrl,
-        api: "openai-completions",
-        apiKey: source.apiKeyEnv === undefined ? "jigs" : `$${source.apiKeyEnv}`,
-        compat: source.compat,
-        models: [
-          {
-            id: source.model,
-            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-          },
-        ],
-      },
-    },
-  };
-}
-
 /** Ensure the isolated per-run Pi home exists and rewrite its jigs-owned configuration. */
 export function ensureManagedPiHome(
   runId: string,
-  source: ModelSource,
+  plan: PiModelPlan,
   options: PiHomeOptions = {},
 ): string {
   const home = managedPiHomePath(runId, options);
   mkdirSync(piSessionsDir(home), { recursive: true });
   writeFileSync(path.join(home, "settings.json"), `${JSON.stringify({ packages: [] }, null, 2)}\n`);
   const modelsPath = path.join(home, "models.json");
-  if (source.kind === "openai-compatible")
-    writeFileSync(modelsPath, `${JSON.stringify(openaiCompatibleModels(source), null, 2)}\n`);
+  if (plan.models !== undefined)
+    writeFileSync(modelsPath, `${JSON.stringify(plan.models, null, 2)}\n`);
   else rmSync(modelsPath, { force: true });
-  if (source.kind === "openai-codex") {
+  if (plan.subscriptionAuth) {
     const realAuthPath = options.realAuthPath ?? realPiAuthPath();
     if (!existsSync(realAuthPath))
       throw new Error(`no Pi openai-codex login found at ${realAuthPath} — run: pi /login`);

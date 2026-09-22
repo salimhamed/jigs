@@ -33,6 +33,7 @@ export {
   type OpenaiCompatibleSource,
   type OpenrouterSource,
   type PiHarness,
+  type PiOpenaiCompatibleOptions,
 } from "./harness-config.ts";
 export {
   type AskJevOptions,

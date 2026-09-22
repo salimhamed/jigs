@@ -1,7 +1,6 @@
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { promisify } from "node:util";
-import type { ModelSource } from "../blocks/agents/harness-config.ts";
 import { driverFor } from "../steps/agents/drivers/index.ts";
 import { realCodexAuthPath } from "../steps/agents/harnesses/codex-home.ts";
 import { stringEnv } from "../steps/agents/harnesses/env.ts";
@@ -10,7 +9,6 @@ import { realPiAuthPath } from "../steps/agents/harnesses/pi-home.ts";
 import { type Check, type CheckResult, PROBE_TIMEOUT_MS } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 import { type HarnessKind, type HarnessRuntimeDeps, harnessRuntime } from "./harness-runtime.ts";
-import { modelApiKeyCheck } from "./models.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -175,15 +173,6 @@ export function piOpenaiCodexAuthCheck(authPath = realPiAuthPath()): Check {
       return { ok: true };
     },
   };
-}
-
-/** Authentication checks selected by the model nested in a Pi call. */
-export function piAuthChecks(source: ModelSource | undefined): Check[] {
-  if (source?.kind === "openai-codex") return [piOpenaiCodexAuthCheck()];
-  if (source?.kind === "openrouter") return [modelApiKeyCheck(source.apiKeyEnv)];
-  if (source?.kind === "openai-compatible" && source.apiKeyEnv !== undefined)
-    return [modelApiKeyCheck(source.apiKeyEnv)];
-  return [];
 }
 
 /** The same check the service gates its boot on, so doctor cannot pass

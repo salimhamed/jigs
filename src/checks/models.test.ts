@@ -20,7 +20,7 @@ const source = {
   name: "north-desktop",
   baseUrl: "http://localhost:1234/v1",
   model: "wanted-model",
-  compat: { supportsDeveloperRole: false, supportsReasoningEffort: false },
+  pi: { supportsDeveloperRole: false, supportsReasoningEffort: false },
 };
 
 test("an OpenAI-compatible runtime check confirms the configured model is served", async () => {

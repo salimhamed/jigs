@@ -13,6 +13,7 @@ import {
 import { scrubbedEnv } from "../env.ts";
 import { executePi } from "../pi.ts";
 import { ensureManagedPiHome } from "../pi-home.ts";
+import { planPiModel } from "../pi-model.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { makeScratchRepo } from "./fixtures/live-env.ts";
 
@@ -52,7 +53,7 @@ test.skipIf(!localConfigured || !localReachable)(
       baseUrl: baseUrl as string,
       model: localModel as string,
     });
-    const controlHome = ensureManagedPiHome("control", source, {
+    const controlHome = ensureManagedPiHome("control", planPiModel(source), {
       baseDir: path.join(tmp, "control-pi-homes"),
     });
     const extensions = path.join(controlHome, "extensions");

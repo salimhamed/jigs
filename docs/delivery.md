@@ -561,7 +561,8 @@ the durable wrappers and shared blocks from `#jigs` directly. Regenerate
 
 ## Generic agent workflows
 
-`runAgent` and `askModel` accept a harness, prompt, and optional output schema.
+`runAgent` accepts a harness, prompt, and optional output schema. `askModel`
+accepts a model source instead.
 `runAgent` also accepts a working directory and optional session. `askModel`
 runs without tools.
 `createRunDirectory()` provides run-owned scratch space without a repository;

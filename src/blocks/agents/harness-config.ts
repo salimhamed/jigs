@@ -51,6 +51,11 @@ export type HarnessKind = Harness["kind"];
 
 /** An OpenRouter API model source. */
 export type OpenrouterSource = { kind: "openrouter"; model: string; apiKeyEnv: string };
+/** Pi-specific compatibility hints for an OpenAI-compatible model. */
+export type PiOpenaiCompatibleOptions = {
+  supportsDeveloperRole: boolean;
+  supportsReasoningEffort: boolean;
+};
 /** An OpenAI-compatible API model source. */
 export type OpenaiCompatibleSource = {
   kind: "openai-compatible";
@@ -58,10 +63,7 @@ export type OpenaiCompatibleSource = {
   baseUrl: string;
   model: string;
   apiKeyEnv?: string;
-  compat: {
-    supportsDeveloperRole: boolean;
-    supportsReasoningEffort: boolean;
-  };
+  pi: PiOpenaiCompatibleOptions;
 };
 /** The Codex subscription model source used only by the Pi harness. */
 export type OpenaiCodexSource = { kind: "openai-codex"; model: string };
@@ -77,24 +79,21 @@ export const models = {
   openrouter(model: string, options: { apiKeyEnv?: string } = {}): OpenrouterSource {
     return { kind: "openrouter", model, apiKeyEnv: options.apiKeyEnv ?? "OPENROUTER_API_KEY" };
   },
-  /** Build a source for an OpenAI-compatible server. Both compatibility hints default to false. */
+  /** Build a source for an OpenAI-compatible server. Pi compatibility hints default to false. */
   openaiCompatible(options: {
     name: string;
     baseUrl: string;
     model: string;
     apiKeyEnv?: string;
-    compat?: {
-      supportsDeveloperRole?: boolean;
-      supportsReasoningEffort?: boolean;
-    };
+    pi?: Partial<PiOpenaiCompatibleOptions>;
   }): OpenaiCompatibleSource {
-    const { compat, ...source } = options;
+    const { pi, ...source } = options;
     return {
       kind: "openai-compatible",
       ...source,
-      compat: {
-        supportsDeveloperRole: compat?.supportsDeveloperRole ?? false,
-        supportsReasoningEffort: compat?.supportsReasoningEffort ?? false,
+      pi: {
+        supportsDeveloperRole: pi?.supportsDeveloperRole ?? false,
+        supportsReasoningEffort: pi?.supportsReasoningEffort ?? false,
       },
     };
   },

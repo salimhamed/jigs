@@ -52,7 +52,7 @@ test("descriptor namespaces build tagged plain data", () => {
     name: "north-desktop",
     model: "local",
     baseUrl: "http://localhost:1234/v1",
-    compat: { supportsDeveloperRole: false, supportsReasoningEffort: false },
+    pi: { supportsDeveloperRole: false, supportsReasoningEffort: false },
   });
   expect(
     models.openaiCompatible({
@@ -60,7 +60,7 @@ test("descriptor namespaces build tagged plain data", () => {
       baseUrl: "https://models.example/v1",
       model: "served-model",
       apiKeyEnv: "LOCAL_MODEL_KEY",
-      compat: { supportsDeveloperRole: true, supportsReasoningEffort: true },
+      pi: { supportsDeveloperRole: true, supportsReasoningEffort: true },
     }),
   ).toEqual({
     kind: "openai-compatible",
@@ -68,7 +68,7 @@ test("descriptor namespaces build tagged plain data", () => {
     baseUrl: "https://models.example/v1",
     model: "served-model",
     apiKeyEnv: "LOCAL_MODEL_KEY",
-    compat: { supportsDeveloperRole: true, supportsReasoningEffort: true },
+    pi: { supportsDeveloperRole: true, supportsReasoningEffort: true },
   });
 });
 
@@ -87,5 +87,15 @@ test("verbs reject the wrong descriptor family at compile time", () => {
     state: "records",
     questions: { match: yesNo("Same?") },
   };
-  expect([run, agent, model, codex, jev]).toHaveLength(5);
+  const localJev: AskJevOptions<{ match: ReturnType<typeof yesNo> }> = {
+    // @ts-expect-error askJev is statically limited to OpenRouter decision sources
+    model: models.openaiCompatible({
+      name: "local",
+      baseUrl: "http://localhost:1234/v1",
+      model: "local",
+    }),
+    state: "records",
+    questions: { match: yesNo("Same?") },
+  };
+  expect([run, agent, model, codex, jev, localJev]).toHaveLength(6);
 });

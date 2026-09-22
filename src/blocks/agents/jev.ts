@@ -1,4 +1,4 @@
-import type { ModelSource } from "./harness-config.ts";
+import type { OpenrouterSource } from "./harness-config.ts";
 
 /** A calibrated yes-or-no question. */
 export type YesNoQuestion = { type: "yes-no"; instructions: string };
@@ -50,7 +50,7 @@ export type JevAnswers<QUESTIONS extends JevQuestions> = {
 
 /** A decision request in workflow and durable wire form. */
 export type AskJevOptions<QUESTIONS extends JevQuestions> = {
-  model: ModelSource;
+  model: OpenrouterSource;
   state: JevState;
   questions: QUESTIONS;
 };
