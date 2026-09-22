@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.47.2](https://github.com/salimhamed/jigs/compare/jigs-v0.47.1...jigs-v0.47.2) (2026-09-22)
+
+
+### Features
+
+* support explicit Pi MCP configuration ([#345](https://github.com/salimhamed/jigs/issues/345)) ([fa02451](https://github.com/salimhamed/jigs/commit/fa0245199e09f002f627a4268ba4e80e84a8bee2))
+
 ## [0.47.1](https://github.com/salimhamed/jigs/compare/jigs-v0.47.0...jigs-v0.47.1) (2026-09-22)
 
 
