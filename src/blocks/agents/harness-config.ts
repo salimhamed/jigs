@@ -36,21 +36,20 @@ export type CodexHarness = SharedHarness & {
     "none" | "minimal" | "low" | "medium" | "high" | "xhigh"
   >;
 };
-/** A Pi harness descriptor backed by a nested model source. */
-export type PiHarness = {
+type SharedPiHarness = {
   kind: "pi";
-  model: ModelSource;
   thinking?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   tools?: string[];
   mcpServers?: Record<string, McpServerConfig>;
 };
-/** A serializable agent-program descriptor. */
-export type Harness = ClaudeHarness | CodexHarness | PiHarness;
-/** The stable name of an agent harness. */
-export type HarnessKind = Harness["kind"];
 
 /** An OpenRouter API model source. */
 export type OpenrouterSource = { kind: "openrouter"; model: string; apiKeyEnv: string };
+/** Pi-specific compatibility hints for an OpenAI-compatible model. */
+export type PiOpenaiCompatibleOptions = {
+  supportsDeveloperRole: boolean;
+  supportsReasoningEffort: boolean;
+};
 /** An OpenAI-compatible API model source. */
 export type OpenaiCompatibleSource = {
   kind: "openai-compatible";
@@ -58,10 +57,6 @@ export type OpenaiCompatibleSource = {
   baseUrl: string;
   model: string;
   apiKeyEnv?: string;
-  compat: {
-    supportsDeveloperRole: boolean;
-    supportsReasoningEffort: boolean;
-  };
 };
 /** The Codex subscription model source used only by the Pi harness. */
 export type OpenaiCodexSource = { kind: "openai-codex"; model: string };
@@ -72,36 +67,83 @@ export type AskableModelSource = Exclude<ModelSource, OpenaiCodexSource>;
 /** The stable name of a model source. */
 export type ModelKind = ModelSource["kind"];
 
+/** A Pi harness descriptor backed by an OpenAI-compatible source, with its compatibility hints. */
+export type PiOpenaiCompatibleHarness = SharedPiHarness & {
+  model: OpenaiCompatibleSource;
+  compat: PiOpenaiCompatibleOptions;
+};
+/** A Pi harness descriptor backed by any source other than an OpenAI-compatible one. */
+export type PiOtherHarness = SharedPiHarness & {
+  model: Exclude<ModelSource, OpenaiCompatibleSource>;
+  compat?: never;
+};
+/** A Pi harness descriptor backed by a nested model source. */
+export type PiHarness = PiOpenaiCompatibleHarness | PiOtherHarness;
+/** A serializable agent-program descriptor. */
+export type Harness = ClaudeHarness | CodexHarness | PiHarness;
+/** The stable name of an agent harness. */
+export type HarnessKind = Harness["kind"];
+
 /** Constructors for model-source descriptors. */
 export const models = {
   openrouter(model: string, options: { apiKeyEnv?: string } = {}): OpenrouterSource {
     return { kind: "openrouter", model, apiKeyEnv: options.apiKeyEnv ?? "OPENROUTER_API_KEY" };
   },
-  /** Build a source for an OpenAI-compatible server. Both compatibility hints default to false. */
+  /** Build a source for an OpenAI-compatible server. */
   openaiCompatible(options: {
     name: string;
     baseUrl: string;
     model: string;
     apiKeyEnv?: string;
-    compat?: {
-      supportsDeveloperRole?: boolean;
-      supportsReasoningEffort?: boolean;
-    };
   }): OpenaiCompatibleSource {
-    const { compat, ...source } = options;
-    return {
-      kind: "openai-compatible",
-      ...source,
-      compat: {
-        supportsDeveloperRole: compat?.supportsDeveloperRole ?? false,
-        supportsReasoningEffort: compat?.supportsReasoningEffort ?? false,
-      },
-    };
+    return { kind: "openai-compatible", ...options };
   },
   openaiCodex(model: string): OpenaiCodexSource {
     return { kind: "openai-codex", model };
   },
 } as const;
+
+type PiHarnessOptions = Pick<SharedPiHarness, "thinking" | "tools">;
+
+/**
+ * Build a Pi harness around a model source. `compat` applies only to an
+ * OpenAI-compatible source; each hint omitted from it defaults to `false`.
+ */
+function piHarness(
+  model: OpenaiCompatibleSource,
+  options?: PiHarnessOptions & { compat?: Partial<PiOpenaiCompatibleOptions> },
+): PiOpenaiCompatibleHarness;
+function piHarness(
+  model: Exclude<ModelSource, OpenaiCompatibleSource>,
+  options?: PiHarnessOptions,
+): PiOtherHarness;
+// A source chosen at runtime may be OpenAI-compatible, so `compat` stays allowed and is checked on call.
+function piHarness<M extends ModelSource>(
+  model: M,
+  options?: PiHarnessOptions & {
+    compat?: OpenaiCompatibleSource extends M ? Partial<PiOpenaiCompatibleOptions> : never;
+  },
+): PiHarness;
+function piHarness(
+  model: ModelSource,
+  options: PiHarnessOptions & { compat?: Partial<PiOpenaiCompatibleOptions> } = {},
+): PiHarness {
+  const { compat, ...harnessOptions } = options;
+  if (model.kind === "openai-compatible") {
+    return {
+      kind: "pi",
+      model,
+      ...harnessOptions,
+      compat: {
+        supportsDeveloperRole: compat?.supportsDeveloperRole ?? false,
+        supportsReasoningEffort: compat?.supportsReasoningEffort ?? false,
+      },
+    };
+  }
+  if (compat !== undefined)
+    throw new Error("Pi compatibility hints apply only to OpenAI-compatible model sources");
+  return { kind: "pi", model, ...harnessOptions };
+}
 
 /** Constructors for agent-harness descriptors. */
 export const harnesses = {
@@ -111,10 +153,5 @@ export const harnesses = {
   codex(model: string, options: Omit<CodexHarness, "kind" | "model"> = {}): CodexHarness {
     return { kind: "codex", model, ...options };
   },
-  pi(
-    model: ModelSource,
-    options: { thinking?: PiHarness["thinking"]; tools?: string[] } = {},
-  ): PiHarness {
-    return { kind: "pi", model, ...options };
-  },
+  pi: piHarness,
 } as const;

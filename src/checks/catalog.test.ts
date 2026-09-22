@@ -1,4 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { models } from "../blocks/agents/harness-config.ts";
 import { type Check, failedCheck, formatFailures, runChecks } from "./catalog.ts";
 import { doctorChecks, preflightChecks, type WorkflowRequires } from "./index.ts";
 
@@ -122,17 +123,51 @@ test("preflight installs only the harnesses declared by the workflow", () => {
   expect(ids).not.toContain("harness.pi-cli");
 });
 
-test("model-source requirements are included in preflight", () => {
-  expect(preflightIds({ models: ["openrouter"] })).toContain("model.openrouter-api-key");
+test("model-source requirements check the descriptor's exact credential", () => {
+  expect(
+    preflightIds({
+      models: [models.openrouter("model", { apiKeyEnv: "TEAM_OPENROUTER_KEY" })],
+    }),
+  ).toContain("model.team-openrouter-key");
+  expect(
+    preflightIds({
+      models: [models.openrouter("model", { apiKeyEnv: "TEAM_OPENROUTER_KEY" })],
+    }),
+  ).not.toContain("model.openrouter-api-key");
 });
 
-test("doctor checks the OpenRouter credential only when it is configured", () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
-  vi.stubEnv("OPENROUTER_API_KEY", "");
-  expect(doctorChecks().map((check) => check.id)).not.toContain("model.openrouter-api-key");
+test("preflight rejects a missing selected credential even when the default is present", async () => {
+  vi.stubEnv("TEAM_OPENROUTER_KEY", "");
+  vi.stubEnv("OPENROUTER_API_KEY", "unrelated-secret");
+  const report = await runChecks(
+    preflightChecks({
+      models: [models.openrouter("model", { apiKeyEnv: "TEAM_OPENROUTER_KEY" })],
+    }),
+  );
 
+  expect(report.ok).toBe(false);
+  expect(report.checks).toEqual([
+    expect.objectContaining({
+      id: "model.team-openrouter-key",
+      ok: false,
+      reason: expect.stringContaining("TEAM_OPENROUTER_KEY is not set"),
+    }),
+  ]);
+  expect(JSON.stringify(report)).not.toContain("unrelated-secret");
+});
+
+test("model requirements reject kind-only declarations", () => {
+  const requires: WorkflowRequires = {
+    // @ts-expect-error preflight needs the full descriptor to select credentials and endpoint settings
+    models: ["openrouter"],
+  };
+  expect(requires.models).toEqual(["openrouter"]);
+});
+
+test("doctor does not infer a model credential without a descriptor", () => {
+  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
   vi.stubEnv("OPENROUTER_API_KEY", "configured");
-  expect(doctorChecks().map((check) => check.id)).toContain("model.openrouter-api-key");
+  expect(doctorChecks().map((check) => check.id)).not.toContain("model.openrouter-api-key");
 });
 
 test("doctor omits checks that require a call-site model descriptor", () => {

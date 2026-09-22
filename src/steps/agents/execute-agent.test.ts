@@ -28,6 +28,7 @@ import {
   executeAgent,
 } from "./execute-agent.ts";
 import type { PiExecutionOptions } from "./harnesses/pi.ts";
+import { planPiModel } from "./harnesses/pi-model.ts";
 import { makeTmpDir, removeTmpDir } from "./harnesses/test-fixtures.ts";
 
 // The settings look for the CLI eagerly, so these tests would need a codex
@@ -657,8 +658,9 @@ test("pi ask executes its nested model with isolated discovery and returns execu
     baseUrl: "http://127.0.0.1:1234/v1",
     model: "local-model",
   });
+  const harness = harnesses.pi(source, { thinking: "medium" });
   const wire = buildAskAgentRequest({
-    harness: harnesses.pi(source, { thinking: "medium" }),
+    harness,
     prompt: "judge it",
     output: verdict,
   });
@@ -669,7 +671,7 @@ test("pi ask executes its nested model with isolated discovery and returns execu
 
   const result = await agentStep(wire, { workflowRunId: "run-pi" }, deps);
 
-  expect(captured.piHome).toEqual({ runId: "run-pi", model: source });
+  expect(captured.piHome).toEqual({ runId: "run-pi", model: planPiModel(harness) });
   expect(captured.piOptions?.args).toEqual([
     "--mode",
     "json",
@@ -734,6 +736,25 @@ test("pi ask rejects missing nested authentication before executing Pi", async (
   expect(captured.piOptions).toBeUndefined();
 });
 
+test("pi maps only the selected OpenRouter credential to the provider variable", async () => {
+  vi.stubEnv("TEAM_OPENROUTER_KEY", "selected-secret");
+  vi.stubEnv("OPENROUTER_API_KEY", "unrelated-secret");
+  const wire = buildAskAgentRequest({
+    harness: harnesses.pi(
+      models.openrouter("openai/gpt-oss", { apiKeyEnv: "TEAM_OPENROUTER_KEY" }),
+    ),
+    prompt: "hello",
+  });
+  const { deps, captured } = makeDeps({}, { piRequestChecks: true });
+
+  await agentStep(wire, { workflowRunId: "run-pi-custom-key" }, deps);
+
+  expect(captured.piOptions?.env.OPENROUTER_API_KEY).toBe("selected-secret");
+  expect(captured.piOptions?.env).not.toHaveProperty("TEAM_OPENROUTER_KEY");
+  expect(JSON.stringify(wire)).not.toContain("selected-secret");
+  expect(JSON.stringify(captured.piHome)).not.toContain("selected-secret");
+});
+
 test("pi run mints and records a matching session with tools in the worktree", async () => {
   const source = models.openaiCompatible({
     name: "studio",
@@ -793,14 +814,15 @@ test("pi run returns a stale resume marker before spawning Pi", async () => {
 test("pi run resumes only after finding the real session file", async () => {
   const sessionId = "existing-session";
   const source = models.openrouter("openai/gpt-oss");
+  const harness = harnesses.pi(source);
   const wire = buildAgentRequest({
-    harness: harnesses.pi(source),
+    harness,
     cwd: worktree,
     prompt: "continue",
     resume: { harness: "pi", id: sessionId },
   });
   const { deps, captured, piDeps } = makeDeps();
-  const home = piDeps.ensurePiHome("run-pi-resume", source);
+  const home = piDeps.ensurePiHome("run-pi-resume", planPiModel(harness));
   writeFileSync(path.join(home, "sessions", `2026-09-21T00-00-00_${sessionId}.jsonl`), "");
   piDeps.executePi = async (options) => {
     captured.piOptions = options;

@@ -2,7 +2,14 @@ import { afterEach, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { askModel } from "../../blocks/agents/ask-model.ts";
 import { harnesses, models } from "../../blocks/agents/harness-config.ts";
-import { askJev, choice, type JevQuestions, score, yesNo } from "../../blocks/agents/jev.ts";
+import {
+  type AskJevOptions,
+  askJev,
+  choice,
+  type JevQuestions,
+  score,
+  yesNo,
+} from "../../blocks/agents/jev.ts";
 import { buildAskAgentRequest, buildModelRequest } from "../../blocks/agents/plan.ts";
 import { drivers } from "./drivers/index.ts";
 import { defaultAgentExecutionDependencies } from "./execute-agent.ts";
@@ -56,21 +63,20 @@ test("askJev rejects a non-decision model by name", async () => {
   );
 });
 
-test("askJev rejects a model kind whose driver has no decision capability", async () => {
-  await expect(
-    executeJev(
-      {
-        model: models.openaiCompatible({
-          name: "local",
-          baseUrl: "http://127.0.0.1:1234/v1",
-          model: "local-chat",
-        }),
-        state: "evidence",
-        questions: { match: yesNo("Does it match?") },
-      },
-      { workflowRunId: "run-1" },
-    ),
-  ).rejects.toThrow("local-chat cannot be used with askJev");
+test("executeJev rejects a durable payload whose model has no decision driver", async () => {
+  const stalePayload = {
+    model: models.openaiCompatible({
+      name: "old-local-model",
+      baseUrl: "http://localhost:1234/v1",
+      model: "local-model",
+    }),
+    state: "evidence",
+    questions: { match: yesNo("Does it match?") },
+  } as unknown as AskJevOptions<{ match: ReturnType<typeof yesNo> }>;
+
+  await expect(executeJev(stalePayload, { workflowRunId: "old-run" })).rejects.toThrow(
+    "local-model cannot be used with askJev: no decision driver exists",
+  );
 });
 
 test("askJev rejects cyclic state before calling the provider", async () => {
@@ -355,9 +361,9 @@ test("an OpenAI-compatible source answers structured requests without requiring 
         name: "north-desktop",
         baseUrl: "http://localhost:1234/v1",
         model: "served-model",
-        compat: { supportsDeveloperRole: true, supportsReasoningEffort: true },
       }),
       prompt: "Return ok true.",
+      system: "Follow the instructions.",
       output: verdict,
     },
     (wire) =>
@@ -376,17 +382,21 @@ test("an OpenAI-compatible source answers structured requests without requiring 
     baseURL: "http://localhost:1234/v1",
     name: "north-desktop",
     supportsStructuredOutputs: true,
-    supportsDeveloperRole: true,
-    supportsReasoningEffort: true,
   });
   expect(requests).toHaveLength(2);
   const request = requests[1];
   expect(String(request?.input)).toBe("http://localhost:1234/v1/chat/completions");
   expect(new Headers(request?.init?.headers).has("authorization")).toBe(false);
-  expect(JSON.parse(String(request?.init?.body))).toMatchObject({
+  const body = JSON.parse(String(request?.init?.body)) as Record<string, unknown>;
+  expect(body).toMatchObject({
     model: "served-model",
     response_format: { type: "json_schema", json_schema: { strict: true } },
+    messages: [
+      { role: "system", content: "Follow the instructions." },
+      { role: "user", content: "Return ok true." },
+    ],
   });
+  expect(body).not.toHaveProperty("reasoning_effort");
 });
 
 test("an OpenAI-compatible source uses only its optional named credential", async () => {
@@ -432,7 +442,7 @@ test("an OpenAI-compatible source uses only its optional named credential", asyn
     drivers["openai-compatible"]
       .requestChecks(buildModelRequest({ model: source, prompt: "x" }))
       .map((check) => check.id),
-  ).toEqual(["model.openai-compatible-runtime", "model.local-model-key"]);
+  ).toEqual(["model.openai-compatible-secured-server", "model.local-model-key"]);
   const withoutKey = buildModelRequest({
     model: models.openaiCompatible({
       name: "open-server",
@@ -443,12 +453,13 @@ test("an OpenAI-compatible source uses only its optional named credential", asyn
   });
   expect(drivers["openai-compatible"].envAllowlist(withoutKey)).toEqual([]);
   expect(drivers["openai-compatible"].requestChecks(withoutKey).map((check) => check.id)).toEqual([
-    "model.openai-compatible-runtime",
+    "model.openai-compatible-open-server",
   ]);
 });
 
 test("OpenRouter answers one structured request directly", async () => {
   vi.stubEnv("OPENAI_API_KEY", "test-key");
+  vi.stubEnv("OPENROUTER_API_KEY", "unrelated-key");
   const requests: Array<{ input: Parameters<typeof fetch>[0]; init?: RequestInit }> = [];
   vi.stubGlobal("fetch", async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     requests.push({ input, init });
@@ -513,19 +524,21 @@ test("OpenRouter answers one structured request directly", async () => {
 
 test("OpenRouter names the missing descriptor credential and its repair", async () => {
   vi.stubEnv("TEAM_OPENROUTER_KEY", "");
+  vi.stubEnv("OPENROUTER_API_KEY", "unrelated-secret");
 
-  await expect(
-    executeModel(
-      buildModelRequest({
-        model: models.openrouter("google/gemini-2.5-flash-lite", {
-          apiKeyEnv: "TEAM_OPENROUTER_KEY",
-        }),
-        prompt: "Return ok true.",
-        output: verdict,
+  const error = await executeModel(
+    buildModelRequest({
+      model: models.openrouter("google/gemini-2.5-flash-lite", {
+        apiKeyEnv: "TEAM_OPENROUTER_KEY",
       }),
-      { workflowRunId: "run-1" },
-    ),
-  ).rejects.toThrow(
+      prompt: "Return ok true.",
+      output: verdict,
+    }),
+    { workflowRunId: "run-1" },
+  ).catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(Error);
+  expect(String(error)).toMatch(
     /TEAM_OPENROUTER_KEY credential: TEAM_OPENROUTER_KEY is not set.*set TEAM_OPENROUTER_KEY in the factory repo's \.env/s,
   );
+  expect(String(error)).not.toContain("unrelated-secret");
 });

@@ -18,26 +18,23 @@ import type {
   EvaluationGeneration,
 } from "./types.ts";
 
-const DEFAULT_API_KEY_ENV = "OPENROUTER_API_KEY";
-
-function descriptor(request?: DriverRequest): OpenrouterSource | undefined {
-  if (request === undefined || !("model" in request) || request.model.kind !== "openrouter")
-    return undefined;
+function descriptor(request: DriverRequest): OpenrouterSource | undefined {
+  if (!("model" in request) || request.model.kind !== "openrouter") return undefined;
   return request.model;
 }
 
-function apiKeyEnv(request?: DriverRequest): string {
-  return descriptor(request)?.apiKeyEnv ?? DEFAULT_API_KEY_ENV;
-}
-
 // Plain asks always reach OpenRouter; a decision reaches it only on a jev-class model.
-function acceptsRequest(request: DriverRequest | undefined): boolean {
-  if (request === undefined || !("questions" in request)) return true;
+function acceptsRequest(request: DriverRequest): boolean {
+  if (!("questions" in request)) return true;
   const source = descriptor(request);
   return (
     source !== undefined &&
     (source.model === "~typesafe/jev-latest" || source.model.startsWith("typesafe/jev-"))
   );
+}
+
+function descriptorChecks(source: OpenrouterSource) {
+  return [modelApiKeyCheck(source.apiKeyEnv)];
 }
 
 async function ask(request: AgentRequest | ModelRequest, context: DriverContext) {
@@ -245,10 +242,16 @@ export const openrouterDriver = {
   family: "model",
   ask,
   decide,
-  installationChecks: () => [modelApiKeyCheck(DEFAULT_API_KEY_ENV)],
-  requestChecks: (request) =>
-    acceptsRequest(request) ? [modelApiKeyCheck(apiKeyEnv(request))] : [],
-  envAllowlist: (request?: DriverRequest) => [apiKeyEnv(request)],
+  installationChecks: () => [],
+  descriptorChecks,
+  requestChecks: (request) => {
+    const source = descriptor(request);
+    return acceptsRequest(request) && source !== undefined ? descriptorChecks(source) : [];
+  },
+  envAllowlist: (request: DriverRequest) => {
+    const source = descriptor(request);
+    return source === undefined ? [] : [source.apiKeyEnv];
+  },
   docsAnchor: "openrouter",
   displayName: "OpenRouter",
 } satisfies Driver<"openrouter">;

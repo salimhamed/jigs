@@ -5,7 +5,7 @@ import type {
   LanguageModel,
   OutputInterface,
 } from "ai";
-import type { HarnessKind, ModelKind } from "../../../blocks/agents/harness-config.ts";
+import type { HarnessKind, ModelKind, ModelSource } from "../../../blocks/agents/harness-config.ts";
 import type { AskJevOptions, JevAnswers, JevQuestions } from "../../../blocks/agents/jev.ts";
 import type { AgentRequest, ModelRequest } from "../../../blocks/agents/plan.ts";
 import type { ModelGeneration } from "../../../blocks/agents/result.ts";
@@ -56,9 +56,10 @@ export interface Driver<K extends HarnessKind | ModelKind> {
     context: DriverContext,
   ): Promise<DecisionGeneration<QUESTIONS>>;
   installationChecks(): Check[];
+  descriptorChecks?(source: Extract<ModelSource, { kind: K }>): Check[];
   requestChecks(request: DriverRequest): Check[];
   jitChecks?(request: AgentRequest): Check[];
-  envAllowlist(request?: DriverRequest): readonly string[];
+  envAllowlist(request: DriverRequest): readonly string[];
   sessionPointer?: { providerKey: string; field: string };
   docsAnchor: string;
   displayName: string;

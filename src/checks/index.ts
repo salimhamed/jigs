@@ -1,4 +1,4 @@
-import type { ModelKind } from "../blocks/agents/harness-config.ts";
+import type { AskableModelSource } from "../blocks/agents/harness-config.ts";
 import type { AgentRequest } from "../blocks/agents/plan.ts";
 import { defaultMergePolicy, readFactoryConfig } from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";
@@ -69,7 +69,7 @@ export interface WorkflowRequires {
   integrations?: Integration[];
   bindings?: string[];
   harnesses?: HarnessKind[];
-  models?: ModelKind[];
+  models?: AskableModelSource[];
   aws?: true;
 }
 
@@ -114,9 +114,10 @@ export function preflightChecks(
     ...(integrations.includes("github") ? githubChecks() : []),
     ...bindingChecks({ factoryRoot, names: bindings }),
     ...harnessChecks(requires.harnesses ?? []),
-    ...(requires.models ?? []).flatMap((kind) => {
-      const driver = driverFor(kind);
-      return driver === undefined ? [missingDriverCheck(kind)] : driver.installationChecks();
+    ...(requires.models ?? []).flatMap((source) => {
+      const driver = driverFor(source.kind);
+      if (driver === undefined) return [missingDriverCheck(source.kind)];
+      return [...driver.installationChecks(), ...(driver.descriptorChecks?.(source) ?? [])];
     }),
     ...(requires.aws ? [awsCredentialsCheck()] : []),
   ];
@@ -135,15 +136,9 @@ export function doctorChecks(): Check[] {
     ...(integrations.includes("linear") ? linearWebhookChecks({ factoryRoot }) : []),
     ...bindingChecks({ factoryRoot }),
     ...webhookChecks({ factoryRoot }),
-    ...Object.values(drivers).flatMap((driver) => {
-      const configured =
-        driver.family === "harness" ||
-        driver.envAllowlist().some((variable) => {
-          const value = process.env[variable];
-          return value !== undefined && value !== "";
-        });
-      return configured ? driver.installationChecks() : [];
-    }),
+    ...Object.values(drivers).flatMap((driver) =>
+      driver.family === "harness" ? driver.installationChecks() : [],
+    ),
     ...(profile !== undefined && profile !== "" ? [awsCredentialsCheck()] : []),
   ];
 }
