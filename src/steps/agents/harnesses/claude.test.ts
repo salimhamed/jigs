@@ -1,5 +1,18 @@
-import { expect, test } from "vitest";
-import { claudeStepSettings } from "../drivers/claude-support.ts";
+import type { SpawnedProcess } from "ai-sdk-provider-claude-code";
+import { afterEach, expect, test, vi } from "vitest";
+import { claudeProcessSpawner, claudeStepSettings } from "../drivers/claude-support.ts";
+
+const boundaries = vi.hoisted(() => ({ spawn: vi.fn() }));
+
+vi.mock("node:child_process", () => ({ spawn: boundaries.spawn }));
+
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
+function fakeChild() {
+  return { process: "fake" } as unknown as SpawnedProcess;
+}
 
 test("claudeStepSettings force-merges the invariants over caller options", () => {
   const settings = claudeStepSettings({
@@ -15,6 +28,43 @@ test("claudeStepSettings force-merges the invariants over caller options", () =>
   expect(settings.allowDangerouslySkipPermissions).toBe(true);
   expect(settings.cwd).toBe("/worktree");
   expect(settings.pathToClaudeCodeExecutable).toBe("/opt/claude");
+  expect(settings.spawnClaudeCodeProcess).toBeTypeOf("function");
+});
+
+test("the Claude process seam reapplies credential isolation after provider assembly", () => {
+  const child = fakeChild();
+  boundaries.spawn.mockReturnValue(child);
+  const signal = new AbortController().signal;
+  const spawnClaude = claudeProcessSpawner(["EXPLICIT_API_KEY"]);
+
+  const result = spawnClaude({
+    command: "/opt/claude",
+    args: ["--output-format", "stream-json"],
+    cwd: "/worktree",
+    signal,
+    env: {
+      PATH: "/usr/bin",
+      HOME: "/home/tester",
+      AWS_SECRET_ACCESS_KEY: "aws-secret",
+      ANTHROPIC_API_KEY: "anthropic-secret",
+      EXPLICIT_API_KEY: "allowed-secret",
+      CLAUDE_CODE_ENTRYPOINT: "sdk-ts",
+    },
+  });
+
+  expect(result).toBe(child);
+  expect(boundaries.spawn).toHaveBeenCalledWith("/opt/claude", ["--output-format", "stream-json"], {
+    cwd: "/worktree",
+    env: {
+      PATH: "/usr/bin",
+      HOME: "/home/tester",
+      EXPLICIT_API_KEY: "allowed-secret",
+      CLAUDE_CODE_ENTRYPOINT: "sdk-ts",
+    },
+    signal,
+    stdio: ["pipe", "pipe", "inherit"],
+    windowsHide: true,
+  });
 });
 
 test("claudeStepSettings resolves the executable when not supplied", () => {

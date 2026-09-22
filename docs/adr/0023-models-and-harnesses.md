@@ -20,7 +20,11 @@ harnesses; `askModel` and `askJev` take model sources.
   AI SDK `LanguageModel` for it; Pi itself owns its agent loop.
 - Subscription logins remain first-class for harnesses. API keys are never
   inherited globally: each driver explicitly allowlists the credentials its
-  subprocess or API client may receive.
+  subprocess or API client may receive. The Claude driver reapplies that
+  policy at the provider's process-launch hook because the provider assembles
+  its final child environment from the host after accepting jigs' environment.
+  This isolates environment credentials, not credential files available to
+  the same operating-system user.
 - The Pi and model-source descriptor types can exist before their drivers. An
   attempted execution fails explicitly with the unregistered kind.
 

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ClaudeCodeSettings } from "ai-sdk-provider-claude-code";
@@ -134,6 +134,42 @@ function claudeSettingsOf(captured: Captured): ClaudeCodeSettings {
   return settings;
 }
 
+async function envSeenByClaude(settings: ClaudeCodeSettings) {
+  const spawnClaude = settings.spawnClaudeCodeProcess;
+  if (spawnClaude === undefined) throw new Error("no Claude process spawner captured");
+  const output = path.join(tmp, `claude-env-${crypto.randomUUID()}.json`);
+  const child = spawnClaude({
+    command: process.execPath,
+    args: [
+      "-e",
+      `require("node:fs").writeFileSync(process.argv[1], JSON.stringify({
+          aws: "AWS_SECRET_ACCESS_KEY" in process.env,
+          anthropic: "ANTHROPIC_API_KEY" in process.env,
+          path: process.env.PATH,
+          entrypoint: process.env.CLAUDE_CODE_ENTRYPOINT,
+        }))`,
+      output,
+    ],
+    cwd: worktree,
+    env: { ...process.env, CLAUDE_CODE_ENTRYPOINT: "sdk-ts" },
+    signal: new AbortController().signal,
+  });
+  const exited = new Promise<void>((resolve, reject) => {
+    child.once("error", reject);
+    child.once("exit", (code, signal) => {
+      if (code === 0) resolve();
+      else reject(new Error(`Claude fixture exited with code ${code} and signal ${signal}`));
+    });
+  });
+  await exited;
+  return JSON.parse(readFileSync(output, "utf8")) as {
+    aws: boolean;
+    anthropic: boolean;
+    path?: string;
+    entrypoint?: string;
+  };
+}
+
 const verdict = z.object({ ok: z.boolean() });
 
 test("claude agent step hydrates from wire config with the harness invariants forced", async () => {
@@ -170,8 +206,42 @@ test("claude agent step hydrates from wire config with the harness invariants fo
     probe: { type: "stdio", command: "node", args: ["p.mjs"], env: { T: "1" } },
     remote: { type: "http", url: "https://mcp.example", headers: { a: "b" } },
   });
+  expect(settings.spawnClaudeCodeProcess).toBeTypeOf("function");
   expect(captured.options?.system).toBeUndefined();
   expect(captured.homeRunIds).toEqual([]);
+});
+
+test("both Claude ask and run isolate credentials at the actual process seam", async () => {
+  vi.stubEnv("AWS_SECRET_ACCESS_KEY", "synthetic-aws-secret");
+  vi.stubEnv("ANTHROPIC_API_KEY", "synthetic-anthropic-secret");
+  const ask = makeDeps();
+  await agentStep(
+    buildAskAgentRequest({ harness: harnesses.claude("sonnet"), prompt: "answer" }),
+    { workflowRunId: "run-ask" },
+    ask.deps,
+  );
+
+  const run = makeDeps();
+  await agentStep(
+    buildAgentRequest({
+      harness: harnesses.claude("sonnet"),
+      cwd: worktree,
+      prompt: "implement",
+    }),
+    { workflowRunId: "run-agent" },
+    run.deps,
+  );
+
+  for (const settings of [claudeSettingsOf(ask.captured), claudeSettingsOf(run.captured)]) {
+    await expect(envSeenByClaude(settings)).resolves.toEqual({
+      aws: false,
+      anthropic: false,
+      path: process.env.PATH,
+      entrypoint: "sdk-ts",
+    });
+  }
+  expect(process.env.AWS_SECRET_ACCESS_KEY).toBe("synthetic-aws-secret");
+  expect(process.env.ANTHROPIC_API_KEY).toBe("synthetic-anthropic-secret");
 });
 
 test("codex agent step runs on the app-server under the managed home with fixed policies", async () => {
