@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.45.0](https://github.com/salimhamed/jigs/compare/jigs-v0.44.2...jigs-v0.45.0) (2026-09-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove jigs-owned token usage and cost reporting ([#335](https://github.com/salimhamed/jigs/issues/335))
+
+### Features
+
+* remove jigs-owned token usage and cost reporting ([#335](https://github.com/salimhamed/jigs/issues/335)) ([920597e](https://github.com/salimhamed/jigs/commit/920597e7a578b0c8181398863a313ec9b17e3c21))
+
 ## [0.44.2](https://github.com/salimhamed/jigs/compare/jigs-v0.44.1...jigs-v0.44.2) (2026-09-21)
 
 
