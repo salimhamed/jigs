@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.47.1
+# @salimhamed/jigs v0.47.2
 
 Describe a worktree provisioned for a workflow run.
 
