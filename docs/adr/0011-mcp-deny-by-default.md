@@ -58,6 +58,9 @@ verified against the Codex source at `rust-v0.149.1`.
   callable (AGE-305, probe 6).
 - Amends ADR 0004's "skills/config reach agents through the worktree": MCP
   servers are the exception — declared per step, never repo-owned.
+- *Amendment (2026-09-22)*: "managed Codex home" is now an **invocation
+  home** — private, temporary configuration per invocation — plus a durable
+  per-run session store it links to.
 
 ## Considered options
 

@@ -61,8 +61,7 @@ export function createClaudeDriver(
     family: "harness",
     run: async (request, context): Promise<ExecutorGeneration> => {
       const harness = descriptor(request);
-      const resume = "resume" in request ? request.resume : undefined;
-      const cwd = request.cwd as string;
+      const { cwd, resume } = request;
       if (resume !== undefined && (await deps.sessionMessages(resume.id, cwd)).length === 0) {
         throw new AgentSessionError(`Claude session ${resume.id} is missing for ${cwd}`);
       }

@@ -6,7 +6,7 @@ import type { CheckResult } from "../../../checks/catalog.ts";
 // The load-bearing JIT guard. Codex auto-trusts a writable cwd — thread/start
 // persists a trust record, and agent steps all run under danger-full-access —
 // so a worktree's .codex/config.toml can declare mcp_servers even under the
-// managed home, which no sandbox policy prevents. This callable check is what
+// invocation home, which no sandbox policy prevents. This callable check is what
 // makes deny-by-default hold. A real TOML parse, not a regex: TOML admits too
 // many spellings and a false negative here defeats deny-by-default entirely.
 

@@ -11,10 +11,10 @@ import { afterEach, beforeEach, expect, test } from "vitest";
 import { harnesses, models } from "../../../blocks/agents/harness-config.ts";
 import { writePiSubmitResultExtension } from "./pi-extension.ts";
 import {
-  managedPiHomePath,
+  piRunStatePath,
   piSessionFile,
-  prepareManagedPiHome,
-  removeManagedPiHome,
+  preparePiInvocationHome,
+  removePiRunState,
 } from "./pi-home.ts";
 import { planPiModel } from "./pi-model.ts";
 import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
@@ -30,7 +30,7 @@ afterEach(() => {
 
 test("parallel Pi invocations have private configuration and shared durable sessions", () => {
   const options = { baseDir: path.join(tmp, "pi-homes") };
-  const local = prepareManagedPiHome(
+  const local = preparePiInvocationHome(
     "run-1",
     planPiModel(
       harnesses.pi(
@@ -45,7 +45,7 @@ test("parallel Pi invocations have private configuration and shared durable sess
     ),
     options,
   );
-  const router = prepareManagedPiHome(
+  const router = preparePiInvocationHome(
     "run-1",
     planPiModel(harnesses.pi(models.openrouter("openai/gpt-oss"))),
     options,
@@ -74,7 +74,7 @@ test("parallel Pi invocations have private configuration and shared durable sess
   expect(readFileSync(session, "utf8")).toBe("durable");
 
   router.cleanup();
-  const afterRestart = prepareManagedPiHome(
+  const afterRestart = preparePiInvocationHome(
     "run-1",
     planPiModel(harnesses.pi(models.openrouter("openai/gpt-oss"))),
     options,
@@ -88,10 +88,14 @@ test("Codex-backed Pi configuration links the real login only for that invocatio
   const realAuthPath = path.join(tmp, "operator-pi", "auth.json");
   mkdirSync(path.dirname(realAuthPath), { recursive: true });
   writeFileSync(realAuthPath, '{"openai-codex":{"type":"oauth"}}');
-  const prepared = prepareManagedPiHome("codex-run", planPiModel(harnesses.pi(models.openaiCodex("gpt-5.5"))), {
-    baseDir: path.join(tmp, "pi-homes"),
-    realAuthPath,
-  });
+  const prepared = preparePiInvocationHome(
+    "codex-run",
+    planPiModel(harnesses.pi(models.openaiCodex("gpt-5.5"))),
+    {
+      baseDir: path.join(tmp, "pi-homes"),
+      realAuthPath,
+    },
+  );
 
   const authPath = path.join(prepared.home, "auth.json");
   expect(lstatSync(authPath).isSymbolicLink()).toBe(true);
@@ -108,15 +112,23 @@ test("a missing real login fails before creating durable Pi state", () => {
   };
 
   expect(() =>
-    prepareManagedPiHome("run-1", planPiModel(models.openaiCodex("gpt-5.5")), options),
+    preparePiInvocationHome(
+      "run-1",
+      planPiModel(harnesses.pi(models.openaiCodex("gpt-5.5"))),
+      options,
+    ),
   ).toThrow(/no Pi openai-codex login found.*pi \/login/);
-  expect(existsSync(managedPiHomePath("run-1", options))).toBe(false);
+  expect(existsSync(piRunStatePath("run-1", options))).toBe(false);
 });
 
 test("Pi resumes only an exact durable session file", () => {
-  const prepared = prepareManagedPiHome("run-1", planPiModel(harnesses.pi(models.openrouter("openai/gpt-oss"))), {
-    baseDir: path.join(tmp, "pi-homes"),
-  });
+  const prepared = preparePiInvocationHome(
+    "run-1",
+    planPiModel(harnesses.pi(models.openrouter("openai/gpt-oss"))),
+    {
+      baseDir: path.join(tmp, "pi-homes"),
+    },
+  );
   writeFileSync(path.join(prepared.sessionDir, "2026_exact.jsonl"), "{}");
   writeFileSync(path.join(prepared.sessionDir, "2026_exact-extra.jsonl"), "{}");
 
@@ -127,9 +139,9 @@ test("Pi resumes only an exact durable session file", () => {
   prepared.cleanup();
 });
 
-test("removeManagedPiHome deletes durable sessions with the run", () => {
+test("removePiRunState deletes durable sessions with the run", () => {
   const options = { baseDir: path.join(tmp, "pi-homes") };
-  const prepared = prepareManagedPiHome(
+  const prepared = preparePiInvocationHome(
     "run-1",
     planPiModel(harnesses.pi(models.openrouter("openai/gpt-oss"))),
     options,
@@ -137,7 +149,7 @@ test("removeManagedPiHome deletes durable sessions with the run", () => {
   writeFileSync(path.join(prepared.sessionDir, "session.jsonl"), "durable until teardown");
   prepared.cleanup();
 
-  removeManagedPiHome("run-1", options);
+  removePiRunState("run-1", options);
 
-  expect(existsSync(managedPiHomePath("run-1", options))).toBe(false);
+  expect(existsSync(piRunStatePath("run-1", options))).toBe(false);
 });

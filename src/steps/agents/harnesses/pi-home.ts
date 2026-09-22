@@ -25,19 +25,19 @@ export interface PreparedPiHome {
   cleanup(): void;
 }
 
-/** Return the operator login file shared with managed Pi homes. */
+/** Return the operator login file linked into Pi invocation homes. */
 export function realPiAuthPath(home: string = homedir()): string {
   return path.join(home, ".pi", "agent", "auth.json");
 }
 
 /** Return the durable per-run Pi state path. */
-export function managedPiHomePath(runId: string, options: PiHomeOptions = {}): string {
+export function piRunStatePath(runId: string, options: PiHomeOptions = {}): string {
   return path.join(options.baseDir ?? path.join(jigsDataDir(), "pi-homes"), runId);
 }
 
-/** Remove the managed Pi home after all of a run's worktrees are released. */
-export function removeManagedPiHome(runId: string, options: PiHomeOptions = {}): void {
-  rmSync(managedPiHomePath(runId, options), { recursive: true, force: true });
+/** Remove durable Pi sessions after all of a run's worktrees are released. */
+export function removePiRunState(runId: string, options: PiHomeOptions = {}): void {
+  rmSync(piRunStatePath(runId, options), { recursive: true, force: true });
 }
 
 /** Return the durable directory that holds a run's Pi sessions. */
@@ -56,7 +56,7 @@ export function piSessionFile(sessionDir: string, sessionId: string): string | u
 }
 
 /** Prepare private invocation configuration beside durable per-run sessions. */
-export function prepareManagedPiHome(
+export function preparePiInvocationHome(
   runId: string,
   plan: PiModelPlan,
   options: PiHomeOptions = {},
@@ -68,7 +68,7 @@ export function prepareManagedPiHome(
     throw new Error(`no Pi openai-codex login found at ${realAuthPath} — run: pi /login`);
   }
 
-  const runState = managedPiHomePath(runId, options);
+  const runState = piRunStatePath(runId, options);
   const sessionDir = piSessionsDir(runState);
   mkdirSync(sessionDir, { recursive: true });
   const invocationBaseDir = options.invocationBaseDir ?? path.join(runState, "invocations");

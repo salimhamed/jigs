@@ -11,10 +11,20 @@ import { MIN_PI_VERSION, resolvePiExecutable } from "../harnesses/executables.ts
 import type { PiExecutionOptions } from "../harnesses/pi.ts";
 import { executePi } from "../harnesses/pi.ts";
 import { writePiSubmitResultExtension } from "../harnesses/pi-extension.ts";
-import { type PreparedPiHome, piSessionFile, prepareManagedPiHome } from "../harnesses/pi-home.ts";
+import {
+  type PreparedPiHome,
+  piSessionFile,
+  preparePiInvocationHome,
+} from "../harnesses/pi-home.ts";
 import { type PiModelPlan, planPiModel } from "../harnesses/pi-model.ts";
 import { AgentSessionError } from "../session-error.ts";
-import type { Driver, DriverContext, DriverRequest, ExecutorGeneration } from "./types.ts";
+import type {
+  Driver,
+  DriverContext,
+  DriverRequest,
+  ExecutorGeneration,
+  RunRequest,
+} from "./types.ts";
 
 function descriptor(request: AgentRequest): PiHarness {
   if (request.harness.kind !== "pi") throw new JigsError("the Pi driver requires a Pi request");
@@ -55,7 +65,7 @@ export interface PiDriverDependencies {
 }
 
 const defaultDependencies: PiDriverDependencies = {
-  preparePiHome: (runId, source) => prepareManagedPiHome(runId, source),
+  preparePiHome: (runId, source) => preparePiInvocationHome(runId, source),
   executePi,
 };
 
@@ -102,11 +112,11 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
     }
   }
 
-  async function run(request: AgentRequest, context: DriverContext): Promise<ExecutorGeneration> {
+  async function run(request: RunRequest, context: DriverContext): Promise<ExecutorGeneration> {
     const harness = descriptor(request);
     const model = planPiModel(harness);
     const prepared = deps.preparePiHome(context.metadata.workflowRunId, model);
-    const resume = "resume" in request ? request.resume : undefined;
+    const { resume } = request;
     const sessionId = resume?.id ?? `jigs-${randomUUID()}`;
     try {
       const sessionFile =
@@ -140,7 +150,7 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
           ...(extension === undefined ? [] : ["-e", extension]),
           promptFor(request),
         ],
-        cwd: request.cwd as string,
+        cwd: request.cwd,
         env: { ...modelEnvironment(model, context.env), PI_CODING_AGENT_DIR: prepared.home },
       });
       const reported = generation.providerMetadata?.pi?.sessionId;

@@ -12,7 +12,7 @@ import {
   executeAgent,
 } from "../../execute-agent.ts";
 import { executePi } from "../pi.ts";
-import { prepareManagedPiHome } from "../pi-home.ts";
+import { preparePiInvocationHome } from "../pi-home.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { makeScratchRepo } from "./fixtures/live-env.ts";
 
@@ -32,7 +32,7 @@ beforeAll(() => {
   tmp = makeTmpDir();
   const pi = createPiDriver({
     preparePiHome: (runId, source) =>
-      prepareManagedPiHome(runId, source, { baseDir: path.join(tmp, "pi-homes") }),
+      preparePiInvocationHome(runId, source, { baseDir: path.join(tmp, "pi-homes") }),
     executePi,
   });
   deps = {

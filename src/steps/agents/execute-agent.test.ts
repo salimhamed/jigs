@@ -221,7 +221,7 @@ test("claude agent step hydrates from wire config with the harness invariants fo
   expect(captured.homeRunIds).toEqual([]);
 });
 
-test("codex agent step runs on the app-server under the managed home with fixed policies", async () => {
+test("codex agent step runs on the app-server under an invocation home with fixed policies", async () => {
   const wire = buildAgentRequest({
     harness: harnesses.codex("gpt-5.5", {
       effort: "xhigh",
@@ -989,7 +989,10 @@ test("a Pi execution failure during resume still throws", async () => {
     resume: { harness: "pi", id: sessionId },
   });
   const { deps, piDeps } = makeDeps();
-  const prepared = piDeps.preparePiHome("run-pi-execution-failure", planPiModel(source));
+  const prepared = piDeps.preparePiHome(
+    "run-pi-execution-failure",
+    planPiModel(harnesses.pi(source)),
+  );
   writeFileSync(path.join(prepared.sessionDir, `2026_${sessionId}.jsonl`), "");
   piDeps.executePi = async () => {
     throw new Error("Pi stopped after launch");
@@ -1010,7 +1013,10 @@ test("a resumed Pi session-id mismatch still throws after launch", async () => {
     resume: { harness: "pi", id: sessionId },
   });
   const { deps, piDeps } = makeDeps();
-  const prepared = piDeps.preparePiHome("run-pi-resume-mismatch", planPiModel(source));
+  const prepared = piDeps.preparePiHome(
+    "run-pi-resume-mismatch",
+    planPiModel(harnesses.pi(source)),
+  );
   writeFileSync(path.join(prepared.sessionDir, `2026_${sessionId}.jsonl`), "");
   piDeps.executePi = async () => ({
     text: "work already completed",
@@ -1104,7 +1110,7 @@ test("pi stale sessions take resumeOrRebuild's fresh arm", async () => {
   expect(result.session?.id).not.toBe("gone");
 });
 
-test("pi run honors JIT failure before creating its managed home or spawning", async () => {
+test("pi run honors JIT failure before creating its invocation home or spawning", async () => {
   const wire = buildAgentRequest({
     harness: harnesses.pi(models.openrouter("openai/gpt-oss")),
     cwd: worktree,

@@ -39,7 +39,7 @@ export interface PreparedCodexHome {
 }
 
 /** Return the durable per-run Codex state path. */
-export function managedCodexHomePath(runId: string, options: CodexHomeOptions = {}): string {
+export function codexRunStatePath(runId: string, options: CodexHomeOptions = {}): string {
   const base = options.baseDir ?? path.join(jigsDataDir(), "codex-homes");
   return path.join(base, runId);
 }
@@ -59,28 +59,21 @@ function rolloutFiles(directory: string): string[] {
   return files;
 }
 
-const MAX_ROLLOUT_METADATA_BYTES = 1024 * 1024;
+const ROLLOUT_METADATA_WINDOW = 64 * 1024;
 
-function rolloutMetadataLine(file: string): string | undefined {
+function rolloutMetadataLine(file: string): string {
+  const buffer = Buffer.allocUnsafe(ROLLOUT_METADATA_WINDOW);
   const descriptor = openSync(file, "r");
-  const chunks: Buffer[] = [];
-  let length = 0;
   try {
-    while (length < MAX_ROLLOUT_METADATA_BYTES) {
-      const chunk = Buffer.allocUnsafe(Math.min(8192, MAX_ROLLOUT_METADATA_BYTES - length));
-      const read = readSync(descriptor, chunk, 0, chunk.length, null);
-      if (read === 0)
-        return length === 0 ? undefined : Buffer.concat(chunks, length).toString("utf8");
-      const newline = chunk.subarray(0, read).indexOf(10);
-      if (newline !== -1) {
-        chunks.push(chunk.subarray(0, newline));
-        const line = Buffer.concat(chunks, length + newline).toString("utf8");
-        return line.endsWith("\r") ? line.slice(0, -1) : line;
-      }
-      chunks.push(chunk.subarray(0, read));
-      length += read;
+    const read = readSync(descriptor, buffer, 0, buffer.length, 0);
+    const newline = buffer.subarray(0, read).indexOf(10);
+    if (newline === -1) {
+      throw new Error(
+        `Codex rollout ${file} has no metadata line within its first ${ROLLOUT_METADATA_WINDOW} bytes`,
+      );
     }
-    return undefined;
+    const line = buffer.subarray(0, newline).toString("utf8");
+    return line.endsWith("\r") ? line.slice(0, -1) : line;
   } finally {
     closeSync(descriptor);
   }
@@ -91,7 +84,7 @@ export function codexSessionFile(sessionDir: string, threadId: string): string |
   for (const candidate of rolloutFiles(sessionDir)) {
     if (!path.basename(candidate).endsWith(`-${threadId}.jsonl`)) continue;
     const firstLine = rolloutMetadataLine(candidate);
-    if (firstLine === undefined || firstLine === "") continue;
+    if (firstLine === "") continue;
     try {
       const first = JSON.parse(firstLine) as { type?: unknown; payload?: { id?: unknown } };
       if (first.type === "session_meta" && first.payload?.id === threadId) return candidate;
@@ -103,7 +96,7 @@ export function codexSessionFile(sessionDir: string, threadId: string): string |
 }
 
 /** Prepare private Codex configuration linked to durable per-run rollouts. */
-export function prepareManagedCodexHome(
+export function prepareCodexInvocationHome(
   runId: string,
   options: CodexHomeOptions = {},
 ): PreparedCodexHome {
@@ -112,7 +105,7 @@ export function prepareManagedCodexHome(
     throw new Error(`no Codex login found at ${realAuthPath} — run: codex login`);
   }
 
-  const runState = managedCodexHomePath(runId, options);
+  const runState = codexRunStatePath(runId, options);
   const sessionDir = codexSessionsDir(runState);
   mkdirSync(sessionDir, { recursive: true });
   const invocationBaseDir = options.invocationBaseDir ?? path.join(runState, "invocations");
@@ -134,6 +127,6 @@ export function prepareManagedCodexHome(
 }
 
 /** Remove durable Codex sessions after all of a run's worktrees are released. */
-export function removeManagedCodexHome(runId: string, options: CodexHomeOptions = {}): void {
-  rmSync(managedCodexHomePath(runId, options), { recursive: true, force: true });
+export function removeCodexRunState(runId: string, options: CodexHomeOptions = {}): void {
+  rmSync(codexRunStatePath(runId, options), { recursive: true, force: true });
 }

@@ -22,6 +22,8 @@ export type EvaluationGeneration = {
   answers: Record<string, unknown>;
   providerMetadata?: Record<string, Record<string, unknown>> | null;
 };
+/** An agent request that runs in a worktree. */
+export type RunRequest = Extract<AgentRequest, { cwd: string }>;
 export type DriverRequest = AgentRequest | ModelRequest | AskJevOptions<JevQuestions>;
 
 export interface DriverDependencies {
@@ -50,7 +52,7 @@ export interface Driver<K extends HarnessKind | ModelKind> {
   kind: K;
   family: K extends HarnessKind ? "harness" : "model";
   ask?(request: AgentRequest | ModelRequest, context: DriverContext): Promise<ExecutorGeneration>;
-  run?(request: AgentRequest, context: DriverContext): Promise<ExecutorGeneration>;
+  run?(request: RunRequest, context: DriverContext): Promise<ExecutorGeneration>;
   decide?<const QUESTIONS extends JevQuestions>(
     request: AskJevOptions<QUESTIONS>,
     context: DriverContext,

@@ -6,10 +6,11 @@ import type { CodexHarness, McpServerConfig } from "../../../blocks/agents/harne
 import type { AgentRequest } from "../../../blocks/agents/plan.ts";
 import { codexAuthCheck, harnessRuntimeCheck } from "../../../checks/harnesses.ts";
 import { codexWorktreeConfigCheck } from "../../../checks/mcp.ts";
+import { JigsError } from "../../../errors.ts";
 import {
   codexSessionFile,
   type PreparedCodexHome,
-  prepareManagedCodexHome,
+  prepareCodexInvocationHome,
 } from "../harnesses/codex-home.ts";
 import { resolveCodexExecutable } from "../harnesses/executables.ts";
 import { codexExec, DEFAULT_MIN_CODEX_VERSION } from "../harnesses/index.ts";
@@ -19,7 +20,7 @@ import {
   codexExecStepSettings,
   withCodexAppServer,
 } from "./codex-support.ts";
-import type { Driver, DriverContext } from "./types.ts";
+import type { Driver, DriverContext, RunRequest } from "./types.ts";
 
 type CodexMcpServerConfig = NonNullable<CodexExecSettings["mcpServers"]>[string];
 function mcpServers(
@@ -44,7 +45,9 @@ function mcpServers(
   );
 }
 function descriptor(request: AgentRequest): CodexHarness {
-  return request.harness as CodexHarness;
+  if (request.harness.kind !== "codex")
+    throw new JigsError("the Codex driver requires a Codex request");
+  return request.harness;
 }
 
 export interface CodexDriverDependencies {
@@ -54,7 +57,7 @@ export interface CodexDriverDependencies {
 }
 
 const defaultDependencies: CodexDriverDependencies = {
-  prepareCodexHome: (runId) => prepareManagedCodexHome(runId),
+  prepareCodexHome: (runId) => prepareCodexInvocationHome(runId),
   sessionFile: codexSessionFile,
   withCodexAppServer,
 };
@@ -62,9 +65,9 @@ const defaultDependencies: CodexDriverDependencies = {
 export function createCodexDriver(
   deps: CodexDriverDependencies = defaultDependencies,
 ): Driver<"codex"> {
-  async function run(request: AgentRequest, context: DriverContext) {
+  async function run(request: RunRequest, context: DriverContext) {
     const harness = descriptor(request);
-    const resume = "resume" in request ? request.resume : undefined;
+    const { resume } = request;
     const prepared = deps.prepareCodexHome(context.metadata.workflowRunId);
     try {
       if (resume !== undefined && deps.sessionFile(prepared.sessionDir, resume.id) === undefined) {
@@ -77,7 +80,7 @@ export function createCodexDriver(
           model: provider(
             harness.model,
             codexAppServerStepSettings({
-              cwd: request.cwd as string,
+              cwd: request.cwd,
               codexHome: prepared.home,
               env: context.env,
               ...(harness.effort === undefined ? {} : { effort: harness.effort }),

@@ -61,9 +61,9 @@ async function render(prompt: string | (() => Promise<string>)): Promise<string>
 }
 
 /**
- * Resume the agent that did the work; failing that, run the same job in a
- * fresh context. The rebuild is a first-class path, never a degraded one:
- * both arms answer the same shape.
+ * Resume the agent that did the work; when the saved session is missing or
+ * unusable, run the same job in a fresh context. The rebuild is a first-class
+ * path, never a degraded one: both arms answer the same shape.
  */
 export async function resumeOrRebuild<T = undefined>(
   options: ResumeOrRebuildOptions<T>,

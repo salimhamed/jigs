@@ -57,6 +57,9 @@ didn't discriminate, and the rest of the ledger is lopsided:
   messages) or treat any resume failure as stale. The provider must be
   created per step and closed in `finally` (`createCodexAppServer()` /
   `provider.close()`), or the step process never exits.
+- *Amendment (2026-09-22)*: resume pointers are validated before launch.
+  Only a missing or incompatible session takes the rebuild path; any other
+  resume failure fails the execution.
 - *Amendment (ADR 0011 / AGE-294)*: MCP servers are the exception to
   "config reaches the agent through the worktree" — they are deny-by-default
   and declared per step (`strictMcpConfig` on Claude Code, a managed Codex
