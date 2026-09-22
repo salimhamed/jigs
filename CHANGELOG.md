@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.47.1](https://github.com/salimhamed/jigs/compare/jigs-v0.47.0...jigs-v0.47.1) (2026-09-22)
+
+
+### Bug Fixes
+
+* detect settled Pi completion ([f65f53b](https://github.com/salimhamed/jigs/commit/f65f53b9c2df2151ee20ebd7ac93549c5daa672a))
+
 ## [0.47.0](https://github.com/salimhamed/jigs/compare/jigs-v0.46.0...jigs-v0.47.0) (2026-09-22)
 
 
