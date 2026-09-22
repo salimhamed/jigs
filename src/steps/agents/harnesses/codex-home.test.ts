@@ -3,13 +3,12 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import {
   CURATED_CONFIG_TOML,
-  codexAuthLink,
   codexSessionFile,
   managedCodexHomePath,
   prepareManagedCodexHome,
   removeManagedCodexHome,
 } from "./codex-home.ts";
-import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
+import { makeTmpDir, managedCodexHomeState, removeTmpDir } from "./test-fixtures.ts";
 
 let tmp: string;
 let realAuthPath: string;
@@ -42,7 +41,7 @@ test("parallel Codex invocations have private config and one durable rollout sto
   expect(first.sessionDir).toBe(second.sessionDir);
   expect(readFileSync(path.join(first.home, "config.toml"), "utf8")).toBe(CURATED_CONFIG_TOML);
   expect(readFileSync(path.join(second.home, "config.toml"), "utf8")).toBe(CURATED_CONFIG_TOML);
-  expect(codexAuthLink(first.home)).toBe(realAuthPath);
+  expect(managedCodexHomeState(first.home).authLinkTarget).toBe(realAuthPath);
   expect(readlinkSync(path.join(first.home, "sessions"))).toBe(first.sessionDir);
 
   const stored = rollout(first.sessionDir, "0199-thread");
@@ -70,6 +69,23 @@ test("Codex accepts only a rollout whose filename and metadata exactly match", (
   expect(codexSessionFile(prepared.sessionDir, "0199-exact")).toBe(exact);
   expect(codexSessionFile(prepared.sessionDir, "0199-invalid")).toBeUndefined();
   expect(codexSessionFile(prepared.sessionDir, "0199")).toBeUndefined();
+  prepared.cleanup();
+});
+
+test("Codex rejects rollout metadata whose first record exceeds the read bound", () => {
+  const prepared = prepareManagedCodexHome("run-1", options);
+  const threadId = "0199-oversized";
+  const directory = path.join(prepared.sessionDir, "2026", "09", "21");
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(
+    path.join(directory, `rollout-${threadId}.jsonl`),
+    JSON.stringify({
+      type: "session_meta",
+      payload: { padding: "x".repeat(1024 * 1024), id: threadId },
+    }),
+  );
+
+  expect(codexSessionFile(prepared.sessionDir, threadId)).toBeUndefined();
   prepared.cleanup();
 });
 

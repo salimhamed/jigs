@@ -270,6 +270,10 @@ new head as unapproved.
   session state is the only "resume failed" outcome that permits rebuilt
   context. Model, network, tool and process failures remain ordinary execution
   failures. More recovery policies can be added when a workflow needs them.
+- **Eager orphaned-invocation cleanup.** Normal completion removes invocation
+  homes, and run-resource release removes the containing run state. A service
+  process crash can leave invocation directories until that release or manual
+  cleanup; add startup sweeping when observed accumulation justifies it.
 - **An effects log** (question posted, reply accepted, fix pushed) beside the
   resources record. Deferred until a workflow needs it.
 

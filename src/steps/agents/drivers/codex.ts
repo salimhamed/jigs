@@ -103,9 +103,10 @@ export function createCodexDriver(
 
   async function ask(request: AgentRequest, context: DriverContext) {
     const harness = descriptor(request);
-    const scratch = mkdtempSync(path.join(tmpdir(), "jigs-ask-"));
     const prepared = deps.prepareCodexHome(context.metadata.workflowRunId);
+    let scratch: string | undefined;
     try {
+      scratch = mkdtempSync(path.join(tmpdir(), "jigs-ask-"));
       return await context.deps.generateText({
         model: codexExec(
           harness.model,
@@ -122,7 +123,7 @@ export function createCodexDriver(
         ...(context.output === undefined ? {} : { output: context.output }),
       });
     } finally {
-      rmSync(scratch, { recursive: true, force: true });
+      if (scratch !== undefined) rmSync(scratch, { recursive: true, force: true });
       prepared.cleanup();
     }
   }

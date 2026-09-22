@@ -1,15 +1,15 @@
 import {
   type McpServerConfig as ClaudeMcpServerConfig,
-  getSessionInfo,
+  getSessionMessages,
 } from "ai-sdk-provider-claude-code";
 import type { ClaudeHarness, McpServerConfig } from "../../../blocks/agents/harness-config.ts";
-import type { AgentRequest } from "../../../blocks/agents/plan.ts";
 import { claudeAuthCheck, harnessRuntimeCheck } from "../../../checks/harnesses.ts";
+import { JigsError } from "../../../errors.ts";
 import { resolveClaudeExecutable } from "../harnesses/executables.ts";
 import { claudeCode } from "../harnesses/index.ts";
 import { AgentSessionError } from "../session-error.ts";
 import { claudeStepSettings } from "./claude-support.ts";
-import type { Driver, ExecutorGeneration } from "./types.ts";
+import type { Driver, DriverRequest, ExecutorGeneration } from "./types.ts";
 
 function mcpServers(
   servers: Record<string, McpServerConfig>,
@@ -33,17 +33,24 @@ function mcpServers(
   );
 }
 
-function descriptor(request: AgentRequest): ClaudeHarness {
-  return request.harness as ClaudeHarness;
+function descriptor(request: DriverRequest): ClaudeHarness {
+  if (!("harness" in request) || request.harness.kind !== "claude") {
+    throw new JigsError("the Claude driver requires a Claude request");
+  }
+  return request.harness;
 }
 
 export interface ClaudeDriverDependencies {
-  sessionExists(sessionId: string, cwd: string): Promise<boolean>;
+  sessionMessages(sessionId: string, cwd: string): Promise<readonly unknown[]>;
 }
 
 const defaultDependencies: ClaudeDriverDependencies = {
-  sessionExists: async (sessionId, cwd) =>
-    (await getSessionInfo(sessionId, { dir: cwd })) !== undefined,
+  sessionMessages: (sessionId, cwd) =>
+    getSessionMessages(sessionId, {
+      dir: cwd,
+      limit: 1,
+      includeSystemMessages: true,
+    }),
 };
 
 export function createClaudeDriver(
@@ -53,10 +60,10 @@ export function createClaudeDriver(
     kind: "claude",
     family: "harness",
     run: async (request, context): Promise<ExecutorGeneration> => {
-      const harness = descriptor(request as AgentRequest);
+      const harness = descriptor(request);
       const resume = "resume" in request ? request.resume : undefined;
       const cwd = request.cwd as string;
-      if (resume !== undefined && !(await deps.sessionExists(resume.id, cwd))) {
+      if (resume !== undefined && (await deps.sessionMessages(resume.id, cwd)).length === 0) {
         throw new AgentSessionError(`Claude session ${resume.id} is missing for ${cwd}`);
       }
       return context.deps.generateText({
@@ -84,7 +91,7 @@ export function createClaudeDriver(
       });
     },
     ask: async (request, context): Promise<ExecutorGeneration> => {
-      const harness = descriptor(request as AgentRequest);
+      const harness = descriptor(request);
       return context.deps.generateText({
         model: claudeCode(
           harness.model,

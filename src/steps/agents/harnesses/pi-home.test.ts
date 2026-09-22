@@ -101,6 +101,18 @@ test("Codex-backed Pi configuration links the real login only for that invocatio
   expect(existsSync(realAuthPath)).toBe(true);
 });
 
+test("a missing real login fails before creating durable Pi state", () => {
+  const options = {
+    baseDir: path.join(tmp, "pi-homes"),
+    realAuthPath: path.join(tmp, "missing.json"),
+  };
+
+  expect(() =>
+    prepareManagedPiHome("run-1", planPiModel(models.openaiCodex("gpt-5.5")), options),
+  ).toThrow(/no Pi openai-codex login found.*pi \/login/);
+  expect(existsSync(managedPiHomePath("run-1", options))).toBe(false);
+});
+
 test("Pi resumes only an exact durable session file", () => {
   const prepared = prepareManagedPiHome("run-1", planPiModel(harnesses.pi(models.openrouter("openai/gpt-oss"))), {
     baseDir: path.join(tmp, "pi-homes"),

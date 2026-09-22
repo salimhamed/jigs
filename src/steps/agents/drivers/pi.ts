@@ -63,9 +63,10 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
   async function ask(request: AgentRequest, context: DriverContext): Promise<ExecutorGeneration> {
     const harness = descriptor(request);
     const model = planPiModel(harness);
-    const scratch = mkdtempSync(path.join(tmpdir(), "jigs-pi-ask-"));
     const prepared = deps.preparePiHome(context.metadata.workflowRunId, model);
+    let scratch: string | undefined;
     try {
+      scratch = mkdtempSync(path.join(tmpdir(), "jigs-pi-ask-"));
       const extension =
         request.outputSchema === undefined
           ? undefined
@@ -96,7 +97,7 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
       // not support tool calls, so only a turn with no call falls back to JSON text.
       return { ...generation, output: parseJsonFallback(generation.text) };
     } finally {
-      rmSync(scratch, { recursive: true, force: true });
+      if (scratch !== undefined) rmSync(scratch, { recursive: true, force: true });
       prepared.cleanup();
     }
   }
@@ -145,7 +146,6 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
       const reported = generation.providerMetadata?.pi?.sessionId;
       if (reported !== sessionId) {
         const message = `Pi reported session ${JSON.stringify(reported)} after jigs requested ${sessionId}`;
-        if (resume !== undefined) throw new AgentSessionError(message);
         throw new Error(message);
       }
       if (request.outputSchema === undefined || generation.output !== undefined) return generation;

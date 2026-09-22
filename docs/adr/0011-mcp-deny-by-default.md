@@ -18,10 +18,10 @@ zero-server `config.toml` and `auth.json` **symlinked** to the real
 `~/.codex/auth.json`. Symlink, never copy: refresh tokens rotate one-time-use
 so two copies fight to mutual invalidation, while `auth.json` writes are
 in-place truncate (no rename), so the symlink survives every refresh and
-writes flow through to the single real file. The managed home is private to
-one invocation. Its `sessions` entry links to a separate durable per-run
-rollout store, so parallel calls cannot rewrite each other's configuration
-and removing temporary configuration cannot remove conversation history. Decided in
+writes flow through to the single real file. The generated configuration is
+private to one invocation, so parallel calls cannot rewrite each other's
+settings. Its `sessions` entry links to a separate durable per-run rollout
+store, so removing temporary configuration cannot remove conversation history. Decided in
 [AGE-294](https://linear.app/salboogie/issue/AGE-294/preflight-design),
 verified against the Codex source at `rust-v0.149.1`.
 

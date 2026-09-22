@@ -110,7 +110,7 @@ function makeDeps(
   };
   const testDrivers = {
     ...drivers,
-    claude: createClaudeDriver({ sessionExists: async () => true }),
+    claude: createClaudeDriver({ sessionMessages: async () => [{ type: "user" }] }),
     codex: createCodexDriver({
       prepareCodexHome: (runId) => {
         captured.homeRunIds.push(runId);
@@ -294,7 +294,6 @@ test("parallel Codex invocations keep settings and homes private", async () => {
   });
   const firstHome = first.captured.codexSettings?.env?.CODEX_HOME;
   const secondHome = second.captured.codexSettings?.env?.CODEX_HOME;
-  expect(firstHome).not.toBe(secondHome);
   expect(existsSync(firstHome ?? "")).toBe(false);
   expect(existsSync(secondHome ?? "")).toBe(false);
 });
@@ -403,6 +402,26 @@ test("a claude resume rides on the settings' resume field", async () => {
   expect(captured.options?.providerOptions).toBeUndefined();
 });
 
+test("a Claude transcript with messages but no summary resumes", async () => {
+  const wire = buildAgentRequest({
+    harness: harnesses.claude("sonnet"),
+    cwd: worktree,
+    prompt: "answer the review",
+    resume: { harness: "claude", id: "summaryless-session" },
+  });
+  const { deps, captured } = makeDeps();
+  const summaryless = createClaudeDriver({
+    sessionMessages: async () => [{ type: "user", message: "interrupted first turn" }],
+  });
+  const resolveDriver = deps.resolveDriver;
+  deps.resolveDriver = ((kind) =>
+    kind === "claude" ? summaryless : resolveDriver(kind)) as DriverResolver;
+
+  await agentStep(wire, { workflowRunId: "run-1" }, deps);
+
+  expect(claudeSettingsOf(captured).resume).toBe("summaryless-session");
+});
+
 test("a missing Claude transcript reports resumeFailed before launch", async () => {
   const wire = buildAgentRequest({
     harness: harnesses.claude("sonnet"),
@@ -411,7 +430,7 @@ test("a missing Claude transcript reports resumeFailed before launch", async () 
     resume: { harness: "claude", id: "missing-session" },
   });
   const { deps, captured } = makeDeps();
-  const missing = createClaudeDriver({ sessionExists: async () => false });
+  const missing = createClaudeDriver({ sessionMessages: async () => [] });
   const resolveDriver = deps.resolveDriver;
   deps.resolveDriver = ((kind) =>
     kind === "claude" ? missing : resolveDriver(kind)) as DriverResolver;
@@ -480,7 +499,7 @@ test("Claude steps always run with bypass", async () => {
   expect(settings.allowDangerouslySkipPermissions).toBe(true);
 });
 
-test("an execution failure during resume still throws", async () => {
+test("a Codex execution failure during resume still throws", async () => {
   const wire = buildAgentRequest({
     harness: harnesses.codex("gpt-5.5"),
     cwd: worktree,
@@ -496,6 +515,23 @@ test("an execution failure during resume still throws", async () => {
 
   await expect(executeAgent(wire, { workflowRunId: "run-1" }, deps)).rejects.toThrow(
     "no rollout found for thread id",
+  );
+});
+
+test("a Claude execution failure during resume still throws", async () => {
+  const wire = buildAgentRequest({
+    harness: harnesses.claude("sonnet"),
+    cwd: worktree,
+    prompt: "answer the review",
+    resume: { harness: "claude", id: "s-42" },
+  });
+  const { deps } = makeDeps();
+  deps.generateText = () => {
+    throw new Error("Claude stopped after launch");
+  };
+
+  await expect(executeAgent(wire, { workflowRunId: "run-1" }, deps)).rejects.toThrow(
+    "Claude stopped after launch",
   );
 });
 
@@ -941,6 +977,49 @@ test("pi run rejects a different session id reported by Pi", async () => {
   await expect(executeAgent(wire, { workflowRunId: "run-pi-mismatch" }, deps)).rejects.toThrow(
     /Pi reported session.*different-session.*jigs-/,
   );
+});
+
+test("a Pi execution failure during resume still throws", async () => {
+  const sessionId = "existing-session";
+  const source = models.openrouter("openai/gpt-oss");
+  const wire = buildAgentRequest({
+    harness: harnesses.pi(source),
+    cwd: worktree,
+    prompt: "continue",
+    resume: { harness: "pi", id: sessionId },
+  });
+  const { deps, piDeps } = makeDeps();
+  const prepared = piDeps.preparePiHome("run-pi-execution-failure", planPiModel(source));
+  writeFileSync(path.join(prepared.sessionDir, `2026_${sessionId}.jsonl`), "");
+  piDeps.executePi = async () => {
+    throw new Error("Pi stopped after launch");
+  };
+
+  await expect(
+    executeAgent(wire, { workflowRunId: "run-pi-execution-failure" }, deps),
+  ).rejects.toThrow("Pi stopped after launch");
+});
+
+test("a resumed Pi session-id mismatch still throws after launch", async () => {
+  const sessionId = "existing-session";
+  const source = models.openrouter("openai/gpt-oss");
+  const wire = buildAgentRequest({
+    harness: harnesses.pi(source),
+    cwd: worktree,
+    prompt: "continue",
+    resume: { harness: "pi", id: sessionId },
+  });
+  const { deps, piDeps } = makeDeps();
+  const prepared = piDeps.preparePiHome("run-pi-resume-mismatch", planPiModel(source));
+  writeFileSync(path.join(prepared.sessionDir, `2026_${sessionId}.jsonl`), "");
+  piDeps.executePi = async () => ({
+    text: "work already completed",
+    providerMetadata: { pi: { sessionId: "different-session" } },
+  });
+
+  await expect(
+    executeAgent(wire, { workflowRunId: "run-pi-resume-mismatch" }, deps),
+  ).rejects.toThrow(/Pi reported session.*different-session.*existing-session/);
 });
 
 test("pi run leaves Pi's default tools enabled when no allowlist is supplied", async () => {

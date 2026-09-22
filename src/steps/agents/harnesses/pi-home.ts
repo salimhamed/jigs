@@ -1,10 +1,8 @@
 import {
   existsSync,
-  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
-  readlinkSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -63,6 +61,13 @@ export function prepareManagedPiHome(
   plan: PiModelPlan,
   options: PiHomeOptions = {},
 ): PreparedPiHome {
+  const realAuthPath = plan.subscriptionAuth
+    ? (options.realAuthPath ?? realPiAuthPath())
+    : undefined;
+  if (realAuthPath !== undefined && !existsSync(realAuthPath)) {
+    throw new Error(`no Pi openai-codex login found at ${realAuthPath} — run: pi /login`);
+  }
+
   const runState = managedPiHomePath(runId, options);
   const sessionDir = piSessionsDir(runState);
   mkdirSync(sessionDir, { recursive: true });
@@ -77,22 +82,10 @@ export function prepareManagedPiHome(
     const modelsPath = path.join(home, "models.json");
     if (plan.models !== undefined)
       writeFileSync(modelsPath, `${JSON.stringify(plan.models, null, 2)}\n`);
-    if (plan.subscriptionAuth) {
-      const realAuthPath = options.realAuthPath ?? realPiAuthPath();
-      if (!existsSync(realAuthPath))
-        throw new Error(`no Pi openai-codex login found at ${realAuthPath} — run: pi /login`);
-      const authLink = path.join(home, "auth.json");
-      let linked = false;
-      try {
-        const stat = lstatSync(authLink);
-        if (stat.isSymbolicLink() && readlinkSync(authLink) === realAuthPath) linked = true;
-        else rmSync(authLink);
-      } catch {
-        // no auth.json yet
-      }
+    if (realAuthPath !== undefined) {
       // Symlink, never copy: OAuth refresh tokens rotate and must remain shared
       // with the operator's one real Pi login file.
-      if (!linked) symlinkSync(realAuthPath, authLink);
+      symlinkSync(realAuthPath, path.join(home, "auth.json"));
     }
   } catch (error) {
     rmSync(home, { recursive: true, force: true });

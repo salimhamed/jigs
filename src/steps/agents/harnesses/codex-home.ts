@@ -1,11 +1,11 @@
 import {
+  closeSync,
   existsSync,
-  lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readdirSync,
-  readFileSync,
-  readlinkSync,
+  readSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -59,11 +59,38 @@ function rolloutFiles(directory: string): string[] {
   return files;
 }
 
+const MAX_ROLLOUT_METADATA_BYTES = 1024 * 1024;
+
+function rolloutMetadataLine(file: string): string | undefined {
+  const descriptor = openSync(file, "r");
+  const chunks: Buffer[] = [];
+  let length = 0;
+  try {
+    while (length < MAX_ROLLOUT_METADATA_BYTES) {
+      const chunk = Buffer.allocUnsafe(Math.min(8192, MAX_ROLLOUT_METADATA_BYTES - length));
+      const read = readSync(descriptor, chunk, 0, chunk.length, null);
+      if (read === 0)
+        return length === 0 ? undefined : Buffer.concat(chunks, length).toString("utf8");
+      const newline = chunk.subarray(0, read).indexOf(10);
+      if (newline !== -1) {
+        chunks.push(chunk.subarray(0, newline));
+        const line = Buffer.concat(chunks, length + newline).toString("utf8");
+        return line.endsWith("\r") ? line.slice(0, -1) : line;
+      }
+      chunks.push(chunk.subarray(0, read));
+      length += read;
+    }
+    return undefined;
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
 /** Find a rollout whose metadata exactly names the requested thread. */
 export function codexSessionFile(sessionDir: string, threadId: string): string | undefined {
   for (const candidate of rolloutFiles(sessionDir)) {
     if (!path.basename(candidate).endsWith(`-${threadId}.jsonl`)) continue;
-    const firstLine = readFileSync(candidate, "utf8").split("\n", 1)[0];
+    const firstLine = rolloutMetadataLine(candidate);
     if (firstLine === undefined || firstLine === "") continue;
     try {
       const first = JSON.parse(firstLine) as { type?: unknown; payload?: { id?: unknown } };
@@ -109,14 +136,4 @@ export function prepareManagedCodexHome(
 /** Remove durable Codex sessions after all of a run's worktrees are released. */
 export function removeManagedCodexHome(runId: string, options: CodexHomeOptions = {}): void {
   rmSync(managedCodexHomePath(runId, options), { recursive: true, force: true });
-}
-
-/** Test whether an invocation home still links to the expected auth file. */
-export function codexAuthLink(home: string): string | undefined {
-  const auth = path.join(home, "auth.json");
-  try {
-    return lstatSync(auth).isSymbolicLink() ? readlinkSync(auth) : undefined;
-  } catch {
-    return undefined;
-  }
 }
