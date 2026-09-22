@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.44.2
+# @salimhamed/jigs v0.45.0
 
 Create the HTTP application that serves a factory's workflow and webhook endpoints.
 
