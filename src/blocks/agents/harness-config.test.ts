@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import type { PiHarness } from "./harness-config.ts";
+import type { AskableModelSource, ModelSource, PiHarness } from "./harness-config.ts";
 import { harnesses, models } from "./harness-config.ts";
 import { type AskJevOptions, yesNo } from "./jev.ts";
 import type { AskAgentOptions, AskModelOptions, RunAgentOptions } from "./plan.ts";
@@ -76,6 +76,29 @@ test("descriptor namespaces build tagged plain data", () => {
   });
 });
 
+test("harnesses.pi accepts a model source chosen at runtime", () => {
+  const sources: ModelSource[] = [
+    models.openaiCompatible({ name: "local", baseUrl: "http://localhost:1234/v1", model: "local" }),
+    models.openrouter("model"),
+  ];
+  const [local, remote] = sources as [ModelSource, ModelSource];
+  const askable: AskableModelSource = models.openrouter("model");
+  const harness: PiHarness = harnesses.pi(local, { compat: { supportsReasoningEffort: true } });
+  expect(harness).toEqual({
+    kind: "pi",
+    model: local,
+    compat: { supportsDeveloperRole: false, supportsReasoningEffort: true },
+  });
+  expect(harnesses.pi(askable, { thinking: "low" })).toEqual({
+    kind: "pi",
+    model: askable,
+    thinking: "low",
+  });
+  expect(() => harnesses.pi(remote, { compat: { supportsDeveloperRole: true } })).toThrow(
+    "Pi compatibility hints apply only to OpenAI-compatible model sources",
+  );
+});
+
 test("verbs reject the wrong descriptor family at compile time", () => {
   // @ts-expect-error runAgent accepts a harness, not a model source
   const run: RunAgentOptions = { harness: models.openrouter("model"), cwd: "/tmp", prompt: "work" };
@@ -114,6 +137,9 @@ test("verbs reject the wrong descriptor family at compile time", () => {
     // @ts-expect-error compatibility hints apply only to Pi's OpenAI-compatible source
     compat: { supportsReasoningEffort: true },
   };
+  const inertPiCompat = () =>
+    // @ts-expect-error compatibility hints apply only to Pi's OpenAI-compatible source
+    harnesses.pi(models.openrouter("model"), { compat: { supportsReasoningEffort: true } });
   expect([
     run,
     agent,
@@ -123,5 +149,6 @@ test("verbs reject the wrong descriptor family at compile time", () => {
     localJev,
     inertModelOption,
     inertHarnessOption,
-  ]).toHaveLength(8);
+    inertPiCompat,
+  ]).toHaveLength(9);
 });

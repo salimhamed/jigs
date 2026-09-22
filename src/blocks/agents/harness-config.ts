@@ -67,11 +67,13 @@ export type AskableModelSource = Exclude<ModelSource, OpenaiCodexSource>;
 /** The stable name of a model source. */
 export type ModelKind = ModelSource["kind"];
 
-type PiOpenaiCompatibleHarness = SharedPiHarness & {
+/** A Pi harness descriptor backed by an OpenAI-compatible source, with its compatibility hints. */
+export type PiOpenaiCompatibleHarness = SharedPiHarness & {
   model: OpenaiCompatibleSource;
   compat: PiOpenaiCompatibleOptions;
 };
-type PiOtherHarness = SharedPiHarness & {
+/** A Pi harness descriptor backed by any source other than an OpenAI-compatible one. */
+export type PiOtherHarness = SharedPiHarness & {
   model: Exclude<ModelSource, OpenaiCompatibleSource>;
   compat?: never;
 };
@@ -103,6 +105,10 @@ export const models = {
 
 type PiHarnessOptions = Pick<SharedPiHarness, "thinking" | "tools">;
 
+/**
+ * Build a Pi harness around a model source. `compat` applies only to an
+ * OpenAI-compatible source; each hint omitted from it defaults to `false`.
+ */
 function piHarness(
   model: OpenaiCompatibleSource,
   options?: PiHarnessOptions & { compat?: Partial<PiOpenaiCompatibleOptions> },
@@ -111,6 +117,13 @@ function piHarness(
   model: Exclude<ModelSource, OpenaiCompatibleSource>,
   options?: PiHarnessOptions,
 ): PiOtherHarness;
+// A source chosen at runtime may be OpenAI-compatible, so `compat` stays allowed and is checked on call.
+function piHarness<M extends ModelSource>(
+  model: M,
+  options?: PiHarnessOptions & {
+    compat?: OpenaiCompatibleSource extends M ? Partial<PiOpenaiCompatibleOptions> : never;
+  },
+): PiHarness;
 function piHarness(
   model: ModelSource,
   options: PiHarnessOptions & { compat?: Partial<PiOpenaiCompatibleOptions> } = {},

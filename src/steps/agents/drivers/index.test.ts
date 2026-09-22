@@ -1,8 +1,22 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { harnesses, models } from "../../../blocks/agents/harness-config.ts";
-import { buildAskAgentRequest } from "../../../blocks/agents/plan.ts";
+import { buildAskAgentRequest, buildModelRequest } from "../../../blocks/agents/plan.ts";
 import { driverFor, drivers } from "./index.ts";
+import type { DriverRequest } from "./types.ts";
+
+const localSource = models.openaiCompatible({
+  name: "local",
+  baseUrl: "http://localhost:1234/v1",
+  model: "local",
+});
+const contractRequests: Record<keyof typeof drivers, DriverRequest> = {
+  claude: buildAskAgentRequest({ harness: harnesses.claude("sonnet"), prompt: "hello" }),
+  codex: buildAskAgentRequest({ harness: harnesses.codex("gpt-5.5"), prompt: "hello" }),
+  "openai-compatible": buildModelRequest({ model: localSource, prompt: "hello" }),
+  openrouter: buildModelRequest({ model: models.openrouter("model"), prompt: "hello" }),
+  pi: buildAskAgentRequest({ harness: harnesses.pi(localSource), prompt: "hello" }),
+};
 
 test("driver lookup preserves installed kinds and rejects unregistered kinds", () => {
   expect(driverFor("claude")).toBe(drivers.claude);
@@ -16,7 +30,10 @@ test("every registered driver declares its operational contract and documentatio
     new URL("../../../../site/guide/models-and-harnesses.md", import.meta.url),
     "utf8",
   );
-  for (const driver of Object.values(drivers)) {
+  for (const [kind, driver] of Object.entries(drivers)) {
+    expect(driver.envAllowlist(contractRequests[kind as keyof typeof drivers])).toBeInstanceOf(
+      Array,
+    );
     const installationIds = driver.installationChecks().map((check) => check.id);
     if (driver.family === "harness") {
       expect(installationIds).toContain(`harness.${driver.kind}-cli`);
