@@ -18,7 +18,10 @@ zero-server `config.toml` and `auth.json` **symlinked** to the real
 `~/.codex/auth.json`. Symlink, never copy: refresh tokens rotate one-time-use
 so two copies fight to mutual invalidation, while `auth.json` writes are
 in-place truncate (no rename), so the symlink survives every refresh and
-writes flow through to the single real file. Decided in
+writes flow through to the single real file. The managed home is private to
+one invocation. Its `sessions` entry links to a separate durable per-run
+rollout store, so parallel calls cannot rewrite each other's configuration
+and removing temporary configuration cannot remove conversation history. Decided in
 [AGE-294](https://linear.app/salboogie/issue/AGE-294/preflight-design),
 verified against the Codex source at `rust-v0.149.1`.
 
@@ -46,10 +49,10 @@ verified against the Codex source at `rust-v0.149.1`.
   verification); the auto-trust hole reproduced — the workspace server
   loaded and codex **prepended** a `[projects."<cwd>"] trust_level =
   "trusted"` record into the curated `config.toml`, confirming the JIT
-  guard is load-bearing and the managed home is codex-mutable state.
-- Rollouts live under `CODEX_HOME/sessions`, so a Codex builder that must
-  resume needs the same managed home to survive between wakes — the managed
-  home is per-run durable state, not a disposable temp dir.
+  guard is load-bearing and the invocation home is Codex-mutable state.
+- Rollouts live through `CODEX_HOME/sessions`, which links to durable per-run
+  storage. A resume validates the exact rollout before Codex starts; only
+  missing or incompatible session state permits a caller to rebuild context.
 - MCP availability checks must exercise a real tool call: agents
   misreported their own MCP server list even when a server was demonstrably
   callable (AGE-305, probe 6).

@@ -20,6 +20,7 @@ import {
 } from "./drivers/index.ts";
 import { scrubbedEnv } from "./harnesses/env.ts";
 import { FileLockTimeoutError, lockPathFor, withFileLock } from "./lock.ts";
+import { AgentSessionError } from "./session-error.ts";
 
 /** Injectable provider and environment operations used by agent execution. */
 export interface AgentExecutionDependencies extends DriverDependencies {
@@ -96,7 +97,7 @@ export async function executeAgent(
             output: outputSpec(wire.outputSchema),
           });
         } catch (err) {
-          if (wire.resume === undefined) throw err;
+          if (wire.resume === undefined || !(err instanceof AgentSessionError)) throw err;
           return { resumeFailed: String(err) };
         }
         const session = extractAgentSession(

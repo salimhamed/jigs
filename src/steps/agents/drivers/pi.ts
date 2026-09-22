@@ -11,8 +11,9 @@ import { MIN_PI_VERSION, resolvePiExecutable } from "../harnesses/executables.ts
 import type { PiExecutionOptions } from "../harnesses/pi.ts";
 import { executePi } from "../harnesses/pi.ts";
 import { writePiSubmitResultExtension } from "../harnesses/pi-extension.ts";
-import { ensureManagedPiHome, piSessionFile, piSessionsDir } from "../harnesses/pi-home.ts";
+import { type PreparedPiHome, piSessionFile, prepareManagedPiHome } from "../harnesses/pi-home.ts";
 import { type PiModelPlan, planPiModel } from "../harnesses/pi-model.ts";
+import { AgentSessionError } from "../session-error.ts";
 import type { Driver, DriverContext, DriverRequest, ExecutorGeneration } from "./types.ts";
 
 function descriptor(request: AgentRequest): PiHarness {
@@ -49,12 +50,12 @@ function parseJsonFallback(text: string): unknown {
 }
 
 export interface PiDriverDependencies {
-  ensurePiHome(runId: string, plan: PiModelPlan): string;
+  preparePiHome(runId: string, plan: PiModelPlan): PreparedPiHome;
   executePi(options: PiExecutionOptions): Promise<ExecutorGeneration>;
 }
 
 const defaultDependencies: PiDriverDependencies = {
-  ensurePiHome: (runId, source) => ensureManagedPiHome(runId, source),
+  preparePiHome: (runId, source) => prepareManagedPiHome(runId, source),
   executePi,
 };
 
@@ -63,12 +64,12 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
     const harness = descriptor(request);
     const model = planPiModel(harness);
     const scratch = mkdtempSync(path.join(tmpdir(), "jigs-pi-ask-"));
+    const prepared = deps.preparePiHome(context.metadata.workflowRunId, model);
     try {
-      const home = deps.ensurePiHome(context.metadata.workflowRunId, model);
       const extension =
         request.outputSchema === undefined
           ? undefined
-          : writePiSubmitResultExtension(home, request.outputSchema);
+          : writePiSubmitResultExtension(prepared.home, request.outputSchema);
       const args = [
         "--mode",
         "json",
@@ -88,7 +89,7 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
       const generation = await deps.executePi({
         args,
         cwd: scratch,
-        env: { ...modelEnvironment(model, context.env), PI_CODING_AGENT_DIR: home },
+        env: { ...modelEnvironment(model, context.env), PI_CODING_AGENT_DIR: prepared.home },
       });
       if (request.outputSchema === undefined || generation.output !== undefined) return generation;
       // Pi is asked to call submit_result first. Some OpenAI-compatible servers do
@@ -96,55 +97,62 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
       return { ...generation, output: parseJsonFallback(generation.text) };
     } finally {
       rmSync(scratch, { recursive: true, force: true });
+      prepared.cleanup();
     }
   }
 
   async function run(request: AgentRequest, context: DriverContext): Promise<ExecutorGeneration> {
     const harness = descriptor(request);
     const model = planPiModel(harness);
-    const home = deps.ensurePiHome(context.metadata.workflowRunId, model);
-    const sessionDir = piSessionsDir(home);
+    const prepared = deps.preparePiHome(context.metadata.workflowRunId, model);
     const resume = "resume" in request ? request.resume : undefined;
     const sessionId = resume?.id ?? `jigs-${randomUUID()}`;
-    if (resume !== undefined && piSessionFile(home, sessionId) === undefined) {
-      throw new Error(`Pi session ${sessionId} is missing from ${sessionDir}`);
+    try {
+      const sessionFile =
+        resume === undefined ? undefined : piSessionFile(prepared.sessionDir, sessionId);
+      if (resume !== undefined && sessionFile === undefined) {
+        throw new AgentSessionError(
+          `Pi session ${sessionId} is missing from ${prepared.sessionDir}`,
+        );
+      }
+      const extension =
+        request.outputSchema === undefined
+          ? undefined
+          : writePiSubmitResultExtension(prepared.home, request.outputSchema);
+      const generation = await deps.executePi({
+        args: [
+          "--mode",
+          "json",
+          "--model",
+          modelName(model),
+          ...(harness.thinking === undefined ? [] : ["--thinking", harness.thinking]),
+          ...(harness.tools === undefined ? [] : ["--tools", harness.tools.join(",")]),
+          ...(sessionFile === undefined ? ["--session-id", sessionId] : ["--session", sessionFile]),
+          "--session-dir",
+          prepared.sessionDir,
+          "-ne",
+          "-ns",
+          "-np",
+          "--no-themes",
+          "-nc",
+          "--no-approve",
+          ...(extension === undefined ? [] : ["-e", extension]),
+          promptFor(request),
+        ],
+        cwd: request.cwd as string,
+        env: { ...modelEnvironment(model, context.env), PI_CODING_AGENT_DIR: prepared.home },
+      });
+      const reported = generation.providerMetadata?.pi?.sessionId;
+      if (reported !== sessionId) {
+        const message = `Pi reported session ${JSON.stringify(reported)} after jigs requested ${sessionId}`;
+        if (resume !== undefined) throw new AgentSessionError(message);
+        throw new Error(message);
+      }
+      if (request.outputSchema === undefined || generation.output !== undefined) return generation;
+      return { ...generation, output: parseJsonFallback(generation.text) };
+    } finally {
+      prepared.cleanup();
     }
-    const extension =
-      request.outputSchema === undefined
-        ? undefined
-        : writePiSubmitResultExtension(home, request.outputSchema);
-    const generation = await deps.executePi({
-      args: [
-        "--mode",
-        "json",
-        "--model",
-        modelName(model),
-        ...(harness.thinking === undefined ? [] : ["--thinking", harness.thinking]),
-        ...(harness.tools === undefined ? [] : ["--tools", harness.tools.join(",")]),
-        "--session-id",
-        sessionId,
-        "--session-dir",
-        sessionDir,
-        "-ne",
-        "-ns",
-        "-np",
-        "--no-themes",
-        "-nc",
-        "--no-approve",
-        ...(extension === undefined ? [] : ["-e", extension]),
-        promptFor(request),
-      ],
-      cwd: request.cwd as string,
-      env: { ...modelEnvironment(model, context.env), PI_CODING_AGENT_DIR: home },
-    });
-    const reported = generation.providerMetadata?.pi?.sessionId;
-    if (reported !== sessionId) {
-      throw new Error(
-        `Pi reported session ${JSON.stringify(reported)} after jigs requested ${sessionId}`,
-      );
-    }
-    if (request.outputSchema === undefined || generation.output !== undefined) return generation;
-    return { ...generation, output: parseJsonFallback(generation.text) };
   }
 
   function nestedHarness(request: DriverRequest): PiHarness | undefined {

@@ -266,11 +266,10 @@ new head as unapproved.
 
 ## Deferred
 
-- **Agent continuation semantics.** Today any failure while resuming an
-  agent session is one outcome, "resume failed", and the caller may start a
-  fresh agent with rebuilt context, which repeats work if the old agent had
-  already committed. Distinguishing the causes and recording the path taken
-  is right but not urgent: no prototype hit it. Revisit when one does.
+- **Richer agent continuation recovery.** Missing or incompatible durable
+  session state is the only "resume failed" outcome that permits rebuilt
+  context. Model, network, tool and process failures remain ordinary execution
+  failures. More recovery policies can be added when a workflow needs them.
 - **An effects log** (question posted, reply accepted, fix pushed) beside the
   resources record. Deferred until a workflow needs it.
 

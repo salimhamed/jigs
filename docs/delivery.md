@@ -564,7 +564,9 @@ the durable wrappers and shared blocks from `#jigs` directly. Regenerate
 `runAgent` accepts a harness, prompt, and optional output schema. `askModel`
 accepts a model source instead.
 `runAgent` also accepts a working directory and optional session. `askModel`
-runs without tools.
+runs without tools. A session is resumed only when its exact durable state is
+available; a missing or incompatible session may take the explicit rebuild
+path, while model, network, tool and process failures fail normally.
 `createRunDirectory()` provides run-owned scratch space without a repository;
 `removeRunDirectory()` removes it after successful completion. Suspension must
 retain the directory, so do not put its removal in a `finally` block.

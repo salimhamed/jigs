@@ -27,6 +27,11 @@ harnesses; `askModel` and `askJev` take model sources.
   provider on the launch error, so login failures still classify as such.
   This isolates environment credentials, not credential files available to
   the same operating-system user.
+- Harness descriptors are reusable configuration, not mutable sessions.
+  Generated settings and extensions belong to one invocation, while durable
+  conversation files live separately. Continuation occurs only from an
+  explicit, validated session pointer; unrelated execution failures never
+  authorize a fresh-context fallback.
 - The Pi and model-source descriptor types can exist before their drivers. An
   attempted execution fails explicitly with the unregistered kind.
 

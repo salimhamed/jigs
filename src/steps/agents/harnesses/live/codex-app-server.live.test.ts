@@ -42,8 +42,8 @@ test("app-server step: persistent thread, rollout under the managed home, clean 
   expect(result.text).toContain("ACK");
   expect(result.threadId).toBeTruthy();
 
-  // Rollouts live under CODEX_HOME/sessions — the managed home is per-run
-  // durable state (only persistent threads write one).
+  // The invocation home's sessions link targets the durable per-run store
+  // (only persistent threads write a rollout).
   const rollouts = globSync(path.join(home, "sessions", "**", `*${result.threadId}*`));
   expect(rollouts.length).toBeGreaterThan(0);
   expect(existsSync(path.join(home, "auth.json"))).toBe(true);

@@ -12,7 +12,7 @@ import {
 } from "../../execute-agent.ts";
 import { scrubbedEnv } from "../env.ts";
 import { executePi } from "../pi.ts";
-import { ensureManagedPiHome } from "../pi-home.ts";
+import { prepareManagedPiHome } from "../pi-home.ts";
 import { planPiModel } from "../pi-model.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { makeScratchRepo } from "./fixtures/live-env.ts";
@@ -34,8 +34,8 @@ beforeAll(() => {
   tmp = makeTmpDir();
   worktree = makeScratchRepo(tmp, "pi-run-isolation");
   const pi = createPiDriver({
-    ensurePiHome: (runId, source) =>
-      ensureManagedPiHome(runId, source, { baseDir: path.join(tmp, "managed-pi-homes") }),
+    preparePiHome: (runId, source) =>
+      prepareManagedPiHome(runId, source, { baseDir: path.join(tmp, "managed-pi-homes") }),
     executePi,
   });
   deps = {
@@ -53,9 +53,10 @@ test.skipIf(!localConfigured || !localReachable)(
       baseUrl: baseUrl as string,
       model: localModel as string,
     });
-    const controlHome = ensureManagedPiHome("control", planPiModel(harnesses.pi(source)), {
+    const preparedControl = prepareManagedPiHome("control", planPiModel(harnesses.pi(source)), {
       baseDir: path.join(tmp, "control-pi-homes"),
     });
+    const controlHome = preparedControl.home;
     const extensions = path.join(controlHome, "extensions");
     mkdirSync(extensions, { recursive: true });
     const token = `PI-PROBE-${crypto.randomUUID()}`;

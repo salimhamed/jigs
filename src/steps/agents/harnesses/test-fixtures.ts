@@ -18,7 +18,7 @@ export interface ManagedCodexHomeState {
 }
 
 // Test-side inspection of a managed Codex home. Deliberately test-only:
-// managed homes are per-run state, and jigs doctor runs without a launch.
+// invocation homes are private temporary state, and doctor runs without a launch.
 export function managedCodexHomeState(home: string): ManagedCodexHomeState {
   const authPath = path.join(home, "auth.json");
   let authIsSymlink = false;
