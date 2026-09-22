@@ -1,36 +1,17 @@
 import { expect, test } from "vitest";
-import {
-  extractAgentSession,
-  type ModelGeneration,
-  type ModelUsage,
-  toModelResult,
-} from "./result.ts";
+import { extractAgentSession, type ModelGeneration, toModelResult } from "./result.ts";
 
-const usage = { inputTokens: 12, outputTokens: 34 } as unknown as ModelUsage;
-
-test("toModelResult maps text and usage into the uniform shape", () => {
-  const generation: ModelGeneration = { text: "done", usage };
+test("toModelResult maps text and structured output into the uniform shape", () => {
+  const generation: ModelGeneration = { text: "done" };
   expect(toModelResult(generation, { parsed: true })).toEqual({
     text: "done",
     output: { parsed: true },
-    usage,
   });
 });
 
-test("toModelResult adds a supplied driver cost to usage", () => {
-  const result = toModelResult({ text: "done", usage, costUsd: 1.25 }, undefined);
-  expect(result.usage).toEqual({ ...usage, costUsd: 1.25 });
-});
-
-test("toModelResult omits an absent driver cost", () => {
-  const result = toModelResult({ text: "done", usage }, undefined);
-  expect(result.usage).toEqual(usage);
-  expect(Object.hasOwn(result.usage ?? {}, "costUsd")).toBe(false);
-});
-
-test("toModelResult preserves a genuine zero driver cost", () => {
-  const result = toModelResult({ text: "done", usage, costUsd: 0 }, undefined);
-  expect(result.usage).toEqual({ ...usage, costUsd: 0 });
+test("toModelResult omits the output when no structured answer was requested", () => {
+  const result = toModelResult({ text: "done" }, undefined);
+  expect(result).toEqual({ text: "done", output: undefined });
 });
 
 test("extractAgentSession reads the driver pointer", () => {

@@ -80,8 +80,4 @@ export const claudeDriver = {
   docsAnchor: "claude-code",
   displayName: "Claude Code",
   resolveExecutable: resolveClaudeExecutable,
-  cost: (generation) => {
-    const cost = generation.providerMetadata?.["claude-code"]?.costUsd;
-    return typeof cost === "number" ? cost : undefined;
-  },
 } satisfies Driver<"claude">;

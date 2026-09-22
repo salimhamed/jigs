@@ -11,14 +11,7 @@ test("plain pi JSONL reduces the authoritative final message and exposes deltas"
 
   expect(generation).toEqual({
     text: "Hello world",
-    usage: {
-      inputTokens: 4,
-      outputTokens: 2,
-      totalTokens: 8,
-      inputTokenDetails: { noCacheTokens: 4, cacheReadTokens: 2, cacheWriteTokens: 0 },
-      outputTokenDetails: { textTokens: 2, reasoningTokens: 0 },
-    },
-    providerMetadata: { pi: { sessionId: "session-plain", costUsd: 0.053 } },
+    providerMetadata: { pi: { sessionId: "session-plain" } },
   });
   expect(onDelta).toHaveBeenCalledTimes(2);
   expect(onDelta).toHaveBeenNthCalledWith(1, {
@@ -32,7 +25,7 @@ test("submit_result arguments become the structured generation output", () => {
   expect(reducePiJsonl(fixture("pi-submit-result.jsonl"))).toMatchObject({
     text: "",
     output: { word: "sky", count: 3 },
-    providerMetadata: { pi: { sessionId: "session-submit", costUsd: 0 } },
+    providerMetadata: { pi: { sessionId: "session-submit" } },
   });
 });
 

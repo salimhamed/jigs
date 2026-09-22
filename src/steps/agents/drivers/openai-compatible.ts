@@ -58,5 +58,4 @@ export const openaiCompatibleDriver = {
   },
   docsAnchor: "openai-compatible",
   displayName: "OpenAI-compatible",
-  cost: () => undefined,
 } satisfies Driver<"openai-compatible">;

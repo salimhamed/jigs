@@ -109,7 +109,6 @@ test("OpenRouter evaluates typed questions and normalizes metadata and cost", as
         probabilities: { "0": 0.03, "1": 0.22, "2": 0.75 },
       },
     },
-    usage: { inputTokens: 48, outputTokens: 5, totalTokens: 53 },
     providerMetadata: {
       openrouter: {
         answers: {
@@ -119,7 +118,6 @@ test("OpenRouter evaluates typed questions and normalizes metadata and cost", as
             legend: { "0": "Different", "1": "Possible", "2": "Same" },
           },
         },
-        usage: { cost: 0.000002016 },
       },
     },
   }));
@@ -178,7 +176,6 @@ test("OpenRouter evaluates typed questions and normalizes metadata and cost", as
         legend: { "0": "Different", "1": "Possible", "2": "Same" },
       },
     },
-    usage: { inputTokens: 48, outputTokens: 5, totalTokens: 53, costUsd: 0.000002016 },
   });
 });
 
@@ -287,7 +284,6 @@ test.each(malformedProviderCases)(
           ...defaultAgentExecutionDependencies,
           evaluate: async () => ({
             answers,
-            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
             providerMetadata: { openrouter: { answers: metadata } },
           }),
         },
@@ -376,7 +372,6 @@ test("an OpenAI-compatible source answers structured requests without requiring 
   );
 
   expect(result.output).toEqual({ ok: true });
-  expect(result.usage?.costUsd).toBeUndefined();
   expect(openaiCompatible.create).toHaveBeenCalledWith({
     baseURL: "http://localhost:1234/v1",
     name: "north-desktop",
@@ -500,7 +495,6 @@ test("OpenRouter answers one structured request directly and reports its cost", 
   );
 
   expect(result.output).toEqual({ ok: true });
-  expect(result.usage?.costUsd).toBe(0.0000055);
   expect(requests).toHaveLength(1);
   const request = requests[0];
   const headers = new Headers(request?.init?.headers);
@@ -510,7 +504,6 @@ test("OpenRouter answers one structured request directly and reports its cost", 
   const body = JSON.parse(String(request?.init?.body)) as Record<string, unknown>;
   expect(body).toMatchObject({
     model: "google/gemini-2.5-flash-lite",
-    usage: { include: true },
     response_format: { type: "json_schema", json_schema: { strict: true } },
   });
   expect(boundaries.execFile).not.toHaveBeenCalled();

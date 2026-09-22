@@ -20,6 +20,5 @@ test.skipIf(!hasOpenRouterCredential)(
     );
 
     expect(result.output).toEqual({ word: "sky", count: 3 });
-    expect(result.usage?.costUsd ?? 0).toBeGreaterThan(0);
   },
 );

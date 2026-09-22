@@ -26,9 +26,9 @@ The call uses the model source's own API driver. A model request can include a
 `system` instruction, but it cannot use MCP servers; configure tool access on
 `runAgent` instead.
 
-The durable operation records the response. Your workflow receives `text`, the
-parsed `output` when you supplied a schema, and usage information when the
-provider supplies it. Schema validation checks the answer’s shape, not its factual
-accuracy; decide what review the result needs before acting on it.
+The durable operation records the response. Your workflow receives `text` and
+the parsed `output` when you supplied a schema. Schema validation checks the
+answer’s shape, not its factual accuracy; decide what review the result needs
+before acting on it.
 
 See the [API reference](/api/) for model request and result types.

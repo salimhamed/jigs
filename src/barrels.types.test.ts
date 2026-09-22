@@ -25,7 +25,6 @@ import type {
   ModelRequest,
   ModelResult,
   ModelSource,
-  ModelUsage,
   OutputJsonSchema,
   RebuildContextPrompt,
   RebuildContextPromptInput,
@@ -149,7 +148,6 @@ type BlocksTypeSurface = {
   executeModelRequestStep: ExecuteModelStep;
   snapshotComment: TicketComment;
   stepResult: ModelResult;
-  stepUsage: ModelUsage;
   threadAnswers: ThreadAnswers;
   ticketClaim: TicketClaim;
   ticketLink: TicketLink;

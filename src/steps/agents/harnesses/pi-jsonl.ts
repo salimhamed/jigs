@@ -2,40 +2,6 @@ import type { ExecutorGeneration } from "../drivers/types.ts";
 
 export type PiDelta = { type: string; [key: string]: unknown };
 
-type PiUsage = {
-  input?: unknown;
-  output?: unknown;
-  cacheRead?: unknown;
-  cacheWrite?: unknown;
-  reasoning?: unknown;
-  totalTokens?: unknown;
-  cost?: { total?: unknown };
-};
-
-function number(value: unknown): number {
-  return typeof value === "number" ? value : 0;
-}
-
-function usage(value: PiUsage | undefined): ExecutorGeneration["usage"] {
-  const input = number(value?.input);
-  const output = number(value?.output);
-  const reasoning = number(value?.reasoning);
-  return {
-    inputTokens: input,
-    outputTokens: output,
-    totalTokens: number(value?.totalTokens),
-    inputTokenDetails: {
-      noCacheTokens: input,
-      cacheReadTokens: number(value?.cacheRead),
-      cacheWriteTokens: number(value?.cacheWrite),
-    },
-    outputTokenDetails: {
-      textTokens: Math.max(0, output - reasoning),
-      reasoningTokens: reasoning,
-    },
-  };
-}
-
 function record(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -59,7 +25,6 @@ export function reducePiJsonl(
 ): ExecutorGeneration {
   let sessionId: string | undefined;
   let finalText = "";
-  let finalUsage: PiUsage | undefined;
   let output: unknown;
   let completed = false;
 
@@ -87,7 +52,6 @@ export function reducePiJsonl(
       }
       completed = true;
       finalText = textContent(message.content);
-      finalUsage = record(message.usage) as PiUsage | undefined;
     } else if (event.type === "tool_execution_end" && event.toolName === "submit_result") {
       const result = record(event.result);
       output = result?.details;
@@ -96,15 +60,12 @@ export function reducePiJsonl(
 
   if (!completed) throw new Error("pi ended without an assistant message_end");
 
-  const cost = finalUsage?.cost?.total;
   return {
     text: finalText,
-    usage: usage(finalUsage),
     ...(output === undefined ? {} : { output }),
     providerMetadata: {
       pi: {
         ...(sessionId === undefined ? {} : { sessionId }),
-        ...(typeof cost === "number" ? { costUsd: cost } : {}),
       },
     },
   };

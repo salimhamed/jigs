@@ -48,14 +48,6 @@ export type JevAnswers<QUESTIONS extends JevQuestions> = {
   [KEY in keyof QUESTIONS]: JevAnswer<QUESTIONS[KEY]>;
 };
 
-/** Token use and provider-estimated cost for one decision request. */
-export type JevUsage = {
-  inputTokens: number | undefined;
-  outputTokens: number | undefined;
-  totalTokens: number | undefined;
-  costUsd?: number;
-};
-
 /** A decision request in workflow and durable wire form. */
 export type AskJevOptions<QUESTIONS extends JevQuestions> = {
   model: ModelSource;
@@ -66,7 +58,6 @@ export type AskJevOptions<QUESTIONS extends JevQuestions> = {
 /** A typed decision result. */
 export type JevResult<QUESTIONS extends JevQuestions> = {
   answers: JevAnswers<QUESTIONS>;
-  usage: JevUsage;
 };
 
 /** The factory's durable wrapper around the decision step. */

@@ -29,11 +29,7 @@ export async function executeModel(
     env: scrubbedEnv(driver.envAllowlist(wire)),
     output: outputSpec(wire.outputSchema),
   });
-  const costUsd = driver.cost(generation);
-  return toModelResult(
-    costUsd === undefined ? generation : { ...generation, costUsd },
-    wire.outputSchema === undefined ? undefined : generation.output,
-  );
+  return toModelResult(generation, wire.outputSchema === undefined ? undefined : generation.output);
 }
 
 /** Evaluate typed questions with a decision-capable model. */
@@ -80,11 +76,7 @@ export async function executeJev<const QUESTIONS extends JevQuestions>(
     deps,
     env: scrubbedEnv(driver.envAllowlist(wire)),
   });
-  const costUsd = driver.cost(generation);
-  return {
-    answers: generation.answers,
-    usage: costUsd === undefined ? generation.usage : { ...generation.usage, costUsd },
-  };
+  return { answers: generation.answers };
 }
 
 function isJsonValue(value: unknown, ancestors: Set<object>): boolean {

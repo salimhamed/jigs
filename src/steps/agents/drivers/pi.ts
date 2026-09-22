@@ -152,8 +152,4 @@ export const piDriver = {
   displayName: "Pi",
   resolveExecutable: resolvePiExecutable,
   minimumVersion: MIN_PI_VERSION,
-  cost: (generation) => {
-    const cost = generation.providerMetadata?.pi?.costUsd;
-    return typeof cost === "number" ? cost : undefined;
-  },
 } satisfies Driver<"pi">;

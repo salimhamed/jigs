@@ -47,5 +47,4 @@ test.skipIf(!configured)("jev returns all three calibrated answer types", async 
     "1": "Possibly the same company",
     "2": "The same company",
   });
-  expect(result.usage.costUsd).toBeGreaterThan(0);
 });

@@ -45,7 +45,6 @@ export {
   type JevQuestions,
   type JevResult,
   type JevState,
-  type JevUsage,
   type ScoreQuestion,
   score,
   type YesNoQuestion,
@@ -72,7 +71,6 @@ export type {
   AgentResult,
   AgentSession,
   ModelResult,
-  ModelUsage,
 } from "./result.ts";
 export {
   type ResumeOrRebuildOptions,

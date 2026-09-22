@@ -17,7 +17,7 @@ import {
   parseOutput,
   type RunAgentOptions,
 } from "../../blocks/agents/plan.ts";
-import type { AgentResult, ModelUsage } from "../../blocks/agents/result.ts";
+import type { AgentResult } from "../../blocks/agents/result.ts";
 import { type RunAgentFn, resumeOrRebuild } from "../../blocks/agents/resume-or-rebuild.ts";
 import { drivers } from "./drivers/index.ts";
 import { type AgentExecutionDependencies, executeAgent } from "./execute-agent.ts";
@@ -30,8 +30,6 @@ vi.mock("./harnesses/executables.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./harnesses/executables.ts")>()),
   resolveCodexExecutable: () => "/fake/codex",
 }));
-
-const usage = { inputTokens: 12, outputTokens: 34 } as unknown as ModelUsage;
 
 let tmp: string;
 // The claude provider validates cwd existence at model construction.
@@ -82,7 +80,7 @@ function makeDeps(
   const deps: AgentExecutionDependencies = {
     generateText: async (options) => {
       captured.options = options;
-      return { text: "done", usage, ...generation };
+      return { text: "done", ...generation };
     },
     evaluate: async () => {
       throw new Error("unexpected decision call");
@@ -99,7 +97,7 @@ function makeDeps(
     },
     executePi: async (options) => {
       captured.piOptions = options;
-      return { text: "done", usage, ...generation };
+      return { text: "done", ...generation };
     },
     // The probe itself is covered in ./jit-marker.test.ts, against a server
     // that really cannot start.
@@ -259,7 +257,7 @@ test("without an output schema no output spec is passed and output is undefined"
   expect(result.output).toBeUndefined();
 });
 
-test("usage passes through and the Claude session pointer is captured", async () => {
+test("the Claude session pointer is captured", async () => {
   const wire = buildAgentRequest({
     harness: harnesses.claude("sonnet"),
     cwd: worktree,
@@ -271,7 +269,6 @@ test("usage passes through and the Claude session pointer is captured", async ()
 
   const result = await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
-  expect(result.usage).toEqual(usage);
   expect(result.session).toEqual({ harness: "claude", id: "s-42" });
 });
 
@@ -411,7 +408,7 @@ test("a second agent in the same worktree is refused while the first is running"
     await new Promise<void>((resolve) => {
       releaseFirst = resolve;
     });
-    return { text: "done", usage };
+    return { text: "done" };
   };
 
   const inFlight = agentStep(wire, { workflowRunId: "run-1" }, first.deps);
@@ -442,7 +439,7 @@ test("a busy worktree does not block an agent in another one", async () => {
     await new Promise<void>((resolve) => {
       releaseFirst = resolve;
     });
-    return { text: "done", usage };
+    return { text: "done" };
   };
 
   const inFlight = agentStep(
@@ -582,7 +579,7 @@ test("pi ask executes its nested model with isolated discovery and returns execu
   });
   const { deps, captured } = makeDeps({
     output: { ok: true },
-    providerMetadata: { pi: { sessionId: "pi-session", costUsd: 0.25 } },
+    providerMetadata: { pi: { sessionId: "pi-session" } },
   });
 
   const result = await agentStep(wire, { workflowRunId: "run-pi" }, deps);
@@ -611,7 +608,6 @@ test("pi ask executes its nested model with isolated discovery and returns execu
   expect(result).toEqual({
     text: "done",
     output: { ok: true },
-    usage: { ...usage, costUsd: 0.25 },
   });
 });
 
@@ -679,7 +675,6 @@ test("pi run mints and records a matching session with tools in the worktree", a
     return {
       text: "done",
       output: { ok: true },
-      usage,
       providerMetadata: { pi: { sessionId: id } },
     };
   };
@@ -735,7 +730,7 @@ test("pi run resumes only after finding the real session file", async () => {
   writeFileSync(path.join(home, "sessions", `2026-09-21T00-00-00_${sessionId}.jsonl`), "");
   deps.executePi = async (options) => {
     captured.piOptions = options;
-    return { text: "continued", usage, providerMetadata: { pi: { sessionId } } };
+    return { text: "continued", providerMetadata: { pi: { sessionId } } };
   };
 
   const result = await agentStep(wire, { workflowRunId: "run-pi-resume" }, deps);
@@ -755,7 +750,6 @@ test("pi run rejects a different session id reported by Pi", async () => {
   const { deps } = makeDeps();
   deps.executePi = async () => ({
     text: "done",
-    usage,
     providerMetadata: { pi: { sessionId: "different-session" } },
   });
 
@@ -776,7 +770,7 @@ test("pi run leaves Pi's default tools enabled when no allowlist is supplied", a
   deps.executePi = async (options) => {
     captured.piOptions = options;
     const id = options.args[options.args.indexOf("--session-id") + 1];
-    return { text: "done", usage, providerMetadata: { pi: { sessionId: id } } };
+    return { text: "done", providerMetadata: { pi: { sessionId: id } } };
   };
 
   await agentStep(wire, { workflowRunId: "run-pi-default-tools" }, deps);
@@ -825,7 +819,6 @@ test("pi stale sessions take resumeOrRebuild's fresh arm", async () => {
     return {
       text: "done",
       output: { ok: true },
-      usage,
       providerMetadata: { pi: { sessionId: id } },
     };
   };

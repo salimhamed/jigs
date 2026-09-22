@@ -33,6 +33,5 @@ test.skipIf(!configured || !reachable)(
     );
 
     expect(result.output).toEqual({ word: "sky", count: 3 });
-    expect(result.usage?.costUsd).toBeUndefined();
   },
 );
