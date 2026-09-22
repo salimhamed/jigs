@@ -187,12 +187,27 @@ export default function (pi: ExtensionAPI) {
       return event.payload;
     const payload = event.payload as Record<string, unknown>;
     if (!Array.isArray(payload.tools)) return event.payload;
-    const tools = payload.tools.filter((tool) => {
-      if (typeof tool !== "object" || tool === null || Array.isArray(tool)) return true;
-      const record = tool as { name?: unknown; function?: { name?: unknown } };
-      return record.name !== "mcp" && record.function?.name !== "mcp";
+    let changed = false;
+    const tools = payload.tools.flatMap((tool) => {
+      if (typeof tool !== "object" || tool === null || Array.isArray(tool)) return [tool];
+      const record = tool as {
+        name?: unknown;
+        function?: { name?: unknown };
+        functionDeclarations?: unknown;
+      };
+      if (record.name === "mcp" || record.function?.name === "mcp") {
+        changed = true;
+        return [];
+      }
+      if (!Array.isArray(record.functionDeclarations)) return [tool];
+      const functionDeclarations = record.functionDeclarations.filter(
+        (declaration) => (declaration as { name?: unknown } | null)?.name !== "mcp",
+      );
+      if (functionDeclarations.length === record.functionDeclarations.length) return [tool];
+      changed = true;
+      return functionDeclarations.length === 0 ? [] : [{ ...record, functionDeclarations }];
     });
-    return tools.length === payload.tools.length ? event.payload : { ...payload, tools };
+    return changed ? { ...payload, tools } : event.payload;
   });
   pi.on("tool_call", (event) =>
     event.toolName === "mcp"

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import {
   piMcpEnvironmentVariables,
   piMcpToolNames,
@@ -8,6 +8,8 @@ import {
   writePiSubmitResultExtension,
 } from "./pi-extension.ts";
 import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
+
+vi.mock("pi-mcp-adapter", () => ({ createMcpAdapter: () => () => {} }));
 
 let tmp: string | undefined;
 afterEach(() => {
@@ -71,9 +73,41 @@ test("MCP extension supplies one complete direct-tools-only adapter snapshot", (
   expect(source).toContain('"jev":false');
   expect(source).toContain('active.filter((name) => name !== "mcp")');
   expect(source).toContain('pi.on("before_provider_request"');
-  expect(source).toContain('record.function?.name !== "mcp"');
   expect(source).toContain('event.toolName === "mcp"');
   expect(source).not.toContain("probe");
+});
+
+test("MCP extension removes the generic proxy from every provider tool shape", async () => {
+  tmp = makeTmpDir();
+  const extension = writePiMcpExtension(tmp, {
+    local: { command: "node", tools: ["ping"], probe: { tool: "ping" } },
+  });
+  const handlers = new Map<string, (event: { payload: unknown }) => unknown>();
+  const { default: register } = (await import(extension)) as {
+    default: (pi: unknown) => void;
+  };
+  register({
+    on: (name: string, handler: (event: { payload: unknown }) => unknown) =>
+      handlers.set(name, handler),
+    getActiveTools: () => [],
+    setActiveTools: () => {},
+  });
+  const beforeRequest = handlers.get("before_provider_request");
+
+  const payload = {
+    tools: [
+      { name: "mcp" },
+      { name: "local_ping" },
+      { type: "function", function: { name: "mcp" } },
+      { functionDeclarations: [{ name: "mcp" }, { name: "local_ping" }] },
+      { functionDeclarations: [{ name: "mcp" }] },
+    ],
+  };
+  expect(beforeRequest?.({ payload })).toEqual({
+    tools: [{ name: "local_ping" }, { functionDeclarations: [{ name: "local_ping" }] }],
+  });
+  const clean = { tools: [{ functionDeclarations: [{ name: "local_ping" }] }] };
+  expect(beforeRequest?.({ payload: clean })).toBe(clean);
 });
 
 test("MCP helpers expose only environment names and Pi-visible direct tool names", () => {
