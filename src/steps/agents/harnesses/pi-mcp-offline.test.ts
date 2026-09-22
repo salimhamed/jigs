@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { createServer, type Server } from "node:http";
+import { createServer, type IncomingMessage, type Server } from "node:http";
 import path from "node:path";
 import semver from "semver";
 import { afterEach, beforeEach, expect, test } from "vitest";
@@ -161,6 +161,12 @@ function piArgs(extension: string, sessions: string): string[] {
   ];
 }
 
+// A request whose client went away before sending its body is not a turn. It is
+// logged so a stray client (such as a Pi from an earlier test) stays visible.
+function warnIgnored(request: IncomingMessage): void {
+  console.warn(`scripted model ignored an empty ${request.method} ${request.url}`);
+}
+
 function piEnv(home: string, token: string, pidFile: string): Record<string, string> {
   return {
     PATH: process.env.PATH ?? "",
@@ -184,8 +190,8 @@ test.skipIf(!hasSupportedPi())(
         body += chunk;
       });
       request.on("end", () => {
-        // A request whose client went away before sending its body is not a turn.
         if (body === "") {
+          warnIgnored(request);
           response.end();
           return;
         }
@@ -281,6 +287,7 @@ test.skipIf(!hasSupportedPi())(
       });
       request.on("end", () => {
         if (body === "") {
+          warnIgnored(request);
           response.end();
           return;
         }

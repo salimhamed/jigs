@@ -1,4 +1,5 @@
 import type { ExecutorGeneration } from "../drivers/types.ts";
+import { SUBMIT_RESULT_TOOL } from "./pi-extension.ts";
 
 export type PiDelta = { type: string; [key: string]: unknown };
 
@@ -25,7 +26,7 @@ function textContent(content: unknown): string {
 }
 
 export type PiReduceOptions = {
-  /** The turn must end with an accepted `submit_result` call. */
+  /** The turn must include an accepted `submit_result` call; the first one accepted is the result. */
   requireResult?: boolean;
   onDelta?: (delta: PiDelta) => void;
 };
@@ -82,14 +83,15 @@ export function reducePiJsonl(jsonl: string, options: PiReduceOptions = {}): Exe
     } else if (
       requireResult &&
       event.type === "tool_execution_end" &&
-      event.toolName === "submit_result"
+      event.toolName === SUBMIT_RESULT_TOOL &&
+      !hasOutput
     ) {
       const result = record(event.result);
       if (event.isError !== true && result !== undefined && "details" in result) {
         output = result.details;
         hasOutput = true;
       } else {
-        rejection = textContent(result?.content) || "submit_result failed";
+        rejection = textContent(result?.content) || `${SUBMIT_RESULT_TOOL} failed`;
       }
     } else if (event.type === "agent_settled") {
       settled = true;
@@ -131,8 +133,8 @@ export function reducePiJsonl(jsonl: string, options: PiReduceOptions = {}): Exe
   if (requireResult && !hasOutput)
     throw new Error(
       rejection === undefined
-        ? "pi finished without calling submit_result"
-        : `pi finished without an accepted submit_result call: ${rejection}`,
+        ? `pi finished without calling ${SUBMIT_RESULT_TOOL}`
+        : `pi finished without an accepted ${SUBMIT_RESULT_TOOL} call: ${rejection}`,
     );
 
   return {

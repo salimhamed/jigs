@@ -93,6 +93,31 @@ test("a rejected submit_result call fails with the extension's schema error", ()
   ).toThrow("without an accepted submit_result call: submit_result arguments do not match");
 });
 
+test("the first accepted submit_result stands over later calls", () => {
+  const second = { ...submitted, result: { ...submitted.result, details: { ok: false } } };
+  const repeated = {
+    type: "tool_execution_end",
+    toolName: "submit_result",
+    result: { content: [{ type: "text", text: "A result was already submitted" }] },
+    isError: true,
+  };
+
+  const generation = reducePiJsonl(
+    jsonl(
+      { type: "agent_start" },
+      submitCall,
+      submitted,
+      second,
+      repeated,
+      assistant([{ type: "text", text: "done" }], "stop"),
+      { type: "agent_settled" },
+    ),
+    required,
+  );
+
+  expect(generation.output).toEqual({ ok: true });
+});
+
 test("a later model error fails even after an accepted submit_result", () => {
   expect(() =>
     reducePiJsonl(

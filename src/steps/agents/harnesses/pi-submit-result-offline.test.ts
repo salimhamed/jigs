@@ -42,23 +42,25 @@ type ChatRequest = {
   messages: Array<Record<string, unknown>>;
   tools?: Array<{ function: { name: string; parameters: Record<string, unknown> } }>;
 };
-type Reply = { text: string } | { call: Record<string, unknown> };
+type Reply =
+  | { text: string }
+  | { call: Record<string, unknown> }
+  | { calls: Array<Record<string, unknown>> };
 
 function send(response: ServerResponse, reply: Reply): void {
   response.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
+  const calls = "text" in reply ? [] : "calls" in reply ? reply.calls : [reply.call];
   const delta =
     "text" in reply
       ? { role: "assistant", content: reply.text }
       : {
           role: "assistant",
-          tool_calls: [
-            {
-              index: 0,
-              id: `call-${crypto.randomUUID()}`,
-              type: "function",
-              function: { name: "submit_result", arguments: JSON.stringify(reply.call) },
-            },
-          ],
+          tool_calls: calls.map((call, index) => ({
+            index,
+            id: `call-${crypto.randomUUID()}`,
+            type: "function",
+            function: { name: "submit_result", arguments: JSON.stringify(call) },
+          })),
         };
   const chunk = {
     id: "scripted",
@@ -87,8 +89,10 @@ async function scriptedModel(reply: (request: ChatRequest, index: number) => Rep
       body += chunk;
     });
     request.on("end", () => {
-      // A request whose client went away before sending its body is not a turn.
+      // A request whose client went away before sending its body is not a
+      // turn. It is logged so a stray client stays visible.
       if (body === "") {
+        console.warn(`scripted model ignored an empty ${request.method} ${request.url}`);
         response.end();
         return;
       }
@@ -230,6 +234,34 @@ test.skipIf(!hasSupportedPi())(
         /without an accepted submit_result call: submit_result arguments do not match the requested schema: \/count/,
       );
       expect(JSON.stringify(model.requests[1]?.messages)).toContain("do not match");
+    } finally {
+      await model.close();
+    }
+  },
+  10_000,
+);
+
+test.skipIf(!hasSupportedPi())(
+  "a structured Pi ask keeps the first accepted submit_result and rejects later calls",
+  async () => {
+    const model = await scriptedModel((_request, index) =>
+      index === 0
+        ? {
+            calls: [
+              { word: "sky", count: 3 },
+              { word: "sea", count: 4 },
+            ],
+          }
+        : { text: "done" },
+    );
+    try {
+      const result = await askAgent(
+        { harness: harnesses.pi(model.source), prompt: "Return sky and 3.", output: answer },
+        step,
+      );
+
+      expect(result.output).toEqual({ word: "sky", count: 3 });
+      expect(JSON.stringify(model.requests[1]?.messages)).toContain("already submitted");
     } finally {
       await model.close();
     }

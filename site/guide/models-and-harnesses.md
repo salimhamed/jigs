@@ -67,7 +67,8 @@ Structured output goes through one `submit_result` tool that jigs writes for the
 call. A structured `askAgent` call allows only that tool; a structured `runAgent`
 call adds it to your `tools` allowlist. The tool checks the model's arguments
 against the requested schema, and the call fails if Pi finishes without an
-accepted `submit_result`, including when the reply is JSON text. A model or
+accepted `submit_result`, including when the reply is JSON text. The first
+accepted result stands: the tool rejects any later call. A model or
 process failure after `submit_result` still fails the call. Pi uses constrained
 JSON Schema sampling where the provider supports it. A call without `output` loads
 no `submit_result` tool and returns plain text.
