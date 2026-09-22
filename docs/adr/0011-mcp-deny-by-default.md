@@ -40,8 +40,10 @@ The adapter may temporarily register its generic `mcp` proxy while a direct
 tool server has no metadata cache. The invocation extension removes that proxy
 from the active tool set before every model turn and blocks the call as a
 backstop. Server resources are disabled. Stdio servers do not inherit Pi's
-environment; each receives only its declared environment, so model credentials
-and sibling-server credentials cannot cross that process boundary.
+environment; each receives its declared environment plus the MCP SDK's stdio
+defaults (`HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM` and `USER` on POSIX, when
+Pi has them), so model credentials and sibling-server credentials cannot cross
+that process boundary.
 
 ## Consequences
 
@@ -83,12 +85,17 @@ and sibling-server credentials cannot cross that process boundary.
   fails and the adapter would otherwise retain its fallback proxy. OAuth probes
   run through Pi itself because a second raw MCP client cannot reuse
   adapter-owned secure credentials without becoming another integration path.
-- Pi and its MCP descendants run in a private process group. An explicit
-  execution abort and an unexpected Pi death both trigger bounded group cleanup.
-  Workflow run cancellation still cannot supply an abort signal to an active
-  step: the current World contract deliberately allows an in-flight effect to
-  finish after `jigs cancel`. End-to-end prompt cancellation remains blocked on
-  a Workflow cancellation signal reaching the executing step.
+- Pi and its MCP descendants run in a private process group. When Pi exits,
+  whatever is left of the group gets SIGTERM, then SIGKILL after a second if it
+  is still alive. Service shutdown stops every live group the same way, and a
+  process exit kills any group still left. Pi execution also accepts an abort
+  signal that triggers the same cleanup, but no production caller passes one
+  yet. The Workflow SDK does deliver an `AbortSignal` passed as a step argument
+  when workflow code calls `abort()` on its controller, but `jigs cancel` only
+  records `run_cancelled`: it neither aborts such a controller nor notifies the
+  executing step, and the cancelled run never replays to do so. A cancelled Pi
+  prompt therefore still runs to completion until cancellation can reach the
+  step.
 - Amends ADR 0004's "skills/config reach agents through the worktree": MCP
   servers are the exception — declared per step, never repo-owned.
 - *Amendment (2026-09-22)*: "managed Codex home" is now an **invocation
