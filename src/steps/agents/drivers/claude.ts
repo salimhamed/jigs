@@ -4,8 +4,8 @@ import type { AgentRequest } from "../../../blocks/agents/plan.ts";
 import { claudeAuthCheck, harnessRuntimeCheck } from "../../../checks/harnesses.ts";
 import { resolveClaudeExecutable } from "../harnesses/executables.ts";
 import { claudeCode } from "../harnesses/index.ts";
-import { claudeProcessSpawner, claudeStepSettings } from "./claude-support.ts";
-import type { Driver, DriverContext } from "./types.ts";
+import { claudeStepSettings } from "./claude-support.ts";
+import type { Driver, DriverContext, ExecutorGeneration } from "./types.ts";
 
 function mcpServers(
   servers: Record<string, McpServerConfig>,
@@ -33,13 +33,8 @@ function descriptor(request: AgentRequest): ClaudeHarness {
   return request.harness as ClaudeHarness;
 }
 
-function envAllowlist(): readonly string[] {
-  return [];
-}
-
-async function run(request: AgentRequest, context: DriverContext) {
+async function run(request: AgentRequest, context: DriverContext): Promise<ExecutorGeneration> {
   const harness = descriptor(request);
-  const allowedEnv = envAllowlist();
   const resume = "resume" in request ? request.resume : undefined;
   return context.deps.generateText({
     model: claudeCode(
@@ -48,13 +43,17 @@ async function run(request: AgentRequest, context: DriverContext) {
         {
           cwd: request.cwd as string,
           env: context.env,
+          strictMcpConfig: true,
+          settingSources: ["project"],
+          permissionMode: "bypassPermissions",
+          allowDangerouslySkipPermissions: true,
           ...(harness.effort === undefined ? {} : { effort: harness.effort }),
           ...(resume === undefined ? {} : { resume: resume.id }),
           ...(harness.mcpServers === undefined
             ? {}
             : { mcpServers: mcpServers(harness.mcpServers) }),
         },
-        allowedEnv,
+        claudeDriver.envAllowlist(request),
       ),
     ),
     prompt: request.prompt,
@@ -62,34 +61,38 @@ async function run(request: AgentRequest, context: DriverContext) {
   });
 }
 
-async function ask(request: AgentRequest, context: DriverContext) {
+async function ask(request: AgentRequest, context: DriverContext): Promise<ExecutorGeneration> {
   const harness = descriptor(request);
-  const allowedEnv = envAllowlist();
   return context.deps.generateText({
-    model: claudeCode(harness.model, {
-      strictMcpConfig: true,
-      mcpServers: {},
-      settingSources: [],
-      env: context.env,
-      pathToClaudeCodeExecutable: resolveClaudeExecutable(),
-      spawnClaudeCodeProcess: claudeProcessSpawner(allowedEnv),
-    }),
+    model: claudeCode(
+      harness.model,
+      claudeStepSettings(
+        {
+          strictMcpConfig: true,
+          mcpServers: {},
+          settingSources: [],
+          env: context.env,
+          pathToClaudeCodeExecutable: resolveClaudeExecutable(),
+        },
+        claudeDriver.envAllowlist(request),
+      ),
+    ),
     prompt: request.prompt,
     ...("system" in request && request.system !== undefined ? { system: request.system } : {}),
     ...(context.output === undefined ? {} : { output: context.output }),
   });
 }
 
-export const claudeDriver = {
+export const claudeDriver: Driver<"claude"> = {
   kind: "claude",
   family: "harness",
   run,
   ask,
   runtimeChecks: () => [harnessRuntimeCheck("claude")],
   authChecks: () => [claudeAuthCheck()],
-  envAllowlist,
+  envAllowlist: () => [],
   sessionPointer: { providerKey: "claude-code", field: "sessionId" },
   docsAnchor: "claude-code",
   displayName: "Claude Code",
   resolveExecutable: resolveClaudeExecutable,
-} satisfies Driver<"claude">;
+};
