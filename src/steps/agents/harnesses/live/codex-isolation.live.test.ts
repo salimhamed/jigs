@@ -8,18 +8,18 @@ import {
 } from "../../drivers/codex-support.ts";
 import { stripApiCredentials } from "../env.ts";
 import { codexExec } from "../index.ts";
-import { makeTmpDir, managedCodexHomeState, removeTmpDir } from "../test-fixtures.ts";
+import { codexInvocationHomeState, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import {
   assertLivePreconditions,
   makeControlCodexHome,
-  makeManagedHome,
+  makeInvocationHome,
   makeScratchRepo,
   PROBE_PROMPT,
 } from "./fixtures/live-env.ts";
 
 // The isolation acceptance criterion, with a LIVE CONTROL and a REAL tool call
 // as the observable — agent self-enumeration misreports. Control home declares
-// the probe server with an unguessable token; the managed home is curated.
+// the probe server with an unguessable token; the invocation home is curated.
 // Both surfaces run against both homes.
 
 let tmp: string;
@@ -34,7 +34,7 @@ beforeAll(() => {
   tmp = makeTmpDir();
   scratch = makeScratchRepo(tmp);
   controlHome = makeControlCodexHome(tmp, probeToken);
-  managedHome = makeManagedHome(tmp, "live-isolation");
+  managedHome = makeInvocationHome(tmp, "live-isolation");
 });
 afterAll(() => {
   removeTmpDir(tmp);
@@ -95,6 +95,6 @@ test("managed (app-server): the probe server is absent; home stays curated", asy
   // Codex prepends trust records and personality (codex-mutable state), but
   // must not have gained any mcp_servers declaration. Parsed, not substring:
   // the curated comment itself mentions mcp_servers.
-  const config = parse(managedCodexHomeState(managedHome).configToml);
+  const config = parse(codexInvocationHomeState(managedHome).configToml);
   expect(config.mcp_servers ?? {}).toEqual({});
 });

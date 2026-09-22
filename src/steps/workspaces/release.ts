@@ -5,8 +5,8 @@ import {
   type ReleaseReport,
   releaseSchema,
 } from "../../blocks/runtime/release.ts";
-import { removeManagedCodexHome } from "../agents/harnesses/codex-home.ts";
-import { removeManagedPiHome } from "../agents/harnesses/pi-home.ts";
+import { removeCodexRunState } from "../agents/harnesses/codex-home.ts";
+import { removePiRunState } from "../agents/harnesses/pi-home.ts";
 import type { RunMetadata } from "../runtime/run-context.ts";
 import { removeRunDirectory, runDirectory } from "../runtime/run-directory/index.ts";
 import { fetchOriginDefault } from "./create.ts";
@@ -108,8 +108,8 @@ export async function releaseRunResources(
       reason: `${outcome} run directory released`,
     };
     if (report.worktrees.every((resource) => resource.removed)) {
-      removeManagedCodexHome(metadata.workflowRunId);
-      removeManagedPiHome(metadata.workflowRunId);
+      removeCodexRunState(metadata.workflowRunId);
+      removePiRunState(metadata.workflowRunId);
     }
   }
   return report;

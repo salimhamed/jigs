@@ -16,7 +16,7 @@ import {
   defaultAgentExecutionDependencies,
   executeAgent,
 } from "../execute-agent.ts";
-import { ensureManagedCodexHome } from "../harnesses/codex-home.ts";
+import { codexSessionFile, prepareCodexInvocationHome } from "../harnesses/codex-home.ts";
 import { stripApiCredentials } from "../harnesses/env.ts";
 import { assertLivePreconditions, makeScratchRepo } from "../harnesses/live/fixtures/live-env.ts";
 import { makeTmpDir, removeTmpDir } from "../harnesses/test-fixtures.ts";
@@ -28,15 +28,16 @@ beforeAll(() => {
   stripApiCredentials();
   tmp = makeTmpDir();
   const codex = createCodexDriver({
-    ensureCodexHome: (runId) =>
-      ensureManagedCodexHome(runId, {
+    prepareCodexHome: (runId) =>
+      prepareCodexInvocationHome(runId, {
         baseDir: path.join(tmp, "codex-homes"),
       }),
+    sessionFile: codexSessionFile,
     withCodexAppServer,
   });
   deps = {
     ...defaultAgentExecutionDependencies,
-    // Managed homes under the test tmp dir, not ~/.local/share.
+    // Run state under the test tmp dir, not ~/.local/share.
     resolveDriver: ((kind) => (kind === "codex" ? codex : driverFor(kind))) as DriverResolver,
   };
 });

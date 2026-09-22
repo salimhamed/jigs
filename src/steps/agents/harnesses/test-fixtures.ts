@@ -10,16 +10,16 @@ export function removeTmpDir(dir: string): void {
   rmSync(dir, { recursive: true, force: true });
 }
 
-export interface ManagedCodexHomeState {
+export interface CodexInvocationHomeState {
   authIsSymlink: boolean;
   authLinkTarget: string | null;
   entries: string[];
   configToml: string;
 }
 
-// Test-side inspection of a managed Codex home. Deliberately test-only:
-// managed homes are per-run state, and jigs doctor runs without a launch.
-export function managedCodexHomeState(home: string): ManagedCodexHomeState {
+// Test-side inspection of a Codex invocation home. Deliberately test-only:
+// invocation homes are private temporary state, and doctor runs without a launch.
+export function codexInvocationHomeState(home: string): CodexInvocationHomeState {
   const authPath = path.join(home, "auth.json");
   let authIsSymlink = false;
   let authLinkTarget: string | null = null;

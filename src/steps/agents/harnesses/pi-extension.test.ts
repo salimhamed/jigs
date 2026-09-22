@@ -9,7 +9,7 @@ afterEach(() => {
   if (tmp !== undefined) removeTmpDir(tmp);
 });
 
-test("submit_result extension is written inside the managed home with the wire schema", () => {
+test("submit_result extension is written inside the invocation home with the wire schema", () => {
   tmp = makeTmpDir();
   const schema = {
     type: "object",

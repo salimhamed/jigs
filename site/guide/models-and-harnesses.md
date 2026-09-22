@@ -40,17 +40,17 @@ Each call gets a curated Pi home; ask mode also gets a scratch working directory
 Jigs disables
 Pi's settings, package, prompt, theme, session, and extension discovery, then
 loads only its `submit_result` extension for structured output. Existing files
-outside that managed home are not discovered. OpenAI Codex subscription calls
+outside that invocation home are not discovered. OpenAI Codex subscription calls
 use a symlink to Pi's normal login at `~/.pi/agent/auth.json`; run `pi`, choose
 `/login`, then select OpenAI Codex before using that source. OpenRouter and
 credentialed OpenAI-compatible sources use the environment variable named by
 their model descriptor.
 
 `runAgent` runs Pi in the supplied worktree and stores its session in the
-run-scoped managed home. The returned session pointer can be passed back as
+run-scoped durable session store. The returned session pointer can be passed back as
 `resume`; jigs verifies that its real session file still exists before spawning
 Pi. A missing session takes the normal `resumeOrRebuild` fresh-context path.
-The managed home and its sessions are removed when the run's worktrees are
+That session store is removed when the run's worktrees are
 released, so they are not long-term conversation storage.
 
 Structured output first asks Pi to call `submit_result` with constrained JSON

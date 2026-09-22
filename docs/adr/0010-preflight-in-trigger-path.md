@@ -41,6 +41,9 @@ skip flag. Decided in
 - **No preflight re-runs on wake.** The ingress stays stateless and dumb;
   staleness after idle days is JIT's job, which is why the shared catalog —
   same repair text at launch and at step 6 on day 5 — matters.
+- *Amendment (2026-09-22)*: "managed Codex home" is now an invocation home —
+  private, temporary configuration per invocation — plus a durable per-run
+  session store.
 
 ## Considered options
 

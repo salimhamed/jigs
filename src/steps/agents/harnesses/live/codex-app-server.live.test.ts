@@ -5,7 +5,11 @@ import { promisify } from "node:util";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { stripApiCredentials } from "../env.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
-import { assertLivePreconditions, makeManagedHome, makeScratchRepo } from "./fixtures/live-env.ts";
+import {
+  assertLivePreconditions,
+  makeInvocationHome,
+  makeScratchRepo,
+} from "./fixtures/live-env.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -21,9 +25,9 @@ afterAll(() => {
 // The clean-exit acceptance criterion, tested honestly as a subprocess: the
 // child runs one app-server step via withCodexAppServer and must exit 0
 // within the deadline. A leaked client pool fails the deadline, not vitest.
-test("app-server step: persistent thread, rollout under the managed home, clean exit", async () => {
+test("app-server step: persistent thread, rollout in the durable session store, clean exit", async () => {
   const scratch = makeScratchRepo(tmp);
-  const home = makeManagedHome(tmp, "live-appserver");
+  const home = makeInvocationHome(tmp, "live-appserver");
   const fixture = path.join(import.meta.dirname, "fixtures", "app-server-step.ts");
   const resultFile = path.join(tmp, "app-server-result.json");
 
@@ -42,8 +46,8 @@ test("app-server step: persistent thread, rollout under the managed home, clean 
   expect(result.text).toContain("ACK");
   expect(result.threadId).toBeTruthy();
 
-  // Rollouts live under CODEX_HOME/sessions — the managed home is per-run
-  // durable state (only persistent threads write one).
+  // The invocation home's sessions link targets the durable per-run store
+  // (only persistent threads write a rollout).
   const rollouts = globSync(path.join(home, "sessions", "**", `*${result.threadId}*`));
   expect(rollouts.length).toBeGreaterThan(0);
   expect(existsSync(path.join(home, "auth.json"))).toBe(true);

@@ -2,8 +2,8 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { managedCodexHomePath } from "../agents/harnesses/codex-home.ts";
-import { managedPiHomePath } from "../agents/harnesses/pi-home.ts";
+import { codexRunStatePath } from "../agents/harnesses/codex-home.ts";
+import { piRunStatePath } from "../agents/harnesses/pi-home.ts";
 import { createRunDirectory } from "../runtime/run-directory/index.ts";
 import type { WorktreeRow } from "./registry.ts";
 import { releaseRunResources } from "./release.ts";
@@ -27,7 +27,7 @@ let store: Map<string, WorktreeRow>;
 
 beforeEach(() => {
   tmp = mkdtempSync(path.join(tmpdir(), "jigs-teardown-test-"));
-  // The managed Codex homes the teardown removes hang off the data home.
+  // The durable Codex run state the teardown removes hang off the data home.
   vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
   vi.spyOn(console, "log").mockImplementation(() => undefined);
   ({ repoDir, remoteDir, worktreesDir } = makeClonedBinding(tmp));
@@ -71,7 +71,7 @@ function merge(branch: string) {
 }
 
 function codexHome(runId: string): string {
-  const home = managedCodexHomePath(runId);
+  const home = codexRunStatePath(runId);
   mkdirSync(home, { recursive: true });
   return home;
 }
@@ -263,7 +263,7 @@ test("a clean worktree reads not-dirty; unreadable or missing directories are no
 test("a merged run removes the worktree, both branches, and its agent homes", async () => {
   const target = runWorktree("feature");
   const home = codexHome("run_1");
-  const piHome = managedPiHomePath("run_1");
+  const piHome = piRunStatePath("run_1");
   mkdirSync(piHome, { recursive: true });
   merge("feature");
 

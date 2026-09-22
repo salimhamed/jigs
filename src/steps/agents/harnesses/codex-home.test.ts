@@ -1,111 +1,111 @@
-import { lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import {
   CURATED_CONFIG_TOML,
-  ensureManagedCodexHome,
-  managedCodexHomePath,
-  removeManagedCodexHome,
+  codexRunStatePath,
+  codexSessionFile,
+  prepareCodexInvocationHome,
+  removeCodexRunState,
 } from "./codex-home.ts";
-import { makeTmpDir, managedCodexHomeState, removeTmpDir } from "./test-fixtures.ts";
+import { codexInvocationHomeState, makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
 let tmp: string;
 let realAuthPath: string;
-let opts: { baseDir: string; realAuthPath: string };
+let options: { baseDir: string; realAuthPath: string };
 
 beforeEach(() => {
   tmp = makeTmpDir();
   realAuthPath = path.join(tmp, "real-codex", "auth.json");
   mkdirSync(path.dirname(realAuthPath), { recursive: true });
   writeFileSync(realAuthPath, '{"auth_mode":"chatgpt"}');
-  opts = { baseDir: path.join(tmp, "codex-homes"), realAuthPath };
+  options = { baseDir: path.join(tmp, "codex-homes"), realAuthPath };
 });
 afterEach(() => {
   removeTmpDir(tmp);
 });
 
-test("fresh ensure creates the curated config and the auth symlink", () => {
-  const home = ensureManagedCodexHome("run-1", opts);
-  const state = managedCodexHomeState(home);
-  expect(state.configToml).toBe(CURATED_CONFIG_TOML);
-  expect(state.authIsSymlink).toBe(true);
-  expect(state.authLinkTarget).toBe(realAuthPath);
-  expect(state.entries).toEqual(["auth.json", "config.toml"]);
+function rollout(sessionDir: string, threadId: string): string {
+  const directory = path.join(sessionDir, "2026", "09", "21");
+  mkdirSync(directory, { recursive: true });
+  const file = path.join(directory, `rollout-2026-09-21T00-00-00-${threadId}.jsonl`);
+  writeFileSync(file, `${JSON.stringify({ type: "session_meta", payload: { id: threadId } })}\n`);
+  return file;
+}
+
+test("parallel Codex invocations have private config and one durable rollout store", () => {
+  const first = prepareCodexInvocationHome("run-1", options);
+  const second = prepareCodexInvocationHome("run-1", options);
+
+  expect(first.home).not.toBe(second.home);
+  expect(first.sessionDir).toBe(second.sessionDir);
+  expect(readFileSync(path.join(first.home, "config.toml"), "utf8")).toBe(CURATED_CONFIG_TOML);
+  expect(readFileSync(path.join(second.home, "config.toml"), "utf8")).toBe(CURATED_CONFIG_TOML);
+  expect(codexInvocationHomeState(first.home).authLinkTarget).toBe(realAuthPath);
+  expect(readlinkSync(path.join(first.home, "sessions"))).toBe(first.sessionDir);
+
+  const stored = rollout(first.sessionDir, "0199-thread");
+  first.cleanup();
+  expect(existsSync(first.home)).toBe(false);
+  expect(existsSync(second.home)).toBe(true);
+  expect(readFileSync(stored, "utf8")).toContain("0199-thread");
+
+  second.cleanup();
+  const afterRestart = prepareCodexInvocationHome("run-1", options);
+  expect(codexSessionFile(afterRestart.sessionDir, "0199-thread")).toBe(stored);
+  afterRestart.cleanup();
 });
 
-test("re-ensure preserves sessions/ — the home is per-run durable state", () => {
-  const home = ensureManagedCodexHome("run-1", opts);
-  const rollout = path.join(home, "sessions", "2026-08-26", "rollout-abc.jsonl");
-  mkdirSync(path.dirname(rollout), { recursive: true });
-  writeFileSync(rollout, "{}");
-
-  ensureManagedCodexHome("run-1", opts);
-  expect(readFileSync(rollout, "utf8")).toBe("{}");
-});
-
-test("re-ensure re-curates a config.toml codex prepended trust records into", () => {
-  const home = ensureManagedCodexHome("run-1", opts);
+test("Codex accepts only a rollout whose filename and metadata exactly match", () => {
+  const prepared = prepareCodexInvocationHome("run-1", options);
+  const exact = rollout(prepared.sessionDir, "0199-exact");
+  rollout(prepared.sessionDir, "0199-other");
+  const invalid = path.join(prepared.sessionDir, "rollout-0199-invalid.jsonl");
   writeFileSync(
-    path.join(home, "config.toml"),
-    `[projects."/some/worktree"]\ntrust_level = "trusted"\n${CURATED_CONFIG_TOML}`,
+    invalid,
+    `${JSON.stringify({ type: "session_meta", payload: { id: "different" } })}\n`,
   );
 
-  ensureManagedCodexHome("run-1", opts);
-  expect(managedCodexHomeState(home).configToml).toBe(CURATED_CONFIG_TOML);
+  expect(codexSessionFile(prepared.sessionDir, "0199-exact")).toBe(exact);
+  expect(codexSessionFile(prepared.sessionDir, "0199-invalid")).toBeUndefined();
+  expect(codexSessionFile(prepared.sessionDir, "0199")).toBeUndefined();
+  prepared.cleanup();
 });
 
-test("a regular-file auth.json (stale copy) is replaced by the symlink", () => {
-  const home = managedCodexHomePath("run-1", opts);
-  mkdirSync(home, { recursive: true });
-  writeFileSync(path.join(home, "auth.json"), '{"stale":"copy"}');
-
-  ensureManagedCodexHome("run-1", opts);
-  const state = managedCodexHomeState(home);
-  expect(state.authIsSymlink).toBe(true);
-  expect(state.authLinkTarget).toBe(realAuthPath);
-});
-
-test("a symlink to the wrong target is re-pointed", () => {
-  const home = ensureManagedCodexHome("run-1", opts);
-  const otherAuth = path.join(tmp, "other-auth.json");
-  writeFileSync(otherAuth, "{}");
-  const relinked = ensureManagedCodexHome("run-1", {
-    ...opts,
-    realAuthPath: otherAuth,
-  });
-  expect(managedCodexHomeState(relinked).authLinkTarget).toBe(otherAuth);
-  expect(home).toBe(relinked);
-});
-
-test("a missing real login throws a repair error", () => {
-  expect(() =>
-    ensureManagedCodexHome("run-1", {
-      ...opts,
-      realAuthPath: path.join(tmp, "nope.json"),
+test("Codex fails loudly when a matching rollout has no metadata line within the read bound", () => {
+  const prepared = prepareCodexInvocationHome("run-1", options);
+  const threadId = "0199-oversized";
+  const directory = path.join(prepared.sessionDir, "2026", "09", "21");
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(
+    path.join(directory, `rollout-${threadId}.jsonl`),
+    JSON.stringify({
+      type: "session_meta",
+      payload: { padding: "x".repeat(64 * 1024), id: threadId },
     }),
-  ).toThrow("no Codex login found");
+  );
+
+  expect(() => codexSessionFile(prepared.sessionDir, threadId)).toThrow(/no metadata line/);
+  prepared.cleanup();
+});
+
+test("a missing real login fails before creating invocation configuration", () => {
   expect(() =>
-    ensureManagedCodexHome("run-1", {
-      ...opts,
-      realAuthPath: path.join(tmp, "nope.json"),
+    prepareCodexInvocationHome("run-1", {
+      ...options,
+      realAuthPath: path.join(tmp, "missing.json"),
     }),
-  ).toThrow("codex login");
+  ).toThrow(/no Codex login found.*codex login/);
+  expect(existsSync(codexRunStatePath("run-1", options))).toBe(false);
 });
 
-test("path convention honors XDG_DATA_HOME and baseDir", () => {
-  expect(managedCodexHomePath("run-1", { baseDir: "/x/y" })).toBe("/x/y/run-1");
-  const prev = process.env.XDG_DATA_HOME;
-  process.env.XDG_DATA_HOME = "/xdg-data";
-  try {
-    expect(managedCodexHomePath("run-1")).toBe("/xdg-data/jigs/codex-homes/run-1");
-  } finally {
-    if (prev === undefined) delete process.env.XDG_DATA_HOME;
-    else process.env.XDG_DATA_HOME = prev;
-  }
-});
+test("removeCodexRunState deletes durable rollouts with the run", () => {
+  const prepared = prepareCodexInvocationHome("run-1", options);
+  rollout(prepared.sessionDir, "0199-thread");
+  prepared.cleanup();
 
-test("removeManagedCodexHome deletes the home", () => {
-  const home = ensureManagedCodexHome("run-1", opts);
-  removeManagedCodexHome("run-1", opts);
-  expect(() => lstatSync(home)).toThrow();
+  removeCodexRunState("run-1", options);
+
+  expect(existsSync(codexRunStatePath("run-1", options))).toBe(false);
+  expect(existsSync(realAuthPath)).toBe(true);
 });

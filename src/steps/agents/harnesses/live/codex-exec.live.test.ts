@@ -5,10 +5,10 @@ import { afterAll, beforeAll, expect, test } from "vitest";
 import { codexExecStepSettings } from "../../drivers/codex-support.ts";
 import { stripApiCredentials } from "../env.ts";
 import { codexExec } from "../index.ts";
-import { makeTmpDir, managedCodexHomeState, removeTmpDir } from "../test-fixtures.ts";
+import { codexInvocationHomeState, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import {
   assertLivePreconditions,
-  makeManagedHome,
+  makeInvocationHome,
   makeScratchRepo,
   REAL_CODEX_AUTH,
 } from "./fixtures/live-env.ts";
@@ -23,10 +23,10 @@ afterAll(() => {
   removeTmpDir(tmp);
 });
 
-test("Codex exec smoke under the managed home; auth symlink and login survive", async () => {
+test("Codex exec smoke under an invocation home; auth symlink and login survive", async () => {
   expect(process.env.OPENAI_API_KEY).toBeUndefined();
   const scratch = makeScratchRepo(tmp);
-  const home = makeManagedHome(tmp, "live-exec");
+  const home = makeInvocationHome(tmp, "live-exec");
   const codeword = `JIGS-LIVE-${crypto.randomUUID().slice(0, 8)}`;
 
   const model = codexExec(
@@ -48,7 +48,7 @@ test("Codex exec smoke under the managed home; auth symlink and login survive", 
   expect(existsSync(probeFile)).toBe(true);
   expect(readFileSync(probeFile, "utf8").trim()).toBe(codeword);
 
-  const state = managedCodexHomeState(home);
+  const state = codexInvocationHomeState(home);
   expect(state.authIsSymlink).toBe(true);
   expect(state.authLinkTarget).toBe(REAL_CODEX_AUTH);
   const realAuth = JSON.parse(readFileSync(REAL_CODEX_AUTH, "utf8")) as Record<string, unknown>;

@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
-import { ensureManagedCodexHome } from "../../codex-home.ts";
+import { prepareCodexInvocationHome } from "../../codex-home.ts";
 import { resolveClaudeExecutable } from "../../executables.ts";
 
 export const REAL_CODEX_AUTH = path.join(homedir(), ".codex", "auth.json");
@@ -16,10 +16,10 @@ export function assertLivePreconditions(): void {
   resolveClaudeExecutable();
 }
 
-export function makeManagedHome(tmp: string, label: string): string {
-  return ensureManagedCodexHome(`${label}-${crypto.randomUUID().slice(0, 8)}`, {
+export function makeInvocationHome(tmp: string, label: string): string {
+  return prepareCodexInvocationHome(`${label}-${crypto.randomUUID().slice(0, 8)}`, {
     baseDir: path.join(tmp, "codex-homes"),
-  });
+  }).home;
 }
 
 export function makeScratchRepo(parent: string, name = "scratch"): string {

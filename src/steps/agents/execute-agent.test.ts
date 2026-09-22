@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ClaudeCodeSettings } from "ai-sdk-provider-claude-code";
@@ -19,6 +19,7 @@ import {
 } from "../../blocks/agents/plan.ts";
 import type { AgentResult } from "../../blocks/agents/result.ts";
 import { type RunAgentFn, resumeOrRebuild } from "../../blocks/agents/resume-or-rebuild.ts";
+import { createClaudeDriver } from "./drivers/claude.ts";
 import { createCodexDriver } from "./drivers/codex.ts";
 import { type DriverResolver, driverFor, drivers } from "./drivers/index.ts";
 import { createPiDriver, type PiDriverDependencies } from "./drivers/pi.ts";
@@ -92,14 +93,16 @@ function makeDeps(
     captured.options = options;
     return { text: "done", ...generation };
   };
-  const ensurePiHome: PiDriverDependencies["ensurePiHome"] = (runId, model) => {
+  const preparePiHome: PiDriverDependencies["preparePiHome"] = (runId, model) => {
     captured.piHome = { runId, model };
-    const home = path.join(tmp, "pi-home", runId);
-    mkdirSync(path.join(home, "sessions"), { recursive: true });
-    return home;
+    const home = path.join(tmp, "pi-home", runId, crypto.randomUUID());
+    const sessionDir = path.join(tmp, "pi-home", runId, "sessions");
+    mkdirSync(home, { recursive: true });
+    mkdirSync(sessionDir, { recursive: true });
+    return { home, sessionDir, cleanup: () => rmSync(home, { recursive: true, force: true }) };
   };
   const piDeps: PiDriverDependencies = {
-    ensurePiHome,
+    preparePiHome,
     executePi: async (options) => {
       captured.piOptions = options;
       return { text: "done", ...generation };
@@ -107,11 +110,17 @@ function makeDeps(
   };
   const testDrivers = {
     ...drivers,
+    claude: createClaudeDriver({ sessionMessages: async () => [{ type: "user" }] }),
     codex: createCodexDriver({
-      ensureCodexHome: (runId) => {
+      prepareCodexHome: (runId) => {
         captured.homeRunIds.push(runId);
-        return path.join(tmp, "codex-home", runId);
+        const home = path.join(tmp, "codex-home", runId, crypto.randomUUID());
+        const sessionDir = path.join(tmp, "codex-home", runId, "sessions");
+        mkdirSync(home, { recursive: true });
+        mkdirSync(sessionDir, { recursive: true });
+        return { home, sessionDir, cleanup: () => rmSync(home, { recursive: true, force: true }) };
       },
+      sessionFile: (_sessionDir, threadId) => `/rollout-${threadId}.jsonl`,
       withCodexAppServer: async (fn) => {
         const provider = ((modelId: string, settings: CodexAppServerSettings) => {
           captured.codexModel = modelId;
@@ -132,6 +141,7 @@ function makeDeps(
       throw new Error("unexpected decision call");
     },
     resolveDriver: ((kind) => {
+      if (kind === "claude") return testDrivers.claude;
       if (kind === "codex") return testDrivers.codex;
       if (kind === "pi") return testDrivers.pi;
       return driverFor(kind);
@@ -166,9 +176,9 @@ function claudeSettingsOf(captured: Captured): ClaudeCodeSettings {
 const verdict = z.object({ ok: z.boolean() });
 
 test("generic execution dependencies contain no driver-private operations", () => {
-  expect(defaultAgentExecutionDependencies).not.toHaveProperty("ensureCodexHome");
+  expect(defaultAgentExecutionDependencies).not.toHaveProperty("prepareCodexHome");
   expect(defaultAgentExecutionDependencies).not.toHaveProperty("withCodexAppServer");
-  expect(defaultAgentExecutionDependencies).not.toHaveProperty("ensurePiHome");
+  expect(defaultAgentExecutionDependencies).not.toHaveProperty("preparePiHome");
   expect(defaultAgentExecutionDependencies).not.toHaveProperty("executePi");
 });
 
@@ -211,7 +221,7 @@ test("claude agent step hydrates from wire config with the harness invariants fo
   expect(captured.homeRunIds).toEqual([]);
 });
 
-test("codex agent step runs on the app-server under the managed home with fixed policies", async () => {
+test("codex agent step runs on the app-server under an invocation home with fixed policies", async () => {
   const wire = buildAgentRequest({
     harness: harnesses.codex("gpt-5.5", {
       effort: "xhigh",
@@ -232,11 +242,60 @@ test("codex agent step runs on the app-server under the managed home with fixed 
   expect(settings?.sandboxPolicy).toBe("danger-full-access");
   expect(settings?.autoApprove).toBe(true);
   expect(settings?.effort).toBe("xhigh");
-  expect(settings?.env?.CODEX_HOME).toBe(path.join(tmp, "codex-home", "run-7"));
+  expect(settings?.env?.CODEX_HOME).toMatch(
+    new RegExp(`^${path.join(tmp, "codex-home", "run-7")}/`),
+  );
   expect(settings?.mcpServers).toEqual({
     probe: { transport: "stdio", command: "node" },
   });
   expect(captured.homeRunIds).toEqual(["run-7"]);
+});
+
+test("parallel Codex invocations keep settings and homes private", async () => {
+  const otherWorktree = path.join(tmp, "parallel-worktree");
+  mkdirSync(otherWorktree, { recursive: true });
+  const first = makeDeps();
+  const second = makeDeps();
+
+  await Promise.all([
+    agentStep(
+      buildAgentRequest({
+        harness: harnesses.codex("gpt-5.5", {
+          effort: "low",
+          mcpServers: { alpha: { command: "alpha", probe: { tool: "ping" } } },
+        }),
+        cwd: worktree,
+        prompt: "first",
+      }),
+      { workflowRunId: "same-run" },
+      first.deps,
+    ),
+    agentStep(
+      buildAgentRequest({
+        harness: harnesses.codex("gpt-6-astra", {
+          effort: "xhigh",
+          mcpServers: { beta: { command: "beta", probe: { tool: "ping" } } },
+        }),
+        cwd: otherWorktree,
+        prompt: "second",
+      }),
+      { workflowRunId: "same-run" },
+      second.deps,
+    ),
+  ]);
+
+  expect(first.captured.codexModel).toBe("gpt-5.5");
+  expect(second.captured.codexModel).toBe("gpt-6-astra");
+  expect(first.captured.codexSettings?.mcpServers).toEqual({
+    alpha: { transport: "stdio", command: "alpha" },
+  });
+  expect(second.captured.codexSettings?.mcpServers).toEqual({
+    beta: { transport: "stdio", command: "beta" },
+  });
+  const firstHome = first.captured.codexSettings?.env?.CODEX_HOME;
+  const secondHome = second.captured.codexSettings?.env?.CODEX_HOME;
+  expect(existsSync(firstHome ?? "")).toBe(false);
+  expect(existsSync(secondHome ?? "")).toBe(false);
 });
 
 test("omitting effort leaves both providers' settings unset", async () => {
@@ -343,6 +402,47 @@ test("a claude resume rides on the settings' resume field", async () => {
   expect(captured.options?.providerOptions).toBeUndefined();
 });
 
+test("a Claude transcript with messages but no summary resumes", async () => {
+  const wire = buildAgentRequest({
+    harness: harnesses.claude("sonnet"),
+    cwd: worktree,
+    prompt: "answer the review",
+    resume: { harness: "claude", id: "summaryless-session" },
+  });
+  const { deps, captured } = makeDeps();
+  const summaryless = createClaudeDriver({
+    sessionMessages: async () => [{ type: "user", message: "interrupted first turn" }],
+  });
+  const resolveDriver = deps.resolveDriver;
+  deps.resolveDriver = ((kind) =>
+    kind === "claude" ? summaryless : resolveDriver(kind)) as DriverResolver;
+
+  await agentStep(wire, { workflowRunId: "run-1" }, deps);
+
+  expect(claudeSettingsOf(captured).resume).toBe("summaryless-session");
+});
+
+test("a missing Claude transcript reports resumeFailed before launch", async () => {
+  const wire = buildAgentRequest({
+    harness: harnesses.claude("sonnet"),
+    cwd: worktree,
+    prompt: "answer the review",
+    resume: { harness: "claude", id: "missing-session" },
+  });
+  const { deps, captured } = makeDeps();
+  const missing = createClaudeDriver({ sessionMessages: async () => [] });
+  const resolveDriver = deps.resolveDriver;
+  deps.resolveDriver = ((kind) =>
+    kind === "claude" ? missing : resolveDriver(kind)) as DriverResolver;
+
+  const result = await executeAgent(wire, { workflowRunId: "run-1" }, deps);
+
+  expect(result).toEqual({
+    resumeFailed: expect.stringContaining("Claude session missing-session is missing"),
+  });
+  expect(captured.options).toBeUndefined();
+});
+
 test("a codex resume rides on providerOptions['codex-app-server'].threadId", async () => {
   const wire = buildAgentRequest({
     harness: harnesses.codex("gpt-5.5"),
@@ -399,7 +499,7 @@ test("Claude steps always run with bypass", async () => {
   expect(settings.allowDangerouslySkipPermissions).toBe(true);
 });
 
-test("a failed resume returns the resumeFailed marker instead of throwing", async () => {
+test("a Codex execution failure during resume still throws", async () => {
   const wire = buildAgentRequest({
     harness: harnesses.codex("gpt-5.5"),
     cwd: worktree,
@@ -413,11 +513,26 @@ test("a failed resume returns the resumeFailed marker instead of throwing", asyn
     throw new Error("no rollout found for thread id 0199-gone");
   };
 
-  const result = await executeAgent(wire, { workflowRunId: "run-1" }, deps);
+  await expect(executeAgent(wire, { workflowRunId: "run-1" }, deps)).rejects.toThrow(
+    "no rollout found for thread id",
+  );
+});
 
-  expect(result).toEqual({
-    resumeFailed: expect.stringContaining("no rollout found for thread id"),
+test("a Claude execution failure during resume still throws", async () => {
+  const wire = buildAgentRequest({
+    harness: harnesses.claude("sonnet"),
+    cwd: worktree,
+    prompt: "answer the review",
+    resume: { harness: "claude", id: "s-42" },
   });
+  const { deps } = makeDeps();
+  deps.generateText = () => {
+    throw new Error("Claude stopped after launch");
+  };
+
+  await expect(executeAgent(wire, { workflowRunId: "run-1" }, deps)).rejects.toThrow(
+    "Claude stopped after launch",
+  );
 });
 
 test("a failure with no resume to blame still throws", async () => {
@@ -637,7 +752,9 @@ test("codex ask step uses read-only exec in a scratch cwd it cleans up", async (
   expect(settings?.sandboxMode).toBe("read-only");
   expect(settings?.approvalMode).toBe("never");
   expect(settings?.skipGitRepoCheck).toBe(true);
-  expect(settings?.env?.CODEX_HOME).toBe(path.join(tmp, "codex-home", "run-9"));
+  expect(settings?.env?.CODEX_HOME).toMatch(
+    new RegExp(`^${path.join(tmp, "codex-home", "run-9")}/`),
+  );
   expect(settings?.cwd?.startsWith(path.join(tmpdir(), "jigs-ask-"))).toBe(true);
   expect(existsSync(settings?.cwd ?? "")).toBe(false);
   expect(result.text).toBe("done");
@@ -690,7 +807,10 @@ test("pi ask executes its nested model with isolated discovery and returns execu
     expect.stringContaining("submit-result.ts"),
     expect.stringContaining("Call submit_result"),
   ]);
-  expect(captured.piOptions?.env.PI_CODING_AGENT_DIR).toBe(path.join(tmp, "pi-home", "run-pi"));
+  expect(captured.piOptions?.env.PI_CODING_AGENT_DIR).toMatch(
+    new RegExp(`^${path.join(tmp, "pi-home", "run-pi")}/`),
+  );
+  expect(existsSync(captured.piOptions?.env.PI_CODING_AGENT_DIR ?? "")).toBe(false);
   expect(existsSync(captured.piOptions?.cwd ?? "")).toBe(false);
   expect(result).toEqual({
     text: "done",
@@ -792,6 +912,10 @@ test("pi run mints and records a matching session with tools in the worktree", a
   expect(captured.piOptions?.cwd).toBe(worktree);
   expect(result.session).toEqual({ harness: "pi", id: sessionId });
   expect(result.output).toEqual({ ok: true });
+  const extension = args[args.indexOf("-e") + 1];
+  if (extension === undefined) throw new Error("Pi output extension was not passed");
+  expect(extension).toContain("submit-result.ts");
+  expect(existsSync(extension)).toBe(false);
 });
 
 test("pi run returns a stale resume marker before spawning Pi", async () => {
@@ -813,8 +937,7 @@ test("pi run returns a stale resume marker before spawning Pi", async () => {
 
 test("pi run resumes only after finding the real session file", async () => {
   const sessionId = "existing-session";
-  const source = models.openrouter("openai/gpt-oss");
-  const harness = harnesses.pi(source);
+  const harness = harnesses.pi(models.openrouter("openai/gpt-oss"));
   const wire = buildAgentRequest({
     harness,
     cwd: worktree,
@@ -822,8 +945,8 @@ test("pi run resumes only after finding the real session file", async () => {
     resume: { harness: "pi", id: sessionId },
   });
   const { deps, captured, piDeps } = makeDeps();
-  const home = piDeps.ensurePiHome("run-pi-resume", planPiModel(harness));
-  writeFileSync(path.join(home, "sessions", `2026-09-21T00-00-00_${sessionId}.jsonl`), "");
+  const prepared = piDeps.preparePiHome("run-pi-resume", planPiModel(harness));
+  writeFileSync(path.join(prepared.sessionDir, `2026-09-21T00-00-00_${sessionId}.jsonl`), "");
   piDeps.executePi = async (options) => {
     captured.piOptions = options;
     return { text: "continued", providerMetadata: { pi: { sessionId } } };
@@ -831,7 +954,11 @@ test("pi run resumes only after finding the real session file", async () => {
 
   const result = await agentStep(wire, { workflowRunId: "run-pi-resume" }, deps);
 
-  expect(captured.piOptions?.args).toContain(sessionId);
+  const args = captured.piOptions?.args ?? [];
+  expect(args).not.toContain("--session-id");
+  expect(args[args.indexOf("--session") + 1]).toBe(
+    path.join(prepared.sessionDir, `2026-09-21T00-00-00_${sessionId}.jsonl`),
+  );
   expect(result.session).toEqual({ harness: "pi", id: sessionId });
 });
 
@@ -850,6 +977,55 @@ test("pi run rejects a different session id reported by Pi", async () => {
   await expect(executeAgent(wire, { workflowRunId: "run-pi-mismatch" }, deps)).rejects.toThrow(
     /Pi reported session.*different-session.*jigs-/,
   );
+});
+
+test("a Pi execution failure during resume still throws", async () => {
+  const sessionId = "existing-session";
+  const source = models.openrouter("openai/gpt-oss");
+  const wire = buildAgentRequest({
+    harness: harnesses.pi(source),
+    cwd: worktree,
+    prompt: "continue",
+    resume: { harness: "pi", id: sessionId },
+  });
+  const { deps, piDeps } = makeDeps();
+  const prepared = piDeps.preparePiHome(
+    "run-pi-execution-failure",
+    planPiModel(harnesses.pi(source)),
+  );
+  writeFileSync(path.join(prepared.sessionDir, `2026_${sessionId}.jsonl`), "");
+  piDeps.executePi = async () => {
+    throw new Error("Pi stopped after launch");
+  };
+
+  await expect(
+    executeAgent(wire, { workflowRunId: "run-pi-execution-failure" }, deps),
+  ).rejects.toThrow("Pi stopped after launch");
+});
+
+test("a resumed Pi session-id mismatch still throws after launch", async () => {
+  const sessionId = "existing-session";
+  const source = models.openrouter("openai/gpt-oss");
+  const wire = buildAgentRequest({
+    harness: harnesses.pi(source),
+    cwd: worktree,
+    prompt: "continue",
+    resume: { harness: "pi", id: sessionId },
+  });
+  const { deps, piDeps } = makeDeps();
+  const prepared = piDeps.preparePiHome(
+    "run-pi-resume-mismatch",
+    planPiModel(harnesses.pi(source)),
+  );
+  writeFileSync(path.join(prepared.sessionDir, `2026_${sessionId}.jsonl`), "");
+  piDeps.executePi = async () => ({
+    text: "work already completed",
+    providerMetadata: { pi: { sessionId: "different-session" } },
+  });
+
+  await expect(
+    executeAgent(wire, { workflowRunId: "run-pi-resume-mismatch" }, deps),
+  ).rejects.toThrow(/Pi reported session.*different-session.*existing-session/);
 });
 
 test("pi run leaves Pi's default tools enabled when no allowlist is supplied", async () => {
@@ -934,7 +1110,7 @@ test("pi stale sessions take resumeOrRebuild's fresh arm", async () => {
   expect(result.session?.id).not.toBe("gone");
 });
 
-test("pi run honors JIT failure before creating its managed home or spawning", async () => {
+test("pi run honors JIT failure before creating its invocation home or spawning", async () => {
   const wire = buildAgentRequest({
     harness: harnesses.pi(models.openrouter("openai/gpt-oss")),
     cwd: worktree,

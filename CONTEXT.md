@@ -292,10 +292,15 @@ Verification of requirements that become known only when a step is about to
 execute. Failure can produce a needs-human halt.
 _Avoid_: runtime check, lazy check
 
-**Managed Codex home**:
-The jigs-managed Codex configuration that supplies an agent step’s selected
-capabilities while retaining the operator’s authentication.
-_Avoid_: isolated home, custom home, sandbox home
+**Invocation home**:
+A temporary, invocation-private directory containing generated harness
+configuration and links to shared authentication and durable session state.
+_Avoid_: managed home, isolated home, custom home, sandbox home
+
+**Durable agent session store**:
+Per-run conversation state retained across agent invocations and workflow
+wakes until the run’s resources are released.
+_Avoid_: invocation home, harness config
 
 **Service**:
 The long-running process owned by a factory that executes workflows,
