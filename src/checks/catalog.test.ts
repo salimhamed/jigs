@@ -115,6 +115,13 @@ test("a workflow that does not require aws does not get it", () => {
   expect(preflightIds({ harnesses: ["claude"] })).not.toContain("aws.credentials");
 });
 
+test("preflight installs only the harnesses declared by the workflow", () => {
+  const ids = preflightIds({ harnesses: ["claude"] });
+  expect(ids).toContain("harness.claude-cli");
+  expect(ids).not.toContain("harness.codex-cli");
+  expect(ids).not.toContain("harness.pi-cli");
+});
+
 test("model-source requirements are included in preflight", () => {
   expect(preflightIds({ models: ["openrouter"] })).toContain("model.openrouter-api-key");
 });

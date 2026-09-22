@@ -430,9 +430,9 @@ test("an OpenAI-compatible source uses only its optional named credential", asyn
   ).toEqual(["LOCAL_MODEL_KEY"]);
   expect(
     drivers["openai-compatible"]
-      .authChecks(buildModelRequest({ model: source, prompt: "x" }))
+      .requestChecks(buildModelRequest({ model: source, prompt: "x" }))
       .map((check) => check.id),
-  ).toEqual(["model.local-model-key"]);
+  ).toEqual(["model.openai-compatible-runtime", "model.local-model-key"]);
   const withoutKey = buildModelRequest({
     model: models.openaiCompatible({
       name: "open-server",
@@ -442,7 +442,9 @@ test("an OpenAI-compatible source uses only its optional named credential", asyn
     prompt: "x",
   });
   expect(drivers["openai-compatible"].envAllowlist(withoutKey)).toEqual([]);
-  expect(drivers["openai-compatible"].authChecks(withoutKey)).toEqual([]);
+  expect(drivers["openai-compatible"].requestChecks(withoutKey).map((check) => check.id)).toEqual([
+    "model.openai-compatible-runtime",
+  ]);
 });
 
 test("OpenRouter answers one structured request directly", async () => {
@@ -523,9 +525,7 @@ test("OpenRouter names the missing descriptor credential and its repair", async 
       }),
       { workflowRunId: "run-1" },
     ),
-  ).rejects.toMatchObject({
-    name: "JigsError",
-    message: "TEAM_OPENROUTER_KEY is not set in the service's environment",
-    hint: expect.stringContaining("set TEAM_OPENROUTER_KEY in the factory repo's .env"),
-  });
+  ).rejects.toThrow(
+    /TEAM_OPENROUTER_KEY credential: TEAM_OPENROUTER_KEY is not set.*set TEAM_OPENROUTER_KEY in the factory repo's \.env/s,
+  );
 });

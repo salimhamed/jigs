@@ -11,6 +11,9 @@ import type { TicketClaim } from "../../../blocks/linear/claim.ts";
 import type { HaltForHumanFn, HumanReply } from "../../../blocks/linear/halt-for-human.ts";
 import { reviewTicket } from "../../../blocks/linear/review.ts";
 import type { TicketSnapshot } from "../../../blocks/linear/snapshot.ts";
+import { createCodexDriver } from "../drivers/codex.ts";
+import { withCodexAppServer } from "../drivers/codex-support.ts";
+import { type DriverResolver, driverFor } from "../drivers/index.ts";
 import {
   type AgentExecutionDependencies,
   defaultAgentExecutionDependencies,
@@ -28,10 +31,14 @@ beforeAll(() => {
   assertLivePreconditions();
   stripApiCredentials();
   tmp = makeTmpDir();
-  deps = {
-    ...defaultAgentExecutionDependencies,
+  const codex = createCodexDriver({
     ensureCodexHome: (runId) =>
       ensureManagedCodexHome(runId, { baseDir: path.join(tmp, "codex-homes") }),
+    withCodexAppServer,
+  });
+  deps = {
+    ...defaultAgentExecutionDependencies,
+    resolveDriver: ((kind) => (kind === "codex" ? codex : driverFor(kind))) as DriverResolver,
   };
 });
 afterAll(() => removeTmpDir(tmp));

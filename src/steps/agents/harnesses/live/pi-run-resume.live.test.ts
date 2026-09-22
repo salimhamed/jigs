@@ -4,11 +4,14 @@ import { afterAll, beforeAll, expect, test } from "vitest";
 import { harnesses, models } from "../../../../blocks/agents/harness-config.ts";
 import { buildAgentRequest } from "../../../../blocks/agents/plan.ts";
 import type { AgentResult } from "../../../../blocks/agents/result.ts";
+import { type DriverResolver, driverFor } from "../../drivers/index.ts";
+import { createPiDriver } from "../../drivers/pi.ts";
 import {
   type AgentExecutionDependencies,
   defaultAgentExecutionDependencies,
   executeAgent,
 } from "../../execute-agent.ts";
+import { executePi } from "../pi.ts";
 import { ensureManagedPiHome } from "../pi-home.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { makeScratchRepo } from "./fixtures/live-env.ts";
@@ -27,10 +30,14 @@ let tmp: string;
 let deps: AgentExecutionDependencies;
 beforeAll(() => {
   tmp = makeTmpDir();
-  deps = {
-    ...defaultAgentExecutionDependencies,
+  const pi = createPiDriver({
     ensurePiHome: (runId, source) =>
       ensureManagedPiHome(runId, source, { baseDir: path.join(tmp, "pi-homes") }),
+    executePi,
+  });
+  deps = {
+    ...defaultAgentExecutionDependencies,
+    resolveDriver: ((kind) => (kind === "pi" ? pi : driverFor(kind))) as DriverResolver,
   };
 });
 afterAll(() => removeTmpDir(tmp));

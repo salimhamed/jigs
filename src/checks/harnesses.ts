@@ -205,9 +205,7 @@ export function harnessRuntimeCheck(kind: HarnessKind, deps: HarnessRuntimeDeps 
 export function harnessChecks(kinds: HarnessKind[]): Check[] {
   return [...new Set(kinds)].flatMap((kind) => {
     const driver = driverFor(kind);
-    return driver === undefined
-      ? [missingDriverCheck(kind)]
-      : [...driver.runtimeChecks(), ...driver.authChecks()];
+    return driver === undefined ? [missingDriverCheck(kind)] : driver.installationChecks();
   });
 }
 

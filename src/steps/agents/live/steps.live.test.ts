@@ -8,6 +8,9 @@ import {
   buildAskAgentRequest,
 } from "../../../blocks/agents/plan.ts";
 import type { AgentResult } from "../../../blocks/agents/result.ts";
+import { createCodexDriver } from "../drivers/codex.ts";
+import { withCodexAppServer } from "../drivers/codex-support.ts";
+import { type DriverResolver, driverFor } from "../drivers/index.ts";
 import {
   type AgentExecutionDependencies,
   defaultAgentExecutionDependencies,
@@ -24,13 +27,17 @@ beforeAll(() => {
   assertLivePreconditions();
   stripApiCredentials();
   tmp = makeTmpDir();
-  deps = {
-    ...defaultAgentExecutionDependencies,
-    // Managed homes under the test tmp dir, not ~/.local/share.
+  const codex = createCodexDriver({
     ensureCodexHome: (runId) =>
       ensureManagedCodexHome(runId, {
         baseDir: path.join(tmp, "codex-homes"),
       }),
+    withCodexAppServer,
+  });
+  deps = {
+    ...defaultAgentExecutionDependencies,
+    // Managed homes under the test tmp dir, not ~/.local/share.
+    resolveDriver: ((kind) => (kind === "codex" ? codex : driverFor(kind))) as DriverResolver,
   };
 });
 afterAll(() => {

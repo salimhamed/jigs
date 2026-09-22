@@ -17,10 +17,10 @@ test("every registered driver declares its operational contract and documentatio
     "utf8",
   );
   for (const driver of Object.values(drivers)) {
-    if (driver.family === "harness") expect(driver.runtimeChecks()).not.toHaveLength(0);
-    else expect(driver.runtimeChecks()).toEqual([]);
+    const installationIds = driver.installationChecks().map((check) => check.id);
     expect(driver.envAllowlist()).toBeInstanceOf(Array);
     if (driver.family === "harness") {
+      expect(installationIds).toContain(`harness.${driver.kind}-cli`);
       expect(driver.sessionPointer).toEqual({
         providerKey: expect.any(String),
         field: expect.any(String),
@@ -47,18 +47,18 @@ test("Pi derives checks and environment from its nested model source", () => {
     ),
     prompt: "hello",
   });
-  expect(drivers.pi.runtimeChecks(local).map((check) => check.id)).toEqual([
-    "harness.pi-cli",
+  expect(drivers.pi.installationChecks().map((check) => check.id)).toEqual(["harness.pi-cli"]);
+  expect(drivers.pi.requestChecks(local).map((check) => check.id)).toEqual([
     "model.openai-compatible-runtime",
+    "model.studio-token",
   ]);
-  expect(drivers.pi.authChecks(local).map((check) => check.id)).toEqual(["model.studio-token"]);
   expect(drivers.pi.envAllowlist(local)).toEqual(["STUDIO_TOKEN"]);
 
   const codex = buildAskAgentRequest({
     harness: harnesses.pi(models.openaiCodex("gpt-5.5")),
     prompt: "hello",
   });
-  expect(drivers.pi.authChecks(codex).map((check) => check.id)).toEqual([
+  expect(drivers.pi.requestChecks(codex).map((check) => check.id)).toEqual([
     "harness.pi-openai-codex-auth",
   ]);
 });

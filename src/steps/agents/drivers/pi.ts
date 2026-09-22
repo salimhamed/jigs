@@ -8,9 +8,11 @@ import { harnessRuntimeCheck, piAuthChecks } from "../../../checks/harnesses.ts"
 import { openaiCompatibleRuntimeCheck } from "../../../checks/models.ts";
 import { JigsError } from "../../../errors.ts";
 import { MIN_PI_VERSION, resolvePiExecutable } from "../harnesses/executables.ts";
+import type { PiExecutionOptions } from "../harnesses/pi.ts";
+import { executePi } from "../harnesses/pi.ts";
 import { writePiSubmitResultExtension } from "../harnesses/pi-extension.ts";
-import { piSessionFile, piSessionsDir } from "../harnesses/pi-home.ts";
-import type { Driver, DriverContext, ExecutorGeneration } from "./types.ts";
+import { ensureManagedPiHome, piSessionFile, piSessionsDir } from "../harnesses/pi-home.ts";
+import type { Driver, DriverContext, DriverRequest, ExecutorGeneration } from "./types.ts";
 
 function descriptor(request: AgentRequest): PiHarness {
   if (request.harness.kind !== "pi") throw new JigsError("the Pi driver requires a Pi request");
@@ -37,119 +39,135 @@ function parseJsonFallback(text: string): unknown {
   return JSON.parse(fenced?.[1] ?? trimmed) as unknown;
 }
 
-async function ask(request: AgentRequest, context: DriverContext): Promise<ExecutorGeneration> {
-  const harness = descriptor(request);
-  const scratch = mkdtempSync(path.join(tmpdir(), "jigs-pi-ask-"));
-  try {
-    const home = context.deps.ensurePiHome(context.metadata.workflowRunId, harness.model);
+export interface PiDriverDependencies {
+  ensurePiHome(runId: string, source: ModelSource): string;
+  executePi(options: PiExecutionOptions): Promise<ExecutorGeneration>;
+}
+
+const defaultDependencies: PiDriverDependencies = {
+  ensurePiHome: (runId, source) => ensureManagedPiHome(runId, source),
+  executePi,
+};
+
+export function createPiDriver(deps: PiDriverDependencies = defaultDependencies): Driver<"pi"> {
+  async function ask(request: AgentRequest, context: DriverContext): Promise<ExecutorGeneration> {
+    const harness = descriptor(request);
+    const scratch = mkdtempSync(path.join(tmpdir(), "jigs-pi-ask-"));
+    try {
+      const home = deps.ensurePiHome(context.metadata.workflowRunId, harness.model);
+      const extension =
+        request.outputSchema === undefined
+          ? undefined
+          : writePiSubmitResultExtension(home, request.outputSchema);
+      const args = [
+        "--mode",
+        "json",
+        "--no-tools",
+        "--model",
+        modelName(harness.model),
+        ...(harness.thinking === undefined ? [] : ["--thinking", harness.thinking]),
+        "-ne",
+        "-ns",
+        "-np",
+        "--no-themes",
+        "-nc",
+        "--no-approve",
+        ...(extension === undefined ? [] : ["-e", extension]),
+        promptFor(request),
+      ];
+      const generation = await deps.executePi({
+        args,
+        cwd: scratch,
+        env: { ...context.env, PI_CODING_AGENT_DIR: home },
+      });
+      if (request.outputSchema === undefined || generation.output !== undefined) return generation;
+      // Pi is asked to call submit_result first. Some OpenAI-compatible servers do
+      // not support tool calls, so only a turn with no call falls back to JSON text.
+      return { ...generation, output: parseJsonFallback(generation.text) };
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  }
+
+  async function run(request: AgentRequest, context: DriverContext): Promise<ExecutorGeneration> {
+    const harness = descriptor(request);
+    const home = deps.ensurePiHome(context.metadata.workflowRunId, harness.model);
+    const sessionDir = piSessionsDir(home);
+    const resume = "resume" in request ? request.resume : undefined;
+    const sessionId = resume?.id ?? `jigs-${randomUUID()}`;
+    if (resume !== undefined && piSessionFile(home, sessionId) === undefined) {
+      throw new Error(`Pi session ${sessionId} is missing from ${sessionDir}`);
+    }
     const extension =
       request.outputSchema === undefined
         ? undefined
         : writePiSubmitResultExtension(home, request.outputSchema);
-    const args = [
-      "--mode",
-      "json",
-      "--no-tools",
-      "--model",
-      modelName(harness.model),
-      ...(harness.thinking === undefined ? [] : ["--thinking", harness.thinking]),
-      "-ne",
-      "-ns",
-      "-np",
-      "--no-themes",
-      "-nc",
-      "--no-approve",
-      ...(extension === undefined ? [] : ["-e", extension]),
-      promptFor(request),
-    ];
-    const generation = await context.deps.executePi({
-      args,
-      cwd: scratch,
+    const generation = await deps.executePi({
+      args: [
+        "--mode",
+        "json",
+        "--model",
+        modelName(harness.model),
+        ...(harness.thinking === undefined ? [] : ["--thinking", harness.thinking]),
+        ...(harness.tools === undefined ? [] : ["--tools", harness.tools.join(",")]),
+        "--session-id",
+        sessionId,
+        "--session-dir",
+        sessionDir,
+        "-ne",
+        "-ns",
+        "-np",
+        "--no-themes",
+        "-nc",
+        "--no-approve",
+        ...(extension === undefined ? [] : ["-e", extension]),
+        promptFor(request),
+      ],
+      cwd: request.cwd as string,
       env: { ...context.env, PI_CODING_AGENT_DIR: home },
     });
+    const reported = generation.providerMetadata?.pi?.sessionId;
+    if (reported !== sessionId) {
+      throw new Error(
+        `Pi reported session ${JSON.stringify(reported)} after jigs requested ${sessionId}`,
+      );
+    }
     if (request.outputSchema === undefined || generation.output !== undefined) return generation;
-    // Pi is asked to call submit_result first. Some OpenAI-compatible servers do
-    // not support tool calls, so only a turn with no call falls back to JSON text.
     return { ...generation, output: parseJsonFallback(generation.text) };
-  } finally {
-    rmSync(scratch, { recursive: true, force: true });
   }
+
+  function nestedSource(request?: DriverRequest): ModelSource | undefined {
+    return request !== undefined && "harness" in request && request.harness.kind === "pi"
+      ? request.harness.model
+      : undefined;
+  }
+
+  return {
+    kind: "pi",
+    family: "harness",
+    ask,
+    run,
+    installationChecks: () => [harnessRuntimeCheck("pi")],
+    requestChecks: (request) => {
+      const source = nestedSource(request);
+      return [
+        ...(source?.kind === "openai-compatible" ? [openaiCompatibleRuntimeCheck(source)] : []),
+        ...piAuthChecks(source),
+      ];
+    },
+    envAllowlist: (request?: DriverRequest) => {
+      const source = nestedSource(request);
+      if (source?.kind === "openrouter") return [source.apiKeyEnv];
+      return source?.kind === "openai-compatible" && source.apiKeyEnv !== undefined
+        ? [source.apiKeyEnv]
+        : [];
+    },
+    sessionPointer: { providerKey: "pi", field: "sessionId" },
+    docsAnchor: "pi",
+    displayName: "Pi",
+    resolveExecutable: resolvePiExecutable,
+    minimumVersion: MIN_PI_VERSION,
+  } satisfies Driver<"pi">;
 }
 
-async function run(request: AgentRequest, context: DriverContext): Promise<ExecutorGeneration> {
-  const harness = descriptor(request);
-  const home = context.deps.ensurePiHome(context.metadata.workflowRunId, harness.model);
-  const sessionDir = piSessionsDir(home);
-  const resume = "resume" in request ? request.resume : undefined;
-  const sessionId = resume?.id ?? `jigs-${randomUUID()}`;
-  if (resume !== undefined && piSessionFile(home, sessionId) === undefined) {
-    throw new Error(`Pi session ${sessionId} is missing from ${sessionDir}`);
-  }
-  const extension =
-    request.outputSchema === undefined
-      ? undefined
-      : writePiSubmitResultExtension(home, request.outputSchema);
-  const generation = await context.deps.executePi({
-    args: [
-      "--mode",
-      "json",
-      "--model",
-      modelName(harness.model),
-      ...(harness.thinking === undefined ? [] : ["--thinking", harness.thinking]),
-      ...(harness.tools === undefined ? [] : ["--tools", harness.tools.join(",")]),
-      "--session-id",
-      sessionId,
-      "--session-dir",
-      sessionDir,
-      "-ne",
-      "-ns",
-      "-np",
-      "--no-themes",
-      "-nc",
-      "--no-approve",
-      ...(extension === undefined ? [] : ["-e", extension]),
-      promptFor(request),
-    ],
-    cwd: request.cwd as string,
-    env: { ...context.env, PI_CODING_AGENT_DIR: home },
-  });
-  const reported = generation.providerMetadata?.pi?.sessionId;
-  if (reported !== sessionId) {
-    throw new Error(
-      `Pi reported session ${JSON.stringify(reported)} after jigs requested ${sessionId}`,
-    );
-  }
-  if (request.outputSchema === undefined || generation.output !== undefined) return generation;
-  return { ...generation, output: parseJsonFallback(generation.text) };
-}
-
-function nestedSource(request?: AgentRequest): ModelSource | undefined {
-  return request?.harness.kind === "pi" ? request.harness.model : undefined;
-}
-
-export const piDriver = {
-  kind: "pi",
-  family: "harness",
-  ask,
-  run,
-  runtimeChecks: (request?: AgentRequest) => {
-    const source = nestedSource(request as AgentRequest | undefined);
-    return [
-      harnessRuntimeCheck("pi"),
-      ...(source?.kind === "openai-compatible" ? [openaiCompatibleRuntimeCheck(source)] : []),
-    ];
-  },
-  authChecks: (request?: AgentRequest) => piAuthChecks(nestedSource(request)),
-  envAllowlist: (request?: AgentRequest) => {
-    const source = nestedSource(request as AgentRequest | undefined);
-    if (source?.kind === "openrouter") return [source.apiKeyEnv];
-    return source?.kind === "openai-compatible" && source.apiKeyEnv !== undefined
-      ? [source.apiKeyEnv]
-      : [];
-  },
-  sessionPointer: { providerKey: "pi", field: "sessionId" },
-  docsAnchor: "pi",
-  displayName: "Pi",
-  resolveExecutable: resolvePiExecutable,
-  minimumVersion: MIN_PI_VERSION,
-} satisfies Driver<"pi">;
+export const piDriver = createPiDriver();

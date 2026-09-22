@@ -14,47 +14,31 @@ Injectable provider and environment operations used by agent execution.
 
 - `DriverDependencies`
 
+#### Properties
+
+##### resolveDriver()
+
+> **resolveDriver**: \<`K`\>(`kind`) => `Driver`\<`K`\> \| `undefined`
+
+Return the installed driver for a descriptor kind, if this release provides one.
+
+###### Type Parameters
+
+###### K
+
+`K` *extends* `DriverKind`
+
+###### Parameters
+
+###### kind
+
+`K`
+
+###### Returns
+
+`Driver`\<`K`\> \| `undefined`
+
 #### Methods
-
-##### ensureCodexHome()
-
-> **ensureCodexHome**(`runId`): `string`
-
-###### Parameters
-
-###### runId
-
-`string`
-
-###### Returns
-
-`string`
-
-###### Inherited from
-
-`DriverDependencies.ensureCodexHome`
-
-##### ensurePiHome()
-
-> **ensurePiHome**(`runId`, `source`): `string`
-
-###### Parameters
-
-###### runId
-
-`string`
-
-###### source
-
-`ModelSource`
-
-###### Returns
-
-`string`
-
-###### Inherited from
-
-`DriverDependencies.ensurePiHome`
 
 ##### evaluate()
 
@@ -89,24 +73,6 @@ Injectable provider and environment operations used by agent execution.
 ###### Inherited from
 
 `DriverDependencies.evaluate`
-
-##### executePi()
-
-> **executePi**(`options`): `Promise`\<`ExecutorGeneration`\>
-
-###### Parameters
-
-###### options
-
-`PiExecutionOptions`
-
-###### Returns
-
-`Promise`\<`ExecutorGeneration`\>
-
-###### Inherited from
-
-`DriverDependencies.executePi`
 
 ##### generateText()
 
@@ -157,30 +123,6 @@ Injectable provider and environment operations used by agent execution.
 ###### Returns
 
 `Promise`\<`object` & `object`[] \| `undefined`\>
-
-##### withCodexAppServer()
-
-> **withCodexAppServer**\<`T`\>(`fn`): `Promise`\<`T`\>
-
-###### Type Parameters
-
-###### T
-
-`T`
-
-###### Parameters
-
-###### fn
-
-(`provider`) => `Promise`\<`T`\>
-
-###### Returns
-
-`Promise`\<`T`\>
-
-###### Inherited from
-
-`DriverDependencies.withCodexAppServer`
 
 ## Variables
 

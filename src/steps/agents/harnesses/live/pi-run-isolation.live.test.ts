@@ -3,6 +3,8 @@ import path from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { harnesses, models } from "../../../../blocks/agents/harness-config.ts";
 import { buildAgentRequest } from "../../../../blocks/agents/plan.ts";
+import { type DriverResolver, driverFor } from "../../drivers/index.ts";
+import { createPiDriver } from "../../drivers/pi.ts";
 import {
   type AgentExecutionDependencies,
   defaultAgentExecutionDependencies,
@@ -30,10 +32,14 @@ let deps: AgentExecutionDependencies;
 beforeAll(() => {
   tmp = makeTmpDir();
   worktree = makeScratchRepo(tmp, "pi-run-isolation");
-  deps = {
-    ...defaultAgentExecutionDependencies,
+  const pi = createPiDriver({
     ensurePiHome: (runId, source) =>
       ensureManagedPiHome(runId, source, { baseDir: path.join(tmp, "managed-pi-homes") }),
+    executePi,
+  });
+  deps = {
+    ...defaultAgentExecutionDependencies,
+    resolveDriver: ((kind) => (kind === "pi" ? pi : driverFor(kind))) as DriverResolver,
   };
 });
 afterAll(() => removeTmpDir(tmp));
