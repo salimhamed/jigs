@@ -5,7 +5,7 @@ import { claudeAuthCheck, harnessRuntimeCheck } from "../../../checks/harnesses.
 import { resolveClaudeExecutable } from "../harnesses/executables.ts";
 import { claudeCode } from "../harnesses/index.ts";
 import { claudeStepSettings } from "./claude-support.ts";
-import type { Driver, DriverContext } from "./types.ts";
+import type { Driver, DriverContext, ExecutorGeneration } from "./types.ts";
 
 function mcpServers(
   servers: Record<string, McpServerConfig>,
@@ -33,42 +33,56 @@ function descriptor(request: AgentRequest): ClaudeHarness {
   return request.harness as ClaudeHarness;
 }
 
-async function run(request: AgentRequest, context: DriverContext) {
+async function run(request: AgentRequest, context: DriverContext): Promise<ExecutorGeneration> {
   const harness = descriptor(request);
   const resume = "resume" in request ? request.resume : undefined;
   return context.deps.generateText({
     model: claudeCode(
       harness.model,
-      claudeStepSettings({
-        cwd: request.cwd as string,
-        env: context.env,
-        ...(harness.effort === undefined ? {} : { effort: harness.effort }),
-        ...(resume === undefined ? {} : { resume: resume.id }),
-        ...(harness.mcpServers === undefined ? {} : { mcpServers: mcpServers(harness.mcpServers) }),
-      }),
+      claudeStepSettings(
+        {
+          cwd: request.cwd as string,
+          env: context.env,
+          strictMcpConfig: true,
+          settingSources: ["project"],
+          permissionMode: "bypassPermissions",
+          allowDangerouslySkipPermissions: true,
+          ...(harness.effort === undefined ? {} : { effort: harness.effort }),
+          ...(resume === undefined ? {} : { resume: resume.id }),
+          ...(harness.mcpServers === undefined
+            ? {}
+            : { mcpServers: mcpServers(harness.mcpServers) }),
+        },
+        claudeDriver.envAllowlist(request),
+      ),
     ),
     prompt: request.prompt,
     ...(context.output === undefined ? {} : { output: context.output }),
   });
 }
 
-async function ask(request: AgentRequest, context: DriverContext) {
+async function ask(request: AgentRequest, context: DriverContext): Promise<ExecutorGeneration> {
   const harness = descriptor(request);
   return context.deps.generateText({
-    model: claudeCode(harness.model, {
-      strictMcpConfig: true,
-      mcpServers: {},
-      settingSources: [],
-      env: context.env,
-      pathToClaudeCodeExecutable: resolveClaudeExecutable(),
-    }),
+    model: claudeCode(
+      harness.model,
+      claudeStepSettings(
+        {
+          strictMcpConfig: true,
+          mcpServers: {},
+          settingSources: [],
+          env: context.env,
+        },
+        claudeDriver.envAllowlist(request),
+      ),
+    ),
     prompt: request.prompt,
     ...("system" in request && request.system !== undefined ? { system: request.system } : {}),
     ...(context.output === undefined ? {} : { output: context.output }),
   });
 }
 
-export const claudeDriver = {
+export const claudeDriver: Driver<"claude"> = {
   kind: "claude",
   family: "harness",
   run,
@@ -80,4 +94,4 @@ export const claudeDriver = {
   docsAnchor: "claude-code",
   displayName: "Claude Code",
   resolveExecutable: resolveClaudeExecutable,
-} satisfies Driver<"claude">;
+};

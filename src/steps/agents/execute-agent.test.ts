@@ -170,6 +170,7 @@ test("claude agent step hydrates from wire config with the harness invariants fo
     probe: { type: "stdio", command: "node", args: ["p.mjs"], env: { T: "1" } },
     remote: { type: "http", url: "https://mcp.example", headers: { a: "b" } },
   });
+  expect(settings.spawnClaudeCodeProcess).toBeTypeOf("function");
   expect(captured.options?.system).toBeUndefined();
   expect(captured.homeRunIds).toEqual([]);
 });

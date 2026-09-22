@@ -23,7 +23,19 @@ test("Claude Code smoke: subscription auth drives an agentic step, no API keys",
   const scratch = makeScratchRepo(tmp);
   const codeword = `JIGS-LIVE-${crypto.randomUUID().slice(0, 8)}`;
 
-  const model = claudeCode("haiku", claudeStepSettings({ cwd: scratch }));
+  const model = claudeCode(
+    "haiku",
+    claudeStepSettings(
+      {
+        cwd: scratch,
+        strictMcpConfig: true,
+        settingSources: ["project"],
+        permissionMode: "bypassPermissions",
+        allowDangerouslySkipPermissions: true,
+      },
+      [],
+    ),
+  );
   const result = await generateText({
     model,
     prompt: `Write a file live-probe.txt at the repo root containing exactly "${codeword}" on one line, then confirm what you wrote.`,
