@@ -2,6 +2,9 @@ import path from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { harnesses } from "../../../../blocks/agents/harness-config.ts";
 import { buildAgentRequest } from "../../../../blocks/agents/plan.ts";
+import { createCodexDriver } from "../../drivers/codex.ts";
+import { withCodexAppServer } from "../../drivers/codex-support.ts";
+import { type DriverResolver, driverFor } from "../../drivers/index.ts";
 import {
   type AgentExecutionDependencies,
   defaultAgentExecutionDependencies,
@@ -23,12 +26,16 @@ beforeAll(() => {
   assertLivePreconditions();
   stripApiCredentials();
   tmp = makeTmpDir();
-  deps = {
-    ...defaultAgentExecutionDependencies,
+  const codex = createCodexDriver({
     ensureCodexHome: (runId) =>
       ensureManagedCodexHome(runId, {
         baseDir: path.join(tmp, "codex-homes"),
       }),
+    withCodexAppServer,
+  });
+  deps = {
+    ...defaultAgentExecutionDependencies,
+    resolveDriver: ((kind) => (kind === "codex" ? codex : driverFor(kind))) as DriverResolver,
   };
 });
 afterAll(() => {

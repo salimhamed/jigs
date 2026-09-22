@@ -5,14 +5,12 @@ import type {
   LanguageModel,
   OutputInterface,
 } from "ai";
-import type { CodexAppServerProvider } from "ai-sdk-provider-codex-cli";
-import type { HarnessKind, ModelKind, ModelSource } from "../../../blocks/agents/harness-config.ts";
+import type { HarnessKind, ModelKind } from "../../../blocks/agents/harness-config.ts";
 import type { AskJevOptions, JevAnswers, JevQuestions } from "../../../blocks/agents/jev.ts";
 import type { AgentRequest, ModelRequest } from "../../../blocks/agents/plan.ts";
 import type { ModelGeneration } from "../../../blocks/agents/result.ts";
 import type { Check } from "../../../checks/catalog.ts";
 import type { RunMetadata } from "../../runtime/run-context.ts";
-import type { PiExecutionOptions } from "../harnesses/pi.ts";
 
 export type ExecutorGeneration = ModelGeneration & { output?: unknown };
 export type DecisionGeneration<QUESTIONS extends JevQuestions = JevQuestions> = {
@@ -39,10 +37,6 @@ export interface DriverDependencies {
     state: AskJevOptions<JevQuestions>["state"];
     questions: QUESTIONS;
   }): Promise<EvaluationGeneration>;
-  ensureCodexHome(runId: string): string;
-  ensurePiHome(runId: string, source: ModelSource): string;
-  executePi(options: PiExecutionOptions): Promise<ExecutorGeneration>;
-  withCodexAppServer<T>(fn: (provider: CodexAppServerProvider) => Promise<T>): Promise<T>;
 }
 
 export interface DriverContext {
@@ -61,8 +55,8 @@ export interface Driver<K extends HarnessKind | ModelKind> {
     request: AskJevOptions<QUESTIONS>,
     context: DriverContext,
   ): Promise<DecisionGeneration<QUESTIONS>>;
-  runtimeChecks(request?: DriverRequest): Check[];
-  authChecks(request?: DriverRequest): Check[];
+  installationChecks(): Check[];
+  requestChecks(request: DriverRequest): Check[];
   jitChecks?(request: AgentRequest): Check[];
   envAllowlist(request?: DriverRequest): readonly string[];
   sessionPointer?: { providerKey: string; field: string };

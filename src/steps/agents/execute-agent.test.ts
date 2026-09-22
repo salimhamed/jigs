@@ -19,8 +19,15 @@ import {
 } from "../../blocks/agents/plan.ts";
 import type { AgentResult } from "../../blocks/agents/result.ts";
 import { type RunAgentFn, resumeOrRebuild } from "../../blocks/agents/resume-or-rebuild.ts";
-import { drivers } from "./drivers/index.ts";
-import { type AgentExecutionDependencies, executeAgent } from "./execute-agent.ts";
+import { createCodexDriver } from "./drivers/codex.ts";
+import { type DriverResolver, driverFor, drivers } from "./drivers/index.ts";
+import { createPiDriver, type PiDriverDependencies } from "./drivers/pi.ts";
+import type { Driver } from "./drivers/types.ts";
+import {
+  type AgentExecutionDependencies,
+  defaultAgentExecutionDependencies,
+  executeAgent,
+} from "./execute-agent.ts";
 import type { PiExecutionOptions } from "./harnesses/pi.ts";
 import { makeTmpDir, removeTmpDir } from "./harnesses/test-fixtures.ts";
 
@@ -75,43 +82,61 @@ function makeDeps(
 ): {
   deps: AgentExecutionDependencies;
   captured: Captured;
+  piDeps: PiDriverDependencies;
+  piDriver: Driver<"pi">;
 } {
   const captured: Captured = { homeRunIds: [] };
-  const deps: AgentExecutionDependencies = {
-    generateText: async (options) => {
-      captured.options = options;
-      return { text: "done", ...generation };
-    },
-    evaluate: async () => {
-      throw new Error("unexpected decision call");
-    },
-    ensureCodexHome: (runId) => {
-      captured.homeRunIds.push(runId);
-      return path.join(tmp, "codex-home", runId);
-    },
-    ensurePiHome: (runId, model) => {
-      captured.piHome = { runId, model };
-      const home = path.join(tmp, "pi-home", runId);
-      mkdirSync(path.join(home, "sessions"), { recursive: true });
-      return home;
-    },
+  const generateText: AgentExecutionDependencies["generateText"] = async (options) => {
+    captured.options = options;
+    return { text: "done", ...generation };
+  };
+  const ensurePiHome: PiDriverDependencies["ensurePiHome"] = (runId, model) => {
+    captured.piHome = { runId, model };
+    const home = path.join(tmp, "pi-home", runId);
+    mkdirSync(path.join(home, "sessions"), { recursive: true });
+    return home;
+  };
+  const piDeps: PiDriverDependencies = {
+    ensurePiHome,
     executePi: async (options) => {
       captured.piOptions = options;
       return { text: "done", ...generation };
     },
+  };
+  const testDrivers = {
+    ...drivers,
+    codex: createCodexDriver({
+      ensureCodexHome: (runId) => {
+        captured.homeRunIds.push(runId);
+        return path.join(tmp, "codex-home", runId);
+      },
+      withCodexAppServer: async (fn) => {
+        const provider = ((modelId: string, settings: CodexAppServerSettings) => {
+          captured.codexModel = modelId;
+          captured.codexSettings = settings;
+          return { fake: "codex-model" };
+        }) as unknown as CodexAppServerProvider;
+        return fn(provider);
+      },
+    }),
+    pi: createPiDriver(piDeps),
+  };
+  testDrivers.pi.requestChecks = () => [];
+  const deps: AgentExecutionDependencies = {
+    generateText,
+    evaluate: async () => {
+      throw new Error("unexpected decision call");
+    },
+    resolveDriver: ((kind) => {
+      if (kind === "codex") return testDrivers.codex;
+      if (kind === "pi") return testDrivers.pi;
+      return driverFor(kind);
+    }) as DriverResolver,
     // The probe itself is covered in ./jit-marker.test.ts, against a server
     // that really cannot start.
     jitFailures: async () => undefined,
-    withCodexAppServer: async (fn) => {
-      const provider = ((modelId: string, settings: CodexAppServerSettings) => {
-        captured.codexModel = modelId;
-        captured.codexSettings = settings;
-        return { fake: "codex-model" };
-      }) as unknown as CodexAppServerProvider;
-      return fn(provider);
-    },
   };
-  return { deps, captured };
+  return { deps, captured, piDeps, piDriver: testDrivers.pi };
 }
 
 // executeAgent answers a union; every test but the resume-failure ones wants the
@@ -135,6 +160,13 @@ function claudeSettingsOf(captured: Captured): ClaudeCodeSettings {
 }
 
 const verdict = z.object({ ok: z.boolean() });
+
+test("generic execution dependencies contain no driver-private operations", () => {
+  expect(defaultAgentExecutionDependencies).not.toHaveProperty("ensureCodexHome");
+  expect(defaultAgentExecutionDependencies).not.toHaveProperty("withCodexAppServer");
+  expect(defaultAgentExecutionDependencies).not.toHaveProperty("ensurePiHome");
+  expect(defaultAgentExecutionDependencies).not.toHaveProperty("executePi");
+});
 
 test("claude agent step hydrates from wire config with the harness invariants forced", async () => {
   const wire = buildAgentRequest({
@@ -332,6 +364,8 @@ test("a session pointer recorded on the other harness reports resumeFailed, not 
     resume: { harness: "codex", id: "0199-thread" },
   });
   const { deps, captured } = makeDeps();
+  const jitFailures = vi.fn(async () => undefined);
+  deps.jitFailures = jitFailures;
 
   const result = await executeAgent(wire, { workflowRunId: "run-1" }, deps);
 
@@ -342,6 +376,7 @@ test("a session pointer recorded on the other harness reports resumeFailed, not 
     resumeFailed: expect.stringContaining("recorded on the codex harness"),
   });
   expect(captured.options).toBeUndefined();
+  expect(jitFailures).not.toHaveBeenCalled();
 });
 
 test("Claude steps always run with bypass", async () => {
@@ -519,6 +554,52 @@ test("a failed JIT check returns the marker before the harness is reached", asyn
   expect(captured.options).toBeUndefined();
 });
 
+test("request checks run by phase even when an installation check has the same id", async () => {
+  const wire = buildAgentRequest({
+    harness: harnesses.claude("sonnet"),
+    cwd: worktree,
+    prompt: "never reached",
+  });
+  const { deps, captured } = makeDeps();
+  const resolveDriver = deps.resolveDriver;
+  const claude = resolveDriver("claude");
+  if (claude === undefined) throw new Error("Claude driver is missing");
+  const requestProbe = vi.fn(async () => ({
+    ok: false as const,
+    reason: "request-specific failure",
+    repair: "fix the request",
+  }));
+  const jitFailures = vi.fn(async () => undefined);
+  deps.jitFailures = jitFailures;
+  deps.resolveDriver = ((kind) =>
+    kind === "claude"
+      ? {
+          ...claude,
+          installationChecks: () => [
+            {
+              id: "shared-diagnostic",
+              label: "Installation diagnostic",
+              run: async () => ({ ok: true as const }),
+            },
+          ],
+          requestChecks: () => [
+            {
+              id: "shared-diagnostic",
+              label: "Request diagnostic",
+              run: requestProbe,
+            },
+          ],
+        }
+      : resolveDriver(kind)) as DriverResolver;
+
+  await expect(executeAgent(wire, { workflowRunId: "run-1" }, deps)).rejects.toThrow(
+    /Request diagnostic: request-specific failure/,
+  );
+  expect(requestProbe).toHaveBeenCalledOnce();
+  expect(jitFailures).not.toHaveBeenCalled();
+  expect(captured.options).toBeUndefined();
+});
+
 test("claude ask step sees no MCP universe and loads no filesystem settings", async () => {
   const wire = buildAskAgentRequest({
     harness: harnesses.claude("sonnet"),
@@ -615,11 +696,8 @@ test("pi ask rejects an unreachable nested endpoint before executing Pi", async 
   vi.stubGlobal("fetch", async () => {
     throw new Error("connection refused");
   });
-  const actualRuntimeChecks = drivers.pi.runtimeChecks;
-  vi.spyOn(drivers.pi, "runtimeChecks").mockImplementation((request) =>
-    actualRuntimeChecks(request).filter((check) => check.id === "model.openai-compatible-runtime"),
-  );
-  const { deps, captured } = makeDeps();
+  const { deps, captured, piDriver } = makeDeps();
+  piDriver.requestChecks = drivers.pi.requestChecks;
   const wire = buildAskAgentRequest({
     harness: harnesses.pi(
       models.openaiCompatible({
@@ -638,9 +716,9 @@ test("pi ask rejects an unreachable nested endpoint before executing Pi", async 
 });
 
 test("pi ask rejects missing nested authentication before executing Pi", async () => {
-  vi.spyOn(drivers.pi, "runtimeChecks").mockReturnValue([]);
   vi.stubEnv("PI_TEST_OPENROUTER_KEY", "");
-  const { deps, captured } = makeDeps();
+  const { deps, captured, piDriver } = makeDeps();
+  piDriver.requestChecks = drivers.pi.requestChecks;
   const wire = buildAskAgentRequest({
     harness: harnesses.pi(
       models.openrouter("openai/gpt-oss", { apiKeyEnv: "PI_TEST_OPENROUTER_KEY" }),
@@ -655,8 +733,6 @@ test("pi ask rejects missing nested authentication before executing Pi", async (
 });
 
 test("pi run mints and records a matching session with tools in the worktree", async () => {
-  vi.spyOn(drivers.pi, "runtimeChecks").mockReturnValue([]);
-  vi.spyOn(drivers.pi, "authChecks").mockReturnValue([]);
   const source = models.openaiCompatible({
     name: "studio",
     baseUrl: "http://127.0.0.1:1234/v1",
@@ -668,8 +744,8 @@ test("pi run mints and records a matching session with tools in the worktree", a
     prompt: "implement it",
     output: verdict,
   });
-  const { deps, captured } = makeDeps({ output: { ok: true } });
-  deps.executePi = async (options) => {
+  const { deps, captured, piDeps } = makeDeps({ output: { ok: true } });
+  piDeps.executePi = async (options) => {
     captured.piOptions = options;
     const id = options.args[options.args.indexOf("--session-id") + 1];
     return {
@@ -696,8 +772,6 @@ test("pi run mints and records a matching session with tools in the worktree", a
 });
 
 test("pi run returns a stale resume marker before spawning Pi", async () => {
-  vi.spyOn(drivers.pi, "runtimeChecks").mockReturnValue([]);
-  vi.spyOn(drivers.pi, "authChecks").mockReturnValue([]);
   const wire = buildAgentRequest({
     harness: harnesses.pi(models.openrouter("openai/gpt-oss")),
     cwd: worktree,
@@ -715,8 +789,6 @@ test("pi run returns a stale resume marker before spawning Pi", async () => {
 });
 
 test("pi run resumes only after finding the real session file", async () => {
-  vi.spyOn(drivers.pi, "runtimeChecks").mockReturnValue([]);
-  vi.spyOn(drivers.pi, "authChecks").mockReturnValue([]);
   const sessionId = "existing-session";
   const source = models.openrouter("openai/gpt-oss");
   const wire = buildAgentRequest({
@@ -725,10 +797,10 @@ test("pi run resumes only after finding the real session file", async () => {
     prompt: "continue",
     resume: { harness: "pi", id: sessionId },
   });
-  const { deps, captured } = makeDeps();
-  const home = deps.ensurePiHome("run-pi-resume", source);
+  const { deps, captured, piDeps } = makeDeps();
+  const home = piDeps.ensurePiHome("run-pi-resume", source);
   writeFileSync(path.join(home, "sessions", `2026-09-21T00-00-00_${sessionId}.jsonl`), "");
-  deps.executePi = async (options) => {
+  piDeps.executePi = async (options) => {
     captured.piOptions = options;
     return { text: "continued", providerMetadata: { pi: { sessionId } } };
   };
@@ -740,15 +812,13 @@ test("pi run resumes only after finding the real session file", async () => {
 });
 
 test("pi run rejects a different session id reported by Pi", async () => {
-  vi.spyOn(drivers.pi, "runtimeChecks").mockReturnValue([]);
-  vi.spyOn(drivers.pi, "authChecks").mockReturnValue([]);
   const wire = buildAgentRequest({
     harness: harnesses.pi(models.openrouter("openai/gpt-oss")),
     cwd: worktree,
     prompt: "implement it",
   });
-  const { deps } = makeDeps();
-  deps.executePi = async () => ({
+  const { deps, piDeps } = makeDeps();
+  piDeps.executePi = async () => ({
     text: "done",
     providerMetadata: { pi: { sessionId: "different-session" } },
   });
@@ -759,15 +829,13 @@ test("pi run rejects a different session id reported by Pi", async () => {
 });
 
 test("pi run leaves Pi's default tools enabled when no allowlist is supplied", async () => {
-  vi.spyOn(drivers.pi, "runtimeChecks").mockReturnValue([]);
-  vi.spyOn(drivers.pi, "authChecks").mockReturnValue([]);
   const wire = buildAgentRequest({
     harness: harnesses.pi(models.openrouter("openai/gpt-oss")),
     cwd: worktree,
     prompt: "implement it",
   });
-  const { deps, captured } = makeDeps();
-  deps.executePi = async (options) => {
+  const { deps, captured, piDeps } = makeDeps();
+  piDeps.executePi = async (options) => {
     captured.piOptions = options;
     const id = options.args[options.args.indexOf("--session-id") + 1];
     return { text: "done", providerMetadata: { pi: { sessionId: id } } };
@@ -783,11 +851,6 @@ test("pi run rejects an unreachable nested endpoint before spawning Pi", async (
   vi.stubGlobal("fetch", async () => {
     throw new Error("connection refused");
   });
-  const actualRuntimeChecks = drivers.pi.runtimeChecks;
-  vi.spyOn(drivers.pi, "runtimeChecks").mockImplementation((request) =>
-    actualRuntimeChecks(request).filter((check) => check.id === "model.openai-compatible-runtime"),
-  );
-  vi.spyOn(drivers.pi, "authChecks").mockReturnValue([]);
   const wire = buildAgentRequest({
     harness: harnesses.pi(
       models.openaiCompatible({
@@ -799,7 +862,8 @@ test("pi run rejects an unreachable nested endpoint before spawning Pi", async (
     cwd: worktree,
     prompt: "implement it",
   });
-  const { deps, captured } = makeDeps();
+  const { deps, captured, piDriver } = makeDeps();
+  piDriver.requestChecks = drivers.pi.requestChecks;
 
   await expect(executeAgent(wire, { workflowRunId: "run-pi-offline" }, deps)).rejects.toThrow(
     /offline-studio model endpoint: offline-studio is unreachable/,
@@ -808,12 +872,10 @@ test("pi run rejects an unreachable nested endpoint before spawning Pi", async (
 });
 
 test("pi stale sessions take resumeOrRebuild's fresh arm", async () => {
-  vi.spyOn(drivers.pi, "runtimeChecks").mockReturnValue([]);
-  vi.spyOn(drivers.pi, "authChecks").mockReturnValue([]);
   const harness = harnesses.pi(models.openrouter("openai/gpt-oss"));
-  const { deps } = makeDeps({ output: { ok: true } });
+  const { deps, piDeps } = makeDeps({ output: { ok: true } });
   let spawned = 0;
-  deps.executePi = async (options) => {
+  piDeps.executePi = async (options) => {
     spawned += 1;
     const id = options.args[options.args.indexOf("--session-id") + 1];
     return {

@@ -4,7 +4,6 @@ import { type ModelResult, toModelResult } from "../../blocks/agents/result.ts";
 import { formatFailures, runChecks } from "../../checks/catalog.ts";
 import { JigsError } from "../../errors.ts";
 import type { RunMetadata } from "../runtime/run-context.ts";
-import { driverFor } from "./drivers/index.ts";
 import {
   type AgentExecutionDependencies,
   defaultAgentExecutionDependencies,
@@ -18,11 +17,11 @@ export async function executeModel(
   metadata: RunMetadata,
   deps: AgentExecutionDependencies = defaultAgentExecutionDependencies,
 ): Promise<ModelResult> {
-  const driver = driverFor(wire.model.kind);
+  const driver = deps.resolveDriver(wire.model.kind);
   if (driver?.ask === undefined)
     throw new JigsError(`no driver is registered for ${wire.model.kind}`);
-  const runtimeReport = await runChecks(driver.runtimeChecks(wire));
-  if (!runtimeReport.ok) throw new JigsError(formatFailures(runtimeReport));
+  const requestReport = await runChecks(driver.requestChecks(wire));
+  if (!requestReport.ok) throw new JigsError(formatFailures(requestReport));
   const generation = await driver.ask(wire, {
     metadata,
     deps,
@@ -38,7 +37,7 @@ export async function executeJev<const QUESTIONS extends JevQuestions>(
   metadata: RunMetadata,
   deps: AgentExecutionDependencies = defaultAgentExecutionDependencies,
 ): Promise<JevResult<QUESTIONS>> {
-  const driver = driverFor(wire.model.kind);
+  const driver = deps.resolveDriver(wire.model.kind);
   if (driver?.decide === undefined)
     throw new JigsError(
       `${wire.model.model} cannot be used with askJev: no decision driver exists`,
@@ -66,11 +65,8 @@ export async function executeJev<const QUESTIONS extends JevQuestions>(
         `question "${key}" is malformed: scores need at least two described levels`,
       );
   }
-  const runtimeReport = await runChecks([
-    ...driver.runtimeChecks(wire),
-    ...driver.authChecks(wire),
-  ]);
-  if (!runtimeReport.ok) throw new JigsError(formatFailures(runtimeReport));
+  const requestReport = await runChecks(driver.requestChecks(wire));
+  if (!requestReport.ok) throw new JigsError(formatFailures(requestReport));
   const generation = await driver.decide(wire, {
     metadata,
     deps,

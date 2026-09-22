@@ -257,9 +257,11 @@ export const openrouterDriver = {
   family: "model",
   ask,
   decide,
-  runtimeChecks: () => [],
-  authChecks: (request?: OpenRouterRequest) =>
-    isEligibleDecisionRequest(request) ? [modelApiKeyCheck(apiKeyEnv(request))] : [],
+  installationChecks: () => [modelApiKeyCheck(DEFAULT_API_KEY_ENV)],
+  requestChecks: (request) =>
+    isEligibleDecisionRequest(request as OpenRouterRequest)
+      ? [modelApiKeyCheck(apiKeyEnv(request as OpenRouterRequest))]
+      : [],
   envAllowlist: (request?: OpenRouterRequest) => [apiKeyEnv(request)],
   docsAnchor: "openrouter",
   displayName: "OpenRouter",

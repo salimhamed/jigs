@@ -44,13 +44,14 @@ export const openaiCompatibleDriver = {
   kind: "openai-compatible",
   family: "model",
   ask,
-  runtimeChecks: (request?: AgentRequest | ModelRequest) => {
-    const source = descriptor(request);
-    return source === undefined ? [] : [openaiCompatibleRuntimeCheck(source)];
-  },
-  authChecks: (request?: AgentRequest | ModelRequest) => {
-    const variable = descriptor(request)?.apiKeyEnv;
-    return variable === undefined ? [] : [modelApiKeyCheck(variable)];
+  installationChecks: () => [],
+  requestChecks: (request) => {
+    const source = descriptor(request as AgentRequest | ModelRequest);
+    if (source === undefined) return [];
+    return [
+      openaiCompatibleRuntimeCheck(source),
+      ...(source.apiKeyEnv === undefined ? [] : [modelApiKeyCheck(source.apiKeyEnv)]),
+    ];
   },
   envAllowlist: (request?: AgentRequest | ModelRequest) => {
     const variable = descriptor(request)?.apiKeyEnv;

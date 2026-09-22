@@ -6,7 +6,7 @@ import { openrouterDriver } from "./openrouter.ts";
 import { piDriver } from "./pi.ts";
 import type { Driver } from "./types.ts";
 
-type DriverKind = HarnessKind | ModelKind;
+export type DriverKind = HarnessKind | ModelKind;
 type DriverRegistry = Partial<{ [K in DriverKind]: Driver<K> }>;
 
 /** Every installed execution driver, keyed by its descriptor kind. */
@@ -24,6 +24,8 @@ const registry: DriverRegistry = drivers;
 export function driverFor<K extends DriverKind>(kind: K): Driver<K> | undefined {
   return registry[kind];
 }
+
+export type DriverResolver = typeof driverFor;
 
 export type RegisteredDriverKind = keyof typeof drivers;
 export type {
