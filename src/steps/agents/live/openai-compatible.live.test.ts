@@ -17,7 +17,7 @@ const reachable = configured
 const answer = z.object({ word: z.string(), count: z.number() });
 
 test.skipIf(!configured || !reachable)(
-  "OpenAI-compatible model call returns parsed structured output without a cost",
+  "OpenAI-compatible model call returns parsed structured output",
   async () => {
     const result = await askModel(
       {

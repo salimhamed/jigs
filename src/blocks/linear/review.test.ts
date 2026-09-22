@@ -56,7 +56,6 @@ const fakeAgent: RunAgentFn = async <T>(config: RunAgentOptions<T>) => {
   return {
     text: "",
     output: parseOutput(config.output, verdicts.shift()),
-    usage: undefined,
   };
 };
 

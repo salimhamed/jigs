@@ -25,3 +25,7 @@ harnesses; `askModel` and `askJev` take model sources.
   attempted execution fails explicitly with the unregistered kind.
 
 This decision amends ADR 0004's statement that Pi is not a v0 harness.
+
+AGE-506 amends this decision's cost-reporting clause: model, agent, and Jev
+results no longer expose usage or costUsd, and drivers no longer own cost
+reporting.

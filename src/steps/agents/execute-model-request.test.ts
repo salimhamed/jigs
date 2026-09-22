@@ -93,7 +93,7 @@ test("askJev rejects cyclic state before calling the provider", async () => {
   expect(evaluate).not.toHaveBeenCalled();
 });
 
-test("OpenRouter evaluates typed questions and normalizes metadata and cost", async () => {
+test("OpenRouter evaluates typed questions and normalizes metadata", async () => {
   vi.stubEnv("OPENROUTER_API_KEY", "test-key");
   const evaluate = vi.fn(async () => ({
     answers: {
@@ -445,7 +445,7 @@ test("an OpenAI-compatible source uses only its optional named credential", asyn
   expect(drivers["openai-compatible"].authChecks(withoutKey)).toEqual([]);
 });
 
-test("OpenRouter answers one structured request directly and reports its cost", async () => {
+test("OpenRouter answers one structured request directly", async () => {
   vi.stubEnv("OPENAI_API_KEY", "test-key");
   const requests: Array<{ input: Parameters<typeof fetch>[0]; init?: RequestInit }> = [];
   vi.stubGlobal("fetch", async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
@@ -467,8 +467,6 @@ test("OpenRouter answers one structured request directly and reports its cost", 
           prompt_tokens: 7,
           completion_tokens: 4,
           total_tokens: 11,
-          cost: 0.0000055,
-          cost_details: { upstream_inference_cost: 0.000004 },
         },
       }),
       { status: 200, headers: { "content-type": "application/json" } },

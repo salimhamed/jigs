@@ -8,7 +8,7 @@ const hasOpenRouterCredential = Boolean(process.env.OPENROUTER_API_KEY);
 const answer = z.object({ word: z.string(), count: z.number() });
 
 test.skipIf(!hasOpenRouterCredential)(
-  "OpenRouter model call returns parsed structured output and a non-zero cost",
+  "OpenRouter model call returns parsed structured output",
   async () => {
     const result = await askModel(
       {
