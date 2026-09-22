@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.47.0
+# @salimhamed/jigs v0.47.1
 
 Start the factory's Workflow dashboard when its port is configured.
 
