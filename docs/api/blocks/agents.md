@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.46.0
+# @salimhamed/jigs v0.47.0
 
 Compose agent and model calls inside a workflow, including harness selection and halts.
 
@@ -421,7 +421,7 @@ A decision request in workflow and durable wire form.
 
 ##### model
 
-> **model**: [`ModelSource`](#modelsource)
+> **model**: [`OpenrouterSource`](#openroutersource)
 
 ##### questions
 
@@ -839,18 +839,6 @@ An OpenAI-compatible API model source.
 
 > **baseUrl**: `string`
 
-##### compat
-
-> **compat**: `object`
-
-###### supportsDeveloperRole
-
-> **supportsDeveloperRole**: `boolean`
-
-###### supportsReasoningEffort
-
-> **supportsReasoningEffort**: `boolean`
-
 ##### kind
 
 > **kind**: `"openai-compatible"`
@@ -897,31 +885,63 @@ The serializable JSON Schema sent across the workflow-step boundary.
 
 ### PiHarness
 
-> **PiHarness** = `object`
+> **PiHarness** = [`PiOpenaiCompatibleHarness`](#piopenaicompatibleharness) \| [`PiOtherHarness`](#piotherharness)
 
 A Pi harness descriptor backed by a nested model source.
 
-#### Properties
+***
 
-##### kind
+### PiOpenaiCompatibleHarness
 
-> **kind**: `"pi"`
+> **PiOpenaiCompatibleHarness** = `SharedPiHarness` & `object`
 
-##### mcpServers?
+A Pi harness descriptor backed by an OpenAI-compatible source, with its compatibility hints.
 
-> `optional` **mcpServers**: `Record`\<`string`, [`McpServerConfig`](#mcpserverconfig)\>
+#### Type Declaration
+
+##### compat
+
+> **compat**: [`PiOpenaiCompatibleOptions`](#piopenaicompatibleoptions)
 
 ##### model
 
-> **model**: [`ModelSource`](#modelsource)
+> **model**: [`OpenaiCompatibleSource`](#openaicompatiblesource)
 
-##### thinking?
+***
 
-> `optional` **thinking**: `"off"` \| `"minimal"` \| `"low"` \| `"medium"` \| `"high"` \| `"xhigh"` \| `"max"`
+### PiOpenaiCompatibleOptions
 
-##### tools?
+> **PiOpenaiCompatibleOptions** = `object`
 
-> `optional` **tools**: `string`[]
+Pi-specific compatibility hints for an OpenAI-compatible model.
+
+#### Properties
+
+##### supportsDeveloperRole
+
+> **supportsDeveloperRole**: `boolean`
+
+##### supportsReasoningEffort
+
+> **supportsReasoningEffort**: `boolean`
+
+***
+
+### PiOtherHarness
+
+> **PiOtherHarness** = `SharedPiHarness` & `object`
+
+A Pi harness descriptor backed by any source other than an OpenAI-compatible one.
+
+#### Type Declaration
+
+##### compat?
+
+> `optional` **compat**: `never`
+
+##### model
+
+> **model**: `Exclude`\<[`ModelSource`](#modelsource), [`OpenaiCompatibleSource`](#openaicompatiblesource)\>
 
 ***
 
@@ -1077,6 +1097,79 @@ Constructors for agent-harness descriptors.
 
 #### Type Declaration
 
+##### pi()
+
+> `readonly` **pi**: \{(`model`, `options?`): [`PiOpenaiCompatibleHarness`](#piopenaicompatibleharness); (`model`, `options?`): [`PiOtherHarness`](#piotherharness); \<`M`\>(`model`, `options?`): [`PiHarness`](#piharness); \} = `piHarness`
+
+###### Call Signature
+
+> (`model`, `options?`): [`PiOpenaiCompatibleHarness`](#piopenaicompatibleharness)
+
+Build a Pi harness around a model source. `compat` applies only to an
+OpenAI-compatible source; each hint omitted from it defaults to `false`.
+
+###### Parameters
+
+###### model
+
+[`OpenaiCompatibleSource`](#openaicompatiblesource)
+
+###### options?
+
+`PiHarnessOptions` & `object`
+
+###### Returns
+
+[`PiOpenaiCompatibleHarness`](#piopenaicompatibleharness)
+
+###### Call Signature
+
+> (`model`, `options?`): [`PiOtherHarness`](#piotherharness)
+
+Build a Pi harness around a model source. `compat` applies only to an
+OpenAI-compatible source; each hint omitted from it defaults to `false`.
+
+###### Parameters
+
+###### model
+
+[`OpenrouterSource`](#openroutersource) | [`OpenaiCodexSource`](#openaicodexsource)
+
+###### options?
+
+`PiHarnessOptions`
+
+###### Returns
+
+[`PiOtherHarness`](#piotherharness)
+
+###### Call Signature
+
+> \<`M`\>(`model`, `options?`): [`PiHarness`](#piharness)
+
+Build a Pi harness around a model source. `compat` applies only to an
+OpenAI-compatible source; each hint omitted from it defaults to `false`.
+
+###### Type Parameters
+
+###### M
+
+`M` *extends* [`ModelSource`](#modelsource)
+
+###### Parameters
+
+###### model
+
+`M`
+
+###### options?
+
+`PiHarnessOptions` & `object`
+
+###### Returns
+
+[`PiHarness`](#piharness)
+
 ##### claude()
 
 > `readonly` **claude**(`model`, `options`): [`ClaudeHarness`](#claudeharness)
@@ -1113,30 +1206,6 @@ Constructors for agent-harness descriptors.
 
 [`CodexHarness`](#codexharness)
 
-##### pi()
-
-> `readonly` **pi**(`model`, `options`): [`PiHarness`](#piharness)
-
-###### Parameters
-
-###### model
-
-[`ModelSource`](#modelsource)
-
-###### options
-
-###### thinking?
-
-`"low"` \| `"medium"` \| `"high"` \| `"xhigh"` \| `"max"` \| `"minimal"` \| `"off"`
-
-###### tools?
-
-`string`[]
-
-###### Returns
-
-[`PiHarness`](#piharness)
-
 ***
 
 ### models
@@ -1165,7 +1234,7 @@ Constructors for model-source descriptors.
 
 > `readonly` **openaiCompatible**(`options`): [`OpenaiCompatibleSource`](#openaicompatiblesource)
 
-Build a source for an OpenAI-compatible server. Both compatibility hints default to false.
+Build a source for an OpenAI-compatible server.
 
 ###### Parameters
 
@@ -1178,18 +1247,6 @@ Build a source for an OpenAI-compatible server. Both compatibility hints default
 ###### baseUrl
 
 `string`
-
-###### compat?
-
-\{ `supportsDeveloperRole?`: `boolean`; `supportsReasoningEffort?`: `boolean`; \}
-
-###### compat.supportsDeveloperRole?
-
-`boolean`
-
-###### compat.supportsReasoningEffort?
-
-`boolean`
 
 ###### model
 
@@ -1569,9 +1626,9 @@ Validate recorded structured output with the caller's original zod schema.
 
 > **resumeOrRebuild**\<`T`\>(`options`): `Promise`\<[`ResumeOrRebuildResult`](#resumeorrebuildresult)\<`T`\>\>
 
-Resume the agent that did the work; failing that, run the same job in a
-fresh context. The rebuild is a first-class path, never a degraded one:
-both arms answer the same shape.
+Resume the agent that did the work; when the saved session is missing or
+unusable, run the same job in a fresh context. The rebuild is a first-class
+path, never a degraded one: both arms answer the same shape.
 
 #### Type Parameters
 

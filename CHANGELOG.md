@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.47.0](https://github.com/salimhamed/jigs/compare/jigs-v0.46.0...jigs-v0.47.0) (2026-09-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* Resume-time execution failures now throw instead of rebuilding context.
+* Model requirements now take descriptors, OpenAI-compatible Pi options live under pi, and askJev accepts OpenRouter sources only.
+
+### Bug Fixes
+
+* honor explicit model credentials and client options ([99defa7](https://github.com/salimhamed/jigs/commit/99defa7fe648d63015bbbbb6fb19659107866460))
+* isolate harness invocation configuration ([42c3b60](https://github.com/salimhamed/jigs/commit/42c3b60f1298c5b1687ef8023bf8e6b5ec5cb156))
+
 ## [0.46.0](https://github.com/salimhamed/jigs/compare/jigs-v0.45.0...jigs-v0.46.0) (2026-09-22)
 
 
