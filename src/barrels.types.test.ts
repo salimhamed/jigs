@@ -26,6 +26,9 @@ import type {
   ModelResult,
   ModelSource,
   OutputJsonSchema,
+  PiMcpHttpServerConfig,
+  PiMcpServerConfig,
+  PiMcpStdioServerConfig,
   RebuildContextPrompt,
   RebuildContextPromptInput,
   ResumeOrRebuildOptions,
@@ -134,6 +137,9 @@ type BlocksTypeSurface = {
   mcpProbe: McpToolProbe;
   mcpServerConfig: McpServerConfig;
   mcpStdioServer: McpStdioServerConfig;
+  piMcpHttpServer: PiMcpHttpServerConfig;
+  piMcpServer: PiMcpServerConfig;
+  piMcpStdioServer: PiMcpStdioServerConfig;
   postTicketHumanInputRequest: PostTicketHumanInputRequest;
   postPullRequestNoteOptions: PostPullRequestNoteOptions;
   postReviewAnswersOptions: PostReviewAnswersOptions;

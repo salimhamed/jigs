@@ -48,6 +48,16 @@ World. Nothing below is global except part 1.
   agent step; exhausting those retries rejects it, after which Workflow may
   replay the whole step. Direct model calls instead use the AI SDK's retry
   behavior. These layers are independent.
+
+  A Pi `runAgent` may declare MCP servers explicitly. Each Pi server also
+  declares the exact MCP tool names the model may see; jigs passes a complete
+  private snapshot to its pinned `pi-mcp-adapter` and does not merge global or
+  project MCP files. HTTP OAuth uses credentials already stored by the adapter;
+  a headless factory never starts a login flow. Bearer configuration names an
+  environment variable instead of putting its value in workflow data. Stdio
+  environment entries and HTTP headers likewise map their target names to
+  source environment-variable names. Stdio children receive only those mapped
+  values; model and sibling-server credentials are not inherited.
 - **The AWS CLI v2**, if any workflow declares `requires: { aws: true }`
   alongside its bindings and harnesses: preflight probes the service's
   `AWS_PROFILE` with `aws sts get-caller-identity` and refuses the run when it

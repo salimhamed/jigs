@@ -1,7 +1,12 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, expect, test } from "vitest";
-import { writePiSubmitResultExtension } from "./pi-extension.ts";
+import {
+  piMcpEnvironmentVariables,
+  piMcpToolNames,
+  writePiMcpExtension,
+  writePiSubmitResultExtension,
+} from "./pi-extension.ts";
 import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
 let tmp: string | undefined;
@@ -25,4 +30,136 @@ test("submit_result extension is written inside the invocation home with the wir
   expect(source).toContain('constrainedSampling: { type: "json_schema", strict: "require" }');
   expect(source).toContain(JSON.stringify(schema));
   expect(source).toContain("details: params");
+});
+
+test("MCP extension supplies one complete direct-tools-only adapter snapshot", () => {
+  tmp = makeTmpDir();
+  const extension = writePiMcpExtension(tmp, {
+    local: {
+      command: "node",
+      args: ["server.mjs"],
+      env: { TOKEN: "LOCAL_MCP_TOKEN" },
+      tools: ["ping"],
+      probe: { tool: "ping" },
+    },
+    remote: {
+      url: "https://mcp.example.test/api",
+      auth: "oauth",
+      headers: { "x-tenant": "MCP_TENANT" },
+      tools: ["lookup"],
+      probe: { tool: "lookup" },
+    },
+  });
+
+  const source = readFileSync(extension, "utf8");
+  expect(source).toContain('from "file:');
+  expect(source).toContain("createMcpAdapter({ config:");
+  expect(source).toContain('"local":{"command":"node","args":["server.mjs"]');
+  expect(source).toContain('"env":{"TOKEN":"$env:LOCAL_MCP_TOKEN"}');
+  expect(source).toContain('"inheritEnv":false');
+  expect(source).toContain('"remote":{"url":"https://mcp.example.test/api"');
+  expect(source).toContain('"auth":"oauth"');
+  expect(source).toContain('"headers":{"x-tenant":"$env:MCP_TENANT"}');
+  expect(source.match(/"exposeResources":false/g)).toHaveLength(2);
+  expect(source).toContain('"lifecycle":"eager","directTools":["ping"],"includeTools":["ping"]');
+  expect(source).toContain('"disableProxyTool":true');
+  expect(source).toContain('"namespaceProxyTools":false');
+  expect(source).toContain('"scriptMode":false');
+  expect(source).toContain('"hostConfigDiscovery":"off"');
+  expect(source).toContain('"ancestorConfigRoots":[]');
+  expect(source).toContain('"agentPluginPaths":[]');
+  expect(source).toContain('"jev":false');
+  expect(source).toContain('active.filter((name) => name !== "mcp")');
+  expect(source).toContain('pi.on("before_provider_request"');
+  expect(source).toContain('record.function?.name !== "mcp"');
+  expect(source).toContain('event.toolName === "mcp"');
+  expect(source).not.toContain("probe");
+});
+
+test("MCP helpers expose only environment names and Pi-visible direct tool names", () => {
+  const servers = {
+    "linear-personal": {
+      command: "node",
+      env: { TOKEN: "LINEAR_API_KEY" },
+      tools: ["issues.lookup"],
+      probe: { tool: "issues.lookup" },
+    },
+  };
+
+  expect(piMcpEnvironmentVariables(servers)).toEqual(["LINEAR_API_KEY"]);
+  expect(piMcpToolNames(servers)).toEqual(["linear-personal_issues_lookup"]);
+});
+
+test("MCP extension rejects unsupported transports before writing the extension", () => {
+  tmp = makeTmpDir();
+  expect(() =>
+    writePiMcpExtension(tmp as string, {
+      invalid: {
+        command: "node",
+        url: "https://mcp.example.test",
+        tools: ["ping"],
+        probe: { tool: "ping" },
+      } as never,
+    }),
+  ).toThrow("must declare exactly one transport");
+  expect(() =>
+    writePiMcpExtension(tmp as string, {
+      invalid: { url: "not a URL", tools: ["ping"], probe: { tool: "ping" } },
+    }),
+  ).toThrow("must declare an HTTP or HTTPS URL");
+  expect(() =>
+    writePiMcpExtension(tmp as string, {
+      invalid: { command: "node", tools: ["other"], probe: { tool: "ping" } },
+    }),
+  ).toThrow("must allow its probe tool 'ping'");
+  expect(() =>
+    writePiMcpExtension(tmp as string, {
+      invalid: {
+        command: "node",
+        headers: { authorization: "TOKEN" },
+        tools: ["ping"],
+        probe: { tool: "ping" },
+      } as never,
+    }),
+  ).toThrow("declares unsupported field(s): headers");
+  expect(() =>
+    writePiMcpExtension(tmp as string, {
+      invalid: {
+        url: "ftp://mcp.example.test",
+        tools: ["ping"],
+        probe: { tool: "ping" },
+      },
+    }),
+  ).toThrow("must declare an HTTP or HTTPS URL");
+  expect(() =>
+    writePiMcpExtension(tmp as string, {
+      invalid: {
+        command: "node",
+        env: { TOKEN: "literal-secret" },
+        tools: ["ping"],
+        probe: { tool: "ping" },
+      },
+    }),
+  ).toThrow("must name step-side environment variables");
+  expect(() =>
+    writePiMcpExtension(tmp as string, {
+      invalid: {
+        url: "https://mcp.example.test",
+        bearerTokenEnv: "not-an-env-name",
+        tools: ["ping"],
+        probe: { tool: "ping" },
+      },
+    }),
+  ).toThrow("bearerTokenEnv must name a step-side environment variable");
+  expect(() =>
+    writePiMcpExtension(tmp as string, {
+      invalid: {
+        url: "https://mcp.example.test",
+        auth: "oauth",
+        bearerTokenEnv: "TOKEN",
+        tools: ["ping"],
+        probe: { tool: "ping" },
+      } as never,
+    }),
+  ).toThrow("cannot declare both auth and bearerTokenEnv");
 });

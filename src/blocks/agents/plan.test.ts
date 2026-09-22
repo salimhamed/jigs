@@ -31,7 +31,9 @@ test("askAgent rejects an MCP universe", () => {
   expect(() =>
     buildAskAgentRequest({
       harness: harnesses.claude("sonnet", {
-        mcpServers: { probe: { command: "node", probe: { tool: "ping" } } },
+        mcpServers: {
+          probe: { command: "node", probe: { tool: "ping" } },
+        },
       }),
       prompt: "ask",
     }),
@@ -41,7 +43,9 @@ test("askAgent rejects an MCP universe", () => {
     buildAskAgentRequest({
       harness: {
         ...harnesses.pi(models.openaiCodex("gpt-5.5")),
-        mcpServers: { probe: { command: "node", probe: { tool: "ping" } } },
+        mcpServers: {
+          probe: { command: "node", tools: ["ping"], probe: { tool: "ping" } },
+        },
       },
       prompt: "ask",
     }),

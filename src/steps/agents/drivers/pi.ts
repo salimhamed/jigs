@@ -10,7 +10,13 @@ import { JigsError } from "../../../errors.ts";
 import { MIN_PI_VERSION, resolvePiExecutable } from "../harnesses/executables.ts";
 import type { PiExecutionOptions } from "../harnesses/pi.ts";
 import { executePi } from "../harnesses/pi.ts";
-import { writePiSubmitResultExtension } from "../harnesses/pi-extension.ts";
+import {
+  piMcpEnvironmentVariables,
+  piMcpToolNames,
+  validatePiMcpServers,
+  writePiMcpExtension,
+  writePiSubmitResultExtension,
+} from "../harnesses/pi-extension.ts";
 import {
   type PreparedPiHome,
   piSessionFile,
@@ -35,12 +41,17 @@ function modelName(plan: PiModelPlan): string {
   return `${plan.provider}/${plan.model}`;
 }
 
-function modelEnvironment(plan: PiModelPlan, env: Record<string, string>): Record<string, string> {
+function modelEnvironment(
+  plan: PiModelPlan,
+  env: Record<string, string>,
+  preservedSources: ReadonlySet<string> = new Set(),
+): Record<string, string> {
   if (plan.credential === undefined) return env;
   const value = env[plan.credential.sourceEnv];
   if (plan.credential.sourceEnv === plan.credential.targetEnv || value === undefined) return env;
   const translated = { ...env, [plan.credential.targetEnv]: value };
-  delete translated[plan.credential.sourceEnv];
+  if (!preservedSources.has(plan.credential.sourceEnv))
+    delete translated[plan.credential.sourceEnv];
   return translated;
 }
 
@@ -130,6 +141,21 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
         request.outputSchema === undefined
           ? undefined
           : writePiSubmitResultExtension(prepared.home, request.outputSchema);
+      const mcpExtension =
+        harness.mcpServers === undefined || Object.keys(harness.mcpServers).length === 0
+          ? undefined
+          : writePiMcpExtension(prepared.home, harness.mcpServers);
+      const selectedTools =
+        harness.tools === undefined
+          ? undefined
+          : [
+              ...new Set([
+                ...harness.tools,
+                ...piMcpToolNames(harness.mcpServers ?? {}),
+                ...(request.outputSchema === undefined ? [] : ["submit_result"]),
+              ]),
+            ];
+      const mcpEnvironment = new Set(piMcpEnvironmentVariables(harness.mcpServers ?? {}));
       const generation = await deps.executePi({
         args: [
           "--mode",
@@ -137,7 +163,7 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
           "--model",
           modelName(model),
           ...(harness.thinking === undefined ? [] : ["--thinking", harness.thinking]),
-          ...(harness.tools === undefined ? [] : ["--tools", harness.tools.join(",")]),
+          ...(selectedTools === undefined ? [] : ["--tools", selectedTools.join(",")]),
           ...(sessionFile === undefined ? ["--session-id", sessionId] : ["--session", sessionFile]),
           "--session-dir",
           prepared.sessionDir,
@@ -147,11 +173,15 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
           "--no-themes",
           "-nc",
           "--no-approve",
+          ...(mcpExtension === undefined ? [] : ["-e", mcpExtension]),
           ...(extension === undefined ? [] : ["-e", extension]),
           promptFor(request),
         ],
         cwd: request.cwd,
-        env: { ...modelEnvironment(model, context.env), PI_CODING_AGENT_DIR: prepared.home },
+        env: {
+          ...modelEnvironment(model, context.env, mcpEnvironment),
+          PI_CODING_AGENT_DIR: prepared.home,
+        },
       });
       const reported = generation.providerMetadata?.pi?.sessionId;
       if (reported !== sessionId) {
@@ -178,12 +208,17 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
     requestChecks: (request) => {
       const harness = nestedHarness(request);
       if (harness === undefined) return [];
+      if ((!("cwd" in request) || request.cwd === undefined) && harness.mcpServers !== undefined)
+        throw new JigsError("askAgent() cannot expose MCP servers through the Pi harness");
+      if (harness.mcpServers !== undefined) validatePiMcpServers(harness.mcpServers);
       const model = planPiModel(harness);
+      const mcpCredentials = piMcpEnvironmentVariables(harness.mcpServers ?? {});
       return [
         ...(model.runtimeSource === undefined
           ? []
           : [openaiCompatibleRuntimeCheck(model.runtimeSource)]),
         ...(model.credential === undefined ? [] : [modelApiKeyCheck(model.credential.sourceEnv)]),
+        ...mcpCredentials.map((name) => modelApiKeyCheck(name)),
         ...(model.subscriptionAuth ? [piOpenaiCodexAuthCheck()] : []),
       ];
     },
@@ -191,7 +226,8 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
       const harness = nestedHarness(request);
       if (harness === undefined) return [];
       const credential = planPiModel(harness).credential;
-      return credential === undefined ? [] : [credential.sourceEnv];
+      const mcpCredentials = piMcpEnvironmentVariables(harness.mcpServers ?? {});
+      return credential === undefined ? mcpCredentials : [credential.sourceEnv, ...mcpCredentials];
     },
     sessionPointer: { providerKey: "pi", field: "sessionId" },
     docsAnchor: "pi",

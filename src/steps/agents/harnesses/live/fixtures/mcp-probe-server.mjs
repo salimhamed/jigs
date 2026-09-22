@@ -1,10 +1,15 @@
 // Minimal stdio MCP server: one tool that returns a fixed token, so tests can
 // observe whether MCP registration actually happened — model self-report alone
 // is not evidence. Ported from prototype/codex-app-server-resume.
+
+import { writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 
 const TOKEN = process.env.PROBE_TOKEN ?? "PROBE-TOKEN-UNSET";
+const UNRELATED = process.env.UNRELATED_SECRET ?? "UNSET";
 const NAME = process.env.PROBE_SERVER_NAME ?? "probe";
+if (process.env.PROBE_PID_FILE !== undefined)
+  writeFileSync(process.env.PROBE_PID_FILE, String(process.pid));
 
 const send = (msg) => process.stdout.write(`${JSON.stringify(msg)}\n`);
 
@@ -53,7 +58,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       jsonrpc: "2.0",
       id,
       result: {
-        content: [{ type: "text", text: TOKEN }],
+        content: [{ type: "text", text: `${TOKEN};UNRELATED=${UNRELATED}` }],
         ...(process.env.PROBE_TOKEN === undefined ? { isError: true } : {}),
       },
     });
