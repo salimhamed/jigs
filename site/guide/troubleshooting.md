@@ -41,6 +41,13 @@ and service logs using the [setup runbook](https://github.com/salimhamed/jigs/bl
 A notification asks the run to recheck its condition; it cannot substitute for
 the required answer or approval.
 
+If `pnpm exec jigs doctor` reports that the factory rejected a repo's webhook
+deliveries with 401, GitHub's copy of the secret does not match
+`GITHUB_WEBHOOK_SECRET` in `.env`. Run `pnpm exec jigs bind <remote>` to send
+GitHub the current value. If it reports 503s instead, the service was running
+without the secret: set it in `.env` (`openssl rand -hex 32` makes one),
+restart the service with `pnpm exec jigs service restart`, then re-bind.
+
 ## An old working directory remains
 
 This can be intentional: failed runs, waiting runs, and unfinished Git work may

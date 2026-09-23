@@ -218,10 +218,12 @@ identity: in `pat` mode
 `GITHUB_TOKEN` from the factory's `.env` — or from the shell for that one
 command, which wins there and only there (the service reads `.env` alone) — and
 in `app` mode the installation token, which needs the App's Repository webhooks
-permission. Without usable hook rights it fails and says
+permission. The webhook also needs `GITHUB_WEBHOOK_SECRET` in the factory's
+`.env`, which jigs never generates: the user creates it with
+`openssl rand -hex 32`, and bind refuses without it. Without usable hook rights it fails and says
 the repair — an ingress with no webhook is a gate that never wakes — and the
 retry is the same `jigs bind`: the binding already recorded stands and the
-webhook is create-or-verify. A factory with no `ingressUrl` skips the webhook
+webhook is create-or-update, re-sending the signing secret every time. A factory with no `ingressUrl` skips the webhook
 with a note, but still needs a usable identity when label approval is
 configured. Re-running bind also restores a deleted approval label; doctor
 reports one that is missing. `jigs unbind` edits the config only; the clone stays on disk.
@@ -231,7 +233,7 @@ reports one that is missing. `jigs unbind` edits the config only; the clone stay
 The service's `/ingress/github` and `/ingress/linear` routes must be reachable
 from the public internet on this factory's service port for a suspended run to
 wake on its own. Run a tunnel, put the URL in `jigs.config.ts` as `ingressUrl`,
-re-bind each target repo (hook-administration rights required), and create a Linear webhook
+set `GITHUB_WEBHOOK_SECRET` in `.env` and restart the service, re-bind each target repo (hook-administration rights required), and create a Linear webhook
 for `Comment` resources. `docs/setup.md` has the exact commands and the
 org-level alternative. Without ingress everything still works; a suspended run
 just needs `jigs poke <run-id>` to notice its answer.

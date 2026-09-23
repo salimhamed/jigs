@@ -16,15 +16,16 @@ import {
 } from "../../config/factory-config.ts";
 import { factoryEnvValue, readFactoryEnv } from "../../config/factory-env.ts";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
+import {
+  githubWebhookSecret,
+  githubWebhookSecretRepair,
+  missingGithubWebhookSecret,
+} from "../../config/github-webhook-secret.ts";
 import { JigsError } from "../../errors.ts";
 import { GithubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity, useFactoryRoot } from "../../providers/github-auth.ts";
 import { type EnsureRepoLabelOptions, ensureRepoLabel } from "../../providers/github-label.ts";
-import {
-  ensureRepoWebhook,
-  ensureWebhookSecret,
-  parseGithubRemote,
-} from "../../providers/github-webhook.ts";
+import { ensureRepoWebhook, parseGithubRemote } from "../../providers/github-webhook.ts";
 import { hasBindingClone } from "../../steps/workspaces/clone.ts";
 import { bindingDir, bindingRepoDir } from "../../steps/workspaces/layout.ts";
 
@@ -235,6 +236,13 @@ async function ensureWebhook({
     return "skipped";
   }
   const slug = `${repoRef.owner}/${repoRef.repo}`;
+  const secret = githubWebhookSecret(factoryRoot);
+  if (secret === undefined) {
+    throw new JigsError(
+      `${missingGithubWebhookSecret(factoryRoot)}, so ${slug}'s webhook cannot be signed`,
+      `${githubWebhookSecretRepair(factoryRoot)}, then re-run: ${reBindCommand}`,
+    );
+  }
   const identity = resolveGithubIdentity(repoRef.owner, factoryRoot);
   // Creating a webhook is hook administration, which each identity holds
   // differently — and in App mode not at all until the permission is granted.
@@ -259,7 +267,6 @@ async function ensureWebhook({
       return `check the remote, and that this token can see ${slug}, then re-run: ${reBindCommand}`;
     return `once that clears, re-run: ${reBindCommand}`;
   };
-  const secret = ensureWebhookSecret();
   const ensured = await ensureRepoWebhook({
     ...repoRef,
     ingressUrl,
@@ -270,9 +277,15 @@ async function ensureWebhook({
       repairFor(err),
     );
   });
-  deps.out(`webhook ${ensured.outcome}: ${slug}`);
+  deps.out(
+    ensured.outcome === "created"
+      ? `webhook created: ${slug}`
+      : `webhook ${ensured.outcome}: ${slug} (signing secret re-sent)`,
+  );
   if (ensured.outcome === "updated") {
-    deps.out("note: existing webhook re-registered with the current event set");
+    deps.out(
+      "note: the existing webhook's events, content type or active flag had drifted and were reset",
+    );
   }
   if (ensured.otherHosts.length > 0) {
     deps.out(

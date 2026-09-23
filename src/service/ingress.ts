@@ -3,8 +3,6 @@
 // suspension primitives re-check provider state on every wake.
 
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { githubWebhookSecretFile } from "../config/paths.ts";
 
 function hmacMatches(rawBody: string, signatureHex: string, secret: string) {
   const expected = createHmac("sha256", secret).update(rawBody).digest();
@@ -34,18 +32,4 @@ export function verifyLinearSignature(
 ): boolean {
   if (signatureHeader === undefined) return false;
   return hmacMatches(rawBody, signatureHeader, secret);
-}
-
-// The env override is the test seam and the non-default deploy path; the file
-// is where `jigs bind` generates the shared per-repo webhook secret.
-export function githubWebhookSecret(): string | null {
-  const env = process.env.GITHUB_WEBHOOK_SECRET;
-  if (env !== undefined && env !== "") return env;
-  const file = githubWebhookSecretFile();
-  try {
-    const secret = readFileSync(file, "utf8").trim();
-    return secret === "" ? null : secret;
-  } catch {
-    return null;
-  }
 }

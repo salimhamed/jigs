@@ -227,6 +227,7 @@ function stubWebhookEnv() {
   vi.stubEnv("GITHUB_TOKEN", "gh_test_token");
   vi.stubEnv("GITHUB_API_URL", "http://mock.test/github");
   vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
+  vi.stubEnv("GITHUB_WEBHOOK_SECRET", "gh-hook-secret");
   fetchMock.mockReset();
 }
 afterEach(() => {
@@ -246,7 +247,7 @@ function makeIngressFactory(): void {
   );
 }
 
-test("re-bind with ingressUrl configured performs no webhook writes the second time", async () => {
+test("re-bind verifies the webhook and re-sends the current secret", async () => {
   stubWebhookEnv();
   makeIngressFactory();
   fetchMock
@@ -256,10 +257,12 @@ test("re-bind with ingressUrl configured performs no webhook writes the second t
   expect(first.webhook).toBe("created");
   expect(fetchMock).toHaveBeenCalledTimes(2);
   const created = JSON.parse(String((fetchMock.mock.calls[1] as [string, RequestInit])[1].body));
+  expect(created.config.secret).toBe("gh-hook-secret");
 
-  const secretFile = path.join(tmp, "data", "jigs", "github-webhook-secret");
-  const secretBytes = readFileSync(secretFile);
-  expect(created.config.secret).toBe(secretBytes.toString("utf8").trim());
+  // Rotated in the factory's .env: GitHub cannot show the old one, so the
+  // matching hook is PATCHed with the new one anyway.
+  vi.stubEnv("GITHUB_WEBHOOK_SECRET", "");
+  writeFileSync(path.join(factory, ".env"), "GITHUB_WEBHOOK_SECRET=rotated\n");
 
   fetchMock.mockResolvedValueOnce(
     new Response(
@@ -276,12 +279,33 @@ test("re-bind with ingressUrl configured performs no webhook writes the second t
       ]),
     ),
   );
-  const second = await bindRepo(API, deps());
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ id: 9 })));
+  const lines: string[] = [];
+  const second = await bindRepo(API, { ...deps(), out: (line) => lines.push(line) });
   expect(second.webhook).toBe("verified");
-  expect(fetchMock).toHaveBeenCalledTimes(3);
-  const [, lastInit] = fetchMock.mock.calls[2] as [string, RequestInit];
-  expect(lastInit.method).toBe("GET");
-  expect(readFileSync(secretFile)).toEqual(secretBytes);
+  expect(lines).toContain("webhook verified: acme/Api (signing secret re-sent)");
+  expect(fetchMock).toHaveBeenCalledTimes(4);
+  const [, patchInit] = fetchMock.mock.calls[3] as [string, RequestInit];
+  expect(patchInit.method).toBe("PATCH");
+  expect(JSON.parse(String(patchInit.body)).config.secret).toBe("rotated");
+});
+
+test("bind refuses a webhook without GITHUB_WEBHOOK_SECRET and makes no GitHub call", async () => {
+  stubWebhookEnv();
+  vi.stubEnv("GITHUB_WEBHOOK_SECRET", "");
+  makeIngressFactory();
+  const envFile = path.join(factory, ".env");
+  const failure = await bindRepo(API, deps()).then(
+    () => null,
+    (err: unknown) => err,
+  );
+  expect(String(failure)).toContain(
+    `GITHUB_WEBHOOK_SECRET is not set in ${envFile}, so acme/Api's webhook cannot be signed`,
+  );
+  expect((failure as { hint?: string }).hint).toBe(
+    `generate one with \`openssl rand -hex 32\`, set it as GITHUB_WEBHOOK_SECRET in ${envFile} and restart the service (jigs service restart), then re-run: jigs bind ${API}`,
+  );
+  expect(fetchMock).not.toHaveBeenCalled();
 });
 
 test("bind names other jigs hook hosts after its result", async () => {

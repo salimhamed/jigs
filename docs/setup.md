@@ -696,23 +696,33 @@ ingressUrl: "https://<machine>.<tailnet>.ts.net",
 
 #### GitHub (per target repo)
 
-(Re-)bind each target repo — `jigs bind` creates the repo webhook from
-`ingressUrl`, verifies it on later binds, and repairs drift. It needs
-hook-administration rights, and fails without them: in `pat` mode that is a
-`GITHUB_TOKEN` with `admin:repo_hook` in this factory's `.env` or exported in
-the shell, and in `app` mode it is the App's **Repository webhooks: read &
-write** permission, granted on the App and accepted on the installation. The signing secret is the one
-thing here that is not per factory: one file per machine at
-`~/.local/share/jigs/github-webhook-secret`, generated on the first bind and
-shared by every factory's repo webhooks. The service reads
-the same file, or `GITHUB_WEBHOOK_SECRET` from `.env` if set. Each factory owns
-the hook at its exact URL; changing its hostname creates a new hook and leaves
-the old one for you to delete by hand.
+First generate the secret GitHub signs deliveries with. jigs never generates
+it, and this factory's `.env` is its only local copy:
+
+```sh
+openssl rand -hex 32   # paste the output into .env as GITHUB_WEBHOOK_SECRET=
+jigs service restart
+```
+
+Then (re-)bind each target repo. `jigs bind` refuses without the secret. With
+it, bind creates the repo webhook from `ingressUrl`, and on later binds re-sends
+its full config, secret included, so re-binding repairs a drifted hook or a
+changed secret. It needs hook-administration rights, and fails without them: in
+`pat` mode that is a `GITHUB_TOKEN` with `admin:repo_hook` in this factory's
+`.env` or exported in the shell, and in `app` mode it is the App's **Repository
+webhooks: read & write** permission, granted on the App and accepted on the
+installation. Each factory owns the hook at its exact URL; changing its hostname
+creates a new hook and leaves the old one for you to delete by hand.
+
+`jigs doctor` fails when `GITHUB_WEBHOOK_SECRET` is unset. GitHub never shows a
+hook's secret, so doctor also reads each hook's recent deliveries: a run of 401s
+means GitHub's copy does not match `.env` (`jigs bind <remote>` fixes it), and
+a run of 503s means the service was running without the secret.
 
 Manual alternative: one org-level webhook (org settings → Webhooks) pointed at
 `<ingressUrl>/ingress/github`, content type `application/json`, events
 `pull_request`, `pull_request_review`, `pull_request_review_comment`,
-`issue_comment` and `check_suite`, secret from that same file — covers every
+`issue_comment`, `check_suite` and `status`, secret `GITHUB_WEBHOOK_SECRET` from `.env` — covers every
 repo without per-repo binds. Note that it points at one factory: an org-level
 hook and several factories do not mix.
 
