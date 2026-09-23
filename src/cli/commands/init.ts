@@ -3,7 +3,11 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { interpolate } from "../../blocks/interpolate.ts";
 import type { MergePolicy } from "../../blocks/pull-requests/policy.ts";
-import { type GithubIdentity, githubIdentitySchema } from "../../config/factory-config.ts";
+import {
+  type GithubIdentity,
+  githubIdentitySchema,
+  type LinearIdentity,
+} from "../../config/factory-config.ts";
 import { JigsError } from "../../errors.ts";
 import { copyFiles, reportCopied } from "../copy-files.ts";
 import { locateTemplates, packageRoot, TEMPLATE_SUFFIX } from "../templates.ts";
@@ -29,6 +33,8 @@ export interface InitDeps {
   out: (line: string) => void;
   /** Defaults to `{ mode: "pat" }`: the token an operator already has. */
   identity?: GithubIdentity;
+  /** Defaults to `{ mode: "key" }`: a personal Linear API key. */
+  linearIdentity?: LinearIdentity;
 }
 
 /**
@@ -105,6 +111,7 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   const templates = locateTemplates();
   const ports = factoryPorts(root);
   const identity = deps.identity ?? { mode: "pat" };
+  const linearIdentity = deps.linearIdentity ?? { mode: "key" };
   const merge = MERGE_POLICY[identity.mode];
   const values: Record<string, string> = {
     FACTORY_NAME: factoryName(root),
@@ -113,10 +120,12 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
     DASHBOARD_PORT: String(ports.dashboardPort),
     POSTGRES_PORT: String(ports.postgresPort),
     GITHUB_IDENTITY: `  github: {\n${IDENTITY_COMMENT[identity.mode]}\n    identities: [${literal(identity, "    ")}],\n  },`,
+    LINEAR_IDENTITY: `  linear: {\n${LINEAR_IDENTITY_COMMENT[linearIdentity.mode]}\n    identity: ${literal(linearIdentity, "    ")},\n  },`,
     MERGE_POLICY: `  merge: ${literal({ ...merge }, "  ", MERGE_COMMENT[identity.mode])},`,
     // The scaffolded test asserts what the scaffolded config declares, and both
     // are written from the one value here, so neither mode can scaffold red.
     GITHUB_EXPECTED: literal({ identities: [identity] }, "  "),
+    LINEAR_EXPECTED: literal({ identity: linearIdentity }, "  "),
     MERGE_EXPECTED: literal({ ...merge }, "  "),
   };
 
@@ -139,6 +148,11 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
     identity.mode === "app"
       ? `jigs acts as the App, with ${identity.operator} as the operator; a GitHub review is the approval signal`
       : "jigs acts as you, so GitHub will not let you approve its pull requests — a jigs:approved label is the signal instead",
+  );
+  deps.out(
+    linearIdentity.mode === "app"
+      ? "on Linear jigs acts as your OAuth application: set LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET in .env"
+      : "on Linear jigs acts as whoever owns LINEAR_API_KEY in .env",
   );
   deps.out("");
   deps.out("next, in this directory:");
@@ -179,6 +193,11 @@ const MERGE_POLICY: Record<IdentityMode, MergePolicy> = {
 const IDENTITY_COMMENT: Record<IdentityMode, string> = {
   pat: "    // jigs acts as you, using GITHUB_TOKEN from .env.",
   app: "    // jigs acts as <app-slug>[bot], minting installation tokens from the key.",
+};
+
+const LINEAR_IDENTITY_COMMENT: Record<LinearIdentity["mode"], string> = {
+  key: "    // jigs acts as the user whose LINEAR_API_KEY is in .env.",
+  app: "    // jigs acts as your Linear OAuth app, from LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET in .env.",
 };
 
 // Keyed by the key it explains, since the renderer emits them in place.

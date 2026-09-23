@@ -95,6 +95,16 @@ test("from a freshly scaffolded factory, every step runs once, in order", async 
   expect(lines.at(-1)).toContain(`is up at http://localhost:${port}`);
 });
 
+test("an app Linear identity names its client variables as the empty slots", async () => {
+  const port = await fakeService();
+  const root = factory({ port, linearIdentity: "app" });
+  const io = { exec: fakeExec(), procs: fakeProcesses() };
+  expect((await up(root, io)).ok).toBe(true);
+  expect(lines.join("\n")).toContain(
+    "LINEAR_CLIENT_ID, LINEAR_CLIENT_SECRET, GITHUB_TOKEN empty in .env",
+  );
+});
+
 test("bootstrap is handed the World URL from .env explicitly", async () => {
   const port = await fakeService();
   const root = factory({ port });

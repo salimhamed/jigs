@@ -1,9 +1,15 @@
 import { copyFileSync, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { type ResolvedService, resolveService } from "../../config/factory-config.ts";
+import {
+  type LinearIdentity,
+  type ResolvedService,
+  readFactoryConfig,
+  resolveService,
+} from "../../config/factory-config.ts";
 import { readFactoryEnv } from "../../config/factory-env.ts";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
+import { LINEAR_IDENTITY_VARIABLES } from "../../providers/linear-auth.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { stringEnv } from "../../steps/agents/harnesses/env.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
@@ -73,7 +79,10 @@ export interface UpOptions {
 
 // Read by the suspension primitives; empty slots are the expected state of a
 // freshly copied .env, so they are reported, not refused.
-const CREDENTIAL_SLOTS = ["LINEAR_API_KEY", "GITHUB_TOKEN"];
+const credentialSlots = (linear: LinearIdentity): string[] => [
+  ...LINEAR_IDENTITY_VARIABLES[linear.mode],
+  "GITHUB_TOKEN",
+];
 
 export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<UpResult> {
   const execFile = deps.execFile ?? nodeExecFile;
@@ -81,7 +90,7 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
   const result: UpResult = { ok: false, steps: runner.steps };
 
   try {
-    const { factoryRoot, service } = await runner.run("locate", (note) => {
+    const { factoryRoot, service, linear } = await runner.run("locate", (note) => {
       const located = locate(deps.cwd);
       note(located.factoryRoot);
       return located;
@@ -97,7 +106,7 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
     };
 
     const env = await runner.run("env", (note) => ensureEnv(factoryRoot, note));
-    reportEmptyCredentials(env, deps.out);
+    reportEmptyCredentials(env, credentialSlots(linear), deps.out);
 
     await runner.run("install", () =>
       execOrExplain(execFile, "pnpm", ["install"], { cwd: factoryRoot }, deps.out, {
@@ -181,10 +190,11 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
 function locate(cwd: string): {
   factoryRoot: string;
   service: ResolvedService;
+  linear: LinearIdentity;
 } {
   const factoryRoot = locateFactoryRoot(cwd);
   const service = resolveService(factoryRoot);
-  return { factoryRoot, service };
+  return { factoryRoot, service, linear: readFactoryConfig(factoryRoot).linear.identity };
 }
 
 function ensureEnv(factoryRoot: string, note: Note): Record<string, string> {
@@ -200,8 +210,12 @@ function ensureEnv(factoryRoot: string, note: Note): Record<string, string> {
   return readFactoryEnv(factoryRoot);
 }
 
-function reportEmptyCredentials(env: Record<string, string>, out: (line: string) => void): void {
-  const empty = CREDENTIAL_SLOTS.filter((key) => (env[key] ?? "") === "");
+function reportEmptyCredentials(
+  env: Record<string, string>,
+  slots: string[],
+  out: (line: string) => void,
+): void {
+  const empty = slots.filter((key) => (env[key] ?? "") === "");
   if (empty.length === 0) return;
   out(`     ${empty.join(", ")} empty in .env — fill them in before a workflow needs them`);
 }
