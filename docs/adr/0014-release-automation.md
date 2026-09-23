@@ -136,8 +136,8 @@ already exists, so the first version was published by hand.
   version that is tagged but not installable. Re-running the workflow is the
   repair: the job skips what already landed and publishes the rest. To make
   that honest, the publish job checks out the released tag rather than the
-  commit that triggered the run, and verifies the version is on the registry
-  before it exits — release-please decides from GitHub's state, so a run
+  commit that triggered the run, and refuses to publish unless the checked-out
+  version matches the tag — release-please decides from GitHub's state, so a run
   triggered by an earlier push could cut the tag and then build the *older*
   checkout, whose version the registry already held, which the idempotent skip
   reported as success while 0.4.2 never shipped. Main's ref-scoped `concurrency`
