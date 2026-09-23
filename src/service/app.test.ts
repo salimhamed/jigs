@@ -212,6 +212,25 @@ test("a GitHub delivery matching a hook logs acceptance with its token", async (
   );
 });
 
+test("a delivery in GitHub's canonical casing resumes a hook claimed from a lowercase remote", async () => {
+  delivers();
+  const body = JSON.stringify({
+    action: "submitted",
+    review: { id: 7, state: "approved" },
+    pull_request: { number: 1 },
+    repository: { name: "Data-Lake-Airflow", owner: { login: "Junglescout" } },
+  });
+  const res = await postGithub(body, {
+    "x-hub-signature-256": `sha256=${sign(body, "gh-hook-secret")}`,
+    "x-github-event": "pull_request_review",
+  });
+  expect(await res.json()).toEqual({ delivered: true });
+  expect(resumeHookMock).toHaveBeenCalledExactlyOnceWith(
+    "github:pr:junglescout/data-lake-airflow#1",
+    undefined,
+  );
+});
+
 test("a GitHub delivery failure is not misreported as a missing hook", async () => {
   const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
   resumeHookMock.mockRejectedValueOnce(new Error("database unavailable"));

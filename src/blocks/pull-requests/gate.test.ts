@@ -459,6 +459,32 @@ test("pr token, including dots and dashes in names", () => {
   );
 });
 
+test("a remote typed in lowercase matches a webhook naming GitHub's canonical casing", () => {
+  const gate = pullRequestToken({ owner: "junglescout", repo: "data-lake-airflow", number: 1 });
+  const webhook = tokenFromGitHubPayload({
+    pull_request: { number: 1 },
+    repository: { name: "Data-Lake-Airflow", owner: { login: "Junglescout" } },
+  });
+  expect(webhook).toBe(gate);
+  expect(gate).toBe("github:pr:junglescout/data-lake-airflow#1");
+});
+
+test("a remote typed in canonical casing matches a lowercase webhook", () => {
+  const gate = pullRequestToken({ owner: "Junglescout", repo: "Data-Lake-Airflow", number: 1 });
+  const webhook = tokenFromGitHubPayload({
+    check_run: { pull_requests: [{ number: 1 }] },
+    repository: { name: "data-lake-airflow", owner: { login: "junglescout" } },
+  });
+  expect(webhook).toBe(gate);
+});
+
+test("the gate claims the casing-independent token", async () => {
+  const pr = { owner: "Junglescout", repo: "API", number: 7 };
+  const fetchState = vi.fn(async () => snapshot({ state: "closed" }));
+  await pullRequestGate(pr, fetchState, SCOPE, APPROVAL).next();
+  expect(createHook).toHaveBeenCalledWith({ token: "github:pr:junglescout/api#7" });
+});
+
 test("a pull_request_review payload reconstructs the exact pr token", () => {
   const payload = {
     action: "submitted",

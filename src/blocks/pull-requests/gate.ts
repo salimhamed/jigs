@@ -14,9 +14,17 @@ import type { ApprovalSignal } from "./policy.ts";
 /** The durable hook-token prefix for pull request activity. */
 export const PULL_REQUEST_TOKEN_PREFIX = "github:pr:";
 
-/** Build the durable hook token shared by a pull request gate and webhook ingress. */
+/**
+ * Build the durable hook token shared by a pull request gate and webhook ingress.
+ *
+ * @remarks
+ * Owner and repository are lowercased because GitHub treats them
+ * case-insensitively: a remote typed `acme/api` and a webhook naming `Acme/API`
+ * are the same pull request and must produce the same token.
+ */
 export function pullRequestToken(pr: PullRequestRef): string {
-  return `${PULL_REQUEST_TOKEN_PREFIX}${pr.owner}/${pr.repo}#${pr.number}`;
+  const slug = `${pr.owner}/${pr.repo}`.toLowerCase();
+  return `${PULL_REQUEST_TOKEN_PREFIX}${slug}#${pr.number}`;
 }
 
 type GithubPayload = {
