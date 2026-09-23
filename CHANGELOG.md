@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.55.0](https://github.com/salimhamed/jigs/compare/jigs-v0.54.0...jigs-v0.55.0) (2026-09-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* give a factory its own Linear identity, key or app ([#368](https://github.com/salimhamed/jigs/issues/368))
+
+### Features
+
+* give a factory its own Linear identity, key or app ([#368](https://github.com/salimhamed/jigs/issues/368)) ([d16e996](https://github.com/salimhamed/jigs/commit/d16e99663fc08eacbe004175d4c9d6f3eadef828))
+
 ## [0.54.0](https://github.com/salimhamed/jigs/compare/jigs-v0.53.0...jigs-v0.54.0) (2026-09-23)
 
 

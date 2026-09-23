@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.54.0
+# @jigs-ai/jigs v0.55.0
 
 Read and update Linear issues outside workflow code.
 
@@ -174,7 +174,7 @@ Who the comment greets. Either may be absent, and they are often the same.
 
 > `const` **checkForTicketHumanReply**: `CheckForTicketHumanReply`
 
-Look for a reply since the last check, excluding the run’s own question.
+Look for a reply since the last check, excluding every comment the run posted.
 
 ***
 
@@ -308,7 +308,7 @@ Post a question or failure on the ticket so a person can help the run continue.
 
 ### postTicketNote()
 
-> **postTicketNote**(`issueId`, `note`, `render`): `Promise`\<`void`\>
+> **postTicketNote**(`issueId`, `note`, `render`): `Promise`\<\{ `commentId`: `string`; \}\>
 
 Tell ticket participants something the run decided, without waiting for a reply.
 
@@ -328,7 +328,7 @@ Tell ticket participants something the run decided, without waiting for a reply.
 
 #### Returns
 
-`Promise`\<`void`\>
+`Promise`\<\{ `commentId`: `string`; \}\>
 
 ***
 
