@@ -33,6 +33,7 @@ function claimWaking(...hints: unknown[]): TicketClaim {
         yield* hints;
       },
     } as unknown as TicketClaim["hook"],
+    postedCommentIds: ["c-earlier-note"],
   };
 }
 
@@ -50,10 +51,11 @@ test("a wake with no payload re-reads Linear, and only a found reply ends the ha
   });
 
   expect(reply).toEqual(REPLY);
-  // Each wake is a re-check from the last cursor, never a read of what woke it.
+  // Each wake is a re-check from the last cursor, never a read of what woke it,
+  // and skips every comment the run posted, not only this halt's question.
   expect(check.mock.calls).toEqual([
-    ["issue-uuid", "2026-09-23T10:00:00Z", "c-question"],
-    ["issue-uuid", "2026-09-23T10:01:00Z", "c-question"],
+    ["issue-uuid", "2026-09-23T10:00:00Z", ["c-earlier-note", "c-question"]],
+    ["issue-uuid", "2026-09-23T10:01:00Z", ["c-earlier-note", "c-question"]],
   ]);
   expect(disposed).toEqual(["jigs:needs-human:issue-uuid:c-question"]);
 });
@@ -66,5 +68,5 @@ test("a delivered payload is ignored in favour of what Linear says now", async (
     checkForTicketHumanReply: check,
   });
   expect(reply).toBe(REPLY);
-  expect(check).toHaveBeenCalledExactlyOnceWith("issue-uuid", "t0", "c-q");
+  expect(check).toHaveBeenCalledExactlyOnceWith("issue-uuid", "t0", ["c-earlier-note", "c-q"]);
 });

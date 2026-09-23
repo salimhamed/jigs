@@ -190,6 +190,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "NEEDS_HUMAN_TOKEN_PREFIX",
     "needsHumanToken",
     "acquireTicket",
+    "noteOnTicket",
     "reviewTicket",
     "ticketReviewVerdictSchema",
     "renderTicketSnapshot",

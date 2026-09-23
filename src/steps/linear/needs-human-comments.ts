@@ -15,7 +15,7 @@ import type {
   HumanReply,
   PostTicketHumanInputRequest,
 } from "../../blocks/linear/halt-for-human.ts";
-import type { TicketNote } from "../../blocks/linear/review.ts";
+import type { PostTicketNote, TicketNote } from "../../blocks/linear/review.ts";
 import { createComment, getIssueParticipants, listCommentsSince } from "../../providers/linear.ts";
 import { dashboardRunUrl, type NamedRunMetadata } from "../runtime/run-context.ts";
 import {
@@ -49,27 +49,29 @@ export const postTicketNote = async (
   issueId: string,
   note: TicketNote,
   render: RenderTicketNote = renderTicketNote,
-): Promise<void> => {
+): ReturnType<PostTicketNote> => {
   const participants = await getIssueParticipants(issueId);
   const comment = await createComment(issueId, render(note, participants));
   console.log(`[postTicketNote] posted comment=${comment.id} issue=${issueId}`);
+  return { commentId: comment.id };
 };
 
-/** Look for a reply since the last check, excluding the run’s own question. */
+/** Look for a reply since the last check, excluding every comment the run posted. */
 export const checkForTicketHumanReply: CheckForTicketHumanReply = async (
   issueId,
   sinceIso,
-  postedCommentId,
+  postedCommentIds,
 ) => {
   const comments = await listCommentsSince(issueId, sinceIso);
   const cursor = comments.reduce(
     (max, comment) => (comment.createdAt > max ? comment.createdAt : max),
     sinceIso,
   );
-  // A factory may run on its operator's own API key, so author identity cannot
-  // tell the run's comment from the human's: exclude exactly the comment this
-  // suspension posted instead.
-  const human = comments.find((comment) => comment.user !== null && comment.id !== postedCommentId);
+  // The factory may act as its operator, so author identity cannot tell jigs'
+  // comments from the human's: exclude, by id, every comment the run posted.
+  const human = comments.find(
+    (comment) => comment.user !== null && !postedCommentIds.includes(comment.id),
+  );
   console.log(
     `[checkForTicketHumanReply] re-check issue=${issueId} since=${sinceIso} found=${human !== undefined}`,
   );

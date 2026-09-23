@@ -111,13 +111,14 @@ test("ticket review asks every knowable decision in one needs-human round", asyn
   const handoff = await reviewTicket({
     runAgent,
     haltForHuman,
-    postTicketNote: async () => {},
+    postTicketNote: async () => ({ commentId: "note" }),
     fetchTicketSnapshot: async () => answeredSnapshot,
     claim: {
       issueId: snapshot.id,
       identifier: snapshot.identifier,
       token: `linear:ticket:${snapshot.id}`,
       hook: {} as TicketClaim["hook"],
+      postedCommentIds: [],
     },
     snapshot,
     harness: harnesses.codex("gpt-5.5"),

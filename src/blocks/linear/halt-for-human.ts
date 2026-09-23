@@ -52,11 +52,11 @@ export type PostTicketHumanInputRequest = (
   halt: Halt,
 ) => Promise<{ commentId: string; postedAt: string }>;
 
-/** Durable step contract for finding a human reply after a cursor. */
+/** Durable step contract for finding a human reply after a cursor, skipping the run's own comments. */
 export type CheckForTicketHumanReply = (
   issueId: string,
   sinceIso: string,
-  postedCommentId: string,
+  postedCommentIds: readonly string[],
 ) => Promise<{ reply: HumanReply | null; cursor: string }>;
 
 /** Durable operations required to post and resume a human halt. */
@@ -84,6 +84,7 @@ export async function haltForHuman(
   // object holds functions.
   const { checkForTicketHumanReply, postTicketHumanInputRequest } = deps;
   const posted = await postTicketHumanInputRequest(claim.issueId, halt);
+  claim.postedCommentIds.push(posted.commentId);
   // The halt's only signal: the claim hook is held for the run's whole life,
   // so this marker is what tells `jigs status` the run is parked on a human. Never
   // awaited — it registers when the run suspends on the claim hook below.
@@ -93,7 +94,9 @@ export async function haltForHuman(
   try {
     let cursor = posted.postedAt;
     for await (const _hint of claim.hook) {
-      const check = await checkForTicketHumanReply(claim.issueId, cursor, posted.commentId);
+      const check = await checkForTicketHumanReply(claim.issueId, cursor, [
+        ...claim.postedCommentIds,
+      ]);
       if (check.reply !== null) return check.reply;
       cursor = check.cursor;
     }

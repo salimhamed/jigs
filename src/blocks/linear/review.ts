@@ -44,7 +44,22 @@ export type TicketNote = {
  * Declared here rather than written as `typeof postTicketNote` for the same
  * reason the halt's step contracts are: the block side owns the contract.
  */
-export type PostTicketNote = (issueId: string, note: TicketNote) => Promise<void>;
+export type PostTicketNote = (issueId: string, note: TicketNote) => Promise<{ commentId: string }>;
+
+/**
+ * Post a note on a claimed ticket and record its comment on the claim, so a
+ * later halt in this run never mistakes it for a human's reply.
+ */
+export async function noteOnTicket(
+  claim: TicketClaim,
+  note: TicketNote,
+  deps: { postTicketNote: PostTicketNote },
+): Promise<void> {
+  // Destructured for the same reason haltForHuman destructures its steps.
+  const { postTicketNote } = deps;
+  const { commentId } = await postTicketNote(claim.issueId, note);
+  claim.postedCommentIds.push(commentId);
+}
 
 /**
  * What a ticket review hands the builder: the brief plus the snapshot it
@@ -109,12 +124,16 @@ export async function reviewTicket(options: ReviewTicketOptions): Promise<Ticket
       // A note, not a halt: the run keeps going, and the comment says plainly
       // that a correction now lands on the pull request instead.
       if (assumptions.length > 0) {
-        await postTicketNote(snapshot.id, {
-          headline: `jigs is starting work on ${snapshot.identifier}. Before writing code, the reviewer read the ticket and is going ahead on these assumptions:`,
-          notes: assumptions,
-          closing:
-            "If one of these is wrong, reply here now, or comment on the pull request when it opens. Once the builder starts, a reply on this ticket is not read again until the pull request's review threads.",
-        });
+        await noteOnTicket(
+          options.claim,
+          {
+            headline: `jigs is starting work on ${snapshot.identifier}. Before writing code, the reviewer read the ticket and is going ahead on these assumptions:`,
+            notes: assumptions,
+            closing:
+              "If one of these is wrong, reply here now, or comment on the pull request when it opens. Once the builder starts, a reply on this ticket is not read again until the pull request's review threads.",
+          },
+          { postTicketNote },
+        );
       }
       return { brief, snapshot, assumptions };
     }

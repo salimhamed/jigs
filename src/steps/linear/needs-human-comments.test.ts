@@ -1,11 +1,20 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import type { Halt } from "../../blocks/linear/halt-for-human.ts";
 
-const { createComment, getIssueParticipants } = vi.hoisted(() => ({
+const { createComment, getIssueParticipants, listCommentsSince } = vi.hoisted(() => ({
   createComment: vi.fn(async (_issueId: string, _body: string) => ({
     id: "comment-1",
     createdAt: "2026-08-31T12:00:00.000Z",
   })),
+  listCommentsSince: vi.fn(
+    async (_issueId: string, _sinceIso: string) =>
+      [] as Array<{
+        id: string;
+        body: string;
+        createdAt: string;
+        user: { id: string; name: string } | null;
+      }>,
+  ),
   getIssueParticipants: vi.fn(async () => ({
     creator: { id: "user-1", name: "Salim" } as {
       id: string;
@@ -22,9 +31,12 @@ vi.mock("../../providers/linear.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../providers/linear.ts")>()),
   createComment,
   getIssueParticipants,
+  listCommentsSince,
 }));
 
-const { postTicketHumanInputRequest, postTicketNote } = await import("./needs-human-comments.ts");
+const { checkForTicketHumanReply, postTicketHumanInputRequest, postTicketNote } = await import(
+  "./needs-human-comments.ts"
+);
 
 const context = {
   workflowRunId: "wrun_01M26",
@@ -206,4 +218,38 @@ test("a factory's own renderer replaces the comment without replacing the step",
   expect(body()).toBe(
     "just: jigs paused work on **AI-659** and needs your answers before it writes any code.",
   );
+});
+
+test("a note returns the id of the comment it posted", async () => {
+  expect(await postTicketNote("issue-1", { headline: "Done.", notes: [], closing: "" })).toEqual({
+    commentId: "comment-1",
+  });
+});
+
+test("a reply check skips every comment the run posted and moves the cursor past them", async () => {
+  const salim = { id: "user-1", name: "Salim" };
+  listCommentsSince.mockResolvedValueOnce([
+    { id: "note", body: "jigs note", createdAt: "2026-08-31T12:01:00.000Z", user: salim },
+    { id: "question", body: "jigs halt", createdAt: "2026-08-31T12:02:00.000Z", user: salim },
+    { id: "answer", body: "left", createdAt: "2026-08-31T12:03:00.000Z", user: salim },
+  ]);
+  expect(
+    await checkForTicketHumanReply("issue-1", "2026-08-31T12:00:00.000Z", ["note", "question"]),
+  ).toEqual({
+    reply: {
+      commentId: "answer",
+      body: "left",
+      author: salim,
+      createdAt: "2026-08-31T12:03:00.000Z",
+    },
+    cursor: "2026-08-31T12:03:00.000Z",
+  });
+
+  listCommentsSince.mockResolvedValueOnce([
+    { id: "note", body: "jigs note", createdAt: "2026-08-31T12:04:00.000Z", user: salim },
+  ]);
+  expect(await checkForTicketHumanReply("issue-1", "2026-08-31T12:03:00.000Z", ["note"])).toEqual({
+    reply: null,
+    cursor: "2026-08-31T12:04:00.000Z",
+  });
 });

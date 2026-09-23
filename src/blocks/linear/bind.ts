@@ -7,7 +7,13 @@ import {
   haltForHuman as haltBlock,
   type PostTicketHumanInputRequest,
 } from "./halt-for-human.ts";
-import { type ReviewTicketOptions, reviewTicket as reviewBlock } from "./review.ts";
+import {
+  noteOnTicket as noteBlock,
+  type ReviewTicketOptions,
+  reviewTicket as reviewBlock,
+  type TicketNote,
+} from "./review.ts";
+
 /** Ticket-review options left after the factory's durable steps are bound. */
 export type BoundReviewTicketOptions = Omit<
   ReviewTicketOptions,
@@ -43,5 +49,8 @@ export function bindLinearSteps(steps: LinearSteps) {
       fetchTicketSnapshot: steps.fetchTicketSnapshot,
     });
   }
-  return { haltForHuman, runAgentOrHalt, reviewTicket };
+  function noteOnTicket(claim: TicketClaim, note: TicketNote) {
+    return noteBlock(claim, note, { postTicketNote: steps.postTicketNote });
+  }
+  return { haltForHuman, runAgentOrHalt, reviewTicket, noteOnTicket };
 }
