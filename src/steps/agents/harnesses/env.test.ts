@@ -1,40 +1,98 @@
 import { expect, test } from "vitest";
-import { scrubbedEnv, stripApiCredentials } from "./env.ts";
+import { claudeDriver } from "../drivers/claude.ts";
+import { codexDriver } from "../drivers/codex.ts";
+import { piDriver } from "../drivers/pi.ts";
+import { harnessEnv } from "./env.ts";
 
-const dirty = () => ({
-  ANTHROPIC_API_KEY: "sk-ant",
-  ANTHROPIC_BASE_URL: "https://x",
-  AI_GATEWAY_API_KEY: "gw",
-  OPENAI_API_KEY: "sk-oai",
-  OPENROUTER_API_KEY: "sk-or",
-  CLAUDECODE: "1",
-  CLAUDE_PID: "123",
-  CLAUDE_EFFORT: "high",
-  CLAUDE_CODE_ENTRYPOINT: "cli",
+const service = () => ({
   PATH: "/usr/bin",
   HOME: "/home/tester",
+  LANG: "en_US.UTF-8",
+  LC_TIME: "en_GB.UTF-8",
+  HTTPS_PROXY: "http://proxy:3128",
+  SSL_CERT_FILE: "/etc/ssl/cert.pem",
+  XDG_RUNTIME_DIR: "/run/user/1000",
+  CLAUDE_CONFIG_DIR: "/home/tester/.claude-work",
+  SYNTHETIC_DATABASE_URL: "postgres://user:secret@db/app",
+  SYNTHETIC_PRIVATE_KEY: "key",
+  WORKFLOW_POSTGRES_URL: "postgres://jigs:secret@db/jigs",
+  OPENROUTER_API_KEY: "sk-or",
+  ANTHROPIC_API_KEY: "sk-ant",
+  GITHUB_TOKEN: "ghp",
+  CLAUDECODE: "1",
+  CLAUDE_CODE_ENTRYPOINT: "cli",
+  MISE_DATA_DIR: "/home/tester/.mise",
+  SSH_AUTH_SOCK: "/run/user/1000/ssh",
 });
 
-test("stripApiCredentials removes every credential var and reports them", () => {
-  const env = dirty();
-  const stripped = stripApiCredentials(env);
-  expect(stripped.sort()).toEqual([
-    "AI_GATEWAY_API_KEY",
-    "ANTHROPIC_API_KEY",
-    "CLAUDECODE",
-    "CLAUDE_CODE_ENTRYPOINT",
-    "CLAUDE_EFFORT",
-    "CLAUDE_PID",
-    "OPENAI_API_KEY",
-    "OPENROUTER_API_KEY",
-  ]);
-  expect(env).toEqual({ ANTHROPIC_BASE_URL: "https://x", PATH: "/usr/bin", HOME: "/home/tester" });
+// Names only: a failing assertion never prints a value.
+const names = (env: Record<string, string>) => Object.keys(env).sort();
+const BASE = ["PATH", "HOME", "LANG", "LC_TIME", "HTTPS_PROXY", "SSL_CERT_FILE", "XDG_RUNTIME_DIR"];
+
+test("a harness starts from the base set and nothing else", () => {
+  expect(names(harnessEnv([], service()))).toEqual([...BASE].sort());
 });
 
-test("a harness gets no API key unless its driver explicitly allowlists it", () => {
-  expect(scrubbedEnv([], dirty())).not.toHaveProperty("OPENROUTER_API_KEY");
-  expect(scrubbedEnv(["OPENROUTER_API_KEY"], dirty())).toHaveProperty(
-    "OPENROUTER_API_KEY",
-    "sk-or",
+test("named variables are added, and only when the service has them", () => {
+  const env = harnessEnv(["MISE_DATA_DIR", "SSH_AUTH_SOCK", "NOT_SET"], service());
+  expect(names(env)).toEqual([...BASE, "MISE_DATA_DIR", "SSH_AUTH_SOCK"].sort());
+});
+
+test("secrets reach a harness only when its driver or the factory names them", () => {
+  const ask = { harness: { kind: "claude" as const, model: "sonnet" }, prompt: "p" };
+  const claude = harnessEnv(claudeDriver.envAllowlist(ask), service());
+  expect(names(claude)).toEqual([...BASE, "CLAUDE_CONFIG_DIR"].sort());
+
+  const codex = harnessEnv(
+    codexDriver.envAllowlist({
+      harness: { kind: "codex", model: "m" },
+      cwd: "/w",
+      prompt: "p",
+    }),
+    service(),
   );
+  expect(names(codex)).toEqual([...BASE].sort());
+
+  const pi = harnessEnv(
+    piDriver.envAllowlist({
+      harness: {
+        kind: "pi",
+        model: { kind: "openrouter", model: "m", apiKeyEnv: "OPENROUTER_API_KEY" },
+      },
+      prompt: "p",
+    }),
+    service(),
+  );
+  expect(names(pi)).toEqual([...BASE, "OPENROUTER_API_KEY"].sort());
+
+  expect(names(harnessEnv(["SYNTHETIC_DATABASE_URL"], service()))).toContain(
+    "SYNTHETIC_DATABASE_URL",
+  );
+});
+
+test("Pi reaches the session bus only for an OAuth MCP server", () => {
+  const withServer = (auth: "oauth" | false) =>
+    piDriver.envAllowlist({
+      harness: {
+        kind: "pi",
+        model: { kind: "openai-codex", model: "m" },
+        mcpServers: {
+          team: { url: "https://mcp.example", auth, tools: ["t"], probe: { tool: "t" } },
+        },
+      },
+      cwd: "/w",
+      prompt: "p",
+    });
+  expect(withServer("oauth")).toContain("DBUS_SESSION_BUS_ADDRESS");
+  expect(withServer(false)).not.toContain("DBUS_SESSION_BUS_ADDRESS");
+});
+
+test("only well-formed locale names count as locale", () => {
+  const env = harnessEnv([], {
+    ...service(),
+    "LC_X;touch /tmp/pwned;": "x",
+    LC_: "x",
+    lc_all: "x",
+  });
+  expect(names(env)).toEqual([...BASE].sort());
 });

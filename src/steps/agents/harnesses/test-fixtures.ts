@@ -3,7 +3,18 @@ import { lstatSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync
 import { tmpdir } from "node:os";
 import path from "node:path";
 import semver from "semver";
+import {
+  type AgentExecutionDependencies,
+  defaultAgentExecutionDependencies,
+} from "../execute-agent.ts";
 import { MIN_PI_VERSION, resolvePiExecutable } from "./executables.ts";
+
+// Tests run outside any factory, so there is no jigs.config.ts declaring
+// agent variables to read.
+export const factorylessDeps: AgentExecutionDependencies = {
+  ...defaultAgentExecutionDependencies,
+  factoryEnv: () => [],
+};
 
 export function makeTmpDir(): string {
   return mkdtempSync(path.join(tmpdir(), "jigs-harness-test-"));

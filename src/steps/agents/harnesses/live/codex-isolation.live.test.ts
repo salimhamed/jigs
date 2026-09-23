@@ -2,7 +2,7 @@ import { generateText } from "ai";
 import { parse } from "smol-toml";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { codexAppServerStepSettings, withCodexAppServer } from "../../drivers/codex-support.ts";
-import { stripApiCredentials } from "../env.ts";
+import { harnessEnv } from "../env.ts";
 import { codexInvocationHomeState, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import {
   assertLivePreconditions,
@@ -25,7 +25,6 @@ const probeToken = `PROBE-${crypto.randomUUID()}`;
 
 beforeAll(() => {
   assertLivePreconditions();
-  stripApiCredentials();
   tmp = makeTmpDir();
   scratch = makeScratchRepo(tmp);
   controlHome = makeControlCodexHome(tmp, probeToken);
@@ -42,6 +41,7 @@ async function appServerProbe(codexHome: string): Promise<string> {
       codexAppServerStepSettings({
         cwd: scratch,
         codexHome,
+        env: harnessEnv([]),
         approvalPolicy: "never",
         // The sandbox an agent step actually runs under. Codex 0.153 made an
         // MCP tool call an approvable action, and under any narrower sandbox

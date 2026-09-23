@@ -141,6 +141,7 @@ function makeDeps(
       if (kind === "pi") return testDrivers.pi;
       return driverFor(kind);
     }) as DriverResolver,
+    factoryEnv: () => [],
     // The probe itself is covered in ./jit-marker.test.ts, against a server
     // that really cannot start.
     jitFailures: async () => undefined,
@@ -628,7 +629,7 @@ test("a busy worktree does not block an agent in another one", async () => {
   await inFlight;
 });
 
-test("the step env is a scrubbed copy: no API credentials, process.env untouched", async () => {
+test("the step env is built, not copied: no API credentials, process.env untouched", async () => {
   process.env.ANTHROPIC_API_KEY = "sk-test-scrub";
   try {
     const wire = buildAgentRequest({
@@ -1357,4 +1358,45 @@ test("pi run honors JIT failure before creating its invocation home or spawning"
   });
   expect(captured.piHome).toBeUndefined();
   expect(captured.piOptions).toBeUndefined();
+});
+
+test("the JIT checks and the harness get the same environment, built from the base set, driver and factory names", async () => {
+  vi.stubEnv("DRIVER_VAR", "driver");
+  vi.stubEnv("FACTORY_VAR", "factory");
+  vi.stubEnv("SYNTHETIC_DATABASE_URL", "postgres://user:secret@db/app");
+  vi.stubEnv("SYNTHETIC_PRIVATE_KEY", "synthetic-key");
+  let jitEnv: Record<string, string> | undefined;
+  let runEnv: Record<string, string> | undefined;
+  const driver = {
+    ...createClaudeDriver(),
+    requestChecks: () => [],
+    envAllowlist: () => ["DRIVER_VAR"],
+    run: async (_request: unknown, context: { env: Record<string, string> }) => {
+      runEnv = context.env;
+      return { text: "done" };
+    },
+  };
+  const deps: AgentExecutionDependencies = {
+    ...defaultAgentExecutionDependencies,
+    resolveDriver: (() => driver) as unknown as DriverResolver,
+    factoryEnv: () => ["FACTORY_VAR"],
+    jitFailures: async (_wire, env) => {
+      jitEnv = env;
+      return undefined;
+    },
+  };
+  try {
+    await agentStep(
+      buildAgentRequest({ harness: harnesses.claude("sonnet"), cwd: worktree, prompt: "p" }),
+      { workflowRunId: "run-env" },
+      deps,
+    );
+  } finally {
+    vi.unstubAllEnvs();
+  }
+  expect(jitEnv).toBe(runEnv);
+  const names = Object.keys(runEnv ?? {});
+  expect(names).toEqual(expect.arrayContaining(["PATH", "DRIVER_VAR", "FACTORY_VAR"]));
+  expect(names).not.toContain("SYNTHETIC_DATABASE_URL");
+  expect(names).not.toContain("SYNTHETIC_PRIVATE_KEY");
 });

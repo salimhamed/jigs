@@ -18,14 +18,16 @@ import {
   driverFor,
   type ExecutorGeneration,
 } from "./drivers/index.ts";
-import { scrubbedEnv } from "./harnesses/env.ts";
+import { factoryAgentEnv, harnessEnv } from "./harnesses/env.ts";
 import { FileLockTimeoutError, lockPathFor, withFileLock } from "./lock.ts";
 import { AgentSessionError } from "./session-error.ts";
 
 /** Injectable provider and environment operations used by agent execution. */
 export interface AgentExecutionDependencies extends DriverDependencies {
   resolveDriver: DriverResolver;
-  jitFailures(wire: AgentRequest): Promise<FailedCheck[] | undefined>;
+  /** Names the factory declares under `agents.env` in `jigs.config.ts`. */
+  factoryEnv(): readonly string[];
+  jitFailures(wire: AgentRequest, env: Record<string, string>): Promise<FailedCheck[] | undefined>;
 }
 
 /** Production dependencies for executing harness requests. */
@@ -33,8 +35,9 @@ export const defaultAgentExecutionDependencies: AgentExecutionDependencies = {
   generateText: (options) => generateText(options),
   evaluate: (options) => experimental_evaluate(options),
   resolveDriver: driverFor,
-  jitFailures: async (wire) => {
-    const report = await runChecks(jitChecks(wire), JIT_TIMEOUT_MS);
+  factoryEnv: factoryAgentEnv,
+  jitFailures: async (wire, env) => {
+    const report = await runChecks(jitChecks(wire, env), JIT_TIMEOUT_MS);
     return report.ok ? undefined : failedChecks(report);
   },
 };
@@ -57,6 +60,8 @@ export async function executeAgent(
   if (driver === undefined) throw new JigsError(`no driver is registered for ${wire.harness.kind}`);
   if (driver.family !== "harness")
     throw new JigsError(`${wire.harness.kind} is a model source, not an agent harness`);
+  // Built once, so the JIT checks probe exactly what the harness gets.
+  const env = harnessEnv([...driver.envAllowlist(wire), ...deps.factoryEnv()]);
   const isRun = wire.cwd !== undefined;
   if (!isRun) {
     assertAskableHarness(wire.harness);
@@ -66,7 +71,7 @@ export async function executeAgent(
     const generation = await driver.ask(wire, {
       metadata,
       deps,
-      env: scrubbedEnv(driver.envAllowlist(wire)),
+      env,
       output: outputSpec(wire.outputSchema),
     });
     return toModelResult(
@@ -84,7 +89,7 @@ export async function executeAgent(
   if (run === undefined) throw new JigsError(`the ${wire.harness.kind} driver cannot run`);
   const requestReport = await runChecks(driver.requestChecks(wire));
   if (!requestReport.ok) throw new JigsError(formatFailures(requestReport));
-  const jitFailure = await deps.jitFailures(wire);
+  const jitFailure = await deps.jitFailures(wire, env);
   if (jitFailure !== undefined) return { jitFailure };
 
   try {
@@ -96,7 +101,7 @@ export async function executeAgent(
           generation = await run(wire, {
             metadata,
             deps,
-            env: scrubbedEnv(driver.envAllowlist(wire)),
+            env,
             output: outputSpec(wire.outputSchema),
           });
         } catch (err) {

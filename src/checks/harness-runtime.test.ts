@@ -8,7 +8,8 @@ const answers =
   (stdout: string, stderr = "") =>
   async () => ({ stdout, stderr });
 
-const one = harnessRuntime;
+const one = (...[harness, deps]: Parameters<typeof harnessRuntime>) =>
+  harnessRuntime(harness, { factoryEnv: () => [], ...deps });
 
 test("a codex past the provider's floor passes and reports path, version and minimum", async () => {
   const runtime = await one("codex", {
@@ -108,4 +109,22 @@ test("an unreadable --version answer is not evidence of a usable CLI", async () 
   });
   expect(runtime).toMatchObject({ ok: false, version: null });
   expect(runtime.line).toContain("answered no version");
+});
+
+test("the version probe runs under the agent environment, with the factory's declared names", async () => {
+  let spawned: Record<string, string> | undefined;
+  await harnessRuntime("codex", {
+    resolve: found("/c"),
+    env: {
+      PATH: "/usr/bin",
+      SYNTHETIC_DATABASE_URL: "postgres://user:secret@db/app",
+      MISE_DATA_DIR: "/m",
+    },
+    factoryEnv: () => ["MISE_DATA_DIR"],
+    exec: async (_file, _args, options) => {
+      spawned = options.env;
+      return { stdout: "codex-cli 0.153.4", stderr: "" };
+    },
+  });
+  expect(Object.keys(spawned ?? {}).sort()).toEqual(["MISE_DATA_DIR", "PATH"]);
 });

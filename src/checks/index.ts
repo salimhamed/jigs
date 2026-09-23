@@ -181,8 +181,8 @@ function piProbeServer(server: PiMcpServerConfig): McpServerConfig {
 
 // Preflight's backstop: everything a step can only learn at hydration, once
 // the body has built its harness config — which no manifest could declare
-// ahead of the run.
-export function jitChecks(wire: AgentRequest): Check[] {
+// ahead of the run. `env` is the environment the step hands its harness.
+export function jitChecks(wire: AgentRequest, env: Record<string, string>): Check[] {
   const harness = wire.harness;
   if (wire.cwd === undefined) return [];
   const driver = driverFor(harness.kind);
@@ -199,10 +199,6 @@ export function jitChecks(wire: AgentRequest): Check[] {
     // Pi's pinned adapter owns OAuth refresh and secure-store access. A raw MCP
     // client cannot reproduce that flow without adding a second integration,
     // so OAuth servers are exercised by the Pi tool call itself.
-    ...mcpServerChecks(
-      probeableServers,
-      wire.cwd,
-      harness.kind === "pi" ? { inheritEnv: false } : {},
-    ),
+    ...mcpServerChecks(probeableServers, wire.cwd, harness.kind === "pi" ? {} : env),
   ];
 }

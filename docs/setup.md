@@ -59,6 +59,31 @@ World. Nothing below is global except part 1.
   source environment-variable names. Stdio children receive those mapped
   values plus the MCP SDK's defaults (`HOME`, `LOGNAME`, `PATH`, `SHELL`,
   `TERM` and `USER`); model and sibling-server credentials are not inherited.
+
+  Agents do not inherit the service environment. Each harness starts with a
+  small base set (`PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL`, `TERM`, locale,
+  `TZ`, `TMPDIR`, the XDG base directories, proxy and CA certificate
+  settings), the variables its driver needs, and the names this factory
+  declares. Anything else your machine needs, declare by name in
+  `jigs.config.ts`, then restart the service. Tool-manager variables are the
+  usual case: if `pi` or `codex` comes from mise and your mise setup relies on
+  its own variables, list them:
+
+  ```ts
+  export default defineFactory({
+    // ...
+    agents: { env: ["MISE_DATA_DIR", "MISE_CONFIG_DIR"] },
+  });
+  ```
+
+  The same goes for `SSH_AUTH_SOCK` if agents sign commits through an SSH
+  agent. The service checks each harness CLI under this environment when it
+  starts. Model credentials and variables jigs sets itself (`ANTHROPIC_API_KEY`,
+  `OPENAI_API_KEY`, `CODEX_HOME` and similar) cannot be declared. Proxy URLs
+  pass through as they are, so credentials written into one reach agents. The list holds names only, never values. A secret the list does not
+  name, such as `WORKFLOW_POSTGRES_URL`, never reaches an agent. This protects
+  the environment only: agents run as your user and can still read any file
+  your user can, `.env` files and credential files included.
 - **The AWS CLI v2**, if any workflow declares `requires: { aws: true }`
   alongside its bindings and harnesses: preflight probes the service's
   `AWS_PROFILE` with `aws sts get-caller-identity` and refuses the run when it

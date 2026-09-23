@@ -3,10 +3,12 @@ import { type ExecuteAgentStep, JitCheckError, runAgent } from "../../blocks/age
 import { harnesses } from "../../blocks/agents/harness-config.ts";
 import { buildAgentRequest } from "../../blocks/agents/plan.ts";
 import { executeAgent } from "./execute-agent.ts";
+import { factorylessDeps } from "./harnesses/test-fixtures.ts";
 
 // Stands in for a factory's wrapper, minus the directive: it delegates to
 // executeAgent the way a factory's own does.
-const runStep: ExecuteAgentStep = (wire) => executeAgent(wire, { workflowRunId: "run-under-test" });
+const runStep: ExecuteAgentStep = (wire) =>
+  executeAgent(wire, { workflowRunId: "run-under-test" }, factorylessDeps);
 
 test("an agent step whose declared MCP server cannot start returns the JIT failure instead of throwing", async () => {
   const wire = buildAgentRequest({

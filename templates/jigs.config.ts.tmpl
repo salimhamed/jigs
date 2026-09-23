@@ -5,6 +5,8 @@ export default defineFactory({
   // Public URL for provider webhooks.
   // ingressUrl: "https://<machine>.<tailnet>.ts.net",
   bindings: {},
+  // Agents get only a small base environment; name any other variable they need.
+  // agents: { env: ["SSH_AUTH_SOCK"] },
   // App mode maps account logins to installation IDs: installations: { owner: 123 }
 {{GITHUB_IDENTITY}}
 {{MERGE_POLICY}}

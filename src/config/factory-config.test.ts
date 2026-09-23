@@ -3,6 +3,8 @@ import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, expect, test } from "vitest";
+import { defineFactory, RESERVED_AGENT_ENV } from "../blocks/factory.ts";
+import { CLAUDE_ENV } from "../steps/agents/drivers/claude-support.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { removeBinding, upsertBinding } from "./binding-edit.ts";
 import {
@@ -108,6 +110,39 @@ test("service port defaults while dashboard port is explicit", () => {
     port: 8990,
     dashboardPort: 3456,
   });
+});
+
+test("agent environment names default to none and must be names, not values", () => {
+  expect(parseFactoryConfig({ service: { dashboardPort: 3456 } }).agents).toEqual({ env: [] });
+  expect(
+    parseFactoryConfig({ service: { dashboardPort: 3456 }, agents: { env: ["MISE_DATA_DIR"] } })
+      .agents.env,
+  ).toEqual(["MISE_DATA_DIR"]);
+  expect(() =>
+    parseFactoryConfig({ service: { dashboardPort: 3456 }, agents: { env: ["A=b"] } }),
+  ).toThrow("agents.env.0");
+  expect(() =>
+    defineFactory({ service: { dashboardPort: 3456 }, agents: { env: ["A=b"] }, workflows: {} }),
+  ).toThrow("agents.env.0");
+});
+
+test.each([
+  "ANTHROPIC_API_KEY",
+  "CLAUDE_CODE_OAUTH_TOKEN",
+  "OPENAI_API_KEY",
+  "OPENROUTER_API_KEY",
+  "CODEX_HOME",
+  "PI_CODING_AGENT_DIR",
+  "CLAUDE_CONFIG_DIR",
+])("agents.env rejects %s, which jigs sets or which selects a model credential", (name) => {
+  const definition = { service: { dashboardPort: 3456 }, agents: { env: [name] }, workflows: {} };
+  expect(() => parseFactoryConfig(definition)).toThrow("model source");
+  expect(() => defineFactory(definition)).toThrow("model source");
+});
+
+test("every variable a driver sets itself is reserved", () => {
+  for (const name of [...CLAUDE_ENV, "CODEX_HOME", "PI_CODING_AGENT_DIR"])
+    expect(RESERVED_AGENT_ENV).toContain(name);
 });
 
 test("identical re-bind preserves every byte", () => {

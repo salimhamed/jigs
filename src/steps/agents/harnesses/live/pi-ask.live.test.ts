@@ -53,6 +53,7 @@ function recordingDeps(): { deps: AgentExecutionDependencies; launches: PiExecut
     launches,
     deps: {
       ...defaultAgentExecutionDependencies,
+      factoryEnv: () => [],
       resolveDriver: ((kind) => (kind === "pi" ? pi : driverFor(kind))) as DriverResolver,
     },
   };

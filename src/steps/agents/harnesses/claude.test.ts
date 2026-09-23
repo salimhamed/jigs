@@ -7,7 +7,7 @@ import { buildAgentRequest, buildAskAgentRequest } from "../../../blocks/agents/
 import { claudeDriver } from "../drivers/claude.ts";
 import { claudeProcessSpawner, claudeStepSettings } from "../drivers/claude-support.ts";
 import { defaultAgentExecutionDependencies } from "../execute-agent.ts";
-import { scrubbedEnv } from "./env.ts";
+import { harnessEnv } from "./env.ts";
 import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
 let tmp: string;
@@ -27,6 +27,7 @@ writeFileSync(process.env.JIGS_CLAUDE_TEST_RECORD, JSON.stringify({
   anthropic: "ANTHROPIC_API_KEY" in process.env,
   entrypoint: process.env.CLAUDE_CODE_ENTRYPOINT,
   allowedToken: process.env.JIGS_ALLOWED_TOKEN,
+  names: Object.keys(process.env),
   cwd: process.cwd(),
   args: process.argv.slice(2),
 }));
@@ -42,17 +43,15 @@ afterAll(() => {
 });
 
 test("claudeStepSettings preserves caller policy and wires the isolated launcher", () => {
-  const settings = claudeStepSettings(
-    {
-      cwd: "/worktree",
-      strictMcpConfig: true,
-      settingSources: ["project"],
-      permissionMode: "bypassPermissions",
-      allowDangerouslySkipPermissions: true,
-      pathToClaudeCodeExecutable: "/opt/claude",
-    },
-    [],
-  );
+  const settings = claudeStepSettings({
+    cwd: "/worktree",
+    strictMcpConfig: true,
+    settingSources: ["project"],
+    permissionMode: "bypassPermissions",
+    allowDangerouslySkipPermissions: true,
+    pathToClaudeCodeExecutable: "/opt/claude",
+    env: {},
+  });
   expect(settings.strictMcpConfig).toBe(true);
   expect(settings.settingSources).toEqual(["project"]);
   expect(settings.permissionMode).toBe("bypassPermissions");
@@ -69,6 +68,9 @@ test("the real provider launch isolates ask and run and preserves stderr auth cl
   vi.stubEnv("AWS_SECRET_ACCESS_KEY", "synthetic-aws-secret");
   vi.stubEnv("ANTHROPIC_API_KEY", "synthetic-anthropic-secret");
   vi.stubEnv("CLAUDE_CODE_ENTRYPOINT", "parent-claude-session");
+  vi.stubEnv("SYNTHETIC_DATABASE_URL", "postgres://user:synthetic@db/app");
+  vi.stubEnv("SYNTHETIC_PRIVATE_KEY", "synthetic-private-key");
+  vi.stubEnv("SYNTHETIC_DECLARED", "declared");
 
   const cases = [
     {
@@ -96,7 +98,7 @@ test("the real provider launch isolates ask and run and preserves stderr auth cl
       metadata: { workflowRunId: `run-${testCase.name}` },
       deps: { ...defaultAgentExecutionDependencies, generateText },
       env: {
-        ...scrubbedEnv(claudeDriver.envAllowlist(testCase.request)),
+        ...harnessEnv([...claudeDriver.envAllowlist(testCase.request), "SYNTHETIC_DECLARED"]),
         JIGS_CLAUDE_TEST_RECORD: record,
       },
     };
@@ -112,12 +114,27 @@ test("the real provider launch isolates ask and run and preserves stderr auth cl
     expect(error).toMatchObject({ message: expect.stringContaining("Please run /login") });
     expect(isAuthenticationError(error), `${testCase.name} stderr classification`).toBe(true);
     expect(getErrorMetadata(error)?.stderr).toContain("Please run /login");
-    expect(JSON.parse(readFileSync(record, "utf8"))).toMatchObject({
+    const launched = JSON.parse(readFileSync(record, "utf8"));
+    expect(launched).toMatchObject({
       aws: false,
       anthropic: false,
       entrypoint: "sdk-ts",
       cwd: testCase.cwd,
     });
+    const names = new Set<string>(launched.names);
+    expect(names.has("SYNTHETIC_DECLARED"), "declared variable").toBe(true);
+    expect(names.has("SYNTHETIC_DATABASE_URL"), "ordinary-named secret").toBe(false);
+    expect(names.has("SYNTHETIC_PRIVATE_KEY"), "ordinary-named secret").toBe(false);
+    // Names only, so a failure never prints a host value.
+    const allowed = new Set([
+      ...Object.keys(harnessEnv(claudeDriver.envAllowlist(testCase.request))),
+      "SYNTHETIC_DECLARED",
+      "JIGS_CLAUDE_TEST_RECORD",
+      "CLAUDE_CODE_ENTRYPOINT",
+    ]);
+    expect(
+      [...names].filter((name) => !allowed.has(name) && !name.startsWith("CLAUDE_AGENT_SDK_")),
+    ).toEqual([]);
   }
 
   expect(process.env.AWS_SECRET_ACCESS_KEY).toBe("synthetic-aws-secret");
@@ -126,15 +143,19 @@ test("the real provider launch isolates ask and run and preserves stderr auth cl
 });
 
 function launchFixture(
-  allowlist: readonly string[],
-  env: Record<string, string>,
+  stepEnv: Record<string, string>,
+  providerEnv: Record<string, string>,
   args: readonly string[] = [fixture],
+  host: NodeJS.ProcessEnv = {},
 ) {
-  return claudeProcessSpawner(allowlist)({
+  return claudeProcessSpawner(
+    stepEnv,
+    host,
+  )({
     command: process.execPath,
     args: [...args],
     cwd: process.cwd(),
-    env: { PATH: process.env.PATH ?? "", ...env },
+    env: { PATH: process.env.PATH ?? "", ...providerEnv },
     signal: new AbortController().signal,
   });
 }
@@ -146,26 +167,44 @@ function exited(child: ReturnType<typeof launchFixture>) {
   });
 }
 
-test("explicitly allowlisted variables survive the launch scrub", async () => {
+test("the launch hook replaces the provider's environment with the step's, keeping only what the SDK added", async () => {
   const record = path.join(tmp, "allowlist-env.json");
-  const child = launchFixture(["JIGS_ALLOWED_TOKEN"], {
-    JIGS_CLAUDE_TEST_RECORD: record,
-    JIGS_ALLOWED_TOKEN: "kept",
-    ANTHROPIC_API_KEY: "dropped",
-  });
+  const host = {
+    PATH: process.env.PATH ?? "",
+    ANTHROPIC_API_KEY: "host",
+    CLAUDE_CODE_OAUTH_TOKEN: "host",
+    AWS_SECRET_ACCESS_KEY: "host",
+    CLAUDE_AGENT_SDK_VERSION: "0.0.0",
+  };
+  const child = launchFixture(
+    { JIGS_CLAUDE_TEST_RECORD: record, JIGS_ALLOWED_TOKEN: "kept" },
+    {
+      ...host,
+      JIGS_ALLOWED_TOKEN: "provider copy",
+      CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING: "true",
+    },
+    [fixture],
+    host,
+  );
   const errors: unknown[] = [];
   child.stdout.on("error", (error) => errors.push(error));
   await expect(exited(child)).resolves.toEqual([0, null]);
   expect(errors).toHaveLength(1);
-  expect(JSON.parse(readFileSync(record, "utf8"))).toMatchObject({
-    allowedToken: "kept",
-    anthropic: false,
-    entrypoint: "sdk-ts",
-  });
+  const launched = JSON.parse(readFileSync(record, "utf8"));
+  expect(launched).toMatchObject({ allowedToken: "kept", anthropic: false, entrypoint: "sdk-ts" });
+  expect([...launched.names].sort()).toEqual(
+    [
+      "CLAUDE_AGENT_SDK_VERSION",
+      "CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING",
+      "CLAUDE_CODE_ENTRYPOINT",
+      "JIGS_ALLOWED_TOKEN",
+      "JIGS_CLAUDE_TEST_RECORD",
+    ].sort(),
+  );
 });
 
 test("a kill through the launcher is a teardown, not a launch failure", async () => {
-  const child = launchFixture([], {}, [
+  const child = launchFixture({ PATH: process.env.PATH ?? "" }, {}, [
     "-e",
     'process.stdout.write(\'{"type":"result"}\\n\'); setInterval(() => {}, 1000);',
   ]);
@@ -191,7 +230,7 @@ test("claudeStepSettings resolves the executable when not supplied", () => {
   const prev = process.env.JIGS_CLAUDE_EXECUTABLE;
   process.env.JIGS_CLAUDE_EXECUTABLE = "/opt/claude-from-env";
   try {
-    expect(claudeStepSettings({ cwd: "/worktree" }, []).pathToClaudeCodeExecutable).toBe(
+    expect(claudeStepSettings({ cwd: "/worktree", env: {} }).pathToClaudeCodeExecutable).toBe(
       "/opt/claude-from-env",
     );
   } finally {

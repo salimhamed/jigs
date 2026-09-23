@@ -49,6 +49,7 @@ const claudeEnv = { JIGS_CLAUDE_EXECUTABLE: "/usr/bin/claude", PATH: "" };
 function claudeResult(stdout: string): Promise<CheckResult> {
   return claudeAuthCheck({
     env: claudeEnv,
+    factoryEnv: () => [],
     exec: async () => ({ stdout }),
   }).run();
 }
@@ -69,16 +70,27 @@ test("an ANTHROPIC_API_KEY overriding the subscription login fails and names the
   expect(result.ok === false && result.repair).toContain("the factory repo's .env");
 });
 
-test("the probe spawns the CLI with the unscrubbed env, so an API key can flip its auth mode", async () => {
+test("the probe spawns the CLI under the environment a Claude step gets", async () => {
   let spawned: Record<string, string> | undefined;
   await claudeAuthCheck({
-    env: { ...claudeEnv, ANTHROPIC_API_KEY: "sk-x" },
+    env: {
+      ...claudeEnv,
+      ANTHROPIC_API_KEY: "sk-x",
+      SYNTHETIC_DATABASE_URL: "postgres://user:secret@db/app",
+      CLAUDE_CONFIG_DIR: "/home/tester/.claude-work",
+      DECLARED_BY_FACTORY: "declared",
+    },
+    factoryEnv: () => ["DECLARED_BY_FACTORY"],
     exec: async (_file, _args, options) => {
       spawned = options.env;
-      return { stdout: JSON.stringify(API_KEY_OVERRIDE) };
+      return { stdout: JSON.stringify(SUBSCRIPTION) };
     },
   }).run();
-  expect(spawned).toHaveProperty("ANTHROPIC_API_KEY", "sk-x");
+  expect(Object.keys(spawned ?? {}).sort()).toEqual([
+    "CLAUDE_CONFIG_DIR",
+    "DECLARED_BY_FACTORY",
+    "PATH",
+  ]);
 });
 
 test("a logged-out CLI fails with claude auth login", async () => {
@@ -171,6 +183,7 @@ test("Pi OpenAI Codex auth requires the provider entry", async () => {
 // Doctor shows the same line the boot would have refused on.
 test("the CLI check reports the shared line, as detail when it passes", async () => {
   const result = await harnessRuntimeCheck("codex", {
+    factoryEnv: () => [],
     resolve: () => "/usr/local/bin/codex",
     exec: async () => ({ stdout: "codex-cli 0.153.4", stderr: "" }),
   }).run();
@@ -180,6 +193,7 @@ test("the CLI check reports the shared line, as detail when it passes", async ()
 
 test("the CLI check fails with the same line as the reason, and the PATH caveat to repair it", async () => {
   const result = await harnessRuntimeCheck("codex", {
+    factoryEnv: () => [],
     resolve: () => "/usr/local/bin/codex",
     exec: async () => ({ stdout: "codex-cli 0.144.6", stderr: "" }),
   }).run();

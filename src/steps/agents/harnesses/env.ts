@@ -1,27 +1,39 @@
-const STRIP_PATTERNS = [
-  /(?:API_KEY|ACCESS_KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL)/i,
-  /^AI_GATEWAY/,
-  /^CLAUDE_CODE_/,
-];
-const STRIP_KEYS = new Set(["CLAUDECODE", "CLAUDE_PID", "CLAUDE_EFFORT"]);
+import { readFactoryConfig } from "../../../config/factory-config.ts";
+import { factoryRoot } from "../../../config/factory-root.ts";
 
-function shouldStrip(key: string): boolean {
-  return STRIP_KEYS.has(key) || STRIP_PATTERNS.some((pattern) => pattern.test(key));
-}
+// Every harness process gets these when the service has them, and nothing else
+// unless its driver names it or the factory declares it in jigs.config.ts.
+export const BASE_ENV = [
+  "PATH",
+  "HOME",
+  "USER",
+  "LOGNAME",
+  "SHELL",
+  "TERM",
+  "LANG",
+  "LANGUAGE",
+  "TZ",
+  "TMPDIR",
+  // Relocated config, caches and logins; the runtime dir holds the session's
+  // sockets, such as the D-Bus bus a keyring is reached through.
+  "XDG_CONFIG_HOME",
+  "XDG_CACHE_HOME",
+  "XDG_DATA_HOME",
+  "XDG_STATE_HOME",
+  "XDG_RUNTIME_DIR",
+  // Reaching model providers from behind a proxy or a private CA.
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "no_proxy",
+  "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
+  "NODE_EXTRA_CA_CERTS",
+] as const;
 
-// Removes every API-key / gateway credential and parent-agent-session var, so
-// the only credential a harness can reach is the subscription login on disk
-// (claude.ai OAuth, ~/.codex/auth.json). Mutates env; returns what it removed.
-export function stripApiCredentials(env: NodeJS.ProcessEnv = process.env): string[] {
-  const stripped: string[] = [];
-  for (const key of Object.keys(env)) {
-    if (shouldStrip(key)) {
-      stripped.push(key);
-      delete env[key];
-    }
-  }
-  return stripped;
-}
+const isLocale = (name: string) => /^LC_[A-Z0-9_]+$/.test(name);
 
 export function stringEnv(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
   const clean: Record<string, string> = {};
@@ -31,17 +43,24 @@ export function stringEnv(env: NodeJS.ProcessEnv = process.env): Record<string, 
   return clean;
 }
 
-// The exact environment an agent step runs under, as a plain string map.
-// Shared with the preflight harness checks so a check and the step it guards
-// cannot drift.
-export function scrubbedEnv(
-  allowlist: readonly string[] = [],
-  base: NodeJS.ProcessEnv = process.env,
+// Built from empty: the base set, then exactly the names given.
+export function harnessEnv(
+  names: readonly string[],
+  source: NodeJS.ProcessEnv = process.env,
 ): Record<string, string> {
-  const env: NodeJS.ProcessEnv = { ...base };
-  stripApiCredentials(env);
-  for (const key of allowlist) {
-    if (base[key] !== undefined) env[key] = base[key];
-  }
-  return stringEnv(env);
+  const env: Record<string, string> = {};
+  const keep = (name: string) => {
+    const value = source[name];
+    if (value !== undefined) env[name] = value;
+  };
+  for (const name of BASE_ENV) keep(name);
+  for (const name of Object.keys(source)) if (isLocale(name)) keep(name);
+  for (const name of names) keep(name);
+  return env;
+}
+
+// What this factory declares under agents.env. Steps and checks both read it
+// here, so a check probes the environment its step will run under.
+export function factoryAgentEnv(): readonly string[] {
+  return readFactoryConfig(factoryRoot()).agents.env;
 }

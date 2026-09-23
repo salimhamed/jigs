@@ -186,6 +186,10 @@ and schedules. Declare used credential providers in `requires.integrations`. Sec
 expression and inputs; the service validates its inputs against the workflow's
 schema. An active prior run causes a tick to be skipped; downtime isn't replayed.
 
+Agent harnesses don't inherit `.env`: each gets a small base set (`PATH`, `HOME`,
+locale, proxies and similar) plus its driver's own variables. Give agents any
+other variable by listing its name in `agents: { env: [...] }`; names only.
+
 Use `jigs bind` and `jigs unbind` for literal binding declarations. Unsupported
 computed expressions fail with guidance before any file or webhook changes.
 Do not replace such expressions automatically to make an edit work.

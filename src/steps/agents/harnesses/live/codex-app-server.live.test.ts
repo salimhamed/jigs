@@ -3,7 +3,6 @@ import { existsSync, globSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { stripApiCredentials } from "../env.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import {
   assertLivePreconditions,
@@ -31,10 +30,7 @@ test("app-server step: persistent thread, rollout in the durable session store, 
   const fixture = path.join(import.meta.dirname, "fixtures", "app-server-step.ts");
   const resultFile = path.join(tmp, "app-server-result.json");
 
-  const childEnv = { ...process.env };
-  stripApiCredentials(childEnv);
   await execFileAsync("node", [fixture, scratch, home, resultFile], {
-    env: childEnv,
     timeout: 480_000,
     killSignal: "SIGKILL",
   });

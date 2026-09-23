@@ -9,7 +9,7 @@ import {
   defaultAgentExecutionDependencies,
   outputSpec,
 } from "./execute-agent.ts";
-import { scrubbedEnv } from "./harnesses/env.ts";
+import { harnessEnv } from "./harnesses/env.ts";
 
 /** Ask an API-backed model source. */
 export async function executeModel(
@@ -27,7 +27,7 @@ export async function executeModel(
   const generation = await driver.ask(wire, {
     metadata,
     deps,
-    env: scrubbedEnv(driver.envAllowlist(wire)),
+    env: harnessEnv(driver.envAllowlist(wire)),
     output: outputSpec(wire.outputSchema),
   });
   return toModelResult(generation, wire.outputSchema === undefined ? undefined : generation.output);
@@ -72,7 +72,7 @@ export async function executeJev<const QUESTIONS extends JevQuestions>(
   const generation = await driver.decide(wire, {
     metadata,
     deps,
-    env: scrubbedEnv(driver.envAllowlist(wire)),
+    env: harnessEnv(driver.envAllowlist(wire)),
   });
   return { answers: generation.answers };
 }

@@ -1,9 +1,10 @@
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { promisify } from "node:util";
+import { CLAUDE_ENV } from "../steps/agents/drivers/claude-support.ts";
 import { driverFor } from "../steps/agents/drivers/index.ts";
 import { realCodexAuthPath } from "../steps/agents/harnesses/codex-home.ts";
-import { stringEnv } from "../steps/agents/harnesses/env.ts";
+import { factoryAgentEnv, harnessEnv } from "../steps/agents/harnesses/env.ts";
 import { resolveClaudeExecutable } from "../steps/agents/harnesses/executables.ts";
 import { realPiAuthPath } from "../steps/agents/harnesses/pi-home.ts";
 import { type Check, type CheckResult, PROBE_TIMEOUT_MS } from "./catalog.ts";
@@ -21,6 +22,7 @@ export interface ClaudeAuthDeps {
     options: { env: Record<string, string>; timeout: number },
   ) => Promise<{ stdout: string }>;
   env?: NodeJS.ProcessEnv;
+  factoryEnv?: () => readonly string[];
 }
 
 type ClaudeAuthStatus = {
@@ -30,10 +32,8 @@ type ClaudeAuthStatus = {
 };
 
 // A login probe only; the CLI itself is harnessRuntimeCheck's business.
-// Heuristic, never a model call. The probe runs under the unscrubbed env: the
-// Claude provider re-inherits every ANTHROPIC_*/CLAUDE_* key from process.env
-// regardless of the env a step hands it, so a probe that scrubbed them would
-// report a green the step will not honor.
+// Heuristic, never a model call. The probe runs under the environment a step
+// gives Claude Code, so it sees the same login the step will.
 export function claudeAuthCheck(deps: ClaudeAuthDeps = {}): Check {
   const exec = deps.exec ?? execFileAsync;
   const env = deps.env ?? process.env;
@@ -52,10 +52,11 @@ export function claudeAuthCheck(deps: ClaudeAuthDeps = {}): Check {
         };
       }
 
+      const probeEnv = harnessEnv([...CLAUDE_ENV, ...(deps.factoryEnv ?? factoryAgentEnv)()], env);
       let stdout: string;
       try {
         ({ stdout } = await exec(executable, ["auth", "status", "--json"], {
-          env: stringEnv(env),
+          env: probeEnv,
           timeout: PROBE_TIMEOUT_MS,
         }));
       } catch (err) {

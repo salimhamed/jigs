@@ -7,7 +7,7 @@ import { buildAgentRequest } from "../../../blocks/agents/plan.ts";
 import { type DriverResolver, driverFor } from "../drivers/index.ts";
 import { createPiDriver } from "../drivers/pi.ts";
 import { defaultAgentExecutionDependencies, executeAgent } from "../execute-agent.ts";
-import { scrubbedEnv } from "./env.ts";
+import { harnessEnv } from "./env.ts";
 import { executePi } from "./pi.ts";
 import { piMcpToolNames } from "./pi-extension.ts";
 import { piRunStatePath, preparePiInvocationHome } from "./pi-home.ts";
@@ -63,7 +63,7 @@ type EnvReport = {
 const STDIO_DEFAULTS = ["HOME", "LOGNAME", "PATH", "SHELL", "TERM", "USER"];
 
 test.skipIf(skipPi || process.platform !== "linux")(
-  "installed Pi launches without credential-shaped names except the allowlisted ones, and its MCP child with only declared env",
+  "installed Pi launches with only the base set, its driver's variables and the factory's declared names, and its MCP child with only declared env",
   async () => {
     const id = crypto.randomUUID();
     const secrets = {
@@ -75,8 +75,13 @@ test.skipIf(skipPi || process.platform !== "linux")(
       OPENROUTER_API_KEY: `fake-openrouter-${id}`,
     };
     for (const [name, value] of Object.entries(secrets)) vi.stubEnv(name, value);
-    // Removal is by name, so a secret under an ordinary name is inherited.
-    vi.stubEnv("SYNTHETIC_PLAIN_VALUE", `plain-${id}`);
+    const undeclared = {
+      SYNTHETIC_DATABASE_URL: `postgres://user:fake-db-${id}@db/app`,
+      SYNTHETIC_PRIVATE_KEY: `fake-private-key-${id}`,
+      SYNTHETIC_PLAIN_VALUE: `plain-${id}`,
+    };
+    for (const [name, value] of Object.entries(undeclared)) vi.stubEnv(name, value);
+    vi.stubEnv("SYNTHETIC_DECLARED", `declared-${id}`);
     const envFile = path.join(tmp, "mcp-env.jsonl");
     vi.stubEnv("JIGS_TEST_ENV_FILE", envFile);
     vi.stubEnv("JIGS_TEST_PROBE_VALUE", "ENV-PROBE");
@@ -177,7 +182,8 @@ test.skipIf(skipPi || process.platform !== "linux")(
     });
     const runId = `pi-launch-env-${id}`;
     const allowlist = pi.envAllowlist(wire);
-    const expectedPiEnv = scrubbedEnv(allowlist);
+    const declared = ["SYNTHETIC_DECLARED"];
+    const expectedPiEnv = harnessEnv([...allowlist, ...declared]);
 
     let result: Awaited<ReturnType<typeof executeAgent>>;
     try {
@@ -186,6 +192,7 @@ test.skipIf(skipPi || process.platform !== "linux")(
         { workflowRunId: runId },
         {
           ...defaultAgentExecutionDependencies,
+          factoryEnv: () => declared,
           resolveDriver: ((kind) => (kind === "pi" ? pi : driverFor(kind))) as DriverResolver,
         },
       );
@@ -227,22 +234,27 @@ test.skipIf(skipPi || process.platform !== "linux")(
       throw new Error("Pi's launch environment was unread");
     const { PI_CODING_AGENT_DIR: agentDir, ...inherited } = piEnv;
     expect(agentDir?.startsWith(piRunStatePath(runId, { baseDir: piHomes }))).toBe(true);
-    // Compared by name so a failure never prints the host's values. The
-    // launcher may add its own non-credential variables, such as NODE_PATH.
+    // Compared by name so a failure never prints the host's values.
     expect(Object.keys(expectedPiEnv).filter((name) => !(name in inherited))).toEqual([]);
+    // Pi's installed shell launcher sets these for itself.
+    const launcherSet = new Set(["NODE_PATH", "PWD", "SHLVL", "_"]);
+    expect(
+      Object.keys(inherited).filter((name) => !(name in expectedPiEnv) && !launcherSet.has(name)),
+    ).toEqual([]);
     expect(allowlist).toEqual(
       expect.arrayContaining(["SYNTHETIC_MODEL_API_KEY", "SYNTHETIC_MCP_TOKEN"]),
     );
     expect(piEnv.SYNTHETIC_MODEL_API_KEY).toBe(secrets.SYNTHETIC_MODEL_API_KEY);
     expect(piEnv.SYNTHETIC_MCP_TOKEN).toBe(secrets.SYNTHETIC_MCP_TOKEN);
+    expect(piEnv.SYNTHETIC_DECLARED === `declared-${id}`, "declared variable").toBe(true);
     for (const name of [
       "SYNTHETIC_UNRELATED_SECRET",
       "SYNTHETIC_API_KEY",
       "SYNTHETIC_TOKEN",
       "OPENROUTER_API_KEY",
+      ...Object.keys(undeclared),
     ])
       expect(name in piEnv, `${name} reached Pi`).toBe(false);
-    expect(piEnv.SYNTHETIC_PLAIN_VALUE).toBe(`plain-${id}`);
 
     const written = [
       ...invocationFiles,
@@ -252,7 +264,7 @@ test.skipIf(skipPi || process.platform !== "linux")(
     expect(written.some(({ file }) => file.endsWith("models.json"))).toBe(true);
     expect(written.some(({ file }) => file.endsWith(".jsonl"))).toBe(true);
     for (const { file, content } of written)
-      for (const value of Object.values(secrets))
+      for (const value of [...Object.values(secrets), ...Object.values(undeclared)])
         expect(content.includes(value), `${file} contains a synthetic secret`).toBe(false);
   },
   15_000,
