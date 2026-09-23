@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.50.0](https://github.com/salimhamed/jigs/compare/jigs-v0.49.0...jigs-v0.50.0) (2026-09-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* ship's implementationHarness and reviewHarness inputs are validated against every registered harness kind, and pi is refused at input validation instead of being absent from the enum.
+
+### Features
+
+* let the ship recipe use any registered harness or model source ([#353](https://github.com/salimhamed/jigs/issues/353)) ([bbc00fc](https://github.com/salimhamed/jigs/commit/bbc00fcd2d1aa6d53ea81e05aa7400d42646ca36))
+
 ## [0.49.0](https://github.com/salimhamed/jigs/compare/jigs-v0.48.0...jigs-v0.49.0) (2026-09-23)
 
 

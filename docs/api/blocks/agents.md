@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.49.0
+# @salimhamed/jigs v0.50.0
 
 Compose agent and model calls inside a workflow, including harness selection and halts.
 
@@ -1341,6 +1341,8 @@ Without `tools` or `mcpServers` the harness also works with `askAgent`.
 
 > `readonly` **codex**(`model`, `options`): [`CodexHarness`](#codexharness)
 
+Build a Codex harness. Only `runAgent` accepts it: Codex has no mode without tools.
+
 ###### Parameters
 
 ###### model
@@ -1357,6 +1359,22 @@ Without `tools` or `mcpServers` the harness also works with `askAgent`.
 
 ***
 
+### harnessKinds
+
+> `const` **harnessKinds**: \[`"claude"` \| `"codex"` \| `"pi"`, ...("claude" \| "codex" \| "pi")\[\]\]
+
+Every harness kind this release of jigs can build, taken from the keys of
+`harnesses`. Use it for a workflow input that names a harness, so a new kind
+appears without editing the input.
+
+#### Example
+
+```ts
+const inputs = z.object({ harness: z.enum(harnessKinds) });
+```
+
+***
+
 ### models
 
 > `const` **models**: `object`
@@ -1368,6 +1386,9 @@ Constructors for model-source descriptors.
 ##### openaiCodex()
 
 > `readonly` **openaiCodex**(`model`): [`OpenaiCodexSource`](#openaicodexsource)
+
+Build a source that runs through the Codex subscription Pi is logged in
+to. Only `harnesses.pi` accepts it.
 
 ###### Parameters
 
@@ -1412,6 +1433,9 @@ Build a source for an OpenAI-compatible server.
 ##### openrouter()
 
 > `readonly` **openrouter**(`model`, `options`): [`OpenrouterSource`](#openroutersource)
+
+Build an OpenRouter source. Its key is read from `OPENROUTER_API_KEY`
+unless `apiKeyEnv` names another variable.
 
 ###### Parameters
 

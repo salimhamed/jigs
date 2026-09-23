@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.49.0
+# @salimhamed/jigs v0.50.0
 
 Define a factory and describe its workflows, schedules, bindings and merge policy.
 
@@ -223,7 +223,9 @@ Settings for the agent harnesses this factory runs.
 
 Names of service environment variables every agent harness also receives.
 A harness otherwise starts with only a small base set, such as `PATH` and
-`HOME`, and the variables its own driver needs.
+`HOME`, and the variables its own driver needs. Model credentials and
+the variables jigs sets itself are refused: name a model credential on
+its model source instead.
 
 ***
 
@@ -424,6 +426,11 @@ What to do with eligible resources after a completed run.
 ##### requires?
 
 > `optional` **requires**: `WorkflowRequires`
+
+What the workflow needs before a run can start: integrations, bindings,
+the harnesses it runs and the API model sources it calls. The service
+checks harness CLIs when it starts, and preflight checks everything
+listed before every run. List only what the workflow actually uses.
 
 ##### workflow()
 
