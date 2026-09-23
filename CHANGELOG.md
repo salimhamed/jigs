@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.52.2](https://github.com/salimhamed/jigs/compare/jigs-v0.52.1...jigs-v0.52.2) (2026-09-23)
+
+
+### Bug Fixes
+
+* trust npm publish's exit code instead of polling the registry ([#361](https://github.com/salimhamed/jigs/issues/361)) ([1318c48](https://github.com/salimhamed/jigs/commit/1318c488e180786e2e283dde9ac6e2135f5b8772))
+
 ## [0.52.1](https://github.com/salimhamed/jigs/compare/jigs-v0.52.0...jigs-v0.52.1) (2026-09-23)
 
 
