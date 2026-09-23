@@ -7,6 +7,7 @@ import {
   claudeAuthCheck,
   codexAuthCheck,
   harnessRuntimeCheck,
+  harnessUsers,
   piOpenaiCodexAuthCheck,
 } from "./harnesses.ts";
 
@@ -201,4 +202,20 @@ test("the CLI check fails with the same line as the reason, and the PATH caveat 
   const failure = result as { reason: string; repair: string };
   expect(failure.reason).toContain("below the minimum");
   expect(failure.repair).toContain("same PATH as your shell");
+});
+
+test("harness users are read from each workflow's requires", () => {
+  expect(
+    harnessUsers({
+      hello: {},
+      review: { requires: { harnesses: ["claude", "claude"] } },
+      ship: { requires: { harnesses: ["codex", "claude"] } },
+    }),
+  ).toEqual(
+    new Map([
+      ["claude", ["review", "ship"]],
+      ["codex", ["ship"]],
+    ]),
+  );
+  expect(harnessUsers({ hello: {} })).toEqual(new Map());
 });

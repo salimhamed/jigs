@@ -9,11 +9,12 @@ Have these ready before you begin:
 
 - Node.js 24 or newer and pnpm.
 - Docker with its daemon running.
-- Both Claude Code (`claude`) and Codex (`codex`) installed and on your shell’s
-  `PATH`. Log in with `claude auth login` and `codex login`.
+- For workflows that run agents, the CLI of each harness they require, such as
+  Claude Code (`claude`) or Codex (`codex`), on your shell’s `PATH` and logged in.
+  `hello` runs no agent and needs none.
 
-The service currently requires both agent CLIs even for `hello`. If you use a
-Node version manager, start the service from a shell where Node and both CLIs work.
+If you use a Node version manager, start the service from a shell where Node and
+those CLIs work.
 
 ## 2. Create your factory
 

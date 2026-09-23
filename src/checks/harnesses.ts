@@ -10,6 +10,7 @@ import { realPiAuthPath } from "../steps/agents/harnesses/pi-home.ts";
 import { type Check, type CheckResult, PROBE_TIMEOUT_MS } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 import { type HarnessKind, type HarnessRuntimeDeps, harnessRuntime } from "./harness-runtime.ts";
+import type { WorkflowRequires } from "./index.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -197,6 +198,40 @@ export function harnessChecks(kinds: HarnessKind[]): Check[] {
     const driver = driverFor(kind);
     return driver === undefined ? [missingDriverCheck(kind)] : driver.installationChecks();
   });
+}
+
+/** Map each harness named in a workflow's `requires` to the workflows that name it. */
+export function harnessUsers(
+  workflows: Record<string, { requires?: WorkflowRequires }>,
+): Map<HarnessKind, string[]> {
+  const users = new Map<HarnessKind, string[]>();
+  for (const [name, entry] of Object.entries(workflows)) {
+    for (const kind of new Set(entry.requires?.harnesses ?? [])) {
+      users.set(kind, [...(users.get(kind) ?? []), name]);
+    }
+  }
+  return users;
+}
+
+export function neededBy(workflows: readonly string[]): string {
+  return `needed by ${workflows.length === 1 ? "workflow" : "workflows"} ${workflows.join(", ")}`;
+}
+
+/** The installation checks of each used harness, each failure naming the workflows that need it. */
+export function usedHarnessChecks(users: Map<HarnessKind, string[]>): Check[] {
+  return [...users].flatMap(([kind, workflows]) =>
+    harnessChecks([kind]).map(
+      (check): Check => ({
+        ...check,
+        run: async () => {
+          const result = await check.run();
+          return result.ok
+            ? result
+            : { ...result, reason: `${result.reason} (${neededBy(workflows)})` };
+        },
+      }),
+    ),
+  );
 }
 
 /** Diagnose a descriptor kind that this release cannot execute. */

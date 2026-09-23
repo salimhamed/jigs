@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { WorkflowRunNotFoundError } from "workflow/errors";
-import type { HarnessRuntime } from "../../checks/harness-runtime.ts";
+import type { HarnessKind, HarnessRuntime } from "../../checks/harness-runtime.ts";
 import { JigsError } from "../../errors.ts";
 import type { RegistrySql } from "../../steps/workspaces/registry.ts";
 import {
@@ -10,7 +10,6 @@ import {
   gateOnWebhookSecrets,
   gateOnWorktreeRegistry,
   gateOnWorldStart,
-  requiredHarnesses,
 } from "./start-world.ts";
 
 const RUN = "wrun_01M2Z000000000000000000000";
@@ -371,12 +370,17 @@ const failing = (harness: "claude" | "codex", line: string): HarnessRuntime => (
   repair: "the service may not have the same PATH as your shell",
 });
 
+const USERS = new Map<HarnessKind, string[]>([
+  ["codex", ["ship"]],
+  ["claude", ["review", "ship"]],
+]);
+
 test("a harness CLI the shared check rejects exits the boot before anything costly", async () => {
   const exits: number[] = [];
   const errors: string[] = [];
 
   const proceed = await gateOnHarnessRuntimes({
-    harnesses: async () => ["codex", "claude"],
+    harnesses: async () => USERS,
     runtimes: async () => [passing(), failing("claude", "claude not found on PATH")],
     exit: (code) => exits.push(code),
     error: (line) => errors.push(line),
@@ -386,7 +390,7 @@ test("a harness CLI the shared check rejects exits the boot before anything cost
   expect(proceed).toBe(false);
   expect(exits).toEqual([1]);
   expect(errors).toHaveLength(1);
-  expect(errors[0]).toContain("claude not found on PATH");
+  expect(errors[0]).toContain("claude not found on PATH (needed by workflows review, ship)");
   expect(errors[0]).toContain("same PATH as your shell");
 });
 
@@ -395,7 +399,7 @@ test("harnesses the shared check accepts are logged and let the boot continue", 
   const exits: number[] = [];
 
   const proceed = await gateOnHarnessRuntimes({
-    harnesses: async () => ["codex", "claude"],
+    harnesses: async () => USERS,
     runtimes: async () => [passing(), passing({ harness: "claude", minimum: null })],
     exit: (code) => exits.push(code),
     log: (line) => logs.push(line),
@@ -406,19 +410,19 @@ test("harnesses the shared check accepts are logged and let the boot continue", 
   expect(logs[0]).toContain("codex 0.153.4 at /usr/local/bin/codex");
 });
 
-test("the boot gate derives harnesses only from declared workflow requirements", async () => {
-  expect(
-    requiredHarnesses([
-      { workflow: async () => {}, inputs: {} as never, requires: { harnesses: ["claude"] } },
-      {
-        workflow: async () => {},
-        inputs: {} as never,
-        requires: { harnesses: ["codex", "claude"] },
-      },
-      { workflow: async () => {}, inputs: {} as never },
-    ]),
-  ).toEqual(["claude", "codex"]);
-  expect(requiredHarnesses([])).toEqual([]);
+test("a factory whose workflows require no harness boots without probing any CLI", async () => {
+  const exits: number[] = [];
+  const logs: string[] = [];
+
+  const proceed = await gateOnHarnessRuntimes({
+    harnesses: async () => new Map(),
+    exit: (code) => exits.push(code),
+    log: (line) => logs.push(line),
+  });
+
+  expect(proceed).toBe(true);
+  expect(exits).toEqual([]);
+  expect(logs).toEqual([]);
 });
 
 test("the boot gate checks exactly the harnesses derived from the factory", async () => {
@@ -426,7 +430,7 @@ test("the boot gate checks exactly the harnesses derived from the factory", asyn
 
   await expect(
     gateOnHarnessRuntimes({
-      harnesses: async () => ["claude"],
+      harnesses: async () => new Map([["claude", ["review"]]]),
       runtimes: async (kinds) => {
         checked.push(kinds);
         return [];

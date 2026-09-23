@@ -166,10 +166,8 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
       "  cp .env.example .env    # credentials for workflows you add (the App needs no GITHUB_TOKEN)",
     );
   }
-  deps.out("  jigs up --no-doctor     # bare hello needs no integration credentials");
-  deps.out(
-    "  # doctor checks GitHub credentials; use plain jigs up after configuring integrations",
-  );
+  deps.out("  jigs up                 # start the service; ends by running jigs doctor");
+  deps.out("  jigs doctor             # re-check what your workflows need, any time");
   deps.out("  jigs run hello --input message=hello");
 
   return { created, skipped, ...ports };

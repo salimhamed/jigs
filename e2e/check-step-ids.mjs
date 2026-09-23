@@ -307,10 +307,22 @@ const RUNTIME_DASHBOARD_PORT = 18993;
 const RUNTIME_TIMEOUT_MS = 90_000;
 const LONG_STEP_MS = Number(process.env.JIGS_E2E_LONG_STEP_MS ?? "25");
 
-function bootOutcome(postgresUrl) {
+const HARNESS_CLIS = ["claude", "codex", "pi"];
+
+// The service's PATH with every directory holding a harness CLI removed, so a
+// boot that probes one fails.
+function harnessFreeEnv() {
+  const { JIGS_CLAUDE_EXECUTABLE: _, ...env } = process.env;
+  const dirs = (env.PATH ?? "")
+    .split(path.delimiter)
+    .filter((dir) => !HARNESS_CLIS.some((cli) => existsSync(path.join(dir, cli))));
+  return { ...env, PATH: dirs.join(path.delimiter) };
+}
+
+function bootOutcome(postgresUrl, { env: baseEnv = process.env, workflow = "ship" } = {}) {
   // The World is the stub whatever the shell says; the URL is the registry's.
   const env = {
-    ...process.env,
+    ...baseEnv,
     PORT: String(BOOT_PORT),
     JIGS_DASHBOARD_PORT: String(BOOT_DASHBOARD_PORT),
     WORKFLOW_TARGET_WORLD: BOOT_WORLD,
@@ -355,7 +367,7 @@ function bootOutcome(postgresUrl) {
     // closes a started World.
     const terminateOnceReady = async () => {
       while (!settled) {
-        if (await ready()) {
+        if (await ready(workflow)) {
           readyMs = Date.now() - spawnedAt;
           terminate();
           return;
@@ -390,17 +402,17 @@ function bootOutcome(postgresUrl) {
   });
 }
 
-async function ready() {
+async function ready(workflow) {
   try {
     const res = await fetch(`http://127.0.0.1:${BOOT_PORT}/health`, {
       signal: AbortSignal.timeout(1_000),
     });
     if (!res.ok) return false;
     const health = await res.json();
-    if (health.ready !== true || !health.workflows.includes("ship")) return false;
+    if (health.ready !== true || !health.workflows.includes(workflow)) return false;
     // The deferred module must have resolved into the compiled service's
     // registration, including its input schema; readiness alone cannot prove it.
-    const inputs = await fetch(`http://127.0.0.1:${BOOT_PORT}/api/workflows/ship/inputs`, {
+    const inputs = await fetch(`http://127.0.0.1:${BOOT_PORT}/api/workflows/${workflow}/inputs`, {
       signal: AbortSignal.timeout(1_000),
     });
     return inputs.ok;
@@ -960,6 +972,22 @@ if (postgresUrl === undefined || postgresUrl === "") {
       fail(
         `the built service did not start and stop cleanly: ${boot.problem}`,
         `if the output above names a package it cannot find, the factory loads it by name at run time: it belongs in ${JIGS}'s peerDependencies and the factory package.json template`,
+      );
+    }
+    console.log(
+      "\n=== bare boot: a factory whose workflows require no harness starts without any harness CLI on PATH",
+    );
+    const recipeFactory = factory;
+    factory = factories.get("bare");
+    const bareBoot = await bootOutcome(postgresUrl, { env: harnessFreeEnv(), workflow: "hello" });
+    factory = recipeFactory;
+    if (bareBoot.problem === null) {
+      console.log(`ready after ${bareBoot.readyMs}ms with no ${HARNESS_CLIS.join(", ")} on PATH`);
+    } else {
+      console.error(bareBoot.output);
+      fail(
+        `the bare service did not start without harness CLIs: ${bareBoot.problem}`,
+        "the startup gate must check only the harnesses a workflow's requires names",
       );
     }
     console.log(

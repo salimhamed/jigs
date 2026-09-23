@@ -124,7 +124,7 @@ pnpm exec jigs up --no-doctor
 
 For bare hello setup, `--no-doctor` skips the final doctor pass, which checks
 GitHub credentials even when the workflow does not use GitHub. Postgres and the
-service's machine prerequisites (including both agent CLIs) still apply. Once
+service's machine prerequisites still apply. Once
 integration credentials are configured, use plain `jigs up` and `jigs doctor`.
 
 

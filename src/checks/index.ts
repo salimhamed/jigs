@@ -19,7 +19,7 @@ import {
   linearEnvValue,
   resolveLinearIdentity,
 } from "../providers/linear-auth.ts";
-import { driverFor, drivers } from "../steps/agents/drivers/index.ts";
+import { driverFor } from "../steps/agents/drivers/index.ts";
 import { awsCredentialsCheck } from "./aws.ts";
 import { bindingChecks } from "./bindings.ts";
 import { CHECK_TIMEOUT_MS, type Check, failedCheck } from "./catalog.ts";
@@ -29,7 +29,13 @@ import {
   githubIdentityChecks,
   realGithubIdentityProbes,
 } from "./github-identity.ts";
-import { type HarnessKind, harnessChecks, missingDriverCheck } from "./harnesses.ts";
+import {
+  type HarnessKind,
+  harnessChecks,
+  harnessUsers,
+  missingDriverCheck,
+  usedHarnessChecks,
+} from "./harnesses.ts";
 import { type LinearIdentityProbes, linearIdentityChecks } from "./linear-identity.ts";
 import { linearWebhookChecks } from "./linear-webhook.ts";
 import { mcpServerChecks } from "./mcp.ts";
@@ -151,8 +157,9 @@ export function preflightChecks(
   ];
 }
 
-// Without a workflow manifest, doctor checks integrations configured in the environment.
-export function doctorChecks(): Check[] {
+// Integrations are checked where the environment configures them; harnesses
+// where a workflow's manifest requires them, so an unused CLI is never required.
+export function doctorChecks(workflows: Record<string, { requires?: WorkflowRequires }>): Check[] {
   const profile = process.env.AWS_PROFILE;
   // On once any variable of either mode is set, so a half-configured app, or
   // credentials for the mode the config does not name, are reported against
@@ -170,9 +177,7 @@ export function doctorChecks(): Check[] {
     ...linearWebhookChecks({ factoryRoot }),
     ...bindingChecks({ factoryRoot }),
     ...webhookChecks({ factoryRoot }),
-    ...Object.values(drivers).flatMap((driver) =>
-      driver.family === "harness" ? driver.installationChecks() : [],
-    ),
+    ...usedHarnessChecks(harnessUsers(workflows)),
     ...(profile !== undefined && profile !== "" ? [awsCredentialsCheck()] : []),
   ];
 }

@@ -22,27 +22,26 @@ import { installShutdown, onShutdown } from "../shutdown.ts";
 // up to do it. Inside the plugin the deferral also orders the boot: nothing
 // fallible resolves until installShutdown() can turn its failure into an exit.
 
-/** Find the distinct harnesses required by the workflows a factory declares. */
-export function requiredHarnesses(entries: Iterable<AnyWorkflowEntry>): HarnessKind[] {
-  return [...new Set([...entries].flatMap((entry) => entry.requires?.harnesses ?? []))];
-}
-
-async function configuredHarnesses(): Promise<HarnessKind[]> {
-  const [{ readFactoryConfig }, { factoryRoot }] = await Promise.all([
+async function configuredHarnesses(): Promise<Map<HarnessKind, string[]>> {
+  const [{ readFactoryConfig }, { factoryRoot }, { harnessUsers }] = await Promise.all([
     import("../../config/factory-config.ts"),
     import("../../config/factory-root.ts"),
+    import("../../checks/harnesses.ts"),
   ]);
   const definition = readFactoryConfig(factoryRoot()) as unknown as FactoryDefinition;
   const entries = await Promise.all(
-    Object.values(definition.workflows).map(async (load) => (await load()).default),
+    Object.entries(definition.workflows).map(
+      async ([name, load]): Promise<[string, AnyWorkflowEntry]> => [name, (await load()).default],
+    ),
   );
-  return requiredHarnesses(entries);
+  return harnessUsers(Object.fromEntries(entries));
 }
 
 /** Injectable runtime checks and output used by the harness startup gate. */
 export interface HarnessRuntimeGateDeps {
   runtimes?: (kinds: HarnessKind[]) => Promise<HarnessRuntime[]>;
-  harnesses?: () => Promise<HarnessKind[]>;
+  /** Each harness the factory's workflows require, with the workflows that require it. */
+  harnesses?: () => Promise<Map<HarnessKind, string[]>>;
   exit?: (code: number) => void;
   log?: (line: string) => void;
   error?: (line: string) => void;
@@ -54,8 +53,12 @@ export interface HarnessRuntimeGateDeps {
 export async function gateOnHarnessRuntimes(deps: HarnessRuntimeGateDeps = {}): Promise<boolean> {
   const log = deps.log ?? ((line: string) => console.log(line));
   let runtimes: HarnessRuntime[];
+  let users: Map<HarnessKind, string[]>;
+  let neededBy: (workflows: readonly string[]) => string;
   try {
-    const kinds = await (deps.harnesses ?? configuredHarnesses)();
+    users = await (deps.harnesses ?? configuredHarnesses)();
+    ({ neededBy } = await import("../../checks/harnesses.ts"));
+    const kinds = [...users.keys()];
     runtimes =
       deps.runtimes === undefined
         ? await (await import("../../checks/harness-runtime.ts")).harnessRuntimes(kinds)
@@ -73,7 +76,9 @@ export async function gateOnHarnessRuntimes(deps: HarnessRuntimeGateDeps = {}): 
   if (first !== undefined && first.ok === false) {
     const error = deps.error ?? ((line: string) => console.error(line));
     error(
-      `[service] cannot run agents: ${failures.map((runtime) => runtime.line).join("; ")}. The ${first.repair}`,
+      `[service] cannot run agents: ${failures
+        .map((runtime) => `${runtime.line} (${neededBy(users.get(runtime.harness) ?? [])})`)
+        .join("; ")}. The ${first.repair}`,
     );
     (deps.exit ?? process.exit)(1);
     return false;
