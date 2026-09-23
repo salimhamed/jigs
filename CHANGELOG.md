@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.52.1](https://github.com/salimhamed/jigs/compare/jigs-v0.52.0...jigs-v0.52.1) (2026-09-23)
+
+
+### Bug Fixes
+
+* wait for a fresh publish before verifying the release ([#359](https://github.com/salimhamed/jigs/issues/359)) ([37de508](https://github.com/salimhamed/jigs/commit/37de5083f62cd2380d59297291a564ab9c181da0))
+
 ## [0.52.0](https://github.com/salimhamed/jigs/compare/jigs-v0.51.0...jigs-v0.52.0) (2026-09-23)
 
 
