@@ -9,7 +9,12 @@ import { harnesses, models } from "../../../blocks/agents/harness-config.ts";
 import { executeAgent } from "../execute-agent.ts";
 import { executePi } from "./pi.ts";
 import { writePiSubmitResultExtension } from "./pi-extension.ts";
-import { makeTmpDir, removeTmpDir, skipWithoutSupportedPi } from "./test-fixtures.ts";
+import {
+  factorylessDeps,
+  makeTmpDir,
+  removeTmpDir,
+  skipWithoutSupportedPi,
+} from "./test-fixtures.ts";
 
 // These tests start the installed Pi against a scripted OpenAI-compatible
 // server on localhost, so every model turn is deterministic and offline.
@@ -132,7 +137,7 @@ const toolNames = (request: ChatRequest | undefined): string[] =>
   (request?.tools ?? []).map((tool) => tool.function.name);
 
 const step = (wire: Parameters<typeof executeAgent>[0]) =>
-  executeAgent(wire, { workflowRunId: `pi-submit-${crypto.randomUUID()}` });
+  executeAgent(wire, { workflowRunId: `pi-submit-${crypto.randomUUID()}` }, factorylessDeps);
 
 const answer = z.object({ word: z.string(), count: z.number() });
 

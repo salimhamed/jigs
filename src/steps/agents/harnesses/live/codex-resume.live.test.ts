@@ -11,7 +11,6 @@ import {
   executeAgent,
 } from "../../execute-agent.ts";
 import { codexSessionFile, prepareCodexInvocationHome } from "../codex-home.ts";
-import { stripApiCredentials } from "../env.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { assertLivePreconditions, makeScratchRepo } from "./fixtures/live-env.ts";
 
@@ -24,7 +23,6 @@ let tmp: string;
 let deps: AgentExecutionDependencies;
 beforeAll(() => {
   assertLivePreconditions();
-  stripApiCredentials();
   tmp = makeTmpDir();
   const codex = createCodexDriver({
     prepareCodexHome: (runId) =>
@@ -36,6 +34,7 @@ beforeAll(() => {
   });
   deps = {
     ...defaultAgentExecutionDependencies,
+    factoryEnv: () => [],
     resolveDriver: ((kind) => (kind === "codex" ? codex : driverFor(kind))) as DriverResolver,
   };
 });

@@ -54,20 +54,35 @@ harnesses; `askModel` and `askJev` take model sources.
   when Pi exits, when the service shuts down, and when the process exits. Run
   cancellation does not yet reach a running Pi step.
 - Subscription logins remain first-class for harnesses. A harness subprocess
-  starts from the service environment with credential-shaped variables
-  removed by name (names containing `API_KEY`, `ACCESS_KEY`, `SECRET`,
-  `TOKEN`, `PASSWORD` or `CREDENTIAL`, gateway and parent-agent-session
-  names); the driver then adds back the variables it needs, such as those its
-  model source and MCP servers name. Removal is by name only, so a secret stored under an ordinary
-  name, such as a database URL with an embedded password, is inherited.
-  Operators keep such values out of the service environment or give them a
-  name that matches. The Claude driver reapplies that
-  policy at the provider's process-launch hook because the provider assembles
-  its final child environment from the host after accepting jigs' environment.
-  At that seam the driver captures the CLI's stderr and hands it to the
-  provider on the launch error, so login failures still classify as such.
-  This isolates credential-named environment variables, not credential files
-  available to the same operating-system user.
+  environment is built from empty, never inherited: a short base set every
+  harness gets (`PATH`, `HOME`, user and shell, `TERM`, locale, `TZ`,
+  `TMPDIR`, the XDG base directories, proxy and CA certificate settings);
+  the driver's own variables, such as `CLAUDE_CONFIG_DIR` and the credential
+  names its model source and MCP servers state; and the names the factory
+  declares under `agents.env` in `jigs.config.ts`. Everything else in the
+  service environment is omitted, whatever its name, so a database URL with
+  an embedded password or a private key never reaches an agent unless it is
+  declared. There is no pattern-based removal behind the allowlist.
+  Environment-specific needs, such as a tool manager's variables or
+  `SSH_AUTH_SOCK`, belong in the factory declaration, not in jigs' base set
+  or a driver.
+- The factory declaration is names only and applies to every harness the
+  factory runs. It lives in factory configuration rather than on harness
+  descriptors because these are properties of the host the service runs on:
+  preflight checks and the service's own probes run before any descriptor
+  exists, and recipes stay portable between factories. A step builds the
+  environment once and hands the same map to its JIT checks and its harness.
+- The Claude driver replaces the child environment at the provider's
+  process-launch hook, because the provider assembles its own from the host
+  after accepting jigs'. At that seam the driver captures the CLI's stderr and
+  hands it to the provider on the launch error, so login failures still
+  classify as such. The Codex provider has no such hook and always launches
+  the app server under the host environment plus jigs', so the driver
+  launches it through a per-invocation script that clears the environment and
+  keeps only the step's variables, referenced by name.
+- The allowlist isolates the environment, not the filesystem. Agents run as
+  the operator's user and can read any file that user can, including
+  credential files and `.env` files on disk.
 - Harness descriptors are reusable configuration, not mutable sessions.
   Generated settings and extensions belong to one invocation, while durable
   conversation files live separately. Continuation occurs only from an

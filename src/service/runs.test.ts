@@ -92,6 +92,7 @@ function reviewApproval(): void {
     service: { port: 8990, dashboardPort: 9090 },
     github: { identities: [{ mode: "pat" }] },
     merge: { by: "human", method: "squash", approval: { kind: "review" } },
+    agents: { env: [] },
   });
 }
 

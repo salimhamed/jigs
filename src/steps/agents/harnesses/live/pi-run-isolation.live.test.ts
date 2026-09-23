@@ -12,7 +12,7 @@ import {
   defaultAgentExecutionDependencies,
   executeAgent,
 } from "../../execute-agent.ts";
-import { scrubbedEnv } from "../env.ts";
+import { harnessEnv } from "../env.ts";
 import { executePi } from "../pi.ts";
 import { preparePiInvocationHome } from "../pi-home.ts";
 import { planPiModel } from "../pi-model.ts";
@@ -42,6 +42,7 @@ beforeAll(() => {
   });
   deps = {
     ...defaultAgentExecutionDependencies,
+    factoryEnv: () => [],
     resolveDriver: ((kind) => (kind === "pi" ? pi : driverFor(kind))) as DriverResolver,
   };
 });
@@ -98,7 +99,7 @@ export default function (pi: ExtensionAPI) {
         prompt,
       ],
       cwd: worktree,
-      env: { ...scrubbedEnv([]), PI_CODING_AGENT_DIR: controlHome },
+      env: { ...harnessEnv([]), PI_CODING_AGENT_DIR: controlHome },
     });
     expect(control.text).toContain(token);
 

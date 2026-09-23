@@ -19,6 +19,39 @@ before any model, credential or MCP check. `askAgent` accepts only a harness tha
 names no tools: a Claude Code or Pi descriptor without `mcpServers`, and a Pi
 descriptor without `tools`.
 
+## Harness environment
+
+A harness does not inherit the service environment. jigs builds each harness
+process's environment from empty, out of three parts:
+
+- A base set every harness gets when the service has it: `PATH`, `HOME`,
+  `USER`, `LOGNAME`, `SHELL`, `TERM`, `LANG`, `LANGUAGE`, `LC_*`, `TZ`,
+  `TMPDIR`, the XDG base directories (`XDG_CONFIG_HOME`, `XDG_CACHE_HOME`,
+  `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_RUNTIME_DIR`), the proxy variables
+  (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and their lowercase forms) and
+  `SSL_CERT_FILE`, `SSL_CERT_DIR` and `NODE_EXTRA_CA_CERTS`.
+- The variables the harness's driver needs, such as `CLAUDE_CONFIG_DIR` for
+  Claude Code and the variables a Pi model source or MCP server names.
+- The names your factory declares in `jigs.config.ts`.
+
+Everything else is left out, whatever it is called. A database URL with a
+password in it, a private key, or `WORKFLOW_POSTGRES_URL` never reaches an
+agent unless you declare it. To give every agent a variable, list its name:
+
+```ts
+export default defineFactory({
+  // ...
+  agents: { env: ["SSH_AUTH_SOCK", "MISE_DATA_DIR"] },
+});
+```
+
+The list holds names only; values stay in the service environment and are read
+when an agent starts. Declare anything your machine needs that the base set
+does not cover, such as a tool manager's variables or an SSH agent socket.
+
+This protects the environment only. Agents run as your user and can still read
+any file your user can, including `.env` files and credential files on disk.
+
 ## Claude Code
 
 Use `harnesses.claude(model, options)` with `runAgent` or `askAgent`. An
@@ -58,12 +91,8 @@ before using that source.
 
 Descriptors hold environment variable names, never secret values. OpenRouter
 and credentialed OpenAI-compatible sources read the variable named by their
-model descriptor. Pi starts with the service environment minus variables whose
-names look like credentials (containing `API_KEY`, `ACCESS_KEY`, `SECRET`,
-`TOKEN`, `PASSWORD` or `CREDENTIAL`), then gets back the variables its model
-source and MCP servers name. Removal goes by name only: a secret under an
-ordinary name, such as a database URL with a password in it, reaches Pi. Keep
-such values out of the service environment, or name them so they match.
+model descriptor. Pi gets that variable and the ones its MCP servers name on
+top of the [harness environment](#harness-environment).
 
 For `runAgent`, `options.mcpServers` is the complete MCP universe. Pi never
 reads your global MCP file, `.mcp.json` or `.pi/mcp.json`; to use a server

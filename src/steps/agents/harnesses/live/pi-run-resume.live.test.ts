@@ -42,6 +42,7 @@ beforeAll(() => {
   });
   deps = {
     ...defaultAgentExecutionDependencies,
+    factoryEnv: () => [],
     resolveDriver: ((kind) => (kind === "pi" ? pi : driverFor(kind))) as DriverResolver,
   };
 });

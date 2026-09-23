@@ -7,7 +7,7 @@
 import { writeFileSync } from "node:fs";
 import { generateText } from "ai";
 import { codexAppServerStepSettings, withCodexAppServer } from "../../../drivers/codex-support.ts";
-import { stripApiCredentials } from "../../env.ts";
+import { harnessEnv } from "../../env.ts";
 
 const [cwd, codexHome, resultFile] = process.argv.slice(2);
 if (cwd === undefined || codexHome === undefined || resultFile === undefined) {
@@ -15,14 +15,13 @@ if (cwd === undefined || codexHome === undefined || resultFile === undefined) {
   process.exit(2);
 }
 
-stripApiCredentials();
-
 const result = await withCodexAppServer(async (provider) => {
   const model = provider(
     "gpt-5.6-luna",
     codexAppServerStepSettings({
       cwd,
       codexHome,
+      env: harnessEnv([]),
       approvalPolicy: "never",
       sandboxPolicy: "workspace-write",
       effort: "low",

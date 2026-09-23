@@ -6,7 +6,7 @@ import { harnesses, models } from "../../../../blocks/agents/harness-config.ts";
 import { buildAgentRequest } from "../../../../blocks/agents/plan.ts";
 import { executeAgent } from "../../execute-agent.ts";
 import { piRunStatePath, piSessionsDir, removePiRunState } from "../pi-home.ts";
-import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import { factorylessDeps, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 
 const LINEAR_SERVER = "linear-personal";
 const LINEAR_TOOL = "get_issue";
@@ -96,7 +96,7 @@ test.skipIf(!existsSync(globalMcpPath) || !localConfigured || !localReachable)(
     });
 
     runId = `pi-linear-${crypto.randomUUID()}`;
-    const result = await executeAgent(request, { workflowRunId: runId });
+    const result = await executeAgent(request, { workflowRunId: runId }, factorylessDeps);
     if ("jitFailure" in result)
       throw new Error(
         `blocked live test: ${result.jitFailure.map((failure) => failure.reason).join("; ")}`,

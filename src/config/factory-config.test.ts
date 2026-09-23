@@ -3,6 +3,7 @@ import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, expect, test } from "vitest";
+import { defineFactory } from "../blocks/factory.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { removeBinding, upsertBinding } from "./binding-edit.ts";
 import {
@@ -108,6 +109,20 @@ test("service port defaults while dashboard port is explicit", () => {
     port: 8990,
     dashboardPort: 3456,
   });
+});
+
+test("agent environment names default to none and must be names, not values", () => {
+  expect(parseFactoryConfig({ service: { dashboardPort: 3456 } }).agents).toEqual({ env: [] });
+  expect(
+    parseFactoryConfig({ service: { dashboardPort: 3456 }, agents: { env: ["MISE_DATA_DIR"] } })
+      .agents.env,
+  ).toEqual(["MISE_DATA_DIR"]);
+  expect(() =>
+    parseFactoryConfig({ service: { dashboardPort: 3456 }, agents: { env: ["A=b"] } }),
+  ).toThrow("agents.env.0");
+  expect(() =>
+    defineFactory({ service: { dashboardPort: 3456 }, agents: { env: ["A=b"] }, workflows: {} }),
+  ).toThrow("agents.env.0");
 });
 
 test("identical re-bind preserves every byte", () => {

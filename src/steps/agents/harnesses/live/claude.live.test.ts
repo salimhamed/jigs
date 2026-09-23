@@ -2,8 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { generateText } from "ai";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { claudeStepSettings } from "../../drivers/claude-support.ts";
-import { stripApiCredentials } from "../env.ts";
+import { CLAUDE_ENV, claudeStepSettings } from "../../drivers/claude-support.ts";
+import { harnessEnv } from "../env.ts";
 import { claudeCode } from "../index.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { assertLivePreconditions, makeScratchRepo } from "./fixtures/live-env.ts";
@@ -11,7 +11,6 @@ import { assertLivePreconditions, makeScratchRepo } from "./fixtures/live-env.ts
 let tmp: string;
 beforeAll(() => {
   assertLivePreconditions();
-  stripApiCredentials();
   tmp = makeTmpDir();
 });
 afterAll(() => {
@@ -19,22 +18,21 @@ afterAll(() => {
 });
 
 test("Claude Code smoke: subscription auth drives an agentic step, no API keys", async () => {
-  expect(process.env.ANTHROPIC_API_KEY).toBeUndefined();
+  const env = harnessEnv(CLAUDE_ENV);
+  expect("ANTHROPIC_API_KEY" in env).toBe(false);
   const scratch = makeScratchRepo(tmp);
   const codeword = `JIGS-LIVE-${crypto.randomUUID().slice(0, 8)}`;
 
   const model = claudeCode(
     "haiku",
-    claudeStepSettings(
-      {
-        cwd: scratch,
-        strictMcpConfig: true,
-        settingSources: ["project"],
-        permissionMode: "bypassPermissions",
-        allowDangerouslySkipPermissions: true,
-      },
-      [],
-    ),
+    claudeStepSettings({
+      cwd: scratch,
+      env,
+      strictMcpConfig: true,
+      settingSources: ["project"],
+      permissionMode: "bypassPermissions",
+      allowDangerouslySkipPermissions: true,
+    }),
   );
   const result = await generateText({
     model,

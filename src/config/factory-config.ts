@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 
 import { z } from "zod";
+import { agentsSchema } from "../blocks/factory.ts";
 import { type MergePolicy, mergePolicySchema } from "../blocks/pull-requests/policy.ts";
 import { releaseSchema } from "../blocks/runtime/release.ts";
 import { JigsError } from "../errors.ts";
@@ -135,6 +136,8 @@ const factoryConfigSchema = z.looseObject({
   // methods, and what signal permits it.
   release: releaseSchema.optional(),
   merge: z.preprocess((block) => block ?? {}, mergePolicySchema),
+  // Service variables every agent harness receives beyond jigs' base set.
+  agents: z.preprocess((block) => block ?? {}, agentsSchema),
 });
 
 export type BindingEntry = z.output<typeof bindingSchema>;

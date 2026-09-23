@@ -2,7 +2,6 @@ import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import type { ClaudeCodeSettings, SpawnedProcess, SpawnOptions } from "ai-sdk-provider-claude-code";
-import { scrubbedEnv } from "../harnesses/env.ts";
 import { resolveClaudeExecutable } from "../harnesses/executables.ts";
 
 export type ClaudeStepOptions = ClaudeCodeSettings & { cwd: string };
@@ -109,25 +108,36 @@ function spawnClaudeCode(options: SpawnOptions, env: Record<string, string>): Sp
   };
 }
 
+// Where Claude Code keeps its login when it is not under ~/.claude.
+export const CLAUDE_ENV = ["CLAUDE_CONFIG_DIR"];
+
+// The provider rebuilds the child environment from the host (every
+// ANTHROPIC_*, CLAUDE_*, AWS_* and GOOGLE_* variable among others), so the
+// launch hook replaces it with the step's own. Only the SDK's identity markers
+// are kept from what the provider assembled.
 export function claudeProcessSpawner(
-  allowlist: readonly string[],
+  env: Record<string, string>,
 ): NonNullable<ClaudeCodeSettings["spawnClaudeCodeProcess"]> {
-  return (options: SpawnOptions): SpawnedProcess =>
-    spawnClaudeCode(options, {
-      ...scrubbedEnv(allowlist, options.env),
-      // The SDK defaults this only when the provider-assembled environment
-      // lacks it. Replace any inherited parent-session marker explicitly.
+  return (options: SpawnOptions): SpawnedProcess => {
+    const sdkMarkers = Object.entries(options.env).filter(
+      (entry): entry is [string, string] =>
+        entry[0].startsWith("CLAUDE_AGENT_SDK_") && entry[1] !== undefined,
+    );
+    return spawnClaudeCode(options, {
+      ...env,
+      ...Object.fromEntries(sdkMarkers),
+      // Replaces any inherited parent-session marker.
       CLAUDE_CODE_ENTRYPOINT: "sdk-ts",
     });
+  };
 }
 
 export function claudeStepSettings(
-  options: ClaudeCodeSettings,
-  envAllowlist: readonly string[],
+  options: ClaudeCodeSettings & { env: Record<string, string> },
 ): ClaudeCodeSettings {
   return {
     ...options,
     pathToClaudeCodeExecutable: options.pathToClaudeCodeExecutable ?? resolveClaudeExecutable(),
-    spawnClaudeCodeProcess: claudeProcessSpawner(envAllowlist),
+    spawnClaudeCodeProcess: claudeProcessSpawner(options.env),
   };
 }

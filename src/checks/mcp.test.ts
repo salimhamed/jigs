@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { McpServerConfig } from "../blocks/agents/harness-config.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { runChecks } from "./catalog.ts";
+import { jitChecks } from "./index.ts";
 import { codexWorktreeConfigCheck, mcpServerChecks } from "./mcp.ts";
 
 // A real stdio MCP server child process, not a mock: the whole point of the
@@ -52,6 +53,39 @@ test("a server does not inherit ambient credential-shaped variables", async () =
   ).toMatchObject({
     id: "mcp.linear",
     label: "MCP server linear",
+    ok: false,
+    reason: expect.stringContaining("PROBE-TOKEN-UNSET"),
+  });
+});
+
+// The step hands its JIT checks the environment it hands the harness. Claude
+// Code and Codex pass theirs on to a stdio server; Pi's adapter does not.
+test("a Claude server is probed under the step environment and a Pi server under its declaration alone", async () => {
+  const stepEnv = { PATH: process.env.PATH ?? "", PROBE_TOKEN: "from-step" };
+  const server = { command: "node", args: [PROBE_SERVER], probe: { tool: "get_probe_token" } };
+  const claude = await runChecks(
+    jitChecks(
+      { harness: { kind: "claude", model: "m", mcpServers: { s: server } }, cwd: tmp, prompt: "p" },
+      stepEnv,
+    ),
+  );
+  expect(claude.checks.find((outcome) => outcome.id === "mcp.s")).toMatchObject({ ok: true });
+
+  const pi = await runChecks(
+    jitChecks(
+      {
+        harness: {
+          kind: "pi",
+          model: { kind: "openai-codex", model: "m" },
+          mcpServers: { s: { ...server, tools: ["get_probe_token"] } },
+        },
+        cwd: tmp,
+        prompt: "p",
+      },
+      stepEnv,
+    ),
+  );
+  expect(pi.checks.find((outcome) => outcome.id === "mcp.s")).toMatchObject({
     ok: false,
     reason: expect.stringContaining("PROBE-TOKEN-UNSET"),
   });

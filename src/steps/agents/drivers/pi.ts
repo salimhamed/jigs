@@ -219,8 +219,16 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
       const harness = nestedHarness(request);
       if (harness === undefined) return [];
       const credential = planPiModel(harness).credential;
-      const mcpCredentials = piMcpEnvironmentVariables(harness.mcpServers ?? {});
-      return credential === undefined ? mcpCredentials : [credential.sourceEnv, ...mcpCredentials];
+      const servers = Object.values(harness.mcpServers ?? {});
+      return [
+        ...(credential === undefined ? [] : [credential.sourceEnv]),
+        ...piMcpEnvironmentVariables(harness.mcpServers ?? {}),
+        // The adapter's OAuth store is the OS keyring, which Linux reaches
+        // over the session bus.
+        ...(servers.some((server) => "auth" in server && server.auth === "oauth")
+          ? ["DBUS_SESSION_BUS_ADDRESS"]
+          : []),
+      ];
     },
     sessionPointer: { providerKey: "pi", field: "sessionId" },
     docsAnchor: "pi",

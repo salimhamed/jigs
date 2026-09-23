@@ -8,7 +8,7 @@ import { JigsError } from "../../../errors.ts";
 import { resolveClaudeExecutable } from "../harnesses/executables.ts";
 import { claudeCode } from "../harnesses/index.ts";
 import { AgentSessionError } from "../session-error.ts";
-import { claudeStepSettings } from "./claude-support.ts";
+import { CLAUDE_ENV, claudeStepSettings } from "./claude-support.ts";
 import type { Driver, DriverRequest, ExecutorGeneration } from "./types.ts";
 
 function mcpServers(
@@ -68,22 +68,19 @@ export function createClaudeDriver(
       return context.deps.generateText({
         model: claudeCode(
           harness.model,
-          claudeStepSettings(
-            {
-              cwd,
-              env: context.env,
-              strictMcpConfig: true,
-              settingSources: ["project"],
-              permissionMode: "bypassPermissions",
-              allowDangerouslySkipPermissions: true,
-              ...(harness.effort === undefined ? {} : { effort: harness.effort }),
-              ...(resume === undefined ? {} : { resume: resume.id }),
-              ...(harness.mcpServers === undefined
-                ? {}
-                : { mcpServers: mcpServers(harness.mcpServers) }),
-            },
-            driver.envAllowlist(request),
-          ),
+          claudeStepSettings({
+            cwd,
+            env: context.env,
+            strictMcpConfig: true,
+            settingSources: ["project"],
+            permissionMode: "bypassPermissions",
+            allowDangerouslySkipPermissions: true,
+            ...(harness.effort === undefined ? {} : { effort: harness.effort }),
+            ...(resume === undefined ? {} : { resume: resume.id }),
+            ...(harness.mcpServers === undefined
+              ? {}
+              : { mcpServers: mcpServers(harness.mcpServers) }),
+          }),
         ),
         prompt: request.prompt,
         ...(context.output === undefined ? {} : { output: context.output }),
@@ -94,17 +91,14 @@ export function createClaudeDriver(
       return context.deps.generateText({
         model: claudeCode(
           harness.model,
-          claudeStepSettings(
-            {
-              // An empty MCP universe still leaves Claude Code's built-in tools.
-              tools: [],
-              strictMcpConfig: true,
-              mcpServers: {},
-              settingSources: [],
-              env: context.env,
-            },
-            driver.envAllowlist(request),
-          ),
+          claudeStepSettings({
+            // An empty MCP universe still leaves Claude Code's built-in tools.
+            tools: [],
+            strictMcpConfig: true,
+            mcpServers: {},
+            settingSources: [],
+            env: context.env,
+          }),
         ),
         prompt: request.prompt,
         ...("system" in request && request.system !== undefined ? { system: request.system } : {}),
@@ -113,7 +107,7 @@ export function createClaudeDriver(
     },
     installationChecks: () => [harnessRuntimeCheck("claude"), claudeAuthCheck()],
     requestChecks: () => [],
-    envAllowlist: () => [],
+    envAllowlist: () => CLAUDE_ENV,
     sessionPointer: { providerKey: "claude-code", field: "sessionId" },
     docsAnchor: "claude-code",
     displayName: "Claude Code",
