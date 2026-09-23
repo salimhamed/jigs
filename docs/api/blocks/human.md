@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.52.1
+# @jigs-ai/jigs v0.52.2
 
 Use these schemas and types for provider-neutral questions and JSON values exchanged with a human.
 
