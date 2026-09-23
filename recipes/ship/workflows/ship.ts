@@ -9,7 +9,7 @@ import { z } from "zod";
 import { deliverChange } from "#blocks/delivery/delivery";
 import { acquireLinearTicket, workItemFromHandoff } from "#blocks/tickets/linear";
 import {
-  postTicketNote,
+  noteOnTicket,
   provisionWorktree,
   release,
   resolveMergePolicy,
@@ -92,7 +92,7 @@ export async function shipWorkflow(inputs: ShipInputs) {
       },
       merged: async (pr) => {
         await setTicketStatus(snapshot.id, "Done");
-        await postTicketNote(snapshot.id, {
+        await noteOnTicket(claim, {
           headline: `jigs finished work on ${snapshot.identifier}.`,
           notes: [`Merged in ${pr.owner}/${pr.repo}#${pr.number}.`],
           closing: "",
