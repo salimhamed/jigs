@@ -151,11 +151,12 @@ this ADR is most likely to cause, and the two-caller rule is the guard.
   tied to the question it answers. The renderer writes its instruction from
   the halt's actual shape.
 - jigs exposes two identity facts, the account it acts as and a pull
-  request's author, for recognising its own comments and reviews, telling a
-  human's ticket reply from its own halt, attribution in notes, and the
-  doctor. It does not use them to block or downgrade anything: an approval
-  GitHub refuses fails loudly with a hint naming the App identity, because
-  that failure tells the author to change the workflow or the setup.
+  request's author, for recognising its own comments and reviews,
+  attribution in notes, and the doctor. It does not use them to block or
+  downgrade anything: an approval GitHub refuses fails loudly with a hint
+  naming the App identity, because that failure tells the author to change
+  the workflow or the setup. A human's ticket reply is told from jigs' own
+  by the comment ids the run has posted, not by identity.
 - Pull-request observation is separable from the merge gate: a workflow can
   subscribe to the wakes (`ci-red`, `review-comments`, `merge-ready`,
   `closed`) without adopting the gate's approval semantics or its exclusive
