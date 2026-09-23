@@ -5,10 +5,11 @@ import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
 import { type Step, StepFailed, stepRunner } from "./step-runner.ts";
-import { type UpDeps, type UpOptions, type UpResult, type UpStepName, upFactory } from "./up.ts";
+import type { UpOptions } from "./up.ts";
 
-// Install the release, refresh its generated integration using the newly
-// installed CLI, rebuild/restart, then check the factory's custom code.
+// Install the release, then run everything after the install under the newly
+// installed CLI: this process holds the old release's integration template
+// and build checks, which reject a jigs.ts the new release generated.
 
 export const JIGS_PACKAGE = "@jigs-ai/jigs";
 
@@ -21,9 +22,9 @@ const CHECKOUT_PACKAGES = ["jigs", "@jigs/service"];
 // release has.
 const RETIRED_PACKAGES = ["@salimhamed/jigs", "@salimhamed/jigs-service"];
 
-export type UpgradeStepName = "packages" | "bump" | "typecheck";
+export type UpgradeStepName = "packages" | "bump" | "generate" | "up" | "typecheck";
 
-export type UpgradeStep = Step<UpgradeStepName | UpStepName>;
+export type UpgradeStep = Step<UpgradeStepName>;
 
 export interface UpgradeResult {
   ok: boolean;
@@ -31,10 +32,13 @@ export interface UpgradeResult {
   factoryRoot?: string;
   before?: string;
   after?: string;
-  up?: UpResult;
 }
 
-export type UpgradeDeps = Omit<UpDeps, "generate">;
+export interface UpgradeDeps {
+  cwd: string;
+  out: (line: string) => void;
+  execFile?: ExecFile;
+}
 
 export interface UpgradeOptions extends Pick<UpOptions, "force" | "doctor"> {
   to?: string;
@@ -59,7 +63,7 @@ export async function upgradeFactory(
     );
   }
   const execFile = deps.execFile ?? nodeExecFile;
-  const runner = stepRunner<UpgradeStepName | UpStepName>(deps.out);
+  const runner = stepRunner<UpgradeStepName>(deps.out);
   const result: UpgradeResult = { ok: false, steps: runner.steps };
 
   try {
@@ -81,33 +85,8 @@ export async function upgradeFactory(
     });
     result.after = after;
 
-    const up = await upFactory(
-      {
-        ...deps,
-        cwd: factoryRoot,
-        execFile,
-        generate: () =>
-          execOrExplain(
-            execFile,
-            "pnpm",
-            ["exec", "jigs", "generate"],
-            { cwd: factoryRoot },
-            deps.out,
-            {
-              missing: new JigsError("pnpm is not on PATH", "install pnpm"),
-              failed: () =>
-                new JigsError(
-                  "could not refresh jigs.ts",
-                  "run pnpm exec jigs generate in this factory",
-                ),
-            },
-          ),
-      },
-      { force: options.force, doctor: options.doctor },
-    );
-    result.up = up;
-    runner.steps.push(...up.steps);
-    if (!up.ok) return result;
+    await runner.run("generate", () => generate(execFile, factoryRoot, deps.out));
+    await runner.run("up", () => up(execFile, factoryRoot, options, deps.out));
 
     if (readManifest(factoryRoot).scripts?.typecheck === undefined) {
       runner.skip("typecheck", "no typecheck script in package.json");
@@ -267,6 +246,39 @@ async function bump(
       }
       return new JigsError(`pnpm update failed in ${factoryRoot}`, "the output above is pnpm's");
     },
+  });
+}
+
+async function generate(
+  execFile: ExecFile,
+  factoryRoot: string,
+  out: (line: string) => void,
+): Promise<void> {
+  await execOrExplain(execFile, "pnpm", ["exec", "jigs", "generate"], { cwd: factoryRoot }, out, {
+    missing: new JigsError("pnpm is not on PATH", "install pnpm"),
+    failed: () =>
+      new JigsError("could not refresh jigs.ts", "run pnpm exec jigs generate in this factory"),
+  });
+}
+
+// The child owns the terminal so its restart prompt and step lines reach the
+// operator directly.
+async function up(
+  execFile: ExecFile,
+  factoryRoot: string,
+  options: UpgradeOptions,
+  out: (line: string) => void,
+): Promise<void> {
+  const args = ["exec", "jigs", "up"];
+  if (options.force === true) args.push("--force");
+  if (options.doctor === false) args.push("--no-doctor");
+  await execOrExplain(execFile, "pnpm", args, { cwd: factoryRoot, stdio: "inherit" }, out, {
+    missing: new JigsError("pnpm is not on PATH", "install pnpm"),
+    failed: () =>
+      new JigsError(
+        `jigs up failed in ${factoryRoot}`,
+        `fix what jigs up reported above, then run pnpm ${args.join(" ")} and pnpm run typecheck in this factory`,
+      ),
   });
 }
 

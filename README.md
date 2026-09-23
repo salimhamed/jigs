@@ -229,9 +229,9 @@ pnpm exec jigs upgrade
 ```
 
 normalizes jigs' release-age exclusion, then bumps jigs to the latest release
-(`--to-version <version>` pins it) and runs `jigs up`. During that `up`, it installs
-the release, regenerates `jigs.ts` through the installed CLI, then builds and
-starts the factory. Finally it typechecks the factory. Review and commit the
+(`--to-version <version>` pins it). The rest runs under the newly installed CLI:
+it regenerates `jigs.ts`, then runs `jigs up` to build and start the factory.
+Finally it typechecks the factory. Review and commit the
 regenerated `jigs.ts` and any `pnpm-workspace.yaml` normalization. Custom code
 is never generated.
 
