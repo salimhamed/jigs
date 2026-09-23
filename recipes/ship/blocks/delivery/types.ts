@@ -5,6 +5,7 @@ type ReviewThread = Extract<PullRequestWake, { kind: "review-comments" }>["threa
 
 import type { Worktree } from "@jigs-ai/jigs";
 import type { AgentSession, Harness } from "@jigs-ai/jigs/blocks/agents";
+import type { TicketNote } from "@jigs-ai/jigs/blocks/linear";
 import type { MergePolicy } from "@jigs-ai/jigs/blocks/pull-requests";
 import type { PullRequestDescription } from "./outputs.ts";
 import type { FindingResponse, ReviewFinding, ReviewRound } from "./review.ts";
@@ -16,9 +17,8 @@ import type { FindingResponse, ReviewFinding, ReviewRound } from "./review.ts";
  */
 export interface WorkItem {
   /**
-   * The work item's address at its source — a Linear issue UUID, say — which
-   * is what posting back to it needs. `key` is what a human reads; this is
-   * what the note step is given.
+   * The work item's address at its source — a Linear issue UUID, say. `key`
+   * is what a human reads.
    */
   id: string;
   /** Short human-facing identifier, as the prompts name the task. */
@@ -261,6 +261,12 @@ export interface ImplementAndReviewOptions<TTask extends WorkItem = WorkItem> {
   implementation: ImplementationAgent<TTask>;
   review: ReviewAgent<TTask>;
   limits: Pick<DeliveryLimits, "implementationReviewRounds">;
+  /**
+   * Posts the note a delivery leaves when it stops short: what is still open
+   * and where the pushed branch is. A ticket-driven workflow posts it through
+   * its claim with `noteOnTicket`, so a later halt never reads it as a reply.
+   */
+  postNote: PostDeliveryNote;
   onLimit?: OnDeliveryLimit<TTask>;
   on?: DeliveryCallbacks;
 }
@@ -295,9 +301,14 @@ export interface FollowPullRequestOptions<TTask extends WorkItem = WorkItem> {
    * states it in `jigs.config.ts`; `resolveMergePolicy(binding)` reads it.
    */
   merge: MergePolicy;
+  /** See {@link ImplementAndReviewOptions.postNote}. */
+  postNote: PostDeliveryNote;
   onLimit?: OnDeliveryLimit<TTask>;
   on?: DeliveryCallbacks;
 }
+
+/** Where a delivery that stops short says so, in the shape of a ticket note. */
+export type PostDeliveryNote = (note: TicketNote) => Promise<void>;
 
 /** Workflow policy at the delivery lifecycle moments the recipe owns. */
 export interface DeliveryCallbacks {

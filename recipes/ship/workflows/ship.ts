@@ -86,6 +86,7 @@ export async function shipWorkflow(inputs: ShipInputs) {
       pullRequestRevisionRounds: inputs.pullRequestRevisionRounds,
     },
     merge: await resolveMergePolicy(inputs.binding),
+    postNote: (note) => noteOnTicket(claim, note),
     on: {
       pullRequestOpened: async () => {
         await setTicketStatus(snapshot.id, "In Review");

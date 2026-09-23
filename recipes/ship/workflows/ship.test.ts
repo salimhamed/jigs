@@ -123,6 +123,13 @@ test("ship moves its ticket as the recipe progresses", async () => {
   });
 });
 
+test("a stopped delivery's note is posted through the ticket claim", async () => {
+  const options = await deliveredFor({ ticket: "ABC-123" });
+  const note = { headline: "jigs stopped work on ABC-123.", notes: ["open"], closing: "Retry." };
+  await options.postNote(note);
+  expect(jigs.noteOnTicket).toHaveBeenCalledWith(claim, note);
+});
+
 test("a successful delivery removes merged worktrees", async () => {
   await deliveredFor({ ticket: "ABC-123" });
   expect(jigs.release).toHaveBeenCalledOnce();
