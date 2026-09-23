@@ -17,12 +17,12 @@ afterEach(() => {
 
 test("generation comes from the factory's installed package, even from a subdirectory", async () => {
   const root = factory();
-  const packageDir = path.join(root, "node_modules/@salimhamed/jigs");
+  const packageDir = path.join(root, "node_modules/@jigs-ai/jigs");
   mkdirSync(packageDir, { recursive: true });
   writeFileSync(
     path.join(packageDir, "package.json"),
     JSON.stringify({
-      name: "@salimhamed/jigs",
+      name: "@jigs-ai/jigs",
       type: "module",
       exports: { "./build": "./build.js" },
     }),

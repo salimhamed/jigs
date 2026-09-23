@@ -9,7 +9,7 @@ This fragment belongs inside a factory workflow. It supplies all the text the
 model needs and asks for a structured answer:
 
 ```ts
-import { models } from "@salimhamed/jigs/blocks/agents";
+import { models } from "@jigs-ai/jigs/blocks/agents";
 import { z } from "zod";
 import { askModel } from "#jigs";
 

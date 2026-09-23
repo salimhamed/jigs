@@ -11,22 +11,10 @@ World. Nothing below is global except part 1.
   the CLI's own node.
 - **docker**, with the daemon running. Each factory brings up its own Postgres
   container; nothing is shared between them.
-- **A token that reads GitHub Packages.** jigs ships as `@salimhamed/jigs` on
-  GitHub Packages with restricted access, so pnpm needs a scope route and a
-  token in `~/.npmrc`:
-
-  ```
-  @salimhamed:registry=https://npm.pkg.github.com
-  //npm.pkg.github.com/:_authToken=<token>
-  ```
-
-  The token is a **classic** personal access token with `read:packages` and,
-  while this repo is private, `repo`; fine-grained tokens cannot read GitHub
-  Packages. These two lines serve `pnpm dlx @salimhamed/jigs init`, every
-  `pnpm install` and every `jigs upgrade`. A factory's own `.npmrc` carries
-  only the scope line — the token never enters a repo. There is no jigs CLI
-  to put on `PATH`: each factory installs its own, and `pnpm exec jigs` runs
-  it.
+- **No registry setup.** jigs is the public `@jigs-ai/jigs` package on npm,
+  so `pnpm dlx @jigs-ai/jigs init`, `pnpm install` and `jigs upgrade` need no token or
+  `.npmrc` entry. There is no jigs CLI to put on `PATH`: each factory installs
+  its own, and `pnpm exec jigs` runs it.
 - **The agent harness CLIs** a factory's agent steps drive: the Claude Code
   CLI (`claude` on `PATH`, or `JIGS_CLAUDE_EXECUTABLE` in a factory's `.env`),
   `codex`, and `pi` from `@earendil-works/pi-coding-agent`. Log subscription-backed
@@ -119,13 +107,16 @@ service will at startup, and the fix is to upgrade `codex` on the machine. A
 factory made before this release should add
 `ignoredOptionalDependencies: ['@openai/codex']` to its `pnpm-workspace.yaml`
 and delete any `@openai/codex` dependency or `overrides` entry. A factory still
-carrying the `@salimhamed/jigs-service` dependency retired in 0.3.0 is refused:
-drop that line and rewrite its `@salimhamed/jigs-service/X` imports to
-`@salimhamed/jigs/X` first ([ADR 0017](adr/0017-single-package.md)).
+depending on a retired name is refused: `@salimhamed/jigs`, its name on GitHub
+Packages, or `@salimhamed/jigs-service`, retired in 0.3.0. Replace that line
+with `@jigs-ai/jigs` at a version, rewrite its `@salimhamed/jigs/X` or
+`@salimhamed/jigs-service/X` imports to `@jigs-ai/jigs/X`, drop the
+`@salimhamed:registry` line from the factory's `.npmrc`, then upgrade
+([ADR 0017](adr/0017-single-package.md)).
 
 pnpm still verifies the whole lockfile against its `minimumReleaseAge` policy
 before it resolves anything. `jigs upgrade` keeps every jigs version covered
-by the `@salimhamed/jigs` exclusion; for other recently published packages,
+by the `@jigs-ai/jigs` exclusion; for other recently published packages,
 leave their `minimumReleaseAgeExclude` entry in `pnpm-workspace.yaml` until
 that install has run, then drop the entry. Both factories hit this moving off
 `@salimhamed/jigs-service`.
@@ -135,8 +126,7 @@ ordinary semver from `0.1.0` on, and nothing here moves it by hand. A PR's
 title is a conventional commit — CI rejects one that is not — and merging it
 to `main` opens or updates a release-please PR carrying the next version and
 the CHANGELOG entries it earned; that PR merges itself once its own checks
-pass, the tag and GitHub Release follow, and the same run publishes to GitHub
-Packages. The number is a coordinate for `jigs upgrade` and a signal to
+pass, the tag and GitHub Release follow, and the same run publishes to npm. The number is a coordinate for `jigs upgrade` and a signal to
 you, never an input to a run: no step id carries a jigs version, so a release
 does not rename an address just by changing the package version
 ([ADR 0013](adr/0013-factory-owned-steps.md)), which is what makes automating
@@ -157,9 +147,16 @@ settings support the release workflow:
   labels). It is a PAT rather than `GITHUB_TOKEN` because GitHub raises no
   workflow run for an event `GITHUB_TOKEN` caused: the release PR would get no
   checks to watch, and its squash would never re-run the release
-  ([ADR 0014](adr/0014-release-automation.md)). The publish itself uses
-  `GITHUB_TOKEN` — nothing waits on an event it raises, and the workflow's
-  `packages: write` is the exact grant.
+  ([ADR 0014](adr/0014-release-automation.md)).
+- **An npm trusted publisher for `@jigs-ai/jigs`.** On npmjs.com, the package's
+  settings name repository `salimhamed/jigs` and workflow `release.yml`, with
+  no environment. The publish job authenticates with the workflow's OIDC
+  token (`id-token: write`), so there is no npm token secret, and npm attaches
+  provenance ([ADR 0014](adr/0014-release-automation.md)). npm only offers this for a
+  package that exists, so the first version was published by hand with
+  `npm publish --access public --provenance=false`: provenance can only be
+  generated in CI, and a local publish otherwise fails with "Automatic
+  provenance generation not supported for provider: null".
 - **Settings → General → "Default to PR title for squash merge commits".**
   Without it a squash's subject is the branch name, every merge parses as a
   non-releasable unit, and the release PR simply never appears — with no error
@@ -177,7 +174,7 @@ number is already in use, edit it in `jigs.config.ts`, `docker-compose.yml` and
 
 ```sh
 mkdir my-factory && cd my-factory && git init
-pnpm dlx @salimhamed/jigs init
+pnpm dlx @jigs-ai/jigs init
 ```
 
 `jigs init` writes `jigs.config.ts`, the pinned package manifest, build and
@@ -188,7 +185,7 @@ repository bindings or integration credentials. Existing files are kept.
 `jigs.config.ts` combines operating settings and deferred workflow registrations:
 
 ```ts
-import { defineFactory } from "@salimhamed/jigs";
+import { defineFactory } from "@jigs-ai/jigs";
 
 export default defineFactory({
   service: { port: 8990, dashboardPort: 9090 },
@@ -200,7 +197,7 @@ export default defineFactory({
 Each workflow module exports its declaration as default:
 
 ```ts
-import type { WorkflowEntry } from "@salimhamed/jigs";
+import type { WorkflowEntry } from "@jigs-ai/jigs";
 
 export default {
   workflow: helloWorkflow,
@@ -524,8 +521,7 @@ my-factory-2286ac2a is up at http://localhost:8990 — dashboard http://localhos
 
 - **env** copies `.env.example` to `.env` if there is none and reports the
   credential slots still empty.
-- **install** is `pnpm install`, reading `@salimhamed/*` from GitHub Packages
-  through your `~/.npmrc`.
+- **install** is `pnpm install`.
 - **compose** is `docker compose up -d --wait`: this factory's own Postgres
   World, on the port `jigs init` chose.
 - **bootstrap** applies the SDK's migrations and the queue schema to that

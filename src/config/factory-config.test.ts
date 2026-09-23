@@ -167,7 +167,7 @@ test("adding and removing bindings preserves sibling comments and provisioning",
 });
 
 test("adding a binding matches the surrounding formatting", () => {
-  const input = `import { defineFactory } from "@salimhamed/jigs";
+  const input = `import { defineFactory } from "@jigs-ai/jigs";
 
 export default defineFactory({
   bindings: {
@@ -177,7 +177,7 @@ export default defineFactory({
 `;
   expect(
     upsertBinding(input, "playground", "git@github.com:acme/pg.git"),
-  ).toBe(`import { defineFactory } from "@salimhamed/jigs";
+  ).toBe(`import { defineFactory } from "@jigs-ai/jigs";
 
 export default defineFactory({
   bindings: {

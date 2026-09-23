@@ -11,14 +11,6 @@ pnpm exec jigs service logs
 
 Once integrations are configured, run `pnpm exec jigs doctor` to check the factory.
 
-## Installation says unauthorized or forbidden
-
-Check your user-level `~/.npmrc`: it must route `@salimhamed` to
-`https://npm.pkg.github.com` and contain a valid classic token with `read:packages`.
-The token’s GitHub account must have access to the package. Source visibility and
-package access are separate; a public repository alone does not grant installation
-access. Do not paste tokens into logs or commit them to your factory.
-
 ## The service exits before becoming ready
 
 Read `service logs`. Confirm Docker is running and both `claude` and `codex` are

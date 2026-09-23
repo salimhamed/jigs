@@ -1,19 +1,32 @@
 {
-  "name": "@salimhamed/jigs",
+  "name": "@jigs-ai/jigs",
   "version": "0.51.0",
   "description": "Guides coding agents through repeatable workflows",
   "type": "module",
   "license": "MIT",
   "author": "Salim Hamed",
+  "homepage": "https://salimhamed.github.io/jigs/",
+  "bugs": {
+    "url": "https://github.com/salimhamed/jigs/issues"
+  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/salimhamed/jigs.git"
+    "url": "git+https://github.com/salimhamed/jigs.git"
   },
+  "keywords": [
+    "ai",
+    "agents",
+    "coding-agents",
+    "workflow",
+    "durable",
+    "automation",
+    "software-factory"
+  ],
   "engines": {
     "node": ">=24"
   },
   "bin": {
-    "jigs": "./dist/cli.js"
+    "jigs": "dist/cli.js"
   },
   "exports": {
     ".": {
@@ -115,8 +128,8 @@
     "migrations"
   ],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "restricted"
+    "access": "public",
+    "provenance": true
   },
   "scripts": {
     "dev": "node src/cli/cli.ts",

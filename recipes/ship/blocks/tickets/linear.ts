@@ -1,8 +1,4 @@
-import {
-  claimTicket,
-  renderTicketSnapshot,
-  type TicketHandoff,
-} from "@salimhamed/jigs/blocks/linear";
+import { claimTicket, renderTicketSnapshot, type TicketHandoff } from "@jigs-ai/jigs/blocks/linear";
 import type { WorkItem } from "#blocks/delivery/types";
 import { fetchTicketSnapshot, resolveLinearIssue } from "#jigs";
 

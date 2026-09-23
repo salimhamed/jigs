@@ -21,7 +21,7 @@ const DRAIN_MS = 1_000;
 
 const fixtureSource = `import { appendFileSync, existsSync } from "node:fs";
 import { setTimeout as wait } from "node:timers/promises";
-import type { WorkflowEntry, WorkflowInputs } from "@salimhamed/jigs";
+import type { WorkflowEntry, WorkflowInputs } from "@jigs-ai/jigs";
 import { createRunDirectory } from "#jigs";
 import { RetryableError, sleep } from "workflow";
 import { z } from "zod";
@@ -242,7 +242,7 @@ export async function runCompiledCancellationMatrix({
 
     const automatic = JSON.parse(
       runNode(
-        `import { reconcileAutomaticRelease } from "@salimhamed/jigs/automatic-release";
+        `import { reconcileAutomaticRelease } from "@jigs-ai/jigs/automatic-release";
 import { getWorld } from "workflow/runtime";
 const report = await reconcileAutomaticRelease({ workflows: {} });
 console.log(JSON.stringify(report));
@@ -325,7 +325,7 @@ await (await getWorld()).close?.();`,
 
     const reconciled = JSON.parse(
       runNode(
-        `import { reconcileAutomaticRelease } from "@salimhamed/jigs/automatic-release";
+        `import { reconcileAutomaticRelease } from "@jigs-ai/jigs/automatic-release";
 import { getWorld } from "workflow/runtime";
 const report = await reconcileAutomaticRelease({ workflows: {} });
 console.log(JSON.stringify(report));

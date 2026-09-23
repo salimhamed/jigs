@@ -1,8 +1,8 @@
 # One published package at the repository root
 
-jigs publishes one package, `@salimhamed/jigs`, containing its CLI, block and
+jigs publishes one package, `@jigs-ai/jigs`, containing its CLI, block and
 step interfaces, service implementation, and factory scaffold. Factories pin
-that package from GitHub Packages and run their own installed CLI. The earlier
+that package from npm and run their own installed CLI. The earlier
 private workspace root and nested published package were flattened because
 there is only one package to build, test and release.
 

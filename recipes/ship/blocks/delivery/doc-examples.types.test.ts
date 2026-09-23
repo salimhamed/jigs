@@ -8,10 +8,10 @@
 // the publication type gate the doc states in prose. Every other line is the
 // doc verbatim; change one and change the other.
 
-import type { Worktree } from "@salimhamed/jigs";
-import { harnesses } from "@salimhamed/jigs/blocks/agents";
-import type { HaltForHumanFn, TicketClaim } from "@salimhamed/jigs/blocks/linear";
-import type { MergePolicy, PullRequestRef } from "@salimhamed/jigs/blocks/pull-requests";
+import type { Worktree } from "@jigs-ai/jigs";
+import { harnesses } from "@jigs-ai/jigs/blocks/agents";
+import type { HaltForHumanFn, TicketClaim } from "@jigs-ai/jigs/blocks/linear";
+import type { MergePolicy, PullRequestRef } from "@jigs-ai/jigs/blocks/pull-requests";
 import { expect, test } from "vitest";
 import type * as delivery from "./delivery.ts";
 import type {

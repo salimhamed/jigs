@@ -3,8 +3,8 @@
 // compiles clean and only shows up in someone else's factory — so the guard
 // here is tsc, through `pnpm typecheck`.
 
-import type { Worktree } from "@salimhamed/jigs";
-import type { Harness } from "@salimhamed/jigs/blocks/agents";
+import type { Worktree } from "@jigs-ai/jigs";
+import type { Harness } from "@jigs-ai/jigs/blocks/agents";
 import { expect, test } from "vitest";
 import * as delivery from "./delivery.ts";
 import type {

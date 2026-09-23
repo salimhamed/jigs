@@ -1,10 +1,10 @@
-import { JigsError, type WorkflowEntry, type WorkflowInputs } from "@salimhamed/jigs";
+import { JigsError, type WorkflowEntry, type WorkflowInputs } from "@jigs-ai/jigs";
 import {
   type Harness,
   type HarnessKind,
   harnesses,
   harnessKinds,
-} from "@salimhamed/jigs/blocks/agents";
+} from "@jigs-ai/jigs/blocks/agents";
 import { z } from "zod";
 import { deliverChange } from "#blocks/delivery/delivery";
 import { acquireLinearTicket, workItemFromHandoff } from "#blocks/tickets/linear";

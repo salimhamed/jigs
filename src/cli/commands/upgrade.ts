@@ -10,16 +10,16 @@ import { type UpDeps, type UpOptions, type UpResult, type UpStepName, upFactory 
 // Install the release, refresh its generated integration using the newly
 // installed CLI, rebuild/restart, then check the factory's custom code.
 
-export const JIGS_PACKAGE = "@salimhamed/jigs";
+export const JIGS_PACKAGE = "@jigs-ai/jigs";
 
 // What a factory scaffolded before jigs was published depends on: the
 // checkout's packages, by their pre-publish names, linked by path.
 const CHECKOUT_PACKAGES = ["jigs", "@jigs/service"];
 
-// The second published package, until jigs became one. A factory still
-// listing it cannot be upgraded into place: every import it holds names a
-// package no release has.
-const RETIRED_PACKAGE = "@salimhamed/jigs-service";
+// Names earlier releases were published under. A factory still listing one
+// cannot be upgraded into place: every import it holds names a package no
+// release has.
+const RETIRED_PACKAGES = ["@salimhamed/jigs", "@salimhamed/jigs-service"];
 
 export type UpgradeStepName = "packages" | "bump" | "typecheck";
 
@@ -203,8 +203,8 @@ function readManifest(factoryRoot: string): Manifest {
 // Refuses a factory still wired to a checkout before pnpm can touch it: the
 // published name would simply be added beside the linked one, and the factory
 // would compile against one jigs and run another. And refuses one still
-// listing the retired second package, which pnpm cannot resolve at any
-// version — that factory needs its imports rewritten first, once, by hand.
+// listing a retired name, which no release comes under — that factory needs
+// its imports rewritten first, once, by hand.
 function publishedVersion(factoryRoot: string): string {
   const manifest = readManifest(factoryRoot);
   const declared = { ...manifest.devDependencies, ...manifest.dependencies };
@@ -217,13 +217,14 @@ function publishedVersion(factoryRoot: string): string {
   if (fromCheckout.length > 0) {
     throw new JigsError(
       `this factory installs jigs from a checkout (${fromCheckout.join(", ")})`,
-      `switch it to the published package first — ${JIGS_PACKAGE} from GitHub Packages, pinned to a version — then jigs upgrade`,
+      `switch it to the published package first — ${JIGS_PACKAGE} from npm, pinned to a version — then jigs upgrade`,
     );
   }
-  if (declared[RETIRED_PACKAGE] !== undefined) {
+  const retired = RETIRED_PACKAGES.find((name) => declared[name] !== undefined);
+  if (retired !== undefined) {
     throw new JigsError(
-      `this factory still depends on ${RETIRED_PACKAGE}, which no longer releases`,
-      `jigs is one package now, and the move is a one-time edit no upgrade can make for you: drop the ${RETIRED_PACKAGE} line from package.json, rewrite every import of ${RETIRED_PACKAGE}/X to ${JIGS_PACKAGE}/X, then jigs upgrade`,
+      `this factory still depends on ${retired}, which no longer releases`,
+      `the move is a one-time edit no upgrade can make for you: replace the ${retired} line in package.json with ${JIGS_PACKAGE} at a version, rewrite every import of ${retired}/X to ${JIGS_PACKAGE}/X, drop any @salimhamed:registry line from .npmrc, then jigs upgrade`,
     );
   }
   const version = declared[JIGS_PACKAGE];
@@ -256,20 +257,6 @@ async function bump(
         return new JigsError(
           "the new jigs peers on a runtime version this factory does not install",
           "the factory supplies @workflow/web, @workflow/world-postgres, workflow and zod — move each to the version pnpm names above, then jigs upgrade again",
-        );
-      }
-      if (/registry\.npmjs\.org\/@salimhamed%2F/.test(output)) {
-        return new JigsError(
-          "the @salimhamed scope is not routed to GitHub Packages, so pnpm asked npmjs.org",
-          "add @salimhamed:registry=https://npm.pkg.github.com to this factory's .npmrc or ~/.npmrc",
-        );
-      }
-      // GitHub Packages answers 404, not 401, for a private package the token
-      // cannot see; a version that does not exist is NO_MATCHING_VERSION.
-      if (/ERR_PNPM_FETCH_40[134]|E40[134]\b/.test(output)) {
-        return new JigsError(
-          "GitHub Packages refused the request",
-          "~/.npmrc needs //npm.pkg.github.com/:_authToken=<classic PAT with read:packages, and repo while the jigs repo is private>",
         );
       }
       if (/ERR_PNPM_NO_MATCHING_VERSION/.test(output)) {

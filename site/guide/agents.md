@@ -12,7 +12,7 @@ This is a fragment to use inside a factory workflow. `worktreePath` stands for
 the path of a worktree you have provisioned for this run:
 
 ```ts
-import { harnesses } from "@salimhamed/jigs/blocks/agents";
+import { harnesses } from "@jigs-ai/jigs/blocks/agents";
 import { runAgent } from "#jigs";
 
 const result = await runAgent({
@@ -32,7 +32,7 @@ runs Claude Code or Pi with no tools and no working directory. Codex cannot be
 used this way, because it has no mode without tools:
 
 ```ts
-import { harnesses } from "@salimhamed/jigs/blocks/agents";
+import { harnesses } from "@jigs-ai/jigs/blocks/agents";
 import { askAgent } from "#jigs";
 
 const answer = await askAgent({

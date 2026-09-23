@@ -71,7 +71,7 @@ test("every subpath the scaffold reaches is in the exports map", async () => {
   const reached = new Set<string>();
   for (const file of await templateFiles(templatesDir)) {
     const source = await readFile(file, "utf8");
-    for (const match of source.matchAll(/"@salimhamed\/jigs(\/[^"]*)?"/g)) {
+    for (const match of source.matchAll(/"@jigs-ai\/jigs(\/[^"]*)?"/g)) {
       reached.add(`.${match[1] ?? ""}`);
     }
   }
@@ -100,7 +100,7 @@ test("every tsdown entry is reachable through the exports map or the bin", () =>
   // import, which is a subpath someone forgot to export. The bin is the one
   // entry reached by path instead.
   const entries = (tsdownConfig as { entry: Record<string, string> }).entry;
-  const reachable = [...exportTargets, ...Object.values<string>(pkg.bin)];
+  const reachable = [...exportTargets, ...Object.values<string>(pkg.bin).map((bin) => `./${bin}`)];
   for (const key of Object.keys(entries)) {
     expect(reachable, key).toContain(`./dist/${key}.js`);
   }
@@ -171,7 +171,7 @@ test("the factory template pins the same versions this package peers on", async 
   }
   // Pinned to the exact version of the CLI that scaffolded it, never a range
   // or a link: the compiler and the runtime have to be one install.
-  expect(template.dependencies["@salimhamed/jigs"]).toBe(pkg.version);
+  expect(template.dependencies["@jigs-ai/jigs"]).toBe(pkg.version);
 });
 
 // Public value exports are checked here; TypeScript checks the type surface.

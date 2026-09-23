@@ -9,8 +9,8 @@ by feature. There are three kinds, and each gets a top level folder:
   recorded.
 - `service/` is the long-running process. It never runs inside a workflow.
 
-Two of those folders are the public import paths: `@salimhamed/jigs/blocks`
-and `@salimhamed/jigs/steps`. The service paths the build uses stay as they
+Two of those folders are the public import paths: `@jigs-ai/jigs/blocks`
+and `@jigs-ai/jigs/steps`. The service paths the build uses stay as they
 were. Decided by Salim on 2026-09-11, shipped in 0.5.0.
 
 ## Why the runtime forces this

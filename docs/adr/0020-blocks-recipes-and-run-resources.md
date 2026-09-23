@@ -74,9 +74,9 @@ so it can show and release it. Decided with Salim on 2026-09-17.
    The public paths name kind first and topic second, and the folders match:
 
    ```
-   @salimhamed/jigs                        defineFactory, WorkflowEntry, JigsError, config types
-   @salimhamed/jigs/blocks/<topic>         src/blocks/<topic>
-   @salimhamed/jigs/steps/<topic>          src/steps/<topic>
+   @jigs-ai/jigs                        defineFactory, WorkflowEntry, JigsError, config types
+   @jigs-ai/jigs/blocks/<topic>         src/blocks/<topic>
+   @jigs-ai/jigs/steps/<topic>          src/steps/<topic>
    ```
 
    with topics `agents`, `human`, `linear`, `pull-requests`, `workspaces`,

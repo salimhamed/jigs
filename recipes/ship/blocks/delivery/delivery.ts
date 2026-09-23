@@ -1,6 +1,6 @@
-import { JigsError } from "@salimhamed/jigs";
-import { type Harness, resumeOrRebuild } from "@salimhamed/jigs/blocks/agents";
-import type { StatusReason } from "@salimhamed/jigs/blocks/pull-requests";
+import { JigsError } from "@jigs-ai/jigs";
+import { type Harness, resumeOrRebuild } from "@jigs-ai/jigs/blocks/agents";
+import type { StatusReason } from "@jigs-ai/jigs/blocks/pull-requests";
 import {
   attend,
   defaultPullRequestScope,
@@ -9,7 +9,7 @@ import {
   postPullRequestNote,
   postReviewAnswers,
   renderChecks,
-} from "@salimhamed/jigs/blocks/pull-requests";
+} from "@jigs-ai/jigs/blocks/pull-requests";
 import type { z } from "zod";
 import {
   commentOnPullRequest,

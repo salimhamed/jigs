@@ -1,10 +1,14 @@
 # jigs
 
+[![npm](https://img.shields.io/npm/v/@jigs-ai/jigs)](https://www.npmjs.com/package/@jigs-ai/jigs)
+
 > In manufacturing, a jig guides tools through repeatable operations.
 
 jigs runs durable TypeScript workflows that combine agents, model calls, and
 external operations. Use it to deliver software, investigate infrastructure,
 or automate another repeatable process. Factories own the process and policy.
+
+Documentation: <https://salimhamed.github.io/jigs/>
 
 ## How it fits together
 
@@ -20,10 +24,11 @@ or automate another repeatable process. Factories own the process and policy.
 
 ## Quick start
 
-jigs ships as one package on GitHub Packages, `@salimhamed/jigs`: the CLI, and
-the library a factory is written against. A factory pins it to a version and
-runs its own copy of the CLI; nothing is installed globally and nothing is
-cloned. Expect around ten minutes.
+jigs ships as one package on npm, `@jigs-ai/jigs`: the CLI, and the library a
+factory is written against (`pnpm add @jigs-ai/jigs` or `npm i @jigs-ai/jigs`).
+A factory pins it to a
+version and runs its own copy of the CLI; nothing is installed globally and
+nothing is cloned, and no registry token is needed. Expect around ten minutes.
 
 **Prerequisites.**
 
@@ -32,31 +37,14 @@ cloned. Expect around ten minutes.
 - The coding-agent CLIs your workflows will drive — `claude` and `codex` — each
   logged in to its subscription. Install both yourself and keep them on the
   `PATH` of whatever starts the service; it will not start without them.
-- A GitHub **classic** personal access token with `read:packages` and, while
-  this repo is private, `repo`. Fine-grained tokens cannot read GitHub
-  Packages.
 - If node comes from a version manager, the shell you start the service from
   needs it on `PATH`.
 
-### 1. Point pnpm at GitHub Packages (once per machine)
-
-```sh
-cat >> ~/.npmrc <<'EOF'
-@salimhamed:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=ghp_your_token_here
-EOF
-```
-
-The first line routes the `@salimhamed` scope; the second is the token that
-reads it. The same two lines serve `pnpm dlx`, `pnpm install` and every
-`jigs upgrade` from here on. The factory's own `.npmrc` carries only the scope
-line, so the token never lands in a repo.
-
-### 2. Scaffold a factory
+### 1. Scaffold a factory
 
 ```sh
 mkdir my-factory && cd my-factory && git init
-pnpm dlx @salimhamed/jigs init
+pnpm dlx @jigs-ai/jigs init
 ```
 
 `jigs init` writes files and runs nothing: `jigs.config.ts`, `package.json` pinned to
@@ -65,7 +53,7 @@ the version that scaffolded it, `nitro.config.ts`, `docker-compose.yml`,
 it prints the remaining steps with **your** ports filled in. Use its numbers,
 not the ones below.
 
-### 3. Read the factory's own code
+### 2. Read the factory's own code
 
 The factory separates its configuration, generated integration, and custom code:
 
@@ -102,7 +90,7 @@ Pass the returned `base` and `head` to `readPatch(worktreePath, base, head, path
 to inspect named files from that same change. Paths are literal, not globs;
 empty paths are rejected. Patch text shares a 200,000-character budget across
 files, with its own `truncated` flag. `renderChangeSummary` from
-`@salimhamed/jigs/blocks/git` renders the summary and displays at most 60 file rows,
+`@jigs-ai/jigs/blocks/git` renders the summary and displays at most 60 file rows,
 with an “and N more” tail for the remaining rows.
 
 Wrappers pass run metadata to jigs, which handles run-specific details such as
@@ -125,7 +113,7 @@ Both workflow and step function paths and names contribute to durable IDs.
 Renames are supported breaking changes: finish or cancel affected active runs
 before deploying them. Ordinary library version bumps do not change these IDs.
 
-### 4. Start the service
+### 3. Start the service
 
 ```sh
 cp .env.example .env      # configure credentials when a workflow needs them
@@ -154,7 +142,7 @@ unchanged factory installs, migrates and restarts nothing.
 From here every `jigs` is the factory's own: `pnpm exec jigs …` (or
 `pnpm jigs …`).
 
-### 5. Add a recipe when you want a process
+### 4. Add a recipe when you want a process
 
 `jigs init` starts bare. To adopt the ship process, copy the recipe:
 
@@ -192,7 +180,7 @@ remote URL is reused; otherwise its name comes from the repo name. An explicit
 Unsupported expressions produce a clear error before any file or webhook
 changes; those configurations can be edited manually.
 
-### 6. Run
+### 5. Run
 
 ```sh
 pnpm exec jigs run hello --input message=hello
@@ -278,7 +266,7 @@ creation and registration in separate durable steps: await the creator first,
 then call `registerResource`. A retry reuses the recorded creator result and
 retries only registration. Inside an idempotent custom `"use step"` function,
 the same implementation is available as `registerResource` from
-`@salimhamed/jigs/steps/runtime`.
+`@jigs-ai/jigs/steps/runtime`.
 
 A registration is an observability record. It grants no permission to delete
 the resource. Cleanup must separately recognize a managed local kind and apply
@@ -309,7 +297,7 @@ argument and routes it to one of four guides:
 
 ## Layout
 
-jigs is one root package, published as `@salimhamed/jigs`. `src/` contains
+jigs is one root package, published as `@jigs-ai/jigs`. `src/` contains
 its implementation, `templates/` contains the bare factory scaffold, and
 `recipes/` contains optional workflows copied into factories.
 `pnpm-workspace.yaml` holds dependency build permissions; there are no workspace members.
@@ -406,8 +394,8 @@ still exported, so a factory can read one or pass its own instead.
 
 ### Import paths
 
-Import by code kind, then topic: `@salimhamed/jigs/blocks/<topic>` for
-workflow-side code and `@salimhamed/jigs/steps/<topic>` for implementations
+Import by code kind, then topic: `@jigs-ai/jigs/blocks/<topic>` for
+workflow-side code and `@jigs-ai/jigs/steps/<topic>` for implementations
 called inside factory `"use step"` wrappers. The topics are `agents`, `human`,
 `linear`, `pull-requests`, `workspaces`, `git` and `runtime`; folders match them.
 Blocks stay free of Node built-ins, environment reads and network calls.
@@ -420,12 +408,12 @@ in `linear`: separating that transport requires a future API design. Accordingly
 `steps/human` currently exports no operations. Run status and suspension inspection
 remain private service/CLI implementation details.
 
-The package root, `@salimhamed/jigs`, keeps factory configuration, `WorkflowEntry`,
+The package root, `@jigs-ai/jigs`, keeps factory configuration, `WorkflowEntry`,
 `defineFactory`, `ticketInputSchema`, `JigsError` and its existing shared types.
 Flat topic aliases and catch-all block/step paths have been removed.
 
 The remaining subpaths belong to the service the factory builds:
-`@salimhamed/jigs/app`, `/nitro`, `/schedules`, `/build`,
+`@jigs-ai/jigs/app`, `/nitro`, `/schedules`, `/build`,
 `/plugins/start-world` and `/plugins/start-dashboard`. A factory names
 `/nitro` in its `nitro.config.ts`; `jigs build` and the server entry it
 generates name the rest.
@@ -461,6 +449,6 @@ Biome formats code with a line width of 100 characters. Keep the generated
 its integration appear stale.
 
 A merge to `main` with a releasable title opens or updates the release PR;
-its merge tags the release and publishes to GitHub Packages. The
+its merge tags the release and publishes to npm. The
 [setup runbook](docs/setup.md#part-1--the-machine-once) has the repository
 settings that make it work.

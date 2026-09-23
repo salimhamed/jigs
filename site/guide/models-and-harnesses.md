@@ -191,7 +191,7 @@ candidates, and action thresholds are business policy. For example, a factory
 can ask one score question for a candidate pair and add field-specific checks:
 
 ```ts
-import { models, score, yesNo } from "@salimhamed/jigs/blocks/agents";
+import { models, score, yesNo } from "@jigs-ai/jigs/blocks/agents";
 import { askJev } from "#jigs";
 
 const state = {

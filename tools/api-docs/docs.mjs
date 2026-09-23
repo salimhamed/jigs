@@ -124,7 +124,7 @@ export async function convert(entryPoints, { format = "markdown", ...options } =
   const app = await Application.bootstrapWithPlugins({
     ...typedocOptions,
     entryPoints,
-    name: "@salimhamed/jigs",
+    name: "@jigs-ai/jigs",
     plugin:
       format === "vitepress"
         ? ["typedoc-plugin-markdown", "typedoc-vitepress-theme"]

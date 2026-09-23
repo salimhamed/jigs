@@ -68,7 +68,8 @@ _Avoid_: workflows repo, config repo
 **jigs package**:
 The single distributed library and CLI that provides blocks, step
 implementations, service code and factory templates.
-_Avoid_: the checkout, link:, @jigs/service, @salimhamed/jigs-service, the
+_Avoid_: the checkout, link:, @jigs/service, @salimhamed/jigs,
+@salimhamed/jigs-service, the
 jigs packages (plural), the jigs repo (as a dependency)
 
 **Factory-supplied runtime**:
