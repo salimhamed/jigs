@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import semver from "semver";
 import type { HarnessKind } from "../blocks/agents/harness-config.ts";
 import { driverFor } from "../steps/agents/drivers/index.ts";
+import { factoryAgentEnv, harnessEnv } from "../steps/agents/harnesses/env.ts";
 import { PROBE_TIMEOUT_MS } from "./catalog.ts";
 
 // Are the harness CLIs installed, and is codex new enough? The service's
@@ -36,9 +37,10 @@ export interface HarnessRuntimeDeps {
   exec?: (
     file: string,
     args: string[],
-    options: { timeout: number },
+    options: { env: Record<string, string>; timeout: number },
   ) => Promise<{ stdout: string; stderr: string }>;
   env?: NodeJS.ProcessEnv;
+  factoryEnv?: () => readonly string[];
 }
 
 const execFileAsync = promisify(execFile);
@@ -82,10 +84,12 @@ export async function harnessRuntime(
     return fail(null, null, `${harness} not found on PATH${floor}`);
   }
 
-  // Some CLIs print the version on stderr.
+  // Under the agent environment, so a CLI that needs an undeclared variable
+  // fails here rather than in a step. Some CLIs print the version on stderr.
+  const probeEnv = harnessEnv((deps.factoryEnv ?? factoryAgentEnv)(), env);
   let answer: string;
   try {
-    const result = await exec(path, ["--version"], { timeout: PROBE_TIMEOUT_MS });
+    const result = await exec(path, ["--version"], { env: probeEnv, timeout: PROBE_TIMEOUT_MS });
     answer = `${result.stdout}${result.stderr}`;
   } catch (err) {
     return fail(path, null, `\`${path} --version\` failed: ${err}${floor}`);

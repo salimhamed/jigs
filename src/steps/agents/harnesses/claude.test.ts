@@ -146,8 +146,12 @@ function launchFixture(
   stepEnv: Record<string, string>,
   providerEnv: Record<string, string>,
   args: readonly string[] = [fixture],
+  host: NodeJS.ProcessEnv = {},
 ) {
-  return claudeProcessSpawner(stepEnv)({
+  return claudeProcessSpawner(
+    stepEnv,
+    host,
+  )({
     command: process.execPath,
     args: [...args],
     cwd: process.cwd(),
@@ -163,15 +167,24 @@ function exited(child: ReturnType<typeof launchFixture>) {
   });
 }
 
-test("the launch hook replaces the provider's environment with the step's", async () => {
+test("the launch hook replaces the provider's environment with the step's, keeping only what the SDK added", async () => {
   const record = path.join(tmp, "allowlist-env.json");
+  const host = {
+    PATH: process.env.PATH ?? "",
+    ANTHROPIC_API_KEY: "host",
+    CLAUDE_CODE_OAUTH_TOKEN: "host",
+    AWS_SECRET_ACCESS_KEY: "host",
+    CLAUDE_AGENT_SDK_VERSION: "0.0.0",
+  };
   const child = launchFixture(
     { JIGS_CLAUDE_TEST_RECORD: record, JIGS_ALLOWED_TOKEN: "kept" },
     {
+      ...host,
       JIGS_ALLOWED_TOKEN: "provider copy",
-      ANTHROPIC_API_KEY: "dropped",
-      CLAUDE_AGENT_SDK_VERSION: "0.0.0",
+      CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING: "true",
     },
+    [fixture],
+    host,
   );
   const errors: unknown[] = [];
   child.stdout.on("error", (error) => errors.push(error));
@@ -179,7 +192,15 @@ test("the launch hook replaces the provider's environment with the step's", asyn
   expect(errors).toHaveLength(1);
   const launched = JSON.parse(readFileSync(record, "utf8"));
   expect(launched).toMatchObject({ allowedToken: "kept", anthropic: false, entrypoint: "sdk-ts" });
-  expect(launched.names).toContain("CLAUDE_AGENT_SDK_VERSION");
+  expect([...launched.names].sort()).toEqual(
+    [
+      "CLAUDE_AGENT_SDK_VERSION",
+      "CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING",
+      "CLAUDE_CODE_ENTRYPOINT",
+      "JIGS_ALLOWED_TOKEN",
+      "JIGS_CLAUDE_TEST_RECORD",
+    ].sort(),
+  );
 });
 
 test("a kill through the launcher is a teardown, not a launch failure", async () => {

@@ -47,7 +47,15 @@ export default defineFactory({
 
 The list holds names only; values stay in the service environment and are read
 when an agent starts. Declare anything your machine needs that the base set
-does not cover, such as a tool manager's variables or an SSH agent socket.
+does not cover, such as a tool manager's variables or an SSH agent socket. The
+service checks each harness CLI under this same environment when it starts, so
+a missing declaration shows up then rather than mid-run. Model credentials and
+the variables jigs sets itself, such as `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
+`OPENROUTER_API_KEY` or `CODEX_HOME`, cannot be declared: name a model
+credential on its model source instead.
+
+Proxy variables pass through as they are, so a username and password written
+into a proxy URL reach every agent.
 
 This protects the environment only. Agents run as your user and can still read
 any file your user can, including `.env` files and credential files on disk.

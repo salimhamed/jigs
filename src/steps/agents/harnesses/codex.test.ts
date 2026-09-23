@@ -1,8 +1,12 @@
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { generateText } from "ai";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { codexAppServerStepSettings, withCodexAppServer } from "../drivers/codex-support.ts";
+import {
+  codexAppServerStepSettings,
+  withCodexAppServer,
+  writeCodexLauncher,
+} from "../drivers/codex-support.ts";
 import { harnessEnv } from "./env.ts";
 import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
@@ -103,4 +107,18 @@ test("withCodexAppServer with the real provider resolves and closes", async () =
   await expect(withCodexAppServer(async (provider) => typeof provider.close)).resolves.toBe(
     "function",
   );
+});
+
+test("the launcher refuses a name that is not shell-safe and writes nothing", () => {
+  const hostile = 'LC_X";touch pwned;"';
+  expect(() => writeCodexLauncher(tmp, CODEX, ["PATH", hostile])).toThrow("not shell-safe");
+  expect(existsSync(path.join(tmp, "jigs-codex-launch"))).toBe(false);
+  expect(() =>
+    codexAppServerStepSettings({
+      cwd: tmp,
+      codexHome: tmp,
+      codexPath: CODEX,
+      env: { [hostile]: "x" },
+    }),
+  ).toThrow("not shell-safe");
 });

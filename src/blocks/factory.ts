@@ -15,9 +15,28 @@ export const ticketInputSchema = z.union([z.uuid(), z.string().regex(/^[A-Z][A-Z
 /** Plaintext run metadata used by read-only tooling to resolve ticket selectors. */
 export const RUN_TICKET_ATTRIBUTE = "$jigs.ticket";
 
+// A driver sets or passes these itself, and a model credential comes from the
+// model source; declaring one would override the subscription login or the
+// invocation's private home.
+export const RESERVED_AGENT_ENV: readonly string[] = [
+  "CLAUDE_CONFIG_DIR",
+  "CODEX_HOME",
+  "PI_CODING_AGENT_DIR",
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_AUTH_TOKEN",
+  "CLAUDE_CODE_OAUTH_TOKEN",
+  "OPENAI_API_KEY",
+  "CODEX_API_KEY",
+  "OPENROUTER_API_KEY",
+];
+
 const envName = z
   .string()
-  .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, "must be an environment variable name, never a value");
+  .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, "must be an environment variable name, never a value")
+  .refine(
+    (name) => !RESERVED_AGENT_ENV.includes(name),
+    "is set by jigs or selects a model credential; name a model credential on its model source instead",
+  );
 
 // Names only: values stay in the service environment and are read when an
 // agent starts, so none reaches the factory definition or workflow data.

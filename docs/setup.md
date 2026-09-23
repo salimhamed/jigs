@@ -77,7 +77,10 @@ World. Nothing below is global except part 1.
   ```
 
   The same goes for `SSH_AUTH_SOCK` if agents sign commits through an SSH
-  agent. The list holds names only, never values. A secret the list does not
+  agent. The service checks each harness CLI under this environment when it
+  starts. Model credentials and variables jigs sets itself (`ANTHROPIC_API_KEY`,
+  `OPENAI_API_KEY`, `CODEX_HOME` and similar) cannot be declared. Proxy URLs
+  pass through as they are, so credentials written into one reach agents. The list holds names only, never values. A secret the list does not
   name, such as `WORKFLOW_POSTGRES_URL`, never reaches an agent. This protects
   the environment only: agents run as your user and can still read any file
   your user can, `.env` files and credential files included.

@@ -27,24 +27,21 @@ const service = () => ({
 
 // Names only: a failing assertion never prints a value.
 const names = (env: Record<string, string>) => Object.keys(env).sort();
+const BASE = ["PATH", "HOME", "LANG", "LC_TIME", "HTTPS_PROXY", "SSL_CERT_FILE", "XDG_RUNTIME_DIR"];
 
 test("a harness starts from the base set and nothing else", () => {
-  expect(names(harnessEnv([], service()))).toEqual(
-    ["PATH", "HOME", "LANG", "LC_TIME", "HTTPS_PROXY", "SSL_CERT_FILE", "XDG_RUNTIME_DIR"].sort(),
-  );
+  expect(names(harnessEnv([], service()))).toEqual([...BASE].sort());
 });
 
 test("named variables are added, and only when the service has them", () => {
   const env = harnessEnv(["MISE_DATA_DIR", "SSH_AUTH_SOCK", "NOT_SET"], service());
-  expect(names(env)).toEqual(
-    [...names(harnessEnv([], service())), "MISE_DATA_DIR", "SSH_AUTH_SOCK"].sort(),
-  );
+  expect(names(env)).toEqual([...BASE, "MISE_DATA_DIR", "SSH_AUTH_SOCK"].sort());
 });
 
 test("secrets reach a harness only when its driver or the factory names them", () => {
   const ask = { harness: { kind: "claude" as const, model: "sonnet" }, prompt: "p" };
   const claude = harnessEnv(claudeDriver.envAllowlist(ask), service());
-  expect(names(claude)).toEqual([...names(harnessEnv([], service())), "CLAUDE_CONFIG_DIR"].sort());
+  expect(names(claude)).toEqual([...BASE, "CLAUDE_CONFIG_DIR"].sort());
 
   const codex = harnessEnv(
     codexDriver.envAllowlist({
@@ -54,7 +51,7 @@ test("secrets reach a harness only when its driver or the factory names them", (
     }),
     service(),
   );
-  expect(names(codex)).toEqual(names(harnessEnv([], service())));
+  expect(names(codex)).toEqual([...BASE].sort());
 
   const pi = harnessEnv(
     piDriver.envAllowlist({
@@ -66,7 +63,7 @@ test("secrets reach a harness only when its driver or the factory names them", (
     }),
     service(),
   );
-  expect(names(pi)).toEqual([...names(harnessEnv([], service())), "OPENROUTER_API_KEY"].sort());
+  expect(names(pi)).toEqual([...BASE, "OPENROUTER_API_KEY"].sort());
 
   expect(names(harnessEnv(["SYNTHETIC_DATABASE_URL"], service()))).toContain(
     "SYNTHETIC_DATABASE_URL",
@@ -88,4 +85,14 @@ test("Pi reaches the session bus only for an OAuth MCP server", () => {
     });
   expect(withServer("oauth")).toContain("DBUS_SESSION_BUS_ADDRESS");
   expect(withServer(false)).not.toContain("DBUS_SESSION_BUS_ADDRESS");
+});
+
+test("only well-formed locale names count as locale", () => {
+  const env = harnessEnv([], {
+    ...service(),
+    "LC_X;touch /tmp/pwned;": "x",
+    LC_: "x",
+    lc_all: "x",
+  });
+  expect(names(env)).toEqual([...BASE].sort());
 });

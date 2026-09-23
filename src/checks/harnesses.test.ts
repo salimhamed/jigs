@@ -183,6 +183,7 @@ test("Pi OpenAI Codex auth requires the provider entry", async () => {
 // Doctor shows the same line the boot would have refused on.
 test("the CLI check reports the shared line, as detail when it passes", async () => {
   const result = await harnessRuntimeCheck("codex", {
+    factoryEnv: () => [],
     resolve: () => "/usr/local/bin/codex",
     exec: async () => ({ stdout: "codex-cli 0.153.4", stderr: "" }),
   }).run();
@@ -192,6 +193,7 @@ test("the CLI check reports the shared line, as detail when it passes", async ()
 
 test("the CLI check fails with the same line as the reason, and the PATH caveat to repair it", async () => {
   const result = await harnessRuntimeCheck("codex", {
+    factoryEnv: () => [],
     resolve: () => "/usr/local/bin/codex",
     exec: async () => ({ stdout: "codex-cli 0.144.6", stderr: "" }),
   }).run();

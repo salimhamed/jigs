@@ -65,13 +65,18 @@ harnesses; `askModel` and `askJev` take model sources.
   declared. There is no pattern-based removal behind the allowlist.
   Environment-specific needs, such as a tool manager's variables or
   `SSH_AUTH_SOCK`, belong in the factory declaration, not in jigs' base set
-  or a driver.
+  or a driver. Proxy URLs pass through unchanged, including any credentials
+  written into them.
 - The factory declaration is names only and applies to every harness the
   factory runs. It lives in factory configuration rather than on harness
   descriptors because these are properties of the host the service runs on:
   preflight checks and the service's own probes run before any descriptor
   exists, and recipes stay portable between factories. A step builds the
-  environment once and hands the same map to its JIT checks and its harness.
+  environment once and hands the same map to its JIT checks and its harness;
+  the service's CLI version probe and the Claude login probe use the same
+  builder. The declaration cannot name a model credential or a variable a
+  driver sets, since those would override the subscription login or the
+  invocation's private home.
 - The Claude driver replaces the child environment at the provider's
   process-launch hook, because the provider assembles its own from the host
   after accepting jigs'. At that seam the driver captures the CLI's stderr and

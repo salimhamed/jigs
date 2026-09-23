@@ -234,9 +234,13 @@ test.skipIf(skipPi || process.platform !== "linux")(
       throw new Error("Pi's launch environment was unread");
     const { PI_CODING_AGENT_DIR: agentDir, ...inherited } = piEnv;
     expect(agentDir?.startsWith(piRunStatePath(runId, { baseDir: piHomes }))).toBe(true);
-    // Compared by name so a failure never prints the host's values. The
-    // launcher may add its own non-credential variables, such as NODE_PATH.
+    // Compared by name so a failure never prints the host's values.
     expect(Object.keys(expectedPiEnv).filter((name) => !(name in inherited))).toEqual([]);
+    // Pi's installed shell launcher sets these for itself.
+    const launcherSet = new Set(["NODE_PATH", "PWD", "SHLVL", "_"]);
+    expect(
+      Object.keys(inherited).filter((name) => !(name in expectedPiEnv) && !launcherSet.has(name)),
+    ).toEqual([]);
     expect(allowlist).toEqual(
       expect.arrayContaining(["SYNTHETIC_MODEL_API_KEY", "SYNTHETIC_MCP_TOKEN"]),
     );

@@ -113,19 +113,23 @@ export const CLAUDE_ENV = ["CLAUDE_CONFIG_DIR"];
 
 // The provider rebuilds the child environment from the host (every
 // ANTHROPIC_*, CLAUDE_*, AWS_* and GOOGLE_* variable among others), so the
-// launch hook replaces it with the step's own. Only the SDK's identity markers
-// are kept from what the provider assembled.
+// launch hook replaces it with the step's own. What the SDK itself added, the
+// keys the host does not have, is kept; the SDK also writes its version marker
+// into the host, so that prefix is kept by name.
 export function claudeProcessSpawner(
   env: Record<string, string>,
+  host: NodeJS.ProcessEnv = process.env,
 ): NonNullable<ClaudeCodeSettings["spawnClaudeCodeProcess"]> {
   return (options: SpawnOptions): SpawnedProcess => {
-    const sdkMarkers = Object.entries(options.env).filter(
+    const sdkAdded = Object.entries(options.env).filter(
       (entry): entry is [string, string] =>
-        entry[0].startsWith("CLAUDE_AGENT_SDK_") && entry[1] !== undefined,
+        entry[1] !== undefined &&
+        !(entry[0] in env) &&
+        (!(entry[0] in host) || entry[0].startsWith("CLAUDE_AGENT_SDK_")),
     );
     return spawnClaudeCode(options, {
+      ...Object.fromEntries(sdkAdded),
       ...env,
-      ...Object.fromEntries(sdkMarkers),
       // Replaces any inherited parent-session marker.
       CLAUDE_CODE_ENTRYPOINT: "sdk-ts",
     });

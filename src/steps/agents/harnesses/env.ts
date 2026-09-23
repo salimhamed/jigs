@@ -33,7 +33,7 @@ export const BASE_ENV = [
   "NODE_EXTRA_CA_CERTS",
 ] as const;
 
-const isLocale = (name: string) => name.startsWith("LC_");
+const isLocale = (name: string) => /^LC_[A-Z0-9_]+$/.test(name);
 
 export function stringEnv(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
   const clean: Record<string, string> = {};
