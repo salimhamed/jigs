@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.54.0
+# @jigs-ai/jigs v0.55.0
 
 Compose ticket claiming, review, snapshots and human handoffs inside a workflow.
 
@@ -416,6 +416,13 @@ A ticket held exclusively by the current workflow run.
 
 > **issueId**: `string`
 
+##### postedCommentIds
+
+> **postedCommentIds**: `string`[]
+
+Every comment this run has posted on the ticket. A parked run skips these
+when it looks for a human's reply.
+
 ##### token
 
 > **token**: `string`
@@ -432,9 +439,9 @@ Ticket-review options left after the factory's durable steps are bound.
 
 ### CheckForTicketHumanReply()
 
-> **CheckForTicketHumanReply** = (`issueId`, `sinceIso`, `postedCommentId`) => `Promise`\<\{ `cursor`: `string`; `reply`: [`HumanReply`](#humanreply) \| `null`; \}\>
+> **CheckForTicketHumanReply** = (`issueId`, `sinceIso`, `postedCommentIds`) => `Promise`\<\{ `cursor`: `string`; `reply`: [`HumanReply`](#humanreply) \| `null`; \}\>
 
-Durable step contract for finding a human reply after a cursor.
+Durable step contract for finding a human reply after a cursor, skipping the run's own comments.
 
 #### Parameters
 
@@ -446,9 +453,9 @@ Durable step contract for finding a human reply after a cursor.
 
 `string`
 
-##### postedCommentId
+##### postedCommentIds
 
-`string`
+readonly `string`[]
 
 #### Returns
 
@@ -559,7 +566,7 @@ Durable step contract for posting a question and recording its cursor.
 
 ### PostTicketNote()
 
-> **PostTicketNote** = (`issueId`, `note`) => `Promise`\<`void`\>
+> **PostTicketNote** = (`issueId`, `note`) => `Promise`\<\{ `commentId`: `string`; \}\>
 
 Posting a note on the ticket that asks for nothing and suspends nothing.
 Declared here rather than written as `typeof postTicketNote` for the same
@@ -577,7 +584,7 @@ reason the halt's step contracts are: the block side owns the contract.
 
 #### Returns
 
-`Promise`\<`void`\>
+`Promise`\<\{ `commentId`: `string`; \}\>
 
 ***
 
@@ -879,6 +886,24 @@ Connect Linear clarification and review to the factory's durable steps.
 
 > **haltForHuman**: [`HaltForHumanFn`](#haltforhumanfn)
 
+##### noteOnTicket()
+
+> **noteOnTicket**: (`claim`, `note`) => `Promise`\<`void`\>
+
+###### Parameters
+
+###### claim
+
+[`TicketClaim`](#ticketclaim)
+
+###### note
+
+[`TicketNote`](#ticketnote)
+
+###### Returns
+
+`Promise`\<`void`\>
+
 ##### reviewTicket()
 
 > **reviewTicket**: (`options`) => `Promise`\<[`TicketHandoff`](#tickethandoff)\>
@@ -986,6 +1011,35 @@ Build the marker token for a run's unanswered ticket comment.
 #### Returns
 
 `string`
+
+***
+
+### noteOnTicket()
+
+> **noteOnTicket**(`claim`, `note`, `deps`): `Promise`\<`void`\>
+
+Post a note on a claimed ticket and record its comment on the claim, so a
+later halt in this run never mistakes it for a human's reply.
+
+#### Parameters
+
+##### claim
+
+[`TicketClaim`](#ticketclaim)
+
+##### note
+
+[`TicketNote`](#ticketnote)
+
+##### deps
+
+###### postTicketNote
+
+[`PostTicketNote`](#postticketnote-2)
+
+#### Returns
+
+`Promise`\<`void`\>
 
 ***
 

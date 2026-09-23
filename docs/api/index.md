@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.54.0
+# @jigs-ai/jigs v0.55.0
 
 Define a factory and describe its workflows, schedules, bindings and merge policy.
 
@@ -296,6 +296,14 @@ Operating settings and deferred workflow modules declared by a factory.
 
 > `optional` **identities**: (\{ `mode`: `"pat"`; \} \| \{ `appId`: `number`; `coAuthor?`: `string`; `installations`: `Record`\<`string`, `number`\>; `mode`: `"app"`; `operator`: `string`; `privateKeyPath`: `string`; \})[]
 
+##### linear?
+
+> `optional` **linear**: `object`
+
+###### identity?
+
+> `optional` **identity**: \{ `mode`: `"key"`; \} \| \{ `mode`: `"app"`; \}
+
 ##### merge?
 
 > `optional` **merge**: `object`
@@ -548,6 +556,22 @@ A workflow entry used where a factory contains several different input schemas.
 > **GitHubDefinition** = `z.input`\<*typeof* `githubSchema`\>
 
 Who jigs is on GitHub: the operator's own token, or a GitHub App installation.
+
+***
+
+### LinearDefinition
+
+> **LinearDefinition** = `z.input`\<*typeof* `linearSchema`\>
+
+Who jigs is on Linear: `key` acts as the user whose `LINEAR_API_KEY` is in
+`.env`, `app` acts as a Linear OAuth application from `LINEAR_CLIENT_ID` and
+`LINEAR_CLIENT_SECRET`. Defaults to `key`.
+
+#### Example
+
+```ts
+linear: { identity: { mode: "app" } },
+```
 
 ***
 
