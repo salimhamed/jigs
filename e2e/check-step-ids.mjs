@@ -1,4 +1,4 @@
-// The only check that can see a broken @salimhamed/jigs packaging, and the
+// The only check that can see a broken @jigs-ai/jigs packaging, and the
 // only one that compiles both the bare scaffold and the optional ship recipe.
 //
 // No jigs package carries a directive, so every durable step id is derived at
@@ -14,7 +14,7 @@
 // new factory would, install the package from the tarball `pnpm pack`
 // emits — what a registry install unpacks, files list and rewritten
 // workspace ranges included — and build it the way a real factory builds,
-// twice: first with @salimhamed/jigs packed at a fake version, then as
+// twice: first with @jigs-ai/jigs packed at a fake version, then as
 // committed, so the tree is left holding a build of the real one. Read the
 // ids back out of each bundle and diff both against the recorded list,
 // because "the ids do not move when the library is versioned" is the property
@@ -49,7 +49,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.join(here, "..");
 const cli = path.join(repo, "dist", "cli.js");
 const jigsPackage = path.join(repo, "package.json");
-const JIGS = "@salimhamed/jigs";
+const JIGS = "@jigs-ai/jigs";
 const FAKE_VERSION = "9.9.9-e2e";
 const PNPM = process.env.JIGS_E2E_PNPM ?? "pnpm";
 
@@ -414,8 +414,8 @@ function installRuntimeFixture() {
   writeFileSync(
     workflow,
     `import { appendFileSync, readFileSync } from "node:fs";
-import type { WorkflowEntry, WorkflowInputs } from "@salimhamed/jigs";
-import { registerResource as registerResourceInsideStep } from "@salimhamed/jigs/steps/runtime";
+import type { WorkflowEntry, WorkflowInputs } from "@jigs-ai/jigs";
+import { registerResource as registerResourceInsideStep } from "@jigs-ai/jigs/steps/runtime";
 import { registerResource } from "#jigs";
 import { defineHook, sleep } from "workflow";
 import { z } from "zod";
@@ -893,7 +893,7 @@ async function checkScaffold(name) {
       `
   import assert from "node:assert/strict";
   import entry from "./.output/server/_chunks/ship.mjs";
-  import { resolveReleasePolicy } from "@salimhamed/jigs/steps/runtime";
+  import { resolveReleasePolicy } from "@jigs-ai/jigs/steps/runtime";
   const workflowName = "workflow//./workflows/ship//shipWorkflow";
   assert.equal(entry.workflow.workflowId, workflowName);
   entry.release = { onSuccess: "keep", onFailure: "release" };

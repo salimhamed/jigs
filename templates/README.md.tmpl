@@ -42,7 +42,7 @@ independently of a workflow's return value.
 
 Factory imports use `#jigs`, `#blocks/<path>`, and `#steps/<path>` from the
 package's `imports` map. The config's workflow loaders stay relative.
-The installed API reference is in `node_modules/@salimhamed/jigs/docs/api/`,
+The installed API reference is in `node_modules/@jigs-ai/jigs/docs/api/`,
 with one Markdown page per package import path.
 
 ## Add the ship recipe
@@ -88,8 +88,6 @@ pnpm test
 Tests inspect the last build, so build first. `jigs up` applies changes to a
 running service. `jigs upgrade` installs a release, refreshes `jigs.ts`, runs
 `jigs up`, and typechecks custom code. Review and commit the generated changes.
-GitHub Packages reads its token from `~/.npmrc`; this factory's `.npmrc` only
-routes the scope.
 
 Changing workflow or step paths or function names changes durable IDs. Finish
 or cancel affected active and parked runs before deploying those changes.

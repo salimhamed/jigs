@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.51.0
+# @jigs-ai/jigs v0.51.0
 
 Compose pull request creation, review, approval and merge gates inside a workflow.
 

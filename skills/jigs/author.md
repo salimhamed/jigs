@@ -2,7 +2,7 @@
 
 Work in the factory repo. Read its `jigs.config.ts`, generated `jigs.ts`, and
 existing `workflows/`, `blocks/`, and `steps/` before editing. The installed
-`node_modules/@salimhamed/jigs/templates/` is the bare scaffold for that version; its only workflow is `hello`.
+`node_modules/@jigs-ai/jigs/templates/` is the bare scaffold for that version; its only workflow is `hello`.
 For the ship process, run `jigs recipe add ship`, then manually add the printed
 `ship: () => import("./workflows/ship.ts"),` line to the config's `workflows` map.
 The command preserves existing files and reports created/kept paths. Recipes
@@ -25,20 +25,20 @@ become editable factory source; upgrades only regenerate `jigs.ts`.
 A workflow calls blocks and steps. A step calls an implementation. Only the
 factory carries directives, so library version changes do not rename its steps.
 Signal an unhappy ending by throwing `JigsError`, imported with
-`import { JigsError } from "@salimhamed/jigs"`; a value returned from a workflow
+`import { JigsError } from "@jigs-ai/jigs"`; a value returned from a workflow
 is treated as success. Its optional second constructor argument is the `hint`
 an operator reads.
 Names and paths can be improved, but changing them changes durable addresses:
 check active and parked runs before deploying a rename, and arrange their
 completion or cancellation with the operator.
 
-Import reusable library code from `@salimhamed/jigs/blocks/<topic>`. The seven
+Import reusable library code from `@jigs-ai/jigs/blocks/<topic>`. The seven
 topics are `agents`, `human`, `linear`, `pull-requests`, `workspaces`, `git`
 and `runtime`. Implementations under `steps/<topic>` belong inside durable
 wrapper bodies. The generated wrappers preserve their names when library
 implementation paths move.
 
-Read the installed API reference at `node_modules/@salimhamed/jigs/docs/api/`;
+Read the installed API reference at `node_modules/@jigs-ai/jigs/docs/api/`;
 its Markdown paths mirror the package import paths.
 
 ## Add a workflow
@@ -111,9 +111,9 @@ of caller options so a call site can override them.
 
 For different durable behavior, write a named custom `"use step"` function and
 bind the appropriate module: `bindAgentSteps` from
-`@salimhamed/jigs/blocks/agents`, `bindLinearSteps` from
-`@salimhamed/jigs/blocks/linear`, or `bindPullRequestSteps` from
-`@salimhamed/jigs/blocks/pull-requests`. Generated integration exports each
+`@jigs-ai/jigs/blocks/agents`, `bindLinearSteps` from
+`@jigs-ai/jigs/blocks/linear`, or `bindPullRequestSteps` from
+`@jigs-ai/jigs/blocks/pull-requests`. Generated integration exports each
 module's dependencies for selective replacement. Keep functions workflow-side;
 never send a prompt or callback through a durable step argument.
 
@@ -129,7 +129,7 @@ Keep a non-idempotent external creator and registration as two durable steps.
 Await the creator, then register what it returned; replay reuses the creator's
 recorded result and retries registration without recreating the external
 resource. An idempotent custom step may instead import `registerResource` from
-`@salimhamed/jigs/steps/runtime` and call it before returning.
+`@jigs-ai/jigs/steps/runtime` and call it before returning.
 
 Use a short stable identity and an absolute URL. The SDK allows 64 total run
 attributes, including other user and reserved keys, a 256-character encoded

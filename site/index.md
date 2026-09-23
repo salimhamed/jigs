@@ -45,9 +45,7 @@ agent prompts. From there, [run an agent](./guide/agents),
 ## What you will need
 
 jigs runs on your machine with Node.js 24 or newer, pnpm, Docker, and installed,
-authenticated Claude Code and Codex CLIs. Installation also needs access to the
-jigs package on GitHub Packages. The source and this documentation are public;
-package access is currently restricted.
+authenticated Claude Code and Codex CLIs. jigs installs from npm as `@jigs-ai/jigs`.
 
 The [getting started guide](./guide/getting-started) walks through those requirements
 and your first run. You do not need Linear or a target GitHub repository for that run.

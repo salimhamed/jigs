@@ -15,17 +15,6 @@ person can judge.
   CLI's own node.
 - Docker, with the daemon running. Each factory brings up its own Postgres; none
   of it is shared.
-- A GitHub **classic** personal access token with `read:packages` (and `repo`
-  while the jigs repo is private), in `~/.npmrc`:
-
-  ```
-  @salimhamed:registry=https://npm.pkg.github.com
-  //npm.pkg.github.com/:_authToken=<token>
-  ```
-
-  Fine-grained tokens cannot read GitHub Packages. A 404 from
-  `npm.pkg.github.com` during an install is this token missing or wrong, not a
-  missing package.
 - The agent harness CLIs the factory's workflows will drive — `claude` and
   `codex` — each logged in to its subscription, and both on the `PATH` of
   whatever starts the service. The service will not start without them, or
@@ -38,16 +27,16 @@ person can judge.
 - On Linux with systemd, run `loginctl enable-linger "$USER"` once so factory
   services survive the last login session ending. `jigs doctor` verifies it.
 
-jigs is one package on GitHub Packages, `@salimhamed/jigs`, pinned by the
-factory to a version. Nothing is cloned and nothing is installed globally:
+jigs is one public npm package, `@jigs-ai/jigs`, pinned by the factory to a version.
+No token or `.npmrc` entry is needed to install it. Nothing is cloned and nothing is installed globally:
 inside a factory, `jigs` means `pnpm exec jigs`.
 
 ## 1. Scaffold the factory
 
 ```sh
 mkdir my-factory && cd my-factory && git init
-pnpm dlx @salimhamed/jigs init                  # jigs acts as the operator
-pnpm dlx @salimhamed/jigs init --github-identity-mode app   # jigs acts as a GitHub App
+pnpm dlx @jigs-ai/jigs init                  # jigs acts as the operator
+pnpm dlx @jigs-ai/jigs init --github-identity-mode app   # jigs acts as a GitHub App
 ```
 
 Choose the identity now: it is written into `jigs.config.ts` as
@@ -253,7 +242,7 @@ just needs `jigs poke <run-id>` to notice its answer.
 jigs upgrade                # or: jigs upgrade --to-version <version>
 ```
 
-normalizes jigs' release-age exclusion, then bumps `@salimhamed/jigs` and runs
+normalizes jigs' release-age exclusion, then bumps `@jigs-ai/jigs` and runs
 `jigs up`. During that `up`, it installs the release, regenerates `jigs.ts`
 through the newly installed CLI, then builds and starts the factory. Finally it
 checks the factory's custom code. It is the only command needed even when an
@@ -268,15 +257,18 @@ is to upgrade `codex` on the machine. A factory made before this release needs
 `ignoredOptionalDependencies: ['@openai/codex']` in its `pnpm-workspace.yaml`
 and should delete any `@openai/codex` dependency or `overrides` entry. A
 factory still installing jigs from a checkout
-(`link:` entries, or the old `jigs` / `@jigs/service` names) is refused;
-switch it to the published package first. So is a factory still depending on
-`@salimhamed/jigs-service`, retired in 0.3.0: drop that line from
-`package.json` and rewrite every `@salimhamed/jigs-service/X` import to
-`@salimhamed/jigs/X` first.
+(`link:` entries, or the old `@jigs/service` name) is refused; switch it to
+the published package first. So is a factory still depending on a retired
+name: `@salimhamed/jigs`, its name on GitHub Packages, or
+`@salimhamed/jigs-service`, retired in 0.3.0. Replace that line in
+`package.json` with `@jigs-ai/jigs` at a version, rewrite every
+`@salimhamed/jigs/X` or `@salimhamed/jigs-service/X` import to
+`@jigs-ai/jigs/X`, and drop the
+`@salimhamed:registry` line from the factory's `.npmrc` first.
 
 pnpm still verifies the whole lockfile against its `minimumReleaseAge` policy
 before it resolves anything. `jigs upgrade` keeps every jigs version covered
-by the `@salimhamed/jigs` exclusion; for other recently published packages,
+by the `@jigs-ai/jigs` exclusion; for other recently published packages,
 leave their `minimumReleaseAgeExclude` entry in `pnpm-workspace.yaml` until
 that install has run, then drop the entry. Both factories hit this moving off
 `@salimhamed/jigs-service`.

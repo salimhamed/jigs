@@ -19,7 +19,7 @@ test("the entry is a real file that composes the app from the factory's config",
   const source = readFileSync(entry, "utf8");
   // An alias would satisfy Nitro and leave the workflow builder's own
   // discovery pass with nothing to find.
-  expect(source).toContain('from "@salimhamed/jigs/app"');
+  expect(source).toContain('from "@jigs-ai/jigs/app"');
   expect(source).toContain('from "./factory.ts"');
 });
 
@@ -28,7 +28,7 @@ test("the schedules plugin is generated beside the entry, holding the ticker", (
   prepare(root);
 
   const source = readFileSync(path.join(root, GENERATED_DIR, "schedules.ts"), "utf8");
-  expect(source).toContain('from "@salimhamed/jigs/schedules"');
+  expect(source).toContain('from "@jigs-ai/jigs/schedules"');
   expect(source).toContain('from "./factory.ts"');
   expect(source).toContain("startSchedules(factory)");
 });

@@ -39,7 +39,6 @@ test("scaffolds a factory that can be installed and built", async () => {
     [
       ".env.example",
       ".gitignore",
-      ".npmrc",
       "README.md",
       "docker-compose.yml",
       "jigs.config.test.ts",
@@ -67,10 +66,7 @@ test("scaffolds a factory that can be installed and built", async () => {
   // scaffold's wrappers and the package they import from drift apart.
   const { version } = JSON.parse(readFileSync(path.join(packageRoot(), "package.json"), "utf8"));
   expect(version).toMatch(/^\d+\.\d+\.\d+$/);
-  expect(pkg.dependencies["@salimhamed/jigs"]).toBe(version);
-  expect(Object.keys(pkg.dependencies).filter((name) => name.startsWith("@salimhamed/"))).toEqual([
-    "@salimhamed/jigs",
-  ]);
+  expect(pkg.dependencies["@jigs-ai/jigs"]).toBe(version);
   expect(JSON.stringify(pkg)).not.toContain("link:");
   // Spike finding 5: pnpm 11 reads allowBuilds only from pnpm-workspace.yaml.
   const workspace = readFileSync(path.join(dir, "pnpm-workspace.yaml"), "utf8");
@@ -83,12 +79,8 @@ test("scaffolds a factory that can be installed and built", async () => {
   // jigs can upgrade immediately without disabling the operator's age policy
   // for any other package.
   expect(workspace).toContain("minimumReleaseAgeExclude");
-  expect(workspace).toContain("'@salimhamed/jigs'");
+  expect(workspace).toContain("'@jigs-ai/jigs'");
   expect(workspace).not.toContain("minimumReleaseAge:");
-  // The scope→registry line only: the token stays in ~/.npmrc.
-  const npmrc = readFileSync(path.join(dir, ".npmrc"), "utf8");
-  expect(npmrc).toContain("@salimhamed:registry=https://npm.pkg.github.com");
-  expect(npmrc).not.toMatch(/^\s*[^#\n]*_authToken/m);
 });
 
 test("every placeholder a template carries is filled in", async () => {
@@ -263,7 +255,6 @@ test("the next steps are printed, not run", async () => {
   expect(printed).toContain("credentials for workflows you add");
   expect(printed).toContain("jigs up --no-doctor");
   expect(printed).toContain("doctor checks GitHub credentials");
-  expect(printed).toContain("read:packages");
   expect(printed).toContain("jigs run hello");
   // `jigs up` owns the machine-touching commands now, one step at a time.
   expect(printed).not.toContain("docker compose");

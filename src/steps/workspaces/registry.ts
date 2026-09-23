@@ -32,7 +32,7 @@ export async function ensureWorktreeRegistry(db: RegistrySql): Promise<void> {
   // Resolve the installed package, not the service chunk Nitro may inline us
   // into. The SQL and journal ship beside dist/, also when installed by pnpm.
   const migrationsFolder = fileURLToPath(
-    new URL("../migrations/", import.meta.resolve("@salimhamed/jigs")),
+    new URL("../migrations/", import.meta.resolve("@jigs-ai/jigs")),
   );
   await migrate(db, {
     migrationsFolder,

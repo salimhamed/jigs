@@ -38,7 +38,7 @@ test("explicit GitHub flags reach the scaffold through the CLI parser", () => {
     writeFileSync(
       configFile,
       readFileSync(configFile, "utf8").replace(
-        'import { defineFactory } from "@salimhamed/jigs";',
+        'import { defineFactory } from "@jigs-ai/jigs";',
         "const defineFactory = (factory) => factory;",
       ),
     );

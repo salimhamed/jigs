@@ -1,11 +1,11 @@
-import type { PullRequestRef, PullRequestWake } from "@salimhamed/jigs/blocks/pull-requests";
+import type { PullRequestRef, PullRequestWake } from "@jigs-ai/jigs/blocks/pull-requests";
 
 type CheckRun = Extract<PullRequestWake, { kind: "ci-red" }>["failing"][number];
 type ReviewThread = Extract<PullRequestWake, { kind: "review-comments" }>["threads"][number];
 
-import type { Worktree } from "@salimhamed/jigs";
-import type { AgentSession, Harness } from "@salimhamed/jigs/blocks/agents";
-import type { MergePolicy } from "@salimhamed/jigs/blocks/pull-requests";
+import type { Worktree } from "@jigs-ai/jigs";
+import type { AgentSession, Harness } from "@jigs-ai/jigs/blocks/agents";
+import type { MergePolicy } from "@jigs-ai/jigs/blocks/pull-requests";
 import type { PullRequestDescription } from "./outputs.ts";
 import type { FindingResponse, ReviewFinding, ReviewRound } from "./review.ts";
 

@@ -85,11 +85,9 @@ test("the summary gate checks direct exports but not their nested members", asyn
     tsconfig: fileURLToPath(new URL("fixtures/tsconfig.json", import.meta.url)),
     validation: typedocOptions.validation,
   });
-  expect(directExportSummaryFailures(project)).toEqual([
-    "@salimhamed/jigs.undocumentedDirectExport",
-  ]);
+  expect(directExportSummaryFailures(project)).toEqual(["@jigs-ai/jigs.undocumentedDirectExport"]);
   expect(() => assertDirectExportSummaries(project)).toThrow(
-    "Direct exports missing a summary:\n- @salimhamed/jigs.undocumentedDirectExport",
+    "Direct exports missing a summary:\n- @jigs-ai/jigs.undocumentedDirectExport",
   );
 });
 
@@ -108,7 +106,7 @@ test("the real renderer writes stable subpath pages with the package version", a
   const firstPage = await readFile(path.join(first, entry.output), "utf8");
   const secondPage = await readFile(path.join(second, entry.output), "utf8");
   const { version } = JSON.parse(await readFile(path.join(rootDir, "package.json"), "utf8"));
-  expect(firstPage).toContain(`@salimhamed/jigs v${version}`);
+  expect(firstPage).toContain(`@jigs-ai/jigs v${version}`);
   expect(firstPage).toContain('Wrap steps in a factory-owned `"use step"` file.');
   expect(firstPage).not.toContain("Defined in:");
   expect(firstPage).toBe(secondPage);

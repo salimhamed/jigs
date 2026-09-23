@@ -12,9 +12,9 @@ export async function generateIntegration(deps: {
   const resolve = createRequire(path.join(root, "package.json"));
   let entry: string;
   try {
-    entry = resolve.resolve("@salimhamed/jigs/build");
+    entry = resolve.resolve("@jigs-ai/jigs/build");
   } catch {
-    throw new JigsError(`@salimhamed/jigs is not installed in ${root}`, "run pnpm install first");
+    throw new JigsError(`@jigs-ai/jigs is not installed in ${root}`, "run pnpm install first");
   }
   const { generateFactoryIntegration } = await import(pathToFileURL(entry).href);
   generateFactoryIntegration(root);

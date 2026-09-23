@@ -9,7 +9,7 @@ import { SERVICE_ENTRY } from "./service-lifecycle.ts";
 
 // Compiles a factory repo's own workflows into its own service bundle. Both
 // halves of the work belong to the factory, not to this CLI: the generated
-// entry comes from the @salimhamed/jigs the factory installed, and the
+// entry comes from the @jigs-ai/jigs the factory installed, and the
 // compiler is the nitro the factory installed.
 
 export type Prepare = (factoryRoot: string) => unknown;
@@ -55,7 +55,7 @@ function echo(result: Partial<ExecOutput>, out: (line: string) => void): void {
 }
 
 /**
- * The generated entry comes from the factory's own @salimhamed/jigs, reached
+ * The generated entry comes from the factory's own @jigs-ai/jigs, reached
  * through two deliberate indirections:
  *
  * - dynamically, because `dist/cli.js` is a bundled artifact: a static import
@@ -67,10 +67,10 @@ async function loadPrepare(factoryRoot: string): Promise<Prepare> {
   const resolveFromFactory = createRequire(path.join(factoryRoot, "package.json"));
   let entry: string;
   try {
-    entry = resolveFromFactory.resolve("@salimhamed/jigs/build");
+    entry = resolveFromFactory.resolve("@jigs-ai/jigs/build");
   } catch {
     throw new JigsError(
-      `@salimhamed/jigs is not installed in ${factoryRoot}`,
+      `@jigs-ai/jigs is not installed in ${factoryRoot}`,
       `run pnpm install in ${factoryRoot}`,
     );
   }

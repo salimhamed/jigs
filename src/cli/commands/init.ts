@@ -152,8 +152,6 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
       "  cp .env.example .env    # credentials for workflows you add (the App needs no GITHUB_TOKEN)",
     );
   }
-  deps.out("  # the install reads @salimhamed/* from GitHub Packages — ~/.npmrc needs");
-  deps.out("  #   //npm.pkg.github.com/:_authToken=<a token with read:packages>");
   deps.out("  jigs up --no-doctor     # bare hello needs no integration credentials");
   deps.out(
     "  # doctor checks GitHub credentials; use plain jigs up after configuring integrations",

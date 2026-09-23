@@ -8,8 +8,6 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
-  # For the publish job: GITHUB_TOKEN writes this repo's GitHub Packages.
-  packages: write
 
 # Main pushes share a group, so they queue instead of racing release-please.
 # The release branch uses its own group so generated docs can be committed
@@ -102,6 +100,11 @@ jobs:
     needs: release-please
     if: ${{ !cancelled() && needs.release-please.outputs.releases_created == 'true' }}
     runs-on: ubuntu-latest
+    # npm trusted publishing: the registry trusts this workflow's OIDC token,
+    # so no npm token is stored anywhere, and it attaches provenance.
+    permissions:
+      contents: read
+      id-token: write
     steps:
       # The tag, not the triggering push: release-please reads main over the
       # API, so the run that cuts a tag can be checked out at an older commit.
@@ -113,36 +116,33 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          # Writes //npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN} into
-          # the runner's npmrc; publishConfig.registry in each package.json
-          # names the same host.
-          registry-url: https://npm.pkg.github.com
-          scope: "@salimhamed"
+          registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - name: Publish to GitHub Packages
-        env:
-          # GITHUB_TOKEN, not the PAT: a publish raises no workflow event this
-          # design waits on, and `packages: write` above is exactly the grant.
-          # No provenance flag either — attestations exist only on npmjs.
-          NODE_AUTH_TOKEN: ${{ github.token }}
+      # Trusted publishing needs npm 11.5.1 or later, and the npm CLI rather
+      # than pnpm publish, which the npm docs do not list as supported.
+      - name: Ensure npm supports trusted publishing
+        run: |
+          set -euo pipefail
+          if ! node -e 'const [a,b,c]=process.argv[1].split(".").map(Number);process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)' "$(npm -v)"; then
+            npm install -g npm@11
+          fi
+          npm -v
+      - name: Publish to npm
         run: |
           set -euo pipefail
           # A version already on the registry is a re-run of this job, not a
           # failure: the registry refuses to publish over it, so skip it.
-          # --no-git-checks: the checkout is detached at the squash commit,
-          # which pnpm otherwise refuses as "not on a branch".
           name="$(node -p "require('./package.json').name")"
           version="$(node -p "require('./package.json').version")"
           if npm view "$name@$version" version >/dev/null 2>&1; then
             echo "$name@$version is already published — skipping"
           else
-            pnpm publish --no-git-checks --access restricted
+            npm publish --access public
           fi
 
       - name: Verify the released version reached the registry
         env:
-          NODE_AUTH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.release-please.outputs.tag_name }}
         run: |
           set -euo pipefail

@@ -29,12 +29,12 @@ add that, set this up — go back to `SKILL.md` and take the route it belongs to
    workflow calls, `steps/` is the work those calls do, `service/` is the
    long-running process, and beside them sit `cli/`, `checks/`, `providers/`
    and `config/`. The README's Layout section explains the split. Inside a
-   factory the installed copy is `node_modules/@salimhamed/jigs/dist/` —
+   factory the installed copy is `node_modules/@jigs-ai/jigs/dist/` —
    compiled, but the exports map names each module.
 
 For a question about how a factory is written rather than how jigs works, the
 worked example is what `jigs init` scaffolds: one `.tmpl` per file under
-`node_modules/@salimhamed/jigs/templates/` in any factory, or
+`node_modules/@jigs-ai/jigs/templates/` in any factory, or
 `templates/` in the repo.
 
 ## How to answer

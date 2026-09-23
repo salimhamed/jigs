@@ -31,14 +31,16 @@ would raise no `push`, so release-please would never run again and the tags and
 Releases would never be cut. The PR merges and nothing ships — a silent
 failure, and the reason the token appears in both steps.
 
-**The publish job authenticates as `GITHUB_TOKEN`, never the PAT.** The
-anti-loop rule that forces the PAT above does not apply to a publish: nothing
-downstream waits on an event it raises. What a publish needs is a write to this
-repo's GitHub Packages, and the workflow's `packages: write` grant is exactly
-that and nothing more — a PAT would carry `write:packages` across every
-repository the human can reach, sitting in a secret for the one job that does
-not need it. Each `package.json` names the repository, which is how GitHub
-Packages links the package to it and lets the repo-scoped token publish.
+**The publish job authenticates with npm trusted publishing, never a stored
+token.** The anti-loop rule that forces the PAT above does not apply to a
+publish: nothing downstream waits on an event it raises. npmjs.com trusts this
+repository's `release.yml` as the publisher of `@jigs-ai/jigs`, so the job's
+`id-token: write` grant is the whole credential: no npm token sits in a secret,
+and npm attaches a provenance attestation to every version. Trusted publishing
+needs the npm CLI (11.5.1 or later), so the job publishes with `npm publish`
+rather than `pnpm publish`, and `repository.url` in `package.json` must name
+this repository exactly. npm offers a trusted publisher only for a package that
+already exists, so the first version was published by hand.
 
 ## Consequences
 
@@ -83,17 +85,17 @@ Packages links the package to it and lets the repo-scoped token publish.
   `vX.Y.Z` needs a root package to hang the tag on, and the root
   `package.json` has no version and must not grow one, since it is not a
   released thing.
-- **The run that cuts the Release also publishes the package** to GitHub
-  Packages as `@salimhamed/jigs` (`restricted`: the repo is private, and so is
-  the registry entry). release-please itself
+- **The run that cuts the Release also publishes the package** to public npm
+  as `@jigs-ai/jigs`. It moved there from GitHub Packages, where installs
+  needed a classic token with `read:packages` on every machine. The package is
+  scoped because npm rejects the unscoped `jigs` name as too similar to
+  existing packages. release-please itself
   publishes nothing — the `node` strategy only rewrites `package.json` and the
   CHANGELOGs — so a `publish` job runs after it, gated on `releases_created`,
   and skips a version the registry already holds so a re-run of the workflow
-  is idempotent rather than a conflict. No provenance attestation: npm only
-  issues those on the public registry. A factory upgrades with `jigs upgrade`
-  (the pin, then `jigs up`, then its typecheck); a consumer needs a token
-  with `read:packages` in `~/.npmrc`, and the scaffolded `.npmrc` carries only
-  the scope-to-registry line. The dependency shape and the consumer side are
+  is idempotent rather than a conflict. A factory upgrades with `jigs upgrade`
+  (the pin, then `jigs up`, then its typecheck) and needs no registry setup.
+  The dependency shape and the consumer side are
   [ADR 0017](./0017-single-package.md).
 - **The release branch owns generated API reference updates.** Once
   release-please writes the bumped version, a branch-only `api-docs` job

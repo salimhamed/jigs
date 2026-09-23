@@ -1,18 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 
 type PullRequestSnapshot = Awaited<
-  ReturnType<typeof import("@salimhamed/jigs/steps/pull-requests").fetchPullRequestState>
+  ReturnType<typeof import("@jigs-ai/jigs/steps/pull-requests").fetchPullRequestState>
 >;
 type PullRequestComment = PullRequestSnapshot["conversationComments"][number];
 type ReviewThread = PullRequestSnapshot["reviewThreads"][number];
 
-import type { Harness, RunAgentFn } from "@salimhamed/jigs/blocks/agents";
-import { harnesses, models, unwrapAgentStep } from "@salimhamed/jigs/blocks/agents";
+import type { Harness, RunAgentFn } from "@jigs-ai/jigs/blocks/agents";
+import { harnesses, models, unwrapAgentStep } from "@jigs-ai/jigs/blocks/agents";
 
 const resumeFailed = (detail: string) => unwrapAgentStep({ resumeFailed: detail });
 
-import type { MergePolicy, PullRequestWake } from "@salimhamed/jigs/blocks/pull-requests";
-import { parseMarkers, pullRequestGate } from "@salimhamed/jigs/blocks/pull-requests";
+import type { MergePolicy, PullRequestWake } from "@jigs-ai/jigs/blocks/pull-requests";
+import { parseMarkers, pullRequestGate } from "@jigs-ai/jigs/blocks/pull-requests";
 import * as jigs from "#jigs";
 import * as delivery from "./delivery.ts";
 import { pullRequestDescription } from "./outputs.ts";
@@ -28,8 +28,8 @@ interface DeliverySteps {
   resolveRepository: typeof jigs.resolveRepository;
   openPullRequest: typeof jigs.openPullRequest;
   registerResource: typeof jigs.registerResource;
-  commentOnPullRequest: typeof import("@salimhamed/jigs/steps/pull-requests").commentOnPullRequest;
-  replyToPullRequestReviewThread: typeof import("@salimhamed/jigs/steps/pull-requests").replyToPullRequestReviewThread;
+  commentOnPullRequest: typeof import("@jigs-ai/jigs/steps/pull-requests").commentOnPullRequest;
+  replyToPullRequestReviewThread: typeof import("@jigs-ai/jigs/steps/pull-requests").replyToPullRequestReviewThread;
   mergePullRequest: typeof jigs.mergePullRequest;
 }
 vi.mock("#jigs", () => ({

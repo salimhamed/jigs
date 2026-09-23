@@ -11,30 +11,17 @@ Have these ready before you begin:
 - Docker with its daemon running.
 - Both Claude Code (`claude`) and Codex (`codex`) installed and on your shell’s
   `PATH`. Log in with `claude auth login` and `codex login`.
-- Access to `@salimhamed/jigs` on GitHub Packages, and a GitHub **classic** personal
-  access token with `read:packages`. The token’s account must have package access;
-  the public source repository does not make the restricted package public.
 
 The service currently requires both agent CLIs even for `hello`. If you use a
 Node version manager, start the service from a shell where Node and both CLIs work.
 
-## 2. Configure package access
-
-Add these lines to your user-level `~/.npmrc`, replacing the placeholder with
-your token. Do this once per machine. Keep the token out of your repository.
-
-```ini
-@salimhamed:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=YOUR_CLASSIC_GITHUB_TOKEN
-```
-
-## 3. Create your factory
+## 2. Create your factory
 
 ```sh
 mkdir my-factory
 cd my-factory
 git init
-pnpm dlx @salimhamed/jigs init
+pnpm dlx @jigs-ai/jigs init
 ```
 
 The command writes your starting files and prints the next steps. It does not
@@ -45,7 +32,7 @@ Open `workflows/hello.ts`. It creates a scratch directory for a run, removes it,
 and returns the message you supply. `jigs.config.ts` registers that workflow under
 the name `hello`.
 
-## 4. Start the service
+## 3. Start the service
 
 ```sh
 cp .env.example .env
@@ -61,7 +48,7 @@ GitHub credentials even though `hello` does not use GitHub. The database and
 machine requirements still apply. No Linear or GitHub integration credentials
 are needed for `hello` itself; your package token is still needed for installation.
 
-## 5. Launch and inspect a run
+## 4. Launch and inspect a run
 
 ```sh
 pnpm exec jigs run hello --input message=hello

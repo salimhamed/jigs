@@ -283,7 +283,7 @@ comment — no separate console, and no second run.
 
 ```ts
 import type { LimitReached } from "#blocks/delivery/types";
-import type { TicketClaim } from "@salimhamed/jigs/blocks/linear";
+import type { TicketClaim } from "@jigs-ai/jigs/blocks/linear";
 import { haltForHuman } from "#jigs";
 
 declare const claim: TicketClaim;
@@ -322,7 +322,7 @@ Import the bound operation from your generated `jigs.ts`, which every factory
 file reaches at the same root-anchored specifier:
 
 ```ts
-import { harnesses } from "@salimhamed/jigs/blocks/agents";
+import { harnesses } from "@jigs-ai/jigs/blocks/agents";
 import { deliverChange } from "#blocks/delivery/delivery";
 import { resolveMergePolicy } from "#jigs";
 
@@ -348,7 +348,7 @@ implementation harness. Configure any of them independently — each takes its o
 source, since it can run models from more than one provider:
 
 ```ts
-import { harnesses, models } from "@salimhamed/jigs/blocks/agents";
+import { harnesses, models } from "@jigs-ai/jigs/blocks/agents";
 import { deliverChange } from "#blocks/delivery/delivery";
 import { resolveMergePolicy } from "#jigs";
 
@@ -434,7 +434,7 @@ Every context carries `renderDefaultPrompt()`, which renders what the recipe wou
 have sent for this attempt. Await it to extend the default:
 
 ```ts
-import { harnesses } from "@salimhamed/jigs/blocks/agents";
+import { harnesses } from "@jigs-ai/jigs/blocks/agents";
 import type { ReviewPromptContext } from "#blocks/delivery/types";
 
 const review = {
@@ -450,7 +450,7 @@ Ignore it and the default is replaced outright — an equally supported use. The
 role's own context is what a replacement is written against:
 
 ```ts
-import { harnesses } from "@salimhamed/jigs/blocks/agents";
+import { harnesses } from "@jigs-ai/jigs/blocks/agents";
 import type { ImplementationPromptContext } from "#blocks/delivery/types";
 
 const implementation = {
@@ -487,7 +487,7 @@ carries. `id` is what a note is posted back to when a budget runs out. The extra
 result, with no explicit generic argument and no cast:
 
 ```ts
-import { harnesses } from "@salimhamed/jigs/blocks/agents";
+import { harnesses } from "@jigs-ai/jigs/blocks/agents";
 import type { WorkItem } from "#blocks/delivery/types";
 import { deliverChange } from "#blocks/delivery/delivery";
 import { resolveMergePolicy } from "#jigs";
