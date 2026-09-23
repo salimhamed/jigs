@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.55.0
+# @jigs-ai/jigs v0.55.1
 
 Start the Workflow runtime and the jigs services that depend on it.
 

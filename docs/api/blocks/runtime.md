@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.55.0
+# @jigs-ai/jigs v0.55.1
 
 Describe run-owned resources, inspect cleanup progress and request release from a workflow.
 
