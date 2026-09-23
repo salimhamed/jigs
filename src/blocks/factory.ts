@@ -55,12 +55,11 @@ export type TicketWorkflowInputs<S extends z.ZodType<{ ticket: string }>> = Work
 export interface WorkflowEntry<S extends z.ZodType = z.ZodType> {
   workflow: (inputs: WorkflowInputs<S>) => Promise<unknown>;
   inputs: S;
-  // The manifest half of preflight's computed check list.
   /**
    * What the workflow needs before a run can start: integrations, bindings,
    * the harnesses it runs and the API model sources it calls. The service
-   * checks each harness CLI when it starts, and preflight checks the rest
-   * before every run. List only what the workflow actually uses.
+   * checks harness CLIs when it starts, and preflight checks everything
+   * listed before every run. List only what the workflow actually uses.
    */
   requires?: WorkflowRequires;
   release?: ReleasePolicy;
