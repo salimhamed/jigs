@@ -100,14 +100,14 @@ export async function postTicketNote(issueId: string, note: TicketNote) {
   return linearOperations.postTicketNote(issueId, note);
 }
 
-/** Look for a human reply since the last check, excluding the run's own question. */
+/** Look for a human reply since the last check, excluding every comment the run posted. */
 export async function checkForTicketHumanReply(
   issueId: string,
   sinceIso: string,
-  postedCommentId: string,
+  postedCommentIds: readonly string[],
 ) {
   "use step";
-  return linearOperations.checkForTicketHumanReply(issueId, sinceIso, postedCommentId);
+  return linearOperations.checkForTicketHumanReply(issueId, sinceIso, postedCommentIds);
 }
 
 /** Read a pull request's reviews, comments, CI results, and merge state. */
@@ -314,6 +314,9 @@ export const runAgentOrHalt = linear.runAgentOrHalt;
 
 /** Clarify a Linear ticket and prepare an implementation brief. */
 export const reviewTicket = linear.reviewTicket;
+
+/** Post a note on a claimed ticket that asks for nothing and waits for nothing. */
+export const noteOnTicket = linear.noteOnTicket;
 
 /** Durable operations used by pull-request blocks. */
 export const pullRequestSteps = { fetchPullRequestState };
