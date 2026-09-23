@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.55.0
+# @jigs-ai/jigs v0.55.1
 
 Create the HTTP application that serves a factory's workflow and webhook endpoints.
 
