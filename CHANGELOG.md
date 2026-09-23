@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.55.1](https://github.com/salimhamed/jigs/compare/jigs-v0.55.0...jigs-v0.55.1) (2026-09-23)
+
+
+### Bug Fixes
+
+* **cli:** finish jigs upgrade under the newly installed version ([#370](https://github.com/salimhamed/jigs/issues/370)) ([5025231](https://github.com/salimhamed/jigs/commit/50252315d16aace45ca3b93d412f6a5e645d2650))
+
 ## [0.55.0](https://github.com/salimhamed/jigs/compare/jigs-v0.54.0...jigs-v0.55.0) (2026-09-23)
 
 
