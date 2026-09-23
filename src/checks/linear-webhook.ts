@@ -1,4 +1,9 @@
-import { readFactoryConfig } from "../config/factory-config.ts";
+import { readFactoryConfig, type WebhooksConfig } from "../config/factory-config.ts";
+import {
+  missingWebhookSecret,
+  webhookSecret,
+  webhookSecretRepair,
+} from "../config/webhook-secret.ts";
 import { type LinearWebhook, listWebhooks } from "../providers/linear.ts";
 import type { Check, CheckResult } from "./catalog.ts";
 
@@ -8,18 +13,32 @@ export interface LinearWebhookChecksOptions {
 }
 
 export function linearWebhookChecks(options: LinearWebhookChecksOptions): Check[] {
-  let ingressUrl: string | undefined;
+  let webhooks: WebhooksConfig | undefined;
   try {
-    const root = options.factoryRoot();
-    ingressUrl = readFactoryConfig(root).ingressUrl;
+    webhooks = readFactoryConfig(options.factoryRoot()).webhooks;
   } catch {
     // The binding catalog owns the single factory-config failure.
     return [];
   }
-  if (ingressUrl === undefined) return [];
+  // Off, ticket halts are polled and there is no Linear webhook to have.
+  if (webhooks === undefined || !webhooks.linear.enabled) return [];
 
-  const url = `${ingressUrl.replace(/\/+$/, "")}/ingress/linear`;
+  const url = `${webhooks.url.replace(/\/+$/, "")}/ingress/linear`;
   return [
+    {
+      id: "linear.webhook-secret",
+      label: "Linear webhook secret",
+      run: async () => {
+        const root = options.factoryRoot();
+        return webhookSecret("linear", root) !== undefined
+          ? { ok: true }
+          : {
+              ok: false,
+              reason: `webhooks.linear is enabled but ${missingWebhookSecret("linear", root)}`,
+              repair: webhookSecretRepair("linear", root),
+            };
+      },
+    },
     {
       id: "linear.webhook",
       label: "Linear webhook",

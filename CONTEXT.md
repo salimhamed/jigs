@@ -202,13 +202,15 @@ when possible, or rebuilt from the run’s record when necessary.
 _Avoid_: implementer, author agent
 
 **Ingress**:
-The service’s entry point for provider webhooks, translating external
-activity into wakes for existing runs.
+The service’s optional entry point for provider webhooks, translating external
+activity into wakes for existing runs. Each provider’s route exists only when
+that provider’s webhooks are enabled. The service’s poll wakes parked runs
+either way; the ingress only wakes them sooner.
 _Avoid_: webhook handler, receiver, endpoint
 
 **Wake**:
 A notification asking a suspended run to recheck its satisfier.
-A webhook, manual poke or reconciliation can supply it.
+A webhook, the service’s poll, a manual poke or reconciliation can supply it.
 _Avoid_: trigger, notification
 
 **Claim**:

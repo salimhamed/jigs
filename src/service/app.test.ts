@@ -49,6 +49,11 @@ const fixture = {
       inputs: z.object({ when: z.date(), name: z.string() }),
     },
   },
+  webhooks: {
+    url: "https://factory.example.ts.net",
+    github: { enabled: true },
+    linear: { enabled: true },
+  },
 } satisfies Factory;
 
 const RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
@@ -147,6 +152,59 @@ const commentPayload = () =>
     data: { id: "c1", body: "reply", issueId: crypto.randomUUID() },
   });
 
+test.each([
+  ["no webhooks block", undefined],
+  [
+    "each provider switched off",
+    {
+      url: "https://factory.example.ts.net",
+      github: { enabled: false },
+      linear: { enabled: false },
+    },
+  ],
+])("with %s, neither ingress route exists", async (_name, webhooks) => {
+  const polling = createApp({ workflows: fixture.workflows, webhooks });
+  const body = commentPayload();
+  const github = await polling.request("/ingress/github", {
+    method: "POST",
+    body: reviewPayload,
+    headers: { "x-hub-signature-256": `sha256=${sign(reviewPayload, "gh-hook-secret")}` },
+  });
+  const linearDelivery = await polling.request("/ingress/linear", {
+    method: "POST",
+    body,
+    headers: { "linear-signature": sign(body, "linear-hook-secret") },
+  });
+  expect([github.status, linearDelivery.status]).toEqual([404, 404]);
+  expect(resumeHookMock).not.toHaveBeenCalled();
+});
+
+test("one provider switched on mounts only its own route", async () => {
+  const githubOnly = createApp({
+    workflows: fixture.workflows,
+    webhooks: { url: "https://f.test", github: { enabled: true }, linear: { enabled: false } },
+  });
+  const body = commentPayload();
+  expect(
+    (
+      await githubOnly.request("/ingress/linear", {
+        method: "POST",
+        body,
+        headers: { "linear-signature": sign(body, "linear-hook-secret") },
+      })
+    ).status,
+  ).toBe(404);
+  expect(
+    (
+      await githubOnly.request("/ingress/github", {
+        method: "POST",
+        body: reviewPayload,
+        headers: { "x-github-event": "pull_request_review" },
+      })
+    ).status,
+  ).toBe(401);
+});
+
 test("POST /ingress/github with a forged signature is a 401", async () => {
   const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
   const res = await postGithub(reviewPayload, {
@@ -166,17 +224,14 @@ test("POST /ingress/github without a signature header is a 401", async () => {
   expect(res.status).toBe(401);
 });
 
-test("POST /ingress/github without a configured secret is a 503", async () => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+test("POST /ingress/github without a configured secret fails closed", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => undefined);
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "");
   const res = await postGithub(reviewPayload, {
-    "x-hub-signature-256": `sha256=${sign(reviewPayload, "gh-hook-secret")}`,
+    "x-hub-signature-256": `sha256=${sign(reviewPayload, "")}`,
   });
-  expect(res.status).toBe(503);
-  expect(await res.json()).toEqual({ error: "webhook secret not configured" });
-  expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[ingress] github rejected reason=configuration event=unknown",
-  );
+  expect(res.status).toBe(401);
+  expect(resumeHookMock).not.toHaveBeenCalled();
 });
 
 test("a validly signed PR review delivery nobody is listening to is acknowledged", async () => {

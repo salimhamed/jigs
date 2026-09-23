@@ -95,7 +95,10 @@ test("re-bind refuses an expression-backed remote before the webhook leg", async
   stubWebhookEnv();
   await bindRepo(API, deps());
   const expressionConfig = `const remote = ${JSON.stringify(API)};\n${jigsConfig()
-    .replace("export default {", 'export default { ingressUrl: "https://factory.example.ts.net",')
+    .replace(
+      "export default {",
+      'export default { webhooks: { url: "https://factory.example.ts.net", github: { enabled: true }, linear: { enabled: false } },',
+    )
     .replace(`remote: "${API}"`, "remote")}`;
   writeFileSync(path.join(factory, "jigs.config.ts"), expressionConfig);
 
@@ -240,16 +243,16 @@ function bearerOf(call: number): string | null {
   return new Headers(init.headers).get("authorization");
 }
 
-function makeIngressFactory(): void {
+function makeWebhookFactory(): void {
   writeFileSync(
     path.join(factory, "jigs.config.ts"),
-    'export default { ingressUrl: "https://factory.example.ts.net", service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
+    'export default { webhooks: { url: "https://factory.example.ts.net", github: { enabled: true }, linear: { enabled: false } }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
   );
 }
 
 test("re-bind verifies the webhook and re-sends the current secret", async () => {
   stubWebhookEnv();
-  makeIngressFactory();
+  makeWebhookFactory();
   fetchMock
     .mockResolvedValueOnce(new Response("[]"))
     .mockResolvedValueOnce(new Response(JSON.stringify({ id: 9 })));
@@ -293,7 +296,7 @@ test("re-bind verifies the webhook and re-sends the current secret", async () =>
 test("bind refuses a webhook without GITHUB_WEBHOOK_SECRET and makes no GitHub call", async () => {
   stubWebhookEnv();
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "");
-  makeIngressFactory();
+  makeWebhookFactory();
   const envFile = path.join(factory, ".env");
   const failure = await bindRepo(API, deps()).then(
     () => null,
@@ -310,7 +313,7 @@ test("bind refuses a webhook without GITHUB_WEBHOOK_SECRET and makes no GitHub c
 
 test("bind names other jigs hook hosts after its result", async () => {
   stubWebhookEnv();
-  makeIngressFactory();
+  makeWebhookFactory();
   fetchMock
     .mockResolvedValueOnce(
       new Response(
@@ -337,11 +340,28 @@ test("bind names other jigs hook hosts after its result", async () => {
   );
 });
 
-test("bind without ingressUrl skips the webhook leg with a note", async () => {
+test("bind without a webhooks block skips the webhook leg and says PR waits poll", async () => {
   stubWebhookEnv();
   const result = await bindRepo(API, deps());
   expect(result.webhook).toBe("skipped");
-  expect(lines.some((l) => l.includes("no ingressUrl"))).toBe(true);
+  expect(lines).toContain(
+    "note: skipping webhook (GitHub webhooks are off); pull request waits poll every 300 seconds",
+  );
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test("bind with GitHub webhooks off needs neither secret nor token, and names the interval", async () => {
+  vi.stubEnv("GITHUB_WEBHOOK_SECRET", "");
+  vi.stubEnv("GITHUB_TOKEN", "");
+  writeFileSync(
+    path.join(factory, "jigs.config.ts"),
+    'export default { webhooks: { url: "https://factory.example.ts.net", github: { enabled: false }, linear: { enabled: true } }, service: { port: 8990, dashboardPort: 9090, pollIntervalSeconds: { github: 60 } }, workflows: {} };',
+  );
+  const result = await bindRepo(API, deps());
+  expect(result.webhook).toBe("skipped");
+  expect(lines).toContain(
+    "note: skipping webhook (GitHub webhooks are off); pull request waits poll every 60 seconds",
+  );
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
@@ -388,7 +408,7 @@ test("a label permission failure preserves the binding after ensuring the webhoo
   stubWebhookEnv();
   writeFileSync(
     path.join(factory, "jigs.config.ts"),
-    'export default { ingressUrl: "https://factory.example.ts.net", merge: { by: "jigs", method: "squash", approval: { kind: "label", name: "ship-it" } }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
+    'export default { webhooks: { url: "https://factory.example.ts.net", github: { enabled: true }, linear: { enabled: false } }, merge: { by: "jigs", method: "squash", approval: { kind: "label", name: "ship-it" } }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
   );
   fetchMock
     .mockResolvedValueOnce(new Response("[]"))
@@ -443,7 +463,7 @@ test("bind prints a merge-policy repair but still resolves successfully", async 
 test("no GITHUB_TOKEN anywhere fails with the repair, and the retry ensures the webhook", async () => {
   stubWebhookEnv();
   vi.stubEnv("GITHUB_TOKEN", "");
-  makeIngressFactory();
+  makeWebhookFactory();
   const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
   expect(String(failure)).toContain("GITHUB_TOKEN is not set");
   expect((failure as { hint?: string }).hint).toContain("admin:repo_hook");
@@ -465,7 +485,7 @@ test("no GITHUB_TOKEN anywhere fails with the repair, and the retry ensures the 
 test("the repair carries --binding-name, so the retry lands on the same binding", async () => {
   stubWebhookEnv();
   vi.stubEnv("GITHUB_TOKEN", "");
-  makeIngressFactory();
+  makeWebhookFactory();
   const failure = await bindRepo(API, deps(), { name: "forge" }).catch((err: unknown) => err);
   expect((failure as { hint?: string }).hint).toContain(
     `re-run: jigs bind ${API} --binding-name forge`,
@@ -477,7 +497,7 @@ test("an alias match is named in the repair command", async () => {
   vi.stubEnv("GITHUB_TOKEN", "");
   writeConfig(
     `gambit: { remote: ${JSON.stringify(API)} }`,
-    'ingressUrl: "https://factory.example.ts.net", ',
+    'webhooks: { url: "https://factory.example.ts.net", github: { enabled: true }, linear: { enabled: false } }, ',
   );
 
   const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
@@ -489,7 +509,7 @@ test("an alias match is named in the repair command", async () => {
 
 test("a failure GitHub did not lay on the token does not send the operator after one", async () => {
   stubWebhookEnv();
-  makeIngressFactory();
+  makeWebhookFactory();
   fetchMock.mockRejectedValueOnce(new Error("fetch failed"));
   const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
   expect(String(failure)).toContain("fetch failed");
@@ -500,7 +520,7 @@ test("a failure GitHub did not lay on the token does not send the operator after
 
 test("a token GitHub rejects fails with the repair, and the retry ensures the webhook", async () => {
   stubWebhookEnv();
-  makeIngressFactory();
+  makeWebhookFactory();
   fetchMock.mockResolvedValueOnce(new Response("Bad credentials", { status: 401 }));
   const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
   expect(String(failure)).toContain("401");
@@ -517,7 +537,7 @@ test("a token GitHub rejects fails with the repair, and the retry ensures the we
 test("the webhook token comes from the factory's .env when the shell has none", async () => {
   stubWebhookEnv();
   vi.stubEnv("GITHUB_TOKEN", "");
-  makeIngressFactory();
+  makeWebhookFactory();
   writeFileSync(path.join(factory, ".env"), "GITHUB_TOKEN=from_dotenv\n");
   fetchMock
     .mockResolvedValueOnce(new Response("[]"))
@@ -528,7 +548,7 @@ test("the webhook token comes from the factory's .env when the shell has none", 
 
 test("an exported GITHUB_TOKEN wins over the factory's .env", async () => {
   stubWebhookEnv();
-  makeIngressFactory();
+  makeWebhookFactory();
   writeFileSync(path.join(factory, ".env"), "GITHUB_TOKEN=from_dotenv\n");
   fetchMock
     .mockResolvedValueOnce(new Response("[]"))
@@ -539,7 +559,7 @@ test("an exported GITHUB_TOKEN wins over the factory's .env", async () => {
 
 test("a rate-limited 403 does not send the operator after a new token", async () => {
   stubWebhookEnv();
-  makeIngressFactory();
+  makeWebhookFactory();
   fetchMock.mockResolvedValueOnce(
     new Response("You have exceeded a secondary rate limit", { status: 403 }),
   );
@@ -551,7 +571,7 @@ test("a rate-limited 403 does not send the operator after a new token", async ()
 
 test("a 403 on the token's scopes asks for a token that carries them", async () => {
   stubWebhookEnv();
-  makeIngressFactory();
+  makeWebhookFactory();
   fetchMock.mockResolvedValueOnce(
     new Response("Resource not accessible by personal access token", {
       status: 403,
@@ -563,7 +583,7 @@ test("a 403 on the token's scopes asks for a token that carries them", async () 
 
 test("a 404 sends the operator to the remote, not to a new token", async () => {
   stubWebhookEnv();
-  makeIngressFactory();
+  makeWebhookFactory();
   fetchMock.mockResolvedValueOnce(new Response("Not Found", { status: 404 }));
   const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
   const { hint } = failure as { hint?: string };
@@ -574,7 +594,7 @@ test("a 404 sends the operator to the remote, not to a new token", async () => {
 
 test("a token this shell alone has is noted, since the service reads .env", async () => {
   stubWebhookEnv();
-  makeIngressFactory();
+  makeWebhookFactory();
   writeFileSync(path.join(factory, ".env"), "GITHUB_TOKEN=\n");
   fetchMock
     .mockResolvedValueOnce(new Response("[]"))
@@ -587,7 +607,7 @@ test("a token this shell alone has is noted, since the service reads .env", asyn
 
 test("a token the factory's .env carries is not flagged as this shell's", async () => {
   stubWebhookEnv();
-  makeIngressFactory();
+  makeWebhookFactory();
   writeFileSync(path.join(factory, ".env"), "GITHUB_TOKEN=from_dotenv\n");
   fetchMock
     .mockResolvedValueOnce(new Response("[]"))
@@ -598,7 +618,7 @@ test("a token the factory's .env carries is not flagged as this shell's", async 
 
 test("bind with a non-github remote skips the webhook leg", async () => {
   stubWebhookEnv();
-  makeIngressFactory();
+  makeWebhookFactory();
   const result = await bindRepo("git@gitlab.com:acme/api.git", deps());
   expect(result.webhook).toBe("skipped");
   expect(lines.some((l) => l.includes("not a github.com remote"))).toBe(true);
@@ -606,7 +626,7 @@ test("bind with a non-github remote skips the webhook leg", async () => {
 });
 
 test("unsupported bindings fail before modifying files or registering webhooks", async () => {
-  const text = `const bindings = {}; export default { service: { dashboardPort: 9090 }, ingressUrl: "https://example.com", bindings };`;
+  const text = `const bindings = {}; export default { service: { dashboardPort: 9090 }, webhooks: { url: "https://example.com", github: { enabled: true }, linear: { enabled: false } }, bindings };`;
   writeFileSync(path.join(factory, "jigs.config.ts"), text);
   const fetch = vi.fn();
   vi.stubGlobal("fetch", fetch);

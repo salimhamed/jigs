@@ -28,8 +28,8 @@ Registration is a separate, explicit edit.
 ## 2. Configure its integrations
 
 Follow the [setup runbook](https://github.com/salimhamed/jigs/blob/main/docs/setup.md)
-to configure GitHub identity, Linear credentials, webhook delivery, and merge
-policy. Decide who is allowed to merge and what counts as approval before
+to configure GitHub identity, Linear credentials, merge policy and, optionally,
+webhooks. Decide who is allowed to merge and what counts as approval before
 launching a delivery run.
 
 Bind the repository the agent will work on, replacing the URL with yours:

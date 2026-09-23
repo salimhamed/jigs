@@ -21,9 +21,7 @@ import { parseGithubRemote } from "../providers/github-webhook.ts";
 import { type Check, type CheckResult, PROBE_TIMEOUT_MS } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 
-// What jigs needs of an installation, and why. `repository_hooks` is the one
-// operators miss: `jigs bind` creates the per-repo webhook that wakes every
-// parked pull request run, and no other credential is available to do it.
+// What jigs needs of an installation, and why.
 interface RequiredPermission {
   name: string;
   level: "read" | "write";
@@ -38,6 +36,11 @@ const REQUIRED_PERMISSIONS: RequiredPermission[] = [
   { name: "metadata", level: "read", why: "read the repository" },
   { name: "checks", level: "read", why: "read CI check runs while polling pull requests" },
   { name: "statuses", level: "read", why: "read CI commit statuses while polling pull requests" },
+];
+
+// Only with GitHub webhooks on, and then the one operators miss: `jigs bind`
+// creates the per-repo webhook, and no other credential can do it.
+const WEBHOOK_PERMISSIONS: RequiredPermission[] = [
   { name: "repository_hooks", level: "write", why: "create the webhook that wakes parked runs" },
 ];
 
@@ -179,14 +182,25 @@ export const realGithubMergePolicyProbes: GithubMergePolicyProbes = {
 
 const isNotFound = (err: unknown) => err instanceof GithubApiError && err.status === 404;
 
+/** What else the identity checks need to know about the factory. */
+export interface GithubIdentityCheckOptions {
+  bindings?: Record<string, Pick<BindingEntry, "remote" | "merge">>;
+  /** Whether GitHub webhooks are on, which makes an App need hook administration. */
+  webhooks?: boolean;
+  mergeProbes?: GithubMergePolicyProbes;
+}
+
 /** The identity check for the configured mode, plus the effective merge policy. */
 export function githubIdentityChecks(
   identities: GithubIdentity[],
   merge: MergePolicy,
   probes: GithubIdentityProbes,
   env: NodeJS.ProcessEnv = process.env,
-  bindings: Record<string, Pick<BindingEntry, "remote" | "merge">> = {},
-  mergeProbes: GithubMergePolicyProbes = realGithubMergePolicyProbes,
+  {
+    bindings = {},
+    webhooks = false,
+    mergeProbes = realGithubMergePolicyProbes,
+  }: GithubIdentityCheckOptions = {},
 ): Check[] {
   const primary = identities[0];
   if (!primary) throw new Error("GitHub identity checks require a nonempty normalized list");
@@ -210,7 +224,7 @@ export function githubIdentityChecks(
       const check =
         entry.mode === "pat"
           ? patCheck(probes, env)
-          : appCheck(entry, checksBindingPolicies, appProbes);
+          : appCheck(entry, checksBindingPolicies, webhooks, appProbes);
       return identities.length === 1
         ? check
         : { ...check, id: `github.identity.${index}`, label: `GitHub identity ${index + 1}` };
@@ -250,6 +264,7 @@ function patCheck(probes: GithubIdentityProbes, env: NodeJS.ProcessEnv): Check {
 function appCheck(
   identity: AppIdentity,
   checksBindingPolicies: boolean,
+  webhooks: boolean,
   probes: GithubIdentityProbes,
 ): Check {
   return {
@@ -309,6 +324,7 @@ function appCheck(
       const requiredPermissions = [
         ...REQUIRED_PERMISSIONS,
         ...(checksBindingPolicies ? JIGS_MERGE_PERMISSIONS : []),
+        ...(webhooks ? WEBHOOK_PERMISSIONS : []),
       ];
       const missing = installations.flatMap(({ installationId, permissions }) =>
         requiredPermissions
@@ -325,8 +341,7 @@ function appCheck(
         return {
           ok: false,
           reason: `the installation is missing ${missing.map((p) => `${p.name}: ${p.level} (to ${p.why}; installation ${p.installationId})`).join(", ")}`,
-          repair:
-            "grant the permission on the App (Settings → Developer settings → GitHub Apps → Permissions — “Repository webhooks” is Read & write), then accept the updated permissions on the installation",
+          repair: `grant the permission on the App (Settings → Developer settings → GitHub Apps → Permissions${missing.some((p) => p.name === "repository_hooks") ? " — “Repository webhooks” is Read & write" : ""}), then accept the updated permissions on the installation`,
         };
       }
       return {

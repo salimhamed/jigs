@@ -12,15 +12,16 @@ import {
   installationFor,
   readFactoryConfig,
   readFactoryConfigText,
+  type WebhooksConfig,
   writeFactoryConfigText,
 } from "../../config/factory-config.ts";
 import { factoryEnvValue, readFactoryEnv } from "../../config/factory-env.ts";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import {
-  githubWebhookSecret,
-  githubWebhookSecretRepair,
-  missingGithubWebhookSecret,
-} from "../../config/github-webhook-secret.ts";
+  missingWebhookSecret,
+  webhookSecret,
+  webhookSecretRepair,
+} from "../../config/webhook-secret.ts";
 import { JigsError } from "../../errors.ts";
 import { GithubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity, useFactoryRoot } from "../../providers/github-auth.ts";
@@ -133,7 +134,8 @@ export async function bindRepo(
   const webhook = await ensureWebhook({
     remoteUrl,
     factoryRoot,
-    ingressUrl: config.ingressUrl,
+    webhooks: config.webhooks,
+    pollSeconds: config.service.pollIntervalSeconds.github,
     // The repair it prints has to land on this binding, not on the one the
     // remote alone would derive.
     reBindCommand,
@@ -216,18 +218,22 @@ function defaultBindingName(remoteUrl: string): string {
 async function ensureWebhook({
   remoteUrl,
   factoryRoot,
-  ingressUrl,
+  webhooks,
+  pollSeconds,
   reBindCommand,
   deps,
 }: {
   remoteUrl: string;
   factoryRoot: string;
-  ingressUrl: string | undefined;
+  webhooks: WebhooksConfig | undefined;
+  pollSeconds: number;
   reBindCommand: string;
   deps: BindDeps;
 }): Promise<BindResult["webhook"]> {
-  if (ingressUrl === undefined) {
-    deps.out("note: skipping webhook (no ingressUrl in jigs.config.ts)");
+  if (webhooks === undefined || !webhooks.github.enabled) {
+    deps.out(
+      `note: skipping webhook (GitHub webhooks are off); pull request waits poll every ${pollSeconds} seconds`,
+    );
     return "skipped";
   }
   const repoRef = parseGithubRemote(remoteUrl);
@@ -236,11 +242,11 @@ async function ensureWebhook({
     return "skipped";
   }
   const slug = `${repoRef.owner}/${repoRef.repo}`;
-  const secret = githubWebhookSecret(factoryRoot);
+  const secret = webhookSecret("github", factoryRoot);
   if (secret === undefined) {
     throw new JigsError(
-      `${missingGithubWebhookSecret(factoryRoot)}, so ${slug}'s webhook cannot be signed`,
-      `${githubWebhookSecretRepair(factoryRoot)}, then re-run: ${reBindCommand}`,
+      `${missingWebhookSecret("github", factoryRoot)}, so ${slug}'s webhook cannot be signed`,
+      `${webhookSecretRepair("github", factoryRoot)}, then re-run: ${reBindCommand}`,
     );
   }
   const identity = resolveGithubIdentity(repoRef.owner, factoryRoot);
@@ -251,9 +257,10 @@ async function ensureWebhook({
       ? `grant the App "Repository webhooks: read & write" (Settings → Developer settings → GitHub Apps → Permissions), accept it on the installation for ${slug}, then re-run: ${reBindCommand}`
       : `set GITHUB_TOKEN in ${path.join(factoryRoot, ".env")} to a classic PAT with admin:repo_hook on ${slug} (an exported GITHUB_TOKEN wins over the file), then re-run: ${reBindCommand}`;
   if (identity.mode === "pat" && factoryEnvValue(factoryRoot, "GITHUB_TOKEN") === undefined) {
-    // An ingress with no webhook is a factory whose PR gate never wakes.
+    // A route with no webhook behind it is a factory waiting on deliveries
+    // that never come.
     throw new JigsError(
-      `jigs.config.ts declares ingressUrl but GITHUB_TOKEN is not set, so ${slug}'s webhook cannot be created`,
+      `jigs.config.ts enables GitHub webhooks but GITHUB_TOKEN is not set, so ${slug}'s webhook cannot be created`,
       credentialRepair,
     );
   }
@@ -269,7 +276,7 @@ async function ensureWebhook({
   };
   const ensured = await ensureRepoWebhook({
     ...repoRef,
-    ingressUrl,
+    webhooksUrl: webhooks.url,
     secret,
   }).catch((err: unknown) => {
     throw new JigsError(

@@ -224,7 +224,7 @@ test("a reply that never landed is posted by the next wake, not lost", async () 
   expect(github.threads[0]?.comments).toHaveLength(1);
 
   // So the question is still outstanding, and the next wake — a webhook, or
-  // the nudge within five minutes — answers it.
+  // the next poll — answers it.
   expect(await outstandingThreads(github, SHIP)).toEqual([asked]);
   const again = classifyPullRequestState(await github.snapshot(), SHIP, APPROVAL).wakes[0];
   if (again?.kind !== "review-comments") throw new Error("expected feedback");

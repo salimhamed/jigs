@@ -69,9 +69,10 @@ export type HaltForHumanDependencies = {
 export type HaltForHumanFn = (claim: TicketClaim, halt: Halt) => Promise<HumanReply>;
 
 // Posts the halt to the Linear ticket (@-mentioning its creator and assignee),
-// then suspends on the claim hook. Wakes are hints: each one re-checks the
-// actual comment thread and re-suspends when no human has replied — no agent
-// step executes on an unsatisfied wake.
+// then suspends on the claim hook. A wake is the service's poll or, with
+// Linear webhooks on, a comment delivery, and either carries nothing: each one
+// re-reads the comment thread from Linear and re-suspends when no human has
+// replied — no agent step executes on an unsatisfied wake.
 /** Post a ticket question and suspend until a human replies to the claim hook. */
 export async function haltForHuman(
   claim: TicketClaim,

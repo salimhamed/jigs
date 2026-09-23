@@ -15,7 +15,7 @@ import type { ApprovalSignal } from "./policy.ts";
 export const PULL_REQUEST_TOKEN_PREFIX = "github:pr:";
 
 /**
- * Build the durable hook token shared by a pull request gate and webhook ingress.
+ * Build the durable hook token shared by a pull request gate, the service poll and the webhook ingress.
  *
  * @remarks
  * Owner and repository are lowercased because GitHub treats them
@@ -282,9 +282,9 @@ export type PullRequestGateFn = (
 // token is never released mid-review. Holding it is the single-writer rule; a
 // workflow that only reads a pull request registers no hook and reads on its
 // own schedule. The first round runs before the hook is ever awaited, so a PR
-// already approved before the gate started is caught without a webhook.
+// already approved before the gate started is caught without waiting for a wake.
 /**
- * Yield actionable pull request state, then wait for webhook activity until the pull request closes.
+ * Yield actionable pull request state, then wait for the next wake until the pull request closes.
  *
  * @remarks
  * Only one run can hold a pull request's token. The injected state reader must be wrapped in a
@@ -310,8 +310,8 @@ export async function* pullRequestGate(
       );
       for (const wake of round.wakes) yield wake;
       if (round.done) return;
-      // Suspend until GitHub reports activity on this PR, or the service's
-      // nudge sweep resumes it.
+      // Suspend until the service's poll resumes this PR, or a GitHub
+      // webhook reports activity on it sooner.
       await hook;
     }
   } finally {

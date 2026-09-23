@@ -36,17 +36,18 @@ Run `pnpm exec jigs status <run-id>`. A suspension is an expected wait, such as 
 human question or outstanding pull-request review. Follow the reported link and
 resolve the condition. Starting another run does not answer the existing one.
 
-If you have answered but the run remains waiting, inspect webhook configuration
-and service logs using the [setup runbook](https://github.com/salimhamed/jigs/blob/main/docs/setup.md).
-A notification asks the run to recheck its condition; it cannot substitute for
-the required answer or approval.
+If you have answered but the run remains waiting, it notices on the next poll,
+within `service.pollIntervalSeconds` (300 seconds by default), or sooner with
+webhooks on. `pnpm exec jigs poke <run-id>` wakes it now. If it still waits,
+read the service's `[nudge]` log lines and, with webhooks on, the webhook
+configuration, using the [setup runbook](https://github.com/salimhamed/jigs/blob/main/docs/setup.md).
+A wake asks the run to recheck its condition; it cannot substitute for the
+required answer or approval.
 
-If `pnpm exec jigs doctor` reports that the factory rejected a repo's webhook
+With GitHub webhooks on, if `pnpm exec jigs doctor` reports that the factory rejected a repo's webhook
 deliveries with 401, GitHub's copy of the secret does not match
 `GITHUB_WEBHOOK_SECRET` in `.env`. Run `pnpm exec jigs bind <remote>` to send
-GitHub the current value. If it reports 503s instead, the service was running
-without the secret: set it in `.env` (`openssl rand -hex 32` makes one),
-restart the service with `pnpm exec jigs service restart`, then re-bind.
+GitHub the current value.
 
 ## An old working directory remains
 

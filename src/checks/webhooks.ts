@@ -1,10 +1,10 @@
 import type { ResolvedGithubIdentity } from "../config/factory-config.ts";
 import { readFactoryConfig } from "../config/factory-config.ts";
 import {
-  githubWebhookSecret,
-  githubWebhookSecretRepair,
-  missingGithubWebhookSecret,
-} from "../config/github-webhook-secret.ts";
+  missingWebhookSecret,
+  webhookSecret,
+  webhookSecretRepair,
+} from "../config/webhook-secret.ts";
 import { GithubApiError } from "../providers/github-api.ts";
 import { resolveGithubIdentity } from "../providers/github-auth.ts";
 import { inspectRepoWebhook, parseGithubRemote } from "../providers/github-webhook.ts";
@@ -23,19 +23,20 @@ export function webhookChecks(options: WebhookChecksOptions): Check[] {
     // The binding checks own config diagnostics; do not duplicate them.
     return [];
   }
-  if (config.ingressUrl === undefined) return [];
-  const ingressUrl = config.ingressUrl;
+  // Off, there is no repo webhook to have: PR waits are polled instead.
+  if (config.webhooks === undefined || !config.webhooks.github.enabled) return [];
+  const webhooksUrl = config.webhooks.url;
   const secretCheck: Check = {
     id: "webhook.secret",
     label: "GitHub webhook secret",
     run: async () => {
       const root = options.factoryRoot();
-      return githubWebhookSecret(root) !== undefined
+      return webhookSecret("github", root) !== undefined
         ? { ok: true }
         : {
             ok: false,
-            reason: missingGithubWebhookSecret(root),
-            repair: `${githubWebhookSecretRepair(root)}, then run jigs bind for each bound repo`,
+            reason: `webhooks.github is enabled but ${missingWebhookSecret("github", root)}`,
+            repair: `${webhookSecretRepair("github", root)}, then run jigs bind for each bound repo`,
           };
     },
   };
@@ -52,9 +53,8 @@ export function webhookChecks(options: WebhookChecksOptions): Check[] {
               run: () =>
                 checkWebhook(
                   binding.remote,
-                  ingressUrl,
+                  webhooksUrl,
                   repo,
-                  options.factoryRoot,
                   options.identity ??
                     (() => resolveGithubIdentity(repo.owner, options.factoryRoot())),
                 ),
@@ -81,35 +81,28 @@ function hookPermissionRepair(
 
 async function checkWebhook(
   remote: string,
-  ingressUrl: string,
+  webhooksUrl: string,
   repo: { owner: string; repo: string },
-  factoryRoot: () => string,
   resolveIdentity: () => ResolvedGithubIdentity,
 ): Promise<CheckResult> {
   const bindRepair = `run: jigs bind ${remote}`;
   try {
-    const hook = await inspectRepoWebhook({ ...repo, ingressUrl });
+    const hook = await inspectRepoWebhook({ ...repo, webhooksUrl });
     if (hook.state === "ok") return { ok: true };
     if (hook.state === "missing") {
       return {
         ok: false,
         reason:
-          "the repo has no active webhook at this factory's ingress URL with the current events",
+          "the repo has no active webhook at this factory's webhooks.url with the current events",
         repair: bindRepair,
       };
     }
     const latest = hook.count === 1 ? "delivery" : `${hook.count} deliveries`;
-    return hook.status === 401
-      ? {
-          ok: false,
-          reason: `the factory rejected the hook's latest ${latest} with 401: GitHub's copy of the signing secret does not match GITHUB_WEBHOOK_SECRET in this factory's .env`,
-          repair: bindRepair,
-        }
-      : {
-          ok: false,
-          reason: `the factory answered the hook's latest ${latest} with 503: the service is running without GITHUB_WEBHOOK_SECRET`,
-          repair: `${githubWebhookSecretRepair(factoryRoot())}, then ${bindRepair}`,
-        };
+    return {
+      ok: false,
+      reason: `the factory rejected the hook's latest ${latest} with 401: GitHub's copy of the signing secret does not match GITHUB_WEBHOOK_SECRET in this factory's .env`,
+      repair: bindRepair,
+    };
   } catch (err) {
     if (err instanceof GithubApiError && (err.status === 403 || err.status === 404)) {
       return {

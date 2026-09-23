@@ -101,12 +101,15 @@ columns.
 
 Each suspension carries a kind:
 
-- **needs-human** — jigs asked a question on the run's Linear ticket. A reply
-  in that comment thread wakes it.
+- **needs-human** — jigs asked a question on the run's Linear ticket. The
+  service re-reads the thread every `service.pollIntervalSeconds.linear`
+  seconds (default 300), and a reply found there wakes it; with Linear
+  webhooks on, the reply wakes it at once.
 - **pull-request** — the run holds a pull request and wants an approving review
-  of the current head, green CI and a mergeable branch. A review, a new commit,
-  a CI result or a top-level comment wakes it, and failing all of those the
-  service re-reads the pull request every five minutes.
+  of the current head, green CI and a mergeable branch. The service re-reads
+  the pull request every `service.pollIntervalSeconds.github` seconds (default
+  300); with GitHub webhooks on, a review, a new commit, a CI result or a
+  top-level comment wakes it at once.
 
 Anything else is **external** and prints its own token.
 
@@ -148,10 +151,12 @@ itself and the comment URL.
 The answer goes **on the ticket**, in that comment thread — with option letters
 like `1a, 2b`, or in plain words. Unless the operator has delegated that to you,
 it is theirs to write: you do not answer for them, and you do not resume the run
-by hand. Once the reply lands, the webhook wakes the run, the reply is
-re-checked against Linear, and the run continues.
+by hand. Once the reply lands, the next poll (or the Linear webhook, if it is
+on) wakes the run, the reply is re-checked against Linear, and the run
+continues.
 
-If the reply is there and the run has not moved, the delivery was missed:
+If the reply is there and the interval is too long to wait, or a webhook
+delivery was missed:
 
 ```sh
 jigs poke <run-id>
@@ -197,9 +202,8 @@ that exact version to be published, then in each factory root:
 pnpm exec jigs upgrade --to-version <version>
 ```
 
-which bumps the package, rebuilds, restarts and ends in `jigs doctor`. Then
-confirm the factory's Linear webhook is still enabled — without ingress nothing
-wakes on its own.
+which bumps the package, rebuilds, restarts and ends in `jigs doctor`, which
+also checks each webhook provider the factory has switched on.
 
 ## Parked runs and worktrees
 

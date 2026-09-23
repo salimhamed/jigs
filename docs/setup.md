@@ -76,8 +76,9 @@ World. Nothing below is global except part 1.
   alongside its bindings and harnesses: preflight probes the service's
   `AWS_PROFILE` with `aws sts get-caller-identity` and refuses the run when it
   resolves nothing — `aws sso login --profile <profile>`.
-- **A tunnel tool**, if any factory will receive provider webhooks:
-  `tailscale` (funnel) or `cloudflared`. Installed once, run per factory.
+- **A tunnel tool**, only if a factory will turn on provider webhooks
+  (optional, step 5): `tailscale` (funnel) or `cloudflared`. Installed once,
+  run per factory.
 - **`loginctl enable-linger "$USER"`** for lights-on: services started by
   `jigs up` are detached from the terminal, but a user session manager still
   reaps them at logout without lingering.
@@ -329,17 +330,17 @@ Where each value comes from:
 1. **Register the App.** GitHub → Settings → Developer settings → GitHub Apps →
    New GitHub App. Give it any name; leave "Request user authorization (OAuth)
    during installation" and "Enable Device Flow" unchecked, and **uncheck
-   Active under Webhook** — jigs keeps its own per-repo webhooks, and one App
-   registration has only one webhook URL, which two factories cannot share.
+   Active under Webhook** — when GitHub webhooks are on, jigs keeps its own
+   per-repo webhooks, and one App registration has only one webhook URL, which
+   two factories cannot share.
 2. **Grant these repository permissions**, and nothing else: **Contents**,
    **Pull requests** and **Issues** read & write; **Administration** read-only;
-   **Metadata**, **Checks** and **Commit statuses** read; and **Repository
-   webhooks** read & write. When
+   and **Metadata**, **Checks** and **Commit statuses** read. When
    `merge.by` is `"jigs"` and the factory has bindings, also grant **Actions**
    read so `jigs bind` and `jigs doctor` can verify that the repository has an
-   active Actions workflow. The Repository webhooks
-   permission lets `jigs bind` create the hook that wakes a parked run; a
-   missing permission is named by `jigs doctor`.
+   active Actions workflow. Only if you turn on GitHub webhooks (step 5), also
+   grant **Repository webhooks** read & write, so `jigs bind` can create the
+   hook. A missing permission is named by `jigs doctor`.
 3. **`appId`** is the "App ID" on the App's settings page.
 4. **`privateKeyPath`** is the `.pem` GitHub generates under "Private keys".
    Save it in the factory repo (`.gitignore` already excludes
@@ -606,23 +607,23 @@ restart above before any run can name it; `jigs bind` says so, and
 `jigs up` works too and saves the restart; the order here is only the one a
 newcomer meets.)
 
-`jigs bind` creates or verifies jigs' repository furniture: the webhook, plus
-the configured approval label when `merge.approval.kind` is `"label"`. In PAT
-mode it reads `GITHUB_TOKEN` from this factory's `.env`, and an exported one
-wins for that one command — a convenience of bind's, not the factory's rule:
-the service reads `.env` alone, so a token that only ever lives in your shell
-leaves the running factory without one, and bind notes it. A classic PAT needs
-`admin:repo_hook` for the webhook and `repo` (or `public_repo` for a public
-repository) to create the label.
+`jigs bind` creates or verifies jigs' repository furniture: the configured
+approval label when `merge.approval.kind` is `"label"`, and the repo webhook
+when GitHub webhooks are on (step 5). With them off, which is the default,
+bind skips the webhook and prints one line saying pull request waits poll
+every `service.pollIntervalSeconds.github` seconds. In PAT mode it reads
+`GITHUB_TOKEN` from this factory's `.env`, and an exported one wins for that
+one command — a convenience of bind's, not the factory's rule: the service
+reads `.env` alone, so a token that only ever lives in your shell leaves the
+running factory without one, and bind notes it. A classic PAT needs `repo`
+(or `public_repo` for a public repository) to create the label, and
+`admin:repo_hook` too when GitHub webhooks are on.
 
-A factory with an `ingressUrl` in its `jigs.config.ts` (step 5) and no usable token
-is half configured — an ingress nothing posts to, a PR gate that never wakes —
-so `jigs bind` **fails** there rather than noting a skip, and says the repair.
-GitHub rejecting the token fails the same way. Fix the token and run the same
-`jigs bind` again: the binding it already recorded stands, and the webhook
-registration is create-or-verify, so re-running is how you repair. A factory
-with no `ingressUrl` skips the webhook; it still needs a usable identity when
-label approval is configured, because bind creates or verifies that label.
+With GitHub webhooks on, a missing secret or unusable token is an error:
+`jigs bind` **fails** rather than noting a skip, and says the repair. GitHub
+rejecting the token fails the same way. Fix it and run the same `jigs bind`
+again: the binding it already recorded stands, and the webhook registration is
+create-or-verify, so re-running is how you repair.
 
 The binding also declares what its worktrees need before an agent can work in
 them — files to copy in, commands to run:
@@ -666,38 +667,89 @@ worktrees, without ever being committed.
 `jigs bindings` prints each binding's clone path and whether the clone exists,
 and `jigs unbind` leaves the clone on disk for you to `rm -rf`.
 
-### 5. Webhook ingress
+### 5. How parked runs wake
 
-The service's `/ingress/github` and `/ingress/linear` routes receive provider
-webhooks: signature-verified, stateless, and safe to miss — every wake is
-re-checked against the provider, and `jigs poke <run-id>` covers any delivery
-that never arrived.
+A run parked on a pull request or on a ticket question does not need webhooks.
+The service re-reads every pull request a run is waiting on, and every ticket a
+run has asked a question on, on a timer per provider, and once more when it
+starts. The default is every 300 seconds for each; set either in
+`jigs.config.ts`, down to a floor of 30:
 
-#### Tunnel (one-time per factory, manual)
+```ts
+service: {
+  port: 8990,
+  dashboardPort: 9090,
+  pollIntervalSeconds: { github: 300, linear: 300 },
+},
+```
 
-The ingress must be reachable from the public internet, on **this factory's**
+Each sweep takes up to a tenth of its interval off at random, so services do
+not all poll on the same second. Each logs one line:
+
+```
+[nudge] pull requests: 2 held, 2 nudged, 0 mid-turn, 0 gone, 0 failed
+[nudge] tickets: 1 held, 1 nudged, 0 mid-turn, 0 gone, 0 failed
+```
+
+`gone` is a run that has moved on since the listing, which is ordinary;
+`failed` is a run that was not woken, and each one is warned about by name. A
+sweep that cannot run at all logs a warning instead; while that is happening,
+parked runs are not re-read, so it is worth reading. A run that is mid-turn is
+left alone and swept on the next pass. The ticket sweep wakes only runs halted
+on a human, not every run that holds a ticket.
+
+```sh
+jigs poke <run-id>
+```
+
+still wakes a suspended run by hand, over the same code path, when the
+interval is too long to wait.
+
+#### React faster with webhooks (optional)
+
+Webhooks cut the wait from minutes to seconds. The service's `/ingress/github`
+and `/ingress/linear` routes receive them: signature-verified, stateless, and
+safe to miss — every wake is re-checked against the provider, and the poll
+above keeps running as the floor under a lost delivery. GitHub does not retry
+a delivery it failed to make, and a tunnel that drops one connection in three
+is a real thing that happens.
+
+Each provider is switched on by name. Without a `webhooks` block both are off
+and neither route exists; inside it, `url` and each provider's `enabled` are
+required:
+
+```ts
+webhooks: {
+  url: "https://<machine>.<tailnet>.ts.net",
+  github: { enabled: true },
+  linear: { enabled: false },
+},
+```
+
+A provider switched on without its secret in `.env` (`GITHUB_WEBHOOK_SECRET`
+or `LINEAR_WEBHOOK_SECRET`) stops the service from starting, with an error
+naming the variable, and `jigs doctor` fails on it too.
+
+##### Tunnel (one-time per factory, manual)
+
+The routes must be reachable from the public internet, on **this factory's**
 service port:
 
 ```sh
 tailscale funnel --bg <servicePort>
 ```
 
-The printed `https://<machine>.<tailnet>.ts.net` URL is this factory's ingress
-URL. Alternative: `cloudflared tunnel --url http://localhost:<servicePort>`
-(or a named cloudflare tunnel for a stable hostname). One tailnet machine can
-funnel a limited number of ports; factories that will never receive webhooks
-need no tunnel at all.
+The printed `https://<machine>.<tailnet>.ts.net` URL is this factory's
+`webhooks.url`. Alternative: `cloudflared tunnel --url
+http://localhost:<servicePort>` (or a named cloudflare tunnel for a stable
+hostname). One tailnet machine can funnel a limited number of ports; factories
+that poll only need no tunnel at all.
 
-Put the URL in this factory's `jigs.config.ts`:
+##### GitHub (per target repo)
 
-```ts
-ingressUrl: "https://<machine>.<tailnet>.ts.net",
-```
-
-#### GitHub (per target repo)
-
-First generate the secret GitHub signs deliveries with. jigs never generates
-it, and this factory's `.env` is its only local copy:
+Set `webhooks.github.enabled` to `true`, then generate the secret GitHub signs
+deliveries with. jigs never generates it, and this factory's `.env` is its only
+local copy:
 
 ```sh
 openssl rand -hex 32   # paste the output into .env as GITHUB_WEBHOOK_SECRET=
@@ -705,59 +757,36 @@ jigs service restart
 ```
 
 Then (re-)bind each target repo. `jigs bind` refuses without the secret. With
-it, bind creates the repo webhook from `ingressUrl`, and on later binds re-sends
-its full config, secret included, so re-binding repairs a drifted hook or a
-changed secret. It needs hook-administration rights, and fails without them: in
-`pat` mode that is a `GITHUB_TOKEN` with `admin:repo_hook` in this factory's
-`.env` or exported in the shell, and in `app` mode it is the App's **Repository
-webhooks: read & write** permission, granted on the App and accepted on the
-installation. Each factory owns the hook at its exact URL; changing its hostname
-creates a new hook and leaves the old one for you to delete by hand.
+it, bind creates the repo webhook at `webhooks.url`, and on later binds
+re-sends its full config, secret included, so re-binding repairs a drifted
+hook or a changed secret. It needs hook-administration rights, and fails
+without them: in `pat` mode that is a `GITHUB_TOKEN` with `admin:repo_hook` in
+this factory's `.env` or exported in the shell, and in `app` mode it is the
+App's **Repository webhooks: read & write** permission, granted on the App and
+accepted on the installation. Each factory owns the hook at its exact URL;
+changing its hostname creates a new hook and leaves the old one for you to
+delete by hand.
 
 `jigs doctor` fails when `GITHUB_WEBHOOK_SECRET` is unset. GitHub never shows a
 hook's secret, so doctor also reads each hook's recent deliveries: a run of 401s
-means GitHub's copy does not match `.env` (`jigs bind <remote>` fixes it), and
-a run of 503s means the service was running without the secret.
+means GitHub's copy does not match `.env` (`jigs bind <remote>` fixes it).
 
 Manual alternative: one org-level webhook (org settings → Webhooks) pointed at
-`<ingressUrl>/ingress/github`, content type `application/json`, events
+`<webhooks.url>/ingress/github`, content type `application/json`, events
 `pull_request`, `pull_request_review`, `pull_request_review_comment`,
 `issue_comment`, `check_suite` and `status`, secret `GITHUB_WEBHOOK_SECRET` from `.env` — covers every
 repo without per-repo binds. Note that it points at one factory: an org-level
 hook and several factories do not mix.
 
-#### Linear
+##### Linear
 
-Create a webhook in Linear (Settings → API → Webhooks) pointed at
-`<ingressUrl>/ingress/linear` with resource types `Comment` only. Put its
+Set `webhooks.linear.enabled` to `true`. jigs does not create the Linear
+webhook: create it in Linear (Settings → API → Webhooks) pointed at
+`<webhooks.url>/ingress/linear` with resource types `Comment` only. Put its
 signing secret in this factory's `.env` as `LINEAR_WEBHOOK_SECRET` and
 `jigs service restart`.
-`jigs doctor` verifies that this exact webhook exists and is enabled.
-
-#### Missed deliveries
-
-GitHub does not retry a delivery it failed to make, and a tunnel that drops one
-connection in three is a real thing that happens. So the webhook is the fast
-path, not the only one: the service re-reads every pull request a run is parked
-on every five minutes, and once more when it starts. A lost delivery costs
-minutes, not the whole wait. Each sweep logs one line:
-
-```
-[nudge] pull requests: 2 held, 2 nudged, 0 mid-turn, 0 gone, 0 failed
-```
-
-`gone` is a run that has moved on since the listing, which is ordinary;
-`failed` is a pull request that has lost its floor, and each one is warned
-about by name. A sweep that cannot run at all logs a warning instead; while
-that is happening, no lost delivery is recovered, so it is worth reading. A run
-that is mid-turn is left alone and swept on the next pass.
-
-```sh
-jigs poke <run-id>
-```
-
-still wakes a suspended run by hand, over the same code path, when five minutes
-is too long to wait.
+`jigs doctor` verifies that the secret is set and that this exact webhook
+exists and is enabled.
 
 ### 6. Operating runs
 

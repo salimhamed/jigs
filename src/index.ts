@@ -19,6 +19,7 @@ export {
   type Schedule,
   type TicketWorkflowInputs,
   ticketInputSchema,
+  type WebhooksDefinition,
   type WorkflowEntry,
   type WorkflowInputs,
 } from "./blocks/factory.ts";

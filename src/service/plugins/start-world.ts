@@ -8,6 +8,7 @@ import type { World } from "@workflow/world";
 import { WorkflowRunNotFoundError } from "workflow/errors";
 import type { AnyWorkflowEntry, FactoryDefinition } from "../../blocks/factory.ts";
 import type { HarnessKind, HarnessRuntime } from "../../checks/harness-runtime.ts";
+import type { WebhooksConfig } from "../../config/factory-config.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { stopPiProcesses } from "../../steps/agents/harnesses/pi.ts";
 import type { BindingClone } from "../../steps/workspaces/clone.ts";
@@ -78,6 +79,50 @@ export async function gateOnHarnessRuntimes(deps: HarnessRuntimeGateDeps = {}): 
     return false;
   }
   for (const runtime of runtimes) log(`[service] harness ${runtime.line}`);
+  return true;
+}
+
+/** Injectable configuration and output used by the webhook startup gate. */
+export interface WebhookSecretGateDeps {
+  webhooks?: () => Promise<WebhooksConfig | undefined>;
+  exit?: (code: number) => void;
+  error?: (line: string) => void;
+}
+
+async function configuredWebhooks(): Promise<WebhooksConfig | undefined> {
+  const [{ readFactoryConfig }, { factoryRoot }] = await Promise.all([
+    import("../../config/factory-config.ts"),
+    import("../../config/factory-root.ts"),
+  ]);
+  return readFactoryConfig(factoryRoot()).webhooks;
+}
+
+// A provider switched on without its secret would answer every delivery with
+// an error while its runs quietly fall back to polling; refusing the boot puts
+// the missing variable in front of the operator instead.
+/** Refuse service startup when an enabled webhook provider has no signing secret. */
+export async function gateOnWebhookSecrets(deps: WebhookSecretGateDeps = {}): Promise<boolean> {
+  const error = deps.error ?? ((line: string) => console.error(line));
+  const exit = deps.exit ?? process.exit;
+  let webhooks: WebhooksConfig | undefined;
+  try {
+    webhooks = await (deps.webhooks ?? configuredWebhooks)();
+  } catch (err) {
+    error(`[service] could not read the webhook configuration: ${describe(err)}`);
+    exit(1);
+    return false;
+  }
+  const { webhookSecret, webhookSecretVariable } = await import("../../config/webhook-secret.ts");
+  const missing = (["github", "linear"] as const)
+    .filter((provider) => webhooks?.[provider].enabled && webhookSecret(provider) === undefined)
+    .map(webhookSecretVariable);
+  if (missing.length > 0) {
+    error(
+      `[service] webhooks are enabled but ${missing.join(" and ")} ${missing.length === 1 ? "is" : "are"} not set. Set ${missing.length === 1 ? "it" : "them"} in the factory's .env, or turn that provider off in the webhooks block of jigs.config.ts, then restart the service`,
+    );
+    exit(1);
+    return false;
+  }
   return true;
 }
 
@@ -289,6 +334,9 @@ export default async function startWorld() {
   setBootPhase("harnesses");
   if (!(await gateOnHarnessRuntimes())) return;
 
+  setBootPhase("webhooks");
+  if (!(await gateOnWebhookSecrets())) return;
+
   // Also before the World starts: a run that asks for a worktree against an
   // unusable registry has already burned an agent.
   setBootPhase("registry");
@@ -317,17 +365,21 @@ export default async function startWorld() {
 
   setBootPhase(READY_PHASE);
 
-  // Startup reconciliation, then the floor under the webhook: every parked
-  // pull request is re-read now, in case a delivery was lost while the service
-  // was down, and every five minutes after that. After readiness, not before:
-  // a slow pull-request nudge pass must not hold `jigs service start` on a
-  // service that is already answering.
-  const { nudgePullRequests, startPullRequestNudge } = await import("../nudge.ts");
-  const nudge = startPullRequestNudge();
+  // Startup reconciliation, then the poll: every parked run is re-read now, in
+  // case something happened while the service was down, and again on each
+  // provider's interval. After readiness, not before: a slow nudge pass must
+  // not hold `jigs service start` on a service that is already answering.
+  const [{ nudgeProvider, startNudges }, { readFactoryConfig }, { factoryRoot }] =
+    await Promise.all([
+      import("../nudge.ts"),
+      import("../../config/factory-config.ts"),
+      import("../../config/factory-root.ts"),
+    ]);
+  const nudge = startNudges(readFactoryConfig(factoryRoot()).service.pollIntervalSeconds);
   onShutdown(() => {
     nudge.stop();
   });
-  await nudgePullRequests();
+  await Promise.all([nudgeProvider("github"), nudgeProvider("linear")]);
 
   // The generated factory plugin starts automatic release after this plugin
   // reaches readiness. It imports the compiled factory so per-workflow policy

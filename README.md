@@ -339,8 +339,9 @@ Two consequences follow, and they are the whole reason for the folder layout.
    record its result.
 
 There is a third kind that is neither. The **service** is the long-running
-process a factory builds and starts: the webhook routes, the scheduler, the
-run endpoints and the dashboard. It never runs inside a workflow at all.
+process a factory builds and starts: the poll that wakes parked runs, the
+optional webhook routes, the scheduler, the run endpoints and the dashboard.
+It never runs inside a workflow at all.
 
 What goes into that sandboxed bundle is decided by the two Workflow SDK
 markers, and both live in factory code (including copied recipes): `"use workflow"` on each workflow,

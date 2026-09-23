@@ -22,8 +22,8 @@ person can judge.
   get the same `PATH` as the shell. `JIGS_CLAUDE_EXECUTABLE` can point at a
   `claude` that is not on `PATH`; `codex` has no equivalent.
 - The AWS CLI, only if a workflow will declare `aws: true`.
-- A tunnel tool (`tailscale` or `cloudflared`), only if the factory will receive
-  provider webhooks.
+- A tunnel tool (`tailscale` or `cloudflared`), only if the factory will turn
+  on provider webhooks, which are optional.
 - On Linux with systemd, run `loginctl enable-linger "$USER"` once so factory
   services survive the last login session ending. `jigs doctor` verifies it.
 
@@ -75,8 +75,8 @@ Both live in `jigs.config.ts` and are independent of each other; `jigs init`
 writes a matching pair and nothing derives one from the other at run time.
 
 **`pat`** — jigs is the operator. `GITHUB_TOKEN` in `.env` is all it needs, and
-`jigs bind` wants a classic PAT with `admin:repo_hook` plus `repo` (or
-`public_repo` for a public repository). GitHub refuses to let
+`jigs bind` wants a classic PAT with `repo` (or `public_repo` for a public
+repository), plus `admin:repo_hook` when GitHub webhooks are on. GitHub refuses to let
 an author approve their own pull request, so `merge.approval` is a label:
 `{ kind: "label", name: "jigs:approved" }`, meaning "merge whenever ready" —
 it survives later pushes and jigs never removes it.
@@ -87,13 +87,14 @@ requests normally. Each App entry in `github.identities` needs `appId`, an `inst
 human's login — an installation token cannot answer `GET /user`). Optional
 `coAuthor` is `Name <email>` for a `Co-authored-by` trailer on merge commits.
 Grant the App exactly: Contents, Pull requests and Issues **read & write**;
-Administration, Metadata, Checks and Commit statuses **read**; and
-**Repository webhooks read & write**. When `merge.by` is `"jigs"` and the factory has bindings, also grant
+and Administration, Metadata, Checks and Commit statuses **read**. Only when
+`webhooks.github.enabled` is `true`, also grant **Repository webhooks read &
+write**. When `merge.by` is `"jigs"` and the factory has bindings, also grant
 Actions **read** so `jigs bind` and `jigs doctor` can verify that the
 repositories have an active Actions workflow. Permissions have to be accepted on the
 installation after they are granted on the App. Register the App with its own
-webhook **off**; jigs keeps per-repo webhooks, and one App registration has
-only one webhook URL.
+webhook **off**; with GitHub webhooks on, jigs keeps per-repo webhooks, and
+one App registration has only one webhook URL.
 
 Factory `merge` states the default policy: `by` (`jigs` or `human`), `method`
 (`squash`, `merge` or `rebase`), and `approval`. A binding may override `by`
@@ -213,30 +214,40 @@ in the target repo.
 
 `jigs bind` creates or verifies jigs' repository furniture: the configured
 approval label when `merge.approval.kind` is `"label"`, and the GitHub webhook
-when the factory has an `ingressUrl` in `jigs.config.ts`. It uses the configured
-identity: in `pat` mode
+when `webhooks.github.enabled` is `true` in `jigs.config.ts`. It uses the
+configured identity: in `pat` mode
 `GITHUB_TOKEN` from the factory's `.env` — or from the shell for that one
 command, which wins there and only there (the service reads `.env` alone) — and
-in `app` mode the installation token, which needs the App's Repository webhooks
-permission. The webhook also needs `GITHUB_WEBHOOK_SECRET` in the factory's
-`.env`, which jigs never generates: the user creates it with
-`openssl rand -hex 32`, and bind refuses without it. Without usable hook rights it fails and says
-the repair — an ingress with no webhook is a gate that never wakes — and the
+in `app` mode the installation token. With GitHub webhooks on, the webhook
+needs the App's Repository webhooks permission (or `admin:repo_hook` on a PAT)
+and `GITHUB_WEBHOOK_SECRET` in the factory's `.env`, which jigs never
+generates: the user creates it with `openssl rand -hex 32`, and bind refuses
+without it. Without usable hook rights it fails and says the repair, and the
 retry is the same `jigs bind`: the binding already recorded stands and the
-webhook is create-or-update, re-sending the signing secret every time. A factory with no `ingressUrl` skips the webhook
-with a note, but still needs a usable identity when label approval is
-configured. Re-running bind also restores a deleted approval label; doctor
+webhook is create-or-update, re-sending the signing secret every time. With
+GitHub webhooks off, the default, bind skips the webhook with one line saying
+pull request waits poll every N seconds, but still needs a usable identity
+when label approval is configured. Re-running bind also restores a deleted approval label; doctor
 reports one that is missing. `jigs unbind` edits the config only; the clone stays on disk.
 
-## 5. Webhook ingress, only if the factory needs it
+## 5. Webhooks, only to react faster
 
-The service's `/ingress/github` and `/ingress/linear` routes must be reachable
-from the public internet on this factory's service port for a suspended run to
-wake on its own. Run a tunnel, put the URL in `jigs.config.ts` as `ingressUrl`,
-set `GITHUB_WEBHOOK_SECRET` in `.env` and restart the service, re-bind each target repo (hook-administration rights required), and create a Linear webhook
-for `Comment` resources. `docs/setup.md` has the exact commands and the
-org-level alternative. Without ingress everything still works; a suspended run
-just needs `jigs poke <run-id>` to notice its answer.
+A suspended run wakes on its own without webhooks: the service re-reads each
+parked pull request and each ticket halted on a human every
+`service.pollIntervalSeconds.github` / `.linear` seconds (default 300, floor
+30). `jigs poke <run-id>` wakes one sooner by hand.
+
+Webhooks are optional and switched on per provider in a `webhooks` block with
+`url`, `github: { enabled }` and `linear: { enabled }`, all required once the
+block exists. The service's `/ingress/github` and `/ingress/linear` routes
+exist only for providers that are on, and must be reachable from the public
+internet on this factory's service port. Run a tunnel and put its URL in
+`webhooks.url`. For GitHub, set `GITHUB_WEBHOOK_SECRET` in `.env`, restart the
+service and re-bind each target repo (hook-administration rights required).
+For Linear, create a webhook by hand for `Comment` resources and put its
+secret in `.env` as `LINEAR_WEBHOOK_SECRET`. A provider switched on without
+its secret stops the service from starting. `docs/setup.md` has the exact
+commands and the org-level alternative.
 
 ## Upgrading a factory later
 

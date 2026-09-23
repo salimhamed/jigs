@@ -39,7 +39,7 @@ const jsonResponse = (body: unknown) => new Response(JSON.stringify(body));
 const opts = {
   owner: "acme",
   repo: "api",
-  ingressUrl: "https://factory.example.ts.net",
+  webhooksUrl: "https://factory.example.ts.net",
   secret: "hook-secret",
 };
 

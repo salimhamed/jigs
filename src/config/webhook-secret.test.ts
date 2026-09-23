@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
-import { githubWebhookSecret } from "./github-webhook-secret.ts";
+import { webhookSecret } from "./webhook-secret.ts";
 
 let tmp: string;
 let factory: string;
@@ -11,6 +11,7 @@ beforeEach(() => {
   tmp = makeTmpDir();
   factory = makeFactoryRepo(tmp);
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "");
+  vi.stubEnv("LINEAR_WEBHOOK_SECRET", "");
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -18,16 +19,22 @@ afterEach(() => {
 });
 
 test("an unset or empty secret is not configured", () => {
-  expect(githubWebhookSecret()).toBeUndefined();
-  expect(githubWebhookSecret(factory)).toBeUndefined();
+  expect(webhookSecret("github")).toBeUndefined();
+  expect(webhookSecret("github", factory)).toBeUndefined();
   writeFileSync(path.join(factory, ".env"), "GITHUB_WEBHOOK_SECRET=\n");
-  expect(githubWebhookSecret(factory)).toBeUndefined();
+  expect(webhookSecret("github", factory)).toBeUndefined();
 });
 
 test("the CLI reads the factory's .env and the service its loaded environment", () => {
   writeFileSync(path.join(factory, ".env"), "GITHUB_WEBHOOK_SECRET=from-file\n");
-  expect(githubWebhookSecret(factory)).toBe("from-file");
-  expect(githubWebhookSecret()).toBeUndefined();
+  expect(webhookSecret("github", factory)).toBe("from-file");
+  expect(webhookSecret("github")).toBeUndefined();
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "loaded");
-  expect(githubWebhookSecret()).toBe("loaded");
+  expect(webhookSecret("github")).toBe("loaded");
+});
+
+test("each provider reads its own variable", () => {
+  writeFileSync(path.join(factory, ".env"), "LINEAR_WEBHOOK_SECRET=linear-file\n");
+  expect(webhookSecret("linear", factory)).toBe("linear-file");
+  expect(webhookSecret("github", factory)).toBeUndefined();
 });
