@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.56.0
+# @jigs-ai/jigs v0.56.1
 
 Describe run-owned resources, inspect cleanup progress and request release from a workflow.
 
@@ -201,50 +201,6 @@ counts and reasons for anything retained.
 
 ***
 
-### ReleaseSteps
-
-Durable step functions required by the workflow-side release block.
-
-#### Properties
-
-##### releaseRunResources()
-
-> **releaseRunResources**: (`policy`) => `Promise`\<[`ReleaseReport`](#releasereport)\>
-
-Persist and apply the selected successful-run policy to the active run.
-
-###### Parameters
-
-###### policy
-
-###### onFailure
-
-`"release"` \| `"keep"` = `...`
-
-What to do with eligible resources after a failed or cancelled run.
-
-###### onSuccess
-
-`"release"` \| `"keep"` = `...`
-
-What to do with eligible resources after a completed run.
-
-###### Returns
-
-`Promise`\<[`ReleaseReport`](#releasereport)\>
-
-##### resolveReleasePolicy()
-
-> **resolveReleasePolicy**: () => `Promise`\<\{ `onFailure`: `"release"` \| `"keep"`; `onSuccess`: `"release"` \| `"keep"`; \}\>
-
-Resolve the workflow, factory or default release policy for the active run.
-
-###### Returns
-
-`Promise`\<\{ `onFailure`: `"release"` \| `"keep"`; `onSuccess`: `"release"` \| `"keep"`; \}\>
-
-***
-
 ### RunResource
 
 A durable thing that a run created or otherwise owns a reference to.
@@ -278,48 +234,6 @@ An absolute URL where a human can inspect the resource.
 Selects whether eligible run resources are released for each terminal outcome.
 
 ## Functions
-
-### bindReleaseSteps()
-
-> **bindReleaseSteps**(`steps`): `object`
-
-Bind durable release steps into the workflow-facing release API.
-
-#### Parameters
-
-##### steps
-
-[`ReleaseSteps`](#releasesteps)
-
-#### Returns
-
-##### release()
-
-> **release**: (`policy?`) => `Promise`\<[`ReleaseReport`](#releasereport)\>
-
-Release resources with an explicit policy, or resolve the run's configured policy.
-
-###### Parameters
-
-###### policy?
-
-###### onFailure
-
-`"release"` \| `"keep"` = `...`
-
-What to do with eligible resources after a failed or cancelled run.
-
-###### onSuccess
-
-`"release"` \| `"keep"` = `...`
-
-What to do with eligible resources after a completed run.
-
-###### Returns
-
-`Promise`\<[`ReleaseReport`](#releasereport)\>
-
-***
 
 ### release()
 
@@ -374,3 +288,89 @@ Fail an exhaustive branch if an unexpected value reaches it at runtime.
 #### Returns
 
 `never`
+
+## Factory plumbing
+
+### ReleaseSteps
+
+Durable step functions required by the workflow-side release block.
+
+#### Properties
+
+##### releaseRunResources()
+
+> **releaseRunResources**: (`policy`) => `Promise`\<[`ReleaseReport`](#releasereport)\>
+
+Persist and apply the selected successful-run policy to the active run.
+
+###### Parameters
+
+###### policy
+
+###### onFailure
+
+`"release"` \| `"keep"` = `...`
+
+What to do with eligible resources after a failed or cancelled run.
+
+###### onSuccess
+
+`"release"` \| `"keep"` = `...`
+
+What to do with eligible resources after a completed run.
+
+###### Returns
+
+`Promise`\<[`ReleaseReport`](#releasereport)\>
+
+##### resolveReleasePolicy()
+
+> **resolveReleasePolicy**: () => `Promise`\<\{ `onFailure`: `"release"` \| `"keep"`; `onSuccess`: `"release"` \| `"keep"`; \}\>
+
+Resolve the workflow, factory or default release policy for the active run.
+
+###### Returns
+
+`Promise`\<\{ `onFailure`: `"release"` \| `"keep"`; `onSuccess`: `"release"` \| `"keep"`; \}\>
+
+***
+
+### bindReleaseSteps()
+
+> **bindReleaseSteps**(`steps`): `object`
+
+Bind durable release steps into the workflow-facing release API.
+
+#### Parameters
+
+##### steps
+
+[`ReleaseSteps`](#releasesteps)
+
+#### Returns
+
+##### release()
+
+> **release**: (`policy?`) => `Promise`\<[`ReleaseReport`](#releasereport)\>
+
+Release resources with an explicit policy, or resolve the run's configured policy.
+
+###### Parameters
+
+###### policy?
+
+###### onFailure
+
+`"release"` \| `"keep"` = `...`
+
+What to do with eligible resources after a failed or cancelled run.
+
+###### onSuccess
+
+`"release"` \| `"keep"` = `...`
+
+What to do with eligible resources after a completed run.
+
+###### Returns
+
+`Promise`\<[`ReleaseReport`](#releasereport)\>

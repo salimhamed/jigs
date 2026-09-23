@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.56.0
+# @jigs-ai/jigs v0.56.1
 
 Compose pull request creation, review, approval and merge gates inside a workflow.
 
@@ -647,30 +647,6 @@ lock. If the gate ends before the pull request closes, this function throws.
 
 ***
 
-### bindPullRequestSteps()
-
-> **bindPullRequestSteps**(`steps`): `object`
-
-Connect pull-request waiting to the factory's durable state reader.
-
-#### Parameters
-
-##### steps
-
-###### fetchPullRequestState
-
-`FetchPrState`
-
-#### Returns
-
-##### pullRequestGate
-
-> **pullRequestGate**: [`PullRequestGateFn`](#pullrequestgatefn) = `gate`
-
-Wait for actionable changes to one pull request.
-
-***
-
 ### carriesMarker()
 
 > **carriesMarker**(`body`): `boolean`
@@ -1271,3 +1247,27 @@ Return the pull request hook token named by a supported GitHub webhook payload.
 #### Returns
 
 `string` \| `null`
+
+## Factory plumbing
+
+### bindPullRequestSteps()
+
+> **bindPullRequestSteps**(`steps`): `object`
+
+Connect pull-request waiting to the factory's durable state reader.
+
+#### Parameters
+
+##### steps
+
+###### fetchPullRequestState
+
+`FetchPrState`
+
+#### Returns
+
+##### pullRequestGate
+
+> **pullRequestGate**: [`PullRequestGateFn`](#pullrequestgatefn) = `gate`
+
+Wait for actionable changes to one pull request.

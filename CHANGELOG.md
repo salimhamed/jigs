@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.56.1](https://github.com/salimhamed/jigs/compare/jigs-v0.56.0...jigs-v0.56.1) (2026-09-23)
+
+
+### Features
+
+* **docs:** rewrite the documentation set around the site ([#374](https://github.com/salimhamed/jigs/issues/374)) ([ac82164](https://github.com/salimhamed/jigs/commit/ac82164893877a866f3f43d88c305a15dd705208))
+
 ## [0.56.0](https://github.com/salimhamed/jigs/compare/jigs-v0.55.1...jigs-v0.56.0) (2026-09-23)
 
 
