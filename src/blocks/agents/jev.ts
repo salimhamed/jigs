@@ -60,7 +60,11 @@ export type JevResult<QUESTIONS extends JevQuestions> = {
   answers: JevAnswers<QUESTIONS>;
 };
 
-/** The factory's durable wrapper around the decision step. */
+/**
+ * The factory's durable wrapper around the decision step.
+ *
+ * @group Factory plumbing
+ */
 export type ExecuteJevStep = <const QUESTIONS extends JevQuestions>(
   request: AskJevOptions<QUESTIONS>,
 ) => Promise<JevResult<QUESTIONS>>;

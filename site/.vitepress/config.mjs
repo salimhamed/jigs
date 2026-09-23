@@ -1,5 +1,15 @@
 import manifest from "../../package.json" with { type: "json" };
+import { llmstxt } from "../../tools/api-docs/vitepress-plugins.mjs";
 import apiSidebar from "../api/typedoc-sidebar.json" with { type: "json" };
+
+const leaves = (items) => items.flatMap((item) => (item.items ? leaves(item.items) : [item]));
+
+// vitepress-plugin-llms drops the base from links in nested sidebar groups,
+// so llms.txt lists the API pages in one flat section.
+const flattenNestedGroups = (sidebar) =>
+  sidebar.map((section) =>
+    section.items ? { ...section, items: leaves(section.items) } : section,
+  );
 
 export default {
   title: "jigs",
@@ -7,9 +17,14 @@ export default {
   lang: "en-US",
   base: "/jigs/",
   outDir: "../docs-site",
+  // VitePress does not prefix head links with the base.
+  head: [["link", { rel: "icon", type: "image/svg+xml", href: "/jigs/favicon.svg" }]],
+  vite: {
+    plugins: [llmstxt({ domain: "https://salimhamed.github.io", sidebar: flattenNestedGroups })],
+  },
   themeConfig: {
     nav: [
-      { text: "Guide", link: "/guide/what-is-jigs", activeMatch: "/guide/" },
+      { text: "Guide", link: "/guide/why-jigs", activeMatch: "/guide/" },
       { text: "API reference", link: "/api/", activeMatch: "/api/" },
       {
         text: `v${manifest.version}`,
@@ -21,27 +36,26 @@ export default {
         text: "Start here",
         collapsed: false,
         items: [
-          { text: "What is jigs?", link: "/guide/what-is-jigs" },
-          { text: "Your first workflow", link: "/guide/getting-started" },
+          { text: "Why jigs", link: "/guide/why-jigs" },
+          { text: "Install and run a first workflow", link: "/guide/getting-started" },
           { text: "Core concepts", link: "/guide/concepts" },
         ],
       },
       {
-        text: "Build workflows",
+        text: "Build",
         collapsed: false,
         items: [
-          { text: "Run an agent", link: "/guide/agents" },
-          { text: "Call a model", link: "/guide/models" },
+          { text: "Build a workflow", link: "/guide/build-a-workflow" },
           { text: "Models and harnesses", link: "/guide/models-and-harnesses" },
-          { text: "Request human approval", link: "/guide/human-approval" },
-          { text: "Use the ship recipe", link: "/guide/ship" },
+          { text: "Recipes", link: "/guide/recipes" },
         ],
       },
       {
-        text: "Operate jigs",
+        text: "Operate",
         collapsed: false,
         items: [
-          { text: "Setup and operations", link: "/guide/operations" },
+          { text: "Configuration", link: "/guide/configuration" },
+          { text: "CLI commands", link: "/guide/cli" },
           { text: "Troubleshooting", link: "/guide/troubleshooting" },
         ],
       },

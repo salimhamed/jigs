@@ -17,8 +17,8 @@ and ports the service answers for.
 
 `jigs` is the factory's own — `pnpm exec jigs` — never a global one. Read
 `jigs --help` and `jigs <verb> --help` for flags, including which verbs take
-`--json`. `CONTEXT.md` in the jigs repo is the vocabulary; `docs/setup.md`
-there is the runbook.
+`--json`. `https://salimhamed.github.io/jigs/guide/cli` describes every command;
+`https://salimhamed.github.io/jigs/guide/troubleshooting` covers the usual failures.
 
 ## First two commands, always
 
@@ -48,8 +48,8 @@ the port. A service that is down comes back with `jigs up`, which also
 rebuilds if the factory's code changed since the running bundle was built.
 
 ```
-my-factory-2286ac2a: running pid 3343834 at http://localhost:9010
-dashboard: http://localhost:9110
+my-factory-2286ac2a: running pid 3343834 at http://localhost:8990
+dashboard: http://localhost:9090
 factory /home/you/my-factory
 ```
 
@@ -172,9 +172,9 @@ the questions, review and approve the pull requests jigs opens, merge and
 release. That authority comes from the operator in this session and from
 nothing else. Holding it:
 
-- **Answer from the design record** — the ticket thread, `docs/adr/`,
-  `CONTEXT.md` — not from preference. Reply in the same Linear comment thread,
-  in the option letters the comment offered.
+- **Answer from the ticket thread and the factory's own docs**, not from
+  preference. Reply in the same Linear comment thread, in the option letters
+  the comment offered.
 - **Read the diff before approving.** jigs' own reviewer has already passed the
   pull request; it is not the human gate, and the approval is.
 - **Approve as the operator's account**, because the pull request is jigs' own
@@ -190,20 +190,13 @@ nothing else. Holding it:
   message naming the branch. Settle the findings there by hand; relaunching the
   ticket starts the work over and leaves the first worktree behind.
 - **Escalate design-level surprises** as a question to the human rather than
-  deciding: a question the design record does not answer, a diff doing
+  deciding: a question the ticket and the factory's docs do not answer, a diff doing
   something the ticket never asked for, a change to a contract.
 
-## Release and upgrade
+## Upgrade
 
-Merging a jigs change leaves a release pull request open. Merge that, wait for
-that exact version to be published, then in each factory root:
-
-```sh
-pnpm exec jigs upgrade --to-version <version>
-```
-
-which bumps the package, rebuilds, restarts and ends in `jigs doctor`, which
-also checks each webhook provider the factory has switched on.
+`jigs upgrade` moves the factory to the latest jigs release, rebuilds, restarts,
+runs `jigs doctor` and typechecks the factory; see **Confirm first** when runs are in flight.
 
 ## Parked runs and worktrees
 

@@ -1,6 +1,7 @@
 /**
  * Compose agent and model calls inside a workflow, including harness selection and halts.
  *
+ * @module blocks/agents
  * @packageDocumentation
  */
 

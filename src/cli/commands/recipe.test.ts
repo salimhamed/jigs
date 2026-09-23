@@ -23,6 +23,7 @@ test("lists ship and installs its source, reporting manual registration", async 
   const config = readFileSync(path.join(deps.cwd, "jigs.config.ts"), "utf8");
   expect(recipeNames()).toContain("ship");
   expect(addRecipe("ship", deps).created).toEqual([
+    "blocks/delivery/README.md",
     "blocks/delivery/approval.types.test.ts",
     "blocks/delivery/delivery.test.ts",
     "blocks/delivery/delivery.ts",
@@ -49,7 +50,7 @@ test("keeps edited files when a recipe is added again", async () => {
   writeFileSync(path.join(deps.cwd, "workflows/ship.ts"), "// factory customization\n");
   const result = addRecipe("ship", deps);
   expect(result.created).toEqual([]);
-  expect(result.skipped).toHaveLength(13);
+  expect(result.skipped).toHaveLength(14);
   expect(deps.lines).toContain("kept    workflows/ship.ts");
   expect(readFileSync(path.join(deps.cwd, "workflows/ship.ts"), "utf8")).toBe(
     "// factory customization\n",

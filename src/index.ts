@@ -4,6 +4,7 @@
  * Import this module from factory configuration and workflow code that needs the shared
  * factory types.
  *
+ * @module jigs
  * @packageDocumentation
  */
 

@@ -12,6 +12,7 @@ import {
   directExportSummaryFailures,
   hasPackageDocumentation,
   internalReferences,
+  isPublicEntry,
   renderEntry,
   rootDir,
 } from "./docs.mjs";
@@ -50,6 +51,13 @@ test("package exports determine the API reference layout", () => {
       output: "blocks/agents.md",
     },
   ]);
+});
+
+test("only the root, blocks and steps entries are published", () => {
+  const published = [".", "./blocks/agents", "./steps/linear"];
+  const service = ["./app", "./nitro", "./build", "./schedules", "./plugins/start-world"];
+  expect(published.every((subpath) => isPublicEntry({ subpath }))).toBe(true);
+  expect(service.some((subpath) => isPublicEntry({ subpath }))).toBe(false);
 });
 
 test("the comment gate reads only doc comments and rejects internal references", () => {
@@ -109,6 +117,12 @@ test("the real renderer writes stable subpath pages with the package version", a
   expect(firstPage).toContain(`@jigs-ai/jigs v${version}`);
   expect(firstPage).toContain('Wrap steps in a factory-owned `"use step"` file.');
   expect(firstPage).not.toContain("Defined in:");
+  const root = await tempDir();
+  await renderEntry({ subpath: ".", source: "src/index.ts", output: "index.md" }, root);
+  const rootPage = await readFile(path.join(root, "index.md"), "utf8");
+  expect(rootPage).toContain("### JigsError");
+  expect(rootPage).toContain("##### hint?");
+  expect(rootPage).not.toContain("captureStackTrace");
   expect(firstPage).toBe(secondPage);
 }, 60_000);
 
@@ -185,7 +199,7 @@ test.each(["unchanged", "changed", "added", "deleted"])(
   },
 );
 
-test("the website covers every public entry and keeps links inside the Pages subpath", async () => {
+test("the website covers the public entries, llms.txt and the favicon inside the Pages subpath", async () => {
   const destination = await tempDir();
   // Run the real build in Node so VitePress uses its own Vite version,
   // independently of Vitest's module loader.
@@ -207,11 +221,27 @@ test("the website covers every public entry and keeps links inside the Pages sub
   const modulePages = generated.filter(
     (file) => file.startsWith("api/") && file.endsWith(".html") && file !== "api/index.html",
   );
-  expect(modulePages).toHaveLength(Object.keys(manifest.exports).length);
+  const publicSubpaths = Object.keys(manifest.exports).filter((subpath) =>
+    isPublicEntry({ subpath }),
+  );
+  expect(modulePages.sort()).toEqual(
+    publicSubpaths
+      .map((subpath) => (subpath === "." ? "api/jigs.html" : `api/${subpath.slice(2)}.html`))
+      .sort(),
+  );
+
+  const llms = await readFile(path.join(destination, "llms.txt"), "utf8");
+  expect(llms).toContain("https://salimhamed.github.io/jigs/guide/getting-started.md");
+  expect(llms).toContain("https://salimhamed.github.io/jigs/api/blocks/agents.md");
+  expect(llms).not.toMatch(/salimhamed\.github\.io\/(?!jigs\/)/);
+  const llmsFull = await readFile(path.join(destination, "llms-full.txt"), "utf8");
+  expect(llmsFull).toContain("# blocks/agents");
 
   const landing = await readFile(path.join(destination, "index.html"), "utf8");
   expect(landing).toContain(`v${manifest.version}`);
   expect(landing).toContain("VPHomeHero");
+  expect(landing).toContain('<link rel="icon" type="image/svg+xml" href="/jigs/favicon.svg">');
+  expect(files.has("favicon.svg")).toBe(true);
   expect(landing).toContain("Search");
   expect(generated.some((file) => /assets\/.*localSearchIndex.*\.js$/.test(file))).toBe(true);
   for (const file of generated.filter((file) => file.endsWith(".html"))) {

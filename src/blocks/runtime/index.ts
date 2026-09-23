@@ -1,6 +1,7 @@
 /**
  * Describe run-owned resources, inspect cleanup progress and request release from a workflow.
  *
+ * @module blocks/runtime
  * @packageDocumentation
  */
 

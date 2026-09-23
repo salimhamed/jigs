@@ -2,8 +2,8 @@ import { copyFile, mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promise
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Application, ReflectionKind } from "typedoc";
-import { typedocOptions } from "./typedoc.config.mjs";
+import { Application, Converter, ReflectionKind } from "typedoc";
+import { siteOptions, typedocOptions } from "./typedoc.config.mjs";
 
 const toolDir = path.dirname(fileURLToPath(import.meta.url));
 export const rootDir = path.resolve(toolDir, "../..");
@@ -28,6 +28,11 @@ export function apiEntries(manifest, buildEntries) {
       output: subpath === "." ? "index.md" : `${subpath.slice(2)}.md`,
     };
   });
+}
+
+/** Factories import the package root, `blocks/*` and `steps/*`; the other entries host the service. */
+export function isPublicEntry(entry) {
+  return entry.subpath === "." || /^\.\/(?:blocks|steps)\//.test(entry.subpath);
 }
 
 async function walkTypeScriptFiles(directory) {
@@ -120,6 +125,26 @@ async function checkRepositoryRules(entries) {
   if (failures.length) throw new Error(failures.join("\n"));
 }
 
+// Members inherited from outside the package, such as Error's stack and
+// captureStackTrace, bury the few members a jigs class adds.
+function hideExternalInheritedMembers(converter) {
+  const external = [];
+  converter.on(Converter.EVENT_CREATE_DECLARATION, (context, reflection) => {
+    if (!reflection.parent?.kindOf(ReflectionKind.ClassOrInterface)) return;
+    const declarations = context.getSymbolFromReflection(reflection)?.declarations ?? [];
+    const isExternal = (declaration) => {
+      const file = declaration.getSourceFile();
+      return (
+        context.program.isSourceFileDefaultLibrary(file) || file.fileName.includes("/node_modules/")
+      );
+    };
+    if (declarations.length && declarations.every(isExternal)) external.push(reflection);
+  });
+  converter.on(Converter.EVENT_RESOLVE_BEGIN, (context) => {
+    for (const reflection of external) context.project.removeReflection(reflection);
+  });
+}
+
 export async function convert(entryPoints, { format = "markdown", ...options } = {}) {
   const app = await Application.bootstrapWithPlugins({
     ...typedocOptions,
@@ -132,6 +157,7 @@ export async function convert(entryPoints, { format = "markdown", ...options } =
     tsconfig: path.join(rootDir, "tsconfig.json"),
     ...options,
   });
+  hideExternalInheritedMembers(app.converter);
   const project = await app.convert();
   if (!project || app.logger.hasErrors()) throw new Error("TypeDoc conversion failed");
   return { app, project };
@@ -176,17 +202,23 @@ export async function run({ write = false, destination = path.join(rootDir, "doc
   await validate(entries);
   if (!write) return;
   await rm(destination, { recursive: true, force: true });
-  await Promise.all(entries.map((entry) => renderEntry(entry, destination)));
+  await Promise.all(entries.filter(isPublicEntry).map((entry) => renderEntry(entry, destination)));
 }
 
 export async function renderSite(destination = path.join(rootDir, "docs-site")) {
   const { entries } = await repositoryConfig();
   await checkRepositoryRules(entries);
   const { app, project } = await convert(
-    entries.map((entry) => path.join(rootDir, entry.source)),
+    entries
+      .filter(isPublicEntry)
+      .sort((a, b) => a.subpath.localeCompare(b.subpath))
+      .map((entry) => path.join(rootDir, entry.source)),
     {
+      ...siteOptions,
       format: "vitepress",
       docsRoot: path.join(rootDir, "site"),
+      readme: path.join(toolDir, "site-index.md"),
+      mergeReadme: true,
       out: path.join(rootDir, "site/api"),
       sidebar: { collapsed: true },
     },

@@ -44,7 +44,11 @@ export interface ReleaseReport {
   runDirectory: ReleasedResource;
 }
 
-/** Durable step functions required by the workflow-side release block. */
+/**
+ * Durable step functions required by the workflow-side release block.
+ *
+ * @group Factory plumbing
+ */
 export interface ReleaseSteps {
   /** Resolve the workflow, factory or default release policy for the active run. */
   resolveReleasePolicy: () => Promise<ReleasePolicy>;
@@ -64,7 +68,11 @@ export async function release(steps: ReleaseSteps, policy?: ReleasePolicy): Prom
   return steps.releaseRunResources(policy ?? (await steps.resolveReleasePolicy()));
 }
 
-/** Bind durable release steps into the workflow-facing release API. */
+/**
+ * Bind durable release steps into the workflow-facing release API.
+ *
+ * @group Factory plumbing
+ */
 export function bindReleaseSteps(steps: ReleaseSteps) {
   return {
     /** Release resources with an explicit policy, or resolve the run's configured policy. */

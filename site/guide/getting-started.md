@@ -1,22 +1,45 @@
-# Run your first workflow
+# Install and run a first workflow
 
-This guide gets a new factory running and launches `hello`, the workflow included
-with every new factory. It does not call a model or change a repository.
+This guide creates a factory, starts its service and runs `hello`, the workflow
+every new factory includes. `hello` calls no model and changes no repository,
+so you need no credentials to try it.
 
-## 1. Check your machine
+## Set up with your agent
 
-Have these ready before you begin:
+If you use a coding agent, you can let it do the steps below. Install the jigs
+skill, which adds a single skill named `/jigs`:
 
-- Node.js 24 or newer and pnpm.
-- Docker with its daemon running.
-- For workflows that run agents, the CLI of each harness they require, such as
-  Claude Code (`claude`) or Codex (`codex`), on your shell’s `PATH` and logged in.
-  `hello` runs no agent and needs none.
+```sh
+npx skills add salimhamed/jigs
+```
 
-If you use a Node version manager, start the service from a shell where Node and
-those CLIs work.
+Then ask your agent `/jigs set up a factory in this empty directory`.
 
-## 2. Create your factory
+The rest of this page is the same process by hand.
+
+## 1. Host dependencies
+
+- **Node.js 24 or newer** and **pnpm**.
+- **Docker**, with its daemon running. Each factory runs its own Postgres
+  container.
+- **Agent CLIs, only for the harnesses your workflows use.** `hello` uses none.
+  Install each one yourself, keep it on the `PATH` of the shell that starts the
+  service, and log in:
+
+  | Harness | Command | Log in |
+  | --- | --- | --- |
+  | Claude Code | `claude` | `claude auth login` |
+  | Codex | `codex` | `codex login` |
+  | Pi | `pi` | run `pi`, then `/login` |
+
+- **On Linux**, run `loginctl enable-linger "$USER"` once, so the service keeps
+  running after you log out. On a host without systemd, such as macOS, the
+  service runs unsupervised and stops when you log out.
+
+jigs installs from public npm as `@jigs-ai/jigs`. Each factory pins its own
+version, so there is nothing to install globally and no registry token.
+
+## 2. Create a factory
 
 ```sh
 mkdir my-factory
@@ -25,51 +48,47 @@ git init
 pnpm dlx @jigs-ai/jigs init
 ```
 
-The command writes your starting files and prints the next steps. It does not
-start services. The service and database ports are chosen for your factory;
-use the values it prints.
-
-Open `workflows/hello.ts`. It creates a scratch directory for a run, removes it,
-and returns the message you supply. `jigs.config.ts` registers that workflow under
-the name `hello`.
+`init` writes the starting files and prints the next steps with this factory's
+ports filled in. It does not start anything. `workflows/hello.ts` is the first
+workflow, and `jigs.config.ts` registers it under the name `hello`.
 
 ## 3. Start the service
 
 ```sh
-cp .env.example .env
 pnpm install
 pnpm exec jigs up
 ```
 
-`up` prepares dependencies and Postgres, builds your factory, and starts its
-service. Wait for it to report ready.
+`pnpm install` puts this factory's jigs in place for `pnpm exec`. `jigs up`
+copies `.env.example` to `.env` if it is missing, starts Postgres, builds the
+factory, starts the service and waits until it is ready. It ends by running
+`jigs doctor`, which checks only what your workflows use; rerun it any time
+with `pnpm exec jigs doctor`.
 
-The last step runs `jigs doctor`, which checks only what your workflows require
-and what `jigs.config.ts` turns on. `hello` needs no Linear or GitHub credentials
-and no agent CLI; your package token is still needed for installation.
+The final line looks like this:
 
-## 4. Launch and inspect a run
+```
+my-factory-2286ac2a is up at http://localhost:8990 — dashboard http://localhost:9090
+```
+
+Open the dashboard URL from your own output. It shows every run and its steps.
+To stop the service, run `pnpm exec jigs service stop`.
+
+## 4. Run hello
 
 ```sh
 pnpm exec jigs run hello --input message=hello
 pnpm exec jigs status
 ```
 
-The launch reports a run ID. Inspect that run by substituting its ID below:
+`run` prints the new run's ID and its dashboard link. `status` lists runs; pass
+a run ID to see one run in detail:
 
 ```sh
 pnpm exec jigs status <run-id>
 ```
 
-The run should complete successfully. You can also open the dashboard at the
-dashboard port in your factory’s configuration and inspect its recorded steps.
-
-## Next steps
-
-Read [core concepts](./concepts) before editing your workflow. Then choose
-[an agent call](./agents), [a model call](./models), or the [ship recipe](./ship).
-For GitHub identities and other credentials, follow the
-[full setup runbook](https://github.com/salimhamed/jigs/blob/main/docs/setup.md).
-A factory needs no webhooks: parked runs re-read GitHub and Linear every 300
-seconds by default. Webhooks are optional, to react faster; the runbook's step
-5 turns them on per provider.
+The run should finish as completed. From here, write your own workflow with
+[Build a workflow](/guide/build-a-workflow). Binding a repository needs GitHub
+credentials, so set them first: see
+[GitHub identity](/guide/configuration#github-identity).
