@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.52.0
+# @jigs-ai/jigs v0.52.1
 
 Configure Nitro to build and host a jigs factory service.
 
