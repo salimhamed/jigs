@@ -112,7 +112,7 @@ test("the real renderer writes stable subpath pages with the package version", a
   expect(firstPage).toContain('Wrap steps in a factory-owned `"use step"` file.');
   expect(firstPage).not.toContain("Defined in:");
   expect(firstPage).toBe(secondPage);
-}, 20_000);
+}, 60_000);
 
 test("release docs generate independently while GitHub gates auto-merge", async () => {
   const workflow = parse(

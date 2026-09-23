@@ -1,18 +1,15 @@
-import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import path from "node:path";
-import semver from "semver";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { runAgent } from "../../../blocks/agents/agent.ts";
 import { askAgent } from "../../../blocks/agents/ask-agent.ts";
 import { harnesses, models } from "../../../blocks/agents/harness-config.ts";
 import { executeAgent } from "../execute-agent.ts";
-import { MIN_PI_VERSION, resolvePiExecutable } from "./executables.ts";
 import { executePi } from "./pi.ts";
 import { writePiSubmitResultExtension } from "./pi-extension.ts";
-import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
+import { makeTmpDir, removeTmpDir, skipWithoutSupportedPi } from "./test-fixtures.ts";
 
 // These tests start the installed Pi against a scripted OpenAI-compatible
 // server on localhost, so every model turn is deterministic and offline.
@@ -28,15 +25,7 @@ afterEach(() => {
   removeTmpDir(tmp);
 });
 
-function hasSupportedPi(): boolean {
-  try {
-    const answer = spawnSync(resolvePiExecutable(process.env), ["--version"], { encoding: "utf8" });
-    const version = semver.coerce(`${answer.stdout}${answer.stderr}`, { includePrerelease: true });
-    return answer.status === 0 && version !== null && semver.gte(version, MIN_PI_VERSION);
-  } catch {
-    return false;
-  }
-}
+const skipPi = skipWithoutSupportedPi();
 
 type ChatRequest = {
   messages: Array<Record<string, unknown>>;
@@ -147,7 +136,7 @@ const step = (wire: Parameters<typeof executeAgent>[0]) =>
 
 const answer = z.object({ word: z.string(), count: z.number() });
 
-test.skipIf(!hasSupportedPi())(
+test.skipIf(skipPi)(
   "installed Pi tool flags: only --no-tools also hides extension tools",
   async () => {
     const model = await scriptedModel(() => ({ text: "ok" }));
@@ -198,7 +187,7 @@ test.skipIf(!hasSupportedPi())(
   20_000,
 );
 
-test.skipIf(!hasSupportedPi())(
+test.skipIf(skipPi)(
   "a structured Pi ask exposes only submit_result and returns its validated arguments",
   async () => {
     const model = await scriptedModel(() => ({ call: { word: "sky", count: 3 } }));
@@ -217,7 +206,7 @@ test.skipIf(!hasSupportedPi())(
   10_000,
 );
 
-test.skipIf(!hasSupportedPi())(
+test.skipIf(skipPi)(
   "a structured Pi ask fails loudly when submit_result arguments do not match the schema",
   async () => {
     // "3" is what Pi's own argument coercion would silently turn into 3.
@@ -241,7 +230,7 @@ test.skipIf(!hasSupportedPi())(
   10_000,
 );
 
-test.skipIf(!hasSupportedPi())(
+test.skipIf(skipPi)(
   "a structured Pi ask keeps the first accepted submit_result and rejects later calls",
   async () => {
     const model = await scriptedModel((_request, index) =>
@@ -269,7 +258,7 @@ test.skipIf(!hasSupportedPi())(
   10_000,
 );
 
-test.skipIf(!hasSupportedPi())(
+test.skipIf(skipPi)(
   "a structured Pi ask never accepts JSON-looking text in place of submit_result",
   async () => {
     const model = await scriptedModel(() => ({ text: '{"word":"sky","count":3}' }));
@@ -287,7 +276,7 @@ test.skipIf(!hasSupportedPi())(
   10_000,
 );
 
-test.skipIf(!hasSupportedPi())(
+test.skipIf(skipPi)(
   "a plain Pi ask sends no tools and returns text",
   async () => {
     const model = await scriptedModel(() => ({ text: '{"looks":"like json"}' }));
@@ -303,7 +292,7 @@ test.skipIf(!hasSupportedPi())(
   10_000,
 );
 
-test.skipIf(!hasSupportedPi())(
+test.skipIf(skipPi)(
   "a structured Pi run adds submit_result to the caller's tool allowlist",
   async () => {
     const worktree = path.join(tmp, "worktree");
@@ -329,7 +318,7 @@ test.skipIf(!hasSupportedPi())(
   10_000,
 );
 
-test.skipIf(!hasSupportedPi())(
+test.skipIf(skipPi)(
   "concurrent structured Pi asks each validate against their own schema",
   async () => {
     const wordOnly = z.object({ word: z.string() });

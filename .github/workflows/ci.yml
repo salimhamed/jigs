@@ -23,6 +23,8 @@ jobs:
           git diff --cached --exit-code
       - run: pnpm lint
       - run: pnpm typecheck
+      # The installed-Pi tests skip locally without a supported pi, but fail in CI.
+      - run: npm install --global @earendil-works/pi-coding-agent@0.87.0
       - run: pnpm test
       - run: pnpm build
 

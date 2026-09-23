@@ -1,13 +1,10 @@
-import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import path from "node:path";
-import semver from "semver";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { MIN_PI_VERSION, resolvePiExecutable } from "./executables.ts";
 import { executePi } from "./pi.ts";
 import { writePiMcpExtension } from "./pi-extension.ts";
-import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
+import { makeTmpDir, removeTmpDir, skipWithoutSupportedPi } from "./test-fixtures.ts";
 
 let tmp: string;
 beforeEach(() => {
@@ -15,15 +12,7 @@ beforeEach(() => {
 });
 afterEach(() => removeTmpDir(tmp));
 
-function hasSupportedPi(): boolean {
-  try {
-    const answer = spawnSync(resolvePiExecutable(process.env), ["--version"], { encoding: "utf8" });
-    const version = semver.coerce(`${answer.stdout}${answer.stderr}`, { includePrerelease: true });
-    return answer.status === 0 && version !== null && semver.gte(version, MIN_PI_VERSION);
-  } catch {
-    return false;
-  }
-}
+const skipPi = skipWithoutSupportedPi();
 
 async function closeServer(server: Server): Promise<void> {
   server.closeAllConnections();
@@ -179,7 +168,7 @@ function piEnv(home: string, token: string, pidFile: string): Record<string, str
   };
 }
 
-test.skipIf(!hasSupportedPi())(
+test.skipIf(skipPi)(
   "installed Pi exposes only the explicit MCP snapshot, calls its stdio tool, and cleans it up",
   async () => {
     const requests: Array<Record<string, unknown>> = [];
@@ -275,7 +264,7 @@ test.skipIf(!hasSupportedPi())(
   10_000,
 );
 
-test.skipIf(!hasSupportedPi())(
+test.skipIf(skipPi)(
   "installed Pi hides the generic proxy when an explicit MCP server fails",
   async () => {
     const requests: Array<Record<string, unknown>> = [];
@@ -332,7 +321,7 @@ test.skipIf(!hasSupportedPi())(
   10_000,
 );
 
-test.skipIf(!hasSupportedPi())(
+test.skipIf(skipPi)(
   "installed Pi shuts down its eager MCP child after model failure",
   async () => {
     const server = createServer((_request, response) => {
@@ -367,7 +356,7 @@ test.skipIf(!hasSupportedPi())(
   10_000,
 );
 
-test.skipIf(!hasSupportedPi())(
+test.skipIf(skipPi)(
   "installed Pi shuts down its eager MCP child when the invocation is cancelled",
   async () => {
     const server = createServer(() => {});

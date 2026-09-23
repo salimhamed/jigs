@@ -6,8 +6,9 @@ status: accepted
 
 Model sources are API endpoints. Harnesses are agent programs jigs spawns.
 Workflow code passes only tagged serializable descriptors; step-side drivers
-hydrate live providers and own execution, checks, environment allowlists,
-session pointers and cost reporting.
+hydrate live providers and own execution, checks, environment allowlists and
+session pointers. Results report no token usage or cost: jigs does not measure
+or report model spend for any driver.
 
 The public constructor namespaces are `models.*` and `harnesses.*`. The four
 execution verbs state which family they accept: `runAgent` and `askAgent` take
@@ -16,6 +17,16 @@ harnesses; `askModel` and `askJev` take model sources.
 ## Consequences
 
 - One step-side driver registry is the source of installed execution kinds.
+- `askAgent` gives the model no tools. Claude Code runs with its built-in tools
+  off and no MCP servers, Pi runs with `--no-tools`, and Codex is rejected
+  because it has no tool-free mode. A descriptor that names tools or MCP servers
+  is rejected before any check runs.
+- Pi structured output goes only through an invocation-private `submit_result`
+  tool, which validates the model's raw arguments against the requested
+  schema. A structured ask allows only that tool; a structured run adds it to
+  the caller's allowlist. The first accepted call stands. A turn that ends
+  without one fails, even when the reply is JSON text, and a model or process
+  failure after it still fails the call.
 - Pi runs as a subprocess of the installed binary. jigs does not implement an
   AI SDK `LanguageModel` for it; Pi itself owns its agent loop. Pi's native
   request retries remain enabled, and jigs accepts a result only after Pi emits
@@ -42,15 +53,21 @@ harnesses; `askModel` and `askJev` take model sources.
 - Pi and its MCP children share a private process group. jigs stops the group
   when Pi exits, when the service shuts down, and when the process exits. Run
   cancellation does not yet reach a running Pi step.
-- Subscription logins remain first-class for harnesses. API keys are never
-  inherited globally: each driver explicitly allowlists the credentials its
-  subprocess or API client may receive. The Claude driver reapplies that
+- Subscription logins remain first-class for harnesses. A harness subprocess
+  starts from the service environment with credential-shaped variables
+  removed by name (names containing `API_KEY`, `ACCESS_KEY`, `SECRET`,
+  `TOKEN`, `PASSWORD` or `CREDENTIAL`, gateway and parent-agent-session
+  names); the driver then adds back the variables it needs, such as those its
+  model source and MCP servers name. Removal is by name only, so a secret stored under an ordinary
+  name, such as a database URL with an embedded password, is inherited.
+  Operators keep such values out of the service environment or give them a
+  name that matches. The Claude driver reapplies that
   policy at the provider's process-launch hook because the provider assembles
   its final child environment from the host after accepting jigs' environment.
   At that seam the driver captures the CLI's stderr and hands it to the
   provider on the launch error, so login failures still classify as such.
-  This isolates environment credentials, not credential files available to
-  the same operating-system user.
+  This isolates credential-named environment variables, not credential files
+  available to the same operating-system user.
 - Harness descriptors are reusable configuration, not mutable sessions.
   Generated settings and extensions belong to one invocation, while durable
   conversation files live separately. Continuation occurs only from an
@@ -60,7 +77,3 @@ harnesses; `askModel` and `askJev` take model sources.
   attempted execution fails explicitly with the unregistered kind.
 
 This decision amends ADR 0004's statement that Pi is not a v0 harness.
-
-AGE-506 amends this decision's cost-reporting clause: model, agent, and Jev
-results no longer expose usage or costUsd, and drivers no longer own cost
-reporting.

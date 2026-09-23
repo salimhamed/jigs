@@ -1,6 +1,10 @@
-import { existsSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { promisify } from "node:util";
 import { afterAll, beforeAll, expect, test } from "vitest";
+import { z } from "zod";
+import { runAgent } from "../../../../blocks/agents/agent.ts";
 import { harnesses, models } from "../../../../blocks/agents/harness-config.ts";
 import { buildAgentRequest } from "../../../../blocks/agents/plan.ts";
 import type { AgentResult } from "../../../../blocks/agents/result.ts";
@@ -12,7 +16,7 @@ import {
   executeAgent,
 } from "../../execute-agent.ts";
 import { executePi } from "../pi.ts";
-import { preparePiInvocationHome } from "../pi-home.ts";
+import { piRunStatePath, piSessionsDir, preparePiInvocationHome } from "../pi-home.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { makeScratchRepo } from "./fixtures/live-env.ts";
 
@@ -27,12 +31,13 @@ const localReachable = localConfigured
   : false;
 
 let tmp: string;
+let piHomes: string;
 let deps: AgentExecutionDependencies;
 beforeAll(() => {
   tmp = makeTmpDir();
+  piHomes = path.join(tmp, "pi-homes");
   const pi = createPiDriver({
-    preparePiHome: (runId, source) =>
-      preparePiInvocationHome(runId, source, { baseDir: path.join(tmp, "pi-homes") }),
+    preparePiHome: (runId, source) => preparePiInvocationHome(runId, source, { baseDir: piHomes }),
     executePi,
   });
   deps = {
@@ -50,7 +55,7 @@ function success(result: Awaited<ReturnType<typeof executeAgent>>): AgentResult<
 }
 
 test.skipIf(!localConfigured || !localReachable)(
-  "Pi runs in a worktree, remembers a resumed turn, and rejects a stale pointer before spawn",
+  "Pi runs in a worktree, resumes in a new process, submits a structured run, and rejects a stale pointer",
   async () => {
     const worktree = makeScratchRepo(tmp, "pi-run-resume");
     const secret = `memory-${crypto.randomUUID()}`;
@@ -80,20 +85,45 @@ test.skipIf(!localConfigured || !localReachable)(
     expect(existsSync(path.join(worktree, "PI_RUN_PROOF.txt"))).toBe(true);
     expect(first.session).toMatchObject({ harness: "pi" });
 
-    const resumed = success(
-      await executeAgent(
-        buildAgentRequest({
-          harness,
+    const runState = piRunStatePath(metadata.workflowRunId, { baseDir: piHomes });
+    expect(readdirSync(path.join(runState, "invocations"))).toEqual([]);
+    expect(readdirSync(piSessionsDir(runState)).length).toBe(1);
+
+    const resultFile = path.join(tmp, "continued.json");
+    await promisify(execFile)(
+      process.execPath,
+      [
+        path.join(import.meta.dirname, "fixtures", "pi-continue.ts"),
+        JSON.stringify({
+          baseDir: piHomes,
+          baseUrl,
+          model: localModel,
+          runId: metadata.workflowRunId,
           cwd: worktree,
           prompt: "Reply with exactly the secret I asked you to remember in the previous turn.",
           resume: first.session,
+          resultFile,
         }),
-        metadata,
-        deps,
-      ),
+      ],
+      { timeout: 540_000 },
     );
+    const resumed = success(JSON.parse(readFileSync(resultFile, "utf8")));
     expect(resumed.text).toContain(secret);
     expect(resumed.session).toEqual(first.session);
+    expect(readdirSync(path.join(runState, "invocations"))).toEqual([]);
+
+    const structured = await runAgent(
+      {
+        harness,
+        cwd: worktree,
+        prompt: "Read PI_RUN_PROOF.txt with a tool, then submit its file name and exact contents.",
+        output: z.object({ file: z.string(), content: z.string() }),
+      },
+      (wire) => executeAgent(wire, metadata, deps),
+    );
+    expect(structured.output.file).toContain("PI_RUN_PROOF.txt");
+    expect(structured.output.content.trim()).toBe("created");
+    expect(structured.session?.id).not.toBe(first.session?.id);
 
     const stale = await executeAgent(
       buildAgentRequest({
