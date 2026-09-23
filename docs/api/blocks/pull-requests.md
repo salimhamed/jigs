@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.53.0
+# @jigs-ai/jigs v0.54.0
 
 Compose pull request creation, review, approval and merge gates inside a workflow.
 
@@ -1077,7 +1077,7 @@ unanswered comes back on the next wake.
 
 > **pullRequestGate**(`pr`, `fetchState`, `scope`, `approval`): `AsyncGenerator`\<[`PullRequestWake`](#pullrequestwake), `void`, `undefined`\>
 
-Yield actionable pull request state, then wait for webhook activity until the pull request closes.
+Yield actionable pull request state, then wait for the next wake until the pull request closes.
 
 #### Parameters
 
@@ -1156,7 +1156,7 @@ The default continuation identity: the workflow, and what it is working on.
 
 > **pullRequestToken**(`pr`): `string`
 
-Build the durable hook token shared by a pull request gate and webhook ingress.
+Build the durable hook token shared by a pull request gate, the service poll and the webhook ingress.
 
 #### Parameters
 
