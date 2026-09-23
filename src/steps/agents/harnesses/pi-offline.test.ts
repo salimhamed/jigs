@@ -1,12 +1,9 @@
-import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import path from "node:path";
-import semver from "semver";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { MIN_PI_VERSION, resolvePiExecutable } from "./executables.ts";
 import { executePi, type PiExecutionOptions } from "./pi.ts";
-import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
+import { makeTmpDir, removeTmpDir, skipWithoutSupportedPi } from "./test-fixtures.ts";
 
 let tmp: string;
 beforeEach(() => {
@@ -14,17 +11,7 @@ beforeEach(() => {
 });
 afterEach(() => removeTmpDir(tmp));
 
-function hasSupportedPi(): boolean {
-  try {
-    const executable = resolvePiExecutable(process.env);
-    const answer = spawnSync(executable, ["--version"], { encoding: "utf8" });
-    if (answer.status !== 0) return false;
-    const version = semver.coerce(`${answer.stdout}${answer.stderr}`, { includePrerelease: true });
-    return version !== null && semver.gte(version, MIN_PI_VERSION);
-  } catch {
-    return false;
-  }
-}
+const skipPi = skipWithoutSupportedPi();
 
 async function closeServer(server: Server): Promise<void> {
   server.closeAllConnections();
@@ -122,7 +109,7 @@ function piOptions(home: string) {
   };
 }
 
-test.skipIf(!hasSupportedPi())(
+test.skipIf(skipPi)(
   "installed Pi retries a scripted endpoint and exits with one settled success",
   async () => {
     let requests = 0;
@@ -176,7 +163,7 @@ test.skipIf(!hasSupportedPi())(
   10_000,
 );
 
-test.skipIf(!hasSupportedPi())(
+test.skipIf(skipPi)(
   "installed Pi exhausts its native retry and reports the settled model error",
   async () => {
     let requests = 0;

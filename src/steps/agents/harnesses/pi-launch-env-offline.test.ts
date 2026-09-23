@@ -1,8 +1,6 @@
-import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import path from "node:path";
-import semver from "semver";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { harnesses, models } from "../../../blocks/agents/harness-config.ts";
 import { buildAgentRequest } from "../../../blocks/agents/plan.ts";
@@ -10,11 +8,10 @@ import { type DriverResolver, driverFor } from "../drivers/index.ts";
 import { createPiDriver } from "../drivers/pi.ts";
 import { defaultAgentExecutionDependencies, executeAgent } from "../execute-agent.ts";
 import { scrubbedEnv } from "./env.ts";
-import { MIN_PI_VERSION, resolvePiExecutable } from "./executables.ts";
 import { executePi } from "./pi.ts";
 import { piMcpToolNames } from "./pi-extension.ts";
 import { piRunStatePath, preparePiInvocationHome } from "./pi-home.ts";
-import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
+import { makeTmpDir, removeTmpDir, skipWithoutSupportedPi } from "./test-fixtures.ts";
 
 let tmp: string;
 beforeEach(() => {
@@ -25,15 +22,7 @@ afterEach(() => {
   removeTmpDir(tmp);
 });
 
-function hasSupportedPi(): boolean {
-  try {
-    const answer = spawnSync(resolvePiExecutable(process.env), ["--version"], { encoding: "utf8" });
-    const version = semver.coerce(`${answer.stdout}${answer.stderr}`, { includePrerelease: true });
-    return answer.status === 0 && version !== null && semver.gte(version, MIN_PI_VERSION);
-  } catch {
-    return false;
-  }
-}
+const skipPi = skipWithoutSupportedPi();
 
 async function closeServer(server: Server): Promise<void> {
   server.closeAllConnections();
@@ -70,24 +59,24 @@ type EnvReport = {
   parentEnv: Record<string, string> | null;
 };
 
-function credentialShaped(name: string): boolean {
-  return scrubbedEnv([], { [name]: "x" })[name] === undefined;
-}
-
 // The MCP SDK's stdio transport always passes these through to a child.
 const STDIO_DEFAULTS = ["HOME", "LOGNAME", "PATH", "SHELL", "TERM", "USER"];
 
-test.skipIf(!hasSupportedPi() || process.platform !== "linux")(
-  "installed Pi launches with only the allowlisted secrets and its MCP child with only declared env",
+test.skipIf(skipPi || process.platform !== "linux")(
+  "installed Pi launches without credential-shaped names except the allowlisted ones, and its MCP child with only declared env",
   async () => {
     const id = crypto.randomUUID();
     const secrets = {
       SYNTHETIC_MODEL_API_KEY: `fake-model-key-${id}`,
       SYNTHETIC_MCP_TOKEN: `fake-mcp-token-${id}`,
       SYNTHETIC_UNRELATED_SECRET: `fake-unrelated-${id}`,
+      SYNTHETIC_API_KEY: `fake-api-key-${id}`,
+      SYNTHETIC_TOKEN: `fake-token-${id}`,
       OPENROUTER_API_KEY: `fake-openrouter-${id}`,
     };
     for (const [name, value] of Object.entries(secrets)) vi.stubEnv(name, value);
+    // Removal is by name, so a secret under an ordinary name is inherited.
+    vi.stubEnv("SYNTHETIC_PLAIN_VALUE", `plain-${id}`);
     const envFile = path.join(tmp, "mcp-env.jsonl");
     vi.stubEnv("JIGS_TEST_ENV_FILE", envFile);
     vi.stubEnv("JIGS_TEST_PROBE_VALUE", "ENV-PROBE");
@@ -241,15 +230,19 @@ test.skipIf(!hasSupportedPi() || process.platform !== "linux")(
     // Compared by name so a failure never prints the host's values. The
     // launcher may add its own non-credential variables, such as NODE_PATH.
     expect(Object.keys(expectedPiEnv).filter((name) => !(name in inherited))).toEqual([]);
-    const credentials = Object.keys(inherited).filter((name) => credentialShaped(name));
-    expect(credentials.filter((name) => !allowlist.includes(name))).toEqual([]);
     expect(allowlist).toEqual(
       expect.arrayContaining(["SYNTHETIC_MODEL_API_KEY", "SYNTHETIC_MCP_TOKEN"]),
     );
     expect(piEnv.SYNTHETIC_MODEL_API_KEY).toBe(secrets.SYNTHETIC_MODEL_API_KEY);
     expect(piEnv.SYNTHETIC_MCP_TOKEN).toBe(secrets.SYNTHETIC_MCP_TOKEN);
-    expect("SYNTHETIC_UNRELATED_SECRET" in piEnv).toBe(false);
-    expect("OPENROUTER_API_KEY" in piEnv).toBe(false);
+    for (const name of [
+      "SYNTHETIC_UNRELATED_SECRET",
+      "SYNTHETIC_API_KEY",
+      "SYNTHETIC_TOKEN",
+      "OPENROUTER_API_KEY",
+    ])
+      expect(name in piEnv, `${name} reached Pi`).toBe(false);
+    expect(piEnv.SYNTHETIC_PLAIN_VALUE).toBe(`plain-${id}`);
 
     const written = [
       ...invocationFiles,
