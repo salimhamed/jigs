@@ -28,7 +28,11 @@ export type AskModelOptions<T = undefined> = {
 };
 
 export type { OutputJsonSchema } from "./output-schema.ts";
-/** Serializable agent request passed to a durable step. */
+/**
+ * Serializable agent request passed to a durable step.
+ *
+ * @group Factory plumbing
+ */
 export type AgentRequest =
   | (Omit<RunAgentOptions, "output"> & { outputSchema?: OutputJsonSchema })
   | (Omit<AskAgentOptions, "output"> & {
@@ -36,7 +40,11 @@ export type AgentRequest =
       resume?: never;
       outputSchema?: OutputJsonSchema;
     });
-/** Serializable API model request passed to a durable step. */
+/**
+ * Serializable API model request passed to a durable step.
+ *
+ * @group Factory plumbing
+ */
 export type ModelRequest = Omit<AskModelOptions, "output"> & { outputSchema?: OutputJsonSchema };
 
 function withOutputSchema<T extends object>(
@@ -47,7 +55,11 @@ function withOutputSchema<T extends object>(
   return outputSchema === undefined ? wire : { ...wire, outputSchema };
 }
 
-/** Convert workflow-side run options into their durable wire form. */
+/**
+ * Convert workflow-side run options into their durable wire form.
+ *
+ * @group Factory plumbing
+ */
 export function buildAgentRequest<T>(config: RunAgentOptions<T>): AgentRequest {
   const { output, ...wire } = config;
   return withOutputSchema(wire, output);
@@ -67,13 +79,21 @@ export function assertAskableHarness(harness: Harness): asserts harness is Askab
       "askAgent() runs without tools — tools on the Pi harness descriptor is only honored by runAgent()",
     );
 }
-/** Convert workflow-side harness-ask options into their durable wire form. */
+/**
+ * Convert workflow-side harness-ask options into their durable wire form.
+ *
+ * @group Factory plumbing
+ */
 export function buildAskAgentRequest<T>(config: AskAgentOptions<T>): AgentRequest {
   assertAskableHarness(config.harness);
   const { output, ...wire } = config;
   return withOutputSchema(wire, output);
 }
-/** Convert workflow-side model options into their durable wire form. */
+/**
+ * Convert workflow-side model options into their durable wire form.
+ *
+ * @group Factory plumbing
+ */
 export function buildModelRequest<T>(config: AskModelOptions<T>): ModelRequest {
   const { output, ...wire } = config;
   return withOutputSchema(wire, output);

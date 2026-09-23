@@ -20,7 +20,11 @@ export type BoundReviewTicketOptions = Omit<
   "runAgent" | "haltForHuman" | "fetchTicketSnapshot" | "postTicketNote"
 >;
 
-/** Durable wrappers a factory supplies for Linear and agent operations. */
+/**
+ * Durable wrappers a factory supplies for Linear and agent operations.
+ *
+ * @group Factory plumbing
+ */
 export interface LinearSteps {
   runAgent: ReviewTicketOptions["runAgent"];
   postTicketHumanInputRequest: PostTicketHumanInputRequest;
@@ -29,7 +33,11 @@ export interface LinearSteps {
   fetchTicketSnapshot: ReviewTicketOptions["fetchTicketSnapshot"];
 }
 
-/** Connect Linear clarification and review to the factory's durable steps. */
+/**
+ * Connect Linear clarification and review to the factory's durable steps.
+ *
+ * @group Factory plumbing
+ */
 export function bindLinearSteps(steps: LinearSteps) {
   const { runAgent } = steps;
   const haltForHuman: HaltForHumanFn = (claim, halt) =>

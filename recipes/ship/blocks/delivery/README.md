@@ -18,6 +18,9 @@ them freely. Upgrading jigs never overwrites them.
 - **Linear and GitHub credentials.** See
   [GitHub identity](https://salimhamed.github.io/jigs/guide/configuration#github-identity)
   and [Linear identity](https://salimhamed.github.io/jigs/guide/configuration#linear-identity).
+- **Linear states named `Todo`, `In Progress`, `In Review` and `Done`** on the
+  ticket's team. The workflow moves the ticket through them and fails on a
+  missing one.
 - **Claude Code and Codex**, installed and logged in. The workflow declares
   both in `requires.harnesses`.
 - **A binding** for the repository to change: `jigs bind <remote>`, then
@@ -26,9 +29,8 @@ them freely. Upgrading jigs never overwrites them.
   [merge](https://salimhamed.github.io/jigs/guide/configuration#merge). jigs never
   merges in a repository with no CI.
 
-Webhooks are optional; without them the run re-checks the pull request and
-ticket every 300 seconds. See
-[webhooks](https://salimhamed.github.io/jigs/guide/configuration#webhooks).
+[Webhooks](https://salimhamed.github.io/jigs/guide/configuration#webhooks) are
+optional.
 
 ## Launch a run
 

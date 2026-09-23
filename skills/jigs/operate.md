@@ -48,8 +48,8 @@ the port. A service that is down comes back with `jigs up`, which also
 rebuilds if the factory's code changed since the running bundle was built.
 
 ```
-my-factory-2286ac2a: running pid 3343834 at http://localhost:9010
-dashboard: http://localhost:9110
+my-factory-2286ac2a: running pid 3343834 at http://localhost:8990
+dashboard: http://localhost:9090
 factory /home/you/my-factory
 ```
 

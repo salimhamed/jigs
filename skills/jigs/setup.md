@@ -69,12 +69,12 @@ pnpm exec jigs up
 `jigs up` prints one line per step: `locate`, `env` (copies `.env.example` if
 there is no `.env` and names empty credential slots), `install`, `compose`
 (Postgres), `bootstrap` (migrations), `build`, `service` (start, or restart only
-when the built bundle changed), `ready` (waits until every binding is cloned and
+when the built bundle or `jigs.config.ts` changed), `ready` (waits until every binding is cloned and
 the World is up) and `doctor`. Doctor checks only what the workflows require
 and what `jigs.config.ts` turns on. The last line is where to look next:
 
 ```
-my-factory-2286ac2a is up at http://localhost:9010 — dashboard http://localhost:9110
+my-factory-2286ac2a is up at http://localhost:8990 — dashboard http://localhost:9090
 ```
 
 Give the human the dashboard URL and have them open it.

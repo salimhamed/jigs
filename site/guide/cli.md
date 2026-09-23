@@ -1,7 +1,8 @@
 # CLI commands
 
 Run every command inside your factory, as `pnpm exec jigs <command>`, so it uses
-that factory's installed version of jigs. Add `--help` to a command to see its
+that factory's installed version of jigs. The exception is `init`, which runs
+before there is a factory: `pnpm dlx @jigs-ai/jigs init`. Add `--help` to a command to see its
 options.
 
 ## Everyday commands
@@ -51,6 +52,10 @@ options.
 | `jigs service status` | Say whether the service runs, with its service and dashboard URLs. |
 | `jigs service logs` | Print the service's recent output. `--lines` sets how many. |
 
+The service hosts its own dashboard. Do not run the Workflow SDK's
+`workflow web` against a factory; see
+[Troubleshooting](/guide/troubleshooting#runs-stop-moving-after-you-ran-workflow-web).
+
 ## Advanced
 
 | Command | What it does |
@@ -77,7 +82,7 @@ when there is nothing to do, so an unchanged factory installs, migrates and
 restarts nothing.
 
 When the service is already running, `up` restarts it only if the built bundle
-changed. `--restart-service` forces a restart. If any run has not finished,
+or `jigs.config.ts` changed. `--restart-service` forces a restart. If any run has not finished,
 `up` lists those runs and asks before restarting over them; `--force` skips the
 question, and without a terminal to ask in, it refuses.
 
@@ -114,10 +119,3 @@ anything jigs cannot prove it owns are always kept. Resources a release policy
 chose to keep need `--include-kept`, which relaxes nothing else. Applying needs
 proof that the service and its agents have stopped, which jigs gets from the
 factory's systemd user scope, so it only works on Linux hosts with systemd.
-
-## Do not run `workflow web` against a factory
-
-The service hosts its own dashboard. Never start the Workflow SDK's standalone
-`workflow web` against a running factory's database: it starts its own queue
-worker, which takes the factory's jobs and delivers them where no workflow is
-listening.

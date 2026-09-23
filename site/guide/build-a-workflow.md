@@ -7,8 +7,9 @@ findings into a structured verdict. It assumes a running factory from
 
 ## 1. Connect a repository
 
-The agent needs a repository to work in. Bind one, then bring the factory up so
-the service clones it:
+The agent needs a repository to work in. Binding one needs GitHub credentials,
+so set them first: see [GitHub identity](/guide/configuration#github-identity).
+Then bind the repository and bring the factory up so the service clones it:
 
 ```sh
 pnpm exec jigs bind git@github.com:owner/app.git
@@ -81,7 +82,8 @@ export default {
 What each part does:
 
 - **`triageInputs`** is a zod schema. `jigs run` checks `--input` values against
-  it before a run is created. `triggerId` is added to every run's inputs.
+  it before a run is created. jigs also adds `triggerId`, an ID unique to the
+  run, which here gives each run its own branch.
 - **`"use workflow"`** marks the function as a durable workflow. Its body must
   be safe to replay, so all real work happens in the steps it calls.
 - **`provisionWorktree`** cuts a worktree for this run from the binding's clone,
@@ -157,10 +159,11 @@ const reply = await haltForHuman(claim, {
 // reply.body is the person's answer, as free text.
 ```
 
-Add `integrations: ["linear"]` to the workflow's `requires`.
-`jigs status <run-id>` shows the question and the link to answer it. The service re-reads the
-ticket every 300 seconds by default, or sooner with
-[webhooks](/guide/configuration#webhooks); `jigs poke <run-id>` checks now.
+Add `ticket: z.string()` to `triageInputs` and `integrations: ["linear"]` to
+`requires`.
+`jigs status <run-id>` shows the question and the link to answer it. The run
+notices a reply on its next [check](/guide/configuration#webhooks);
+`jigs poke <run-id>` checks now.
 Answer the existing run rather than starting another one.
 
 ## Record what the workflow created

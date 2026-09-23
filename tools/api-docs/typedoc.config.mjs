@@ -1,5 +1,5 @@
 export const sharedOptions = {
-  blockTags: ["@example", "@module", "@remarks"],
+  blockTags: ["@example", "@group", "@module", "@remarks"],
   disableSources: true,
   entryPointStrategy: "resolve",
   excludeInternal: true,

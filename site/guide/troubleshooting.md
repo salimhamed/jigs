@@ -35,9 +35,8 @@ Run `pnpm exec jigs status <run>`. A waiting run is expected when it asked a
 question or is following a pull request; the status says what it needs and
 links to where you act. Starting another run does not answer the first one.
 
-Once you have answered, the run notices on its next check: every
-`service.pollIntervalSeconds` (300 seconds by default), or within seconds with
-[webhooks](/guide/configuration#webhooks). `pnpm exec jigs poke <run>` makes it
+Once you have answered, the run notices on its next
+[check](/guide/configuration#webhooks). `pnpm exec jigs poke <run>` makes it
 check now. A poke cannot stand in for the answer or approval itself.
 
 If `jigs status` reports a run as `stalled`, nothing is going to move it; its

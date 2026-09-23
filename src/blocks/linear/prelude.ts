@@ -3,7 +3,11 @@ import type { resolveLinearIssue } from "../../steps/linear/resolve.ts";
 import { claimTicket, type TicketClaim } from "./claim.ts";
 import type { TicketSnapshot } from "./snapshot.ts";
 
-/** Durable ticket lookups required before a workflow starts protected work. */
+/**
+ * Durable ticket lookups required before a workflow starts protected work.
+ *
+ * @group Factory plumbing
+ */
 export interface AcquireTicketSteps {
   resolveLinearIssue: typeof resolveLinearIssue;
   fetchTicketSnapshot: typeof fetchTicketSnapshot;

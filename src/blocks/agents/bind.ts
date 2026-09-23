@@ -11,14 +11,22 @@ import type { AskAgentOptions, AskModelOptions, RunAgentOptions } from "./plan.t
 
 export type { ExecuteJevStep } from "./jev.ts";
 
-/** The raw durable wrappers a factory supplies, one per execution role. */
+/**
+ * The raw durable wrappers a factory supplies, one per execution role.
+ *
+ * @group Factory plumbing
+ */
 export interface AgentSteps {
   executeAgent: ExecuteAgentStep;
   executeModel: ExecuteModelStep;
   executeJev: ExecuteJevStep;
 }
 
-/** Connect agent calls to durable steps without requiring a ticket integration. */
+/**
+ * Connect agent calls to durable steps without requiring a ticket integration.
+ *
+ * @group Factory plumbing
+ */
 export function bindAgentSteps(steps: AgentSteps) {
   function runAgent<T = undefined>(config: RunAgentOptions<T>) {
     return runAgentBlock(config, steps.executeAgent);

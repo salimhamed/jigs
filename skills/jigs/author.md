@@ -153,8 +153,8 @@ does not authorize cleanup.
 For delivery, run `jigs recipe add ship` and register the workflow as the
 command instructs. The copied `blocks/delivery/` contains the phases, types,
 prompts and renderers; these are factory code to edit, not library exports.
-Read `blocks/delivery/README.md` for the recipe's graph, budgets and compiling
-examples before changing the ship process. Keep factory prompt overrides beside
+Read `blocks/delivery/README.md` for the recipe's prerequisites, budgets,
+prompts and compiling examples before changing the ship process. Keep factory prompt overrides beside
 their callers. Reuse existing blocks for comment scoping and agent-session
 rebuilding rather than duplicating their mechanics.
 

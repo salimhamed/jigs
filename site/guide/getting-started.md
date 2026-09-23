@@ -16,7 +16,7 @@ npx skills add salimhamed/jigs
 For example: "Use /jigs to set up a jigs factory in this empty directory." The
 rest of this page is the same process by hand.
 
-## 1. Check your machine
+## 1. Host dependencies
 
 - **Node.js 24 or newer** and **pnpm**.
 - **Docker**, with its daemon running. Each factory runs its own Postgres
@@ -32,7 +32,8 @@ rest of this page is the same process by hand.
   | Pi | `pi` | run `pi`, then `/login` |
 
 - **On Linux**, run `loginctl enable-linger "$USER"` once, so the service keeps
-  running after you log out.
+  running after you log out. On a host without systemd, such as macOS, the
+  service runs unsupervised and stops when you log out.
 
 jigs installs from public npm as `@jigs-ai/jigs`. Each factory pins its own
 version, so there is nothing to install globally and no registry token.
@@ -53,13 +54,13 @@ workflow, and `jigs.config.ts` registers it under the name `hello`.
 ## 3. Start the service
 
 ```sh
-cp .env.example .env
 pnpm install
 pnpm exec jigs up
 ```
 
-`jigs up` installs dependencies, starts Postgres, builds the factory, starts the
-service and waits until it is ready. Its last step runs `jigs doctor`, which
+`pnpm install` puts this factory's jigs in place for `pnpm exec`. `jigs up`
+copies `.env.example` to `.env` if it is missing, starts Postgres, builds the
+factory, starts the service and waits until it is ready. Its last step runs `jigs doctor`, which
 checks only what your workflows use. You can run `pnpm exec jigs doctor` again
 at any time while the service is running.
 
@@ -70,6 +71,7 @@ my-factory-2286ac2a is up at http://localhost:8990 — dashboard http://localhos
 ```
 
 Open the dashboard URL from your own output. It shows every run and its steps.
+To stop the service, run `pnpm exec jigs service stop`.
 
 ## 4. Run hello
 
@@ -86,5 +88,6 @@ pnpm exec jigs status <run-id>
 ```
 
 The run should finish as completed. From here, write your own workflow with
-[Build a workflow](/guide/build-a-workflow), or see
-[Configuration](/guide/configuration) to connect GitHub and Linear.
+[Build a workflow](/guide/build-a-workflow). Binding a repository needs GitHub
+credentials, so set them first: see
+[GitHub identity](/guide/configuration#github-identity).

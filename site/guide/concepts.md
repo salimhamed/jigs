@@ -14,6 +14,10 @@ A handful of terms covers most of what you will meet in a factory.
 | Binding | A name for a target repository, mapped to its remote URL. |
 | Worktree | A Git working directory jigs cuts from its clone of a binding, one per run and branch. |
 | Recipe | A complete workflow you copy into your factory and then own. |
+| Harness | An agent program jigs starts, such as Claude Code, Codex or Pi. It works with tools in a directory. |
+| Model source | A model API that answers one request directly, such as OpenRouter. |
+| Preflight | The checks jigs runs on a workflow's `requires` before it creates a run. A failure names its repair, and no run starts. |
+| Jev | A decision call, `askJev`, that returns calibrated probabilities for named yes/no, choice or score questions. |
 
 ## Workflows coordinate, steps do the work
 
@@ -75,6 +79,7 @@ already point at them:
 - `steps/` for your own `"use step"` functions that touch files, services or
   other outside state.
 
-Factory code imports from the root, as `#jigs`, `#blocks/<path>` and
-`#steps/<path>`, never with `../`. The workflow loaders in `jigs.config.ts` stay
-relative.
+Import the verbs, such as `runAgent`, from `#jigs`; types and blocks from
+`@jigs-ai/jigs` and `@jigs-ai/jigs/blocks/<topic>`; and your own code from
+`#blocks/<path>` and `#steps/<path>`, never with `../`. The workflow loaders in
+`jigs.config.ts` stay relative.

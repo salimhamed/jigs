@@ -35,8 +35,9 @@ export default defineFactory({
 | `pollIntervalSeconds.linear` | `300` | How often runs waiting on a ticket reply re-read it. Minimum 30. |
 
 `jigs init` picks ports for each factory so that two factories on one machine
-rarely clash. If a port is taken, change it here and in `docker-compose.yml`
-and `.env` too, for the database.
+rarely clash. The service and dashboard ports live here. The Postgres port
+lives in `docker-compose.yml` and in `WORKFLOW_POSTGRES_URL` in `.env`; change
+both together.
 
 ## `workflows`
 
@@ -77,8 +78,8 @@ bindings: {
 
 Each `copy` entry is a path, or a glob, inside `bindings/<name>/` in the
 factory, and lands at the same path in the worktree. `bindings/app/.env`
-arrives as `.env` at the worktree root. Keep secret files there and add
-`bindings/*/.env` to `.gitignore`. An entry that matches nothing fails the
+arrives as `.env` at the worktree root. Keep secret files there; the
+scaffold's `.gitignore` already ignores every `.env`. An entry that matches nothing fails the
 worktree with a message naming it.
 
 `jigs bind <remote>` adds a binding with its `remote`, and `jigs unbind <name>`
@@ -296,7 +297,7 @@ you if `.env` is missing, and lists the credentials still empty.
 | Variable | When you need it |
 | --- | --- |
 | `WORKFLOW_TARGET_WORLD`, `WORKFLOW_POSTGRES_URL` | Always. Filled in by `jigs init`; leave them. |
-| `GITHUB_TOKEN` | GitHub [PAT mode](#github-identity). |
+| `GITHUB_TOKEN` | GitHub [PAT mode](#github-identity), once you bind a GitHub repository or a workflow requires `github`. |
 | `LINEAR_API_KEY` | Linear [`key` mode](#linear-identity). |
 | `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` | Linear [`app` mode](#linear-identity). |
 | `GITHUB_WEBHOOK_SECRET` | GitHub [webhooks](#webhooks) enabled. |

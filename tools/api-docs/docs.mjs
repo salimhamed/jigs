@@ -217,6 +217,8 @@ export async function renderSite(destination = path.join(rootDir, "docs-site")) 
       ...siteOptions,
       format: "vitepress",
       docsRoot: path.join(rootDir, "site"),
+      readme: path.join(toolDir, "site-index.md"),
+      mergeReadme: true,
       out: path.join(rootDir, "site/api"),
       sidebar: { collapsed: true },
     },
