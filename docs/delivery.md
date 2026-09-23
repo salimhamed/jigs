@@ -322,7 +322,7 @@ Import the bound operation from your generated `jigs.ts`, which every factory
 file reaches at the same root-anchored specifier:
 
 ```ts
-import { claude, codex } from "@salimhamed/jigs/blocks/agents";
+import { harnesses } from "@salimhamed/jigs/blocks/agents";
 import { deliverChange } from "#blocks/delivery/delivery";
 import { resolveMergePolicy } from "#jigs";
 
@@ -330,8 +330,8 @@ const result = await deliverChange({
   task,
   worktree,
   binding: "application",
-  implementation: { harness: codex({ model: "gpt-5.6-sol" }) },
-  review: { harness: claude({ model: "opus" }) },
+  implementation: { harness: harnesses.codex("gpt-5.6-sol") },
+  review: { harness: harnesses.claude("opus") },
   limits: {
     implementationReviewRounds: 5,
     ciFixAttempts: 3,
@@ -343,27 +343,25 @@ const result = await deliverChange({
 
 `ciRepair`, `pullRequestRevision` and `pullRequestDescription` default to the
 implementation harness. Configure any of them independently — each takes its own
-`{ harness, prompt }`, and `selectHarness` resolves a harness name against the
-factory's own per-harness model defaults, so naming one harness never drags the
-other's default model along:
+`{ harness, prompt }`, built with `harnesses.claude`, `harnesses.codex` or
+`harnesses.pi`. Claude Code and Codex take a model name; Pi takes a model
+source, since it can run models from more than one provider:
 
 ```ts
-import { claude, codex, selectHarness } from "@salimhamed/jigs/blocks/agents";
+import { harnesses, models } from "@salimhamed/jigs/blocks/agents";
 import { deliverChange } from "#blocks/delivery/delivery";
 import { resolveMergePolicy } from "#jigs";
-
-const defaultModels = { claude: "opus", codex: "gpt-5.6-sol" };
 
 const result = await deliverChange({
   task,
   worktree,
   binding: "application",
-  implementation: { harness: selectHarness("codex", defaultModels) },
-  review: { harness: selectHarness("claude", defaultModels) },
-  ciRepair: { harness: codex({ model: "gpt-5.6-sol-codex" }) },
-  pullRequestRevision: { harness: claude({ model: "sonnet" }) },
+  implementation: { harness: harnesses.codex("gpt-5.6-sol") },
+  review: { harness: harnesses.claude("opus") },
+  ciRepair: { harness: harnesses.pi(models.openaiCodex("gpt-5.5"), { thinking: "high" }) },
+  pullRequestRevision: { harness: harnesses.claude("sonnet") },
   pullRequestDescription: {
-    harness: claude({ model: "haiku" }),
+    harness: harnesses.claude("haiku"),
     transform: (description) => ({ ...description, title: `[factory] ${description.title}` }),
   },
   limits: {
@@ -376,12 +374,41 @@ const result = await deliverChange({
 ```
 
 Sessions are kept per role and never passed between incompatible harness
-configurations: change a role's harness and its next attempt starts fresh, with
-the worktree diff rebuilt into its prompt. The review role keeps its own
-session, separate from the implementation one, so a verdict never inherits the
-builder's conversation and still remembers what it already judged. A description role's
-`transform(description, task)` enforces factory title and body conventions after
-the model responds.
+configurations: change a role's harness, its model, or a Pi role's model source,
+and its next attempt starts fresh, with the worktree diff rebuilt into its
+prompt. The review role keeps its own session, separate from the implementation
+one, so a verdict never inherits the builder's conversation and still remembers
+what it already judged. A description role's `transform(description, task)`
+enforces factory title and body conventions after the model responds.
+
+### Harnesses chosen at launch
+
+The copied `workflows/ship.ts` lets a run pick its implementation and review
+harnesses with the `implementationHarness` and `reviewHarness` inputs, and their
+models with `implementationModel` and `reviewModel`. The harness inputs list
+every harness kind jigs provides, so a harness added in a later release appears
+there without an edit. A model input left unset takes the chosen harness's
+default from the workflow's `inputHarnesses`, the factory's own map of a model
+per harness; jigs holds no default model of its own.
+
+Only a harness built from a model name can be chosen this way: today Claude Code
+and Codex. Pi needs a model source, so `--input implementationHarness=pi` fails
+input validation, before a run is created, with a message saying Pi roles are
+configured in the workflow's own code. To use Pi, build that role with
+`harnesses.pi(...)` in `workflows/ship.ts` and add `"pi"` to the entry's
+`requires.harnesses`, so the service checks the Pi CLI when it starts. When the
+source is OpenRouter or OpenAI-compatible, also list it under `requires.models`
+so preflight checks its credential and model before each run.
+
+The shipped workflow uses no model source of its own, so it declares no
+`requires.models`.
+
+Agents do not inherit the service's environment: each harness starts from a
+small base set plus the variables its driver needs. A tool an agent runs in the
+worktree that needs another variable — an SSH agent socket, a tool manager's
+settings — needs its name listed under `agents: { env }` in `jigs.config.ts`.
+[Models and harnesses](../site/guide/models-and-harnesses.md#harness-environment)
+has the base set and the rules.
 
 ## Own the prompts
 
@@ -403,15 +430,15 @@ it; a replacement can ignore it. Resumed sessions do not read the diff. Review
 and description contexts always contain their required `diff` string, and
 `ledger` is present only when the reviewer holds no session to resume.
 
-Every context carries `renderDefaultPrompt()`, which renders what jigs would
+Every context carries `renderDefaultPrompt()`, which renders what the recipe would
 have sent for this attempt. Await it to extend the default:
 
 ```ts
-import { claude } from "@salimhamed/jigs/blocks/agents";
+import { harnesses } from "@salimhamed/jigs/blocks/agents";
 import type { ReviewPromptContext } from "#blocks/delivery/types";
 
 const review = {
-  harness: claude({ model: "opus" }),
+  harness: harnesses.claude("opus"),
   prompt: async (context: ReviewPromptContext) =>
     `${await context.renderDefaultPrompt()}
 
@@ -423,11 +450,11 @@ Ignore it and the default is replaced outright — an equally supported use. The
 role's own context is what a replacement is written against:
 
 ```ts
-import { codex } from "@salimhamed/jigs/blocks/agents";
+import { harnesses } from "@salimhamed/jigs/blocks/agents";
 import type { ImplementationPromptContext } from "#blocks/delivery/types";
 
 const implementation = {
-  harness: codex({ model: "gpt-5.6-sol" }),
+  harness: harnesses.codex("gpt-5.6-sol"),
   prompt: (context: ImplementationPromptContext) => `
 Round ${context.attempt} on ${context.task.key}: ${context.task.title}
 
@@ -460,7 +487,7 @@ carries. `id` is what a note is posted back to when a budget runs out. The extra
 result, with no explicit generic argument and no cast:
 
 ```ts
-import { claude, codex } from "@salimhamed/jigs/blocks/agents";
+import { harnesses } from "@salimhamed/jigs/blocks/agents";
 import type { WorkItem } from "#blocks/delivery/types";
 import { deliverChange } from "#blocks/delivery/delivery";
 import { resolveMergePolicy } from "#jigs";
@@ -477,7 +504,7 @@ const result = await deliverChange({
   worktree,
   binding: "application",
   implementation: {
-    harness: codex({ model: "gpt-5.6-sol" }),
+    harness: harnesses.codex("gpt-5.6-sol"),
     prompt: async (context) =>
       [
         await context.renderDefaultPrompt(),
@@ -485,7 +512,7 @@ const result = await deliverChange({
         `Acceptance criteria:\n${context.task.acceptance.join("\n")}`,
       ].join("\n\n"),
   },
-  review: { harness: claude({ model: "opus" }) },
+  review: { harness: harnesses.claude("opus") },
   limits: {
     implementationReviewRounds: 5,
     ciFixAttempts: 3,
@@ -561,10 +588,16 @@ the durable wrappers and shared blocks from `#jigs` directly. Regenerate
 
 ## Generic agent workflows
 
-`runAgent` accepts a harness, prompt, and optional output schema. `askModel`
-accepts a model source instead.
-`runAgent` also accepts a working directory and optional session. `askModel`
-runs without tools. A session is resumed only when its exact durable state is
+Other workflows use the four agent and model verbs from `#jigs` without any
+delivery concepts. `runAgent` runs a harness in a working directory, with tools
+and an optional session to resume. `askAgent` asks Claude Code or Pi for one
+answer with no tools and no working directory; it refuses Codex, which has no
+mode without tools, and any descriptor that names tools or MCP servers.
+`askModel` calls a model source's API directly. `askJev` asks a jev decision
+model named questions about one state and returns calibrated probabilities
+rather than prose. Each takes a prompt or questions and, except `askJev`, an
+optional output schema.
+A session is resumed only when its exact durable state is
 available; a missing or incompatible session may take the explicit rebuild
 path, while model, network, tool and process failures fail normally.
 `createRunDirectory()` provides run-owned scratch space without a repository;

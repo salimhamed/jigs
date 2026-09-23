@@ -239,8 +239,10 @@ existing files and reports created/kept paths. Register it manually under
 block are now factory source to edit freely.
 
 The ship recipe explicitly resolves and claims its Linear ticket, then calls
-the library's `deliverChange`. Set implementation and review harnesses/models
-separately — a model left unset takes the chosen harness's own default — and choose
+its own `deliverChange` in `blocks/delivery/`. Set implementation and review
+harnesses/models separately — a model left unset takes the chosen harness's own
+default, and a Pi role is built in the workflow's code because it needs a model
+source — and choose
 the `implementationReviewRounds`, `ciFixAttempts`, and `pullRequestRevisionRounds`
 budgets. A delivery returns only after merge; reaching a limit preserves the
 branch, posts a ticket note and fails the run. For custom prompts,

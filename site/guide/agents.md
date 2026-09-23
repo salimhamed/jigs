@@ -27,6 +27,20 @@ const result = await runAgent({
 Choose a model available to your authenticated harness. A workflow that needs
 no Git repository can instead use `createRunDirectory()` for scratch space.
 
+When the agent only needs to answer from the prompt, use `askAgent` instead. It
+runs Claude Code or Pi with no tools and no working directory. Codex cannot be
+used this way, because it has no mode without tools:
+
+```ts
+import { harnesses } from "@salimhamed/jigs/blocks/agents";
+import { askAgent } from "#jigs";
+
+const answer = await askAgent({
+  harness: harnesses.claude("haiku"),
+  prompt: "Suggest a short branch name for: fix the login timeout.",
+});
+```
+
 ## Keep conversations separate
 
 An agent result can include a `session` pointer. Pass it as `resume` to a later

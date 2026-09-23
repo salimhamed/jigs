@@ -1,5 +1,10 @@
-import type { WorkflowEntry, WorkflowInputs } from "@salimhamed/jigs";
-import { type HarnessKind, harnesses } from "@salimhamed/jigs/blocks/agents";
+import { JigsError, type WorkflowEntry, type WorkflowInputs } from "@salimhamed/jigs";
+import {
+  type Harness,
+  type HarnessKind,
+  harnesses,
+  harnessKinds,
+} from "@salimhamed/jigs/blocks/agents";
 import { z } from "zod";
 import { deliverChange } from "#blocks/delivery/delivery";
 import { acquireLinearTicket, workItemFromHandoff } from "#blocks/tickets/linear";
@@ -12,23 +17,37 @@ import {
   setTicketStatus,
 } from "#jigs";
 
-// This factory's model per harness. A model input left unset takes the default
-// of the harness that was actually chosen, so naming one never drags the
-// other's default along. Pass `effort` beside `model` to tune a particular
-// harness; omit it to keep that provider's default.
-const defaultModels = { claude: "opus", codex: "gpt-5.6-sol" };
+// The harnesses a run can choose by name, each with this factory's default
+// model. A model input left unset takes the default of the harness that was
+// actually chosen, so naming one never drags the other's default along. Pass
+// `effort` beside the model to tune a harness; omit it to keep that
+// provider's default. A harness missing here, such as Pi, needs a model
+// source rather than a model name: build its role below with `harnesses.pi`.
+const inputHarnesses: Partial<Record<HarnessKind, (model?: string) => Harness>> = {
+  claude: (model = "opus") => harnesses.claude(model),
+  codex: (model = "gpt-5.6-sol") => harnesses.codex(model),
+};
 
-function harness(kind: Extract<HarnessKind, "claude" | "codex">, model?: string) {
-  const selected = model ?? defaultModels[kind];
-  return kind === "claude" ? harnesses.claude(selected) : harnesses.codex(selected);
+function unbuildable(kind: HarnessKind) {
+  return `ship cannot build a ${kind} role from its inputs: ${kind} roles need a model source and are configured in the ship workflow's own code`;
 }
+
+function roleHarness(kind: HarnessKind, model?: string): Harness {
+  const build = inputHarnesses[kind];
+  if (build === undefined) throw new JigsError(unbuildable(kind));
+  return build(model);
+}
+
+const harnessInput = z.enum(harnessKinds).refine((kind) => inputHarnesses[kind] !== undefined, {
+  error: (issue) => unbuildable(issue.input as HarnessKind),
+});
 
 export const shipInputs = z.object({
   ticket: z.string().min(1),
   binding: z.string(),
-  implementationHarness: z.enum(["claude", "codex"]).default("codex"),
+  implementationHarness: harnessInput.default("codex"),
   implementationModel: z.string().min(1).optional(),
-  reviewHarness: z.enum(["claude", "codex"]).default("claude"),
+  reviewHarness: harnessInput.default("claude"),
   reviewModel: z.string().min(1).optional(),
   implementationReviewRounds: z.number().int().positive().default(3),
   ciFixAttempts: z.number().int().nonnegative().default(3),
@@ -50,7 +69,7 @@ export async function shipWorkflow(inputs: ShipInputs) {
   const handoff = await reviewTicket({
     claim,
     snapshot,
-    harness: harnesses.claude(defaultModels.claude),
+    harness: roleHarness("claude"),
     cwd: worktree.path,
   });
   const result = await deliverChange({
@@ -58,9 +77,9 @@ export async function shipWorkflow(inputs: ShipInputs) {
     worktree,
     binding: inputs.binding,
     implementation: {
-      harness: harness(inputs.implementationHarness, inputs.implementationModel),
+      harness: roleHarness(inputs.implementationHarness, inputs.implementationModel),
     },
-    review: { harness: harness(inputs.reviewHarness, inputs.reviewModel) },
+    review: { harness: roleHarness(inputs.reviewHarness, inputs.reviewModel) },
     limits: {
       implementationReviewRounds: inputs.implementationReviewRounds,
       ciFixAttempts: inputs.ciFixAttempts,

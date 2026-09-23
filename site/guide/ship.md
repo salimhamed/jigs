@@ -55,6 +55,30 @@ pnpm exec jigs watch
 The workflow may ask questions on the ticket or wait for pull-request review.
 [Inspect its status](./operations) to see what needs attention.
 
+## Choose the agents
+
+By default Codex implements the change and Claude Code reviews it. Pick a
+different harness or model for a run with inputs:
+
+```sh
+pnpm exec jigs run ship --input ticket=AGE-123 --input binding=repo \
+  --input implementationHarness=claude --input implementationModel=sonnet
+```
+
+`implementationHarness` and `reviewHarness` accept Claude Code (`claude`) and
+Codex (`codex`) by name. A model left unset takes that harness's default, which
+the copied workflow keeps in its own `inputHarnesses` map. Pi is listed too, but
+choosing it fails before the run starts: a Pi role needs a
+[model source](./models-and-harnesses#pi), so you build it in
+`workflows/ship.ts` with `harnesses.pi(...)` and add `"pi"` to the workflow's
+`requires.harnesses`.
+
+The ship workflow calls no model source directly, so it declares no
+`requires.models`. Agents start with only a small base environment; list any
+extra variable your repository's tools need under `agents: { env }` in
+`jigs.config.ts`, as described in
+[harness environment](./models-and-harnesses#harness-environment).
+
 ## Make the process yours
 
 The copied files include delivery phases, prompts, types, and tests in

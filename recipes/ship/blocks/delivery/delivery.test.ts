@@ -6,8 +6,8 @@ type PullRequestSnapshot = Awaited<
 type PullRequestComment = PullRequestSnapshot["conversationComments"][number];
 type ReviewThread = PullRequestSnapshot["reviewThreads"][number];
 
-import type { RunAgentFn } from "@salimhamed/jigs/blocks/agents";
-import { unwrapAgentStep } from "@salimhamed/jigs/blocks/agents";
+import type { Harness, RunAgentFn } from "@salimhamed/jigs/blocks/agents";
+import { harnesses, models, unwrapAgentStep } from "@salimhamed/jigs/blocks/agents";
 
 const resumeFailed = (detail: string) => unwrapAgentStep({ resumeFailed: detail });
 
@@ -1354,5 +1354,49 @@ describe("delivery", () => {
         renderDefaultPrompt: async () => "",
       }),
     );
+  });
+});
+
+describe("role sessions across harness changes", () => {
+  const source = { apiKeyEnv: "OPENROUTER_API_KEY", model: "vendor/model", kind: "openrouter" };
+  const pi = harnesses.pi(models.openrouter("vendor/model"), { thinking: "low" });
+
+  async function repairWith(saved: Harness, current: Harness) {
+    const { steps, calls } = setup([red("first"), { kind: "closed", merged: true }]);
+    vi.mocked(steps.readBranchState)
+      .mockResolvedValueOnce({ commits: 1, headSha: "first", dirty: false })
+      .mockResolvedValueOnce({ commits: 2, headSha: "second", dirty: false });
+    await useSteps(steps).followPullRequest({
+      change: {
+        ...approved,
+        attempts: { ...approved.attempts },
+        sessions: { ciRepair: { harness: saved, session: { harness: saved.kind, id: "saved" } } },
+        review: [],
+      },
+      pr,
+      implementation: options.implementation,
+      ciRepair: { harness: current },
+      limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
+      merge: HUMAN_MERGE,
+    });
+    return calls[0]?.resume;
+  }
+
+  it("resumes a Pi role whose descriptor lists the same fields in another order", async () => {
+    const reordered = { thinking: "low", model: source, kind: "pi" } as Harness;
+    expect(await repairWith(pi, reordered)).toEqual({ harness: "pi", id: "saved" });
+  });
+
+  it("starts a Pi role fresh when its nested model source changes", async () => {
+    const other = harnesses.pi(models.openrouter("vendor/other"), { thinking: "low" });
+    expect(await repairWith(pi, other)).toBeUndefined();
+    const otherKey = harnesses.pi(models.openrouter("vendor/model", { apiKeyEnv: "TEAM_KEY" }), {
+      thinking: "low",
+    });
+    expect(await repairWith(pi, otherKey)).toBeUndefined();
+  });
+
+  it("starts a role fresh when it moves to a different harness kind", async () => {
+    expect(await repairWith(pi, harnesses.codex("builder"))).toBeUndefined();
   });
 });

@@ -1,5 +1,5 @@
 import { JigsError } from "@salimhamed/jigs";
-import { resumeOrRebuild } from "@salimhamed/jigs/blocks/agents";
+import { type Harness, resumeOrRebuild } from "@salimhamed/jigs/blocks/agents";
 import type { StatusReason } from "@salimhamed/jigs/blocks/pull-requests";
 import {
   attend,
@@ -109,6 +109,20 @@ function lazyDiff(change: DeliveryChange) {
   return () => (diff ??= readWorktreeDiff(change.worktree.path, change.worktree.baseSha));
 }
 
+// Field order is not identity: a descriptor, or a Pi descriptor's nested model
+// source, built with its fields in another order is the same harness.
+function sameHarness(a: Harness, b: Harness) {
+  return canonical(a) === canonical(b);
+}
+
+function canonical(value: unknown) {
+  return JSON.stringify(value, (_key, field: unknown) =>
+    field !== null && typeof field === "object" && !Array.isArray(field)
+      ? Object.fromEntries(Object.entries(field).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : field,
+  );
+}
+
 interface RoleRun<TTask extends WorkItem, TContext, T> {
   change: DeliveryChange<TTask>;
   name: AgentRoleName;
@@ -129,9 +143,7 @@ async function runRole<
   const { change, name, role, renderDefault } = run;
   const saved = change.sessions[name];
   const session =
-    saved !== undefined && JSON.stringify(saved.harness) === JSON.stringify(role.harness)
-      ? saved.session
-      : undefined;
+    saved !== undefined && sameHarness(saved.harness, role.harness) ? saved.session : undefined;
   const result = await resumeOrRebuild({
     runAgent,
     harness: role.harness,
