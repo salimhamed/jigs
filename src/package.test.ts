@@ -236,6 +236,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "askModel",
     "choice",
     "bindAgentSteps",
+    "harnessKinds",
     "harnesses",
     "models",
     "buildAgentRequest",

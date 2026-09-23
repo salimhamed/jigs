@@ -9,8 +9,10 @@ vi.mock("#blocks/delivery/delivery", () => ({
 // harness from it, and what deliverChange is actually handed. A model left
 // unset has to arrive as the chosen harness's own default, and only running
 // the workflow body against mocked durable steps shows that it does.
+import { harnessKinds } from "@salimhamed/jigs/blocks/agents";
 import type { TicketClaim, TicketHandoff, TicketSnapshot } from "@salimhamed/jigs/blocks/linear";
 import { expect, test, vi } from "vitest";
+import { z } from "zod";
 
 vi.mock("#jigs", async (importOriginal) => ({
   ...(await importOriginal<typeof import("#jigs")>()),
@@ -154,4 +156,26 @@ test("omitted models stay unset until the workflow chooses harness defaults", ()
   const parsed = shipInputs.parse({ ticket: "ABC-123", binding: "repo" });
   expect(parsed.implementationModel).toBeUndefined();
   expect(parsed.reviewModel).toBeUndefined();
+});
+
+test("the harness inputs list every registered harness kind", () => {
+  const schema = z.toJSONSchema(shipInputs, { io: "input" }) as {
+    properties: Record<string, { enum?: string[] }>;
+  };
+  expect(schema.properties.implementationHarness?.enum).toEqual(harnessKinds);
+  expect(schema.properties.reviewHarness?.enum).toEqual(harnessKinds);
+});
+
+test("a pi role is refused at input validation with where to configure it", () => {
+  for (const field of ["implementationHarness", "reviewHarness"]) {
+    const parsed = shipInputs.safeParse({ ticket: "ABC-123", binding: "repo", [field]: "pi" });
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues).toEqual([
+      expect.objectContaining({
+        path: [field],
+        message:
+          "ship cannot build a pi role from its inputs: pi roles need a model source and are configured in the ship workflow's own code",
+      }),
+    ]);
+  }
 });

@@ -31,4 +31,9 @@ the parsed `output` when you supplied a schema. Schema validation checks the
 answer’s shape, not its factual accuracy; decide what review the result needs
 before acting on it.
 
+To judge or score something instead of writing prose, use `askJev`, which
+returns calibrated probabilities for named questions. The
+[models and harnesses](./models-and-harnesses#jev-decisions) page shows it, with
+every model source jigs supports.
+
 See the [API reference](/api/) for model request and result types.

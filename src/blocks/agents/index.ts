@@ -25,6 +25,7 @@ export {
   type HarnessForOptions,
   type HarnessKind,
   harnesses,
+  harnessKinds,
   type McpHttpServerConfig,
   type McpServerConfig,
   type McpStdioServerConfig,

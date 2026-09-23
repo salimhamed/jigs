@@ -127,6 +127,10 @@ export type HarnessKind = Harness["kind"];
 
 /** Constructors for model-source descriptors. */
 export const models = {
+  /**
+   * Build an OpenRouter source. Its key is read from `OPENROUTER_API_KEY`
+   * unless `apiKeyEnv` names another variable.
+   */
   openrouter(model: string, options: { apiKeyEnv?: string } = {}): OpenrouterSource {
     return { kind: "openrouter", model, apiKeyEnv: options.apiKeyEnv ?? "OPENROUTER_API_KEY" };
   },
@@ -139,6 +143,10 @@ export const models = {
   }): OpenaiCompatibleSource {
     return { kind: "openai-compatible", ...options };
   },
+  /**
+   * Build a source that runs through the Codex subscription Pi is logged in
+   * to. Only `harnesses.pi` accepts it.
+   */
   openaiCodex(model: string): OpenaiCodexSource {
     return { kind: "openai-codex", model };
   },
@@ -212,8 +220,23 @@ function claudeHarness(model: string, options: ClaudeHarnessOptions = {}): Claud
 /** Constructors for agent-harness descriptors. */
 export const harnesses = {
   claude: claudeHarness,
+  /** Build a Codex harness. Only `runAgent` accepts it: Codex has no mode without tools. */
   codex(model: string, options: Omit<CodexHarness, "kind" | "model"> = {}): CodexHarness {
     return { kind: "codex", model, ...options };
   },
   pi: piHarness,
-} as const;
+} as const satisfies {
+  [K in HarnessKind]: (...args: never[]) => Extract<Harness, { kind: K }>;
+};
+
+/**
+ * Every harness kind this release of jigs can build, taken from the keys of
+ * `harnesses`. Use it for a workflow input that names a harness, so a new kind
+ * appears without editing the input.
+ *
+ * @example
+ * ```ts
+ * const inputs = z.object({ harness: z.enum(harnessKinds) });
+ * ```
+ */
+export const harnessKinds = Object.keys(harnesses) as [HarnessKind, ...HarnessKind[]];

@@ -19,6 +19,18 @@ before any model, credential or MCP check. `askAgent` accepts only a harness tha
 names no tools: a Claude Code or Pi descriptor without `mcpServers`, and a Pi
 descriptor without `tools`.
 
+`harnessKinds` lists every harness kind this release can build. Use it for a
+workflow input that names a harness, as the ship recipe does, so a harness added
+in a later release shows up without editing the input.
+
+## Cost
+
+jigs does not track spend. Results carry the answer and, for a harness, a
+session pointer; they report no token usage or cost. Claude Code and Codex bill
+the account or subscription they are logged in to, Pi bills whichever model
+source it runs, and OpenRouter and OpenAI-compatible calls bill the key their
+descriptor names. Watch spend in each provider's own dashboard.
+
 ## Harness environment
 
 A harness does not inherit the service environment. jigs builds each harness
@@ -119,7 +131,7 @@ are first exercised by the run itself.
 Pi's own request retries stay on, and jigs adds no retry loop of its own. A call
 succeeds only when Pi settles on a successful final response and exits
 normally: a run that settles on an error, is aborted, crashes or emits
-truncated output fails. jigs reports no token usage or cost for Pi calls.
+truncated output fails.
 
 `runAgent` runs Pi in the supplied worktree and stores its session in the
 run-scoped durable session store. The returned session pointer can be passed back as
@@ -148,7 +160,8 @@ because the nested model source is workflow configuration.
 
 ## OpenRouter
 
-Use `models.openrouter(model)` with `askModel`. Set `OPENROUTER_API_KEY` in the
+Use `models.openrouter(model)` with `askModel`, with `askJev`, or as the model
+source of a Pi harness. Set `OPENROUTER_API_KEY` in the
 factory repo's `.env`, then restart the service. A different variable can be
 named with `models.openrouter(model, { apiKeyEnv: "TEAM_OPENROUTER_KEY" })`;
 the descriptor records only that variable name, never its value.

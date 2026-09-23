@@ -56,6 +56,12 @@ export interface WorkflowEntry<S extends z.ZodType = z.ZodType> {
   workflow: (inputs: WorkflowInputs<S>) => Promise<unknown>;
   inputs: S;
   // The manifest half of preflight's computed check list.
+  /**
+   * What the workflow needs before a run can start: integrations, bindings,
+   * the harnesses it runs and the API model sources it calls. The service
+   * checks each harness CLI when it starts, and preflight checks the rest
+   * before every run. List only what the workflow actually uses.
+   */
   requires?: WorkflowRequires;
   release?: ReleasePolicy;
 }
@@ -95,7 +101,9 @@ export interface AgentsDefinition {
   /**
    * Names of service environment variables every agent harness also receives.
    * A harness otherwise starts with only a small base set, such as `PATH` and
-   * `HOME`, and the variables its own driver needs.
+   * `HOME`, and the variables its own driver needs. Model credentials and
+   * the variables jigs sets itself are refused: name a model credential on
+   * its model source instead.
    */
   env?: string[];
 }
