@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.48.0](https://github.com/salimhamed/jigs/compare/jigs-v0.47.2...jigs-v0.48.0) (2026-09-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* askAgent rejects Codex and harnesses with tools or MCP servers, and Pi structured output fails without a valid submit_result call.
+
+### Features
+
+* enforce tools-off asks and strict Pi structured output ([#347](https://github.com/salimhamed/jigs/issues/347)) ([c07b5b1](https://github.com/salimhamed/jigs/commit/c07b5b1248601df7d3b03aef1e082fc9d5af19db))
+
 ## [0.47.2](https://github.com/salimhamed/jigs/compare/jigs-v0.47.1...jigs-v0.47.2) (2026-09-22)
 
 
