@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.52.2
+# @jigs-ai/jigs v0.53.0
 
 Reconcile resources that a completed factory run asked jigs to release automatically.
 
