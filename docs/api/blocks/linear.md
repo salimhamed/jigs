@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.52.2
+# @jigs-ai/jigs v0.53.0
 
 Compose ticket claiming, review, snapshots and human handoffs inside a workflow.
 

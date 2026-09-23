@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.53.0](https://github.com/salimhamed/jigs/compare/jigs-v0.52.2...jigs-v0.53.0) (2026-09-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* keep the GitHub webhook secret in .env and re-send it on every bind ([#362](https://github.com/salimhamed/jigs/issues/362))
+
+### Bug Fixes
+
+* keep the GitHub webhook secret in .env and re-send it on every bind ([#362](https://github.com/salimhamed/jigs/issues/362)) ([5b66e73](https://github.com/salimhamed/jigs/commit/5b66e737b12dabf0ceb951c2707b8eb99f02f36c))
+
 ## [0.52.2](https://github.com/salimhamed/jigs/compare/jigs-v0.52.1...jigs-v0.52.2) (2026-09-23)
 
 

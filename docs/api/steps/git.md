@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.52.2
+# @jigs-ai/jigs v0.53.0
 
 Inspect committed changes and push branches in a Git worktree.
 
