@@ -2,7 +2,8 @@
 
 Use `runAgent` when the work needs tools and a working directory: inspecting code,
 running checks, or making a change. A **harness** is the coding-agent runtime that
-does the work. jigs supports Claude Code and Codex.
+does the work. jigs supports Claude Code, Codex and Pi; see
+[models and harnesses](./models-and-harnesses) for what each one needs.
 
 Import the bound operation from your factory’s generated `#jigs` module. The
 harness descriptor comes from the jigs package.

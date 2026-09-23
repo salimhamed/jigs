@@ -6,8 +6,9 @@ status: accepted
 
 Model sources are API endpoints. Harnesses are agent programs jigs spawns.
 Workflow code passes only tagged serializable descriptors; step-side drivers
-hydrate live providers and own execution, checks, environment allowlists,
-session pointers and cost reporting.
+hydrate live providers and own execution, checks, environment allowlists and
+session pointers. Results report no token usage or cost: jigs does not measure
+or report model spend for any driver.
 
 The public constructor namespaces are `models.*` and `harnesses.*`. The four
 execution verbs state which family they accept: `runAgent` and `askAgent` take
@@ -16,6 +17,16 @@ harnesses; `askModel` and `askJev` take model sources.
 ## Consequences
 
 - One step-side driver registry is the source of installed execution kinds.
+- `askAgent` gives the model no tools. Claude Code runs with its built-in tools
+  off and no MCP servers, Pi runs with `--no-tools`, and Codex is rejected
+  because it has no tool-free mode. A descriptor that names tools or MCP servers
+  is rejected before any check runs.
+- Pi structured output goes only through an invocation-private `submit_result`
+  tool, which validates the model's raw arguments against the requested
+  schema. A structured ask allows only that tool; a structured run adds it to
+  the caller's allowlist. The first accepted call stands. A turn that ends
+  without one fails, even when the reply is JSON text, and a model or process
+  failure after it still fails the call.
 - Pi runs as a subprocess of the installed binary. jigs does not implement an
   AI SDK `LanguageModel` for it; Pi itself owns its agent loop. Pi's native
   request retries remain enabled, and jigs accepts a result only after Pi emits
@@ -60,7 +71,3 @@ harnesses; `askModel` and `askJev` take model sources.
   attempted execution fails explicitly with the unregistered kind.
 
 This decision amends ADR 0004's statement that Pi is not a v0 harness.
-
-AGE-506 amends this decision's cost-reporting clause: model, agent, and Jev
-results no longer expose usage or costUsd, and drivers no longer own cost
-reporting.

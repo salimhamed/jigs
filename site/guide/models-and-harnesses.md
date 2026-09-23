@@ -46,20 +46,46 @@ For an OpenAI-compatible source, `options.compat.supportsDeveloperRole` and
 cannot discover. Both default to `false`. These hints are written only to Pi's
 managed `models.json`; direct `askModel` descriptors do not accept them.
 
-Each call gets a curated Pi home; ask mode also gets a scratch working directory.
-Jigs disables
-Pi's settings, package, prompt, theme, session, and extension discovery, then
-loads only its `submit_result` extension for structured output. Existing files
-outside that invocation home are not discovered. OpenAI Codex subscription calls
-use a symlink to Pi's normal login at `~/.pi/agent/auth.json`; run `pi`, choose
-`/login`, then select OpenAI Codex before using that source. OpenRouter and
-credentialed OpenAI-compatible sources use the environment variable named by
-their model descriptor.
+Each call gets its own temporary Pi home, so parallel calls never share
+settings, schemas or MCP servers; ask mode also gets a scratch working
+directory. jigs disables Pi's settings, package, prompt, theme, session and
+extension discovery, then loads only the extensions it writes for that call:
+`submit_result` for structured output and, for a run with `mcpServers`, the MCP
+adapter. Existing files outside that invocation home are not discovered. OpenAI
+Codex subscription calls use a symlink to Pi's normal login at
+`~/.pi/agent/auth.json`; run `pi`, choose `/login`, then select OpenAI Codex
+before using that source.
+
+Descriptors hold environment variable names, never secret values. OpenRouter
+and credentialed OpenAI-compatible sources read the variable named by their
+model descriptor. Pi starts with the service environment minus API keys and
+tokens, plus only the variables its model source and MCP servers name.
+
+For `runAgent`, `options.mcpServers` is the complete MCP universe. Pi never
+reads your global MCP file, `.mcp.json` or `.pi/mcp.json`; to use a server
+defined there, copy its definition into the descriptor. Each server lists the
+`tools` the model may call and a `probe` tool from that list. Stdio `env` and
+HTTP `headers` map a name to the environment variable that holds its value, so
+`env: { TOKEN: "TEAM_MCP_TOKEN" }` passes the value of `TEAM_MCP_TOKEN` as
+`TOKEN`, and `bearerTokenEnv` names the variable that holds a bearer token. A
+stdio server starts with only its declared variables plus the MCP SDK's
+defaults (`HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM` and `USER`), so it never
+sees Pi's model key or another server's credentials. `auth: "oauth"` uses a
+login `pi-mcp-adapter` already holds; jigs never starts a login flow. Before
+launching Pi, jigs calls each server's probe tool, except OAuth servers, which
+are first exercised by the run itself.
+
+Pi's own request retries stay on, and jigs adds no retry loop of its own. A call
+succeeds only when Pi settles on a successful final response and exits
+normally: a run that settles on an error, is aborted, crashes or emits
+truncated output fails. jigs reports no token usage or cost for Pi calls.
 
 `runAgent` runs Pi in the supplied worktree and stores its session in the
 run-scoped durable session store. The returned session pointer can be passed back as
 `resume`; jigs verifies that its real session file still exists before spawning
 Pi. A missing session takes the normal `resumeOrRebuild` fresh-context path.
+Any other failure in a resumed turn, including a model error, fails the call
+and never falls back to a fresh context.
 That session store is removed when the run's worktrees are
 released, so they are not long-term conversation storage.
 
@@ -73,7 +99,8 @@ process failure after `submit_result` still fails the call. Pi uses constrained
 JSON Schema sampling where the provider supports it. A call without `output` loads
 no `submit_result` tool and returns plain text.
 
-Pi 0.85.1 or newer must be available on the service's `PATH`. Install it with
+Pi 0.85.1 or newer must be available on the service's `PATH`; jigs is tested
+with Pi 0.87.0. Install it with
 `npm install --global @earendil-works/pi-coding-agent`. `jigs doctor` can check
 the Pi executable, but model and authentication checks happen at the call site
 because the nested model source is workflow configuration.
