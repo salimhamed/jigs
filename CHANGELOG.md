@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.52.0](https://github.com/salimhamed/jigs/compare/jigs-v0.51.0...jigs-v0.52.0) (2026-09-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* publish to public npm as @jigs-ai/jigs ([#348](https://github.com/salimhamed/jigs/issues/348))
+
+### Features
+
+* publish to public npm as @jigs-ai/jigs ([#348](https://github.com/salimhamed/jigs/issues/348)) ([8900c1f](https://github.com/salimhamed/jigs/commit/8900c1f96df6e0cf95ec59edd91aabfa8d8e23f6))
+
 ## [0.51.0](https://github.com/salimhamed/jigs/compare/jigs-v0.50.0...jigs-v0.51.0) (2026-09-23)
 
 
