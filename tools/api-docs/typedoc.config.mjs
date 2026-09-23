@@ -1,5 +1,5 @@
 export const sharedOptions = {
-  blockTags: ["@example", "@remarks"],
+  blockTags: ["@example", "@module", "@remarks"],
   disableSources: true,
   entryPointStrategy: "resolve",
   excludeInternal: true,
@@ -25,7 +25,28 @@ export const typedocOptions = {
   entryFileName: "index",
   hideBreadcrumbs: true,
   hidePageHeader: true,
-  outputFileStrategy: "modules",
+  router: "module",
 };
 
 export default typedocOptions;
+
+// Site-only: tables and code-block signatures scan well in a browser, while the
+// npm pages under docs/api keep the default layout that reads well as plain text.
+export const siteOptions = {
+  classPropertiesFormat: "table",
+  enumMembersFormat: "table",
+  interfacePropertiesFormat: "table",
+  parametersFormat: "table",
+  sortEntryPoints: false,
+  tableColumnSettings: {
+    hideDefaults: false,
+    hideInherited: true,
+    hideModifiers: true,
+    hideOverrides: true,
+    hideSources: true,
+    leftAlignHeaders: true,
+  },
+  typeAliasPropertiesFormat: "table",
+  typeDeclarationFormat: "table",
+  useCodeBlocks: true,
+};

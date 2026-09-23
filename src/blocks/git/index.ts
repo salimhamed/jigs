@@ -1,6 +1,7 @@
 /**
  * Describe and render committed Git changes for review.
  *
+ * @module blocks/git
  * @packageDocumentation
  */
 

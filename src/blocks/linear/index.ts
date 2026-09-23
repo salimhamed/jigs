@@ -1,6 +1,7 @@
 /**
  * Compose ticket claiming, review, snapshots and human handoffs inside a workflow.
  *
+ * @module blocks/linear
  * @packageDocumentation
  */
 

@@ -1,6 +1,7 @@
 /**
  * Compose pull request creation, review, approval and merge gates inside a workflow.
  *
+ * @module blocks/pull-requests
  * @packageDocumentation
  */
 

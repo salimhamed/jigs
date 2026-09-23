@@ -1,6 +1,7 @@
 /**
  * Use these schemas and types for provider-neutral questions and JSON values exchanged with a human.
  *
+ * @module blocks/human
  * @packageDocumentation
  */
 
