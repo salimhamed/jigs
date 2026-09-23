@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.48.0
+# @salimhamed/jigs v0.49.0
 
 Execute agent and model requests outside workflow code.
 
@@ -74,6 +74,16 @@ Return the installed driver for a descriptor kind, if this release provides one.
 
 `DriverDependencies.evaluate`
 
+##### factoryEnv()
+
+> **factoryEnv**(): readonly `string`[]
+
+Names the factory declares under `agents.env` in `jigs.config.ts`.
+
+###### Returns
+
+readonly `string`[]
+
 ##### generateText()
 
 > **generateText**(`options`): `Promise`\<`ExecutorGeneration`\>
@@ -112,13 +122,17 @@ Return the installed driver for a descriptor kind, if this release provides one.
 
 ##### jitFailures()
 
-> **jitFailures**(`wire`): `Promise`\<`object` & `object`[] \| `undefined`\>
+> **jitFailures**(`wire`, `env`): `Promise`\<`object` & `object`[] \| `undefined`\>
 
 ###### Parameters
 
 ###### wire
 
 `AgentRequest`
+
+###### env
+
+`Record`\<`string`, `string`\>
 
 ###### Returns
 

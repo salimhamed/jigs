@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.49.0](https://github.com/salimhamed/jigs/compare/jigs-v0.48.0...jigs-v0.49.0) (2026-09-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* agent harnesses no longer inherit undeclared service environment variables. Declare any variable an agent needs by name in jigs.config.ts, for example `agents: { env: ["SSH_AUTH_SOCK"] }`.
+
+### Features
+
+* build agent harness environments from an allowlist ([#351](https://github.com/salimhamed/jigs/issues/351)) ([679f8b5](https://github.com/salimhamed/jigs/commit/679f8b5cf15463fff504c82ea1657bcd334c0cbe))
+
 ## [0.48.0](https://github.com/salimhamed/jigs/compare/jigs-v0.47.2...jigs-v0.48.0) (2026-09-23)
 
 
