@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.51.0
+# @jigs-ai/jigs v0.52.0
 
 Describe a worktree provisioned for a workflow run.
 
