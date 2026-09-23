@@ -241,3 +241,24 @@ test("doctor reports Linear app credentials against a factory configured for a k
     reason: "linear.identity uses key but LINEAR_API_KEY is not set",
   });
 });
+
+test("a factory config that cannot be read fails the Linear check as itself", async () => {
+  const factory = makeTmpDir();
+  onTestFinished(() => removeTmpDir(factory));
+  writeFileSync(
+    path.join(factory, "jigs.config.ts"),
+    'export default { service: { dashboardPort: 9090 }, linear: { identity: { mode: "nope" } } }',
+  );
+  vi.stubEnv("JIGS_FACTORY_ROOT", factory);
+  vi.stubEnv("LINEAR_API_KEY", "configured");
+  const report = await runChecks(preflightChecks({ integrations: ["linear"] }));
+  expect(report.checks).toEqual([
+    expect.objectContaining({
+      id: "linear.identity",
+      ok: false,
+      reason: expect.stringContaining("jigs.config.ts"),
+      repair: "repair jigs.config.ts, then: jigs service restart",
+    }),
+  ]);
+  expect(report.checks[0]).not.toMatchObject({ reason: expect.stringContaining("rejected") });
+});

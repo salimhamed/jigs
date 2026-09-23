@@ -4,7 +4,12 @@ import type {
   PiMcpServerConfig,
 } from "../blocks/agents/harness-config.ts";
 import type { AgentRequest } from "../blocks/agents/plan.ts";
-import { defaultMergePolicy, readFactoryConfig } from "../config/factory-config.ts";
+import {
+  defaultMergePolicy,
+  FACTORY_CONFIG_FILE,
+  type LinearIdentity,
+  readFactoryConfig,
+} from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";
 import { getAuthenticatedUser } from "../providers/github.ts";
 import { resolveGithubIdentities } from "../providers/github-auth.ts";
@@ -17,8 +22,8 @@ import {
 import { driverFor, drivers } from "../steps/agents/drivers/index.ts";
 import { awsCredentialsCheck } from "./aws.ts";
 import { bindingChecks } from "./bindings.ts";
-import { CHECK_TIMEOUT_MS, type Check } from "./catalog.ts";
-import type { Integration } from "./core.ts";
+import { CHECK_TIMEOUT_MS, type Check, failedCheck } from "./catalog.ts";
+import { type Integration, RESTART_SERVICE } from "./core.ts";
 import {
   type GithubIdentityProbes,
   githubIdentityChecks,
@@ -103,14 +108,23 @@ function githubChecks(checkBindings = false): Check[] {
   }
 }
 
-// A configuration that cannot be read is the binding checks' diagnosis; the
-// credential is still checked against the default identity.
-function configuredLinearIdentity() {
+// A configuration that cannot be read says nothing about the credential, so it
+// fails as itself rather than as a key Linear rejected.
+function linearChecks(): Check[] {
+  let identity: LinearIdentity;
   try {
-    return resolveLinearIdentity();
-  } catch {
-    return { mode: "key" } as const;
+    identity = resolveLinearIdentity();
+  } catch (err) {
+    return [
+      failedCheck(
+        "linear.identity",
+        "Linear identity",
+        err instanceof Error ? err.message : String(err),
+        `repair ${FACTORY_CONFIG_FILE}, then: ${RESTART_SERVICE}`,
+      ),
+    ];
   }
+  return linearIdentityChecks(identity, linearProbes);
 }
 
 export function preflightChecks(
@@ -124,9 +138,7 @@ export function preflightChecks(
   const bindings =
     typeof inputs?.binding === "string" ? [inputs.binding] : (requires.bindings ?? []);
   return [
-    ...(integrations.includes("linear")
-      ? linearIdentityChecks(configuredLinearIdentity(), linearProbes)
-      : []),
+    ...(integrations.includes("linear") ? linearChecks() : []),
     ...(integrations.includes("github") ? githubChecks() : []),
     ...bindingChecks({ factoryRoot, names: bindings }),
     ...harnessChecks(requires.harnesses ?? []),
@@ -142,7 +154,6 @@ export function preflightChecks(
 // Without a workflow manifest, doctor checks integrations configured in the environment.
 export function doctorChecks(): Check[] {
   const profile = process.env.AWS_PROFILE;
-  const linearIdentity = configuredLinearIdentity();
   // On once any variable of either mode is set, so a half-configured app, or
   // credentials for the mode the config does not name, are reported against
   // the configured mode rather than silently skipped.
@@ -150,7 +161,7 @@ export function doctorChecks(): Check[] {
     .flat()
     .some((name) => linearEnvValue(name) !== undefined);
   return [
-    ...(linearConfigured ? linearIdentityChecks(linearIdentity, linearProbes) : []),
+    ...(linearConfigured ? linearChecks() : []),
     // Always: an App identity needs no environment variable to be configured,
     // so there is nothing to detect — the configuration itself is the answer.
     ...githubChecks(true),
