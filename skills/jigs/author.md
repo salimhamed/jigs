@@ -1,8 +1,16 @@
 # Author a workflow
 
-Work in the factory repo. Read its `jigs.config.ts`, generated `jigs.ts`, and
-existing `workflows/`, `blocks/`, and `steps/` before editing. The installed
-`node_modules/@jigs-ai/jigs/templates/` is the bare scaffold for that version; its only workflow is `hello`.
+Work in the factory repo. Read its `jigs.config.ts`, generated `jigs.ts`,
+`workflows/`, and `blocks/` and `steps/` if present, before editing. The
+installed `node_modules/@jigs-ai/jigs/templates/` is the bare scaffold for that
+version; its only workflow is `hello`.
+
+The guides, in the order you need them:
+
+- `https://salimhamed.github.io/jigs/guide/build-a-workflow`: one workflow end to end.
+- `https://salimhamed.github.io/jigs/guide/recipes`: copying in a ready-made workflow such as ship.
+- `https://salimhamed.github.io/jigs/guide/configuration`: every `jigs.config.ts` key and `.env` variable.
+
 For the ship process, run `jigs recipe add ship`, then manually add the printed
 `ship: () => import("./workflows/ship.ts"),` line to the config's `workflows` map.
 The command preserves existing files and reports created/kept paths. Recipes
@@ -145,13 +153,9 @@ does not authorize cleanup.
 For delivery, run `jigs recipe add ship` and register the workflow as the
 command instructs. The copied `blocks/delivery/` contains the phases, types,
 prompts and renderers; these are factory code to edit, not library exports.
-`docs/delivery.md` in the jigs repository describes this recipe's graph, budgets
-and compiling examples. Read it when changing the ship process. Keep factory
-prompt overrides beside their callers.
-
-Extract a shipped block only when both a recipe and at least one concrete
-prototype use the same mechanism. Name both callers; single-caller composition
-stays in the recipe. Reuse existing blocks for comment scoping and agent-session
+Read `blocks/delivery/README.md` for the recipe's graph, budgets and compiling
+examples before changing the ship process. Keep factory prompt overrides beside
+their callers. Reuse existing blocks for comment scoping and agent-session
 rebuilding rather than duplicating their mechanics.
 
 ## Marker convention for bespoke pull request workflows

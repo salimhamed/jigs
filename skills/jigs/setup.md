@@ -1,8 +1,9 @@
 # Set a factory up
 
-From nothing to a service that answers. `docs/setup.md` in the jigs repo is the
-full runbook and the source of truth; this file is the order of operations and
-the places people get stuck.
+From nothing to a service that answers. The human-facing walkthrough is
+`https://salimhamed.github.io/jigs/guide/getting-started`; identity, merge
+policy, bindings and webhooks are in
+`https://salimhamed.github.io/jigs/guide/configuration`.
 
 Print each command for the human to run, or run it and show them the output.
 Nothing below is safe to run silently: every step can fail in a way only a
@@ -11,292 +12,130 @@ person can judge.
 ## What has to be there first
 
 - Node 24 or newer, and pnpm. If node comes from a version manager, the shell
-  that runs `jigs up` must have it on `PATH` — the service is spawned with the
+  that runs `jigs up` must have it on `PATH`: the service is spawned with the
   CLI's own node.
-- Docker, with the daemon running. Each factory brings up its own Postgres; none
-  of it is shared.
-- The agent harness CLIs the factory's workflows will drive — `claude` and
-  `codex` — each logged in to its subscription, and both on the `PATH` of
-  whatever starts the service. The service will not start without them, or
-  with a `codex` below the minimum version it prints. A service does not always
-  get the same `PATH` as the shell. `JIGS_CLAUDE_EXECUTABLE` can point at a
-  `claude` that is not on `PATH`; `codex` has no equivalent.
-- The AWS CLI, only if a workflow will declare `aws: true`.
-- A tunnel tool (`tailscale` or `cloudflared`), only if the factory will turn
-  on provider webhooks, which are optional.
-- On Linux with systemd, run `loginctl enable-linger "$USER"` once so factory
-  services survive the last login session ending. `jigs doctor` verifies it.
+- Docker, with the daemon running. Each factory brings up its own Postgres.
+- On Linux with systemd, `loginctl enable-linger "$USER"` once, so factory
+  services survive the last login session ending.
+- Only for the harnesses the factory's workflows use, each logged in to its
+  subscription and on the `PATH` of whatever starts the service:
+  Claude Code (`claude auth login`), Codex (`codex login`), Pi (`pi`, then
+  `/login`). `JIGS_CLAUDE_EXECUTABLE` can point at a `claude` that is not on
+  `PATH`. A bare factory needs none of them.
+- The AWS CLI, only if a workflow declares `aws: true`.
 
-jigs is one public npm package, `@jigs-ai/jigs`, pinned by the factory to a version.
-No token or `.npmrc` entry is needed to install it. Nothing is cloned and nothing is installed globally:
-inside a factory, `jigs` means `pnpm exec jigs`.
+jigs is on public npm as `@jigs-ai/jigs`, pinned by the factory to a version.
+No token is needed to install it, and nothing is installed globally: inside a
+factory, `jigs` means `pnpm exec jigs`.
 
-## 1. Scaffold the factory
+## 1. Scaffold
 
 ```sh
 mkdir my-factory && cd my-factory && git init
-pnpm dlx @jigs-ai/jigs init                  # jigs acts as the operator
-pnpm dlx @jigs-ai/jigs init --github-identity-mode app   # jigs acts as a GitHub App
+pnpm dlx @jigs-ai/jigs init
 ```
 
-Choose the identity now: it is written into `jigs.config.ts` as
-`github.identities`, together with the `merge.approval` signal that works with it
-(a `jigs:approved` label for `pat`, a GitHub review for `app`). Section 2a
-covers both. Changing it later is a config edit, not a re-scaffold.
+Choose the GitHub identity now; `jigs init --help` lists the flags.
+`--github-identity-mode pat` (the default) makes jigs act as the operator, with
+a `jigs:approved` label as the merge approval. `--github-identity-mode app`
+makes jigs act as a GitHub App and takes the App's id, installations, private
+key path and the operator's login; approval is then a GitHub review.
+`--linear-identity-mode key|app` does the same for Linear. Both are written to
+`jigs.config.ts`, so changing one later is a config edit.
 
-`jigs init` writes `jigs.config.ts`, a package manifest pinned to the CLI's
-version, build settings, Docker Compose, `.env.example`, and the factory's
-trivial `hello` workflow. Optional recipes are copied in separately.
-It also writes the committed generated integration, `jigs.ts`.
+`jigs init` writes `jigs.config.ts`, the generated `jigs.ts`, a `hello`
+workflow, the package manifest, Docker Compose, `.env.example` and build
+settings. It preserves existing files. Its printed ports come from the factory
+path; adjust them in `jigs.config.ts` if they are taken.
 
-The printed ports are derived from the factory path. Two factories can still
-collide; use the printed numbers and adjust them if already occupied.
-
-Existing files are preserved. Custom workflows, blocks and steps belong to
-the factory; `author.md` covers extending them. Keep custom code outside
-`jigs.ts`: `jigs generate` refreshes that entire file, and builds refuse drift.
-Finish or cancel affected runs before deploying workflow or step renames.
-
-## 2. Tokens
+## 2. `.env`
 
 ```sh
 cp .env.example .env
 ```
 
-The scaffold's `hello` workflow needs no integration credentials.
-Fill in the Linear identity's credentials (`LINEAR_API_KEY` in `key` mode,
-`LINEAR_CLIENT_ID` and `LINEAR_CLIENT_SECRET` in `app` mode) and, in `pat` mode,
-`GITHUB_TOKEN` before the first ship run: a workflow that declares either integration cannot start a run without a
-working credential. `WORKFLOW_TARGET_WORLD` and `WORKFLOW_POSTGRES_URL` come
-filled in and should be left alone.
+`hello` needs no credentials. Leave `WORKFLOW_TARGET_WORLD` and
+`WORKFLOW_POSTGRES_URL` as written. Fill in the Linear and GitHub credentials
+before adding a workflow that declares those integrations; the configuration
+guide's `.env` table lists each variable.
 
-## 2a. GitHub identity and merge policy
-
-Both live in `jigs.config.ts` and are independent of each other; `jigs init`
-writes a matching pair and nothing derives one from the other at run time.
-
-**`pat`** — jigs is the operator. `GITHUB_TOKEN` in `.env` is all it needs, and
-`jigs bind` wants a classic PAT with `repo` (or `public_repo` for a public
-repository), plus `admin:repo_hook` when GitHub webhooks are on. GitHub refuses to let
-an author approve their own pull request, so `merge.approval` is a label:
-`{ kind: "label", name: "jigs:approved" }`, meaning "merge whenever ready" —
-it survives later pushes and jigs never removes it.
-
-**`app`** — jigs is `<app-slug>[bot]` and the operator approves its pull
-requests normally. Each App entry in `github.identities` needs `appId`, an `installations` map from account login to installation ID,
-`privateKeyPath` (the `.pem`, `chmod 600`, gitignored) and `operator` (the
-human's login — an installation token cannot answer `GET /user`). Optional
-`coAuthor` is `Name <email>` for a `Co-authored-by` trailer on merge commits.
-Grant the App exactly: Contents, Pull requests and Issues **read & write**;
-and Administration, Metadata, Checks and Commit statuses **read**. Only when
-`webhooks.github.enabled` is `true`, also grant **Repository webhooks read &
-write**. When `merge.by` is `"jigs"` and the factory has bindings, also grant
-Actions **read** so `jigs bind` and `jigs doctor` can verify that the
-repositories have an active Actions workflow. Permissions have to be accepted on the
-installation after they are granted on the App. Register the App with its own
-webhook **off**; with GitHub webhooks on, jigs keeps per-repo webhooks, and
-one App registration has only one webhook URL.
-
-Factory `merge` states the default policy: `by` (`jigs` or `human`), `method`
-(`squash`, `merge` or `rebase`), and `approval`. A binding may override `by`
-and `method`; approval stays factory-level. jigs merges only when the signal is
-present, GitHub reports the pull request mergeable, CI is green (at least one
-check, all of them passed), and it is not a draft — so **jigs never merges in a
-repository with no CI**; set that binding's `merge.by` to `"human"` there. A `label` approval
-cannot satisfy a native "require approvals" rule, so on a repository carrying
-one, `merge.by: "jigs"` in `pat` mode never fires. A `behind` pull request
-(branches must be up to date) is waited on, not updated. `jigs doctor` prints
-the identity and the effective policy per binding:
-
-```
-ok   GitHub identity: jigs acts as jigs-app-dev[bot] on salimhamed; operator salimhamed
-ok   merge policy: repo: jigs merges with squash once GitHub reports it mergeable and an approving GitHub review of the current commit is present
-```
-
-## 2b. Linear identity
-
-`linear.identity` in `jigs.config.ts` is `{ mode: "key" }` (the default) or
-`{ mode: "app" }`, chosen at `jigs init --linear-identity-mode key|app`.
-**`key`** — jigs acts as the user whose `LINEAR_API_KEY` is in `.env`. Linear
-does not notify a user of their own comments, so if that user is the operator,
-a parked run's @-mention never reaches their inbox. **`app`** — jigs acts as a
-Linear OAuth application registered in the workspace with **Client
-credentials** on (Public and Webhooks off); put its `LINEAR_CLIENT_ID` and
-`LINEAR_CLIENT_SECRET` in `.env`. jigs mints and re-mints the token itself. An
-app cannot list webhooks, so in `app` mode `jigs doctor` does not verify the
-Linear webhook; confirm it by hand. `jigs doctor` reports the identity as
-`linear.identity`.
-
-## 3. Up
+## 3. `jigs up`
 
 ```sh
-pnpm install          # once, so the factory's own jigs exists
+pnpm install
 pnpm exec jigs up
 ```
 
-The last step runs `jigs doctor`. It checks only what your workflows require and
-what `jigs.config.ts` turns on, so a bare `hello` factory needs no integration
-credentials and no agent CLI. Postgres and the service's machine prerequisites
-still apply.
-
-
-`jigs up` runs, in order, each on its own line: env (copies `.env.example` if
-there is no `.env`, reports empty credential slots), install, compose (the
-World), bootstrap (migrations), build, service (start, or restart only if the
-bundle changed), ready (waits until the service reports itself ready — every
-binding cloned, World up — printing each boot phase), doctor. The last line
-names the service and dashboard URLs:
+`jigs up` prints one line per step: `locate`, `env` (copies `.env.example` if
+there is no `.env` and names empty credential slots), `install`, `compose`
+(Postgres), `bootstrap` (migrations), `build`, `service` (start, or restart only
+when the built bundle changed), `ready` (waits until every binding is cloned and
+the World is up) and `doctor`. Doctor checks only what the workflows require
+and what `jigs.config.ts` turns on. The last line is where to look next:
 
 ```
-ok   locate (3ms) — /home/you/my-factory
-ok   env (1ms)
-ok   install (4.7s)
-ok   compose (2.1s)
-ok   bootstrap (1.3s)
-ok   build (1.9s)
-ok   service (12ms)
-ok   ready (1.8s)
-skip doctor — --no-doctor
 my-factory-2286ac2a is up at http://localhost:9010 — dashboard http://localhost:9110
 ```
 
-The first failing step prints `FAIL <step>: <why>` and its repair on the next
-line, and `up` exits 1 there. Show the human both lines and follow the repair;
-then run `jigs up` again — an unchanged factory installs, migrates and
-restarts nothing. `jigs up` is also the command after every change to the
-factory's code. `--restart-service` forces a restart, `--force` skips the question
-about in-flight runs, `--no-doctor` skips the last step. A `FAIL ready` names
-the log when the service exited during boot (a binding it could not clone, a
-World it could not open); one after five minutes leaves the process running,
-so `jigs service status` before repairing anything.
+Give the human the dashboard URL and have them open it.
 
-Confirm the dashboard URL answers, then:
+The first failing step prints `FAIL <step>: <why>` with its repair on the next
+line, and `up` stops there. Show both lines, follow the repair, then run
+`jigs up` again; an unchanged factory installs, migrates and restarts nothing.
+A `FAIL ready` names the service log when the service exited during boot; one
+after five minutes leaves the process running, so run `jigs service status`
+before repairing anything. `jigs doctor` reruns the checks any time the service
+is up.
+
+`jigs up` is also the command after every change to the factory's code.
+`--restart-service` forces a restart; `--force` skips the question about
+in-flight runs.
+
+Then:
 
 ```sh
-jigs status   # "no runs" is the right answer here
+jigs run hello --input message=hello
+jigs status
 ```
 
-## 4. Add a recipe and bind its target repos
+## 4. Add a recipe and bind a target repo
 
-The bare scaffold registers `hello`, which creates and removes a run directory
-and echoes its input: `jigs run hello --input message=hello`.
-For ticket delivery, run `jigs recipe add ship` (or `jigs recipe list` to list
-choices). It copies source and reports created/kept files without overwriting.
-Manually add its printed registration under `workflows` in `jigs.config.ts`:
-`ship: () => import("./workflows/ship.ts"),`. Configure the recipe's integration
-credentials and harnesses, then bind a target. Copied recipes are factory code.
+```sh
+jigs recipe list
+jigs recipe add ship
+```
+
+`recipe add` copies source without overwriting and prints one registration line
+to add by hand under `workflows` in `jigs.config.ts`:
+`ship: () => import("./workflows/ship.ts"),`. The copied code is the factory's
+to edit; `blocks/delivery/README.md` explains the ship recipe.
 
 ```sh
 jigs bind git@github.com:owner/repo.git
 jigs bindings
-jigs up                  # rebuild and restart for the changed configuration
+jigs up
 ```
 
-A binding is a name in `jigs.config.ts` mapped to a target repo's remote URL. jigs
-keeps its own bare clone per binding under
-`~/.local/share/jigs/bindings/<factory>/<binding>/repo.git` and cuts every
-worktree from it — the operator's own checkout is not involved. The service
-makes those clones when it starts, so the restart above is what makes a new
-binding usable (seconds, up to a minute for a large repo); `jigs doctor`
-reports a binding with no clone yet.
+`jigs bind` adds the binding to `jigs.config.ts` and, with the configured
+identity, creates the approval label when approval is a label and the webhook
+when GitHub webhooks are on. The service clones each binding when it starts, so the
+`jigs up` above is what makes a new binding usable. Worktree provisioning
+(`copy`, `postCreate`) is a hand edit described in the configuration guide.
 
-Binding commands edit the TypeScript syntax tree. They require an unambiguous
-literal `bindings` object for automatic edits. Unsupported syntax produces a
-clear repair message before any configuration or webhook writes; edit computed
-configurations manually.
+## 5. Webhooks are optional
 
-The binding also carries how its worktrees are provisioned — `jigs bind` writes
-`remote:` only, the rest is hand-edited and optional:
+A parked run wakes without webhooks: the service re-reads each waiting pull
+request and ticket every `service.pollIntervalSeconds.github` / `.linear`
+seconds (default 300), and `jigs poke <run-id>` wakes one sooner. Webhooks
+only make the wake immediate. They need a public tunnel URL, a
+`webhooks` block in `jigs.config.ts` and a secret per provider in `.env`; the
+configuration guide's webhooks section has the steps.
 
-```ts
-bindings: {
-  forge: {
-    remote: "git@github.com:owner/Forge.git",
-    copy: [".env"],
-    postCreate: ["npm ci"],
-    hookTimeoutMinutes: 20,
-  },
-},
-```
-
-A `copy:` entry is a path relative to the binding's own `bindings/<name>/`
-directory in the factory repo and lands at that same relative path in the
-worktree — `bindings/forge/.env` above arrives as `.env` at the worktree root.
-An entry that matches nothing, or that reaches outside that directory, fails
-the worktree request by name. `.env`-class files therefore belong in the
-factory repo under `bindings/<name>/`, gitignored as `bindings/*/.env`, never
-in the target repo.
-
-`jigs bind` creates or verifies jigs' repository furniture: the configured
-approval label when `merge.approval.kind` is `"label"`, and the GitHub webhook
-when `webhooks.github.enabled` is `true` in `jigs.config.ts`. It uses the
-configured identity: in `pat` mode
-`GITHUB_TOKEN` from the factory's `.env` — or from the shell for that one
-command, which wins there and only there (the service reads `.env` alone) — and
-in `app` mode the installation token. With GitHub webhooks on, the webhook
-needs the App's Repository webhooks permission (or `admin:repo_hook` on a PAT)
-and `GITHUB_WEBHOOK_SECRET` in the factory's `.env`, which jigs never
-generates: the user creates it with `openssl rand -hex 32`, and bind refuses
-without it. Without usable hook rights it fails and says the repair, and the
-retry is the same `jigs bind`: the binding already recorded stands and the
-webhook is create-or-update, re-sending the signing secret every time. With
-GitHub webhooks off, the default, bind skips the webhook with one line saying
-pull request waits poll every N seconds, but still needs a usable identity
-when label approval is configured. Re-running bind also restores a deleted approval label; doctor
-reports one that is missing. `jigs unbind` edits the config only; the clone stays on disk.
-
-## 5. Webhooks, only to react faster
-
-A suspended run wakes on its own without webhooks: the service re-reads each
-parked pull request and each ticket halted on a human every
-`service.pollIntervalSeconds.github` / `.linear` seconds (default 300, floor
-30). `jigs poke <run-id>` wakes one sooner by hand.
-
-Webhooks are optional and switched on per provider in a `webhooks` block with
-`url`, `github: { enabled }` and `linear: { enabled }`, all required once the
-block exists. The service's `/ingress/github` and `/ingress/linear` routes
-exist only for providers that are on, and must be reachable from the public
-internet on this factory's service port. Run a tunnel and put its URL in
-`webhooks.url`. For GitHub, set `GITHUB_WEBHOOK_SECRET` in `.env`, restart the
-service and re-bind each target repo (hook-administration rights required).
-For Linear, create a webhook by hand for `Comment` resources and put its
-secret in `.env` as `LINEAR_WEBHOOK_SECRET`. A provider switched on without
-its secret stops the service from starting. `docs/setup.md` has the exact
-commands and the org-level alternative.
-
-## Upgrading a factory later
+## Upgrading later
 
 ```sh
-jigs upgrade                # or: jigs upgrade --to-version <version>
+jigs upgrade
 ```
 
-normalizes jigs' release-age exclusion, then bumps `@jigs-ai/jigs`. The rest
-runs under the newly installed CLI: it regenerates `jigs.ts`, then runs
-`jigs up` to build and start the factory. Finally it checks the factory's custom
-code. It is the only command needed even when an
-older factory excludes an exact jigs version. Review and commit the regenerated
-`jigs.ts` and any `pnpm-workspace.yaml` normalization. Fix API errors in custom
-code outside `jigs.ts`; refresh generated wrappers with `jigs generate`. An
-install failure naming `@workflow/web`, `@workflow/world-postgres`, `workflow`
-or `zod` is a release that moved a runtime peer: move the same pin in the
-factory's `package.json` and run `jigs upgrade` again. A release can also raise
-the minimum `codex` version; the service reports that at startup, and the fix
-is to upgrade `codex` on the machine. A factory made before this release needs
-`ignoredOptionalDependencies: ['@openai/codex']` in its `pnpm-workspace.yaml`
-and should delete any `@openai/codex` dependency or `overrides` entry. A
-factory still installing jigs from a checkout
-(`link:` entries, or the old `@jigs/service` name) is refused; switch it to
-the published package first. So is a factory still depending on a retired
-name: `@salimhamed/jigs`, its name on GitHub Packages, or
-`@salimhamed/jigs-service`, retired in 0.3.0. Replace that line in
-`package.json` with `@jigs-ai/jigs` at a version, rewrite every
-`@salimhamed/jigs/X` or `@salimhamed/jigs-service/X` import to
-`@jigs-ai/jigs/X`, and drop the
-`@salimhamed:registry` line from the factory's `.npmrc` first.
-
-pnpm still verifies the whole lockfile against its `minimumReleaseAge` policy
-before it resolves anything. `jigs upgrade` keeps every jigs version covered
-by the `@jigs-ai/jigs` exclusion; for other recently published packages,
-leave their `minimumReleaseAgeExclude` entry in `pnpm-workspace.yaml` until
-that install has run, then drop the entry. Both factories hit this moving off
-`@salimhamed/jigs-service`.
+It bumps jigs, regenerates `jigs.ts`, runs `jigs up` and typechecks the
+factory. Review and commit the regenerated `jigs.ts`.
