@@ -1,23 +1,22 @@
 # jigs — agent guide
 
-See `README.md` for what jigs is and the dev commands (`pnpm check` runs lint,
-typecheck, test, and build). `pnpm check` covers no workflow directive: library
-code has none, and recipes compile inside factories. Run `pnpm e2e` too: it
-builds a bare `jigs init` factory and one with `jigs recipe add ship` plus manual
-workflow registration. Their emitted IDs are pinned in `e2e/expected-ids.bare.txt`
-and `e2e/expected-ids.ship.txt`. With `WORKFLOW_POSTGRES_URL` set it also boots
-the recipe factory service, waits for readiness, and requires a clean exit on
-SIGTERM. CI provides Postgres; without the URL the boot is skipped.
+`docs/contributing.md` has the dev commands and the source layout. Run
+`pnpm check` and `pnpm e2e` before you finish. `pnpm check` compiles no workflow
+directive: library code has none, and recipes compile inside factories. `pnpm e2e`
+builds a bare `jigs init` factory and one with `jigs recipe add ship`, and diffs
+their durable IDs against `e2e/expected-ids.bare.txt` and
+`e2e/expected-ids.ship.txt`. With `WORKFLOW_POSTGRES_URL` set it also boots the
+ship factory's service and requires a clean exit on SIGTERM. CI provides
+Postgres; without the URL the boot is skipped, so say so when you report.
 
-PR titles are conventional commits, enforced by CI — the squashed title is what
+PR titles are conventional commits, enforced by CI: the squashed title is what
 release-please reads to cut a release
-([ADR 0014](docs/adr/0014-release-automation.md)).
+([ADR 0007](docs/adr/0007-release-automation.md)).
 
 ## Where code goes
 
-`src` is split by what the Workflow SDK does with the code. The
-README's Layout section has the tree and the reasoning. The rules a change has
-to keep:
+`src` is split by what the Workflow SDK does with the code. The rules a change
+has to keep:
 
 - `blocks/` is workflow-side. It may import other `blocks/` files, zod, the
   `workflow` SDK, and `import type` from anywhere. It may not import a *value*
@@ -34,11 +33,13 @@ to keep:
 - A type used by one module stays in that module. A type used on both sides of
   the blocks/steps line lives in `blocks/`, under the same topic. There is no
   shared types folder.
+- Extract a shipped block only when a recipe and at least one other concrete
+  workflow use the same mechanism; single-caller composition stays in the recipe.
 
 No file under `src/` carries a `"use workflow"` or `"use step"` directive; both
-live in factory code, including the copied recipes ([ADR 0013](docs/adr/0013-factory-owned-steps.md)). `pnpm e2e` is
-what proves it, and it also scans the built workflow bundle for `node:`
-specifiers and `process.env`.
+live in factory code, including the copied recipes
+([ADR 0006](docs/adr/0006-factory-owned-steps.md)). `pnpm e2e` proves it, and
+also scans the built workflow bundle for `node:` specifiers and `process.env`.
 
 ## Compatibility
 
@@ -48,35 +49,33 @@ deprecation paths, fallbacks for old callers or dual code paths. A breaking
 change is a `!` in the PR title and one footer line in the commit, nothing more.
 Factories adopt a release by upgrading and fixing what breaks.
 
-## Doc comments
+## Docs
+
+The website (`site/`) is the only user documentation; `docs/` holds maintainer
+notes and ADRs. Anything public (site pages, README, skills, templates, doc
+comments) cites no ADR, Linear ticket, `CONTEXT.md` or `docs/` path.
+`CONTEXT.md` is the maintainer vocabulary for `src/`; use its terms.
 
 Write `/** */` comments for users with limited context, in plain language and as
 briefly as clarity allows. Use summary prose, `@remarks` for longer rationale and
 `@example` when it helps; use `@internal` to exclude an implementation detail.
-Do not use `@param`, `@returns`, unknown tags, Linear tickets, ADR numbers or
-`docs/adr/` paths. Every declaration exported directly from a package entry point
-has a summary; nested members rely on their rendered TypeScript signatures unless
-their meaning needs explanation. Every public entry point starts with
-`@packageDocumentation`.
-Maintainer `//` comments may cite an ADR, but never a Linear ticket.
+Do not use `@param`, `@returns` or unknown tags. Every declaration exported
+directly from a package entry point has a summary; nested members rely on their
+rendered TypeScript signatures unless their meaning needs explanation. Every
+public entry point starts with `@packageDocumentation`. Maintainer `//` comments
+may cite an ADR, but never a Linear ticket.
 
-## Agent skills
+## Issue tracker
 
-### Issue tracker
+Issues live in Linear, in the **Jigs** project
+(`cba18af1-71f0-4a08-bdec-24b5c88b1ec9`) of the **Development** team (key
+`AGE`, `1a7c511f-7779-4da3-ba3b-71d8943e8471`), through the `linear-personal`
+MCP server.
 
-Issues live in Linear — the **Jigs** project under the **Development (AGE)**
-team, accessed via the `linear-personal` MCP server. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Default vocabulary — the five canonical labels, names used as-is. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context: root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
-
-### Bespoke workflow direction
-
-For factory layout refactors, bespoke workflow authoring, or changes to jigs'
-execution API, read [the implementation plan](docs/bespoke-workflows-plan.md)
-for the agreed ownership boundaries, rationale and staged acceptance criteria.
+- Create with `save_issue` (team `Development`, project `Jigs`); read with
+  `get_issue` on `AGE-<n>` and `list_comments`; list with `list_issues`
+  filtered by project `Jigs`.
+- Comment with `save_comment`. Set labels by passing `labels` to `save_issue`.
+- Close by setting state `Done`, or `Canceled` for won't-fix.
+- Triage labels, used as-is: `needs-triage`, `needs-info`, `ready-for-agent`,
+  `ready-for-human`, `wontfix`.

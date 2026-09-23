@@ -1,82 +1,57 @@
 # {{FACTORY_NAME}}
 
-A [jigs](https://github.com/salimhamed/jigs) factory: workflows and the service that runs them.
+A [jigs](https://salimhamed.github.io/jigs/) factory: workflows and the service that runs them.
 
 ## Start
 
 ```sh
 cp .env.example .env
 pnpm install
-pnpm exec jigs up --no-doctor
+pnpm exec jigs up
 pnpm exec jigs run hello --input message=hello
 ```
 
-For bare hello setup, `--no-doctor` skips the final doctor pass, which checks
-GitHub credentials even when the workflow does not use GitHub. Postgres and the
-service's machine prerequisites (including both agent CLIs) still apply. Once
-integration credentials are configured, use plain `jigs up` and `jigs doctor`.
-
-
-`hello` creates and removes a run directory, then returns its input. It needs no
-repository binding, Linear token, GitHub token, or agent. The service still needs
-its Postgres World and machine prerequisites reported by `jigs doctor`.
-Configure integration credentials only when adding workflows that use them.
+`jigs up` starts the service and ends by running `jigs doctor`, which checks
+only what this factory's workflows use. `hello` needs no repository, ticket
+source, credentials or agent. Rerun `jigs doctor` any time the service is up.
+See [getting started](https://salimhamed.github.io/jigs/guide/getting-started).
 
 Every `jigs` below means `pnpm exec jigs`. The service listens on
 `:{{SERVICE_PORT}}`, its dashboard on `:{{DASHBOARD_PORT}}`, and Postgres on
-`:{{POSTGRES_PORT}}`. `jigs status` lists runs; `jigs status <run-id>` opens run details.
-Run detail also lists resources recorded by the generated `registerResource` step,
-independently of a workflow's return value.
+`:{{POSTGRES_PORT}}`. `jigs status` lists runs; `jigs status <run-id>` shows one,
+with the resources it recorded. All commands are in the
+[CLI reference](https://salimhamed.github.io/jigs/guide/cli).
 
-## Layout and authoring
+## Layout
 
-- `jigs.config.ts` registers deferred workflow imports, service settings, bindings,
-  and schedules. Secrets live in `.env`.
-- `jigs.ts` is generated durable step wrappers and bound blocks. Commit it;
-  refresh it with `jigs generate` and keep custom code elsewhere.
-- `workflows/hello.ts` is the trivial starting workflow. Add processes here with
-  a `"use workflow"` function and a default export `{ workflow, inputs, requires }`.
-- Add `blocks/` for reusable replay-safe coordination without directives.
-- Add `steps/` for custom `"use step"` functions doing external work.
-- `jigs.config.test.ts` checks declarations and compiled durable IDs.
+- `jigs.config.ts` registers workflows, service settings, bindings, schedules
+  and identities. Secrets live in `.env`.
+- `jigs.ts` is generated step wrappers and bound blocks. Commit it, refresh it
+  with `jigs generate`, and keep custom code elsewhere.
+- `workflows/hello.ts` is the starter workflow. A workflow file has a
+  `"use workflow"` function and a default export `{ workflow, inputs }`, plus
+  `requires` when it needs integrations or agents.
+- Add `blocks/` for reusable workflow-side code, and `steps/` for your own
+  `"use step"` functions that do outside work.
+- `jigs.config.test.ts` checks the registered workflows and compiled durable IDs.
 
-Factory imports use `#jigs`, `#blocks/<path>`, and `#steps/<path>` from the
-package's `imports` map. The config's workflow loaders stay relative.
-The installed API reference is in `node_modules/@jigs-ai/jigs/docs/api/`,
-with one Markdown page per package import path.
+Import with `#jigs`, `#blocks/<path>` and `#steps/<path>` from the `imports`
+map in `package.json`; the workflow loaders in `jigs.config.ts` stay relative.
+The API reference is also installed at `node_modules/@jigs-ai/jigs/docs/api/`,
+one Markdown page per import path.
 
-## Add the ship recipe
+## Recipes
 
 ```sh
 jigs recipe list
 jigs recipe add ship
 ```
 
-The command copies the ship workflow, tests, and Linear block into this factory.
-It reports `created` and `kept` files and preserves existing files. Registration
-is manual: add the printed line under `workflows` in `jigs.config.ts`:
-
-```ts
-ship: () => import("./workflows/ship.ts"),
-```
-
-Copied source is yours to edit; package upgrades do not overwrite it. `ship`
-reviews a Linear ticket, implements and reviews a change, opens a pull request,
-handles review and CI, and requests release after merge. Failed runs can retain
-files for `jigs resources list` and preview-first `jigs resources prune`. Set
-the Linear identity's credentials in `.env` (`LINEAR_API_KEY`, or
-`LINEAR_CLIENT_ID` and `LINEAR_CLIENT_SECRET` for an app), configure the GitHub
-identity, and install/authenticate its agent harnesses before running it.
-
-```sh
-jigs bind git@github.com:owner/repo.git
-jigs up
-jigs run ship --input ticket=ABC-123 --input binding=repo
-```
-
-See [delivery](https://github.com/salimhamed/jigs/blob/main/docs/delivery.md)
-for model selection, budgets, and prompt overrides. Binding commands edit a
-literal `bindings` object; computed configurations require manual edits.
+`recipe add` copies a recipe's workflow, tests and blocks into this factory and
+keeps any file that already exists. Add the line it prints under `workflows` in
+`jigs.config.ts`. The copied code is yours; upgrades never overwrite it. After
+adding ship, read `blocks/delivery/README.md`. See
+[recipes](https://salimhamed.github.io/jigs/guide/recipes).
 
 ## Verify and upgrade
 
@@ -86,9 +61,9 @@ jigs build
 pnpm test
 ```
 
-Tests inspect the last build, so build first. `jigs up` applies changes to a
-running service. `jigs upgrade` installs a release, refreshes `jigs.ts`, runs
-`jigs up`, and typechecks custom code. Review and commit the generated changes.
+Tests read the last build, so build first. `jigs up` applies changes to a
+running service. `jigs upgrade` installs the latest release, refreshes
+`jigs.ts`, runs `jigs up` and typechecks. Review and commit what it changes.
 
-Changing workflow or step paths or function names changes durable IDs. Finish
-or cancel affected active and parked runs before deploying those changes.
+A workflow or step's file path and function name are its durable ID. Finish or
+cancel active runs before renaming or moving either.
