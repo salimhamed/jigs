@@ -3,6 +3,7 @@
  *
  * Wrap steps in a factory-owned `"use step"` file. Never call them directly from a workflow.
  *
+ * @module steps/agents
  * @packageDocumentation
  */
 
