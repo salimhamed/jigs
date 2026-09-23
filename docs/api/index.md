@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.48.0
+# @salimhamed/jigs v0.49.0
 
 Define a factory and describe its workflows, schedules, bindings and merge policy.
 
@@ -211,6 +211,22 @@ https://v8.dev/docs/stack-trace-api#customizing-stack-traces
 
 ## Interfaces
 
+### AgentsDefinition
+
+Settings for the agent harnesses this factory runs.
+
+#### Properties
+
+##### env?
+
+> `optional` **env**: `string`[]
+
+Names of service environment variables every agent harness also receives.
+A harness otherwise starts with only a small base set, such as `PATH` and
+`HOME`, and the variables its own driver needs.
+
+***
+
 ### Factory
 
 What a factory repo hands the service: its workflows, keyed by name, and
@@ -236,6 +252,10 @@ Operating settings and deferred workflow modules declared by a factory.
 
 #### Properties
 
+##### agents?
+
+> `optional` **agents**: [`AgentsDefinition`](#agentsdefinition)
+
 ##### bindings?
 
 > `optional` **bindings**: `Record`\<`string`, \{ `copy?`: `string`[]; `hookTimeoutMinutes?`: `number`; `postCreate?`: `string`[]; `remote`: `string`; \}\>
@@ -246,7 +266,7 @@ Operating settings and deferred workflow modules declared by a factory.
 
 ###### identities?
 
-> `optional` **identities**: (\{ `appId`: `number`; `coAuthor?`: `string`; `installations`: `Record`\<`string`, `number`\>; `mode`: `"app"`; `operator`: `string`; `privateKeyPath`: `string`; \} \| \{ `mode`: `"pat"`; \})[]
+> `optional` **identities**: (\{ `mode`: `"pat"`; \} \| \{ `appId`: `number`; `coAuthor?`: `string`; `installations`: `Record`\<`string`, `number`\>; `mode`: `"app"`; `operator`: `string`; `privateKeyPath`: `string`; \})[]
 
 ##### ingressUrl?
 
