@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.55.1
+# @jigs-ai/jigs v0.56.0
 
 Describe and render committed Git changes for review.
 
@@ -134,7 +134,7 @@ How a file differs between the base and head trees.
 
 ### parseNameStatus()
 
-> **parseNameStatus**(`output`): `Pick`\<[`FileChange`](#filechange), `"status"` \| `"path"`\>[]
+> **parseNameStatus**(`output`): `Pick`\<[`FileChange`](#filechange), `"path"` \| `"status"`\>[]
 
 Parse NUL-delimited Git name-status output without losing unusual filenames.
 
@@ -146,7 +146,7 @@ Parse NUL-delimited Git name-status output without losing unusual filenames.
 
 #### Returns
 
-`Pick`\<[`FileChange`](#filechange), `"status"` \| `"path"`\>[]
+`Pick`\<[`FileChange`](#filechange), `"path"` \| `"status"`\>[]
 
 ***
 

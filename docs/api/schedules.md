@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.55.1
+# @jigs-ai/jigs v0.56.0
 
 Start and inspect the recurring schedules declared by a factory.
 
