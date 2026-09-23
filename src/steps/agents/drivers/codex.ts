@@ -1,7 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import type { CodexAppServerProvider, CodexExecSettings } from "ai-sdk-provider-codex-cli";
+import type { CodexAppServerProvider, CodexAppServerSettings } from "ai-sdk-provider-codex-cli";
 import type { CodexHarness, McpServerConfig } from "../../../blocks/agents/harness-config.ts";
 import type { AgentRequest } from "../../../blocks/agents/plan.ts";
 import { codexAuthCheck, harnessRuntimeCheck } from "../../../checks/harnesses.ts";
@@ -13,16 +10,12 @@ import {
   prepareCodexInvocationHome,
 } from "../harnesses/codex-home.ts";
 import { resolveCodexExecutable } from "../harnesses/executables.ts";
-import { codexExec, DEFAULT_MIN_CODEX_VERSION } from "../harnesses/index.ts";
+import { DEFAULT_MIN_CODEX_VERSION } from "../harnesses/index.ts";
 import { AgentSessionError } from "../session-error.ts";
-import {
-  codexAppServerStepSettings,
-  codexExecStepSettings,
-  withCodexAppServer,
-} from "./codex-support.ts";
+import { codexAppServerStepSettings, withCodexAppServer } from "./codex-support.ts";
 import type { Driver, DriverContext, RunRequest } from "./types.ts";
 
-type CodexMcpServerConfig = NonNullable<CodexExecSettings["mcpServers"]>[string];
+type CodexMcpServerConfig = NonNullable<CodexAppServerSettings["mcpServers"]>[string];
 function mcpServers(
   servers: Record<string, McpServerConfig>,
 ): Record<string, CodexMcpServerConfig> {
@@ -104,38 +97,10 @@ export function createCodexDriver(
     }
   }
 
-  async function ask(request: AgentRequest, context: DriverContext) {
-    const harness = descriptor(request);
-    const prepared = deps.prepareCodexHome(context.metadata.workflowRunId);
-    let scratch: string | undefined;
-    try {
-      scratch = mkdtempSync(path.join(tmpdir(), "jigs-ask-"));
-      return await context.deps.generateText({
-        model: codexExec(
-          harness.model,
-          codexExecStepSettings({
-            cwd: scratch,
-            codexHome: prepared.home,
-            env: context.env,
-            approvalMode: "never",
-            sandboxMode: "read-only",
-          }),
-        ),
-        prompt: request.prompt,
-        ...("system" in request && request.system !== undefined ? { system: request.system } : {}),
-        ...(context.output === undefined ? {} : { output: context.output }),
-      });
-    } finally {
-      if (scratch !== undefined) rmSync(scratch, { recursive: true, force: true });
-      prepared.cleanup();
-    }
-  }
-
   return {
     kind: "codex",
     family: "harness",
     run,
-    ask,
     installationChecks: () => [harnessRuntimeCheck("codex"), codexAuthCheck()],
     requestChecks: () => [],
     jitChecks: (request) =>

@@ -1,7 +1,11 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { harnesses, models } from "../../../blocks/agents/harness-config.ts";
-import { buildAskAgentRequest, buildModelRequest } from "../../../blocks/agents/plan.ts";
+import {
+  buildAgentRequest,
+  buildAskAgentRequest,
+  buildModelRequest,
+} from "../../../blocks/agents/plan.ts";
 import { driverFor, drivers } from "./index.ts";
 import type { DriverRequest } from "./types.ts";
 
@@ -12,7 +16,7 @@ const localSource = models.openaiCompatible({
 });
 const contractRequests: Record<keyof typeof drivers, DriverRequest> = {
   claude: buildAskAgentRequest({ harness: harnesses.claude("sonnet"), prompt: "hello" }),
-  codex: buildAskAgentRequest({ harness: harnesses.codex("gpt-5.5"), prompt: "hello" }),
+  codex: buildAgentRequest({ harness: harnesses.codex("gpt-5.5"), cwd: "/work", prompt: "hello" }),
   "openai-compatible": buildModelRequest({ model: localSource, prompt: "hello" }),
   openrouter: buildModelRequest({ model: models.openrouter("model"), prompt: "hello" }),
   pi: buildAskAgentRequest({ harness: harnesses.pi(localSource), prompt: "hello" }),

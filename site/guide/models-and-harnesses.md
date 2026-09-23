@@ -9,17 +9,27 @@ provider objects.
 The execution API has four verbs:
 
 - `runAgent` runs a harness in a working directory.
-- `askAgent` asks a harness without tools or a working directory.
+- `askAgent` asks Claude Code or Pi for one answer without tools or a working
+  directory.
 - `askModel` calls a model source API directly.
 - `askJev` judges, evaluates or verifies an artifact through a model source.
 
+The verbs check their descriptors in TypeScript and again when the call runs,
+before any model, credential or MCP check. `askAgent` accepts only a harness that
+names no tools: a Claude Code or Pi descriptor without `mcpServers`, and a Pi
+descriptor without `tools`.
+
 ## Claude Code
 
-Use `harnesses.claude(model, options)` with `runAgent` or `askAgent`.
+Use `harnesses.claude(model, options)` with `runAgent` or `askAgent`. An
+`askAgent` call turns off Claude Code's built-in tools and loads no MCP servers
+or settings files.
 
 ## Codex
 
-Use `harnesses.codex(model, options)` with `runAgent` or `askAgent`.
+Use `harnesses.codex(model, options)` with `runAgent`. `askAgent` rejects Codex
+because Codex has no mode without tools: even its read-only sandbox can still run
+commands and read files. Use Claude Code or Pi for a tool-free ask.
 
 ## Pi
 
@@ -28,8 +38,8 @@ argument is a model source such as
 `models.openaiCodex("gpt-5.5")`, `models.openrouter("...")`, or
 `models.openaiCompatible({ ... })`. `options.thinking` selects Pi's thinking
 level. For `runAgent`, omit `options.tools` to use Pi's default tools or provide
-an allowlist such as `{ tools: ["read", "bash"] }`. Ask mode always disables
-tools. MCP servers are not accepted.
+an allowlist such as `{ tools: ["read", "bash"] }`. `askAgent` runs Pi with no
+tools, so it rejects a descriptor with `tools` or `mcpServers`.
 
 For an OpenAI-compatible source, `options.compat.supportsDeveloperRole` and
 `options.compat.supportsReasoningEffort` describe server capabilities that Pi
@@ -53,9 +63,15 @@ Pi. A missing session takes the normal `resumeOrRebuild` fresh-context path.
 That session store is removed when the run's worktrees are
 released, so they are not long-term conversation storage.
 
-Structured output first asks Pi to call `submit_result` with constrained JSON
-Schema sampling. If a compatible server completes without that tool call, Jigs
-parses the returned JSON and applies the workflow's normal zod validation.
+Structured output goes through one `submit_result` tool that jigs writes for the
+call. A structured `askAgent` call allows only that tool; a structured `runAgent`
+call adds it to your `tools` allowlist. The tool checks the model's arguments
+against the requested schema, and the call fails if Pi finishes without an
+accepted `submit_result`, including when the reply is JSON text. The first
+accepted result stands: the tool rejects any later call. A model or
+process failure after `submit_result` still fails the call. Pi uses constrained
+JSON Schema sampling where the provider supports it. A call without `output` loads
+no `submit_result` tool and returns plain text.
 
 Pi 0.85.1 or newer must be available on the service's `PATH`. Install it with
 `npm install --global @earendil-works/pi-coding-agent`. `jigs doctor` can check

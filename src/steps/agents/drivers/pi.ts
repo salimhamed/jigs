@@ -13,6 +13,7 @@ import { executePi } from "../harnesses/pi.ts";
 import {
   piMcpEnvironmentVariables,
   piMcpToolNames,
+  SUBMIT_RESULT_TOOL,
   validatePiMcpServers,
   writePiMcpExtension,
   writePiSubmitResultExtension,
@@ -61,13 +62,7 @@ function promptFor(request: AgentRequest): string {
       ? `${request.system}\n\n${request.prompt}`
       : request.prompt;
   if (request.outputSchema === undefined) return prompt;
-  return `${prompt}\n\nCall submit_result with the final answer. If tool calls are unavailable, return only JSON matching this schema:\n${JSON.stringify(request.outputSchema)}`;
-}
-
-function parseJsonFallback(text: string): unknown {
-  const trimmed = text.trim();
-  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed);
-  return JSON.parse(fenced?.[1] ?? trimmed) as unknown;
+  return `${prompt}\n\nCall ${SUBMIT_RESULT_TOOL} with the final answer.`;
 }
 
 export interface PiDriverDependencies {
@@ -88,14 +83,17 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
     let scratch: string | undefined;
     try {
       scratch = mkdtempSync(path.join(tmpdir(), "jigs-pi-ask-"));
+      const { outputSchema } = request;
       const extension =
-        request.outputSchema === undefined
+        outputSchema === undefined
           ? undefined
-          : writePiSubmitResultExtension(prepared.home, request.outputSchema);
+          : writePiSubmitResultExtension(prepared.home, outputSchema);
       const args = [
         "--mode",
         "json",
-        "--no-tools",
+        // --no-tools would also drop extension tools, so a structured ask
+        // allows exactly the result tool instead.
+        ...(outputSchema === undefined ? ["--no-tools"] : ["--tools", SUBMIT_RESULT_TOOL]),
         "--model",
         modelName(model),
         ...(harness.thinking === undefined ? [] : ["--thinking", harness.thinking]),
@@ -108,15 +106,12 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
         ...(extension === undefined ? [] : ["-e", extension]),
         promptFor(request),
       ];
-      const generation = await deps.executePi({
+      return await deps.executePi({
         args,
         cwd: scratch,
         env: { ...modelEnvironment(model, context.env), PI_CODING_AGENT_DIR: prepared.home },
+        requireResult: outputSchema !== undefined,
       });
-      if (request.outputSchema === undefined || generation.output !== undefined) return generation;
-      // Pi is asked to call submit_result first. Some OpenAI-compatible servers do
-      // not support tool calls, so only a turn with no call falls back to JSON text.
-      return { ...generation, output: parseJsonFallback(generation.text) };
     } finally {
       if (scratch !== undefined) rmSync(scratch, { recursive: true, force: true });
       prepared.cleanup();
@@ -152,7 +147,7 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
               ...new Set([
                 ...harness.tools,
                 ...piMcpToolNames(harness.mcpServers ?? {}),
-                ...(request.outputSchema === undefined ? [] : ["submit_result"]),
+                ...(request.outputSchema === undefined ? [] : [SUBMIT_RESULT_TOOL]),
               ]),
             ];
       const mcpEnvironment = new Set(piMcpEnvironmentVariables(harness.mcpServers ?? {}));
@@ -182,14 +177,14 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
           ...modelEnvironment(model, context.env, mcpEnvironment),
           PI_CODING_AGENT_DIR: prepared.home,
         },
+        requireResult: request.outputSchema !== undefined,
       });
       const reported = generation.providerMetadata?.pi?.sessionId;
       if (reported !== sessionId) {
         const message = `Pi reported session ${JSON.stringify(reported)} after jigs requested ${sessionId}`;
         throw new Error(message);
       }
-      if (request.outputSchema === undefined || generation.output !== undefined) return generation;
-      return { ...generation, output: parseJsonFallback(generation.text) };
+      return generation;
     } finally {
       prepared.cleanup();
     }
@@ -208,8 +203,6 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
     requestChecks: (request) => {
       const harness = nestedHarness(request);
       if (harness === undefined) return [];
-      if ((!("cwd" in request) || request.cwd === undefined) && harness.mcpServers !== undefined)
-        throw new JigsError("askAgent() cannot expose MCP servers through the Pi harness");
       if (harness.mcpServers !== undefined) validatePiMcpServers(harness.mcpServers);
       const model = planPiModel(harness);
       const mcpCredentials = piMcpEnvironmentVariables(harness.mcpServers ?? {});

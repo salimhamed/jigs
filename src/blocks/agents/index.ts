@@ -16,10 +16,13 @@ export { askAgent } from "./ask-agent.ts";
 export { askModel, type ExecuteModelStep } from "./ask-model.ts";
 export { type AgentSteps, bindAgentSteps, type ExecuteJevStep } from "./bind.ts";
 export {
+  type AskableHarness,
   type AskableModelSource,
   type ClaudeHarness,
+  type ClaudeHarnessOptions,
   type CodexHarness,
   type Harness,
+  type HarnessForOptions,
   type HarnessKind,
   harnesses,
   type McpHttpServerConfig,
@@ -33,12 +36,14 @@ export {
   type OpenaiCompatibleSource,
   type OpenrouterSource,
   type PiHarness,
+  type PiHarnessOptions,
   type PiMcpHttpServerConfig,
   type PiMcpServerConfig,
   type PiMcpStdioServerConfig,
   type PiOpenaiCompatibleHarness,
   type PiOpenaiCompatibleOptions,
   type PiOtherHarness,
+  type ToolFree,
 } from "./harness-config.ts";
 export {
   type AskJevOptions,
