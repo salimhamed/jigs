@@ -251,3 +251,37 @@ many unchanged sweeps is the obvious follow-up; it is not built here.
 attending such a pull request reads them as human feedback once. Factories
 upgrade with no parked runs, which is already the rule, and nothing is
 engineered around the old comments.
+
+### Addendum: webhooks are optional (2026-09-23)
+
+Polling is now the main path and webhooks only make it faster. A factory that
+never exposes a public URL is a supported setup, not a half-configured one.
+This follows from "wakes are hints, never truth": a wake was already a request
+to re-read the provider, so a timer can supply it as well as a delivery.
+
+- `ingressUrl` is replaced by an optional `webhooks` block with a required
+  `url` and a required `enabled` per provider (`github`, `linear`). There is no
+  master switch and nothing is inferred from a secret being present. Without
+  the block both providers are off.
+- A provider that is off has no `/ingress/<provider>` route. A provider that is
+  on without its secret (`GITHUB_WEBHOOK_SECRET`, `LINEAR_WEBHOOK_SECRET`)
+  stops the service at boot, naming the variable, rather than answering every
+  delivery with an error while its runs quietly fall back to polling.
+- The nudge runs whatever the webhook settings are, with a separate timer per
+  provider set by `service.pollIntervalSeconds.github` and `.linear` (default
+  300, minimum 30). The jitter is up to a tenth of the interval, taken off,
+  instead of a fixed thirty seconds.
+- The nudge now also wakes `linear:ticket:` claims, but only for a run that
+  also holds a `jigs:needs-human:` marker for that ticket. The claim is held
+  for the run's whole life, so waking it while the run waits on something else
+  would add a replay and a stale hint on every sweep. `haltForHuman` already
+  re-read the comment thread from Linear on every wake and never read the
+  payload, so a payload-less wake needed no change there.
+- `jigs bind` skips the repo webhook while GitHub webhooks are off and says PR
+  waits are polled. Doctor checks a provider's webhook, and its secret, only
+  when that provider is on, and an App needs "Repository webhooks: read &
+  write" only then. The Linear webhook is still created by hand.
+
+The replay cost recorded above now applies to every parked run rather than
+only to those whose deliveries were lost, and a slower interval is the
+operator's lever against it.

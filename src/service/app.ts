@@ -15,7 +15,7 @@ import { NEEDS_HUMAN_TOKEN_PREFIX } from "../blocks/linear/halt-for-human.ts";
 import { tokenFromGitHubPayload } from "../blocks/pull-requests/gate.ts";
 import { doctorChecks, failedChecks, runChecks } from "../checks/index.ts";
 import { factoryRoot } from "../config/factory-root.ts";
-import { githubWebhookSecret } from "../config/github-webhook-secret.ts";
+import { webhookSecret } from "../config/webhook-secret.ts";
 import { findOpenPullRequestsByHeadSha } from "../providers/github.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import { readOwner } from "../steps/workspaces/owner.ts";
@@ -133,93 +133,10 @@ export function createApp(factory: Factory): Hono {
   // The ingress is stateless: verify, reconstruct the token, resume. A
   // delivery nobody is listening to is acknowledged and dropped — no mapping
   // tables or persisted deliveries. Wakes are hints; consumers re-check the
-  // provider.
-  app.post("/ingress/github", async (c) => {
-    const event = sanitizeForLog(c.req.header("x-github-event") ?? "unknown");
-    const secret = githubWebhookSecret();
-    // 503, not 401: GitHub's delivery log then tells "not configured" apart
-    // from "wrong secret", and doctor reads that log.
-    if (secret === undefined) {
-      console.log(`[ingress] github rejected reason=configuration event=${event}`);
-      return c.json({ error: "webhook secret not configured" }, 503);
-    }
-    const rawBody = await c.req.text();
-    const signature = c.req.header("x-hub-signature-256");
-    if (!verifyGithubSignature(rawBody, signature, secret)) {
-      console.log(`[ingress] github rejected reason=signature event=${event}`);
-      return c.json({ error: "invalid signature" }, 401);
-    }
-    const payload = parseJson(rawBody);
-    if (event === "status") {
-      const status = githubStatus(payload);
-      if (status === null) {
-        console.log(`[ingress] github ignored reason=unrecognized-event event=${event}`);
-        return c.json({ ignored: true });
-      }
-      if (status.state === "pending") {
-        console.log(`[ingress] github ignored reason=pending-status event=${event}`);
-        return c.json({ ignored: true });
-      }
-      let prs: Awaited<ReturnType<typeof findOpenPullRequestsByHeadSha>>;
-      try {
-        prs = await findOpenPullRequestsByHeadSha(status.repository, status.sha);
-      } catch (error) {
-        const reason =
-          error instanceof Error && error.message.includes("GITHUB_TOKEN is not set")
-            ? "missing-github-credential"
-            : "status-lookup-failed";
-        console.log(`[ingress] github dropped reason=${reason} event=${event}`);
-        return c.json({ delivered: false }, 404);
-      }
-      if (prs.length === 0) {
-        console.log(`[ingress] github dropped reason=no-open-pull-request event=${event}`);
-        return c.json({ delivered: false });
-      }
-      const tokens = prs
-        .map((pr) =>
-          tokenFromGitHubPayload({
-            pull_request: { number: pr.number },
-            repository: { name: pr.repo, owner: { login: pr.owner } },
-          }),
-        )
-        .filter((token): token is string => token !== null);
-      return resumeAndLog(c, "github", tokens, event, resumeHook);
-    }
-    const token = tokenFromGitHubPayload(payload);
-    if (token === null) {
-      console.log(`[ingress] github ignored reason=unrecognized-event event=${event}`);
-      return c.json({ ignored: true });
-    }
-    return resumeAndLog(c, "github", [token], event, resumeHook);
-  });
-
-  app.post("/ingress/linear", async (c) => {
-    const secret = process.env.LINEAR_WEBHOOK_SECRET;
-    if (secret === undefined || secret === "") {
-      console.log("[ingress] linear rejected reason=configuration");
-      return c.json({ error: "LINEAR_WEBHOOK_SECRET is not configured" }, 503);
-    }
-    const rawBody = await c.req.text();
-    const signature = c.req.header("linear-signature");
-    if (!verifyLinearSignature(rawBody, signature, secret)) {
-      console.log("[ingress] linear rejected reason=signature");
-      return c.json({ error: "invalid signature" }, 401);
-    }
-    const payload = parseJson(rawBody);
-    if (payload === null) {
-      console.log("[ingress] linear ignored reason=unrecognized-shape");
-      return c.json({ ignored: true });
-    }
-    const event = linearEvent(payload);
-    const token = tokenFromLinearPayload(payload);
-    if (token === null) {
-      console.log(
-        `[ingress] linear ignored reason=unrecognized-event${event === null ? "" : ` event=${event}`}`,
-      );
-      return c.json({ ignored: true });
-    }
-    return resumeAndLog(c, "linear", [token], event, resumeHook);
-  });
+  // provider. A provider whose webhooks are off has no route at all, so a
+  // stray delivery is a 404 rather than work.
+  if (factory.webhooks?.github.enabled) mountGithubIngress(app);
+  if (factory.webhooks?.linear.enabled) mountLinearIngress(app);
 
   // Manual wake on the same code path as the ingress: resume every token the
   // run's suspensions are satisfied by. The fallback when a delivery was missed.
@@ -360,6 +277,97 @@ export function createApp(factory: Factory): Hono {
   }
 
   return app;
+}
+
+function mountGithubIngress(app: Hono): void {
+  app.post("/ingress/github", async (c) => {
+    const event = sanitizeForLog(c.req.header("x-github-event") ?? "unknown");
+    const secret = webhookSecret("github");
+    // 503, not 401: GitHub's delivery log then tells "not configured" apart
+    // from "wrong secret", and doctor reads that log.
+    if (secret === undefined) {
+      console.log(`[ingress] github rejected reason=configuration event=${event}`);
+      return c.json({ error: "webhook secret not configured" }, 503);
+    }
+    const rawBody = await c.req.text();
+    const signature = c.req.header("x-hub-signature-256");
+    if (!verifyGithubSignature(rawBody, signature, secret)) {
+      console.log(`[ingress] github rejected reason=signature event=${event}`);
+      return c.json({ error: "invalid signature" }, 401);
+    }
+    const payload = parseJson(rawBody);
+    if (event === "status") {
+      const status = githubStatus(payload);
+      if (status === null) {
+        console.log(`[ingress] github ignored reason=unrecognized-event event=${event}`);
+        return c.json({ ignored: true });
+      }
+      if (status.state === "pending") {
+        console.log(`[ingress] github ignored reason=pending-status event=${event}`);
+        return c.json({ ignored: true });
+      }
+      let prs: Awaited<ReturnType<typeof findOpenPullRequestsByHeadSha>>;
+      try {
+        prs = await findOpenPullRequestsByHeadSha(status.repository, status.sha);
+      } catch (error) {
+        const reason =
+          error instanceof Error && error.message.includes("GITHUB_TOKEN is not set")
+            ? "missing-github-credential"
+            : "status-lookup-failed";
+        console.log(`[ingress] github dropped reason=${reason} event=${event}`);
+        return c.json({ delivered: false }, 404);
+      }
+      if (prs.length === 0) {
+        console.log(`[ingress] github dropped reason=no-open-pull-request event=${event}`);
+        return c.json({ delivered: false });
+      }
+      const tokens = prs
+        .map((pr) =>
+          tokenFromGitHubPayload({
+            pull_request: { number: pr.number },
+            repository: { name: pr.repo, owner: { login: pr.owner } },
+          }),
+        )
+        .filter((token): token is string => token !== null);
+      return resumeAndLog(c, "github", tokens, event, resumeHook);
+    }
+    const token = tokenFromGitHubPayload(payload);
+    if (token === null) {
+      console.log(`[ingress] github ignored reason=unrecognized-event event=${event}`);
+      return c.json({ ignored: true });
+    }
+    return resumeAndLog(c, "github", [token], event, resumeHook);
+  });
+}
+
+function mountLinearIngress(app: Hono): void {
+  app.post("/ingress/linear", async (c) => {
+    const secret = webhookSecret("linear");
+    if (secret === undefined) {
+      console.log("[ingress] linear rejected reason=configuration");
+      return c.json({ error: "LINEAR_WEBHOOK_SECRET is not configured" }, 503);
+    }
+    const rawBody = await c.req.text();
+    const signature = c.req.header("linear-signature");
+    if (!verifyLinearSignature(rawBody, signature, secret)) {
+      console.log("[ingress] linear rejected reason=signature");
+      return c.json({ error: "invalid signature" }, 401);
+    }
+    const payload = parseJson(rawBody);
+    if (payload === null) {
+      console.log("[ingress] linear ignored reason=unrecognized-shape");
+      return c.json({ ignored: true });
+    }
+    const event = linearEvent(payload);
+    const token = tokenFromLinearPayload(payload);
+    if (token === null) {
+      console.log(
+        `[ingress] linear ignored reason=unrecognized-event${event === null ? "" : ` event=${event}`}`,
+      );
+      return c.json({ ignored: true });
+    }
+    return resumeAndLog(c, "linear", [token], event, resumeHook);
+  });
 }
 
 // Liveness must answer from anywhere, including a service started outside a

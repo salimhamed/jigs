@@ -7,6 +7,7 @@ import {
   fenceTerminalWorkflowDeliveries,
   gateOnBindingClones,
   gateOnHarnessRuntimes,
+  gateOnWebhookSecrets,
   gateOnWorktreeRegistry,
   gateOnWorldStart,
   requiredHarnesses,
@@ -435,4 +436,48 @@ test("the boot gate checks exactly the harnesses derived from the factory", asyn
   ).resolves.toBe(true);
 
   expect(checked).toEqual([["claude"]]);
+});
+
+const WEBHOOKS = {
+  url: "https://factory.example.ts.net",
+  github: { enabled: true },
+  linear: { enabled: false },
+};
+
+test("an enabled provider without its secret refuses the boot and names the variable", async () => {
+  vi.stubEnv("GITHUB_WEBHOOK_SECRET", "");
+  const exit = vi.fn();
+  const error = vi.fn();
+  expect(await gateOnWebhookSecrets({ webhooks: async () => WEBHOOKS, exit, error })).toBe(false);
+  expect(exit).toHaveBeenCalledWith(1);
+  expect(error).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("GITHUB_WEBHOOK_SECRET"));
+  expect(error.mock.calls[0]?.[0]).not.toContain("LINEAR_WEBHOOK_SECRET");
+});
+
+test("both providers on and unsigned name both variables", async () => {
+  vi.stubEnv("GITHUB_WEBHOOK_SECRET", "");
+  vi.stubEnv("LINEAR_WEBHOOK_SECRET", "");
+  const error = vi.fn();
+  await gateOnWebhookSecrets({
+    webhooks: async () => ({ ...WEBHOOKS, linear: { enabled: true } }),
+    exit: vi.fn(),
+    error,
+  });
+  expect(error.mock.calls[0]?.[0]).toContain("GITHUB_WEBHOOK_SECRET and LINEAR_WEBHOOK_SECRET");
+});
+
+test.each([
+  ["no webhooks block", undefined],
+  ["both providers off", { ...WEBHOOKS, github: { enabled: false } }],
+])("%s needs no secret to boot", async (_name, webhooks) => {
+  vi.stubEnv("GITHUB_WEBHOOK_SECRET", "");
+  vi.stubEnv("LINEAR_WEBHOOK_SECRET", "");
+  const exit = vi.fn();
+  expect(await gateOnWebhookSecrets({ webhooks: async () => webhooks, exit })).toBe(true);
+  expect(exit).not.toHaveBeenCalled();
+});
+
+test("an enabled provider with its secret boots", async () => {
+  vi.stubEnv("GITHUB_WEBHOOK_SECRET", "signed");
+  expect(await gateOnWebhookSecrets({ webhooks: async () => WEBHOOKS, exit: vi.fn() })).toBe(true);
 });

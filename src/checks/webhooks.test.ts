@@ -24,10 +24,15 @@ afterEach(() => {
   removeTmpDir(tmp);
 });
 
-function configure(ingress = "https://factory.example.ts.net"): void {
+function configure(github = true): void {
+  const webhooks = {
+    url: "https://factory.example.ts.net",
+    github: { enabled: github },
+    linear: { enabled: false },
+  };
   writeFileSync(
     path.join(factory, "jigs.config.ts"),
-    `export default ${JSON.stringify({ ingressUrl: ingress, service: { dashboardPort: 9090 }, workflows: {}, bindings: { api: { remote: "git@github.com:acme/api.git" } } })};`,
+    `export default ${JSON.stringify({ webhooks, service: { dashboardPort: 9090 }, workflows: {}, bindings: { api: { remote: "git@github.com:acme/api.git" } } })};`,
   );
 }
 
@@ -121,7 +126,7 @@ test.each([
     writeFileSync(path.join(factory, ".env"), `GITHUB_WEBHOOK_SECRET=${value}\n`);
   expect(await secretCheck().run()).toEqual({
     ok: false,
-    reason: `GITHUB_WEBHOOK_SECRET is not set in ${path.join(factory, ".env")}`,
+    reason: `webhooks.github is enabled but GITHUB_WEBHOOK_SECRET is not set in ${path.join(factory, ".env")}`,
     repair: `generate one with \`openssl rand -hex 32\`, set it as GITHUB_WEBHOOK_SECRET in ${path.join(factory, ".env")} and restart the service (jigs service restart), then run jigs bind for each bound repo`,
   });
 });
@@ -156,7 +161,7 @@ test("a missing hook fails with the exact bind repair", async () => {
   fetchMock.mockResolvedValueOnce(new Response("[]"));
   expect(await check().run()).toEqual({
     ok: false,
-    reason: "the repo has no active webhook at this factory's ingress URL with the current events",
+    reason: "the repo has no active webhook at this factory's webhooks.url with the current events",
     repair: "run: jigs bind git@github.com:acme/api.git",
   });
 });
@@ -218,6 +223,12 @@ test("an installed App missing hook permission gets the permission repair", asyn
   expect(result.repair).not.toContain("install the App");
 });
 
-test("no ingressUrl emits no webhook checks", () => {
+test("no webhooks block emits no webhook checks", () => {
+  expect(checks()).toEqual([]);
+});
+
+test("GitHub switched off emits no webhook checks, even without its secret", () => {
+  configure(false);
+  vi.stubEnv("GITHUB_WEBHOOK_SECRET", "");
   expect(checks()).toEqual([]);
 });

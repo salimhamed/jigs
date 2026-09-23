@@ -36,7 +36,6 @@ const GRANTED = {
   actions: "read",
   checks: "read",
   statuses: "read",
-  repository_hooks: "write",
 };
 
 const SQUASH_REVIEW: MergePolicy = { by: "jigs", method: "squash", approval: { kind: "review" } };
@@ -56,9 +55,10 @@ const outcome = async (
   env: NodeJS.ProcessEnv = { GITHUB_TOKEN: "ghp_live" },
   merge: MergePolicy = SQUASH_REVIEW,
   bindings: Record<string, { remote: string }> = {},
+  webhooks = false,
 ) => {
   const report = await runChecks(
-    githubIdentityChecks([identity], merge, probes(overrides), env, bindings),
+    githubIdentityChecks([identity], merge, probes(overrides), env, { bindings, webhooks }),
   );
   const found = report.checks.find((check) => check.id === id);
   if (found === undefined) throw new Error(`no check ${id}`);
@@ -129,11 +129,20 @@ test("an installation that does not answer names the three facts that address it
   });
 });
 
-test("webhook administration is a permission the operator has to grant and accept", async () => {
-  const { repository_hooks: _ungranted, ...withoutHooks } = GRANTED;
-  const check = await outcome(APP, "github.identity", {
-    installation: async () => ({ permissions: withoutHooks }),
-  });
+test("without GitHub webhooks an App needs no webhook administration", async () => {
+  expect(await outcome(APP, "github.identity")).toMatchObject({ ok: true });
+});
+
+test("with GitHub webhooks on, webhook administration is a permission to grant and accept", async () => {
+  const check = await outcome(
+    APP,
+    "github.identity",
+    {},
+    { GITHUB_TOKEN: "ghp_live" },
+    SQUASH_REVIEW,
+    {},
+    true,
+  );
   expect(check).toMatchObject({
     ok: false,
     reason: expect.stringContaining("repository_hooks: write"),

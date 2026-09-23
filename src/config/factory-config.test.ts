@@ -13,6 +13,7 @@ import {
   readFactoryConfig,
   resolveBinding,
   resolveService,
+  webhooksEnabled,
 } from "./factory-config.ts";
 
 const roots: string[] = [];
@@ -101,6 +102,30 @@ test.each([
     },
     "typo",
   ],
+  [{ service: { dashboardPort: 9090, pollIntervalSeconds: { github: 29 } } }, "github"],
+  [{ service: { dashboardPort: 9090, pollIntervalSeconds: { linear: 1.5 } } }, "linear"],
+  [{ service: { dashboardPort: 9090 }, webhooks: { github: { enabled: true } } }, "url"],
+  [
+    {
+      service: { dashboardPort: 9090 },
+      webhooks: { url: "https://f.test", github: { enabled: true } },
+    },
+    "linear",
+  ],
+  [
+    {
+      service: { dashboardPort: 9090 },
+      webhooks: { url: "https://f.test", github: {}, linear: { enabled: false } },
+    },
+    "enabled",
+  ],
+  [
+    {
+      service: { dashboardPort: 9090 },
+      webhooks: { url: "not a url", github: { enabled: true }, linear: { enabled: false } },
+    },
+    "url",
+  ],
 ])("invalid configuration names its field", (value, field) => {
   expect(() => parseFactoryConfig(value)).toThrow(field);
 });
@@ -109,7 +134,35 @@ test("service port defaults while dashboard port is explicit", () => {
   expect(parseFactoryConfig({ service: { dashboardPort: 3456 } }).service).toEqual({
     port: 8990,
     dashboardPort: 3456,
+    pollIntervalSeconds: { github: 300, linear: 300 },
   });
+});
+
+test("each provider's poll interval defaults on its own and may sit at the floor", () => {
+  expect(
+    parseFactoryConfig({ service: { dashboardPort: 3456, pollIntervalSeconds: { linear: 30 } } })
+      .service.pollIntervalSeconds,
+  ).toEqual({ github: 300, linear: 30 });
+});
+
+test("without a webhooks block no provider sends webhooks", () => {
+  const { webhooks } = parseFactoryConfig({ service: { dashboardPort: 3456 } });
+  expect(webhooks).toBeUndefined();
+  expect(webhooksEnabled(webhooks, "github")).toBe(false);
+  expect(webhooksEnabled(webhooks, "linear")).toBe(false);
+});
+
+test("a webhooks block turns each provider on or off by name", () => {
+  const { webhooks } = parseFactoryConfig({
+    service: { dashboardPort: 3456 },
+    webhooks: {
+      url: "https://factory.example.ts.net",
+      github: { enabled: true },
+      linear: { enabled: false },
+    },
+  });
+  expect(webhooksEnabled(webhooks, "github")).toBe(true);
+  expect(webhooksEnabled(webhooks, "linear")).toBe(false);
 });
 
 test("agent environment names default to none and must be names, not values", () => {

@@ -37,12 +37,32 @@ const bindingSchema = z.strictObject({
 
 const portSchema = z.int().min(1).max(65535);
 
+// A floor, so a slip between seconds and minutes cannot turn the sweep into a
+// loop of provider reads for every parked run.
+const pollIntervalSchema = z.int().min(30).default(300);
+
 const serviceSchema = z.strictObject({
   port: portSchema.default(8990),
   // Where this factory's service hosts the SDK's run dashboard. Required and
   // never derived: a default would silently land on another factory's service
   // port, and the two numbers have to be the operator's to move.
   dashboardPort: portSchema,
+  // How often the service wakes each parked run to re-read its provider. With
+  // that provider's webhook on, this is only the floor under a lost delivery.
+  pollIntervalSeconds: z.preprocess(
+    (block) => block ?? {},
+    z.strictObject({ github: pollIntervalSchema, linear: pollIntervalSchema }),
+  ),
+});
+
+const webhookProviderSchema = z.strictObject({ enabled: z.boolean() });
+
+// Each provider is stated outright rather than implied by a secret in .env: a
+// forgotten secret must be a boot error, not a factory that silently polls.
+export const webhooksSchema = z.strictObject({
+  url: z.url(),
+  github: webhookProviderSchema,
+  linear: webhookProviderSchema,
 });
 
 // Who jigs is on GitHub. `pat` is the operator's own token, so every pull
@@ -120,9 +140,9 @@ export function installationFor(
 
 const factoryConfigSchema = z.looseObject({
   bindings: z.record(z.string(), bindingSchema).default({}),
-  // Where provider webhooks reach this factory's service (the tunnel URL);
-  // `jigs bind` skips its webhook leg while unset.
-  ingressUrl: z.url().optional(),
+  // Where provider webhooks reach this factory's service (the tunnel URL), and
+  // which providers send them. Absent, the service only polls.
+  webhooks: webhooksSchema.optional(),
   // One service per factory repo, so the addresses belong to the factory
   // rather than the machine. Only non-secret operating parameters live here —
   // the World the service writes is a credential-bearing URL, so it stays in
@@ -142,6 +162,16 @@ const factoryConfigSchema = z.looseObject({
 
 export type BindingEntry = z.output<typeof bindingSchema>;
 export type FactoryConfig = z.output<typeof factoryConfigSchema>;
+export type WebhooksConfig = z.output<typeof webhooksSchema>;
+export type WebhookProvider = "github" | "linear";
+
+/** Whether this factory receives webhooks from a provider. */
+export function webhooksEnabled(
+  webhooks: WebhooksConfig | undefined,
+  provider: WebhookProvider,
+): boolean {
+  return webhooks?.[provider].enabled ?? false;
+}
 export type GithubIdentity = z.output<typeof githubIdentitySchema>;
 export type AppIdentity = Extract<GithubIdentity, { mode: "app" }>;
 /** Credentials selected for one installation, after resolving the configured account map. */

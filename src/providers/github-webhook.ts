@@ -43,7 +43,7 @@ export function parseGithubRemote(url: string): GitHubRepoRef | null {
 }
 
 export interface EnsureRepoWebhookOptions extends GitHubRepoRef {
-  ingressUrl: string;
+  webhooksUrl: string;
   secret: string;
 }
 
@@ -54,8 +54,8 @@ interface RepoHook {
   config: { url?: string; content_type?: string };
 }
 
-export function githubWebhookUrl(ingressUrl: string): string {
-  return `${ingressUrl.replace(/\/+$/, "")}/ingress/github`;
+export function githubWebhookUrl(webhooksUrl: string): string {
+  return `${webhooksUrl.replace(/\/+$/, "")}/ingress/github`;
 }
 
 function isJigsHookAtAnotherUrl(hook: RepoHook, desiredUrl: string): boolean {
@@ -86,10 +86,10 @@ const matchesDesired = (hook: RepoHook, hookUrl: string) =>
 export async function ensureRepoWebhook({
   owner,
   repo,
-  ingressUrl,
+  webhooksUrl,
   secret,
 }: EnsureRepoWebhookOptions): Promise<EnsureRepoWebhookResult> {
-  const hookUrl = githubWebhookUrl(ingressUrl);
+  const hookUrl = githubWebhookUrl(webhooksUrl);
   const hooksPath = `/repos/${owner}/${repo}/hooks`;
   const hooks = await githubRequest<RepoHook[]>("GET", `${hooksPath}?per_page=100`);
   const existing = hooks.find((hook) => hook.config.url === hookUrl);
@@ -136,11 +136,11 @@ const DELIVERY_SAMPLE = 10;
 export async function inspectRepoWebhook({
   owner,
   repo,
-  ingressUrl,
+  webhooksUrl,
 }: Omit<EnsureRepoWebhookOptions, "secret">): Promise<RepoWebhookState> {
   const hooksPath = `/repos/${owner}/${repo}/hooks`;
   const hooks = await githubRequest<RepoHook[]>("GET", `${hooksPath}?per_page=100`);
-  const hookUrl = githubWebhookUrl(ingressUrl);
+  const hookUrl = githubWebhookUrl(webhooksUrl);
   const hook = hooks.find(
     (candidate) =>
       candidate.config.url === hookUrl &&

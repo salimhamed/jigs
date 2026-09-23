@@ -5,10 +5,12 @@ ticket and suspend the run until a human replies. The current integration uses
 Linear; it is not a generic chat inbox. Pull-request approval is a separate
 policy used by the [ship recipe](./ship).
 
-The workflow needs a claimed Linear ticket, integration credentials, and working
-webhook delivery. The ship recipe already includes ticket acquisition and
-claiming. See the [setup runbook](https://github.com/salimhamed/jigs/blob/main/docs/setup.md)
-for configuring Linear and the public webhook URL.
+The workflow needs a claimed Linear ticket and Linear credentials. The ship
+recipe already includes ticket acquisition and claiming. The service re-reads
+the ticket for a reply every `service.pollIntervalSeconds.linear` seconds (300
+by default); an optional Linear webhook wakes the run sooner. See the
+[setup runbook](https://github.com/salimhamed/jigs/blob/main/docs/setup.md)
+for configuring Linear and, if you want them, webhooks.
 
 ## Ask a concrete question
 

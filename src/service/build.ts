@@ -68,7 +68,11 @@ const definition: FactoryDefinition = config;
 const workflows = Object.fromEntries(await Promise.all(
   Object.entries(definition.workflows).map(async ([name, load]) => [name, (await load()).default]),
 ));
-export default { workflows, schedules: definition.schedules } satisfies Factory;
+export default {
+  workflows,
+  schedules: definition.schedules,
+  webhooks: definition.webhooks,
+} satisfies Factory;
 `;
 
 /**

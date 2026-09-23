@@ -4,7 +4,11 @@ import type {
   PiMcpServerConfig,
 } from "../blocks/agents/harness-config.ts";
 import type { AgentRequest } from "../blocks/agents/plan.ts";
-import { defaultMergePolicy, readFactoryConfig } from "../config/factory-config.ts";
+import {
+  defaultMergePolicy,
+  readFactoryConfig,
+  webhooksEnabled,
+} from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";
 import { getAuthenticatedUser } from "../providers/github.ts";
 import { resolveGithubIdentities } from "../providers/github-auth.ts";
@@ -44,6 +48,7 @@ export {
   SERVICE_ENV_FILE,
 } from "./core.ts";
 export {
+  type GithubIdentityCheckOptions,
   type GithubIdentityProbes,
   type GithubMergePolicyProbes,
   githubIdentityChecks,
@@ -87,14 +92,11 @@ const githubProbes: GithubIdentityProbes = realGithubIdentityProbes(getAuthentic
 // factory would get, and the credential is still worth checking.
 function githubChecks(checkBindings = false): Check[] {
   try {
-    const { merge, bindings } = readFactoryConfig(factoryRoot());
-    return githubIdentityChecks(
-      resolveGithubIdentities(),
-      merge,
-      githubProbes,
-      process.env,
-      checkBindings ? bindings : {},
-    );
+    const { merge, bindings, webhooks } = readFactoryConfig(factoryRoot());
+    return githubIdentityChecks(resolveGithubIdentities(), merge, githubProbes, process.env, {
+      bindings: checkBindings ? bindings : {},
+      webhooks: webhooksEnabled(webhooks, "github"),
+    });
   } catch {
     // A configuration that cannot be read is the binding checks' diagnosis;
     // the credential is still worth checking, against what a factory that
@@ -137,7 +139,9 @@ export function doctorChecks(): Check[] {
     // Always: an App identity needs no environment variable to be configured,
     // so there is nothing to detect — the configuration itself is the answer.
     ...githubChecks(true),
-    ...(integrations.includes("linear") ? linearWebhookChecks({ factoryRoot }) : []),
+    // Keyed on the config rather than LINEAR_API_KEY: a Linear webhook switched
+    // on without its secret is a failure even where the key is missing too.
+    ...linearWebhookChecks({ factoryRoot }),
     ...bindingChecks({ factoryRoot }),
     ...webhookChecks({ factoryRoot }),
     ...Object.values(drivers).flatMap((driver) =>

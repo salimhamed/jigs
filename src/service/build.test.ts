@@ -51,3 +51,10 @@ test("generated factory resolves deferred modules only inside the service", () =
   expect(source).toContain('from "../jigs.config.ts"');
   expect(source).toContain("(await load()).default");
 });
+
+test("generated factory hands the app the webhook settings that decide its ingress routes", () => {
+  const root = factory();
+  prepare(root);
+  const source = readFileSync(path.join(root, GENERATED_DIR, "factory.ts"), "utf8");
+  expect(source).toContain("webhooks: definition.webhooks");
+});

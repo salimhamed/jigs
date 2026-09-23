@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { WorkflowRequires } from "../checks/index.ts";
 // The schemas that validate these blocks, named for their types alone: a
 // second hand-written copy of either would drift from what jigs accepts.
-import type { githubSchema } from "../config/factory-config.ts";
+import type { githubSchema, webhooksSchema } from "../config/factory-config.ts";
 import { JigsError } from "./errors.ts";
 import type { mergePolicySchema } from "./pull-requests/policy.ts";
 import type { ReleasePolicy } from "./runtime/release.ts";
@@ -87,10 +87,27 @@ export interface Schedule {
 export interface Factory {
   workflows: Record<string, AnyWorkflowEntry>;
   schedules?: Record<string, Schedule>;
+  /** Which provider webhook routes the service mounts. Absent, it mounts none. */
+  webhooks?: WebhooksDefinition;
 }
 
 /** Who jigs is on GitHub: the operator's own token, or a GitHub App installation. */
 export type GitHubDefinition = z.input<typeof githubSchema>;
+
+/**
+ * Where provider webhooks reach the service, and which providers send them.
+ * Without this block the service still wakes parked runs by polling.
+ *
+ * @example
+ * ```ts
+ * webhooks: {
+ *   url: "https://factory.example.ts.net",
+ *   github: { enabled: true },
+ *   linear: { enabled: false },
+ * },
+ * ```
+ */
+export type WebhooksDefinition = z.input<typeof webhooksSchema>;
 
 /** Who merges, by which of GitHub's three methods, and what signal permits it. */
 export type MergeDefinition = z.input<typeof mergePolicySchema>;
@@ -109,9 +126,19 @@ export interface AgentsDefinition {
 
 /** Operating settings and deferred workflow modules declared by a factory. */
 export interface FactoryDefinition {
-  service: { port?: number; dashboardPort: number };
+  service: {
+    port?: number;
+    dashboardPort: number;
+    /**
+     * Seconds between the service's re-reads of each parked run, per
+     * provider. Each defaults to 300 and may not go below 30. Up to a tenth
+     * of the interval is taken off at random so services do not all poll at
+     * once.
+     */
+    pollIntervalSeconds?: { github?: number; linear?: number };
+  };
   agents?: AgentsDefinition;
-  ingressUrl?: string;
+  webhooks?: WebhooksDefinition;
   github?: GitHubDefinition;
   merge?: MergeDefinition;
   release?: ReleasePolicy;

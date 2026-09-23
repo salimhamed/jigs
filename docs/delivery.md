@@ -154,7 +154,8 @@ Reading the graph against the code:
   approved SHA explicitly. Only an `ApprovedChange` typechecks as its input, so a stopped result
   cannot be published at all.
 - **Following the pull request** is one suspended gate per pull request, woken
-  by a GitHub webhook or by the service's five-minute nudge. Every wake re-reads
+  by the service's poll (every `service.pollIntervalSeconds.github` seconds,
+  300 by default) or, when GitHub webhooks are on, by a delivery sooner. Every wake re-reads
   the whole pull request and says what is outstanding *now*; nothing is
   remembered between wakes, because every comment jigs posts carries a hidden
   marker naming what it answered ([ADR 0009](adr/0009-webhook-ingress-resource-scoped-tokens.md)).
@@ -201,7 +202,7 @@ Reading the graph against the code:
   re-read before posting. A post that fails ends that wake — the round stops
   there, the run does not fail, and the next wake reposts whatever is still
   unanswered. A reply lost to a transport failure is therefore delayed by at
-  most one nudge interval, never dropped and never doubled.
+  most one poll interval, never dropped and never doubled.
 - **A delivery returns only after merge.** Every stop-short path first pushes
   the branch and posts a ticket note, then throws with a message naming the
   branch: an exhausted budget, `onLimit` declining, an unusable CI repair, an

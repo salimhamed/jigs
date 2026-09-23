@@ -1,10 +1,10 @@
 import { createHook, type Hook } from "workflow";
 
 // The claim's hook token names the ticket, never the run: owning it is the
-// exclusivity lock. The ingress has only a webhook payload to go on, so it
-// reconstructs the token through ticketToken below — build and parse cannot
-// drift while they share the one constructor. Linear Comment payloads carry
-// issueId as a UUID, so the token does too.
+// exclusivity lock. The Linear ingress, when on, has only a webhook payload to
+// go on, so it reconstructs the token through ticketToken below — build and
+// parse cannot drift while they share the one constructor. Linear Comment
+// payloads carry issueId as a UUID, so the token does too.
 /** Prefix for the durable hook that gives one run exclusive ownership of a ticket. */
 export const TICKET_TOKEN_PREFIX = "linear:ticket:";
 
