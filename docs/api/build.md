@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.55.1
+# @jigs-ai/jigs v0.56.0
 
 Generate and build the service files that host a factory.
 

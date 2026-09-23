@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.56.0](https://github.com/salimhamed/jigs/compare/jigs-v0.55.1...jigs-v0.56.0) (2026-09-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* **service:** check only the harnesses and integrations the factory uses ([#372](https://github.com/salimhamed/jigs/issues/372))
+
+### Bug Fixes
+
+* **service:** check only the harnesses and integrations the factory uses ([#372](https://github.com/salimhamed/jigs/issues/372)) ([59a982e](https://github.com/salimhamed/jigs/commit/59a982eaedc63bb3e33adae154001880d66ee206))
+
 ## [0.55.1](https://github.com/salimhamed/jigs/compare/jigs-v0.55.0...jigs-v0.55.1) (2026-09-23)
 
 

@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.55.1
+# @jigs-ai/jigs v0.56.0
 
 Start the Workflow runtime and the jigs services that depend on it.
 
@@ -118,11 +118,13 @@ Injectable runtime checks and output used by the harness startup gate.
 
 ##### harnesses()?
 
-> `optional` **harnesses**: () => `Promise`\<(`"claude"` \| `"codex"` \| `"pi"`)[]\>
+> `optional` **harnesses**: () => `Promise`\<`Map`\<`"claude"` \| `"codex"` \| `"pi"`, `string`[]\>\>
+
+Each harness the factory's workflows require, with the workflows that require it.
 
 ###### Returns
 
-`Promise`\<(`"claude"` \| `"codex"` \| `"pi"`)[]\>
+`Promise`\<`Map`\<`"claude"` \| `"codex"` \| `"pi"`, `string`[]\>\>
 
 ##### log()?
 
@@ -445,21 +447,3 @@ Start and take ownership of the Workflow World, exiting cleanly on failure.
 #### Returns
 
 `Promise`\<`boolean`\>
-
-***
-
-### requiredHarnesses()
-
-> **requiredHarnesses**(`entries`): (`"claude"` \| `"codex"` \| `"pi"`)[]
-
-Find the distinct harnesses required by the workflows a factory declares.
-
-#### Parameters
-
-##### entries
-
-`Iterable`\<`AnyWorkflowEntry`\>
-
-#### Returns
-
-(`"claude"` \| `"codex"` \| `"pi"`)[]
