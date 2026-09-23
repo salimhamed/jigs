@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.47.2
+# @salimhamed/jigs v0.48.0
 
 Read and update GitHub pull requests outside workflow code.
 
