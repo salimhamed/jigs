@@ -1,21 +1,15 @@
-import { readFileSync, statSync } from "node:fs";
-import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { resetGithubAuth } from "./github-auth.ts";
 import {
   ensureRepoWebhook,
-  ensureWebhookSecret,
+  inspectRepoWebhook,
   parseGithubRemote,
-  verifyRepoWebhook,
   WEBHOOK_EVENTS,
 } from "./github-webhook.ts";
 
 const fetchMock = vi.fn();
-let tmp: string;
 
 beforeEach(() => {
-  tmp = makeTmpDir();
   vi.stubGlobal("fetch", fetchMock);
   vi.stubEnv("GITHUB_API_URL", "http://mock.test/github");
   vi.stubEnv("GITHUB_TOKEN", "gh_test_token");
@@ -26,7 +20,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   resetGithubAuth();
-  removeTmpDir(tmp);
 });
 
 test("parseGithubRemote handles ssh, git@, and https forms and returns null for non-github remotes", () => {
@@ -39,15 +32,6 @@ test("parseGithubRemote handles ssh, git@, and https forms and returns null for 
   expect(parseGithubRemote("git@gitlab.com:acme/api.git")).toBe(null);
   expect(parseGithubRemote("https://example.com/acme/api")).toBe(null);
   expect(parseGithubRemote("/home/user/repos/api")).toBe(null);
-});
-
-test("the webhook secret is generated once and stable across calls", () => {
-  const first = ensureWebhookSecret(tmp);
-  expect(first).toMatch(/^[0-9a-f]{64}$/);
-  expect(ensureWebhookSecret(tmp)).toBe(first);
-  const file = path.join(tmp, "github-webhook-secret");
-  expect(readFileSync(file, "utf8")).toBe(`${first}\n`);
-  expect(statSync(file).mode & 0o777).toBe(0o600);
 });
 
 const jsonResponse = (body: unknown) => new Response(JSON.stringify(body));
@@ -84,28 +68,44 @@ test("creates the webhook when none matches", async () => {
   });
 });
 
-test("verifies an existing matching webhook with zero writes", async () => {
-  fetchMock.mockResolvedValueOnce(
-    jsonResponse([
-      {
-        id: 9,
-        active: true,
-        events: [...WEBHOOK_EVENTS].reverse(),
-        config: {
-          url: "https://factory.example.ts.net/ingress/github",
-          content_type: "json",
+// GitHub never returns the secret, so a hook that looks right may still carry
+// a stale one: bind must send the current secret regardless.
+test("a matching webhook is verified and still PATCHed with the rotated secret", async () => {
+  fetchMock
+    .mockResolvedValueOnce(
+      jsonResponse([
+        {
+          id: 9,
+          active: true,
+          events: [...WEBHOOK_EVENTS].reverse(),
+          config: {
+            url: "https://factory.example.ts.net/ingress/github",
+            content_type: "json",
+          },
         },
-      },
-    ]),
-  );
-  expect(await ensureRepoWebhook(opts)).toEqual({
+      ]),
+    )
+    .mockResolvedValueOnce(jsonResponse({ id: 9 }));
+  expect(await ensureRepoWebhook({ ...opts, secret: "rotated-secret" })).toEqual({
     outcome: "verified",
     otherHosts: [],
   });
-  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  const [patchUrl, patchInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+  expect(patchUrl).toBe("http://mock.test/github/repos/acme/api/hooks/9");
+  expect(patchInit.method).toBe("PATCH");
+  expect(JSON.parse(String(patchInit.body))).toEqual({
+    config: {
+      url: "https://factory.example.ts.net/ingress/github",
+      content_type: "json",
+      secret: "rotated-secret",
+    },
+    events: WEBHOOK_EVENTS,
+    active: true,
+  });
 });
 
-// The event set is named once, so bind (ensure) and doctor (verify) cannot
+// The event set is named once, so bind (ensure) and doctor (inspect) cannot
 // drift apart over `issue_comment`, the top-level PR comment.
 test("a hook missing status is repaired by bind and failed by doctor", async () => {
   const stale = [
@@ -120,7 +120,7 @@ test("a hook missing status is repaired by bind and failed by doctor", async () 
     },
   ];
   fetchMock.mockResolvedValueOnce(jsonResponse(stale));
-  expect(await verifyRepoWebhook({ ...opts })).toBe(false);
+  expect(await inspectRepoWebhook({ ...opts })).toEqual({ state: "missing" });
 
   fetchMock
     .mockResolvedValueOnce(jsonResponse(stale))

@@ -15,13 +15,14 @@ import { NEEDS_HUMAN_TOKEN_PREFIX } from "../blocks/linear/halt-for-human.ts";
 import { tokenFromGitHubPayload } from "../blocks/pull-requests/gate.ts";
 import { doctorChecks, failedChecks, runChecks } from "../checks/index.ts";
 import { factoryRoot } from "../config/factory-root.ts";
+import { githubWebhookSecret } from "../config/github-webhook-secret.ts";
 import { findOpenPullRequestsByHeadSha } from "../providers/github.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import { readOwner } from "../steps/workspaces/owner.ts";
 import { listWorktreesForRun } from "../steps/workspaces/registry.ts";
 import { registrySql } from "../steps/workspaces/sql.ts";
 import { listWorktreeStates } from "../steps/workspaces/worktree-state.ts";
-import { githubWebhookSecret, verifyGithubSignature, verifyLinearSignature } from "./ingress.ts";
+import { verifyGithubSignature, verifyLinearSignature } from "./ingress.ts";
 import { listRunDeadJobs } from "./queue.ts";
 import { bootPhase, isReady } from "./readiness.ts";
 import {
@@ -136,9 +137,11 @@ export function createApp(factory: Factory): Hono {
   app.post("/ingress/github", async (c) => {
     const event = sanitizeForLog(c.req.header("x-github-event") ?? "unknown");
     const secret = githubWebhookSecret();
-    if (secret === null) {
+    // 503, not 401: GitHub's delivery log then tells "not configured" apart
+    // from "wrong secret", and doctor reads that log.
+    if (secret === undefined) {
       console.log(`[ingress] github rejected reason=configuration event=${event}`);
-      return c.json({ error: "no GitHub webhook secret configured" }, 503);
+      return c.json({ error: "webhook secret not configured" }, 503);
     }
     const rawBody = await c.req.text();
     const signature = c.req.header("x-hub-signature-256");

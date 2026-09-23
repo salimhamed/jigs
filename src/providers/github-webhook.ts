@@ -1,19 +1,16 @@
-// The per-repo GitHub webhook leg of `jigs bind`: one shared secret in the
-// jigs data dir, idempotent create/verify/repair against the repo's hook list.
+// The per-repo GitHub webhook leg of `jigs bind`: idempotent create-or-update
+// against the repo's hook list, signed with the factory's GITHUB_WEBHOOK_SECRET.
 // Hook administration is a permission in its own right — an App needs
 // "Repository webhooks: read & write" before any of this works.
 
-import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { githubWebhookSecretFile, jigsDataDir } from "../config/paths.ts";
 import { githubRequest } from "./github-api.ts";
 
 // Reviews, inline review comments, conversation comments, and the check-run
 // half of CI. `issue_comment` is here because a factory sharing its operator's
 // GitHub identity cannot receive a formal review on its own pull request, so
 // the conversation is where feedback arrives. `status` names only a commit;
-// ingress resolves that sha to its open pull requests before routing it. The
-// drift PATCH picks up a change on re-bind.
+// ingress resolves that sha to its open pull requests before routing it. Every
+// re-bind PATCHes the hook, so a change here lands on the next bind.
 export const WEBHOOK_EVENTS = [
   "pull_request",
   "pull_request_review",
@@ -45,20 +42,6 @@ export function parseGithubRemote(url: string): GitHubRepoRef | null {
   return null;
 }
 
-// One shared secret for all repo webhooks, generated on first need. The
-// service reads the same file (or its GITHUB_WEBHOOK_SECRET override).
-export function ensureWebhookSecret(dataDir: string = jigsDataDir()): string {
-  const file = githubWebhookSecretFile(dataDir);
-  if (existsSync(file)) {
-    const existing = readFileSync(file, "utf8").trim();
-    if (existing !== "") return existing;
-  }
-  mkdirSync(dataDir, { recursive: true });
-  const secret = randomBytes(32).toString("hex");
-  writeFileSync(file, `${secret}\n`, { mode: 0o600 });
-  return secret;
-}
-
 export interface EnsureRepoWebhookOptions extends GitHubRepoRef {
   ingressUrl: string;
   secret: string;
@@ -88,9 +71,17 @@ const sameEvents = (a: string[], b: string[]) =>
   a.length === b.length && [...a].sort().join(",") === [...b].sort().join(",");
 
 export interface EnsureRepoWebhookResult {
+  // "verified": the hook's visible settings already matched; "updated": they
+  // had drifted. Either way the full config, secret included, was re-sent.
   outcome: "created" | "verified" | "updated";
   otherHosts: string[];
 }
+
+const matchesDesired = (hook: RepoHook, hookUrl: string) =>
+  hook.active &&
+  sameEvents(hook.events, WEBHOOK_EVENTS) &&
+  hook.config.url === hookUrl &&
+  hook.config.content_type === "json";
 
 export async function ensureRepoWebhook({
   owner,
@@ -118,31 +109,52 @@ export async function ensureRepoWebhook({
     await githubRequest("POST", hooksPath, desired);
     return { outcome: "created", otherHosts };
   }
-  if (
-    existing.active &&
-    sameEvents(existing.events, WEBHOOK_EVENTS) &&
-    existing.config.url === hookUrl &&
-    existing.config.content_type === "json"
-  ) {
-    return { outcome: "verified", otherHosts };
-  }
-  // Full-config PATCH: GitHub never returns the secret, so re-sending it
-  // reconverges a drifted or rotated one along with the events.
+  // GitHub never returns a hook's secret, so a rotated local one is invisible
+  // here: always re-send it rather than trusting the settings that do show.
   await githubRequest("PATCH", `${hooksPath}/${existing.id}`, desired);
-  return { outcome: "updated", otherHosts };
+  return { outcome: matchesDesired(existing, hookUrl) ? "verified" : "updated", otherHosts };
 }
 
-export async function verifyRepoWebhook({
+interface HookDelivery {
+  delivered_at: string;
+  status_code: number;
+}
+
+export type RepoWebhookState =
+  | { state: "ok" }
+  | { state: "missing" }
+  | { state: "rejected"; status: 401 | 503; count: number };
+
+// Enough to see past a burst of redeliveries. The list's order is not
+// documented, so it is sorted here.
+const DELIVERY_SAMPLE = 10;
+
+// A wrong secret cannot be read off the hook, only off GitHub's delivery log.
+// The ingress answers a bad signature with 401 and a missing secret with 503;
+// `count` is the newest unbroken run of that status. A hook with no
+// deliveries yet is "ok".
+export async function inspectRepoWebhook({
   owner,
   repo,
   ingressUrl,
-}: Omit<EnsureRepoWebhookOptions, "secret">): Promise<boolean> {
-  const hooks = await githubRequest<RepoHook[]>(
-    "GET",
-    `/repos/${owner}/${repo}/hooks?per_page=100`,
-  );
+}: Omit<EnsureRepoWebhookOptions, "secret">): Promise<RepoWebhookState> {
+  const hooksPath = `/repos/${owner}/${repo}/hooks`;
+  const hooks = await githubRequest<RepoHook[]>("GET", `${hooksPath}?per_page=100`);
   const hookUrl = githubWebhookUrl(ingressUrl);
-  return hooks.some(
-    (hook) => hook.config.url === hookUrl && hook.active && sameEvents(hook.events, WEBHOOK_EVENTS),
+  const hook = hooks.find(
+    (candidate) =>
+      candidate.config.url === hookUrl &&
+      candidate.active &&
+      sameEvents(candidate.events, WEBHOOK_EVENTS),
   );
+  if (hook === undefined) return { state: "missing" };
+  const deliveries = await githubRequest<HookDelivery[]>(
+    "GET",
+    `${hooksPath}/${hook.id}/deliveries?per_page=${DELIVERY_SAMPLE}`,
+  );
+  const newestFirst = [...deliveries].sort((a, b) => b.delivered_at.localeCompare(a.delivered_at));
+  const status = newestFirst[0]?.status_code;
+  if (status !== 401 && status !== 503) return { state: "ok" };
+  const runEnd = newestFirst.findIndex((delivery) => delivery.status_code !== status);
+  return { state: "rejected", status, count: runEnd === -1 ? newestFirst.length : runEnd };
 }

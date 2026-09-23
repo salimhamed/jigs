@@ -1,8 +1,13 @@
 import type { ResolvedGithubIdentity } from "../config/factory-config.ts";
 import { readFactoryConfig } from "../config/factory-config.ts";
+import {
+  githubWebhookSecret,
+  githubWebhookSecretRepair,
+  missingGithubWebhookSecret,
+} from "../config/github-webhook-secret.ts";
 import { GithubApiError } from "../providers/github-api.ts";
 import { resolveGithubIdentity } from "../providers/github-auth.ts";
-import { parseGithubRemote, verifyRepoWebhook } from "../providers/github-webhook.ts";
+import { inspectRepoWebhook, parseGithubRemote } from "../providers/github-webhook.ts";
 import type { Check, CheckResult } from "./catalog.ts";
 
 export interface WebhookChecksOptions {
@@ -20,25 +25,43 @@ export function webhookChecks(options: WebhookChecksOptions): Check[] {
   }
   if (config.ingressUrl === undefined) return [];
   const ingressUrl = config.ingressUrl;
-  return Object.entries(config.bindings).flatMap(([name, binding]) => {
-    const repo = parseGithubRemote(binding.remote);
-    return repo === null
-      ? []
-      : [
-          {
-            id: `webhook.${name}`,
-            label: `webhook ${name}`,
-            run: () =>
-              checkWebhook(
-                binding.remote,
-                ingressUrl,
-                repo,
-                options.identity ??
-                  (() => resolveGithubIdentity(repo.owner, options.factoryRoot())),
-              ),
-          },
-        ];
-  });
+  const secretCheck: Check = {
+    id: "webhook.secret",
+    label: "GitHub webhook secret",
+    run: async () => {
+      const root = options.factoryRoot();
+      return githubWebhookSecret(root) !== undefined
+        ? { ok: true }
+        : {
+            ok: false,
+            reason: missingGithubWebhookSecret(root),
+            repair: `${githubWebhookSecretRepair(root)}, then run jigs bind for each bound repo`,
+          };
+    },
+  };
+  return [
+    secretCheck,
+    ...Object.entries(config.bindings).flatMap(([name, binding]) => {
+      const repo = parseGithubRemote(binding.remote);
+      return repo === null
+        ? []
+        : [
+            {
+              id: `webhook.${name}`,
+              label: `webhook ${name}`,
+              run: () =>
+                checkWebhook(
+                  binding.remote,
+                  ingressUrl,
+                  repo,
+                  options.factoryRoot,
+                  options.identity ??
+                    (() => resolveGithubIdentity(repo.owner, options.factoryRoot())),
+                ),
+            },
+          ];
+    }),
+  ];
 }
 
 // Hook administration is its own permission, and which one depends on the
@@ -60,17 +83,32 @@ async function checkWebhook(
   remote: string,
   ingressUrl: string,
   repo: { owner: string; repo: string },
+  factoryRoot: () => string,
   resolveIdentity: () => ResolvedGithubIdentity,
 ): Promise<CheckResult> {
   const bindRepair = `run: jigs bind ${remote}`;
   try {
-    return (await verifyRepoWebhook({ ...repo, ingressUrl }))
-      ? { ok: true }
+    const hook = await inspectRepoWebhook({ ...repo, ingressUrl });
+    if (hook.state === "ok") return { ok: true };
+    if (hook.state === "missing") {
+      return {
+        ok: false,
+        reason:
+          "the repo has no active webhook at this factory's ingress URL with the current events",
+        repair: bindRepair,
+      };
+    }
+    const latest = hook.count === 1 ? "delivery" : `${hook.count} deliveries`;
+    return hook.status === 401
+      ? {
+          ok: false,
+          reason: `the factory rejected the hook's latest ${latest} with 401: GitHub's copy of the signing secret does not match GITHUB_WEBHOOK_SECRET in this factory's .env`,
+          repair: bindRepair,
+        }
       : {
           ok: false,
-          reason:
-            "the repo has no active webhook at this factory's ingress URL with the current events",
-          repair: bindRepair,
+          reason: `the factory answered the hook's latest ${latest} with 503: the service is running without GITHUB_WEBHOOK_SECRET`,
+          repair: `${githubWebhookSecretRepair(factoryRoot())}, then ${bindRepair}`,
         };
   } catch (err) {
     if (err instanceof GithubApiError && (err.status === 403 || err.status === 404)) {

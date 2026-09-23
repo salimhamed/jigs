@@ -70,3 +70,6 @@ Read [core concepts](./concepts) before editing your workflow. Then choose
 [an agent call](./agents), [a model call](./models), or the [ship recipe](./ship).
 For GitHub identities, webhook setup, and other credentials, follow the
 [full setup runbook](https://github.com/salimhamed/jigs/blob/main/docs/setup.md).
+GitHub webhooks are signed with `GITHUB_WEBHOOK_SECRET` from `.env`. jigs never
+generates it: create one with `openssl rand -hex 32` before `jigs bind`, which
+refuses without it.

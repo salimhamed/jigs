@@ -169,11 +169,11 @@ test("POST /ingress/github without a signature header is a 401", async () => {
 test("POST /ingress/github without a configured secret is a 503", async () => {
   const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "");
-  vi.stubEnv("XDG_DATA_HOME", dataDir);
   const res = await postGithub(reviewPayload, {
     "x-hub-signature-256": `sha256=${sign(reviewPayload, "gh-hook-secret")}`,
   });
   expect(res.status).toBe(503);
+  expect(await res.json()).toEqual({ error: "webhook secret not configured" });
   expect(log).toHaveBeenCalledExactlyOnceWith(
     "[ingress] github rejected reason=configuration event=unknown",
   );
