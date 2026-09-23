@@ -64,8 +64,9 @@ cp .env.example .env
 ```
 
 The scaffold's `hello` workflow needs no integration credentials.
-Fill in `LINEAR_API_KEY` and, in `pat` mode, `GITHUB_TOKEN` before the first ship
-run: a workflow that declares either integration cannot start a run without a
+Fill in the Linear identity's credentials (`LINEAR_API_KEY` in `key` mode,
+`LINEAR_CLIENT_ID` and `LINEAR_CLIENT_SECRET` in `app` mode) and, in `pat` mode,
+`GITHUB_TOKEN` before the first ship run: a workflow that declares either integration cannot start a run without a
 working credential. `WORKFLOW_TARGET_WORLD` and `WORKFLOW_POSTGRES_URL` come
 filled in and should be left alone.
 
@@ -111,6 +112,20 @@ the identity and the effective policy per binding:
 ok   GitHub identity: jigs acts as jigs-app-dev[bot] on salimhamed; operator salimhamed
 ok   merge policy: repo: jigs merges with squash once GitHub reports it mergeable and an approving GitHub review of the current commit is present
 ```
+
+## 2b. Linear identity
+
+`linear.identity` in `jigs.config.ts` is `{ mode: "key" }` (the default) or
+`{ mode: "app" }`, chosen at `jigs init --linear-identity-mode key|app`.
+**`key`** — jigs acts as the user whose `LINEAR_API_KEY` is in `.env`. Linear
+does not notify a user of their own comments, so if that user is the operator,
+a parked run's @-mention never reaches their inbox. **`app`** — jigs acts as a
+Linear OAuth application registered in the workspace with **Client
+credentials** on (Public and Webhooks off); put its `LINEAR_CLIENT_ID` and
+`LINEAR_CLIENT_SECRET` in `.env`. jigs mints and re-mints the token itself. An
+app cannot list webhooks, so in `app` mode `jigs doctor` does not verify the
+Linear webhook; confirm it by hand. `jigs doctor` reports the identity as
+`linear.identity`.
 
 ## 3. Up
 

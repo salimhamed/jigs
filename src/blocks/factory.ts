@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { WorkflowRequires } from "../checks/index.ts";
 // The schemas that validate these blocks, named for their types alone: a
 // second hand-written copy of either would drift from what jigs accepts.
-import type { githubSchema, webhooksSchema } from "../config/factory-config.ts";
+import type { githubSchema, linearSchema, webhooksSchema } from "../config/factory-config.ts";
 import { JigsError } from "./errors.ts";
 import type { mergePolicySchema } from "./pull-requests/policy.ts";
 import type { ReleasePolicy } from "./runtime/release.ts";
@@ -95,6 +95,18 @@ export interface Factory {
 export type GitHubDefinition = z.input<typeof githubSchema>;
 
 /**
+ * Who jigs is on Linear: `key` acts as the user whose `LINEAR_API_KEY` is in
+ * `.env`, `app` acts as a Linear OAuth application from `LINEAR_CLIENT_ID` and
+ * `LINEAR_CLIENT_SECRET`. Defaults to `key`.
+ *
+ * @example
+ * ```ts
+ * linear: { identity: { mode: "app" } },
+ * ```
+ */
+export type LinearDefinition = z.input<typeof linearSchema>;
+
+/**
  * Where provider webhooks reach the service, and which providers send them.
  * Without this block the service still wakes parked runs by polling.
  *
@@ -140,6 +152,7 @@ export interface FactoryDefinition {
   agents?: AgentsDefinition;
   webhooks?: WebhooksDefinition;
   github?: GitHubDefinition;
+  linear?: LinearDefinition;
   merge?: MergeDefinition;
   release?: ReleasePolicy;
   bindings?: Record<

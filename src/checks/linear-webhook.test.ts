@@ -14,12 +14,12 @@ afterEach(() => {
   }
 });
 
-function factoryWith(webhooks: unknown): string {
+function factoryWith(webhooks: unknown, extra: Record<string, unknown> = {}): string {
   const root = mkdtempSync(path.join(tmpdir(), "jigs-linear-webhook-"));
   roots.push(root);
   writeFileSync(
     path.join(root, "jigs.config.ts"),
-    `export default ${JSON.stringify({ service: { dashboardPort: 8991 }, workflows: {}, ...(webhooks === null ? {} : { webhooks }) })};`,
+    `export default ${JSON.stringify({ service: { dashboardPort: 8991 }, workflows: {}, ...extra, ...(webhooks === null ? {} : { webhooks }) })};`,
   );
   return root;
 }
@@ -117,4 +117,17 @@ test("Linear switched on without its secret fails and names the variable", async
     ok: false,
     reason: expect.stringContaining("LINEAR_WEBHOOK_SECRET is not set"),
   });
+});
+
+test("an app identity does not list webhooks, and says what to confirm by hand", async () => {
+  vi.stubEnv("LINEAR_WEBHOOK_SECRET", "linear-secret");
+  const root = factoryWith(enabled(), { linear: { identity: { mode: "app" } } });
+  const list = vi.fn(async (): Promise<LinearWebhook[]> => []);
+  const result = await webhookCheck(linearWebhookChecks({ factoryRoot: () => root, list }))?.run();
+  expect(result).toEqual({
+    ok: true,
+    detail:
+      "not verified: listing webhooks needs the admin scope, which an app actor cannot hold. Confirm a Comment webhook exists at https://factory.example.test/ingress/linear in Linear settings.",
+  });
+  expect(list).not.toHaveBeenCalled();
 });

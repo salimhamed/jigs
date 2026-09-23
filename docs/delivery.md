@@ -112,7 +112,7 @@ flowchart TD
     decision -- "stop" --> preserve
   end
 
-  committed -- "no" --> preserve["push the branch,<br/>post a ticket note"]
+  committed -- "no" --> preserve["push the branch,<br/>post the stop note"]
   preserve --> failed(["throw JigsError"])
 
   decision -- "continue: budget + additionalAttempts,<br/>instructions to the next attempt" --> irBudget
@@ -129,7 +129,7 @@ Reading the graph against the code:
   `implementationReviewRounds: 0` fails the run without running an
   agent. The implementation agent commits its own work. If it leaves the
   worktree dirty or adds no commit since the base, the delivery preserves the
-  branch, posts the ticket note and throws before any review runs — nothing
+  branch, posts the stop note and throws before any review runs — nothing
   uncommitted is ever reviewed.
 - **The review blocks on defects, not on preferences.** Each finding is marked
   `blocking` or not: a requirement left unmet, a defect a user could hit or an
@@ -204,7 +204,7 @@ Reading the graph against the code:
   unanswered. A reply lost to a transport failure is therefore delayed by at
   most one poll interval, never dropped and never doubled.
 - **A delivery returns only after merge.** Every stop-short path first pushes
-  the branch and posts a ticket note, then throws with a message naming the
+  the branch and posts a note through `postNote`, then throws with a message naming the
   branch: an exhausted budget, `onLimit` declining, an unusable CI repair, an
   unreviewable implementation attempt, or a pull request closed unmerged.
   Publication whose head moved off `approval.reviewedCommit`, and a pull-request
@@ -272,7 +272,7 @@ findings that say why the phase is unfinished, the task, the worktree, and the
 pull request once one exists. Returning `{ action: "continue", instructions,
 additionalAttempts }` adds to that phase's budget and passes `instructions` to
 the next attempt and every attempt after it. Returning `{ action: "stop" }`
-preserves the branch, posts the ticket note and fails the run.
+preserves the branch, posts the stop note and fails the run.
 
 The **halt-for-human ticket channel** is how a human actually reaches that
 callback. `onLimit` runs workflow-side, so it may suspend: the starter factory's
@@ -325,7 +325,7 @@ file reaches at the same root-anchored specifier:
 ```ts
 import { harnesses } from "@jigs-ai/jigs/blocks/agents";
 import { deliverChange } from "#blocks/delivery/delivery";
-import { resolveMergePolicy } from "#jigs";
+import { noteOnTicket, resolveMergePolicy } from "#jigs";
 
 const result = await deliverChange({
   task,
@@ -339,8 +339,15 @@ const result = await deliverChange({
     pullRequestRevisionRounds: 4,
   },
   merge: await resolveMergePolicy("application"),
+  postNote: (note) => noteOnTicket(claim, note),
 });
 ```
+
+`postNote` is where a delivery that stops short says what is still open and
+where the pushed branch is. Posting it through the ticket's claim with
+`noteOnTicket` records the comment on the claim, so a later `haltForHuman` in
+the run never reads it as a human's reply. A delivery whose task has no ticket
+posts it wherever its humans read.
 
 `ciRepair`, `pullRequestRevision` and `pullRequestDescription` default to the
 implementation harness. Configure any of them independently — each takes its own
@@ -351,7 +358,7 @@ source, since it can run models from more than one provider:
 ```ts
 import { harnesses, models } from "@jigs-ai/jigs/blocks/agents";
 import { deliverChange } from "#blocks/delivery/delivery";
-import { resolveMergePolicy } from "#jigs";
+import { noteOnTicket, resolveMergePolicy } from "#jigs";
 
 const result = await deliverChange({
   task,
@@ -371,6 +378,7 @@ const result = await deliverChange({
     pullRequestRevisionRounds: 4,
   },
   merge: await resolveMergePolicy("application"),
+  postNote: (note) => noteOnTicket(claim, note),
 });
 ```
 
@@ -520,6 +528,7 @@ const result = await deliverChange({
     pullRequestRevisionRounds: 4,
   },
   merge: await resolveMergePolicy("application"),
+  postNote: (note) => postIncidentNote(incident, note),
   onLimit: async (limit) => ({
     action: "continue",
     instructions: `The on-call owner of ${limit.task.service} asked for one more pass.`,
@@ -561,6 +570,7 @@ const built = await implementAndReview({
   implementation,
   review,
   limits: { implementationReviewRounds: 5 },
+  postNote,
 });
 await checkSecurity(built.change);
 
@@ -576,6 +586,7 @@ return followPullRequest({
   implementation,
   limits: { ciFixAttempts: 3, pullRequestRevisionRounds: 4 },
   merge: await resolveMergePolicy("application"),
+  postNote,
 });
 ```
 

@@ -263,9 +263,13 @@ cp .env.example .env      # set integration credentials when workflows need them
 
 `.env` is this factory's environment file: the service loads it when it
 starts, `jigs bind` reads `GITHUB_TOKEN` out of it, and `PORT` comes from
-`jigs.config.ts` rather than from here. The `LINEAR_API_KEY` / `GITHUB_TOKEN` slots
-are consumed by the suspension blocks (`haltForHuman()` posts Linear
-comments, `pullRequestGate()` re-checks PR state), and are validated when declared in the workflow requirements: preflight refuses to create a run when a requirement is unmet,
+`jigs.config.ts` rather than from here. Every provider secret lives here, and
+`jigs.config.ts` names only which identity mode uses it: `GITHUB_TOKEN` in
+GitHub's `pat` mode, `LINEAR_API_KEY` in Linear's `key` mode, and
+`LINEAR_CLIENT_ID` plus `LINEAR_CLIENT_SECRET` in Linear's `app` mode (2b).
+The Linear and GitHub slots are consumed by the suspension blocks
+(`haltForHuman()` posts Linear comments, `pullRequestGate()` re-checks PR
+state), and are validated when declared in the workflow requirements: preflight refuses to create a run when a requirement is unmet,
 reporting every failure with its repair. `jigs doctor` runs the same checks
 without a launch.
 
@@ -489,6 +493,49 @@ repository to require either of them of its own contributors; what it cannot
 work around is a required-review rule under label approval, because GitHub does
 not count a label as a review. The report reads both classic branch protection
 and rulesets and names the relevant GitHub settings page for every mismatch.
+
+### 2b. Which Linear identity jigs uses
+
+`linear.identity` in `jigs.config.ts` says who jigs is on Linear. There are two
+modes, chosen at `jigs init --linear-identity-mode key|app`; `key` is the
+default. A factory has exactly one Linear identity.
+
+**`key` — jigs is you.** `LINEAR_API_KEY` in `.env` is a personal API key, so
+every comment jigs posts is yours. Any user's key works, including one for a user you create
+just for the factory.
+
+```ts
+linear: { identity: { mode: "key" } },
+```
+
+Linear does not notify you of your own comments. When a run parks on a
+question, it @-mentions the ticket's creator and assignee; if that is the
+person whose key the factory uses, the mention never reaches their inbox, and
+the run waits until someone happens to look.
+
+**`app` — jigs is a bot.** jigs acts as a Linear OAuth application, so its
+comments post under the app's name and its mentions notify you like anyone
+else's.
+
+```ts
+linear: { identity: { mode: "app" } },
+```
+
+1. **Register the app** in the workspace this factory serves: Linear →
+   Settings → API → OAuth applications → New. Name it, for example, `jigs`.
+   The form requires a redirect URL; any URL will do, since jigs never uses
+   it. Leave **Public** off and **Webhooks** off, and turn on **Client
+   credentials**. Optionally set **GitHub username** to your GitHub App's
+   `<app-slug>[bot]`, so pull-request attachments on the ticket read as jigs.
+2. **Copy the client id and secret** into `.env` as `LINEAR_CLIENT_ID` and
+   `LINEAR_CLIENT_SECRET`, then `jigs service restart`.
+
+There is no browser step. jigs trades the id and secret for a token when the
+service needs one; the token lasts 30 days, and jigs mints a new one when
+Linear stops accepting it. The app belongs to that one workspace: a factory
+serving another workspace registers its own.
+
+`jigs doctor` reports on this identity as its `linear.identity` check.
 
 ### 3. Up
 
@@ -785,8 +832,12 @@ webhook: create it in Linear (Settings → API → Webhooks) pointed at
 `<webhooks.url>/ingress/linear` with resource types `Comment` only. Put its
 signing secret in this factory's `.env` as `LINEAR_WEBHOOK_SECRET` and
 `jigs service restart`.
-`jigs doctor` verifies that the secret is set and that this exact webhook
-exists and is enabled.
+`jigs doctor` verifies that the secret is set and, in `key` mode, that this
+exact webhook exists and is enabled. In `app` mode it cannot: listing webhooks
+needs Linear's admin scope, which Linear never grants an app, so the
+`linear.webhook` check is not performed and says why. Check by hand in
+Settings → API → Webhooks that the webhook points at
+`<webhooks.url>/ingress/linear`, is enabled, and lists `Comment`.
 
 ### 6. Operating runs
 

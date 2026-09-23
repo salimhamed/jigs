@@ -4,22 +4,33 @@ import type {
   PiMcpServerConfig,
 } from "../blocks/agents/harness-config.ts";
 import type { AgentRequest } from "../blocks/agents/plan.ts";
-import { defaultMergePolicy, readFactoryConfig } from "../config/factory-config.ts";
+import {
+  defaultMergePolicy,
+  FACTORY_CONFIG_FILE,
+  type LinearIdentity,
+  readFactoryConfig,
+} from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";
 import { getAuthenticatedUser } from "../providers/github.ts";
 import { resolveGithubIdentities } from "../providers/github-auth.ts";
 import { getViewer } from "../providers/linear.ts";
+import {
+  LINEAR_IDENTITY_VARIABLES,
+  linearEnvValue,
+  resolveLinearIdentity,
+} from "../providers/linear-auth.ts";
 import { driverFor, drivers } from "../steps/agents/drivers/index.ts";
 import { awsCredentialsCheck } from "./aws.ts";
 import { bindingChecks } from "./bindings.ts";
-import { CHECK_TIMEOUT_MS, type Check } from "./catalog.ts";
-import { type CoreProbes, coreChecks, type Integration } from "./core.ts";
+import { CHECK_TIMEOUT_MS, type Check, failedCheck } from "./catalog.ts";
+import { type Integration, RESTART_SERVICE } from "./core.ts";
 import {
   type GithubIdentityProbes,
   githubIdentityChecks,
   realGithubIdentityProbes,
 } from "./github-identity.ts";
 import { type HarnessKind, harnessChecks, missingDriverCheck } from "./harnesses.ts";
+import { type LinearIdentityProbes, linearIdentityChecks } from "./linear-identity.ts";
 import { linearWebhookChecks } from "./linear-webhook.ts";
 import { mcpServerChecks } from "./mcp.ts";
 import { webhookChecks } from "./webhooks.ts";
@@ -37,12 +48,7 @@ export {
   formatFailures,
   runChecks,
 } from "./catalog.ts";
-export {
-  type CoreProbes,
-  coreChecks,
-  RESTART_SERVICE,
-  SERVICE_ENV_FILE,
-} from "./core.ts";
+export { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 export {
   type GithubIdentityCheckOptions,
   type GithubIdentityProbes,
@@ -65,6 +71,7 @@ export {
   harnessChecks,
   harnessRuntimeCheck,
 } from "./harnesses.ts";
+export { type LinearIdentityProbes, linearIdentityChecks } from "./linear-identity.ts";
 export { codexWorktreeConfigCheck, mcpServerChecks } from "./mcp.ts";
 export { type WebhookChecksOptions, webhookChecks } from "./webhooks.ts";
 
@@ -79,8 +86,8 @@ export interface WorkflowRequires {
 }
 
 // The real provider clients, so a caller of the catalog states only its own
-// requirements. Substituting a probe stays a seam on coreChecks itself.
-const coreProbes: CoreProbes = { linearViewer: getViewer };
+// requirements. Substituting a probe stays a seam on each check factory.
+const linearProbes: LinearIdentityProbes = { viewer: getViewer };
 const githubProbes: GithubIdentityProbes = realGithubIdentityProbes(getAuthenticatedUser);
 
 // Which credential jigs holds and what it is allowed to do with it. Both come
@@ -101,6 +108,25 @@ function githubChecks(checkBindings = false): Check[] {
   }
 }
 
+// A configuration that cannot be read says nothing about the credential, so it
+// fails as itself rather than as a key Linear rejected.
+function linearChecks(): Check[] {
+  let identity: LinearIdentity;
+  try {
+    identity = resolveLinearIdentity();
+  } catch (err) {
+    return [
+      failedCheck(
+        "linear.identity",
+        "Linear identity",
+        err instanceof Error ? err.message : String(err),
+        `repair ${FACTORY_CONFIG_FILE}, then: ${RESTART_SERVICE}`,
+      ),
+    ];
+  }
+  return linearIdentityChecks(identity, linearProbes);
+}
+
 export function preflightChecks(
   requires: WorkflowRequires,
   inputs?: Record<string, unknown>,
@@ -112,7 +138,7 @@ export function preflightChecks(
   const bindings =
     typeof inputs?.binding === "string" ? [inputs.binding] : (requires.bindings ?? []);
   return [
-    ...coreChecks(coreProbes, process.env, integrations),
+    ...(integrations.includes("linear") ? linearChecks() : []),
     ...(integrations.includes("github") ? githubChecks() : []),
     ...bindingChecks({ factoryRoot, names: bindings }),
     ...harnessChecks(requires.harnesses ?? []),
@@ -128,15 +154,19 @@ export function preflightChecks(
 // Without a workflow manifest, doctor checks integrations configured in the environment.
 export function doctorChecks(): Check[] {
   const profile = process.env.AWS_PROFILE;
-  const integrations: Integration[] = [];
-  if (process.env.LINEAR_API_KEY) integrations.push("linear");
+  // On once any variable of either mode is set, so a half-configured app, or
+  // credentials for the mode the config does not name, are reported against
+  // the configured mode rather than silently skipped.
+  const linearConfigured = Object.values(LINEAR_IDENTITY_VARIABLES)
+    .flat()
+    .some((name) => linearEnvValue(name) !== undefined);
   return [
-    ...coreChecks(coreProbes, process.env, integrations),
+    ...(linearConfigured ? linearChecks() : []),
     // Always: an App identity needs no environment variable to be configured,
     // so there is nothing to detect — the configuration itself is the answer.
     ...githubChecks(true),
-    // Keyed on the config rather than LINEAR_API_KEY: a Linear webhook switched
-    // on without its secret is a failure even where the key is missing too.
+    // Keyed on the config rather than the Linear credential: a Linear webhook
+    // switched on without its secret is a failure even where that is missing too.
     ...linearWebhookChecks({ factoryRoot }),
     ...bindingChecks({ factoryRoot }),
     ...webhookChecks({ factoryRoot }),

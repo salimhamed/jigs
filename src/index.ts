@@ -15,6 +15,7 @@ export {
   type Factory,
   type FactoryDefinition,
   type GitHubDefinition,
+  type LinearDefinition,
   type MergeDefinition,
   type Schedule,
   type TicketWorkflowInputs,

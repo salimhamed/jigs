@@ -35,6 +35,7 @@ async function customTaskFieldsAreReachable(): Promise<string> {
     review: { harness, prompt: (context) => `${context.task.service} ${context.headCommit}` },
     limits: { implementationReviewRounds: 1, ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
     merge: { by: "human", method: "squash", approval: { kind: "review" } },
+    postNote: async () => {},
     onLimit: async (limit) => ({
       action: "continue",
       instructions: limit.task.service,

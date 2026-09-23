@@ -15,6 +15,7 @@ import { pullRequestToken } from "../blocks/pull-requests/gate.ts";
 import { resourceAttribute } from "../blocks/runtime/resources.ts";
 import { resetGithubAuth } from "../providers/github-auth.ts";
 import * as linear from "../providers/linear.ts";
+import { resetLinearAuth } from "../providers/linear-auth.ts";
 import * as sql from "../steps/workspaces/sql.ts";
 import { makeFakeSql } from "../steps/workspaces/test-fixtures.ts";
 import * as queue from "./queue.ts";
@@ -119,6 +120,7 @@ beforeEach(() => {
   vi.stubEnv("LINEAR_WEBHOOK_SECRET", "linear-hook-secret");
   resumeHookMock.mockReset().mockRejectedValue(new HookNotFoundError("unclaimed-test-token"));
   resetGithubAuth();
+  resetLinearAuth();
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -127,6 +129,7 @@ afterEach(() => {
   // again from the data dir above.
   setWorld(undefined);
   resetGithubAuth();
+  resetLinearAuth();
 });
 
 const sign = (body: string, secret: string) =>

@@ -82,6 +82,10 @@ before claiming can collide with the run that already holds the ticket. Use
 `acquireTicket` to resolve, claim, and snapshot in the required order before
 starting protected work.
 
+Post ticket notes through the claim with `noteOnTicket(claim, note)` rather
+than the `postTicketNote` step. The claim records every comment the run posts,
+and `haltForHuman` skips them all when it looks for a human's reply.
+
 ## Validation ownership
 
 Give the responsible agent the acceptance criteria and repository access. It

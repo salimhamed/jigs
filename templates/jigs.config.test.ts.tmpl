@@ -18,11 +18,12 @@ test("every entry carries a zod inputs schema and a workflow", () => {
   }
 });
 
-test("the scaffold names its GitHub identity and merge policy outright", () => {
+test("the scaffold names its identities and merge policy outright", () => {
   // Both of these are what `jigs init` wrote into jigs.config.ts, from the
   // same value: identity and policy are independent settings, and the one this
   // factory was scaffolded for should still be the one it declares.
   expect(factory.github).toEqual({{GITHUB_EXPECTED}});
+  expect(factory.linear).toEqual({{LINEAR_EXPECTED}});
   expect(factory.merge).toEqual({{MERGE_EXPECTED}});
 });
 

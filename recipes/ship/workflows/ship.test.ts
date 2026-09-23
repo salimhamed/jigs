@@ -24,7 +24,7 @@ vi.mock("#jigs", async (importOriginal) => ({
   })),
   reviewTicket: vi.fn(async (): Promise<TicketHandoff> => handoff),
   setTicketStatus: vi.fn(async () => ({})),
-  postTicketNote: vi.fn(async () => {}),
+  noteOnTicket: vi.fn(async () => {}),
   resolveMergePolicy: vi.fn(async () => ({
     by: "human" as const,
     method: "squash" as const,
@@ -67,7 +67,7 @@ async function deliveredFor(inputs: Record<string, unknown>) {
   vi.mocked(delivery.deliverChange).mockClear();
   vi.mocked(jigs.release).mockClear();
   vi.mocked(jigs.setTicketStatus).mockClear();
-  vi.mocked(jigs.postTicketNote).mockClear();
+  vi.mocked(jigs.noteOnTicket).mockClear();
   vi.mocked(tickets.acquireLinearTicket).mockClear();
   await shipWorkflow({
     ...shipInputs.parse({ binding: "repo", ...inputs }),
@@ -116,11 +116,18 @@ test("ship moves its ticket as the recipe progresses", async () => {
   expect(jigs.setTicketStatus).toHaveBeenCalledWith(snapshot.id, "In Review");
   expect(jigs.setTicketStatus).toHaveBeenCalledWith(snapshot.id, "Done");
   expect(jigs.setTicketStatus).toHaveBeenCalledWith(snapshot.id, "Todo");
-  expect(jigs.postTicketNote).toHaveBeenCalledWith(snapshot.id, {
+  expect(jigs.noteOnTicket).toHaveBeenCalledWith(claim, {
     headline: "jigs finished work on ABC-123.",
     notes: ["Merged in acme/repo#1."],
     closing: "",
   });
+});
+
+test("a stopped delivery's note is posted through the ticket claim", async () => {
+  const options = await deliveredFor({ ticket: "ABC-123" });
+  const note = { headline: "jigs stopped work on ABC-123.", notes: ["open"], closing: "Retry." };
+  await options.postNote(note);
+  expect(jigs.noteOnTicket).toHaveBeenCalledWith(claim, note);
 });
 
 test("a successful delivery removes merged worktrees", async () => {

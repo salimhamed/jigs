@@ -59,6 +59,26 @@ test("custom comment steps receive only serializable halt data and no step-objec
   expect(checkForTicketHumanReply).toHaveBeenCalledExactlyOnceWith(
     "issue-1",
     "2026-09-11T00:00:00Z",
-    "posted",
+    ["posted"],
   );
+});
+
+test("a note posted through the claim is skipped when a later halt looks for a reply", async () => {
+  const claim = await claimTicket("issue-1", "AGE-1");
+  const checkForTicketHumanReply = vi.fn<LinearSteps["checkForTicketHumanReply"]>(async () => ({
+    reply: { commentId: "reply", body: "ok", author: { id: "u", name: "H" }, createdAt: "t2" },
+    cursor: "t2",
+  }));
+  const linear = bindLinearSteps({
+    ...defaults,
+    postTicketNote: async () => ({ commentId: "note" }),
+    postTicketHumanInputRequest: async () => ({ commentId: "question", postedAt: "t1" }),
+    checkForTicketHumanReply,
+  });
+  await linear.noteOnTicket(claim, { headline: "Starting.", notes: [], closing: "" });
+  await linear.haltForHuman(claim, { headline: "Which?", where: "review", onReply: "continue" });
+  expect(checkForTicketHumanReply).toHaveBeenCalledExactlyOnceWith("issue-1", "t1", [
+    "note",
+    "question",
+  ]);
 });

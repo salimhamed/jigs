@@ -119,6 +119,26 @@ export const githubSchema = z
     }
   });
 
+/**
+ * Who jigs is on Linear. `key` is a personal API key, so jigs acts as that user.
+ * `app` is a Linear OAuth application acting as itself, which mints its own
+ * token from a client id and secret.
+ *
+ * @remarks
+ * Only the mode lives in config. The secrets live in the factory's `.env`:
+ * `LINEAR_API_KEY` for `key`, `LINEAR_CLIENT_ID` and `LINEAR_CLIENT_SECRET`
+ * for `app`.
+ */
+export const linearIdentitySchema = z.discriminatedUnion("mode", [
+  z.strictObject({ mode: z.literal("key") }),
+  z.strictObject({ mode: z.literal("app") }),
+]);
+
+/** A factory's Linear settings. It holds exactly one Linear identity. */
+export const linearSchema = z.strictObject({
+  identity: linearIdentitySchema.default({ mode: "key" }),
+});
+
 /** Resolve the credentials for one account. */
 export function installationFor(
   identities: GithubIdentity[],
@@ -152,6 +172,7 @@ const factoryConfigSchema = z.looseObject({
   // Which GitHub credential jigs uses. Nothing downstream reads the identity
   // to decide policy — `merge` below states the policy outright.
   github: z.preprocess((block) => block ?? {}, githubSchema),
+  linear: z.preprocess((block) => block ?? {}, linearSchema),
   // This factory's merge policy: who merges, by which of GitHub's three merge
   // methods, and what signal permits it.
   release: releaseSchema.optional(),
@@ -166,6 +187,8 @@ export type WebhooksConfig = z.output<typeof webhooksSchema>;
 export type WebhookProvider = "github" | "linear";
 
 export type GithubIdentity = z.output<typeof githubIdentitySchema>;
+/** Who jigs is on Linear: a personal API key, or an OAuth application acting as itself. */
+export type LinearIdentity = z.output<typeof linearIdentitySchema>;
 export type AppIdentity = Extract<GithubIdentity, { mode: "app" }>;
 /** Credentials selected for one installation, after resolving the configured account map. */
 export type ResolvedAppIdentity = Omit<AppIdentity, "installations"> & {

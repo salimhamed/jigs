@@ -1,5 +1,8 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { writeFileSync } from "node:fs";
+import path from "node:path";
+import { afterEach, expect, onTestFinished, test, vi } from "vitest";
 import { models } from "../blocks/agents/harness-config.ts";
+import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { type Check, failedCheck, formatFailures, runChecks } from "./catalog.ts";
 import { doctorChecks, preflightChecks, type WorkflowRequires } from "./index.ts";
 
@@ -195,7 +198,7 @@ test("generic workflows require neither Linear nor GitHub credentials", async ()
 test("workflows check only explicitly declared integrations", async () => {
   vi.stubEnv("LINEAR_API_KEY", "");
   vi.stubEnv("GITHUB_TOKEN", "");
-  expect(preflightIds({ integrations: ["linear"] })).toEqual(["core.linear-api-key"]);
+  expect(preflightIds({ integrations: ["linear"] })).toEqual(["linear.identity"]);
   expect(preflightIds({ integrations: ["github"] })).toEqual([
     "github.identity",
     "github.merge-policy",
@@ -207,14 +210,55 @@ test("workflows check only explicitly declared integrations", async () => {
 
 test("doctor checks credentials only for configured integrations", () => {
   vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
-  vi.stubEnv("LINEAR_API_KEY", "");
+  for (const name of ["LINEAR_API_KEY", "LINEAR_CLIENT_ID", "LINEAR_CLIENT_SECRET"])
+    vi.stubEnv(name, "");
   vi.stubEnv("GITHUB_TOKEN", "");
   const ids = () => doctorChecks().map((check) => check.id);
-  expect(ids()).not.toContain("core.linear-api-key");
+  expect(ids()).not.toContain("linear.identity");
   expect(ids()).not.toContain("linear.webhook");
   // GitHub is not detected from the environment: an App identity sets no
   // variable, so the configuration is the only thing that could say.
   expect(ids()).toContain("github.identity");
   vi.stubEnv("LINEAR_API_KEY", "configured");
-  expect(ids()).toContain("core.linear-api-key");
+  expect(ids()).toContain("linear.identity");
+});
+
+test("doctor reports Linear app credentials against a factory configured for a key", async () => {
+  const factory = makeTmpDir();
+  onTestFinished(() => removeTmpDir(factory));
+  writeFileSync(
+    path.join(factory, "jigs.config.ts"),
+    "export default { service: { dashboardPort: 9090 } }",
+  );
+  vi.stubEnv("JIGS_FACTORY_ROOT", factory);
+  vi.stubEnv("LINEAR_API_KEY", "");
+  vi.stubEnv("LINEAR_CLIENT_ID", "client-id");
+  vi.stubEnv("LINEAR_CLIENT_SECRET", "client-secret");
+  const linear = doctorChecks().filter((check) => check.id === "linear.identity");
+  expect(linear).toHaveLength(1);
+  expect((await runChecks(linear)).checks[0]).toMatchObject({
+    ok: false,
+    reason: "linear.identity uses key but LINEAR_API_KEY is not set",
+  });
+});
+
+test("a factory config that cannot be read fails the Linear check as itself", async () => {
+  const factory = makeTmpDir();
+  onTestFinished(() => removeTmpDir(factory));
+  writeFileSync(
+    path.join(factory, "jigs.config.ts"),
+    'export default { service: { dashboardPort: 9090 }, linear: { identity: { mode: "nope" } } }',
+  );
+  vi.stubEnv("JIGS_FACTORY_ROOT", factory);
+  vi.stubEnv("LINEAR_API_KEY", "configured");
+  const report = await runChecks(preflightChecks({ integrations: ["linear"] }));
+  expect(report.checks).toEqual([
+    expect.objectContaining({
+      id: "linear.identity",
+      ok: false,
+      reason: expect.stringContaining("jigs.config.ts"),
+      repair: "repair jigs.config.ts, then: jigs service restart",
+    }),
+  ]);
+  expect(report.checks[0]).not.toMatchObject({ reason: expect.stringContaining("rejected") });
 });

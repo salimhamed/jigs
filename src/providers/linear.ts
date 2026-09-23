@@ -1,7 +1,9 @@
 // These read env and hit the network, so a caller must reach them only from
 // inside a "use step" function or from a route handler (the trigger's ticket
 // lookup, the run-ref resolver) — never from a workflow body, where both are
-// forbidden. LINEAR_API_URL is a test seam.
+// forbidden.
+
+import { LINEAR_API_URL, linearAuthFor } from "./linear-auth.ts";
 
 export interface LinearUser {
   id: string;
@@ -15,36 +17,71 @@ export interface LinearComment {
   user: LinearUser | null;
 }
 
+interface GraphqlBody<T> {
+  data?: T;
+  errors?: Array<{ message: string; extensions?: { code?: string } }>;
+}
+
+interface GraphqlReply<T> {
+  res: Response;
+  text: string;
+  body: GraphqlBody<T> | undefined;
+}
+
+function parseBody<T>(text: string): GraphqlBody<T> | undefined {
+  try {
+    return JSON.parse(text) as GraphqlBody<T>;
+  } catch {
+    return undefined;
+  }
+}
+
+// Linear names a rejected credential in the errors array as well as with a
+// 401, so either one retires a minted token.
+function rejectedCredential(reply: GraphqlReply<unknown>): boolean {
+  return (
+    reply.res.status === 401 ||
+    (reply.body?.errors?.some((error) => error.extensions?.code === "AUTHENTICATION_ERROR") ??
+      false)
+  );
+}
+
 async function linearGraphql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
-  const apiKey = process.env.LINEAR_API_KEY;
-  if (apiKey === undefined || apiKey === "") {
-    throw new Error("LINEAR_API_KEY is not set");
-  }
-  const url = process.env.LINEAR_API_URL ?? "https://api.linear.app/graphql";
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: apiKey },
-    body: JSON.stringify({ query, variables }),
-  });
-  if (!res.ok) {
-    throw new Error(`Linear API ${res.status}: ${await res.text()}`);
-  }
-  const json = (await res.json()) as {
-    data?: T;
-    errors?: Array<{ message: string }>;
+  const auth = linearAuthFor();
+  const post = async (): Promise<GraphqlReply<T>> => {
+    const res = await fetch(LINEAR_API_URL(), {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: await auth.authorization() },
+      body: JSON.stringify({ query, variables }),
+    });
+    const text = await res.text();
+    return { res, text, body: parseBody<T>(text) };
   };
-  const firstError = json.errors?.[0];
+  let reply = await post();
+  // A minted token outlived its welcome; a personal key would only fail again.
+  if (auth.identity.mode === "app" && rejectedCredential(reply)) {
+    auth.invalidate();
+    reply = await post();
+  }
+  const { res, text, body } = reply;
+  if (!res.ok) {
+    throw new Error(`Linear API ${res.status}: ${text}`);
+  }
+  if (body === undefined) {
+    throw new Error(`Linear API ${res.status}: response was not JSON: ${text}`);
+  }
+  const firstError = body.errors?.[0];
   if (firstError !== undefined) {
     throw new Error(`Linear GraphQL: ${firstError.message}`);
   }
-  if (json.data === undefined) {
+  if (body.data === undefined) {
     throw new Error("Linear GraphQL: response carried no data");
   }
-  return json.data;
+  return body.data;
 }
 
-// The preflight probe for LINEAR_API_KEY: the cheapest call that proves the
-// key is both present and accepted.
+// The preflight probe for the Linear identity: the cheapest call that proves
+// the credential is both present and accepted, and names who jigs is.
 export async function getViewer(): Promise<LinearUser> {
   const data = await linearGraphql<{ viewer: LinearUser }>("query { viewer { id name } }", {});
   return data.viewer;

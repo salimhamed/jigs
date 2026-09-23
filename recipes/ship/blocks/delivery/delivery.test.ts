@@ -20,7 +20,7 @@ import { pullRequestDescription } from "./outputs.ts";
 interface DeliverySteps {
   runAgent: typeof jigs.runAgent;
   pullRequestGate: typeof jigs.pullRequestGate;
-  postTicketNote: typeof jigs.postTicketNote;
+  postNote: PostDeliveryNote;
   readBranchState: typeof jigs.readBranchState;
   readWorktreeDiff: typeof jigs.readWorktreeDiff;
   pushBranch: typeof jigs.pushBranch;
@@ -35,7 +35,6 @@ interface DeliverySteps {
 vi.mock("#jigs", () => ({
   runAgent: vi.fn(),
   pullRequestGate: vi.fn(),
-  postTicketNote: vi.fn(),
   readBranchState: vi.fn(),
   readWorktreeDiff: vi.fn(),
   pushBranch: vi.fn(),
@@ -47,10 +46,12 @@ vi.mock("#jigs", () => ({
   replyToPullRequestReviewThread: vi.fn(),
   mergePullRequest: vi.fn(),
 }));
+// Handed to delivery through `options`; each test's steps supply what it does.
+const postNote = vi.fn<PostDeliveryNote>();
 function useSteps(steps: DeliverySteps) {
   vi.mocked(jigs.runAgent).mockImplementation(steps.runAgent);
   vi.mocked(jigs.pullRequestGate).mockImplementation(steps.pullRequestGate);
-  vi.mocked(jigs.postTicketNote).mockImplementation(steps.postTicketNote);
+  postNote.mockImplementation(steps.postNote);
   vi.mocked(jigs.readBranchState).mockImplementation(steps.readBranchState);
   vi.mocked(jigs.readWorktreeDiff).mockImplementation(steps.readWorktreeDiff);
   vi.mocked(jigs.pushBranch).mockImplementation(steps.pushBranch);
@@ -74,7 +75,12 @@ import {
   defaultRevisionPrompt,
 } from "./prompts.ts";
 import { implementationReport, type ReviewFinding, reviewVerdict } from "./review.ts";
-import type { ApprovedChange, DeliverChangeOptions, FollowPullRequestOptions } from "./types.ts";
+import type {
+  ApprovedChange,
+  DeliverChangeOptions,
+  FollowPullRequestOptions,
+  PostDeliveryNote,
+} from "./types.ts";
 
 // The real gate reaches the SDK through this one hook. Resolving straight
 // through turns a suspension into the next round, which is all these tests
@@ -151,6 +157,7 @@ const options: DeliverChangeOptions = {
   review: { harness: { kind: "claude", model: "reviewer" } },
   limits: { implementationReviewRounds: 2, ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
   merge: HUMAN_MERGE,
+  postNote,
 };
 
 function setup(wakes: PullRequestWake[] = [{ kind: "closed", merged: true }]) {
@@ -175,7 +182,7 @@ function setup(wakes: PullRequestWake[] = [{ kind: "closed", merged: true }]) {
   const steps: DeliverySteps = {
     runAgent,
     pullRequestGate: gate,
-    postTicketNote: vi.fn().mockResolvedValue(undefined),
+    postNote: vi.fn().mockResolvedValue(undefined),
     readBranchState: vi.fn().mockResolvedValue({ commits: 1, headSha: "new", dirty: false }),
     readWorktreeDiff: vi.fn().mockResolvedValue("diff"),
     pushBranch: vi.fn().mockResolvedValue({ headSha: "new" }),
@@ -471,11 +478,8 @@ describe("delivery", () => {
       "The work is pushed on branch fix",
     );
     expect(steps.pushBranch).toHaveBeenCalledWith("/work", "fix");
-    expect(steps.postTicketNote).toHaveBeenCalledOnce();
-    const [issueId, note] = vi.mocked(steps.postTicketNote).mock.calls[0] ?? [];
-    // The work item's address at its source, never the key a human reads: the
-    // note step posts through Linear's CommentCreateInput, which wants the id.
-    expect(issueId).toBe("68bc9696-35d5-442d-ab56-214c8cfefbec");
+    expect(steps.postNote).toHaveBeenCalledOnce();
+    const [note] = vi.mocked(steps.postNote).mock.calls[0] ?? [];
     expect(note?.headline).toContain("internal-42");
     expect(note?.notes).toEqual([
       "The check never fires",
@@ -500,7 +504,7 @@ describe("delivery", () => {
       }),
     ).rejects.toThrow("The work is pushed on branch fix");
     expect(steps.pushBranch).toHaveBeenCalledWith("/work", "fix");
-    expect(steps.postTicketNote).toHaveBeenCalledOnce();
+    expect(steps.postNote).toHaveBeenCalledOnce();
   });
 
   it("only adds the explicitly granted attempts and passes human direction", async () => {
@@ -633,6 +637,7 @@ describe("delivery", () => {
       change: { ...approved, attempts: { ...approved.attempts }, sessions: {}, review: [] },
       pr,
       implementation: options.implementation,
+      postNote: options.postNote,
       limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
       merge: HUMAN_MERGE,
     });
@@ -686,6 +691,7 @@ describe("delivery", () => {
       change: { ...approved, attempts: { ...approved.attempts }, sessions: {}, review: [] },
       pr,
       implementation: options.implementation,
+      postNote: options.postNote,
       limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 2 },
       merge: HUMAN_MERGE,
     });
@@ -777,6 +783,7 @@ describe("delivery", () => {
       change: { ...approved, attempts: { ...approved.attempts }, sessions: {}, review: [] },
       pr,
       implementation: options.implementation,
+      postNote: options.postNote,
       limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 3 },
       merge: HUMAN_MERGE,
     });
@@ -797,7 +804,7 @@ describe("delivery", () => {
       "pull request owner/repo#1 was closed unmerged",
     );
     expect(steps.pushBranch).toHaveBeenCalledWith("/work", "fix");
-    expect(steps.postTicketNote).toHaveBeenCalledOnce();
+    expect(steps.postNote).toHaveBeenCalledOnce();
   });
 
   it("retries a merge refused for a state that passes, and says so once", async () => {
@@ -918,7 +925,7 @@ describe("delivery", () => {
       "CI repair attempt 1 produced no new clean commit. The work is pushed on branch fix",
     );
     expect(steps.pushBranch).toHaveBeenCalledWith("/work", "fix");
-    expect(steps.postTicketNote).toHaveBeenCalledOnce();
+    expect(steps.postNote).toHaveBeenCalledOnce();
   });
 
   it("spends one revision round per feedback wake and stops at the budget", async () => {
@@ -1139,6 +1146,7 @@ describe("delivery", () => {
         change: { ...approved, attempts: { ...approved.attempts }, sessions: {}, review: [] },
         pr,
         implementation: options.implementation,
+        postNote: options.postNote,
         [role]: { ...options.implementation, prompt: () => "Follow TASK.md" },
         limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
         merge: HUMAN_MERGE,
@@ -1172,6 +1180,7 @@ describe("delivery", () => {
       },
       pr,
       implementation: options.implementation,
+      postNote: options.postNote,
       ciRepair: { ...options.implementation, prompt: () => "Follow TASK.md" },
       limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
       merge: HUMAN_MERGE,
@@ -1290,6 +1299,7 @@ describe("delivery", () => {
       change: { ...approved, attempts: { ...approved.attempts }, sessions: {}, review: [] },
       pr,
       implementation: options.implementation,
+      postNote: options.postNote,
       limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
       merge: HUMAN_MERGE,
     });
@@ -1313,6 +1323,7 @@ describe("delivery", () => {
       change: { ...approved, attempts: { ...approved.attempts }, sessions, review: [] },
       pr,
       implementation: options.implementation,
+      postNote: options.postNote,
       limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
       merge: HUMAN_MERGE,
     });
@@ -1375,6 +1386,7 @@ describe("role sessions across harness changes", () => {
       },
       pr,
       implementation: options.implementation,
+      postNote: options.postNote,
       ciRepair: { harness: current },
       limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
       merge: HUMAN_MERGE,

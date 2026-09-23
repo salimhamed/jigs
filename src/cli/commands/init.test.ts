@@ -294,14 +294,14 @@ test("the scaffold states an identity and the approval signal that matches it", 
 // test is red on day one is the failure this guards.
 const scaffoldedExpectations = (dir: string) => {
   const text = readFileSync(path.join(dir, "jigs.config.test.ts"), "utf8");
-  const [, github, merge] =
-    /expect\(factory\.github\)\.toEqual\((.+?)\);\n\s*expect\(factory\.merge\)\.toEqual\((.+?)\);/s.exec(
+  const [, github, linear, merge] =
+    /expect\(factory\.github\)\.toEqual\((.+?)\);\n\s*expect\(factory\.linear\)\.toEqual\((.+?)\);\n\s*expect\(factory\.merge\)\.toEqual\((.+?)\);/s.exec(
       text,
     ) ?? [];
-  if (github === undefined || merge === undefined) {
-    throw new Error("the scaffolded test no longer asserts the identity and the merge policy");
+  if (github === undefined || linear === undefined || merge === undefined) {
+    throw new Error("the scaffolded test no longer asserts the identities and the merge policy");
   }
-  return { github: evaluate(github), merge: evaluate(merge) };
+  return { github: evaluate(github), linear: evaluate(linear), merge: evaluate(merge) };
 };
 
 // Both files carry settings objects rather than data formats, so both are read
@@ -318,29 +318,61 @@ const scaffoldedConfig = (dir: string) => {
   );
   return evaluate(body.replace(/workflows:\s*\{[^}]*\},?/s, "")) as {
     github: unknown;
+    linear: unknown;
     merge: unknown;
   };
 };
 
-test.each(["pat", "app"] as const)(
-  "the %s scaffold's own test asserts what its config declares",
-  async (mode) => {
+test.each([
+  ["pat", "key"],
+  ["app", "app"],
+] as const)(
+  "the %s/%s scaffold's own test asserts what its config declares",
+  async (mode, linearMode) => {
     const dir = scaffold(`${mode}-agreement`);
     await initFactory({
       cwd: dir,
       out: () => {},
       identity: mode === "app" ? APP : { mode: "pat" },
+      linearIdentity: { mode: linearMode },
     });
     const expectations = scaffoldedExpectations(dir);
     const config = scaffoldedConfig(dir);
     expect(config.github).toEqual(expectations.github);
+    expect(config.linear).toEqual({ identity: { mode: linearMode } });
+    expect(config.linear).toEqual(expectations.linear);
     expect(config.merge).toEqual(expectations.merge);
     // And what it declares is what jigs accepts, so the first `jigs up` loads.
-    expect(parseFactoryConfig({ service: { dashboardPort: 9090 }, ...config }).github).toEqual(
-      expectations.github,
-    );
+    const parsed = parseFactoryConfig({ service: { dashboardPort: 9090 }, ...config });
+    expect(parsed.github).toEqual(expectations.github);
+    expect(parsed.linear).toEqual(expectations.linear);
   },
 );
+
+test("the scaffold names its Linear identity and the variables that mode reads", async () => {
+  const keyFactory = scaffold("key-factory");
+  const { lines: keyLines } = await init(keyFactory);
+  const key = readFileSync(path.join(keyFactory, "jigs.config.ts"), "utf8");
+  expect(key).toContain('identity: { mode: "key" }');
+  expect(key).toContain("LINEAR_API_KEY");
+  expect(keyLines.join("\n")).toContain("whoever owns LINEAR_API_KEY");
+
+  const appFactory = scaffold("linear-app-factory");
+  const lines: string[] = [];
+  await initFactory({
+    cwd: appFactory,
+    out: (line) => lines.push(line),
+    linearIdentity: { mode: "app" },
+  });
+  const app = readFileSync(path.join(appFactory, "jigs.config.ts"), "utf8");
+  expect(app).toContain('identity: { mode: "app" }');
+  expect(app).toContain("LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET");
+  expect(lines.join("\n")).toContain("set LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET in .env");
+  // Both modes' slots are scaffolded, so switching mode needs no new .env line.
+  const example = readFileSync(path.join(appFactory, ".env.example"), "utf8");
+  for (const name of ["LINEAR_API_KEY=", "LINEAR_CLIENT_ID=", "LINEAR_CLIENT_SECRET="])
+    expect(example).toContain(name);
+});
 
 test("app mode is refused rather than stubbed when a fact is missing", () => {
   expect(() => resolveIdentityOptions("app", {})).toThrow("--github-app-id");

@@ -30,6 +30,8 @@ test("explicit GitHub flags reach the scaffold through the CLI parser", () => {
       "human",
       "--git-co-author",
       "Human <human@example.com>",
+      "--linear-identity-mode",
+      "app",
     );
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
@@ -61,6 +63,7 @@ test("explicit GitHub flags reach the scaffold through the CLI parser", () => {
         coAuthor: "Human <human@example.com>",
       },
     ]);
+    expect(config.linear).toEqual({ identity: { mode: "app" } });
     expect(config.bindings["example-alias"]?.remote).toBe("git@github.com:some-org/example.git");
   } finally {
     rmSync(cwd, { recursive: true, force: true });

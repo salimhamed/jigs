@@ -30,6 +30,7 @@ export {
 } from "./halt-for-human.ts";
 export { type AcquireTicketSteps, acquireTicket } from "./prelude.ts";
 export {
+  noteOnTicket,
   type PostTicketNote,
   type ReviewTicketOptions,
   reviewTicket,

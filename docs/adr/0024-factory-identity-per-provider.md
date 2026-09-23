@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # A factory has its own identity on each provider

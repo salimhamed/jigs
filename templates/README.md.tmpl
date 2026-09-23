@@ -64,7 +64,8 @@ Copied source is yours to edit; package upgrades do not overwrite it. `ship`
 reviews a Linear ticket, implements and reviews a change, opens a pull request,
 handles review and CI, and requests release after merge. Failed runs can retain
 files for `jigs resources list` and preview-first `jigs resources prune`. Set
-`LINEAR_API_KEY`, configure the GitHub
+the Linear identity's credentials in `.env` (`LINEAR_API_KEY`, or
+`LINEAR_CLIENT_ID` and `LINEAR_CLIENT_SECRET` for an app), configure the GitHub
 identity, and install/authenticate its agent harnesses before running it.
 
 ```sh

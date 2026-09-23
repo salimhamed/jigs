@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import readline from "node:readline/promises";
 import { Command, Option } from "commander";
+import type { LinearIdentity } from "../config/factory-config.ts";
 import { JigsError } from "../errors.ts";
 import { bindRepo } from "./commands/bind.ts";
 import { listBindings } from "./commands/bindings.ts";
@@ -161,13 +162,29 @@ program
     "--git-co-author <author>",
     '"Name <email>" for merge commit trailers (--github-identity-mode app)',
   )
-  .action(async (options: { githubIdentityMode: IdentityMode } & AppIdentityOptions) => {
-    await initFactory({
-      cwd: process.cwd(),
-      out,
-      identity: resolveIdentityOptions(options.githubIdentityMode, options),
-    });
-  });
+  .addOption(
+    new Option(
+      "--linear-identity-mode <mode>",
+      "which Linear credential this factory is written for",
+    )
+      .choices(["key", "app"])
+      .default("key"),
+  )
+  .action(
+    async (
+      options: {
+        githubIdentityMode: IdentityMode;
+        linearIdentityMode: LinearIdentity["mode"];
+      } & AppIdentityOptions,
+    ) => {
+      await initFactory({
+        cwd: process.cwd(),
+        out,
+        identity: resolveIdentityOptions(options.githubIdentityMode, options),
+        linearIdentity: { mode: options.linearIdentityMode },
+      });
+    },
+  );
 
 const recipe = program.command("recipe").description("copy a shipped workflow into this factory");
 recipe

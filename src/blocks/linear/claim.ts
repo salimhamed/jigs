@@ -47,6 +47,11 @@ export interface TicketClaim {
   identifier: string;
   token: string;
   hook: Hook<unknown>;
+  /**
+   * Every comment this run has posted on the ticket. A parked run skips these
+   * when it looks for a human's reply.
+   */
+  postedCommentIds: string[];
 }
 
 // Must be the workflow body's first await: getConflict() suspends to commit
@@ -66,5 +71,5 @@ export async function claimTicket(issueId: string, identifier: string): Promise<
   if (conflict !== null) {
     throw new ClaimConflictError(token, conflict.runId);
   }
-  return { issueId, identifier, token, hook };
+  return { issueId, identifier, token, hook, postedCommentIds: [] };
 }

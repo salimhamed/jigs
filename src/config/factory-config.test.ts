@@ -414,6 +414,23 @@ test("an app identity needs every fact a token cannot be minted without", () => 
   );
 });
 
+test("a factory that states no Linear identity acts with a personal key", () => {
+  expect(withSettings({}).linear).toEqual({ identity: { mode: "key" } });
+  expect(withSettings({ linear: {} }).linear).toEqual({ identity: { mode: "key" } });
+});
+
+test("a Linear identity is key or app and carries nothing else", () => {
+  for (const mode of ["key", "app"]) {
+    expect(withSettings({ linear: { identity: { mode } } }).linear.identity).toEqual({ mode });
+  }
+  expect(() => withSettings({ linear: { identity: { mode: "pat" } } })).toThrow("linear.identity");
+  // Secrets live in .env, so a client id in config is refused, not ignored.
+  expect(() => withSettings({ linear: { identity: { mode: "app", clientId: "abc" } } })).toThrow(
+    "clientId",
+  );
+  expect(() => withSettings({ linear: { identities: [{ mode: "key" }] } })).toThrow("identities");
+});
+
 test("a label approval is nothing without the label's name", () => {
   expect(() => withSettings({ merge: { approval: { kind: "label" } } })).toThrow("name");
   expect(

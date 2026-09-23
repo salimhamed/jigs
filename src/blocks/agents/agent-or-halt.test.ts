@@ -9,6 +9,7 @@ const claim = {
   issueId: "issue-1",
   identifier: "AGE-420",
   token: "linear:ticket:issue-1",
+  postedCommentIds: [] as string[],
 } as TicketClaim;
 
 const config = {

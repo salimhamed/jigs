@@ -10,7 +10,7 @@
 
 import type { Worktree } from "@jigs-ai/jigs";
 import { harnesses } from "@jigs-ai/jigs/blocks/agents";
-import type { HaltForHumanFn, TicketClaim } from "@jigs-ai/jigs/blocks/linear";
+import type { HaltForHumanFn, TicketClaim, TicketNote } from "@jigs-ai/jigs/blocks/linear";
 import type { MergePolicy, PullRequestRef } from "@jigs-ai/jigs/blocks/pull-requests";
 import { expect, test } from "vitest";
 import type * as delivery from "./delivery.ts";
@@ -21,6 +21,7 @@ import type {
   ImplementationPromptContext,
   LimitReached,
   OnDeliveryLimit,
+  PostDeliveryNote,
   ReviewAgent,
   ReviewPromptContext,
   WorkItem,
@@ -32,6 +33,7 @@ declare const implementAndReview: Delivery["implementAndReview"];
 declare const publishApprovedChange: Delivery["publishApprovedChange"];
 declare const followPullRequest: Delivery["followPullRequest"];
 declare const haltForHuman: HaltForHumanFn;
+declare const noteOnTicket: (claim: TicketClaim, note: TicketNote) => Promise<void>;
 // A step rather than a bound block, so it has no place in the binder's type.
 declare const resolveMergePolicy: (binding: string) => Promise<MergePolicy>;
 
@@ -40,6 +42,7 @@ declare const worktree: Worktree;
 declare const implementation: ImplementationAgent;
 declare const review: ReviewAgent;
 declare const checkSecurity: (change: ApprovedChange) => Promise<void>;
+declare const postNote: PostDeliveryNote;
 
 // "Choose agents and budgets"
 async function chooseAgentsAndBudgets() {
@@ -55,6 +58,7 @@ async function chooseAgentsAndBudgets() {
       pullRequestRevisionRounds: 4,
     },
     merge: await resolveMergePolicy("application"),
+    postNote: (note) => noteOnTicket(claim, note),
   });
   return result;
 }
@@ -81,6 +85,7 @@ async function configureEachRoleIndependently() {
       pullRequestRevisionRounds: 4,
     },
     merge: await resolveMergePolicy("application"),
+    postNote: (note) => noteOnTicket(claim, note),
   });
   return result;
 }
@@ -143,6 +148,7 @@ interface Incident extends WorkItem {
 
 declare const incident: Incident;
 declare const notifyOncall: (service: string, pr: PullRequestRef) => Promise<void>;
+declare const postIncidentNote: (incident: Incident, note: TicketNote) => Promise<void>;
 
 async function customTaskFieldsSurvive() {
   const result = await deliverChange({
@@ -165,6 +171,7 @@ async function customTaskFieldsSurvive() {
       pullRequestRevisionRounds: 4,
     },
     merge: await resolveMergePolicy("application"),
+    postNote: (note) => postIncidentNote(incident, note),
     onLimit: async (limit) => ({
       action: "continue",
       instructions: `The on-call owner of ${limit.task.service} asked for one more pass.`,
@@ -183,6 +190,7 @@ async function composeThePhases(): Promise<DeliveryResult> {
     implementation,
     review,
     limits: { implementationReviewRounds: 5 },
+    postNote,
   });
   await checkSecurity(built.change);
 
@@ -198,6 +206,7 @@ async function composeThePhases(): Promise<DeliveryResult> {
     implementation,
     limits: { ciFixAttempts: 3, pullRequestRevisionRounds: 4 },
     merge: await resolveMergePolicy("application"),
+    postNote,
   });
 }
 
@@ -209,6 +218,7 @@ async function onlyApprovedWorkPublishes() {
     implementation,
     review,
     limits: { implementationReviewRounds: 1 },
+    postNote,
   });
   return publishApprovedChange({
     change: built.change,

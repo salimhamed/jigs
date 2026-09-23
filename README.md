@@ -58,7 +58,8 @@ not the ones below.
 The factory separates its configuration, generated integration, and custom code:
 
 - `jigs.config.ts` declares service ports, bindings, deferred workflow imports,
-  schedules, the GitHub identity jigs runs as, and this factory's merge policy.
+  schedules, the GitHub and Linear identities jigs runs as, and this factory's
+  merge policy.
   Workflow modules export their function, inputs and requirements together.
 - `jigs.ts` is generated, committed integration code: named durable step wrappers
   and ready-to-call jigs blocks. Never put custom code here. `jigs generate`
@@ -130,8 +131,12 @@ integration credentials are configured, use plain `jigs up` and `jigs doctor`.
 `GITHUB_TOKEN` is the credential of the default `pat` identity, where jigs acts
 as you. `jigs init --github-identity-mode app` scaffolds the other one, where jigs acts as
 a GitHub App and you can approve the pull requests it opens; it needs an App
-registration and its private key instead, and no `GITHUB_TOKEN`. Both, and the
-merge policy beside them, are in [setup](docs/setup.md).
+registration and its private key instead, and no `GITHUB_TOKEN`. Linear works
+the same way: the default `key` identity reads `LINEAR_API_KEY` and acts as
+you, and `jigs init --linear-identity-mode app` makes jigs a Linear OAuth app
+that reads `LINEAR_CLIENT_ID` and `LINEAR_CLIENT_SECRET`, so its mentions
+reach your inbox. All of them, and the merge policy beside them, are in
+[setup](docs/setup.md).
 
 `jigs up` takes the factory from whatever state it is in to a running service:
 install, Postgres World, migrations, build, start and wait until the service

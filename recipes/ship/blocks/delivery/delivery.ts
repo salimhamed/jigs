@@ -15,7 +15,6 @@ import {
   commentOnPullRequest,
   mergePullRequest,
   openPullRequest,
-  postTicketNote,
   pullRequestGate,
   pushApprovedChange,
   pushBranch,
@@ -57,6 +56,7 @@ import type {
   ImplementationPromptContext,
   LimitReached,
   OnDeliveryLimit,
+  PostDeliveryNote,
   PublishApprovedChangeOptions,
   PullRequestRevisionPromptContext,
   ReviewPromptContext,
@@ -163,16 +163,16 @@ async function runRole<
 }
 
 // A delivery that stops short first pushes, so the commits outlive `jigs
-// sweep`, then says on the ticket what is still open and where the work is.
-// Nothing waits on a reply.
+// sweep`, then says through `postNote` what is still open and where the work
+// is. Nothing waits on a reply.
 async function stopDelivery<TTask extends WorkItem>(
   change: DeliveryChange<TTask>,
   limit: LimitReached<TTask>,
   reason: string,
-  on?: DeliveryCallbacks,
+  options: { postNote: PostDeliveryNote; on?: DeliveryCallbacks },
 ): Promise<never> {
   await pushBranch(change.worktree.path, change.worktree.branch);
-  await postTicketNote(change.task.id, {
+  await options.postNote({
     headline: reason,
     notes: [
       ...limit.findings,
@@ -181,7 +181,7 @@ async function stopDelivery<TTask extends WorkItem>(
     closing:
       "Nothing is waiting on a reply here. Settle the open findings and start the run again, or take the branch over by hand.",
   });
-  await on?.stopped?.(reason);
+  await options.on?.stopped?.(reason);
   throw new JigsError(
     `${reason} The work is pushed on branch ${change.worktree.branch}.`,
     limit.findings.length === 0 ? undefined : limit.findings.join("\n"),
@@ -218,7 +218,7 @@ export async function implementAndReview<TTask extends WorkItem = WorkItem>(
           change,
           limit,
           `jigs stopped work on ${change.task.key} after ${limit.attempts} implementation review round(s) without an approved change.`,
-          options.on,
+          options,
         );
       budget += extension.additionalAttempts;
       instructions = extension.instructions;
@@ -257,7 +257,7 @@ export async function implementAndReview<TTask extends WorkItem = WorkItem>(
           findings: [reason],
         },
         `jigs stopped work on ${change.task.key} during implementation review round ${round}. ${reason}`,
-        options.on,
+        options,
       );
     }
     const reviewed: PromptFields<ReviewPromptContext<TTask>> = {
@@ -378,7 +378,7 @@ export async function followPullRequest<TTask extends WorkItem = WorkItem>(
           findings: [],
         },
         `jigs stopped work on ${change.task.key} because pull request ${pr.owner}/${pr.repo}#${pr.number} was closed unmerged.`,
-        options.on,
+        options,
       );
     }
     if (wake.kind === "merge-ready") {
@@ -442,7 +442,7 @@ export async function followPullRequest<TTask extends WorkItem = WorkItem>(
           change,
           limit,
           `jigs stopped work on ${change.task.key} after ${limit.attempts} ${phase} attempt(s).`,
-          options.on,
+          options,
         );
       budgets[counter] += extension.additionalAttempts;
       instructions[counter] = extension.instructions;
@@ -489,7 +489,7 @@ export async function followPullRequest<TTask extends WorkItem = WorkItem>(
             findings: ["The CI repair did not produce a clean, new commit."],
           },
           `jigs stopped work on ${change.task.key} because CI repair attempt ${change.attempts[counter]} produced no new clean commit.`,
-          options.on,
+          options,
         );
       }
       await pushBranch(change.worktree.path, change.worktree.branch);

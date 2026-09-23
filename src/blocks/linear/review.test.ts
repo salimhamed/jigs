@@ -17,6 +17,7 @@ const claim = {
   issueId: "68bc9696-35d5-442d-ab56-214c8cfefbec",
   identifier: "AGE-313",
   token: "linear:ticket:68bc9696-35d5-442d-ab56-214c8cfefbec",
+  postedCommentIds: [] as string[],
 } as TicketClaim;
 
 const snapshot: TicketSnapshot = {
@@ -66,6 +67,7 @@ const fakeHaltForHuman: HaltForHumanFn = async (humanClaim, halt) => {
 
 const fakePostTicketNote: PostTicketNote = async (issueId, note) => {
   noteCalls.push({ issueId, ...note });
+  return { commentId: `note-${noteCalls.length}` };
 };
 
 // The reply landed on the ticket, so each re-read carries one more comment.
@@ -93,6 +95,7 @@ beforeEach(() => {
   agentCalls = [];
   humanCalls = [];
   noteCalls = [];
+  claim.postedCommentIds = [];
   verdicts = [];
   fetched = [];
 });
@@ -163,6 +166,8 @@ test("a proceed verdict with assumptions posts them as a note that blocks nothin
   expect(noteCalls[0]?.issueId).toBe(snapshot.id);
   expect(noteCalls[0]?.headline).toContain("AGE-313");
   expect(noteCalls[0]?.notes).toEqual(["Only the validate script changes."]);
+  // Recorded, so a later halt in this run does not read the note as a reply.
+  expect(claim.postedCommentIds).toEqual(["note-1"]);
   // Posted, not suspended on: the handoff comes straight back.
   expect(humanCalls).toHaveLength(0);
   expect(result.assumptions).toEqual(["Only the validate script changes."]);
