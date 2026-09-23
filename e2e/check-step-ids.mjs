@@ -143,7 +143,7 @@ function factoryModules() {
 const unresolvedSpecifiers = (source) =>
   source.match(/(?:from|import|require)\s*\(?\s*["']#[^"']+["']/g) ?? [];
 
-// The CLI half of a package that is now also the service (ADR 0017). `jigs
+// The CLI half of a package that is now also the service (ADR 0006). `jigs
 // init` runs from `pnpm dlx` on a machine that has installed nothing, and the
 // four runtime peers are the factory's to supply, so `dist/cli.js` must reach
 // none of the service runtime — nitro, hono, postgres, croner, the
