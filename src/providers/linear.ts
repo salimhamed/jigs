@@ -1,7 +1,9 @@
 // These read env and hit the network, so a caller must reach them only from
 // inside a "use step" function or from a route handler (the trigger's ticket
 // lookup, the run-ref resolver) — never from a workflow body, where both are
-// forbidden. LINEAR_API_URL is a test seam.
+// forbidden.
+
+import { LINEAR_API_URL, linearAuthFor } from "./linear-auth.ts";
 
 export interface LinearUser {
   id: string;
@@ -16,16 +18,19 @@ export interface LinearComment {
 }
 
 async function linearGraphql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
-  const apiKey = process.env.LINEAR_API_KEY;
-  if (apiKey === undefined || apiKey === "") {
-    throw new Error("LINEAR_API_KEY is not set");
+  const auth = linearAuthFor();
+  const post = async () =>
+    fetch(LINEAR_API_URL(), {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: await auth.authorization() },
+      body: JSON.stringify({ query, variables }),
+    });
+  let res = await post();
+  // A minted token outlived its welcome; a personal key would only fail again.
+  if (res.status === 401 && auth.identity.mode === "app") {
+    auth.invalidate();
+    res = await post();
   }
-  const url = process.env.LINEAR_API_URL ?? "https://api.linear.app/graphql";
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: apiKey },
-    body: JSON.stringify({ query, variables }),
-  });
   if (!res.ok) {
     throw new Error(`Linear API ${res.status}: ${await res.text()}`);
   }
@@ -43,8 +48,8 @@ async function linearGraphql<T>(query: string, variables: Record<string, unknown
   return json.data;
 }
 
-// The preflight probe for LINEAR_API_KEY: the cheapest call that proves the
-// key is both present and accepted.
+// The preflight probe for the Linear identity: the cheapest call that proves
+// the credential is both present and accepted, and names who jigs is.
 export async function getViewer(): Promise<LinearUser> {
   const data = await linearGraphql<{ viewer: LinearUser }>("query { viewer { id name } }", {});
   return data.viewer;

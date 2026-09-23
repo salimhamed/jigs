@@ -16,8 +16,9 @@ import {
   readFactoryConfig,
 } from "../config/factory-config.ts";
 import { factoryEnvValue } from "../config/factory-env.ts";
-import { factoryRoot } from "../config/factory-root.ts";
 import { JigsError } from "../errors.ts";
+import { credentialRoot, setCredentialRoot } from "./credential-root.ts";
+import { resetLinearAuth } from "./linear-auth.ts";
 
 export const GITHUB_API_BASE = (): string => process.env.GITHUB_API_URL ?? "https://api.github.com";
 
@@ -221,25 +222,19 @@ export function createGithubAuth(
 
 function environmentPat(): string | undefined {
   try {
-    return factoryEnvValue(currentFactoryRoot(), "GITHUB_TOKEN");
+    return factoryEnvValue(credentialRoot(), "GITHUB_TOKEN");
   } catch {
     // Outside a factory the shell is the only environment there is.
     return process.env.GITHUB_TOKEN;
   }
 }
 
-// The service answers for the factory it was started with; a CLI verb locates
-// one from the directory the operator typed it in, which is not necessarily
-// the process's own. Naming it is how the credential follows.
-let factoryRootOverride: string | null = null;
-
+/** Point every provider credential at one factory, for a CLI verb run outside it. */
 export function useFactoryRoot(root: string): void {
-  factoryRootOverride = root;
-  processAuth.clear();
-  processIdentities = null;
+  resetGithubAuth();
+  resetLinearAuth();
+  setCredentialRoot(root);
 }
-
-const currentFactoryRoot = (): string => factoryRootOverride ?? factoryRoot();
 
 /**
  * The identity this factory is configured with, with the private key path
@@ -249,7 +244,7 @@ const currentFactoryRoot = (): string => factoryRootOverride ?? factoryRoot();
 export function resolveGithubIdentities(root?: string): GithubIdentity[] {
   let dir: string;
   try {
-    dir = root ?? currentFactoryRoot();
+    dir = root ?? credentialRoot();
   } catch {
     return [{ mode: "pat" }];
   }
@@ -286,5 +281,5 @@ export function githubAuthFor(account: string): GithubAuth {
 export function resetGithubAuth(): void {
   processAuth.clear();
   processIdentities = null;
-  factoryRootOverride = null;
+  setCredentialRoot(null);
 }

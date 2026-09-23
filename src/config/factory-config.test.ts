@@ -425,9 +425,9 @@ test("a Linear identity is key or app and carries nothing else", () => {
   }
   expect(() => withSettings({ linear: { identity: { mode: "pat" } } })).toThrow("linear.identity");
   // Secrets live in .env, so a client id in config is refused, not ignored.
-  expect(() =>
-    withSettings({ linear: { identity: { mode: "app", clientId: "abc" } } }),
-  ).toThrow("clientId");
+  expect(() => withSettings({ linear: { identity: { mode: "app", clientId: "abc" } } })).toThrow(
+    "clientId",
+  );
   expect(() => withSettings({ linear: { identities: [{ mode: "key" }] } })).toThrow("identities");
 });
 

@@ -91,6 +91,7 @@ function reviewApproval(): void {
     bindings: {},
     service: { port: 8990, dashboardPort: 9090, pollIntervalSeconds: { github: 300, linear: 300 } },
     github: { identities: [{ mode: "pat" }] },
+    linear: { identity: { mode: "key" } },
     merge: { by: "human", method: "squash", approval: { kind: "review" } },
     agents: { env: [] },
   });
