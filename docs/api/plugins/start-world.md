@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.53.0
+# @jigs-ai/jigs v0.54.0
 
 Start the Workflow runtime and the jigs services that depend on it.
 
@@ -226,6 +226,50 @@ Injectable database operations and output used by the registry startup gate.
 
 ***
 
+### WebhookSecretGateDeps
+
+Injectable configuration and output used by the webhook startup gate.
+
+#### Properties
+
+##### error()?
+
+> `optional` **error**: (`line`) => `void`
+
+###### Parameters
+
+###### line
+
+`string`
+
+###### Returns
+
+`void`
+
+##### exit()?
+
+> `optional` **exit**: (`code`) => `void`
+
+###### Parameters
+
+###### code
+
+`number`
+
+###### Returns
+
+`void`
+
+##### webhooks()?
+
+> `optional` **webhooks**: () => `Promise`\<\{ `github`: \{ `enabled`: `boolean`; \}; `linear`: \{ `enabled`: `boolean`; \}; `url`: `string`; \} \| `undefined`\>
+
+###### Returns
+
+`Promise`\<\{ `github`: \{ `enabled`: `boolean`; \}; `linear`: \{ `enabled`: `boolean`; \}; `url`: `string`; \} \| `undefined`\>
+
+***
+
 ### WorldStartGateDeps
 
 Workflow World operations used by the final service startup gate.
@@ -343,6 +387,24 @@ Refuse service startup when a required agent harness is unavailable.
 ##### deps
 
 [`HarnessRuntimeGateDeps`](#harnessruntimegatedeps) = `{}`
+
+#### Returns
+
+`Promise`\<`boolean`\>
+
+***
+
+### gateOnWebhookSecrets()
+
+> **gateOnWebhookSecrets**(`deps`): `Promise`\<`boolean`\>
+
+Refuse service startup when an enabled webhook provider has no signing secret.
+
+#### Parameters
+
+##### deps
+
+[`WebhookSecretGateDeps`](#webhooksecretgatedeps) = `{}`
 
 #### Returns
 

@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.53.0
+# @jigs-ai/jigs v0.54.0
 
 Describe and render committed Git changes for review.
 

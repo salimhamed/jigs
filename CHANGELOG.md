@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.54.0](https://github.com/salimhamed/jigs/compare/jigs-v0.53.0...jigs-v0.54.0) (2026-09-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* `ingressUrl` is replaced by a `webhooks` block; webhooks are off unless enabled per provider.
+
+### Features
+
+* make webhooks optional ([#365](https://github.com/salimhamed/jigs/issues/365)) ([0c9f4d8](https://github.com/salimhamed/jigs/commit/0c9f4d8dc336b91bcc1db55d6577da748863509b))
+
 ## [0.53.0](https://github.com/salimhamed/jigs/compare/jigs-v0.52.2...jigs-v0.53.0) (2026-09-23)
 
 

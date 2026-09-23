@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.53.0
+# @jigs-ai/jigs v0.54.0
 
 Define a factory and describe its workflows, schedules, bindings and merge policy.
 
@@ -242,6 +242,32 @@ doctor` refer to, and one workflow can carry several.
 
 > `optional` **schedules**: `Record`\<`string`, [`Schedule`](#schedule)\>
 
+##### webhooks?
+
+> `optional` **webhooks**: `object`
+
+Which provider webhook routes the service mounts. Absent, it mounts none.
+
+###### github
+
+> **github**: `object` = `webhookProviderSchema`
+
+###### github.enabled
+
+> **enabled**: `boolean`
+
+###### linear
+
+> **linear**: `object` = `webhookProviderSchema`
+
+###### linear.enabled
+
+> **enabled**: `boolean`
+
+###### url
+
+> **url**: `string`
+
 ##### workflows
 
 > **workflows**: `Record`\<`string`, [`AnyWorkflowEntry`](#anyworkflowentry)\>
@@ -269,10 +295,6 @@ Operating settings and deferred workflow modules declared by a factory.
 ###### identities?
 
 > `optional` **identities**: (\{ `mode`: `"pat"`; \} \| \{ `appId`: `number`; `coAuthor?`: `string`; `installations`: `Record`\<`string`, `number`\>; `mode`: `"app"`; `operator`: `string`; `privateKeyPath`: `string`; \})[]
-
-##### ingressUrl?
-
-> `optional` **ingressUrl**: `string`
 
 ##### merge?
 
@@ -330,9 +352,50 @@ What to do with eligible resources after a completed run.
 
 > **dashboardPort**: `number`
 
+###### pollIntervalSeconds?
+
+> `optional` **pollIntervalSeconds**: `object`
+
+Seconds between the service's re-reads of each parked run, per
+provider. Each defaults to 300 and may not go below 30. Up to a tenth
+of the interval is taken off at random so services do not all poll at
+once.
+
+###### pollIntervalSeconds.github?
+
+> `optional` **github**: `number`
+
+###### pollIntervalSeconds.linear?
+
+> `optional` **linear**: `number`
+
 ###### port?
 
 > `optional` **port**: `number`
+
+##### webhooks?
+
+> `optional` **webhooks**: `object`
+
+###### github
+
+> **github**: `object` = `webhookProviderSchema`
+
+###### github.enabled
+
+> **enabled**: `boolean`
+
+###### linear
+
+> **linear**: `object` = `webhookProviderSchema`
+
+###### linear.enabled
+
+> **enabled**: `boolean`
+
+###### url
+
+> **url**: `string`
 
 ##### workflows
 
@@ -507,6 +570,25 @@ Ticket references are ordinary inputs; resolve them explicitly in a step.
 ##### S
 
 `S` *extends* `z.ZodType`\<\{ `ticket`: `string`; \}\>
+
+***
+
+### WebhooksDefinition
+
+> **WebhooksDefinition** = `z.input`\<*typeof* `webhooksSchema`\>
+
+Where provider webhooks reach the service, and which providers send them.
+Without this block the service still wakes parked runs by polling.
+
+#### Example
+
+```ts
+webhooks: {
+  url: "https://factory.example.ts.net",
+  github: { enabled: true },
+  linear: { enabled: false },
+},
+```
 
 ***
 
