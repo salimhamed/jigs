@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, type TestContext, test } from "vitest";
@@ -11,6 +11,21 @@ import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 const LINEAR_SERVER = "linear-personal";
 const LINEAR_TOOL = "get_issue";
 const globalMcpPath = path.join(homedir(), ".config", "mcp", "mcp.json");
+const baseUrl = process.env.JIGS_TEST_OPENAI_COMPATIBLE_BASE_URL;
+const localModel = process.env.JIGS_TEST_OPENAI_COMPATIBLE_MODEL;
+const localConfigured =
+  baseUrl !== undefined && baseUrl !== "" && localModel !== undefined && localModel !== "";
+const localReachable = localConfigured
+  ? await fetch(`${baseUrl.replace(/\/$/, "")}/models`, { signal: AbortSignal.timeout(3_000) })
+      .then((response) => response.ok)
+      .catch(() => false)
+  : false;
+// Credential shapes that must never reach the files a run leaves behind.
+const CREDENTIAL_MARKERS = [
+  /lin_(?:api|oauth)_[A-Za-z0-9]{8,}/,
+  /"(?:access|refresh)_token"\s*:/,
+  /Bearer [A-Za-z0-9._~+/-]{20,}/,
+];
 
 type GlobalMcpConfig = {
   mcpServers?: Record<string, { url?: unknown; auth?: unknown }>;
@@ -46,7 +61,7 @@ afterEach(() => {
   if (runId !== undefined) removePiRunState(runId);
 });
 
-test.skipIf(!existsSync(globalMcpPath))(
+test.skipIf(!existsSync(globalMcpPath) || !localConfigured || !localReachable)(
   "Pi calls the explicitly selected read-only Linear server through LM Studio",
   async (context: TestContext) => {
     const globalConfig = JSON.parse(readFileSync(globalMcpPath, "utf8")) as GlobalMcpConfig;
@@ -56,20 +71,13 @@ test.skipIf(!existsSync(globalMcpPath))(
         `blocked live test: ${LINEAR_SERVER} is not configured as an OAuth HTTP server in ${globalMcpPath}`,
       );
     }
-    const lmStudio = await fetch("http://127.0.0.1:1234/v1/models", {
-      signal: AbortSignal.timeout(3_000),
-    }).catch(() => undefined);
-    if (lmStudio === undefined)
-      context.skip("blocked live test: LM Studio is unavailable at http://127.0.0.1:1234/v1");
-    if (!lmStudio.ok)
-      context.skip(`blocked live test: LM Studio model endpoint returned HTTP ${lmStudio.status}`);
     tmp = makeTmpDir();
     const request = buildAgentRequest({
       harness: harnesses.pi(
         models.openaiCompatible({
           name: "lmstudio",
-          baseUrl: "http://127.0.0.1:1234/v1",
-          model: "qwen/qwen3.8-27b",
+          baseUrl: baseUrl as string,
+          model: localModel as string,
         }),
         {
           mcpServers: {
@@ -98,5 +106,17 @@ test.skipIf(!existsSync(globalMcpPath))(
       context.skip("blocked live test: Linear OAuth credentials are unavailable to pi-mcp-adapter");
     expect(result.text).toContain("AGE-511");
     expect(result.text).toContain("Support explicit pi MCP configuration");
+
+    const runState = piRunStatePath(runId);
+    expect(readdirSync(path.join(runState, "invocations"))).toEqual([]);
+    const left = readdirSync(runState, { recursive: true, encoding: "utf8" })
+      .map((name) => path.join(runState, name))
+      .filter((file) => statSync(file).isFile());
+    expect(left.length).toBeGreaterThan(0);
+    for (const file of left) {
+      const content = readFileSync(file, "utf8");
+      for (const marker of CREDENTIAL_MARKERS)
+        expect(marker.test(content), `${file} matches ${marker}`).toBe(false);
+    }
   },
 );

@@ -3,8 +3,16 @@ import { expect, test } from "vitest";
 import { z } from "zod";
 import { askAgent } from "../../../../blocks/agents/ask-agent.ts";
 import { harnesses, models } from "../../../../blocks/agents/harness-config.ts";
-import { executeAgent } from "../../execute-agent.ts";
-import { realPiAuthPath } from "../pi-home.ts";
+import { type DriverResolver, driverFor } from "../../drivers/index.ts";
+import { createPiDriver } from "../../drivers/pi.ts";
+import {
+  type AgentExecutionDependencies,
+  defaultAgentExecutionDependencies,
+  executeAgent,
+} from "../../execute-agent.ts";
+import { executePi, type PiExecutionOptions } from "../pi.ts";
+import { SUBMIT_RESULT_TOOL } from "../pi-extension.ts";
+import { preparePiInvocationHome, realPiAuthPath } from "../pi-home.ts";
 
 const baseUrl = process.env.JIGS_TEST_OPENAI_COMPATIBLE_BASE_URL;
 const localModel = process.env.JIGS_TEST_OPENAI_COMPATIBLE_MODEL;
@@ -29,9 +37,42 @@ function hasOpenaiCodexLogin(): boolean {
 
 const answer = z.object({ word: z.string(), count: z.number() });
 
+// Records each Pi launch so a test can prove which tools the ask exposed. The
+// result can only come from submit_result: requireResult rejects a turn whose
+// answer is JSON-looking text.
+function recordingDeps(): { deps: AgentExecutionDependencies; launches: PiExecutionOptions[] } {
+  const launches: PiExecutionOptions[] = [];
+  const pi = createPiDriver({
+    preparePiHome: (runId, plan) => preparePiInvocationHome(runId, plan),
+    executePi: (options) => {
+      launches.push(options);
+      return executePi(options);
+    },
+  });
+  return {
+    launches,
+    deps: {
+      ...defaultAgentExecutionDependencies,
+      resolveDriver: ((kind) => (kind === "pi" ? pi : driverFor(kind))) as DriverResolver,
+    },
+  };
+}
+
+function expectToolsOffThenSubmitResult(launches: PiExecutionOptions[]): void {
+  const [plain, structured] = launches;
+  expect(launches).toHaveLength(2);
+  expect(plain?.args).toContain("--no-tools");
+  expect(plain?.args).not.toContain("-e");
+  expect(plain?.requireResult).toBe(false);
+  const tools = structured?.args.indexOf("--tools") ?? -1;
+  expect(structured?.args[tools + 1]).toBe(SUBMIT_RESULT_TOOL);
+  expect(structured?.requireResult).toBe(true);
+}
+
 test.skipIf(!localConfigured || !localReachable)(
   "Pi asks an LM Studio OpenAI-compatible model for text and structured output",
   async () => {
+    const { deps, launches } = recordingDeps();
     const model = models.openaiCompatible({
       name: "lmstudio",
       baseUrl: baseUrl as string,
@@ -39,7 +80,8 @@ test.skipIf(!localConfigured || !localReachable)(
     });
     const plain = await askAgent(
       { harness: harnesses.pi(model), prompt: "Reply with exactly PONG." },
-      (wire) => executeAgent(wire, { workflowRunId: `live-pi-local-plain-${crypto.randomUUID()}` }),
+      (wire) =>
+        executeAgent(wire, { workflowRunId: `live-pi-local-plain-${crypto.randomUUID()}` }, deps),
     );
     const structured = await askAgent(
       {
@@ -47,20 +89,24 @@ test.skipIf(!localConfigured || !localReachable)(
         prompt: "Return the word sky and the number 3.",
         output: answer,
       },
-      (wire) => executeAgent(wire, { workflowRunId: `live-pi-local-json-${crypto.randomUUID()}` }),
+      (wire) =>
+        executeAgent(wire, { workflowRunId: `live-pi-local-json-${crypto.randomUUID()}` }, deps),
     );
     expect(plain.text.toUpperCase()).toContain("PONG");
     expect(structured.output).toEqual({ word: "sky", count: 3 });
+    expectToolsOffThenSubmitResult(launches);
   },
 );
 
 test.skipIf(!hasOpenaiCodexLogin())(
   "Pi asks OpenAI Codex gpt-5.5 for text and structured output",
   async () => {
+    const { deps, launches } = recordingDeps();
     const model = models.openaiCodex("gpt-5.5");
     const plain = await askAgent(
       { harness: harnesses.pi(model, { thinking: "low" }), prompt: "Reply with exactly PONG." },
-      (wire) => executeAgent(wire, { workflowRunId: `live-pi-codex-plain-${crypto.randomUUID()}` }),
+      (wire) =>
+        executeAgent(wire, { workflowRunId: `live-pi-codex-plain-${crypto.randomUUID()}` }, deps),
     );
     const structured = await askAgent(
       {
@@ -68,9 +114,11 @@ test.skipIf(!hasOpenaiCodexLogin())(
         prompt: "Return the word sky and the number 3.",
         output: answer,
       },
-      (wire) => executeAgent(wire, { workflowRunId: `live-pi-codex-json-${crypto.randomUUID()}` }),
+      (wire) =>
+        executeAgent(wire, { workflowRunId: `live-pi-codex-json-${crypto.randomUUID()}` }, deps),
     );
     expect(plain.text.toUpperCase()).toContain("PONG");
     expect(structured.output).toEqual({ word: "sky", count: 3 });
+    expectToolsOffThenSubmitResult(launches);
   },
 );

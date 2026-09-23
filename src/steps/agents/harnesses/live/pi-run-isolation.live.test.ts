@@ -1,6 +1,8 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { afterAll, beforeAll, expect, test } from "vitest";
+import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
+import { z } from "zod";
+import { runAgent } from "../../../../blocks/agents/agent.ts";
 import { harnesses, models } from "../../../../blocks/agents/harness-config.ts";
 import { buildAgentRequest } from "../../../../blocks/agents/plan.ts";
 import { type DriverResolver, driverFor } from "../../drivers/index.ts";
@@ -44,6 +46,7 @@ beforeAll(() => {
   };
 });
 afterAll(() => removeTmpDir(tmp));
+afterEach(() => vi.unstubAllEnvs());
 
 test.skipIf(!localConfigured || !localReachable)(
   "a real Pi extension is callable in the control home and absent from a managed run",
@@ -69,6 +72,9 @@ export default function (pi: ExtensionAPI) {
     name: "get_probe_token",
     label: "Get probe token",
     description: "Return the isolation probe token.",
+    // Pi's system prompt lists only tools with a snippet, and a small local
+    // model will not call a tool the prompt does not list.
+    promptSnippet: "Return the isolation probe token",
     parameters: Type.Object({}),
     async execute() {
       return { content: [{ type: "text", text: ${JSON.stringify(token)} }], details: {} };
@@ -105,5 +111,53 @@ export default function (pi: ExtensionAPI) {
     if ("resumeFailed" in managed)
       throw new Error(`unexpected resume failure: ${managed.resumeFailed}`);
     expect(managed.text).not.toContain(token);
+  },
+);
+
+test.skipIf(!localConfigured || !localReachable)(
+  "parallel Pi runs in different worktrees keep their own schemas and MCP servers",
+  async () => {
+    const source = models.openaiCompatible({
+      name: "lmstudio",
+      baseUrl: baseUrl as string,
+      model: localModel as string,
+    });
+    const probeServer = path.join(import.meta.dirname, "fixtures", "mcp-probe-server.mjs");
+    const alphaToken = `ALPHA-${crypto.randomUUID()}`;
+    const bravoToken = `BRAVO-${crypto.randomUUID()}`;
+    vi.stubEnv("JIGS_LIVE_ALPHA_PROBE", alphaToken);
+    vi.stubEnv("JIGS_LIVE_BRAVO_PROBE", bravoToken);
+    const prompt =
+      "Call the available get_probe_token tool, then submit the text it returns before the first semicolon.";
+    const runIn = <T>(name: string, envName: string, output: z.ZodType<T>) =>
+      runAgent(
+        {
+          harness: harnesses.pi(source, {
+            mcpServers: {
+              [name]: {
+                command: process.execPath,
+                args: [probeServer],
+                env: { PROBE_TOKEN: envName },
+                tools: ["get_probe_token"],
+                probe: { tool: "get_probe_token" },
+              },
+            },
+          }),
+          cwd: makeScratchRepo(tmp, `pi-parallel-${name}`),
+          prompt,
+          output,
+        },
+        (wire) =>
+          executeAgent(wire, { workflowRunId: `live-pi-parallel-${crypto.randomUUID()}` }, deps),
+      );
+
+    const [alpha, bravo] = await Promise.all([
+      runIn("alpha", "JIGS_LIVE_ALPHA_PROBE", z.object({ alphaToken: z.string() })),
+      runIn("bravo", "JIGS_LIVE_BRAVO_PROBE", z.object({ bravo: z.object({ token: z.string() }) })),
+    ]);
+    expect(alpha.output.alphaToken).toContain(alphaToken);
+    expect(alpha.output.alphaToken).not.toContain(bravoToken);
+    expect(bravo.output.bravo.token).toContain(bravoToken);
+    expect(bravo.output.bravo.token).not.toContain(alphaToken);
   },
 );
