@@ -53,15 +53,21 @@ harnesses; `askModel` and `askJev` take model sources.
 - Pi and its MCP children share a private process group. jigs stops the group
   when Pi exits, when the service shuts down, and when the process exits. Run
   cancellation does not yet reach a running Pi step.
-- Subscription logins remain first-class for harnesses. API keys are never
-  inherited globally: each driver explicitly allowlists the credentials its
-  subprocess or API client may receive. The Claude driver reapplies that
+- Subscription logins remain first-class for harnesses. A harness subprocess
+  starts from the service environment with credential-shaped variables
+  removed by name (names containing `API_KEY`, `ACCESS_KEY`, `SECRET`,
+  `TOKEN`, `PASSWORD` or `CREDENTIAL`, gateway and parent-agent-session
+  names); the driver then adds back the variables it needs, such as those its
+  model source and MCP servers name. Removal is by name only, so a secret stored under an ordinary
+  name, such as a database URL with an embedded password, is inherited.
+  Operators keep such values out of the service environment or give them a
+  name that matches. The Claude driver reapplies that
   policy at the provider's process-launch hook because the provider assembles
   its final child environment from the host after accepting jigs' environment.
   At that seam the driver captures the CLI's stderr and hands it to the
   provider on the launch error, so login failures still classify as such.
-  This isolates environment credentials, not credential files available to
-  the same operating-system user.
+  This isolates credential-named environment variables, not credential files
+  available to the same operating-system user.
 - Harness descriptors are reusable configuration, not mutable sessions.
   Generated settings and extensions belong to one invocation, while durable
   conversation files live separately. Continuation occurs only from an

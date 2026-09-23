@@ -58,8 +58,12 @@ before using that source.
 
 Descriptors hold environment variable names, never secret values. OpenRouter
 and credentialed OpenAI-compatible sources read the variable named by their
-model descriptor. Pi starts with the service environment minus API keys and
-tokens, plus only the variables its model source and MCP servers name.
+model descriptor. Pi starts with the service environment minus variables whose
+names look like credentials (containing `API_KEY`, `ACCESS_KEY`, `SECRET`,
+`TOKEN`, `PASSWORD` or `CREDENTIAL`), then gets back the variables its model
+source and MCP servers name. Removal goes by name only: a secret under an
+ordinary name, such as a database URL with a password in it, reaches Pi. Keep
+such values out of the service environment, or name them so they match.
 
 For `runAgent`, `options.mcpServers` is the complete MCP universe. Pi never
 reads your global MCP file, `.mcp.json` or `.pi/mcp.json`; to use a server
