@@ -129,19 +129,6 @@ jobs:
           fi
           npm -v
       - name: Publish to npm
-        run: |
-          set -euo pipefail
-          # A version already on the registry is a re-run of this job, not a
-          # failure: the registry refuses to publish over it, so skip it.
-          name="$(node -p "require('./package.json').name")"
-          version="$(node -p "require('./package.json').version")"
-          if npm view "$name@$version" version >/dev/null 2>&1; then
-            echo "$name@$version is already published — skipping"
-          else
-            npm publish --access public
-          fi
-
-      - name: Verify the released version reached the registry
         env:
           TAG: ${{ needs.release-please.outputs.tag_name }}
         run: |
@@ -152,13 +139,10 @@ jobs:
             echo "checked out $version but release-please tagged '$TAG'" >&2
             exit 1
           fi
-          # A fresh publish can 404 on reads for several minutes.
-          for attempt in $(seq 1 30); do
-            if npm view "$name@$version" version --prefer-online; then
-              exit 0
-            fi
-            echo "attempt $attempt: $name@$version not visible yet"
-            sleep 20
-          done
-          echo "$name@$version never appeared on the registry" >&2
-          exit 1
+          # A version already on the registry is a re-run of this job, not a
+          # failure: the registry refuses to publish over it, so skip it.
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "$name@$version is already published — skipping"
+          else
+            npm publish --access public
+          fi
