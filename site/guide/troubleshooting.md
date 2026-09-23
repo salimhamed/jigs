@@ -1,58 +1,63 @@
 # Troubleshooting
 
-Start with the command that failed: jigs usually prints the failed check and a
-repair instruction. For service startup problems, these commands give the most
-useful next evidence:
+jigs usually prints what failed and how to fix it on the next line. Start there.
+For service problems, these two commands give the most useful evidence:
 
 ```sh
 pnpm exec jigs service status
 pnpm exec jigs service logs
 ```
 
-Once integrations are configured, run `pnpm exec jigs doctor` to check the factory.
+## The service exits before it is ready
 
-## The service exits before becoming ready
+Read `jigs service logs`. The usual causes:
 
-Read `service logs`. Confirm Docker is running and that each agent CLI the log
-names is available, and logged in, in the shell that starts the service. The log
-says which workflows need it. If the log names a minimum Codex version, update
-the installed Codex CLI.
+- **Docker is not running**, so Postgres is not up.
+- **A harness CLI is missing from the service's `PATH`.** The service checks
+  the CLI of every harness your workflows require, and the log names the
+  workflows that need it. Start `jigs up` from a shell where that CLI runs, or
+  for Claude Code set `JIGS_CLAUDE_EXECUTABLE` in `.env`.
+- **Codex or Pi is too old.** The log names the minimum version; upgrade the CLI.
+- **A binding's remote cannot be reached.** The service clones every binding
+  before it is ready, and exits with the Git error if it cannot.
 
-## Doctor reports a credential for a workflow you have not run
+Fix the cause and run `jigs up` again.
 
-Doctor checks every integration a registered workflow's `requires` names, and
-each failure says which workflows need it. Configure the credential, or remove
-the workflow from `jigs.config.ts` if the factory does not use it.
+## A build says `jigs.ts` is out of date
 
-## A build says generated integration is stale
+Run `pnpm exec jigs generate`, review the change to `jigs.ts`, then run
+`pnpm exec jigs up`. Keep your own code out of `jigs.ts`, since generating
+replaces it.
 
-Run `pnpm exec jigs generate`, review the changes to `jigs.ts`, and then run
-`pnpm exec jigs up`. Keep custom code outside `jigs.ts` so regeneration can safely
-replace it. `jigs upgrade` handles regeneration when you update the package.
+## A run is waiting
 
-## A workflow is waiting
+Run `pnpm exec jigs status <run>`. A waiting run is expected when it asked a
+question or is following a pull request; the status says what it needs and
+links to where you act. Starting another run does not answer the first one.
 
-Run `pnpm exec jigs status <run-id>`. A suspension is an expected wait, such as a
-human question or outstanding pull-request review. Follow the reported link and
-resolve the condition. Starting another run does not answer the existing one.
+Once you have answered, the run notices on its next check: every
+`service.pollIntervalSeconds` (300 seconds by default), or within seconds with
+[webhooks](/guide/configuration#webhooks). `pnpm exec jigs poke <run>` makes it
+check now. A poke cannot stand in for the answer or approval itself.
 
-If you have answered but the run remains waiting, it notices on the next poll,
-within `service.pollIntervalSeconds` (300 seconds by default), or sooner with
-webhooks on. `pnpm exec jigs poke <run-id>` wakes it now. If it still waits,
-read the service's `[nudge]` log lines and, with webhooks on, the webhook
-configuration, using the [setup runbook](https://github.com/salimhamed/jigs/blob/main/docs/setup.md).
-A wake asks the run to recheck its condition; it cannot substitute for the
-required answer or approval.
+If `jigs status` reports a run as `stalled`, nothing is going to move it; its
+detail view shows the step or queue job that died and how to requeue it.
 
-With GitHub webhooks on, if `pnpm exec jigs doctor` reports that the factory rejected a repo's webhook
-deliveries with 401, GitHub's copy of the secret does not match
-`GITHUB_WEBHOOK_SECRET` in `.env`. Run `pnpm exec jigs bind <remote>` to send
-GitHub the current value.
+## Doctor reports webhook deliveries rejected with 401
 
-## An old working directory remains
+GitHub's copy of the webhook secret does not match `GITHUB_WEBHOOK_SECRET` in
+`.env`. Run `pnpm exec jigs bind <remote>` for that repository to send GitHub
+the current secret.
 
-This can be intentional: failed runs, waiting runs, and unfinished Git work may
-be retained. Inspect `pnpm exec jigs resources list` and preview
-`pnpm exec jigs resources prune` before removing anything. The
-[resource release guide](https://github.com/salimhamed/jigs/blob/main/docs/automatic-resource-release.md)
-explains what is eligible.
+## An old worktree or directory is still there
+
+That is often on purpose: failed runs, waiting runs and unfinished Git work
+keep their resources. Inspect them with `pnpm exec jigs resources list`, then
+preview `pnpm exec jigs resources prune` before you remove anything. See
+[CLI commands](/guide/cli#cleaning-up-resources).
+
+## Runs stop moving after you ran `workflow web`
+
+Never run the Workflow SDK's standalone `workflow web` against a factory's
+database. It starts a queue worker that takes the factory's jobs. Stop it, and
+use the dashboard the service hosts instead.
