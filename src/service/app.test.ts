@@ -226,7 +226,7 @@ test("a delivery in GitHub's canonical casing resumes a hook claimed from a lowe
   });
   expect(await res.json()).toEqual({ delivered: true });
   expect(resumeHookMock).toHaveBeenCalledExactlyOnceWith(
-    pullRequestToken({ owner: "junglescout", repo: "data-lake-airflow", number: 1 }),
+    "github:pr:junglescout/data-lake-airflow#1",
     undefined,
   );
 });
