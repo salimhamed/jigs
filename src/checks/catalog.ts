@@ -2,6 +2,8 @@
 // its repair instruction, so preflight, JIT checks and `jigs doctor` render
 // the same text at launch and mid-run.
 
+import type { WorkflowRequires } from "./index.ts";
+
 // `detail` is what a passing check found, when that is worth showing.
 export type CheckResult =
   | { ok: true; detail?: string }
@@ -74,4 +76,40 @@ export function formatFailures(report: CheckReport): string {
 
 export function failedCheck(id: string, label: string, reason: string, repair: string): Check {
   return { id, label, run: async () => ({ ok: false, reason, repair }) };
+}
+
+/** A factory's workflows by name, as far as the check catalog reads them. */
+export type WorkflowManifests = Record<string, { requires?: WorkflowRequires }>;
+
+/** Map each requirement `pick` reads from a workflow's `requires` to the workflows that name it. */
+export function requirementUsers<K extends string>(
+  workflows: WorkflowManifests,
+  pick: (requires: WorkflowRequires) => readonly K[],
+): Map<K, string[]> {
+  const users = new Map<K, string[]>();
+  for (const [name, entry] of Object.entries(workflows)) {
+    for (const requirement of new Set(pick(entry.requires ?? {}))) {
+      users.set(requirement, [...(users.get(requirement) ?? []), name]);
+    }
+  }
+  return users;
+}
+
+export function neededBy(workflows: readonly string[]): string {
+  return `needed by ${workflows.length === 1 ? "workflow" : "workflows"} ${workflows.join(", ")}`;
+}
+
+// With no workflows, the factory configuration asked for these checks itself,
+// and each check's own reason already says so.
+export function neededByWorkflows(checks: Check[], workflows: readonly string[]): Check[] {
+  if (workflows.length === 0) return checks;
+  return checks.map((check) => ({
+    ...check,
+    run: async () => {
+      const result = await check.run();
+      return result.ok
+        ? result
+        : { ...result, reason: `${result.reason} (${neededBy(workflows)})` };
+    },
+  }));
 }

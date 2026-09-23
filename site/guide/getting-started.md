@@ -38,16 +38,15 @@ the name `hello`.
 ```sh
 cp .env.example .env
 pnpm install
-pnpm exec jigs up --no-doctor
+pnpm exec jigs up
 ```
 
 `up` prepares dependencies and Postgres, builds your factory, and starts its
 service. Wait for it to report ready.
 
-For this first run, `--no-doctor` skips the final integration check, which checks
-GitHub credentials even though `hello` does not use GitHub. The database and
-machine requirements still apply. No Linear or GitHub integration credentials
-are needed for `hello` itself; your package token is still needed for installation.
+The last step runs `jigs doctor`, which checks only what your workflows require
+and what `jigs.config.ts` turns on. `hello` needs no Linear or GitHub credentials
+and no agent CLI; your package token is still needed for installation.
 
 ## 4. Launch and inspect a run
 

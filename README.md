@@ -119,13 +119,13 @@ before deploying them. Ordinary library version bumps do not change these IDs.
 ```sh
 cp .env.example .env      # configure credentials when a workflow needs them
 pnpm install              # puts the factory's own jigs in node_modules/.bin
-pnpm exec jigs up --no-doctor
+pnpm exec jigs up
 ```
 
-For bare hello setup, `--no-doctor` skips the final doctor pass, which checks
-GitHub credentials even when the workflow does not use GitHub. Postgres and the
-service's machine prerequisites still apply. Once
-integration credentials are configured, use plain `jigs up` and `jigs doctor`.
+The last step runs `jigs doctor`. It checks only what your workflows require and
+what `jigs.config.ts` turns on, so a bare `hello` factory needs no integration
+credentials and no agent CLI. Postgres and the service's machine prerequisites
+still apply.
 
 
 `GITHUB_TOKEN` is the credential of the default `pat` identity, where jigs acts

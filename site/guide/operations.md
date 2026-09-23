@@ -37,8 +37,7 @@ pnpm exec jigs up
 ```
 
 Use `up` after changing configuration or workflow code. It brings dependencies,
-Postgres, the build, and the running service into agreement. For the bare hello
-setup without integration credentials, continue using `up --no-doctor`.
+Postgres, the build, and the running service into agreement.
 
 Before deploying incompatible workflow changes, finish or deliberately cancel
 affected active runs. See [core concepts](./concepts#changing-a-running-workflow).

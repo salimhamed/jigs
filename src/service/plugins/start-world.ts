@@ -57,7 +57,7 @@ export async function gateOnHarnessRuntimes(deps: HarnessRuntimeGateDeps = {}): 
   let neededBy: (workflows: readonly string[]) => string;
   try {
     users = await (deps.harnesses ?? configuredHarnesses)();
-    ({ neededBy } = await import("../../checks/harnesses.ts"));
+    ({ neededBy } = await import("../../checks/catalog.ts"));
     const kinds = [...users.keys()];
     runtimes =
       deps.runtimes === undefined

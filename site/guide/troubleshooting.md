@@ -13,16 +13,16 @@ Once integrations are configured, run `pnpm exec jigs doctor` to check the facto
 
 ## The service exits before becoming ready
 
-Read `service logs`. Confirm Docker is running and both `claude` and `codex` are
-available in the shell that starts the service. Authenticate both tools. If the
-log names a minimum Codex version, update the installed Codex CLI.
+Read `service logs`. Confirm Docker is running and that each agent CLI the log
+names is available, and logged in, in the shell that starts the service. The log
+says which workflows need it. If the log names a minimum Codex version, update
+the installed Codex CLI.
 
-## Hello works, but doctor reports GitHub credentials
+## Doctor reports a credential for a workflow you have not run
 
-The full doctor pass checks GitHub credentials even for a factory only running
-`hello`. Use `pnpm exec jigs up --no-doctor` for the introductory setup. Configure
-integrations before running a workflow that needs them; this flag does not remove
-that workflow’s requirements.
+Doctor checks every integration a registered workflow's `requires` names, and
+each failure says which workflows need it. Configure the credential, or remove
+the workflow from `jigs.config.ts` if the factory does not use it.
 
 ## A build says generated integration is stale
 

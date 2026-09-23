@@ -309,17 +309,36 @@ const LONG_STEP_MS = Number(process.env.JIGS_E2E_LONG_STEP_MS ?? "25");
 
 const HARNESS_CLIS = ["claude", "codex", "pi"];
 
-// The service's PATH with every directory holding a harness CLI removed, so a
-// boot that probes one fails.
-function harnessFreeEnv() {
-  const { JIGS_CLAUDE_EXECUTABLE: _, ...env } = process.env;
+const CREDENTIAL_PREFIXES = ["GITHUB_", "LINEAR_", "AWS_"];
+
+// The shell's environment with no provider credential, and a PATH with every
+// directory holding a harness CLI removed, so a boot or doctor that needs
+// either fails.
+function bareEnv() {
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(
+      ([name]) =>
+        name !== "JIGS_CLAUDE_EXECUTABLE" &&
+        !CREDENTIAL_PREFIXES.some((prefix) => name.startsWith(prefix)),
+    ),
+  );
   const dirs = (env.PATH ?? "")
     .split(path.delimiter)
     .filter((dir) => !HARNESS_CLIS.some((cli) => existsSync(path.join(dir, cli))));
   return { ...env, PATH: dirs.join(path.delimiter) };
 }
 
-function bootOutcome(postgresUrl, { env: baseEnv = process.env, workflow = "ship" } = {}) {
+async function doctorReport() {
+  const res = await fetch(`http://127.0.0.1:${BOOT_PORT}/api/doctor`, {
+    signal: AbortSignal.timeout(30_000),
+  });
+  return res.json();
+}
+
+function bootOutcome(
+  postgresUrl,
+  { env: baseEnv = process.env, workflow = "ship", whileReady } = {},
+) {
   // The World is the stub whatever the shell says; the URL is the registry's.
   const env = {
     ...baseEnv,
@@ -336,6 +355,7 @@ function bootOutcome(postgresUrl, { env: baseEnv = process.env, workflow = "ship
     let listening = false;
     let terminatedAt;
     let readyMs;
+    let observed;
     let timer;
     const settle = (problem) => {
       if (settled) return;
@@ -350,6 +370,7 @@ function bootOutcome(postgresUrl, { env: baseEnv = process.env, workflow = "ship
         output,
         problem,
         readyMs,
+        observed,
         exitMs: terminatedAt === undefined ? undefined : Date.now() - terminatedAt,
       });
     };
@@ -369,6 +390,7 @@ function bootOutcome(postgresUrl, { env: baseEnv = process.env, workflow = "ship
       while (!settled) {
         if (await ready(workflow)) {
           readyMs = Date.now() - spawnedAt;
+          observed = await whileReady?.().catch((err) => ({ error: String(err) }));
           terminate();
           return;
         }
@@ -975,21 +997,33 @@ if (postgresUrl === undefined || postgresUrl === "") {
       );
     }
     console.log(
-      "\n=== bare boot: a factory whose workflows require no harness starts without any harness CLI on PATH",
+      "\n=== bare boot: with no harness CLI and no provider credential, the bare factory starts and doctor is clean",
     );
     const recipeFactory = factory;
     factory = factories.get("bare");
-    const bareBoot = await bootOutcome(postgresUrl, { env: harnessFreeEnv(), workflow: "hello" });
+    const bareBoot = await bootOutcome(postgresUrl, {
+      env: bareEnv(),
+      workflow: "hello",
+      whileReady: doctorReport,
+    });
     factory = recipeFactory;
-    if (bareBoot.problem === null) {
-      console.log(`ready after ${bareBoot.readyMs}ms with no ${HARNESS_CLIS.join(", ")} on PATH`);
-    } else {
+    if (bareBoot.problem !== null) {
       console.error(bareBoot.output);
       fail(
         `the bare service did not start without harness CLIs: ${bareBoot.problem}`,
         "the startup gate must check only the harnesses a workflow's requires names",
       );
     }
+    if (bareBoot.observed?.ok !== true) {
+      console.error(JSON.stringify(bareBoot.observed, null, 2));
+      fail(
+        "doctor is not clean on the bare factory",
+        "doctor must check only what the factory's workflows require and its configuration turns on",
+      );
+    }
+    console.log(
+      `ready after ${bareBoot.readyMs}ms with no ${HARNESS_CLIS.join(", ")} on PATH; doctor clean (${bareBoot.observed.checks.length} checks)`,
+    );
     console.log(
       `\n=== runtime: real Postgres steps, sleep, parallel work, restart recovery, hook resume, and dashboard (${LONG_STEP_MS}ms long step)`,
     );
