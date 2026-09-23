@@ -152,13 +152,13 @@ jobs:
             echo "checked out $version but release-please tagged '$TAG'" >&2
             exit 1
           fi
-          # A fresh publish can 404 on reads for a minute or so.
-          for attempt in $(seq 1 12); do
+          # A fresh publish can 404 on reads for several minutes.
+          for attempt in $(seq 1 30); do
             if npm view "$name@$version" version --prefer-online; then
               exit 0
             fi
             echo "attempt $attempt: $name@$version not visible yet"
-            sleep 10
+            sleep 20
           done
           echo "$name@$version never appeared on the registry" >&2
           exit 1
