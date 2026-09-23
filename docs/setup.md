@@ -540,13 +540,13 @@ serving another workspace registers its own.
 
 ```sh
 pnpm install              # once: the factory's own jigs lands in node_modules/.bin
-pnpm exec jigs up --no-doctor
+pnpm exec jigs up
 ```
 
-For bare hello setup, `--no-doctor` skips the final doctor pass, which checks
-GitHub credentials even when the workflow does not use GitHub. Postgres and the
-service's machine prerequisites (including both agent CLIs) still apply. Once
-integration credentials are configured, use plain `jigs up` and `jigs doctor`.
+The last step runs `jigs doctor`. It checks only what your workflows require and
+what `jigs.config.ts` turns on, so a bare `hello` factory needs no integration
+credentials and no agent CLI. Postgres and the service's machine prerequisites
+still apply.
 
 
 `jigs up` is the commands a human used to type after `jigs init`, run in

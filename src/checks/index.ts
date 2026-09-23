@@ -14,22 +14,31 @@ import { factoryRoot } from "../config/factory-root.ts";
 import { getAuthenticatedUser } from "../providers/github.ts";
 import { resolveGithubIdentities } from "../providers/github-auth.ts";
 import { getViewer } from "../providers/linear.ts";
-import {
-  LINEAR_IDENTITY_VARIABLES,
-  linearEnvValue,
-  resolveLinearIdentity,
-} from "../providers/linear-auth.ts";
-import { driverFor, drivers } from "../steps/agents/drivers/index.ts";
+import { resolveLinearIdentity } from "../providers/linear-auth.ts";
+import { driverFor } from "../steps/agents/drivers/index.ts";
 import { awsCredentialsCheck } from "./aws.ts";
 import { bindingChecks } from "./bindings.ts";
-import { CHECK_TIMEOUT_MS, type Check, failedCheck } from "./catalog.ts";
+import {
+  CHECK_TIMEOUT_MS,
+  type Check,
+  failedCheck,
+  neededByWorkflows,
+  requirementUsers,
+  type WorkflowManifests,
+} from "./catalog.ts";
 import { type Integration, RESTART_SERVICE } from "./core.ts";
 import {
   type GithubIdentityProbes,
   githubIdentityChecks,
   realGithubIdentityProbes,
 } from "./github-identity.ts";
-import { type HarnessKind, harnessChecks, missingDriverCheck } from "./harnesses.ts";
+import {
+  type HarnessKind,
+  harnessChecks,
+  harnessUsers,
+  missingDriverCheck,
+  usedHarnessChecks,
+} from "./harnesses.ts";
 import { type LinearIdentityProbes, linearIdentityChecks } from "./linear-identity.ts";
 import { linearWebhookChecks } from "./linear-webhook.ts";
 import { mcpServerChecks } from "./mcp.ts";
@@ -151,29 +160,49 @@ export function preflightChecks(
   ];
 }
 
-// Without a workflow manifest, doctor checks integrations configured in the environment.
-export function doctorChecks(): Check[] {
-  const profile = process.env.AWS_PROFILE;
-  // On once any variable of either mode is set, so a half-configured app, or
-  // credentials for the mode the config does not name, are reported against
-  // the configured mode rather than silently skipped.
-  const linearConfigured = Object.values(LINEAR_IDENTITY_VARIABLES)
-    .flat()
-    .some((name) => linearEnvValue(name) !== undefined);
+// Beyond what a workflow requires, the configuration can ask for a provider
+// itself: a binding or a GitHub webhook needs GitHub, a Linear webhook needs
+// Linear, and an App identity is set up on purpose. The key and PAT identities
+// are what every scaffold states, so they ask for nothing. An unreadable config
+// asks for nothing either: the binding checks report it.
+function configuredProviders(): Record<Integration, boolean> {
+  try {
+    const { bindings, webhooks, github, linear } = readFactoryConfig(factoryRoot());
+    return {
+      github:
+        Object.keys(bindings).length > 0 ||
+        (webhooks?.github.enabled ?? false) ||
+        github.identities.some((identity) => identity.mode === "app"),
+      linear: (webhooks?.linear.enabled ?? false) || linear.identity.mode === "app",
+    };
+  } catch {
+    return { github: false, linear: false };
+  }
+}
+
+// Every check follows the factory: its workflows' manifests and its
+// configuration. A provider, harness or AWS profile nothing uses is not checked.
+export function doctorChecks(workflows: WorkflowManifests): Check[] {
+  const users = requirementUsers(workflows, (requires) => [
+    ...(requires.integrations ?? []),
+    ...(requires.aws ? (["aws"] as const) : []),
+  ]);
+  const configured = configuredProviders();
+  const provider = (name: Integration, checks: () => Check[]): Check[] => {
+    const needing = users.get(name) ?? [];
+    return needing.length > 0 || configured[name] ? neededByWorkflows(checks(), needing) : [];
+  };
+  const aws = users.get("aws") ?? [];
   return [
-    ...(linearConfigured ? linearChecks() : []),
-    // Always: an App identity needs no environment variable to be configured,
-    // so there is nothing to detect — the configuration itself is the answer.
-    ...githubChecks(true),
+    ...provider("linear", linearChecks),
+    ...provider("github", () => githubChecks(true)),
     // Keyed on the config rather than the Linear credential: a Linear webhook
     // switched on without its secret is a failure even where that is missing too.
     ...linearWebhookChecks({ factoryRoot }),
     ...bindingChecks({ factoryRoot }),
     ...webhookChecks({ factoryRoot }),
-    ...Object.values(drivers).flatMap((driver) =>
-      driver.family === "harness" ? driver.installationChecks() : [],
-    ),
-    ...(profile !== undefined && profile !== "" ? [awsCredentialsCheck()] : []),
+    ...usedHarnessChecks(harnessUsers(workflows)),
+    ...(aws.length > 0 ? neededByWorkflows([awsCredentialsCheck()], aws) : []),
   ];
 }
 

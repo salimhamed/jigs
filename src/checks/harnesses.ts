@@ -7,7 +7,14 @@ import { realCodexAuthPath } from "../steps/agents/harnesses/codex-home.ts";
 import { factoryAgentEnv, harnessEnv } from "../steps/agents/harnesses/env.ts";
 import { resolveClaudeExecutable } from "../steps/agents/harnesses/executables.ts";
 import { realPiAuthPath } from "../steps/agents/harnesses/pi-home.ts";
-import { type Check, type CheckResult, PROBE_TIMEOUT_MS } from "./catalog.ts";
+import {
+  type Check,
+  type CheckResult,
+  neededByWorkflows,
+  PROBE_TIMEOUT_MS,
+  requirementUsers,
+  type WorkflowManifests,
+} from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 import { type HarnessKind, type HarnessRuntimeDeps, harnessRuntime } from "./harness-runtime.ts";
 
@@ -197,6 +204,18 @@ export function harnessChecks(kinds: HarnessKind[]): Check[] {
     const driver = driverFor(kind);
     return driver === undefined ? [missingDriverCheck(kind)] : driver.installationChecks();
   });
+}
+
+/** Map each harness named in a workflow's `requires` to the workflows that name it. */
+export function harnessUsers(workflows: WorkflowManifests): Map<HarnessKind, string[]> {
+  return requirementUsers(workflows, (requires) => requires.harnesses ?? []);
+}
+
+/** The installation checks of each used harness, each failure naming the workflows that need it. */
+export function usedHarnessChecks(users: Map<HarnessKind, string[]>): Check[] {
+  return [...users].flatMap(([kind, workflows]) =>
+    neededByWorkflows(harnessChecks([kind]), workflows),
+  );
 }
 
 /** Diagnose a descriptor kind that this release cannot execute. */

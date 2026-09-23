@@ -127,7 +127,7 @@ export function createApp(factory: Factory): Hono {
   // The same catalog engine as preflight, without a workflow or a launch. A
   // red report is still a report, so it answers 200.
   app.get("/api/doctor", async (c) =>
-    c.json(await runChecks([...doctorChecks(), ...scheduleChecks(factory)])),
+    c.json(await runChecks([...doctorChecks(factory.workflows), ...scheduleChecks(factory)])),
   );
 
   // The ingress is stateless: verify, reconstruct the token, resume. A

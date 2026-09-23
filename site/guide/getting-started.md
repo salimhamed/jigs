@@ -9,11 +9,12 @@ Have these ready before you begin:
 
 - Node.js 24 or newer and pnpm.
 - Docker with its daemon running.
-- Both Claude Code (`claude`) and Codex (`codex`) installed and on your shell’s
-  `PATH`. Log in with `claude auth login` and `codex login`.
+- For workflows that run agents, the CLI of each harness they require, such as
+  Claude Code (`claude`) or Codex (`codex`), on your shell’s `PATH` and logged in.
+  `hello` runs no agent and needs none.
 
-The service currently requires both agent CLIs even for `hello`. If you use a
-Node version manager, start the service from a shell where Node and both CLIs work.
+If you use a Node version manager, start the service from a shell where Node and
+those CLIs work.
 
 ## 2. Create your factory
 
@@ -37,16 +38,15 @@ the name `hello`.
 ```sh
 cp .env.example .env
 pnpm install
-pnpm exec jigs up --no-doctor
+pnpm exec jigs up
 ```
 
 `up` prepares dependencies and Postgres, builds your factory, and starts its
 service. Wait for it to report ready.
 
-For this first run, `--no-doctor` skips the final integration check, which checks
-GitHub credentials even though `hello` does not use GitHub. The database and
-machine requirements still apply. No Linear or GitHub integration credentials
-are needed for `hello` itself; your package token is still needed for installation.
+The last step runs `jigs doctor`, which checks only what your workflows require
+and what `jigs.config.ts` turns on. `hello` needs no Linear or GitHub credentials
+and no agent CLI; your package token is still needed for installation.
 
 ## 4. Launch and inspect a run
 

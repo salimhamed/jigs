@@ -206,8 +206,9 @@ test("GET /api/doctor reports rejected configured credentials without creating a
   const failed = body.checks.filter((check) => !("ok" in check && check.ok));
   expect(failed.map((check) => check.id)).toContain("github.identity");
   for (const failure of failed) expect(failure.repair).not.toBe("");
-  // Doctor runs the whole catalog, not one workflow's manifest.
-  expect(body.checks.map((check) => check.id)).toContain("harness.codex-auth");
+  // Doctor reads every workflow's manifest for the harnesses the factory uses.
+  expect(body.checks.map((check) => check.id)).toContain("harness.claude-auth");
+  expect(body.checks.map((check) => check.id)).not.toContain("harness.codex-auth");
   expect(start).not.toHaveBeenCalled();
 });
 
@@ -261,7 +262,7 @@ test("doctor reports a malformed schedule beside the catalog's own checks", asyn
   const schedule = body.checks.find((check) => check.id === "schedule.nightly");
   expect(schedule?.label).toBe("schedule nightly");
   expect(schedule?.repair).toContain("fix schedules.nightly.cron");
-  expect(body.checks.map((check) => check.id)).toContain("harness.claude-auth");
+  expect(body.checks.some((check) => check.id.startsWith("harness."))).toBe(false);
 });
 
 test("doctor names an unreadable factory config instead of staying silent", async () => {

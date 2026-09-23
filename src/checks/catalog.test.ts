@@ -170,22 +170,26 @@ test("model requirements reject kind-only declarations", () => {
 test("doctor does not infer a model credential without a descriptor", () => {
   vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
   vi.stubEnv("OPENROUTER_API_KEY", "configured");
-  expect(doctorChecks().map((check) => check.id)).not.toContain("model.openrouter-api-key");
+  expect(doctorChecks({}).map((check) => check.id)).not.toContain("model.openrouter-api-key");
 });
 
 test("doctor omits checks that require a call-site model descriptor", () => {
   vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
-  expect(doctorChecks().map((check) => check.id)).not.toContain("model.openai-compatible-runtime");
+  expect(doctorChecks({}).map((check) => check.id)).not.toContain(
+    "model.openai-compatible-runtime",
+  );
 });
 
-test("doctor checks aws only when a profile is set, having no manifest to read", () => {
-  // Doctor asks for every declared binding, so it reads a factory config;
-  // this one does not exist, which collapses to a single failed check.
+test("doctor checks aws only when a workflow requires it", async () => {
   vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
-  vi.stubEnv("AWS_PROFILE", "");
-  expect(doctorChecks().map((c) => c.id)).not.toContain("aws.credentials");
   vi.stubEnv("AWS_PROFILE", "some-profile");
-  expect(doctorChecks().map((c) => c.id)).toContain("aws.credentials");
+  expect(doctorChecks({ hello: {} }).map((c) => c.id)).not.toContain("aws.credentials");
+  vi.stubEnv("AWS_PROFILE", "");
+  const report = await runChecks(doctorChecks({ hello: {}, deploy: { requires: { aws: true } } }));
+  expect(report.checks.find((c) => c.id === "aws.credentials")).toMatchObject({
+    ok: false,
+    reason: expect.stringContaining("(needed by workflow deploy)"),
+  });
 });
 
 test("generic workflows require neither Linear nor GitHub credentials", async () => {
@@ -208,38 +212,58 @@ test("workflows check only explicitly declared integrations", async () => {
   expect(report.checks).toHaveLength(3);
 });
 
-test("doctor checks credentials only for configured integrations", () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
-  for (const name of ["LINEAR_API_KEY", "LINEAR_CLIENT_ID", "LINEAR_CLIENT_SECRET"])
-    vi.stubEnv(name, "");
-  vi.stubEnv("GITHUB_TOKEN", "");
-  const ids = () => doctorChecks().map((check) => check.id);
-  expect(ids()).not.toContain("linear.identity");
-  expect(ids()).not.toContain("linear.webhook");
-  // GitHub is not detected from the environment: an App identity sets no
-  // variable, so the configuration is the only thing that could say.
-  expect(ids()).toContain("github.identity");
-  vi.stubEnv("LINEAR_API_KEY", "configured");
-  expect(ids()).toContain("linear.identity");
-});
-
-test("doctor reports Linear app credentials against a factory configured for a key", async () => {
+function factoryWith(config: string): void {
   const factory = makeTmpDir();
   onTestFinished(() => removeTmpDir(factory));
-  writeFileSync(
-    path.join(factory, "jigs.config.ts"),
-    "export default { service: { dashboardPort: 9090 } }",
-  );
+  writeFileSync(path.join(factory, "jigs.config.ts"), `export default ${config}`);
   vi.stubEnv("JIGS_FACTORY_ROOT", factory);
-  vi.stubEnv("LINEAR_API_KEY", "");
-  vi.stubEnv("LINEAR_CLIENT_ID", "client-id");
-  vi.stubEnv("LINEAR_CLIENT_SECRET", "client-secret");
-  const linear = doctorChecks().filter((check) => check.id === "linear.identity");
-  expect(linear).toHaveLength(1);
-  expect((await runChecks(linear)).checks[0]).toMatchObject({
+}
+
+test("doctor checks no provider credential for a factory whose workflows require none", async () => {
+  factoryWith(
+    '{ service: { dashboardPort: 9090 }, github: { identities: [{ mode: "pat" }] }, linear: { identity: { mode: "key" } } }',
+  );
+  for (const name of ["LINEAR_API_KEY", "LINEAR_CLIENT_ID", "LINEAR_CLIENT_SECRET", "GITHUB_TOKEN"])
+    vi.stubEnv(name, "");
+  vi.stubEnv("LINEAR_API_KEY", "set-but-unused");
+  const report = await runChecks(doctorChecks({ hello: {} }));
+  expect(report).toEqual({ ok: true, checks: [] });
+});
+
+test("doctor checks each provider a workflow requires and names the workflows", async () => {
+  factoryWith(
+    '{ service: { dashboardPort: 9090 }, github: { identities: [{ mode: "pat" }] }, linear: { identity: { mode: "key" } } }',
+  );
+  for (const name of ["LINEAR_API_KEY", "LINEAR_CLIENT_ID", "LINEAR_CLIENT_SECRET", "GITHUB_TOKEN"])
+    vi.stubEnv(name, "");
+  const report = await runChecks(
+    doctorChecks({
+      hello: {},
+      triage: { requires: { integrations: ["linear"] } },
+      ship: { requires: { integrations: ["linear", "github"] } },
+    }),
+  );
+  expect(report.checks.find((c) => c.id === "linear.identity")).toMatchObject({
     ok: false,
-    reason: "linear.identity uses key but LINEAR_API_KEY is not set",
+    reason:
+      "linear.identity uses key but LINEAR_API_KEY is not set (needed by workflows triage, ship)",
   });
+  expect(report.checks.find((c) => c.id === "github.identity")).toMatchObject({
+    ok: false,
+    reason: expect.stringContaining("(needed by workflow ship)"),
+  });
+});
+
+test("doctor checks a provider the factory configuration asks for", () => {
+  const ids = () => doctorChecks({ hello: {} }).map((check) => check.id);
+  factoryWith(
+    '{ service: { dashboardPort: 9090 }, bindings: { api: { remote: "https://github.com/o/api.git" } } }',
+  );
+  expect(ids()).toContain("github.identity");
+  expect(ids()).not.toContain("linear.identity");
+  factoryWith('{ service: { dashboardPort: 9090 }, linear: { identity: { mode: "app" } } }');
+  expect(ids()).toContain("linear.identity");
+  expect(ids()).not.toContain("github.identity");
 });
 
 test("a factory config that cannot be read fails the Linear check as itself", async () => {
@@ -261,4 +285,32 @@ test("a factory config that cannot be read fails the Linear check as itself", as
     }),
   ]);
   expect(report.checks[0]).not.toMatchObject({ reason: expect.stringContaining("rejected") });
+});
+
+test("doctor checks no harness for a factory whose workflows require none", () => {
+  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  const ids = doctorChecks({ hello: {} }).map((check) => check.id);
+  expect(ids.filter((id) => id.startsWith("harness."))).toEqual([]);
+});
+
+test("doctor checks each required harness and names the workflows that need it", async () => {
+  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  vi.stubEnv("PATH", "/nowhere");
+  vi.stubEnv("JIGS_CLAUDE_EXECUTABLE", "");
+  const harness = doctorChecks({
+    hello: {},
+    review: { requires: { harnesses: ["claude"] } },
+    ship: { requires: { harnesses: ["claude", "codex"] } },
+  }).filter((check) => check.id.startsWith("harness."));
+  expect(harness.map((check) => check.id)).toEqual([
+    "harness.claude-cli",
+    "harness.claude-auth",
+    "harness.codex-cli",
+    "harness.codex-auth",
+  ]);
+  const cli = (await runChecks(harness)).checks.find((check) => check.id === "harness.claude-cli");
+  expect(cli).toMatchObject({
+    ok: false,
+    reason: "claude not found on PATH (needed by workflows review, ship)",
+  });
 });
