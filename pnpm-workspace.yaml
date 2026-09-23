@@ -9,3 +9,6 @@ allowBuilds:
 # that would never run.
 ignoredOptionalDependencies:
   - '@openai/codex'
+
+overrides:
+  'vite@5>esbuild': 0.25.12
