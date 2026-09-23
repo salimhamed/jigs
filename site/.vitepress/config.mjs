@@ -24,7 +24,7 @@ export default {
   },
   themeConfig: {
     nav: [
-      { text: "Guide", link: "/guide/what-is-jigs", activeMatch: "/guide/" },
+      { text: "Guide", link: "/guide/why-jigs", activeMatch: "/guide/" },
       { text: "API reference", link: "/api/", activeMatch: "/api/" },
       {
         text: `v${manifest.version}`,
@@ -36,7 +36,7 @@ export default {
         text: "Start here",
         collapsed: false,
         items: [
-          { text: "What is jigs?", link: "/guide/what-is-jigs" },
+          { text: "Why jigs", link: "/guide/why-jigs" },
           { text: "Install and run a first workflow", link: "/guide/getting-started" },
           { text: "Core concepts", link: "/guide/concepts" },
         ],

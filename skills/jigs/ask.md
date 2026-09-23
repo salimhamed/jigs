@@ -16,7 +16,7 @@ add that, set this up — go back to `SKILL.md` and take the route it belongs to
    | Question | Page |
    | --- | --- |
    | What a term means | `concepts` |
-   | What jigs is for | `what-is-jigs` |
+   | What jigs is for | `why-jigs` |
    | Installing and a first run | `getting-started` |
    | Writing a workflow | `build-a-workflow` |
    | Harnesses and model sources | `models-and-harnesses` |

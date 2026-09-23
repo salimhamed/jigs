@@ -36,13 +36,13 @@ explains each step.
 
 ## Set up with your agent
 
-Install the jigs skill for your coding agent:
+Install the jigs skill for your coding agent. It adds a single skill named `/jigs`:
 
 ```sh
 npx skills add salimhamed/jigs
 ```
 
-Then ask it: "Use /jigs to set up a jigs factory in this empty directory."
+Then ask it `/jigs set up a factory in this empty directory`.
 
 ## Development
 

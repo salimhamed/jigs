@@ -7,14 +7,15 @@ so you need no credentials to try it.
 ## Set up with your agent
 
 If you use a coding agent, you can let it do the steps below. Install the jigs
-skill, then ask your agent to set up a factory:
+skill, which adds a single skill named `/jigs`:
 
 ```sh
 npx skills add salimhamed/jigs
 ```
 
-For example: "Use /jigs to set up a jigs factory in this empty directory." The
-rest of this page is the same process by hand.
+Then ask your agent `/jigs set up a factory in this empty directory`.
+
+The rest of this page is the same process by hand.
 
 ## 1. Host dependencies
 
@@ -60,9 +61,9 @@ pnpm exec jigs up
 
 `pnpm install` puts this factory's jigs in place for `pnpm exec`. `jigs up`
 copies `.env.example` to `.env` if it is missing, starts Postgres, builds the
-factory, starts the service and waits until it is ready. Its last step runs `jigs doctor`, which
-checks only what your workflows use. You can run `pnpm exec jigs doctor` again
-at any time while the service is running.
+factory, starts the service and waits until it is ready. It ends by running
+`jigs doctor`, which checks only what your workflows use; rerun it any time
+with `pnpm exec jigs doctor`.
 
 The final line looks like this:
 

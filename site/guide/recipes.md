@@ -25,10 +25,7 @@ Then run `pnpm typecheck`, `pnpm test` and `pnpm exec jigs up`.
 
 ## Available recipes
 
-- **ship**: takes a Linear ticket to a merged pull request. An agent
-  implements the change, a second agent reviews it, and the workflow opens the
-  pull request and follows its feedback and CI until it merges. It needs
-  Linear and GitHub credentials, Claude Code and Codex logged in, and a Linear
-  team with states named `Todo`, `In Progress`, `In Review` and `Done`. After
-  `jigs recipe add ship`, read `blocks/delivery/README.md` in your factory for
-  what it needs, how to launch it and how to change it.
+- **ship**: takes a Linear ticket to a merged pull request, with one agent
+  implementing and a second reviewing. After `jigs recipe add ship`, read
+  `blocks/delivery/README.md` in your factory for what it needs and how to
+  change it.
