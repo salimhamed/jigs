@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.50.0
+# @salimhamed/jigs v0.51.0
 
 Read and update Linear issues outside workflow code.
 

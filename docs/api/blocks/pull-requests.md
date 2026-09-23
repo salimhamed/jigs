@@ -1,4 +1,4 @@
-# @salimhamed/jigs v0.50.0
+# @salimhamed/jigs v0.51.0
 
 Compose pull request creation, review, approval and merge gates inside a workflow.
 
@@ -1167,6 +1167,12 @@ Build the durable hook token shared by a pull request gate and webhook ingress.
 #### Returns
 
 `string`
+
+#### Remarks
+
+Owner and repository are lowercased because GitHub treats them
+case-insensitively: a remote typed `acme/api` and a webhook naming `Acme/API`
+are the same pull request and must produce the same token.
 
 ***
 

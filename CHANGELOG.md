@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.51.0](https://github.com/salimhamed/jigs/compare/jigs-v0.50.0...jigs-v0.51.0) (2026-09-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* an unfinished run that entered a pull request gate on a binding remote containing uppercase letters fails with a replay divergence on its next wake after upgrading; let such runs finish or cancel and relaunch them.
+
+### Bug Fixes
+
+* match GitHub hook tokens regardless of owner and repo casing ([#355](https://github.com/salimhamed/jigs/issues/355)) ([b2bf9b4](https://github.com/salimhamed/jigs/commit/b2bf9b49db368646302e084283d243b084f953ff))
+
 ## [0.50.0](https://github.com/salimhamed/jigs/compare/jigs-v0.49.0...jigs-v0.50.0) (2026-09-23)
 
 
