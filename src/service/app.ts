@@ -282,16 +282,12 @@ export function createApp(factory: Factory): Hono {
 function mountGithubIngress(app: Hono): void {
   app.post("/ingress/github", async (c) => {
     const event = sanitizeForLog(c.req.header("x-github-event") ?? "unknown");
+    // The boot gate refuses a service without the secret; a missing one here
+    // still fails closed.
     const secret = webhookSecret("github");
-    // 503, not 401: GitHub's delivery log then tells "not configured" apart
-    // from "wrong secret", and doctor reads that log.
-    if (secret === undefined) {
-      console.log(`[ingress] github rejected reason=configuration event=${event}`);
-      return c.json({ error: "webhook secret not configured" }, 503);
-    }
     const rawBody = await c.req.text();
     const signature = c.req.header("x-hub-signature-256");
-    if (!verifyGithubSignature(rawBody, signature, secret)) {
+    if (secret === undefined || !verifyGithubSignature(rawBody, signature, secret)) {
       console.log(`[ingress] github rejected reason=signature event=${event}`);
       return c.json({ error: "invalid signature" }, 401);
     }
@@ -343,13 +339,9 @@ function mountGithubIngress(app: Hono): void {
 function mountLinearIngress(app: Hono): void {
   app.post("/ingress/linear", async (c) => {
     const secret = webhookSecret("linear");
-    if (secret === undefined) {
-      console.log("[ingress] linear rejected reason=configuration");
-      return c.json({ error: "LINEAR_WEBHOOK_SECRET is not configured" }, 503);
-    }
     const rawBody = await c.req.text();
     const signature = c.req.header("linear-signature");
-    if (!verifyLinearSignature(rawBody, signature, secret)) {
+    if (secret === undefined || !verifyLinearSignature(rawBody, signature, secret)) {
       console.log("[ingress] linear rejected reason=signature");
       return c.json({ error: "invalid signature" }, 401);
     }

@@ -165,13 +165,6 @@ export type FactoryConfig = z.output<typeof factoryConfigSchema>;
 export type WebhooksConfig = z.output<typeof webhooksSchema>;
 export type WebhookProvider = "github" | "linear";
 
-/** Whether this factory receives webhooks from a provider. */
-export function webhooksEnabled(
-  webhooks: WebhooksConfig | undefined,
-  provider: WebhookProvider,
-): boolean {
-  return webhooks?.[provider].enabled ?? false;
-}
 export type GithubIdentity = z.output<typeof githubIdentitySchema>;
 export type AppIdentity = Extract<GithubIdentity, { mode: "app" }>;
 /** Credentials selected for one installation, after resolving the configured account map. */

@@ -4,11 +4,7 @@ import type {
   PiMcpServerConfig,
 } from "../blocks/agents/harness-config.ts";
 import type { AgentRequest } from "../blocks/agents/plan.ts";
-import {
-  defaultMergePolicy,
-  readFactoryConfig,
-  webhooksEnabled,
-} from "../config/factory-config.ts";
+import { defaultMergePolicy, readFactoryConfig } from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";
 import { getAuthenticatedUser } from "../providers/github.ts";
 import { resolveGithubIdentities } from "../providers/github-auth.ts";
@@ -95,7 +91,7 @@ function githubChecks(checkBindings = false): Check[] {
     const { merge, bindings, webhooks } = readFactoryConfig(factoryRoot());
     return githubIdentityChecks(resolveGithubIdentities(), merge, githubProbes, process.env, {
       bindings: checkBindings ? bindings : {},
-      webhooks: webhooksEnabled(webhooks, "github"),
+      webhooks: webhooks?.github.enabled ?? false,
     });
   } catch {
     // A configuration that cannot be read is the binding checks' diagnosis;

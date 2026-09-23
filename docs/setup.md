@@ -769,8 +769,7 @@ delete by hand.
 
 `jigs doctor` fails when `GITHUB_WEBHOOK_SECRET` is unset. GitHub never shows a
 hook's secret, so doctor also reads each hook's recent deliveries: a run of 401s
-means GitHub's copy does not match `.env` (`jigs bind <remote>` fixes it), and
-a run of 503s means the service was running without the secret.
+means GitHub's copy does not match `.env` (`jigs bind <remote>` fixes it).
 
 Manual alternative: one org-level webhook (org settings → Webhooks) pointed at
 `<webhooks.url>/ingress/github`, content type `application/json`, events

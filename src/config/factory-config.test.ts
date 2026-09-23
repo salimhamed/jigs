@@ -13,7 +13,6 @@ import {
   readFactoryConfig,
   resolveBinding,
   resolveService,
-  webhooksEnabled,
 } from "./factory-config.ts";
 
 const roots: string[] = [];
@@ -146,23 +145,7 @@ test("each provider's poll interval defaults on its own and may sit at the floor
 });
 
 test("without a webhooks block no provider sends webhooks", () => {
-  const { webhooks } = parseFactoryConfig({ service: { dashboardPort: 3456 } });
-  expect(webhooks).toBeUndefined();
-  expect(webhooksEnabled(webhooks, "github")).toBe(false);
-  expect(webhooksEnabled(webhooks, "linear")).toBe(false);
-});
-
-test("a webhooks block turns each provider on or off by name", () => {
-  const { webhooks } = parseFactoryConfig({
-    service: { dashboardPort: 3456 },
-    webhooks: {
-      url: "https://factory.example.ts.net",
-      github: { enabled: true },
-      linear: { enabled: false },
-    },
-  });
-  expect(webhooksEnabled(webhooks, "github")).toBe(true);
-  expect(webhooksEnabled(webhooks, "linear")).toBe(false);
+  expect(parseFactoryConfig({ service: { dashboardPort: 3456 } }).webhooks).toBeUndefined();
 });
 
 test("agent environment names default to none and must be names, not values", () => {

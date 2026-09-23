@@ -82,7 +82,7 @@ export async function gateOnHarnessRuntimes(deps: HarnessRuntimeGateDeps = {}): 
   return true;
 }
 
-/** Injectable configuration, environment and output used by the webhook startup gate. */
+/** Injectable configuration and output used by the webhook startup gate. */
 export interface WebhookSecretGateDeps {
   webhooks?: () => Promise<WebhooksConfig | undefined>;
   exit?: (code: number) => void;

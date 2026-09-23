@@ -95,21 +95,6 @@ test("recent 401 deliveries fail with the bind repair that re-sends the secret",
   });
 });
 
-test("recent 503 deliveries point at the service's missing secret", async () => {
-  configure();
-  respond([hook()], [delivery(503, "2026-09-23T12:00:00Z")]);
-  const result = await check().run();
-  expect(result).toMatchObject({
-    ok: false,
-    reason:
-      "the factory answered the hook's latest delivery with 503: the service is running without GITHUB_WEBHOOK_SECRET",
-  });
-  expect(result.ok === false && result.repair).toContain("openssl rand -hex 32");
-  expect(result.ok === false && result.repair).toContain(
-    "run: jigs bind git@github.com:acme/api.git",
-  );
-});
-
 const secretCheck = () => {
   const [found] = checks();
   if (found === undefined) throw new Error("expected the secret check");

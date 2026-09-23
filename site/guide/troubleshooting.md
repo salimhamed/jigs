@@ -47,9 +47,7 @@ required answer or approval.
 With GitHub webhooks on, if `pnpm exec jigs doctor` reports that the factory rejected a repo's webhook
 deliveries with 401, GitHub's copy of the secret does not match
 `GITHUB_WEBHOOK_SECRET` in `.env`. Run `pnpm exec jigs bind <remote>` to send
-GitHub the current value. If it reports 503s instead, the service was running
-without the secret: set it in `.env` (`openssl rand -hex 32` makes one),
-restart the service with `pnpm exec jigs service restart`, then re-bind.
+GitHub the current value.
 
 ## An old working directory remains
 

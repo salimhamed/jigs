@@ -55,7 +55,6 @@ export function webhookChecks(options: WebhookChecksOptions): Check[] {
                   binding.remote,
                   webhooksUrl,
                   repo,
-                  options.factoryRoot,
                   options.identity ??
                     (() => resolveGithubIdentity(repo.owner, options.factoryRoot())),
                 ),
@@ -84,7 +83,6 @@ async function checkWebhook(
   remote: string,
   webhooksUrl: string,
   repo: { owner: string; repo: string },
-  factoryRoot: () => string,
   resolveIdentity: () => ResolvedGithubIdentity,
 ): Promise<CheckResult> {
   const bindRepair = `run: jigs bind ${remote}`;
@@ -100,17 +98,11 @@ async function checkWebhook(
       };
     }
     const latest = hook.count === 1 ? "delivery" : `${hook.count} deliveries`;
-    return hook.status === 401
-      ? {
-          ok: false,
-          reason: `the factory rejected the hook's latest ${latest} with 401: GitHub's copy of the signing secret does not match GITHUB_WEBHOOK_SECRET in this factory's .env`,
-          repair: bindRepair,
-        }
-      : {
-          ok: false,
-          reason: `the factory answered the hook's latest ${latest} with 503: the service is running without GITHUB_WEBHOOK_SECRET`,
-          repair: `${webhookSecretRepair("github", factoryRoot())}, then ${bindRepair}`,
-        };
+    return {
+      ok: false,
+      reason: `the factory rejected the hook's latest ${latest} with 401: GitHub's copy of the signing secret does not match GITHUB_WEBHOOK_SECRET in this factory's .env`,
+      repair: bindRepair,
+    };
   } catch (err) {
     if (err instanceof GithubApiError && (err.status === 403 || err.status === 404)) {
       return {

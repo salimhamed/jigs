@@ -224,17 +224,14 @@ test("POST /ingress/github without a signature header is a 401", async () => {
   expect(res.status).toBe(401);
 });
 
-test("POST /ingress/github without a configured secret is a 503", async () => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+test("POST /ingress/github without a configured secret fails closed", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => undefined);
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "");
   const res = await postGithub(reviewPayload, {
-    "x-hub-signature-256": `sha256=${sign(reviewPayload, "gh-hook-secret")}`,
+    "x-hub-signature-256": `sha256=${sign(reviewPayload, "")}`,
   });
-  expect(res.status).toBe(503);
-  expect(await res.json()).toEqual({ error: "webhook secret not configured" });
-  expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[ingress] github rejected reason=configuration event=unknown",
-  );
+  expect(res.status).toBe(401);
+  expect(resumeHookMock).not.toHaveBeenCalled();
 });
 
 test("a validly signed PR review delivery nobody is listening to is acknowledged", async () => {

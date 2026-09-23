@@ -123,16 +123,15 @@ interface HookDelivery {
 export type RepoWebhookState =
   | { state: "ok" }
   | { state: "missing" }
-  | { state: "rejected"; status: 401 | 503; count: number };
+  | { state: "rejected"; count: number };
 
 // Enough to see past a burst of redeliveries. The list's order is not
 // documented, so it is sorted here.
 const DELIVERY_SAMPLE = 10;
 
 // A wrong secret cannot be read off the hook, only off GitHub's delivery log.
-// The ingress answers a bad signature with 401 and a missing secret with 503;
-// `count` is the newest unbroken run of that status. A hook with no
-// deliveries yet is "ok".
+// The ingress answers a bad signature with 401; `count` is the newest unbroken
+// run of them. A hook with no deliveries yet is "ok".
 export async function inspectRepoWebhook({
   owner,
   repo,
@@ -153,8 +152,7 @@ export async function inspectRepoWebhook({
     `${hooksPath}/${hook.id}/deliveries?per_page=${DELIVERY_SAMPLE}`,
   );
   const newestFirst = [...deliveries].sort((a, b) => b.delivered_at.localeCompare(a.delivered_at));
-  const status = newestFirst[0]?.status_code;
-  if (status !== 401 && status !== 503) return { state: "ok" };
-  const runEnd = newestFirst.findIndex((delivery) => delivery.status_code !== status);
-  return { state: "rejected", status, count: runEnd === -1 ? newestFirst.length : runEnd };
+  if (newestFirst[0]?.status_code !== 401) return { state: "ok" };
+  const runEnd = newestFirst.findIndex((delivery) => delivery.status_code !== 401);
+  return { state: "rejected", count: runEnd === -1 ? newestFirst.length : runEnd };
 }
