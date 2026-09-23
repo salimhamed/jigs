@@ -2,17 +2,17 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
-import {
-  type Call,
-  closeFakeServices,
-  execError,
-  type FakeProcesses,
-  fakeExec,
-  fakeProcesses,
-  fakeService,
-  factory as scaffold,
-} from "./test-fixtures.ts";
-import { type UpgradeDeps, type UpgradeOptions, upgradeFactory } from "./upgrade.ts";
+import { checkFactoryIntegration } from "../integration.ts";
+import { type Call, execError, fakeExec, factory as scaffold } from "./test-fixtures.ts";
+import { upFactory } from "./up.ts";
+import { type UpgradeOptions, upgradeFactory } from "./upgrade.ts";
+
+vi.mock("./up.ts", async (original) => ({
+  ...(await original<typeof import("./up.ts")>()),
+  upFactory: vi.fn(() => {
+    throw new Error("upgrade ran up in the process that installed the release");
+  }),
+}));
 
 let tmp: string;
 let lines: string[];
@@ -24,7 +24,6 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.unstubAllEnvs();
-  closeFakeServices();
   removeTmpDir(tmp);
 });
 
@@ -36,13 +35,12 @@ interface Manifest {
 const PUBLISHED = { "@jigs-ai/jigs": "0.1.18" };
 
 function factory(
-  port: number,
   manifest: Manifest = {
     dependencies: PUBLISHED,
     scripts: { typecheck: "tsc --noEmit" },
   },
 ): string {
-  const root = scaffold(tmp, { port });
+  const root = scaffold(tmp, { port: 1 });
   writeFileSync(path.join(root, "package.json"), JSON.stringify(manifest, null, 2));
   return root;
 }
@@ -71,21 +69,11 @@ function fakeRegistry(latest: string, fail?: (call: Call) => Error | undefined) 
 
 function upgrade(
   root: string,
-  io: { exec: ReturnType<typeof fakeExec>; procs: FakeProcesses },
+  io: { exec: ReturnType<typeof fakeExec> },
   options: UpgradeOptions = {},
-  extra: Partial<UpgradeDeps> = {},
 ) {
   return upgradeFactory(
-    {
-      cwd: root,
-      out: (line) => lines.push(line),
-      execFile: io.exec.execFile,
-      processes: io.procs.processes,
-      prepare: vi.fn(),
-      migrate: vi.fn(),
-      readyTimeoutMs: 500,
-      ...extra,
-    },
+    { cwd: root, out: (line) => lines.push(line), execFile: io.exec.execFile },
     options,
   );
 }
@@ -96,60 +84,39 @@ const statuses = (result: Awaited<ReturnType<typeof upgradeFactory>>) =>
 const commands = (io: { exec: ReturnType<typeof fakeExec> }) =>
   io.exec.calls.map((call) => [path.basename(call.file), ...call.args]);
 
-test("bumps jigs to latest, runs every up step, then the typecheck", async () => {
-  const port = await fakeService();
-  const root = factory(port);
-  const generated = path.join(root, "generated-by-new-release");
+test("bumps jigs to latest, then generates and runs up under the new CLI, then typechecks", async () => {
+  const root = factory();
   const io = {
     exec: fakeRegistry("0.1.19", (call) => {
-      if (call.args.join(" ") !== "exec jigs generate") return undefined;
-      expect(readManifest(root).dependencies["@jigs-ai/jigs"]).toBe("0.1.19");
-      writeFileSync(generated, "new template");
+      if (call.args[0] === "exec") {
+        expect(readManifest(root).dependencies["@jigs-ai/jigs"]).toBe("0.1.19");
+      }
       return undefined;
     }),
-    procs: fakeProcesses(),
   };
-  const result = await upgrade(
-    root,
-    io,
-    {},
-    {
-      prepare: vi.fn(() => {
-        expect(readFileSync(generated, "utf8")).toBe("new template");
-      }),
-    },
-  );
+
+  const result = await upgrade(root, io);
 
   expect(result.ok).toBe(true);
   expect(statuses(result)).toEqual([
     "packages:ok",
     "bump:ok",
-    "locate:ok",
-    "env:ok",
-    "install:ok",
     "generate:ok",
-    "compose:ok",
-    "bootstrap:ok",
-    "build:ok",
-    "service:ok",
-    "ready:ok",
-    "doctor:ok",
+    "up:ok",
     "typecheck:ok",
   ]);
   expect(result.before).toBe("0.1.18");
   expect(result.after).toBe("0.1.19");
-  expect(result.up?.service).toBe("started");
 
   expect(commands(io)).toEqual([
     ["pnpm", "update", "--latest", "@jigs-ai/jigs"],
-    ["pnpm", "install"],
     ["pnpm", "exec", "jigs", "generate"],
-    ["docker", "compose", "up", "-d", "--wait"],
-    ["bootstrap"],
-    ["nitro", "build"],
+    ["pnpm", "exec", "jigs", "up"],
     ["pnpm", "run", "typecheck"],
   ]);
   for (const call of io.exec.calls) expect(call.options.cwd).toBe(root);
+  const upCall = io.exec.calls.find((call) => call.args.join(" ") === "exec jigs up");
+  expect(upCall?.options.stdio).toBe("inherit");
 
   const printed = lines.join("\n");
   expect(printed).toMatch(
@@ -160,9 +127,29 @@ test("bumps jigs to latest, runs every up step, then the typecheck", async () =>
   expect(lines.at(-1)).toBe("acme-factory runs jigs 0.1.19");
 });
 
+// The bug this guards: the process that ran the bump holds the old release's
+// integration template, so an in-process build rejected the jigs.ts the new
+// release had just generated and left the factory half-upgraded.
+test("a jigs.ts the old CLI would reject does not stop the upgrade", async () => {
+  const root = factory();
+  const io = {
+    exec: fakeRegistry("0.1.19", (call) => {
+      if (call.args.join(" ") === "exec jigs generate") {
+        writeFileSync(path.join(root, "jigs.ts"), "// generated by jigs 0.1.19\n");
+      }
+      return undefined;
+    }),
+  };
+
+  const result = await upgrade(root, io);
+
+  expect(() => checkFactoryIntegration(root)).toThrow(/differs from the installed jigs/);
+  expect(result.ok).toBe(true);
+  expect(upFactory).not.toHaveBeenCalled();
+});
+
 test("normalizes an exact jigs release-age exclusion before pnpm runs", async () => {
-  const port = await fakeService();
-  const root = factory(port);
+  const root = factory();
   const workspace = path.join(root, "pnpm-workspace.yaml");
   writeFileSync(
     workspace,
@@ -177,7 +164,6 @@ test("normalizes an exact jigs release-age exclusion before pnpm runs", async ()
       expect(contents).not.toContain("@jigs-ai/jigs@0.1.18");
       return undefined;
     }),
-    procs: fakeProcesses(),
   };
 
   const result = await upgrade(root, io, { to: "0.1.19" });
@@ -191,14 +177,13 @@ test("normalizes an exact jigs release-age exclusion before pnpm runs", async ()
 });
 
 test("rewrites an exact exclusion in place with its comment and position", async () => {
-  const port = await fakeService();
-  const root = factory(port);
+  const root = factory();
   const workspace = path.join(root, "pnpm-workspace.yaml");
   writeFileSync(
     workspace,
     "minimumReleaseAgeExclude:\n  # jigs, freshly published\n  - '@jigs-ai/jigs@0.1.18'\n  - 'zod@1.0.0'\n",
   );
-  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+  const io = { exec: fakeRegistry("0.1.19") };
 
   const result = await upgrade(root, io);
 
@@ -209,14 +194,13 @@ test("rewrites an exact exclusion in place with its comment and position", async
 });
 
 test("normalizes an exact jigs exclusion in a flow-style list", async () => {
-  const port = await fakeService();
-  const root = factory(port);
+  const root = factory();
   const workspace = path.join(root, "pnpm-workspace.yaml");
   writeFileSync(
     workspace,
     "minimumReleaseAgeExclude: ['@acme/fresh@1.0.0', '@jigs-ai/jigs@0.1.18']\n",
   );
-  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+  const io = { exec: fakeRegistry("0.1.19") };
 
   const result = await upgrade(root, io);
 
@@ -227,14 +211,13 @@ test("normalizes an exact jigs exclusion in a flow-style list", async () => {
 });
 
 test("removes stale jigs exclusions beside the wildcard", async () => {
-  const port = await fakeService();
-  const root = factory(port);
+  const root = factory();
   const workspace = path.join(root, "pnpm-workspace.yaml");
   writeFileSync(
     workspace,
     "minimumReleaseAgeExclude:\n  - '@jigs-ai/jigs'\n  - '@acme/fresh@1.0.0'\n  - '@jigs-ai/jigs@0.1.18'\n",
   );
-  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+  const io = { exec: fakeRegistry("0.1.19") };
 
   const result = await upgrade(root, io);
 
@@ -246,12 +229,11 @@ test("removes stale jigs exclusions beside the wildcard", async () => {
 });
 
 test("adds a release-age exclusion when the workspace has no exclusion list", async () => {
-  const port = await fakeService();
-  const root = factory(port);
+  const root = factory();
   const workspace = path.join(root, "pnpm-workspace.yaml");
   const before = "packages:\n  - src/*\n# operator setting\nstrictPeerDependencies: true\n";
   writeFileSync(workspace, before);
-  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+  const io = { exec: fakeRegistry("0.1.19") };
 
   const result = await upgrade(root, io);
 
@@ -263,11 +245,10 @@ test("adds a release-age exclusion when the workspace has no exclusion list", as
 });
 
 test("treats an empty release-age exclusion value as an empty list", async () => {
-  const port = await fakeService();
-  const root = factory(port);
+  const root = factory();
   const workspace = path.join(root, "pnpm-workspace.yaml");
   writeFileSync(workspace, "minimumReleaseAgeExclude:\n");
-  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+  const io = { exec: fakeRegistry("0.1.19") };
 
   const result = await upgrade(root, io);
 
@@ -276,10 +257,10 @@ test("treats an empty release-age exclusion value as an empty list", async () =>
 });
 
 test("reports a non-mapping workspace file with a repair hint", async () => {
-  const root = factory(1);
+  const root = factory();
   const workspace = path.join(root, "pnpm-workspace.yaml");
   writeFileSync(workspace, "- packages\n");
-  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+  const io = { exec: fakeRegistry("0.1.19") };
 
   const result = await upgrade(root, io);
 
@@ -293,13 +274,12 @@ test("reports a non-mapping workspace file with a repair hint", async () => {
 });
 
 test("leaves an already-normalized release-age exclusion byte-identical", async () => {
-  const port = await fakeService();
-  const root = factory(port);
+  const root = factory();
   const workspace = path.join(root, "pnpm-workspace.yaml");
   const before =
     "minimumReleaseAgeExclude:\n  - '@acme/fresh@1.0.0'\n  - '@jigs-ai/jigs' # all releases\n";
   writeFileSync(workspace, before);
-  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+  const io = { exec: fakeRegistry("0.1.19") };
 
   const result = await upgrade(root, io);
 
@@ -309,13 +289,12 @@ test("leaves an already-normalized release-age exclusion byte-identical", async 
 });
 
 test("leaves a normalized exclusion byte-identical when jigs is not last", async () => {
-  const port = await fakeService();
-  const root = factory(port);
+  const root = factory();
   const workspace = path.join(root, "pnpm-workspace.yaml");
   const before =
     "minimumReleaseAgeExclude:\n  - '@jigs-ai/jigs' # all releases\n  - '@acme/fresh@1.0.0'\n";
   writeFileSync(workspace, before);
-  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+  const io = { exec: fakeRegistry("0.1.19") };
 
   const result = await upgrade(root, io);
 
@@ -325,9 +304,8 @@ test("leaves a normalized exclusion byte-identical when jigs is not last", async
 });
 
 test("--to-version pins jigs to that version instead of the latest", async () => {
-  const port = await fakeService();
-  const root = factory(port);
-  const io = { exec: fakeRegistry("0.3.0"), procs: fakeProcesses() };
+  const root = factory();
+  const io = { exec: fakeRegistry("0.3.0") };
 
   const result = await upgrade(root, io, { to: "0.2.0" });
 
@@ -339,8 +317,8 @@ test("--to-version pins jigs to that version instead of the latest", async () =>
 });
 
 test("--to-version that is not an exact version is refused before anything runs", async () => {
-  const root = factory(1);
-  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+  const root = factory();
+  const io = { exec: fakeRegistry("0.1.19") };
 
   await expect(upgrade(root, io, { to: "latest" })).rejects.toThrow(
     "--to-version takes an exact version",
@@ -349,9 +327,8 @@ test("--to-version that is not an exact version is refused before anything runs"
 });
 
 test("a factory already on the latest says so and still runs up and the typecheck", async () => {
-  const port = await fakeService();
-  const root = factory(port);
-  const io = { exec: fakeRegistry("0.1.18"), procs: fakeProcesses() };
+  const root = factory();
+  const io = { exec: fakeRegistry("0.1.18") };
 
   const result = await upgrade(root, io);
 
@@ -361,14 +338,14 @@ test("a factory already on the latest says so and still runs up and the typechec
 });
 
 test("a factory linked to a checkout is refused before pnpm runs, naming the published package", async () => {
-  const root = factory(1, {
+  const root = factory({
     dependencies: {
       "@jigs/service": "link:/home/me/jigs/packages/service",
       jigs: "link:/home/me/jigs/packages/jigs",
       workflow: "4.8.4",
     },
   });
-  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+  const io = { exec: fakeRegistry("0.1.19") };
 
   const result = await upgrade(root, io);
 
@@ -382,10 +359,10 @@ test("a factory linked to a checkout is refused before pnpm runs, naming the pub
 });
 
 test("a published name still linked by path counts as a checkout install", async () => {
-  const root = factory(1, {
+  const root = factory({
     dependencies: { "@jigs-ai/jigs": "link:../jigs/packages/jigs" },
   });
-  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+  const io = { exec: fakeRegistry("0.1.19") };
 
   const result = await upgrade(root, io);
 
@@ -394,12 +371,11 @@ test("a published name still linked by path counts as a checkout install", async
 });
 
 test("a link: to something other than jigs is not a checkout install", async () => {
-  const port = await fakeService();
-  const root = factory(port, {
+  const root = factory({
     dependencies: { ...PUBLISHED, "acme-tools": "link:../acme-tools" },
     scripts: { typecheck: "tsc --noEmit" },
   });
-  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+  const io = { exec: fakeRegistry("0.1.19") };
 
   const result = await upgrade(root, io);
 
@@ -408,8 +384,8 @@ test("a link: to something other than jigs is not a checkout install", async () 
 });
 
 test("a factory that does not depend on jigs is told so, since pnpm would silently skip it", async () => {
-  const root = factory(1, { dependencies: { workflow: "4.8.4" } });
-  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+  const root = factory({ dependencies: { workflow: "4.8.4" } });
+  const io = { exec: fakeRegistry("0.1.19") };
 
   const result = await upgrade(root, io);
 
@@ -422,13 +398,13 @@ test("a factory that does not depend on jigs is told so, since pnpm would silent
 // package no release has, so pnpm would resolve nothing and the rewrite is
 // the operator's.
 test("a factory still on the two-package split is sent to the one-time migration", async () => {
-  const root = factory(1, {
+  const root = factory({
     dependencies: {
       "@jigs-ai/jigs": "0.2.0",
       "@salimhamed/jigs-service": "0.2.0",
     },
   });
-  const io = { exec: fakeRegistry("0.3.0"), procs: fakeProcesses() };
+  const io = { exec: fakeRegistry("0.3.0") };
 
   const result = await upgrade(root, io);
 
@@ -443,8 +419,8 @@ test("a factory still on the two-package split is sent to the one-time migration
 });
 
 test("a factory still on the GitHub Packages name is sent to the one-time rename", async () => {
-  const root = factory(1, { dependencies: { "@salimhamed/jigs": "0.47.2" } });
-  const io = { exec: fakeRegistry("0.48.0"), procs: fakeProcesses() };
+  const root = factory({ dependencies: { "@salimhamed/jigs": "0.47.2" } });
+  const io = { exec: fakeRegistry("0.48.0") };
 
   const result = await upgrade(root, io);
 
@@ -459,14 +435,14 @@ test("a factory still on the GitHub Packages name is sent to the one-time rename
 });
 
 test("outside a factory repo, packages fails with the existing error", async () => {
-  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+  const io = { exec: fakeRegistry("0.1.19") };
   const result = await upgrade(tmp, io);
   expect(statuses(result)).toEqual(["packages:failed"]);
   expect(result.steps[0]?.detail).toContain("not inside a factory repo");
 });
 
 test("a peer the new release moved fails the bump and names the factory-supplied runtime", async () => {
-  const root = factory(1);
+  const root = factory();
   const io = {
     exec: fakeRegistry("0.1.19", (call) =>
       call.args[0] === "update"
@@ -476,7 +452,6 @@ test("a peer the new release moved fails the bump and names the factory-supplied
           )
         : undefined,
     ),
-    procs: fakeProcesses(),
   };
 
   const result = await upgrade(root, io);
@@ -490,7 +465,7 @@ test("a peer the new release moved fails the bump and names the factory-supplied
 });
 
 test("a version the registry does not have is named with the --to-version that asked for it", async () => {
-  const root = factory(1);
+  const root = factory();
   const io = {
     exec: fakeRegistry("0.1.19", (call) =>
       call.args[0] === "update"
@@ -500,7 +475,6 @@ test("a version the registry does not have is named with the --to-version that a
           )
         : undefined,
     ),
-    procs: fakeProcesses(),
   };
 
   const result = await upgrade(root, io, { to: "9.9.9" });
@@ -510,12 +484,11 @@ test("a version the registry does not have is named with the --to-version that a
 });
 
 test("pnpm missing from PATH is named at the bump", async () => {
-  const root = factory(1);
+  const root = factory();
   const io = {
     exec: fakeRegistry("0.1.19", (call) =>
       call.file === "pnpm" ? execError("ENOENT") : undefined,
     ),
-    procs: fakeProcesses(),
   };
 
   const result = await upgrade(root, io);
@@ -524,34 +497,27 @@ test("pnpm missing from PATH is named at the bump", async () => {
   expect(result.steps[1]?.repair).toContain("install pnpm");
 });
 
-test("a failing up step ends the upgrade there; no typecheck runs", async () => {
-  const root = factory(1);
+test("a failing jigs up ends the upgrade there, names the command to re-run, and skips typecheck", async () => {
+  const root = factory();
   const io = {
     exec: fakeRegistry("0.1.19", (call) =>
-      call.file === "docker" ? execError(1, "Cannot connect to the Docker daemon\n") : undefined,
+      call.args.slice(0, 3).join(" ") === "exec jigs up" ? execError(1) : undefined,
     ),
-    procs: fakeProcesses(),
   };
 
-  const result = await upgrade(root, io);
+  const result = await upgrade(root, io, { force: true });
 
   expect(result.ok).toBe(false);
-  expect(statuses(result)).toEqual([
-    "packages:ok",
-    "bump:ok",
-    "locate:ok",
-    "env:ok",
-    "install:ok",
-    "generate:ok",
-    "compose:failed",
-  ]);
-  expect(result.up?.ok).toBe(false);
+  expect(statuses(result)).toEqual(["packages:ok", "bump:ok", "generate:ok", "up:failed"]);
+  expect(result.steps.at(-1)?.detail).toBe(`jigs up failed in ${root}`);
+  expect(result.steps.at(-1)?.repair).toBe(
+    "fix what jigs up reported above, then run pnpm exec jigs up --force and pnpm run typecheck in this factory",
+  );
   expect(commands(io).map((c) => c.join(" "))).not.toContain("pnpm run typecheck");
 });
 
 test("a red typecheck reports custom factory code errors after refreshing the integration", async () => {
-  const port = await fakeService();
-  const root = factory(port);
+  const root = factory();
   const io = {
     exec: fakeRegistry("0.1.19", (call) =>
       call.args[0] === "run" && call.args[1] === "typecheck"
@@ -561,7 +527,6 @@ test("a red typecheck reports custom factory code errors after refreshing the in
           )
         : undefined,
     ),
-    procs: fakeProcesses(),
   };
 
   const result = await upgrade(root, io);
@@ -572,13 +537,12 @@ test("a red typecheck reports custom factory code errors after refreshing the in
   expect(lines.join("\n")).toContain("error TS2305");
   expect(lines.at(-2)).toBe(`FAIL typecheck: typecheck failed in ${root}`);
   // The service already runs the new bundle; that is what the red line is for.
-  expect(result.up?.ok).toBe(true);
+  expect(statuses(result)).toContain("up:ok");
 });
 
 test("without a typecheck script the step is skipped and says so", async () => {
-  const port = await fakeService();
-  const root = factory(port, { dependencies: PUBLISHED });
-  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
+  const root = factory({ dependencies: PUBLISHED });
+  const io = { exec: fakeRegistry("0.1.19") };
 
   const result = await upgrade(root, io);
 
@@ -588,57 +552,41 @@ test("without a typecheck script the step is skipped and says so", async () => {
   expect(commands(io).map((c) => c.join(" "))).not.toContain("pnpm run typecheck");
 });
 
-test("--force and --no-doctor reach up", async () => {
-  const port = await fakeService({
-    runs: [{ runId: "wrun_01", workflow: "ship", status: "suspended" }],
-  });
-  const root = factory(port);
-  const io = { exec: fakeRegistry("0.1.19"), procs: fakeProcesses() };
-  await upgrade(root, io);
-  io.exec.bundle = "bundle v2";
+test("--force and --no-doctor reach jigs up", async () => {
+  const root = factory();
+  const io = { exec: fakeRegistry("0.1.19") };
 
   const result = await upgrade(root, io, { force: true, doctor: false });
 
   expect(result.ok).toBe(true);
-  expect(result.up?.service).toBe("restarted");
-  expect(statuses(result)).toContain("doctor:skipped");
+  expect(commands(io)).toContainEqual(["pnpm", "exec", "jigs", "up", "--force", "--no-doctor"]);
 });
 
 test("a failed integration refresh stops before rebuilding or restarting", async () => {
-  const root = factory(59997);
+  const root = factory();
   const io = {
     exec: fakeRegistry("0.1.19", (call) =>
       call.args.join(" ") === "exec jigs generate" ? execError(1, "generation failed") : undefined,
     ),
-    procs: fakeProcesses(),
   };
   const result = await upgrade(root, io);
   expect(result.ok).toBe(false);
-  expect(statuses(result)).toEqual([
-    "packages:ok",
-    "bump:ok",
-    "locate:ok",
-    "env:ok",
-    "install:ok",
-    "generate:failed",
-  ]);
+  expect(statuses(result)).toEqual(["packages:ok", "bump:ok", "generate:failed"]);
   expect(result.steps.at(-1)?.detail).toBe("could not refresh jigs.ts");
   expect(result.steps.at(-1)?.repair).toBe("run pnpm exec jigs generate in this factory");
   expect(lines.at(-1)).toBe("  → run pnpm exec jigs generate in this factory");
   expect(commands(io)).toEqual([
     ["pnpm", "update", "--latest", "@jigs-ai/jigs"],
-    ["pnpm", "install"],
     ["pnpm", "exec", "jigs", "generate"],
   ]);
 });
 
 test("a missing pnpm during integration refresh names the missing tool", async () => {
-  const root = factory(59997);
+  const root = factory();
   const io = {
     exec: fakeRegistry("0.1.19", (call) =>
       call.args.join(" ") === "exec jigs generate" ? execError("ENOENT") : undefined,
     ),
-    procs: fakeProcesses(),
   };
 
   const result = await upgrade(root, io);

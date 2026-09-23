@@ -242,7 +242,7 @@ program
   .option("--no-doctor", "skip the doctor pass once the service is up")
   .action(async (options: { toVersion?: string; force?: boolean; doctor: boolean }) => {
     const result = await upgradeFactory(
-      { cwd: process.cwd(), out, confirm: makeConfirm() },
+      { cwd: process.cwd(), out },
       { ...options, to: options.toVersion },
     );
     if (!result.ok) process.exitCode = 1;

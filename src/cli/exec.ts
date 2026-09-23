@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import type { JigsError } from "../errors.ts";
 
@@ -13,6 +13,9 @@ export interface ExecOutput {
 export interface ExecOptions {
   cwd: string;
   env?: Record<string, string>;
+  // Hands the operator's terminal to the child, for one that prompts or
+  // reports its own progress; nothing is captured.
+  stdio?: "inherit";
 }
 
 export type ExecFile = (file: string, args: string[], options: ExecOptions) => Promise<ExecOutput>;
@@ -21,12 +24,30 @@ export type ExecFile = (file: string, args: string[], options: ExecOptions) => P
 // the binary itself is missing, and whatever the child printed rides along.
 export type ExecError = Error & Partial<ExecOutput> & { code?: number | string };
 
-export const nodeExecFile: ExecFile = async (file, args, options) =>
-  await promisify(execFile)(file, args, {
+export const nodeExecFile: ExecFile = async (file, args, options) => {
+  if (options.stdio === "inherit") return await inheritedExec(file, args, options);
+  return await promisify(execFile)(file, args, {
     cwd: options.cwd,
     env: options.env,
     maxBuffer: 64 * 1024 * 1024,
   });
+};
+
+function inheritedExec(file: string, args: string[], options: ExecOptions): Promise<ExecOutput> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(file, args, { cwd: options.cwd, env: options.env, stdio: "inherit" });
+    child.once("error", reject);
+    child.once("close", (code, signal) => {
+      if (code === 0) resolve({ stdout: "", stderr: "" });
+      else {
+        const status = code ?? signal ?? "unknown";
+        reject(
+          Object.assign(new Error(`${file} exited with ${status}`), { code: code ?? undefined }),
+        );
+      }
+    });
+  });
+}
 
 export function execOutput(result: Partial<ExecOutput>): string {
   return `${result.stdout ?? ""}${result.stderr ?? ""}`;

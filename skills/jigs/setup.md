@@ -270,10 +270,10 @@ commands and the org-level alternative.
 jigs upgrade                # or: jigs upgrade --to-version <version>
 ```
 
-normalizes jigs' release-age exclusion, then bumps `@jigs-ai/jigs` and runs
-`jigs up`. During that `up`, it installs the release, regenerates `jigs.ts`
-through the newly installed CLI, then builds and starts the factory. Finally it
-checks the factory's custom code. It is the only command needed even when an
+normalizes jigs' release-age exclusion, then bumps `@jigs-ai/jigs`. The rest
+runs under the newly installed CLI: it regenerates `jigs.ts`, then runs
+`jigs up` to build and start the factory. Finally it checks the factory's custom
+code. It is the only command needed even when an
 older factory excludes an exact jigs version. Review and commit the regenerated
 `jigs.ts` and any `pnpm-workspace.yaml` normalization. Fix API errors in custom
 code outside `jigs.ts`; refresh generated wrappers with `jigs generate`. An
