@@ -23,6 +23,8 @@ jobs:
           git diff --cached --exit-code
       - run: pnpm lint
       - run: pnpm typecheck
+      # The installed-Pi tests skip when no supported pi is on PATH.
+      - run: npm install --global @earendil-works/pi-coding-agent@0.87.0
       - run: pnpm test
       - run: pnpm build
 
