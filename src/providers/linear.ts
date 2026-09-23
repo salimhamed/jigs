@@ -17,35 +17,67 @@ export interface LinearComment {
   user: LinearUser | null;
 }
 
+interface GraphqlBody<T> {
+  data?: T;
+  errors?: Array<{ message: string; extensions?: { code?: string } }>;
+}
+
+interface GraphqlReply<T> {
+  res: Response;
+  text: string;
+  body: GraphqlBody<T> | undefined;
+}
+
+function parseBody<T>(text: string): GraphqlBody<T> | undefined {
+  try {
+    return JSON.parse(text) as GraphqlBody<T>;
+  } catch {
+    return undefined;
+  }
+}
+
+// Linear names a rejected credential in the errors array as well as with a
+// 401, so either one retires a minted token.
+function rejectedCredential(reply: GraphqlReply<unknown>): boolean {
+  return (
+    reply.res.status === 401 ||
+    (reply.body?.errors?.some((error) => error.extensions?.code === "AUTHENTICATION_ERROR") ??
+      false)
+  );
+}
+
 async function linearGraphql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
   const auth = linearAuthFor();
-  const post = async () =>
-    fetch(LINEAR_API_URL(), {
+  const post = async (): Promise<GraphqlReply<T>> => {
+    const res = await fetch(LINEAR_API_URL(), {
       method: "POST",
       headers: { "content-type": "application/json", authorization: await auth.authorization() },
       body: JSON.stringify({ query, variables }),
     });
-  let res = await post();
-  // A minted token outlived its welcome; a personal key would only fail again.
-  if (res.status === 401 && auth.identity.mode === "app") {
-    auth.invalidate();
-    res = await post();
-  }
-  if (!res.ok) {
-    throw new Error(`Linear API ${res.status}: ${await res.text()}`);
-  }
-  const json = (await res.json()) as {
-    data?: T;
-    errors?: Array<{ message: string }>;
+    const text = await res.text();
+    return { res, text, body: parseBody<T>(text) };
   };
-  const firstError = json.errors?.[0];
+  let reply = await post();
+  // A minted token outlived its welcome; a personal key would only fail again.
+  if (auth.identity.mode === "app" && rejectedCredential(reply)) {
+    auth.invalidate();
+    reply = await post();
+  }
+  const { res, text, body } = reply;
+  if (!res.ok) {
+    throw new Error(`Linear API ${res.status}: ${text}`);
+  }
+  if (body === undefined) {
+    throw new Error(`Linear API ${res.status}: response was not JSON: ${text}`);
+  }
+  const firstError = body.errors?.[0];
   if (firstError !== undefined) {
     throw new Error(`Linear GraphQL: ${firstError.message}`);
   }
-  if (json.data === undefined) {
+  if (body.data === undefined) {
     throw new Error("Linear GraphQL: response carried no data");
   }
-  return json.data;
+  return body.data;
 }
 
 // The preflight probe for the Linear identity: the cheapest call that proves

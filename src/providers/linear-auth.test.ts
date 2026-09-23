@@ -121,7 +121,16 @@ test("a factory's key comes from its .env", async () => {
   expect(await linearAuthFor().authorization()).toBe("from-dotenv");
 });
 
-function graphqlServer(graphqlStatuses: number[]) {
+const AUTHENTICATION_ERROR = {
+  errors: [
+    {
+      message: "Authentication required, not authenticated",
+      extensions: { type: "authentication error", code: "AUTHENTICATION_ERROR", statusCode: 401 },
+    },
+  ],
+};
+
+function graphqlServer(graphqlStatuses: Array<number | "auth-error">) {
   const calls: Array<{ url: string; authorization?: string }> = [];
   let minted = 0;
   vi.stubGlobal(
@@ -131,6 +140,7 @@ function graphqlServer(graphqlStatuses: number[]) {
       calls.push({ url, authorization });
       if (url.endsWith("/oauth/token")) return tokenResponse(`token-${++minted}`);
       const status = graphqlStatuses.shift() ?? 200;
+      if (status === "auth-error") return new Response(JSON.stringify(AUTHENTICATION_ERROR));
       return status === 200
         ? new Response(JSON.stringify({ data: { viewer: { id: "u1", name: "jigs" } } }))
         : new Response("authentication required", { status });
@@ -149,6 +159,19 @@ test("an app token Linear rejects is re-minted and the call retried once", async
     ["http://linear.test/graphql", "Bearer token-1"],
     ["http://linear.test/oauth/token", undefined],
     ["http://linear.test/graphql", "Bearer token-2"],
+  ]);
+});
+
+test("an AUTHENTICATION_ERROR under a 200 re-mints the app token once", async () => {
+  writeFactory({ mode: "app" }, "LINEAR_CLIENT_ID=id\nLINEAR_CLIENT_SECRET=secret\n");
+  useFactoryRoot(tmp);
+  const calls = graphqlServer(["auth-error"]);
+  expect(await getViewer()).toEqual({ id: "u1", name: "jigs" });
+  expect(calls.map((call) => call.authorization)).toEqual([
+    undefined,
+    "Bearer token-1",
+    undefined,
+    "Bearer token-2",
   ]);
 });
 
