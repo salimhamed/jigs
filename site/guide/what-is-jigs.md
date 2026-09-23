@@ -1,42 +1,29 @@
 # What is jigs?
 
-jigs runs TypeScript workflows that combine coding agents, model calls, and
-operations such as creating a working directory or opening a pull request.
-It is useful when a process has several steps, may need human input, and should
-retain its progress while it waits.
+jigs runs durable TypeScript workflows for coding agents. A workflow is a
+function that strings together agent runs, model calls, questions for a person,
+and operations such as preparing a Git worktree or opening a pull request. You
+write it once and run it as often as you like, so the same process happens the
+same way each time.
 
-For example, a software change might involve reading a ticket, asking a question,
-implementing the change, getting an independent review, and following the pull
-request until it merges. The optional [ship recipe](./ship) supplies that process
-as code you can edit.
+Your workflows live in a **factory repo**, a repository of your own that
+installs jigs as a package. The factory runs its own service on your machine,
+with its own Postgres database and a dashboard of every run. When a run waits
+for a reply, a review or a CI build, it keeps the work it has already done and
+continues once the wait is over, even across a restart.
 
-You can also write a much smaller workflow: run an investigation, summarize the
-findings with a model, and return a report. Software delivery is one use of jigs,
-not a requirement for every workflow.
+## What you get
 
-## Where your code lives
-
-You create a **factory repo**: your own repository of workflows and configuration.
-It installs jigs as a package and runs its own service and Postgres database.
-The service executes your workflows and hosts a dashboard of their history.
-
-A factory is separate from the repositories an agent changes. You give those
-repositories names called **bindings**. jigs maintains a clone for each binding
-and creates a separate Git working directory, called a **worktree**, for a run.
-
-## What durability means
-
-The runtime records the results of completed **steps**. When a workflow resumes,
-it reuses those recorded results to continue. Closing the terminal that launched
-a run does not cancel it; the service does the work.
-
-This does not make every external operation happen exactly once. Failed attempts
-can be retried, so custom operations still need to handle retries safely. Your
-workflow also decides when to ask a person, what an agent may do, and when the
-work is complete.
-
-## Choose a starting point
-
-- [Run your first workflow](./getting-started) to set up a factory.
-- [Learn the core concepts](./concepts) to understand the files you will edit.
-- [Explore the API](/api/) when you need exact functions and types.
+- **Several GitHub repositories per factory.** Each target repository is a
+  named **binding**. jigs keeps its own clone of it and gives every run a
+  separate worktree, so runs never share a working directory.
+- **Linear tickets and human questions.** A workflow can claim a Linear
+  ticket, post a question on it, and pause until someone replies.
+- **Optional webhooks.** Waiting runs re-check GitHub and Linear on a timer.
+  Turn on webhooks only if you want them to react in seconds instead of minutes.
+- **Durable workflows built on the Vercel Workflow SDK.** Completed steps are
+  recorded, so a run that pauses or restarts does not repeat them.
+- **Claude Code, Codex and Pi harnesses.** Run any of them as an agent in a
+  worktree, or call a model API directly.
+- **Your existing subscriptions.** Claude Code and Codex run under the accounts
+  you are logged in to, so agent work bills your Claude and Codex plans.

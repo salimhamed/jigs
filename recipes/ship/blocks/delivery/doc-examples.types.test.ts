@@ -1,15 +1,15 @@
-// The examples in docs/delivery.md, kept compiling by tsc. A doc example that
-// does not typecheck is worse than no example: a factory author pastes it and
-// the failure is theirs. Two edits from the published text. The import line: a
-// factory reaches its bound operations at `#jigs`, which resolves through the
-// factory's own package.json imports map and cannot resolve here, so the
-// operations are declared from the binder's return type instead. And
-// `onlyApprovedWorkPublishes`, which has no counterpart in the doc: it asserts
-// the publication type gate the doc states in prose. Every other line is the
-// doc verbatim; change one and change the other.
+// The examples in README.md beside this file, kept compiling by tsc. A doc
+// example that does not typecheck is worse than no example: a factory author
+// pastes it and the failure is theirs. Two edits from the README. The import
+// line: a factory reaches its bound operations at `#jigs`, which resolves
+// through the factory's own package.json imports map and cannot resolve here,
+// so the operations are declared from the binder's return type instead. And
+// `onlyApprovedWorkPublishes`, which has no counterpart in the README: it
+// asserts the publication type gate the README states in prose. Every other
+// line is the README verbatim; change one and change the other.
 
 import type { Worktree } from "@jigs-ai/jigs";
-import { harnesses } from "@jigs-ai/jigs/blocks/agents";
+import { harnesses, models } from "@jigs-ai/jigs/blocks/agents";
 import type { HaltForHumanFn, TicketClaim, TicketNote } from "@jigs-ai/jigs/blocks/linear";
 import type { MergePolicy, PullRequestRef } from "@jigs-ai/jigs/blocks/pull-requests";
 import { expect, test } from "vitest";
@@ -65,15 +65,13 @@ async function chooseAgentsAndBudgets() {
 
 // "Choose agents and budgets", configuring each role independently.
 async function configureEachRoleIndependently() {
-  const defaultModels = { claude: "opus", codex: "gpt-5.6-sol" };
-
   const result = await deliverChange({
     task,
     worktree,
     binding: "application",
-    implementation: { harness: harnesses.codex(defaultModels.codex) },
-    review: { harness: harnesses.claude(defaultModels.claude) },
-    ciRepair: { harness: harnesses.codex("gpt-5.6-sol-codex") },
+    implementation: { harness: harnesses.codex("gpt-5.6-sol") },
+    review: { harness: harnesses.claude("opus") },
+    ciRepair: { harness: harnesses.pi(models.openaiCodex("gpt-5.5"), { thinking: "high" }) },
     pullRequestRevision: { harness: harnesses.claude("sonnet") },
     pullRequestDescription: {
       harness: harnesses.claude("haiku"),
@@ -90,7 +88,7 @@ async function configureEachRoleIndependently() {
   return result;
 }
 
-// "Own the prompts", extending the shipped default.
+// "Change the prompts", extending the shipped default.
 const reviewExtendingTheDefault = {
   harness: harnesses.claude("opus"),
   prompt: async (context: ReviewPromptContext) =>
@@ -99,7 +97,7 @@ const reviewExtendingTheDefault = {
 Also check authorization and migration compatibility.`,
 };
 
-// "Own the prompts", replacing it outright from the role's own context.
+// "Change the prompts", replacing it outright from the role's own context.
 const implementationReplacingTheDefault = {
   harness: harnesses.codex("gpt-5.6-sol"),
   prompt: (context: ImplementationPromptContext) => `
@@ -116,7 +114,7 @@ reviewed. Do not push and do not open a pull request.
 `,
 };
 
-// "Where a human grants continuation": the halt-for-human ticket channel.
+// "Ask a person when a budget runs out": the halt-for-human ticket channel.
 declare const claim: TicketClaim;
 
 const onLimit = async (limit: LimitReached) => {
@@ -139,7 +137,7 @@ const onLimit = async (limit: LimitReached) => {
 
 const haltingOnLimit: OnDeliveryLimit = onLimit;
 
-// "Supply your own work items": extra fields survive with no generic argument
+// "Deliver your own work items": extra fields survive with no generic argument
 // and no cast, into the prompt context, onLimit, and the result.
 interface Incident extends WorkItem {
   service: string;
@@ -227,7 +225,7 @@ async function onlyApprovedWorkPublishes() {
   });
 }
 
-test("every example in docs/delivery.md typechecks", () => {
+test("every example in README.md typechecks", () => {
   expect([
     chooseAgentsAndBudgets,
     configureEachRoleIndependently,

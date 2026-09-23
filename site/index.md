@@ -1,51 +1,52 @@
 ---
 layout: home
-title: Repeatable workflows for coding agents
+title: jigs
 hero:
   name: jigs
-  text: Repeatable workflows for coding agents.
-  tagline: Connect agents, model calls, and human decisions in TypeScript. Keep your process in your own code, with a recorded history of every run.
+  text: Repeatable workflows for coding agents
   actions:
     - theme: brand
       text: Get started
       link: /guide/getting-started
-    - theme: alt
-      text: Understand how it works
-      link: /guide/what-is-jigs
-    - theme: alt
-      text: Explore the API
-      link: /api/
-features:
-  - title: Your process, in your code
-    details: Write a small workflow for an investigation, or adopt the ship recipe for implementing and reviewing software changes. You decide the steps and policies.
-    link: /guide/concepts
-    linkText: Learn the core concepts
-  - title: Progress that survives a wait
-    details: Durable steps record their results. A workflow can wait for a human reply or pull-request review, then continue using the work already recorded.
-    link: /guide/human-approval
-    linkText: Bring a human into the workflow
-  - title: See what is happening
-    details: Follow runs from the command line or inspect their step history in your factory’s dashboard. Waiting runs tell you what needs attention.
-    link: /guide/operations
-    linkText: Run and monitor workflows
 ---
 
-## Start small, then make it yours
+## What jigs is
 
-For a ticket describing a bug, the ship recipe can ask for clarification, have
-an agent implement the fix, get an independent agent review, and follow the pull
-request through CI and human approval. You choose the agents, budgets, and merge
-policy in your factory.
+jigs runs TypeScript workflows that combine coding agents, model calls, human
+questions and ordinary operations such as creating a Git worktree or opening a
+pull request. A workflow keeps its progress while it waits for a person, a
+review or a CI build, and picks up where it left off.
 
-Your first workflow creates a scratch directory, removes it, and returns a message.
-It proves your service is working before you add repository access, tickets, or
-agent prompts. From there, [run an agent](./guide/agents),
-[ask a model](./guide/models), or [adopt the ship recipe](./guide/ship).
+## How it runs
 
-## What you will need
+You keep your workflows in a **factory repo**: your own repository that installs
+jigs from npm as `@jigs-ai/jigs`. Each factory runs its own service on your
+machine, with its own Postgres database, and hosts a dashboard showing every
+run's history. The repositories your agents change are connected to the factory
+by name, and jigs cuts a separate worktree for each run.
 
-jigs runs on your machine with Node.js 24 or newer, pnpm, Docker, and installed,
-authenticated Claude Code and Codex CLIs. jigs installs from npm as `@jigs-ai/jigs`.
+## How to use it
 
-The [getting started guide](./guide/getting-started) walks through those requirements
-and your first run. You do not need Linear or a target GitHub repository for that run.
+Create a factory with `pnpm dlx @jigs-ai/jigs init`, start it with `jigs up`,
+and run the included `hello` workflow. Then write your own workflows, or copy in
+a recipe such as **ship**, which takes a Linear ticket to a merged pull request.
+The [getting started guide](/guide/getting-started) walks through it.
+
+## Set up with your agent
+
+Install the jigs skill into your coding agent:
+
+```sh
+npx skills add salimhamed/jigs
+```
+
+Then ask it, for example: "Use /jigs to set up a jigs factory in this empty
+directory." The same skill can run and watch workflows, write new ones, and
+answer questions about jigs.
+
+## Give your agent the docs
+
+Point an agent at the documentation written for it:
+
+- <https://salimhamed.github.io/jigs/llms.txt> lists every page.
+- <https://salimhamed.github.io/jigs/llms-full.txt> holds the whole site in one file.
