@@ -32,7 +32,7 @@ test("a green report prints one ok line per check and does not throw", async () 
   respond({
     ok: true,
     checks: [
-      { id: "core.linear-api-key", label: "Linear API key", ok: true },
+      { id: "linear.identity", label: "Linear identity", ok: true },
       { id: "binding.api", label: "binding api", ok: true },
     ],
   });
@@ -41,7 +41,7 @@ test("a green report prints one ok line per check and does not throw", async () 
   expect(report.ok).toBe(true);
   expect(lines).toEqual([
     "ok   systemd user service supervision",
-    "ok   Linear API key",
+    "ok   Linear identity",
     "ok   binding api",
   ]);
 });
@@ -50,7 +50,7 @@ test("a red report prints the reason and repair for each failure and throws a Ji
   respond({
     ok: false,
     checks: [
-      { id: "core.linear-api-key", label: "Linear API key", ok: true },
+      { id: "linear.identity", label: "Linear identity", ok: true },
       {
         id: "binding.api",
         label: "binding api",
@@ -75,7 +75,7 @@ test("a red report prints the reason and repair for each failure and throws a Ji
   expect((failure as JigsError).message).toBe("doctor found 2 problem(s)");
   expect(lines).toEqual([
     "ok   systemd user service supervision",
-    "ok   Linear API key",
+    "ok   Linear identity",
     "FAIL binding api: no binding named 'api'",
     "  → run: jigs bind <the-api-remote-url> --binding-name api",
     "FAIL Codex subscription login: no Codex login found",

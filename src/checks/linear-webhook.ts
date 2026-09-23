@@ -1,4 +1,8 @@
-import { readFactoryConfig, type WebhooksConfig } from "../config/factory-config.ts";
+import {
+  type LinearIdentity,
+  readFactoryConfig,
+  type WebhooksConfig,
+} from "../config/factory-config.ts";
 import {
   missingWebhookSecret,
   webhookSecret,
@@ -14,8 +18,12 @@ export interface LinearWebhookChecksOptions {
 
 export function linearWebhookChecks(options: LinearWebhookChecksOptions): Check[] {
   let webhooks: WebhooksConfig | undefined;
+  let identity: LinearIdentity;
   try {
-    webhooks = readFactoryConfig(options.factoryRoot()).webhooks;
+    ({
+      webhooks,
+      linear: { identity },
+    } = readFactoryConfig(options.factoryRoot()));
   } catch {
     // The binding catalog owns the single factory-config failure.
     return [];
@@ -42,7 +50,15 @@ export function linearWebhookChecks(options: LinearWebhookChecksOptions): Check[
     {
       id: "linear.webhook",
       label: "Linear webhook",
-      run: () => checkLinearWebhook(url, options.list ?? listWebhooks),
+      run: async () =>
+        // Listing webhooks needs the admin scope, which Linear never grants an
+        // app actor, and a second admin credential just for this was rejected.
+        identity.mode === "app"
+          ? {
+              ok: true,
+              detail: `not verified: listing webhooks needs the admin scope, which an app actor cannot hold. Confirm a Comment webhook exists at ${url} in Linear settings.`,
+            }
+          : checkLinearWebhook(url, options.list ?? listWebhooks),
     },
   ];
 }

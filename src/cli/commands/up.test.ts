@@ -225,8 +225,8 @@ test("a red doctor is the final failing line, with its checks indented above", a
       ok: false,
       checks: [
         {
-          id: "core.linear-api-key",
-          label: "Linear API key",
+          id: "linear.identity",
+          label: "Linear identity",
           ok: false,
           reason: "LINEAR_API_KEY is empty",
           repair: "set it in .env",
@@ -241,7 +241,7 @@ test("a red doctor is the final failing line, with its checks indented above", a
 
   expect(result.ok).toBe(false);
   expect(statuses(result).at(-1)).toBe("doctor:failed");
-  expect(lines).toContain("  FAIL Linear API key: LINEAR_API_KEY is empty");
+  expect(lines).toContain("  FAIL Linear identity: LINEAR_API_KEY is empty");
   expect(lines.at(-2)).toBe("FAIL doctor: doctor found 1 problem(s)");
 });
 

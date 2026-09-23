@@ -195,7 +195,7 @@ test("generic workflows require neither Linear nor GitHub credentials", async ()
 test("workflows check only explicitly declared integrations", async () => {
   vi.stubEnv("LINEAR_API_KEY", "");
   vi.stubEnv("GITHUB_TOKEN", "");
-  expect(preflightIds({ integrations: ["linear"] })).toEqual(["core.linear-api-key"]);
+  expect(preflightIds({ integrations: ["linear"] })).toEqual(["linear.identity"]);
   expect(preflightIds({ integrations: ["github"] })).toEqual([
     "github.identity",
     "github.merge-policy",
@@ -210,11 +210,11 @@ test("doctor checks credentials only for configured integrations", () => {
   vi.stubEnv("LINEAR_API_KEY", "");
   vi.stubEnv("GITHUB_TOKEN", "");
   const ids = () => doctorChecks().map((check) => check.id);
-  expect(ids()).not.toContain("core.linear-api-key");
+  expect(ids()).not.toContain("linear.identity");
   expect(ids()).not.toContain("linear.webhook");
   // GitHub is not detected from the environment: an App identity sets no
   // variable, so the configuration is the only thing that could say.
   expect(ids()).toContain("github.identity");
   vi.stubEnv("LINEAR_API_KEY", "configured");
-  expect(ids()).toContain("core.linear-api-key");
+  expect(ids()).toContain("linear.identity");
 });

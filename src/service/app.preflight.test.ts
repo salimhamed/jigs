@@ -142,8 +142,8 @@ test("a trigger with three seeded failures is refused with all three at once", a
   expect(body.error).toBe("preflight failed");
   expect(body.failures.map((failure) => failure.id).sort()).toEqual([
     "binding.api",
-    "core.linear-api-key",
     "github.identity",
+    "linear.identity",
   ]);
   for (const failure of body.failures) {
     expect(failure.reason).not.toBe("");
