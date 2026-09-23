@@ -143,11 +143,12 @@ export function preflightChecks(
 export function doctorChecks(): Check[] {
   const profile = process.env.AWS_PROFILE;
   const linearIdentity = configuredLinearIdentity();
-  // On once any variable the identity reads is set, so a half-configured app
-  // is reported rather than silently skipped.
-  const linearConfigured = LINEAR_IDENTITY_VARIABLES[linearIdentity.mode].some(
-    (name) => linearEnvValue(name) !== undefined,
-  );
+  // On once any variable of either mode is set, so a half-configured app, or
+  // credentials for the mode the config does not name, are reported against
+  // the configured mode rather than silently skipped.
+  const linearConfigured = Object.values(LINEAR_IDENTITY_VARIABLES)
+    .flat()
+    .some((name) => linearEnvValue(name) !== undefined);
   return [
     ...(linearConfigured ? linearIdentityChecks(linearIdentity, linearProbes) : []),
     // Always: an App identity needs no environment variable to be configured,

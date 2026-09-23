@@ -1,5 +1,8 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { writeFileSync } from "node:fs";
+import path from "node:path";
+import { afterEach, expect, onTestFinished, test, vi } from "vitest";
 import { models } from "../blocks/agents/harness-config.ts";
+import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { type Check, failedCheck, formatFailures, runChecks } from "./catalog.ts";
 import { doctorChecks, preflightChecks, type WorkflowRequires } from "./index.ts";
 
@@ -207,7 +210,8 @@ test("workflows check only explicitly declared integrations", async () => {
 
 test("doctor checks credentials only for configured integrations", () => {
   vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
-  vi.stubEnv("LINEAR_API_KEY", "");
+  for (const name of ["LINEAR_API_KEY", "LINEAR_CLIENT_ID", "LINEAR_CLIENT_SECRET"])
+    vi.stubEnv(name, "");
   vi.stubEnv("GITHUB_TOKEN", "");
   const ids = () => doctorChecks().map((check) => check.id);
   expect(ids()).not.toContain("linear.identity");
@@ -217,4 +221,23 @@ test("doctor checks credentials only for configured integrations", () => {
   expect(ids()).toContain("github.identity");
   vi.stubEnv("LINEAR_API_KEY", "configured");
   expect(ids()).toContain("linear.identity");
+});
+
+test("doctor reports Linear app credentials against a factory configured for a key", async () => {
+  const factory = makeTmpDir();
+  onTestFinished(() => removeTmpDir(factory));
+  writeFileSync(
+    path.join(factory, "jigs.config.ts"),
+    "export default { service: { dashboardPort: 9090 } }",
+  );
+  vi.stubEnv("JIGS_FACTORY_ROOT", factory);
+  vi.stubEnv("LINEAR_API_KEY", "");
+  vi.stubEnv("LINEAR_CLIENT_ID", "client-id");
+  vi.stubEnv("LINEAR_CLIENT_SECRET", "client-secret");
+  const linear = doctorChecks().filter((check) => check.id === "linear.identity");
+  expect(linear).toHaveLength(1);
+  expect((await runChecks(linear)).checks[0]).toMatchObject({
+    ok: false,
+    reason: "linear.identity uses key but LINEAR_API_KEY is not set",
+  });
 });
