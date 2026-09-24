@@ -15,7 +15,7 @@ import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { stringEnv } from "../../steps/agents/harnesses/env.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
 import { buildFactoryService, type Prepare } from "./build.ts";
-import { dockerCompose } from "./compose.ts";
+import { dockerCompose, factoryName, postgresNames } from "./compose.ts";
 import { runDoctor } from "./doctor.ts";
 import { type RunListRun, showRuns } from "./run-list.ts";
 import { resolveServiceUrl } from "./service-client.ts";
@@ -183,7 +183,7 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
       });
     }
 
-    printSummary(factoryRoot, service, liveServicePid(lifecycle), deps.out);
+    await printSummary(execFile, factoryRoot, service, liveServicePid(lifecycle), deps.out);
     result.ok = true;
     return result;
   } catch (err) {
@@ -277,42 +277,37 @@ async function bootstrapWorld(
 }
 
 // One Postgres container and one Node process, which also serves the
-// dashboard on its second port: every running thing and how to stop it.
-function printSummary(
+// dashboard on its second port: every running thing, and the one command
+// that stops them all.
+async function printSummary(
+  execFile: ExecFile,
   factoryRoot: string,
   service: ResolvedService,
   pid: number | undefined,
   out: (line: string) => void,
-): void {
-  const project = composeProjectName(factoryRoot);
+): Promise<void> {
   const ports = postgresPorts(factoryRoot);
-  const rows: Array<[string, string, string]> = [
+  const { container } = await postgresNames(execFile, factoryRoot);
+  const rows: Array<[string, string]> = [
     [
       "postgres",
-      `docker compose${project === undefined ? "" : ` project ${project}`}, ${ports.length === 0 ? "no published port" : `port ${ports.join(", ")}`}`,
-      "stop: docker compose down",
+      `${ports.length === 0 ? "no published port" : ports.map((port) => `localhost:${port}`).join(", ")}${container === undefined ? "" : `  (Docker container ${container})`}`,
     ],
-    [
-      "service",
-      `${service.serviceUrl}  pid ${pid ?? "unknown"}`,
-      "stop: pnpm exec jigs service stop",
-    ],
-    ["", `dashboard ${service.dashboardUrl}`, `logs ${homeRelative(serviceLogPath(service.slug))}`],
+    ["service", `${service.serviceUrl}  (pid ${pid ?? "unknown"})`],
+    ["dashboard", service.dashboardUrl],
+    ["logs", homeRelative(serviceLogPath(service.slug))],
   ];
-  const width = Math.max(...rows.map(([, what]) => what.length)) + 4;
-  out(`${service.slug} is up`);
-  for (const [name, what, how] of rows) out(`  ${name.padEnd(11)}${what.padEnd(width)}${how}`);
-  out("  stop everything: pnpm exec jigs down");
+  const width = Math.max(...rows.map(([label]) => label.length)) + 3;
+  out(`${factoryName(factoryRoot)} is up`);
+  out("");
+  for (const [label, what] of rows) out(`  ${label.padEnd(width)}${what}`);
+  out("");
+  out("  stop:  pnpm exec jigs down");
 }
 
 function homeRelative(file: string): string {
   const home = homedir();
   return file.startsWith(`${home}${path.sep}`) ? `~${file.slice(home.length)}` : file;
-}
-
-function composeProjectName(factoryRoot: string): string | undefined {
-  const compose = readFileSync(path.join(factoryRoot, "docker-compose.yml"), "utf8");
-  return compose.match(/^name:\s*["']?([^"'\s#]+)/m)?.[1];
 }
 
 function redactPassword(url: string): string {

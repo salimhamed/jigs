@@ -67,14 +67,17 @@ which checks only what your workflows use; rerun it any time with
 `pnpm exec jigs doctor`.
 
 It ends by naming the two things it runs, one Postgres container and one service
-process that also serves the dashboard, and how to stop each:
+process that also serves the dashboard, and the one command that stops both:
 
 ```
-my-factory-2286ac2a is up
-  postgres   docker compose project my-factory, port 5440    stop: docker compose down
-  service    http://localhost:8990  pid 53812                stop: pnpm exec jigs service stop
-             dashboard http://localhost:9090                 logs ~/.local/share/jigs/services/my-factory-2286ac2a.log
-  stop everything: pnpm exec jigs down
+my-factory is up
+
+  postgres    localhost:5440  (Docker container my-factory-postgres-1)
+  service     http://localhost:8990  (pid 53812)
+  dashboard   http://localhost:9090
+  logs        ~/.local/share/jigs/services/my-factory-2286ac2a.log
+
+  stop:  pnpm exec jigs down
 ```
 
 Open the dashboard URL from your own output. It shows every run and its steps.
