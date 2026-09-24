@@ -12,6 +12,7 @@ export { JigsError } from "./blocks/errors.ts";
 export {
   type AgentsDefinition,
   type AnyWorkflowEntry,
+  type BindingDefinition,
   defineFactory,
   type Factory,
   type FactoryDefinition,

@@ -4,7 +4,12 @@ import { z } from "zod";
 import type { WorkflowRequires } from "../checks/index.ts";
 // The schemas that validate these blocks, named for their types alone: a
 // second hand-written copy of either would drift from what jigs accepts.
-import type { githubSchema, linearSchema, webhooksSchema } from "../config/factory-config.ts";
+import type {
+  bindingSchema,
+  githubSchema,
+  linearSchema,
+  webhooksSchema,
+} from "../config/factory-config.ts";
 import { JigsError } from "./errors.ts";
 import type { mergePolicySchema } from "./pull-requests/policy.ts";
 import type { ReleasePolicy } from "./runtime/release.ts";
@@ -121,6 +126,23 @@ export type LinearDefinition = z.input<typeof linearSchema>;
  */
 export type WebhooksDefinition = z.input<typeof webhooksSchema>;
 
+/**
+ * A repository this factory works in: its remote, how a worktree cut from it
+ * is provisioned, and any merge settings that differ from the factory's.
+ *
+ * @example
+ * ```ts
+ * bindings: {
+ *   api: {
+ *     remote: "git@github.com:acme/api.git",
+ *     postCreate: ["pnpm install"],
+ *     merge: { by: "jigs", method: "rebase" },
+ *   },
+ * },
+ * ```
+ */
+export type BindingDefinition = z.input<typeof bindingSchema>;
+
 /** Who merges, by which of GitHub's three methods, and what signal permits it. */
 export type MergeDefinition = z.input<typeof mergePolicySchema>;
 
@@ -155,15 +177,7 @@ export interface FactoryDefinition {
   linear?: LinearDefinition;
   merge?: MergeDefinition;
   release?: ReleasePolicy;
-  bindings?: Record<
-    string,
-    {
-      remote: string;
-      copy?: string[];
-      postCreate?: string[];
-      hookTimeoutMinutes?: number;
-    }
-  >;
+  bindings?: Record<string, BindingDefinition>;
   workflows: Record<string, () => Promise<{ default: AnyWorkflowEntry }>>;
   schedules?: Record<string, Schedule>;
 }

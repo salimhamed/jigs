@@ -17,7 +17,7 @@ const require = createRequire(import.meta.url);
 // worktree cut from that remote is provisioned — the single place that story
 // is told. Where the clone lives is jigs' business, and every other fact is
 // derived from git at each activation.
-const bindingSchema = z.strictObject({
+export const bindingSchema = z.strictObject({
   remote: z.string().min(1),
   // Repository policy may differ between bindings. Approval remains a
   // factory identity concern and is deliberately not accepted here.
