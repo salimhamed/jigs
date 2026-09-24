@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.56.2](https://github.com/salimhamed/jigs/compare/jigs-v0.56.1...jigs-v0.56.2) (2026-09-24)
+
+
+### Bug Fixes
+
+* **config:** expose the per-binding merge override on FactoryDefinition ([#376](https://github.com/salimhamed/jigs/issues/376)) ([d9c057a](https://github.com/salimhamed/jigs/commit/d9c057a7b5c6cbabf8c118c13b2a759e5a7192b1))
+
 ## [0.56.1](https://github.com/salimhamed/jigs/compare/jigs-v0.56.0...jigs-v0.56.1) (2026-09-23)
 
 
