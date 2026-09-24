@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.58.0](https://github.com/salimhamed/jigs/compare/jigs-v0.57.1...jigs-v0.58.0) (2026-09-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* **recipes:** jigs recipe add ship is now jigs recipe add linear-ticket-to-pr.
+
+### Features
+
+* **recipes:** rename the ship recipe to linear-ticket-to-pr ([#385](https://github.com/salimhamed/jigs/issues/385)) ([d017f00](https://github.com/salimhamed/jigs/commit/d017f000937b8d59d1a264642a37b0e4fbd52de2))
+
+
+### Bug Fixes
+
+* **cli:** exempt jigs from pnpm's release-age hold and simplify init and recipe add output ([#384](https://github.com/salimhamed/jigs/issues/384)) ([329a13d](https://github.com/salimhamed/jigs/commit/329a13de468432067360c6ff313b8d8a52b2bc3b))
+
 ## [0.57.1](https://github.com/salimhamed/jigs/compare/jigs-v0.57.0...jigs-v0.57.1) (2026-09-24)
 
 
