@@ -14,14 +14,14 @@ pnpm exec jigs recipe add ship
 ```
 
 `recipe add` reports each file it creates, and keeps any file that already
-exists. It does not edit `jigs.config.ts`. Register the workflow yourself by
-adding the line it prints to the `workflows` map:
+exists. It registers the workflow by adding this line to the `workflows` map in
+`jigs.config.ts`:
 
 ```ts
 ship: () => import("./workflows/ship.ts"),
 ```
 
-Then run `pnpm typecheck`, `pnpm test` and `pnpm exec jigs up`.
+Then run `pnpm exec jigs up`.
 
 ## Available recipes
 

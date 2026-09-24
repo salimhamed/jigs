@@ -910,19 +910,11 @@ async function checkScaffold(name) {
   if (formatted !== generated) {
     fail("generated jigs.ts changes under Biome", "format templates/jigs.ts.tmpl as TypeScript");
   }
-  // Exercise recipe discovery and copying from the installed tarball, including
-  // the documented manual registration step. Both versions use these same files.
+  // Exercise recipe discovery, copying and registration from the installed
+  // tarball. Both versions use these same files.
   installFromTarball(tarballs.bumped);
   if (name === "ship") {
     run(path.join(factory, "node_modules", ".bin", "jigs"), ["recipe", "add", "ship"]);
-    const config = path.join(factory, "jigs.config.ts");
-    writeFileSync(
-      config,
-      readFileSync(config, "utf8").replace(
-        "workflows: {",
-        'workflows: {\n    ship: () => import("./workflows/ship.ts"),',
-      ),
-    );
   }
 
   // Bumped first so the tree is left holding a build of the real version.

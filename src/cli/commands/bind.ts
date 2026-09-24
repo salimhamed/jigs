@@ -6,7 +6,7 @@ import {
   mergePolicyCheck,
   realGithubMergePolicyProbes,
 } from "../../checks/github-identity.ts";
-import { upsertBinding } from "../../config/binding-edit.ts";
+import { upsertBinding } from "../../config/config-edit.ts";
 import {
   bindingMergePolicy,
   installationFor,

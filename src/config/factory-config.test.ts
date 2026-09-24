@@ -6,7 +6,7 @@ import { afterEach, expect, test } from "vitest";
 import { defineFactory, RESERVED_AGENT_ENV } from "../blocks/factory.ts";
 import { CLAUDE_ENV } from "../steps/agents/drivers/claude-support.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
-import { removeBinding, upsertBinding } from "./binding-edit.ts";
+import { addWorkflow, removeBinding, upsertBinding } from "./config-edit.ts";
 import {
   bindingMergePolicy,
   parseFactoryConfig,
@@ -359,6 +359,26 @@ test.each([
   "export default defineFactory({ bindings: { api: { remote: url } } });",
 ])("unsupported automatic edits fail clearly", (text) => {
   expect(() => upsertBinding(text, "api", "url")).toThrow("Cannot edit bindings in jigs.config.ts");
+});
+
+test.each([
+  [
+    "export default defineFactory({ workflows: {} });",
+    'workflows: {\n  ship: () => import("./workflows/ship.ts"),\n}',
+  ],
+  ["export default defineFactory({ workflows: { hello } });", undefined],
+])("a workflow is registered in a direct workflows object", (text, expected) => {
+  if (expected) expect(addWorkflow(text, "ship")).toContain(expected);
+  else expect(() => addWorkflow(text, "ship")).toThrow("Cannot register ship");
+});
+
+test("an already registered workflow leaves the config alone", () => {
+  expect(
+    addWorkflow('export default { workflows: { ship: () => import("./x.ts") } };', "ship"),
+  ).toBeUndefined();
+  expect(() => addWorkflow("export default {};", "ship")).toThrow(
+    "Cannot register ship in jigs.config.ts: workflows is not a direct object",
+  );
 });
 
 test("config loading supports computed settings without invoking workflow loaders", () => {
