@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.56.1
+# @jigs-ai/jigs v0.56.2
 
 Define a factory and describe its workflows, schedules, bindings and merge policy.
 
@@ -122,7 +122,7 @@ Operating settings and deferred workflow modules declared by a factory.
 
 ##### bindings?
 
-> `optional` **bindings**: `Record`\<`string`, \{ `copy?`: `string`[]; `hookTimeoutMinutes?`: `number`; `postCreate?`: `string`[]; `remote`: `string`; \}\>
+> `optional` **bindings**: `Record`\<`string`, \{ `copy?`: `string`[]; `hookTimeoutMinutes?`: `number`; `merge?`: \{ `by?`: `"jigs"` \| `"human"`; `method?`: `"squash"` \| `"merge"` \| `"rebase"`; \}; `postCreate?`: `string`[]; `remote`: `string`; \}\>
 
 ##### github?
 
@@ -384,6 +384,27 @@ A provisioned repository worktree and the commit it was cut from.
 > **AnyWorkflowEntry** = [`WorkflowEntry`](#workflowentry)\<`any`\>
 
 A workflow entry used where a factory contains several different input schemas.
+
+***
+
+### BindingDefinition
+
+> **BindingDefinition** = `z.input`\<*typeof* `bindingSchema`\>
+
+A repository this factory works in: its remote, how a worktree cut from it
+is provisioned, and any merge settings that differ from the factory's.
+
+#### Example
+
+```ts
+bindings: {
+  api: {
+    remote: "git@github.com:acme/api.git",
+    postCreate: ["pnpm install"],
+    merge: { by: "jigs", method: "rebase" },
+  },
+},
+```
 
 ***
 
