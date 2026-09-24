@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.56.3](https://github.com/salimhamed/jigs/compare/jigs-v0.56.2...jigs-v0.56.3) (2026-09-24)
+
+
+### Bug Fixes
+
+* **packaging:** keep runtime peers out of the pnpm dlx install ([#378](https://github.com/salimhamed/jigs/issues/378)) ([0d511a3](https://github.com/salimhamed/jigs/commit/0d511a31dc7bfa61edf07c3d2b6261bbfc8a57b6))
+
 ## [0.56.2](https://github.com/salimhamed/jigs/compare/jigs-v0.56.1...jigs-v0.56.2) (2026-09-24)
 
 
