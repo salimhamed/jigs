@@ -2,8 +2,9 @@
 
 Run every command inside your factory, as `pnpm exec jigs <command>`, so it uses
 that factory's installed version of jigs. The exception is `init`, which runs
-before there is a factory: `pnpm dlx @jigs-ai/jigs init`. Add `--help` to a command to see its
-options.
+before there is a factory:
+`pnpm --config.minimum-release-age-exclude=@jigs-ai/jigs dlx @jigs-ai/jigs init`.
+Add `--help` to a command to see its options.
 
 ## Everyday commands
 

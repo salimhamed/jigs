@@ -32,7 +32,7 @@ factory, `jigs` means `pnpm exec jigs`.
 
 ```sh
 mkdir my-factory && cd my-factory && git init
-pnpm dlx @jigs-ai/jigs init
+pnpm --config.minimum-release-age-exclude=@jigs-ai/jigs dlx @jigs-ai/jigs init
 ```
 
 Choose the GitHub identity now; `jigs init --help` lists the flags.

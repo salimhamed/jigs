@@ -17,7 +17,7 @@ nothing is installed globally. You need Node 24 or newer, pnpm and Docker.
 
 ```sh
 mkdir my-factory && cd my-factory && git init
-pnpm dlx @jigs-ai/jigs init
+pnpm --config.minimum-release-age-exclude=@jigs-ai/jigs dlx @jigs-ai/jigs init
 pnpm install
 cp .env.example .env
 pnpm exec jigs up

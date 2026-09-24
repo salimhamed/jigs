@@ -251,8 +251,11 @@ test("the next steps are printed, not run", async () => {
   const { lines } = await init(dir);
 
   const printed = lines.join("\n");
-  expect(printed).toContain("jigs.ts is generated");
-  const steps = lines.slice(lines.indexOf("next, in this directory:") + 1).map((l) => l.trim());
+  const next = lines.indexOf("next, in this directory:");
+  // Only the file list and one blank line come before the next steps.
+  expect(lines.slice(0, next - 1).every((l) => l.startsWith("created "))).toBe(true);
+  expect(lines[next - 1]).toBe("");
+  const steps = lines.slice(next + 1).map((l) => l.trim());
   expect(steps.map((l) => l.split("  ")[0])).toEqual([
     "pnpm install",
     "cp .env.example .env",
@@ -355,23 +358,16 @@ test.each([
 
 test("the scaffold names its Linear identity and the variables that mode reads", async () => {
   const keyFactory = scaffold("key-factory");
-  const { lines: keyLines } = await init(keyFactory);
+  await init(keyFactory);
   const key = readFileSync(path.join(keyFactory, "jigs.config.ts"), "utf8");
   expect(key).toContain('identity: { mode: "key" }');
   expect(key).toContain("LINEAR_API_KEY");
-  expect(keyLines.join("\n")).toContain("whoever owns LINEAR_API_KEY");
 
   const appFactory = scaffold("linear-app-factory");
-  const lines: string[] = [];
-  await initFactory({
-    cwd: appFactory,
-    out: (line) => lines.push(line),
-    linearIdentity: { mode: "app" },
-  });
+  await initFactory({ cwd: appFactory, out: () => {}, linearIdentity: { mode: "app" } });
   const app = readFileSync(path.join(appFactory, "jigs.config.ts"), "utf8");
   expect(app).toContain('identity: { mode: "app" }');
   expect(app).toContain("LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET");
-  expect(lines.join("\n")).toContain("set LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET in .env");
   // Both modes' slots are scaffolded, so switching mode needs no new .env line.
   const example = readFileSync(path.join(appFactory, ".env.example"), "utf8");
   for (const name of ["LINEAR_API_KEY=", "LINEAR_CLIENT_ID=", "LINEAR_CLIENT_SECRET="])
