@@ -89,15 +89,26 @@ test("root and no-argument help are side-effect-free, grouped and exact", () => 
     expect(noArgs.status).toBe(0);
     expect(noArgs.stderr).toBe("");
     expect(noArgs.stdout).toBe(explicit.stdout);
-    expect(noArgs.stdout).toContain("Everyday commands:");
-    expect(noArgs.stdout).toContain("Connecting code repositories:");
-    expect(noArgs.stdout).toContain("Ready-made workflows:");
-    expect(noArgs.stdout).toContain("Inspecting and cleaning working files:");
-    expect(noArgs.stdout).toContain("Background service:");
-    expect(noArgs.stdout).toContain("Advanced commands:");
-    expect(noArgs.stdout).toContain("jigs run ship --input ticket=AGE-123");
-    expect(noArgs.stdout).toContain("each workflow defines its own inputs");
-    expect(noArgs.stdout.indexOf("jigs init")).toBeLessThan(noArgs.stdout.indexOf("jigs bind"));
+    expect(noArgs.stdout.startsWith("Usage: jigs <command> [options]\n\nSet up:\n")).toBe(true);
+    const sections = noArgs.stdout.split("\n").filter((line) => /^\S.*:$/.test(line));
+    expect(sections).toEqual([
+      "Set up:",
+      "Start and stop:",
+      "Service process:",
+      "Workflows and runs:",
+      "Repositories:",
+      "Recipes:",
+      "Resources:",
+      "Generated code:",
+      "Options:",
+    ]);
+    expect(noArgs.stdout).toMatch(/^ {2}down {2,}Stop the service and Postgres; data is kept$/m);
+    expect(noArgs.stdout).toMatch(
+      /^ {2}service stop {2,}Stop the service; Postgres keeps running$/m,
+    );
+    expect(noArgs.stdout).toContain("pnpm exec jigs <command>; add --help for its options");
+    expect(noArgs.stdout).not.toMatch(/\bship\b/);
+    expect(noArgs.stdout).not.toContain("Getting started");
     expect(noArgs.stdout).not.toMatch(/jigs (ps|sweep)\b/);
     expect(noArgs.stdout).not.toMatch(/^\s*jigs logs\b/m);
     expect(existsSync(path.join(cwd, "package.json"))).toBe(false);

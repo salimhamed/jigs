@@ -11,6 +11,7 @@ options.
 | --- | --- |
 | `jigs init` | Create a factory in the current directory. Keeps existing files. |
 | `jigs up` | Install, start Postgres, build, start the service, wait until ready, then run `jigs doctor`. |
+| `jigs down` | Stop the service, then Postgres (`docker compose down`). Postgres's data is kept. |
 | `jigs workflows` | List the workflows the running service can run, and their inputs. |
 | `jigs run <workflow> --input key=value` | Start a run. Repeat `--input` for each input. |
 | `jigs status [run]` | Show all runs and schedules, or one run's steps, result, resources and what it waits for. |
@@ -47,7 +48,7 @@ options.
 | Command | What it does |
 | --- | --- |
 | `jigs service start` | Start the service from the current build and wait until it is ready. |
-| `jigs service stop` | Stop the service, giving in-flight work a few seconds to finish. |
+| `jigs service stop` | Stop the service, giving in-flight work a few seconds to finish. Postgres keeps running. |
 | `jigs service restart` | Stop, then start. |
 | `jigs service status` | Say whether the service runs, with its service and dashboard URLs. |
 | `jigs service logs` | Print the service's recent output. `--lines` sets how many. |

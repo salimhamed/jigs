@@ -67,13 +67,13 @@ export async function bindRepo(
   if (remoteUrl.startsWith("-")) {
     throw new JigsError(
       `${remoteUrl} starts with a dash — bind takes a remote URL, not a git option`,
-      "jigs bind git@github.com:owner/repo.git",
+      "pnpm exec jigs bind git@github.com:owner/repo.git",
     );
   }
   if (looksLikePath(remoteUrl)) {
     throw new JigsError(
       `${remoteUrl} looks like a path — bind takes a remote URL`,
-      "jigs bind git@github.com:owner/repo.git — a repo on this machine is a URL too: file:///srv/git/repo.git",
+      "pnpm exec jigs bind git@github.com:owner/repo.git — a repo on this machine is a URL too: file:///srv/git/repo.git",
     );
   }
 
@@ -100,7 +100,7 @@ export async function bindRepo(
     // store that already holds another repo's.
     throw new JigsError(
       `${name} is already bound to ${existing.remote}`,
-      `jigs unbind ${name}, then bind again — the clone at ${bindingDir({ factoryRoot, bindingName: name })} holds the old repo's objects`,
+      `pnpm exec jigs unbind ${name}, then bind again — the clone at ${bindingDir({ factoryRoot, bindingName: name })} holds the old repo's objects`,
     );
   }
   const updated = upsertBinding(text, name, remoteUrl);
@@ -120,7 +120,7 @@ export async function bindRepo(
     existing === undefined ||
     !hasBindingClone(bindingRepoDir({ factoryRoot, bindingName: name }))
   ) {
-    deps.out(`run jigs up to apply the config and clone ${name}`);
+    deps.out(`run pnpm exec jigs up to apply the config and clone ${name}`);
   }
 
   // Last, so furniture that cannot be ensured leaves the binding recorded and
@@ -129,8 +129,8 @@ export async function bindRepo(
   // approval is only one possible merge signal.
   const reBindCommand =
     options.name !== undefined || name !== derivedName
-      ? `jigs bind ${remoteUrl} --binding-name ${name}`
-      : `jigs bind ${remoteUrl}`;
+      ? `pnpm exec jigs bind ${remoteUrl} --binding-name ${name}`
+      : `pnpm exec jigs bind ${remoteUrl}`;
   const webhook = await ensureWebhook({
     remoteUrl,
     factoryRoot,

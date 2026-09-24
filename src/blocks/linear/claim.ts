@@ -33,7 +33,7 @@ export class ClaimConflictError extends Error {
 
   constructor(resource: string, owningRunId: string) {
     super(
-      `${resource} is already claimed by run ${owningRunId} — release it with: jigs cancel ${owningRunId}`,
+      `${resource} is already claimed by run ${owningRunId} — release it with: pnpm exec jigs cancel ${owningRunId}`,
     );
     this.name = "ClaimConflictError";
     this.resource = resource;

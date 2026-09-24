@@ -5,15 +5,16 @@ A [jigs](https://salimhamed.github.io/jigs/) factory: workflows and the service 
 ## Start
 
 ```sh
-cp .env.example .env
 pnpm install
+cp .env.example .env
 pnpm exec jigs up
 pnpm exec jigs run hello --input message=hello
 ```
 
-`jigs up` starts the service and ends by running `jigs doctor`, which checks
-only what this factory's workflows use. `hello` needs no repository, ticket
-source, credentials or agent. Rerun `jigs doctor` any time the service is up.
+`jigs up` starts Postgres and the service and ends by running `jigs doctor`,
+which checks only what this factory's workflows use. `hello` needs no
+repository, ticket source, credentials or agent. Rerun `pnpm exec jigs doctor`
+any time the service is up.
 See [getting started](https://salimhamed.github.io/jigs/guide/getting-started).
 
 Every `jigs` below means `pnpm exec jigs`. The service listens on
@@ -43,8 +44,8 @@ one Markdown page per import path.
 ## Recipes
 
 ```sh
-jigs recipe list
-jigs recipe add ship
+pnpm exec jigs recipe list
+pnpm exec jigs recipe add ship
 ```
 
 `recipe add` copies a recipe's workflow, tests and blocks into this factory and
@@ -57,7 +58,7 @@ adding ship, read `blocks/delivery/README.md`. See
 
 ```sh
 pnpm typecheck
-jigs build
+pnpm exec jigs build
 pnpm test
 ```
 

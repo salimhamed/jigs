@@ -26,7 +26,7 @@ test("an unset AWS_PROFILE fails naming the env file and the restart", async () 
   expect(result).toMatchObject({
     ok: false,
     reason: expect.stringContaining("AWS_PROFILE is not set"),
-    repair: "set AWS_PROFILE in the factory repo's .env, then: jigs service restart",
+    repair: "set AWS_PROFILE in the factory repo's .env, then: pnpm exec jigs service restart",
   });
 });
 

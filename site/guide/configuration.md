@@ -291,8 +291,8 @@ rejected.
 
 ## The `.env` file
 
-`jigs init` writes `.env.example`. Copy it to `.env`; `jigs up` does this for
-you if `.env` is missing, and lists the credentials still empty.
+`jigs init` writes `.env.example`. Copy it to `.env`; `jigs up` stops if `.env`
+is missing, and lists the credentials still empty.
 
 | Variable | When you need it |
 | --- | --- |

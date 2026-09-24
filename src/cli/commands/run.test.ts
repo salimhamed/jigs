@@ -161,7 +161,7 @@ test("a refused launch prints every preflight failure with its repair", async ()
             label: "binding api",
             ok: false,
             reason: "no binding named 'api'",
-            repair: "run: jigs bind <the-api-remote-url> --binding-name api",
+            repair: "run: pnpm exec jigs bind <the-api-remote-url> --binding-name api",
           },
           {
             id: "harness.codex-auth",
@@ -180,7 +180,7 @@ test("a refused launch prints every preflight failure with its repair", async ()
   expect(lines.join("\n")).toBe(
     [
       "binding api: no binding named 'api'",
-      "  → run: jigs bind <the-api-remote-url> --binding-name api",
+      "  → run: pnpm exec jigs bind <the-api-remote-url> --binding-name api",
       "Codex subscription login: no Codex login found",
       "  → run: codex login",
     ].join("\n"),
@@ -203,7 +203,7 @@ test("a started run prints its id, workflow and log pointer", async () => {
   expect(lines).toEqual([
     "run wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
     "workflow deliver-feature",
-    "inspect: jigs status wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
+    "inspect: pnpm exec jigs status wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
     "dashboard: http://localhost:9090/run/wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
   ]);
   const [, trigger] = fetchMock.mock.calls;
@@ -276,7 +276,7 @@ test("a run launched over sources newer than the build says so, and still launch
   });
 
   expect(lines[0]).toContain("jigs.config.ts newer than the built service");
-  expect(lines[1]).toContain("jigs up");
+  expect(lines[1]).toContain("pnpm exec jigs up");
   expect(lines).toContain("run wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM");
 });
 

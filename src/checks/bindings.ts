@@ -67,7 +67,7 @@ async function checkBinding(
       reason: `no binding named '${name}' in ${FACTORY_CONFIG_FILE}`,
       // The remote is genuinely not knowable from the manifest; the name is,
       // so the invocation is as exact as it can be.
-      repair: `run: jigs bind <the-${name}-remote-url> --binding-name ${name}`,
+      repair: `run: pnpm exec jigs bind <the-${name}-remote-url> --binding-name ${name}`,
     };
   }
 

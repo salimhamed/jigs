@@ -232,7 +232,7 @@ Confirm these actions when the current request has not already authorized them:
   local resources remain for automatic release or offline maintenance.
 - `jigs resources prune --apply` — it removes the preview's eligible local
   resources after proving the factory service and child scope are stopped.
-- `jigs service restart`, `jigs service stop`, `jigs up --restart-service` or
+- `jigs service restart`, `jigs service stop`, `jigs down`, `jigs up --restart-service` or
   `jigs upgrade` while `jigs status` shows a running or suspended run. `up` and
   `upgrade` ask before restarting over one; `--force` is the human's call.
 - Editing the `bindings` block in `jigs.config.ts` — changing a `remote:` repoints

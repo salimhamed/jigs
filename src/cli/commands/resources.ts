@@ -234,14 +234,14 @@ export async function runResourcesPrune(
     if (!systemd.available()) {
       throw new JigsError(
         "cannot prove the factory's child processes are stopped without systemd user scopes",
-        "run preview only here, or perform --apply on the supervised host after jigs service stop",
+        "run preview only here, or perform --apply on the supervised host after pnpm exec jigs service stop",
       );
     }
     const pid = liveServicePid({ cwd: factoryRoot, out: deps.out });
     if (pid !== undefined) {
       throw new JigsError(
         `factory service is still running as pid ${pid}`,
-        "stop it first with jigs service stop; prune never stops or kills processes",
+        "stop it first with pnpm exec jigs service stop; prune never stops or kills processes",
       );
     }
     if (serviceSupervision(slug) !== "systemd-scope") {

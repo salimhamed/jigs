@@ -77,7 +77,7 @@ test("a timeout repair names the check that timed out, not a doctor run that can
     ok: false,
     repair: expect.stringContaining("hangs"),
   });
-  expect(outcome?.ok === false && outcome.repair).not.toContain("jigs doctor");
+  expect(outcome?.ok === false && outcome.repair).not.toContain("pnpm exec jigs doctor");
 });
 
 test("formatFailures renders one repair line per failure and skips the passes", () => {
@@ -281,7 +281,7 @@ test("a factory config that cannot be read fails the Linear check as itself", as
       id: "linear.identity",
       ok: false,
       reason: expect.stringContaining("jigs.config.ts"),
-      repair: "repair jigs.config.ts, then: jigs service restart",
+      repair: "repair jigs.config.ts, then: pnpm exec jigs service restart",
     }),
   ]);
   expect(report.checks[0]).not.toMatchObject({ reason: expect.stringContaining("rejected") });

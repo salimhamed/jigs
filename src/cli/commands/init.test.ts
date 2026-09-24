@@ -252,11 +252,15 @@ test("the next steps are printed, not run", async () => {
 
   const printed = lines.join("\n");
   expect(printed).toContain("jigs.ts is generated");
-  expect(printed).toContain("credentials for workflows you add");
-  expect(printed).toContain("  jigs up ");
-  expect(printed).toContain("  jigs doctor ");
+  const steps = lines.slice(lines.indexOf("next, in this directory:") + 1).map((l) => l.trim());
+  expect(steps.map((l) => l.split("  ")[0])).toEqual([
+    "pnpm install",
+    "cp .env.example .env",
+    "pnpm exec jigs up",
+    "pnpm exec jigs run hello --input message=hello",
+    "pnpm exec jigs doctor",
+  ]);
   expect(printed).not.toContain("--no-doctor");
-  expect(printed).toContain("jigs run hello");
   // `jigs up` owns the machine-touching commands now, one step at a time.
   expect(printed).not.toContain("docker compose");
   expect(printed).not.toContain("pnpm exec bootstrap");
@@ -283,9 +287,8 @@ test("the scaffold states an identity and the approval signal that matches it", 
   expect(app).toContain("installations: { salimhamed: 162033982 }");
   expect(app).toContain('operator: "salimhamed"');
   expect(app).toContain('approval: { kind: "review" }');
-  // App mode needs no GITHUB_TOKEN, and does need the key locked down.
+  // App mode needs the key locked down.
   expect(lines.join("\n")).toContain("chmod 600 github-app.private-key.pem");
-  expect(lines.join("\n")).toContain("the App needs no GITHUB_TOKEN");
   // The App's private key is a credential, and a scaffolded repo is a git repo.
   expect(readFileSync(path.join(appFactory, ".gitignore"), "utf8")).toContain("*.private-key.pem");
 });

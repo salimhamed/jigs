@@ -8,6 +8,7 @@ import { listBindings } from "./commands/bindings.ts";
 import { buildFactoryService } from "./commands/build.ts";
 import { cancelRun } from "./commands/cancel.ts";
 import { runDoctor } from "./commands/doctor.ts";
+import { downFactory } from "./commands/down.ts";
 import { generateIntegration } from "./commands/generate.ts";
 import {
   type AppIdentityOptions,
@@ -69,65 +70,59 @@ const RUN_SELECTOR_HELP =
 
 const ROOT_HELP = `Usage: jigs <command> [options]
 
-Guides coding agents through repeatable workflows
+Set up:
+  init                      Scaffold a factory in the current directory
+  upgrade                   Move to a newer jigs, run up, then typecheck
+  doctor                    Check config, connections and required tools
 
-Everyday commands:
-  jigs init                         Set up a new factory in the current directory.
-  jigs up                           Prepare, build and start the factory, then check readiness.
-  jigs workflows                    List workflows available to run and their inputs.
-  jigs run <workflow-name>          Start a workflow.
-  jigs status [run-id]              Show all runs, or full detail for one run.
-  jigs watch [run-id]               Follow all runs, or only the selected run.
-  jigs cancel <run-id>              Cancel a run.
-  jigs doctor                       Check configuration, connections and required tools.
-  jigs upgrade                      Update jigs, prepare and start, then typecheck.
+Start and stop:
+  up                        Start Postgres and the service, then run doctor
+                            (reruns restart the service only if the build or
+                            config changed)
+  down                      Stop the service and Postgres; data is kept
 
-Connecting code repositories:
-  jigs bind <remote-url>            Connect a target Git repository to this factory.
-  jigs bindings                     List connected repositories and local clone state.
-  jigs unbind <binding-name>        Remove a connection without deleting the remote.
+Service process:
+  service start             Start the service from the existing build
+  service stop              Stop the service; Postgres keeps running
+  service restart           Stop and start the service
+  service status            Report whether the service is running
+  service logs              Show recent service output
 
-Ready-made workflows:
-  jigs recipe list                  List available workflow templates.
-  jigs recipe add <recipe-name>     Copy a template while preserving existing files.
+Workflows and runs:
+  workflows                 List the workflows the service can run
+  run <workflow-name>       Start a workflow
+  status [run-id]           Show all runs, or full detail for one run
+  watch [run-id]            Follow all runs, or only the selected run
+  cancel <run-id>           Cancel a run
+  poke <run-id>             Ask a suspended run to evaluate again
 
-Inspecting and cleaning working files:
-  jigs resources list               Show this factory's run resources and working folders.
-  jigs resources prune              Preview safe resource cleanup.
-  jigs resources prune --apply      Perform eligible cleanup after safety checks.
+Repositories:
+  bind <remote-url>         Connect a Git repository to this factory
+  bindings                  List connected repositories and their clones
+  unbind <binding-name>     Remove a connection; the remote is untouched
 
-Background service:
-  jigs service start                Start the service using the existing build.
-  jigs service stop                 Stop the service.
-  jigs service restart              Stop and start the service.
-  jigs service status               Report whether the service is running.
-  jigs service logs                 Show recent service output.
+Recipes:
+  recipe list               List the workflows jigs ships
+  recipe add <recipe-name>  Copy one in, keeping files that already exist
 
-Advanced commands:
-  jigs build                        Compile workflows into the runnable service.
-  jigs generate                     Refresh the generated jigs.ts integration.
-  jigs poke <run-id>                Ask a suspended run to evaluate again.
+Resources:
+  resources list            Show run resources and working folders
+  resources prune           Preview safe resource cleanup
+  resources prune --apply   Perform eligible cleanup after safety checks
 
-Getting started:
-  jigs up
-  jigs workflows
-  jigs run ship --input ticket=AGE-123
-  jigs status <run-id>
-  jigs watch <run-id>
-
-The ship workflow must be installed and registered first. AGE-123 is an example
-input for ship; each workflow defines its own inputs.
+Generated code:
+  build                     Compile workflows into the service bundle
+  generate                  Refresh the generated jigs.ts
 
 Run selectors accept a complete run ID, unique ID prefix, ticket ID such as
-AGE-123, or a supported ticket UUID. Run jigs <command> --help for options.
+AGE-123, or a supported ticket UUID. In a factory, run every command as
+pnpm exec jigs <command>; add --help for its options.
 
 Options:
   -h, --help                         Display help.
 `;
 
-const program = new Command("jigs")
-  .description("Guides coding agents through repeatable workflows")
-  .showHelpAfterError("(add --help for additional information)");
+const program = new Command("jigs").showHelpAfterError("(add --help for additional information)");
 
 // Root help is a user journey rather than Commander's registration order.
 // Overriding only this command leaves every command's generated help intact.
@@ -230,6 +225,15 @@ program
       { ...options, restart: options.restartService },
     );
     if (!result.ok) process.exitCode = 1;
+  });
+
+program
+  .command("down")
+  .description(
+    "stop this factory's service process, then its Postgres container (docker compose down, volume kept)",
+  )
+  .action(async () => {
+    await downFactory({ cwd: process.cwd(), out });
   });
 
 program
@@ -404,32 +408,32 @@ resources
 
 const service = program
   .command("service")
-  .description("supervise this factory repo's service process");
+  .description("supervise this factory's service process; Postgres is left running");
 
 service
   .command("start")
-  .description("start this factory's service in the background")
+  .description("start this factory's service process in the background")
   .action(async () => {
     await startService({ cwd: process.cwd(), out });
   });
 
 service
   .command("stop")
-  .description("stop this factory's service")
+  .description("stop this factory's service process, dashboard included")
   .action(async () => {
     await stopService({ cwd: process.cwd(), out });
   });
 
 service
   .command("restart")
-  .description("stop then start this factory's service")
+  .description("stop then start this factory's service process")
   .action(async () => {
     await restartService({ cwd: process.cwd(), out });
   });
 
 service
   .command("status")
-  .description("report whether this factory's service is running")
+  .description("report whether this factory's service process is running")
   .action(() => {
     serviceStatus({ cwd: process.cwd(), out });
   });
