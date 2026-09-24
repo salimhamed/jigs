@@ -63,7 +63,8 @@ export interface Call {
 }
 
 // Stands in for pnpm, docker, bootstrap and nitro. The fake nitro writes the
-// bundle, so a test controls whether a build changes it.
+// bundle, so a test controls whether a build changes it; the fake docker
+// names the Postgres container and volume the way compose would.
 export function fakeExec(fail?: (call: Call) => Error | undefined) {
   const state = {
     calls: [] as Call[],
@@ -79,6 +80,20 @@ export function fakeExec(fail?: (call: Call) => Error | undefined) {
       const entry = path.join(options.cwd, SERVICE_ENTRY);
       mkdirSync(path.dirname(entry), { recursive: true });
       writeFileSync(entry, state.bundle);
+    }
+    if (file === "docker" && args[1] === "ps") {
+      return {
+        stdout: `${JSON.stringify({ Name: "acme-factory-postgres-1", Service: "postgres" })}\n`,
+        stderr: "",
+      };
+    }
+    if (file === "docker" && args[1] === "config") {
+      return {
+        stdout: JSON.stringify({
+          volumes: { "postgres-data": { name: "acme-factory_postgres-data" } },
+        }),
+        stderr: "",
+      };
     }
     return { stdout: "", stderr: "" };
   };

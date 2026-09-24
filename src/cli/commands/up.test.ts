@@ -89,6 +89,8 @@ test("from a freshly scaffolded factory, every step runs once, in order", async 
     ["docker", "compose", "up", "-d", "--wait"],
     ["bootstrap"],
     ["nitro", "build"],
+    ["docker", "compose", "ps", "-a", "--format", "json"],
+    ["docker", "compose", "config", "--format", "json"],
   ]);
   for (const call of io.exec.calls) expect(call.options.cwd).toBe(root);
   expect(io.procs.spawns).toHaveLength(1);
@@ -100,19 +102,28 @@ test("from a freshly scaffolded factory, every step runs once, in order", async 
   expect(printed).toMatch(/^ok {3}doctor \(\d+ms\)$/m);
   const [pid] = io.procs.alive;
   const log = io.procs.spawns[0]?.logPath ?? "";
-  const slug = path.basename(log, ".log");
-  const [postgres, service, dashboard] = [
-    "docker compose project acme-factory, port 5555",
-    `http://localhost:${port}  pid ${pid}`,
-    "dashboard http://localhost:9200",
-  ].map((what) => what.padEnd(50));
-  expect(lines.slice(-5)).toEqual([
-    `${slug} is up`,
-    `  postgres   ${postgres}stop: docker compose down`,
-    `  service    ${service}stop: pnpm exec jigs service stop`,
-    `             ${dashboard}logs ${log}`,
-    "  stop everything: pnpm exec jigs down",
+  expect(lines.slice(-8)).toEqual([
+    "acme-factory is up",
+    "",
+    "  postgres    localhost:5555  (Docker container acme-factory-postgres-1)",
+    `  service     http://localhost:${port}  (pid ${pid})`,
+    "  dashboard   http://localhost:9200",
+    `  logs        ${log}`,
+    "",
+    "  stop:  pnpm exec jigs down",
   ]);
+});
+
+test("a container compose cannot name is left out of the summary, not guessed", async () => {
+  const port = await fakeService();
+  const root = factory({ port });
+  const io = {
+    exec: fakeExec((call) => (call.args[1] === "ps" ? execError(1) : undefined)),
+    procs: fakeProcesses(),
+  };
+
+  expect((await up(root, io)).ok).toBe(true);
+  expect(lines).toContain("  postgres    localhost:5555");
 });
 
 test("an app Linear identity names its client variables as the empty slots", async () => {

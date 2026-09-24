@@ -54,13 +54,16 @@ test("stops the service process, then Postgres without removing its volume", asy
   expect(io.procs.signals).toContainEqual({ pid: 53812, sig: "SIGTERM" });
   expect(existsSync(servicePidfilePath(slug))).toBe(false);
   expect(io.exec.calls.map((call) => [call.file, ...call.args])).toEqual([
+    ["docker", "compose", "ps", "-a", "--format", "json"],
+    ["docker", "compose", "config", "--format", "json"],
     ["docker", "compose", "down"],
   ]);
-  expect(io.exec.calls[0]?.options.cwd).toBe(root);
+  for (const call of io.exec.calls) expect(call.options.cwd).toBe(root);
   expect(lines).toEqual([
     `stopped service ${slug} (pid 53812)`,
-    "stopped postgres container (docker compose down); data kept in its volume",
-    `${slug} is down — start again with pnpm exec jigs up`,
+    "stopped postgres container acme-factory-postgres-1  (data kept in volume acme-factory_postgres-data)",
+    "",
+    "acme-factory is down — start again with pnpm exec jigs up",
   ]);
 });
 
@@ -72,8 +75,20 @@ test("a service that is not running is said so, and Postgres still stops", async
 
   const { slug } = resolveService(root);
   expect(lines[0]).toBe(`service ${slug} was not running`);
-  expect(io.exec.calls.map((call) => call.args)).toEqual([["compose", "down"]]);
-  expect(lines.at(-1)).toBe(`${slug} is down — start again with pnpm exec jigs up`);
+  expect(io.exec.calls.map((call) => call.args).at(-1)).toEqual(["compose", "down"]);
+  expect(lines.at(-1)).toBe("acme-factory is down — start again with pnpm exec jigs up");
+});
+
+test("names compose cannot give are left out, not guessed", async () => {
+  const root = scaffold(tmp, { port: 1 });
+  const io = {
+    exec: fakeExec((call) => (call.args[1] === "down" ? undefined : execError(1))),
+    procs: fakeProcesses(),
+  };
+
+  await down(root, io);
+
+  expect(lines).toContain("stopped postgres container");
 });
 
 test("docker compose output is streamed as it prints", async () => {
