@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.57.0](https://github.com/salimhamed/jigs/compare/jigs-v0.56.3...jigs-v0.57.0) (2026-09-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cli:** add jigs down, print runnable commands, regroup help, and summarise what up started ([#380](https://github.com/salimhamed/jigs/issues/380))
+
+### Features
+
+* **cli:** add jigs down, print runnable commands, regroup help, and summarise what up started ([#380](https://github.com/salimhamed/jigs/issues/380)) ([2aa5ff1](https://github.com/salimhamed/jigs/commit/2aa5ff1e113ee597010d7d671ce9b4ba0d7b726c))
+
 ## [0.56.3](https://github.com/salimhamed/jigs/compare/jigs-v0.56.2...jigs-v0.56.3) (2026-09-24)
 
 
