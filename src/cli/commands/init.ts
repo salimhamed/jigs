@@ -136,25 +136,6 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   reportCopied({ created, skipped }, deps.out);
 
   deps.out("");
-  deps.out(
-    `${factoryName(root)} listens on :${ports.servicePort}, its dashboard on :${ports.dashboardPort}, its World on :${ports.postgresPort}`,
-  );
-  deps.out("");
-  deps.out(
-    "workflows/, blocks/ and custom steps/ are yours; jigs.ts is generated — refresh it with pnpm exec jigs generate and keep custom code outside it",
-  );
-  deps.out("");
-  deps.out(
-    identity.mode === "app"
-      ? `jigs acts as the App, with ${identity.operator} as the operator; a GitHub review is the approval signal`
-      : "jigs acts as you, so GitHub will not let you approve its pull requests — a jigs:approved label is the signal instead",
-  );
-  deps.out(
-    linearIdentity.mode === "app"
-      ? "on Linear jigs acts as your OAuth application: set LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET in .env"
-      : "on Linear jigs acts as whoever owns LINEAR_API_KEY in .env",
-  );
-  deps.out("");
   deps.out("next, in this directory:");
   if (identity.mode === "app") {
     deps.out(`  chmod 600 ${identity.privateKeyPath}   # and keep it out of git`);

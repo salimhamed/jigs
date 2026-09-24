@@ -1,5 +1,7 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { addWorkflow, workflowEntry } from "../../config/config-edit.ts";
+import { FACTORY_CONFIG_FILE } from "../../config/factory-config.ts";
 import { JigsError } from "../../errors.ts";
 import { copyFiles, reportCopied } from "../copy-files.ts";
 import { packageRoot } from "../templates.ts";
@@ -18,22 +20,31 @@ export function addRecipe(name: string, deps: { cwd: string; out: (line: string)
     throw new JigsError(`unknown recipe: ${name}`, "pnpm exec jigs recipe list");
   }
   const root = path.resolve(deps.cwd);
-  if (!existsSync(path.join(root, "jigs.config.ts"))) {
+  const configFile = path.join(root, FACTORY_CONFIG_FILE);
+  if (!existsSync(configFile)) {
     throw new JigsError(
       "no jigs.config.ts in this directory",
       "run from a factory root, or pnpm exec jigs init first",
     );
   }
+  // Parse before copying, so a config jigs cannot edit leaves the factory untouched.
+  const registered = addWorkflow(readFileSync(configFile, "utf8"), name);
   const result = copyFiles(path.join(recipesRoot(), name), root, {
     suffix: "",
     contents: (source) => source,
   });
   reportCopied(result, deps.out);
+  const entry = workflowEntry(name).slice(0, -1);
+  if (registered === undefined) {
+    deps.out(`${name} is already registered in ${FACTORY_CONFIG_FILE}`);
+  } else {
+    writeFileSync(configFile, registered);
+    deps.out(`registered ${name} in ${FACTORY_CONFIG_FILE} by adding ${entry}`);
+  }
   deps.out("");
-  deps.out("Register the workflow in jigs.config.ts under workflows (if not already present):");
-  deps.out(`  ${name}: () => import("./workflows/${name}.ts"),`);
+  deps.out("next:");
   deps.out(
-    "Then run pnpm exec jigs build, pnpm typecheck, and pnpm test. Copied recipe files are yours to edit.",
+    `  pnpm exec jigs up       # build and restart with ${name}; doctor lists what it still needs`,
   );
   return result;
 }

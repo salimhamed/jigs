@@ -32,7 +32,7 @@ factory, `jigs` means `pnpm exec jigs`.
 
 ```sh
 mkdir my-factory && cd my-factory && git init
-pnpm dlx @jigs-ai/jigs init
+pnpm --config.minimum-release-age-exclude=@jigs-ai/jigs dlx @jigs-ai/jigs init
 ```
 
 Choose the GitHub identity now; `jigs init --help` lists the flags.
@@ -116,10 +116,9 @@ jigs recipe list
 jigs recipe add ship
 ```
 
-`recipe add` copies source without overwriting and prints one registration line
-to add by hand under `workflows` in `jigs.config.ts`:
-`ship: () => import("./workflows/ship.ts"),`. The copied code is the factory's
-to edit; `blocks/delivery/README.md` explains the ship recipe.
+`recipe add` copies source without overwriting and registers the workflow under
+`workflows` in `jigs.config.ts`. If it cannot edit the config, it names the line
+to add by hand. The copied code is the factory's to edit; `blocks/delivery/README.md` explains the ship recipe.
 
 ```sh
 jigs bind git@github.com:owner/repo.git

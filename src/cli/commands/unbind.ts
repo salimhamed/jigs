@@ -1,4 +1,4 @@
-import { removeBinding } from "../../config/binding-edit.ts";
+import { removeBinding } from "../../config/config-edit.ts";
 import { readFactoryConfigText, writeFactoryConfigText } from "../../config/factory-config.ts";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { bindingDir } from "../../steps/workspaces/layout.ts";

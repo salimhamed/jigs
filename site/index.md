@@ -16,8 +16,9 @@ jigs runs durable TypeScript workflows that combine coding agents, model calls,
 questions for a person and operations such as opening a pull request. A run
 waits for a reply, a review or a CI build and continues where it left off.
 Your workflows live in a **factory repo** that installs jigs from npm as
-`@jigs-ai/jigs`. Create one with `pnpm dlx @jigs-ai/jigs init`, then follow
-[Install and run a first workflow](/guide/getting-started).
+`@jigs-ai/jigs`. Create one with
+`pnpm --config.minimum-release-age-exclude=@jigs-ai/jigs dlx @jigs-ai/jigs init`,
+then follow [Install and run a first workflow](/guide/getting-started).
 
 ## Getting started for agents
 

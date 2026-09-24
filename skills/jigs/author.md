@@ -11,9 +11,9 @@ The guides, in the order you need them:
 - `https://salimhamed.github.io/jigs/guide/recipes`: copying in a ready-made workflow such as ship.
 - `https://salimhamed.github.io/jigs/guide/configuration`: every `jigs.config.ts` key and `.env` variable.
 
-For the ship process, run `jigs recipe add ship`, then manually add the printed
-`ship: () => import("./workflows/ship.ts"),` line to the config's `workflows` map.
-The command preserves existing files and reports created/kept paths. Recipes
+For the ship process, run `jigs recipe add ship`. It adds
+`ship: () => import("./workflows/ship.ts"),` to the config's `workflows` map,
+preserves existing files and reports created/kept paths. Recipes
 become editable factory source; upgrades only regenerate `jigs.ts`.
 
 ## Code responsibilities
@@ -150,8 +150,7 @@ preserves the original strings. Treat the record as observability only:
 deletion requires separate kind-specific ownership and policy; a recorded URL
 does not authorize cleanup.
 
-For delivery, run `jigs recipe add ship` and register the workflow as the
-command instructs. The copied `blocks/delivery/` contains the phases, types,
+For delivery, run `jigs recipe add ship`; it registers the workflow. The copied `blocks/delivery/` contains the phases, types,
 prompts and renderers; these are factory code to edit, not library exports.
 Read `blocks/delivery/README.md` for the recipe's prerequisites, budgets,
 prompts and compiling examples before changing the ship process. Keep factory prompt overrides beside

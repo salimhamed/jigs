@@ -45,12 +45,15 @@ version, so there is nothing to install globally and no registry token.
 mkdir my-factory
 cd my-factory
 git init
-pnpm dlx @jigs-ai/jigs init
+pnpm --config.minimum-release-age-exclude=@jigs-ai/jigs dlx @jigs-ai/jigs init
 ```
 
-`init` writes the starting files and prints the next steps with this factory's
-ports filled in. It does not start anything. `workflows/hello.ts` is the first
-workflow, and `jigs.config.ts` registers it under the name `hello`.
+pnpm holds back packages published in the last day. The flag lets you get the
+newest jigs, and it applies only to jigs.
+
+`init` writes the starting files and prints the next steps. It does not start
+anything. `workflows/hello.ts` is the first workflow, and `jigs.config.ts`
+registers it under the name `hello`.
 
 ## 3. Start the service
 

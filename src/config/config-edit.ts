@@ -34,7 +34,7 @@ const reservedWords = new Set(
   ),
 );
 
-function bindingPropertyName(name: string): string {
+function propertyKey(name: string): string {
   return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) && !reservedWords.has(name)
     ? name
     : JSON.stringify(name);
@@ -45,17 +45,15 @@ function leadingWhitespace(text: string, position: number): string {
   return text.slice(lineStart, position).match(/^\s*/)?.[0] ?? "";
 }
 
-function insertBinding(
+function insertEntry(
   text: string,
   object: ObjectLiteralExpression,
-  bindingsProperty: PropertyAssignment,
-  name: string,
-  remote: string,
+  objectProperty: PropertyAssignment,
+  entry: string,
 ): string {
-  const entry = `${bindingPropertyName(name)}: { remote: ${JSON.stringify(remote)} },`;
   const properties = object.getProperties();
   if (properties.length === 0) {
-    const propertyIndent = leadingWhitespace(text, bindingsProperty.getStart());
+    const propertyIndent = leadingWhitespace(text, objectProperty.getStart());
     const indentation = propertyIndent || "  ";
     return `${text.slice(0, object.getStart())}{\n${propertyIndent}${indentation}${entry}\n${propertyIndent}}${text.slice(object.getEnd())}`;
   }
@@ -76,18 +74,12 @@ function insertBinding(
 
 // Editing deliberately supports the scaffold's direct object shape. Runtime
 // loading is unrestricted; an unsupported edit never writes or registers hooks.
-function editableBindings(text: string, manualEdit?: string) {
+function editableConfig(text: string, fail: (reason: string) => never) {
   const project = new Project({
     useInMemoryFileSystem: true,
     skipAddingFilesFromTsConfig: true,
   });
   const source = project.createSourceFile(FACTORY_CONFIG_FILE, text);
-  const fail = (reason: string): never => {
-    throw new JigsError(
-      `Cannot edit bindings in ${FACTORY_CONFIG_FILE}: ${reason}.`,
-      `Declare bindings directly as an object in export default defineFactory({ bindings: { ... } }) to use jigs bind or jigs unbind, or edit the binding manually. No files were changed.${manualEdit ? `\n${manualEdit}` : ""}`,
-    );
-  };
   const diagnostics = source
     .getPreEmitDiagnostics()
     .filter((d) => d.getCategory() === ts.DiagnosticCategory.Error && d.getCode() < 2000);
@@ -120,6 +112,17 @@ function editableBindings(text: string, manualEdit?: string) {
     }
   };
   validate(root, "the configuration object");
+  return { source, root, validate };
+}
+
+function editableBindings(text: string, manualEdit?: string) {
+  const fail = (reason: string): never => {
+    throw new JigsError(
+      `Cannot edit bindings in ${FACTORY_CONFIG_FILE}: ${reason}.`,
+      `Declare bindings directly as an object in export default defineFactory({ bindings: { ... } }) to use jigs bind or jigs unbind, or edit the binding manually. No files were changed.${manualEdit ? `\n${manualEdit}` : ""}`,
+    );
+  };
+  const { source, root, validate } = editableConfig(text, fail);
   let property = namedProperty(root, "bindings");
   const insertedBindings = !property;
   if (!property)
@@ -167,12 +170,17 @@ export function upsertBinding(text: string, name: string, remote: string): strin
   if (!property) {
     if (insertedBindings) {
       object.addPropertyAssignment({
-        name: bindingPropertyName(name),
+        name: propertyKey(name),
         initializer: `{ remote: ${JSON.stringify(remote)} }`,
       });
       return source.getFullText();
     }
-    return insertBinding(text, object, bindingsProperty, name, remote);
+    return insertEntry(
+      text,
+      object,
+      bindingsProperty,
+      `${propertyKey(name)}: { remote: ${JSON.stringify(remote)} },`,
+    );
   } else {
     const binding = property.getInitializerIfKindOrThrow(SyntaxKind.ObjectLiteralExpression);
     const remoteProperty = namedProperty(binding, "remote") as PropertyAssignment | undefined;
@@ -197,4 +205,27 @@ export function removeBinding(text: string, name: string): string {
   if (!property) throw new JigsError(`no binding named ${name}`);
   property.remove();
   return source.getFullText();
+}
+
+/** The `workflows` entry that registers a copied workflow file. */
+export function workflowEntry(name: string): string {
+  return `${propertyKey(name)}: () => import(${JSON.stringify(`./workflows/${name}.ts`)}),`;
+}
+
+/** Register a workflow loader, or return undefined when the name is already registered. */
+export function addWorkflow(text: string, name: string): string | undefined {
+  const fail = (reason: string): never => {
+    throw new JigsError(
+      `Cannot register ${name} in ${FACTORY_CONFIG_FILE}: ${reason}.`,
+      `Add this line to workflows in ${FACTORY_CONFIG_FILE} by hand:\n  ${workflowEntry(name)}`,
+    );
+  };
+  const { root, validate } = editableConfig(text, fail);
+  const property = namedProperty(root, "workflows");
+  const workflows = property?.getInitializer();
+  if (!property || !workflows || !Node.isObjectLiteralExpression(workflows))
+    return fail("workflows is not a direct object");
+  validate(workflows, "workflows");
+  if (namedProperty(workflows, name)) return undefined;
+  return insertEntry(text, workflows, property, workflowEntry(name));
 }

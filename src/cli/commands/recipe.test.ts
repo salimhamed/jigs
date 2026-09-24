@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, test } from "vitest";
@@ -16,11 +16,10 @@ function factory() {
   return { cwd, lines, out: (line: string) => lines.push(line) };
 }
 
-test("lists ship and installs its source, reporting manual registration", async () => {
+test("lists ship, installs its source and registers its workflow", async () => {
   const deps = factory();
   await initFactory(deps);
   deps.lines.length = 0;
-  const config = readFileSync(path.join(deps.cwd, "jigs.config.ts"), "utf8");
   expect(recipeNames()).toContain("ship");
   expect(addRecipe("ship", deps).created).toEqual([
     "blocks/delivery/README.md",
@@ -38,9 +37,15 @@ test("lists ship and installs its source, reporting manual registration", async 
     "workflows/ship.test.ts",
     "workflows/ship.ts",
   ]);
-  expect(deps.lines).toContain('  ship: () => import("./workflows/ship.ts"),');
-  expect(deps.lines).toContain("created workflows/ship.ts");
-  expect(readFileSync(path.join(deps.cwd, "jigs.config.ts"), "utf8")).toBe(config);
+  expect(deps.lines.slice(-4)).toEqual([
+    'registered ship in jigs.config.ts by adding ship: () => import("./workflows/ship.ts")',
+    "",
+    "next:",
+    "  pnpm exec jigs up       # build and restart with ship; doctor lists what it still needs",
+  ]);
+  expect(readFileSync(path.join(deps.cwd, "jigs.config.ts"), "utf8")).toContain(
+    '  workflows: {\n    hello: () => import("./workflows/hello.ts"),\n    ship: () => import("./workflows/ship.ts"),\n  },',
+  );
 });
 
 test("keeps edited files when a recipe is added again", async () => {
@@ -48,13 +53,31 @@ test("keeps edited files when a recipe is added again", async () => {
   await initFactory(deps);
   addRecipe("ship", deps);
   writeFileSync(path.join(deps.cwd, "workflows/ship.ts"), "// factory customization\n");
+  const config = readFileSync(path.join(deps.cwd, "jigs.config.ts"), "utf8");
   const result = addRecipe("ship", deps);
   expect(result.created).toEqual([]);
+  expect(deps.lines).toContain("ship is already registered in jigs.config.ts");
+  expect(readFileSync(path.join(deps.cwd, "jigs.config.ts"), "utf8")).toBe(config);
   expect(result.skipped).toHaveLength(14);
   expect(deps.lines).toContain("kept    workflows/ship.ts");
   expect(readFileSync(path.join(deps.cwd, "workflows/ship.ts"), "utf8")).toBe(
     "// factory customization\n",
   );
+});
+
+test("refuses a config it cannot edit, before copying, and gives the line to add", async () => {
+  const deps = factory();
+  writeFileSync(
+    path.join(deps.cwd, "jigs.config.ts"),
+    "const workflows = {};\nexport default { workflows };\n",
+  );
+  expect(() => addRecipe("ship", deps)).toThrow(
+    expect.objectContaining({
+      message: expect.stringContaining("Cannot register ship in jigs.config.ts"),
+      hint: expect.stringContaining('ship: () => import("./workflows/ship.ts"),'),
+    }),
+  );
+  expect(existsSync(path.join(deps.cwd, "workflows/ship.ts"))).toBe(false);
 });
 
 test("rejects unknown names and paths, and requires a factory root", () => {
