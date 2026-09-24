@@ -515,7 +515,7 @@ test("stop escalates to SIGKILL when the process outlives the timeout", async ()
 test("stop without a pidfile says so instead of failing", async () => {
   const root = builtFactory();
   await stopService(deps(root, fake()));
-  expect(lines).toContain(`not running: ${factorySlug(root)}`);
+  expect(lines).toContain(`service ${factorySlug(root)} was not running`);
 });
 
 test("status reports the pid, the url and the factory root", async () => {

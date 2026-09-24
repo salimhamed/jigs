@@ -484,7 +484,7 @@ async function inspectBinding(
       findings.push({
         binding: bindingName,
         reason: `${ref.owner}/${ref.repo} has no ${merge.approval.name} label, so the configured approval signal can never be given`,
-        repair: `create the ${merge.approval.name} label in ${ref.owner}/${ref.repo} Issues → Labels, re-run jigs bind to restore it, or switch this factory's approval to review`,
+        repair: `create the ${merge.approval.name} label in ${ref.owner}/${ref.repo} Issues → Labels, re-run pnpm exec jigs bind to restore it, or switch this factory's approval to review`,
       });
     const approvals = protectionResult?.requiredApprovingReviews;
     if (approvals !== undefined && approvals > 0)
@@ -514,7 +514,7 @@ function unreadableProtection(
   if (unread === "rulesets")
     return {
       reason: `read ${slug}'s classic branch protection but not its rulesets, ${cannotVerify}`,
-      repair: `reading rulesets needs no extra permission, so GitHub did not answer: re-run jigs doctor, and if it keeps failing check GitHub's status and that ${slug} is still reachable`,
+      repair: `reading rulesets needs no extra permission, so GitHub did not answer: re-run pnpm exec jigs doctor, and if it keeps failing check GitHub's status and that ${slug} is still reachable`,
     };
   return {
     reason:

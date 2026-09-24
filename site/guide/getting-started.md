@@ -56,23 +56,30 @@ workflow, and `jigs.config.ts` registers it under the name `hello`.
 
 ```sh
 pnpm install
+cp .env.example .env
 pnpm exec jigs up
 ```
 
-`pnpm install` puts this factory's jigs in place for `pnpm exec`. `jigs up`
-copies `.env.example` to `.env` if it is missing, starts Postgres, builds the
-factory, starts the service and waits until it is ready. It ends by running
-`jigs doctor`, which checks only what your workflows use; rerun it any time
-with `pnpm exec jigs doctor`.
+`pnpm install` puts this factory's jigs in place for `pnpm exec`. `hello`
+needs nothing filled in `.env`. `jigs up` starts Postgres, builds the factory,
+starts the service and waits until it is ready. It then runs `jigs doctor`,
+which checks only what your workflows use; rerun it any time with
+`pnpm exec jigs doctor`.
 
-The final line looks like this:
+It ends by naming the two things it runs, one Postgres container and one service
+process that also serves the dashboard, and how to stop each:
 
 ```
-my-factory-2286ac2a is up at http://localhost:8990 — dashboard http://localhost:9090
+my-factory-2286ac2a is up
+  postgres   docker compose project my-factory, port 5440    stop: docker compose down
+  service    http://localhost:8990  pid 53812                stop: pnpm exec jigs service stop
+             dashboard http://localhost:9090                 logs ~/.local/share/jigs/services/my-factory-2286ac2a.log
+  stop everything: pnpm exec jigs down
 ```
 
 Open the dashboard URL from your own output. It shows every run and its steps.
-To stop the service, run `pnpm exec jigs service stop`.
+`pnpm exec jigs service stop` stops the service and its dashboard and leaves
+Postgres running; `pnpm exec jigs down` stops both and keeps Postgres's data.
 
 ## 4. Run hello
 

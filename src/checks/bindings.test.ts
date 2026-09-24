@@ -49,7 +49,7 @@ test("an undeclared binding fails with the exact jigs bind invocation", async ()
     id: "binding.api",
     ok: false,
     reason: expect.stringContaining("no binding named 'api'"),
-    repair: expect.stringContaining("jigs bind"),
+    repair: expect.stringContaining("pnpm exec jigs bind"),
   });
   expect(outcome.ok === false && outcome.repair).toContain("--binding-name api");
   expect(outcome.ok === false && outcome.repair).toContain("remote-url");
@@ -61,7 +61,8 @@ test("a declared binding with no clone yet names the restart that makes one", as
   expect(await check(factory, "api")).toMatchObject({
     ok: false,
     reason: "binding api has no clone yet",
-    repair: "restart the service: jigs service restart (it clones every binding on start)",
+    repair:
+      "restart the service: pnpm exec jigs service restart (it clones every binding on start)",
   });
 });
 

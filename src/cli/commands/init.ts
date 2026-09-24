@@ -60,7 +60,7 @@ export function resolveIdentityOptions(
   if (missing.length > 0) {
     throw new JigsError(
       `jigs init --github-identity-mode app needs ${missing.map((flag) => `--${FLAGS[flag]}`).join(", ")}`,
-      'jigs init --github-identity-mode app --github-app-id 123 --github-app-installation your-github-login=456 --github-app-private-key-path github-app.private-key.pem --github-operator-login your-github-login [--git-co-author "Your Name <you@example.com>"]',
+      'pnpm exec jigs init --github-identity-mode app --github-app-id 123 --github-app-installation your-github-login=456 --github-app-private-key-path github-app.private-key.pem --github-operator-login your-github-login [--git-co-author "Your Name <you@example.com>"]',
     );
   }
   const installations: Record<string, number> = {};
@@ -141,7 +141,7 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   );
   deps.out("");
   deps.out(
-    "workflows/, blocks/ and custom steps/ are yours; jigs.ts is generated — refresh it with jigs generate and keep custom code outside it",
+    "workflows/, blocks/ and custom steps/ are yours; jigs.ts is generated — refresh it with pnpm exec jigs generate and keep custom code outside it",
   );
   deps.out("");
   deps.out(
@@ -156,19 +156,14 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   );
   deps.out("");
   deps.out("next, in this directory:");
-  deps.out(
-    identity.mode === "app"
-      ? `  chmod 600 ${identity.privateKeyPath}   # and keep it out of git`
-      : "  cp .env.example .env    # credentials for workflows you add",
-  );
   if (identity.mode === "app") {
-    deps.out(
-      "  cp .env.example .env    # credentials for workflows you add (the App needs no GITHUB_TOKEN)",
-    );
+    deps.out(`  chmod 600 ${identity.privateKeyPath}   # and keep it out of git`);
   }
-  deps.out("  jigs up                 # start the service; ends by running jigs doctor");
-  deps.out("  jigs doctor             # re-check what your workflows need, any time");
-  deps.out("  jigs run hello --input message=hello");
+  deps.out("  pnpm install");
+  deps.out("  cp .env.example .env    # then fill in what your workflows need");
+  deps.out("  pnpm exec jigs up       # start Postgres and the service; ends by running doctor");
+  deps.out("  pnpm exec jigs run hello --input message=hello");
+  deps.out("  pnpm exec jigs doctor   # re-check what your workflows need, any time");
 
   return { created, skipped, ...ports };
 }
@@ -251,7 +246,7 @@ function factoryName(factoryRoot: string): string {
   if (name === "") {
     throw new JigsError(
       `${factoryRoot} has no usable name for a docker project`,
-      `run jigs init from a directory named in [a-z0-9-]`,
+      `run pnpm exec jigs init from a directory named in [a-z0-9-]`,
     );
   }
   return name;

@@ -1,4 +1,5 @@
-import { copyFileSync, existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import path from "node:path";
 import {
   type LinearIdentity,
@@ -14,6 +15,7 @@ import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { stringEnv } from "../../steps/agents/harnesses/env.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
 import { buildFactoryService, type Prepare } from "./build.ts";
+import { dockerCompose } from "./compose.ts";
 import { runDoctor } from "./doctor.ts";
 import { type RunListRun, showRuns } from "./run-list.ts";
 import { resolveServiceUrl } from "./service-client.ts";
@@ -25,13 +27,14 @@ import {
   runningBundleHash,
   type ServiceLifecycleDeps,
   type ServiceProcesses,
+  serviceLogPath,
   startService,
 } from "./service-lifecycle.ts";
-import { indent, type Note, type Step, StepFailed, stepRunner } from "./step-runner.ts";
+import { indent, type Step, StepFailed, stepRunner } from "./step-runner.ts";
 
 // Takes a factory from any state to a running service: the commands a human
 // used to type after `jigs init`, run in order. Each step is idempotent, so a
-// second `up` on an unchanged factory copies, installs, migrates and restarts
+// second `up` on an unchanged factory installs, migrates and restarts
 // nothing.
 
 export type UpStepName =
@@ -105,7 +108,7 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
       startTimeoutMs: deps.readyTimeoutMs,
     };
 
-    const env = await runner.run("env", (note) => ensureEnv(factoryRoot, note));
+    const env = await runner.run("env", () => ensureEnv(factoryRoot));
     reportEmptyCredentials(env, credentialSlots(linear), deps.out);
 
     await runner.run("install", () =>
@@ -120,7 +123,9 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
       await runner.run("generate", deps.generate);
     }
 
-    await runner.run("compose", () => composeUp(execFile, factoryRoot, deps.out));
+    await runner.run("compose", () =>
+      dockerCompose(execFile, factoryRoot, ["up", "-d", "--wait"], deps.out),
+    );
 
     await runner.run("bootstrap", async () => {
       const url = await bootstrapWorld(execFile, factoryRoot, env, deps.out);
@@ -178,7 +183,7 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
       });
     }
 
-    deps.out(`${service.slug} is up at ${service.serviceUrl} — dashboard ${service.dashboardUrl}`);
+    printSummary(factoryRoot, service, liveServicePid(lifecycle), deps.out);
     result.ok = true;
     return result;
   } catch (err) {
@@ -197,15 +202,20 @@ function locate(cwd: string): {
   return { factoryRoot, service, linear: readFactoryConfig(factoryRoot).linear.identity };
 }
 
-function ensureEnv(factoryRoot: string, note: Note): Record<string, string> {
-  const dotenv = path.join(factoryRoot, ".env");
-  if (!existsSync(dotenv)) {
-    const example = path.join(factoryRoot, ".env.example");
-    if (!existsSync(example)) {
-      throw new JigsError(`no .env or .env.example in ${factoryRoot}`, "scaffold one: jigs init");
+// Never copied for the operator: a .env is where they decide which
+// credentials this factory holds.
+function ensureEnv(factoryRoot: string): Record<string, string> {
+  if (!existsSync(path.join(factoryRoot, ".env"))) {
+    if (!existsSync(path.join(factoryRoot, ".env.example"))) {
+      throw new JigsError(
+        `no .env or .env.example in ${factoryRoot}`,
+        "scaffold one: pnpm exec jigs init",
+      );
     }
-    copyFileSync(example, dotenv);
-    note("copied .env.example to .env");
+    throw new JigsError(
+      `no .env in ${factoryRoot} — copy .env.example, then fill in what your workflows need`,
+      "cp .env.example .env",
+    );
   }
   return readFactoryEnv(factoryRoot);
 }
@@ -218,33 +228,6 @@ function reportEmptyCredentials(
   const empty = slots.filter((key) => (env[key] ?? "") === "");
   if (empty.length === 0) return;
   out(`     ${empty.join(", ")} empty in .env — fill them in before a workflow needs them`);
-}
-
-async function composeUp(
-  execFile: ExecFile,
-  factoryRoot: string,
-  out: (line: string) => void,
-): Promise<void> {
-  if (!existsSync(path.join(factoryRoot, "docker-compose.yml"))) {
-    throw new JigsError(`no docker-compose.yml in ${factoryRoot}`, "scaffold one: jigs init");
-  }
-  await execOrExplain(
-    execFile,
-    "docker",
-    ["compose", "up", "-d", "--wait"],
-    { cwd: factoryRoot },
-    out,
-    {
-      missing: new JigsError("docker is not on PATH", "install docker and start its daemon"),
-      failed: (err) =>
-        /Cannot connect to the Docker daemon/i.test(execOutput(err))
-          ? new JigsError("the docker daemon is not running", "start docker")
-          : new JigsError(
-              `docker compose up failed in ${factoryRoot}`,
-              "the output above is docker compose's",
-            ),
-    },
-  );
 }
 
 // The World URL travels in the child's environment explicitly, never left to
@@ -293,13 +276,58 @@ async function bootstrapWorld(
   return url;
 }
 
+// One Postgres container and one Node process, which also serves the
+// dashboard on its second port: every running thing and how to stop it.
+function printSummary(
+  factoryRoot: string,
+  service: ResolvedService,
+  pid: number | undefined,
+  out: (line: string) => void,
+): void {
+  const project = composeProjectName(factoryRoot);
+  const ports = postgresPorts(factoryRoot);
+  const rows: Array<[string, string, string]> = [
+    [
+      "postgres",
+      `docker compose${project === undefined ? "" : ` project ${project}`}, ${ports.length === 0 ? "no published port" : `port ${ports.join(", ")}`}`,
+      "stop: docker compose down",
+    ],
+    [
+      "service",
+      `${service.serviceUrl}  pid ${pid ?? "unknown"}`,
+      "stop: pnpm exec jigs service stop",
+    ],
+    ["", `dashboard ${service.dashboardUrl}`, `logs ${homeRelative(serviceLogPath(service.slug))}`],
+  ];
+  const width = Math.max(...rows.map(([, what]) => what.length)) + 4;
+  out(`${service.slug} is up`);
+  for (const [name, what, how] of rows) out(`  ${name.padEnd(11)}${what.padEnd(width)}${how}`);
+  out("  stop everything: pnpm exec jigs down");
+}
+
+function homeRelative(file: string): string {
+  const home = homedir();
+  return file.startsWith(`${home}${path.sep}`) ? `~${file.slice(home.length)}` : file;
+}
+
+function composeProjectName(factoryRoot: string): string | undefined {
+  const compose = readFileSync(path.join(factoryRoot, "docker-compose.yml"), "utf8");
+  return compose.match(/^name:\s*["']?([^"'\s#]+)/m)?.[1];
+}
+
 function redactPassword(url: string): string {
   return url.replace(/\/\/([^:/@]+):[^@]*@/, "//$1:***@");
 }
 
-function publishedPostgresPorts(factoryRoot: string): string {
+function postgresPorts(factoryRoot: string): string[] {
   const compose = readFileSync(path.join(factoryRoot, "docker-compose.yml"), "utf8");
-  const ports = [...compose.matchAll(/"?(\d+):5432"?/g)].map((m) => m[1]);
+  return [...compose.matchAll(/"?(\d+):5432"?/g)].flatMap((m) =>
+    m[1] === undefined ? [] : [m[1]],
+  );
+}
+
+function publishedPostgresPorts(factoryRoot: string): string {
+  const ports = postgresPorts(factoryRoot);
   return ports.length === 0 ? "no port for 5432" : `:${ports.join(", :")}`;
 }
 
@@ -319,14 +347,14 @@ async function confirmRestart(
   if (deps.confirm === undefined) {
     throw new JigsError(
       `refusing to restart ${service.slug} over ${inFlight.length} run(s) in flight without confirmation`,
-      "re-run with --force, or jigs cancel <run-id> first",
+      "re-run with --force, or pnpm exec jigs cancel <run-id> first",
     );
   }
   const question = `restart ${service.slug} over ${inFlight.length} in-flight run(s)?`;
   if (!(await deps.confirm(question))) {
     throw new JigsError(
       "restart declined — the service still runs the previous bundle",
-      "re-run jigs up when the runs finish",
+      "re-run pnpm exec jigs up when the runs finish",
     );
   }
 }

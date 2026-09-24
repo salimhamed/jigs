@@ -268,7 +268,7 @@ test("reports a non-mapping workspace file with a repair hint", async () => {
   expect(statuses(result)).toEqual(["packages:failed"]);
   expect(result.steps[0]?.detail).toBe(`${workspace} must contain a YAML mapping`);
   expect(result.steps[0]?.repair).toBe(
-    "make pnpm-workspace.yaml a top-level mapping, then run jigs upgrade again",
+    "make pnpm-workspace.yaml a top-level mapping, then run pnpm exec jigs upgrade again",
   );
   expect(io.exec.calls).toHaveLength(0);
 });

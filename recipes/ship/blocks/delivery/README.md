@@ -23,8 +23,8 @@ them freely. Upgrading jigs never overwrites them.
   missing one.
 - **Claude Code and Codex**, installed and logged in. The workflow declares
   both in `requires.harnesses`.
-- **A binding** for the repository to change: `jigs bind <remote>`, then
-  `jigs up`. See [bindings](https://salimhamed.github.io/jigs/guide/configuration#bindings).
+- **A binding** for the repository to change: `pnpm exec jigs bind <remote>`, then
+  `pnpm exec jigs up`. See [bindings](https://salimhamed.github.io/jigs/guide/configuration#bindings).
 - **A merge policy** you have decided on. See
   [merge](https://salimhamed.github.io/jigs/guide/configuration#merge). jigs never
   merges in a repository with no CI.

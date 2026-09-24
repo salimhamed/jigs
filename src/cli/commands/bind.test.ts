@@ -131,7 +131,7 @@ test("bind creates a derived-name entry when no binding has the remote", async (
 
 test("a new binding says jigs up applies and clones it", async () => {
   await bindRepo(API, deps());
-  expect(lines).toContain("run jigs up to apply the config and clone api");
+  expect(lines).toContain("run pnpm exec jigs up to apply the config and clone api");
 });
 
 test("a non-github remote's name comes from the last path segment", async () => {
@@ -163,7 +163,7 @@ test("a binding whose clone is already on disk needs no restart", async () => {
   markCloned("api");
 
   await bindRepo(API, deps());
-  expect(lines.some((l) => l.includes("jigs up"))).toBe(false);
+  expect(lines.some((l) => l.includes("pnpm exec jigs up"))).toBe(false);
 });
 
 test("a name re-bound after an unbind says jigs up applies the changed config", async () => {
@@ -173,7 +173,7 @@ test("a name re-bound after an unbind says jigs up applies the changed config", 
   unbindRepo("api", deps());
 
   await bindRepo("git@github.com:acme/api-moved.git", deps(), { name: "api" });
-  expect(lines).toContain("run jigs up to apply the config and clone api");
+  expect(lines).toContain("run pnpm exec jigs up to apply the config and clone api");
 });
 
 test("a name already bound to another remote is refused, hinting unbind", async () => {
@@ -185,7 +185,7 @@ test("a name already bound to another remote is refused, hinting unbind", async 
     (err: unknown) => err,
   );
   expect(String(failure)).toContain("already bound to");
-  expect((failure as { hint?: string }).hint).toContain("jigs unbind api");
+  expect((failure as { hint?: string }).hint).toContain("pnpm exec jigs unbind api");
   expect(jigsConfig()).not.toContain("api-moved");
 });
 
@@ -306,7 +306,7 @@ test("bind refuses a webhook without GITHUB_WEBHOOK_SECRET and makes no GitHub c
     `GITHUB_WEBHOOK_SECRET is not set in ${envFile}, so acme/Api's webhook cannot be signed`,
   );
   expect((failure as { hint?: string }).hint).toBe(
-    `generate one with \`openssl rand -hex 32\`, set it as GITHUB_WEBHOOK_SECRET in ${envFile} and restart the service (jigs service restart), then re-run: jigs bind ${API}`,
+    `generate one with \`openssl rand -hex 32\`, set it as GITHUB_WEBHOOK_SECRET in ${envFile} and restart the service (pnpm exec jigs service restart), then re-run: pnpm exec jigs bind ${API}`,
   );
   expect(fetchMock).not.toHaveBeenCalled();
 });
@@ -429,7 +429,7 @@ test("a label permission failure preserves the binding after ensuring the webhoo
   expect(jigsConfig()).toContain(`remote: "${API}"`);
   expect(String(failure)).toContain("ship-it label could not be ensured");
   expect((failure as { hint?: string }).hint).toContain("repo (or public_repo");
-  expect((failure as { hint?: string }).hint).toContain(`re-run: jigs bind ${API}`);
+  expect((failure as { hint?: string }).hint).toContain(`re-run: pnpm exec jigs bind ${API}`);
 });
 
 test("bind prints a merge-policy repair but still resolves successfully", async () => {
@@ -479,7 +479,7 @@ test("no GITHUB_TOKEN anywhere fails with the repair, and the retry ensures the 
   const retry = await bindRepo(API, deps());
   expect(retry.webhook).toBe("created");
   // The failed run wrote the binding but nothing cloned it.
-  expect(lines).toContain("run jigs up to apply the config and clone api");
+  expect(lines).toContain("run pnpm exec jigs up to apply the config and clone api");
 });
 
 test("the repair carries --binding-name, so the retry lands on the same binding", async () => {
@@ -488,7 +488,7 @@ test("the repair carries --binding-name, so the retry lands on the same binding"
   makeWebhookFactory();
   const failure = await bindRepo(API, deps(), { name: "forge" }).catch((err: unknown) => err);
   expect((failure as { hint?: string }).hint).toContain(
-    `re-run: jigs bind ${API} --binding-name forge`,
+    `re-run: pnpm exec jigs bind ${API} --binding-name forge`,
   );
 });
 
@@ -503,7 +503,7 @@ test("an alias match is named in the repair command", async () => {
   const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
 
   expect((failure as { hint?: string }).hint).toContain(
-    `re-run: jigs bind ${API} --binding-name gambit`,
+    `re-run: pnpm exec jigs bind ${API} --binding-name gambit`,
   );
 });
 
@@ -515,7 +515,7 @@ test("a failure GitHub did not lay on the token does not send the operator after
   expect(String(failure)).toContain("fetch failed");
   const { hint } = failure as { hint?: string };
   expect(hint).not.toContain("GITHUB_TOKEN");
-  expect(hint).toContain(`jigs bind ${API}`);
+  expect(hint).toContain(`pnpm exec jigs bind ${API}`);
 });
 
 test("a token GitHub rejects fails with the repair, and the retry ensures the webhook", async () => {
@@ -524,7 +524,7 @@ test("a token GitHub rejects fails with the repair, and the retry ensures the we
   fetchMock.mockResolvedValueOnce(new Response("Bad credentials", { status: 401 }));
   const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
   expect(String(failure)).toContain("401");
-  expect((failure as { hint?: string }).hint).toContain(`re-run: jigs bind ${API}`);
+  expect((failure as { hint?: string }).hint).toContain(`re-run: pnpm exec jigs bind ${API}`);
   expect(jigsConfig()).toContain(`remote: "${API}"`);
 
   fetchMock
@@ -566,7 +566,7 @@ test("a rate-limited 403 does not send the operator after a new token", async ()
   const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
   const { hint } = failure as { hint?: string };
   expect(hint).not.toContain("GITHUB_TOKEN");
-  expect(hint).toContain(`once that clears, re-run: jigs bind ${API}`);
+  expect(hint).toContain(`once that clears, re-run: pnpm exec jigs bind ${API}`);
 });
 
 test("a 403 on the token's scopes asks for a token that carries them", async () => {

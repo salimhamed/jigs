@@ -290,7 +290,7 @@ export async function startService(
     if (!existsSync(entry)) {
       throw new JigsError(
         `no built service at ${entry}`,
-        `build this factory's service first: jigs build in ${factoryRoot}`,
+        `build this factory's service first: pnpm exec jigs build in ${factoryRoot}`,
       );
     }
 
@@ -338,7 +338,7 @@ export async function awaitServiceReady(deps: ServiceLifecycleDeps): Promise<voi
   const { slug, serviceUrl } = resolveService(locateFactoryRoot(deps.cwd));
   const pid = readPid(slug);
   if (pid === undefined) {
-    throw new JigsError(`not running: ${slug}`, "start it: jigs service start");
+    throw new JigsError(`not running: ${slug}`, "start it: pnpm exec jigs service start");
   }
   if (!processes.signal(pid, 0)) throw failedBoot(slug, pid, out);
   await awaitReady(deps, slug, serviceUrl, pid);
@@ -373,7 +373,7 @@ async function awaitReady(
     if (Date.now() >= deadline) {
       throw new JigsError(
         `the ${slug} service is still booting after ${startTimeoutMs / 1000}s — pid ${pid} is still running${phase === undefined ? "" : ` (${phase})`}`,
-        `it clones every binding before the World starts — watch jigs service logs (${serviceLogPath(slug)}); jigs service stop ends it`,
+        `it clones every binding before the World starts — watch pnpm exec jigs service logs (${serviceLogPath(slug)}); pnpm exec jigs service stop ends it`,
       );
     }
     await sleep(startPollMs);
@@ -389,7 +389,7 @@ function failedBoot(slug: string, pid: number, out: (line: string) => void): Jig
   rmSync(servicePidfilePath(slug), { force: true });
   return new JigsError(
     `the ${slug} service exited during boot (pid ${pid})`,
-    `its log says why: jigs service logs (${logFile})`,
+    `its log says why: pnpm exec jigs service logs (${logFile})`,
   );
 }
 
@@ -418,7 +418,7 @@ export async function stopService(deps: ServiceLifecycleDeps): Promise<void> {
   const pidfile = servicePidfilePath(slug);
   if (pid === undefined || !processes.signal(pid, 0)) {
     if (pid !== undefined) rmSync(pidfile, { force: true });
-    out(`not running: ${slug}`);
+    out(`service ${slug} was not running`);
     return;
   }
 
@@ -434,7 +434,7 @@ export async function stopService(deps: ServiceLifecycleDeps): Promise<void> {
   }
   rmSync(pidfile, { force: true });
   rmSync(serviceRunStatePath(slug), { force: true });
-  out(`stopped ${slug}: pid ${pid}`);
+  out(`stopped service ${slug} (pid ${pid})`);
 }
 
 export async function restartService(
@@ -512,7 +512,7 @@ export function serviceLogs(deps: ServiceLifecycleDeps, options: { lines?: numbe
   if (!existsSync(file)) {
     throw new JigsError(
       `no service log at ${file}`,
-      `this factory's service has not run yet: jigs service start`,
+      `this factory's service has not run yet: pnpm exec jigs service start`,
     );
   }
   for (const line of tailLines(file, options.lines ?? LOG_LINES)) out(line);

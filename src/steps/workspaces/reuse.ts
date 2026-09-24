@@ -4,7 +4,7 @@ export class WorktreeOwnedError extends Error {
 
   constructor(path: string, owningRunId: string) {
     super(
-      `worktree ${path} is owned by run ${owningRunId} — wait for it, or release it with: jigs cancel ${owningRunId}`,
+      `worktree ${path} is owned by run ${owningRunId} — wait for it, or release it with: pnpm exec jigs cancel ${owningRunId}`,
     );
     this.name = "WorktreeOwnedError";
     this.path = path;

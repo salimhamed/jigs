@@ -63,7 +63,7 @@ export async function mintLinearAppToken(
   if (!res.ok) {
     throw new JigsError(
       `Linear refused a client-credentials token (HTTP ${res.status}): ${await res.text()}`,
-      "check LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET in the factory repo's .env against the Linear OAuth application, and that client credentials are enabled on it, then: jigs service restart",
+      "check LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET in the factory repo's .env against the Linear OAuth application, and that client credentials are enabled on it, then: pnpm exec jigs service restart",
     );
   }
   const body = (await res.json()) as { access_token?: unknown };
@@ -93,7 +93,7 @@ export function createLinearAuth(identity: LinearIdentity, deps: LinearAuthDeps 
     if (value === undefined || value === "") {
       throw new JigsError(
         `${name} is not set, and linear.identity mode "${identity.mode}" needs it`,
-        `set ${name} in the factory repo's .env, then: jigs service restart`,
+        `set ${name} in the factory repo's .env, then: pnpm exec jigs service restart`,
       );
     }
     return value;

@@ -66,18 +66,24 @@ pnpm install
 pnpm exec jigs up
 ```
 
-`jigs up` prints one line per step: `locate`, `env` (copies `.env.example` if
-there is no `.env` and names empty credential slots), `install`, `compose`
+`jigs up` prints one line per step: `locate`, `env` (fails with `cp .env.example .env` as its
+repair when there is no `.env`, and names empty credential slots), `install`, `compose`
 (Postgres), `bootstrap` (migrations), `build`, `service` (start, or restart only
 when the built bundle or `jigs.config.ts` changed), `ready` (waits until every binding is cloned and
 the World is up) and `doctor`. Doctor checks only what the workflows require
-and what `jigs.config.ts` turns on. The last line is where to look next:
+and what `jigs.config.ts` turns on. The closing block names what runs and how to stop each:
 
 ```
-my-factory-2286ac2a is up at http://localhost:8990 — dashboard http://localhost:9090
+my-factory-2286ac2a is up
+  postgres   docker compose project my-factory, port 5440    stop: docker compose down
+  service    http://localhost:8990  pid 53812                stop: pnpm exec jigs service stop
+             dashboard http://localhost:9090                 logs ~/.local/share/jigs/services/my-factory-2286ac2a.log
+  stop everything: pnpm exec jigs down
 ```
 
-Give the human the dashboard URL and have them open it.
+Give the human the dashboard URL and have them open it. `jigs down` stops the
+service and Postgres together and keeps the data; `jigs service stop` stops only
+the service.
 
 The first failing step prints `FAIL <step>: <why>` with its repair on the next
 line, and `up` stops there. Show both lines, follow the repair, then run

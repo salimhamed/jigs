@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
@@ -28,7 +28,14 @@ afterEach(() => {
   removeTmpDir(tmp);
 });
 
-const factory = (shape: Parameters<typeof scaffold>[1]) => scaffold(tmp, shape);
+// With the .env an operator makes from .env.example, which up never copies.
+const factory = (shape: Parameters<typeof scaffold>[1]) => {
+  const root = scaffold(tmp, shape);
+  if (shape.env === undefined && shape.example !== false) {
+    copyFileSync(path.join(root, ".env.example"), path.join(root, ".env"));
+  }
+  return root;
+};
 
 function up(
   root: string,
@@ -86,13 +93,26 @@ test("from a freshly scaffolded factory, every step runs once, in order", async 
   for (const call of io.exec.calls) expect(call.options.cwd).toBe(root);
   expect(io.procs.spawns).toHaveLength(1);
 
-  // .env was copied, and the slots that stay empty are named, not refused.
-  expect(readFileSync(path.join(root, ".env"), "utf8")).toContain("WORKFLOW_POSTGRES_URL=");
+  // The slots that stay empty are named, not refused.
   const printed = lines.join("\n");
-  expect(printed).toMatch(/^ok {3}env \(\d+ms\) — copied \.env\.example to \.env$/m);
+  expect(printed).toMatch(/^ok {3}env \(\d+ms\)$/m);
   expect(printed).toContain("LINEAR_API_KEY, GITHUB_TOKEN empty in .env");
   expect(printed).toMatch(/^ok {3}doctor \(\d+ms\)$/m);
-  expect(lines.at(-1)).toContain(`is up at http://localhost:${port}`);
+  const [pid] = io.procs.alive;
+  const log = io.procs.spawns[0]?.logPath ?? "";
+  const slug = path.basename(log, ".log");
+  const [postgres, service, dashboard] = [
+    "docker compose project acme-factory, port 5555",
+    `http://localhost:${port}  pid ${pid}`,
+    "dashboard http://localhost:9200",
+  ].map((what) => what.padEnd(50));
+  expect(lines.slice(-5)).toEqual([
+    `${slug} is up`,
+    `  postgres   ${postgres}stop: docker compose down`,
+    `  service    ${service}stop: pnpm exec jigs service stop`,
+    `             ${dashboard}logs ${log}`,
+    "  stop everything: pnpm exec jigs down",
+  ]);
 });
 
 test("an app Linear identity names its client variables as the empty slots", async () => {
@@ -282,7 +302,7 @@ test("a service that never listens fails ready with the boot hint", async () => 
 });
 
 test("without jigs.config.ts, up stops before touching the machine", async () => {
-  const root = factory({ port: 1, config: false });
+  const root = scaffold(tmp, { port: 1, config: false });
   const io = { exec: fakeExec(), procs: fakeProcesses() };
 
   const result = await up(root, io);
@@ -323,7 +343,35 @@ test("an existing .env is kept and its credentials are not reported when set", a
   await up(root, io);
 
   expect(lines.join("\n")).not.toContain("empty in .env");
-  expect(lines.join("\n")).not.toContain("copied .env.example");
+});
+
+test("a missing .env fails env with the copy as its repair, and copies nothing", async () => {
+  const root = scaffold(tmp, { port: 1 });
+  const io = { exec: fakeExec(), procs: fakeProcesses() };
+
+  const result = await up(root, io);
+
+  expect(statuses(result)).toEqual(["locate:ok", "env:failed"]);
+  expect(result.steps[1]?.detail).toContain("fill in what your workflows need");
+  expect(result.steps[1]?.repair).toBe("cp .env.example .env");
+  expect(existsSync(path.join(root, ".env"))).toBe(false);
+  expect(io.exec.calls).toHaveLength(0);
+});
+
+test("docker compose output is streamed under the compose step as it prints", async () => {
+  const port = await fakeService();
+  const root = factory({ port });
+  const exec = fakeExec();
+  const execFile = exec.execFile;
+  exec.execFile = async (file, args, options) => {
+    if (file === "docker") options.onLine?.("Container acme-factory-postgres-1  Healthy");
+    return await execFile(file, args, options);
+  };
+
+  await up(root, { exec, procs: fakeProcesses() });
+
+  const compose = lines.findIndex((line) => line.startsWith("ok   compose"));
+  expect(lines[compose - 1]).toBe("  Container acme-factory-postgres-1  Healthy");
 });
 
 test("pnpm missing from PATH is named, not echoed", async () => {

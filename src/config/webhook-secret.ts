@@ -32,5 +32,5 @@ export function webhookSecretRepair(provider: WebhookProvider, factoryRoot: stri
     provider === "github"
       ? "generate one with `openssl rand -hex 32`"
       : "copy the signing secret from the Linear webhook's settings page";
-  return `${source}, set it as ${SECRET_VARIABLES[provider]} in ${path.join(factoryRoot, ".env")} and restart the service (jigs service restart)`;
+  return `${source}, set it as ${SECRET_VARIABLES[provider]} in ${path.join(factoryRoot, ".env")} and restart the service (pnpm exec jigs service restart)`;
 }

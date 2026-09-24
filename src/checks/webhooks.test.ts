@@ -91,7 +91,7 @@ test("recent 401 deliveries fail with the bind repair that re-sends the secret",
     ok: false,
     reason:
       "the factory rejected the hook's latest 2 deliveries with 401: GitHub's copy of the signing secret does not match GITHUB_WEBHOOK_SECRET in this factory's .env",
-    repair: "run: jigs bind git@github.com:acme/api.git",
+    repair: "run: pnpm exec jigs bind git@github.com:acme/api.git",
   });
 });
 
@@ -112,7 +112,7 @@ test.each([
   expect(await secretCheck().run()).toEqual({
     ok: false,
     reason: `webhooks.github is enabled but GITHUB_WEBHOOK_SECRET is not set in ${path.join(factory, ".env")}`,
-    repair: `generate one with \`openssl rand -hex 32\`, set it as GITHUB_WEBHOOK_SECRET in ${path.join(factory, ".env")} and restart the service (jigs service restart), then run jigs bind for each bound repo`,
+    repair: `generate one with \`openssl rand -hex 32\`, set it as GITHUB_WEBHOOK_SECRET in ${path.join(factory, ".env")} and restart the service (pnpm exec jigs service restart), then run pnpm exec jigs bind for each bound repo`,
   });
 });
 
@@ -147,7 +147,7 @@ test("a missing hook fails with the exact bind repair", async () => {
   expect(await check().run()).toEqual({
     ok: false,
     reason: "the repo has no active webhook at this factory's webhooks.url with the current events",
-    repair: "run: jigs bind git@github.com:acme/api.git",
+    repair: "run: pnpm exec jigs bind git@github.com:acme/api.git",
   });
 });
 

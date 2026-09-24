@@ -16,6 +16,9 @@ export interface ExecOptions {
   // Hands the operator's terminal to the child, for one that prompts or
   // reports its own progress; nothing is captured.
   stdio?: "inherit";
+  // Each line the child prints, as it prints it, for one slow enough to look
+  // frozen; the output is still captured for the failure mapping.
+  onLine?: (line: string) => void;
 }
 
 export type ExecFile = (file: string, args: string[], options: ExecOptions) => Promise<ExecOutput>;
@@ -26,6 +29,7 @@ export type ExecError = Error & Partial<ExecOutput> & { code?: number | string }
 
 export const nodeExecFile: ExecFile = async (file, args, options) => {
   if (options.stdio === "inherit") return await inheritedExec(file, args, options);
+  if (options.onLine !== undefined) return await streamedExec(file, args, options, options.onLine);
   return await promisify(execFile)(file, args, {
     cwd: options.cwd,
     env: options.env,
@@ -43,6 +47,42 @@ function inheritedExec(file: string, args: string[], options: ExecOptions): Prom
         const status = code ?? signal ?? "unknown";
         reject(
           Object.assign(new Error(`${file} exited with ${status}`), { code: code ?? undefined }),
+        );
+      }
+    });
+  });
+}
+
+function streamedExec(
+  file: string,
+  args: string[],
+  options: ExecOptions,
+  onLine: (line: string) => void,
+): Promise<ExecOutput> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(file, args, { cwd: options.cwd, env: options.env });
+    const output = { stdout: "", stderr: "" };
+    const pending = { stdout: "", stderr: "" };
+    for (const stream of ["stdout", "stderr"] as const) {
+      child[stream].setEncoding("utf8");
+      child[stream].on("data", (chunk: string) => {
+        output[stream] += chunk;
+        const lines = (pending[stream] + chunk).split(/\r?\n|\r/);
+        pending[stream] = lines.pop() ?? "";
+        for (const line of lines) if (line !== "") onLine(line);
+      });
+    }
+    child.once("error", reject);
+    child.once("close", (code, signal) => {
+      for (const rest of [pending.stdout, pending.stderr]) if (rest !== "") onLine(rest);
+      if (code === 0) resolve(output);
+      else {
+        const status = code ?? signal ?? "unknown";
+        reject(
+          Object.assign(new Error(`${file} exited with ${status}`), {
+            code: code ?? undefined,
+            ...output,
+          }),
         );
       }
     });
@@ -74,8 +114,10 @@ export async function execOrExplain(
   } catch (err) {
     const failure = err as ExecError;
     if (failure.code === "ENOENT") throw errors.missing;
-    for (const line of execOutput(failure).split("\n")) {
-      if (line !== "") out(`  ${line}`);
+    if (options.onLine === undefined) {
+      for (const line of execOutput(failure).split("\n")) {
+        if (line !== "") out(`  ${line}`);
+      }
     }
     throw errors.failed(failure);
   }

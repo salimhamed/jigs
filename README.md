@@ -18,13 +18,13 @@ nothing is installed globally. You need Node 24 or newer, pnpm and Docker.
 ```sh
 mkdir my-factory && cd my-factory && git init
 pnpm dlx @jigs-ai/jigs init
-cp .env.example .env
 pnpm install
+cp .env.example .env
 pnpm exec jigs up
 ```
 
-`jigs up` starts the service, checks the factory, and ends with the dashboard
-URL. Then run the starter workflow:
+`jigs up` starts Postgres and the service, checks the factory, and ends by
+listing what it started, with the dashboard URL. Then run the starter workflow:
 
 ```sh
 pnpm exec jigs run hello --input message=hello

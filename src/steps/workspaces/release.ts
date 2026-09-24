@@ -97,7 +97,7 @@ export async function releaseRunResources(
               ? `worktree released; branches kept with ${unmerged} unmerged commit(s)`
               : "worktree released; any remaining branch was absent, changed, or could not be deleted";
     } catch (error) {
-      resource.reason = `release incomplete; inspect with jigs resources list before jigs resources prune: ${String(error)}`;
+      resource.reason = `release incomplete; inspect with pnpm exec jigs resources list before pnpm exec jigs resources prune: ${String(error)}`;
     }
   }
   if (action === "release") {

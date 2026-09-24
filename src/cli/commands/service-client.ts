@@ -37,7 +37,7 @@ export async function serviceFetch(
   } catch {
     throw new JigsError(
       `could not reach the jigs service at ${base}`,
-      "jigs service status says whether it is running; jigs service start starts it",
+      "pnpm exec jigs service status says whether it is running; pnpm exec jigs service start starts it",
     );
   }
 }

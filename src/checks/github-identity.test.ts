@@ -78,7 +78,7 @@ test("pat mode fails before probing when there is no token", async () => {
   expect(await outcome({ mode: "pat" }, "github.identity", {}, {})).toMatchObject({
     ok: false,
     reason: expect.stringContaining("GITHUB_TOKEN is not set"),
-    repair: expect.stringContaining("jigs service restart"),
+    repair: expect.stringContaining("pnpm exec jigs service restart"),
   });
 });
 
@@ -592,7 +592,7 @@ test("label approval fails when the configured label does not exist", async () =
   expect(result).toMatchObject({
     ok: false,
     reason: expect.stringContaining("has no jigs:approved label"),
-    repair: expect.stringContaining("re-run jigs bind"),
+    repair: expect.stringContaining("re-run pnpm exec jigs bind"),
   });
   if (result?.ok !== false) throw new Error("expected failure");
   expect(result.reason).toContain(

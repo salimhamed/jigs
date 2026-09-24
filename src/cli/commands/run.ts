@@ -162,7 +162,7 @@ export async function launchRun(
   const result = (await res.json()) as LaunchResult;
   deps.out(`run ${result.runId}`);
   deps.out(`workflow ${result.workflow}`);
-  deps.out(`inspect: jigs status ${result.runId}`);
+  deps.out(`inspect: pnpm exec jigs status ${result.runId}`);
   deps.out(`dashboard: ${result.dashboard}`);
   return result;
 }
@@ -181,5 +181,5 @@ function reportStaleBundle(deps: LaunchDeps): void {
   }
   if (behind === undefined) return;
   deps.out(`warning: ${behind} — this run executes the previous bundle`);
-  deps.out("bring the service up to the sources first: jigs up");
+  deps.out("bring the service up to the sources first: pnpm exec jigs up");
 }

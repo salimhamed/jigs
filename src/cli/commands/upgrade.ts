@@ -110,13 +110,13 @@ function normalizeReleaseAgeExclude(factoryRoot: string): boolean {
   if (document.errors.length > 0) {
     throw new JigsError(
       `could not parse ${file}: ${document.errors[0]?.message}`,
-      "fix pnpm-workspace.yaml, then run jigs upgrade again",
+      "fix pnpm-workspace.yaml, then run pnpm exec jigs upgrade again",
     );
   }
   if (document.contents !== null && !isMap(document.contents)) {
     throw new JigsError(
       `${file} must contain a YAML mapping`,
-      "make pnpm-workspace.yaml a top-level mapping, then run jigs upgrade again",
+      "make pnpm-workspace.yaml a top-level mapping, then run pnpm exec jigs upgrade again",
     );
   }
   const workspace = document.toJS() as { minimumReleaseAgeExclude?: unknown } | null;
@@ -124,7 +124,7 @@ function normalizeReleaseAgeExclude(factoryRoot: string): boolean {
   if (existing != null && !Array.isArray(existing)) {
     throw new JigsError(
       `minimumReleaseAgeExclude in ${file} is not a list`,
-      "make minimumReleaseAgeExclude a YAML list, then run jigs upgrade again",
+      "make minimumReleaseAgeExclude a YAML list, then run pnpm exec jigs upgrade again",
     );
   }
   const jigsEntries = Array.isArray(existing)
@@ -174,7 +174,7 @@ function quotedJigsPackage(): Scalar<string> {
 function readManifest(factoryRoot: string): Manifest {
   const file = path.join(factoryRoot, "package.json");
   if (!existsSync(file)) {
-    throw new JigsError(`no package.json in ${factoryRoot}`, "scaffold one: jigs init");
+    throw new JigsError(`no package.json in ${factoryRoot}`, "scaffold one: pnpm exec jigs init");
   }
   return JSON.parse(readFileSync(file, "utf8")) as Manifest;
 }
@@ -196,21 +196,21 @@ function publishedVersion(factoryRoot: string): string {
   if (fromCheckout.length > 0) {
     throw new JigsError(
       `this factory installs jigs from a checkout (${fromCheckout.join(", ")})`,
-      `switch it to the published package first — ${JIGS_PACKAGE} from npm, pinned to a version — then jigs upgrade`,
+      `switch it to the published package first — ${JIGS_PACKAGE} from npm, pinned to a version — then pnpm exec jigs upgrade`,
     );
   }
   const retired = RETIRED_PACKAGES.find((name) => declared[name] !== undefined);
   if (retired !== undefined) {
     throw new JigsError(
       `this factory still depends on ${retired}, which no longer releases`,
-      `the move is a one-time edit no upgrade can make for you: replace the ${retired} line in package.json with ${JIGS_PACKAGE} at a version, rewrite every import of ${retired}/X to ${JIGS_PACKAGE}/X, drop any @salimhamed:registry line from .npmrc, then jigs upgrade`,
+      `the move is a one-time edit no upgrade can make for you: replace the ${retired} line in package.json with ${JIGS_PACKAGE} at a version, rewrite every import of ${retired}/X to ${JIGS_PACKAGE}/X, drop any @salimhamed:registry line from .npmrc, then pnpm exec jigs upgrade`,
     );
   }
   const version = declared[JIGS_PACKAGE];
   if (version === undefined) {
     throw new JigsError(
       `${JIGS_PACKAGE} not in this factory's package.json`,
-      "a factory depends on it by version — scaffold one with jigs init to see the shape",
+      "a factory depends on it by version — scaffold one with pnpm exec jigs init to see the shape",
     );
   }
   return version;
@@ -235,7 +235,7 @@ async function bump(
       if (/ERR_PNPM_PEER_DEP_ISSUES/.test(output)) {
         return new JigsError(
           "the new jigs peers on a runtime version this factory does not install",
-          "the factory supplies @workflow/web, @workflow/world-postgres, workflow and zod — move each to the version pnpm names above, then jigs upgrade again",
+          "the factory supplies @workflow/web, @workflow/world-postgres, workflow and zod — move each to the version pnpm names above, then pnpm exec jigs upgrade again",
         );
       }
       if (/ERR_PNPM_NO_MATCHING_VERSION/.test(output)) {

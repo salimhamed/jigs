@@ -64,7 +64,9 @@ export async function cancelRun(ref: string, deps: CancelDeps): Promise<CancelRe
   // Cancel leaves the worktree behind; offline prune proves the service and
   // every child stopped before it considers local resources.
   for (const path of worktrees) {
-    deps.out(`worktree kept at ${path} — jigs resources prune --run ${result.runId} to review`);
+    deps.out(
+      `worktree kept at ${path} — pnpm exec jigs resources prune --run ${result.runId} to review`,
+    );
   }
   return result;
 }

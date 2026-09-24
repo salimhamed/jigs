@@ -116,7 +116,7 @@ export async function mintInstallationToken(
   if (!res.ok) {
     throw new JigsError(
       `GitHub refused an installation token for App ${identity.appId} installation ${identity.installationId} (HTTP ${res.status})`,
-      `check App ${identity.appId}’s entry in jigs.config.ts: appId, installations and privateKeyPath, and that installation ${identity.installationId} still exists — jigs doctor names which one is wrong`,
+      `check App ${identity.appId}’s entry in jigs.config.ts: appId, installations and privateKeyPath, and that installation ${identity.installationId} still exists — pnpm exec jigs doctor names which one is wrong`,
     );
   }
   const body = (await res.json()) as { token: string; expires_at: string };
@@ -202,7 +202,7 @@ export function createGithubAuth(
         if (token === undefined || token === "") {
           throw new JigsError(
             "GITHUB_TOKEN is not set",
-            "set GITHUB_TOKEN in the factory repo's .env, then: jigs service restart",
+            "set GITHUB_TOKEN in the factory repo's .env, then: pnpm exec jigs service restart",
           );
         }
         return token;
