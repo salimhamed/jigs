@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.57.1](https://github.com/salimhamed/jigs/compare/jigs-v0.57.0...jigs-v0.57.1) (2026-09-24)
+
+
+### Bug Fixes
+
+* **cli:** lay out the up and down summaries one item per line ([#382](https://github.com/salimhamed/jigs/issues/382)) ([a952a16](https://github.com/salimhamed/jigs/commit/a952a16abf80dcf5a1fbabbd675d6600d46db4cf))
+
 ## [0.57.0](https://github.com/salimhamed/jigs/compare/jigs-v0.56.3...jigs-v0.57.0) (2026-09-24)
 
 
