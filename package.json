@@ -172,7 +172,16 @@
     "zod": "4.5.4"
   },
   "peerDependenciesMeta": {
+    "@workflow/web": {
+      "optional": true
+    },
+    "@workflow/world-postgres": {
+      "optional": true
+    },
     "nitro": {
+      "optional": true
+    },
+    "workflow": {
       "optional": true
     }
   },
