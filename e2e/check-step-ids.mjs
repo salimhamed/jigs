@@ -1,5 +1,5 @@
 // The only check that can see a broken @jigs-ai/jigs packaging, and the
-// only one that compiles both the bare scaffold and the optional ship recipe.
+// only one that compiles both the bare scaffold and the optional linear-ticket-to-pr recipe.
 //
 // No jigs package carries a directive, so every durable step id is derived at
 // compile time from the factory-local path of the file that declares it — and
@@ -56,7 +56,7 @@ const JIGS = "@jigs-ai/jigs";
 const FAKE_VERSION = "9.9.9-e2e";
 const PNPM = process.env.JIGS_E2E_PNPM ?? "pnpm";
 
-const HEADER = `# Workflow and step ids emitted by the named scaffold (bare or ship recipe).
+const HEADER = `# Workflow and step ids emitted by the named scaffold (bare or linear-ticket-to-pr recipe).
 # Recorded by: node e2e/check-step-ids.mjs --record
 #
 # These addresses come from the factory's named workflow and step functions.
@@ -449,7 +449,7 @@ async function doctorReport() {
 
 function bootOutcome(
   postgresUrl,
-  { env: baseEnv = process.env, workflow = "ship", whileReady } = {},
+  { env: baseEnv = process.env, workflow = "linear-ticket-to-pr", whileReady } = {},
 ) {
   // The World is the stub whatever the shell says; the URL is the registry's.
   const env = {
@@ -913,8 +913,12 @@ async function checkScaffold(name) {
   // Exercise recipe discovery, copying and registration from the installed
   // tarball. Both versions use these same files.
   installFromTarball(tarballs.bumped);
-  if (name === "ship") {
-    run(path.join(factory, "node_modules", ".bin", "jigs"), ["recipe", "add", "ship"]);
+  if (name === "linear-ticket-to-pr") {
+    run(path.join(factory, "node_modules", ".bin", "jigs"), [
+      "recipe",
+      "add",
+      "linear-ticket-to-pr",
+    ]);
   }
 
   // Bumped first so the tree is left holding a build of the real version.
@@ -956,7 +960,7 @@ async function checkScaffold(name) {
   // survives into the emitted output was never resolved — the module it names is
   // gone, and the failure only surfaces when the code path runs in production.
   // The entry alone is not the output: nitro splits the factory's own modules
-  // into `_chunks/`, and `_chunks/ship.mjs` is where the compiled workflow — and
+  // into `_chunks/`, and `_chunks/linear-ticket-to-pr.mjs` is where the compiled workflow — and
   // every `#jigs` import site in it — actually lands.
   const scan = (files) => files.flatMap((file) => unresolvedSpecifiers(readFileSync(file, "utf8")));
 
@@ -1023,16 +1027,16 @@ async function checkScaffold(name) {
 
   // Exercise policy lookup with a real compiler-stamped workflow export. Source
   // unit tests cannot prove that the compiled module retains workflowId.
-  if (name === "ship") {
+  if (name === "linear-ticket-to-pr") {
     console.log("\n=== release: compiled workflow policy overrides the factory default");
     run(process.execPath, [
       "--input-type=module",
       "--eval",
       `
   import assert from "node:assert/strict";
-  import entry from "./.output/server/_chunks/ship.mjs";
+  import entry from "./.output/server/_chunks/linear-ticket-to-pr.mjs";
   import { resolveReleasePolicy } from "@jigs-ai/jigs/steps/runtime";
-  const workflowName = "workflow//./workflows/ship//shipWorkflow";
+  const workflowName = "workflow//./workflows/linear-ticket-to-pr//linearTicketToPrWorkflow";
   assert.equal(entry.workflow.workflowId, workflowName);
   entry.release = { onSuccess: "keep", onFailure: "release" };
   const policy = await resolveReleasePolicy(
@@ -1065,9 +1069,10 @@ tarballs = pack();
 checkCliBundle();
 checkDlxInit();
 const cancellationOnly = process.argv.includes("--cancellation-only");
-for (const name of cancellationOnly ? ["bare"] : ["bare", "ship"]) await checkScaffold(name);
+for (const name of cancellationOnly ? ["bare"] : ["bare", "linear-ticket-to-pr"])
+  await checkScaffold(name);
 
-// Boot the recipe scaffold once: it registers hello and ship, exercising the
+// Boot the recipe scaffold once: it registers hello and linear-ticket-to-pr, exercising the
 // optional recipe's deferred registration as well as all runtime peers.
 const postgresUrl = process.env.WORKFLOW_POSTGRES_URL;
 if (postgresUrl === undefined || postgresUrl === "") {

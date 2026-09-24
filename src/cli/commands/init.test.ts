@@ -168,7 +168,7 @@ test("the tsconfig compiles the code this factory starts with", async () => {
 
 // Each exported "use step" function's name is half a durable step id, so the
 // scaffold's wrappers are the ids every factory's World records. e2e reads
-// them back out of a real build and diffs them against e2e/expected-ids.ship.txt;
+// them back out of a real build and diffs them against e2e/expected-ids.linear-ticket-to-pr.txt;
 // here the template is held to that same recorded list without a build.
 test("the wrappers scaffolded are the step ids this repo has recorded", async () => {
   const dir = scaffold("theta");
@@ -179,7 +179,10 @@ test("the wrappers scaffolded are the step ids this repo has recorded", async ()
     .map((match) => `step//./jigs//${match[1]}`)
     .sort();
   expect(steps).toHaveLength(30);
-  const recorded = readFileSync(path.join(packageRoot(), "e2e", "expected-ids.ship.txt"), "utf8")
+  const recorded = readFileSync(
+    path.join(packageRoot(), "e2e", "expected-ids.linear-ticket-to-pr.txt"),
+    "utf8",
+  )
     .split("\n")
     .filter((line) => line.startsWith("step//./jigs//"))
     .sort();

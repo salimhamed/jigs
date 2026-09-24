@@ -20,7 +20,7 @@ add that, set this up — go back to `SKILL.md` and take the route it belongs to
    | Installing and a first run | `getting-started` |
    | Writing a workflow | `build-a-workflow` |
    | Harnesses and model sources | `models-and-harnesses` |
-   | Recipes such as ship | `recipes` |
+   | Recipes such as linear-ticket-to-pr | `recipes` |
    | `jigs.config.ts` and `.env` | `configuration` |
    | What a command does | `cli` |
    | Something failing | `troubleshooting` |
@@ -32,7 +32,7 @@ add that, set this up — go back to `SKILL.md` and take the route it belongs to
 4. **The installed source**, when nothing above pins the behaviour down:
    `node_modules/@jigs-ai/jigs/dist/` (compiled; the package exports map names
    each module) and `node_modules/@jigs-ai/jigs/templates/`, one `.tmpl` per
-   file `jigs init` writes. A factory that added the ship recipe also has
+   file `jigs init` writes. A factory that added the linear-ticket-to-pr recipe also has
    `blocks/delivery/README.md`.
 
 ## How to answer

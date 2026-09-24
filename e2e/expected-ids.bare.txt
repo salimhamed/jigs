@@ -1,4 +1,4 @@
-# Workflow and step ids emitted by the named scaffold (bare or ship recipe).
+# Workflow and step ids emitted by the named scaffold (bare or linear-ticket-to-pr recipe).
 # Recorded by: node e2e/check-step-ids.mjs --record
 #
 # These addresses come from the factory's named workflow and step functions.

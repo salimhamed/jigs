@@ -113,12 +113,12 @@ jigs status
 
 ```sh
 jigs recipe list
-jigs recipe add ship
+jigs recipe add linear-ticket-to-pr
 ```
 
 `recipe add` copies source without overwriting and registers the workflow under
 `workflows` in `jigs.config.ts`. If it cannot edit the config, it names the line
-to add by hand. The copied code is the factory's to edit; `blocks/delivery/README.md` explains the ship recipe.
+to add by hand. The copied code is the factory's to edit; `blocks/delivery/README.md` explains the linear-ticket-to-pr recipe.
 
 ```sh
 jigs bind git@github.com:owner/repo.git

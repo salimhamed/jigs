@@ -8,16 +8,16 @@ Requires Node 24 or newer, pnpm and Docker.
 pnpm install
 pnpm dev           # run the CLI from source
 pnpm check         # lint, typecheck, test, build, and the doc-comment gate
-pnpm e2e           # bare and ship factories from packed installs; diffs durable IDs
+pnpm e2e           # bare and linear-ticket-to-pr factories from packed installs; diffs durable IDs
 pnpm test:live     # live provider tests, each with its own auth setup
 pnpm docs:site     # build the website into docs-site/ (fails on dead links)
 pnpm docs:preview  # serve the built site; open the printed /jigs/ URL
 ```
 
-With `WORKFLOW_POSTGRES_URL` set, `pnpm e2e` also boots the ship factory's
-service, waits for readiness and requires a clean exit on SIGTERM. Put local
-values in `.env.e2e.local` (copy `.env.e2e.example`; it is gitignored). Shell
-and CI values win over the file. Point it at a dedicated database and port,
+With `WORKFLOW_POSTGRES_URL` set, `pnpm e2e` also boots the linear-ticket-to-pr
+factory's service, waits for readiness and requires a clean exit on SIGTERM. Put
+local values in `.env.e2e.local` (copy `.env.e2e.example`; it is gitignored).
+Shell and CI values win over the file. Point it at a dedicated database and port,
 never a live factory World.
 
 Before a Workflow SDK or Postgres World upgrade, or a change to service startup
