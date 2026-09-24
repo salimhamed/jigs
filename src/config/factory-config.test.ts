@@ -73,6 +73,21 @@ test("a binding may override either repository-specific merge setting", () => {
   });
 });
 
+test("defineFactory accepts a binding merge override", () => {
+  const definition = defineFactory({
+    service: { dashboardPort: 9090 },
+    bindings: { api: { remote: "url", merge: { by: "jigs", method: "rebase" } } },
+    workflows: {},
+  });
+  expect(definition.bindings.api.merge).toEqual({ by: "jigs", method: "rebase" });
+  defineFactory({
+    service: { dashboardPort: 9090 },
+    // @ts-expect-error approval is factory-level, not a binding override
+    bindings: { api: { remote: "url", merge: { approval: { kind: "review" } } } },
+    workflows: {},
+  });
+});
+
 test("binding merge approval is rejected as a factory identity policy", () => {
   expect(() =>
     parseFactoryConfig({
