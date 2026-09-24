@@ -1,4 +1,4 @@
-// The prompts the ship recipe sends when a role supplies no callback of its own. They are
+// The prompts the linear-ticket-to-pr recipe sends when a role supplies no callback of its own. They are
 // exported so a role that only wants to add to one can render it directly,
 // the same way `renderDefaultPrompt()` does from inside a prompt callback.
 

@@ -17,7 +17,7 @@ import { z } from "zod";
 vi.mock("#jigs", async (importOriginal) => ({
   ...(await importOriginal<typeof import("#jigs")>()),
   provisionWorktree: vi.fn(async () => ({
-    path: "/tmp/ship-test",
+    path: "/tmp/linear-ticket-to-pr-test",
     branch: "acme/abc-123",
     defaultBranch: "main",
     baseSha: "0".repeat(40),
@@ -61,7 +61,11 @@ const handoff: TicketHandoff = { brief: "Do the thing.", snapshot, assumptions: 
 const jigs = await import("#jigs");
 const delivery = await import("#blocks/delivery/delivery");
 const tickets = await import("#blocks/tickets/linear");
-const { default: entry, shipInputs, shipWorkflow } = await import("./ship.ts");
+const {
+  default: entry,
+  linearTicketToPrInputs,
+  linearTicketToPrWorkflow,
+} = await import("./linear-ticket-to-pr.ts");
 
 async function deliveredFor(inputs: Record<string, unknown>) {
   vi.mocked(delivery.deliverChange).mockClear();
@@ -69,9 +73,9 @@ async function deliveredFor(inputs: Record<string, unknown>) {
   vi.mocked(jigs.setTicketStatus).mockClear();
   vi.mocked(jigs.noteOnTicket).mockClear();
   vi.mocked(tickets.acquireLinearTicket).mockClear();
-  await shipWorkflow({
-    ...shipInputs.parse({ binding: "repo", ...inputs }),
-    triggerId: "ship-test",
+  await linearTicketToPrWorkflow({
+    ...linearTicketToPrInputs.parse({ binding: "repo", ...inputs }),
+    triggerId: "linear-ticket-to-pr-test",
   });
   const options = vi.mocked(delivery.deliverChange).mock.calls[0]?.[0];
   if (options === undefined) throw new Error("deliverChange was never called");
@@ -103,7 +107,7 @@ test("the work item delivered carries the ticket and the implementation brief", 
   expect(jigs.resolveMergePolicy).toHaveBeenCalledWith("repo");
 });
 
-test("ship moves its ticket as the recipe progresses", async () => {
+test("linear-ticket-to-pr moves its ticket as the recipe progresses", async () => {
   const options = await deliveredFor({ ticket: "ABC-123" });
   expect(jigs.setTicketStatus).toHaveBeenCalledTimes(1);
   expect(jigs.setTicketStatus).toHaveBeenCalledWith(snapshot.id, "In Progress");
@@ -140,15 +144,15 @@ test("a delivery that stops short rejects without removing its worktree", async 
   vi.mocked(delivery.deliverChange).mockRejectedValueOnce(new Error("stopped short"));
 
   await expect(
-    shipWorkflow({
-      ...shipInputs.parse({ binding: "repo", ticket: "ABC-123" }),
-      triggerId: "ship-test",
+    linearTicketToPrWorkflow({
+      ...linearTicketToPrInputs.parse({ binding: "repo", ticket: "ABC-123" }),
+      triggerId: "linear-ticket-to-pr-test",
     }),
   ).rejects.toThrow("stopped short");
   expect(jigs.release).not.toHaveBeenCalled();
 });
 
-test("ship accepts ticket identifiers and IDs and declares its integrations", () => {
+test("linear-ticket-to-pr accepts ticket identifiers and IDs and declares its integrations", () => {
   for (const ticket of ["ABC-123", crypto.randomUUID()]) {
     expect(entry.inputs.parse({ ticket, binding: "repo" })).toMatchObject({ ticket });
   }
@@ -160,13 +164,13 @@ test("ship accepts ticket identifiers and IDs and declares its integrations", ()
 });
 
 test("omitted models stay unset until the workflow chooses harness defaults", () => {
-  const parsed = shipInputs.parse({ ticket: "ABC-123", binding: "repo" });
+  const parsed = linearTicketToPrInputs.parse({ ticket: "ABC-123", binding: "repo" });
   expect(parsed.implementationModel).toBeUndefined();
   expect(parsed.reviewModel).toBeUndefined();
 });
 
 test("the harness inputs list every registered harness kind", () => {
-  const schema = z.toJSONSchema(shipInputs, { io: "input" }) as {
+  const schema = z.toJSONSchema(linearTicketToPrInputs, { io: "input" }) as {
     properties: Record<string, { enum?: string[] }>;
   };
   expect(schema.properties.implementationHarness?.enum).toEqual(harnessKinds);
@@ -175,13 +179,17 @@ test("the harness inputs list every registered harness kind", () => {
 
 test("a pi role is refused at input validation with where to configure it", () => {
   for (const field of ["implementationHarness", "reviewHarness"]) {
-    const parsed = shipInputs.safeParse({ ticket: "ABC-123", binding: "repo", [field]: "pi" });
+    const parsed = linearTicketToPrInputs.safeParse({
+      ticket: "ABC-123",
+      binding: "repo",
+      [field]: "pi",
+    });
     expect(parsed.success).toBe(false);
     expect(parsed.error?.issues).toEqual([
       expect.objectContaining({
         path: [field],
         message:
-          "ship cannot build a pi role from its inputs: pi roles need a model source and are configured in the ship workflow's own code",
+          "linear-ticket-to-pr cannot build a pi role from its inputs: pi roles need a model source and are configured in the linear-ticket-to-pr workflow's own code",
       }),
     ]);
   }

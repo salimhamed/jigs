@@ -3,10 +3,11 @@
 `docs/contributing.md` has the dev commands and the source layout. Run
 `pnpm check` and `pnpm e2e` before you finish. `pnpm check` compiles no workflow
 directive: library code has none, and recipes compile inside factories. `pnpm e2e`
-builds a bare `jigs init` factory and one with `jigs recipe add ship`, and diffs
-their durable IDs against `e2e/expected-ids.bare.txt` and
-`e2e/expected-ids.ship.txt`. With `WORKFLOW_POSTGRES_URL` set it also boots the
-ship factory's service and requires a clean exit on SIGTERM. CI provides
+builds a bare `jigs init` factory and one with
+`jigs recipe add linear-ticket-to-pr`, and diffs their durable IDs against
+`e2e/expected-ids.bare.txt` and `e2e/expected-ids.linear-ticket-to-pr.txt`. With
+`WORKFLOW_POSTGRES_URL` set it also boots the linear-ticket-to-pr factory's
+service and requires a clean exit on SIGTERM. CI provides
 Postgres; without the URL the boot is skipped, so say so when you report.
 
 PR titles are conventional commits, enforced by CI: the squashed title is what

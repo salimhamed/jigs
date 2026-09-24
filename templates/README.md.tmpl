@@ -45,13 +45,14 @@ one Markdown page per import path.
 
 ```sh
 pnpm exec jigs recipe list
-pnpm exec jigs recipe add ship
+pnpm exec jigs recipe add linear-ticket-to-pr
 ```
 
-`recipe add` copies a recipe's workflow, tests and blocks into this factory and
+`recipe add` copies a recipe's workflow, tests and blocks into this factory,
 keeps any file that already exists, and registers the workflow under
-`workflows` in `jigs.config.ts`. The copied code is yours; upgrades never overwrite it. After
-adding ship, read `blocks/delivery/README.md`. See
+`workflows` in `jigs.config.ts`. The copied code is yours; upgrades never
+overwrite it. After adding linear-ticket-to-pr, read
+`blocks/delivery/README.md`. See
 [recipes](https://salimhamed.github.io/jigs/guide/recipes).
 
 ## Verify and upgrade

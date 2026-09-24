@@ -8,11 +8,11 @@ version; its only workflow is `hello`.
 The guides, in the order you need them:
 
 - `https://salimhamed.github.io/jigs/guide/build-a-workflow`: one workflow end to end.
-- `https://salimhamed.github.io/jigs/guide/recipes`: copying in a ready-made workflow such as ship.
+- `https://salimhamed.github.io/jigs/guide/recipes`: copying in a ready-made workflow such as linear-ticket-to-pr.
 - `https://salimhamed.github.io/jigs/guide/configuration`: every `jigs.config.ts` key and `.env` variable.
 
-For the ship process, run `jigs recipe add ship`. It adds
-`ship: () => import("./workflows/ship.ts"),` to the config's `workflows` map,
+For the linear-ticket-to-pr process, run `jigs recipe add linear-ticket-to-pr`. It adds
+`"linear-ticket-to-pr": () => import("./workflows/linear-ticket-to-pr.ts"),` to the config's `workflows` map,
 preserves existing files and reports created/kept paths. Recipes
 become editable factory source; upgrades only regenerate `jigs.ts`.
 
@@ -150,10 +150,10 @@ preserves the original strings. Treat the record as observability only:
 deletion requires separate kind-specific ownership and policy; a recorded URL
 does not authorize cleanup.
 
-For delivery, run `jigs recipe add ship`; it registers the workflow. The copied `blocks/delivery/` contains the phases, types,
+For delivery, run `jigs recipe add linear-ticket-to-pr`; it registers the workflow. The copied `blocks/delivery/` contains the phases, types,
 prompts and renderers; these are factory code to edit, not library exports.
 Read `blocks/delivery/README.md` for the recipe's prerequisites, budgets,
-prompts and compiling examples before changing the ship process. Keep factory prompt overrides beside
+prompts and compiling examples before changing the linear-ticket-to-pr process. Keep factory prompt overrides beside
 their callers. Reuse existing blocks for comment scoping and agent-session
 rebuilding rather than duplicating their mechanics.
 
@@ -183,7 +183,7 @@ the wake rather than the run, so the next wake reposts what is still
 unanswered. A workflow that only reads a pull request must
 not call `pullRequestGate`: the `github:pr:` hook is an exclusive writer claim
 and a second holder fails. Read on a schedule with the snapshot step instead,
-under a scope of your own, and the ship recipe's comments will read as neither your
+under a scope of your own, and the linear-ticket-to-pr recipe's comments will read as neither your
 feedback nor your completed work.
 
 ## Configuration and schedules

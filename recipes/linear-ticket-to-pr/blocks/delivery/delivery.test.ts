@@ -86,7 +86,7 @@ import type {
 // through turns a suspension into the next round, which is all these tests
 // need from it.
 vi.mock("workflow", () => ({
-  getWorkflowMetadata: () => ({ workflowRunId: "wrun_TEST", workflowName: "ship" }),
+  getWorkflowMetadata: () => ({ workflowRunId: "wrun_TEST", workflowName: "linear-ticket-to-pr" }),
   createHook: () => ({
     getConflict: async () => null,
     // biome-ignore lint/suspicious/noThenProperty: the SDK's Hook is a thenable
@@ -595,7 +595,12 @@ describe("delivery", () => {
       expect.stringContaining("It keeps membership checks constant-time."),
     );
     expect(markersOf(vi.mocked(steps.replyToPullRequestReviewThread).mock.calls[0]?.[2])).toEqual([
-      { scope: "ship/internal-42", run: "wrun_TEST", kind: "reply", source: "4@2026-01-01" },
+      {
+        scope: "linear-ticket-to-pr/internal-42",
+        run: "wrun_TEST",
+        kind: "reply",
+        source: "4@2026-01-01",
+      },
     ]);
     expect(steps.commentOnPullRequest).not.toHaveBeenCalled();
   });
@@ -651,7 +656,12 @@ describe("delivery", () => {
       expect.stringContaining("Changed the lookup and ran the bind tests."),
     );
     expect(markersOf(vi.mocked(steps.commentOnPullRequest).mock.calls[0]?.[1])).toEqual([
-      { scope: "ship/internal-42", run: "wrun_TEST", kind: "completion", source: "after" },
+      {
+        scope: "linear-ticket-to-pr/internal-42",
+        run: "wrun_TEST",
+        kind: "completion",
+        source: "after",
+      },
     ]);
   });
 

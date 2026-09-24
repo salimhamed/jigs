@@ -1,12 +1,12 @@
-# The ship recipe
+# The linear-ticket-to-pr recipe
 
-`ship` takes a Linear ticket to a merged pull request. It claims the ticket,
+`linear-ticket-to-pr` takes a Linear ticket to a merged pull request. It claims the ticket,
 asks on it when the requirements are unclear, has one agent implement the
 change and another review it, opens the pull request, and follows its review
 comments and CI until it merges. These files are now your factory's code: edit
 them freely. Upgrading jigs never overwrites them.
 
-- `workflows/ship.ts` is the workflow: its inputs, harness defaults and the
+- `workflows/linear-ticket-to-pr.ts` is the workflow: its inputs, harness defaults and the
   ticket status it sets at each stage.
 - `blocks/tickets/linear.ts` resolves and claims the ticket.
 - `blocks/delivery/` holds the phases (`delivery.ts`), prompts, types and tests.
@@ -35,15 +35,15 @@ optional.
 ## Launch a run
 
 ```sh
-pnpm exec jigs run ship --input ticket=AGE-123 --input binding=app
+pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input binding=app
 pnpm exec jigs watch
 ```
 
 By default Codex implements and Claude Code reviews. Choose per run with
 `implementationHarness` and `reviewHarness` (`claude` or `codex`), and
 `implementationModel` and `reviewModel`. A model left unset takes that
-harness's default from `inputHarnesses` in `workflows/ship.ts`. Pi needs a model
-source rather than a model name, so build a Pi role in `workflows/ship.ts` with
+harness's default from `inputHarnesses` in `workflows/linear-ticket-to-pr.ts`. Pi needs a model
+source rather than a model name, so build a Pi role in `workflows/linear-ticket-to-pr.ts` with
 `harnesses.pi(...)` and add `"pi"` to `requires.harnesses`.
 
 ## Budgets

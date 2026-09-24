@@ -116,7 +116,7 @@ async function checkRepositoryRules(entries) {
       failures.push(`${entry.source}: missing a leading @packageDocumentation comment`);
     }
   }
-  for (const directory of ["src", "recipes/ship"]) {
+  for (const directory of ["src", "recipes/linear-ticket-to-pr"]) {
     for (const file of await walkTypeScriptFiles(path.join(rootDir, directory))) {
       const relative = path.relative(rootDir, file);
       failures.push(...internalReferences(await readFile(file, "utf8"), relative));

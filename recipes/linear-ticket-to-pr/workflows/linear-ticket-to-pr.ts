@@ -29,7 +29,7 @@ const inputHarnesses: Partial<Record<HarnessKind, (model?: string) => Harness>> 
 };
 
 function unbuildable(kind: HarnessKind) {
-  return `ship cannot build a ${kind} role from its inputs: ${kind} roles need a model source and are configured in the ship workflow's own code`;
+  return `linear-ticket-to-pr cannot build a ${kind} role from its inputs: ${kind} roles need a model source and are configured in the linear-ticket-to-pr workflow's own code`;
 }
 
 function roleHarness(kind: HarnessKind, model?: string): Harness {
@@ -42,7 +42,7 @@ const harnessInput = z.enum(harnessKinds).refine((kind) => inputHarnesses[kind] 
   error: (issue) => unbuildable(issue.input as HarnessKind),
 });
 
-export const shipInputs = z.object({
+export const linearTicketToPrInputs = z.object({
   ticket: z.string().min(1),
   binding: z.string(),
   implementationHarness: harnessInput.default("codex"),
@@ -54,10 +54,10 @@ export const shipInputs = z.object({
   pullRequestRevisionRounds: z.number().int().nonnegative().default(3),
 });
 
-type ShipInputs = WorkflowInputs<typeof shipInputs>;
+type LinearTicketToPrInputs = WorkflowInputs<typeof linearTicketToPrInputs>;
 
 /** Take a Linear ticket through implementation, review, and pull-request merge. */
-export async function shipWorkflow(inputs: ShipInputs) {
+export async function linearTicketToPrWorkflow(inputs: LinearTicketToPrInputs) {
   "use workflow";
 
   const { claim, snapshot } = await acquireLinearTicket(inputs.ticket);
@@ -110,7 +110,7 @@ export async function shipWorkflow(inputs: ShipInputs) {
 }
 
 export default {
-  workflow: shipWorkflow,
-  inputs: shipInputs,
+  workflow: linearTicketToPrWorkflow,
+  inputs: linearTicketToPrInputs,
   requires: { harnesses: ["claude", "codex"], integrations: ["linear", "github"] },
-} satisfies WorkflowEntry<typeof shipInputs>;
+} satisfies WorkflowEntry<typeof linearTicketToPrInputs>;
