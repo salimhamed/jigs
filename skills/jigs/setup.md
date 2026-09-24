@@ -48,9 +48,10 @@ workflow, the package manifest, Docker Compose, `.env.example` and build
 settings. It preserves existing files. Its printed ports come from the factory
 path; adjust them in `jigs.config.ts` if they are taken.
 
-## 2. `.env`
+## 2. Install and `.env`
 
 ```sh
+pnpm install
 cp .env.example .env
 ```
 
@@ -62,16 +63,17 @@ guide's `.env` table lists each variable.
 ## 3. `jigs up`
 
 ```sh
-pnpm install
 pnpm exec jigs up
 ```
 
-`jigs up` prints one line per step: `locate`, `env` (fails with `cp .env.example .env` as its
-repair when there is no `.env`, and names empty credential slots), `install`, `compose`
-(Postgres), `bootstrap` (migrations), `build`, `service` (start, or restart only
-when the built bundle or `jigs.config.ts` changed), `ready` (waits until every binding is cloned and
-the World is up) and `doctor`. Doctor checks only what the workflows require
-and what `jigs.config.ts` turns on. The closing block names what runs and how to stop each:
+`jigs up` prints one line per step: `locate`, `env` (fails with
+`cp .env.example .env` as its repair when there is no `.env`, and names empty
+credential slots), `install`, `compose` (Postgres, its output streamed),
+`bootstrap` (migrations), `build`, `service` (start, or restart only when the
+built bundle or `jigs.config.ts` changed), `ready` (waits until every binding
+is cloned and the World is up) and `doctor`. Doctor checks only what the
+workflows require and what `jigs.config.ts` turns on. The closing block names
+what runs and how to stop each:
 
 ```
 my-factory-2286ac2a is up

@@ -114,10 +114,9 @@ Generated code:
   build                     Compile workflows into the service bundle
   generate                  Refresh the generated jigs.ts
 
-In a factory, run every command as pnpm exec jigs <command>.
-
 Run selectors accept a complete run ID, unique ID prefix, ticket ID such as
-AGE-123, or a supported ticket UUID. Run jigs <command> --help for options.
+AGE-123, or a supported ticket UUID. In a factory, run every command as
+pnpm exec jigs <command>; add --help for its options.
 
 Options:
   -h, --help                         Display help.

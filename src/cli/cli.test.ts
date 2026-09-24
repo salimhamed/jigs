@@ -106,7 +106,7 @@ test("root and no-argument help are side-effect-free, grouped and exact", () => 
     expect(noArgs.stdout).toMatch(
       /^ {2}service stop {2,}Stop the service; Postgres keeps running$/m,
     );
-    expect(noArgs.stdout).toContain("pnpm exec jigs <command>");
+    expect(noArgs.stdout).toContain("pnpm exec jigs <command>; add --help for its options");
     expect(noArgs.stdout).not.toMatch(/\bship\b/);
     expect(noArgs.stdout).not.toContain("Getting started");
     expect(noArgs.stdout).not.toMatch(/jigs (ps|sweep)\b/);
