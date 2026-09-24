@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.56.2
+# @jigs-ai/jigs v0.56.3
 
 Define a factory and describe its workflows, schedules, bindings and merge policy.
 
