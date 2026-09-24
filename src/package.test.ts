@@ -141,11 +141,23 @@ test("the runtime a factory supplies is a peer here, and still a devDependency",
   // an install resolves it from this package's own node_modules, so the
   // factory never has to list it.
   const peers: Record<string, string> = pkg.peerDependencies;
-  expect(Object.keys(peers).filter((name) => !optionalPeers.has(name))).toEqual(FACTORY_SUPPLIED);
+  expect(Object.keys(peers).sort()).toEqual([...FACTORY_SUPPLIED, "nitro"].sort());
   for (const [name, range] of Object.entries(peers)) {
     expect(pkg.devDependencies[name], name).toBe(range);
     expect(pkg.dependencies[name], name).toBeUndefined();
   }
+});
+
+test("only zod is a required peer, so pnpm dlx installs none of the runtime", () => {
+  // pnpm installs a required peer that nothing provides, and `pnpm dlx
+  // @jigs-ai/jigs init` provides nothing: the SDK, its World and the dashboard
+  // would pull in esbuild, @swc/core and cbor-extract, whose build scripts
+  // pnpm stops to ask about. A factory lists them itself, so it loses nothing.
+  expect([...optionalPeers].sort()).toEqual(
+    Object.keys(pkg.peerDependencies)
+      .filter((name) => name !== "zod")
+      .sort(),
+  );
 });
 
 test("the factory template pins the same versions this package peers on", async () => {
@@ -160,10 +172,10 @@ test("the factory template pins the same versions this package peers on", async 
     ),
   );
   for (const [name, range] of Object.entries<string>(pkg.peerDependencies)) {
-    // nitro is the one optional peer: it is only here so the emitted
-    // declarations reference its types instead of inlining them, and a factory
-    // holds it as a devDependency, the way this package does.
-    const section = optionalPeers.has(name) ? "devDependencies" : "dependencies";
+    // nitro is only a peer so the emitted declarations reference its types
+    // instead of inlining them, and a factory holds it as a devDependency, the
+    // way this package does.
+    const section = FACTORY_SUPPLIED.includes(name) ? "dependencies" : "devDependencies";
     expect(template[section][name], name).toBe(range);
   }
   for (const name of ["croner", "hono", "postgres"]) {

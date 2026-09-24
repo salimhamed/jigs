@@ -27,19 +27,22 @@
 // name from the factory's node_modules, so they are peers a factory has to
 // install itself, and nothing says otherwise until the built service starts
 // in someone else's repo.
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { parse as parseYaml } from "yaml";
 import {
   installCompiledCancellationFixture,
   runCompiledCancellationMatrix,
@@ -183,6 +186,115 @@ function checkCliBundle() {
     );
   }
   console.log(`dist/cli.js imports ${imports.join(", ")}`);
+}
+
+// `pnpm dlx @jigs-ai/jigs init` on a machine with nothing installed. pnpm
+// installs every required peer that nothing provides, and in a non-interactive
+// shell refuses to finish over any dependency build script it was not told to
+// allow; the SDK's compiler and the World bring three. So the runtime peers are
+// optional, and here the tarball runs the way dlx runs it: in an empty
+// directory, with a cache and config of its own so neither the operator's
+// settings nor their dlx cache are involved. @workflow/serde is exempt: the AI
+// SDK depends on it, and it has no build script.
+const DLX_ABSENT = /^(?:workflow|@workflow\/(?!serde$).+|esbuild|@swc\/.+|cbor-extract)$/;
+
+function dlxEnv(home) {
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !/^(?:npm|pnpm)_/i.test(key)),
+  );
+  return {
+    ...env,
+    XDG_CACHE_HOME: path.join(home, "cache"),
+    XDG_CONFIG_HOME: path.join(home, "config"),
+  };
+}
+
+function dlx(cwd, env, args) {
+  const result = spawnSync(PNPM, [`--package=${tarballs.jigs}`, "dlx", "jigs", ...args], {
+    cwd,
+    env,
+    encoding: "utf8",
+  });
+  const output = `${result.stdout}${result.stderr}`;
+  if (result.status !== 0 || /ignored build scripts/i.test(output)) {
+    console.error(output);
+    fail(
+      `pnpm dlx jigs ${args.join(" ")} did not finish cleanly`,
+      "a required peer or dependency now brings a build script pnpm stops on — keep the runtime peers optional in peerDependenciesMeta",
+    );
+  }
+  return output;
+}
+
+// Every package name installed anywhere under a node_modules, the virtual store
+// included, whatever pnpm names that store.
+function installedPackages(nodeModules, names = new Set()) {
+  const record = (name, dir) => {
+    names.add(name);
+    const nested = path.join(dir, "node_modules");
+    if (!lstatSync(dir).isSymbolicLink() && existsSync(nested)) installedPackages(nested, names);
+  };
+  for (const entry of readdirSync(nodeModules, { withFileTypes: true })) {
+    const full = path.join(nodeModules, entry.name);
+    if (entry.name === ".bin" || !(entry.isDirectory() || entry.isSymbolicLink())) continue;
+    if (entry.name.startsWith(".") && entry.isDirectory()) {
+      for (const stored of readdirSync(full)) {
+        const nested = path.join(full, stored, "node_modules");
+        if (existsSync(nested) && statSync(nested).isDirectory()) installedPackages(nested, names);
+      }
+    } else if (entry.name.startsWith("@")) {
+      for (const scoped of readdirSync(full))
+        record(`${entry.name}/${scoped}`, path.join(full, scoped));
+    } else {
+      record(entry.name, full);
+    }
+  }
+  return names;
+}
+
+function checkDlxInit() {
+  console.log("\n=== dlx: jigs init from the tarball, the way pnpm dlx runs it on a new machine");
+  const home = path.join(scratch, "dlx-home");
+  const target = path.join(scratch, "dlx-factory");
+  mkdirSync(home);
+  mkdirSync(target);
+  const env = dlxEnv(home);
+  console.log(dlx(target, env, ["init"]));
+  if (!existsSync(path.join(target, "jigs.config.ts"))) {
+    fail("pnpm dlx jigs init wrote no jigs.config.ts", "the output above is the CLI's");
+  }
+  if (!dlx(scratch, env, ["--help"]).includes("Usage: jigs")) {
+    fail(
+      "pnpm dlx jigs --help printed no usage",
+      "the root help no longer starts with Usage: jigs",
+    );
+  }
+  const dlxRoot = path.join(home, "cache", "pnpm", "dlx");
+  const installs = readdirSync(dlxRoot).flatMap((hash) =>
+    readdirSync(path.join(dlxRoot, hash))
+      .map((dir) => path.join(dlxRoot, hash, dir, "node_modules"))
+      .filter((dir) => existsSync(path.join(dir, ".bin", "jigs"))),
+  );
+  if (installs.length === 0)
+    fail(`no dlx install of jigs under ${dlxRoot}`, "pnpm moved its dlx cache");
+  for (const nodeModules of installs) {
+    const unwanted = [...installedPackages(nodeModules)].filter((name) => DLX_ABSENT.test(name));
+    if (unwanted.length > 0) {
+      fail(
+        `pnpm dlx installed ${unwanted.sort().join(", ")}`,
+        "a runtime peer is required again, or a dependency now brings the SDK — dlx must install only what the CLI runs",
+      );
+    }
+    const state = parseYaml(readFileSync(path.join(nodeModules, ".modules.yaml"), "utf8"));
+    const skippedBuilds = [...(state.ignoredBuilds ?? []), ...(state.pendingBuilds ?? [])];
+    if (skippedBuilds.length > 0) {
+      fail(
+        `pnpm dlx left build scripts unrun: ${skippedBuilds.join(", ")}`,
+        "keep native builds out of the dlx install",
+      );
+    }
+  }
+  console.log("pnpm dlx jigs init and --help ran with no runtime peer and no build script");
 }
 
 function run(file, args) {
@@ -959,6 +1071,7 @@ async function checkScaffold(name) {
 scratch = mkdtempSync(path.join(tmpdir(), "jigs-e2e-"));
 tarballs = pack();
 checkCliBundle();
+checkDlxInit();
 const cancellationOnly = process.argv.includes("--cancellation-only");
 for (const name of cancellationOnly ? ["bare"] : ["bare", "ship"]) await checkScaffold(name);
 

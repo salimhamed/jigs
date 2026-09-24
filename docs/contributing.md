@@ -61,6 +61,8 @@ Public import paths follow the folders: `@jigs-ai/jigs`,
 subpaths (`/app`, `/nitro`, `/schedules`, `/automatic-release`, `/build`,
 `/plugins/*`) belong to the service a factory builds. The Workflow SDK, its
 Postgres World, the dashboard and zod are peer dependencies the factory installs.
+All but zod are optional peers, so `pnpm dlx @jigs-ai/jigs init` installs none
+of them or the native builds they bring; the CLI must never import them.
 
 ## Releases
 
