@@ -273,7 +273,7 @@ export function classifyPullRequestState(
 export type FetchPrState = (pr: PullRequestRef) => Promise<PullRequestSnapshot>;
 
 /** The slice of the factory's `readBranchState` step the gate reads the local head with. */
-export type ReadLocalHead = (worktreePath: string, baseSha: string) => Promise<{ headSha: string }>;
+export type ReadLocalHead = (worktree: Worktree) => Promise<{ headSha: string }>;
 
 /** The factory's `branchContains` step: whether a commit is the worktree's HEAD or an ancestor. */
 export type BranchContains = (worktreePath: string, sha: string) => Promise<boolean>;
@@ -298,7 +298,7 @@ export interface PullRequestGateOptions {
    * is the local head, or when the pull request has commits the worktree does not, because
    * someone else pushed.
    */
-  worktree?: Pick<Worktree, "path" | "baseSha"> | undefined;
+  worktree?: Worktree | undefined;
 }
 
 // GitHub can report the old head for a moment after a push; the local branch
@@ -308,10 +308,10 @@ async function passedLocally(
   pr: PullRequestRef,
   kind: PullRequestWake["kind"],
   head: string,
-  worktree: Pick<Worktree, "path" | "baseSha">,
+  worktree: Worktree,
   steps: PullRequestGateSteps,
 ): Promise<boolean> {
-  const local = await steps.readLocalHead(worktree.path, worktree.baseSha);
+  const local = await steps.readLocalHead(worktree);
   if (local.headSha === head) return false;
   const where = `[prGate] ${pr.owner}/${pr.repo}#${pr.number}`;
   if (await steps.branchContains(worktree.path, head)) {

@@ -25,7 +25,6 @@ import {
   readWorktreeDiff,
   registerResource,
   resolveMergePolicy,
-  resolveRepository,
 } from "#jigs/steps";
 import * as prompts from "./prompts.ts";
 import {
@@ -57,7 +56,6 @@ export interface Budget {
 export interface Delivery {
   task: WorkItem;
   worktree: Worktree;
-  binding: string;
   builder: Harness;
   reviewer: Harness;
   budget: Budget;
@@ -117,7 +115,7 @@ export async function implementAndReview(
   const { task, worktree, budget } = delivery;
   const cwd = worktree.path;
   const reviewerSession = agentSession({ name: "reviewer", harness: delivery.reviewer, cwd });
-  const diff = () => readWorktreeDiff(cwd, worktree.baseSha);
+  const diff = () => readWorktreeDiff(worktree);
   const ledger: ReviewRound[] = [];
   let findings: ReviewFinding[] = [];
 
@@ -128,7 +126,7 @@ export async function implementAndReview(
       fresh: async () => prompts.implementation.fresh(task, worktree, findings, await diff()),
     });
 
-    const state = await readBranchState(cwd, worktree.baseSha);
+    const state = await readBranchState(worktree);
     if (state.dirty || state.commits === 0) {
       return stop(delivery, `jigs stopped work on ${task.key} in review round ${round}.`, [
         state.dirty
@@ -171,16 +169,12 @@ export async function publish(
   approved: Approved,
 ): Promise<PullRequestRef & { url: string }> {
   const { task, worktree } = delivery;
-  await pushApprovedChange(worktree.path, worktree.branch, approved.reviewedCommit);
+  await pushApprovedChange(worktree, approved.reviewedCommit);
 
   const described = await runAgent({
     harness: delivery.builder,
     cwd: worktree.path,
-    prompt: prompts.description(
-      task,
-      worktree,
-      await readWorktreeDiff(worktree.path, worktree.baseSha),
-    ),
+    prompt: prompts.description(task, worktree, await readWorktreeDiff(worktree)),
     output: pullRequestDescription,
   });
 
@@ -193,9 +187,7 @@ export async function publish(
       : `${described.output.body}\n\n## Reviewer notes\n\n${notes.map((note) => `- ${note}`).join("\n")}`;
 
   const pr = await openPullRequest({
-    repo: await resolveRepository(delivery.binding),
-    head: worktree.branch,
-    base: worktree.defaultBranch,
+    worktree,
     title: described.output.title,
     body,
   });
@@ -215,7 +207,7 @@ export async function followPullRequest(
   builder: BuilderSession,
 ): Promise<void> {
   const { task, worktree, budget } = delivery;
-  const merge = await resolveMergePolicy(delivery.binding);
+  const merge = await resolveMergePolicy(worktree.binding);
   let lastAssessed: string | undefined;
   for await (const snapshot of watchPullRequest(pr)) {
     if (snapshot.state === "closed") {
@@ -235,13 +227,13 @@ export async function followPullRequest(
           prompts.maintenance.fresh(
             task,
             worktree,
-            await readWorktreeDiff(worktree.path, worktree.baseSha),
+            await readWorktreeDiff(worktree),
             pr,
             assessed,
             recovery,
           ),
       });
-      let local = await readBranchState(worktree.path, worktree.baseSha);
+      let local = await readBranchState(worktree);
       let current = await fetchPullRequestState(pr);
       if (current.state === "closed") {
         if (current.merged) return;
@@ -264,7 +256,7 @@ export async function followPullRequest(
       ) {
         await sleep("2s");
         current = await fetchPullRequestState(pr);
-        local = await readBranchState(worktree.path, worktree.baseSha);
+        local = await readBranchState(worktree);
         if (current.state === "closed") {
           if (current.merged) return;
           return maintenanceStopped(delivery, pr, "The pull request was closed unmerged.");
@@ -338,7 +330,7 @@ function maintenanceStopped(delivery: Delivery, pr: PullRequestRef, reason: stri
 // throw with what is still open. Maintenance deliberately does not call this.
 async function stop(delivery: Delivery, reason: string, findings: string[]): Promise<never> {
   const retained = [...findings];
-  await pushBranch(delivery.worktree.path, delivery.worktree.branch).catch((error: unknown) => {
+  await pushBranch(delivery.worktree).catch((error: unknown) => {
     retained.push(
       `Could not push the branch: ${String(error)}. Recover the work from ${delivery.worktree.path}.`,
     );

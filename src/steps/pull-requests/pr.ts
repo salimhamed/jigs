@@ -25,6 +25,7 @@ import { resolveGithubIdentity } from "../../providers/github-auth.ts";
 import { parseGithubRemote } from "../../providers/github-webhook.ts";
 import { type MergeRefusal, mergeRefusal } from "../../workflow/pull-requests/merge-ready.ts";
 import type { MergePolicy } from "../../workflow/pull-requests/policy.ts";
+import type { Worktree } from "../../workflow/workspaces/worktree.ts";
 
 /** Identifies a GitHub repository by its owner and name. */
 export interface GitHubRepoRef {
@@ -60,7 +61,7 @@ export async function resolveMergePolicy(binding: string): Promise<MergePolicy> 
 }
 
 /**
- * Open a pull request from the working branch into the base branch.
+ * Open a pull request from the worktree's branch into its repository's default branch.
  *
  * The lookup comes first because this is one step: a create that succeeded
  * before the assignment failed, or whose response was lost, leaves a pull
@@ -68,14 +69,14 @@ export async function resolveMergePolicy(binding: string): Promise<MergePolicy> 
  * and re-attempts only what did not finish.
  */
 export async function openPullRequest(request: {
-  repo: GitHubRepoRef;
-  head: string;
-  base: string;
+  worktree: Worktree;
   title: string;
   body: string;
   draft?: boolean | undefined;
 }): Promise<OpenedPullRequest> {
-  const { repo, head, base, title, body, draft } = request;
+  const { worktree, title, body, draft } = request;
+  const repo = await resolveRepository(worktree.binding);
+  const { branch: head, defaultBranch: base } = worktree;
   const identity = resolveGithubIdentity(repo.owner);
   // In App mode the pull request's author is the bot, which is what lets the
   // operator approve it. The assignee and the opening line are how the

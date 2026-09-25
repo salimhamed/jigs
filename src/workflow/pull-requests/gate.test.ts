@@ -502,7 +502,13 @@ test("a later wake in the same round is yielded while the head stays put", async
 });
 
 describe("with a worktree", () => {
-  const worktree = { path: "/work", baseSha: "base" };
+  const worktree = {
+    binding: "app",
+    path: "/work",
+    branch: "feature",
+    defaultBranch: "main",
+    baseSha: "base",
+  };
   const red = snapshot({ ci: "red", failingChecks: [check("test")] });
 
   // The local head, and which commits the local branch contains.
@@ -522,7 +528,7 @@ describe("with a worktree", () => {
     const next = gate.next();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(await Promise.race([next, Promise.resolve("suspended")])).toBe("suspended");
-    expect(steps.readLocalHead).toHaveBeenCalledExactlyOnceWith("/work", "base");
+    expect(steps.readLocalHead).toHaveBeenCalledExactlyOnceWith(worktree);
     expect(steps.branchContains).toHaveBeenCalledExactlyOnceWith("/work", "head-1");
     expect(hook.awaited).toBe(1);
   });

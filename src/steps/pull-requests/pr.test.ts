@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
-import { beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { PullRequestSnapshot } from "../../providers/github.ts";
 import {
   assignPullRequest,
@@ -41,6 +41,14 @@ vi.mock("../../providers/github-auth.ts", () => ({ resolveGithubIdentity: vi.fn(
 
 const pr = { owner: "owner", repo: "repo", number: 1 };
 const repo = { owner: "owner", repo: "repo" };
+const worktree = {
+  binding: "app",
+  path: "/work",
+  branch: "fix",
+  defaultBranch: "main",
+  baseSha: "base",
+};
+let root: string;
 const SQUASH: MergePolicy = { by: "jigs", method: "squash", approval: { kind: "review" } };
 
 const asApp = (coAuthor?: string) =>
@@ -94,6 +102,15 @@ test("resolveMergePolicy applies a named binding's overrides to the factory poli
 });
 
 beforeEach(() => {
+  root = makeTmpDir();
+  writeFileSync(
+    path.join(root, "jigs.config.ts"),
+    `export default {
+    service: { dashboardPort: 9090 },
+    bindings: { app: { remote: "git@github.com:owner/repo.git" } },
+  };`,
+  );
+  vi.stubEnv("JIGS_FACTORY_ROOT", root);
   vi.resetAllMocks();
   vi.mocked(resolveGithubIdentity).mockReturnValue({ mode: "pat" });
   vi.mocked(fetchPrSnapshot).mockResolvedValue(snapshot);
@@ -108,6 +125,11 @@ beforeEach(() => {
   });
   vi.mocked(mergePr).mockResolvedValue({ merged: true, sha: "merged" });
   vi.mocked(postPullRequestReview).mockResolvedValue({ id: 970 });
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  removeTmpDir(root);
 });
 
 test("reviewPullRequest returns the provider's review id", async () => {
@@ -265,9 +287,10 @@ test("a rebase has no merge message to carry a trailer in", async () => {
 });
 
 test("pat mode adds no trailer, no assignee and no requested-by line", async () => {
-  expect(
-    await openPullRequest({ repo, head: "fix", base: "main", title: "fix: search", body: "Body." }),
-  ).toEqual({ ...pr, url: "https://github.example/owner/repo/pull/1" });
+  expect(await openPullRequest({ worktree, title: "fix: search", body: "Body." })).toEqual({
+    ...pr,
+    url: "https://github.example/owner/repo/pull/1",
+  });
   expect(findOpenPullRequestByBranch).toHaveBeenCalledExactlyOnceWith(repo, "fix", "main");
   expect(createPullRequest).toHaveBeenCalledWith(expect.objectContaining({ body: "Body." }));
   expect(assignPullRequest).not.toHaveBeenCalled();
@@ -277,9 +300,9 @@ test("pat mode adds no trailer, no assignee and no requested-by line", async () 
 
 test("app mode names the operator and returns the provider's URL", async () => {
   asApp();
-  await expect(
-    openPullRequest({ repo, head: "fix", base: "main", title: "fix: search", body: "Body." }),
-  ).resolves.toEqual({ ...pr, url: "https://github.example/owner/repo/pull/1" });
+  await expect(openPullRequest({ worktree, title: "fix: search", body: "Body." })).resolves.toEqual(
+    { ...pr, url: "https://github.example/owner/repo/pull/1" },
+  );
   expect(findOpenPullRequestByBranch).toHaveBeenCalledExactlyOnceWith(repo, "fix", "main");
   expect(createPullRequest).toHaveBeenCalledWith(
     expect.objectContaining({ body: "Requested by @salimhamed.\n\nBody." }),
@@ -289,16 +312,14 @@ test("app mode names the operator and returns the provider's URL", async () => {
 
 test("openPullRequest forwards draft only when supplied", async () => {
   await openPullRequest({
-    repo,
-    head: "fix",
-    base: "main",
+    worktree,
     title: "fix: search",
     body: "Body.",
     draft: true,
   });
   expect(createPullRequest).toHaveBeenLastCalledWith(expect.objectContaining({ draft: true }));
 
-  await openPullRequest({ repo, head: "fix", base: "main", title: "fix: search", body: "Body." });
+  await openPullRequest({ worktree, title: "fix: search", body: "Body." });
   expect(createPullRequest).toHaveBeenLastCalledWith({
     owner: "owner",
     repo: "repo",
@@ -317,9 +338,9 @@ test("an open pull request for the branch is adopted instead of created again", 
     url: "https://github.example/owner/repo/pull/7",
   });
 
-  await expect(
-    openPullRequest({ repo, head: "fix", base: "main", title: "fix: search", body: "Body." }),
-  ).resolves.toEqual({ ...pr, number: 7, url: "https://github.example/owner/repo/pull/7" });
+  await expect(openPullRequest({ worktree, title: "fix: search", body: "Body." })).resolves.toEqual(
+    { ...pr, number: 7, url: "https://github.example/owner/repo/pull/7" },
+  );
   expect(findOpenPullRequestByBranch).toHaveBeenCalledExactlyOnceWith(repo, "fix", "main");
   expect(createPullRequest).not.toHaveBeenCalled();
   expect(assignPullRequest).toHaveBeenCalledWith({ ...pr, number: 7 }, ["salimhamed"]);
@@ -329,9 +350,9 @@ test("a failed assignment is not swallowed", async () => {
   asApp();
   vi.mocked(assignPullRequest).mockRejectedValue(new GithubApiError(403, "/assignees", "no"));
 
-  await expect(
-    openPullRequest({ repo, head: "fix", base: "main", title: "fix: search", body: "Body." }),
-  ).rejects.toThrow("no");
+  await expect(openPullRequest({ worktree, title: "fix: search", body: "Body." })).rejects.toThrow(
+    "no",
+  );
   expect(createPullRequest).toHaveBeenCalledOnce();
 });
 
@@ -362,4 +383,35 @@ test("preservedCommitMessageBody keeps useful commit-message content", () => {
     "* feat: a\n\nBecause.\n\n* fix: b",
   );
   expect(preservedCommitMessageBody([])).toBe("");
+});
+
+test("opening a PR derives its repository, head and default branch from the supplied worktree", async () => {
+  writeFileSync(
+    path.join(root, "jigs.config.ts"),
+    `export default {
+    service: { dashboardPort: 9090 },
+    bindings: { docs: { remote: "git@github.com:acme/docs.git" } },
+  };`,
+  );
+  await openPullRequest({
+    worktree: { ...worktree, binding: "docs", branch: "update-guide", defaultBranch: "trunk" },
+    title: "Update guide",
+    body: "More examples.",
+    draft: false,
+  });
+  expect(findOpenPullRequestByBranch).toHaveBeenCalledExactlyOnceWith(
+    { owner: "acme", repo: "docs" },
+    "update-guide",
+    "trunk",
+  );
+  expect(resolveGithubIdentity).toHaveBeenCalledWith("acme");
+  expect(createPullRequest).toHaveBeenCalledExactlyOnceWith({
+    owner: "acme",
+    repo: "docs",
+    head: "update-guide",
+    base: "trunk",
+    title: "Update guide",
+    body: "More examples.",
+    draft: false,
+  });
 });
