@@ -4,11 +4,12 @@
 
 import type { WorkflowRequires } from "./index.ts";
 
-// `detail` is what a passing check found, when that is worth showing.
+/** A check's outcome: a pass with an optional `detail`, or a failure with its repair. */
 export type CheckResult =
   | { ok: true; detail?: string }
   | { ok: false; reason: string; repair: string };
 
+/** One requirement check with a stable id and a label for reports. */
 export interface Check {
   id: string;
   label: string;

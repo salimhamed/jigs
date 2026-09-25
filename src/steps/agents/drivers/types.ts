@@ -17,11 +17,14 @@ import type { AgentRequest, ModelRequest } from "../../../workflow/agents/plan.t
 import type { AgentSessionRef, ModelGeneration } from "../../../workflow/agents/result.ts";
 import type { RunMetadata } from "../../runtime/run-context.ts";
 
+/** What a driver's call returns: the reply text, provider metadata and any structured output. */
 export type ExecutorGeneration = ModelGeneration & { output?: unknown };
+/** What a driver's `decide` returns: one answer per question. */
 export type DecisionGeneration<QUESTIONS extends JevQuestions = JevQuestions> = {
   answers: JevAnswers<QUESTIONS>;
 };
 
+/** @internal */
 export type EvaluationGeneration = {
   answers: Record<string, unknown>;
   providerMetadata?: Record<string, Record<string, unknown>> | null;
@@ -34,12 +37,14 @@ export type HarnessTarget = {
   cwd: string;
   resume?: AgentSessionRef | undefined;
 };
+/** Any request a driver's checks and environment allowlist are asked about. */
 export type DriverRequest =
   | AgentRequest
   | ModelRequest
   | AskJevOptions<JevQuestions>
   | HarnessTarget;
 
+/** What a driver's `open` receives: the run and the harness environment jigs built. */
 export interface OpenContext {
   metadata: RunMetadata;
   env: Record<string, string>;
@@ -53,7 +58,9 @@ export interface OpenedModel {
 
 /**
  * The AI SDK calls a driver makes through jigs rather than importing them, so a
- * test can replace them. A factory reads it only to see what a driver may reach.
+ * test can replace them.
+ *
+ * @internal
  */
 export interface DriverDependencies {
   generateText(options: {
@@ -71,12 +78,13 @@ export interface DriverDependencies {
 }
 
 /**
- * What a driver receives for one call: the run it belongs to, the AI SDK calls
- * it may make, the harness environment jigs built for it, and, for a structured
- * call, the output spec a provider model consumes.
+ * What a driver receives for one call: the run it belongs to, the harness
+ * environment jigs built for it, and, for a structured call, the output spec a
+ * provider model consumes. `deps` is jigs' own wiring, not part of the contract.
  */
 export interface DriverContext {
   metadata: RunMetadata;
+  /** @internal */
   deps: DriverDependencies;
   env: Record<string, string>;
   output?: OutputInterface<unknown, unknown, never>;

@@ -52,8 +52,8 @@ remove and reshape types, exports, config and durable addresses without shims,
 deprecation paths, fallbacks for old callers or dual code paths. A breaking
 change is a `!` in the PR title and one footer line in the commit, nothing more.
 Factories adopt a release by upgrading and fixing what breaks. `Driver`,
-`DriverContext`, `DriverDependencies` and `AgentRunner` from
-`@jigs-ai/jigs/steps` are a published contract pinned by
+`DriverContext`, `AgentRunner` and the types they reach, exported from
+`@jigs-ai/jigs/steps`, are a published contract pinned by
 `src/steps/contract.test.ts`; changing them is a breaking release.
 
 ## Docs
