@@ -16,6 +16,13 @@ export {
   type RunAgentFn,
 } from "./agents/agent-session.ts";
 export { type AgentSteps, bindAgentSteps } from "./agents/bind.ts";
+export {
+  type BranchState,
+  bindGitSteps,
+  type CommittedWorkOptions,
+  type GitSteps,
+  type ReadBranchState,
+} from "./git/committed-work.ts";
 export { type BoundReviewTicketOptions, bindLinearSteps, type LinearSteps } from "./linear/bind.ts";
 export { claimTicket } from "./linear/claim.ts";
 export { type AcquireTicketSteps, acquireTicket } from "./linear/prelude.ts";
