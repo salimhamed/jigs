@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.68.1
+# @jigs-ai/jigs v0.69.0
 
 Reserved for provider-neutral human interaction steps.
 

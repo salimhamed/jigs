@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.68.1
+# @jigs-ai/jigs v0.69.0
 
 Everything a factory's configuration and workflows import from jigs: the factory and workflow
 definitions, harness and model descriptors, the data steps hand back, question helpers, and
@@ -1846,106 +1846,6 @@ The GitHub organization or account that owns the repository.
 > **repo**: `string`
 
 The repository name.
-
-***
-
-### PullRequestWake
-
-> **PullRequestWake** = \{ `headSha`: `string`; `kind`: `"merge-ready"`; `retryNoted`: `boolean`; \} \| \{ `body?`: `string`; `kind`: `"review-comments"`; `threads`: [`ReviewThread`](#reviewthread)[]; \} \| \{ `failing`: [`CheckRun`](#checkrun)[]; `headSha`: `string`; `kind`: `"ci-red"`; `mentionLogin`: `string` \| `null`; \} \| \{ `kind`: `"closed"`; `merged`: `boolean`; \}
-
-What is outstanding on the pull request right now. Every wake describes
-current state, so the same state yields the same wake until the consumer
-leaves evidence on the pull request that it is done with it:
-
-- `review-comments`: feedback with no answer carrying this scope's marker.
-- `ci-red`: the current head is red, with no marked stand-down for it.
-- `merge-ready`: GitHub reports the pull request mergeable and the
-  configured approval signal is present, with no marked stand-down for it.
-  `retryNoted` says a refusal jigs is waiting out was already reported for
-  this head, so the retry is silent.
-- `closed`: terminal.
-
-#### Type Declaration
-
-\{ `headSha`: `string`; `kind`: `"merge-ready"`; `retryNoted`: `boolean`; \}
-
-##### headSha
-
-> **headSha**: `string`
-
-The reviewed commit that the merge must still target.
-
-##### kind
-
-> **kind**: `"merge-ready"`
-
-Identifies a pull request that is ready for an attempted merge.
-
-##### retryNoted
-
-> **retryNoted**: `boolean`
-
-Whether a transient refusal for this commit was already reported.
-
-\{ `body?`: `string`; `kind`: `"review-comments"`; `threads`: [`ReviewThread`](#reviewthread)[]; \}
-
-##### body?
-
-> `optional` **body**: `string`
-
-The changes-requested review summary, when the feedback included one.
-
-##### kind
-
-> **kind**: `"review-comments"`
-
-Identifies unanswered review feedback.
-
-##### threads
-
-> **threads**: [`ReviewThread`](#reviewthread)[]
-
-Inline and conversation threads that still need answers.
-
-\{ `failing`: [`CheckRun`](#checkrun)[]; `headSha`: `string`; `kind`: `"ci-red"`; `mentionLogin`: `string` \| `null`; \}
-
-##### failing
-
-> **failing**: [`CheckRun`](#checkrun)[]
-
-Failed checks reported by the provider.
-
-##### headSha
-
-> **headSha**: `string`
-
-The commit whose checks failed.
-
-##### kind
-
-> **kind**: `"ci-red"`
-
-Identifies a failed build on the current commit.
-
-##### mentionLogin
-
-> **mentionLogin**: `string` \| `null`
-
-The most recent human reviewer to notify when repair cannot continue.
-
-\{ `kind`: `"closed"`; `merged`: `boolean`; \}
-
-##### kind
-
-> **kind**: `"closed"`
-
-Identifies a terminal, closed pull request.
-
-##### merged
-
-> **merged**: `boolean`
-
-Whether the pull request closed by merging.
 
 ***
 

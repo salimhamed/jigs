@@ -1,33 +1,10 @@
-# @jigs-ai/jigs v0.68.1
+# @jigs-ai/jigs v0.69.0
 
 Inspect committed changes and push branches in a Git worktree.
 
 Wrap steps in a factory-owned `"use step"` file. Never call them directly from a workflow.
 
 ## Functions
-
-### branchContains()
-
-> **branchContains**(`worktree`, `sha`): `Promise`\<`boolean`\>
-
-Whether `sha` is the worktree's HEAD or one of its ancestors. A commit the worktree has never
-fetched is not contained.
-
-#### Parameters
-
-##### worktree
-
-`Worktree`
-
-##### sha
-
-`string`
-
-#### Returns
-
-`Promise`\<`boolean`\>
-
-***
 
 ### pushApprovedChange()
 
