@@ -137,6 +137,8 @@ test("a blocking finding sends the round back, and the resumed builder is told o
   const [firstBuild, firstReview, secondBuild, secondReview] = calls;
   expect(firstBuild?.resumed).toBe(false);
   expect(firstBuild?.prompt).toContain("THE TASK BRIEF");
+  expect(firstBuild?.prompt).toContain("Base commit: base");
+  expect(firstBuild?.prompt).toContain("Current diff:\ndiff --git a/x b/x");
   expect(firstReview?.harness).toBe(delivery.reviewer);
   expect(secondBuild?.resumed).toBe(true);
   expect(secondBuild?.prompt).toContain("Missing test");
@@ -298,4 +300,63 @@ test("with human merges, jigs waits for the merge and a close without one stops"
 
   expect(steps.mergePullRequest).not.toHaveBeenCalled();
   expect(error.message).toBe("Pull request acme/app#7 was closed unmerged.");
+});
+
+test("a CI repair with no new clean commit marks the red head and stops", async () => {
+  policy("human");
+  gate({ kind: "ci-red", headSha: "h1", failing, mentionLogin: null });
+
+  const error = await stopped(followPullRequest(delivery, pr));
+
+  expect(calls.map((call) => call.harness)).toEqual([delivery.fixer]);
+  expect(routines.postPullRequestNote).toHaveBeenCalledOnce();
+  expect(routines.postPullRequestNote).toHaveBeenCalledWith(
+    expect.objectContaining({ reason: "ci", headSha: "h1" }),
+  );
+  expect(error.message).toBe(
+    "jigs stopped work on ABC-1: the CI repair produced no new clean commit.",
+  );
+});
+
+test("a thrown merge is treated as transient and noted for retry", async () => {
+  policy("jigs");
+  gate({ kind: "merge-ready", headSha: "h1", retryNoted: false }, { kind: "closed", merged: true });
+  vi.mocked(steps.mergePullRequest).mockRejectedValue(new Error("GitHub 502"));
+
+  await followPullRequest(delivery, pr);
+
+  expect(routines.postPullRequestNote).toHaveBeenCalledOnce();
+  expect(routines.postPullRequestNote).toHaveBeenCalledWith(
+    expect.objectContaining({
+      reason: "merge-retry",
+      headSha: "h1",
+      body: expect.stringContaining("GitHub 502"),
+    }),
+  );
+});
+
+test("a spent revision budget stops with the review body as the finding", async () => {
+  policy("human");
+  gate({ kind: "review-comments", threads: [thread], body: "Please rename." });
+
+  const error = await stopped(
+    followPullRequest({ ...delivery, budget: { ...delivery.budget, revisionRounds: 0 } }, pr),
+  );
+
+  expect(error.findings).toEqual(["Please rename."]);
+  expect(calls).toHaveLength(0);
+});
+
+test("a revision that leaves uncommitted changes stops like any other", async () => {
+  policy("human");
+  gate({ kind: "review-comments", threads: [thread] });
+  vi.mocked(routines.runAgent).mockImplementationOnce((async () => {
+    at("h2", true);
+    return { output: { answers: [], commitExplanation: null } };
+  }) as never);
+
+  const error = await stopped(followPullRequest(delivery, pr));
+
+  expect(error.message).toContain("left uncommitted changes");
+  expect(routines.postReviewAnswers).not.toHaveBeenCalled();
 });

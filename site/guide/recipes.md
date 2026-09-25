@@ -51,17 +51,28 @@ the agent in the workflow file.
 
 ## Updating a recipe you already added
 
-`recipe add` never overwrites a file you have. To take a newer version of a
-recipe, move your copy aside, add the recipe again, and carry your changes
-across:
+`recipe add` never overwrites a file you have, and leaves an existing
+`workflows` entry in `jigs.config.ts` as it is. To take a newer version of
+linear-ticket-to-pr:
 
-```sh
-git mv workflows/linear-ticket-to-pr workflows/linear-ticket-to-pr.old
-pnpm exec jigs recipe add linear-ticket-to-pr
-```
+1. Finish or cancel the runs that use it. Moving or renaming a workflow file or
+   function changes its durable ID.
+2. Move your copy out of `workflows/`, or delete it. Anything left under
+   `workflows/` is still typechecked and tested with the factory. An older copy
+   may be the file `workflows/linear-ticket-to-pr.ts`, its
+   `workflows/linear-ticket-to-pr.test.ts`, and the `workflows/linear-ticket-to-pr/`
+   directory; move all three.
 
-`recipe add` also leaves an existing `workflows` entry in `jigs.config.ts` as it
-is, so check that it imports the path shown above.
+   ```sh
+   mkdir -p ../old-linear-ticket-to-pr
+   mv workflows/linear-ticket-to-pr* ../old-linear-ticket-to-pr/
+   ```
 
-Moving or renaming a workflow file or function changes its durable ID, so
-finish or cancel the runs that use the old one first.
+3. Add the recipe again: `pnpm exec jigs recipe add linear-ticket-to-pr`.
+4. Check that the `workflows` entry in `jigs.config.ts` imports
+   `./workflows/linear-ticket-to-pr/linear-ticket-to-pr.ts`.
+5. Install Pi, or point `fixer` in the workflow file at a Claude Code or Codex
+   harness.
+6. Carry your own edits across, and launch with the new inputs above. `jigs run`
+   rejects an `--input` the workflow does not declare, so an old input such as
+   `implementationModel` fails before the run starts.

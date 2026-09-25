@@ -301,7 +301,13 @@ export async function followPullRequest(delivery: Delivery, pr: PullRequestRef):
         prompts.revision.fresh(task, worktree, await diff(), wake.threads, wake.body),
     });
     const after = await readBranchState(cwd, worktree.baseSha);
-    if (after.dirty) throw new JigsError("Pull request revision left uncommitted changes");
+    if (after.dirty) {
+      return stop(
+        delivery,
+        `jigs stopped work on ${task.key}: the review revision left uncommitted changes.`,
+        [],
+      );
+    }
     await pushBranch(cwd, worktree.branch);
     // Only a round that pushed a commit gets an explanation comment naming it.
     const committedSha = after.headSha === before.headSha ? undefined : after.headSha;

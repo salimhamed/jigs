@@ -65,7 +65,8 @@ A run cannot type a model name. To change a model, edit its line in `agents`.
 pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input binding=app --input 'budget={"reviewRounds":5}'
 ```
 
-Budgets are fixed when the run starts. When one runs out, or the pull request
+Budgets are fixed when the run starts. When one runs out, a CI repair produces
+no new clean commit, an agent leaves uncommitted changes, or the pull request
 closes unmerged, the delivery pushes the branch, the workflow posts a note on
 the ticket saying what is still open, moves the ticket back to `Todo`, and the
 run fails. To spend more, start another run.
