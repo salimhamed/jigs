@@ -33,7 +33,7 @@ add that, set this up — go back to `SKILL.md` and take the route it belongs to
    `node_modules/@jigs-ai/jigs/dist/` (compiled; the package exports map names
    each module) and `node_modules/@jigs-ai/jigs/templates/`, one `.tmpl` per
    file `jigs init` writes. A factory that added the linear-ticket-to-pr recipe also has
-   `workflows/linear-ticket-to-pr/delivery/README.md`.
+   `workflows/linear-ticket-to-pr/README.md`.
 
 ## How to answer
 

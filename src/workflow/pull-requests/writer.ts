@@ -7,7 +7,7 @@ export function currentRunId(): string {
 }
 
 // The compiler stamps a workflow with its durable address —
-// `workflow//./workflows/linear-ticket-to-pr//linearTicketToPrWorkflow` — and only the last segment is a
+// `workflow//./workflows/linear-ticket-to-pr/linear-ticket-to-pr//linearTicketToPr` — and only the last segment is a
 // name a person wrote. Taking it keeps the scope out of the file layout, so
 // moving a workflow file does not orphan the markers on a parked pull request.
 // Renaming the function still does, exactly as it moves the durable step ids.

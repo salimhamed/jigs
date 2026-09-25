@@ -1080,7 +1080,7 @@ async function checkScaffold(name) {
   import assert from "node:assert/strict";
   import entry from "./.output/server/_chunks/linear-ticket-to-pr.mjs";
   import { resolveReleasePolicy } from "@jigs-ai/jigs/steps/runtime";
-  const workflowName = "workflow//./workflows/linear-ticket-to-pr//linearTicketToPrWorkflow";
+  const workflowName = "workflow//./workflows/linear-ticket-to-pr/linear-ticket-to-pr//linearTicketToPr";
   assert.equal(entry.workflow.workflowId, workflowName);
   entry.release = { onSuccess: "keep", onFailure: "release" };
   const policy = await resolveReleasePolicy(

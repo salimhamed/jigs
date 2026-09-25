@@ -29,10 +29,16 @@ export function addRecipe(name: string, deps: { cwd: string; out: (line: string)
   }
   // Parse before copying, so a config jigs cannot edit leaves the factory untouched.
   const registered = addWorkflow(readFileSync(configFile, "utf8"), name);
-  const result = copyFiles(path.join(recipesRoot(), name), root, {
+  // A recipe directory is exactly what the factory receives at workflows/<name>/.
+  const directory = path.join("workflows", name);
+  const copied = copyFiles(path.join(recipesRoot(), name), path.join(root, directory), {
     suffix: "",
     contents: (source) => source,
   });
+  const result = {
+    created: copied.created.map((file) => path.join(directory, file)),
+    skipped: copied.skipped.map((file) => path.join(directory, file)),
+  };
   reportCopied(result, deps.out);
   const entry = workflowEntry(name).slice(0, -1);
   if (registered === undefined) {

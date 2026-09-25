@@ -364,7 +364,7 @@ test.each([
 test.each([
   [
     "export default defineFactory({ workflows: {} });",
-    'workflows: {\n  ship: () => import("./workflows/ship.ts"),\n}',
+    'workflows: {\n  ship: () => import("./workflows/ship/ship.ts"),\n}',
   ],
   ["export default defineFactory({ workflows: { hello } });", undefined],
 ])("a workflow is registered in a direct workflows object", (text, expected) => {
