@@ -1,5 +1,6 @@
 import type {
   AskableModelSource,
+  Harness,
   McpServerConfig,
   PiMcpServerConfig,
 } from "../blocks/agents/harness-config.ts";
@@ -33,10 +34,10 @@ import {
   realGithubIdentityProbes,
 } from "./github-identity.ts";
 import {
-  type HarnessKind,
   harnessChecks,
   harnessUsers,
   missingDriverCheck,
+  requiredHarnessKinds,
   usedHarnessChecks,
 } from "./harnesses.ts";
 import { type LinearIdentityProbes, linearIdentityChecks } from "./linear-identity.ts";
@@ -87,9 +88,9 @@ export { type WebhookChecksOptions, webhookChecks } from "./webhooks.ts";
 // A workflow's declared requirements — the manifest side of the computed check
 // list. Hand-maintaining the list is the drift trap this exists to avoid.
 export interface WorkflowRequires {
+  agents?: Record<string, Harness>;
   integrations?: Integration[];
   bindings?: string[];
-  harnesses?: HarnessKind[];
   models?: AskableModelSource[];
   aws?: true;
 }
@@ -150,7 +151,7 @@ export function preflightChecks(
     ...(integrations.includes("linear") ? linearChecks() : []),
     ...(integrations.includes("github") ? githubChecks() : []),
     ...bindingChecks({ factoryRoot, names: bindings }),
-    ...harnessChecks(requires.harnesses ?? []),
+    ...harnessChecks(requiredHarnessKinds(requires)),
     ...(requires.models ?? []).flatMap((source) => {
       const driver = driverFor(source.kind);
       if (driver === undefined) return [missingDriverCheck(source.kind)];

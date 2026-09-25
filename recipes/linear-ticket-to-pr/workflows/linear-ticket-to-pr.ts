@@ -1,4 +1,4 @@
-import { JigsError, type WorkflowEntry, type WorkflowInputs } from "@jigs-ai/jigs";
+import { defineWorkflow, JigsError, type WorkflowInputs } from "@jigs-ai/jigs";
 import {
   type Harness,
   type HarnessKind,
@@ -6,16 +6,10 @@ import {
   harnessKinds,
 } from "@jigs-ai/jigs/blocks/agents";
 import { z } from "zod";
-import { deliverChange } from "#blocks/delivery/delivery";
-import { acquireLinearTicket, workItemFromHandoff } from "#blocks/tickets/linear";
-import {
-  noteOnTicket,
-  provisionWorktree,
-  release,
-  resolveMergePolicy,
-  reviewTicket,
-  setTicketStatus,
-} from "#jigs";
+import { noteOnTicket, release, reviewTicket } from "#jigs/routines";
+import { provisionWorktree, resolveMergePolicy, setTicketStatus } from "#jigs/steps";
+import { deliverChange } from "../blocks/delivery/delivery.ts";
+import { acquireLinearTicket, workItemFromHandoff } from "../blocks/tickets/linear.ts";
 
 // The harnesses a run can choose by name, each with this factory's default
 // model. A model input left unset takes the default of the harness that was
@@ -37,6 +31,10 @@ function roleHarness(kind: HarnessKind, model?: string): Harness {
   if (build === undefined) throw new JigsError(unbuildable(kind));
   return build(model);
 }
+
+// Every harness a run can choose, at its default model. The service checks
+// each one's CLI before a run starts.
+const agents = { claude: roleHarness("claude"), codex: roleHarness("codex") };
 
 const harnessInput = z.enum(harnessKinds).refine((kind) => inputHarnesses[kind] !== undefined, {
   error: (issue) => unbuildable(issue.input as HarnessKind),
@@ -109,8 +107,8 @@ export async function linearTicketToPrWorkflow(inputs: LinearTicketToPrInputs) {
   return result;
 }
 
-export default {
-  workflow: linearTicketToPrWorkflow,
+export default defineWorkflow({
   inputs: linearTicketToPrInputs,
-  requires: { harnesses: ["claude", "codex"], integrations: ["linear", "github"] },
-} satisfies WorkflowEntry<typeof linearTicketToPrInputs>;
+  requires: { agents, integrations: ["linear", "github"] },
+  workflow: linearTicketToPrWorkflow,
+});

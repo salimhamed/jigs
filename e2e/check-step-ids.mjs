@@ -302,7 +302,7 @@ function run(file, args) {
 }
 
 // No separate "the wrappers are still there" check: the scaffolded workflow
-// imports them, so a missing jigs.ts fails the build below, and a moved
+// imports them, so a missing jigs/steps.ts fails the build below, and a moved
 // one reports as the ids it took with it in the diff.
 function build() {
   run(path.join(factory, "node_modules", ".bin", "jigs"), ["build"]);
@@ -563,9 +563,9 @@ function installRuntimeFixture() {
   writeFileSync(
     workflow,
     `import { appendFileSync, readFileSync } from "node:fs";
-import type { WorkflowEntry, WorkflowInputs } from "@jigs-ai/jigs";
+import { defineWorkflow, type WorkflowInputs } from "@jigs-ai/jigs";
 import { registerResource as registerResourceInsideStep } from "@jigs-ai/jigs/steps/runtime";
-import { registerResource } from "#jigs";
+import { registerResource } from "#jigs/steps";
 import { defineHook, sleep } from "workflow";
 import { z } from "zod";
 
@@ -645,10 +645,7 @@ export async function runtimeE2eWorkflow(
   return { ...result, lines: await markerLines(inputs.marker) };
 }
 
-export default {
-  workflow: runtimeE2eWorkflow,
-  inputs: runtimeE2eInputs,
-} satisfies WorkflowEntry<typeof runtimeE2eInputs>;
+export default defineWorkflow({ inputs: runtimeE2eInputs, workflow: runtimeE2eWorkflow });
 `,
   );
   const config = path.join(factory, "jigs.config.ts");
@@ -937,14 +934,25 @@ async function checkScaffold(name) {
   scaffold(name);
   factories.set(name, factory);
   // Formatting generated code must not trigger the build's exact-content drift check.
-  const generated = readFileSync(path.join(factory, "jigs.ts"), "utf8");
-  const formatted = execFileSync(
-    path.join(repo, "node_modules", ".bin", "biome"),
-    ["check", "--write", "--stdin-file-path=jigs.ts"],
-    { cwd: repo, input: generated, encoding: "utf8" },
+  for (const file of ["jigs/steps.ts", "jigs/routines.ts"]) {
+    const generated = readFileSync(path.join(factory, file), "utf8");
+    const formatted = execFileSync(
+      path.join(repo, "node_modules", ".bin", "biome"),
+      ["check", "--write", `--stdin-file-path=${file}`],
+      { cwd: repo, input: generated, encoding: "utf8" },
+    );
+    if (formatted !== generated) {
+      fail(`generated ${file} changes under Biome`, `format templates/${file}.tmpl as TypeScript`);
+    }
+  }
+  const directives = readdirSync(path.join(factory, "jigs")).filter((file) =>
+    readFileSync(path.join(factory, "jigs", file), "utf8").includes('"use step"'),
   );
-  if (formatted !== generated) {
-    fail("generated jigs.ts changes under Biome", "format templates/jigs.ts.tmpl as TypeScript");
+  if (existsSync(path.join(factory, "jigs.ts")) || directives.join() !== "steps.ts") {
+    fail(
+      `the generated directives are in ${directives.join(", ") || "no file"}, not only jigs/steps.ts`,
+      "every generated step wrapper belongs in jigs/steps.ts, and jigs.ts is no longer generated",
+    );
   }
   // Exercise recipe discovery, copying and registration from the installed
   // tarball. Both versions use these same files.
@@ -1015,7 +1023,7 @@ async function checkScaffold(name) {
     );
   }
   const sample = path.join(path.dirname(chunks[0]), "__scan-sample.mjs");
-  writeFileSync(sample, 'import { deliverChange } from "#jigs";\n');
+  writeFileSync(sample, 'import { runAgent } from "#jigs/routines";\n');
   const caught = scan(factoryModules()).some((specifier) => specifier.includes("#jigs"));
   rmSync(sample);
   if (!caught) {

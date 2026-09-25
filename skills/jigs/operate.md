@@ -209,7 +209,7 @@ resources also need `--include-kept`. Apply refuses when the current jigs
 service command has not yet recorded systemd scope supervision; start and stop
 the factory service once, then retry. Dirty and unmerged work remains.
 
-Parked runs are also why the names in `jigs.ts` and `workflows/` matter —
+Parked runs are also why the names in `jigs/steps.ts` and `workflows/` matter —
 see the never list.
 
 ## Never
@@ -218,7 +218,7 @@ see the never list.
   that World starts a second queue worker, which steals the service's queue jobs
   and delivers them to a port with no workflow route. The service hosts the
   dashboard; use that.
-- Keep custom code outside generated `jigs.ts`. Refresh it with `jigs generate`
+- Keep custom code outside the generated `jigs/`. Refresh it with `jigs generate`
   and review the diff. When an authorized change renames or moves a workflow
   or step, check active and suspended runs before deployment: finish or cancel
   affected runs so they do not resume against different durable addresses.

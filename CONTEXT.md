@@ -23,9 +23,15 @@ _Avoid_: task, node, stage
 step. Its file path and function name are the **step id**, so renaming or moving
 one changes the address, and a jigs version bump never does.
 
-**Generated integration**: The factory's committed `jigs.ts`: step wrappers and
-bound blocks, written by `jigs generate` from the installed library. Custom code
-lives outside it.
+**Generated integration**: The factory's committed `jigs/` directory, written by
+`jigs generate` from the installed library. `jigs/steps.ts` holds every step
+wrapper and is the only generated file with a directive; `jigs/routines.ts`
+binds the library's routines to those wrappers. Workflows import them as
+`#jigs/steps` and `#jigs/routines`. Custom code lives outside it.
+
+**Routine**: A function a workflow calls that runs steps and may wait on
+something outside the run, such as `runAgent` or `pullRequestGate`. Exported
+from the generated `jigs/routines.ts`.
 
 **Recipe**: A workflow jigs ships as source under `recipes/`, which
 `jigs recipe add` copies into a factory. Once copied it is factory code.

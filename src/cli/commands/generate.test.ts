@@ -33,16 +33,18 @@ test("generation comes from the factory's installed package, even from a subdire
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 export function generateFactoryIntegration(root) {
-  writeFileSync(path.join(root, 'jigs.ts'), '// this factory installed me');
+  writeFileSync(path.join(root, 'jigs-generated.ts'), '// this factory installed me');
 }
 `,
   );
-  const nested = path.join(root, "blocks");
+  const nested = path.join(root, "workflows");
   mkdirSync(nested);
   const lines: string[] = [];
   await generateIntegration({ cwd: nested, out: (line) => lines.push(line) });
-  expect(readFileSync(path.join(root, "jigs.ts"), "utf8")).toBe("// this factory installed me");
-  expect(lines).toEqual(["generated jigs.ts — review and commit this file"]);
+  expect(readFileSync(path.join(root, "jigs-generated.ts"), "utf8")).toBe(
+    "// this factory installed me",
+  );
+  expect(lines).toEqual(["generated jigs/steps.ts and jigs/routines.ts — review and commit them"]);
 });
 
 test("generation explains when the factory has not installed jigs", async () => {

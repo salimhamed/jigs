@@ -17,6 +17,7 @@ import {
 } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 import { type HarnessKind, type HarnessRuntimeDeps, harnessRuntime } from "./harness-runtime.ts";
+import type { WorkflowRequires } from "./index.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -206,9 +207,14 @@ export function harnessChecks(kinds: HarnessKind[]): Check[] {
   });
 }
 
-/** Map each harness named in a workflow's `requires` to the workflows that name it. */
+/** The harness kinds a workflow's `requires.agents` runs. */
+export function requiredHarnessKinds(requires: WorkflowRequires): HarnessKind[] {
+  return Object.values(requires.agents ?? {}).map((agent) => agent.kind);
+}
+
+/** Map each harness kind a workflow's agents run to the workflows that run it. */
 export function harnessUsers(workflows: WorkflowManifests): Map<HarnessKind, string[]> {
-  return requirementUsers(workflows, (requires) => requires.harnesses ?? []);
+  return requirementUsers(workflows, requiredHarnessKinds);
 }
 
 /** The installation checks of each used harness, each failure naming the workflows that need it. */

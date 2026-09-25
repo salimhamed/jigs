@@ -1,6 +1,6 @@
 import { claimTicket, renderTicketSnapshot, type TicketHandoff } from "@jigs-ai/jigs/blocks/linear";
-import type { WorkItem } from "#blocks/delivery/types";
-import { fetchTicketSnapshot, resolveLinearIssue } from "#jigs";
+import { fetchTicketSnapshot, resolveLinearIssue } from "#jigs/steps";
+import type { WorkItem } from "../delivery/types.ts";
 
 /** Claim a Linear ticket and read its current requirements. */
 export async function acquireLinearTicket(reference: string) {

@@ -20,7 +20,7 @@ export default defineFactory({
   linear: { identity: { mode: "key" } },
   merge: { by: "human", method: "squash", approval: { kind: "label", name: "jigs:approved" } },
   workflows: {
-    hello: () => import("./workflows/hello.ts"),
+    hello: () => import("./workflows/hello/hello.ts"),
   },
 });
 ```
@@ -115,9 +115,9 @@ release: { onSuccess: "release", onFailure: "keep" },
 ```
 
 That is the default. `onSuccess` applies to completed runs and `onFailure` to
-failed and cancelled ones. A workflow entry can set its own `release`, and a
-workflow can call `await release()` from `#jigs` as its last step when it needs
-the report. Waiting runs always keep everything.
+failed and cancelled ones. A workflow's `defineWorkflow` can set its own `release`,
+and a workflow can call `await release()` from `#jigs/routines` as its last step
+when it needs the report. Waiting runs always keep everything.
 
 Release never throws away work: a worktree with uncommitted or unmerged changes
 stays, and a branch is deleted only when its commits are proven merged. See

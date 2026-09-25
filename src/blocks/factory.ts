@@ -56,23 +56,62 @@ export type WorkflowInputs<S extends z.ZodType> = z.output<S> & Injected;
 /** Ticket references are ordinary inputs; resolve them explicitly in a step. */
 export type TicketWorkflowInputs<S extends z.ZodType<{ ticket: string }>> = WorkflowInputs<S>;
 
-/** A factory-owned workflow together with its input schema and runtime requirements. */
-export interface WorkflowEntry<S extends z.ZodType = z.ZodType> {
-  workflow: (inputs: WorkflowInputs<S>) => Promise<unknown>;
+/**
+ * A workflow: its function, its input schema, and what a run needs before it
+ * may start.
+ */
+export interface WorkflowDefinition<S extends z.ZodType = z.ZodType> {
   inputs: S;
   /**
-   * What the workflow needs before a run can start: integrations, bindings,
-   * the harnesses it runs and the API model sources it calls. The service
-   * checks harness CLIs when it starts, and preflight checks everything
-   * listed before every run. List only what the workflow actually uses.
+   * What the workflow needs before a run can start: the agents it runs, the
+   * integrations, bindings and API model sources it uses. The service checks
+   * the CLI of every agent's harness when it starts, and preflight checks
+   * everything listed before every run. List only what the workflow uses.
+   *
+   * @example
+   * ```ts
+   * const agents = {
+   *   builder: harnesses.claude("opus"),
+   *   reviewer: harnesses.codex("gpt-5.6-sol"),
+   * };
+   *
+   * export default defineWorkflow({
+   *   inputs,
+   *   requires: { agents, integrations: ["linear", "github"] },
+   *   workflow: shipTicket,
+   * });
+   * ```
    */
   requires?: WorkflowRequires;
   release?: ReleasePolicy;
+  workflow: (inputs: WorkflowInputs<S>) => Promise<unknown>;
 }
 
-/** A workflow entry used where a factory contains several different input schemas. */
-// biome-ignore lint/suspicious/noExplicitAny: heterogeneous schemas per entry
-export type AnyWorkflowEntry = WorkflowEntry<any>;
+/**
+ * Declare a workflow as the default export of its file. It returns the
+ * definition unchanged; it exists so TypeScript checks the workflow's
+ * parameter against the input schema.
+ *
+ * @example
+ * ```ts
+ * const inputs = z.object({ binding: z.string() });
+ *
+ * export async function hello(input: WorkflowInputs<typeof inputs>) {
+ *   "use workflow";
+ *   // ...
+ * }
+ *
+ * export default defineWorkflow({ inputs, workflow: hello });
+ * ```
+ */
+export function defineWorkflow<S extends z.ZodType>(
+  definition: WorkflowDefinition<S>,
+): WorkflowDefinition<S> {
+  return definition;
+}
+
+// biome-ignore lint/suspicious/noExplicitAny: heterogeneous schemas per workflow
+type AnyWorkflowDefinition = WorkflowDefinition<any>;
 
 /** One recurring trigger: a workflow, when to fire it, and the inputs to
  *  fire it with. */
@@ -90,7 +129,7 @@ export interface Schedule {
  * doctor` refer to, and one workflow can carry several.
  */
 export interface Factory {
-  workflows: Record<string, AnyWorkflowEntry>;
+  workflows: Record<string, AnyWorkflowDefinition>;
   schedules?: Record<string, Schedule>;
   /** Which provider webhook routes the service mounts. Absent, it mounts none. */
   webhooks?: WebhooksDefinition;
@@ -178,7 +217,7 @@ export interface FactoryDefinition {
   merge?: MergeDefinition;
   release?: ReleasePolicy;
   bindings?: Record<string, BindingDefinition>;
-  workflows: Record<string, () => Promise<{ default: AnyWorkflowEntry }>>;
+  workflows: Record<string, () => Promise<{ default: AnyWorkflowDefinition }>>;
   schedules?: Record<string, Schedule>;
 }
 

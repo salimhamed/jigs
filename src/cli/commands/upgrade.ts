@@ -9,7 +9,7 @@ import type { UpOptions } from "./up.ts";
 
 // Install the release, then run everything after the install under the newly
 // installed CLI: this process holds the old release's integration template
-// and build checks, which reject a jigs.ts the new release generated.
+// and build checks, which reject the jigs/ files the new release generated.
 
 export const JIGS_PACKAGE = "@jigs-ai/jigs";
 
@@ -257,7 +257,7 @@ async function generate(
   await execOrExplain(execFile, "pnpm", ["exec", "jigs", "generate"], { cwd: factoryRoot }, out, {
     missing: new JigsError("pnpm is not on PATH", "install pnpm"),
     failed: () =>
-      new JigsError("could not refresh jigs.ts", "run pnpm exec jigs generate in this factory"),
+      new JigsError("could not refresh jigs/", "run pnpm exec jigs generate in this factory"),
   });
 }
 
@@ -292,7 +292,7 @@ async function typecheck(
     failed: () =>
       new JigsError(
         `typecheck failed in ${factoryRoot}`,
-        "update custom factory code to match the installed jigs API; jigs.ts has already been regenerated",
+        "update custom factory code to match the installed jigs API; jigs/ has already been regenerated",
       ),
   });
 }

@@ -26,8 +26,8 @@ or step transport, run the long-step regression once with the real value:
 the **Long step regression** workflow in Actions with the revision to test. It
 takes over five minutes and never runs on pull requests.
 
-Biome formats at 100 columns. Keep `templates/jigs.ts.tmpl` formatted the same
-way, or a formatted factory reports its `jigs.ts` as stale.
+Biome formats at 100 columns. Keep `templates/jigs/*.ts.tmpl` formatted the same
+way, or a formatted factory reports its `jigs/` files as stale.
 
 ## Layout
 
@@ -54,7 +54,7 @@ bundles it into a sandbox without Node built-ins. So anything a workflow
 imports (`blocks/`) must be side-effect free, and real work goes in steps. No
 file under `src/` carries `"use workflow"` or `"use step"`: a step's durable ID
 comes from its file path and function name, so the directives live in factory
-code and the generated `jigs.ts`, and a jigs upgrade never renames a step.
+code and the generated `jigs/steps.ts`, and a jigs upgrade never renames a step.
 
 Public import paths follow the folders: `@jigs-ai/jigs`,
 `@jigs-ai/jigs/blocks/<topic>` and `@jigs-ai/jigs/steps/<topic>`. The other

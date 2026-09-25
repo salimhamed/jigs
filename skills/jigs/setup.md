@@ -43,8 +43,8 @@ key path and the operator's login; approval is then a GitHub review.
 `--linear-identity-mode key|app` does the same for Linear. Both are written to
 `jigs.config.ts`, so changing one later is a config edit.
 
-`jigs init` writes `jigs.config.ts`, the generated `jigs.ts`, a `hello`
-workflow, the package manifest, Docker Compose, `.env.example` and build
+`jigs init` writes `jigs.config.ts`, the generated `jigs/steps.ts` and
+`jigs/routines.ts`, a `hello` workflow in `workflows/hello/hello.ts`, the package manifest, Docker Compose, `.env.example` and build
 settings. It preserves existing files. Its printed ports come from the factory
 path; adjust them in `jigs.config.ts` if they are taken.
 
@@ -55,7 +55,7 @@ pnpm install
 cp .env.example .env
 ```
 
-`hello` needs no credentials. Leave `WORKFLOW_TARGET_WORLD` and
+`hello` needs a binding and no other credentials. Leave `WORKFLOW_TARGET_WORLD` and
 `WORKFLOW_POSTGRES_URL` as written. Fill in the Linear and GitHub credentials
 before adding a workflow that declares those integrations; the configuration
 guide's `.env` table lists each variable.
@@ -102,14 +102,26 @@ is up.
 `--restart-service` forces a restart; `--force` skips the question about
 in-flight runs.
 
-Then:
+## 4. Bind a target repo and run hello
 
 ```sh
-jigs run hello --input message=hello
+jigs bind git@github.com:owner/repo.git
+jigs bindings
+jigs up
+jigs run hello --input binding=repo
 jigs status
 ```
 
-## 4. Add a recipe and bind a target repo
+`jigs bind` adds the binding to `jigs.config.ts` and, with the configured
+identity, creates the approval label when approval is a label and the webhook
+when GitHub webhooks are on, so a GitHub remote under the default PAT identity
+needs `GITHUB_TOKEN` in `.env` first. A local `file://` remote needs no
+credentials. The service clones each binding when it starts, so the `jigs up`
+above is what makes a new binding usable. `hello` cuts a worktree from it and
+returns the path. Worktree provisioning (`copy`, `postCreate`) is a hand edit
+described in the configuration guide.
+
+## 5. Add a recipe
 
 ```sh
 jigs recipe list
@@ -120,19 +132,7 @@ jigs recipe add linear-ticket-to-pr
 `workflows` in `jigs.config.ts`. If it cannot edit the config, it names the line
 to add by hand. The copied code is the factory's to edit; `blocks/delivery/README.md` explains the linear-ticket-to-pr recipe.
 
-```sh
-jigs bind git@github.com:owner/repo.git
-jigs bindings
-jigs up
-```
-
-`jigs bind` adds the binding to `jigs.config.ts` and, with the configured
-identity, creates the approval label when approval is a label and the webhook
-when GitHub webhooks are on. The service clones each binding when it starts, so the
-`jigs up` above is what makes a new binding usable. Worktree provisioning
-(`copy`, `postCreate`) is a hand edit described in the configuration guide.
-
-## 5. Webhooks are optional
+## 6. Webhooks are optional
 
 A parked run wakes without webhooks: the service re-reads each waiting pull
 request and ticket every `service.pollIntervalSeconds.github` / `.linear`
@@ -147,5 +147,8 @@ configuration guide's webhooks section has the steps.
 jigs upgrade
 ```
 
-It bumps jigs, regenerates `jigs.ts`, runs `jigs up` and typechecks the
-factory. Review and commit the regenerated `jigs.ts`.
+It bumps jigs, regenerates `jigs/`, runs `jigs up` and typechecks the
+factory. Review and commit the regenerated `jigs/steps.ts` and
+`jigs/routines.ts`. An upgrade from a release that generated `jigs.ts` also
+needs that file deleted and its `#jigs` imports moved to `#jigs/steps` and
+`#jigs/routines`; the build says so.

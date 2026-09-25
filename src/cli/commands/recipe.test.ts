@@ -44,7 +44,7 @@ test("lists linear-ticket-to-pr, installs its source and registers its workflow"
     "  pnpm exec jigs up       # build and restart with linear-ticket-to-pr; doctor lists what it still needs",
   ]);
   expect(readFileSync(path.join(deps.cwd, "jigs.config.ts"), "utf8")).toContain(
-    '  workflows: {\n    hello: () => import("./workflows/hello.ts"),\n    "linear-ticket-to-pr": () => import("./workflows/linear-ticket-to-pr.ts"),\n  },',
+    '  workflows: {\n    hello: () => import("./workflows/hello/hello.ts"),\n    "linear-ticket-to-pr": () => import("./workflows/linear-ticket-to-pr.ts"),\n  },',
   );
 });
 

@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, expect, onTestFinished, test, vi } from "vitest";
-import { models } from "../blocks/agents/harness-config.ts";
+import { harnesses, models } from "../blocks/agents/harness-config.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { type Check, failedCheck, formatFailures, runChecks } from "./catalog.ts";
 import { doctorChecks, preflightChecks, type WorkflowRequires } from "./index.ts";
@@ -116,11 +116,13 @@ test("a workflow requiring aws gets the credentials check", () => {
 });
 
 test("a workflow that does not require aws does not get it", () => {
-  expect(preflightIds({ harnesses: ["claude"] })).not.toContain("aws.credentials");
+  expect(preflightIds({ agents: { builder: harnesses.claude("opus") } })).not.toContain(
+    "aws.credentials",
+  );
 });
 
 test("preflight installs only the harnesses declared by the workflow", () => {
-  const ids = preflightIds({ harnesses: ["claude"] });
+  const ids = preflightIds({ agents: { builder: harnesses.claude("opus") } });
   expect(ids).toContain("harness.claude-cli");
   expect(ids).not.toContain("harness.codex-cli");
   expect(ids).not.toContain("harness.pi-cli");
@@ -299,8 +301,12 @@ test("doctor checks each required harness and names the workflows that need it",
   vi.stubEnv("JIGS_CLAUDE_EXECUTABLE", "");
   const harness = doctorChecks({
     hello: {},
-    review: { requires: { harnesses: ["claude"] } },
-    ship: { requires: { harnesses: ["claude", "codex"] } },
+    review: { requires: { agents: { reviewer: harnesses.claude("opus") } } },
+    ship: {
+      requires: {
+        agents: { builder: harnesses.claude("opus"), reviewer: harnesses.codex("gpt-5.5") },
+      },
+    },
   }).filter((check) => check.id.startsWith("harness."));
   expect(harness.map((check) => check.id)).toEqual([
     "harness.claude-cli",

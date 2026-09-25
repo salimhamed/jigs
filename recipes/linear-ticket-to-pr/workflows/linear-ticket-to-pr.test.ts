@@ -1,4 +1,4 @@
-vi.mock("#blocks/delivery/delivery", () => ({
+vi.mock("../blocks/delivery/delivery.ts", () => ({
   deliverChange: vi.fn(async () => ({
     change: {} as never,
     pr: { owner: "acme", repo: "repo", number: 1 },
@@ -9,32 +9,36 @@ vi.mock("#blocks/delivery/delivery", () => ({
 // harness from it, and what deliverChange is actually handed. A model left
 // unset has to arrive as the chosen harness's own default, and only running
 // the workflow body against mocked durable steps shows that it does.
-import { harnessKinds } from "@jigs-ai/jigs/blocks/agents";
+import { harnesses, harnessKinds } from "@jigs-ai/jigs/blocks/agents";
 import type { TicketClaim, TicketHandoff, TicketSnapshot } from "@jigs-ai/jigs/blocks/linear";
 import { expect, test, vi } from "vitest";
 import { z } from "zod";
 
-vi.mock("#jigs", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("#jigs")>()),
+vi.mock("#jigs/steps", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#jigs/steps")>()),
   provisionWorktree: vi.fn(async () => ({
     path: "/tmp/linear-ticket-to-pr-test",
     branch: "acme/abc-123",
     defaultBranch: "main",
     baseSha: "0".repeat(40),
   })),
-  reviewTicket: vi.fn(async (): Promise<TicketHandoff> => handoff),
   setTicketStatus: vi.fn(async () => ({})),
-  noteOnTicket: vi.fn(async () => {}),
   resolveMergePolicy: vi.fn(async () => ({
     by: "human" as const,
     method: "squash" as const,
     approval: { kind: "review" as const },
   })),
+}));
+
+vi.mock("#jigs/routines", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#jigs/routines")>()),
+  reviewTicket: vi.fn(async (): Promise<TicketHandoff> => handoff),
+  noteOnTicket: vi.fn(async () => {}),
   release: vi.fn(async () => {}),
 }));
 
-vi.mock("#blocks/tickets/linear", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("#blocks/tickets/linear")>()),
+vi.mock("../blocks/tickets/linear.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../blocks/tickets/linear.ts")>()),
   acquireLinearTicket: vi.fn(async () => ({ claim, snapshot })),
 }));
 
@@ -58,9 +62,9 @@ const snapshot: TicketSnapshot = {
 const claim = { issueId: snapshot.id, identifier: snapshot.identifier } as TicketClaim;
 const handoff: TicketHandoff = { brief: "Do the thing.", snapshot, assumptions: [] };
 
-const jigs = await import("#jigs");
-const delivery = await import("#blocks/delivery/delivery");
-const tickets = await import("#blocks/tickets/linear");
+const jigs = { ...(await import("#jigs/steps")), ...(await import("#jigs/routines")) };
+const delivery = await import("../blocks/delivery/delivery.ts");
+const tickets = await import("../blocks/tickets/linear.ts");
 const {
   default: entry,
   linearTicketToPrInputs,
@@ -158,7 +162,7 @@ test("linear-ticket-to-pr accepts ticket identifiers and IDs and declares its in
   }
   expect(entry.inputs.safeParse({ ticket: "", binding: "repo" }).success).toBe(false);
   expect(entry.requires).toEqual({
-    harnesses: ["claude", "codex"],
+    agents: { claude: harnesses.claude("opus"), codex: harnesses.codex("gpt-5.6-sol") },
     integrations: ["linear", "github"],
   });
 });

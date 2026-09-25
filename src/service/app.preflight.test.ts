@@ -2,6 +2,7 @@ import { chmodSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
+import { harnesses } from "../blocks/agents/harness-config.ts";
 import { ensureBindingClone } from "../steps/workspaces/clone.ts";
 import { bindingRepoDir } from "../steps/workspaces/layout.ts";
 // Real git fixtures, reached by path: they are test-only, so they stay out
@@ -38,7 +39,11 @@ const app = createApp({
     bound: {
       workflow: async () => undefined,
       inputs: z.object({}),
-      requires: { bindings: ["api"], harnesses: ["claude"], integrations: ["linear", "github"] },
+      requires: {
+        bindings: ["api"],
+        agents: { builder: harnesses.claude("opus") },
+        integrations: ["linear", "github"],
+      },
     },
   },
 });

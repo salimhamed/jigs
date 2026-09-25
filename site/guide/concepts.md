@@ -38,17 +38,25 @@ path and function name. A waiting run is tied to those IDs. If the `"use step"`
 functions lived inside the jigs package, every upgrade would move them and
 strand the runs that were waiting.
 
-So the directives live in your factory. `jigs.ts` is a generated file of small
-`"use step"` wrappers around jigs' operations, plus ready-to-call blocks.
-Workflows import from it as `#jigs`:
+So the directives live in your factory. `jigs generate` writes two files into
+`jigs/`, and a workflow imports from them by name:
 
 ```ts
-import { createRunDirectory, runAgent } from "#jigs";
+import { provisionWorktree, setTicketStatus } from "#jigs/steps";
+import { reviewTicket, runAgent } from "#jigs/routines";
 ```
 
-Commit `jigs.ts` and keep your own code out of it. `jigs generate` refreshes it
-from the installed jigs version, a build fails with that repair if it is out of
-date, and `jigs upgrade` regenerates it for you.
+`jigs/steps.ts` holds every step jigs provides: small `"use step"` wrappers
+around jigs' operations. It is the only generated file with a directive, so
+every name in it is recorded and replayed.
+
+`jigs/routines.ts` holds the functions a workflow calls that run those steps
+for you, and may wait on something outside the run, such as a reply on a
+ticket. `runAgent`, `reviewTicket` and `pullRequestGate` are routines.
+
+Commit `jigs/` and never edit it. `jigs generate` refreshes it from the
+installed jigs version, a build fails with that repair if it is out of date,
+and `jigs upgrade` regenerates it for you.
 
 ## Renaming a workflow or step
 
@@ -65,21 +73,22 @@ IDs.
 | --- | --- |
 | `jigs.config.ts` | Service ports, bindings, registered workflows, schedules and policy. See [Configuration](/guide/configuration). |
 | `jigs.config.test.ts` | Checks the registered workflows and the durable IDs the build emits. |
-| `jigs.ts` | The generated integration described above. |
-| `workflows/hello.ts` | The first workflow. Add your own next to it. |
+| `jigs/steps.ts`, `jigs/routines.ts` | The generated files described above. |
+| `workflows/hello/hello.ts` | The first workflow. Each workflow gets its own directory under `workflows/`. |
 | `.env.example` | The environment file template. Copy it to `.env` for secrets. |
-| `package.json` | Pins jigs and defines the `#jigs`, `#blocks/*` and `#steps/*` imports. |
+| `package.json` | Pins jigs and maps `#jigs/*` to the files in `jigs/`. |
 | `nitro.config.ts`, `docker-compose.yml`, `tsconfig.json`, `vitest.config.ts`, `pnpm-workspace.yaml`, `.gitignore`, `README.md` | Build, database and tooling settings. |
 
-Two folders appear when you need them. The `#blocks/*` and `#steps/*` imports
-already point at them:
+A workflow keeps what it owns beside it. Its own `"use step"` functions go in a
+`steps.ts` in its directory, and its prompts and helpers in files next to that.
 
-- `blocks/` for your own reusable workflow-side code, such as prompts and
-  decisions. A recipe copies its blocks here too.
-- `steps/` for your own `"use step"` functions that touch files, services or
-  other outside state.
+A workflow imports from two kinds of place. The library, `@jigs-ai/jigs` and
+its topic subpaths, holds types, constructors and pure functions such as
+`defineWorkflow` and `harnesses`. `#jigs/steps` and `#jigs/routines` hold the
+durable operations generated for your factory. Import a workflow's own files
+with relative paths inside its directory. The workflow loaders in
+`jigs.config.ts` stay relative too.
 
-Import the verbs, such as `runAgent`, from `#jigs`; types and blocks from
-`@jigs-ai/jigs` and `@jigs-ai/jigs/blocks/<topic>`; and your own code from
-`#blocks/<path>` and `#steps/<path>`, never with `../`. The workflow loaders in
-`jigs.config.ts` stay relative.
+The split between steps and routines is there so you can see it: every name
+from `#jigs/steps` is one recorded operation, and every name from
+`#jigs/routines` composes those.

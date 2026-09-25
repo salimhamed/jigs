@@ -23,11 +23,15 @@ Read `jigs service logs`. The usual causes:
 
 Fix the cause and run `jigs up` again.
 
-## A build says `jigs.ts` is out of date
+## A build says `jigs/` is out of date
 
-Run `pnpm exec jigs generate`, review the change to `jigs.ts`, then run
-`pnpm exec jigs up`. Keep your own code out of `jigs.ts`, since generating
-replaces it.
+Run `pnpm exec jigs generate`, review the change to `jigs/steps.ts` and
+`jigs/routines.ts`, then run `pnpm exec jigs up`. Keep your own code out of
+`jigs/`, since generating replaces it.
+
+A build also refuses a factory that still has a `jigs.ts` from an earlier
+release. Delete it, run `pnpm exec jigs generate`, and import from
+`#jigs/steps` and `#jigs/routines` instead of `#jigs`.
 
 ## A run is waiting
 

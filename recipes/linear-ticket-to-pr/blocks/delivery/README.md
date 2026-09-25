@@ -21,8 +21,8 @@ them freely. Upgrading jigs never overwrites them.
 - **Linear states named `Todo`, `In Progress`, `In Review` and `Done`** on the
   ticket's team. The workflow moves the ticket through them and fails on a
   missing one.
-- **Claude Code and Codex**, installed and logged in. The workflow declares
-  both in `requires.harnesses`.
+- **Claude Code and Codex**, installed and logged in. The workflow names
+  both in `requires.agents`.
 - **A binding** for the repository to change: `pnpm exec jigs bind <remote>`, then
   `pnpm exec jigs up`. See [bindings](https://salimhamed.github.io/jigs/guide/configuration#bindings).
 - **A merge policy** you have decided on. See
@@ -44,7 +44,7 @@ By default Codex implements and Claude Code reviews. Choose per run with
 `implementationModel` and `reviewModel`. A model left unset takes that
 harness's default from `inputHarnesses` in `workflows/linear-ticket-to-pr.ts`. Pi needs a model
 source rather than a model name, so build a Pi role in `workflows/linear-ticket-to-pr.ts` with
-`harnesses.pi(...)` and add `"pi"` to `requires.harnesses`.
+`harnesses.pi(...)` and add it to `agents`, which the workflow passes as `requires.agents`.
 
 ## Budgets
 
@@ -72,8 +72,9 @@ GitHub reports the pull request mergeable and CI has passed.
 
 ```ts
 import { harnesses } from "@jigs-ai/jigs/blocks/agents";
-import { deliverChange } from "#blocks/delivery/delivery";
-import { noteOnTicket, resolveMergePolicy } from "#jigs";
+import { deliverChange } from "../blocks/delivery/delivery.ts";
+import { noteOnTicket } from "#jigs/routines";
+import { resolveMergePolicy } from "#jigs/steps";
 
 const result = await deliverChange({
   task,
@@ -100,8 +101,9 @@ changing a role's harness or model starts it fresh.
 
 ```ts
 import { harnesses, models } from "@jigs-ai/jigs/blocks/agents";
-import { deliverChange } from "#blocks/delivery/delivery";
-import { noteOnTicket, resolveMergePolicy } from "#jigs";
+import { deliverChange } from "../blocks/delivery/delivery.ts";
+import { noteOnTicket } from "#jigs/routines";
+import { resolveMergePolicy } from "#jigs/steps";
 
 const result = await deliverChange({
   task,
@@ -133,9 +135,9 @@ that phase, or `{ action: "stop" }` to end it. It runs workflow-side, so it can
 wait for a person, for example by asking on the ticket:
 
 ```ts
-import type { LimitReached } from "#blocks/delivery/types";
+import type { LimitReached } from "../blocks/delivery/types.ts";
 import type { TicketClaim } from "@jigs-ai/jigs/blocks/linear";
-import { haltForHuman } from "#jigs";
+import { haltForHuman } from "#jigs/routines";
 
 declare const claim: TicketClaim;
 
@@ -166,7 +168,7 @@ extend it:
 
 ```ts
 import { harnesses } from "@jigs-ai/jigs/blocks/agents";
-import type { ReviewPromptContext } from "#blocks/delivery/types";
+import type { ReviewPromptContext } from "../blocks/delivery/types.ts";
 
 const review = {
   harness: harnesses.claude("opus"),
@@ -181,7 +183,7 @@ Or replace it outright:
 
 ```ts
 import { harnesses } from "@jigs-ai/jigs/blocks/agents";
-import type { ImplementationPromptContext } from "#blocks/delivery/types";
+import type { ImplementationPromptContext } from "../blocks/delivery/types.ts";
 
 const implementation = {
   harness: harnesses.codex("gpt-5.6-sol"),
@@ -213,9 +215,9 @@ task values plain data.
 
 ```ts
 import { harnesses } from "@jigs-ai/jigs/blocks/agents";
-import type { WorkItem } from "#blocks/delivery/types";
-import { deliverChange } from "#blocks/delivery/delivery";
-import { resolveMergePolicy } from "#jigs";
+import type { WorkItem } from "../blocks/delivery/types.ts";
+import { deliverChange } from "../blocks/delivery/delivery.ts";
+import { resolveMergePolicy } from "#jigs/steps";
 
 interface Incident extends WorkItem {
   service: string;
@@ -261,7 +263,7 @@ Call the phases yourself to put your own checks between them. Publication
 accepts only an `ApprovedChange`, so unreviewed work cannot reach it:
 
 ```ts
-import { followPullRequest, implementAndReview, publishApprovedChange } from "#blocks/delivery/delivery";
+import { followPullRequest, implementAndReview, publishApprovedChange } from "../blocks/delivery/delivery.ts";
 
 const built = await implementAndReview({
   task,

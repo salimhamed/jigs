@@ -18,5 +18,5 @@ export async function generateIntegration(deps: {
   }
   const { generateFactoryIntegration } = await import(pathToFileURL(entry).href);
   generateFactoryIntegration(root);
-  deps.out("generated jigs.ts — review and commit this file");
+  deps.out("generated jigs/steps.ts and jigs/routines.ts — review and commit them");
 }
