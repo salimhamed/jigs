@@ -36,7 +36,7 @@ function fakeClaude() {
     requestChecks: () => [],
     envAllowlist: () => [],
     sessionPointer: { providerKey: "claude-code", field: "sessionId" },
-    docsAnchor: "claude-code",
+    setsEnv: [],
     displayName: "Claude Code",
   };
   const seams: ExecutionSeams = {

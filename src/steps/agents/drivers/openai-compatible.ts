@@ -51,6 +51,6 @@ export const openaiCompatibleDriver = {
     const variable = descriptor(request)?.apiKeyEnv;
     return variable === undefined ? [] : [variable];
   },
-  docsAnchor: "openai-compatible",
+  setsEnv: [],
   displayName: "OpenAI-compatible",
 } satisfies Driver<"openai-compatible">;

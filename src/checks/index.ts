@@ -212,25 +212,28 @@ export function doctorChecks(workflows: WorkflowManifests): Check[] {
 // "did not answer".
 export const JIT_TIMEOUT_MS = 3 * CHECK_TIMEOUT_MS + 5_000;
 
-function resolveNamedEnvironment(values: Record<string, string> | undefined) {
+function resolveNamedEnvironment(
+  values: Record<string, string> | undefined,
+  env: Record<string, string>,
+) {
   if (values === undefined) return undefined;
   return Object.fromEntries(
-    Object.entries(values).map(([target, source]) => [target, process.env[source] ?? ""]),
+    Object.entries(values).map(([target, source]) => [target, env[source] ?? ""]),
   );
 }
 
-function piProbeServer(server: PiMcpServerConfig): McpServerConfig {
+function piProbeServer(server: PiMcpServerConfig, env: Record<string, string>): McpServerConfig {
   if ("command" in server) {
     return {
       command: server.command,
       ...(server.args === undefined ? {} : { args: server.args }),
-      ...(server.env === undefined ? {} : { env: resolveNamedEnvironment(server.env) }),
+      ...(server.env === undefined ? {} : { env: resolveNamedEnvironment(server.env, env) }),
       probe: server.probe,
     };
   }
-  const headers = resolveNamedEnvironment(server.headers) ?? {};
+  const headers = resolveNamedEnvironment(server.headers, env) ?? {};
   if (server.bearerTokenEnv !== undefined)
-    headers.authorization = `Bearer ${process.env[server.bearerTokenEnv] ?? ""}`;
+    headers.authorization = `Bearer ${env[server.bearerTokenEnv] ?? ""}`;
   return {
     url: server.url,
     ...(Object.keys(headers).length === 0 ? {} : { headers }),
@@ -249,7 +252,7 @@ export function jitChecks(target: HarnessTarget, env: Record<string, string>): C
       ? Object.fromEntries(
           Object.entries(harness.mcpServers ?? {})
             .filter(([, server]) => !("auth" in server && server.auth === "oauth"))
-            .map(([name, server]) => [name, piProbeServer(server)]),
+            .map(([name, server]) => [name, piProbeServer(server, env)]),
         )
       : (harness.mcpServers ?? {});
   return [

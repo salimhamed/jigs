@@ -1,5 +1,6 @@
 import type { WorkflowMetadata } from "workflow";
 
+/** The run a step belongs to: `getWorkflowMetadata()` inside the step. */
 export type RunMetadata = Pick<WorkflowMetadata, "workflowRunId">;
 export type NamedRunMetadata = Pick<WorkflowMetadata, "workflowRunId" | "workflowName">;
 

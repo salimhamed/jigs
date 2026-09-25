@@ -17,12 +17,14 @@ import type { AgentRequest, ModelRequest } from "../../../workflow/agents/plan.t
 import type { AgentSessionRef, ModelGeneration } from "../../../workflow/agents/result.ts";
 import type { RunMetadata } from "../../runtime/run-context.ts";
 
+/** What a driver's call returns: the reply text, provider metadata and any structured output. */
 export type ExecutorGeneration = ModelGeneration & { output?: unknown };
+/** What a driver's `decide` returns: one answer per question. */
 export type DecisionGeneration<QUESTIONS extends JevQuestions = JevQuestions> = {
   answers: JevAnswers<QUESTIONS>;
-  providerMetadata?: Record<string, Record<string, unknown>> | null;
 };
 
+/** @internal */
 export type EvaluationGeneration = {
   answers: Record<string, unknown>;
   providerMetadata?: Record<string, Record<string, unknown>> | null;
@@ -35,12 +37,14 @@ export type HarnessTarget = {
   cwd: string;
   resume?: AgentSessionRef | undefined;
 };
+/** Any request a driver's checks and environment allowlist are asked about. */
 export type DriverRequest =
   | AgentRequest
   | ModelRequest
   | AskJevOptions<JevQuestions>
   | HarnessTarget;
 
+/** What a driver's `open` receives: the run and the harness environment jigs built. */
 export interface OpenContext {
   metadata: RunMetadata;
   env: Record<string, string>;
@@ -52,6 +56,12 @@ export interface OpenedModel {
   close(): Promise<void>;
 }
 
+/**
+ * The AI SDK calls a driver makes through jigs rather than importing them, so a
+ * test can replace them.
+ *
+ * @internal
+ */
 export interface DriverDependencies {
   generateText(options: {
     model: LanguageModel;
@@ -67,13 +77,30 @@ export interface DriverDependencies {
   }): Promise<EvaluationGeneration>;
 }
 
+/**
+ * What a driver receives for one call: the run it belongs to, the harness
+ * environment jigs built for it, and, for a structured call, the output spec a
+ * provider model consumes. `deps` is jigs' own wiring, not part of the contract.
+ */
 export interface DriverContext {
   metadata: RunMetadata;
+  /** @internal */
   deps: DriverDependencies;
   env: Record<string, string>;
   output?: OutputInterface<unknown, unknown, never>;
 }
 
+/**
+ * How jigs runs one harness or model-source kind: its checks, the environment
+ * it may see, and how it asks, runs or opens a provider model. Each kind a
+ * descriptor can name has exactly one driver inside jigs; a factory cannot
+ * register another.
+ *
+ * @remarks
+ * A factory reads this to know what `createAgentRunner` does before it
+ * hands back a model. The shape is a published contract: changing it is a
+ * breaking release.
+ */
 export interface Driver<K extends HarnessKind | ModelKind> {
   kind: K;
   family: K extends HarnessKind ? "harness" : "model";
@@ -90,8 +117,9 @@ export interface Driver<K extends HarnessKind | ModelKind> {
   requestChecks(request: DriverRequest): Check[];
   jitChecks?(target: HarnessTarget): Check[];
   envAllowlist(request: DriverRequest): readonly string[];
+  /** Names the driver sets in the harness environment itself, such as a private home. */
+  setsEnv: readonly string[];
   sessionPointer?: { providerKey: string; field: string };
-  docsAnchor: string;
   displayName: string;
   resolveExecutable?(env: NodeJS.ProcessEnv): string;
   minimumVersion?: string;

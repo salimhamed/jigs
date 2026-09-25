@@ -6,6 +6,7 @@ import {
   buildAskAgentRequest,
   buildModelRequest,
 } from "../../../workflow/agents/plan.ts";
+import { RESERVED_AGENT_ENV } from "../../../workflow/factory.ts";
 import { driverFor, drivers } from "./index.ts";
 import type { DriverRequest } from "./types.ts";
 
@@ -24,6 +25,13 @@ const contractRequests: Record<keyof typeof drivers, DriverRequest> = {
   "openai-compatible": buildModelRequest({ model: localSource, prompt: "hello" }),
   openrouter: buildModelRequest({ model: models.openrouter("model"), prompt: "hello" }),
   pi: buildAskAgentRequest({ harness: harnesses.pi(localSource), prompt: "hello" }),
+};
+const docsAnchors: Record<keyof typeof drivers, string> = {
+  claude: "claude-code",
+  codex: "codex",
+  "openai-compatible": "openai-compatible",
+  openrouter: "openrouter",
+  pi: "pi",
 };
 
 test("driver lookup preserves installed kinds and rejects unregistered kinds", () => {
@@ -62,7 +70,7 @@ test("every registered driver declares its operational contract and documentatio
     const headings = [...guide.matchAll(/^## (.+)$/gm)].map((match) =>
       match[1]?.toLowerCase().replaceAll(" ", "-"),
     );
-    expect(headings).toContain(driver.docsAnchor);
+    expect(headings).toContain(docsAnchors[kind as keyof typeof drivers]);
   }
 });
 
@@ -92,4 +100,18 @@ test("Pi derives checks and environment from its nested model source", () => {
   expect(drivers.pi.requestChecks(codex).map((check) => check.id)).toEqual([
     "harness.pi-openai-codex-auth",
   ]);
+});
+
+// The contract requests use each source's defaults, so a driver's allowlist
+// for them names the default credential variables as well.
+test("agents.env reserves every variable a driver sets or reads by default", () => {
+  const declared = Object.entries(drivers).flatMap(([kind, driver]) => [
+    ...driver.setsEnv,
+    ...driver.envAllowlist(contractRequests[kind as keyof typeof drivers]),
+  ]);
+  expect(declared).toEqual(
+    expect.arrayContaining(["CLAUDE_CONFIG_DIR", "CODEX_HOME", "PI_CODING_AGENT_DIR"]),
+  );
+  expect(declared).toContain(models.openrouter("model").apiKeyEnv);
+  for (const name of declared) expect(RESERVED_AGENT_ENV).toContain(name);
 });

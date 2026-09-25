@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -88,6 +88,42 @@ test("a Claude server is probed under the step environment and a Pi server under
     ok: false,
     reason: expect.stringContaining("PROBE-TOKEN-UNSET"),
   });
+});
+
+test("a Pi server's named variables resolve from the step environment, not the service's", async () => {
+  vi.stubEnv("PROBE_SOURCE", "ambient");
+  const envFile = path.join(tmp, "probe-env.jsonl");
+  const probe = (stepEnv: Record<string, string>) =>
+    runChecks(
+      jitChecks(
+        {
+          harness: {
+            kind: "pi",
+            model: { kind: "openai-codex", model: "m" },
+            mcpServers: {
+              s: {
+                command: "node",
+                args: [PROBE_SERVER],
+                env: { PROBE_TOKEN: "PROBE_SOURCE", PROBE_ENV_FILE: "PROBE_ENV_FILE_SOURCE" },
+                tools: ["get_probe_token"],
+                probe: { tool: "get_probe_token" },
+              },
+            },
+          },
+          cwd: tmp,
+        },
+        { PATH: process.env.PATH ?? "", PROBE_ENV_FILE_SOURCE: envFile, ...stepEnv },
+      ),
+    );
+  const probedTokens = () =>
+    readFileSync(envFile, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => (JSON.parse(line) as { env: Record<string, string> }).env.PROBE_TOKEN);
+
+  await probe({});
+  await probe({ PROBE_SOURCE: "from-step" });
+  expect(probedTokens()).toEqual(["", "from-step"]);
 });
 
 test("a server is spawned in the worktree, so a relative arg resolves the way the step will resolve it", async () => {

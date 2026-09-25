@@ -1,6 +1,6 @@
+import { DEFAULT_MIN_CODEX_VERSION } from "ai-sdk-provider-codex-cli";
 import { expect, test } from "vitest";
 import { MIN_PI_VERSION } from "../steps/agents/harnesses/executables.ts";
-import { DEFAULT_MIN_CODEX_VERSION } from "../steps/agents/harnesses/index.ts";
 import { harnessRuntime } from "./harness-runtime.ts";
 
 const found = (path: string) => () => path;

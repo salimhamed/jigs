@@ -7,8 +7,13 @@ Workflow code passes only tagged, serializable descriptors built with
 `models.*` and `harnesses.*`. Step-side drivers in one registry
 (`src/steps/agents/drivers`) turn a descriptor into a live provider and own its
 execution, checks, environment and session references. `runAgent` and `askAgent`
-take harnesses; `askModel` and `askJev` take model sources. Results report no
-token usage or cost.
+take harnesses; `askModel` and `askJev` take model sources. `createAgentRunner`
+opens a Claude Code or Codex harness through the same driver for a factory's
+own step. The registry is closed: a factory cannot add a kind, and `Driver`,
+`DriverContext`, `AgentRunner` and the types they reach are a published
+contract whose change is a breaking release. `DriverContext.deps` is jigs' own
+wiring, including the AI SDK's experimental evaluation API, and stays outside
+it. Results report no token usage or cost.
 
 - **Claude Code and Codex** run through the community AI SDK providers
   (`ai-sdk-provider-claude-code`, `ai-sdk-provider-codex-cli`), exact-pinned,
@@ -30,15 +35,20 @@ token usage or cost.
 ## Consequences
 
 - `askAgent` gives the model no tools: Claude with built-in tools off and no
-  MCP, Pi with `--no-tools`. Codex is rejected because it has no tool-free mode,
-  and a descriptor naming tools or MCP servers is rejected before any check.
+  MCP, Pi with `--no-tools`, or with `--tools submit_result` alone when the ask
+  is structured (`--no-tools` would drop the result tool too). Codex is
+  rejected because it has no tool-free mode, and a descriptor naming tools or
+  MCP servers is rejected before any check.
 - **The harness environment is built from empty.** It gets a short base set
   (`PATH`, `HOME`, user, shell, `TERM`, locale, `TZ`, `TMPDIR`, XDG dirs, proxy
   and CA settings), the driver's own variables and credential names, and the
   names the factory lists under `agents.env`. Nothing else from the service
   environment passes, whatever its name. `agents.env` is names only, applies to
   every harness and cannot name a model credential or a driver-set variable.
-  Preflight, JIT checks and the service's probes use the same builder.
+  Every harness probe (preflight, JIT checks, the service's) uses the same
+  builder, and a Pi MCP probe resolves its named variables from that
+  environment. The model credential presence check reads the process
+  environment by design: it asks whether the service has the key at all.
 - Claude's environment is replaced at the provider's process-launch hook,
   where the driver also captures stderr so login failures still classify.
   Codex has no such hook, so the driver launches the app server through a
@@ -48,6 +58,6 @@ token usage or cost.
 - Retries are layered, not added: Pi's own request retries, the AI SDK's for
   direct model calls, and Workflow step replay. The drivers add no loop.
 - Descriptors are reusable configuration, not sessions. Continuation happens
-  only from an explicit session reference validated before launch; only a missing
-  or incompatible session permits a fresh-context rebuild.
-- A descriptor kind with no registered driver fails explicitly at execution.
+  only from an explicit session reference (`AgentSessionRef`) validated before
+  launch; only a missing or incompatible session permits a fresh-context
+  rebuild, which `agentSession` does with its `fresh` prompt.
