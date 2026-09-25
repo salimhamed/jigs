@@ -1,28 +1,8 @@
-# @jigs-ai/jigs v0.66.0
+# @jigs-ai/jigs v0.67.0
 
 Read and update GitHub pull requests outside workflow code.
 
 Wrap steps in a factory-owned `"use step"` file. Never call them directly from a workflow.
-
-## Interfaces
-
-### GitHubRepoRef
-
-Identifies a GitHub repository by its owner and name.
-
-#### Properties
-
-##### owner
-
-> **owner**: `string`
-
-The GitHub organization or account that owns the repository.
-
-##### repo
-
-> **repo**: `string`
-
-The repository name.
 
 ## Type Aliases
 
@@ -74,7 +54,7 @@ The pull request's browser URL.
 
 > `const` **fetchPullRequestState**: `FetchPrState`
 
-Read the pull request’s checks, reviews, and open review threads.
+Read the pull request’s checks, reviews, open review threads and approval.
 
 ## Functions
 
@@ -120,9 +100,9 @@ Mark a draft pull request ready and return its freshly read state.
 
 ### mergePullRequest()
 
-> **mergePullRequest**(`pr`, `expectedHeadSha`, `policy`): `Promise`\<[`MergeOutcome`](#mergeoutcome)\>
+> **mergePullRequest**(`worktree`, `pr`, `expectedHeadSha`): `Promise`\<[`MergeOutcome`](#mergeoutcome)\>
 
-Merge the pull request with the configured method, pinned to the head the
+Merge the pull request with the worktree binding's `mergeMethod`, pinned to the head the
 caller judged ready.
 
 The title is re-read here rather than carried in from `describePullRequest`:
@@ -134,6 +114,10 @@ reports `merged` only if GitHub says so.
 
 #### Parameters
 
+##### worktree
+
+`Worktree`
+
 ##### pr
 
 `PullRequestRef`
@@ -141,26 +125,6 @@ reports `merged` only if GitHub says so.
 ##### expectedHeadSha
 
 `string`
-
-##### policy
-
-###### approval
-
-\{ `kind`: `"review"`; \} \| \{ `kind`: `"label"`; `name`: `string`; \} = `...`
-
-The signal that authorizes an automatic merge.
-
-###### by
-
-`"jigs"` \| `"human"` = `...`
-
-Whether jigs merges an eligible pull request or waits for a person to merge it.
-
-###### method
-
-`"squash"` \| `"merge"` \| `"rebase"` = `...`
-
-The GitHub merge method to use when jigs performs the merge.
 
 #### Returns
 
@@ -228,42 +192,6 @@ Reply to a review thread and return the posted comment id.
 #### Returns
 
 `Promise`\<\{ `id`: `number`; \}\>
-
-***
-
-### resolveMergePolicy()
-
-> **resolveMergePolicy**(`binding`): `Promise`\<\{ `approval`: \{ `kind`: `"review"`; \} \| \{ `kind`: `"label"`; `name`: `string`; \}; `by`: `"jigs"` \| `"human"`; `method`: `"squash"` \| `"merge"` \| `"rebase"`; \}\>
-
-Read the effective merge policy for a factory binding.
-
-#### Parameters
-
-##### binding
-
-`string`
-
-#### Returns
-
-`Promise`\<\{ `approval`: \{ `kind`: `"review"`; \} \| \{ `kind`: `"label"`; `name`: `string`; \}; `by`: `"jigs"` \| `"human"`; `method`: `"squash"` \| `"merge"` \| `"rebase"`; \}\>
-
-***
-
-### resolveRepository()
-
-> **resolveRepository**(`binding`): `Promise`\<[`GitHubRepoRef`](#githubreporef)\>
-
-Find the GitHub repository configured for a binding.
-
-#### Parameters
-
-##### binding
-
-`string`
-
-#### Returns
-
-`Promise`\<[`GitHubRepoRef`](#githubreporef)\>
 
 ***
 
