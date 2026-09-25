@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.68.0](https://github.com/salimhamed/jigs/compare/jigs-v0.67.0...jigs-v0.68.0) (2026-09-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* release run resources in one step ([#407](https://github.com/salimhamed/jigs/issues/407))
+
+### Code Refactoring
+
+* release run resources in one step ([#407](https://github.com/salimhamed/jigs/issues/407)) ([34ee34f](https://github.com/salimhamed/jigs/commit/34ee34f495a4956c757ccbb769439d417cec2d86))
+
 ## [0.67.0](https://github.com/salimhamed/jigs/compare/jigs-v0.66.0...jigs-v0.67.0) (2026-09-25)
 
 

@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.67.0
+# @jigs-ai/jigs v0.68.0
 
 Read run context and update run resources outside workflow code.
 
@@ -69,13 +69,21 @@ identities occupy distinct atomic keys.
 
 ### releaseRunResources()
 
-> **releaseRunResources**(`policy`, `metadata`): `Promise`\<`ReleaseReport`\>
+> **releaseRunResources**(`metadata`, `definition`, `explicit?`): `Promise`\<`ReleaseReport`\>
 
-Persist an explicit success action, release under the run lock and return the result.
+Release this run's resources on its success path and return what was removed or kept.
 
 #### Parameters
 
-##### policy
+##### metadata
+
+`NamedRunMetadata`
+
+##### definition
+
+`FactoryDefinition`
+
+##### explicit?
 
 ###### onFailure
 
@@ -89,13 +97,15 @@ What to do with eligible resources after a failed or cancelled run.
 
 What to do with eligible resources after a completed run.
 
-##### metadata
-
-`RunMetadata`
-
 #### Returns
 
 `Promise`\<`ReleaseReport`\>
+
+#### Remarks
+
+Without a policy, uses the workflow's `release`, then the factory's, then the default of
+releasing successful runs and keeping failed ones. The success action is recorded first, so
+automatic cleanup after the run ends never reverses it.
 
 ***
 
@@ -114,25 +124,3 @@ Remove this run's working directory after its work is finished, never while paus
 #### Returns
 
 `Promise`\<`void`\>
-
-***
-
-### resolveReleasePolicy()
-
-> **resolveReleasePolicy**(`metadata`, `definition`): `Promise`\<\{ `onFailure`: `"release"` \| `"keep"`; `onSuccess`: `"release"` \| `"keep"`; \}\>
-
-Resolve the workflow policy, then the factory policy, then the built-in release/keep default.
-
-#### Parameters
-
-##### metadata
-
-`NamedRunMetadata`
-
-##### definition
-
-`FactoryDefinition`
-
-#### Returns
-
-`Promise`\<\{ `onFailure`: `"release"` \| `"keep"`; `onSuccess`: `"release"` \| `"keep"`; \}\>
