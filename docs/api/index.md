@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.61.0
+# @jigs-ai/jigs v0.62.0
 
 Everything a factory's configuration and workflows import from jigs: the factory and workflow
 definitions, harness and model descriptors, the data steps hand back, question helpers, and
@@ -733,8 +733,8 @@ everything listed before every run. List only what the workflow uses.
 
 ```ts
 const agents = {
-  builder: harnesses.claude("opus"),
-  reviewer: harnesses.codex("gpt-5.6-sol"),
+  builder: harnesses.claude({ model: "opus" }),
+  reviewer: harnesses.codex({ model: "gpt-5.6-sol" }),
 };
 
 export default defineWorkflow({
@@ -1005,45 +1005,94 @@ A question answered with one named option.
 
 ### ClaudeHarness
 
-> **ClaudeHarness** = `SharedHarness` & `object`
+> **ClaudeHarness** = [`JsonOnly`](#jsononly)\<`Omit`\<`ClaudeCodeSettings`, [`ClaudePolicyKey`](#claudepolicykey)\>\> & `object`
 
-A Claude Code harness descriptor.
+A Claude Code harness descriptor: the provider's own settings that are data, minus each
+[ClaudePolicyKey](#claudepolicykey), plus the model and jigs' MCP server shape.
 
 #### Type Declaration
-
-##### effort?
-
-> `optional` **effort**: `NonNullable`\<`ClaudeCodeSettings`\[`"effort"`\]\>
 
 ##### kind
 
 > **kind**: `"claude"`
 
+##### mcpServers?
+
+> `optional` **mcpServers**: `Record`\<`string`, [`McpServerConfig`](#mcpserverconfig)\>
+
+##### model
+
+> **model**: `string`
+
 ***
 
-### ClaudeHarnessOptions
+### ClaudeHarnessSettings
 
-> **ClaudeHarnessOptions** = `Omit`\<[`ClaudeHarness`](#claudeharness), `"kind"` \| `"model"`\>
+> **ClaudeHarnessSettings** = `Omit`\<[`ClaudeHarness`](#claudeharness), `"kind"`\>
 
-Options for `harnesses.claude`.
+The one argument `harnesses.claude` takes: the model and any Claude Code settings.
+
+***
+
+### ClaudePolicyKey
+
+> **ClaudePolicyKey** = *typeof* `claudePolicyKeys`\[`number`\]
+
+A Claude Code setting a descriptor cannot name, because jigs sets it itself or holds it as
+policy.
+
+#### Remarks
+
+jigs sets the working directory, environment, executable and session for every step, and holds
+permissions, setting sources and MCP servers as policy. `extraArgs` and `sdkOptions` would
+rewrite any of those. `agents`, `settings` and `plugins` would bring in unprobed MCP servers,
+environment, permissions and hooks from outside the worktree; they come from the repository's
+project settings instead.
 
 ***
 
 ### CodexHarness
 
-> **CodexHarness** = `SharedHarness` & `object`
+> **CodexHarness** = [`JsonOnly`](#jsononly)\<`Omit`\<`CodexAppServerSettings`, [`CodexPolicyKey`](#codexpolicykey)\>\> & `object`
 
-A Codex harness descriptor.
+A Codex harness descriptor: the provider's own settings that are data, minus each
+[CodexPolicyKey](#codexpolicykey), plus the model and jigs' MCP server shape.
 
 #### Type Declaration
-
-##### effort?
-
-> `optional` **effort**: `Extract`\<`NonNullable`\<`CodexAppServerSettings`\[`"effort"`\]\>, `"none"` \| `"minimal"` \| `"low"` \| `"medium"` \| `"high"` \| `"xhigh"`\>
 
 ##### kind
 
 > **kind**: `"codex"`
+
+##### mcpServers?
+
+> `optional` **mcpServers**: `Record`\<`string`, [`McpServerConfig`](#mcpserverconfig)\>
+
+##### model
+
+> **model**: `string`
+
+***
+
+### CodexHarnessSettings
+
+> **CodexHarnessSettings** = `Omit`\<[`CodexHarness`](#codexharness), `"kind"`\>
+
+The one argument `harnesses.codex` takes: the model and any Codex settings.
+
+***
+
+### CodexPolicyKey
+
+> **CodexPolicyKey** = *typeof* `codexPolicyKeys`\[`number`\]
+
+A Codex setting a descriptor cannot name, because jigs sets it itself or holds it as policy.
+
+#### Remarks
+
+jigs sets the working directory, environment, executable, thread and session for every step,
+and holds the approval and sandbox policies and MCP servers. `configOverrides` would rewrite
+the sandbox and MCP tables.
 
 ***
 
@@ -1215,6 +1264,20 @@ A typed decision result.
 > **JevState** = `string` \| `JevJsonObject` \| `JevJsonValue`[]
 
 JSON-compatible evidence evaluated by a decision model.
+
+***
+
+### JsonOnly
+
+> **JsonOnly**\<`T`\> = `{ [K in keyof T as false extends IsData<Exclude<T[K], undefined>> ? never : K]: T[K] }`
+
+The keys of a settings type whose values are data, so they can cross into a step.
+
+#### Type Parameters
+
+##### T
+
+`T`
 
 ***
 
@@ -2169,29 +2232,61 @@ Constructors for agent-harness descriptors.
 
 ##### claude()
 
-> `readonly` **claude**: \<`O`\>(`model`, `options?`) => [`HarnessForOptions`](#harnessforoptions)\<[`ClaudeHarness`](#claudeharness), `O`\> = `claudeHarness`
+> `readonly` **claude**: \<`O`\>(`settings`) => [`HarnessForOptions`](#harnessforoptions)\<[`ClaudeHarness`](#claudeharness), `O`\> = `claudeHarness`
 
-Build a Claude Code harness. Without `mcpServers` it also works with `askAgent`.
+Build a Claude Code harness from the model and any Claude Code settings. Without `tools` or
+`mcpServers` it also works with `askAgent`.
 
 ###### Type Parameters
 
 ###### O
 
-`O` *extends* [`ClaudeHarnessOptions`](#claudeharnessoptions) = `Record`\<`never`, `never`\>
+`O` *extends* [`ClaudeHarnessSettings`](#claudeharnesssettings)
 
 ###### Parameters
 
-###### model
+###### settings
 
-`string`
-
-###### options?
-
-`O`
+`Exactly`\<[`ClaudeHarnessSettings`](#claudeharnesssettings), `O`\>
 
 ###### Returns
 
 [`HarnessForOptions`](#harnessforoptions)\<[`ClaudeHarness`](#claudeharness), `O`\>
+
+###### Example
+
+```ts
+harnesses.claude({ model: "opus", effort: "high", maxTurns: 40 });
+```
+
+##### codex()
+
+> `readonly` **codex**: \<`O`\>(`settings`) => [`CodexHarness`](#codexharness) = `codexHarness`
+
+Build a Codex harness from the model and any Codex settings. Only `runAgent` accepts it: Codex
+has no mode without tools.
+
+###### Type Parameters
+
+###### O
+
+`O` *extends* [`CodexHarnessSettings`](#codexharnesssettings)
+
+###### Parameters
+
+###### settings
+
+`Exactly`\<[`CodexHarnessSettings`](#codexharnesssettings), `O`\>
+
+###### Returns
+
+[`CodexHarness`](#codexharness)
+
+###### Example
+
+```ts
+harnesses.codex({ model: "gpt-5.6-sol", personality: "pragmatic" });
+```
 
 ##### pi()
 
@@ -2284,26 +2379,6 @@ Without `tools` or `mcpServers` the harness also works with `askAgent`.
 ###### Returns
 
 [`HarnessForOptions`](#harnessforoptions)\<[`PiHarness`](#piharness), `O`\>
-
-##### codex()
-
-> `readonly` **codex**(`model`, `options`): [`CodexHarness`](#codexharness)
-
-Build a Codex harness. Only `runAgent` accepts it: Codex has no mode without tools.
-
-###### Parameters
-
-###### model
-
-`string`
-
-###### options
-
-`Omit`\<[`CodexHarness`](#codexharness), `"kind"` \| `"model"`\> = `{}`
-
-###### Returns
-
-[`CodexHarness`](#codexharness)
 
 ***
 
