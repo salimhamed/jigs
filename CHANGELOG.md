@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.60.0](https://github.com/salimhamed/jigs/compare/jigs-v0.59.0...jigs-v0.60.0) (2026-09-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* the @jigs-ai/jigs/blocks/* subpaths are removed; import from the root @jigs-ai/jigs instead. Several service-only helpers are no longer exported. See #391 for the list and the upgrade notes.
+
+### Code Refactoring
+
+* rename src/blocks to src/workflow and collapse the library exports into the root ([#391](https://github.com/salimhamed/jigs/issues/391)) ([1a5dcc9](https://github.com/salimhamed/jigs/commit/1a5dcc98e5ea37f2b0e39b7514c89b5d0a20db7e))
+
 ## [0.59.0](https://github.com/salimhamed/jigs/compare/jigs-v0.58.0...jigs-v0.59.0) (2026-09-25)
 
 
