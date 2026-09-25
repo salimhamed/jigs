@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.66.0](https://github.com/salimhamed/jigs/compare/jigs-v0.65.0...jigs-v0.66.0) (2026-09-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* Git and pull request steps accept Worktree values.
+
+### Features
+
+* pass worktrees to Git and pull request steps ([78ee322](https://github.com/salimhamed/jigs/commit/78ee32248badb3d054501892e7ca76fe21c94f8a))
+
 ## [0.65.0](https://github.com/salimhamed/jigs/compare/jigs-v0.64.0...jigs-v0.65.0) (2026-09-25)
 
 

@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.65.0
+# @jigs-ai/jigs v0.66.0
 
 Read and update GitHub pull requests outside workflow code.
 
@@ -172,7 +172,7 @@ The GitHub merge method to use when jigs performs the merge.
 
 > **openPullRequest**(`request`): `Promise`\<[`OpenedPullRequest`](#openedpullrequest)\>
 
-Open a pull request from the working branch into the base branch.
+Open a pull request from the worktree's branch into its repository's default branch.
 
 The lookup comes first because this is one step: a create that succeeded
 before the assignment failed, or whose response was lost, leaves a pull
@@ -183,10 +183,6 @@ and re-attempts only what did not finish.
 
 ##### request
 
-###### base
-
-`string`
-
 ###### body
 
 `string`
@@ -195,17 +191,13 @@ and re-attempts only what did not finish.
 
 `boolean`
 
-###### head
-
-`string`
-
-###### repo
-
-[`GitHubRepoRef`](#githubreporef)
-
 ###### title
 
 `string`
+
+###### worktree
+
+`Worktree`
 
 #### Returns
 

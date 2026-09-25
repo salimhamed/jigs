@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.65.0
+# @jigs-ai/jigs v0.66.0
 
 Everything a factory's configuration and workflows import from jigs: the factory and workflow
 definitions, harness and model descriptors, the data steps hand back, question helpers, and
@@ -938,6 +938,12 @@ A provisioned repository worktree and the commit it was cut from.
 ##### baseSha
 
 > **baseSha**: `string`
+
+##### binding
+
+> **binding**: `string`
+
+The named repository binding in the factory configuration.
 
 ##### branch
 
