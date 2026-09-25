@@ -1,38 +1,20 @@
-# @jigs-ai/jigs v0.69.0
+# @jigs-ai/jigs v0.69.1
 
-Read and update GitHub pull requests outside workflow code.
+Low-level GitHub operations for factory-owned steps. Call their durable
+`#jigs/steps` wrappers from workflow code.
 
-Wrap steps in a factory-owned `"use step"` file. Never call them directly from a workflow.
+Watch changes with `watchPullRequest` from `#jigs/routines`, and reply or post
+updates with `postReviewAnswers` and `postPullRequestNote`. See [Waiting and external events](https://salimhamed.github.io/jigs/guide/waiting-and-events).
 
-## Type Aliases
+## Read
 
-### MergeOutcome
+### fetchPullRequestState
 
-> **MergeOutcome** = \{ `mergeCommitSha`: `string` \| `null`; `merged`: `true`; \} \| `object` & `MergeRefusal`
+> `const` **fetchPullRequestState**: `FetchPrState`
 
-What GitHub did, and when it did not, why — and whether asking again could
-change the answer, which is what decides between standing the commit down
-and leaving it merge-ready.
+Read the pull request’s checks, reviews, open review threads and approval.
 
-#### Type Declaration
-
-\{ `mergeCommitSha`: `string` \| `null`; `merged`: `true`; \}
-
-##### mergeCommitSha
-
-> **mergeCommitSha**: `string` \| `null`
-
-The merge commit, or `null` when GitHub has not reported it yet.
-
-##### merged
-
-> **merged**: `true`
-
-Confirms that GitHub reports the pull request merged.
-
-`object` & `MergeRefusal`
-
-***
+## Open/update
 
 ### OpenedPullRequest
 
@@ -47,36 +29,6 @@ A newly opened or adopted pull request and its browser URL.
 > **url**: `string`
 
 The pull request's browser URL.
-
-## Variables
-
-### fetchPullRequestState
-
-> `const` **fetchPullRequestState**: `FetchPrState`
-
-Read the pull request’s checks, reviews, open review threads and approval.
-
-## Functions
-
-### commentOnPullRequest()
-
-> **commentOnPullRequest**(`pr`, `body`): `Promise`\<\{ `id`: `number`; \}\>
-
-Post a comment on the pull request conversation and return its id.
-
-#### Parameters
-
-##### pr
-
-`PullRequestRef`
-
-##### body
-
-`string`
-
-#### Returns
-
-`Promise`\<\{ `id`: `number`; \}\>
 
 ***
 
@@ -95,40 +47,6 @@ Mark a draft pull request ready and return its freshly read state.
 #### Returns
 
 `Promise`\<`PullRequestSnapshot`\>
-
-***
-
-### mergePullRequest()
-
-> **mergePullRequest**(`worktree`, `pr`, `expectedHeadSha`): `Promise`\<[`MergeOutcome`](#mergeoutcome)\>
-
-Merge the pull request with the worktree binding's `mergeMethod`, pinned to the head the
-caller judged ready.
-
-The title is re-read here rather than carried in from `describePullRequest`:
-a reviewer who corrects it — to satisfy a conventional-commit check on the
-target repo, usually — does so between the pull request opening and this
-merge, and a title captured at open time would ship the one they corrected
-away. After any ambiguous answer the pull request is read again, and this
-reports `merged` only if GitHub says so.
-
-#### Parameters
-
-##### worktree
-
-`Worktree`
-
-##### pr
-
-`PullRequestRef`
-
-##### expectedHeadSha
-
-`string`
-
-#### Returns
-
-`Promise`\<[`MergeOutcome`](#mergeoutcome)\>
 
 ***
 
@@ -166,6 +84,28 @@ and re-attempts only what did not finish.
 #### Returns
 
 `Promise`\<[`OpenedPullRequest`](#openedpullrequest)\>
+
+## Discuss/review
+
+### commentOnPullRequest()
+
+> **commentOnPullRequest**(`pr`, `body`): `Promise`\<\{ `id`: `number`; \}\>
+
+Post a comment on the pull request conversation and return its id.
+
+#### Parameters
+
+##### pr
+
+`PullRequestRef`
+
+##### body
+
+`string`
+
+#### Returns
+
+`Promise`\<\{ `id`: `number`; \}\>
 
 ***
 
@@ -216,3 +156,65 @@ GitHub's GithubApiError surface unchanged.
 #### Returns
 
 `Promise`\<\{ `id`: `number`; \}\>
+
+## Merge
+
+### MergeOutcome
+
+> **MergeOutcome** = \{ `mergeCommitSha`: `string` \| `null`; `merged`: `true`; \} \| `object` & `MergeRefusal`
+
+What GitHub did, why it declined, and whether asking again could
+change the answer, which is what decides between standing the commit down
+and leaving it merge-ready.
+
+#### Type Declaration
+
+\{ `mergeCommitSha`: `string` \| `null`; `merged`: `true`; \}
+
+##### mergeCommitSha
+
+> **mergeCommitSha**: `string` \| `null`
+
+The merge commit, or `null` when GitHub has not reported it yet.
+
+##### merged
+
+> **merged**: `true`
+
+Confirms that GitHub reports the pull request merged.
+
+`object` & `MergeRefusal`
+
+***
+
+### mergePullRequest()
+
+> **mergePullRequest**(`worktree`, `pr`, `expectedHeadSha`): `Promise`\<[`MergeOutcome`](#mergeoutcome)\>
+
+Merge the pull request with the worktree binding's `mergeMethod`, pinned to the head the
+caller judged ready.
+
+The title is re-read here rather than carried in from `describePullRequest`:
+a reviewer who corrects it, usually to satisfy a conventional-commit check
+on the target repo, does so between the pull request opening and this
+merge, and a title captured at open time would ship the one they corrected
+away. After any ambiguous answer the pull request is read again, and this
+reports `merged` only if GitHub says so.
+
+#### Parameters
+
+##### worktree
+
+`Worktree`
+
+##### pr
+
+`PullRequestRef`
+
+##### expectedHeadSha
+
+`string`
+
+#### Returns
+
+`Promise`\<[`MergeOutcome`](#mergeoutcome)\>

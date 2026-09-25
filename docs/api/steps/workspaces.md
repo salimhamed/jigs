@@ -1,10 +1,55 @@
-# @jigs-ai/jigs v0.69.0
+# @jigs-ai/jigs v0.69.1
 
-Provision a repository worktree outside workflow code.
+Prepare a run-owned worktree for a configured GitHub binding.
 
-Wrap steps in a factory-owned `"use step"` file. Never call them directly from a workflow.
+`provisionWorktree` creates or reuses the run's working copy from the binding's
+clone. Call its generated `#jigs/steps` wrapper from workflow code so a resumed
+workflow receives the recorded workspace information. The low-level function
+here belongs inside a factory-owned `"use step"` implementation.
 
-## Interfaces
+## Worktrees
+
+### WorktreeRequest
+
+The binding and branch used to provision a run's worktree.
+
+#### Properties
+
+##### binding
+
+> **binding**: `string`
+
+##### branch
+
+> **branch**: `string`
+
+***
+
+### provisionWorktree()
+
+> **provisionWorktree**(`request`, `metadata`, `deps`): `Promise`\<`Worktree`\>
+
+Create or reuse a worktree for this run and prepare its files and dependencies.
+
+#### Parameters
+
+##### request
+
+[`WorktreeRequest`](#worktreerequest)
+
+##### metadata
+
+`RunMetadata`
+
+##### deps
+
+[`ProvisionWorktreeDependencies`](#provisionworktreedependencies) = `{}`
+
+#### Returns
+
+`Promise`\<`Worktree`\>
+
+## Advanced implementation/testing
 
 ### ProvisionWorktreeDependencies
 
@@ -53,45 +98,3 @@ Injectable registry and ownership operations used while provisioning a worktree.
 ###### Returns
 
 `Promise`\<`T`\>
-
-***
-
-### WorktreeRequest
-
-The binding and branch used to provision a run's worktree.
-
-#### Properties
-
-##### binding
-
-> **binding**: `string`
-
-##### branch
-
-> **branch**: `string`
-
-## Functions
-
-### provisionWorktree()
-
-> **provisionWorktree**(`request`, `metadata`, `deps`): `Promise`\<`Worktree`\>
-
-Create or reuse a worktree for this run and prepare its files and dependencies.
-
-#### Parameters
-
-##### request
-
-[`WorktreeRequest`](#worktreerequest)
-
-##### metadata
-
-`RunMetadata`
-
-##### deps
-
-[`ProvisionWorktreeDependencies`](#provisionworktreedependencies) = `{}`
-
-#### Returns
-
-`Promise`\<`Worktree`\>

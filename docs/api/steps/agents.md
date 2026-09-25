@@ -1,10 +1,12 @@
-# @jigs-ai/jigs v0.69.0
+# @jigs-ai/jigs v0.69.1
 
-Execute agent and model requests outside workflow code.
+Low-level agent and model execution functions for factory-owned step wrappers.
 
-Wrap steps in a factory-owned `"use step"` file. Never call them directly from a workflow.
+Workflow code normally uses `runAgent`, `askAgent`, `askModel` and `askJev` from
+`#jigs/routines`. These implementations must run inside `"use step"` code.
+See [Models and harnesses](https://salimhamed.github.io/jigs/guide/models-and-harnesses).
 
-## Functions
+## Execution primitives
 
 ### executeAgent()
 

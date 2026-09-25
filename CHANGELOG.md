@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.69.1](https://github.com/salimhamed/jigs/compare/jigs-v0.69.0...jigs-v0.69.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* **docs:** document factory APIs and simplify guides ([6c87c1f](https://github.com/salimhamed/jigs/commit/6c87c1fae8e572b739af8e92374825b90986ce4d))
+
 ## [0.69.0](https://github.com/salimhamed/jigs/compare/jigs-v0.68.1...jigs-v0.69.0) (2026-09-25)
 
 

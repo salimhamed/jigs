@@ -1,52 +1,12 @@
-# @jigs-ai/jigs v0.69.0
+# @jigs-ai/jigs v0.69.1
 
-Inspect committed changes and push branches in a Git worktree.
+Low-level Git operations for factory-owned steps. Workflow code normally uses
+the generated `#jigs/steps` wrappers.
 
-Wrap steps in a factory-owned `"use step"` file. Never call them directly from a workflow.
+Inspect changes before publishing them. `pushApprovedChange` requires the
+reviewed commit to remain HEAD and the worktree to be clean, including on retries.
 
-## Functions
-
-### pushApprovedChange()
-
-> **pushApprovedChange**(`worktree`, `approvedCommit`): `Promise`\<\{ `headSha`: `string`; \}\>
-
-Push a reviewed commit only while it is still HEAD and the worktree is clean.
-
-Safe to retry after a successful push. Rejects if HEAD moved or any uncommitted change exists.
-
-#### Parameters
-
-##### worktree
-
-`Worktree`
-
-##### approvedCommit
-
-`string`
-
-#### Returns
-
-`Promise`\<\{ `headSha`: `string`; \}\>
-
-***
-
-### pushBranch()
-
-> **pushBranch**(`worktree`): `Promise`\<\{ `headSha`: `string`; \}\>
-
-Push the worktree's current HEAD and register a GitHub branch resource when applicable.
-
-#### Parameters
-
-##### worktree
-
-`Worktree`
-
-#### Returns
-
-`Promise`\<\{ `headSha`: `string`; \}\>
-
-***
+## Inspect changes
 
 ### readBranchState()
 
@@ -152,3 +112,45 @@ Defaults to the worktree's base commit.
 #### Returns
 
 `Promise`\<`string`\>
+
+## Publish changes
+
+### pushApprovedChange()
+
+> **pushApprovedChange**(`worktree`, `approvedCommit`): `Promise`\<\{ `headSha`: `string`; \}\>
+
+Push a reviewed commit only while it is still HEAD and the worktree is clean.
+
+Safe to retry after a successful push. Rejects if HEAD moved or any uncommitted change exists.
+
+#### Parameters
+
+##### worktree
+
+`Worktree`
+
+##### approvedCommit
+
+`string`
+
+#### Returns
+
+`Promise`\<\{ `headSha`: `string`; \}\>
+
+***
+
+### pushBranch()
+
+> **pushBranch**(`worktree`): `Promise`\<\{ `headSha`: `string`; \}\>
+
+Push the worktree's current HEAD and register a GitHub branch resource when applicable.
+
+#### Parameters
+
+##### worktree
+
+`Worktree`
+
+#### Returns
+
+`Promise`\<\{ `headSha`: `string`; \}\>
