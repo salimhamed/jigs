@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.63.0](https://github.com/salimhamed/jigs/compare/jigs-v0.62.0...jigs-v0.63.0) (2026-09-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* jigs recipe add copies into workflows/<name>/ and registers workflows/<name>/<name>.ts. The recipe's inputs are builder, reviewer and budget; implementationModel and reviewModel are gone. The recipe requires the Pi CLI for its fixer agent. A factory keeps its existing copy; see #397 for how to take the new one.
+
+### Features
+
+* rewrite the linear-ticket-to-pr recipe as colocated phases with fixed budgets ([#397](https://github.com/salimhamed/jigs/issues/397)) ([5b4fec5](https://github.com/salimhamed/jigs/commit/5b4fec5d608e14450549c6c60e65a64d03f6a0cc))
+
 ## [0.62.0](https://github.com/salimhamed/jigs/compare/jigs-v0.61.0...jigs-v0.62.0) (2026-09-25)
 
 
