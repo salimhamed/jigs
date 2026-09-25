@@ -231,7 +231,7 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
       ];
     },
     sessionPointer: { providerKey: "pi", field: "sessionId" },
-    docsAnchor: "pi",
+    setsEnv: ["PI_CODING_AGENT_DIR"],
     displayName: "Pi",
     resolveExecutable: resolvePiExecutable,
     minimumVersion: MIN_PI_VERSION,

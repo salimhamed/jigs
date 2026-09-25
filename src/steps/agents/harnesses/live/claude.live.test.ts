@@ -1,12 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { generateText } from "ai";
+import { claudeCode } from "ai-sdk-provider-claude-code";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { type ClaudeHarness, harnesses } from "../../../../workflow/agents/harness-config.ts";
 import { CLAUDE_ENV, claudeStepSettings } from "../../drivers/claude-support.ts";
 import { createAgentRunner } from "../../runner.ts";
 import { harnessEnv } from "../env.ts";
-import { claudeCode } from "../index.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { assertLivePreconditions, makeScratchRepo } from "./fixtures/live-env.ts";
 

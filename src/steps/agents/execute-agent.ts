@@ -61,14 +61,14 @@ async function runAgent(
   metadata: RunMetadata,
   seams: ExecutionSeams,
 ): Promise<AgentResult> {
-  const output = outputSpec(wire.outputSchema);
-  // Pi has no provider model: its driver runs the whole call itself.
+  // Pi has no provider model: its driver runs the whole call itself and builds
+  // its own result tool from the schema.
   if (wire.harness.kind === "pi") {
     const prepared = await prepareAgentRun(wire, seams);
     try {
       const run = prepared.driver.run;
       if (run === undefined) throw new JigsError(`the ${wire.harness.kind} driver cannot run`);
-      const generation = await run(wire, { metadata, deps: seams, env: prepared.env, output });
+      const generation = await run(wire, { metadata, deps: seams, env: prepared.env });
       const session = extractAgentSession(
         wire.harness,
         generation.providerMetadata,
@@ -84,6 +84,7 @@ async function runAgent(
     { cwd: wire.cwd, run: metadata, resume: wire.resume },
     seams,
   );
+  const output = outputSpec(wire.outputSchema);
   try {
     const generation = await seams.generateText({
       model: runner.model,
@@ -114,7 +115,8 @@ async function askAgent(
     metadata,
     deps: seams,
     env,
-    output: outputSpec(wire.outputSchema),
+    // Pi reads the schema from the request for its result tool.
+    output: wire.harness.kind === "pi" ? undefined : outputSpec(wire.outputSchema),
   });
   return toModelResult(generation, wire.outputSchema === undefined ? undefined : generation.output);
 }

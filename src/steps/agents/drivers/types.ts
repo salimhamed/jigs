@@ -20,7 +20,6 @@ import type { RunMetadata } from "../../runtime/run-context.ts";
 export type ExecutorGeneration = ModelGeneration & { output?: unknown };
 export type DecisionGeneration<QUESTIONS extends JevQuestions = JevQuestions> = {
   answers: JevAnswers<QUESTIONS>;
-  providerMetadata?: Record<string, Record<string, unknown>> | null;
 };
 
 export type EvaluationGeneration = {
@@ -52,6 +51,10 @@ export interface OpenedModel {
   close(): Promise<void>;
 }
 
+/**
+ * The AI SDK calls a driver makes through jigs rather than importing them, so a
+ * test can replace them. A factory reads it only to see what a driver may reach.
+ */
 export interface DriverDependencies {
   generateText(options: {
     model: LanguageModel;
@@ -67,6 +70,11 @@ export interface DriverDependencies {
   }): Promise<EvaluationGeneration>;
 }
 
+/**
+ * What a driver receives for one call: the run it belongs to, the AI SDK calls
+ * it may make, the harness environment jigs built for it, and, for a structured
+ * call, the output spec a provider model consumes.
+ */
 export interface DriverContext {
   metadata: RunMetadata;
   deps: DriverDependencies;
@@ -74,6 +82,17 @@ export interface DriverContext {
   output?: OutputInterface<unknown, unknown, never>;
 }
 
+/**
+ * How jigs runs one harness or model-source kind: its checks, the environment
+ * it may see, and how it asks, runs or opens a provider model. Each kind a
+ * descriptor can name has exactly one driver inside jigs; a factory cannot
+ * register another.
+ *
+ * @remarks
+ * A factory reads this to know what `createAgentRunner` does before it
+ * hands back a model. The shape is a published contract: changing it is a
+ * breaking release.
+ */
 export interface Driver<K extends HarnessKind | ModelKind> {
   kind: K;
   family: K extends HarnessKind ? "harness" : "model";
@@ -90,8 +109,9 @@ export interface Driver<K extends HarnessKind | ModelKind> {
   requestChecks(request: DriverRequest): Check[];
   jitChecks?(target: HarnessTarget): Check[];
   envAllowlist(request: DriverRequest): readonly string[];
+  /** Names the driver sets in the harness environment itself, such as a private home. */
+  setsEnv: readonly string[];
   sessionPointer?: { providerKey: string; field: string };
-  docsAnchor: string;
   displayName: string;
   resolveExecutable?(env: NodeJS.ProcessEnv): string;
   minimumVersion?: string;

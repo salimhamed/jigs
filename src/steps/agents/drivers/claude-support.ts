@@ -4,8 +4,6 @@ import { PassThrough } from "node:stream";
 import type { ClaudeCodeSettings, SpawnedProcess, SpawnOptions } from "ai-sdk-provider-claude-code";
 import { resolveClaudeExecutable } from "../harnesses/executables.ts";
 
-export type ClaudeStepOptions = ClaudeCodeSettings & { cwd: string };
-
 const STDERR_LIMIT = 4_000;
 
 function spawnClaudeCode(options: SpawnOptions, env: Record<string, string>): SpawnedProcess {

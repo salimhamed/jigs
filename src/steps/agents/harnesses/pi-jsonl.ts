@@ -1,8 +1,6 @@
 import type { ExecutorGeneration } from "../drivers/types.ts";
 import { SUBMIT_RESULT_TOOL } from "./pi-extension.ts";
 
-export type PiDelta = { type: string; [key: string]: unknown };
-
 type AssistantOutcome = {
   stopReason: unknown;
   errorMessage: unknown;
@@ -28,12 +26,11 @@ function textContent(content: unknown): string {
 export type PiReduceOptions = {
   /** The turn must include an accepted `submit_result` call; the first one accepted is the result. */
   requireResult?: boolean;
-  onDelta?: (delta: PiDelta) => void;
 };
 
 /** Reduce Pi's JSONL event stream into the common executor result. */
 export function reducePiJsonl(jsonl: string, options: PiReduceOptions = {}): ExecutorGeneration {
-  const { requireResult = false, onDelta } = options;
+  const { requireResult = false } = options;
   let sessionId: string | undefined;
   let finalAssistant: AssistantOutcome | undefined;
   let output: unknown;
@@ -69,9 +66,6 @@ export function reducePiJsonl(jsonl: string, options: PiReduceOptions = {}): Exe
         hasOutput = false;
         rejection = undefined;
       }
-    } else if (event.type === "message_update") {
-      const delta = record(event.assistantMessageEvent);
-      if (delta !== undefined) onDelta?.(delta as PiDelta);
     } else if (event.type === "message_end") {
       const message = record(event.message);
       if (message?.role !== "assistant") continue;

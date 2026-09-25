@@ -1,5 +1,6 @@
 import {
   type McpServerConfig as ClaudeMcpServerConfig,
+  claudeCode,
   getSessionMessages,
 } from "ai-sdk-provider-claude-code";
 import { claudeAuthCheck, harnessRuntimeCheck } from "../../../checks/harnesses.ts";
@@ -10,7 +11,6 @@ import {
   type McpServerConfig,
 } from "../../../workflow/agents/harness-config.ts";
 import { resolveClaudeExecutable } from "../harnesses/executables.ts";
-import { claudeCode } from "../harnesses/index.ts";
 import { AgentSessionError } from "../session-error.ts";
 import { CLAUDE_ENV, claudeStepSettings } from "./claude-support.ts";
 import { descriptorSettings } from "./descriptor-settings.ts";
@@ -111,7 +111,7 @@ export function createClaudeDriver(
     requestChecks: () => [],
     envAllowlist: () => CLAUDE_ENV,
     sessionPointer: { providerKey: "claude-code", field: "sessionId" },
-    docsAnchor: "claude-code",
+    setsEnv: [],
     displayName: "Claude Code",
     resolveExecutable: resolveClaudeExecutable,
   };

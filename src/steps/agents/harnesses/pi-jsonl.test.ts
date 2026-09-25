@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { reducePiJsonl } from "./pi-jsonl.ts";
 
 const fixture = (name: string): string =>
@@ -25,19 +25,10 @@ const submitted = {
   isError: false,
 };
 
-test("plain pi JSONL reduces the authoritative final message and exposes deltas", () => {
-  const onDelta = vi.fn();
-  const generation = reducePiJsonl(fixture("pi-plain.jsonl"), { onDelta });
-
-  expect(generation).toEqual({
+test("plain pi JSONL reduces the authoritative final message", () => {
+  expect(reducePiJsonl(fixture("pi-plain.jsonl"))).toEqual({
     text: "Hello world",
     providerMetadata: { pi: { sessionId: "session-plain" } },
-  });
-  expect(onDelta).toHaveBeenCalledTimes(2);
-  expect(onDelta).toHaveBeenNthCalledWith(1, {
-    type: "text_delta",
-    contentIndex: 0,
-    delta: "Hello",
   });
 });
 

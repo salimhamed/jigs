@@ -27,7 +27,6 @@ export function driverFor<K extends DriverKind>(kind: K): Driver<K> | undefined 
 
 export type DriverResolver = typeof driverFor;
 
-export type RegisteredDriverKind = keyof typeof drivers;
 export type {
   DecisionGeneration,
   Driver,

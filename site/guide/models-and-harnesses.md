@@ -13,6 +13,10 @@ harnesses.pi(models.openaiCodex("gpt-5.5"), { thinking: "high" });
 models.openrouter("google/gemini-2.5-flash-lite");
 ```
 
+The kinds are fixed: a factory cannot add a harness or model kind,
+`models.openaiCompatible` reaches any endpoint that speaks the OpenAI API, and a
+native Anthropic or Gemini API becomes a built-in kind when a factory needs one.
+
 ## The four verbs
 
 Import them from `#jigs/routines`.

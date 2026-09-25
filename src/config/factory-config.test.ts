@@ -3,9 +3,8 @@ import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, expect, test } from "vitest";
-import { CLAUDE_ENV } from "../steps/agents/drivers/claude-support.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
-import { defineFactory, RESERVED_AGENT_ENV } from "../workflow/factory.ts";
+import { defineFactory } from "../workflow/factory.ts";
 import { addWorkflow, removeBinding, upsertBinding } from "./config-edit.ts";
 import {
   bindingMergePolicy,
@@ -189,11 +188,6 @@ test.each([
   const definition = { service: { dashboardPort: 3456 }, agents: { env: [name] }, workflows: {} };
   expect(() => parseFactoryConfig(definition)).toThrow("model source");
   expect(() => defineFactory(definition)).toThrow("model source");
-});
-
-test("every variable a driver sets itself is reserved", () => {
-  for (const name of [...CLAUDE_ENV, "CODEX_HOME", "PI_CODING_AGENT_DIR"])
-    expect(RESERVED_AGENT_ENV).toContain(name);
 });
 
 test("identical re-bind preserves every byte", () => {

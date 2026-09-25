@@ -3,6 +3,7 @@ import {
   type CodexAppServerProvider,
   type CodexAppServerSettings,
   createCodexAppServer,
+  DEFAULT_MIN_CODEX_VERSION,
 } from "ai-sdk-provider-codex-cli";
 import { codexAuthCheck, harnessRuntimeCheck } from "../../../checks/harnesses.ts";
 import { codexWorktreeConfigCheck } from "../../../checks/mcp.ts";
@@ -18,7 +19,6 @@ import {
   prepareCodexInvocationHome,
 } from "../harnesses/codex-home.ts";
 import { resolveCodexExecutable } from "../harnesses/executables.ts";
-import { DEFAULT_MIN_CODEX_VERSION } from "../harnesses/index.ts";
 import { AgentSessionError } from "../session-error.ts";
 import { codexAppServerStepSettings } from "./codex-support.ts";
 import { descriptorSettings } from "./descriptor-settings.ts";
@@ -132,7 +132,7 @@ export function createCodexDriver(
     jitChecks: (target) => [codexWorktreeConfigCheck(target.cwd)],
     envAllowlist: () => [],
     sessionPointer: { providerKey: "codex-app-server", field: "threadId" },
-    docsAnchor: "codex",
+    setsEnv: ["CODEX_HOME"],
     displayName: "Codex",
     resolveExecutable: resolveCodexExecutable,
     minimumVersion: DEFAULT_MIN_CODEX_VERSION,

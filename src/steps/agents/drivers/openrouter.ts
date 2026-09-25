@@ -234,7 +234,7 @@ async function decide<const QUESTIONS extends JevQuestions>(
   const openrouterMetadata = record(evaluated.providerMetadata?.openrouter);
   const answerMetadata = record(openrouterMetadata.answers);
   const answers = normalizeAnswers(request.questions, evaluated.answers, answerMetadata);
-  return { answers, providerMetadata: evaluated.providerMetadata };
+  return { answers };
 }
 
 export const openrouterDriver = {
@@ -252,6 +252,6 @@ export const openrouterDriver = {
     const source = descriptor(request);
     return source === undefined ? [] : [source.apiKeyEnv];
   },
-  docsAnchor: "openrouter",
+  setsEnv: [],
   displayName: "OpenRouter",
 } satisfies Driver<"openrouter">;
