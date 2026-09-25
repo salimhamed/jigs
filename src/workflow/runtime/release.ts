@@ -43,39 +43,3 @@ export interface ReleaseReport {
   /** The scratch directory's local path, removal flag and reason for the result. */
   runDirectory: ReleasedResource;
 }
-
-/**
- * Durable step functions the release routine runs.
- *
- * @group Factory plumbing
- */
-export interface ReleaseSteps {
-  /** Resolve the workflow, factory or default release policy for the active run. */
-  resolveReleasePolicy: () => Promise<ReleasePolicy>;
-  /** Persist and apply the selected successful-run policy to the active run. */
-  releaseRunResources: (policy: ReleasePolicy) => Promise<ReleaseReport>;
-}
-
-/**
- * Release eligible resources as the workflow's last successful action.
- *
- * @remarks
- * Without an argument, resolves the workflow policy, then the factory policy, then the default of
- * releasing successful runs and keeping failed runs. An explicit choice remains authoritative for
- * later automatic cleanup.
- */
-export async function release(steps: ReleaseSteps, policy?: ReleasePolicy): Promise<ReleaseReport> {
-  return steps.releaseRunResources(policy ?? (await steps.resolveReleasePolicy()));
-}
-
-/**
- * Bind durable release steps into the workflow-facing release API.
- *
- * @group Factory plumbing
- */
-export function bindReleaseSteps(steps: ReleaseSteps) {
-  return {
-    /** Release resources with an explicit policy, or resolve the run's configured policy. */
-    release: (policy?: ReleasePolicy) => release(steps, policy),
-  };
-}

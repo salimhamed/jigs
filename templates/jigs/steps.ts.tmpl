@@ -42,17 +42,14 @@ export async function provisionWorktree(request: WorktreeRequest): Promise<Workt
   return worktree;
 }
 
-/** Release finished run resources. */
-export async function releaseRunResources(policy: ReleasePolicy) {
-  "use step";
-  return runtimeOperations.releaseRunResources(policy, getWorkflowMetadata());
-}
-
-/** Resolve this workflow's release policy before its final successful action. */
-export async function resolveReleasePolicy() {
+/**
+ * Release this run's resources now and return the report. The service already does this when
+ * the run ends; call it to release early, to read the report, or to pass this run's policy.
+ */
+export async function release(policy?: ReleasePolicy) {
   "use step";
   const { default: definition } = await import("../jigs.config.ts");
-  return runtimeOperations.resolveReleasePolicy(getWorkflowMetadata(), definition);
+  return runtimeOperations.releaseRunResources(getWorkflowMetadata(), definition, policy);
 }
 
 /** Execute an agent in a working directory. Use runAgent() to pass an output schema and parse its answer. */

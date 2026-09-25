@@ -234,7 +234,6 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "bindAgentSteps",
     "bindLinearSteps",
     "bindPullRequestSteps",
-    "bindReleaseSteps",
     "claimTicket",
     "postPullRequestNote",
     "postReviewAnswers",
@@ -270,7 +269,6 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "createRunDirectory",
     "registerResource",
     "removeRunDirectory",
-    "resolveReleasePolicy",
     "releaseRunResources",
   ],
   "steps/git/index.ts": [
