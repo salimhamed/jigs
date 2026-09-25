@@ -322,7 +322,12 @@ export async function followPullRequest<TTask extends WorkItem = WorkItem>(
     harness: pullRequestRevision.harness,
     cwd,
   });
-  for await (const wake of pullRequestGate(pr, { scope, approval: options.merge.approval })) {
+  const gate = pullRequestGate(pr, {
+    scope,
+    approval: options.merge.approval,
+    worktree: change.worktree,
+  });
+  for await (const wake of gate) {
     if (wake.kind === "closed") {
       if (wake.merged) {
         await options.on?.merged?.(pr);

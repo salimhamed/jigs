@@ -7,6 +7,7 @@ import type {
   ReviewThread,
 } from "../../providers/github.ts";
 import { ClaimConflictError } from "../linear/claim.ts";
+import type { Worktree } from "../workspaces/worktree.ts";
 import { carriesMarker, commentSource, type MarkerLedger, readLedger } from "./marker.ts";
 import { isPullRequestMergeReady } from "./merge-ready.ts";
 import type { ApprovalSignal } from "./policy.ts";
@@ -271,12 +272,20 @@ export function classifyPullRequestState(
 // side free of any value import into steps/.
 export type FetchPrState = (pr: PullRequestRef) => Promise<PullRequestSnapshot>;
 
+/** The slice of the factory's `readBranchState` step the gate reads the local head with. */
+export type ReadLocalHead = (worktreePath: string, baseSha: string) => Promise<{ headSha: string }>;
+
 /** What a pull request gate watches for. */
 export interface PullRequestGateOptions {
   /** The continuation identity whose markers say what is already done. */
   scope: string;
   /** The signal that makes an open pull request merge-ready. */
   approval: ApprovalSignal;
+  /**
+   * The worktree this run pushes the pull request's branch from. With it, the gate never delivers
+   * a wake for a head the run has already moved past, even while GitHub still reports that head.
+   */
+  worktree?: Pick<Worktree, "path" | "baseSha"> | undefined;
 }
 
 // One hook per PR, held across the whole review until the PR closes — the
@@ -290,14 +299,18 @@ export interface PullRequestGateOptions {
  * @remarks
  * Only one run can hold a pull request's token. The injected state reader must be wrapped in a
  * factory-owned `"use step"` function so each snapshot is durable and workflow replay stays pure.
- * A wake is yielded only while the head it was read from is still the pull request's head.
+ * A wake is yielded only while the head it was read from is still the pull request's head. With
+ * `worktree`, a `ci-red` or `review-comments` wake is also checked against the local branch, the
+ * record of what this run has pushed, so the gate never delivers a wake for a head the run has
+ * already moved past.
  */
 export async function* pullRequestGate(
   pr: PullRequestRef,
-  fetchState: FetchPrState,
+  steps: { fetchState: FetchPrState; readLocalHead: ReadLocalHead },
   options: PullRequestGateOptions,
 ): AsyncGenerator<PullRequestWake, void, undefined> {
-  const { scope, approval } = options;
+  const { fetchState, readLocalHead } = steps;
+  const { scope, approval, worktree } = options;
   const token = pullRequestToken(pr);
   const hook = createHook<unknown>({ token });
   try {
@@ -324,6 +337,17 @@ export async function* pullRequestGate(
             );
             moved = current;
             break;
+          }
+        }
+        if (worktree !== undefined && (wake.kind === "ci-red" || wake.kind === "review-comments")) {
+          // GitHub can report the old head for a moment after a push; the
+          // local branch already knows better.
+          const local = await readLocalHead(worktree.path, worktree.baseSha);
+          if (local.headSha !== snapshot.headSha) {
+            console.log(
+              `[prGate] ${pr.owner}/${pr.repo}#${pr.number} ${wake.kind} for ${snapshot.headSha} is behind the local head ${local.headSha}; dropping it`,
+            );
+            continue;
           }
         }
         yield wake;

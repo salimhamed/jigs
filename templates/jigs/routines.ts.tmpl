@@ -19,6 +19,7 @@ import {
   fetchTicketSnapshot,
   postTicketHumanInputRequest,
   postTicketNote,
+  readBranchState,
   releaseRunResources,
   replyToPullRequestReviewThread,
   resolveLinearIssue,
@@ -71,6 +72,7 @@ export const acquireTicket = (reference: string) =>
 
 const pullRequests = bindPullRequestSteps({
   fetchPullRequestState,
+  readBranchState,
   commentOnPullRequest,
   replyToPullRequestReviewThread,
 });

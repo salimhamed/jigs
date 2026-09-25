@@ -181,7 +181,7 @@ Answer the existing run rather than starting another one.
 ```ts
 function pullRequestGate(
   pr: PullRequestRef,
-  options: { scope: string; approval: MergePolicy["approval"] },
+  options: { scope: string; approval: MergePolicy["approval"]; worktree?: Worktree },
 ): AsyncIterable<PullRequestWake>;
 
 type PullRequestWake =
@@ -198,7 +198,8 @@ import { mergePullRequest, resolveMergePolicy } from "#jigs/steps";
 const merge = await resolveMergePolicy(input.binding);
 const scope = `triage/${input.ticket}`;
 
-for await (const wake of pullRequestGate(pr, { scope, approval: merge.approval })) {
+const gate = pullRequestGate(pr, { scope, approval: merge.approval, worktree });
+for await (const wake of gate) {
   if (wake.kind === "closed") return { merged: wake.merged };
   if (wake.kind === "merge-ready") {
     const result = await mergePullRequest(pr, wake.headSha, merge);
@@ -227,7 +228,11 @@ run recognises its own answers.
 
 A wake is delivered only while its head is still the pull request's head. If
 the branch moved while you handled an earlier wake, a red build on the old
-commit is dropped rather than repaired twice. `postPullRequestNote` posts once
+commit is dropped rather than repaired twice. Pass the `worktree` your workflow
+pushes from, and the gate also checks each red build and review wake against
+the local branch. It then never delivers a wake for a head the run has already
+moved past, even in the moment after a push when GitHub still reports the old
+one. `postPullRequestNote` posts once
 per commit and reason, so a merge you retry on every wake reports its refusal
 once.
 

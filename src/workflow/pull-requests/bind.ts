@@ -14,6 +14,7 @@ import {
   type PullRequestRef,
   type PullRequestWake,
   pullRequestGate,
+  type ReadLocalHead,
 } from "./gate.ts";
 
 /**
@@ -23,6 +24,7 @@ import {
  */
 export interface PullRequestSteps {
   fetchPullRequestState: FetchPrState;
+  readBranchState: ReadLocalHead;
   commentOnPullRequest: typeof commentOnPullRequest;
   replyToPullRequestReviewThread: typeof replyToPullRequestReviewThread;
 }
@@ -39,7 +41,12 @@ export function bindPullRequestSteps(steps: PullRequestSteps) {
     pullRequestGate: (
       pr: PullRequestRef,
       options: PullRequestGateOptions,
-    ): AsyncIterable<PullRequestWake> => pullRequestGate(pr, steps.fetchPullRequestState, options),
+    ): AsyncIterable<PullRequestWake> =>
+      pullRequestGate(
+        pr,
+        { fetchState: steps.fetchPullRequestState, readLocalHead: steps.readBranchState },
+        options,
+      ),
     postReviewAnswers: (options: Omit<PostReviewAnswersOptions, StepFields>) =>
       postReviewAnswers({ ...options, ...steps }),
     postPullRequestNote: (options: Omit<PostPullRequestNoteOptions, StepFields>) =>
