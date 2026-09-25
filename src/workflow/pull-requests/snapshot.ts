@@ -82,7 +82,7 @@ export interface PullRequestSnapshot {
 
 /**
  * How the operator's consent reads right now. `stale` is an approval that
- * named an earlier commit — a different thing to tell an operator than a pull
+ * named an earlier commit. This differs from a pull
  * request nobody has approved.
  */
 export type ApprovalState = "approved" | "changes-requested" | "stale" | "none";

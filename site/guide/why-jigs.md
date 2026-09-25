@@ -1,35 +1,44 @@
 # Why jigs
 
-Coding agents are capable but not repeatable. Ask one to take a ticket to a
-merged pull request twice and it may take two different routes, skip a check,
-or forget where it stopped when the session ends. The process lives in a prompt
-and in the agent's memory, and both drift.
+AI is making more and more individual tasks automatable. But real work is
+usually a process: implement something, review it, run checks, wait for
+feedback, and decide what happens next.
 
-A workflow writes that process down as code. Every run follows the same steps,
-in the same order, with the agent doing only the parts that need judgment. The
-run waits for a person, a review or a CI build without losing its place, and it
-leaves a record of what happened. That is what jigs gives you: the flexibility
-of agents inside a process you can trust and rerun.
+**jigs exists to automate the process between those tasks.**
 
-## Built on the Vercel Workflow SDK
+## Workflows connect the work
 
-jigs runs on the [Vercel Workflow SDK](https://useworkflow.dev). A workflow is
-an async function marked `"use workflow"`; a step is a function marked
-`"use step"`. The SDK records each finished step, so a run that pauses or
-restarts resumes where it was and never repeats completed work.
+A workflow defines how work moves from step to step. One step might use Claude
+Code, another Codex, another a direct model call, deterministic TypeScript,
+human input, or an external event.
 
-A workflow is ordinary TypeScript. It can call jigs' routines and steps, such as
-`runAgent` or `openPullRequest`, but it does not have to: any code and
-any library can go in it, within the SDK's rules for workflows and steps.
+The workflow connects those pieces so the process can continue automatically
+instead of requiring someone to manually drive each transition.
 
-Your workflows live in a **factory repo**, a repository of your own that
-installs jigs as a package. The factory runs its own service on your machine,
-with its own Postgres database and a dashboard of every run.
+## Not tied to one agent or repository
 
-## Features
+Workflows live above the tools that execute them.
 
-- **Several repositories per factory**, each run in its own Git worktree.
-- **Linear tickets and human questions**: claim a ticket, ask on it, pause for the reply.
-- **Claude Code, Codex and Pi harnesses**, or a model API called directly.
-- **Your existing Claude and Codex subscriptions** pay for agent work.
-- **Optional webhooks**: waiting runs poll GitHub and Linear without them.
+They can combine different agent harnesses, hosted or local models, and
+ordinary code. They can also work across multiple repositories or automate
+something that does not involve a repository at all.
+
+## Pause and continue
+
+Real processes don't always execute from beginning to end in one uninterrupted
+session. They wait for reviews, CI, people, pull requests, tickets, and other
+external events.
+
+Workflows can pause and resume later without losing their place, and webhooks
+can wake them as soon as something changes.
+
+jigs builds on the [Vercel Workflow SDK](https://useworkflow.dev) to provide this
+durable execution model.
+
+## Local by design
+
+jigs runs locally so workflows can work directly with your repositories,
+development tools, credentials, agent subscriptions, and local models.
+
+Your workflows live in a **factory**: a TypeScript repository you own that
+installs jigs and defines the processes you want to automate.

@@ -27,8 +27,8 @@ export type TicketParticipants = {
  * What the comment's footer says about the run that posted it. The factory's
  * step wrapper builds it: the run id and the workflow name come from the
  * Workflow SDK's metadata, and the dashboard link from the service's own
- * configuration — none of it visible to the workflow. Where the run paused is the
- * halt's, not the context's: only the routine that raised it knows.
+ * configuration. None of it is visible to the workflow. Where the run paused
+ * belongs to the halt, not the context: only the routine that raised it knows.
  */
 export type NeedsHumanContext = {
   runId: string;

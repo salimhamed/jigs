@@ -3,7 +3,7 @@
 This page builds one workflow from start to finish: `triage` takes a bug report,
 has an agent investigate it in a repository, and asks a model to turn the
 findings into a structured verdict. It assumes a running factory from
-[Install and run a first workflow](/guide/getting-started).
+[Install and run a workflow](/guide/getting-started).
 
 ## 1. Connect a repository
 

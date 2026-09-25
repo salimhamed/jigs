@@ -124,7 +124,7 @@ export async function reviewPullRequest(
 }
 
 /**
- * What GitHub did, and when it did not, why — and whether asking again could
+ * What GitHub did, why it declined, and whether asking again could
  * change the answer, which is what decides between standing the commit down
  * and leaving it merge-ready.
  */
@@ -153,8 +153,8 @@ const STATE_CHANGED = new Set([405, 409]);
  * caller judged ready.
  *
  * The title is re-read here rather than carried in from `describePullRequest`:
- * a reviewer who corrects it — to satisfy a conventional-commit check on the
- * target repo, usually — does so between the pull request opening and this
+ * a reviewer who corrects it, usually to satisfy a conventional-commit check
+ * on the target repo, does so between the pull request opening and this
  * merge, and a title captured at open time would ship the one they corrected
  * away. After any ambiguous answer the pull request is read again, and this
  * reports `merged` only if GitHub says so.

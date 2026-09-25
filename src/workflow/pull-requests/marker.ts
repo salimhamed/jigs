@@ -24,7 +24,7 @@ export interface PullRequestMarker {
   run: string;
   /**
    * `reply` answers the thing named by `source`, `completion` records work
-   * finished for it, and `status` is a note about a commit — a stand-down
+   * finished for it, and `status` is a note about a commit, such as a stand-down
    * after a refused merge, a CI failure jigs could not repair, or a merge
    * refused for a state that will pass.
    */
