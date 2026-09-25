@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.67.0
+# @jigs-ai/jigs v0.68.0
 
 Read and update GitHub pull requests outside workflow code.
 
