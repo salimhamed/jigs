@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.65.0
+# @jigs-ai/jigs v0.66.0
 
 Build a factory's own agent step. `createAgentRunner` opens a harness the way the built-in
 agent step does and hands back the live provider model.

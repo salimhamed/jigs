@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.65.0
+# @jigs-ai/jigs v0.66.0
 
 Execute agent and model requests outside workflow code.
 

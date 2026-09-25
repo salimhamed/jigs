@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.65.0
+# @jigs-ai/jigs v0.66.0
 
 Inspect committed changes and push branches in a Git worktree.
 
@@ -8,16 +8,16 @@ Wrap steps in a factory-owned `"use step"` file. Never call them directly from a
 
 ### branchContains()
 
-> **branchContains**(`worktreePath`, `sha`): `Promise`\<`boolean`\>
+> **branchContains**(`worktree`, `sha`): `Promise`\<`boolean`\>
 
 Whether `sha` is the worktree's HEAD or one of its ancestors. A commit the worktree has never
 fetched is not contained.
 
 #### Parameters
 
-##### worktreePath
+##### worktree
 
-`string`
+`Worktree`
 
 ##### sha
 
@@ -31,7 +31,7 @@ fetched is not contained.
 
 ### pushApprovedChange()
 
-> **pushApprovedChange**(`worktreePath`, `branch`, `approvedCommit`): `Promise`\<\{ `headSha`: `string`; \}\>
+> **pushApprovedChange**(`worktree`, `approvedCommit`): `Promise`\<\{ `headSha`: `string`; \}\>
 
 Push a reviewed commit only while it is still HEAD and the worktree is clean.
 
@@ -39,13 +39,9 @@ Safe to retry after a successful push. Rejects if HEAD moved or any uncommitted 
 
 #### Parameters
 
-##### worktreePath
+##### worktree
 
-`string`
-
-##### branch
-
-`string`
+`Worktree`
 
 ##### approvedCommit
 
@@ -59,19 +55,15 @@ Safe to retry after a successful push. Rejects if HEAD moved or any uncommitted 
 
 ### pushBranch()
 
-> **pushBranch**(`worktreePath`, `branch`): `Promise`\<\{ `headSha`: `string`; \}\>
+> **pushBranch**(`worktree`): `Promise`\<\{ `headSha`: `string`; \}\>
 
 Push the worktree's current HEAD and register a GitHub branch resource when applicable.
 
 #### Parameters
 
-##### worktreePath
+##### worktree
 
-`string`
-
-##### branch
-
-`string`
+`Worktree`
 
 #### Returns
 
@@ -81,19 +73,19 @@ Push the worktree's current HEAD and register a GitHub branch resource when appl
 
 ### readBranchState()
 
-> **readBranchState**(`worktreePath`, `baseSha`): `Promise`\<\{ `commits`: `number`; `dirty`: `boolean`; `headSha`: `string`; \}\>
+> **readBranchState**(`worktree`, `baseSha`): `Promise`\<\{ `commits`: `number`; `dirty`: `boolean`; `headSha`: `string`; \}\>
 
-Inspect the worktree state used to decide whether a branch is ready to push.
+Inspect branch readiness, counting commits since the worktree's base unless overridden.
 
 #### Parameters
 
-##### worktreePath
+##### worktree
 
-`string`
+`Worktree`
 
 ##### baseSha
 
-`string`
+`string` = `worktree.baseSha`
 
 #### Returns
 
@@ -103,19 +95,19 @@ Inspect the worktree state used to decide whether a branch is ready to push.
 
 ### readChange()
 
-> **readChange**(`worktreePath`, `base`): `Promise`\<`ChangeSummary`\>
+> **readChange**(`worktree`, `base`): `Promise`\<`ChangeSummary`\>
 
-Describe committed changes between a base ref and the worktree's current HEAD.
+Describe committed changes from the worktree's base to HEAD, or supply another base ref.
 
 #### Parameters
 
-##### worktreePath
+##### worktree
 
-`string`
+`Worktree`
 
 ##### base
 
-`string`
+`string` = `worktree.baseSha`
 
 #### Returns
 
@@ -130,15 +122,15 @@ from HEAD. Returns at most 1,000 files and 1,000 commits; `truncated` reports om
 
 ### readPatch()
 
-> **readPatch**(`worktreePath`, `base`, `head`, `paths`): `Promise`\<`ChangePatch`\>
+> **readPatch**(`worktree`, `base`, `head`, `paths`): `Promise`\<`ChangePatch`\>
 
 Read patches for selected literal paths between two commits.
 
 #### Parameters
 
-##### worktreePath
+##### worktree
 
-`string`
+`Worktree`
 
 ##### base
 
@@ -165,19 +157,20 @@ deduplicated, empty paths are rejected and all returned patches share a 200,000-
 
 ### readWorktreeDiff()
 
-> **readWorktreeDiff**(`worktreePath`, `baseSha`): `Promise`\<`string`\>
+> **readWorktreeDiff**(`worktree`, `baseSha`): `Promise`\<`string`\>
 
 Read a raw patch from the merge base of `baseSha` and HEAD, truncating after 200,000 characters.
+Defaults to the worktree's base commit.
 
 #### Parameters
 
-##### worktreePath
+##### worktree
 
-`string`
+`Worktree`
 
 ##### baseSha
 
-`string`
+`string` = `worktree.baseSha`
 
 #### Returns
 
