@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.62.0](https://github.com/salimhamed/jigs/compare/jigs-v0.61.0...jigs-v0.62.0) (2026-09-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* harnesses.claude and harnesses.codex take one settings object with model inside it. ClaudeHarnessOptions and AgentExecutionDependencies are removed. The constructors reject keys outside the descriptor, including when the object comes from a variable. See #395 for the kept and denied key lists and the upgrade notes.
+
+### Features
+
+* type harness descriptors from the providers and add createAgentRunner ([#395](https://github.com/salimhamed/jigs/issues/395)) ([078d43e](https://github.com/salimhamed/jigs/commit/078d43e85b58f320da77aa4271986668d6775d9e))
+
 ## [0.61.0](https://github.com/salimhamed/jigs/compare/jigs-v0.60.0...jigs-v0.61.0) (2026-09-25)
 
 
