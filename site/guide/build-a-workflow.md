@@ -175,8 +175,77 @@ Answer the existing run rather than starting another one.
 
 ## Wait on a pull request
 
-`pullRequestGate` watches one pull request until it closes. Loop over it with
-`for await`: each wake says what is outstanding right now.
+`watchPullRequest` yields the current GitHub facts immediately, then yields
+again when those facts change. The workflow decides what to do with them:
+run an agent, apply rules, or keep waiting. The watcher makes no model calls
+and does not decide whether a comment needs an answer.
+
+This example continues a builder session created earlier in the workflow.
+`pr` identifies the pull request by `owner`, `repo` and `number`:
+
+```ts
+import { JigsError } from "@jigs-ai/jigs";
+import { watchPullRequest } from "#jigs/routines";
+
+let turns = 0;
+for await (const snapshot of watchPullRequest(pr)) {
+  if (snapshot.state === "closed") return { merged: snapshot.merged };
+
+  if (turns >= input.budget.prTurns) {
+    throw new JigsError(
+      "The pull request maintenance budget is exhausted.",
+      "Review the unfinished pull request before starting another run.",
+    );
+  }
+  turns += 1;
+
+  const situation = JSON.stringify(snapshot);
+  await builder.run({
+    resume: `Read this PR's discussion and checks. Address anything that needs
+attention, or do nothing if it is already handled. You may respond on GitHub
+and push fixes. Do not merge. Current facts: ${situation}`,
+    fresh: `${task}
+
+Continue work on PR #${pr.number} in ${pr.owner}/${pr.repo}.
+Read the code and discussion, then respond or push fixes if needed. Do not merge.
+Current facts: ${situation}`,
+  });
+}
+```
+
+The example's `task`, `builder`, and `input.budget.prTurns` belong to the
+factory. See [agent sessions](/guide/models-and-harnesses#agent-sessions) for
+creating the builder and supplying recovery context in `fresh`.
+
+`snapshot.state` and `snapshot.merged` come from GitHub. The snapshot also
+includes `headSha`, draft and merge state, labels, reviews, inline review
+threads and conversation comments. jigs summarizes GitHub checks and commit
+statuses as `ci` (`"red"`, `"green"` or `"pending"`) and includes `failingChecks`.
+These are observed facts, not an assessment that the work is finished.
+
+Repeated notifications with unchanged facts produce no new snapshot. An
+agent's own comments and pushes do change the facts and can produce another
+turn. Keep an explicit limit in factory code; the watcher has no hidden agent
+budget. Agents may post using their GitHub tools: no hidden jigs marker is
+required, and an unmarked comment does not automatically mean unresolved work.
+
+The watcher yields a closed snapshot once, then ends. Leaving the loop by
+`return`, `break` or a throw releases the watch. It shares the existing PR hook
+with `pullRequestGate`: only one run can watch a given pull request at a time.
+A second owner receives a claim conflict. The service's polling, webhooks and
+`jigs poke` wake the watch to reread GitHub.
+
+The watcher never merges. Factory code decides who may merge and calls
+`mergePullRequest` when appropriate; that step rechecks current GitHub facts
+and the [merge approval policy](/guide/configuration#merge). The
+[linear-ticket-to-pr recipe](/guide/recipes#linear-ticket-to-pr) demonstrates
+continuing the builder session after publication with this policy.
+
+### Use the rules-based gate
+
+`pullRequestGate` is an alternative for workflows that want jigs to classify
+outstanding work using its marker rules. Loop over it with `for await`: each
+wake says what is outstanding right now.
 
 ```ts
 function pullRequestGate(

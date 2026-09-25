@@ -745,7 +745,7 @@ test("GET /api/runs/:ref says what each park is waiting for, and where to act", 
       {
         token: PR,
         kind: "pull-request",
-        reason: "waiting for an approving review and green CI on acme/api#41",
+        reason: "waiting for pull request activity on acme/api#41",
         url: "https://github.com/acme/api/pull/41",
       },
     ],

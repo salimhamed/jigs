@@ -9,7 +9,6 @@
  * @packageDocumentation
  */
 
-export type { CheckRun, ReviewThread } from "./providers/github.ts";
 export { JitCheckError, unwrapAgentStep } from "./workflow/agents/agent.ts";
 export {
   type AskableHarness,
@@ -113,7 +112,6 @@ export {
   type JsonValue,
 } from "./workflow/human/questions.ts";
 export { interpolate } from "./workflow/interpolate.ts";
-
 export { ClaimConflictError, type TicketClaim } from "./workflow/linear/claim.ts";
 export type { Halt, HumanReply } from "./workflow/linear/halt-for-human.ts";
 export {
@@ -133,7 +131,6 @@ export {
   type TicketReviewPromptInput,
   ticketReviewPrompt,
 } from "./workflow/linear/ticket-review.prompt.ts";
-
 export { renderChecks, type ThreadAnswers } from "./workflow/pull-requests/answers.ts";
 export type { PullRequestRef, PullRequestWake } from "./workflow/pull-requests/gate.ts";
 export {
@@ -141,12 +138,21 @@ export {
   parseMarkers,
   type StatusReason,
 } from "./workflow/pull-requests/marker.ts";
+export { isPullRequestMergeReady } from "./workflow/pull-requests/merge-ready.ts";
 export {
   type ApprovalSignal,
   approvalSignalSchema,
   type MergePolicy,
   mergePolicySchema,
 } from "./workflow/pull-requests/policy.ts";
+export type {
+  CheckRun,
+  PullRequestComment,
+  PullRequestReview,
+  PullRequestSnapshot,
+  ReviewComment,
+  ReviewThread,
+} from "./workflow/pull-requests/snapshot.ts";
 export { defaultPullRequestScope } from "./workflow/pull-requests/writer.ts";
 
 export type { ReleasePolicy, ReleaseReport } from "./workflow/runtime/release.ts";

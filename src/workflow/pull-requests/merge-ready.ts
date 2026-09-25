@@ -131,7 +131,7 @@ export function mergeRefusal(
   return null;
 }
 
-/** May this pull request merge now? {@link mergeRefusal} for why it may not. */
+/** Whether current GitHub facts satisfy the configured approval and merge requirements. */
 export function isPullRequestMergeReady(
   snapshot: PullRequestSnapshot,
   approval: ApprovalSignal,

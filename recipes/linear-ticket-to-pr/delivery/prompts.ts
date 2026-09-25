@@ -3,7 +3,7 @@
 // that already holds the earlier turns and is told only what is new. `fresh`
 // is for an agent starting from nothing and is told everything.
 
-import type { CheckRun, ReviewThread, Worktree } from "@jigs-ai/jigs";
+import type { PullRequestRef, PullRequestSnapshot, Worktree } from "@jigs-ai/jigs";
 import type { WorkItem } from "./delivery.ts";
 import {
   type FindingResponse,
@@ -81,30 +81,22 @@ export const review = {
     ]),
 };
 
-export const ciRepair = {
-  job: "Investigate the failing checks, fix their cause, run relevant checks, and commit the fix. Do not push.",
-  resume: (failing: CheckRun[]) =>
-    join([`Failing checks:\n${JSON.stringify(failing)}`, ciRepair.job]),
-  fresh: (task: WorkItem, worktree: Worktree, diff: string, failing: CheckRun[]) =>
-    join([taskBrief(task, worktree), `Current diff:\n${diff}`, ciRepair.resume(failing)]),
-};
-
-export const revision = {
-  job: "Address the review feedback, test and commit any changes, and explain your response to each thread. Use each thread's rootId as threadId. Set commitExplanation to a concise account of the change and its validation when you commit, or null when you do not. Do not push or post comments yourself.",
-  resume: (threads: ReviewThread[], reviewBody: string | undefined) =>
-    join([`Review threads:\n${JSON.stringify(threads)}`, reviewBody ?? "", revision.job]),
+export const maintenance = {
+  job: "Continue maintaining the pull request you implemented. Read the discussion, code, and checks and decide what needs attention; a new message may need no action, including your own replies. Use GitHub tools to investigate and respond directly when useful. Safely synchronize the worktree with the PR branch before editing; never discard other people's work or force-push. Fix issues, run relevant checks, commit and push any changes. Do not merge or approve the PR yourself: the workflow applies the factory's merge policy. Return finished only when no work remains for you on the current code and discussion; pending when waiting for checks or another external change; needs-human when you cannot proceed without help. Explain the result in summary. Do not repeat a reply or change already made. When everything is settled, post nothing. Return needs-human if GitHub tools or credentials are unavailable; do not claim completion.",
+  resume: (pr: PullRequestRef, snapshot: PullRequestSnapshot) =>
+    join([
+      `Pull request: https://github.com/${pr.owner}/${pr.repo}/pull/${pr.number}`,
+      `Current GitHub facts:\n${JSON.stringify(snapshot)}`,
+      maintenance.job,
+    ]),
   fresh: (
     task: WorkItem,
     worktree: Worktree,
     diff: string,
-    threads: ReviewThread[],
-    reviewBody: string | undefined,
+    pr: PullRequestRef,
+    snapshot: PullRequestSnapshot,
   ) =>
-    join([
-      taskBrief(task, worktree),
-      `Current diff:\n${diff}`,
-      revision.resume(threads, reviewBody),
-    ]),
+    join([taskBrief(task, worktree), `Current diff:\n${diff}`, maintenance.resume(pr, snapshot)]),
 };
 
 export const description = (task: WorkItem, worktree: Worktree, diff: string) =>

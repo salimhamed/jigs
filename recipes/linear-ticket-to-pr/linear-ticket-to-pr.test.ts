@@ -76,7 +76,7 @@ test("a delivered ticket moves through In Progress, In Review and Done", async (
   );
   expect(handed()?.task).toMatchObject({ key: "ABC-123", url: snapshot.url });
   expect(handed()?.task.instructions).toContain("## Implementation brief\nUse the flag.");
-  expect(handed()?.budget).toEqual({ reviewRounds: 3, ciFixes: 3, revisionRounds: 3 });
+  expect(handed()?.budget).toEqual({ reviewRounds: 3, prTurns: 6 });
 });
 
 test("a run picks its builder and reviewer by name", async () => {
@@ -84,14 +84,13 @@ test("a run picks its builder and reviewer by name", async () => {
   expect(handed()).toMatchObject({
     builder: entry.requires?.agents?.builder,
     reviewer: entry.requires?.agents?.reviewer,
-    fixer: entry.requires?.agents?.fixer,
   });
 
   vi.clearAllMocks();
-  await run({ builder: "reviewer", reviewer: "fixer" });
+  await run({ builder: "reviewer", reviewer: "builder" });
   expect(handed()).toMatchObject({
     builder: entry.requires?.agents?.reviewer,
-    reviewer: entry.requires?.agents?.fixer,
+    reviewer: entry.requires?.agents?.builder,
   });
   expect(
     entry.inputs.safeParse({ ticket: "ABC-123", binding: "app", builder: "opus" }).success,
@@ -117,12 +116,11 @@ test("any other failure leaves the ticket alone", async () => {
   expect(statuses()).toEqual(["In Progress"]);
 });
 
-test("the workflow requires its three agents, Linear and GitHub", () => {
+test("the workflow requires its two agents, Linear and GitHub", () => {
   expect(entry.requires).toEqual({
     agents: {
       builder: harnesses.codex({ model: "gpt-5.6-sol" }),
       reviewer: harnesses.claude({ model: "opus" }),
-      fixer: expect.objectContaining({ kind: "pi", thinking: "high" }),
     },
     integrations: ["linear", "github"],
   });

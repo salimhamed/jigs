@@ -4,16 +4,15 @@
 
 import { readFileSync } from "node:fs";
 import {
-  type CheckRun,
   harnesses,
-  models,
+  type PullRequestRef,
+  type PullRequestSnapshot,
   type TicketClaim,
   type TicketSnapshot,
-  type Worktree,
 } from "@jigs-ai/jigs";
 import { expect, test } from "vitest";
 import { z } from "zod";
-import { noteOnTicket } from "#jigs/routines";
+import { agentSession, noteOnTicket } from "#jigs/routines";
 import { setTicketStatus } from "#jigs/steps";
 import {
   type Delivery,
@@ -27,28 +26,31 @@ import {
 declare const delivery: Delivery;
 declare const snapshot: TicketSnapshot;
 declare const claim: TicketClaim;
-declare const join: (parts: string[]) => string;
-declare const taskBrief: (task: WorkItem, worktree: Worktree) => string;
 
 // "The agents"
 function theAgents() {
   const agents = {
     builder: harnesses.codex({ model: "gpt-5.6-sol" }),
     reviewer: harnesses.claude({ model: "opus" }),
-    fixer: harnesses.pi(models.openaiCodex("gpt-5.5"), { thinking: "high" }),
     careful: harnesses.claude({ model: "opus", effort: "high" }),
   };
-  const agentName = z.enum(["builder", "reviewer", "fixer", "careful"]);
+  const agentName = z.enum(["builder", "reviewer", "careful"]);
   return agents[agentName.parse("careful")];
 }
 
 // "The three phases"
 async function theThreePhases() {
+  const builder = agentSession({
+    name: "builder",
+    harness: delivery.builder,
+    cwd: delivery.worktree.path,
+  });
+
   try {
-    const approved = await implementAndReview(delivery);
+    const approved = await implementAndReview(delivery, builder);
     const pr = await publish(delivery, approved);
     await setTicketStatus(snapshot.id, "In Review");
-    await followPullRequest(delivery, pr);
+    await followPullRequest(delivery, pr, builder);
     await setTicketStatus(snapshot.id, "Done");
     return { pr: pr.url };
   } catch (error) {
@@ -62,14 +64,13 @@ async function theThreePhases() {
 
 // "Edit the prompts"
 function editThePrompts() {
-  const ciRepair = {
-    job: "Investigate the failing checks, fix their cause, run relevant checks, and commit the fix. Do not push.",
-    resume: (failing: CheckRun[]) =>
-      join([`Failing checks:\n${JSON.stringify(failing)}`, ciRepair.job]),
-    fresh: (task: WorkItem, worktree: Worktree, diff: string, failing: CheckRun[]) =>
-      join([taskBrief(task, worktree), `Current diff:\n${diff}`, ciRepair.resume(failing)]),
+  const maintenance = {
+    resume: (pr: PullRequestRef, snapshot: PullRequestSnapshot) =>
+      `Attend ${pr.owner}/${pr.repo}#${pr.number}. Read these facts and decide whether anything needs attention:\n${JSON.stringify(snapshot)}`,
+    fresh: (task: WorkItem, pr: PullRequestRef, snapshot: PullRequestSnapshot) =>
+      `${task.instructions}\n\n${maintenance.resume(pr, snapshot)}`,
   };
-  return ciRepair;
+  return maintenance;
 }
 
 const flatten = (code: string) =>

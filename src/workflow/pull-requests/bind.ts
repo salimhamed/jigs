@@ -31,6 +31,8 @@ export interface PullRequestSteps {
   replyToPullRequestReviewThread: typeof replyToPullRequestReviewThread;
 }
 
+import { watchPullRequest } from "./watch.ts";
+
 type StepFields = keyof PullRequestSteps;
 
 /**
@@ -40,6 +42,7 @@ type StepFields = keyof PullRequestSteps;
  */
 export function bindPullRequestSteps(steps: PullRequestSteps) {
   return {
+    watchPullRequest: (pr: PullRequestRef) => watchPullRequest(pr, steps.fetchPullRequestState),
     pullRequestGate: (
       pr: PullRequestRef,
       options: PullRequestGateOptions,

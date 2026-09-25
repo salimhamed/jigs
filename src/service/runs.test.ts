@@ -409,7 +409,7 @@ test("a ticket claim is not a park, and every other hook explains itself", () =>
   expect(describeSuspension(pullRequestToken({ owner: "acme", repo: "api", number: 41 }))).toEqual({
     token: "github:pr:acme/api#41",
     kind: "pull-request",
-    reason: "waiting for an approving review and green CI on acme/api#41",
+    reason: "waiting for pull request activity on acme/api#41",
     url: "https://github.com/acme/api/pull/41",
   });
   // The ticket the run was launched with, never the issue UUID in the token:
@@ -434,7 +434,7 @@ test("a park jigs minted keeps its kind when the rest of the token is unreadable
   expect(describeSuspension("github:pr:garbage")).toEqual({
     token: "github:pr:garbage",
     kind: "pull-request",
-    reason: "waiting for an approving review and green CI on garbage",
+    reason: "waiting for pull request activity on garbage",
   });
   expect(describeSuspension("jigs:needs-human:onlyone")).toEqual({
     token: "jigs:needs-human:onlyone",
@@ -567,7 +567,7 @@ test("describeRun is the one thing status list and detail both read", async () =
     suspensions: [
       {
         token: PARK[0],
-        reason: "waiting for an approving review and green CI on acme/api#41",
+        reason: "waiting for pull request activity on acme/api#41",
       },
     ],
   });
@@ -665,9 +665,7 @@ test("a run names its ticket and keeps its parked pull request in WAITING", asyn
   });
   const row = (await listRuns(factory))[0];
   expect(row?.ticket).toBe("AGE-317");
-  expect(row?.suspensions[0]?.reason).toBe(
-    "waiting for an approving review and green CI on acme/api#41",
-  );
+  expect(row?.suspensions[0]?.reason).toBe("waiting for pull request activity on acme/api#41");
   expect(row?.suspensions[0]?.url).toBe("https://github.com/acme/api/pull/41");
   // The listing behind status and watch stays provider-free; only the single-run
   // route calls enrichSuspensions.

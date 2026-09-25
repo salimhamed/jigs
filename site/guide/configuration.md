@@ -151,6 +151,13 @@ merge: {
 
 A binding may override `by` and `method`, but not `approval`.
 
+`resolveMergePolicy(binding)` reads these settings for factory code. The
+linear-ticket-to-pr recipe checks `by` before calling `mergePullRequest`, which
+rereads GitHub and enforces readiness and approval. `watchPullRequest` only
+reports facts: it neither consumes a merge policy nor performs a merge. Custom
+workflows must apply `by` themselves. These settings do not restrict an agent
+that merges independently through its own GitHub tools.
+
 jigs merges only when the approval signal is present, GitHub reports the pull
 request mergeable, it is not a draft, and at least one check has run and
 passed. **jigs never merges in a repository with no CI**, so set

@@ -4,24 +4,17 @@
 // throws DeliveryStopped; the workflow decides what to tell whom.
 
 import {
-  defaultPullRequestScope,
   type Harness,
+  isPullRequestMergeReady,
   JigsError,
   type PullRequestRef,
-  renderChecks,
-  type ThreadAnswers,
   type TicketNote,
   type Worktree,
 } from "@jigs-ai/jigs";
 import { z } from "zod";
+import { agentSession, runAgent, watchPullRequest } from "#jigs/routines";
 import {
-  agentSession,
-  postPullRequestNote,
-  postReviewAnswers,
-  pullRequestGate,
-  runAgent,
-} from "#jigs/routines";
-import {
+  fetchPullRequestState,
   mergePullRequest,
   openPullRequest,
   pushApprovedChange,
@@ -55,8 +48,8 @@ export interface WorkItem {
 export interface Budget {
   /** One round is one build plus one review of what it committed. */
   reviewRounds: number;
-  ciFixes: number;
-  revisionRounds: number;
+  /** Every invocation after publication counts, including a decision to wait. */
+  prTurns: number;
 }
 
 export interface Delivery {
@@ -65,8 +58,6 @@ export interface Delivery {
   binding: string;
   builder: Harness;
   reviewer: Harness;
-  /** Repairs CI and answers review threads after publication. */
-  fixer: Harness;
   budget: Budget;
 }
 
@@ -76,7 +67,7 @@ export interface Approved {
   ledger: ReviewRound[];
 }
 
-/** Thrown when a delivery stops short. The branch is already pushed. */
+/** Thrown when a delivery stops short; local work remains available. */
 export class DeliveryStopped extends JigsError {
   readonly findings: string[];
   readonly worktree: Worktree;
@@ -94,7 +85,7 @@ export class DeliveryStopped extends JigsError {
       headline: this.message,
       notes: [
         ...this.findings,
-        `The work is on branch \`${this.worktree.branch}\`, pushed, in the worktree at \`${this.worktree.path}\`.`,
+        `The work is on branch \`${this.worktree.branch}\`, in the worktree at \`${this.worktree.path}\`.`,
       ],
       closing:
         "Nothing is waiting on a reply here. Start another run to continue, or take the branch over by hand.",
@@ -102,21 +93,21 @@ export class DeliveryStopped extends JigsError {
   }
 }
 
-// threadId null answers the pull request conversation: a review body has no
-// thread root to reply into.
-const threadAnswers = z.strictObject({
-  answers: z.array(
-    z.strictObject({ threadId: z.number().int().nullable(), body: z.string().min(1) }),
-  ),
-  commitExplanation: z.string().min(1).nullable(),
-}) satisfies z.ZodType<ThreadAnswers>;
+export const maintenanceReport = z.strictObject({
+  status: z.enum(["finished", "pending", "needs-human"]),
+  summary: z.string().min(1),
+});
+
+type BuilderSession = ReturnType<typeof agentSession>;
 
 // ---- phase 1: build and review until approved ------------------------------
 
-export async function implementAndReview(delivery: Delivery): Promise<Approved> {
+export async function implementAndReview(
+  delivery: Delivery,
+  builderSession: BuilderSession,
+): Promise<Approved> {
   const { task, worktree, budget } = delivery;
   const cwd = worktree.path;
-  const builderSession = agentSession({ name: "builder", harness: delivery.builder, cwd });
   const reviewerSession = agentSession({ name: "reviewer", harness: delivery.reviewer, cwd });
   const diff = () => readWorktreeDiff(cwd, worktree.baseSha);
   const ledger: ReviewRound[] = [];
@@ -210,18 +201,18 @@ export async function publish(
 
 // ---- phase 3: follow the pull request until it merges -------------------------
 
-export async function followPullRequest(delivery: Delivery, pr: PullRequestRef): Promise<void> {
+export async function followPullRequest(
+  delivery: Delivery,
+  pr: PullRequestRef,
+  builder: BuilderSession,
+): Promise<void> {
   const { task, worktree, budget } = delivery;
-  const cwd = worktree.path;
   const merge = await resolveMergePolicy(delivery.binding);
-  const scope = defaultPullRequestScope(task.key);
-  const fixerSession = agentSession({ name: "fixer", harness: delivery.fixer, cwd });
-  const diff = () => readWorktreeDiff(cwd, worktree.baseSha);
-  const spent = { ciFixes: 0, revisionRounds: 0 };
+  let turns = 0;
 
-  for await (const wake of pullRequestGate(pr, { scope, approval: merge.approval, worktree })) {
-    if (wake.kind === "closed") {
-      if (wake.merged) return;
+  for await (const snapshot of watchPullRequest(pr)) {
+    if (snapshot.state === "closed") {
+      if (snapshot.merged) return;
       return stop(
         delivery,
         `Pull request ${pr.owner}/${pr.repo}#${pr.number} was closed unmerged.`,
@@ -229,99 +220,94 @@ export async function followPullRequest(delivery: Delivery, pr: PullRequestRef):
       );
     }
 
-    if (wake.kind === "merge-ready") {
-      if (merge.by === "human") continue;
-      // A thrown merge is unclassified: it may pass on a later wake.
-      const result = await mergePullRequest(pr, wake.headSha, merge).catch((error: unknown) => ({
-        merged: false as const,
-        reason: String(error),
-        transient: true,
-      }));
-      if (result.merged) return;
-      // A "merge" note stands this commit down; "merge-retry" keeps it merge-ready.
-      await postPullRequestNote({
-        pr,
-        scope,
-        reason: result.transient ? "merge-retry" : "merge",
-        headSha: wake.headSha,
-        body: result.transient
-          ? `I could not merge this pull request yet: ${result.reason}. I will try again when GitHub reports a change.`
-          : `I could not merge this pull request: ${result.reason}. It needs a new commit or a change to the repository.`,
-      });
-      continue;
-    }
-
-    if (wake.kind === "ci-red") {
-      if (spent.ciFixes === budget.ciFixes) {
-        return stop(
-          delivery,
-          `jigs stopped work on ${task.key} after ${budget.ciFixes} CI repair attempt(s).`,
-          wake.failing.map((check) => `${check.name}: ${check.conclusion}`),
-        );
-      }
-      spent.ciFixes += 1;
-      await fixerSession.run({
-        resume: prompts.ciRepair.resume(wake.failing),
-        fresh: async () => prompts.ciRepair.fresh(task, worktree, await diff(), wake.failing),
-      });
-      const state = await readBranchState(cwd, worktree.baseSha);
-      if (state.headSha === wake.headSha || state.dirty) {
-        // Marks this red head as given up on, so a later run does not spend its budget on it.
-        await postPullRequestNote({
-          pr,
-          scope,
-          reason: "ci",
-          headSha: wake.headSha,
-          body: `I could not repair the failing checks on ${wake.headSha}.\n\n${renderChecks(wake.failing)}`,
-        });
-        return stop(
-          delivery,
-          `jigs stopped work on ${task.key}: the CI repair produced no new clean commit.`,
-          [],
-        );
-      }
-      await pushBranch(cwd, worktree.branch);
-      continue;
-    }
-
-    // wake.kind === "review-comments"
-    if (spent.revisionRounds === budget.revisionRounds) {
+    if (turns >= budget.prTurns) {
       return stop(
         delivery,
-        `jigs stopped work on ${task.key} after ${budget.revisionRounds} review revision round(s).`,
-        [wake.body ?? "Address the pull request review threads."],
+        `jigs stopped work on ${task.key} after ${budget.prTurns} pull request agent turn(s).`,
+        [`Unfinished pull request: https://github.com/${pr.owner}/${pr.repo}/pull/${pr.number}`],
       );
     }
-    spent.revisionRounds += 1;
-    const before = await readBranchState(cwd, worktree.baseSha);
-    const answers = await fixerSession.run({
-      output: threadAnswers,
-      resume: prompts.revision.resume(wake.threads, wake.body),
+    turns += 1;
+    const report = await builder.run({
+      output: maintenanceReport,
+      resume: prompts.maintenance.resume(pr, snapshot),
       fresh: async () =>
-        prompts.revision.fresh(task, worktree, await diff(), wake.threads, wake.body),
+        prompts.maintenance.fresh(
+          task,
+          worktree,
+          await readWorktreeDiff(worktree.path, worktree.baseSha),
+          pr,
+          snapshot,
+        ),
     });
-    const after = await readBranchState(cwd, worktree.baseSha);
-    if (after.dirty) {
+    const local = await readBranchState(worktree.path, worktree.baseSha);
+    if (local.dirty) {
       return stop(
         delivery,
-        `jigs stopped work on ${task.key}: the review revision left uncommitted changes.`,
-        [],
+        `jigs stopped work on ${task.key}: pull request maintenance left uncommitted changes.`,
+        [report.summary],
       );
     }
-    await pushBranch(cwd, worktree.branch);
-    // Only a round that pushed a commit gets an explanation comment naming it.
-    const committedSha = after.headSha === before.headSha ? undefined : after.headSha;
-    await postReviewAnswers({ pr, scope, answers, committedSha, threads: wake.threads });
+    if (report.status === "needs-human") {
+      return stop(
+        delivery,
+        `jigs stopped work on ${task.key}: pull request maintenance needs human attention.`,
+        [report.summary],
+      );
+    }
+
+    // The agent handles conversation meaning. GitHub approval and checks still
+    // govern merging, and a changed head needs a new snapshot and assessment.
+    if (
+      report.status !== "finished" ||
+      merge.by === "human" ||
+      local.headSha !== snapshot.headSha ||
+      !isPullRequestMergeReady(snapshot, merge.approval)
+    )
+      continue;
+
+    // The agent may have posted, or a person may have added feedback during
+    // its turn. Let the watcher deliver those facts before considering a merge.
+    const current = await fetchPullRequestState(pr);
+    if (facts(current) !== facts(snapshot)) continue;
+
+    const result = await mergePullRequest(pr, snapshot.headSha, merge).catch((error: unknown) => ({
+      merged: false as const,
+      reason: String(error),
+      transient: true,
+    }));
+    if (result.merged) return;
+    return stop(delivery, `jigs could not merge the pull request for ${task.key}.`, [
+      result.reason,
+    ]);
   }
 
   throw new JigsError(
-    `the pull request gate for ${pr.owner}/${pr.repo}#${pr.number} ended without a close`,
+    `the pull request watch for ${pr.owner}/${pr.repo}#${pr.number} ended without a close`,
   );
+}
+
+// GitHub collections can arrive in a different order without new activity.
+function facts(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(facts).sort().join(",")}]`;
+  if (typeof value === "object" && value !== null) {
+    return `{${Object.entries(value)
+      .filter(([, field]) => field !== undefined)
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .map(([key, field]) => `${JSON.stringify(key)}:${facts(field)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
 }
 
 // A delivery that stops short pushes first, so the commits outlive the
 // worktree, then throws with what is still open.
 async function stop(delivery: Delivery, reason: string, findings: string[]): Promise<never> {
-  await pushBranch(delivery.worktree.path, delivery.worktree.branch);
-  throw new DeliveryStopped(reason, findings, delivery.worktree);
+  const retained = [...findings];
+  await pushBranch(delivery.worktree.path, delivery.worktree.branch).catch((error: unknown) => {
+    retained.push(
+      `Could not push the branch: ${String(error)}. Recover the work from ${delivery.worktree.path}.`,
+    );
+  });
+  throw new DeliveryStopped(reason, retained, delivery.worktree);
 }
