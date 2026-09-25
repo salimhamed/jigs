@@ -147,7 +147,7 @@ export function describeSuspension(token: string, ticket?: string | null): RunSu
     return {
       token,
       kind: "pull-request",
-      reason: `waiting for an approving review and green CI on ${pr.slug}`,
+      reason: `waiting for pull request activity on ${pr.slug}`,
       url: pr.url,
     };
   }

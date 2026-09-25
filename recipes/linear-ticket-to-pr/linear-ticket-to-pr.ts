@@ -1,13 +1,12 @@
 import {
   defineWorkflow,
   harnesses,
-  models,
   renderTicketSnapshot,
   type TicketHandoff,
   type WorkflowInputs,
 } from "@jigs-ai/jigs";
 import { z } from "zod";
-import { acquireTicket, noteOnTicket, reviewTicket } from "#jigs/routines";
+import { acquireTicket, agentSession, noteOnTicket, reviewTicket } from "#jigs/routines";
 import { provisionWorktree, setTicketStatus } from "#jigs/steps";
 import {
   DeliveryStopped,
@@ -22,9 +21,8 @@ import {
 const agents = {
   builder: harnesses.codex({ model: "gpt-5.6-sol" }),
   reviewer: harnesses.claude({ model: "opus" }),
-  fixer: harnesses.pi(models.openaiCodex("gpt-5.5"), { thinking: "high" }),
 };
-const agentName = z.enum(["builder", "reviewer", "fixer"]);
+const agentName = z.enum(["builder", "reviewer"]);
 
 const inputs = z.object({
   ticket: z.string().min(1),
@@ -35,8 +33,7 @@ const inputs = z.object({
   budget: z
     .object({
       reviewRounds: z.number().int().positive().default(3),
-      ciFixes: z.number().int().nonnegative().default(3),
-      revisionRounds: z.number().int().nonnegative().default(3),
+      attemptsPerUpdate: z.number().int().positive().default(3),
     })
     .prefault({}),
 });
@@ -62,15 +59,16 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
     binding: input.binding,
     builder: agents[input.builder],
     reviewer: agents[input.reviewer],
-    fixer: agents.fixer,
     budget: input.budget,
   };
 
+  const builder = agentSession({ name: "builder", harness: delivery.builder, cwd: worktree.path });
+
   try {
-    const approved = await implementAndReview(delivery);
+    const approved = await implementAndReview(delivery, builder);
     const pr = await publish(delivery, approved);
     await setTicketStatus(snapshot.id, "In Review");
-    await followPullRequest(delivery, pr);
+    await followPullRequest(delivery, pr, builder);
     await setTicketStatus(snapshot.id, "Done");
     return { pr: pr.url };
   } catch (error) {

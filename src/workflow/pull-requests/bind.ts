@@ -17,6 +17,7 @@ import {
   pullRequestGate,
   type ReadLocalHead,
 } from "./gate.ts";
+import { watchPullRequest } from "./watch.ts";
 
 /**
  * The factory's `"use step"` wrappers the pull request routines run.
@@ -40,6 +41,7 @@ type StepFields = keyof PullRequestSteps;
  */
 export function bindPullRequestSteps(steps: PullRequestSteps) {
   return {
+    watchPullRequest: (pr: PullRequestRef) => watchPullRequest(pr, steps.fetchPullRequestState),
     pullRequestGate: (
       pr: PullRequestRef,
       options: PullRequestGateOptions,

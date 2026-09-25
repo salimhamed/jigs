@@ -79,6 +79,9 @@ const pullRequests = bindPullRequestSteps({
   replyToPullRequestReviewThread,
 });
 
+/** Read current pull request facts, then yield changed snapshots until it closes. */
+export const watchPullRequest = pullRequests.watchPullRequest;
+
 /** Wake on a pull request's reviews, CI and merge readiness until it closes. */
 export const pullRequestGate = pullRequests.pullRequestGate;
 

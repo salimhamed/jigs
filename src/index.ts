@@ -9,7 +9,6 @@
  * @packageDocumentation
  */
 
-export type { CheckRun, ReviewThread } from "./providers/github.ts";
 export { JitCheckError, unwrapAgentStep } from "./workflow/agents/agent.ts";
 export {
   type AskableHarness,
@@ -141,12 +140,22 @@ export {
   parseMarkers,
   type StatusReason,
 } from "./workflow/pull-requests/marker.ts";
+export { isPullRequestMergeReady } from "./workflow/pull-requests/merge-ready.ts";
 export {
   type ApprovalSignal,
   approvalSignalSchema,
   type MergePolicy,
   mergePolicySchema,
 } from "./workflow/pull-requests/policy.ts";
+export {
+  type CheckRun,
+  type PullRequestComment,
+  type PullRequestReview,
+  type PullRequestSnapshot,
+  pullRequestSnapshotKey,
+  type ReviewComment,
+  type ReviewThread,
+} from "./workflow/pull-requests/snapshot.ts";
 export { defaultPullRequestScope } from "./workflow/pull-requests/writer.ts";
 
 export type { ReleasePolicy, ReleaseReport } from "./workflow/runtime/release.ts";
