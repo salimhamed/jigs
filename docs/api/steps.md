@@ -1,9 +1,11 @@
-# @jigs-ai/jigs v0.63.0
+# @jigs-ai/jigs v0.64.0
 
 Build a factory's own agent step. `createAgentRunner` opens a harness the way the built-in
 agent step does and hands back the live provider model.
 
-Call these inside a factory-owned `"use step"` function, never from a workflow.
+Call these inside a factory-owned `"use step"` function, never from a workflow. `Driver`,
+`DriverContext`, `AgentRunner` and the types they reach are a published contract: a change to
+any of them is a breaking release.
 
 ## Classes
 
@@ -93,9 +95,400 @@ A session reference from an earlier call to resume.
 
 ##### run
 
-> **run**: `RunMetadata`
+> **run**: [`RunMetadata`](#runmetadata)
 
 The run the step belongs to: `getWorkflowMetadata()` inside the step.
+
+***
+
+### Check
+
+One requirement check with a stable id and a label for reports.
+
+#### Properties
+
+##### id
+
+> **id**: `string`
+
+##### label
+
+> **label**: `string`
+
+#### Methods
+
+##### run()
+
+> **run**(): `Promise`\<[`CheckResult`](#checkresult)\>
+
+###### Returns
+
+`Promise`\<[`CheckResult`](#checkresult)\>
+
+***
+
+### Driver
+
+How jigs runs one harness or model-source kind: its checks, the environment
+it may see, and how it asks, runs or opens a provider model. Each kind a
+descriptor can name has exactly one driver inside jigs; a factory cannot
+register another.
+
+#### Remarks
+
+A factory reads this to know what `createAgentRunner` does before it
+hands back a model. The shape is a published contract: changing it is a
+breaking release.
+
+#### Type Parameters
+
+##### K
+
+`K` *extends* `HarnessKind` \| `ModelKind`
+
+#### Properties
+
+##### displayName
+
+> **displayName**: `string`
+
+##### family
+
+> **family**: `K` *extends* `"claude"` \| `"codex"` \| `"pi"` ? `"harness"` : `"model"`
+
+##### kind
+
+> **kind**: `K`
+
+##### minimumVersion?
+
+> `optional` **minimumVersion**: `string`
+
+##### sessionPointer?
+
+> `optional` **sessionPointer**: `object`
+
+###### field
+
+> **field**: `string`
+
+###### providerKey
+
+> **providerKey**: `string`
+
+##### setsEnv
+
+> **setsEnv**: readonly `string`[]
+
+Names the driver sets in the harness environment itself, such as a private home.
+
+#### Methods
+
+##### ask()?
+
+> `optional` **ask**(`request`, `context`): `Promise`\<[`ExecutorGeneration`](#executorgeneration)\>
+
+###### Parameters
+
+###### request
+
+`AgentRequest` | `ModelRequest`
+
+###### context
+
+[`DriverContext`](#drivercontext)
+
+###### Returns
+
+`Promise`\<[`ExecutorGeneration`](#executorgeneration)\>
+
+##### decide()?
+
+> `optional` **decide**\<`QUESTIONS`\>(`request`, `context`): `Promise`\<[`DecisionGeneration`](#decisiongeneration)\<`QUESTIONS`\>\>
+
+###### Type Parameters
+
+###### QUESTIONS
+
+`QUESTIONS` *extends* `JevQuestions`
+
+###### Parameters
+
+###### request
+
+`AskJevOptions`\<`QUESTIONS`\>
+
+###### context
+
+[`DriverContext`](#drivercontext)
+
+###### Returns
+
+`Promise`\<[`DecisionGeneration`](#decisiongeneration)\<`QUESTIONS`\>\>
+
+##### descriptorChecks()?
+
+> `optional` **descriptorChecks**(`source`): [`Check`](#check)[]
+
+###### Parameters
+
+###### source
+
+`Extract`\<`OpenrouterSource`, \{ `kind`: `K`; \}\> | `Extract`\<`OpenaiCompatibleSource`, \{ `kind`: `K`; \}\> | `Extract`\<`OpenaiCodexSource`, \{ `kind`: `K`; \}\>
+
+###### Returns
+
+[`Check`](#check)[]
+
+##### envAllowlist()
+
+> **envAllowlist**(`request`): readonly `string`[]
+
+###### Parameters
+
+###### request
+
+[`DriverRequest`](#driverrequest)
+
+###### Returns
+
+readonly `string`[]
+
+##### installationChecks()
+
+> **installationChecks**(): [`Check`](#check)[]
+
+###### Returns
+
+[`Check`](#check)[]
+
+##### jitChecks()?
+
+> `optional` **jitChecks**(`target`): [`Check`](#check)[]
+
+###### Parameters
+
+###### target
+
+[`HarnessTarget`](#harnesstarget)
+
+###### Returns
+
+[`Check`](#check)[]
+
+##### open()?
+
+> `optional` **open**(`target`, `context`): `Promise`\<[`OpenedModel`](#openedmodel)\>
+
+Build the live provider model for a run. Drivers without a provider model implement `run`.
+
+###### Parameters
+
+###### target
+
+[`HarnessTarget`](#harnesstarget)
+
+###### context
+
+[`OpenContext`](#opencontext)
+
+###### Returns
+
+`Promise`\<[`OpenedModel`](#openedmodel)\>
+
+##### requestChecks()
+
+> **requestChecks**(`request`): [`Check`](#check)[]
+
+###### Parameters
+
+###### request
+
+[`DriverRequest`](#driverrequest)
+
+###### Returns
+
+[`Check`](#check)[]
+
+##### resolveExecutable()?
+
+> `optional` **resolveExecutable**(`env`): `string`
+
+###### Parameters
+
+###### env
+
+`ProcessEnv`
+
+###### Returns
+
+`string`
+
+##### run()?
+
+> `optional` **run**(`request`, `context`): `Promise`\<[`ExecutorGeneration`](#executorgeneration)\>
+
+###### Parameters
+
+###### request
+
+`Omit`\<`RunAgentOptions`\<`undefined`\>, `"output"`\> & `object`
+
+###### context
+
+[`DriverContext`](#drivercontext)
+
+###### Returns
+
+`Promise`\<[`ExecutorGeneration`](#executorgeneration)\>
+
+***
+
+### DriverContext
+
+What a driver receives for one call: the run it belongs to, the harness
+environment jigs built for it, and, for a structured call, the output spec a
+provider model consumes. `deps` is jigs' own wiring, not part of the contract.
+
+#### Properties
+
+##### env
+
+> **env**: `Record`\<`string`, `string`\>
+
+##### metadata
+
+> **metadata**: [`RunMetadata`](#runmetadata)
+
+##### output?
+
+> `optional` **output**: `Output`\<`unknown`, `unknown`, `never`\>
+
+***
+
+### OpenContext
+
+What a driver's `open` receives: the run and the harness environment jigs built.
+
+#### Properties
+
+##### env
+
+> **env**: `Record`\<`string`, `string`\>
+
+##### metadata
+
+> **metadata**: [`RunMetadata`](#runmetadata)
+
+***
+
+### OpenedModel
+
+A live provider model and what closing it releases.
+
+#### Properties
+
+##### model
+
+> **model**: `LanguageModel`
+
+#### Methods
+
+##### close()
+
+> **close**(): `Promise`\<`void`\>
+
+###### Returns
+
+`Promise`\<`void`\>
+
+## Type Aliases
+
+### CheckResult
+
+> **CheckResult** = \{ `detail?`: `string`; `ok`: `true`; \} \| \{ `ok`: `false`; `reason`: `string`; `repair`: `string`; \}
+
+A check's outcome: a pass with an optional `detail`, or a failure with its repair.
+
+***
+
+### DecisionGeneration
+
+> **DecisionGeneration**\<`QUESTIONS`\> = `object`
+
+What a driver's `decide` returns: one answer per question.
+
+#### Type Parameters
+
+##### QUESTIONS
+
+`QUESTIONS` *extends* `JevQuestions` = `JevQuestions`
+
+#### Properties
+
+##### answers
+
+> **answers**: `JevAnswers`\<`QUESTIONS`\>
+
+***
+
+### DriverRequest
+
+> **DriverRequest** = `AgentRequest` \| `ModelRequest` \| `AskJevOptions`\<`JevQuestions`\> \| [`HarnessTarget`](#harnesstarget)
+
+Any request a driver's checks and environment allowlist are asked about.
+
+***
+
+### ExecutorGeneration
+
+> **ExecutorGeneration** = `ModelGeneration` & `object`
+
+What a driver's call returns: the reply text, provider metadata and any structured output.
+
+#### Type Declaration
+
+##### output?
+
+> `optional` **output**: `unknown`
+
+***
+
+### HarnessTarget
+
+> **HarnessTarget** = `object`
+
+A harness to open in a worktree, resuming a session when one is given.
+
+#### Properties
+
+##### cwd
+
+> **cwd**: `string`
+
+##### harness
+
+> **harness**: `Harness`
+
+##### resume?
+
+> `optional` **resume**: `AgentSessionRef`
+
+***
+
+### RunMetadata
+
+> **RunMetadata** = `Pick`\<`WorkflowMetadata`, `"workflowRunId"`\>
+
+The run a step belongs to: `getWorkflowMetadata()` inside the step.
+
+***
+
+### RunRequest
+
+> **RunRequest** = `Extract`\<`AgentRequest`, \{ `cwd`: `string`; \}\>
+
+An agent request that runs in a worktree.
 
 ## Functions
 
