@@ -26,7 +26,11 @@ import {
   renderTicketNote,
 } from "./render-comment.ts";
 
-/** Post a question or failure on the ticket so a person can help the run continue. */
+/**
+ * Post a question or failure on the ticket so a person can help the run continue.
+ *
+ * @group Human interaction primitives
+ */
 export const postTicketHumanInputRequest = async (
   issueId: string,
   halt: Halt,
@@ -44,7 +48,11 @@ export const postTicketHumanInputRequest = async (
   return { commentId: comment.id, postedAt: comment.createdAt };
 };
 
-/** Tell ticket participants something the run decided, without waiting for a reply. */
+/**
+ * Tell ticket participants something the run decided, without waiting for a reply.
+ *
+ * @group Human interaction primitives
+ */
 export const postTicketNote = async (
   issueId: string,
   note: TicketNote,
@@ -56,7 +64,11 @@ export const postTicketNote = async (
   return { commentId: comment.id };
 };
 
-/** Look for a reply since the last check, excluding every comment the run posted. */
+/**
+ * Look for a reply since the last check, excluding every comment the run posted.
+ *
+ * @group Human interaction primitives
+ */
 export const checkForTicketHumanReply: CheckForTicketHumanReply = async (
   issueId,
   sinceIso,

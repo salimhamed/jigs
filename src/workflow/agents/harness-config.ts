@@ -4,32 +4,56 @@ import type { ClaudeCodeSettings } from "ai-sdk-provider-claude-code";
 import type { CodexAppServerSettings } from "ai-sdk-provider-codex-cli";
 import { JigsError } from "../errors.ts";
 
-/** A harmless MCP tool call used to prove that a configured server is available. */
+/**
+ * A harmless MCP tool call used to prove that a configured server is available.
+ *
+ * @group Harnesses and models
+ */
 export type McpToolProbe = { tool: string; arguments?: Record<string, unknown> };
-/** Configuration for an MCP server launched as a child process. */
+/**
+ * Configuration for an MCP server launched as a child process.
+ *
+ * @group Harnesses and models
+ */
 export type McpStdioServerConfig = {
   command: string;
   args?: string[];
   env?: Record<string, string>;
   probe: McpToolProbe;
 };
-/** Configuration for an MCP server reached over HTTP. */
+/**
+ * Configuration for an MCP server reached over HTTP.
+ *
+ * @group Harnesses and models
+ */
 export type McpHttpServerConfig = {
   url: string;
   headers?: Record<string, string>;
   probe: McpToolProbe;
 };
-/** An MCP server an agent harness can expose to the model. */
+/**
+ * An MCP server an agent harness can expose to the model.
+ *
+ * @group Harnesses and models
+ */
 export type McpServerConfig = McpStdioServerConfig | McpHttpServerConfig;
 
-/** A stdio MCP server Pi exposes through an explicit direct-tool allowlist. */
+/**
+ * A stdio MCP server Pi exposes through an explicit direct-tool allowlist.
+ *
+ * @group Harnesses and models
+ */
 export type PiMcpStdioServerConfig = Omit<McpStdioServerConfig, "env"> & {
   /** Maps child variable names to step-side source environment variable names. */
   env?: Record<string, string>;
   /** Raw MCP tool names the model may call. This must include the probe tool. */
   tools: string[];
 };
-/** An HTTP MCP server Pi exposes through an explicit direct-tool allowlist. */
+/**
+ * An HTTP MCP server Pi exposes through an explicit direct-tool allowlist.
+ *
+ * @group Harnesses and models
+ */
 export type PiMcpHttpServerConfig = Omit<McpHttpServerConfig, "headers"> & {
   /** Maps HTTP header names to step-side source environment variable names. */
   headers?: Record<string, string>;
@@ -52,7 +76,11 @@ export type PiMcpHttpServerConfig = Omit<McpHttpServerConfig, "headers"> & {
         bearerTokenEnv: string;
       }
   );
-/** An explicitly configured MCP server accepted by the Pi harness. */
+/**
+ * An explicitly configured MCP server accepted by the Pi harness.
+ *
+ * @group Harnesses and models
+ */
 export type PiMcpServerConfig = PiMcpStdioServerConfig | PiMcpHttpServerConfig;
 
 // A value that can be written down: nothing callable anywhere inside it. Keys
@@ -74,7 +102,11 @@ type IsData<T, Depth extends unknown[] = []> = unknown extends T
             : true
           : true;
 
-/** The keys of a settings type whose values are data, so they can cross into a step. */
+/**
+ * The keys of a settings type whose values are data, so they can cross into a step.
+ *
+ * @group Harnesses and models
+ */
 export type JsonOnly<T> = {
   [K in keyof T as false extends IsData<Exclude<T[K], undefined>> ? never : K]: T[K];
 };
@@ -115,6 +147,8 @@ export const claudePolicyKeys = [
  * rewrite any of those. `agents`, `settings` and `plugins` would bring in unprobed MCP servers,
  * environment, permissions and hooks from outside the worktree; they come from the repository's
  * project settings instead.
+ *
+ * @group Harnesses and models
  */
 export type ClaudePolicyKey = (typeof claudePolicyKeys)[number];
 
@@ -138,12 +172,16 @@ export const codexPolicyKeys = [
  * jigs sets the working directory, environment, executable, thread and session for every step,
  * and holds the approval and sandbox policies and MCP servers. `configOverrides` would rewrite
  * the sandbox and MCP tables.
+ *
+ * @group Harnesses and models
  */
 export type CodexPolicyKey = (typeof codexPolicyKeys)[number];
 
 /**
  * A Claude Code harness descriptor: the provider's own settings that are data, minus each
  * {@link ClaudePolicyKey}, plus the model and jigs' MCP server shape.
+ *
+ * @group Harnesses and models
  */
 export type ClaudeHarness = JsonOnly<Omit<ClaudeCodeSettings, ClaudePolicyKey>> & {
   kind: "claude";
@@ -153,6 +191,8 @@ export type ClaudeHarness = JsonOnly<Omit<ClaudeCodeSettings, ClaudePolicyKey>> 
 /**
  * A Codex harness descriptor: the provider's own settings that are data, minus each
  * {@link CodexPolicyKey}, plus the model and jigs' MCP server shape.
+ *
+ * @group Harnesses and models
  */
 export type CodexHarness = JsonOnly<Omit<CodexAppServerSettings, CodexPolicyKey>> & {
   kind: "codex";
@@ -166,14 +206,26 @@ type SharedPiHarness = {
   mcpServers?: Record<string, PiMcpServerConfig>;
 };
 
-/** An OpenRouter API model source. */
+/**
+ * An OpenRouter API model source.
+ *
+ * @group Harnesses and models
+ */
 export type OpenrouterSource = { kind: "openrouter"; model: string; apiKeyEnv: string };
-/** Pi-specific compatibility hints for an OpenAI-compatible model. */
+/**
+ * Pi-specific compatibility hints for an OpenAI-compatible model.
+ *
+ * @group Harnesses and models
+ */
 export type PiOpenaiCompatibleOptions = {
   supportsDeveloperRole: boolean;
   supportsReasoningEffort: boolean;
 };
-/** An OpenAI-compatible API model source. */
+/**
+ * An OpenAI-compatible API model source.
+ *
+ * @group Harnesses and models
+ */
 export type OpenaiCompatibleSource = {
   kind: "openai-compatible";
   name: string;
@@ -181,40 +233,86 @@ export type OpenaiCompatibleSource = {
   model: string;
   apiKeyEnv?: string;
 };
-/** The Codex subscription model source used only by the Pi harness. */
+/**
+ * The Codex subscription model source used only by the Pi harness.
+ *
+ * @group Harnesses and models
+ */
 export type OpenaiCodexSource = { kind: "openai-codex"; model: string };
-/** Any configured source from which a model can answer. */
+/**
+ * Any configured source from which a model can answer.
+ *
+ * @group Harnesses and models
+ */
 export type ModelSource = OpenrouterSource | OpenaiCompatibleSource | OpenaiCodexSource;
-/** A model source accepted by a direct model call. */
+/**
+ * A model source accepted by a direct model call.
+ *
+ * @group Harnesses and models
+ */
 export type AskableModelSource = Exclude<ModelSource, OpenaiCodexSource>;
-/** The stable name of a model source. */
+/**
+ * The stable name of a model source.
+ *
+ * @group Harnesses and models
+ */
 export type ModelKind = ModelSource["kind"];
 
-/** A Pi harness descriptor backed by an OpenAI-compatible source, with its compatibility hints. */
+/**
+ * A Pi harness descriptor backed by an OpenAI-compatible source, with its compatibility hints.
+ *
+ * @group Harnesses and models
+ */
 export type PiOpenaiCompatibleHarness = SharedPiHarness & {
   model: OpenaiCompatibleSource;
   compat: PiOpenaiCompatibleOptions;
 };
-/** A Pi harness descriptor backed by any source other than an OpenAI-compatible one. */
+/**
+ * A Pi harness descriptor backed by any source other than an OpenAI-compatible one.
+ *
+ * @group Harnesses and models
+ */
 export type PiOtherHarness = SharedPiHarness & {
   model: Exclude<ModelSource, OpenaiCompatibleSource>;
   compat?: never;
 };
-/** A Pi harness descriptor backed by a nested model source. */
+/**
+ * A Pi harness descriptor backed by a nested model source.
+ *
+ * @group Harnesses and models
+ */
 export type PiHarness = PiOpenaiCompatibleHarness | PiOtherHarness;
-/** A serializable agent-program descriptor. */
+/**
+ * A serializable agent-program descriptor.
+ *
+ * @group Harnesses and models
+ */
 export type Harness = ClaudeHarness | CodexHarness | PiHarness;
-/** Marks a descriptor that names no tools or MCP servers. */
+/**
+ * Marks a descriptor that names no tools or MCP servers.
+ *
+ * @group Harnesses and models
+ */
 export type ToolFree = { tools?: never; mcpServers?: never };
 /**
  * A harness `askAgent` can run with no tools: Claude Code or Pi, without MCP
  * servers or a Pi tool allowlist. Codex has no mode without tools.
+ *
+ * @group Harnesses and models
  */
 export type AskableHarness = (ClaudeHarness & ToolFree) | (PiHarness & ToolFree);
-/** The stable name of an agent harness. */
+/**
+ * The stable name of an agent harness.
+ *
+ * @group Harnesses and models
+ */
 export type HarnessKind = Harness["kind"];
 
-/** Constructors for model-source descriptors. */
+/**
+ * Constructors for model-source descriptors.
+ *
+ * @group Harnesses and models
+ */
 export const models = {
   /**
    * Build an OpenRouter source. Its key is read from `OPENROUTER_API_KEY`
@@ -244,13 +342,23 @@ export const models = {
 /**
  * Options for `harnesses.pi`. `compat` applies only to an OpenAI-compatible
  * model source.
+ *
+ * @group Harnesses and models
  */
 export type PiHarnessOptions = Pick<PiHarness, "thinking" | "tools" | "mcpServers"> & {
   compat?: Partial<PiOpenaiCompatibleOptions>;
 };
-/** The one argument `harnesses.claude` takes: the model and any Claude Code settings. */
+/**
+ * The one argument `harnesses.claude` takes: the model and any Claude Code settings.
+ *
+ * @group Harnesses and models
+ */
 export type ClaudeHarnessSettings = Omit<ClaudeHarness, "kind">;
-/** The one argument `harnesses.codex` takes: the model and any Codex settings. */
+/**
+ * The one argument `harnesses.codex` takes: the model and any Codex settings.
+ *
+ * @group Harnesses and models
+ */
 export type CodexHarnessSettings = Omit<CodexHarness, "kind">;
 // Rejects a key the settings type does not have, even when the argument is not a fresh literal.
 type Exactly<T, O> = O & { [K in Exclude<keyof O, keyof T>]: never };
@@ -258,6 +366,8 @@ type Exactly<T, O> = O & { [K in Exclude<keyof O, keyof T>]: never };
  * The descriptor a harness constructor returns for its options. It is also
  * {@link ToolFree}, so `askAgent` accepts it, when the options name no tools
  * or MCP servers.
+ *
+ * @group Harnesses and models
  */
 export type HarnessForOptions<H, O> = [Extract<keyof O, keyof ToolFree>] extends [never]
   ? H & ToolFree
@@ -333,7 +443,11 @@ function codexHarness(settings: CodexHarnessSettings): CodexHarness {
   return { kind: "codex", ...settings };
 }
 
-/** Constructors for agent-harness descriptors. */
+/**
+ * Constructors for agent-harness descriptors.
+ *
+ * @group Harnesses and models
+ */
 export const harnesses = {
   claude: claudeHarness,
   codex: codexHarness,
@@ -351,5 +465,7 @@ export const harnesses = {
  * ```ts
  * const inputs = z.object({ harness: z.enum(harnessKinds) });
  * ```
+ *
+ * @group Harnesses and models
  */
 export const harnessKinds = Object.keys(harnesses) as [HarnessKind, ...HarnessKind[]];

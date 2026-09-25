@@ -2,7 +2,11 @@
 
 import { z } from "zod";
 
-/** A value that can be serialized as JSON and embedded in a prompt or comment. */
+/**
+ * A value that can be serialized as JSON and embedded in a prompt or comment.
+ *
+ * @group Human input
+ */
 export type JsonValue =
   | string
   | number
@@ -11,7 +15,11 @@ export type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
-/** Validates an answer choice with a nonempty label and an optional recommendation marker. */
+/**
+ * Validates an answer choice with a nonempty label and an optional recommendation marker.
+ *
+ * @group Human input
+ */
 export const haltOptionSchema = z.strictObject({
   /** The text shown for this choice. */
   label: z.string().min(1),
@@ -19,7 +27,11 @@ export const haltOptionSchema = z.strictObject({
   recommended: z.boolean().optional(),
 });
 
-/** Validates a question with nonempty text, optional context and optional suggested answers. */
+/**
+ * Validates a question with nonempty text, optional context and optional suggested answers.
+ *
+ * @group Human input
+ */
 export const haltQuestionSchema = z.strictObject({
   /** The question to answer. */
   question: z.string().min(1),
@@ -29,8 +41,16 @@ export const haltQuestionSchema = z.strictObject({
   options: z.array(haltOptionSchema).optional(),
 });
 
-/** One answer choice for a question shown to a human. */
+/**
+ * One answer choice for a question shown to a human.
+ *
+ * @group Human input
+ */
 export type HaltOption = z.infer<typeof haltOptionSchema>;
 
-/** A question shown to a human while a run waits for their reply. */
+/**
+ * A question shown to a human while a run waits for their reply.
+ *
+ * @group Human input
+ */
 export type HaltQuestion = z.infer<typeof haltQuestionSchema>;

@@ -1,35 +1,29 @@
-# Write your own agent step
+# Custom agent steps
 
-Most workflows never need more than `runAgent` and a harness descriptor. When
-one does, it writes its own step, the way it writes any step, and asks jigs for
-the assembled runner instead of rebuilding the setup by hand.
+Most workflows should use `runAgent` and the built-in harness descriptors.
+Write a custom agent step only when you need control that cannot be represented
+as durable descriptor data.
+
+## When you need one
+
+- Pass a function, such as a logger or provider callback.
+- Call the AI SDK directly.
+- Set a generation option inside the step.
+- Customize provider interaction while keeping jigs' runner policy.
+
+Harness descriptors cross the durable workflow/step boundary, so they must be
+JSON-serializable data. Functions and live provider objects cannot cross as
+step inputs or results. A custom `"use step"` function creates and uses them
+inside the worker. Ordinary pure functions are also allowed in workflow code;
+see [Core concepts](/guide/concepts).
 
 ## The runner
 
-`createAgentRunner` opens a Claude Code or Codex harness the way the built-in
-agent step does, and hands back the live provider model.
-
-```ts
-import { createAgentRunner } from "@jigs-ai/jigs/steps";
-
-interface AgentRunner {
-  model: LanguageModel;
-  sessionFrom(result: GenerateTextResult): AgentSessionRef | undefined;
-  close(): Promise<void>;
-}
-
-function createAgentRunner(
-  harness: Harness,
-  options: { cwd: string; run: RunMetadata; resume?: AgentSessionRef | undefined },
-): Promise<AgentRunner>;
-```
-
-Before it returns, it does everything the built-in step does before it calls
-the provider: it builds the agent's environment from the allowlist and your
-`agents.env`, runs the request and just-in-time checks, locks the worktree,
-gives Codex a private home and its own app server, and installs the Claude
-launch hook. `model` is ready to pass to the AI SDK. `close` releases the lock
-and stops what the harness started.
+`createAgentRunner` gives a custom step the same harness setup and policy used
+by the built-in agent step. It handles environment policy, checks, worktree
+locking, session setup and provider startup. The returned live provider model
+can be passed to the AI SDK. See the [runner API](/api/steps#createagentrunner)
+for the exact contract.
 
 ## A step that uses it
 
@@ -74,18 +68,10 @@ const answer = await runWithTemperature({
 });
 ```
 
-Always close the runner in a `finally`. Until it is closed, no other agent can
-start in that worktree.
+**Always close the runner in `finally`.** It holds resources such as the worktree
+lock until it closes.
 
-## Where functions go
-
-A step is the one place a factory can hand the provider a function, such as a
-tool-approval hook or a logger. A descriptor is data the workflow writes to the
-database for the step to read, so it can hold no function. A step runs in a
-worker, where functions are allowed, so pass them through the AI SDK call your
-step makes.
-
-## When it throws
+## Errors
 
 `createAgentRunner` throws a `JitCheckError` when a just-in-time check fails,
 such as an MCP server that does not answer its probe. It throws an
@@ -97,10 +83,3 @@ expect; your step decides for itself.
 Pi has no AI SDK provider model: jigs runs the Pi CLI and reads its output
 directly. So `createAgentRunner` throws for a Pi descriptor. Run Pi with
 `runAgent`.
-
-## Why a runner and not a plugin
-
-The alternative was to let a factory inject its own functions into jigs' step.
-A step of your own needs no new idea: it reads like every other step in the
-factory, and jigs' policy still applies, because the runner applies it. Adding
-a new harness kind from a factory is not supported yet.

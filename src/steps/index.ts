@@ -1,10 +1,10 @@
 /**
- * Build a factory's own agent step. `createAgentRunner` opens a harness the way the built-in
- * agent step does and hands back the live provider model.
+ * APIs for implementing a factory-owned custom agent step. Most workflows use
+ * `runAgent` and other generated routines instead.
  *
- * Call these inside a factory-owned `"use step"` function, never from a workflow. `Driver`,
- * `DriverContext`, `AgentRunner` and the types they reach are a published contract: a change to
- * any of them is a breaking release.
+ * Call these inside `"use step"` code. `createAgentRunner` provides a live provider
+ * model with jigs policy applied. Driver interfaces are advanced extension contracts.
+ * See [Custom agent steps](https://salimhamed.github.io/jigs/guide/custom-agent-step).
  *
  * @module steps
  * @packageDocumentation

@@ -42,19 +42,14 @@ export default {
         ],
       },
       {
-        text: "Build",
+        text: "Using jigs",
         collapsed: false,
         items: [
           { text: "Build a workflow", link: "/guide/build-a-workflow" },
           { text: "Models and harnesses", link: "/guide/models-and-harnesses" },
-          { text: "Write your own agent step", link: "/guide/custom-agent-step" },
+          { text: "Waiting and external events", link: "/guide/waiting-and-events" },
           { text: "Recipes", link: "/guide/recipes" },
-        ],
-      },
-      {
-        text: "Operate",
-        collapsed: false,
-        items: [
+          { text: "Custom agent steps", link: "/guide/custom-agent-step" },
           { text: "Configuration", link: "/guide/configuration" },
           { text: "CLI commands", link: "/guide/cli" },
           { text: "Troubleshooting", link: "/guide/troubleshooting" },

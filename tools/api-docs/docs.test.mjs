@@ -13,8 +13,10 @@ import {
   hasPackageDocumentation,
   internalReferences,
   isPublicEntry,
+  publicSidebar,
   renderEntry,
   rootDir,
+  withFactoryEntries,
 } from "./docs.mjs";
 import { typedocOptions } from "./typedoc.config.mjs";
 
@@ -53,9 +55,10 @@ test("package exports determine the API reference layout", () => {
   ]);
 });
 
-test("only the root and steps entries are published", () => {
+test("public package docs exclude service plumbing and the empty human module", () => {
   const published = [".", "./steps/agents", "./steps/linear"];
   const service = [
+    "./steps/human",
     "./app",
     "./nitro",
     "./build",
@@ -132,6 +135,60 @@ test("the real renderer writes stable subpath pages with the package version", a
   expect(rootPage).not.toContain("captureStackTrace");
   expect(firstPage).toBe(secondPage);
 }, 60_000);
+
+test("factory references expose caller signatures and concrete bound options", async () => {
+  const destination = await tempDir();
+  let temporarySource;
+  await withFactoryEntries(async ({ entries, tsconfig }) => {
+    temporarySource = entries[0].source;
+    const { project } = await convert(
+      entries.map((entry) => entry.source),
+      { tsconfig },
+    );
+    assertDirectExportSummaries(project);
+    for (const entry of entries) await renderEntry(entry, destination, { tsconfig });
+  });
+  await expect(readFile(temporarySource)).rejects.toMatchObject({ code: "ENOENT" });
+  const routines = await readFile(path.join(destination, "factory/routines.md"), "utf8");
+  const steps = await readFile(path.join(destination, "factory/steps.md"), "utf8");
+  for (const name of ["runAgent", "haltForHuman", "watchPullRequest", "committedWork"]) {
+    expect(routines).toContain(`### ${name}()`);
+  }
+  for (const field of ["scope", "since", "body", "threads", "answers"]) {
+    expect(routines).toContain(`###### ${field}`);
+  }
+  for (const internal of [
+    "HaltForHumanFn",
+    "BoundReviewTicketOptions",
+    "StepFields",
+    "ExecuteAgentStep",
+  ]) {
+    expect(routines).not.toContain(internal);
+  }
+  expect(routines).toContain("### pullRequestGate()");
+  expect(routines).toContain("Only one run may own");
+  expect(steps).toContain("### createRunDirectory()");
+  expect(steps).toContain("### release()");
+  expect(steps).not.toContain("RunMetadata");
+  expect(steps).not.toContain("FactoryDefinition");
+}, 60_000);
+
+test("API navigation labels generated imports and low-level implementations separately", () => {
+  const sidebar = publicSidebar([
+    { subpath: "." },
+    { subpath: "./steps" },
+    { subpath: "./steps/git" },
+    { subpath: "./steps/human" },
+  ]);
+  expect(sidebar.map((item) => item.text)).toEqual([
+    "jigs",
+    "Factory routines",
+    "Factory steps",
+    "Custom agent step APIs",
+    "Step implementations",
+  ]);
+  expect(sidebar.at(-1).items).toEqual([{ text: "git", link: "/api/steps/git" }]);
+});
 
 test("release docs generate independently while GitHub gates auto-merge", async () => {
   const workflow = parse(
@@ -232,14 +289,26 @@ test("the website covers the public entries, llms.txt and the favicon inside the
     isPublicEntry({ subpath }),
   );
   expect(modulePages.sort()).toEqual(
-    publicSubpaths
-      .map((subpath) => (subpath === "." ? "api/jigs.html" : `api/${subpath.slice(2)}.html`))
-      .sort(),
+    [
+      ...publicSubpaths.map((subpath) =>
+        subpath === "." ? "api/jigs.html" : `api/${subpath.slice(2)}.html`,
+      ),
+      "api/factory/routines.html",
+      "api/factory/steps.html",
+    ].sort(),
   );
 
   const llms = await readFile(path.join(destination, "llms.txt"), "utf8");
   expect(llms).toContain("https://salimhamed.github.io/jigs/guide/getting-started.md");
   expect(llms).toContain("https://salimhamed.github.io/jigs/api/steps/agents.md");
+  expect(llms).toContain("/jigs/guide/waiting-and-events.md");
+  expect(llms).toContain("/jigs/api/factory/routines.md");
+  expect(llms).toContain("/jigs/api/factory/steps.md");
+  expect(llms).not.toContain("steps/human");
+  expect(llms.indexOf("guide/getting-started.md")).toBeLessThan(llms.indexOf("guide/why-jigs.md"));
+  expect(llms.indexOf("guide/models-and-harnesses.md")).toBeLessThan(
+    llms.indexOf("guide/waiting-and-events.md"),
+  );
   expect(llms).not.toMatch(/salimhamed\.github\.io\/(?!jigs\/)/);
   const llmsFull = await readFile(path.join(destination, "llms-full.txt"), "utf8");
   expect(llmsFull).toContain("# steps/agents");

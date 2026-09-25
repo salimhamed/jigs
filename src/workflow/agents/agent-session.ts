@@ -26,7 +26,11 @@ export function resumeFailed(detail: string): never {
 /** Run an agent through the factory's bound step wrapper. */
 export type RunAgentFn = <T = undefined>(config: RunAgentOptions<T>) => Promise<AgentResult<T>>;
 
-/** The two ways to state one turn of an agent session. */
+/**
+ * The two ways to state one turn of an agent session.
+ *
+ * @group Agent and model requests/results
+ */
 export interface AgentSessionTurn {
   /**
    * Sent to an agent that already holds the earlier turns: only what is new. A function is called
@@ -46,6 +50,8 @@ export interface AgentSessionTurn {
  * @remarks
  * `run` resumes the harness session the agent session holds. When that session is gone, or it was
  * recorded on a different harness descriptor, `run` starts fresh with the `fresh` prompt instead.
+ *
+ * @group Agent and model requests/results
  */
 export interface AgentSession {
   readonly harness: Harness;

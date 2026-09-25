@@ -7,7 +7,11 @@
 import { fetchIssueSnapshot } from "../../providers/linear.ts";
 import { type TicketSnapshot, toTicketSnapshot } from "../../workflow/linear/snapshot.ts";
 
-/** Read the ticket’s current details and discussion. */
+/**
+ * Read the ticket’s current details and discussion.
+ *
+ * @group Resolve and read
+ */
 export async function fetchTicketSnapshot(issueId: string): Promise<TicketSnapshot> {
   const raw = await fetchIssueSnapshot(issueId);
   const snapshot = toTicketSnapshot(raw, new Date().toISOString());

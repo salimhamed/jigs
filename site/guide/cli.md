@@ -3,23 +3,52 @@
 Run every command inside your factory, as `pnpm exec jigs <command>`, so it uses
 that factory's installed version of jigs. The exception is `init`, which runs
 before there is a factory:
-`pnpm --config.minimum-release-age-exclude=@jigs-ai/jigs dlx @jigs-ai/jigs init`.
+`pnpm dlx @jigs-ai/jigs init`.
 Add `--help` to a command to see its options.
 
-## Everyday commands
+::: tip Installing a very recent release
+If pnpm's minimum release age blocks a release you want to use, run:
+
+```sh
+pnpm --config.minimum-release-age-exclude=@jigs-ai/jigs dlx @jigs-ai/jigs init
+```
+
+This bypasses that restriction for jigs. It does not force a `dlx` cache refresh.
+:::
+
+## Factory
 
 | Command | What it does |
 | --- | --- |
 | `jigs init` | Create a factory in the current directory. Keeps existing files. |
 | `jigs up` | Install, start Postgres, build, start the service, wait until ready, then run `jigs doctor`. |
 | `jigs down` | Stop the service, then Postgres (`docker compose down`). Postgres's data is kept. |
+| `jigs doctor` | Check configuration, credentials and tools against the running service. |
+| `jigs upgrade` | Move the factory to the latest jigs and bring it up. |
+
+## Runs
+
+| Command | What it does |
+| --- | --- |
 | `jigs workflows` | List the workflows the running service can run, and their inputs. |
 | `jigs run <workflow> --input key=value` | Start a run. Repeat `--input` for each input. |
 | `jigs status [run]` | Show all runs and schedules, or one run's steps, result, resources and what it waits for. |
 | `jigs watch [run]` | Follow all runs, or one, printing a line per change. |
 | `jigs cancel <run>` | Cancel a run. |
-| `jigs doctor` | Check configuration, credentials and tools against the running service. |
-| `jigs upgrade` | Move the factory to the latest jigs and bring it up. |
+| `jigs poke <run>` | Ask a waiting run to check its condition now, without answering it. |
+
+### Choosing a run
+
+Wherever a command takes a run, you can give a complete run ID, a unique prefix
+of one, or the ticket the run claimed, such as `AGE-123`. An ambiguous prefix
+lists the matches instead of guessing. `status`, `watch` and `resources` take
+`--json` for machine-readable output.
+
+### Input values
+
+`--input` values are read as JSON when they parse, and as plain strings
+otherwise, so `count=3` is a number and `ticket=AGE-123` is a string. A value
+the workflow's schema rejects fails before any run is created.
 
 ## Repositories
 
@@ -45,6 +74,10 @@ Add `--help` to a command to see its options.
 | `jigs resources prune --apply` | Remove it. Needs the service stopped. |
 
 ## Service
+
+Use `jigs up` and `jigs down` for ordinary startup and shutdown. Direct service
+commands are useful for restarting after `.env` edits, inspecting logs or
+managing only the service.
 
 | Command | What it does |
 | --- | --- |
@@ -74,38 +107,23 @@ lingering are available.
 `jigs service stop` stops the service and dashboard while leaving Postgres
 running. `jigs down` stops both and keeps Postgres's data for the next start.
 
-## Advanced
+## Advanced/build
 
 | Command | What it does |
 | --- | --- |
 | `jigs build` | Compile the workflows into the service bundle. `jigs up` runs it for you. |
 | `jigs generate` | Refresh the generated `jigs/steps.ts` and `jigs/routines.ts` from the installed jigs version. |
-| `jigs poke <run>` | Make a waiting run check its condition now. It does not answer the wait for it. |
-
-## Choosing a run
-
-Wherever a command takes a run, you can give a complete run ID, a unique prefix
-of one, or the ticket the run claimed, such as `AGE-123`. An ambiguous prefix
-lists the matches instead of guessing. `status`, `watch` and `resources` take
-`--json` for machine-readable output.
-
-`--input` values are read as JSON when they parse, and as plain strings
-otherwise, so `count=3` is a number and `ticket=AGE-123` is a string. A value
-the workflow's schema rejects fails before any run is created.
 
 ## `jigs up` on a running service
 
-`jigs up` is also the command to run after every change. Each step is skipped
-when there is nothing to do, so an unchanged factory installs, migrates and
-restarts nothing.
+Use `jigs up` after changing workflow code or configuration:
 
-When the service is already running, `up` restarts it only if the built bundle
-or `jigs.config.ts` changed. `--restart-service` forces a restart. If any run has not finished,
-`up` lists those runs and asks before restarting over them; `--force` skips the
-question, and without a terminal to ask in, it refuses.
-
-If a step fails, `up` prints `FAIL <step>` with a repair on the next line. Fix
-it and run `jigs up` again.
+- Unchanged install, migration and build work is skipped.
+- The service restarts only when the built bundle or `jigs.config.ts` changes.
+  `--restart-service` forces a restart.
+- Active runs are listed before a restart and require confirmation. `--force`
+  bypasses it; without a terminal, the command otherwise refuses.
+- A failed step prints `FAIL <step>` and a repair. Fix it, then run `up` again.
 
 ## Upgrading jigs
 
@@ -125,7 +143,9 @@ worktrees it leaves behind.
 
 ## Cleaning up resources
 
-`jigs resources prune` only previews unless you add `--apply`. To apply:
+Resource cleanup is conservative. jigs removes only finished-run resources it
+can prove it owns and can safely remove. `jigs resources prune` previews unless
+you add `--apply`. To apply:
 
 1. Run `jigs service stop`.
 2. Check the preview, optionally for one run with `--run <run>`.

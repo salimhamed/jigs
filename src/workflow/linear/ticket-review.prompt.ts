@@ -1,11 +1,23 @@
 import { plainLanguage } from "./plain-language.prompt.ts";
 
-/** The rendered ticket supplied to a ticket-review prompt. */
+/**
+ * The rendered ticket supplied to a ticket-review prompt.
+ *
+ * @group Linear
+ */
 export type TicketReviewPromptInput = { ticket: string };
-/** Renders instructions for an agent to turn a ticket into an actionable handoff. */
+/**
+ * Renders instructions for an agent to turn a ticket into an actionable handoff.
+ *
+ * @group Linear
+ */
 export type TicketReviewPrompt = (input: TicketReviewPromptInput) => string;
 
-/** The default prompt for reviewing a Linear ticket before implementation begins. */
+/**
+ * The default prompt for reviewing a Linear ticket before implementation begins.
+ *
+ * @group Linear
+ */
 export const ticketReviewPrompt: TicketReviewPrompt = ({ ticket }) => `# Ticket review
 
 You are reviewing a Linear ticket before a builder agent starts on it.

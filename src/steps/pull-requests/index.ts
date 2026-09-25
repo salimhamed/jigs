@@ -1,7 +1,9 @@
 /**
- * Read and update GitHub pull requests outside workflow code.
+ * Low-level GitHub operations for factory-owned steps. Call their durable
+ * `#jigs/steps` wrappers from workflow code.
  *
- * Wrap steps in a factory-owned `"use step"` file. Never call them directly from a workflow.
+ * Watching a pull request over time uses a routine such as `watchPullRequest` or
+ * `pullRequestGate`. See [Waiting and external events](https://salimhamed.github.io/jigs/guide/waiting-and-events).
  *
  * @module steps/pull-requests
  * @packageDocumentation

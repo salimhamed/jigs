@@ -75,6 +75,8 @@ export async function registerResourceWith(
  * Repeating kind + identity is idempotent. A new URL for that identity
  * replaces the old URL; concurrent updates are last-committed-wins. Distinct
  * identities occupy distinct atomic keys.
+ *
+ * @group Recorded resources
  */
 export async function registerResource(resource: RunResource): Promise<RunResource> {
   const runId = getWorkflowMetadata().workflowRunId;

@@ -17,40 +17,72 @@ import type { AgentRequest, ModelRequest } from "../../../workflow/agents/plan.t
 import type { AgentSessionRef, ModelGeneration } from "../../../workflow/agents/result.ts";
 import type { RunMetadata } from "../../runtime/run-context.ts";
 
-/** What a driver's call returns: the reply text, provider metadata and any structured output. */
+/**
+ * What a driver's call returns: the reply text, provider metadata and any structured output.
+ *
+ * @group Advanced driver contracts
+ */
 export type ExecutorGeneration = ModelGeneration & { output?: unknown };
-/** What a driver's `decide` returns: one answer per question. */
+/**
+ * What a driver's `decide` returns: one answer per question.
+ *
+ * @group Advanced driver contracts
+ */
 export type DecisionGeneration<QUESTIONS extends JevQuestions = JevQuestions> = {
   answers: JevAnswers<QUESTIONS>;
 };
 
-/** @internal */
+/**
+ * @internal
+ *
+ * @group Advanced driver contracts
+ */
 export type EvaluationGeneration = {
   answers: Record<string, unknown>;
   providerMetadata?: Record<string, Record<string, unknown>> | null;
 };
-/** An agent request that runs in a worktree. */
+/**
+ * An agent request that runs in a worktree.
+ *
+ * @group Advanced driver contracts
+ */
 export type RunRequest = Extract<AgentRequest, { cwd: string }>;
-/** A harness to open in a worktree, resuming a session when one is given. */
+/**
+ * A harness to open in a worktree, resuming a session when one is given.
+ *
+ * @group Advanced driver contracts
+ */
 export type HarnessTarget = {
   harness: Harness;
   cwd: string;
   resume?: AgentSessionRef | undefined;
 };
-/** Any request a driver's checks and environment allowlist are asked about. */
+/**
+ * Any request a driver's checks and environment allowlist are asked about.
+ *
+ * @group Advanced driver contracts
+ */
 export type DriverRequest =
   | AgentRequest
   | ModelRequest
   | AskJevOptions<JevQuestions>
   | HarnessTarget;
 
-/** What a driver's `open` receives: the run and the harness environment jigs built. */
+/**
+ * What a driver's `open` receives: the run and the harness environment jigs built.
+ *
+ * @group Advanced driver contracts
+ */
 export interface OpenContext {
   metadata: RunMetadata;
   env: Record<string, string>;
 }
 
-/** A live provider model and what closing it releases. */
+/**
+ * A live provider model and what closing it releases.
+ *
+ * @group Advanced driver contracts
+ */
 export interface OpenedModel {
   model: LanguageModel;
   close(): Promise<void>;
@@ -61,6 +93,8 @@ export interface OpenedModel {
  * test can replace them.
  *
  * @internal
+ *
+ * @group Advanced driver contracts
  */
 export interface DriverDependencies {
   generateText(options: {
@@ -81,6 +115,8 @@ export interface DriverDependencies {
  * What a driver receives for one call: the run it belongs to, the harness
  * environment jigs built for it, and, for a structured call, the output spec a
  * provider model consumes. `deps` is jigs' own wiring, not part of the contract.
+ *
+ * @group Advanced driver contracts
  */
 export interface DriverContext {
   metadata: RunMetadata;
@@ -100,6 +136,8 @@ export interface DriverContext {
  * A factory reads this to know what `createAgentRunner` does before it
  * hands back a model. The shape is a published contract: changing it is a
  * breaking release.
+ *
+ * @group Advanced driver contracts
  */
 export interface Driver<K extends HarnessKind | ModelKind> {
   kind: K;

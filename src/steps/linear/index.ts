@@ -1,7 +1,9 @@
 /**
- * Read and update Linear issues outside workflow code.
+ * Low-level Linear operations for factory-owned steps. Workflow code calls their
+ * `#jigs/steps` wrappers; higher-level waiting such as `haltForHuman` comes from
+ * `#jigs/routines`.
  *
- * Wrap steps in a factory-owned `"use step"` file. Never call them directly from a workflow.
+ * See [Waiting and external events](https://salimhamed.github.io/jigs/guide/waiting-and-events).
  *
  * @module steps/linear
  * @packageDocumentation

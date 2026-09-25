@@ -1,6 +1,10 @@
 import type { WorkflowMetadata } from "workflow";
 
-/** The run a step belongs to: `getWorkflowMetadata()` inside the step. */
+/**
+ * The run a step belongs to: `getWorkflowMetadata()` inside the step.
+ *
+ * @group Runtime metadata
+ */
 export type RunMetadata = Pick<WorkflowMetadata, "workflowRunId">;
 export type NamedRunMetadata = Pick<WorkflowMetadata, "workflowRunId" | "workflowName">;
 
@@ -14,6 +18,8 @@ export type NamedRunMetadata = Pick<WorkflowMetadata, "workflowRunId" | "workflo
  * service was started without one. Never a standalone `workflow web` URL: run
  * against a live World it opens a second queue worker and steals the jobs the
  * run is waiting on.
+ *
+ * @group Advanced run context
  */
 export function dashboardRunUrl(runId: string): string | undefined {
   const port = process.env.JIGS_DASHBOARD_PORT;

@@ -22,6 +22,8 @@ function resolveCommit(worktreePath: string, ref: string): Promise<string> {
  * @remarks
  * Resolves both endpoints once, compares their trees directly and lists commits reachable only
  * from HEAD. Returns at most 1,000 files and 1,000 commits; `truncated` reports omitted results.
+ *
+ * @group Inspect changes
  */
 export async function readChange(
   worktree: Worktree,
@@ -78,6 +80,8 @@ export async function readChange(
  * @remarks
  * Pass the resolved `base` and `head` from `readChange` to inspect that exact change. Paths are
  * deduplicated, empty paths are rejected and all returned patches share a 200,000-character limit.
+ *
+ * @group Inspect changes
  */
 export async function readPatch(
   worktree: Worktree,

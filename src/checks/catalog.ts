@@ -4,12 +4,20 @@
 
 import type { WorkflowRequires } from "./index.ts";
 
-/** A check's outcome: a pass with an optional `detail`, or a failure with its repair. */
+/**
+ * A check's outcome: a pass with an optional `detail`, or a failure with its repair.
+ *
+ * @group Advanced driver contracts
+ */
 export type CheckResult =
   | { ok: true; detail?: string }
   | { ok: false; reason: string; repair: string };
 
-/** One requirement check with a stable id and a label for reports. */
+/**
+ * One requirement check with a stable id and a label for reports.
+ *
+ * @group Advanced driver contracts
+ */
 export interface Check {
   id: string;
   label: string;

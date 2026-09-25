@@ -1,6 +1,10 @@
 import { JigsError } from "../errors.ts";
 
-/** A durable thing that a run created or otherwise owns a reference to. */
+/**
+ * A durable thing that a run created or otherwise owns a reference to.
+ *
+ * @group Runtime and resources
+ */
 export interface RunResource {
   /** The resource category, such as `worktree` or `run-directory`. */
   kind: string;

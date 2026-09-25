@@ -1,4 +1,4 @@
-import { copyFile, mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,8 +36,88 @@ export function apiEntries(manifest, buildEntries) {
  */
 export function isPublicEntry(entry) {
   return (
-    entry.subpath === "." || entry.subpath === "./steps" || entry.subpath.startsWith("./steps/")
+    entry.subpath !== "./steps/human" &&
+    (entry.subpath === "." || entry.subpath === "./steps" || entry.subpath.startsWith("./steps/"))
   );
+}
+
+/** Render the real generated factory APIs against current source, without package export changes. */
+export async function withFactoryEntries(action) {
+  const { entries } = await repositoryConfig();
+  const directory = await mkdtemp(path.join(rootDir, ".api-docs-"));
+  try {
+    const integration = path.join(directory, "jigs");
+    await mkdir(integration);
+    const factoryEntries = [];
+    for (const name of ["routines", "steps"]) {
+      const source = path.join(integration, `${name}.ts`);
+      const template = await readFile(path.join(rootDir, `templates/jigs/${name}.ts.tmpl`), "utf8");
+      // These types are inferred from bound routines, not package exports. Inline
+      // their real structure so the factory reference does not show opaque names.
+      const inlineTypes = [
+        "AgentSessionOptions",
+        "BoundReviewTicketOptions",
+        "HaltForHumanFn",
+        "PullRequestGateOptions",
+        "CommittedWorkOptions",
+        "BranchState",
+      ];
+      const tags = inlineTypes.map((type) => ` * @inlineType ${type}\n`).join("");
+      await writeFile(source, template.replaceAll(" */", `${tags} */`));
+      factoryEntries.push({ subpath: `#jigs/${name}`, source, output: `factory/${name}.md` });
+    }
+    // The release wrapper imports a factory definition. It only needs the type here.
+    await writeFile(
+      path.join(directory, "jigs.config.ts"),
+      'import type { FactoryDefinition } from "@jigs-ai/jigs";\n' +
+        "declare const definition: FactoryDefinition;\nexport default definition;\n",
+    );
+    const tsconfig = path.join(directory, "tsconfig.json");
+    await writeFile(
+      tsconfig,
+      JSON.stringify(
+        {
+          extends: path.join(rootDir, "tsconfig.json"),
+          compilerOptions: {
+            paths: Object.fromEntries(
+              entries.map((entry) => [
+                entry.subpath === "." ? "@jigs-ai/jigs" : `@jigs-ai/jigs/${entry.subpath.slice(2)}`,
+                [path.resolve(rootDir, entry.source)],
+              ]),
+            ),
+          },
+          include: [path.join(rootDir, "src")],
+          files: factoryEntries.map((entry) => entry.source),
+        },
+        null,
+        2,
+      ),
+    );
+    return await action({ entries: factoryEntries, tsconfig });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+/** Navigation is arranged by how factory authors use an import, not its package path. */
+export function publicSidebar(entries) {
+  return [
+    { text: "jigs", link: "/api/jigs" },
+    { text: "Factory routines", link: "/api/factory/routines" },
+    { text: "Factory steps", link: "/api/factory/steps" },
+    { text: "Custom agent step APIs", link: "/api/steps" },
+    {
+      text: "Step implementations",
+      collapsed: true,
+      items: entries
+        .filter((entry) => isPublicEntry(entry) && entry.subpath.startsWith("./steps/"))
+        .sort((a, b) => a.subpath.localeCompare(b.subpath))
+        .map((entry) => ({
+          text: entry.subpath.slice("./steps/".length),
+          link: `/api/${entry.subpath.slice(2)}`,
+        })),
+    },
+  ];
 }
 
 async function walkTypeScriptFiles(directory) {
@@ -116,7 +196,7 @@ async function repositoryConfig() {
 async function checkRepositoryRules(entries) {
   const failures = [];
   for (const entry of entries) {
-    const source = await readFile(path.join(rootDir, entry.source), "utf8");
+    const source = await readFile(path.resolve(rootDir, entry.source), "utf8");
     if (!hasPackageDocumentation(source)) {
       failures.push(`${entry.source}: missing a leading @packageDocumentation comment`);
     }
@@ -150,6 +230,26 @@ function hideExternalInheritedMembers(converter) {
   });
 }
 
+// TypeDoc preserves explicit generic mapped aliases such as Omit<T, K> even
+// with @inlineType. Bound routine arguments need their resolved public fields.
+function expandBoundRoutineOptions(converter) {
+  converter.on(Converter.EVENT_CREATE_SIGNATURE, (context, signature) => {
+    let owner = signature.parent;
+    while (owner && !["postReviewAnswers", "postPullRequestNote"].includes(owner.name))
+      owner = owner.parent;
+    if (!owner) return;
+    for (const parameter of signature.parameters ?? []) {
+      if (parameter.type?.type !== "reference" || parameter.type.name !== "Omit") continue;
+      const symbol = context.getSymbolFromReflection(parameter);
+      if (!symbol?.valueDeclaration) continue;
+      const type = context.checker.getTypeOfSymbolAtLocation(symbol, symbol.valueDeclaration);
+      const scoped = context.withScope(signature).withScope(parameter);
+      scoped.inlineType.add("Omit");
+      parameter.type = converter.convertType(scoped, type);
+    }
+  });
+}
+
 export async function convert(entryPoints, { format = "markdown", ...options } = {}) {
   const app = await Application.bootstrapWithPlugins({
     ...typedocOptions,
@@ -163,6 +263,7 @@ export async function convert(entryPoints, { format = "markdown", ...options } =
     ...options,
   });
   hideExternalInheritedMembers(app.converter);
+  expandBoundRoutineOptions(app.converter);
   const project = await app.convert();
   if (!project || app.logger.hasErrors()) throw new Error("TypeDoc conversion failed");
   return { app, project };
@@ -170,7 +271,9 @@ export async function convert(entryPoints, { format = "markdown", ...options } =
 
 async function validate(entries) {
   await checkRepositoryRules(entries);
-  const { app, project } = await convert(entries.map((entry) => path.join(rootDir, entry.source)));
+  const { app, project } = await convert(
+    entries.map((entry) => path.resolve(rootDir, entry.source)),
+  );
   app.validate(project);
   assertDirectExportSummaries(project);
   if (app.logger.hasErrors() || app.logger.hasWarnings()) {
@@ -178,11 +281,12 @@ async function validate(entries) {
   }
 }
 
-export async function renderEntry(entry, destination) {
+export async function renderEntry(entry, destination, options = {}) {
   const temporary = await mkdtemp(path.join(os.tmpdir(), "jigs-api-docs-"));
   try {
-    const { app, project } = await convert([path.join(rootDir, entry.source)], {
+    const { app, project } = await convert([path.resolve(rootDir, entry.source)], {
       validation: typedocOptions.validation,
+      ...options,
     });
     await app.outputs.writeOutput({ name: "markdown", path: temporary }, project);
     if (app.logger.hasErrors() || app.logger.hasWarnings()) {
@@ -208,38 +312,48 @@ export async function run({ write = false, destination = path.join(rootDir, "doc
   if (!write) return;
   await rm(destination, { recursive: true, force: true });
   await Promise.all(entries.filter(isPublicEntry).map((entry) => renderEntry(entry, destination)));
+  await withFactoryEntries(async ({ entries: factoryEntries, tsconfig }) => {
+    for (const entry of factoryEntries) await renderEntry(entry, destination, { tsconfig });
+  });
 }
 
 export async function renderSite(destination = path.join(rootDir, "docs-site")) {
   const { entries } = await repositoryConfig();
   await checkRepositoryRules(entries);
-  const { app, project } = await convert(
-    entries
-      .filter(isPublicEntry)
-      .sort((a, b) => a.subpath.localeCompare(b.subpath))
-      .map((entry) => path.join(rootDir, entry.source)),
-    {
-      ...siteOptions,
-      format: "vitepress",
-      docsRoot: path.join(rootDir, "site"),
-      readme: path.join(toolDir, "site-index.md"),
-      mergeReadme: true,
-      out: path.join(rootDir, "site/api"),
-      sidebar: { collapsed: true },
-    },
+  await withFactoryEntries(async ({ entries: factoryEntries, tsconfig }) => {
+    const { app, project } = await convert(
+      [...entries.filter(isPublicEntry), ...factoryEntries]
+        .sort((a, b) => a.subpath.localeCompare(b.subpath))
+        .map((entry) => path.resolve(rootDir, entry.source)),
+      {
+        ...siteOptions,
+        tsconfig,
+        format: "vitepress",
+        docsRoot: path.join(rootDir, "site"),
+        readme: path.join(toolDir, "site-index.md"),
+        mergeReadme: true,
+        out: path.join(rootDir, "site/api"),
+        sidebar: { collapsed: true },
+      },
+    );
+    app.validate(project);
+    assertDirectExportSummaries(project);
+    if (app.logger.hasErrors() || app.logger.hasWarnings()) {
+      throw new Error("TypeDoc validation failed");
+    }
+    await rm(path.join(rootDir, "site/api"), { recursive: true, force: true });
+    await app.outputs.writeOutput(
+      { name: "markdown", path: path.join(rootDir, "site/api") },
+      project,
+    );
+    if (app.logger.hasErrors() || app.logger.hasWarnings()) {
+      throw new Error("TypeDoc site rendering failed");
+    }
+  });
+  await writeFile(
+    path.join(rootDir, "site/api/typedoc-sidebar.json"),
+    JSON.stringify(publicSidebar(entries), null, 2),
   );
-  app.validate(project);
-  assertDirectExportSummaries(project);
-  if (app.logger.hasErrors() || app.logger.hasWarnings()) {
-    throw new Error("TypeDoc validation failed");
-  }
-  await app.outputs.writeOutput(
-    { name: "markdown", path: path.join(rootDir, "site/api") },
-    project,
-  );
-  if (app.logger.hasErrors() || app.logger.hasWarnings()) {
-    throw new Error("TypeDoc site rendering failed");
-  }
   const { build } = await import("vitepress");
   await build(path.join(rootDir, "site"), { outDir: destination });
 }

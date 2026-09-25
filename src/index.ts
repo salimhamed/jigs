@@ -1,9 +1,14 @@
 /**
- * Everything a factory's configuration and workflows import from jigs: the factory and workflow
- * definitions, harness and model descriptors, the data steps hand back, question helpers, and
- * pure renderers.
+ * Factory and workflow definitions, harness and model descriptors, types and pure helpers.
  *
- * Steps and routines come from your factory's generated `#jigs/steps` and `#jigs/routines`.
+ * Durable steps and routines come from the factory-generated `#jigs/steps` and
+ * `#jigs/routines`.
+ *
+ * @example
+ * ```ts
+ * import { defineWorkflow, harnesses } from "@jigs-ai/jigs";
+ * import { runAgent } from "#jigs/routines";
+ * ```
  *
  * @module jigs
  * @packageDocumentation

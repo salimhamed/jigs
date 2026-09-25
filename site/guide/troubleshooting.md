@@ -1,12 +1,15 @@
 # Troubleshooting
 
 jigs usually prints what failed and how to fix it on the next line. Start there.
-For service problems, these two commands give the most useful evidence:
+Check whether the service is alive and read its startup or runtime failures:
 
 ```sh
 pnpm exec jigs service status
 pnpm exec jigs service logs
 ```
+
+Once the service is running, `pnpm exec jigs doctor` checks configured
+dependencies, credentials and tools against it.
 
 ## The service exits before it is ready
 
@@ -21,13 +24,15 @@ Read `jigs service logs`. The usual causes:
 - **A binding's remote cannot be reached.** The service clones every binding
   before it is ready, and exits with the Git error if it cannot.
 
-Fix the cause and run `jigs up` again.
+Fix the cause and run `jigs up` again. Harness installation and authentication
+are covered in [Models and harnesses](/guide/models-and-harnesses).
 
 ## A build says `jigs/` is out of date
 
 Run `pnpm exec jigs generate`, review the change to `jigs/steps.ts` and
-`jigs/routines.ts`, then run `pnpm exec jigs up`. Keep your own code out of
-`jigs/`, since generating replaces it.
+`jigs/routines.ts`, then run `pnpm exec jigs up`. This is generated code committed
+to the factory to keep [step identities stable](/guide/concepts#why-jigs-generates-code-in-your-factory).
+Keep your own code outside `jigs/`, since regeneration replaces it.
 
 A build also refuses a factory that still has a `jigs.ts` from an earlier
 release. Run `pnpm exec jigs upgrade`. It deletes `jigs.ts`, writes `jigs/`,
@@ -37,10 +42,18 @@ and replaces the older entries in the `imports` map in `package.json` with
 
 ## A library import does not resolve
 
-`@jigs-ai/jigs` has one entry for workflow code: the root. Import descriptors,
-types, schemas and renderers from `@jigs-ai/jigs`. Import routines such as
-`claimTicket`, `agentSession`, `watchPullRequest` or `pullRequestGate` from `#jigs/routines`, after
-`pnpm exec jigs generate`.
+Workflow and configuration code use these imports:
+
+```ts
+import { defineWorkflow, harnesses } from "@jigs-ai/jigs";
+import { runAgent } from "#jigs/routines";
+import { createRunDirectory } from "#jigs/steps";
+```
+
+Run `pnpm exec jigs generate` if the generated imports are missing. Custom
+`"use step"` implementations may also import `@jigs-ai/jigs/steps` and its
+`steps/*` modules. Those low-level implementations are not durable wrappers
+and must not be called directly from workflow code. See the [API import map](/api/).
 
 ## A run is waiting
 
@@ -49,7 +62,7 @@ question or is following a pull request; the status says what it needs and
 links to where you act. Starting another run does not answer the first one.
 
 Once you have answered, the run notices on its next
-[check](/guide/configuration#webhooks). `pnpm exec jigs poke <run>` makes it
+[check](/guide/waiting-and-events). `pnpm exec jigs poke <run>` makes it
 check now. A poke cannot stand in for the answer or approval itself.
 
 If the pull request is approved but `jigs status <run>` shows `CI: none` and a

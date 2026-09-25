@@ -5,13 +5,19 @@ export type MarkerKind = "reply" | "completion" | "status";
  * Why a `status` note was written, so one note never silences another.
  * `merge` and `ci` stand a commit down; `merge-retry` only records that the
  * refusal was already reported, and leaves the commit merge-ready.
+ *
+ * @group Pull requests
  */
 export type StatusReason = "merge" | "ci" | "merge-retry";
 
 const KINDS = new Set<string>(["reply", "completion", "status"]);
 const REASONS = new Set<string>(["merge", "ci", "merge-retry"]);
 
-/** Hidden progress metadata stored in a pull request comment. */
+/**
+ * Hidden progress metadata stored in a pull request comment.
+ *
+ * @group Pull requests
+ */
 export interface PullRequestMarker {
   /**
    * The continuation identity. It survives run replacement, so a later run
@@ -100,7 +106,11 @@ function quoted(body: string, at: number): boolean {
 const text = (value: unknown): string | undefined =>
   typeof value === "string" ? value : undefined;
 
-/** Every marker in one comment body, in the order they appear. */
+/**
+ * Every marker in one comment body, in the order they appear.
+ *
+ * @group Pull requests
+ */
 export function parseMarkers(body: string): PullRequestMarker[] {
   const markers: PullRequestMarker[] = [];
   for (const match of body.matchAll(MARKER)) {

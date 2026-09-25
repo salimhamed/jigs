@@ -60,7 +60,11 @@ export function tokenFromGitHubPayload(payload: unknown): string | null {
   return pullRequestToken({ owner, repo, number });
 }
 
-/** Identifies a pull request by repository owner, repository name and number. */
+/**
+ * Identifies a pull request by repository owner, repository name and number.
+ *
+ * @group Pull requests
+ */
 export type PullRequestRef = {
   /** The GitHub organization or account that owns the repository. */
   owner: string;
@@ -82,6 +86,8 @@ export type PullRequestRef = {
  *   `retryNoted` says a refusal jigs is waiting out was already reported for
  *   this head, so the retry is silent.
  * - `closed`: terminal.
+ *
+ * @group Pull requests
  */
 export type PullRequestWake =
   | {

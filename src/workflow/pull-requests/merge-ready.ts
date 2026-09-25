@@ -123,7 +123,11 @@ export function mergeRefusal(
   return null;
 }
 
-/** Whether current GitHub facts satisfy the configured approval and merge requirements. */
+/**
+ * Whether current GitHub facts satisfy the configured approval and merge requirements.
+ *
+ * @group Pull requests
+ */
 export function isPullRequestMergeReady(snapshot: PullRequestSnapshot): boolean {
   return mergeRefusal(snapshot, snapshot.headSha) === null;
 }

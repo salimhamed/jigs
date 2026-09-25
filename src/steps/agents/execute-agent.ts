@@ -21,7 +21,11 @@ export function outputSpec(
   return schema === undefined ? undefined : Output.object({ schema: jsonSchema<unknown>(schema) });
 }
 
-/** Run or ask an agent harness, checking worktree requirements before a run. */
+/**
+ * Run or ask an agent harness, checking worktree requirements before a run.
+ *
+ * @group Execution primitives
+ */
 export function executeAgent(
   wire: AgentRequest,
   metadata: RunMetadata,

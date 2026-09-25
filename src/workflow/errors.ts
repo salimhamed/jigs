@@ -1,4 +1,8 @@
-/** An operator-readable failure that is safe to construct inside a workflow. */
+/**
+ * An operator-readable failure that is safe to construct inside a workflow.
+ *
+ * @group Errors and utilities
+ */
 export class JigsError extends Error {
   readonly hint?: string;
 

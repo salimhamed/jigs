@@ -1,14 +1,22 @@
 import { JigsError } from "../../errors.ts";
 import { fetchIssueStates, updateIssueState } from "../../providers/linear.ts";
 
-/** The before-and-after state names from a ticket status update. */
+/**
+ * The before-and-after state names from a ticket status update.
+ *
+ * @group Create and update
+ */
 export interface TicketStatusResult {
   from: string;
   to: string;
   changed: boolean;
 }
 
-/** Set a ticket to one of its team's named states. */
+/**
+ * Set a ticket to one of its team's named states.
+ *
+ * @group Create and update
+ */
 export async function setTicketStatus(
   issueId: string,
   stateName: string,

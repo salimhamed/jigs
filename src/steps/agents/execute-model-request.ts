@@ -8,7 +8,11 @@ import { outputSpec } from "./execute-agent.ts";
 import { harnessEnv } from "./harnesses/env.ts";
 import { type ExecutionSeams, executionSeams } from "./seams.ts";
 
-/** Ask an API-backed model source. */
+/**
+ * Ask an API-backed model source.
+ *
+ * @group Execution primitives
+ */
 export function executeModel(wire: ModelRequest, metadata: RunMetadata): Promise<ModelResult> {
   return executeModelWith(wire, metadata, executionSeams);
 }
@@ -34,7 +38,11 @@ export async function executeModelWith(
   return toModelResult(generation, wire.outputSchema === undefined ? undefined : generation.output);
 }
 
-/** Evaluate typed questions with a decision-capable model. */
+/**
+ * Evaluate typed questions with a decision-capable model.
+ *
+ * @group Execution primitives
+ */
 export function executeJev<const QUESTIONS extends JevQuestions>(
   wire: AskJevOptions<QUESTIONS>,
   metadata: RunMetadata,

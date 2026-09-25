@@ -15,7 +15,11 @@ export async function readPullRequestSnapshot(pr: PullRequestRef): Promise<PullR
   return { ...facts, approval: { signal, state: approvalState(facts, signal) } };
 }
 
-/** Read the pull request’s checks, reviews, open review threads and approval. */
+/**
+ * Read the pull request’s checks, reviews, open review threads and approval.
+ *
+ * @group Read
+ */
 export const fetchPullRequestState: FetchPrState = async (pr: PullRequestRef) => {
   const snapshot = await readPullRequestSnapshot(pr);
   console.log(

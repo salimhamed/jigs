@@ -13,7 +13,11 @@ import type {
 import { JigsError } from "./errors.ts";
 import type { ReleasePolicy } from "./runtime/release.ts";
 
-/** Accept a Linear issue UUID or an uppercase team-and-number ticket identifier. */
+/**
+ * Accept a Linear issue UUID or an uppercase team-and-number ticket identifier.
+ *
+ * @group Factory and workflows
+ */
 export const ticketInputSchema = z.union([z.uuid(), z.string().regex(/^[A-Z][A-Z0-9]*-\d+$/)]);
 
 /** Plaintext run metadata used by read-only tooling to resolve ticket selectors. */
@@ -49,15 +53,25 @@ export const agentsSchema = z.strictObject({ env: z.array(envName).default([]) }
 /** Metadata supplied to every workflow run. */
 export type Injected = { triggerId: string };
 
-/** Parsed workflow inputs with the trigger that started the run. */
+/**
+ * Parsed workflow inputs with the trigger that started the run.
+ *
+ * @group Factory and workflows
+ */
 export type WorkflowInputs<S extends z.ZodType> = z.output<S> & Injected;
 
-/** Ticket references are ordinary inputs; resolve them explicitly in a step. */
+/**
+ * Ticket references are ordinary inputs; resolve them explicitly in a step.
+ *
+ * @group Factory and workflows
+ */
 export type TicketWorkflowInputs<S extends z.ZodType<{ ticket: string }>> = WorkflowInputs<S>;
 
 /**
  * A workflow: its function, its input schema, and what a run needs before it
  * may start.
+ *
+ * @group Factory and workflows
  */
 export interface WorkflowDefinition<S extends z.ZodType = z.ZodType> {
   inputs: S;
@@ -102,6 +116,8 @@ export interface WorkflowDefinition<S extends z.ZodType = z.ZodType> {
  *
  * export default defineWorkflow({ inputs, workflow: hello });
  * ```
+ *
+ * @group Factory and workflows
  */
 export function defineWorkflow<S extends z.ZodType>(
   definition: WorkflowDefinition<S>,
@@ -113,7 +129,9 @@ export function defineWorkflow<S extends z.ZodType>(
 type AnyWorkflowDefinition = WorkflowDefinition<any>;
 
 /** One recurring trigger: a workflow, when to fire it, and the inputs to
- *  fire it with. */
+ *  fire it with. *
+ * @group Factory and workflows
+ */
 export interface Schedule {
   workflow: string;
   /** Five fields, evaluated in the service host's local time zone. */
@@ -126,6 +144,8 @@ export interface Schedule {
  * the schedules that fire them. A schedule is keyed by its own name rather
  * than nested under a workflow. The name is what runs, status and `jigs
  * doctor` refer to, and one workflow can carry several.
+ *
+ * @group Factory and workflows
  */
 export interface Factory {
   workflows: Record<string, AnyWorkflowDefinition>;
@@ -147,6 +167,8 @@ export interface Factory {
  * ```ts
  * github: { identities: [{ mode: "pat" }], mergeApproval: "label" },
  * ```
+ *
+ * @group Factory and workflows
  */
 export type GitHubDefinition = z.input<typeof githubSchema>;
 
@@ -159,6 +181,8 @@ export type GitHubDefinition = z.input<typeof githubSchema>;
  * ```ts
  * linear: { identity: { mode: "app" } },
  * ```
+ *
+ * @group Factory and workflows
  */
 export type LinearDefinition = z.input<typeof linearSchema>;
 
@@ -174,6 +198,8 @@ export type LinearDefinition = z.input<typeof linearSchema>;
  *   linear: { enabled: false },
  * },
  * ```
+ *
+ * @group Factory and workflows
  */
 export type WebhooksDefinition = z.input<typeof webhooksSchema>;
 
@@ -191,10 +217,16 @@ export type WebhooksDefinition = z.input<typeof webhooksSchema>;
  *   },
  * },
  * ```
+ *
+ * @group Factory and workflows
  */
 export type BindingDefinition = z.input<typeof bindingSchema>;
 
-/** Settings for the agent harnesses this factory runs. */
+/**
+ * Settings for the agent harnesses this factory runs.
+ *
+ * @group Factory and workflows
+ */
 export interface AgentsDefinition {
   /**
    * Names of service environment variables every agent harness also receives.
@@ -206,7 +238,11 @@ export interface AgentsDefinition {
   env?: string[];
 }
 
-/** Operating settings and deferred workflow modules declared by a factory. */
+/**
+ * Operating settings and deferred workflow modules declared by a factory.
+ *
+ * @group Factory and workflows
+ */
 export interface FactoryDefinition {
   service: {
     port?: number;
@@ -229,7 +265,11 @@ export interface FactoryDefinition {
   schedules?: Record<string, Schedule>;
 }
 
-/** Preserve the declaration's inferred keys without loading its workflows. */
+/**
+ * Preserve the declaration's inferred keys without loading its workflows.
+ *
+ * @group Factory and workflows
+ */
 export function defineFactory<const T extends FactoryDefinition>(factory: T): T {
   const agents = agentsSchema.safeParse(factory.agents ?? {});
   if (!agents.success)

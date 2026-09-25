@@ -15,7 +15,11 @@ import {
 } from "./marker.ts";
 import { currentRunId } from "./writer.ts";
 
-/** Answers routed back to pull-request threads and an optional commit explanation. */
+/**
+ * Answers routed back to pull-request threads and an optional commit explanation.
+ *
+ * @group Pull requests
+ */
 export interface ThreadAnswers {
   /** Replies to post, using `null` to answer feedback on the pull request conversation. */
   answers: Array<{
@@ -197,7 +201,11 @@ export async function postPullRequestNote(options: PostPullRequestNoteOptions): 
   }
 }
 
-/** Render failed checks as a Markdown list for a pull request note. */
+/**
+ * Render failed checks as a Markdown list for a pull request note.
+ *
+ * @group Pull requests
+ */
 export function renderChecks(failing: CheckRun[]): string {
   return failing.length === 0
     ? "_(the provider reported a red build without naming a check)_"

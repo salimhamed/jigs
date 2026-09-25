@@ -4,9 +4,12 @@ A factory is configured in two files. `jigs.config.ts` holds settings you
 commit. `.env` holds secrets and is never committed. There is no other
 configuration file.
 
-After editing `jigs.config.ts`, run `jigs up`; it rebuilds and restarts the
-service when needed. After editing `.env`, run `jigs service restart`, because
-the service reads it when it starts.
+| You changed | Run |
+| --- | --- |
+| Workflow code or `jigs.config.ts` | `pnpm exec jigs up` |
+| `.env` | `pnpm exec jigs service restart` |
+
+The service reads `.env` when it starts.
 
 ```ts
 import { defineFactory } from "@jigs-ai/jigs";
@@ -24,20 +27,6 @@ export default defineFactory({
 });
 ```
 
-## `service`
-
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `port` | `8990` | Where the service listens. The CLI talks to it here. |
-| `dashboardPort` | required | Where the service hosts the run dashboard. |
-| `pollIntervalSeconds.github` | `300` | How often waiting runs re-read their pull requests. Minimum 30. |
-| `pollIntervalSeconds.linear` | `300` | How often runs waiting on a ticket reply re-read it. Minimum 30. |
-
-`jigs init` picks ports for each factory so that two factories on one machine
-rarely clash. The service and dashboard ports live here. The Postgres port
-lives in `docker-compose.yml` and in `WORKFLOW_POSTGRES_URL` in `.env`; change
-both together.
-
 ## `workflows`
 
 A map from a workflow's name to a deferred import of its file. The name is what
@@ -51,9 +40,9 @@ workflows: {
 
 ## `bindings` {#bindings}
 
-A binding names a target repository. jigs keeps its own clone of each one,
-outside your checkout, and cuts every run's worktree from it. The service makes
-the clones when it starts, so run `jigs up` after adding a binding.
+A binding names a GitHub repository that workflows may operate on. jigs keeps
+its own clone and provisions a separate working copy, called a worktree, for
+each run.
 
 ```ts
 bindings: {
@@ -69,7 +58,7 @@ bindings: {
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `remote` | required | The repository's Git remote URL. |
+| `remote` | required | The GitHub repository's Git remote URL. |
 | `copy` | `[]` | Files to copy into each new worktree. |
 | `postCreate` | `[]` | Commands to run in each new worktree, in order. The first failure stops provisioning. |
 | `hookTimeoutMinutes` | `10` | The total time `postCreate` may take. |
@@ -85,6 +74,24 @@ worktree with a message naming it.
 removes one; add the other keys by hand. Both commands edit a plain object
 literal. If `bindings` is computed, they explain why and leave the file alone.
 
+## `service`
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `port` | `8990` | Where the service listens. The CLI talks to it here. |
+| `dashboardPort` | required | Where the service hosts the run dashboard. |
+| `pollIntervalSeconds.github` | `300` | How often waiting runs re-read their pull requests. Minimum 30. |
+| `pollIntervalSeconds.linear` | `300` | How often runs waiting on a ticket reply re-read it. Minimum 30. |
+
+`jigs init` picks ports for each factory so that two factories on one machine
+rarely clash.
+
+::: details Changing the Postgres port
+The Postgres port appears in both `docker-compose.yml` and
+`WORKFLOW_POSTGRES_URL` in `.env`. Change both together. The service and
+dashboard ports are separate settings in `jigs.config.ts`.
+:::
+
 ## `schedules` {#schedules}
 
 Fire a workflow on a cron schedule:
@@ -99,15 +106,17 @@ schedules: {
 },
 ```
 
-`cron` has five fields, read in the service host's local time. Each tick is an
-ordinary run: its inputs are checked and preflight runs. A tick is skipped while
-the schedule's previous run is still active, and ticks missed while the service
-was down are not made up. `jigs status` lists schedules under the runs, and runs
-a schedule started show `schedule:<name>` as their trigger.
+- Cron uses five fields in the service host's local time.
+- Each tick validates inputs and runs preflight, like `jigs run`.
+- A tick is skipped while the schedule's previous run is still active.
+- Missed ticks while the service was down are not replayed.
+
+`jigs status` lists schedules. Their runs show `schedule:<name>` as the trigger.
 
 ## `release` {#release}
 
-What happens to a run's worktrees and scratch directory once it ends:
+Release policy controls what happens to run-owned worktrees and scratch
+directories after the run ends:
 
 ```ts
 release: { onSuccess: "release", onFailure: "keep" },
@@ -119,46 +128,9 @@ The service applies the policy when a run ends; waiting runs always keep everyth
 A workflow that wants to release early, or needs the report, can call
 `await release()` from `#jigs/steps`.
 
-Release never throws away work: a worktree with uncommitted or unmerged changes
-stays, and a branch is deleted only when its commits are proven merged. See
+jigs does not delete uncommitted or unmerged work it cannot prove is safe to
+remove. A branch is deleted only when its commits are proven merged. See
 `jigs resources` in [CLI commands](/guide/cli) to inspect what is left.
-
-## Merging {#merging}
-
-Two settings say how a pull request is merged, and your workflow says who
-merges it.
-
-- **`github.mergeApproval`**: what counts as your consent. `"review"` is an
-  approving review of the current commit; a new push withdraws it. `"label"`
-  is the `jigs:approved` label on the pull request; it survives later pushes,
-  so it means "merge whenever ready". The default follows the
-  [identity](#github-identity): `"label"` with a PAT, `"review"` with an App.
-  A PAT cannot use `"review"`: jigs opens pull requests as you, and GitHub does
-  not let you approve your own.
-- **`bindings.<name>.mergeMethod`**: `"squash"`, `"merge"` or `"rebase"`, as on
-  GitHub. Default `"squash"`. With `squash` and `merge`, the pull request title
-  becomes the commit title. With `rebase`, each commit is rewritten and loses
-  its signature.
-
-`jigs bind` creates the `jigs:approved` label on each GitHub repository it
-binds, whichever approval you use.
-
-Who merges is not configuration. The linear-ticket-to-pr recipe sets it with
-`mergedBy` in its workflow file, and waits for you to merge by default. A custom
-workflow decides in its own code and calls `mergePullRequest`, which applies
-the two settings above, rereads GitHub and enforces readiness and approval
-before it merges. `watchPullRequest` only reports facts and never
-merges. None of this restricts an agent that merges through its own GitHub
-tools.
-
-jigs merges only when the approval is present, GitHub reports the pull request
-mergeable, it is not a draft, and at least one check has run and passed.
-**jigs never merges in a repository with no CI**: when no check has reported,
-`jigs status` says so, since CI may not have started yet or the repository may
-have none. While GitHub reports `behind`, `blocked` or `unknown`, jigs waits and
-checks again later. A label cannot satisfy a branch rule that requires approving
-reviews, so label approval only works on repositories without that rule. jigs
-never changes branch protection.
 
 ## `agents.env` {#agents-env}
 
@@ -178,12 +150,14 @@ sets itself cannot be listed; name a model key on its model source instead.
 This limits what agents see in their environment only. They still run as your
 user and can read any file you can.
 
-## GitHub identity {#github-identity}
+## GitHub
+
+### Identity {#github-identity}
 
 `github.identities` says who jigs is on GitHub. Choose the mode when you create
 the factory, with `jigs init --github-identity-mode pat` (the default) or `app`.
 
-### PAT: jigs acts as you
+#### PAT: jigs acts as you
 
 ```ts
 github: { identities: [{ mode: "pat" }] },
@@ -195,7 +169,7 @@ opens are authored by you, so GitHub will not let you approve them: jigs uses
 pull request. A classic token needs `repo` (or `public_repo`), plus
 `admin:repo_hook` if you turn on GitHub webhooks.
 
-### App: jigs acts as a bot
+#### App: jigs acts as a bot
 
 ```ts
 github: {
@@ -232,7 +206,47 @@ Every GitHub binding needs an installation for its owner. To use different Apps
 for different organizations, add more entries to `identities`; no two may claim
 the same account. A PAT must be the only entry.
 
-## Linear identity {#linear-identity}
+### Merging {#merging}
+
+These are three independent decisions:
+
+| Concern | Controlled by |
+| --- | --- |
+| What counts as operator approval | `github.mergeApproval` |
+| How GitHub creates the merge | `bindings.<name>.mergeMethod` |
+| Whether and when to attempt a merge | Workflow code |
+
+- **`github.mergeApproval`**: what counts as your consent. `"review"` is an
+  approving review of the current commit; a new push withdraws it. `"label"`
+  is the `jigs:approved` label on the pull request; it survives later pushes,
+  so it means "merge whenever ready". The default follows the
+  [identity](#github-identity): `"label"` with a PAT, `"review"` with an App.
+  A PAT cannot use `"review"`: jigs opens pull requests as you, and GitHub does
+  not let you approve your own.
+- **`bindings.<name>.mergeMethod`**: `"squash"`, `"merge"` or `"rebase"`, as on
+  GitHub. Default `"squash"`. With `squash` and `merge`, the pull request title
+  becomes the commit title. With `rebase`, each commit is rewritten and loses
+  its signature.
+
+`jigs bind` creates the `jigs:approved` label on each GitHub repository it
+binds, whichever approval you use.
+
+Workflow code calls `mergePullRequest` when its policy says to merge. That step
+rereads GitHub and enforces readiness and approval. `watchPullRequest` only
+reports facts. These checks do not restrict an agent using its own GitHub tools.
+
+jigs merges only when the approval is present, GitHub reports the pull request
+mergeable, it is not a draft, at least one check has run, and CI is green.
+**jigs never merges in a repository with no CI**: when no check has reported,
+`jigs status` says so, since CI may not have started yet or the repository may
+have none. While GitHub reports `behind`, `blocked` or `unknown`, jigs waits and
+checks again later. A label cannot satisfy a branch rule that requires approving
+reviews, so label approval only works on repositories without that rule. jigs
+never changes branch protection.
+
+## Linear
+
+### Identity {#linear-identity}
 
 `linear.identity` says who jigs is on Linear. Choose it with
 `jigs init --linear-identity-mode key` (the default) or `app`.
@@ -245,7 +259,7 @@ the same account. A PAT must be the only entry.
   anyone else's. In Linear, go to Settings → API → OAuth applications and create
   one with **Client credentials** on, Public off and Webhooks off (any redirect
   URL will do). Put its ID and secret in `.env` as `LINEAR_CLIENT_ID` and
-  `LINEAR_CLIENT_SECRET`, then run `jigs service restart`.
+  `LINEAR_CLIENT_SECRET`.
 
 ```ts
 linear: { identity: { mode: "app" } },
@@ -253,10 +267,10 @@ linear: { identity: { mode: "app" } },
 
 ## Webhooks {#webhooks}
 
-Webhooks are optional. Without them, waiting runs re-read GitHub and Linear
-every [`pollIntervalSeconds`](#service), and nothing else is needed. Webhooks
-make runs react in seconds. The poll keeps running underneath, so a lost
-delivery only delays a run.
+Webhooks improve latency, not correctness. Without them, the built-in GitHub
+and Linear waits continue to poll at [`pollIntervalSeconds`](#service). A lost
+webhook delivery only delays the next check. See
+[Waiting and external events](/guide/waiting-and-events) for how runs wait.
 
 ```ts
 webhooks: {
@@ -284,7 +298,7 @@ A provider that is enabled without its secret stops the service from starting.
 `jigs doctor` checks the secrets and, for GitHub, whether recent deliveries were
 rejected.
 
-## The `.env` file
+## `.env` {#env}
 
 `jigs init` writes `.env.example`. Copy it to `.env`; `jigs up` stops if `.env`
 is missing, and lists the credentials still empty.

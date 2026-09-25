@@ -19,6 +19,8 @@ const workflowFunctionName = (workflowName: string): string =>
  * and the subject it was given: a ticket key or the pull request itself.
  * Pass an explicit scope to continue another workflow's work, or to review a
  * pull request independently of the run delivering it.
+ *
+ * @group Pull requests
  */
 export function defaultPullRequestScope(subject: string): string {
   return pullRequestScope(workflowFunctionName(getWorkflowMetadata().workflowName), subject);

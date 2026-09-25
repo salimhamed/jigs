@@ -21,7 +21,7 @@ import type { AgentResult } from "./result.ts";
 /**
  * A failed just-in-time tool check, with repair details for each failure.
  *
- * @group Factory plumbing
+ * @group Errors and utilities
  */
 export class JitCheckError extends Error {
   readonly failures: FailedCheck[];
@@ -47,7 +47,7 @@ export type ExecuteAgentStep = (
 /**
  * Convert returned execution failure markers into errors the workflow throws.
  *
- * @group Factory plumbing
+ * @group Agent and model requests/results
  */
 export function unwrapAgentStep(result: Awaited<ReturnType<ExecuteAgentStep>>): AgentResult {
   if ("jitFailure" in result) throw new JitCheckError(result.jitFailure);
