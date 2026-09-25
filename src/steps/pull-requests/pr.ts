@@ -164,11 +164,11 @@ export async function mergePullRequest(
   pr: PullRequestRef,
   expectedHeadSha: string,
 ): Promise<MergeOutcome> {
-  const method = resolveBinding(factoryRoot(), worktree.binding).mergeMethod;
   const before = await readPullRequestSnapshot(pr);
   if (before.merged) return { merged: true, mergeCommitSha: before.mergeCommitSha };
   const refusal = mergeRefusal(before, expectedHeadSha);
   if (refusal !== null) return { merged: false, ...refusal };
+  const method = resolveBinding(factoryRoot(), worktree.binding).mergeMethod;
   const message = await suppliedCommitMessageBody(pr, method);
   try {
     const result = await mergePr(pr, {

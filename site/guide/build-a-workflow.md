@@ -212,7 +212,10 @@ for creating the builder and supplying recovery context in `fresh`.
 `snapshot.state` and `snapshot.merged` come from GitHub. The snapshot also
 includes `headSha`, draft and merge state, labels, reviews, inline review
 threads and conversation comments. jigs summarizes GitHub checks and commit
-statuses as `ci` (`"red"`, `"green"` or `"pending"`) and includes `failingChecks`.
+statuses as `ci` (`"red"`, `"green"`, `"pending"`, or `"none"` when nothing has
+reported on the head yet) and includes `failingChecks`. `approval` gives the
+factory's approval signal and its `state` (`"approved"`, `"changes-requested"`,
+`"stale"` or `"none"`).
 These are observed facts, not an assessment that the work is finished.
 
 To compare a fresh read with an earlier snapshot, import

@@ -19,9 +19,9 @@ test("every entry carries a zod inputs schema and a workflow", () => {
 });
 
 test("the scaffold names its identities outright", () => {
-  // Both of these are what `jigs init` wrote into jigs.config.ts, from the
-  // same value: the identities this factory was scaffolded for should still be
-  // the ones it declares.
+  // `jigs init` wrote these into jigs.config.ts and into this test from the
+  // same values, so the identities this factory was scaffolded for should
+  // still be the ones it declares.
   expect(factory.github).toEqual({{GITHUB_EXPECTED}});
   expect(factory.linear).toEqual({{LINEAR_EXPECTED}});
 });
