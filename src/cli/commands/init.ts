@@ -142,9 +142,8 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   }
   deps.out("  pnpm install");
   deps.out("  cp .env.example .env    # then fill in what your workflows need");
-  deps.out("  pnpm exec jigs bind <remote-url>   # a repository for hello's worktree");
   deps.out("  pnpm exec jigs up       # start Postgres and the service; ends by running doctor");
-  deps.out("  pnpm exec jigs run hello --input binding=<binding-name>");
+  deps.out("  pnpm exec jigs run hello");
   deps.out("  pnpm exec jigs doctor   # re-check what your workflows need, any time");
 
   return { created, skipped, ...ports };

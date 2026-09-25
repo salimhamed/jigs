@@ -1,14 +1,13 @@
 import { defineWorkflow, type WorkflowInputs } from "@jigs-ai/jigs";
 import { z } from "zod";
-import { provisionWorktree } from "#jigs/steps";
+import { createRunDirectory } from "#jigs/steps";
 
-const inputs = z.object({ binding: z.string(), branch: z.string().default("hello") });
+const inputs = z.object({});
 
-/** Cut a worktree: proves a step runs with no ticket or agent. */
-export async function hello(input: WorkflowInputs<typeof inputs>) {
+/** Create this run's directory: proves a step runs with no repository, ticket, agent or credentials. */
+export async function hello(_input: WorkflowInputs<typeof inputs>) {
   "use workflow";
-  const worktree = await provisionWorktree({ binding: input.binding, branch: input.branch });
-  return worktree.path;
+  return await createRunDirectory();
 }
 
 export default defineWorkflow({ inputs, workflow: hello });

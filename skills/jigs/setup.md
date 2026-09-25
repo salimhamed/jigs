@@ -55,7 +55,7 @@ pnpm install
 cp .env.example .env
 ```
 
-`hello` needs a binding and no other credentials. Leave `WORKFLOW_TARGET_WORLD` and
+`hello` needs no credentials. Leave `WORKFLOW_TARGET_WORLD` and
 `WORKFLOW_POSTGRES_URL` as written. Fill in the Linear and GitHub credentials
 before adding a workflow that declares those integrations; the configuration
 guide's `.env` table lists each variable.
@@ -102,26 +102,14 @@ is up.
 `--restart-service` forces a restart; `--force` skips the question about
 in-flight runs.
 
-## 4. Bind a target repo and run hello
+Then:
 
 ```sh
-jigs bind git@github.com:owner/repo.git
-jigs bindings
-jigs up
-jigs run hello --input binding=repo
+jigs run hello
 jigs status
 ```
 
-`jigs bind` adds the binding to `jigs.config.ts` and, with the configured
-identity, creates the approval label when approval is a label and the webhook
-when GitHub webhooks are on, so a GitHub remote under the default PAT identity
-needs `GITHUB_TOKEN` in `.env` first. A local `file://` remote needs no
-credentials. The service clones each binding when it starts, so the `jigs up`
-above is what makes a new binding usable. `hello` cuts a worktree from it and
-returns the path. Worktree provisioning (`copy`, `postCreate`) is a hand edit
-described in the configuration guide.
-
-## 5. Add a recipe
+## 4. Add a recipe and bind a target repo
 
 ```sh
 jigs recipe list
@@ -132,7 +120,19 @@ jigs recipe add linear-ticket-to-pr
 `workflows` in `jigs.config.ts`. If it cannot edit the config, it names the line
 to add by hand. The copied code is the factory's to edit; `blocks/delivery/README.md` explains the linear-ticket-to-pr recipe.
 
-## 6. Webhooks are optional
+```sh
+jigs bind git@github.com:owner/repo.git
+jigs bindings
+jigs up
+```
+
+`jigs bind` adds the binding to `jigs.config.ts` and, with the configured
+identity, creates the approval label when approval is a label and the webhook
+when GitHub webhooks are on. The service clones each binding when it starts, so the
+`jigs up` above is what makes a new binding usable. Worktree provisioning
+(`copy`, `postCreate`) is a hand edit described in the configuration guide.
+
+## 5. Webhooks are optional
 
 A parked run wakes without webhooks: the service re-reads each waiting pull
 request and ticket every `service.pollIntervalSeconds.github` / `.linear`

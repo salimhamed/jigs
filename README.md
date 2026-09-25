@@ -20,7 +20,6 @@ mkdir my-factory && cd my-factory && git init
 pnpm --config.minimum-release-age-exclude=@jigs-ai/jigs dlx @jigs-ai/jigs init
 pnpm install
 cp .env.example .env
-pnpm exec jigs bind git@github.com:owner/app.git
 pnpm exec jigs up
 ```
 
@@ -28,7 +27,7 @@ pnpm exec jigs up
 listing what it started, with the dashboard URL. Then run the starter workflow:
 
 ```sh
-pnpm exec jigs run hello --input binding=app
+pnpm exec jigs run hello
 pnpm exec jigs status
 ```
 

@@ -1,8 +1,8 @@
 # Install and run a first workflow
 
 This guide creates a factory, starts its service and runs `hello`, the workflow
-every new factory includes. `hello` cuts a worktree from a repository you bind.
-It calls no model and pushes nothing, so it needs no agent or ticket source.
+every new factory includes. `hello` calls no model and changes no repository,
+so you need no credentials to try it.
 
 ## Set up with your agent
 
@@ -60,18 +60,11 @@ registers it under the name `hello`.
 ```sh
 pnpm install
 cp .env.example .env
-pnpm exec jigs bind git@github.com:owner/app.git
 pnpm exec jigs up
 ```
 
-`pnpm install` puts this factory's jigs in place for `pnpm exec`.
-
-`jigs bind` names a repository for `hello` to work in, and `jigs up` clones it.
-The binding's name comes from the repository name, here `app`. On a GitHub
-remote, `bind` also creates the approval label, so it needs a GitHub token in
-`.env` first: see [GitHub identity](/guide/configuration#github-identity). A
-repository on this machine, written as `file:///srv/git/app.git`, needs no
-credentials. `jigs up` starts Postgres, builds the factory,
+`pnpm install` puts this factory's jigs in place for `pnpm exec`. `hello`
+needs nothing filled in `.env`. `jigs up` starts Postgres, builds the factory,
 starts the service and waits until it is ready. It then runs `jigs doctor`,
 which checks only what your workflows use; rerun it any time with
 `pnpm exec jigs doctor`.
@@ -97,7 +90,7 @@ Postgres running; `pnpm exec jigs down` stops both and keeps Postgres's data.
 ## 4. Run hello
 
 ```sh
-pnpm exec jigs run hello --input binding=app
+pnpm exec jigs run hello
 pnpm exec jigs status
 ```
 
@@ -108,5 +101,7 @@ a run ID to see one run in detail:
 pnpm exec jigs status <run-id>
 ```
 
-The run should finish as completed and return the worktree's path. From here,
-write your own workflow with [Build a workflow](/guide/build-a-workflow).
+The run should finish as completed. From here, write your own workflow with
+[Build a workflow](/guide/build-a-workflow). Binding a repository needs GitHub
+credentials, so set them first: see
+[GitHub identity](/guide/configuration#github-identity).

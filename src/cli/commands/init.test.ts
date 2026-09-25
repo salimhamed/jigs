@@ -257,9 +257,8 @@ test("the next steps are printed, not run", async () => {
   expect(steps.map((l) => l.split("  ")[0])).toEqual([
     "pnpm install",
     "cp .env.example .env",
-    "pnpm exec jigs bind <remote-url>",
     "pnpm exec jigs up",
-    "pnpm exec jigs run hello --input binding=<binding-name>",
+    "pnpm exec jigs run hello",
     "pnpm exec jigs doctor",
   ]);
   expect(printed).not.toContain("--no-doctor");

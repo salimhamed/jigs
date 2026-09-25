@@ -18,7 +18,7 @@ pnpm exec jigs up
 
 The binding's name comes from the repository name, here `app`. A workflow that
 needs no repository can skip this and use `createRunDirectory()` from
-`#jigs/steps` for a scratch directory instead.
+`#jigs/steps` for a scratch directory instead, as `hello` does.
 
 ## 2. Write the workflow
 
