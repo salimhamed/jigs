@@ -159,23 +159,26 @@ test("descriptor settings reach the CLI and jigs' policy wins over a smuggled po
     extraArgs: { "dangerously-load-anything": null },
   } as ClaudeHarness;
 
-  const opened = await open(
-    { harness, cwd: worktree },
-    {
-      metadata: { workflowRunId: "run-settings" },
-      env: { ...harnessEnv([]), JIGS_CLAUDE_TEST_RECORD: record },
-    },
-  );
-  await expect(generateText({ model: opened.model, prompt: "work" })).rejects.toThrow();
-  await opened.close();
+  try {
+    const opened = await open(
+      { harness, cwd: worktree },
+      {
+        metadata: { workflowRunId: "run-settings" },
+        env: { ...harnessEnv([]), JIGS_CLAUDE_TEST_RECORD: record },
+      },
+    );
+    await expect(generateText({ model: opened.model, prompt: "work" })).rejects.toThrow();
+    await opened.close();
 
-  const { args } = JSON.parse(readFileSync(record, "utf8")) as { args: string[] };
-  const flag = (name: string) => args[args.indexOf(name) + 1];
-  expect(flag("--max-turns")).toBe("3");
-  expect(flag("--allowedTools")).toBe("Read");
-  expect(flag("--permission-mode")).toBe("bypassPermissions");
-  expect(args).not.toContain("--dangerously-load-anything");
-  vi.unstubAllEnvs();
+    const { args } = JSON.parse(readFileSync(record, "utf8")) as { args: string[] };
+    const flag = (name: string) => args[args.indexOf(name) + 1];
+    expect(flag("--max-turns")).toBe("3");
+    expect(flag("--allowedTools")).toBe("Read");
+    expect(flag("--permission-mode")).toBe("bypassPermissions");
+    expect(args).not.toContain("--dangerously-load-anything");
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });
 
 function launchFixture(

@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { unwrapAgentStep } from "../../workflow/agents/agent.ts";
 import { bindAgentSession, type RunAgentFn } from "../../workflow/agents/agent-session.ts";
-import { harnesses, models } from "../../workflow/agents/harness-config.ts";
+import { type CodexHarness, harnesses, models } from "../../workflow/agents/harness-config.ts";
 import {
   buildAgentRequest,
   buildAskAgentRequest,
@@ -262,6 +262,25 @@ test("codex agent step runs on the app-server under an invocation home with fixe
     probe: { transport: "stdio", command: "node" },
   });
   expect(captured.homeRunIds).toEqual(["run-7"]);
+});
+
+test("a Codex descriptor that smuggles sandbox or config policy loses to jigs' policy", async () => {
+  // A descriptor that skipped its constructor, as a hand-built wire could.
+  const harness = {
+    ...harnesses.codex({ model: "gpt-5.5", personality: "pragmatic" }),
+    sandboxPolicy: "read-only",
+    configOverrides: { sandbox_mode: "read-only", mcp_servers: {} },
+  } as CodexHarness;
+  const wire = buildAgentRequest({ harness, cwd: worktree, prompt: "implement it" });
+  const { deps, captured } = makeDeps();
+
+  await agentStep(wire, { workflowRunId: "run-smuggle" }, deps);
+
+  const settings = captured.codexSettings;
+  expect(settings?.personality).toBe("pragmatic");
+  expect(settings?.sandboxPolicy).toBe("danger-full-access");
+  expect(settings?.approvalPolicy).toBe("never");
+  expect(settings).not.toHaveProperty("configOverrides");
 });
 
 test("parallel Codex invocations keep settings and homes private", async () => {

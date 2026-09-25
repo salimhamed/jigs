@@ -101,6 +101,9 @@ export const claudePolicyKeys = [
   "resumeDropsTurn",
   "extraArgs",
   "sdkOptions",
+  "agents",
+  "settings",
+  "plugins",
 ] as const satisfies readonly (keyof ClaudeCodeSettings)[];
 /**
  * A Claude Code setting a descriptor cannot name, because jigs sets it itself or holds it as
@@ -109,7 +112,9 @@ export const claudePolicyKeys = [
  * @remarks
  * jigs sets the working directory, environment, executable and session for every step, and holds
  * permissions, setting sources and MCP servers as policy. `extraArgs` and `sdkOptions` would
- * rewrite any of those.
+ * rewrite any of those. `agents`, `settings` and `plugins` would bring in unprobed MCP servers,
+ * environment, permissions and hooks from outside the worktree; they come from the repository's
+ * project settings instead.
  */
 export type ClaudePolicyKey = (typeof claudePolicyKeys)[number];
 

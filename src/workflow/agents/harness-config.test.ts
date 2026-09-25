@@ -197,6 +197,12 @@ const claudePolicyRejected = [
   () => harnesses.claude({ model: "opus", extraArgs: {} }),
   // @ts-expect-error sdkOptions is Claude policy
   () => harnesses.claude({ model: "opus", sdkOptions: {} }),
+  // @ts-expect-error agents is Claude policy
+  () => harnesses.claude({ model: "opus", agents: {} }),
+  // @ts-expect-error settings is Claude policy
+  () => harnesses.claude({ model: "opus", settings: "/etc/claude.json" }),
+  // @ts-expect-error plugins is Claude policy
+  () => harnesses.claude({ model: "opus", plugins: [] }),
   // @ts-expect-error mcpServers takes jigs' shape with a probe, not the provider's
   () => harnesses.claude({ model: "opus", mcpServers: { s: { type: "stdio", command: "x" } } }),
 ];
@@ -232,6 +238,8 @@ const functionsRejected = [
   () => harnesses.claude({ model: "opus", hooks: { PreToolUse: [{ hooks: [async () => ({})] }] } }),
   // @ts-expect-error a logger is an object of functions
   () => harnesses.claude({ model: "opus", logger: false }),
+  // @ts-expect-error a tool-approval callback is not data
+  () => harnesses.claude({ model: "opus", canUseTool: async () => ({ behavior: "allow" }) }),
   // @ts-expect-error a callback is not data
   () => harnesses.codex({ model: "gpt-5.5", onSessionCreated: () => {} }),
   // @ts-expect-error a logger is an object of functions
@@ -270,7 +278,7 @@ test("a descriptor holds only the provider's data settings outside the policy li
   // Rejected at compile time, so the list only has to exist.
   expect(claudePolicyRejected).toHaveLength(claudePolicyKeys.length);
   expect(codexPolicyRejected).toHaveLength(codexPolicyKeys.length);
-  expect(functionsRejected).toHaveLength(5);
+  expect(functionsRejected).toHaveLength(6);
 });
 
 test("a settings object held in a variable is checked too", () => {
