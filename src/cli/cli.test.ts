@@ -51,7 +51,8 @@ test("explicit GitHub flags reach the scaffold through the CLI parser", () => {
       "--binding-name",
       "example-alias",
     );
-    expect(bound.status).toBe(0);
+    // With no real App behind it the label leg fails, after the binding is recorded.
+    expect(bound.stderr).toContain("jigs:approved label could not be ensured");
     const config = readFactoryConfig(cwd);
     expect(config.github.identities).toEqual([
       {

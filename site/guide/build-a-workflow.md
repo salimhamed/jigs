@@ -237,9 +237,9 @@ A second owner receives a claim conflict. The service's polling, webhooks and
 
 The watcher never merges. Factory code decides who may merge and calls
 `mergePullRequest` when appropriate; that step rechecks current GitHub facts
-and the [merge approval policy](/guide/configuration#merge). The
+and the [merge approval](/guide/configuration#merging). The
 [linear-ticket-to-pr recipe](/guide/recipes#linear-ticket-to-pr) demonstrates
-continuing the builder session after publication with this policy.
+continuing the builder session after publication and deciding who merges.
 
 ### Use the rules-based gate
 
@@ -250,7 +250,7 @@ wake says what is outstanding right now.
 ```ts
 function pullRequestGate(
   pr: PullRequestRef,
-  options: { scope: string; approval: MergePolicy["approval"]; worktree?: Worktree },
+  options: { scope: string; approval: MergeApproval; worktree?: Worktree },
 ): AsyncIterable<PullRequestWake>;
 
 type PullRequestWake =
@@ -262,9 +262,9 @@ type PullRequestWake =
 
 ```ts
 import { postPullRequestNote, pullRequestGate } from "#jigs/routines";
-import { mergePullRequest, resolveMergePolicy } from "#jigs/steps";
+import { mergePullRequest, resolveMergeSettings } from "#jigs/steps";
 
-const merge = await resolveMergePolicy(input.binding);
+const merge = await resolveMergeSettings(input.binding);
 const scope = `triage/${input.ticket}`;
 
 const gate = pullRequestGate(pr, { scope, approval: merge.approval, worktree });

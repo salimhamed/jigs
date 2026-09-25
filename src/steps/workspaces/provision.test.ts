@@ -30,6 +30,7 @@ function binding(overrides: Partial<Binding> = {}): Binding {
   return {
     name: "api",
     remote: "git@github.com:acme/api.git",
+    mergeMethod: "squash",
     copy: [],
     postCreate: [],
     hookTimeoutMinutes: 10,

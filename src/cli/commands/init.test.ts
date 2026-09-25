@@ -272,15 +272,12 @@ test("the next steps are printed, not run", async () => {
   expect(existsSync(path.join(dir, ".env"))).toBe(false);
 });
 
-test("the scaffold states an identity and the approval signal that matches it", async () => {
+test("the scaffold states an identity and leaves the approval to its default", async () => {
   const patFactory = scaffold("pat-factory");
   await init(patFactory);
   const pat = readFileSync(path.join(patFactory, "jigs.config.ts"), "utf8");
   expect(pat).toContain('identities: [{ mode: "pat" }]');
-  // jigs is the pull request's author under a personal token, and GitHub
-  // refuses to let an author approve their own, so a label is the consent.
-  expect(pat).toContain('approval: { kind: "label", name: "jigs:approved" }');
-  expect(pat).not.toContain('kind: "review"');
+  expect(pat).not.toContain("merge");
 
   const appFactory = scaffold("app-factory");
   const lines: string[] = [];
@@ -289,7 +286,7 @@ test("the scaffold states an identity and the approval signal that matches it", 
   expect(app).toContain('mode: "app"');
   expect(app).toContain("installations: { salimhamed: 162033982 }");
   expect(app).toContain('operator: "salimhamed"');
-  expect(app).toContain('approval: { kind: "review" }');
+  expect(app).not.toContain("merge");
   // App mode needs the key locked down.
   expect(lines.join("\n")).toContain("chmod 600 github-app.private-key.pem");
   // The App's private key is a credential, and a scaffolded repo is a git repo.
@@ -301,14 +298,14 @@ test("the scaffold states an identity and the approval signal that matches it", 
 // test is red on day one is the failure this guards.
 const scaffoldedExpectations = (dir: string) => {
   const text = readFileSync(path.join(dir, "jigs.config.test.ts"), "utf8");
-  const [, github, linear, merge] =
-    /expect\(factory\.github\)\.toEqual\((.+?)\);\n\s*expect\(factory\.linear\)\.toEqual\((.+?)\);\n\s*expect\(factory\.merge\)\.toEqual\((.+?)\);/s.exec(
+  const [, github, linear] =
+    /expect\(factory\.github\)\.toEqual\((.+?)\);\n\s*expect\(factory\.linear\)\.toEqual\((.+?)\);/s.exec(
       text,
     ) ?? [];
-  if (github === undefined || linear === undefined || merge === undefined) {
-    throw new Error("the scaffolded test no longer asserts the identities and the merge policy");
+  if (github === undefined || linear === undefined) {
+    throw new Error("the scaffolded test no longer asserts the identities");
   }
-  return { github: evaluate(github), linear: evaluate(linear), merge: evaluate(merge) };
+  return { github: evaluate(github), linear: evaluate(linear) };
 };
 
 // Both files carry settings objects rather than data formats, so both are read
@@ -326,7 +323,6 @@ const scaffoldedConfig = (dir: string) => {
   return evaluate(body.replace(/workflows:\s*\{[^}]*\},?/s, "")) as {
     github: unknown;
     linear: unknown;
-    merge: unknown;
   };
 };
 
@@ -348,10 +344,12 @@ test.each([
     expect(config.github).toEqual(expectations.github);
     expect(config.linear).toEqual({ identity: { mode: linearMode } });
     expect(config.linear).toEqual(expectations.linear);
-    expect(config.merge).toEqual(expectations.merge);
     // And what it declares is what jigs accepts, so the first `jigs up` loads.
     const parsed = parseFactoryConfig({ service: { dashboardPort: 9090 }, ...config });
-    expect(parsed.github).toEqual(expectations.github);
+    expect(parsed.github).toEqual({
+      ...(expectations.github as object),
+      mergeApproval: mode === "app" ? "review" : "label",
+    });
     expect(parsed.linear).toEqual(expectations.linear);
   },
 );

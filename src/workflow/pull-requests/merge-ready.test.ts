@@ -8,11 +8,11 @@ import {
   isPullRequestMergeReady,
   mergeRefusal,
 } from "./merge-ready.ts";
-import type { ApprovalSignal } from "./policy.ts";
+import type { MergeApproval } from "./policy.ts";
 
 const SCOPE = "ship/AGE-402";
-const REVIEW: ApprovalSignal = { kind: "review" };
-const LABEL: ApprovalSignal = { kind: "label", name: "jigs:approved" };
+const REVIEW: MergeApproval = "review";
+const LABEL: MergeApproval = "label";
 
 const snapshot: PullRequestSnapshot = {
   state: "open",
@@ -71,7 +71,7 @@ test("a review approval names a commit, so a push withdraws it", () => {
 // approval that named an earlier commit says so rather than reading as one
 // nobody ever gave.
 test("an unmet approval names which of the four things is missing", () => {
-  const refusalFor = (patch: Partial<PullRequestSnapshot>, signal: ApprovalSignal = REVIEW) =>
+  const refusalFor = (patch: Partial<PullRequestSnapshot>, signal: MergeApproval = REVIEW) =>
     mergeRefusal({ ...snapshot, ...patch }, "new", signal)?.reason;
   const approval = snapshot.reviews[0];
   if (approval === undefined) throw new Error("Missing fixture approval");
@@ -184,6 +184,11 @@ test("a refusal jigs can wait out is kept apart from one only a new commit fixes
     expect(refusal({ mergeState })).toMatchObject({ transient: true });
   }
   expect(refusal({ ci: "pending" })).toMatchObject({ transient: true });
+  // No check at all may be CI that has not started yet, or a repository without it.
+  expect(refusal({ ci: "none" })).toEqual({
+    reason: expect.stringMatching(/no checks have reported on new.*not have started yet.*has none/),
+    transient: true,
+  });
   expect(refusal({ ci: "red" })).toMatchObject({ transient: true });
   // Approving again is the whole recovery, and it names this same commit.
   expect(refusal({ reviews: [] })).toMatchObject({ transient: true });

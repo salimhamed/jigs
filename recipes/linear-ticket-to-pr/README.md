@@ -33,9 +33,11 @@ overwrites them.
   authenticate the tool separately. Missing access makes maintenance stop for help.
 - **A binding** for the repository to change: `pnpm exec jigs bind <remote>`, then
   `pnpm exec jigs up`. See [bindings](https://salimhamed.github.io/jigs/guide/configuration#bindings).
-- **A merge policy** you have decided on. See
-  [merge](https://salimhamed.github.io/jigs/guide/configuration#merge). jigs never
-  merges in a repository with no CI.
+- **Who merges.** `mergedBy` near the top of `linear-ticket-to-pr.ts` is
+  `"human"`, so the run waits for you to merge. Set it to `"jigs"` to have jigs
+  merge once the pull request is approved and CI is green. jigs never merges in
+  a repository with no CI. How you approve, and the merge method, are set in
+  [jigs.config.ts](https://salimhamed.github.io/jigs/guide/configuration#merging).
 
 [Webhooks](https://salimhamed.github.io/jigs/guide/configuration#webhooks) are
 optional.
@@ -149,7 +151,7 @@ try {
   The builder returns `finished`, `pending`, or `needs-human` with a summary.
   `pending` waits only for an external change; unfinished local or unpublished
   work is recovered immediately instead. `needs-human` stops with the explanation.
-  With `by: "human"` the recipe waits for you to merge. With `by: "jigs"` it
+  With `mergedBy: "human"` the recipe waits for you to merge. With `"jigs"` it
   requires `finished`, a clean matching local commit, unchanged GitHub facts,
   and the configured GitHub approval and green CI before calling the merge step.
   The watcher never merges, and the agent is instructed not to merge or approve.

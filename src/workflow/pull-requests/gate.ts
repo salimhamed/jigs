@@ -10,7 +10,7 @@ import { ClaimConflictError } from "../linear/claim.ts";
 import type { Worktree } from "../workspaces/worktree.ts";
 import { carriesMarker, commentSource, type MarkerLedger, readLedger } from "./marker.ts";
 import { isPullRequestMergeReady } from "./merge-ready.ts";
-import type { ApprovalSignal } from "./policy.ts";
+import type { MergeApproval } from "./policy.ts";
 
 /** The durable hook-token prefix for pull request activity. */
 export const PULL_REQUEST_TOKEN_PREFIX = "github:pr:";
@@ -186,7 +186,7 @@ export interface PullRequestState {
 export function classifyPullRequestState(
   snapshot: PullRequestSnapshot,
   scope: string,
-  approval: ApprovalSignal,
+  approval: MergeApproval,
 ): PullRequestState {
   const ownComments = bodies(snapshot).filter(carriesMarker).length;
   if (snapshot.state === "closed") {
@@ -290,7 +290,7 @@ export interface PullRequestGateOptions {
   /** The continuation identity whose markers say what is already done. */
   scope: string;
   /** The signal that makes an open pull request merge-ready. */
-  approval: ApprovalSignal;
+  approval: MergeApproval;
   /**
    * The worktree this run pushes the pull request's branch from. With it, a `ci-red` or
    * `review-comments` wake is dropped when its head is an older commit of the local branch: the

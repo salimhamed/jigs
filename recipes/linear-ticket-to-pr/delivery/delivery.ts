@@ -24,7 +24,7 @@ import {
   readBranchState,
   readWorktreeDiff,
   registerResource,
-  resolveMergePolicy,
+  resolveMergeSettings,
 } from "#jigs/steps";
 import * as prompts from "./prompts.ts";
 import {
@@ -59,6 +59,8 @@ export interface Delivery {
   builder: Harness;
   reviewer: Harness;
   budget: Budget;
+  /** Who merges the pull request once it is approved and CI is green. */
+  mergedBy: "jigs" | "human";
 }
 
 export interface Approved {
@@ -207,7 +209,7 @@ export async function followPullRequest(
   builder: BuilderSession,
 ): Promise<void> {
   const { task, worktree, budget } = delivery;
-  const merge = await resolveMergePolicy(worktree.binding);
+  const merge = await resolveMergeSettings(worktree.binding);
   let lastAssessed: string | undefined;
   for await (const snapshot of watchPullRequest(pr)) {
     if (snapshot.state === "closed") {
@@ -290,7 +292,7 @@ export async function followPullRequest(
       // published head or changed discussion is assessed on the next watch yield.
       if (
         report.status !== "finished" ||
-        merge.by === "human" ||
+        delivery.mergedBy === "human" ||
         pullRequestSnapshotKey(current) !== pullRequestSnapshotKey(assessed) ||
         !isPullRequestMergeReady(current, merge.approval)
       )

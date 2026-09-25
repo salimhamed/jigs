@@ -89,7 +89,6 @@ export {
   type FactoryDefinition,
   type GitHubDefinition,
   type LinearDefinition,
-  type MergeDefinition,
   type Schedule,
   type TicketWorkflowInputs,
   ticketInputSchema,
@@ -142,10 +141,10 @@ export {
 } from "./workflow/pull-requests/marker.ts";
 export { isPullRequestMergeReady } from "./workflow/pull-requests/merge-ready.ts";
 export {
-  type ApprovalSignal,
-  approvalSignalSchema,
-  type MergePolicy,
-  mergePolicySchema,
+  APPROVED_LABEL,
+  type MergeApproval,
+  type MergeMethod,
+  type MergeSettings,
 } from "./workflow/pull-requests/policy.ts";
 export {
   type CheckRun,

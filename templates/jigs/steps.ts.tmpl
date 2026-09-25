@@ -7,7 +7,7 @@ import type {
   Halt,
   JevQuestions,
   JevResult,
-  MergePolicy,
+  MergeSettings,
   ModelRequest,
   PullRequestRef,
   ReleasePolicy,
@@ -158,10 +158,10 @@ export async function resolveRepository(binding: string) {
   return pullRequestsOperations.resolveRepository(binding);
 }
 
-/** Read the effective merge policy for a factory binding. */
-export async function resolveMergePolicy(binding: string) {
+/** Read how a factory binding's pull requests are approved and merged. */
+export async function resolveMergeSettings(binding: string) {
   "use step";
-  return pullRequestsOperations.resolveMergePolicy(binding);
+  return pullRequestsOperations.resolveMergeSettings(binding);
 }
 
 /** Check commits since the base, the branch's current commit, and uncommitted changes. */
@@ -266,8 +266,8 @@ export async function markPullRequestReady(pullRequest: PullRequestRef) {
 export async function mergePullRequest(
   pullRequest: PullRequestRef,
   expectedHeadSha: string,
-  policy: MergePolicy,
+  settings: MergeSettings,
 ) {
   "use step";
-  return pullRequestsOperations.mergePullRequest(pullRequest, expectedHeadSha, policy);
+  return pullRequestsOperations.mergePullRequest(pullRequest, expectedHeadSha, settings);
 }

@@ -3,7 +3,7 @@
 // forbidden. The credential comes from github-auth.ts, whichever identity the
 // factory configured.
 
-import type { MergePolicy } from "../workflow/pull-requests/policy.ts";
+import type { MergeMethod } from "../workflow/pull-requests/policy.ts";
 import type {
   CheckRun,
   PullRequestSnapshot,
@@ -134,10 +134,10 @@ function classifyChecks(runs: CheckRun[], anyPending: boolean) {
   );
   if (failing.length > 0) return { ci: "red" as const, failing };
   if (anyPending) return { ci: "pending" as const, failing };
-  // Zero runs reads as pending, never green: a repo with no CI must never
-  // escalate, and it has nothing to recover from either.
+  // Zero runs is never green, and never red either: a repo with no CI must
+  // never escalate, and it has nothing to recover from.
   return {
-    ci: runs.length === 0 ? ("pending" as const) : ("green" as const),
+    ci: runs.length === 0 ? ("none" as const) : ("green" as const),
     failing,
   };
 }
@@ -424,7 +424,7 @@ export interface MergeRequest {
   title: string;
   /** The head the caller judged ready; GitHub refuses the merge if it has moved. */
   expectedHeadSha: string;
-  method: MergePolicy["method"];
+  method: MergeMethod;
   /** The squash or merge commit body jigs supplies when one is required. */
   message?: string;
 }

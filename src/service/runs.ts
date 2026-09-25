@@ -227,7 +227,7 @@ async function withPrState(
   const wake = lastWake(suspension.token, runId);
   const withWake = wake === undefined ? suspension : { ...suspension, lastWake: wake };
   try {
-    const approval = readFactoryConfig(factoryRoot()).merge.approval;
+    const approval = readFactoryConfig(factoryRoot()).github.mergeApproval;
     const snapshot = await fetchPrSnapshot(pr);
     return {
       ...withWake,

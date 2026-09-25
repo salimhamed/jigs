@@ -25,7 +25,7 @@ Add `--help` to a command to see its options.
 
 | Command | What it does |
 | --- | --- |
-| `jigs bind <remote-url>` | Add a binding for a repository, and create its approval label or webhook when configured. |
+| `jigs bind <remote-url>` | Add a binding for a repository, create the `jigs:approved` label, and create its webhook when configured. |
 | `jigs bindings` | List bindings, their clone paths and whether each clone exists. |
 | `jigs unbind <name>` | Remove a binding. The clone stays on disk for you to delete. |
 

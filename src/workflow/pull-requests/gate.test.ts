@@ -9,7 +9,7 @@ import {
   tokenFromGitHubPayload,
 } from "./gate.ts";
 import { type MarkerKind, markBody, type StatusReason } from "./marker.ts";
-import type { ApprovalSignal } from "./policy.ts";
+import type { MergeApproval } from "./policy.ts";
 
 // The gate reaches the SDK through this one hook, so a stand-in that counts
 // awaits and hands back a resolver is enough to drive the loop.
@@ -50,7 +50,7 @@ beforeEach(() => {
 const SCOPE = "ship/AGE-403";
 const AT = "2026-08-26T12:00:00Z";
 
-const APPROVAL: ApprovalSignal = { kind: "review" };
+const APPROVAL: MergeApproval = "review";
 
 const snapshot = (overrides: Partial<PullRequestSnapshot> = {}): PullRequestSnapshot => ({
   state: "open",
@@ -309,9 +309,10 @@ test("a marked could-not-repair note settles that red head", () => {
   expect(wakesOf({ ...state, headSha: "head-2" })).toHaveLength(1);
 });
 
-test("green and pending CI yield nothing on their own", () => {
+test("green, pending and absent CI yield nothing on their own", () => {
   expect(wakesOf(snapshot({ ci: "green" }))).toEqual([]);
   expect(wakesOf(snapshot({ ci: "pending" }))).toEqual([]);
+  expect(wakesOf(snapshot({ ci: "none" }))).toEqual([]);
 });
 
 test("a failed commit status wakes ci-red and its successful recovery clears it", () => {

@@ -17,7 +17,7 @@ export {
   type OpenedPullRequest,
   openPullRequest,
   replyToPullRequestReviewThread,
-  resolveMergePolicy,
+  resolveMergeSettings,
   resolveRepository,
   reviewPullRequest,
 } from "./pr.ts";

@@ -90,9 +90,13 @@ function reviewApproval(): void {
   vi.spyOn(config, "readFactoryConfig").mockReturnValue({
     bindings: {},
     service: { port: 8990, dashboardPort: 9090, pollIntervalSeconds: { github: 300, linear: 300 } },
-    github: { identities: [{ mode: "pat" }] },
+    github: {
+      identities: [
+        { mode: "app", appId: 1, installations: { acme: 2 }, privateKeyPath: "k", operator: "me" },
+      ],
+      mergeApproval: "review",
+    },
     linear: { identity: { mode: "key" } },
-    merge: { by: "human", method: "squash", approval: { kind: "review" } },
     agents: { env: [] },
   });
 }

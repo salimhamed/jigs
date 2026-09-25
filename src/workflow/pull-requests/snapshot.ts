@@ -73,7 +73,8 @@ export interface PullRequestSnapshot {
   reviews: PullRequestReview[];
   reviewThreads: ReviewThread[];
   conversationComments: PullRequestComment[];
-  ci: "red" | "green" | "pending";
+  /** `none` is a head no check or status has reported on yet, or ever will. It is never green. */
+  ci: "red" | "green" | "pending" | "none";
   failingChecks: CheckRun[];
 }
 

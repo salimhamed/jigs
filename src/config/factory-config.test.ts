@@ -7,7 +7,6 @@ import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { defineFactory } from "../workflow/factory.ts";
 import { addWorkflow, removeBinding, upsertBinding } from "./config-edit.ts";
 import {
-  bindingMergePolicy,
   parseFactoryConfig,
   readFactoryConfig,
   resolveBinding,
@@ -42,58 +41,30 @@ test("binding defaults and declared provisioning are validated", () => {
   const config = readFactoryConfig(factory(source));
   expect(config.bindings["acme-api"]).toEqual({
     remote: "git@github.com:acme/api.git",
+    mergeMethod: "squash",
     copy: [],
     postCreate: ["npm ci"],
     hookTimeoutMinutes: 10,
   });
 });
 
-test("a binding may override either repository-specific merge setting", () => {
-  const config = parseFactoryConfig({
-    service: { dashboardPort: 9090 },
-    bindings: {
-      api: { remote: "url", merge: { by: "jigs" } },
-      web: { remote: "url", merge: { method: "rebase" } },
-    },
-    merge: { by: "human", method: "squash", approval: { kind: "review" } },
-  });
-  const api = config.bindings.api;
-  const web = config.bindings.web;
-  if (api === undefined || web === undefined) throw new Error("expected both bindings");
-  expect(bindingMergePolicy(config.merge, api)).toEqual({
-    by: "jigs",
-    method: "squash",
-    approval: { kind: "review" },
-  });
-  expect(bindingMergePolicy(config.merge, web)).toEqual({
-    by: "human",
-    method: "rebase",
-    approval: { kind: "review" },
-  });
+test("a binding's merge method is exactly GitHub's three", () => {
+  for (const mergeMethod of ["squash", "merge", "rebase"]) {
+    const config = withSettings({ bindings: { api: { remote: "url", mergeMethod } } });
+    expect(config.bindings.api?.mergeMethod).toBe(mergeMethod);
+  }
+  expect(() =>
+    withSettings({ bindings: { api: { remote: "url", mergeMethod: "fast-forward" } } }),
+  ).toThrow("mergeMethod");
 });
 
-test("defineFactory accepts a binding merge override", () => {
+test("defineFactory accepts a binding merge method", () => {
   const definition = defineFactory({
     service: { dashboardPort: 9090 },
-    bindings: { api: { remote: "url", merge: { by: "jigs", method: "rebase" } } },
+    bindings: { api: { remote: "url", mergeMethod: "rebase" } },
     workflows: {},
   });
-  expect(definition.bindings.api.merge).toEqual({ by: "jigs", method: "rebase" });
-  defineFactory({
-    service: { dashboardPort: 9090 },
-    // @ts-expect-error approval is factory-level, not a binding override
-    bindings: { api: { remote: "url", merge: { approval: { kind: "review" } } } },
-    workflows: {},
-  });
-});
-
-test("binding merge approval is rejected as a factory identity policy", () => {
-  expect(() =>
-    parseFactoryConfig({
-      service: { dashboardPort: 9090 },
-      bindings: { api: { remote: "url", merge: { approval: { kind: "review" } } } },
-    }),
-  ).toThrow("approval is factory-level because it follows github.identities");
+  expect(definition.bindings.api.mergeMethod).toBe("rebase");
 });
 
 test.each([
@@ -413,14 +384,9 @@ test("native TypeScript config is one snapshot per process and a new process see
 const withSettings = (extra: Record<string, unknown>) =>
   parseFactoryConfig({ service: { dashboardPort: 9090 }, ...extra });
 
-test("a factory that states no identity or policy gets the defaults", () => {
+test("a factory that states no identity gets a PAT, approved by label", () => {
   const config = withSettings({});
-  expect(config.github.identities[0]).toEqual({ mode: "pat" });
-  expect(config.merge).toEqual({
-    by: "human",
-    method: "squash",
-    approval: { kind: "review" },
-  });
+  expect(config.github).toEqual({ identities: [{ mode: "pat" }], mergeApproval: "label" });
 });
 
 test("an app identity needs every fact a token cannot be minted without", () => {
@@ -460,46 +426,30 @@ test("a Linear identity is key or app and carries nothing else", () => {
   expect(() => withSettings({ linear: { identities: [{ mode: "key" }] } })).toThrow("identities");
 });
 
-test("a label approval is nothing without the label's name", () => {
-  expect(() => withSettings({ merge: { approval: { kind: "label" } } })).toThrow("name");
-  expect(
-    withSettings({ merge: { approval: { kind: "label", name: "jigs:approved" } } }).merge.approval,
-  ).toEqual({ kind: "label", name: "jigs:approved" });
-  // A review approval takes no name, and a signal that is neither is refused.
-  expect(() => withSettings({ merge: { approval: { kind: "review", name: "x" } } })).toThrow(
-    "name",
+const APP_IDENTITY = {
+  mode: "app",
+  appId: 1,
+  installations: { owner: 2 },
+  privateKeyPath: "k.pem",
+  operator: "salimhamed",
+};
+
+test("merge approval defaults to review for an App, and an App may choose the label", () => {
+  expect(withSettings({ github: { identities: [APP_IDENTITY] } }).github.mergeApproval).toBe(
+    "review",
   );
-  expect(() => withSettings({ merge: { approval: { kind: "comment" } } })).toThrow("approval");
+  expect(
+    withSettings({ github: { identities: [APP_IDENTITY], mergeApproval: "label" } }).github
+      .mergeApproval,
+  ).toBe("label");
+  expect(() => withSettings({ github: { mergeApproval: "comment" } })).toThrow("mergeApproval");
 });
 
-test("the merge method is exactly GitHub's three", () => {
-  for (const method of ["squash", "merge", "rebase"]) {
-    expect(withSettings({ merge: { method } }).merge.method).toBe(method);
-  }
-  expect(() => withSettings({ merge: { method: "fast-forward" } })).toThrow("method");
-});
-
-test("identity and policy are independent: any pairing parses", () => {
-  const config = withSettings({
-    github: {
-      identities: [
-        {
-          mode: "app",
-          appId: 1,
-          installations: { owner: 2 },
-          privateKeyPath: "k.pem",
-          operator: "salimhamed",
-        },
-      ],
-    },
-    merge: { by: "jigs", method: "rebase", approval: { kind: "label", name: "ship-it" } },
-  });
-  expect(config.github.identities[0]?.mode).toBe("app");
-  expect(config.merge).toEqual({
-    by: "jigs",
-    method: "rebase",
-    approval: { kind: "label", name: "ship-it" },
-  });
+test("a PAT cannot approve by review, because GitHub refuses an author's own approval", () => {
+  expect(withSettings({ github: { mergeApproval: "label" } }).github.mergeApproval).toBe("label");
+  expect(() => withSettings({ github: { mergeApproval: "review" } })).toThrow(
+    "GitHub does not let the author of a pull request approve it",
+  );
 });
 
 test("App maps and lists normalize and reject ambiguous account ownership", async () => {

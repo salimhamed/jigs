@@ -105,8 +105,9 @@ Each suspension carries a kind:
   service re-reads the thread every `service.pollIntervalSeconds.linear`
   seconds (default 300), and a reply found there wakes it; with Linear
   webhooks on, the reply wakes it at once.
-- **pull-request** — the run holds a pull request and wants an approving review
-  of the current head, green CI and a mergeable branch. The service re-reads
+- **pull-request** — the run holds a pull request and wants the factory's
+  approval (a review of the current head, or the `jigs:approved` label), green
+  CI and a mergeable branch. The service re-reads
   the pull request every `service.pollIntervalSeconds.github` seconds (default
   300); with GitHub webhooks on, a review, a new commit, a CI result or a
   top-level comment wakes it at once.

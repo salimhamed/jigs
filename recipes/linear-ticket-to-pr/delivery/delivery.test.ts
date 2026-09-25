@@ -1,10 +1,4 @@
-import {
-  describeHarness,
-  type Harness,
-  harnesses,
-  type MergePolicy,
-  type PullRequestSnapshot,
-} from "@jigs-ai/jigs";
+import { describeHarness, type Harness, harnesses, type PullRequestSnapshot } from "@jigs-ai/jigs";
 import { beforeEach, expect, test, vi } from "vitest";
 import { createHook, sleep } from "workflow";
 import * as routines from "#jigs/routines";
@@ -41,7 +35,7 @@ vi.mock("#jigs/steps", async (importOriginal) => ({
   readBranchState: vi.fn(),
   readWorktreeDiff: vi.fn(async () => "diff --git a/x b/x"),
   registerResource: vi.fn(),
-  resolveMergePolicy: vi.fn(),
+  resolveMergeSettings: vi.fn(),
 }));
 vi.mock("workflow", () => ({
   createHook: vi.fn(),
@@ -65,6 +59,7 @@ const delivery: Delivery = {
   builder: harnesses.codex({ model: "gpt-5.6-sol" }),
   reviewer: harnesses.claude({ model: "opus" }),
   budget: { reviewRounds: 2, attemptsPerUpdate: 3 },
+  mergedBy: "human",
 };
 const pr = { owner: "acme", repo: "app", number: 7, url: "https://github.com/acme/app/pull/7" };
 
@@ -112,12 +107,10 @@ function watch(...wakes: PullRequestSnapshot[]) {
     yield* wakes;
   });
 }
-const policy = (by: "jigs" | "human") =>
-  vi.mocked(steps.resolveMergePolicy).mockResolvedValue({
-    by,
-    method: "squash",
-    approval: { kind: "review" },
-  } as MergePolicy);
+const policy = (by: Delivery["mergedBy"]) => {
+  delivery.mergedBy = by;
+  vi.mocked(steps.resolveMergeSettings).mockResolvedValue({ method: "squash", approval: "review" });
+};
 
 const stopped = (promise: Promise<unknown>) =>
   promise.then(
@@ -258,7 +251,7 @@ test("the implementation builder resumes to judge the PR and merges only after G
   expect(steps.mergePullRequest).toHaveBeenCalledWith(
     pr,
     "h1",
-    expect.objectContaining({ by: "jigs" }),
+    expect.objectContaining({ method: "squash" }),
   );
 });
 
@@ -293,7 +286,7 @@ test("attempt allowance resets for every update and permits more than six update
   expect(steps.mergePullRequest).not.toHaveBeenCalled();
 });
 
-test("human merge policy never merges", async () => {
+test("a human merger means jigs never merges", async () => {
   policy("human");
   answer(maintenanceReport, finished);
   watch(snapshot, closed);

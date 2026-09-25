@@ -33,7 +33,9 @@ import type {
   McpServerConfig,
   McpStdioServerConfig,
   McpToolProbe,
-  MergePolicy,
+  MergeApproval,
+  MergeMethod,
+  MergeSettings,
   ModelKind,
   ModelRequest,
   ModelResult,
@@ -109,7 +111,9 @@ type RootTypeSurface = {
   mcpServer: McpServerConfig;
   mcpStdioServer: McpStdioServerConfig;
   mcpProbe: McpToolProbe;
-  mergePolicy: MergePolicy;
+  mergeApproval: MergeApproval;
+  mergeMethod: MergeMethod;
+  mergeSettings: MergeSettings;
   modelKind: ModelKind;
   modelRequest: ModelRequest;
   modelResult: ModelResult;

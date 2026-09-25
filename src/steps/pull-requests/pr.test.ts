@@ -16,13 +16,13 @@ import {
 import { GithubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity } from "../../providers/github-auth.ts";
 import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
-import type { MergePolicy } from "../../workflow/pull-requests/policy.ts";
+import type { MergeSettings } from "../../workflow/pull-requests/policy.ts";
 import {
   markPullRequestReady,
   mergePullRequest,
   openPullRequest,
   preservedCommitMessageBody,
-  resolveMergePolicy,
+  resolveMergeSettings,
   reviewPullRequest,
 } from "./pr.ts";
 
@@ -49,7 +49,7 @@ const worktree = {
   baseSha: "base",
 };
 let root: string;
-const SQUASH: MergePolicy = { by: "jigs", method: "squash", approval: { kind: "review" } };
+const SQUASH: MergeSettings = { method: "squash", approval: "review" };
 
 const asApp = (coAuthor?: string) =>
   vi.mocked(resolveGithubIdentity).mockReturnValue({
@@ -78,22 +78,27 @@ const snapshot: PullRequestSnapshot = {
   ],
 };
 
-test("resolveMergePolicy applies a named binding's overrides to the factory policy", async () => {
+test("resolveMergeSettings reads the binding's method and the factory's approval", async () => {
   const root = makeTmpDir();
   writeFileSync(
     path.join(root, "jigs.config.ts"),
     `export default {
       service: { dashboardPort: 9090 },
-      merge: { by: "jigs", method: "squash", approval: { kind: "review" } },
-      bindings: { docs: { remote: "git@github.com:acme/docs.git", merge: { by: "human", method: "rebase" } } },
+      bindings: {
+        docs: { remote: "git@github.com:acme/docs.git", mergeMethod: "rebase" },
+        api: { remote: "git@github.com:acme/api.git" },
+      },
     };`,
   );
   vi.stubEnv("JIGS_FACTORY_ROOT", root);
   try {
-    await expect(resolveMergePolicy("docs")).resolves.toEqual({
-      by: "human",
+    await expect(resolveMergeSettings("docs")).resolves.toEqual({
       method: "rebase",
-      approval: { kind: "review" },
+      approval: "label",
+    });
+    await expect(resolveMergeSettings("api")).resolves.toEqual({
+      method: "squash",
+      approval: "label",
     });
   } finally {
     vi.unstubAllEnvs();

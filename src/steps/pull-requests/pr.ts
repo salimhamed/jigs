@@ -1,8 +1,4 @@
-import {
-  bindingMergePolicy,
-  readFactoryConfig,
-  resolveBinding,
-} from "../../config/factory-config.ts";
+import { readFactoryConfig, resolveBinding } from "../../config/factory-config.ts";
 import { factoryRoot } from "../../config/factory-root.ts";
 import {
   assignPullRequest,
@@ -24,7 +20,7 @@ import { GithubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity } from "../../providers/github-auth.ts";
 import { parseGithubRemote } from "../../providers/github-webhook.ts";
 import { type MergeRefusal, mergeRefusal } from "../../workflow/pull-requests/merge-ready.ts";
-import type { MergePolicy } from "../../workflow/pull-requests/policy.ts";
+import type { MergeMethod, MergeSettings } from "../../workflow/pull-requests/policy.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
 
 /** Identifies a GitHub repository by its owner and name. */
@@ -53,11 +49,11 @@ export async function resolveRepository(binding: string): Promise<GitHubRepoRef>
   return ref;
 }
 
-/** Read the effective merge policy for a factory binding. */
-export async function resolveMergePolicy(binding: string): Promise<MergePolicy> {
+/** Read how a binding's pull requests are approved and merged. */
+export async function resolveMergeSettings(binding: string): Promise<MergeSettings> {
   const root = factoryRoot();
-  const { merge } = readFactoryConfig(root);
-  return bindingMergePolicy(merge, resolveBinding(root, binding));
+  const { mergeMethod } = resolveBinding(root, binding);
+  return { method: mergeMethod, approval: readFactoryConfig(root).github.mergeApproval };
 }
 
 /**
@@ -183,18 +179,18 @@ const STATE_CHANGED = new Set([405, 409]);
 export async function mergePullRequest(
   pr: PullRequestRef,
   expectedHeadSha: string,
-  policy: MergePolicy,
+  settings: MergeSettings,
 ): Promise<MergeOutcome> {
   const before = await fetchPrSnapshot(pr);
   if (before.merged) return { merged: true, mergeCommitSha: before.mergeCommitSha };
-  const refusal = mergeRefusal(before, expectedHeadSha, policy.approval);
+  const refusal = mergeRefusal(before, expectedHeadSha, settings.approval);
   if (refusal !== null) return { merged: false, ...refusal };
-  const message = await suppliedCommitMessageBody(pr, policy.method);
+  const message = await suppliedCommitMessageBody(pr, settings.method);
   try {
     const result = await mergePr(pr, {
       title: await fetchPrTitle(pr),
       expectedHeadSha,
-      method: policy.method,
+      method: settings.method,
       ...(message === undefined ? {} : { message }),
     });
     if (result.merged) return { merged: true, mergeCommitSha: result.sha };
@@ -213,7 +209,7 @@ export async function mergePullRequest(
   // `mergeable_state` stopped it. Retrying that on every nudge would never end.
   return {
     merged: false,
-    ...(mergeRefusal(after, expectedHeadSha, policy.approval) ?? {
+    ...(mergeRefusal(after, expectedHeadSha, settings.approval) ?? {
       reason: `GitHub refused to merge ${expectedHeadSha} and still reports it as ${after.mergeState}`,
       transient: false,
     }),
@@ -235,7 +231,7 @@ export async function mergePullRequest(
  */
 async function suppliedCommitMessageBody(
   pr: PullRequestRef,
-  method: MergePolicy["method"],
+  method: MergeMethod,
 ): Promise<undefined | string> {
   const identity = resolveGithubIdentity(pr.owner);
   if (method === "rebase" || identity.mode !== "app" || identity.coAuthor === undefined) {

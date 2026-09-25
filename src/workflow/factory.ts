@@ -11,7 +11,6 @@ import type {
   webhooksSchema,
 } from "../config/factory-config.ts";
 import { JigsError } from "./errors.ts";
-import type { mergePolicySchema } from "./pull-requests/policy.ts";
 import type { ReleasePolicy } from "./runtime/release.ts";
 
 /** Accept a Linear issue UUID or an uppercase team-and-number ticket identifier. */
@@ -135,7 +134,20 @@ export interface Factory {
   webhooks?: WebhooksDefinition;
 }
 
-/** Who jigs is on GitHub: the operator's own token, or a GitHub App installation. */
+/**
+ * Who jigs is on GitHub, the operator's own token or a GitHub App installation, and how the
+ * operator approves a pull request for merging.
+ *
+ * @remarks
+ * `mergeApproval` defaults to `label` with a token and to `review` with an App. A token cannot use
+ * `review`: jigs opens pull requests as the operator, and GitHub does not let the author approve
+ * their own pull request.
+ *
+ * @example
+ * ```ts
+ * github: { identities: [{ mode: "pat" }], mergeApproval: "label" },
+ * ```
+ */
 export type GitHubDefinition = z.input<typeof githubSchema>;
 
 /**
@@ -167,7 +179,7 @@ export type WebhooksDefinition = z.input<typeof webhooksSchema>;
 
 /**
  * A repository this factory works in: its remote, how a worktree cut from it
- * is provisioned, and any merge settings that differ from the factory's.
+ * is provisioned, and the merge method jigs uses there.
  *
  * @example
  * ```ts
@@ -175,15 +187,12 @@ export type WebhooksDefinition = z.input<typeof webhooksSchema>;
  *   api: {
  *     remote: "git@github.com:acme/api.git",
  *     postCreate: ["pnpm install"],
- *     merge: { by: "jigs", method: "rebase" },
+ *     mergeMethod: "rebase",
  *   },
  * },
  * ```
  */
 export type BindingDefinition = z.input<typeof bindingSchema>;
-
-/** Who merges, by which of GitHub's three methods, and what signal permits it. */
-export type MergeDefinition = z.input<typeof mergePolicySchema>;
 
 /** Settings for the agent harnesses this factory runs. */
 export interface AgentsDefinition {
@@ -214,7 +223,6 @@ export interface FactoryDefinition {
   webhooks?: WebhooksDefinition;
   github?: GitHubDefinition;
   linear?: LinearDefinition;
-  merge?: MergeDefinition;
   release?: ReleasePolicy;
   bindings?: Record<string, BindingDefinition>;
   workflows: Record<string, () => Promise<{ default: AnyWorkflowDefinition }>>;

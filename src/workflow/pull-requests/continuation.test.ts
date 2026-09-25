@@ -13,9 +13,9 @@ import type {
 } from "../../providers/github.ts";
 import { postPullRequestNote, postReviewAnswers } from "./answers.ts";
 import { classifyPullRequestState } from "./gate.ts";
-import type { ApprovalSignal } from "./policy.ts";
+import type { MergeApproval } from "./policy.ts";
 
-const APPROVAL: ApprovalSignal = { kind: "review" };
+const APPROVAL: MergeApproval = "review";
 
 vi.mock("workflow", () => ({
   getWorkflowMetadata: () => ({ workflowRunId: "wrun_A", workflowName: "ship" }),
