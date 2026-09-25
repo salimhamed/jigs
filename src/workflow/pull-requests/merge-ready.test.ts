@@ -1,11 +1,7 @@
 import { expect, test } from "vitest";
-import { classifyPullRequestState } from "./gate.ts";
-import { markBody } from "./marker.ts";
 import { approvalState, isPullRequestMergeReady, mergeRefusal } from "./merge-ready.ts";
 import type { MergeApproval } from "./policy.ts";
 import type { PullRequestSnapshot } from "./snapshot.ts";
-
-const SCOPE = "ship/AGE-402";
 
 type Facts = Omit<PullRequestSnapshot, "approval">;
 
@@ -59,7 +55,6 @@ test("a clean pull request with no build is not ready, whatever GitHub says", ()
   expect(isPullRequestMergeReady(read({ ci: "red" }))).toBe(false);
   const labelled = read({ reviews: [], labels: ["jigs:approved"], ci: "pending" }, "label");
   expect(isPullRequestMergeReady(labelled)).toBe(false);
-  expect(classifyPullRequestState(labelled, SCOPE).wakes).toEqual([]);
 });
 
 test("a draft, a closed and an already merged pull request are never ready", () => {
@@ -123,54 +118,10 @@ test("a label approval is the pull request's, not a commit's, so it survives a p
   expect(approved({}, "label")).toBe(false);
 });
 
-test("the configured signal is the one the gate classifies with", () => {
+test("merge readiness reads the configured approval signal", () => {
   const labelled = { reviews: [], labels: ["jigs:approved"] };
-  expect(classifyPullRequestState(read(labelled, "review"), SCOPE).wakes).toEqual([]);
-  expect(classifyPullRequestState(read(labelled, "label"), SCOPE).wakes).toEqual([
-    { kind: "merge-ready", headSha: "new", retryNoted: false },
-  ]);
-});
-
-test("a pull request GitHub is not ready to merge becomes merge-ready when it is", () => {
-  expect(classifyPullRequestState(read({ mergeState: "unstable" }), SCOPE).wakes).toEqual([]);
-  expect(classifyPullRequestState(snapshot, SCOPE).wakes).toEqual([
-    { kind: "merge-ready", headSha: "new", retryNoted: false },
-  ]);
-});
-
-test("closed snapshots yield no agent or merge work", () => {
-  expect(classifyPullRequestState(read({ state: "closed", ci: "red" }), SCOPE).wakes).toEqual([
-    { kind: "closed", merged: false },
-  ]);
-});
-
-test("a stood-down head does not ask to be merged again", () => {
-  const stoodDown: Partial<Facts> = {
-    conversationComments: [
-      {
-        id: 1,
-        body: markBody("I could not merge this pull request.", [
-          { scope: SCOPE, run: "wrun_RUN", kind: "status", reason: "merge", source: "new" },
-        ]),
-        user: "salim",
-        userType: "User",
-        createdAt: "1",
-        updatedAt: "1",
-      },
-    ],
-  };
-  expect(classifyPullRequestState(read(stoodDown), SCOPE).wakes).toEqual([]);
-  // A push moves the head, and the approval of that new head is new work.
-  expect(
-    classifyPullRequestState(
-      read({
-        ...stoodDown,
-        headSha: "newer",
-        reviews: facts.reviews.map((review) => ({ ...review, commitSha: "newer" })),
-      }),
-      SCOPE,
-    ).wakes,
-  ).toEqual([{ kind: "merge-ready", headSha: "newer", retryNoted: false }]);
+  expect(isPullRequestMergeReady(read(labelled, "review"))).toBe(false);
+  expect(isPullRequestMergeReady(read(labelled, "label"))).toBe(true);
 });
 
 test("a refusal jigs can wait out is kept apart from one only a new commit fixes", () => {
@@ -197,26 +148,4 @@ test("a refusal jigs can wait out is kept apart from one only a new commit fixes
   // Nothing a later wake reads changes any of these on this commit.
   expect(refusal({ mergeState: "dirty" })).toMatchObject({ transient: false });
   expect(refusal({ state: "closed" })).toMatchObject({ transient: false });
-});
-
-test("a merge jigs will retry leaves the head merge-ready, and is only noted once", () => {
-  const noted = (reason: "merge" | "merge-retry"): PullRequestSnapshot =>
-    read({
-      conversationComments: [
-        {
-          id: 1,
-          body: markBody("I could not merge this pull request yet.", [
-            { scope: SCOPE, run: "wrun_RUN", kind: "status", reason, source: "new" },
-          ]),
-          user: "salim",
-          userType: "User",
-          createdAt: "1",
-          updatedAt: "1",
-        },
-      ],
-    });
-  expect(classifyPullRequestState(noted("merge-retry"), SCOPE).wakes).toEqual([
-    { kind: "merge-ready", headSha: "new", retryNoted: true },
-  ]);
-  expect(classifyPullRequestState(noted("merge"), SCOPE).wakes).toEqual([]);
 });

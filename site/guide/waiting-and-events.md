@@ -63,24 +63,64 @@ The workflow decides whether to change code, respond to feedback or merge.
 See the [watcher reference](/api/factory/routines#watchpullrequest) and
 [snapshot fields](/api/jigs#pullrequestsnapshot) for the exact data.
 
-## Rules-based pull request gate
+## Reply to reviews and post updates
 
-Use `pullRequestGate` when you want jigs' built-in marker and merge-readiness
-rules to classify what is outstanding. It reports review feedback, failing CI,
-merge readiness or closure. A workflow handles each result:
+After reading a snapshot, your workflow can use `postReviewAnswers` to reply to
+review threads, or `postPullRequestNote` to explain the status of a commit. Both
+come from `#jigs/routines`; the generated routines supply the durable steps.
+
+### Reply to a review
+
+Once the workflow has chosen feedback to answer, send the reply with the thread
+from the snapshot. In this example, `selectedThread` is one of
+`snapshot.reviewThreads`:
 
 ```ts
-import { pullRequestGate } from "#jigs/routines";
+import { postReviewAnswers } from "#jigs/routines";
 
-for await (const wake of pullRequestGate(pr, { scope: "delivery", worktree })) {
-  if (wake.kind === "closed") return { merged: wake.merged };
-  // Handle review-comments, ci-red or merge-ready according to your policy.
-}
+await postReviewAnswers({
+  pr,
+  scope: "delivery",
+  threads: [selectedThread],
+  answers: {
+    answers: [{
+      threadId: selectedThread.rootId,
+      body: "Added a regression test for saving a draft twice.",
+    }],
+    commitExplanation: null,
+  },
+});
 ```
 
-The gate does not merge by itself. Keep the scope stable so its notes and
-answers can be recognized. The [gate reference](/api/factory/routines#pullrequestgate)
-describes its markers, ownership and handling of outdated commits.
+The routine sends the answer to the right GitHub thread and marks which
+feedback it addresses. You can also include an explanation of a pushed commit.
+The [reference](/api/factory/routines#postreviewanswers) lists those options.
+
+### Post a commit update
+
+Use `postPullRequestNote` for a status message about the current commit:
+
+```ts
+import { postPullRequestNote } from "#jigs/routines";
+
+await postPullRequestNote({
+  pr,
+  scope: "delivery",
+  headSha: snapshot.headSha,
+  reason: "ci",
+  body: "CI still fails on this commit. The failing test needs investigation.",
+});
+```
+
+It checks the pull request before posting and skips a note already recorded for
+that scope, commit and reason. This avoids repeating the same status message
+on each update. See the [reference](/api/factory/routines#postpullrequestnote)
+for the available reasons and failure behavior.
+
+Keep `scope` stable to identify this workflow's work on the pull request. These
+routines write comments; they do not decide whether to retry, fix code or merge.
+`watchPullRequest` still reports all current facts, including your own comments.
+Your workflow decides which feedback needs a reply and what to do next.
 
 ## Polling and webhooks
 

@@ -165,8 +165,11 @@ test("factory references expose caller signatures and concrete bound options", a
   ]) {
     expect(routines).not.toContain(internal);
   }
-  expect(routines).toContain("### pullRequestGate()");
-  expect(routines).toContain("Only one run may own");
+  expect(routines).toContain("### postReviewAnswers()");
+  expect(routines).toContain("### postPullRequestNote()");
+  expect(routines).not.toContain("pullRequestGate");
+  expect(steps).not.toContain("branchContains");
+  expect(routines).toContain("Only one run may watch");
   expect(steps).toContain("### createRunDirectory()");
   expect(steps).toContain("### release()");
   expect(steps).not.toContain("RunMetadata");
@@ -320,23 +323,43 @@ test("the website covers the public entries, llms.txt and the favicon inside the
   expect(files.has("favicon.svg")).toBe(true);
   expect(landing).toContain("Search");
   expect(generated.some((file) => /assets\/.*localSearchIndex.*\.js$/.test(file))).toBe(true);
-  for (const file of generated.filter((file) => file.endsWith(".html"))) {
-    const html = await readFile(path.join(destination, file), "utf8");
+  const htmlPages = new Map(
+    await Promise.all(
+      generated
+        .filter((file) => file.endsWith(".html"))
+        .map(async (file) => [file, await readFile(path.join(destination, file), "utf8")]),
+    ),
+  );
+  const pageIds = new Map(
+    [...htmlPages].map(([file, html]) => {
+      const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
+      if (file.startsWith("api/")) {
+        expect(
+          ids.filter((id, index) => ids.indexOf(id) !== index),
+          `${file}: duplicate HTML anchors`,
+        ).toEqual([]);
+      }
+      return [file, new Set(ids)];
+    }),
+  );
+  for (const [file, html] of htmlPages) {
     for (const [, href] of html.matchAll(/(?:href|src)="([^"]+)"/g)) {
-      if (/^(?:[a-z][a-z\d+.-]*:|#)/i.test(href)) continue;
+      if (/^[a-z][a-z\d+.-]*:/i.test(href)) continue;
       if (href.startsWith("/")) {
         expect(href, `${file}: ${href} must stay inside the Pages project`).toMatch(/^\/jigs\//);
       }
       const target = decodeURIComponent(href.split(/[?#]/)[0]);
-      if (!target) continue;
-      const relative = target.startsWith("/jigs/")
-        ? target.slice("/jigs/".length)
-        : path.normalize(path.join(path.dirname(file), target));
-      if (!relative || relative.endsWith("/")) {
-        expect(files.has(`${relative}index.html`), `${file}: missing ${href}`).toBe(true);
-        continue;
-      }
+      let relative = !target
+        ? file
+        : target.startsWith("/jigs/")
+          ? target.slice("/jigs/".length)
+          : path.normalize(path.join(path.dirname(file), target));
+      if (!relative || relative.endsWith("/")) relative += "index.html";
       expect(files.has(relative), `${file}: missing ${href}`).toBe(true);
+      const fragment = href.includes("#") ? decodeURIComponent(href.split("#")[1]) : "";
+      if (fragment && pageIds.has(relative)) {
+        expect(pageIds.get(relative).has(fragment), `${file}: missing anchor ${href}`).toBe(true);
+      }
     }
   }
 }, 60_000);

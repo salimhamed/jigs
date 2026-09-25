@@ -8,7 +8,6 @@ import {
   type PushTarget,
   pushCommit,
   resolveRemoteUrl,
-  tryGit,
 } from "../../providers/git.ts";
 import { githubAuthFor } from "../../providers/github-auth.ts";
 import { parseGithubRemote } from "../../providers/github-webhook.ts";
@@ -64,16 +63,6 @@ export async function readBranchState(
   const head = await headSha(worktreePath);
   const dirty = await isWorktreeDirty(worktreePath);
   return { commits, headSha: head, dirty };
-}
-
-/**
- * Whether `sha` is the worktree's HEAD or one of its ancestors. A commit the worktree has never
- * fetched is not contained.
- *
- * @group Inspect changes
- */
-export async function branchContains(worktree: Worktree, sha: string): Promise<boolean> {
-  return (await tryGit(["merge-base", "--is-ancestor", sha, "HEAD"], worktree.path)) !== null;
 }
 
 /**

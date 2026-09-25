@@ -25,7 +25,7 @@ become editable factory source; upgrades only regenerate `jigs/`.
   workflow's own steps in a `steps.ts` in its directory; their implementations
   may use Node and external services.
 - A routine is a function you call from a workflow. It runs steps and may
-  wait, such as `runAgent`, `reviewTicket` or `pullRequestGate`. It has no
+  wait, such as `runAgent`, `reviewTicket` or `watchPullRequest`. It has no
   directive.
 - Step arguments and results cross the database as JSON. Pass data only: a
   function or a provider object fails with `SerializationError: Failed to
@@ -177,7 +177,7 @@ and the `source` it answers — a comment as `id@updatedAt`, or a commit sha. A
 down, so nothing tries it again, while `merge-retry` only records that a
 refusal jigs is waiting out was already reported and leaves the commit
 merge-ready.
-The gate derives what is outstanding from a fresh snapshot and those markers, so nothing is remembered between wakes and a
+Because that record lives on the pull request, nothing is remembered between wakes and a
 replacement run continues where the last one stopped.
 
 Writing your own pull request workflow: choose one scope and keep it, since it
@@ -186,13 +186,12 @@ which the recipe's delivery uses, is the workflow function's
 own name plus that key — so renaming the function changes the scope and a pull
 request parked mid-conversation stops recognising its own answers, the same
 rule that governs durable step ids. Pass an explicit `scope` when you want one
-that outlives a rename. Loop over `pullRequestGate` with `for await`; leaving the loop stops
-watching, and a wake arrives only while its head is still the pull request's
-head. Post through `postReviewAnswers` and `postPullRequestNote` so answers are
+that outlives a rename. Loop over `watchPullRequest` with `for await`; leaving the loop stops
+watching. Post through `postReviewAnswers` and `postPullRequestNote` so answers are
 marked. `postPullRequestNote` posts once per head and reason and is a no-op on
 repeat. A post that fails ends the wake rather than the run, so the next wake
 reposts what is still unanswered. A workflow that only reads a pull request must
-not call `pullRequestGate`: the `github:pr:` hook is an exclusive writer claim
+not call `watchPullRequest`: the `github:pr:` hook is an exclusive writer claim
 and a second holder fails. Read on a schedule with the snapshot step instead,
 under a scope of your own, and the linear-ticket-to-pr recipe's comments will read as neither your
 feedback nor your completed work.

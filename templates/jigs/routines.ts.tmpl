@@ -16,7 +16,6 @@ import {
   bindPullRequestSteps,
 } from "@jigs-ai/jigs/routines";
 import {
-  branchContains,
   checkForTicketHumanReply,
   commentOnPullRequest,
   executeAgent,
@@ -139,8 +138,6 @@ export const {
 
 const pullRequests = bindPullRequestSteps({
   fetchPullRequestState,
-  readBranchState,
-  branchContains,
   commentOnPullRequest,
   replyToPullRequestReviewThread,
 });
@@ -155,28 +152,10 @@ const pullRequests = bindPullRequestSteps({
  * Duplicate wakes and reordered collections with unchanged facts do not yield again.
  * Snapshots include comments regardless of author or jigs markers; the workflow
  * owns decisions, action limits and merging. A closed snapshot is yielded once.
- * Leaving the loop releases the watch. Only one run may watch a pull request,
- * shared with `pullRequestGate`; a second owner receives `ClaimConflictError`.
+ * Leaving the loop releases the watch. Only one run may watch a pull request;
+ * a second owner receives `ClaimConflictError`.
  */
 export const watchPullRequest = pullRequests.watchPullRequest;
-
-/**
- * Wake on a pull request's reviews, CI and merge readiness until it closes.
- *
- * @group Pull requests
- *
- * @remarks
- * Yields `review-comments`, `ci-red`, `merge-ready` or `closed` according to
- * current GitHub facts and this scope's hidden comment markers. Keep `scope`
- * stable and use `postReviewAnswers` and `postPullRequestNote` to record actions.
- * Unmarked feedback remains outstanding until answered with this scope's marker.
- * The gate never merges; call the generated `mergePullRequest` step when ready.
- * Only one run may own this pull request's watch or gate. Leaving the loop
- * releases ownership, and closure ends it. Outdated heads are dropped; with
- * `worktree`, CI and review wakes also skip commits already passed by the local
- * branch. A head pushed by someone else is still delivered.
- */
-export const pullRequestGate = pullRequests.pullRequestGate;
 
 /**
  * Post one revision round's answers, each marked with what it answers.
@@ -184,9 +163,12 @@ export const pullRequestGate = pullRequests.pullRequestGate;
  * @group Pull requests
  *
  * @remarks
- * Marks each answer with its source and scope so the gate recognizes answered
- * feedback. Inline review threads and conversation comments use their respective
- * GitHub reply endpoints.
+ * Marks each answer with its source and scope to identify the feedback it addresses.
+ * Inline review threads and conversation comments use their respective GitHub reply endpoints.
+ * Each call posts the supplied answers; the workflow decides which feedback needs a reply.
+ * Posting stops and logs the error on the first failure. Read fresh facts before deciding
+ * whether to try again. Include `committedSha` and a non-null `commitExplanation` to
+ * explain a pushed commit after posting the replies.
  */
 export const postReviewAnswers = pullRequests.postReviewAnswers;
 
@@ -196,8 +178,10 @@ export const postReviewAnswers = pullRequests.postReviewAnswers;
  * @group Pull requests
  *
  * @remarks
- * Posts at most once per scope, head and reason. Use `merge-retry` for transient
- * merge refusals; the gate can then report that the retry was already noted.
+ * Reads current comments and skips a note already marked with this scope, head and reason.
+ * Use `ci` for a CI update, `merge` for a merge refusal, or `merge-retry` for a temporary
+ * refusal. The reason does not change readiness or schedule more work. Posting failures
+ * are logged and return without throwing; the workflow decides whether to try again.
  */
 export const postPullRequestNote = pullRequests.postPullRequestNote;
 

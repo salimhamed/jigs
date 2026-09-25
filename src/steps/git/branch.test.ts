@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, test } from "vitest";
 import { pushCommit } from "../../providers/git.ts";
 import { git, makeRemoteBackedRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
-import { branchContains, pushApprovedChange, readBranchState, readWorktreeDiff } from "./branch.ts";
+import { pushApprovedChange, readBranchState, readWorktreeDiff } from "./branch.ts";
 
 let tmp: string;
 let checkout: string;
@@ -57,19 +57,6 @@ test("the push uses an explicit commit even when HEAD has moved", async () => {
   await pushCommit(checkout, "feature", approved);
   expect(git(remoteDir, "rev-parse", "refs/heads/feature")).toBe(approved);
   expect(git(checkout, "rev-parse", "HEAD")).not.toBe(approved);
-});
-
-test("a branch contains its head and its ancestors, not a later or unknown commit", async () => {
-  const parent = git(checkout, "rev-parse", "HEAD~1");
-  git(checkout, "checkout", "-qb", "other", parent);
-  git(checkout, "commit", "--allow-empty", "-qm", "someone else's work");
-  const elsewhere = git(checkout, "rev-parse", "HEAD");
-  git(checkout, "checkout", "-q", "feature");
-
-  expect(await branchContains(worktree, approved)).toBe(true);
-  expect(await branchContains(worktree, parent)).toBe(true);
-  expect(await branchContains(worktree, elsewhere)).toBe(false);
-  expect(await branchContains(worktree, "0".repeat(40))).toBe(false);
 });
 
 test("branch state and diff default to the provisioned base and accept another comparison commit", async () => {

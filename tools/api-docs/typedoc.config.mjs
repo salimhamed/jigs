@@ -11,7 +11,7 @@ export const sharedOptions = {
     "Agent and model requests/results",
     "Decision models",
     "Human input",
-    "Linear",
+    "Linear tickets",
     "Linear and human input",
     "Pull requests",
     "Git/change data",
@@ -72,6 +72,8 @@ export default typedocOptions;
 // Site-only: tables and code-block signatures scan well in a browser, while the
 // npm pages under docs/api keep the default layout that reads well as plain text.
 export const siteOptions = {
+  // Match TypeDoc's symbol links even when group ordering differs from conversion order.
+  useCustomAnchors: true,
   classPropertiesFormat: "table",
   enumMembersFormat: "table",
   interfacePropertiesFormat: "table",

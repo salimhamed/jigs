@@ -48,7 +48,7 @@ export class ClaimConflictError extends Error {
 /**
  * A ticket held exclusively by the current workflow run.
  *
- * @group Linear
+ * @group Linear tickets
  */
 export interface TicketClaim {
   issueId: string;
@@ -74,7 +74,7 @@ export interface TicketClaim {
 /**
  * Claim a Linear ticket for the lifetime of the current workflow run.
  *
- * @group Linear
+ * @group Linear tickets
  */
 export async function claimTicket(issueId: string, identifier: string): Promise<TicketClaim> {
   const token = ticketToken(issueId);

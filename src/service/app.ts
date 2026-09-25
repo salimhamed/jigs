@@ -21,7 +21,7 @@ import { listWorktreeStates } from "../steps/workspaces/worktree-state.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { tokenFromLinearPayload } from "../workflow/linear/claim.ts";
 import { NEEDS_HUMAN_TOKEN_PREFIX } from "../workflow/linear/halt-for-human.ts";
-import { tokenFromGitHubPayload } from "../workflow/pull-requests/gate.ts";
+import { tokenFromGitHubPayload } from "../workflow/pull-requests/pull-request.ts";
 import { verifyGithubSignature, verifyLinearSignature } from "./ingress.ts";
 import { listRunDeadJobs } from "./queue.ts";
 import { bootPhase, isReady } from "./readiness.ts";

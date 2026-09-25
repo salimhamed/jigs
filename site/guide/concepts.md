@@ -107,8 +107,8 @@ return its results.
 ## Routines compose common operations
 
 **jigs provides routines that compose common steps into higher-level operations.**
-For example, `runAgent` coordinates agent execution, while `pullRequestGate`
-waits for a pull request to meet the workflow's requirements. A routine packages
+For example, `runAgent` coordinates agent execution, while `watchPullRequest`
+reports changes to a pull request so the workflow can decide what happens next. A routine packages
 orchestration that every workflow would otherwise have to rebuild.
 
 Steps are the durable units recorded by the SDK. A routine is ordinary workflow

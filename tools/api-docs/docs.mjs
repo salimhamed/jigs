@@ -58,7 +58,6 @@ export async function withFactoryEntries(action) {
         "AgentSessionOptions",
         "BoundReviewTicketOptions",
         "HaltForHumanFn",
-        "PullRequestGateOptions",
         "CommittedWorkOptions",
         "BranchState",
       ];

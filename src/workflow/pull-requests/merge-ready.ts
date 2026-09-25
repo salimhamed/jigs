@@ -65,8 +65,8 @@ export interface MergeRefusal {
 
 /**
  * Why this pull request cannot merge at `expectedHeadSha`, or `null` when it
- * can. The single verdict behind both the gate, which asks about the head it
- * just read, and the merge step, which asks again about the head it pinned.
+ * can. Used when reporting readiness and by the merge step, which rechecks
+ * GitHub against the commit the workflow supplied.
  *
  * `mergeable_state` is the authority that will accept or refuse the merge call,
  * and it already folds in conflicts, required checks and required reviews, so

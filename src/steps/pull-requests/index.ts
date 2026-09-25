@@ -2,8 +2,8 @@
  * Low-level GitHub operations for factory-owned steps. Call their durable
  * `#jigs/steps` wrappers from workflow code.
  *
- * Watching a pull request over time uses a routine such as `watchPullRequest` or
- * `pullRequestGate`. See [Waiting and external events](https://salimhamed.github.io/jigs/guide/waiting-and-events).
+ * Watch changes with `watchPullRequest` from `#jigs/routines`, and reply or post
+ * updates with `postReviewAnswers` and `postPullRequestNote`. See [Waiting and external events](https://salimhamed.github.io/jigs/guide/waiting-and-events).
  *
  * @module steps/pull-requests
  * @packageDocumentation

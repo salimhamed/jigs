@@ -18,7 +18,7 @@ import { type TicketReviewPrompt, ticketReviewPrompt } from "./ticket-review.pro
 /**
  * Structured verdict returned by the agent that reviews a ticket before work starts.
  *
- * @group Linear
+ * @group Linear tickets
  */
 export const ticketReviewVerdictSchema = z.strictObject({
   verdict: z.enum(["proceed", "needs-human"]),
@@ -34,7 +34,7 @@ export const ticketReviewVerdictSchema = z.strictObject({
  * nothing. It carries its own words, the way a halt does, so the
  * renderer owns the layout and every caller owns what it says.
  *
- * @group Linear
+ * @group Linear tickets
  */
 export type TicketNote = {
   /** One plain sentence naming what jigs is about to do, or has stopped doing. */
@@ -77,7 +77,7 @@ export async function noteOnTicket(
  * `assumptions` is what the review decided for itself rather than asked
  * about. It is posted to the ticket, so a human can still correct it.
  *
- * @group Linear
+ * @group Linear tickets
  */
 export type TicketHandoff = {
   brief: string;

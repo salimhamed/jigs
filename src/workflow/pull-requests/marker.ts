@@ -2,9 +2,9 @@
 export type MarkerKind = "reply" | "completion" | "status";
 
 /**
- * Why a `status` note was written, so one note never silences another.
- * `merge` and `ci` stand a commit down; `merge-retry` only records that the
- * refusal was already reported, and leaves the commit merge-ready.
+ * Label a status note as a merge refusal, CI failure or temporary merge refusal.
+ * Distinct reasons keep notes for the same commit independent. They do not
+ * change merge readiness or schedule more work.
  *
  * @group Pull requests
  */
@@ -20,10 +20,8 @@ const REASONS = new Set<string>(["merge", "ci", "merge-retry"]);
  */
 export interface PullRequestMarker {
   /**
-   * The continuation identity. It survives run replacement, so a later run
-   * answering for the same scope sees this work as its own and does not redo
-   * it. Another scope's marker means "some jigs workflow wrote this", never
-   * "my work is done".
+   * Names this workflow's work on the pull request. Keep it stable across
+   * replacement runs to recognize earlier notes and replies.
    */
   scope: string;
   /** The run that wrote it. Provenance for a reader; never matched on. */

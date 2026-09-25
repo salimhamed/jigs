@@ -1,7 +1,7 @@
 import { expect, test, vi } from "vitest";
 import type { CheckRun, PullRequestSnapshot, ReviewThread } from "../../providers/github.ts";
 import { postPullRequestNote, postReviewAnswers, renderChecks } from "./answers.ts";
-import { parseMarkers } from "./marker.ts";
+import { parseMarkers, type StatusReason } from "./marker.ts";
 
 vi.mock("workflow", () => ({
   getWorkflowMetadata: () => ({ workflowRunId: "wrun_RUN", workflowName: "ship" }),
@@ -30,8 +30,8 @@ const thread = (rootId: number, body: string): ReviewThread => ({
 
 const threads = [thread(900, "why not a set here?"), thread(910, "typo")];
 
-// What the gate hands over for a top-level comment or a review summary: one
-// comment, no file anchor.
+// A top-level comment or a review summary carried as a thread: one comment,
+// no file anchor.
 const conversation = (rootId: number, body: string): ReviewThread => ({
   rootId,
   path: "",
@@ -278,6 +278,40 @@ test("a note names the commit it settles, and a failed note does not throw", asy
   // Nothing is thrown: the commit it describes is still red, and the next wake
   // says so again.
   expect(failing.comments).toHaveLength(1);
+});
+
+test("a repeated note for the same head and reason posts once", async () => {
+  const posted = recorder();
+  const recorded = async (): Promise<PullRequestSnapshot> => ({
+    ...(await unannotated()),
+    conversationComments: posted.comments.map((body, index) => ({
+      id: 8001 + index,
+      body,
+      user: "salim",
+      userType: "User",
+      createdAt: AT,
+      updatedAt: AT,
+    })),
+  });
+  const note = (reason: StatusReason, headSha: string) =>
+    postPullRequestNote({
+      fetchPullRequestState: recorded,
+      commentOnPullRequest: posted.commentOnPullRequest,
+      pr,
+      scope: SCOPE,
+      reason,
+      headSha,
+      body: `I could not merge ${headSha} yet.`,
+    });
+
+  await note("merge-retry", "head-1");
+  await note("merge-retry", "head-1");
+  expect(posted.comments).toHaveLength(1);
+
+  // Another reason, or another head, is another note.
+  await note("merge", "head-1");
+  await note("merge-retry", "head-2");
+  expect(posted.comments).toHaveLength(3);
 });
 
 test("a red build the provider named no check for still renders something", () => {

@@ -12,7 +12,7 @@ import * as sql from "../steps/workspaces/sql.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { ticketToken } from "../workflow/linear/claim.ts";
 import { needsHumanToken } from "../workflow/linear/halt-for-human.ts";
-import { pullRequestToken } from "../workflow/pull-requests/gate.ts";
+import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
 import { resourceAttribute } from "../workflow/runtime/resources.ts";
 import * as queue from "./queue.ts";
 import {

@@ -5,8 +5,8 @@ import {
   type PullRequestRef,
   type PullRequestSnapshot,
 } from "../../providers/github.ts";
-import type { FetchPrState } from "../../workflow/pull-requests/gate.ts";
 import { approvalState } from "../../workflow/pull-requests/merge-ready.ts";
+import type { FetchPrState } from "../../workflow/pull-requests/pull-request.ts";
 
 /** The pull request with the operator's consent read against the factory's `github.mergeApproval`. */
 export async function readPullRequestSnapshot(pr: PullRequestRef): Promise<PullRequestSnapshot> {
@@ -23,7 +23,7 @@ export async function readPullRequestSnapshot(pr: PullRequestRef): Promise<PullR
 export const fetchPullRequestState: FetchPrState = async (pr: PullRequestRef) => {
   const snapshot = await readPullRequestSnapshot(pr);
   console.log(
-    `[prGate] fetched ${pr.owner}/${pr.repo}#${pr.number} state=${snapshot.state} merged=${snapshot.merged} reviews=${snapshot.reviews.length} threads=${snapshot.reviewThreads.length} ci=${snapshot.ci} approval=${snapshot.approval.state}`,
+    `[pullRequest] fetched ${pr.owner}/${pr.repo}#${pr.number} state=${snapshot.state} merged=${snapshot.merged} reviews=${snapshot.reviews.length} threads=${snapshot.reviewThreads.length} ci=${snapshot.ci} approval=${snapshot.approval.state}`,
   );
   return snapshot;
 };

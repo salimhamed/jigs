@@ -10,7 +10,7 @@ import { HookNotFoundError } from "workflow/errors";
 import type { WebhookProvider } from "../config/factory-config.ts";
 import { TICKET_TOKEN_PREFIX } from "../workflow/linear/claim.ts";
 import { NEEDS_HUMAN_TOKEN_PREFIX } from "../workflow/linear/halt-for-human.ts";
-import { PULL_REQUEST_TOKEN_PREFIX } from "../workflow/pull-requests/gate.ts";
+import { PULL_REQUEST_TOKEN_PREFIX } from "../workflow/pull-requests/pull-request.ts";
 import { listWorldHooks } from "./runs.ts";
 import { runsWithActiveStep } from "./stalls.ts";
 import { recordWake } from "./wake-note.ts";
