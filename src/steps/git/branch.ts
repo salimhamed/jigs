@@ -12,6 +12,7 @@ import {
 } from "../../providers/git.ts";
 import { githubAuthFor } from "../../providers/github-auth.ts";
 import { parseGithubRemote } from "../../providers/github-webhook.ts";
+import type { BranchState } from "../../workflow/git/committed-work.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
 import { registerResource } from "../runtime/resources.ts";
 import { isWorktreeDirty } from "../workspaces/teardown.ts";
@@ -53,14 +54,7 @@ async function registerGithubBranch(worktreePath: string, branch: string): Promi
 export async function readBranchState(
   worktree: Worktree,
   baseSha: string = worktree.baseSha,
-): Promise<{
-  /** The number of commits reachable from HEAD but not the base commit. */
-  commits: number;
-  /** The current HEAD commit SHA. */
-  headSha: string;
-  /** Whether the worktree has uncommitted changes or its status could not be read. */
-  dirty: boolean;
-}> {
+): Promise<BranchState> {
   const worktreePath = worktree.path;
   const commits = await commitsAhead(worktreePath, baseSha);
   const head = await headSha(worktreePath);
