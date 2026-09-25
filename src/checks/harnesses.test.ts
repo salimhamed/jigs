@@ -211,12 +211,18 @@ test("harness users are derived from each workflow's agents", () => {
       hello: {},
       review: {
         requires: {
-          agents: { reviewer: harnesses.claude("opus"), second: harnesses.claude("sonnet") },
+          agents: {
+            reviewer: harnesses.claude({ model: "opus" }),
+            second: harnesses.claude({ model: "sonnet" }),
+          },
         },
       },
       ship: {
         requires: {
-          agents: { builder: harnesses.codex("gpt-5.5"), reviewer: harnesses.claude("opus") },
+          agents: {
+            builder: harnesses.codex({ model: "gpt-5.5" }),
+            reviewer: harnesses.claude({ model: "opus" }),
+          },
         },
       },
     }),

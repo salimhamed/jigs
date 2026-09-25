@@ -16,7 +16,11 @@ import type {
   ChangeSummary,
   CheckRun,
   ClaudeHarness,
+  ClaudeHarnessSettings,
+  ClaudePolicyKey,
   CodexHarness,
+  CodexHarnessSettings,
+  CodexPolicyKey,
   FileChange,
   Halt,
   HaltOption,
@@ -61,7 +65,7 @@ import type {
   TicketSnapshot,
   Worktree,
 } from "./index.ts";
-import type { AgentExecutionDependencies } from "./steps/agents/index.ts";
+import type { AgentRunner, AgentRunnerOptions } from "./steps/index.ts";
 import type {
   LinearIssueMatch,
   NeedsHumanContext,
@@ -88,7 +92,11 @@ type RootTypeSurface = {
   changeSummary: ChangeSummary;
   checkRun: CheckRun;
   claudeHarness: ClaudeHarness;
+  claudeHarnessSettings: ClaudeHarnessSettings;
+  claudePolicyKey: ClaudePolicyKey;
   codexHarness: CodexHarness;
+  codexHarnessSettings: CodexHarnessSettings;
+  codexPolicyKey: CodexPolicyKey;
   fileChange: FileChange;
   halt: Halt;
   haltOption: HaltOption;
@@ -135,10 +143,11 @@ type RootTypeSurface = {
 };
 
 type StepsTypeSurface = {
+  agentRunner: AgentRunner;
+  agentRunnerOptions: AgentRunnerOptions;
   githubRepoRef: GitHubRepoRef;
   mergeOutcome: MergeOutcome;
   openedPullRequest: OpenedPullRequest;
-  executeDeps: AgentExecutionDependencies;
   linearIssueMatch: LinearIssueMatch;
   needsHumanContext: NeedsHumanContext;
   provisionRunWorktreeDeps: ProvisionWorktreeDependencies;

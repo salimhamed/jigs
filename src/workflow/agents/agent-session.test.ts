@@ -42,7 +42,7 @@ test("the first turn starts fresh and a later turn resumes the session it record
   const { calls, runAgent } = recorder();
   const session = bindAgentSession(runAgent)({
     name: "builder",
-    harness: harnesses.claude("sonnet"),
+    harness: harnesses.claude({ model: "sonnet" }),
     cwd: "/tmp/worktree",
   });
 
@@ -70,7 +70,7 @@ test("the reference is updated after each run", async () => {
   const { calls, runAgent } = recorder();
   const session = bindAgentSession(runAgent)({
     name: "builder",
-    harness: harnesses.codex("gpt"),
+    harness: harnesses.codex({ model: "gpt" }),
     cwd: "/w",
   });
 
@@ -95,7 +95,7 @@ test("a resumed run that reports no session keeps the reference it resumed", asy
   };
   const session = bindAgentSession(unreported)({
     name: "builder",
-    harness: harnesses.claude("sonnet"),
+    harness: harnesses.claude({ model: "sonnet" }),
     cwd: "/w",
   });
 
@@ -110,7 +110,7 @@ test("a session the step reports unusable is started fresh, which then holds the
   const { calls, runAgent } = recorder({ staleResume: true });
   const session = bindAgentSession(runAgent)({
     name: "builder",
-    harness: harnesses.claude("sonnet"),
+    harness: harnesses.claude({ model: "sonnet" }),
     cwd: "/w",
   });
 
@@ -126,11 +126,11 @@ test("a session the step reports unusable is started fresh, which then holds the
 
 test("a reference recorded on a different harness kind is not resumed", async () => {
   const { calls, runAgent } = recorder({
-    session: (call) => (call === 1 ? ref(harnesses.claude("sonnet"), "old") : undefined),
+    session: (call) => (call === 1 ? ref(harnesses.claude({ model: "sonnet" }), "old") : undefined),
   });
   const session = bindAgentSession(runAgent)({
     name: "builder",
-    harness: harnesses.codex("gpt"),
+    harness: harnesses.codex({ model: "gpt" }),
     cwd: "/w",
   });
 
@@ -167,7 +167,7 @@ test("without output the turn resolves to nothing", async () => {
   const { runAgent } = recorder();
   const session = bindAgentSession(runAgent)({
     name: "fixer",
-    harness: harnesses.claude("sonnet"),
+    harness: harnesses.claude({ model: "sonnet" }),
     cwd: "/w",
   });
   expect(await session.run({ resume: "r", fresh: "f" })).toBeUndefined();
@@ -178,11 +178,15 @@ test("an error that is not a resume failure is not swallowed", async () => {
   const runAgent: RunAgentFn = async <T>() => {
     calls += 1;
     if (calls > 1) throw new Error("the harness fell over");
-    return { text: "", output: undefined as T, session: ref(harnesses.claude("sonnet"), "s") };
+    return {
+      text: "",
+      output: undefined as T,
+      session: ref(harnesses.claude({ model: "sonnet" }), "s"),
+    };
   };
   const session = bindAgentSession(runAgent)({
     name: "builder",
-    harness: harnesses.claude("sonnet"),
+    harness: harnesses.claude({ model: "sonnet" }),
     cwd: "/w",
   });
   await session.run({ resume: "r", fresh: "f" });

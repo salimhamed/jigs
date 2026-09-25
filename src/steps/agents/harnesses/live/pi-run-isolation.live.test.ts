@@ -7,11 +7,8 @@ import { harnesses, models } from "../../../../workflow/agents/harness-config.ts
 import { buildAgentRequest } from "../../../../workflow/agents/plan.ts";
 import { type DriverResolver, driverFor } from "../../drivers/index.ts";
 import { createPiDriver } from "../../drivers/pi.ts";
-import {
-  type AgentExecutionDependencies,
-  defaultAgentExecutionDependencies,
-  executeAgent,
-} from "../../execute-agent.ts";
+import { executeAgentWith } from "../../execute-agent.ts";
+import { type ExecutionSeams, executionSeams } from "../../seams.ts";
 import { harnessEnv } from "../env.ts";
 import { executePi } from "../pi.ts";
 import { preparePiInvocationHome } from "../pi-home.ts";
@@ -31,7 +28,7 @@ const localReachable = localConfigured
 
 let tmp: string;
 let worktree: string;
-let deps: AgentExecutionDependencies;
+let deps: ExecutionSeams;
 beforeAll(() => {
   tmp = makeTmpDir();
   worktree = makeScratchRepo(tmp, "pi-run-isolation");
@@ -41,7 +38,7 @@ beforeAll(() => {
     executePi,
   });
   deps = {
-    ...defaultAgentExecutionDependencies,
+    ...executionSeams,
     factoryEnv: () => [],
     resolveDriver: ((kind) => (kind === "pi" ? pi : driverFor(kind))) as DriverResolver,
   };
@@ -103,7 +100,7 @@ export default function (pi: ExtensionAPI) {
     });
     expect(control.text).toContain(token);
 
-    const managed = await executeAgent(
+    const managed = await executeAgentWith(
       buildAgentRequest({ harness: harnesses.pi(source), cwd: worktree, prompt }),
       { workflowRunId: `live-pi-isolation-${crypto.randomUUID()}` },
       deps,
@@ -149,7 +146,11 @@ test.skipIf(!localConfigured || !localReachable)(
           output,
         },
         (wire) =>
-          executeAgent(wire, { workflowRunId: `live-pi-parallel-${crypto.randomUUID()}` }, deps),
+          executeAgentWith(
+            wire,
+            { workflowRunId: `live-pi-parallel-${crypto.randomUUID()}` },
+            deps,
+          ),
       );
 
     const [alpha, bravo] = await Promise.all([

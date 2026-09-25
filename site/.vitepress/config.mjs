@@ -47,6 +47,7 @@ export default {
         items: [
           { text: "Build a workflow", link: "/guide/build-a-workflow" },
           { text: "Models and harnesses", link: "/guide/models-and-harnesses" },
+          { text: "Write your own agent step", link: "/guide/custom-agent-step" },
           { text: "Recipes", link: "/guide/recipes" },
         ],
       },

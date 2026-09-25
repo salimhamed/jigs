@@ -65,6 +65,10 @@
       "types": "./dist/routines.d.ts",
       "default": "./dist/routines.js"
     },
+    "./steps": {
+      "types": "./dist/steps/index.d.ts",
+      "default": "./dist/steps/index.js"
+    },
     "./steps/agents": {
       "types": "./dist/steps/agents/index.d.ts",
       "default": "./dist/steps/agents/index.js"

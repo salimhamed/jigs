@@ -41,7 +41,7 @@ const app = createApp({
       inputs: z.object({}),
       requires: {
         bindings: ["api"],
-        agents: { builder: harnesses.claude("opus") },
+        agents: { builder: harnesses.claude({ model: "opus" }) },
         integrations: ["linear", "github"],
       },
     },

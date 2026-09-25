@@ -3,10 +3,11 @@ import path from "node:path";
 import { generateText } from "ai";
 import { getErrorMetadata, isAuthenticationError } from "ai-sdk-provider-claude-code";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
+import { type ClaudeHarness, harnesses } from "../../../workflow/agents/harness-config.ts";
 import { buildAgentRequest, buildAskAgentRequest } from "../../../workflow/agents/plan.ts";
 import { claudeDriver } from "../drivers/claude.ts";
 import { claudeProcessSpawner, claudeStepSettings } from "../drivers/claude-support.ts";
-import { defaultAgentExecutionDependencies } from "../execute-agent.ts";
+import { executionSeams } from "../seams.ts";
 import { harnessEnv } from "./env.ts";
 import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
@@ -62,7 +63,8 @@ test("claudeStepSettings preserves caller policy and wires the isolated launcher
 });
 
 test("the real provider launch isolates ask and run and preserves stderr auth classification", async () => {
-  if (!claudeDriver.ask || !claudeDriver.run) throw new Error("Claude driver is incomplete");
+  const { ask, open } = claudeDriver;
+  if (ask === undefined || open === undefined) throw new Error("Claude driver is incomplete");
 
   vi.stubEnv("JIGS_CLAUDE_EXECUTABLE", fixture);
   vi.stubEnv("AWS_SECRET_ACCESS_KEY", "synthetic-aws-secret");
@@ -96,7 +98,7 @@ test("the real provider launch isolates ask and run and preserves stderr auth cl
     const record = path.join(tmp, `${testCase.name}-env.json`);
     const context = {
       metadata: { workflowRunId: `run-${testCase.name}` },
-      deps: { ...defaultAgentExecutionDependencies, generateText },
+      deps: { ...executionSeams, generateText },
       env: {
         ...harnessEnv([...claudeDriver.envAllowlist(testCase.request), "SYNTHETIC_DECLARED"]),
         JIGS_CLAUDE_TEST_RECORD: record,
@@ -105,8 +107,11 @@ test("the real provider launch isolates ask and run and preserves stderr auth cl
 
     let error: unknown;
     try {
-      if (testCase.request.cwd === undefined) await claudeDriver.ask(testCase.request, context);
-      else await claudeDriver.run(testCase.request, context);
+      if (testCase.request.cwd === undefined) await ask(testCase.request, context);
+      else {
+        const opened = await open(testCase.request, context);
+        await generateText({ model: opened.model, prompt: testCase.request.prompt });
+      }
     } catch (caught) {
       error = caught;
     }
@@ -140,6 +145,37 @@ test("the real provider launch isolates ask and run and preserves stderr auth cl
   expect(process.env.AWS_SECRET_ACCESS_KEY).toBe("synthetic-aws-secret");
   expect(process.env.ANTHROPIC_API_KEY).toBe("synthetic-anthropic-secret");
   expect(process.env.CLAUDE_CODE_ENTRYPOINT).toBe("parent-claude-session");
+});
+
+test("descriptor settings reach the CLI and jigs' policy wins over a smuggled policy key", async () => {
+  const { open } = claudeDriver;
+  if (open === undefined) throw new Error("Claude driver is incomplete");
+  vi.stubEnv("JIGS_CLAUDE_EXECUTABLE", fixture);
+  const record = path.join(tmp, "settings-args.json");
+  // A descriptor that skipped its constructor, as a hand-built wire could.
+  const harness = {
+    ...harnesses.claude({ model: "sonnet", maxTurns: 3, allowedTools: ["Read"] }),
+    permissionMode: "plan",
+    extraArgs: { "dangerously-load-anything": null },
+  } as ClaudeHarness;
+
+  const opened = await open(
+    { harness, cwd: worktree },
+    {
+      metadata: { workflowRunId: "run-settings" },
+      env: { ...harnessEnv([]), JIGS_CLAUDE_TEST_RECORD: record },
+    },
+  );
+  await expect(generateText({ model: opened.model, prompt: "work" })).rejects.toThrow();
+  await opened.close();
+
+  const { args } = JSON.parse(readFileSync(record, "utf8")) as { args: string[] };
+  const flag = (name: string) => args[args.indexOf(name) + 1];
+  expect(flag("--max-turns")).toBe("3");
+  expect(flag("--allowedTools")).toBe("Read");
+  expect(flag("--permission-mode")).toBe("bypassPermissions");
+  expect(args).not.toContain("--dangerously-load-anything");
+  vi.unstubAllEnvs();
 });
 
 function launchFixture(

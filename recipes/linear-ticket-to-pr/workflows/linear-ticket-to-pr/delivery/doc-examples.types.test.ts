@@ -56,8 +56,8 @@ async function chooseAgentsAndBudgets() {
     task,
     worktree,
     binding: "application",
-    implementation: { harness: harnesses.codex("gpt-5.6-sol") },
-    review: { harness: harnesses.claude("opus") },
+    implementation: { harness: harnesses.codex({ model: "gpt-5.6-sol" }) },
+    review: { harness: harnesses.claude({ model: "opus" }) },
     limits: {
       implementationReviewRounds: 5,
       ciFixAttempts: 3,
@@ -75,12 +75,12 @@ async function configureEachRoleIndependently() {
     task,
     worktree,
     binding: "application",
-    implementation: { harness: harnesses.codex("gpt-5.6-sol") },
-    review: { harness: harnesses.claude("opus") },
+    implementation: { harness: harnesses.codex({ model: "gpt-5.6-sol" }) },
+    review: { harness: harnesses.claude({ model: "opus" }) },
     ciRepair: { harness: harnesses.pi(models.openaiCodex("gpt-5.5"), { thinking: "high" }) },
-    pullRequestRevision: { harness: harnesses.claude("sonnet") },
+    pullRequestRevision: { harness: harnesses.claude({ model: "sonnet" }) },
     pullRequestDescription: {
-      harness: harnesses.claude("haiku"),
+      harness: harnesses.claude({ model: "haiku" }),
       transform: (description) => ({ ...description, title: `[factory] ${description.title}` }),
     },
     limits: {
@@ -96,7 +96,7 @@ async function configureEachRoleIndependently() {
 
 // "Change the prompts", extending the shipped default.
 const reviewExtendingTheDefault = {
-  harness: harnesses.claude("opus"),
+  harness: harnesses.claude({ model: "opus" }),
   prompt: async (context: ReviewPromptContext) =>
     `${await context.renderDefaultPrompt()}
 
@@ -105,7 +105,7 @@ Also check authorization and migration compatibility.`,
 
 // "Change the prompts", replacing it outright from the role's own context.
 const implementationReplacingTheDefault = {
-  harness: harnesses.codex("gpt-5.6-sol"),
+  harness: harnesses.codex({ model: "gpt-5.6-sol" }),
   prompt: (context: ImplementationPromptContext) => `
 Round ${context.attempt} on ${context.task.key}: ${context.task.title}
 
@@ -160,7 +160,7 @@ async function customTaskFieldsSurvive() {
     worktree,
     binding: "application",
     implementation: {
-      harness: harnesses.codex("gpt-5.6-sol"),
+      harness: harnesses.codex({ model: "gpt-5.6-sol" }),
       prompt: async (context) =>
         [
           await context.renderDefaultPrompt(),
@@ -168,7 +168,7 @@ async function customTaskFieldsSurvive() {
           `Acceptance criteria:\n${context.task.acceptance.join("\n")}`,
         ].join("\n\n"),
     },
-    review: { harness: harnesses.claude("opus") },
+    review: { harness: harnesses.claude({ model: "opus" }) },
     limits: {
       implementationReviewRounds: 5,
       ciFixAttempts: 3,

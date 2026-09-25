@@ -1,10 +1,6 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
-import {
-  type CodexAppServerProvider,
-  type CodexAppServerSettings,
-  createCodexAppServer,
-} from "ai-sdk-provider-codex-cli";
+import type { CodexAppServerSettings } from "ai-sdk-provider-codex-cli";
 import { resolveCodexExecutable } from "../harnesses/executables.ts";
 
 export type CodexAppServerStepOptions = CodexAppServerSettings & {
@@ -56,15 +52,4 @@ export function codexAppServerStepSettings(
     ),
     env,
   };
-}
-
-export async function withCodexAppServer<T>(
-  fn: (provider: CodexAppServerProvider) => Promise<T>,
-): Promise<T> {
-  const provider = createCodexAppServer();
-  try {
-    return await fn(provider);
-  } finally {
-    await provider.close();
-  }
 }

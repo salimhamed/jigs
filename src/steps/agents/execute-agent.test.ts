@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { MockLanguageModelV4 } from "ai/test";
 import type { ClaudeCodeSettings } from "ai-sdk-provider-claude-code";
 import type { CodexAppServerProvider, CodexAppServerSettings } from "ai-sdk-provider-codex-cli";
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
@@ -18,14 +19,11 @@ import { createClaudeDriver } from "./drivers/claude.ts";
 import { createCodexDriver } from "./drivers/codex.ts";
 import { type DriverResolver, driverFor, drivers } from "./drivers/index.ts";
 import { createPiDriver, type PiDriverDependencies } from "./drivers/pi.ts";
-import {
-  type AgentExecutionDependencies,
-  defaultAgentExecutionDependencies,
-  executeAgent,
-} from "./execute-agent.ts";
+import { executeAgentWith } from "./execute-agent.ts";
 import type { PiExecutionOptions } from "./harnesses/pi.ts";
 import { planPiModel } from "./harnesses/pi-model.ts";
 import { makeTmpDir, removeTmpDir } from "./harnesses/test-fixtures.ts";
+import { type ExecutionSeams, executionSeams } from "./seams.ts";
 
 // The settings look for the CLI eagerly, so these tests would need a codex
 // installed. Claude's half is stubbed below, through JIGS_CLAUDE_EXECUTABLE.
@@ -65,9 +63,10 @@ afterEach(() => {
 });
 
 type Captured = {
-  options?: Parameters<AgentExecutionDependencies["generateText"]>[0];
+  options?: Parameters<ExecutionSeams["generateText"]>[0];
   codexModel?: string;
   codexSettings?: CodexAppServerSettings;
+  codexCall?: MockLanguageModelV4["doGenerateCalls"][number];
   homeRunIds: string[];
   piOptions?: PiExecutionOptions;
   piHome?: { runId: string; model: unknown };
@@ -76,15 +75,15 @@ type Captured = {
 // Pi's request checks probe the nested model endpoint and credentials, which
 // most tests neither stub nor care about; the ones that do opt back in.
 function makeDeps(
-  generation: Partial<Awaited<ReturnType<AgentExecutionDependencies["generateText"]>>> = {},
+  generation: Partial<Awaited<ReturnType<ExecutionSeams["generateText"]>>> = {},
   options: { piRequestChecks?: boolean } = {},
 ): {
-  deps: AgentExecutionDependencies;
+  deps: ExecutionSeams;
   captured: Captured;
   piDeps: PiDriverDependencies;
 } {
   const captured: Captured = { homeRunIds: [] };
-  const generateText: AgentExecutionDependencies["generateText"] = async (options) => {
+  const generateText: ExecutionSeams["generateText"] = async (options) => {
     captured.options = options;
     return { text: "done", ...generation };
   };
@@ -116,21 +115,35 @@ function makeDeps(
         return { home, sessionDir, cleanup: () => rmSync(home, { recursive: true, force: true }) };
       },
       sessionFile: (_sessionDir, threadId) => `/rollout-${threadId}.jsonl`,
-      withCodexAppServer: async (fn) => {
-        const provider = ((modelId: string, settings: CodexAppServerSettings) => {
-          captured.codexModel = modelId;
-          captured.codexSettings = settings;
-          return { fake: "codex-model" };
-        }) as unknown as CodexAppServerProvider;
-        return fn(provider);
-      },
+      createAppServer: () =>
+        Object.assign(
+          (modelId: string, settings: CodexAppServerSettings) => {
+            captured.codexModel = modelId;
+            captured.codexSettings = settings;
+            return new MockLanguageModelV4({
+              doGenerate: async (params) => {
+                captured.codexCall = params;
+                return {
+                  content: [],
+                  finishReason: { unified: "stop", raw: undefined },
+                  usage: {
+                    inputTokens: { total: 0, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+                    outputTokens: { total: 0, text: 0, reasoning: 0 },
+                  },
+                  warnings: [],
+                };
+              },
+            });
+          },
+          { close: async () => {} },
+        ) as unknown as CodexAppServerProvider,
     }),
     pi: {
       ...createPiDriver(piDeps),
       ...(options.piRequestChecks === true ? {} : { requestChecks: () => [] }),
     },
   };
-  const deps: AgentExecutionDependencies = {
+  const deps: ExecutionSeams = {
     generateText,
     evaluate: async () => {
       throw new Error("unexpected decision call");
@@ -151,8 +164,10 @@ function makeDeps(
 
 // executeAgent answers a union; every test but the resume-failure ones wants the
 // successful arm.
-async function agentStep(...args: Parameters<typeof executeAgent>): Promise<AgentResult<unknown>> {
-  const result = await executeAgent(...args);
+async function agentStep(
+  ...args: Parameters<typeof executeAgentWith>
+): Promise<AgentResult<unknown>> {
+  const result = await executeAgentWith(...args);
   if ("jitFailure" in result) {
     throw new Error(`unexpected JIT failure: ${JSON.stringify(result.jitFailure)}`);
   }
@@ -172,15 +187,16 @@ function claudeSettingsOf(captured: Captured): ClaudeCodeSettings {
 const verdict = z.object({ ok: z.boolean() });
 
 test("generic execution dependencies contain no driver-private operations", () => {
-  expect(defaultAgentExecutionDependencies).not.toHaveProperty("prepareCodexHome");
-  expect(defaultAgentExecutionDependencies).not.toHaveProperty("withCodexAppServer");
-  expect(defaultAgentExecutionDependencies).not.toHaveProperty("preparePiHome");
-  expect(defaultAgentExecutionDependencies).not.toHaveProperty("executePi");
+  expect(executionSeams).not.toHaveProperty("prepareCodexHome");
+  expect(executionSeams).not.toHaveProperty("withCodexAppServer");
+  expect(executionSeams).not.toHaveProperty("preparePiHome");
+  expect(executionSeams).not.toHaveProperty("executePi");
 });
 
 test("claude agent step hydrates from wire config with the harness invariants forced", async () => {
   const wire = buildAgentRequest({
-    harness: harnesses.claude("sonnet", {
+    harness: harnesses.claude({
+      model: "sonnet",
       effort: "medium",
       mcpServers: {
         probe: {
@@ -219,7 +235,8 @@ test("claude agent step hydrates from wire config with the harness invariants fo
 
 test("codex agent step runs on the app-server under an invocation home with fixed policies", async () => {
   const wire = buildAgentRequest({
-    harness: harnesses.codex("gpt-5.5", {
+    harness: harnesses.codex({
+      model: "gpt-5.5",
       effort: "xhigh",
       mcpServers: { probe: { command: "node", probe: { tool: "ping" } } },
     }),
@@ -256,7 +273,8 @@ test("parallel Codex invocations keep settings and homes private", async () => {
   await Promise.all([
     agentStep(
       buildAgentRequest({
-        harness: harnesses.codex("gpt-5.5", {
+        harness: harnesses.codex({
+          model: "gpt-5.5",
           effort: "low",
           mcpServers: { alpha: { command: "alpha", probe: { tool: "ping" } } },
         }),
@@ -268,7 +286,8 @@ test("parallel Codex invocations keep settings and homes private", async () => {
     ),
     agentStep(
       buildAgentRequest({
-        harness: harnesses.codex("gpt-6-astra", {
+        harness: harnesses.codex({
+          model: "gpt-6-astra",
           effort: "xhigh",
           mcpServers: { beta: { command: "beta", probe: { tool: "ping" } } },
         }),
@@ -298,7 +317,7 @@ test("omitting effort leaves both providers' settings unset", async () => {
   const claudeRun = makeDeps();
   await agentStep(
     buildAgentRequest({
-      harness: harnesses.claude("sonnet"),
+      harness: harnesses.claude({ model: "sonnet" }),
       cwd: worktree,
       prompt: "implement it",
     }),
@@ -310,7 +329,7 @@ test("omitting effort leaves both providers' settings unset", async () => {
   const codexRun = makeDeps();
   await agentStep(
     buildAgentRequest({
-      harness: harnesses.codex("gpt-5.5"),
+      harness: harnesses.codex({ model: "gpt-5.5" }),
       cwd: worktree,
       prompt: "implement it",
     }),
@@ -322,7 +341,7 @@ test("omitting effort leaves both providers' settings unset", async () => {
 
 test("a declared output schema becomes an AI SDK output spec and the raw output is returned", async () => {
   const wire = buildAgentRequest({
-    harness: harnesses.claude("sonnet"),
+    harness: harnesses.claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "judge it",
     output: verdict,
@@ -346,7 +365,7 @@ test("a declared output schema becomes an AI SDK output spec and the raw output 
 
 test("without an output schema no output spec is passed and output is undefined", async () => {
   const wire = buildAgentRequest({
-    harness: harnesses.claude("sonnet"),
+    harness: harnesses.claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "just do it",
   });
@@ -360,7 +379,7 @@ test("without an output schema no output spec is passed and output is undefined"
 
 test("the Claude session reference is captured", async () => {
   const wire = buildAgentRequest({
-    harness: harnesses.claude("sonnet"),
+    harness: harnesses.claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "go",
   });
@@ -375,7 +394,7 @@ test("the Claude session reference is captured", async () => {
 
 test("the Codex threadId is captured, and a missing session reference is omitted, never an error", async () => {
   const codexWire = buildAgentRequest({
-    harness: harnesses.codex("gpt-5.5"),
+    harness: harnesses.codex({ model: "gpt-5.5" }),
     cwd: worktree,
     prompt: "go",
   });
@@ -394,7 +413,7 @@ test("the Codex threadId is captured, and a missing session reference is omitted
 
 test("a claude resume rides on the settings' resume field", async () => {
   const wire = buildAgentRequest({
-    harness: harnesses.claude("sonnet"),
+    harness: harnesses.claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "answer the review",
     resume: { harness: "claude", id: "s-42", descriptor: "" },
@@ -409,7 +428,7 @@ test("a claude resume rides on the settings' resume field", async () => {
 
 test("a Claude transcript with messages but no summary resumes", async () => {
   const wire = buildAgentRequest({
-    harness: harnesses.claude("sonnet"),
+    harness: harnesses.claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "answer the review",
     resume: { harness: "claude", id: "summaryless-session", descriptor: "" },
@@ -429,7 +448,7 @@ test("a Claude transcript with messages but no summary resumes", async () => {
 
 test("a missing Claude transcript reports resumeFailed before launch", async () => {
   const wire = buildAgentRequest({
-    harness: harnesses.claude("sonnet"),
+    harness: harnesses.claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "answer the review",
     resume: { harness: "claude", id: "missing-session", descriptor: "" },
@@ -440,7 +459,7 @@ test("a missing Claude transcript reports resumeFailed before launch", async () 
   deps.resolveDriver = ((kind) =>
     kind === "claude" ? missing : resolveDriver(kind)) as DriverResolver;
 
-  const result = await executeAgent(wire, { workflowRunId: "run-1" }, deps);
+  const result = await executeAgentWith(wire, { workflowRunId: "run-1" }, deps);
 
   expect(result).toEqual({
     resumeFailed: expect.stringContaining("Claude session missing-session is missing"),
@@ -448,9 +467,9 @@ test("a missing Claude transcript reports resumeFailed before launch", async () 
   expect(captured.options).toBeUndefined();
 });
 
-test("a codex resume rides on providerOptions['codex-app-server'].threadId", async () => {
+test("a codex resume rides on the call's providerOptions['codex-app-server'].threadId", async () => {
   const wire = buildAgentRequest({
-    harness: harnesses.codex("gpt-5.5"),
+    harness: harnesses.codex({ model: "gpt-5.5" }),
     cwd: worktree,
     prompt: "answer the review",
     resume: { harness: "codex", id: "0199-thread", descriptor: "" },
@@ -458,8 +477,10 @@ test("a codex resume rides on providerOptions['codex-app-server'].threadId", asy
   const { deps, captured } = makeDeps();
 
   await agentStep(wire, { workflowRunId: "run-1" }, deps);
+  const model = captured.options?.model as Pick<MockLanguageModelV4, "doGenerate">;
+  await model.doGenerate({ prompt: [] });
 
-  expect(captured.options?.providerOptions).toEqual({
+  expect(captured.codexCall?.providerOptions).toEqual({
     "codex-app-server": { threadId: "0199-thread" },
   });
   // settings.resume is the provider's fallback, not the app-server contract.
@@ -468,7 +489,7 @@ test("a codex resume rides on providerOptions['codex-app-server'].threadId", asy
 
 test("a session reference recorded on the other harness reports resumeFailed, not a silently fresh session", async () => {
   const wire = buildAgentRequest({
-    harness: harnesses.claude("sonnet"),
+    harness: harnesses.claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "answer the review",
     resume: { harness: "codex", id: "0199-thread", descriptor: "" },
@@ -477,7 +498,7 @@ test("a session reference recorded on the other harness reports resumeFailed, no
   const jitFailures = vi.fn(async () => undefined);
   deps.jitFailures = jitFailures;
 
-  const result = await executeAgent(wire, { workflowRunId: "run-1" }, deps);
+  const result = await executeAgentWith(wire, { workflowRunId: "run-1" }, deps);
 
   // The resume prompt was written for an agent that already holds the change,
   // so running it against a brand-new session would be a lie. The marker sends
@@ -491,7 +512,7 @@ test("a session reference recorded on the other harness reports resumeFailed, no
 
 test("Claude steps always run with bypass", async () => {
   const wire = buildAgentRequest({
-    harness: harnesses.claude("sonnet"),
+    harness: harnesses.claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "judge it",
   });
@@ -506,7 +527,7 @@ test("Claude steps always run with bypass", async () => {
 
 test("a Codex execution failure during resume still throws", async () => {
   const wire = buildAgentRequest({
-    harness: harnesses.codex("gpt-5.5"),
+    harness: harnesses.codex({ model: "gpt-5.5" }),
     cwd: worktree,
     prompt: "answer the review",
     resume: { harness: "codex", id: "0199-gone", descriptor: "" },
@@ -518,14 +539,14 @@ test("a Codex execution failure during resume still throws", async () => {
     throw new Error("no rollout found for thread id 0199-gone");
   };
 
-  await expect(executeAgent(wire, { workflowRunId: "run-1" }, deps)).rejects.toThrow(
+  await expect(executeAgentWith(wire, { workflowRunId: "run-1" }, deps)).rejects.toThrow(
     "no rollout found for thread id",
   );
 });
 
 test("a Claude execution failure during resume still throws", async () => {
   const wire = buildAgentRequest({
-    harness: harnesses.claude("sonnet"),
+    harness: harnesses.claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "answer the review",
     resume: { harness: "claude", id: "s-42", descriptor: "" },
@@ -535,14 +556,14 @@ test("a Claude execution failure during resume still throws", async () => {
     throw new Error("Claude stopped after launch");
   };
 
-  await expect(executeAgent(wire, { workflowRunId: "run-1" }, deps)).rejects.toThrow(
+  await expect(executeAgentWith(wire, { workflowRunId: "run-1" }, deps)).rejects.toThrow(
     "Claude stopped after launch",
   );
 });
 
 test("a failure with no resume to blame still throws", async () => {
   const wire = buildAgentRequest({
-    harness: harnesses.claude("sonnet"),
+    harness: harnesses.claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "go",
   });
@@ -551,14 +572,14 @@ test("a failure with no resume to blame still throws", async () => {
     throw new Error("the harness fell over");
   };
 
-  await expect(executeAgent(wire, { workflowRunId: "run-1" }, deps)).rejects.toThrow(
+  await expect(executeAgentWith(wire, { workflowRunId: "run-1" }, deps)).rejects.toThrow(
     "the harness fell over",
   );
 });
 
 test("a second agent in the same worktree is refused while the first is running", async () => {
   const wire = buildAgentRequest({
-    harness: harnesses.claude("sonnet"),
+    harness: harnesses.claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "implement it",
   });
@@ -576,7 +597,7 @@ test("a second agent in the same worktree is refused while the first is running"
   await new Promise((resolve) => setTimeout(resolve, 20));
 
   const second = makeDeps();
-  await expect(executeAgent(wire, { workflowRunId: "run-1" }, second.deps)).rejects.toThrow(
+  await expect(executeAgentWith(wire, { workflowRunId: "run-1" }, second.deps)).rejects.toThrow(
     /an agent is already running in .* refusing to start a second one/,
   );
   expect(second.captured.options).toBeUndefined();
@@ -604,7 +625,7 @@ test("a busy worktree does not block an agent in another one", async () => {
 
   const inFlight = agentStep(
     buildAgentRequest({
-      harness: harnesses.claude("sonnet"),
+      harness: harnesses.claude({ model: "sonnet" }),
       cwd: worktree,
       prompt: "implement it",
     }),
@@ -616,7 +637,7 @@ test("a busy worktree does not block an agent in another one", async () => {
   const elsewhere = makeDeps();
   await agentStep(
     buildAgentRequest({
-      harness: harnesses.claude("sonnet"),
+      harness: harnesses.claude({ model: "sonnet" }),
       cwd: other,
       prompt: "implement it elsewhere",
     }),
@@ -633,7 +654,7 @@ test("the step env is built, not copied: no API credentials, process.env untouch
   process.env.ANTHROPIC_API_KEY = "sk-test-scrub";
   try {
     const wire = buildAgentRequest({
-      harness: harnesses.claude("sonnet"),
+      harness: harnesses.claude({ model: "sonnet" }),
       cwd: worktree,
       prompt: "go",
     });
@@ -650,7 +671,7 @@ test("the step env is built, not copied: no API credentials, process.env untouch
 
 test("a failed JIT check returns the marker before the harness is reached", async () => {
   const wire = buildAgentRequest({
-    harness: harnesses.claude("sonnet"),
+    harness: harnesses.claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "never reached — the JIT check fails first",
   });
@@ -666,7 +687,7 @@ test("a failed JIT check returns the marker before the harness is reached", asyn
     },
   ];
 
-  const result = await executeAgent(
+  const result = await executeAgentWith(
     wire,
     { workflowRunId: "run-1" },
     {
@@ -681,7 +702,7 @@ test("a failed JIT check returns the marker before the harness is reached", asyn
 
 test("request checks run by phase even when an installation check has the same id", async () => {
   const wire = buildAgentRequest({
-    harness: harnesses.claude("sonnet"),
+    harness: harnesses.claude({ model: "sonnet" }),
     cwd: worktree,
     prompt: "never reached",
   });
@@ -717,7 +738,7 @@ test("request checks run by phase even when an installation check has the same i
         }
       : resolveDriver(kind)) as DriverResolver;
 
-  await expect(executeAgent(wire, { workflowRunId: "run-1" }, deps)).rejects.toThrow(
+  await expect(executeAgentWith(wire, { workflowRunId: "run-1" }, deps)).rejects.toThrow(
     /Request diagnostic: request-specific failure/,
   );
   expect(requestProbe).toHaveBeenCalledOnce();
@@ -727,7 +748,7 @@ test("request checks run by phase even when an installation check has the same i
 
 test("claude ask step disables built-in tools, sees no MCP universe and loads no filesystem settings", async () => {
   const wire = buildAskAgentRequest({
-    harness: harnesses.claude("sonnet"),
+    harness: harnesses.claude({ model: "sonnet" }),
     prompt: "summarize",
     system: "be terse",
   });
@@ -748,16 +769,20 @@ test("askAgent rejects Codex, a Pi allowlist and a model source before any check
   const { deps, captured } = makeDeps({}, { piRequestChecks: true });
   const requestChecks = vi.spyOn(drivers.openrouter, "requestChecks");
   const ask = (harness: unknown) =>
-    ({ harness, prompt: "never reached" }) as unknown as Parameters<typeof executeAgent>[0];
+    ({ harness, prompt: "never reached" }) as unknown as Parameters<typeof executeAgentWith>[0];
   const metadata = { workflowRunId: "run-1" };
 
-  await expect(executeAgent(ask(harnesses.codex("gpt-5.5")), metadata, deps)).rejects.toThrow(
-    "askAgent() cannot use the Codex harness",
-  );
   await expect(
-    executeAgent(ask(harnesses.pi(models.openrouter("m"), { tools: ["read"] })), metadata, deps),
+    executeAgentWith(ask(harnesses.codex({ model: "gpt-5.5" })), metadata, deps),
+  ).rejects.toThrow("askAgent() cannot use the Codex harness");
+  await expect(
+    executeAgentWith(
+      ask(harnesses.pi(models.openrouter("m"), { tools: ["read"] })),
+      metadata,
+      deps,
+    ),
   ).rejects.toThrow("askAgent() runs without tools");
-  await expect(executeAgent(ask(models.openrouter("m")), metadata, deps)).rejects.toThrow(
+  await expect(executeAgentWith(ask(models.openrouter("m")), metadata, deps)).rejects.toThrow(
     "openrouter is a model source, not an agent harness",
   );
   expect(requestChecks).not.toHaveBeenCalled();
@@ -859,7 +884,7 @@ test("pi ask rejects an unreachable nested endpoint before executing Pi", async 
     prompt: "hello",
   });
 
-  await expect(executeAgent(wire, { workflowRunId: "run-pi" }, deps)).rejects.toThrow(
+  await expect(executeAgentWith(wire, { workflowRunId: "run-pi" }, deps)).rejects.toThrow(
     /offline-studio model endpoint: offline-studio is unreachable/,
   );
   expect(captured.piOptions).toBeUndefined();
@@ -875,7 +900,7 @@ test("pi ask rejects missing nested authentication before executing Pi", async (
     prompt: "hello",
   });
 
-  await expect(executeAgent(wire, { workflowRunId: "run-pi" }, deps)).rejects.toThrow(
+  await expect(executeAgentWith(wire, { workflowRunId: "run-pi" }, deps)).rejects.toThrow(
     /PI_TEST_OPENROUTER_KEY credential: PI_TEST_OPENROUTER_KEY is not set/,
   );
   expect(captured.piOptions).toBeUndefined();
@@ -1037,7 +1062,7 @@ test("pi rejects unsupported MCP and ask configurations before probes or model c
   run.deps.jitFailures = vi.fn(async () => undefined);
 
   await expect(
-    executeAgent(invalidRun, { workflowRunId: "invalid-run" }, run.deps),
+    executeAgentWith(invalidRun, { workflowRunId: "invalid-run" }, run.deps),
   ).rejects.toThrow("must allow its probe tool 'ping'");
   expect(run.deps.jitFailures).not.toHaveBeenCalled();
   expect(run.captured.piHome).toBeUndefined();
@@ -1050,10 +1075,10 @@ test("pi rejects unsupported MCP and ask configurations before probes or model c
       },
     },
     prompt: "never reached",
-  } as unknown as Parameters<typeof executeAgent>[0];
+  } as unknown as Parameters<typeof executeAgentWith>[0];
   const ask = makeDeps({}, { piRequestChecks: true });
   await expect(
-    executeAgent(invalidAsk, { workflowRunId: "invalid-ask" }, ask.deps),
+    executeAgentWith(invalidAsk, { workflowRunId: "invalid-ask" }, ask.deps),
   ).rejects.toThrow("askAgent() has no MCP universe");
   expect(ask.captured.piHome).toBeUndefined();
 });
@@ -1079,7 +1104,7 @@ test("pi rejects missing step-side MCP credentials before probing a server", asy
   run.deps.jitFailures = vi.fn(async () => undefined);
 
   await expect(
-    executeAgent(wire, { workflowRunId: "missing-mcp-secret" }, run.deps),
+    executeAgentWith(wire, { workflowRunId: "missing-mcp-secret" }, run.deps),
   ).rejects.toThrow("PI_MISSING_MCP_TOKEN");
   expect(run.deps.jitFailures).not.toHaveBeenCalled();
   expect(run.captured.piHome).toBeUndefined();
@@ -1151,7 +1176,7 @@ test("pi run returns a stale resume marker before spawning Pi", async () => {
   });
   const { deps, captured } = makeDeps();
 
-  const result = await executeAgent(wire, { workflowRunId: "run-pi-stale" }, deps);
+  const result = await executeAgentWith(wire, { workflowRunId: "run-pi-stale" }, deps);
 
   expect(result).toEqual({
     resumeFailed: expect.stringMatching(/missing-session.*run-pi-stale\/sessions/),
@@ -1198,7 +1223,7 @@ test("pi run rejects a different session id reported by Pi", async () => {
     providerMetadata: { pi: { sessionId: "different-session" } },
   });
 
-  await expect(executeAgent(wire, { workflowRunId: "run-pi-mismatch" }, deps)).rejects.toThrow(
+  await expect(executeAgentWith(wire, { workflowRunId: "run-pi-mismatch" }, deps)).rejects.toThrow(
     /Pi reported session.*different-session.*jigs-/,
   );
 });
@@ -1223,7 +1248,7 @@ test("a Pi execution failure during resume still throws", async () => {
   };
 
   await expect(
-    executeAgent(wire, { workflowRunId: "run-pi-execution-failure" }, deps),
+    executeAgentWith(wire, { workflowRunId: "run-pi-execution-failure" }, deps),
   ).rejects.toThrow("Pi stopped after launch");
 });
 
@@ -1248,7 +1273,7 @@ test("a resumed Pi session-id mismatch still throws after launch", async () => {
   });
 
   await expect(
-    executeAgent(wire, { workflowRunId: "run-pi-resume-mismatch" }, deps),
+    executeAgentWith(wire, { workflowRunId: "run-pi-resume-mismatch" }, deps),
   ).rejects.toThrow(/Pi reported session.*different-session.*existing-session/);
 });
 
@@ -1288,7 +1313,7 @@ test("pi run rejects an unreachable nested endpoint before spawning Pi", async (
   });
   const { deps, captured } = makeDeps({}, { piRequestChecks: true });
 
-  await expect(executeAgent(wire, { workflowRunId: "run-pi-offline" }, deps)).rejects.toThrow(
+  await expect(executeAgentWith(wire, { workflowRunId: "run-pi-offline" }, deps)).rejects.toThrow(
     /offline-studio model endpoint: offline-studio is unreachable/,
   );
   expect(captured.piOptions).toBeUndefined();
@@ -1310,7 +1335,7 @@ test("a pi session that cannot resume takes the agent session's fresh arm", asyn
     };
   };
   const runAgent: RunAgentFn = async <T>(config: RunAgentOptions<T>) => {
-    const stepResult = await executeAgent(
+    const stepResult = await executeAgentWith(
       buildAgentRequest(config),
       { workflowRunId: "run-pi-rebuild" },
       deps,
@@ -1345,7 +1370,7 @@ test("pi run honors JIT failure before creating its invocation home or spawning"
     },
   ];
 
-  const result = await executeAgent(wire, { workflowRunId: "run-pi-jit" }, deps);
+  const result = await executeAgentWith(wire, { workflowRunId: "run-pi-jit" }, deps);
 
   expect(result).toEqual({
     jitFailure: [expect.objectContaining({ id: "github.marker", reason: "not ready" })],
@@ -1365,13 +1390,14 @@ test("the JIT checks and the harness get the same environment, built from the ba
     ...createClaudeDriver(),
     requestChecks: () => [],
     envAllowlist: () => ["DRIVER_VAR"],
-    run: async (_request: unknown, context: { env: Record<string, string> }) => {
+    open: async (_target: unknown, context: { env: Record<string, string> }) => {
       runEnv = context.env;
-      return { text: "done" };
+      return { model: new MockLanguageModelV4(), close: async () => {} };
     },
   };
-  const deps: AgentExecutionDependencies = {
-    ...defaultAgentExecutionDependencies,
+  const deps: ExecutionSeams = {
+    ...executionSeams,
+    generateText: async () => ({ text: "done" }),
     resolveDriver: (() => driver) as unknown as DriverResolver,
     factoryEnv: () => ["FACTORY_VAR"],
     jitFailures: async (_wire, env) => {
@@ -1381,7 +1407,11 @@ test("the JIT checks and the harness get the same environment, built from the ba
   };
   try {
     await agentStep(
-      buildAgentRequest({ harness: harnesses.claude("sonnet"), cwd: worktree, prompt: "p" }),
+      buildAgentRequest({
+        harness: harnesses.claude({ model: "sonnet" }),
+        cwd: worktree,
+        prompt: "p",
+      }),
       { workflowRunId: "run-env" },
       deps,
     );

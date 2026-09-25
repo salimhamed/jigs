@@ -47,7 +47,7 @@ object does not: its methods are functions, and it holds a child process.
 
 ```ts
 // Crosses: it is only data.
-harnesses.claude("opus", { effort: "high" });
+harnesses.claude({ model: "opus", effort: "high" });
 // => { kind: "claude", model: "opus", effort: "high" }
 
 // Does not: a provider from the AI SDK is made of functions.
@@ -105,8 +105,8 @@ workflow. A workflow lists its agents in a plain object and declares them in
 import { defineWorkflow, harnesses } from "@jigs-ai/jigs";
 
 const agents = {
-  builder: harnesses.claude("opus", { effort: "high" }),
-  reviewer: harnesses.codex("gpt-5.6-sol"),
+  builder: harnesses.claude({ model: "opus", effort: "high" }),
+  reviewer: harnesses.codex({ model: "gpt-5.6-sol" }),
 };
 
 export default defineWorkflow({

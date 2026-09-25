@@ -13,7 +13,7 @@ const claim = {
 } as TicketClaim;
 
 const config = {
-  harness: harnesses.claude("sonnet"),
+  harness: harnesses.claude({ model: "sonnet" }),
   cwd: "/work/tree",
   prompt: "implement it",
 };

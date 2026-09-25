@@ -7,8 +7,8 @@ import {
   toModelResult,
 } from "./result.ts";
 
-const claude = harnesses.claude("sonnet");
-const codex = harnesses.codex("gpt");
+const claude = harnesses.claude({ model: "sonnet" });
+const codex = harnesses.codex({ model: "gpt" });
 
 test("toModelResult maps text and structured output into the uniform shape", () => {
   const generation: ModelGeneration = { text: "done" };
@@ -76,5 +76,14 @@ test("describeHarness ignores field order, including a nested model source", () 
     kind: "pi",
   };
   expect(describeHarness(reordered as typeof pi)).toBe(describeHarness(pi));
-  expect(describeHarness(harnesses.claude("opus"))).not.toBe(describeHarness(claude));
+  expect(describeHarness(harnesses.claude({ model: "opus" }))).not.toBe(describeHarness(claude));
+});
+
+test("describeHarness includes every provider setting, so a changed one starts a session fresh", () => {
+  const before = harnesses.claude({ model: "opus", maxTurns: 40, allowedTools: ["Read"] });
+  const after = harnesses.claude({ model: "opus", maxTurns: 41, allowedTools: ["Read"] });
+  expect(describeHarness(before)).not.toBe(describeHarness(after));
+  expect(describeHarness(harnesses.codex({ model: "gpt", personality: "pragmatic" }))).not.toBe(
+    describeHarness(harnesses.codex({ model: "gpt" })),
+  );
 });

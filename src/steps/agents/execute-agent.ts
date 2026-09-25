@@ -1,46 +1,19 @@
-import { experimental_evaluate, generateText, jsonSchema, Output, type OutputInterface } from "ai";
-import {
-  type FailedCheck,
-  failedChecks,
-  formatFailures,
-  JIT_TIMEOUT_MS,
-  jitChecks,
-  runChecks,
-} from "../../checks/index.ts";
+import { jsonSchema, Output, type OutputInterface } from "ai";
+import { formatFailures, runChecks } from "../../checks/index.ts";
 import { JigsError } from "../../errors.ts";
-import type { ExecuteAgentStep } from "../../workflow/agents/agent.ts";
+import { type ExecuteAgentStep, JitCheckError } from "../../workflow/agents/agent.ts";
 import { type AgentRequest, assertAskableHarness } from "../../workflow/agents/plan.ts";
-import { extractAgentSession, toModelResult } from "../../workflow/agents/result.ts";
-import type { RunMetadata } from "../runtime/run-context.ts";
 import {
-  type DriverDependencies,
-  type DriverResolver,
-  driverFor,
-  type ExecutorGeneration,
-} from "./drivers/index.ts";
-import { factoryAgentEnv, harnessEnv } from "./harnesses/env.ts";
-import { FileLockTimeoutError, lockPathFor, withFileLock } from "./lock.ts";
+  type AgentResult,
+  extractAgentSession,
+  toModelResult,
+} from "../../workflow/agents/result.ts";
+import type { RunMetadata } from "../runtime/run-context.ts";
+import type { ExecutorGeneration, RunRequest } from "./drivers/index.ts";
+import { harnessEnv } from "./harnesses/env.ts";
+import { openAgentRunner, prepareAgentRun } from "./runner.ts";
+import { type ExecutionSeams, executionSeams } from "./seams.ts";
 import { AgentSessionError } from "./session-error.ts";
-
-/** Injectable provider and environment operations used by agent execution. */
-export interface AgentExecutionDependencies extends DriverDependencies {
-  resolveDriver: DriverResolver;
-  /** Names the factory declares under `agents.env` in `jigs.config.ts`. */
-  factoryEnv(): readonly string[];
-  jitFailures(wire: AgentRequest, env: Record<string, string>): Promise<FailedCheck[] | undefined>;
-}
-
-/** Production dependencies for executing harness requests. */
-export const defaultAgentExecutionDependencies: AgentExecutionDependencies = {
-  generateText: (options) => generateText(options),
-  evaluate: (options) => experimental_evaluate(options),
-  resolveDriver: driverFor,
-  factoryEnv: factoryAgentEnv,
-  jitFailures: async (wire, env) => {
-    const report = await runChecks(jitChecks(wire, env), JIT_TIMEOUT_MS);
-    return report.ok ? undefined : failedChecks(report);
-  },
-};
 
 export function outputSpec(
   schema: Record<string, unknown> | undefined,
@@ -48,88 +21,102 @@ export function outputSpec(
   return schema === undefined ? undefined : Output.object({ schema: jsonSchema<unknown>(schema) });
 }
 
-const LOCK_STALE_MS = 4 * 60 * 60_000 + 60_000;
-
 /** Run or ask an agent harness, checking worktree requirements before a run. */
-export async function executeAgent(
+export function executeAgent(
   wire: AgentRequest,
   metadata: RunMetadata,
-  deps: AgentExecutionDependencies = defaultAgentExecutionDependencies,
 ): ReturnType<ExecuteAgentStep> {
-  const driver = deps.resolveDriver(wire.harness.kind);
+  return executeAgentWith(wire, metadata, executionSeams);
+}
+
+export async function executeAgentWith(
+  wire: AgentRequest,
+  metadata: RunMetadata,
+  seams: ExecutionSeams,
+): ReturnType<ExecuteAgentStep> {
+  if (wire.cwd === undefined) return askAgent(wire, metadata, seams);
+  try {
+    return await runAgent(wire, metadata, seams);
+  } catch (err) {
+    if (err instanceof JitCheckError) return { jitFailure: err.failures };
+    if (wire.resume !== undefined && err instanceof AgentSessionError)
+      return { resumeFailed: String(err) };
+    throw err;
+  }
+}
+
+function resultOf(
+  wire: AgentRequest,
+  generation: ExecutorGeneration,
+  session: AgentResult["session"],
+): AgentResult {
+  return {
+    ...toModelResult(generation, wire.outputSchema === undefined ? undefined : generation.output),
+    ...(session === undefined ? {} : { session }),
+  };
+}
+
+async function runAgent(
+  wire: RunRequest,
+  metadata: RunMetadata,
+  seams: ExecutionSeams,
+): Promise<AgentResult> {
+  const output = outputSpec(wire.outputSchema);
+  // Pi has no provider model: its driver runs the whole call itself.
+  if (wire.harness.kind === "pi") {
+    const prepared = await prepareAgentRun(wire, seams);
+    try {
+      const run = prepared.driver.run;
+      if (run === undefined) throw new JigsError(`the ${wire.harness.kind} driver cannot run`);
+      const generation = await run(wire, { metadata, deps: seams, env: prepared.env, output });
+      const session = extractAgentSession(
+        wire.harness,
+        generation.providerMetadata,
+        prepared.driver.sessionPointer,
+      );
+      return resultOf(wire, generation, session);
+    } finally {
+      prepared.release();
+    }
+  }
+  const runner = await openAgentRunner(
+    wire.harness,
+    { cwd: wire.cwd, run: metadata, resume: wire.resume },
+    seams,
+  );
+  try {
+    const generation = await seams.generateText({
+      model: runner.model,
+      prompt: wire.prompt,
+      ...(output === undefined ? {} : { output }),
+    });
+    return resultOf(wire, generation, runner.sessionFrom(generation));
+  } finally {
+    await runner.close();
+  }
+}
+
+async function askAgent(
+  wire: AgentRequest,
+  metadata: RunMetadata,
+  seams: ExecutionSeams,
+): Promise<AgentResult> {
+  const driver = seams.resolveDriver(wire.harness.kind);
   if (driver === undefined) throw new JigsError(`no driver is registered for ${wire.harness.kind}`);
   if (driver.family !== "harness")
     throw new JigsError(`${wire.harness.kind} is a model source, not an agent harness`);
-  // Built once, so the JIT checks probe exactly what the harness gets.
-  const env = harnessEnv([...driver.envAllowlist(wire), ...deps.factoryEnv()]);
-  const isRun = wire.cwd !== undefined;
-  if (!isRun) {
-    assertAskableHarness(wire.harness);
-    if (driver.ask === undefined) throw new JigsError(`the ${wire.harness.kind} driver cannot ask`);
-    const requestReport = await runChecks(driver.requestChecks(wire));
-    if (!requestReport.ok) throw new JigsError(formatFailures(requestReport));
-    const generation = await driver.ask(wire, {
-      metadata,
-      deps,
-      env,
-      output: outputSpec(wire.outputSchema),
-    });
-    return toModelResult(
-      generation,
-      wire.outputSchema === undefined ? undefined : generation.output,
-    );
-  }
-
-  if (wire.resume !== undefined && wire.resume.harness !== wire.harness.kind) {
-    return {
-      resumeFailed: `session ${wire.resume.id} was recorded on the ${wire.resume.harness} harness and this step runs on ${wire.harness.kind}`,
-    };
-  }
-  const run = driver.run;
-  if (run === undefined) throw new JigsError(`the ${wire.harness.kind} driver cannot run`);
+  const env = harnessEnv([...driver.envAllowlist(wire), ...seams.factoryEnv()]);
+  assertAskableHarness(wire.harness);
+  if (driver.ask === undefined) throw new JigsError(`the ${wire.harness.kind} driver cannot ask`);
   const requestReport = await runChecks(driver.requestChecks(wire));
   if (!requestReport.ok) throw new JigsError(formatFailures(requestReport));
-  const jitFailure = await deps.jitFailures(wire, env);
-  if (jitFailure !== undefined) return { jitFailure };
-
-  try {
-    return await withFileLock(
-      lockPathFor(wire.cwd, "agent-step"),
-      async () => {
-        let generation: ExecutorGeneration;
-        try {
-          generation = await run(wire, {
-            metadata,
-            deps,
-            env,
-            output: outputSpec(wire.outputSchema),
-          });
-        } catch (err) {
-          if (wire.resume === undefined || !(err instanceof AgentSessionError)) throw err;
-          return { resumeFailed: String(err) };
-        }
-        const session = extractAgentSession(
-          wire.harness,
-          generation.providerMetadata,
-          driver.sessionPointer,
-        );
-        return {
-          ...toModelResult(
-            generation,
-            wire.outputSchema === undefined ? undefined : generation.output,
-          ),
-          ...(session === undefined ? {} : { session }),
-        };
-      },
-      { timeoutMs: 0, staleMs: LOCK_STALE_MS },
-    );
-  } catch (err) {
-    if (err instanceof FileLockTimeoutError)
-      throw new Error(
-        `an agent is already running in ${wire.cwd} — refusing to start a second one in the same worktree`,
-      );
-    throw err;
-  }
+  const generation = await driver.ask(wire, {
+    metadata,
+    deps: seams,
+    env,
+    output: outputSpec(wire.outputSchema),
+  });
+  return toModelResult(generation, wire.outputSchema === undefined ? undefined : generation.output);
 }
 
 export type { ExecutorGeneration } from "./drivers/index.ts";

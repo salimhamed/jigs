@@ -2,17 +2,18 @@ import { expect, test } from "vitest";
 import { type ExecuteAgentStep, JitCheckError, runAgent } from "../../workflow/agents/agent.ts";
 import { harnesses } from "../../workflow/agents/harness-config.ts";
 import { buildAgentRequest } from "../../workflow/agents/plan.ts";
-import { executeAgent } from "./execute-agent.ts";
+import { executeAgentWith } from "./execute-agent.ts";
 import { factorylessDeps } from "./harnesses/test-fixtures.ts";
 
 // Stands in for a factory's wrapper, minus the directive: it delegates to
 // executeAgent the way a factory's own does.
 const runStep: ExecuteAgentStep = (wire) =>
-  executeAgent(wire, { workflowRunId: "run-under-test" }, factorylessDeps);
+  executeAgentWith(wire, { workflowRunId: "run-under-test" }, factorylessDeps);
 
 test("an agent step whose declared MCP server cannot start returns the JIT failure instead of throwing", async () => {
   const wire = buildAgentRequest({
-    harness: harnesses.claude("sonnet", {
+    harness: harnesses.claude({
+      model: "sonnet",
       mcpServers: {
         linear: {
           command: "definitely-not-a-binary",
@@ -39,7 +40,8 @@ test("an agent step whose declared MCP server cannot start returns the JIT failu
 test("runAgent() turns a failed JIT check into a thrown JitCheckError carrying the repair text", async () => {
   const failing = runAgent(
     {
-      harness: harnesses.claude("sonnet", {
+      harness: harnesses.claude({
+        model: "sonnet",
         mcpServers: {
           linear: {
             command: "definitely-not-a-binary",

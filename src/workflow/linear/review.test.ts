@@ -87,7 +87,7 @@ const review = () =>
     fetchTicketSnapshot: fakeFetchSnapshot,
     claim,
     snapshot,
-    harness: harnesses.claude("sonnet"),
+    harness: harnesses.claude({ model: "sonnet" }),
     cwd: "/tmp/worktree",
   });
 
@@ -243,7 +243,7 @@ test("optional callbacks run around the human halt, never around proceed", async
     },
     claim,
     snapshot,
-    harness: harnesses.claude("sonnet"),
+    harness: harnesses.claude({ model: "sonnet" }),
     cwd: "/tmp/worktree",
     on: {
       needsHuman: async () => {
@@ -265,7 +265,7 @@ test("optional callbacks run around the human halt, never around proceed", async
     fetchTicketSnapshot: fakeFetchSnapshot,
     claim,
     snapshot,
-    harness: harnesses.claude("sonnet"),
+    harness: harnesses.claude({ model: "sonnet" }),
     cwd: "/tmp/worktree",
     on: {
       needsHuman: async () => {
@@ -316,7 +316,7 @@ test("a caller-supplied prompt replaces the one shipped beside the routine", asy
     fetchTicketSnapshot: fakeFetchSnapshot,
     claim,
     snapshot,
-    harness: harnesses.claude("sonnet"),
+    harness: harnesses.claude({ model: "sonnet" }),
     cwd: "/tmp/worktree",
     prompt: factoryPrompt,
   });

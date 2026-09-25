@@ -6,7 +6,7 @@ import { z } from "zod";
 import { runAgent } from "../../../workflow/agents/agent.ts";
 import { askAgent } from "../../../workflow/agents/ask-agent.ts";
 import { harnesses, models } from "../../../workflow/agents/harness-config.ts";
-import { executeAgent } from "../execute-agent.ts";
+import { executeAgentWith } from "../execute-agent.ts";
 import { executePi } from "./pi.ts";
 import { writePiSubmitResultExtension } from "./pi-extension.ts";
 import {
@@ -136,8 +136,8 @@ function writeScriptedHome(baseUrl: string): string {
 const toolNames = (request: ChatRequest | undefined): string[] =>
   (request?.tools ?? []).map((tool) => tool.function.name);
 
-const step = (wire: Parameters<typeof executeAgent>[0]) =>
-  executeAgent(wire, { workflowRunId: `pi-submit-${crypto.randomUUID()}` }, factorylessDeps);
+const step = (wire: Parameters<typeof executeAgentWith>[0]) =>
+  executeAgentWith(wire, { workflowRunId: `pi-submit-${crypto.randomUUID()}` }, factorylessDeps);
 
 const answer = z.object({ word: z.string(), count: z.number() });
 

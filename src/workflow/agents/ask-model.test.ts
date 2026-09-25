@@ -10,7 +10,8 @@ test("askAgent rejects MCP servers before calling its step", async () => {
     askAgent(
       {
         // @ts-expect-error askAgent accepts only a harness without MCP servers
-        harness: harnesses.claude("sonnet", {
+        harness: harnesses.claude({
+          model: "sonnet",
           mcpServers: { probe: { command: "node", probe: { tool: "ping" } } },
         }),
         prompt: "never",

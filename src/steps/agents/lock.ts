@@ -51,11 +51,11 @@ function tryAcquire(lockPath: string): string | null {
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-export async function withFileLock<T>(
+// Resolves to the release once the lock is held.
+export async function acquireFileLock(
   lockPath: string,
-  fn: () => Promise<T>,
   options: FileLockOptions = {},
-): Promise<T> {
+): Promise<() => void> {
   const timeoutMs = options.timeoutMs ?? 30_000;
   const staleMs = options.staleMs ?? 120_000;
   const pollMs = options.pollMs ?? 50;
@@ -79,11 +79,8 @@ export async function withFileLock<T>(
     else await sleep(pollMs);
     token = tryAcquire(lockPath);
   }
-  try {
-    return await fn();
-  } finally {
-    release(lockPath, token);
-  }
+  const held = token;
+  return () => release(lockPath, held);
 }
 
 function release(lockPath: string, token: string): void {

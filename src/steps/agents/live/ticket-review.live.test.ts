@@ -1,4 +1,5 @@
 import path from "node:path";
+import { createCodexAppServer } from "ai-sdk-provider-codex-cli";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import type { RunAgentFn } from "../../../workflow/agents/agent-session.ts";
 import { harnesses } from "../../../workflow/agents/harness-config.ts";
@@ -12,19 +13,15 @@ import type { HaltForHumanFn, HumanReply } from "../../../workflow/linear/halt-f
 import { reviewTicket } from "../../../workflow/linear/review.ts";
 import type { TicketSnapshot } from "../../../workflow/linear/snapshot.ts";
 import { createCodexDriver } from "../drivers/codex.ts";
-import { withCodexAppServer } from "../drivers/codex-support.ts";
 import { type DriverResolver, driverFor } from "../drivers/index.ts";
-import {
-  type AgentExecutionDependencies,
-  defaultAgentExecutionDependencies,
-  executeAgent,
-} from "../execute-agent.ts";
+import { executeAgentWith } from "../execute-agent.ts";
 import { codexSessionFile, prepareCodexInvocationHome } from "../harnesses/codex-home.ts";
 import { assertLivePreconditions } from "../harnesses/live/fixtures/live-env.ts";
 import { makeTmpDir, removeTmpDir } from "../harnesses/test-fixtures.ts";
+import { type ExecutionSeams, executionSeams } from "../seams.ts";
 
 let tmp: string;
-let deps: AgentExecutionDependencies;
+let deps: ExecutionSeams;
 
 beforeAll(() => {
   assertLivePreconditions();
@@ -33,10 +30,10 @@ beforeAll(() => {
     prepareCodexHome: (runId) =>
       prepareCodexInvocationHome(runId, { baseDir: path.join(tmp, "codex-homes") }),
     sessionFile: codexSessionFile,
-    withCodexAppServer,
+    createAppServer: () => createCodexAppServer(),
   });
   deps = {
-    ...defaultAgentExecutionDependencies,
+    ...executionSeams,
     factoryEnv: () => [],
     resolveDriver: ((kind) => (kind === "codex" ? codex : driverFor(kind))) as DriverResolver,
   };
@@ -82,7 +79,11 @@ const answeredSnapshot: TicketSnapshot = {
 test("ticket review asks every knowable decision in one needs-human round", async () => {
   const runId = `live-ticket-review-${crypto.randomUUID().slice(0, 8)}`;
   const runAgent: RunAgentFn = async <T>(config: RunAgentOptions<T>) => {
-    const result = await executeAgent(buildAgentRequest(config), { workflowRunId: runId }, deps);
+    const result = await executeAgentWith(
+      buildAgentRequest(config),
+      { workflowRunId: runId },
+      deps,
+    );
     if ("jitFailure" in result || "resumeFailed" in result)
       throw new Error("unexpected agent marker");
     return {
@@ -121,7 +122,7 @@ test("ticket review asks every knowable decision in one needs-human round", asyn
       postedCommentIds: [],
     },
     snapshot,
-    harness: harnesses.codex("gpt-5.5"),
+    harness: harnesses.codex({ model: "gpt-5.5" }),
     cwd: "/tmp",
   });
 

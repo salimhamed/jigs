@@ -9,7 +9,7 @@ const verdict = z.object({ approved: z.boolean(), note: z.string() });
 
 test("builders convert schemas and preserve serializable descriptors", () => {
   const run = buildAgentRequest({
-    harness: harnesses.claude("sonnet"),
+    harness: harnesses.claude({ model: "sonnet" }),
     cwd: "/work/tree",
     prompt: "review",
     output: verdict,
@@ -33,7 +33,8 @@ test("askAgent rejects an MCP universe", () => {
   expect(() =>
     buildAskAgentRequest({
       // @ts-expect-error askAgent accepts only a harness without MCP servers
-      harness: harnesses.claude("sonnet", {
+      harness: harnesses.claude({
+        model: "sonnet",
         mcpServers: {
           probe: { command: "node", probe: { tool: "ping" } },
         },
@@ -60,7 +61,7 @@ test("askAgent rejects Codex and a Pi tool allowlist at compile time and at runt
   expect(() =>
     buildAskAgentRequest({
       // @ts-expect-error Codex has no mode without tools
-      harness: harnesses.codex("gpt-5.5"),
+      harness: harnesses.codex({ model: "gpt-5.5" }),
       prompt: "ask",
     }),
   ).toThrow("askAgent() cannot use the Codex harness");
@@ -82,7 +83,7 @@ test("askAgent rejects Codex and a Pi tool allowlist at compile time and at runt
 });
 
 test("harness constructors stay tool-free only when their options name no tools", () => {
-  const claude: AskableHarness = harnesses.claude("sonnet", { effort: "high" });
+  const claude: AskableHarness = harnesses.claude({ model: "sonnet", effort: "high" });
   const pi: AskableHarness = harnesses.pi(models.openaiCodex("gpt-5.5"), { thinking: "low" });
   const local: AskableHarness = harnesses.pi(
     models.openaiCompatible({ name: "local", baseUrl: "http://localhost:1234/v1", model: "m" }),

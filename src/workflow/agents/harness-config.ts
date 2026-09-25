@@ -55,20 +55,104 @@ export type PiMcpHttpServerConfig = Omit<McpHttpServerConfig, "headers"> & {
 /** An explicitly configured MCP server accepted by the Pi harness. */
 export type PiMcpServerConfig = PiMcpStdioServerConfig | PiMcpHttpServerConfig;
 
-type SharedHarness = { model: string; mcpServers?: Record<string, McpServerConfig> };
+// A value that can be written down: nothing callable anywhere inside it. Keys
+// typed `unknown` or `any` count as data. Depth is capped so the provider's
+// large settings types stay cheap to check.
+type IsData<T, Depth extends unknown[] = []> = unknown extends T
+  ? true
+  : Depth["length"] extends 6
+    ? true
+    : T extends (...args: never[]) => unknown
+      ? false
+      : T extends readonly (infer E)[]
+        ? IsData<E, [...Depth, unknown]>
+        : T extends object
+          ? false extends {
+              [K in keyof T]-?: IsData<Exclude<T[K], undefined>, [...Depth, unknown]>;
+            }[keyof T]
+            ? false
+            : true
+          : true;
 
-/** A Claude Code harness descriptor. */
-export type ClaudeHarness = SharedHarness & {
-  kind: "claude";
-  effort?: NonNullable<ClaudeCodeSettings["effort"]>;
+/** The keys of a settings type whose values are data, so they can cross into a step. */
+export type JsonOnly<T> = {
+  [K in keyof T as false extends IsData<Exclude<T[K], undefined>> ? never : K]: T[K];
 };
-/** A Codex harness descriptor. */
-export type CodexHarness = SharedHarness & {
+
+// The drivers also strip these at run time, so a descriptor that skipped the
+// constructor still cannot carry them.
+export const claudePolicyKeys = [
+  "cwd",
+  "env",
+  "pathToClaudeCodeExecutable",
+  "executable",
+  "executableArgs",
+  "permissionMode",
+  "allowDangerouslySkipPermissions",
+  "strictMcpConfig",
+  "mcpServers",
+  "settingSources",
+  "resume",
+  "continue",
+  "sessionId",
+  "forkSession",
+  "persistSession",
+  "resumeSessionAt",
+  "resumeDropsTurn",
+  "extraArgs",
+  "sdkOptions",
+] as const satisfies readonly (keyof ClaudeCodeSettings)[];
+/**
+ * A Claude Code setting a descriptor cannot name, because jigs sets it itself or holds it as
+ * policy.
+ *
+ * @remarks
+ * jigs sets the working directory, environment, executable and session for every step, and holds
+ * permissions, setting sources and MCP servers as policy. `extraArgs` and `sdkOptions` would
+ * rewrite any of those.
+ */
+export type ClaudePolicyKey = (typeof claudePolicyKeys)[number];
+
+export const codexPolicyKeys = [
+  "cwd",
+  "env",
+  "codexPath",
+  "approvalPolicy",
+  "sandboxPolicy",
+  "autoApprove",
+  "threadMode",
+  "resume",
+  "persistExtendedHistory",
+  "configOverrides",
+  "mcpServers",
+] as const satisfies readonly (keyof CodexAppServerSettings)[];
+/**
+ * A Codex setting a descriptor cannot name, because jigs sets it itself or holds it as policy.
+ *
+ * @remarks
+ * jigs sets the working directory, environment, executable, thread and session for every step,
+ * and holds the approval and sandbox policies and MCP servers. `configOverrides` would rewrite
+ * the sandbox and MCP tables.
+ */
+export type CodexPolicyKey = (typeof codexPolicyKeys)[number];
+
+/**
+ * A Claude Code harness descriptor: the provider's own settings that are data, minus each
+ * {@link ClaudePolicyKey}, plus the model and jigs' MCP server shape.
+ */
+export type ClaudeHarness = JsonOnly<Omit<ClaudeCodeSettings, ClaudePolicyKey>> & {
+  kind: "claude";
+  model: string;
+  mcpServers?: Record<string, McpServerConfig>;
+};
+/**
+ * A Codex harness descriptor: the provider's own settings that are data, minus each
+ * {@link CodexPolicyKey}, plus the model and jigs' MCP server shape.
+ */
+export type CodexHarness = JsonOnly<Omit<CodexAppServerSettings, CodexPolicyKey>> & {
   kind: "codex";
-  effort?: Extract<
-    NonNullable<CodexAppServerSettings["effort"]>,
-    "none" | "minimal" | "low" | "medium" | "high" | "xhigh"
-  >;
+  model: string;
+  mcpServers?: Record<string, McpServerConfig>;
 };
 type SharedPiHarness = {
   kind: "pi";
@@ -159,8 +243,12 @@ export const models = {
 export type PiHarnessOptions = Pick<PiHarness, "thinking" | "tools" | "mcpServers"> & {
   compat?: Partial<PiOpenaiCompatibleOptions>;
 };
-/** Options for `harnesses.claude`. */
-export type ClaudeHarnessOptions = Omit<ClaudeHarness, "kind" | "model">;
+/** The one argument `harnesses.claude` takes: the model and any Claude Code settings. */
+export type ClaudeHarnessSettings = Omit<ClaudeHarness, "kind">;
+/** The one argument `harnesses.codex` takes: the model and any Codex settings. */
+export type CodexHarnessSettings = Omit<CodexHarness, "kind">;
+// Rejects a key the settings type does not have, even when the argument is not a fresh literal.
+type Exactly<T, O> = O & { [K in Exclude<keyof O, keyof T>]: never };
 /**
  * The descriptor a harness constructor returns for its options. It is also
  * {@link ToolFree}, so `askAgent` accepts it, when the options name no tools
@@ -208,22 +296,42 @@ function piHarness(model: ModelSource, options: PiHarnessOptions = {}): PiHarnes
   return { kind: "pi", model, ...harnessOptions };
 }
 
-/** Build a Claude Code harness. Without `mcpServers` it also works with `askAgent`. */
-function claudeHarness<O extends ClaudeHarnessOptions = Record<never, never>>(
-  model: string,
-  options?: O,
+/**
+ * Build a Claude Code harness from the model and any Claude Code settings. Without `tools` or
+ * `mcpServers` it also works with `askAgent`.
+ *
+ * @example
+ * ```ts
+ * harnesses.claude({ model: "opus", effort: "high", maxTurns: 40 });
+ * ```
+ */
+function claudeHarness<O extends ClaudeHarnessSettings>(
+  settings: Exactly<ClaudeHarnessSettings, O>,
 ): HarnessForOptions<ClaudeHarness, O>;
-function claudeHarness(model: string, options: ClaudeHarnessOptions = {}): ClaudeHarness {
-  return { kind: "claude", model, ...options };
+function claudeHarness(settings: ClaudeHarnessSettings): ClaudeHarness {
+  return { kind: "claude", ...settings };
+}
+
+/**
+ * Build a Codex harness from the model and any Codex settings. Only `runAgent` accepts it: Codex
+ * has no mode without tools.
+ *
+ * @example
+ * ```ts
+ * harnesses.codex({ model: "gpt-5.6-sol", personality: "pragmatic" });
+ * ```
+ */
+function codexHarness<O extends CodexHarnessSettings>(
+  settings: Exactly<CodexHarnessSettings, O>,
+): CodexHarness;
+function codexHarness(settings: CodexHarnessSettings): CodexHarness {
+  return { kind: "codex", ...settings };
 }
 
 /** Constructors for agent-harness descriptors. */
 export const harnesses = {
   claude: claudeHarness,
-  /** Build a Codex harness. Only `runAgent` accepts it: Codex has no mode without tools. */
-  codex(model: string, options: Omit<CodexHarness, "kind" | "model"> = {}): CodexHarness {
-    return { kind: "codex", model, ...options };
-  },
+  codex: codexHarness,
   pi: piHarness,
 } as const satisfies {
   [K in HarnessKind]: (...args: never[]) => Extract<Harness, { kind: K }>;

@@ -106,7 +106,7 @@ test("every tsdown entry is reachable through the exports map or the bin", () =>
   }
 });
 
-test("the root, the routines entry and the seven step topics are the factory's subpaths", () => {
+test("the root, the routines entry, the steps entry and the seven step topics are the factory's subpaths", () => {
   const topics = ["agents", "human", "linear", "pull-requests", "workspaces", "git", "runtime"];
   const service = ["./app", "./nitro", "./schedules", "./automatic-release", "./build"];
   const plugins = ["./plugins/start-world", "./plugins/start-dashboard"];
@@ -114,12 +114,16 @@ test("the root, the routines entry and the seven step topics are the factory's s
     [
       ".",
       "./routines",
+      "./steps",
       ...service,
       ...plugins,
       ...topics.map((topic) => `./steps/${topic}`),
     ].sort(),
   );
-  expect(existsSync(path.join(packageDir, "src", "steps", "index.ts"))).toBe(false);
+  expect(pkg.exports["./steps"]).toEqual({
+    types: "./dist/steps/index.d.ts",
+    default: "./dist/steps/index.js",
+  });
   for (const topic of topics) {
     expect(pkg.exports[`./steps/${topic}`]).toEqual({
       types: `./dist/steps/${topic}/index.d.ts`,
@@ -261,12 +265,8 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "resolveRepository",
     "reviewPullRequest",
   ],
-  "steps/agents/index.ts": [
-    "executeAgent",
-    "defaultAgentExecutionDependencies",
-    "executeJev",
-    "executeModel",
-  ],
+  "steps/index.ts": ["AgentSessionError", "createAgentRunner"],
+  "steps/agents/index.ts": ["executeAgent", "executeJev", "executeModel"],
   "steps/runtime/index.ts": [
     "dashboardRunUrl",
     "createRunDirectory",

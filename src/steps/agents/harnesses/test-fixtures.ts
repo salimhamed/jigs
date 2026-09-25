@@ -2,19 +2,29 @@ import { spawnSync } from "node:child_process";
 import { lstatSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { type CodexAppServerProvider, createCodexAppServer } from "ai-sdk-provider-codex-cli";
 import semver from "semver";
-import {
-  type AgentExecutionDependencies,
-  defaultAgentExecutionDependencies,
-} from "../execute-agent.ts";
+import { type ExecutionSeams, executionSeams } from "../seams.ts";
 import { MIN_PI_VERSION, resolvePiExecutable } from "./executables.ts";
 
 // Tests run outside any factory, so there is no jigs.config.ts declaring
 // agent variables to read.
-export const factorylessDeps: AgentExecutionDependencies = {
-  ...defaultAgentExecutionDependencies,
+export const factorylessDeps: ExecutionSeams = {
+  ...executionSeams,
   factoryEnv: () => [],
 };
+
+// For tests that drive the provider directly, outside a driver.
+export async function withCodexAppServer<T>(
+  fn: (provider: CodexAppServerProvider) => Promise<T>,
+): Promise<T> {
+  const provider = createCodexAppServer();
+  try {
+    return await fn(provider);
+  } finally {
+    await provider.close();
+  }
+}
 
 export function makeTmpDir(): string {
   return mkdtempSync(path.join(tmpdir(), "jigs-harness-test-"));

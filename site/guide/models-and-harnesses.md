@@ -8,7 +8,7 @@ OpenRouter. Both are described by plain descriptors you build in workflow code:
 ```ts
 import { harnesses, models } from "@jigs-ai/jigs";
 
-harnesses.claude("sonnet");
+harnesses.claude({ model: "sonnet", effort: "high" });
 harnesses.pi(models.openaiCodex("gpt-5.5"), { thinking: "high" });
 models.openrouter("google/gemini-2.5-flash-lite");
 ```
@@ -33,8 +33,8 @@ source it calls to `requires.models`:
 
 ```ts
 const agents = {
-  builder: harnesses.codex("gpt-5.6-sol"),
-  reviewer: harnesses.claude("opus"),
+  builder: harnesses.codex({ model: "gpt-5.6-sol" }),
+  reviewer: harnesses.claude({ model: "opus" }),
 };
 
 export default defineWorkflow({
@@ -109,19 +109,93 @@ descriptor, compared by value. So a deploy that changes an agent's model or
 settings starts that agent fresh on its next turn, rather than resuming a
 session another configuration made.
 
+## Harness settings
+
+A Claude Code or Codex descriptor is the provider's own settings, plus the
+model. jigs invents no setting names: whatever the provider accepts, and can be
+written down as data, you can set.
+
+```ts
+type ClaudeHarness = JsonOnly<Omit<ClaudeCodeSettings, ClaudePolicyKey>> & {
+  kind: "claude";
+  model: string;
+  mcpServers?: Record<string, McpServerConfig>;
+};
+type CodexHarness = JsonOnly<Omit<CodexAppServerSettings, CodexPolicyKey>> & {
+  kind: "codex";
+  model: string;
+  mcpServers?: Record<string, McpServerConfig>;
+};
+```
+
+Each constructor takes one object: the model and any settings.
+
+```ts
+harnesses.claude({
+  model: "opus",
+  effort: "high",
+  maxTurns: 40,
+  allowedTools: ["Read", "Edit", "Bash"],
+  maxBudgetUsd: 5,
+  fallbackModel: "sonnet",
+});
+
+harnesses.codex({
+  model: "gpt-5.6-sol",
+  personality: "pragmatic",
+  developerInstructions: "Prefer small commits.",
+});
+```
+
+The provider's type is the list of knobs, so a new provider setting needs no
+jigs release. The cost is that a provider renaming a setting becomes a compile
+error when you upgrade, the same as any other contract jigs changes.
+
+Two kinds of setting are left out. A setting whose value is a function, such as
+a hook, a tool-approval callback or a logger, cannot be written down, and a
+descriptor has to be, because a workflow hands it to a step through the
+database. And a setting jigs sets itself or holds as policy is a compile error
+at the constructor. The drivers also drop those keys at run time and apply
+their policy last, so policy always wins. To hand the provider a function,
+[write your own agent step](/guide/custom-agent-step).
+
+`mcpServers` keeps jigs' shape on both harnesses: each server names a probe
+tool, which jigs calls before the agent starts.
+
 ## Claude Code
 
-`harnesses.claude(model, options)` works with `runAgent` and `askAgent`. It runs
-the `claude` CLI on the service's `PATH`, or the path in `JIGS_CLAUDE_EXECUTABLE`,
-logged in with `claude auth login`. It bills that account. `options.effort` sets
-the effort level; `options.mcpServers` adds MCP servers for `runAgent`.
+`harnesses.claude({ model, ...settings })` works with `runAgent` and
+`askAgent`. It runs the `claude` CLI on the service's `PATH`, or the path in
+`JIGS_CLAUDE_EXECUTABLE`, logged in with `claude auth login`. It bills that
+account. `askAgent` sends only the model: it always runs without tools, MCP
+servers or filesystem settings.
+
+A Claude Code descriptor cannot name these keys (`ClaudePolicyKey`):
+
+| Keys | Why |
+| --- | --- |
+| `cwd`, `env` | Each step sets the worktree and builds the environment from the allowlist. |
+| `pathToClaudeCodeExecutable`, `executable`, `executableArgs` | jigs runs the CLI the service checked at startup. |
+| `permissionMode`, `allowDangerouslySkipPermissions` | An agent step always runs with permissions bypassed, in its own worktree. |
+| `strictMcpConfig`, `mcpServers`, `settingSources` | The agent sees exactly the MCP servers its descriptor lists, and only the project's settings. |
+| `resume`, `continue`, `sessionId`, `forkSession`, `persistSession`, `resumeSessionAt`, `resumeDropsTurn` | The session belongs to the session reference jigs records and resumes. |
+| `extraArgs`, `sdkOptions` | Raw arguments and SDK options could rewrite any of the above. |
 
 ## Codex
 
-`harnesses.codex(model, options)` works with `runAgent` only. Codex has no mode
-without tools, so `askAgent` refuses it. It runs the `codex` CLI on the
+`harnesses.codex({ model, ...settings })` works with `runAgent` only. Codex has
+no mode without tools, so `askAgent` refuses it. It runs the `codex` CLI on the
 service's `PATH`, logged in with `codex login`. The service refuses to start
 when that CLI is older than the minimum version it names.
+
+A Codex descriptor cannot name these keys (`CodexPolicyKey`):
+
+| Keys | Why |
+| --- | --- |
+| `cwd`, `env`, `codexPath` | Each step sets the worktree, builds the environment and launches the checked CLI from a private home. |
+| `approvalPolicy`, `sandboxPolicy`, `autoApprove` | An agent step never waits for approval and runs with full access to its worktree. |
+| `threadMode`, `resume`, `persistExtendedHistory` | The thread belongs to the session reference jigs records and resumes. |
+| `mcpServers`, `configOverrides` | The agent sees exactly the MCP servers its descriptor lists; config overrides could rewrite the sandbox and MCP tables. |
 
 ## Pi
 
