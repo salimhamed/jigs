@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.58.0
+# @jigs-ai/jigs v0.59.0
 
 Describe run-owned resources, inspect cleanup progress and request release from a workflow.
 
@@ -269,7 +269,7 @@ What to do with eligible resources after a completed run.
 
 Without an argument, resolves the workflow policy, then the factory policy, then the default of
 releasing successful runs and keeping failed runs. An explicit choice remains authoritative for
-later automatic cleanup. Never call this from `finally` or `catch`, because waits also throw.
+later automatic cleanup.
 
 ***
 

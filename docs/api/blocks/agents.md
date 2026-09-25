@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.58.0
+# @jigs-ai/jigs v0.59.0
 
 Compose agent and model calls inside a workflow, including harness selection and halts.
 

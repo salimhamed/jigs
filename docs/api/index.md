@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.58.0
+# @jigs-ai/jigs v0.59.0
 
 Define a factory and describe its workflows, schedules, bindings and merge policy.
 
@@ -106,7 +106,7 @@ Which provider webhook routes the service mounts. Absent, it mounts none.
 
 ##### workflows
 
-> **workflows**: `Record`\<`string`, [`AnyWorkflowEntry`](#anyworkflowentry)\>
+> **workflows**: `Record`\<`string`, `AnyWorkflowDefinition`\>
 
 ***
 
@@ -243,7 +243,7 @@ once.
 
 ##### workflows
 
-> **workflows**: `Record`\<`string`, () => `Promise`\<\{ `default`: [`AnyWorkflowEntry`](#anyworkflowentry); \}\>\>
+> **workflows**: `Record`\<`string`, () => `Promise`\<\{ `default`: `AnyWorkflowDefinition`; \}\>\>
 
 ***
 
@@ -298,9 +298,10 @@ Five fields, evaluated in the service host's local time zone.
 
 ***
 
-### WorkflowEntry
+### WorkflowDefinition
 
-A factory-owned workflow together with its input schema and runtime requirements.
+A workflow: its function, its input schema, and what a run needs before it
+may start.
 
 #### Type Parameters
 
@@ -334,10 +335,25 @@ What to do with eligible resources after a completed run.
 
 > `optional` **requires**: `WorkflowRequires`
 
-What the workflow needs before a run can start: integrations, bindings,
-the harnesses it runs and the API model sources it calls. The service
-checks harness CLIs when it starts, and preflight checks everything
-listed before every run. List only what the workflow actually uses.
+What the workflow needs before a run can start: the agents it runs, the
+integrations, bindings and API model sources it uses. The service checks
+the CLI of every agent's harness when it starts, and preflight checks
+everything listed before every run. List only what the workflow uses.
+
+###### Example
+
+```ts
+const agents = {
+  builder: harnesses.claude("opus"),
+  reviewer: harnesses.codex("gpt-5.6-sol"),
+};
+
+export default defineWorkflow({
+  inputs,
+  requires: { agents, integrations: ["linear", "github"] },
+  workflow: shipTicket,
+});
+```
 
 ##### workflow()
 
@@ -378,14 +394,6 @@ A provisioned repository worktree and the commit it was cut from.
 > **path**: `string`
 
 ## Type Aliases
-
-### AnyWorkflowEntry
-
-> **AnyWorkflowEntry** = [`WorkflowEntry`](#workflowentry)\<`any`\>
-
-A workflow entry used where a factory contains several different input schemas.
-
-***
 
 ### BindingDefinition
 
@@ -516,3 +524,42 @@ Preserve the declaration's inferred keys without loading its workflows.
 #### Returns
 
 `T`
+
+***
+
+### defineWorkflow()
+
+> **defineWorkflow**\<`S`\>(`definition`): [`WorkflowDefinition`](#workflowdefinition)\<`S`\>
+
+Declare a workflow as the default export of its file. It returns the
+definition unchanged; it exists so TypeScript checks the workflow's
+parameter against the input schema.
+
+#### Type Parameters
+
+##### S
+
+`S` *extends* `ZodType`\<`unknown`, `unknown`, `$ZodTypeInternals`\<`unknown`, `unknown`\>\>
+
+#### Parameters
+
+##### definition
+
+[`WorkflowDefinition`](#workflowdefinition)\<`S`\>
+
+#### Returns
+
+[`WorkflowDefinition`](#workflowdefinition)\<`S`\>
+
+#### Example
+
+```ts
+const inputs = z.object({ binding: z.string() });
+
+export async function hello(input: WorkflowInputs<typeof inputs>) {
+  "use workflow";
+  // ...
+}
+
+export default defineWorkflow({ inputs, workflow: hello });
+```
