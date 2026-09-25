@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.65.0](https://github.com/salimhamed/jigs/compare/jigs-v0.64.0...jigs-v0.65.0) (2026-09-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* The linear-ticket-to-pr recipe replaces the fixer and per-event budgets with the builder session and budget.attemptsPerUpdate; drain runs before adopting the updated recipe.
+
+### Features
+
+* watch pull request facts and continue builder sessions ([#401](https://github.com/salimhamed/jigs/issues/401)) ([80e17d1](https://github.com/salimhamed/jigs/commit/80e17d1ce3d87ddb83d65e10c1a65823172245f7))
+
 ## [0.64.0](https://github.com/salimhamed/jigs/compare/jigs-v0.63.0...jigs-v0.64.0) (2026-09-25)
 
 
