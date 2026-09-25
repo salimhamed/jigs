@@ -133,8 +133,9 @@ For different durable behavior, write a named custom `"use step"` function and
 bind the appropriate module: `bindAgentSteps` from
 `@jigs-ai/jigs/blocks/agents`, `bindLinearSteps` from
 `@jigs-ai/jigs/blocks/linear`, or `bindPullRequestSteps` from
-`@jigs-ai/jigs/blocks/pull-requests`. Generated integration exports each
-module's dependencies for selective replacement. Keep functions workflow-side;
+`@jigs-ai/jigs/blocks/pull-requests`. The generated files export only what a
+workflow calls, so pass your own step alongside the generated ones from
+`#jigs/steps`. Keep functions workflow-side;
 never send a prompt or callback through a durable step argument.
 
 ### Record a custom resource

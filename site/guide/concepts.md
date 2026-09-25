@@ -28,7 +28,7 @@ running again. This is called **replay**.
 So a workflow, and every block it calls, must be safe to run again: no file
 access, network calls, Git commands or `process.env` reads. That work belongs in
 steps. jigs provides steps for the common operations, and you can write your own
-under `steps/`. Pass only plain data into a step; keep prompts written as
+in a `steps.ts` in the workflow's directory, `workflows/<name>/steps.ts`. Pass only plain data into a step; keep prompts written as
 functions, and other callbacks, on the workflow side.
 
 ## Why the factory holds generated code
@@ -62,8 +62,9 @@ and `jigs upgrade` regenerates it for you.
 
 Because IDs come from paths and names, moving or renaming a workflow file, a
 workflow function or a step changes its address. Finish or cancel the runs that
-use it before you deploy the rename. Upgrading jigs alone does not change your
-IDs.
+use it before you deploy the rename. The same holds for the generated files: a
+jigs release that moves `jigs/steps.ts` or renames a step in it moves those IDs,
+and says so in its release notes.
 
 ## Factory layout
 

@@ -149,6 +149,7 @@ jigs upgrade
 
 It bumps jigs, regenerates `jigs/`, runs `jigs up` and typechecks the
 factory. Review and commit the regenerated `jigs/steps.ts` and
-`jigs/routines.ts`. An upgrade from a release that generated `jigs.ts` also
-needs that file deleted and its `#jigs` imports moved to `#jigs/steps` and
-`#jigs/routines`; the build says so.
+`jigs/routines.ts`. From a release that generated `jigs.ts`, it also deletes
+that file and replaces `#jigs`, `#blocks/*` and `#steps/*` in `package.json`
+imports with `#jigs/*`; move the factory's `#jigs` imports to `#jigs/steps` and
+`#jigs/routines` by hand.

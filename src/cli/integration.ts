@@ -29,7 +29,7 @@ export function checkFactoryIntegration(factoryRoot: string): void {
   if (existsSync(path.join(factoryRoot, RETIRED_FILE))) {
     throw new JigsError(
       `${RETIRED_FILE} is no longer generated; its steps now live in jigs/steps.ts`,
-      `delete ${RETIRED_FILE}, run pnpm exec jigs generate, and import from #jigs/steps and #jigs/routines`,
+      `run pnpm exec jigs upgrade: it deletes ${RETIRED_FILE}, writes jigs/, and replaces #jigs, #blocks/* and #steps/* in package.json imports with #jigs/*; then import from #jigs/steps and #jigs/routines`,
     );
   }
   const stale = GENERATED_FILES.filter((file) => {

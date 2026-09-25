@@ -254,11 +254,21 @@ async function generate(
   factoryRoot: string,
   out: (line: string) => void,
 ): Promise<void> {
-  await execOrExplain(execFile, "pnpm", ["exec", "jigs", "generate"], { cwd: factoryRoot }, out, {
-    missing: new JigsError("pnpm is not on PATH", "install pnpm"),
-    failed: () =>
-      new JigsError("could not refresh jigs/", "run pnpm exec jigs generate in this factory"),
-  });
+  // The new release's generate also retires jigs.ts and the old imports map;
+  // each line it prints names one change, so the operator sees them all.
+  const onLine = (line: string) => out(`  ${line}`);
+  await execOrExplain(
+    execFile,
+    "pnpm",
+    ["exec", "jigs", "generate"],
+    { cwd: factoryRoot, onLine },
+    out,
+    {
+      missing: new JigsError("pnpm is not on PATH", "install pnpm"),
+      failed: () =>
+        new JigsError("could not refresh jigs/", "run pnpm exec jigs generate in this factory"),
+    },
+  );
 }
 
 // The child owns the terminal so its restart prompt and step lines reach the

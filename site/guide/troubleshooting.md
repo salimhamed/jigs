@@ -30,7 +30,9 @@ Run `pnpm exec jigs generate`, review the change to `jigs/steps.ts` and
 `jigs/`, since generating replaces it.
 
 A build also refuses a factory that still has a `jigs.ts` from an earlier
-release. Delete it, run `pnpm exec jigs generate`, and import from
+release. Run `pnpm exec jigs upgrade`. It deletes `jigs.ts`, writes `jigs/`,
+and replaces `#jigs`, `#blocks/*` and `#steps/*` in the `imports` map in
+`package.json` with `#jigs/*`. Then change your workflows to import from
 `#jigs/steps` and `#jigs/routines` instead of `#jigs`.
 
 ## A run is waiting

@@ -130,6 +130,25 @@ test("bumps jigs to latest, then generates and runs up under the new CLI, then t
 // The bug this guards: the process that ran the bump holds the old release's
 // integration template, so an in-process build rejected the jigs/ files the new
 // release had just generated and left the factory half-upgraded.
+test("each change the new release's generate reports reaches the operator", async () => {
+  const root = factory();
+  const io = {
+    exec: fakeRegistry("0.1.19", (call) => {
+      if (call.args.join(" ") === "exec jigs generate") {
+        call.options.onLine?.("deleted jigs.ts; its steps now live in jigs/steps.ts");
+        call.options.onLine?.("removed #jigs from package.json imports");
+      }
+      return undefined;
+    }),
+  };
+
+  const result = await upgrade(root, io);
+
+  expect(result.ok).toBe(true);
+  expect(lines).toContain("  deleted jigs.ts; its steps now live in jigs/steps.ts");
+  expect(lines).toContain("  removed #jigs from package.json imports");
+});
+
 test("generated files the old CLI would reject do not stop the upgrade", async () => {
   const root = factory();
   const io = {
