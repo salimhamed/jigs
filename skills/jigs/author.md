@@ -73,8 +73,8 @@ cleanup. Failed cleanup stays visible in `jigs status <run-id>`, is retried by t
 service, and remains inspectable with `jigs resources list` and preview-first
 `jigs resources prune`.
 
-Release is success-only: never call it from `finally` or a catch, because
-suspension throws too. Dirty unmerged work stays, and branches are deleted only
+Release is success-only: call it on the success path, as the workflow's last
+line. Dirty unmerged work stays, and branches are deleted only
 when their commits are proven present on the remote default branch. Squash
 merges may therefore retain branches. Inspect the report when resource removal
 fails.
