@@ -2,9 +2,9 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { GithubApiError } from "../../providers/github-api.ts";
+import { JIGS_LABELS } from "../../providers/github-label.ts";
 import { bindingRepoDir } from "../../steps/workspaces/layout.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
-import { JIGS_LABELS } from "../../workflow/pull-requests/policy.ts";
 import { type BindDeps, bindRepo } from "./bind.ts";
 import { unbindRepo } from "./unbind.ts";
 
@@ -351,7 +351,21 @@ test("bind without a webhooks section skips the webhook leg and says PR waits po
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-test("bind with GitHub webhooks off needs neither secret nor token, and names the interval", async () => {
+test("the label leg without GITHUB_TOKEN fails with the credential repair, after recording the binding", async () => {
+  stubWebhookEnv();
+  vi.stubEnv("GITHUB_TOKEN", "");
+
+  const failure = await bindRepo(API, { cwd: factory, out: (line) => lines.push(line) }).catch(
+    (err: unknown) => err,
+  );
+
+  expect(jigsConfig()).toContain(`remote: "${API}"`);
+  expect(String(failure)).toContain("jigs:approved label could not be ensured");
+  expect((failure as { hint?: string }).hint).toContain("set GITHUB_TOKEN in");
+  expect((failure as { hint?: string }).hint).toContain("repo (or public_repo");
+});
+
+test("bind with GitHub webhooks off needs no webhook secret, and names the interval", async () => {
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "");
   vi.stubEnv("GITHUB_TOKEN", "");
   writeFileSync(

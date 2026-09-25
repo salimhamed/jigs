@@ -18,11 +18,14 @@ import {
 import { JigsError } from "../../errors.ts";
 import { GithubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity, useFactoryRoot } from "../../providers/github-auth.ts";
-import { type EnsureRepoLabelOptions, ensureRepoLabel } from "../../providers/github-label.ts";
+import {
+  type EnsureRepoLabelOptions,
+  ensureRepoLabel,
+  JIGS_LABELS,
+} from "../../providers/github-label.ts";
 import { ensureRepoWebhook, parseGithubRemote } from "../../providers/github-webhook.ts";
 import { hasBindingClone } from "../../steps/workspaces/clone.ts";
 import { bindingDir, bindingRepoDir } from "../../steps/workspaces/layout.ts";
-import { JIGS_LABELS } from "../../workflow/pull-requests/policy.ts";
 
 const BINDING_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
@@ -158,13 +161,16 @@ async function ensureJigsLabels(
   for (const label of JIGS_LABELS) {
     const outcome = await (deps.ensureLabel ?? ensureRepoLabel)({ ...repoRef, label }).catch(
       (err: unknown) => {
-        const repair = tokenWasRejected(err)
-          ? credentialRepair
-          : err instanceof GithubApiError && err.status === 404 && identity.mode === "app"
-            ? `check the remote, and install the App on ${slug} or grant its installation access to the repo, then re-run: ${reBindCommand}`
-            : err instanceof GithubApiError && err.status === 404
-              ? `check the remote, and that this token can see ${slug}, then re-run: ${reBindCommand}`
-              : `once that clears, re-run: ${reBindCommand}`;
+        const tokenMissing =
+          identity.mode === "pat" && factoryEnvValue(factoryRoot, "GITHUB_TOKEN") === undefined;
+        const repair =
+          tokenMissing || tokenWasRejected(err)
+            ? credentialRepair
+            : err instanceof GithubApiError && err.status === 404 && identity.mode === "app"
+              ? `check the remote, and install the App on ${slug} or grant its installation access to the repo, then re-run: ${reBindCommand}`
+              : err instanceof GithubApiError && err.status === 404
+                ? `check the remote, and that this token can see ${slug}, then re-run: ${reBindCommand}`
+                : `once that clears, re-run: ${reBindCommand}`;
         throw new JigsError(
           `${slug}'s ${label.name} label could not be ensured: ${err instanceof Error ? err.message : String(err)}`,
           repair,

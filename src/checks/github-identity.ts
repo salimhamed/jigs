@@ -22,7 +22,11 @@ interface RequiredPermission {
 const REQUIRED_PERMISSIONS: RequiredPermission[] = [
   { name: "contents", level: "write", why: "push the reviewed commit" },
   { name: "pull_requests", level: "write", why: "open, comment on and merge pull requests" },
-  { name: "issues", level: "write", why: "post on the pull request conversation" },
+  {
+    name: "issues",
+    level: "write",
+    why: "post on the pull request conversation and create jigs' labels",
+  },
   { name: "metadata", level: "read", why: "read the repository" },
   { name: "checks", level: "read", why: "read CI check runs while polling pull requests" },
   { name: "statuses", level: "read", why: "read CI commit statuses while polling pull requests" },

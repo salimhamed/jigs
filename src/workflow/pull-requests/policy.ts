@@ -3,19 +3,6 @@ import { z } from "zod";
 /** The label that approves a pull request for merging when a factory approves by label. */
 export const APPROVED_LABEL = "jigs:approved";
 
-/** A label jigs creates on every GitHub repository it is bound to. */
-export interface JigsLabel {
-  name: string;
-  /** Six hex digits, without the leading `#`. */
-  color: string;
-  description: string;
-}
-
-/** Every label jigs relies on. `jigs bind` makes sure each one exists on the repository. */
-export const JIGS_LABELS: readonly JigsLabel[] = [
-  { name: APPROVED_LABEL, color: "1d76db", description: "Approves this pull request for jigs" },
-];
-
 /**
  * How the operator approves a pull request for merging.
  *
