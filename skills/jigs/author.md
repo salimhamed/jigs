@@ -12,7 +12,7 @@ The guides, in the order you need them:
 - `https://salimhamed.github.io/jigs/guide/configuration`: every `jigs.config.ts` key and `.env` variable.
 
 For the linear-ticket-to-pr process, run `jigs recipe add linear-ticket-to-pr`. It adds
-`"linear-ticket-to-pr": () => import("./workflows/linear-ticket-to-pr.ts"),` to the config's `workflows` map,
+`"linear-ticket-to-pr": () => import("./workflows/linear-ticket-to-pr/linear-ticket-to-pr.ts"),` to the config's `workflows` map,
 preserves existing files and reports created/kept paths. Recipes
 become editable factory source; upgrades only regenerate `jigs/`.
 
@@ -160,11 +160,13 @@ preserves the original strings. Treat the record as observability only:
 deletion requires separate kind-specific ownership and policy; a recorded URL
 does not authorize cleanup.
 
-For delivery, run `jigs recipe add linear-ticket-to-pr`; it registers the workflow. The copied `workflows/linear-ticket-to-pr/delivery/` contains the phases, types,
-prompts and renderers; these are factory code to edit, not library exports.
-Read `workflows/linear-ticket-to-pr/delivery/README.md` for the recipe's prerequisites, budgets,
-prompts and compiling examples before changing the linear-ticket-to-pr process. Keep factory prompt overrides beside
-their callers. Reuse existing routines for comment scoping and agent sessions
+For delivery, run `jigs recipe add linear-ticket-to-pr`; it registers the workflow. The copied
+`workflows/linear-ticket-to-pr/` holds the workflow file and `delivery/`: the three phases
+(`implementAndReview`, `publish`, `followPullRequest`), the prompts and the review schemas.
+These are factory code to edit, not library exports. Read
+`workflows/linear-ticket-to-pr/README.md` for the recipe's prerequisites, budgets, agents and
+prompts before changing the linear-ticket-to-pr process. To change a prompt, edit its function in
+`delivery/prompts.ts`. Reuse existing routines for comment scoping and agent sessions
 (`agentSession`, which resumes or starts fresh) rather than duplicating their
 mechanics.
 
@@ -182,7 +184,7 @@ replacement run continues where the last one stopped.
 
 Writing your own pull request workflow: choose one scope and keep it, since it
 is what "already answered" is measured against. `defaultPullRequestScope(ticketKey)`,
-which every delivery uses unless you pass `scope`, is the workflow function's
+which the recipe's delivery uses, is the workflow function's
 own name plus that key — so renaming the function changes the scope and a pull
 request parked mid-conversation stops recognising its own answers, the same
 rule that governs durable step ids. Pass an explicit `scope` when you want one

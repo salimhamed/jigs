@@ -173,7 +173,7 @@ operations generated for your factory.
 import { defineWorkflow, harnesses } from "@jigs-ai/jigs";
 import { reviewTicket } from "#jigs/routines";
 import { provisionWorktree, setTicketStatus } from "#jigs/steps";
-import { deliverChange } from "./linear-ticket-to-pr/delivery/delivery.ts";
+import { implementAndReview } from "./delivery/delivery.ts";
 ```
 
 Import a workflow's own files with relative paths. The workflow loaders in

@@ -36,4 +36,4 @@ step//./jigs/steps//resolveRepository
 step//./jigs/steps//reviewPullRequest
 step//./jigs/steps//setTicketStatus
 workflow//./workflows/hello/hello//hello
-workflow//./workflows/linear-ticket-to-pr//linearTicketToPrWorkflow
+workflow//./workflows/linear-ticket-to-pr/linear-ticket-to-pr//linearTicketToPr

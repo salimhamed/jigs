@@ -209,7 +209,7 @@ export function removeBinding(text: string, name: string): string {
 
 /** The `workflows` entry that registers a copied workflow file. */
 export function workflowEntry(name: string): string {
-  return `${propertyKey(name)}: () => import(${JSON.stringify(`./workflows/${name}.ts`)}),`;
+  return `${propertyKey(name)}: () => import(${JSON.stringify(`./workflows/${name}/${name}.ts`)}),`;
 }
 
 /** Register a workflow loader, or return undefined when the name is already registered. */
