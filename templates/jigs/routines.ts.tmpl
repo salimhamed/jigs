@@ -7,7 +7,6 @@ import {
   bindAgentSteps,
   bindLinearSteps,
   bindPullRequestSteps,
-  bindReleaseSteps,
 } from "@jigs-ai/jigs/routines";
 import {
   branchContains,
@@ -21,14 +20,9 @@ import {
   postTicketHumanInputRequest,
   postTicketNote,
   readBranchState,
-  releaseRunResources,
   replyToPullRequestReviewThread,
   resolveLinearIssue,
-  resolveReleasePolicy,
 } from "./steps.ts";
-
-/** Release this run's resources as the workflow's last successful action. */
-export const { release } = bindReleaseSteps({ resolveReleasePolicy, releaseRunResources });
 
 const agents = bindAgentSteps({ executeAgent, executeJev, executeModel });
 

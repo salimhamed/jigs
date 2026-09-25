@@ -26,4 +26,3 @@ export {
   postReviewAnswers,
 } from "./pull-requests/answers.ts";
 export { bindPullRequestSteps, type PullRequestSteps } from "./pull-requests/bind.ts";
-export { bindReleaseSteps, type ReleaseSteps } from "./runtime/release.ts";

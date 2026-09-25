@@ -26,11 +26,10 @@ step//./jigs/steps//readChange
 step//./jigs/steps//readPatch
 step//./jigs/steps//readWorktreeDiff
 step//./jigs/steps//registerResource
-step//./jigs/steps//releaseRunResources
+step//./jigs/steps//release
 step//./jigs/steps//removeRunDirectory
 step//./jigs/steps//replyToPullRequestReviewThread
 step//./jigs/steps//resolveLinearIssue
-step//./jigs/steps//resolveReleasePolicy
 step//./jigs/steps//reviewPullRequest
 step//./jigs/steps//setTicketStatus
 workflow//./workflows/hello/hello//hello

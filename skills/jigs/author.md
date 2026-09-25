@@ -80,18 +80,16 @@ terminal. The default is `{ onSuccess: "release", onFailure: "keep" }`; set
 `release` on the factory config or in `defineWorkflow`. Failed and cancelled runs
 both use `onFailure`. Live and suspended runs retain their resources.
 
-Call `await release()` from `#jigs/routines` as the workflow's last successful action
-when it needs a report before returning. `release(policy)` persists the
-callsite's success choice, so an explicit keep is not reversed by automatic
-cleanup. Failed cleanup stays visible in `jigs status <run-id>`, is retried by the
-service, and remains inspectable with `jigs resources list` and preview-first
-`jigs resources prune`.
+Release never throws away work: dirty or unmerged worktrees stay, and branches
+are deleted only when their commits are proven present on the remote default
+branch, so squash merges may retain branches. Failed cleanup stays visible in
+`jigs status <run-id>`, is retried by the service, and remains inspectable with
+`jigs resources list` and preview-first `jigs resources prune`.
 
-Release is success-only: call it on the success path, as the workflow's last
-line. Dirty unmerged work stays, and branches are deleted only
-when their commits are proven present on the remote default branch. Squash
-merges may therefore retain branches. Inspect the report when resource removal
-fails.
+A workflow never needs to release its own resources. To release early or read
+the report, call `await release()` from `#jigs/steps` on the success path;
+`release(policy)` records that success choice, so automatic cleanup does not
+reverse an explicit keep.
 
 Configuration values vary by factory; requirements belong to the workflow
 declaration next to its input schema.

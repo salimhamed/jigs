@@ -1079,15 +1079,13 @@ async function checkScaffold(name) {
       `
   import assert from "node:assert/strict";
   import entry from "./.output/server/_chunks/linear-ticket-to-pr.mjs";
-  import { resolveReleasePolicy } from "@jigs-ai/jigs/steps/runtime";
+  import { automaticReleaseAction } from "@jigs-ai/jigs/automatic-release";
   const workflowName = "workflow//./workflows/linear-ticket-to-pr/linear-ticket-to-pr//linearTicketToPr";
   assert.equal(entry.workflow.workflowId, workflowName);
   entry.release = { onSuccess: "keep", onFailure: "release" };
-  const policy = await resolveReleasePolicy(
-    { workflowRunId: "run_policy_check", workflowName },
-    { workflows: { differentConfigKey: async () => ({ default: entry }) } },
-  );
-  assert.deepEqual(policy, entry.release);
+  const factory = { workflows: { differentConfigKey: entry } };
+  assert.equal(automaticReleaseAction(factory, workflowName, "success"), "keep");
+  assert.equal(automaticReleaseAction(factory, workflowName, "failure"), "release");
 `,
     ]);
   }

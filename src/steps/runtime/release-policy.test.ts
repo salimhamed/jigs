@@ -4,7 +4,6 @@ import path from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { parseFactoryConfig } from "../../config/factory-config.ts";
-import { bindReleaseSteps } from "../../workflow/runtime/release.ts";
 import {
   effectiveReleasePolicy,
   resolveReleasePolicy,
@@ -41,21 +40,6 @@ test("two workflows can differ and match compiled IDs rather than config names",
   expect(workflowReleasePolicy(factory, "workflow//./first//run")).toEqual(keep);
   expect(workflowReleasePolicy(factory, "workflow//./second//run")).toEqual(discard);
   expect(workflowReleasePolicy(factory, "missing")).toBeUndefined();
-});
-
-test("callsite policy wins and skips the policy read step", async () => {
-  const resolveReleasePolicy = vi.fn(async () => discard);
-  const releaseRunResources = vi.fn(async () => ({
-    policy: keep,
-    worktrees: [],
-    runDirectory: { path: "scratch", removed: false, reason: "keep" },
-  }));
-  const { release } = bindReleaseSteps({ resolveReleasePolicy, releaseRunResources });
-  await release(keep);
-  expect(resolveReleasePolicy).not.toHaveBeenCalled();
-  expect(releaseRunResources).toHaveBeenLastCalledWith(keep);
-  await release();
-  expect(releaseRunResources).toHaveBeenLastCalledWith(discard);
 });
 
 test("resolver combines compiled entry and current factory defaults", async () => {

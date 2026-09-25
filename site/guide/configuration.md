@@ -114,9 +114,10 @@ release: { onSuccess: "release", onFailure: "keep" },
 ```
 
 That is the default. `onSuccess` applies to completed runs and `onFailure` to
-failed and cancelled ones. A workflow's `defineWorkflow` can set its own `release`,
-and a workflow can call `await release()` from `#jigs/routines` as its last step
-when it needs the report. Waiting runs always keep everything.
+failed and cancelled ones. A workflow's `defineWorkflow` can set its own `release`.
+The service applies the policy when a run ends; waiting runs always keep everything.
+A workflow that wants to release early, or needs the report, can call
+`await release()` from `#jigs/steps`.
 
 Release never throws away work: a worktree with uncommitted or unmerged changes
 stays, and a branch is deleted only when its commits are proven merged. See

@@ -1,17 +1,28 @@
 import { getWorld } from "workflow/runtime";
+import type { FactoryDefinition } from "../../workflow/factory.ts";
 import type { ReleasePolicy, ReleaseReport } from "../../workflow/runtime/release.ts";
 import { resourcesFromAttributes } from "../../workflow/runtime/resources.ts";
 import { withRunResourceLock } from "../workspaces/registry.ts";
 import { releaseRunResources as applyRelease } from "../workspaces/release.ts";
 import { registrySql } from "../workspaces/sql.ts";
 import { writeCleanupDirective, writeCleanupProgress } from "./cleanup-state.ts";
-import type { RunMetadata } from "./run-context.ts";
+import { resolveReleasePolicy } from "./release-policy.ts";
+import type { NamedRunMetadata } from "./run-context.ts";
 
-/** Persist an explicit success action, release under the run lock and return the result. */
+/**
+ * Release this run's resources on its success path and return what was removed or kept.
+ *
+ * @remarks
+ * Without a policy, uses the workflow's `release`, then the factory's, then the default of
+ * releasing successful runs and keeping failed ones. The success action is recorded first, so
+ * automatic cleanup after the run ends never reverses it.
+ */
 export async function releaseRunResources(
-  policy: ReleasePolicy,
-  metadata: RunMetadata,
+  metadata: NamedRunMetadata,
+  definition: FactoryDefinition,
+  explicit?: ReleasePolicy,
 ): Promise<ReleaseReport> {
+  const policy = explicit ?? (await resolveReleasePolicy(metadata, definition));
   const action = policy.onSuccess;
   await writeCleanupDirective(metadata.workflowRunId, action);
   await writeCleanupProgress(metadata.workflowRunId, {
