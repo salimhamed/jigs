@@ -16,7 +16,7 @@ import { makeFakeSql } from "../steps/workspaces/test-fixtures.ts";
 import { type Factory, ticketInputSchema } from "../workflow/factory.ts";
 import { ticketToken } from "../workflow/linear/claim.ts";
 import { needsHumanToken } from "../workflow/linear/halt-for-human.ts";
-import { pullRequestToken } from "../workflow/pull-requests/gate.ts";
+import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
 import { resourceAttribute } from "../workflow/runtime/resources.ts";
 import * as queue from "./queue.ts";
 import { clearWakes, lastWake } from "./wake-note.ts";

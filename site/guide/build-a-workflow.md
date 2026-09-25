@@ -246,10 +246,9 @@ jigs marker is required, and an unmarked comment does not automatically mean
 unresolved work.
 
 The watcher yields a closed snapshot once, then ends. Leaving the loop by
-`return`, `break` or a throw releases the watch. It shares the existing PR hook
-with `pullRequestGate`: only one run can watch a given pull request at a time.
-A second owner receives a claim conflict. The service's polling, webhooks and
-`jigs poke` wake the watch to reread GitHub.
+`return`, `break` or a throw releases the watch. Only one run can watch a given
+pull request at a time; a second owner receives a claim conflict. The service's
+polling, webhooks and `jigs poke` wake the watch to reread GitHub.
 
 The watcher never merges. Factory code decides who may merge and calls
 `mergePullRequest` when appropriate; that step rechecks current GitHub facts
@@ -258,73 +257,6 @@ binding's merge method. Each snapshot's `approval` already reads the factory's
 approval setting, so `isPullRequestMergeReady(snapshot)` needs nothing else. The
 [linear-ticket-to-pr recipe](/guide/recipes#linear-ticket-to-pr) demonstrates
 continuing the builder session after publication and deciding who merges.
-
-### Use the rules-based gate
-
-`pullRequestGate` is an alternative for workflows that want jigs to classify
-outstanding work using its marker rules. Loop over it with `for await`: each
-wake says what is outstanding right now.
-
-```ts
-function pullRequestGate(
-  pr: PullRequestRef,
-  options: { scope: string; worktree?: Worktree },
-): AsyncIterable<PullRequestWake>;
-
-type PullRequestWake =
-  | { kind: "closed"; merged: boolean }
-  | { kind: "merge-ready"; headSha: string; retryNoted: boolean }
-  | { kind: "ci-red"; headSha: string; failing: CheckRun[]; mentionLogin: string | null }
-  | { kind: "review-comments"; threads: ReviewThread[]; body?: string };
-```
-
-```ts
-import { postPullRequestNote, pullRequestGate } from "#jigs/routines";
-import { mergePullRequest } from "#jigs/steps";
-
-const scope = `triage/${input.ticket}`;
-
-const gate = pullRequestGate(pr, { scope, worktree });
-for await (const wake of gate) {
-  if (wake.kind === "closed") return { merged: wake.merged };
-  if (wake.kind === "merge-ready") {
-    const result = await mergePullRequest(worktree, pr, wake.headSha);
-    if (result.merged) return { merged: true };
-    await postPullRequestNote({
-      pr,
-      scope,
-      reason: result.transient ? "merge-retry" : "merge",
-      headSha: wake.headSha,
-      body: `I could not merge this pull request: ${result.reason}.`,
-    });
-    continue;
-  }
-  // ci-red and review-comments: fix, push, answer the threads
-}
-```
-
-Leaving the loop stops watching, whether by `return`, `break` or a throw. Only
-one run can watch a pull request at a time, so a second gate on the same pull
-request fails with a claim conflict.
-
-The `scope` names this workflow's work on the pull request. Every comment
-jigs posts carries it in a hidden marker, and the gate reads those markers
-back to decide what is still outstanding. Keep the scope stable, so a later
-run recognises its own answers.
-
-A wake is delivered only while its head is still the pull request's head. If
-the branch moved while you handled an earlier wake, a red build on the old
-commit is dropped rather than repaired twice.
-
-Pass the `worktree` your workflow pushes from, and the gate also checks each
-red build and review wake against the local branch. A wake for an older commit
-of that branch is dropped: the run has moved past it, even if GitHub still
-reports it in the moment after a push. A wake for a commit the worktree does
-not have is delivered, because someone else pushed it and it still needs an
-answer.
-
-`postPullRequestNote` posts once per commit and reason, so a merge you retry on
-every wake reports its refusal once.
 
 ## Record what the workflow created
 

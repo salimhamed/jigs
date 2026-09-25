@@ -45,7 +45,6 @@ import type {
   PullRequestApproval,
   PullRequestMarker,
   PullRequestRef,
-  PullRequestWake,
   RebuildContextPrompt,
   RebuildContextPromptInput,
   ReleasePolicy,
@@ -118,7 +117,6 @@ type RootTypeSurface = {
   prApproval: PullRequestApproval;
   prMarker: PullRequestMarker;
   prRef: PullRequestRef;
-  prWake: PullRequestWake;
   rebuildContextPrompt: RebuildContextPrompt;
   rebuildContextPromptInput: RebuildContextPromptInput;
   releasePolicy: ReleasePolicy;

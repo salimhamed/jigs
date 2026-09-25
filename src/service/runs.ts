@@ -14,8 +14,8 @@ import { registrySql } from "../steps/workspaces/sql.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { TICKET_TOKEN_PREFIX, ticketToken } from "../workflow/linear/claim.ts";
 import { NEEDS_HUMAN_TOKEN_PREFIX } from "../workflow/linear/halt-for-human.ts";
-import { PULL_REQUEST_TOKEN_PREFIX } from "../workflow/pull-requests/gate.ts";
 import { mergeRefusal } from "../workflow/pull-requests/merge-ready.ts";
+import { PULL_REQUEST_TOKEN_PREFIX } from "../workflow/pull-requests/pull-request.ts";
 import { type CleanupView, cleanupFromAttributes } from "../workflow/runtime/cleanup.ts";
 import { type RunResource, resourcesFromAttributes } from "../workflow/runtime/resources.ts";
 import { type JobRunIds, listJobRunIds } from "./queue.ts";
@@ -192,7 +192,7 @@ function needsHumanParts(token: string): { issueId: string; commentId: string } 
 
 /**
  * What the providers say about one run's suspensions: the pull request the
- * merge gate is watching, and the comment a halt is waiting on. Failures leave
+ * run is watching, and the comment a halt is waiting on. Failures leave
  * a suspension exactly as its token described it — observability must never
  * break the route — so this is for the single-run read only, never the listing.
  */
@@ -214,9 +214,8 @@ export async function enrichSuspensions(
 }
 
 /**
- * The pull request as the merge gate sees it: the same classification the gate
- * merges on, so what an operator reads here and what jigs is doing cannot
- * disagree. `blocker` is why it will not merge, in the words of the refusal.
+ * The pull request as the merge step sees it: the same refusal the step merges
+ * on, so what an operator reads here and what jigs is doing cannot disagree. `blocker` is why it will not merge, in the words of the refusal.
  */
 async function withPrState(
   suspension: RunSuspension,

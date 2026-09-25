@@ -4,7 +4,6 @@
 # These addresses come from the factory's named workflow and step functions.
 # Renaming a factory file or function deliberately changes its address; merely
 # upgrading the jigs library must not. Review intended renames before recording.
-step//./jigs/steps//branchContains
 step//./jigs/steps//checkForTicketHumanReply
 step//./jigs/steps//commentOnPullRequest
 step//./jigs/steps//createRunDirectory

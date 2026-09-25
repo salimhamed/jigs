@@ -10,7 +10,6 @@ import {
   bindPullRequestSteps,
 } from "@jigs-ai/jigs/routines";
 import {
-  branchContains,
   checkForTicketHumanReply,
   commentOnPullRequest,
   executeAgent,
@@ -71,17 +70,12 @@ export const { committedWork } = bindGitSteps({ readBranchState });
 
 const pullRequests = bindPullRequestSteps({
   fetchPullRequestState,
-  readBranchState,
-  branchContains,
   commentOnPullRequest,
   replyToPullRequestReviewThread,
 });
 
 /** Read current pull request facts, then yield changed snapshots until it closes. */
 export const watchPullRequest = pullRequests.watchPullRequest;
-
-/** Wake on a pull request's reviews, CI and merge readiness until it closes. */
-export const pullRequestGate = pullRequests.pullRequestGate;
 
 /** Post one revision round's answers, each marked with what it answers. */
 export const postReviewAnswers = pullRequests.postReviewAnswers;

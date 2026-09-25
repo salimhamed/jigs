@@ -133,13 +133,13 @@ export {
 } from "./workflow/linear/ticket-review.prompt.ts";
 
 export { renderChecks, type ThreadAnswers } from "./workflow/pull-requests/answers.ts";
-export type { PullRequestRef, PullRequestWake } from "./workflow/pull-requests/gate.ts";
 export {
   type PullRequestMarker,
   parseMarkers,
   type StatusReason,
 } from "./workflow/pull-requests/marker.ts";
 export { isPullRequestMergeReady } from "./workflow/pull-requests/merge-ready.ts";
+export type { PullRequestRef } from "./workflow/pull-requests/pull-request.ts";
 export {
   type ApprovalState,
   type CheckRun,

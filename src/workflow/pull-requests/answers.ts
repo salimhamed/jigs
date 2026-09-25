@@ -1,18 +1,25 @@
-import type { CheckRun, PullRequestRef, ReviewThread } from "../../providers/github.ts";
+import type {
+  CheckRun,
+  PullRequestRef,
+  PullRequestSnapshot,
+  ReviewThread,
+} from "../../providers/github.ts";
 import type {
   commentOnPullRequest,
   replyToPullRequestReviewThread,
 } from "../../steps/pull-requests/pr.ts";
-import { type FetchPrState, readPullRequestLedger } from "./gate.ts";
 import {
   assertUsableScope,
   carriesMarker,
   commentSource,
   type MarkerKind,
+  type MarkerLedger,
   markBody,
   type PullRequestMarker,
+  readLedger,
   type StatusReason,
 } from "./marker.ts";
+import type { FetchPrState } from "./pull-request.ts";
 import { currentRunId } from "./writer.ts";
 
 /** Answers routed back to pull-request threads and an optional commit explanation. */
@@ -164,6 +171,19 @@ export async function postReviewAnswers(options: PostReviewAnswersOptions): Prom
   } catch (error) {
     postFailed(pr, `the explanation of ${sha}`, error);
   }
+}
+
+// Every comment body on the pull request, wherever it hangs: the markers in
+// them are the whole record of what jigs has done here.
+function readPullRequestLedger(snapshot: PullRequestSnapshot, scope: string): MarkerLedger {
+  return readLedger(
+    [
+      ...snapshot.reviews.map((review) => review.body),
+      ...snapshot.reviewThreads.flatMap((thread) => thread.comments.map((comment) => comment.body)),
+      ...snapshot.conversationComments.map((comment) => comment.body),
+    ],
+    scope,
+  );
 }
 
 /**
