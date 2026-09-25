@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.66.0
+# @jigs-ai/jigs v0.67.0
 
 Read run context and update run resources outside workflow code.
 

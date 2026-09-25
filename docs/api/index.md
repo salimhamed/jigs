@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.66.0
+# @jigs-ai/jigs v0.67.0
 
 Everything a factory's configuration and workflows import from jigs: the factory and workflow
 definitions, harness and model descriptors, the data steps hand back, question helpers, and
@@ -275,7 +275,7 @@ Operating settings and deferred workflow modules declared by a factory.
 
 ##### bindings?
 
-> `optional` **bindings**: `Record`\<`string`, \{ `copy?`: `string`[]; `hookTimeoutMinutes?`: `number`; `merge?`: \{ `by?`: `"jigs"` \| `"human"`; `method?`: `"squash"` \| `"merge"` \| `"rebase"`; \}; `postCreate?`: `string`[]; `remote`: `string`; \}\>
+> `optional` **bindings**: `Record`\<`string`, \{ `copy?`: `string`[]; `hookTimeoutMinutes?`: `number`; `mergeMethod?`: `"squash"` \| `"merge"` \| `"rebase"`; `postCreate?`: `string`[]; `remote`: `string`; \}\>
 
 ##### github?
 
@@ -285,6 +285,13 @@ Operating settings and deferred workflow modules declared by a factory.
 
 > `optional` **identities**: (\{ `mode`: `"pat"`; \} \| \{ `appId`: `number`; `coAuthor?`: `string`; `installations`: `Record`\<`string`, `number`\>; `mode`: `"app"`; `operator`: `string`; `privateKeyPath`: `string`; \})[]
 
+###### mergeApproval?
+
+> `optional` **mergeApproval**: `"review"` \| `"label"`
+
+How the operator approves a pull request for merging. Defaults to `label` with a personal
+access token and to `review` with a GitHub App.
+
 ##### linear?
 
 > `optional` **linear**: `object`
@@ -292,34 +299,6 @@ Operating settings and deferred workflow modules declared by a factory.
 ###### identity?
 
 > `optional` **identity**: \{ `mode`: `"key"`; \} \| \{ `mode`: `"app"`; \}
-
-##### merge?
-
-> `optional` **merge**: `object`
-
-###### approval?
-
-> `optional` **approval**: \{ `kind`: `"review"`; \} \| \{ `kind`: `"label"`; `name`: `string`; \}
-
-The signal that authorizes an automatic merge.
-
-###### Type Declaration
-
-\{ `kind`: `"review"`; \}
-
-\{ `kind`: `"label"`; `name`: `string`; \}
-
-###### by?
-
-> `optional` **by**: `"jigs"` \| `"human"`
-
-Whether jigs merges an eligible pull request or waits for a person to merge it.
-
-###### method?
-
-> `optional` **method**: `"squash"` \| `"merge"` \| `"rebase"`
-
-The GitHub merge method to use when jigs performs the merge.
 
 ##### release?
 
@@ -464,6 +443,24 @@ The first human ticket reply that wakes a halted run.
 
 ***
 
+### PullRequestApproval
+
+The factory's approval signal and how it reads on the pull request.
+
+#### Properties
+
+##### signal
+
+> **signal**: `"review"` \| `"label"`
+
+`review` is an approving review of the head; `label` is the `jigs:approved` label.
+
+##### state
+
+> **state**: [`ApprovalState`](#approvalstate)
+
+***
+
 ### PullRequestComment
 
 A comment on the pull request conversation, which hangs off no thread.
@@ -578,9 +575,17 @@ GitHub facts about a pull request, without a judgment about outstanding work.
 
 #### Properties
 
+##### approval
+
+> **approval**: [`PullRequestApproval`](#pullrequestapproval)
+
+The operator's consent, read the way this factory's `github.mergeApproval` asks for it.
+
 ##### ci
 
-> **ci**: `"red"` \| `"green"` \| `"pending"`
+> **ci**: `"red"` \| `"green"` \| `"pending"` \| `"none"`
+
+`none`: no check or status has reported on this head yet. It is never green.
 
 ##### conversationComments
 
@@ -1004,11 +1009,13 @@ The harness descriptor the session was recorded on, as [describeHarness](#descri
 
 ***
 
-### ApprovalSignal
+### ApprovalState
 
-> **ApprovalSignal** = `z.output`\<*typeof* [`approvalSignalSchema`](#approvalsignalschema)\>
+> **ApprovalState** = `"approved"` \| `"changes-requested"` \| `"stale"` \| `"none"`
 
-The review or label signal that authorizes an automatic merge.
+How the operator's consent reads right now. `stale` is an approval that
+named an earlier commit — a different thing to tell an operator than a pull
+request nobody has approved.
 
 ***
 
@@ -1126,7 +1133,7 @@ Options for one API model call.
 > **BindingDefinition** = `z.input`\<*typeof* `bindingSchema`\>
 
 A repository this factory works in: its remote, how a worktree cut from it
-is provisioned, and any merge settings that differ from the factory's.
+is provisioned, and the merge method jigs uses there.
 
 #### Example
 
@@ -1135,7 +1142,7 @@ bindings: {
   api: {
     remote: "git@github.com:acme/api.git",
     postCreate: ["pnpm install"],
-    merge: { by: "jigs", method: "rebase" },
+    mergeMethod: "rebase",
   },
 },
 ```
@@ -1275,7 +1282,20 @@ the sandbox and MCP tables.
 
 > **GitHubDefinition** = `z.input`\<*typeof* `githubSchema`\>
 
-Who jigs is on GitHub: the operator's own token, or a GitHub App installation.
+Who jigs is on GitHub, the operator's own token or a GitHub App installation, and how the
+operator approves a pull request for merging.
+
+#### Remarks
+
+`mergeApproval` defaults to `label` with a token and to `review` with an App. A token cannot use
+`review`: jigs opens pull requests as the operator, and GitHub does not let the author approve
+their own pull request.
+
+#### Example
+
+```ts
+github: { identities: [{ mode: "pat" }], mergeApproval: "label" },
+```
 
 ***
 
@@ -1551,22 +1571,6 @@ A harmless MCP tool call used to prove that a configured server is available.
 ##### tool
 
 > **tool**: `string`
-
-***
-
-### MergeDefinition
-
-> **MergeDefinition** = `z.input`\<*typeof* [`mergePolicySchema`](#mergepolicyschema)\>
-
-Who merges, by which of GitHub's three methods, and what signal permits it.
-
-***
-
-### MergePolicy
-
-> **MergePolicy** = `z.output`\<*typeof* [`mergePolicySchema`](#mergepolicyschema)\>
-
-The effective pull request merge behavior for a binding.
 
 ***
 
@@ -2373,14 +2377,6 @@ A calibrated yes-or-no question.
 
 ## Variables
 
-### approvalSignalSchema
-
-> `const` **approvalSignalSchema**: `ZodDiscriminatedUnion`\<\[`ZodObject`\<\{ `kind`: `ZodLiteral`\<`"review"`\>; \}, `$strict`\>, `ZodObject`\<\{ `kind`: `ZodLiteral`\<`"label"`\>; `name`: `ZodString`; \}, `$strict`\>\], `"kind"`\>
-
-Selects how the operator authorizes an automatic merge.
-
-***
-
 ### haltOptionSchema
 
 > `const` **haltOptionSchema**: `ZodObject`\<\{ `label`: `ZodString`; `recommended`: `ZodOptional`\<`ZodBoolean`\>; \}, `$strict`\>
@@ -2570,20 +2566,6 @@ appears without editing the input.
 ```ts
 const inputs = z.object({ harness: z.enum(harnessKinds) });
 ```
-
-***
-
-### mergePolicySchema
-
-> `const` **mergePolicySchema**: `ZodObject`\<\{ `approval`: `ZodDefault`\<`ZodDiscriminatedUnion`\<\[`ZodObject`\<\{ `kind`: `ZodLiteral`\<`"review"`\>; \}, `$strict`\>, `ZodObject`\<\{ `kind`: `ZodLiteral`\<`"label"`\>; `name`: `ZodString`; \}, `$strict`\>\], `"kind"`\>\>; `by`: `ZodDefault`\<`ZodEnum`\<\{ `human`: `"human"`; `jigs`: `"jigs"`; \}\>\>; `method`: `ZodDefault`\<`ZodEnum`\<\{ `merge`: `"merge"`; `rebase`: `"rebase"`; `squash`: `"squash"`; \}\>\>; \}, `$strict`\>
-
-Configures who merges a pull request, how it is merged and how approval is recorded.
-
-#### Remarks
-
-`by` chooses an automatic jigs merge or a human merge. `method` selects squash, merge-commit or
-rebase behavior. `approval` requires either a review of the current commit or a named label that
-remains valid after later pushes.
 
 ***
 
@@ -2854,7 +2836,7 @@ Replace named `{{ placeholders }}` once, leaving unknown names unchanged.
 
 ### isPullRequestMergeReady()
 
-> **isPullRequestMergeReady**(`snapshot`, `approval`): `boolean`
+> **isPullRequestMergeReady**(`snapshot`): `boolean`
 
 Whether current GitHub facts satisfy the configured approval and merge requirements.
 
@@ -2863,32 +2845,6 @@ Whether current GitHub facts satisfy the configured approval and merge requireme
 ##### snapshot
 
 [`PullRequestSnapshot`](#pullrequestsnapshot)
-
-##### approval
-
-\{ `kind`: `"review"`; \}
-
-###### kind
-
-`"review"` = `...`
-
-Require an approving review of the current commit.
-
-|
-
-\{ `kind`: `"label"`; `name`: `string`; \}
-
-###### kind
-
-`"label"` = `...`
-
-Require a named label, which remains valid after later pushes.
-
-###### name
-
-`string` = `...`
-
-The label that authorizes merging whenever the pull request is ready.
 
 #### Returns
 

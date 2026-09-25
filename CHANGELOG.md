@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.67.0](https://github.com/salimhamed/jigs/compare/jigs-v0.66.0...jigs-v0.67.0) (2026-09-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* split the merge config into github.mergeApproval, binding mergeMethod and workflow code ([#404](https://github.com/salimhamed/jigs/issues/404))
+
+### Code Refactoring
+
+* split the merge config into github.mergeApproval, binding mergeMethod and workflow code ([#404](https://github.com/salimhamed/jigs/issues/404)) ([7d621c2](https://github.com/salimhamed/jigs/commit/7d621c2d13f0e4a3502dcab4102b0d45a53d0797))
+
 ## [0.66.0](https://github.com/salimhamed/jigs/compare/jigs-v0.65.0...jigs-v0.66.0) (2026-09-25)
 
 
