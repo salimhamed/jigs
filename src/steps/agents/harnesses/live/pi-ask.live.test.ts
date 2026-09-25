@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { z } from "zod";
-import { askAgent } from "../../../../blocks/agents/ask-agent.ts";
-import { harnesses, models } from "../../../../blocks/agents/harness-config.ts";
+import { askAgent } from "../../../../workflow/agents/ask-agent.ts";
+import { harnesses, models } from "../../../../workflow/agents/harness-config.ts";
 import { type DriverResolver, driverFor } from "../../drivers/index.ts";
 import { createPiDriver } from "../../drivers/pi.ts";
 import {

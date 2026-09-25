@@ -984,7 +984,7 @@ async function checkScaffold(name) {
     );
   }
 
-  // The other half of the same property: workflow-side code cannot read the
+  // The other half of the same property: workflow code cannot read the
   // environment either. Reported with line context because, unlike a `"node:fs"`
   // specifier, a bare `process.env` says nothing about which module it came from.
   const envReads = workflowBundle()
@@ -994,7 +994,7 @@ async function checkScaffold(name) {
     for (const line of envReads.slice(0, 5)) console.error(`  ${line.trim()}`);
     fail(
       `the workflow bundle reads process.env in ${envReads.length} place(s)`,
-      "workflow-side code cannot read the environment — the read belongs in a step, or a step-side module crossed into a block",
+      "workflow code cannot read the environment — the read belongs in a step, or a step module crossed into the workflow bundle",
     );
   }
 
@@ -1093,7 +1093,7 @@ async function checkScaffold(name) {
   }
 
   // The scaffold's own checks, run the way a new factory runs them on day one:
-  // the typecheck covers the generated entry, the workflow, and the blocks and
+  // the typecheck covers the generated entry, the workflow, and the delivery code and
   // prompts scaffolded beside them, and the scaffolded tests cover the shape of
   // every id the same build emitted (the exact list is this file's business,
   // above) and what the workflow body hands delivery. Both read the scaffold

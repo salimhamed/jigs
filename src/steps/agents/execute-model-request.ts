@@ -1,8 +1,8 @@
-import type { AskJevOptions, JevQuestions, JevResult } from "../../blocks/agents/jev.ts";
-import type { ModelRequest } from "../../blocks/agents/plan.ts";
-import { type ModelResult, toModelResult } from "../../blocks/agents/result.ts";
 import { formatFailures, runChecks } from "../../checks/catalog.ts";
 import { JigsError } from "../../errors.ts";
+import type { AskJevOptions, JevQuestions, JevResult } from "../../workflow/agents/jev.ts";
+import type { ModelRequest } from "../../workflow/agents/plan.ts";
+import { type ModelResult, toModelResult } from "../../workflow/agents/result.ts";
 import type { RunMetadata } from "../runtime/run-context.ts";
 import {
   type AgentExecutionDependencies,

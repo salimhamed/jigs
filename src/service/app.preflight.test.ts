@@ -2,7 +2,6 @@ import { chmodSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
-import { harnesses } from "../blocks/agents/harness-config.ts";
 import { ensureBindingClone } from "../steps/workspaces/clone.ts";
 import { bindingRepoDir } from "../steps/workspaces/layout.ts";
 // Real git fixtures, reached by path: they are test-only, so they stay out
@@ -13,6 +12,7 @@ import {
   makeTmpDir,
   removeTmpDir,
 } from "../test-fixtures.ts";
+import { harnesses } from "../workflow/agents/harness-config.ts";
 
 // File-scoped so it cannot disturb app.test.ts: the whole point of AC1 is
 // that a refused trigger never reaches start().

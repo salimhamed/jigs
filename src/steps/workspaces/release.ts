@@ -1,10 +1,10 @@
 import { existsSync } from "node:fs";
-import type { CleanupOutcome } from "../../blocks/runtime/cleanup.ts";
+import type { CleanupOutcome } from "../../workflow/runtime/cleanup.ts";
 import {
   type ReleasePolicy,
   type ReleaseReport,
   releaseSchema,
-} from "../../blocks/runtime/release.ts";
+} from "../../workflow/runtime/release.ts";
 import { removeCodexRunState } from "../agents/harnesses/codex-home.ts";
 import { removePiRunState } from "../agents/harnesses/pi-home.ts";
 import type { RunMetadata } from "../runtime/run-context.ts";

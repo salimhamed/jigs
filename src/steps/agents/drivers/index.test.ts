@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
-import { harnesses, harnessKinds, models } from "../../../blocks/agents/harness-config.ts";
+import { harnesses, harnessKinds, models } from "../../../workflow/agents/harness-config.ts";
 import {
   buildAgentRequest,
   buildAskAgentRequest,
   buildModelRequest,
-} from "../../../blocks/agents/plan.ts";
+} from "../../../workflow/agents/plan.ts";
 import { driverFor, drivers } from "./index.ts";
 import type { DriverRequest } from "./types.ts";
 
@@ -29,7 +29,7 @@ test("driver lookup preserves installed kinds and rejects unregistered kinds", (
   expect(driverFor("pi")).toBe(drivers.pi);
 });
 
-test("the workflow-side harness kinds are exactly the registered harness drivers", () => {
+test("the harness kinds workflow code names are exactly the registered harness drivers", () => {
   const harnessDrivers = Object.values(drivers)
     .filter((driver) => driver.family === "harness")
     .map((driver) => driver.kind);

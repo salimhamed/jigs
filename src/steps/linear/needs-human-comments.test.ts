@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from "vitest";
-import type { Halt } from "../../blocks/linear/halt-for-human.ts";
+import type { Halt } from "../../workflow/linear/halt-for-human.ts";
 
 const { createComment, getIssueParticipants, listCommentsSince } = vi.hoisted(() => ({
   createComment: vi.fn(async (_issueId: string, _body: string) => ({

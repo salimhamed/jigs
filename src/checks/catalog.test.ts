@@ -1,8 +1,8 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, expect, onTestFinished, test, vi } from "vitest";
-import { harnesses, models } from "../blocks/agents/harness-config.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import { harnesses, models } from "../workflow/agents/harness-config.ts";
 import { type Check, failedCheck, formatFailures, runChecks } from "./catalog.ts";
 import { doctorChecks, preflightChecks, type WorkflowRequires } from "./index.ts";
 

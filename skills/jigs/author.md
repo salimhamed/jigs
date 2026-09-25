@@ -19,13 +19,17 @@ become editable factory source; upgrades only regenerate `jigs/`.
 ## Code responsibilities
 
 - A workflow is a named process with a `"use workflow"` async function.
-- A block coordinates durable steps and makes replay-safe decisions. It has no
-  directive. No filesystem, network, environment reads, or Node built-ins.
+- Workflow code decides what happens next and must be safe to replay: no
+  filesystem, network, environment reads, or Node built-ins.
 - A step has `"use step"` and performs work the runtime records. Keep a
   workflow's own steps in a `steps.ts` in its directory; their implementations
   may use Node and external services.
-- A routine is a function a workflow calls that runs steps and may wait, such
-  as `runAgent`, `reviewTicket` or `pullRequestGate`.
+- A routine is a function you call from a workflow. It runs steps and may
+  wait, such as `runAgent`, `reviewTicket` or `pullRequestGate`. It has no
+  directive.
+- Step arguments and results cross the database as JSON. Pass data only: a
+  function or a provider object fails with `SerializationError: Failed to
+  serialize step arguments`.
 - `jigs/` is generated and committed. `jigs/steps.ts` holds every built-in step
   and is the only generated file with `"use step"`; `jigs/routines.ts` holds the
   routines bound to them. Import them as `#jigs/steps` and `#jigs/routines`.
@@ -35,7 +39,7 @@ become editable factory source; upgrades only regenerate `jigs/`.
   its own files beside it, imported with `./` paths. The deferred workflow
   loaders in `jigs.config.ts` stay relative.
 
-A workflow calls blocks and steps. A step calls an implementation. Only the
+A workflow calls routines and steps. A step calls an implementation. Only the
 factory carries directives, so library version changes do not rename its steps.
 Signal an unhappy ending by throwing `JigsError`, imported with
 `import { JigsError } from "@jigs-ai/jigs"`; a value returned from a workflow
@@ -45,11 +49,13 @@ Names and paths can be improved, but changing them changes durable addresses:
 check active and parked runs before deploying a rename, and arrange their
 completion or cancellation with the operator.
 
-Import reusable library code from `@jigs-ai/jigs/blocks/<topic>`. The seven
-topics are `agents`, `human`, `linear`, `pull-requests`, `workspaces`, `git`
-and `runtime`. Implementations under `steps/<topic>` belong inside durable
-wrapper bodies. The generated wrappers preserve their names when library
-implementation paths move.
+A workflow imports from two places. `@jigs-ai/jigs` is the library:
+`defineWorkflow`, `harnesses`, `models`, `JigsError`, every descriptor and
+result type, `yesNo`, `choice` and `score`, and pure renderers such as
+`renderTicketSnapshot`. `#jigs/steps` and `#jigs/routines` are generated for the
+factory. Implementations under `@jigs-ai/jigs/steps/<topic>` belong inside
+durable wrapper bodies. The generated wrappers preserve their names when
+library implementation paths move.
 
 Read the installed API reference at `node_modules/@jigs-ai/jigs/docs/api/`;
 its Markdown paths mirror the package import paths.
@@ -95,7 +101,7 @@ declaration next to its input schema.
 Resolve the ticket, then claim it, then do everything else. The claim is the
 one-active-run-per-ticket lock. A run that provisions, posts, writes, or pushes
 before claiming can collide with the run that already holds the ticket. Use
-`acquireTicket` to resolve, claim, and snapshot in the required order before
+`acquireTicket` from `#jigs/routines` to resolve, claim, and snapshot in the required order before
 starting protected work.
 
 Post ticket notes through the claim with `noteOnTicket(claim, note)` rather
@@ -123,20 +129,17 @@ or reports a blocker. A different implementation choice should not require editi
 and redeploying the workflow's validation program. Retain concrete evidence through
 review and cleanup; a success flag alone does not establish acceptance.
 
-## Customize blocks and steps
+## Customize routines and steps
 
-Pass typed prompt overrides directly to jigs blocks. For shared defaults, write
-one custom block wrapping the shipped block, with defaults before the spread
-of caller options so a call site can override them.
+Pass typed prompt overrides directly to jigs routines. For shared defaults,
+write one function of your own wrapping the shipped routine, with defaults
+before the spread of caller options so a call site can override them.
 
-For different durable behavior, write a named custom `"use step"` function and
-bind the appropriate module: `bindAgentSteps` from
-`@jigs-ai/jigs/blocks/agents`, `bindLinearSteps` from
-`@jigs-ai/jigs/blocks/linear`, or `bindPullRequestSteps` from
-`@jigs-ai/jigs/blocks/pull-requests`. The generated files export only what a
-workflow calls, so pass your own step alongside the generated ones from
-`#jigs/steps`. Keep functions workflow-side;
-never send a prompt or callback through a durable step argument.
+For different durable behavior, write a named custom `"use step"` function
+beside the workflow and call it from the workflow. Routines that take a step
+as an argument, such as `postPullRequestNote` or `resumeOrRebuild`, accept
+yours in place of the generated one from `#jigs/steps`. Keep functions in the
+workflow; never send a prompt or callback through a durable step argument.
 
 ### Record a custom resource
 
@@ -159,11 +162,11 @@ preserves the original strings. Treat the record as observability only:
 deletion requires separate kind-specific ownership and policy; a recorded URL
 does not authorize cleanup.
 
-For delivery, run `jigs recipe add linear-ticket-to-pr`; it registers the workflow. The copied `blocks/delivery/` contains the phases, types,
+For delivery, run `jigs recipe add linear-ticket-to-pr`; it registers the workflow. The copied `workflows/linear-ticket-to-pr/delivery/` contains the phases, types,
 prompts and renderers; these are factory code to edit, not library exports.
-Read `blocks/delivery/README.md` for the recipe's prerequisites, budgets,
+Read `workflows/linear-ticket-to-pr/delivery/README.md` for the recipe's prerequisites, budgets,
 prompts and compiling examples before changing the linear-ticket-to-pr process. Keep factory prompt overrides beside
-their callers. Reuse existing blocks for comment scoping and agent-session
+their callers. Reuse existing routines for comment scoping and agent-session
 rebuilding rather than duplicating their mechanics.
 
 ## Marker convention for bespoke pull request workflows
@@ -175,8 +178,7 @@ and the `source` it answers — a comment as `id@updatedAt`, or a commit sha. A
 down, so nothing tries it again, while `merge-retry` only records that a
 refusal jigs is waiting out was already reported and leaves the commit
 merge-ready.
-`classifyPullRequestState(snapshot, scope)` derives what is outstanding from a fresh
-snapshot and those markers, so nothing is remembered between wakes and a
+The gate derives what is outstanding from a fresh snapshot and those markers, so nothing is remembered between wakes and a
 replacement run continues where the last one stopped.
 
 Writing your own pull request workflow: choose one scope and keep it, since it

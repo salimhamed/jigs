@@ -9,11 +9,6 @@ and issues; the _Avoid_ lists name the words that mean something else here.
 factory file, started by `jigs run`, a schedule or a trigger.
 _Avoid_: pipeline, flow, DAG
 
-**Block**: Workflow-side code in `src/blocks/` (or a factory's `blocks/`) that
-coordinates steps and makes replay-safe decisions. It has no directive and no
-recorded result of its own.
-_Avoid_: helper, primitive, sub-workflow
-
 **Step**: A durable operation whose attempts and result the SDK records. jigs
 ships the implementation in `src/steps/`; the factory's step wrapper gives it an
 address.
@@ -30,8 +25,15 @@ binds the library's routines to those wrappers. Workflows import them as
 `#jigs/steps` and `#jigs/routines`. Custom code lives outside it.
 
 **Routine**: A function a workflow calls that runs steps and may wait on
-something outside the run, such as `runAgent` or `pullRequestGate`. Exported
-from the generated `jigs/routines.ts`.
+something outside the run, such as `runAgent` or `pullRequestGate`. It lives
+in `src/workflow/`, has no directive and no recorded result of its own, and
+reaches a factory through the generated `jigs/routines.ts`, which binds it to
+the factory's step wrappers.
+_Avoid_: helper, primitive, sub-workflow
+
+**Workflow code**: Everything in `src/workflow/`: code that runs inside the
+workflow bundle and so must be replay-safe, with no Node built-ins, environment
+or network. Routines, descriptors, schemas and pure renderers live here.
 
 **Recipe**: A workflow jigs ships as source under `recipes/`, which
 `jigs recipe add` copies into a factory. Once copied it is factory code.

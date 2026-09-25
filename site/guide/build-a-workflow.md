@@ -25,8 +25,7 @@ needs no repository can skip this and use `createRunDirectory()` from
 Create `workflows/triage/triage.ts`:
 
 ```ts
-import { defineWorkflow, JigsError, type WorkflowInputs } from "@jigs-ai/jigs";
-import { harnesses, models } from "@jigs-ai/jigs/blocks/agents";
+import { defineWorkflow, harnesses, JigsError, models, type WorkflowInputs } from "@jigs-ai/jigs";
 import { z } from "zod";
 import { askModel, runAgent } from "#jigs/routines";
 import { provisionWorktree } from "#jigs/steps";
@@ -147,8 +146,7 @@ someone replies there. It needs Linear credentials (see
 Claiming also makes sure only one run works on a ticket at a time:
 
 ```ts
-import { claimTicket } from "@jigs-ai/jigs/blocks/linear";
-import { haltForHuman } from "#jigs/routines";
+import { claimTicket, haltForHuman } from "#jigs/routines";
 import { resolveLinearIssue } from "#jigs/steps";
 
 const issue = await resolveLinearIssue(input.ticket);
@@ -198,11 +196,11 @@ permits jigs to delete them.
 
 ## Explore further
 
-- [Agents and models API](/api/blocks/agents): every option of `runAgent`,
-  `askAgent`, `askModel` and `askJev`.
-- [Linear API](/api/blocks/linear): claims, questions, ticket notes and snapshots.
-- [Runtime API](/api/blocks/runtime): run directories, resources and release.
-- [Workspaces API](/api/blocks/workspaces): worktrees.
-- [Git API](/api/blocks/git): reading a change and its patch.
-- [Pull requests API](/api/blocks/pull-requests): gates, merge policy and review answers.
+- [Library API](/api/jigs): harnesses, models, every option of `runAgent`,
+  `askAgent`, `askModel` and `askJev`, and the data steps hand back.
+- [Linear steps](/api/steps/linear): ticket notes, questions and snapshots.
+- [Runtime steps](/api/steps/runtime): run directories, resources and release.
+- [Workspace steps](/api/steps/workspaces): worktrees.
+- [Git steps](/api/steps/git): reading a change and its patch.
+- [Pull request steps](/api/steps/pull-requests): opening, reviewing and merging.
 - [Models and harnesses](/guide/models-and-harnesses): what each harness and model source needs.

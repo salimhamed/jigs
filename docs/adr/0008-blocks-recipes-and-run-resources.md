@@ -1,26 +1,28 @@
-# Blocks, recipes and run resources
+# Routines, recipes and run resources
 
 Status: accepted
 
-jigs workflows are ordinary TypeScript calling durable steps through blocks.
+jigs workflows are ordinary TypeScript calling durable steps through routines.
 The library ships the bottom two of three layers and no delivery process:
 
-1. **Steps and their wrappers.** The generated `jigs.ts` is the durable-address
+1. **Steps and their wrappers.** The generated `jigs/steps.ts` is the durable-address
    anchor, not an extension point ([0006](./0006-factory-owned-steps.md)). A
    factory adds steps as `"use step"` functions beside the workflow that owns
    them.
-2. **Blocks.** Reusable workflow-side code that calls wrappers and other blocks
-   and carries no process policy: no round budgets, no "merged means done", no
-   note wording. Public paths name kind, then topic, matching the folders:
-   `@jigs-ai/jigs` (factory definition, `JigsError`, config types),
-   `@jigs-ai/jigs/blocks/<topic>` and `@jigs-ai/jigs/steps/<topic>`. Workflows
-   import blocks; only the generated integration imports steps.
+2. **Routines.** Reusable code in the workflow bundle that calls wrappers and
+   other routines and carries no process policy: no round budgets, no "merged
+   means done", no note wording. Workflow code imports the library from the
+   root `@jigs-ai/jigs` (definitions, `JigsError`, descriptors, types, pure
+   renderers) and routines from the generated `jigs/routines.ts`, which alone
+   imports `@jigs-ai/jigs/routines`. Only the generated `jigs/steps.ts` imports
+   `@jigs-ai/jigs/steps/<topic>`.
 3. **Recipes.** Complete workflows shipped as source in `recipes/`, tested by
    `pnpm e2e`, and copied into a factory with `jigs recipe add`. Once copied a
    recipe is factory code. `jigs init` scaffolds a bare factory with one
    trivial workflow; `ship` is a recipe, never scaffolded.
 
-A mechanism moves from a recipe into a block only when two workflows use it.
+A mechanism moves from a recipe into a shipped routine only when two workflows
+use it.
 
 ## Run resources
 
@@ -39,7 +41,7 @@ SDK's attribute limits and never truncated.
 The factory service owns release. Policy resolves from the workflow entry, then
 the factory default, then `{ onSuccess: "release", onFailure: "keep" }`;
 `completed` uses `onSuccess`, `failed` and `cancelled` use `onFailure`. A
-workflow may call the `release` block as its last line to get the report; an
+workflow may call the `release` routine as its last line to get the report; an
 explicit `keep` it records is final for the run. Each worktree is then decided
 by the [teardown rules](./0002-worktree-lifecycle.md).
 

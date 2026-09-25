@@ -6,7 +6,7 @@ later. A **model source** is an API that answers one request directly, such as
 OpenRouter. Both are described by plain descriptors you build in workflow code:
 
 ```ts
-import { harnesses, models } from "@jigs-ai/jigs/blocks/agents";
+import { harnesses, models } from "@jigs-ai/jigs";
 
 harnesses.claude("sonnet");
 harnesses.pi(models.openaiCodex("gpt-5.5"), { thinking: "high" });
@@ -110,7 +110,7 @@ model is served.
 returns probabilities rather than prose:
 
 ```ts
-import { models, score, yesNo } from "@jigs-ai/jigs/blocks/agents";
+import { models, score, yesNo } from "@jigs-ai/jigs";
 import { askJev } from "#jigs/routines";
 
 const result = await askJev({

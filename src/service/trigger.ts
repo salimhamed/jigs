@@ -1,12 +1,12 @@
 import { start } from "workflow/api";
 import type { z } from "zod";
-import { type Factory, type Injected, RUN_TICKET_ATTRIBUTE } from "../blocks/factory.ts";
+import { type CheckReport, preflightChecks, runChecks } from "../checks/index.ts";
+import { type Factory, type Injected, RUN_TICKET_ATTRIBUTE } from "../workflow/factory.ts";
 import {
   CLEANUP_DIRECTIVE_ATTRIBUTE,
   CLEANUP_STATE_ATTRIBUTE,
   encodeCleanupProgress,
-} from "../blocks/runtime/cleanup.ts";
-import { type CheckReport, preflightChecks, runChecks } from "../checks/index.ts";
+} from "../workflow/runtime/cleanup.ts";
 
 export type StartRunResult =
   | { kind: "started"; runId: string }

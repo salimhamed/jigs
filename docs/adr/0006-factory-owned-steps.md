@@ -9,7 +9,7 @@ library implementations are plain functions, and every directive lives in the
 factory. Upgrading jigs does not rename a factory's durable addresses.
 
 The factory commits a generated root `jigs.ts`: explicit named step wrappers,
-plus blocks bound to them through `bindAgentSteps`, `bindLinearSteps`,
+plus routines bound to them through `bindAgentSteps`, `bindLinearSteps`,
 `bindPullRequestSteps` and `bindReleaseSteps`. `jigs generate` rewrites it from
 the installed package and `jigs upgrade` runs it. A build never edits source:
 it fails when `jigs.ts` differs from the installed template. Committing the
@@ -21,7 +21,7 @@ factory's compile and its service run on the same runtime.
 
 ## Consequences
 
-- Custom code never goes in `jigs.ts`. A custom block binds only the
+- Custom code never goes in `jigs.ts`. A custom routine binds only the
   capabilities it needs, with replacement steps in the factory; a custom
   renderer is imported inside that step, not passed across a durable call.
 - Renaming a library export or changing the template moves step ids, a

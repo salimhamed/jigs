@@ -1,9 +1,9 @@
 import type { CodexAppServerProvider, CodexAppServerSettings } from "ai-sdk-provider-codex-cli";
-import type { CodexHarness, McpServerConfig } from "../../../blocks/agents/harness-config.ts";
-import type { AgentRequest } from "../../../blocks/agents/plan.ts";
 import { codexAuthCheck, harnessRuntimeCheck } from "../../../checks/harnesses.ts";
 import { codexWorktreeConfigCheck } from "../../../checks/mcp.ts";
 import { JigsError } from "../../../errors.ts";
+import type { CodexHarness, McpServerConfig } from "../../../workflow/agents/harness-config.ts";
+import type { AgentRequest } from "../../../workflow/agents/plan.ts";
 import {
   codexSessionFile,
   type PreparedCodexHome,

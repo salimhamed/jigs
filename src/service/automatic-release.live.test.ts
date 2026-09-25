@@ -6,13 +6,6 @@ import { createWorld } from "@workflow/world-postgres";
 import { Pool } from "pg";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { setWorld } from "workflow/runtime";
-import type { Factory } from "../blocks/factory.ts";
-import {
-  CLEANUP_DIRECTIVE_ATTRIBUTE,
-  CLEANUP_STATE_ATTRIBUTE,
-  cleanupFromAttributes,
-  encodeCleanupProgress,
-} from "../blocks/runtime/cleanup.ts";
 import { writeCleanupProgress } from "../steps/runtime/cleanup-state.ts";
 import { createRunDirectory } from "../steps/runtime/run-directory/index.ts";
 import { provisionWorktree } from "../steps/workspaces/index.ts";
@@ -27,6 +20,13 @@ import {
 } from "../steps/workspaces/registry.ts";
 import { releaseRunResources } from "../steps/workspaces/release.ts";
 import { makeClonedBinding, makeTmpDir, removeTmpDir } from "../steps/workspaces/test-fixtures.ts";
+import type { Factory } from "../workflow/factory.ts";
+import {
+  CLEANUP_DIRECTIVE_ATTRIBUTE,
+  CLEANUP_STATE_ATTRIBUTE,
+  cleanupFromAttributes,
+  encodeCleanupProgress,
+} from "../workflow/runtime/cleanup.ts";
 import {
   type AutomaticReleaseDeps,
   type CleanupRun,

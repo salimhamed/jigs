@@ -1,13 +1,13 @@
 import path from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { z } from "zod";
-import { harnesses } from "../../../blocks/agents/harness-config.ts";
+import { harnesses } from "../../../workflow/agents/harness-config.ts";
 import {
   type AgentRequest,
   buildAgentRequest,
   buildAskAgentRequest,
-} from "../../../blocks/agents/plan.ts";
-import type { AgentResult } from "../../../blocks/agents/result.ts";
+} from "../../../workflow/agents/plan.ts";
+import type { AgentResult } from "../../../workflow/agents/result.ts";
 import { createCodexDriver } from "../drivers/codex.ts";
 import { withCodexAppServer } from "../drivers/codex-support.ts";
 import { type DriverResolver, driverFor } from "../drivers/index.ts";

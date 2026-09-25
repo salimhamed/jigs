@@ -471,7 +471,7 @@ test("both providers on and unsigned name both variables", async () => {
 });
 
 test.each([
-  ["no webhooks block", undefined],
+  ["no webhooks section", undefined],
   ["both providers off", { ...WEBHOOKS, github: { enabled: false } }],
 ])("%s needs no secret to boot", async (_name, webhooks) => {
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "");

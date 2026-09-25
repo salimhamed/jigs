@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { harnesses, models } from "../../../blocks/agents/harness-config.ts";
+import { harnesses, models } from "../../../workflow/agents/harness-config.ts";
 import { writePiSubmitResultExtension } from "./pi-extension.ts";
 import {
   piRunStatePath,

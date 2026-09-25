@@ -6,13 +6,13 @@
 
 import type { World } from "@workflow/world";
 import { WorkflowRunNotFoundError } from "workflow/errors";
-import type { FactoryDefinition, WorkflowDefinition } from "../../blocks/factory.ts";
 import type { HarnessKind, HarnessRuntime } from "../../checks/harness-runtime.ts";
 import type { WebhooksConfig } from "../../config/factory-config.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { stopPiProcesses } from "../../steps/agents/harnesses/pi.ts";
 import type { BindingClone } from "../../steps/workspaces/clone.ts";
 import type { RegistrySql } from "../../steps/workspaces/registry.ts";
+import type { FactoryDefinition, WorkflowDefinition } from "../../workflow/factory.ts";
 import { READY_PHASE, setBootPhase } from "../readiness.ts";
 import { installShutdown, onShutdown } from "../shutdown.ts";
 
@@ -123,7 +123,7 @@ export async function gateOnWebhookSecrets(deps: WebhookSecretGateDeps = {}): Pr
     .map(webhookSecretVariable);
   if (missing.length > 0) {
     error(
-      `[service] webhooks are enabled but ${missing.join(" and ")} ${missing.length === 1 ? "is" : "are"} not set. Set ${missing.length === 1 ? "it" : "them"} in the factory's .env, or turn that provider off in the webhooks block of jigs.config.ts, then restart the service`,
+      `[service] webhooks are enabled but ${missing.join(" and ")} ${missing.length === 1 ? "is" : "are"} not set. Set ${missing.length === 1 ? "it" : "them"} in the factory's .env, or turn that provider off in the webhooks section of jigs.config.ts, then restart the service`,
     );
     exit(1);
     return false;

@@ -85,8 +85,8 @@ The before-and-after state names from a ticket status update.
 What the comment's footer says about the run that posted it. The factory's
 step wrapper builds it: the run id and the workflow name come from the
 Workflow SDK's metadata, and the dashboard link from the service's own
-configuration — none of it visible to a block. Where the run paused is the
-halt's, not the context's: only the block that raised it knows.
+configuration — none of it visible to the workflow. Where the run paused is the
+halt's, not the context's: only the routine that raised it knows.
 
 #### Properties
 

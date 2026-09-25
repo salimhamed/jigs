@@ -12,7 +12,7 @@ Read only the file you picked.
 | The argument is about | Route |
 | --- | --- |
 | Running, watching, cancelling or poking runs; cleaning up resources; a run that looks stuck; answering a needs-human halt; driving a ticket to merge with the operator's authority | `operate.md` |
-| Adding or changing a workflow, block, step, prompt, schedule, or a `requires` manifest | `author.md` |
+| Adding or changing a workflow, routine, step, prompt, schedule, or a `requires` manifest | `author.md` |
 | Installing jigs, initialising a factory, binding a repo, bringing a service up | `setup.md` |
 | A question — what a term means, why something works the way it does, where something lives | `ask.md` |
 

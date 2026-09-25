@@ -3,9 +3,9 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
-import { runAgent } from "../../../blocks/agents/agent.ts";
-import { askAgent } from "../../../blocks/agents/ask-agent.ts";
-import { harnesses, models } from "../../../blocks/agents/harness-config.ts";
+import { runAgent } from "../../../workflow/agents/agent.ts";
+import { askAgent } from "../../../workflow/agents/ask-agent.ts";
+import { harnesses, models } from "../../../workflow/agents/harness-config.ts";
 import { executeAgent } from "../execute-agent.ts";
 import { executePi } from "./pi.ts";
 import { writePiSubmitResultExtension } from "./pi-extension.ts";

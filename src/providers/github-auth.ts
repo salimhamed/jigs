@@ -2,7 +2,7 @@
 // the operator's personal access token, or a GitHub App installation token
 // minted here from the App's private key. Reads the environment and the
 // filesystem, so it is only reached from a step, a check or the CLI — never
-// workflow-side.
+// from workflow code.
 
 import { createSign } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";

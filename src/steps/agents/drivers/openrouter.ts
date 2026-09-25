@@ -1,15 +1,15 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import type { OpenrouterSource } from "../../../blocks/agents/harness-config.ts";
+import { modelApiKeyCheck } from "../../../checks/models.ts";
+import { JigsError } from "../../../errors.ts";
+import type { OpenrouterSource } from "../../../workflow/agents/harness-config.ts";
 import type {
   AskJevOptions,
   JevAnswer,
   JevAnswers,
   JevQuestion,
   JevQuestions,
-} from "../../../blocks/agents/jev.ts";
-import type { AgentRequest, ModelRequest } from "../../../blocks/agents/plan.ts";
-import { modelApiKeyCheck } from "../../../checks/models.ts";
-import { JigsError } from "../../../errors.ts";
+} from "../../../workflow/agents/jev.ts";
+import type { AgentRequest, ModelRequest } from "../../../workflow/agents/plan.ts";
 import type {
   DecisionGeneration,
   Driver,

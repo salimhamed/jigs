@@ -1,7 +1,7 @@
 // The one credential source behind every Linear call jigs makes. Two modes: a
 // personal API key, or an OAuth application token minted here with the
 // client-credentials grant. Reads the environment and the network, so it is
-// only reached from a step, a check or the CLI — never workflow-side.
+// only reached from a step, a check or the CLI — never from workflow code.
 
 import { type LinearIdentity, readFactoryConfig } from "../config/factory-config.ts";
 import { factoryEnvValue } from "../config/factory-env.ts";

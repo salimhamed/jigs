@@ -2,8 +2,8 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type { McpServerConfig, McpToolProbe } from "../blocks/agents/harness-config.ts";
 import { checkWorktreeCodexMcpConfig } from "../steps/agents/harnesses/codex-config-guard.ts";
+import type { McpServerConfig, McpToolProbe } from "../workflow/agents/harness-config.ts";
 import { CHECK_TIMEOUT_MS, type Check, type CheckResult } from "./catalog.ts";
 
 // MCP checks are JIT-only by design: a step's servers are built inside the

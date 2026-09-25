@@ -1,7 +1,7 @@
 import path from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { harnesses } from "../../../../blocks/agents/harness-config.ts";
-import { buildAgentRequest } from "../../../../blocks/agents/plan.ts";
+import { harnesses } from "../../../../workflow/agents/harness-config.ts";
+import { buildAgentRequest } from "../../../../workflow/agents/plan.ts";
 import { createCodexDriver } from "../../drivers/codex.ts";
 import { withCodexAppServer } from "../../drivers/codex-support.ts";
 import { type DriverResolver, driverFor } from "../../drivers/index.ts";

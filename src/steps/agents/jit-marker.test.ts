@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
-import { type ExecuteAgentStep, JitCheckError, runAgent } from "../../blocks/agents/agent.ts";
-import { harnesses } from "../../blocks/agents/harness-config.ts";
-import { buildAgentRequest } from "../../blocks/agents/plan.ts";
+import { type ExecuteAgentStep, JitCheckError, runAgent } from "../../workflow/agents/agent.ts";
+import { harnesses } from "../../workflow/agents/harness-config.ts";
+import { buildAgentRequest } from "../../workflow/agents/plan.ts";
 import { executeAgent } from "./execute-agent.ts";
 import { factorylessDeps } from "./harnesses/test-fixtures.ts";
 

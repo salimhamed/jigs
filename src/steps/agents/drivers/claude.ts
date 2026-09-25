@@ -2,9 +2,9 @@ import {
   type McpServerConfig as ClaudeMcpServerConfig,
   getSessionMessages,
 } from "ai-sdk-provider-claude-code";
-import type { ClaudeHarness, McpServerConfig } from "../../../blocks/agents/harness-config.ts";
 import { claudeAuthCheck, harnessRuntimeCheck } from "../../../checks/harnesses.ts";
 import { JigsError } from "../../../errors.ts";
+import type { ClaudeHarness, McpServerConfig } from "../../../workflow/agents/harness-config.ts";
 import { resolveClaudeExecutable } from "../harnesses/executables.ts";
 import { claudeCode } from "../harnesses/index.ts";
 import { AgentSessionError } from "../session-error.ts";

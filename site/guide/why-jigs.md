@@ -18,7 +18,7 @@ an async function marked `"use workflow"`; a step is a function marked
 `"use step"`. The SDK records each finished step, so a run that pauses or
 restarts resumes where it was and never repeats completed work.
 
-A workflow is ordinary TypeScript. It can call jigs' building blocks, such as
+A workflow is ordinary TypeScript. It can call jigs' routines and steps, such as
 `runAgent` or `openPullRequest`, but it does not have to: any code and
 any library can go in it, within the SDK's rules for workflows and steps.
 

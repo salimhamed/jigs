@@ -22,20 +22,20 @@ test("lists linear-ticket-to-pr, installs its source and registers its workflow"
   deps.lines.length = 0;
   expect(recipeNames()).toContain("linear-ticket-to-pr");
   expect(addRecipe("linear-ticket-to-pr", deps).created).toEqual([
-    "blocks/delivery/README.md",
-    "blocks/delivery/approval.types.test.ts",
-    "blocks/delivery/delivery.test.ts",
-    "blocks/delivery/delivery.ts",
-    "blocks/delivery/doc-examples.types.test.ts",
-    "blocks/delivery/outputs.ts",
-    "blocks/delivery/prompt-contexts.types.test.ts",
-    "blocks/delivery/prompts.test.ts",
-    "blocks/delivery/prompts.ts",
-    "blocks/delivery/review.ts",
-    "blocks/delivery/types.ts",
-    "blocks/tickets/linear.ts",
     "workflows/linear-ticket-to-pr.test.ts",
     "workflows/linear-ticket-to-pr.ts",
+    "workflows/linear-ticket-to-pr/delivery/README.md",
+    "workflows/linear-ticket-to-pr/delivery/approval.types.test.ts",
+    "workflows/linear-ticket-to-pr/delivery/delivery.test.ts",
+    "workflows/linear-ticket-to-pr/delivery/delivery.ts",
+    "workflows/linear-ticket-to-pr/delivery/doc-examples.types.test.ts",
+    "workflows/linear-ticket-to-pr/delivery/outputs.ts",
+    "workflows/linear-ticket-to-pr/delivery/prompt-contexts.types.test.ts",
+    "workflows/linear-ticket-to-pr/delivery/prompts.test.ts",
+    "workflows/linear-ticket-to-pr/delivery/prompts.ts",
+    "workflows/linear-ticket-to-pr/delivery/review.ts",
+    "workflows/linear-ticket-to-pr/delivery/types.ts",
+    "workflows/linear-ticket-to-pr/tickets/linear.ts",
   ]);
   expect(deps.lines.slice(-4)).toEqual([
     'registered linear-ticket-to-pr in jigs.config.ts by adding "linear-ticket-to-pr": () => import("./workflows/linear-ticket-to-pr.ts")',

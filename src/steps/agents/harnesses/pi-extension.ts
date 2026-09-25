@@ -3,8 +3,8 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { formatToolName } from "pi-mcp-adapter/types";
-import type { PiMcpServerConfig } from "../../../blocks/agents/harness-config.ts";
-import type { OutputJsonSchema } from "../../../blocks/agents/output-schema.ts";
+import type { PiMcpServerConfig } from "../../../workflow/agents/harness-config.ts";
+import type { OutputJsonSchema } from "../../../workflow/agents/output-schema.ts";
 
 type PiMcpServer = {
   command?: string;

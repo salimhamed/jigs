@@ -1,6 +1,6 @@
-// The type half of what the barrels export. package.test.ts asserts the value
+// The type half of what the entry points export. package.test.ts asserts the value
 // names with a runtime import, which cannot see a type at all: a `TicketRef` or
-// a `JsonValue` dropped from a topic index would pass every test in this repo
+// a `JsonValue` dropped from the root would pass every test in this repo
 // and break a factory on install. Here the guard is tsc —
 // `pnpm typecheck` fails when one of these names stops being exported.
 
@@ -11,16 +11,25 @@ import type {
   AgentSession,
   AskAgentOptions,
   AskModelOptions,
+  ChangePatch,
+  ChangeStatus,
+  ChangeSummary,
+  CheckRun,
   ClaudeHarness,
   CodexHarness,
-  ExecuteAgentStep,
-  ExecuteModelStep,
+  FileChange,
+  Halt,
+  HaltOption,
+  HaltQuestion,
   Harness,
   HarnessKind,
+  HumanReply,
+  JsonValue,
   McpHttpServerConfig,
   McpServerConfig,
   McpStdioServerConfig,
   McpToolProbe,
+  MergePolicy,
   ModelKind,
   ModelRequest,
   ModelResult,
@@ -29,25 +38,18 @@ import type {
   PiMcpHttpServerConfig,
   PiMcpServerConfig,
   PiMcpStdioServerConfig,
+  PullRequestMarker,
+  PullRequestRef,
+  PullRequestWake,
   RebuildContextPrompt,
   RebuildContextPromptInput,
-  ResumeOrRebuildOptions,
-  ResumeOrRebuildResult,
-  RunAgentFn,
+  ReleasePolicy,
+  ReleaseReport,
+  ReviewThread,
   RunAgentOptions,
-  RunAgentOrHaltDependencies,
-} from "./blocks/agents/index.ts";
-import type { ChangePatch, ChangeStatus, ChangeSummary, FileChange } from "./blocks/git/index.ts";
-import type { HaltOption, HaltQuestion, JsonValue } from "./blocks/human/index.ts";
-import type {
-  CheckForTicketHumanReply,
-  Halt,
-  HaltForHumanDependencies,
-  HaltForHumanFn,
-  HumanReply,
-  PostTicketHumanInputRequest,
-  PostTicketNote,
-  ReviewTicketOptions,
+  RunResource,
+  StatusReason,
+  ThreadAnswers,
   TicketClaim,
   TicketComment,
   TicketHandoff,
@@ -57,24 +59,8 @@ import type {
   TicketReviewPrompt,
   TicketReviewPromptInput,
   TicketSnapshot,
-} from "./blocks/linear/index.ts";
-import type {
-  Attend,
-  MarkerKind,
-  MarkerLedger,
-  MergeRefusal,
-  PostPullRequestNoteOptions,
-  PostReviewAnswersOptions,
-  PullRequestGateFn,
-  PullRequestMarker,
-  PullRequestRef,
-  PullRequestState,
-  PullRequestWake,
-  StatusReason,
-  ThreadAnswers,
-} from "./blocks/pull-requests/index.ts";
-import type { ReleasePolicy, ReleaseReport, ReleaseSteps } from "./blocks/runtime/index.ts";
-import type { Worktree } from "./blocks/workspaces/index.ts";
+  Worktree,
+} from "./index.ts";
 import type { AgentExecutionDependencies } from "./steps/agents/index.ts";
 import type {
   LinearIssueMatch,
@@ -91,78 +77,61 @@ import type {
 } from "./steps/pull-requests/index.ts";
 import type { ProvisionWorktreeDependencies, WorktreeRequest } from "./steps/workspaces/index.ts";
 
-type BlocksTypeSurface = {
+type RootTypeSurface = {
+  agentRequest: AgentRequest;
+  agentResult: AgentResult;
+  agentSession: AgentSession;
+  askAgentOptions: AskAgentOptions;
+  askModelOptions: AskModelOptions;
   changePatch: ChangePatch;
   changeStatus: ChangeStatus;
   changeSummary: ChangeSummary;
+  checkRun: CheckRun;
+  claudeHarness: ClaudeHarness;
+  codexHarness: CodexHarness;
   fileChange: FileChange;
-  releasePolicy: ReleasePolicy;
-  releaseReport: ReleaseReport;
-  releaseSteps: ReleaseSteps;
-  worktreeFacts: Worktree;
-  agentFn: RunAgentFn;
-  agentOrHaltDeps: RunAgentOrHaltDependencies;
-  agentSession: AgentSession;
-  agentStepConfig: RunAgentOptions;
-  agentStepResult: AgentResult;
-  agentWire: AgentRequest;
-  askStepConfig: AskModelOptions;
-  askAgentConfig: AskAgentOptions;
-  askWire: ModelRequest;
-  attend: Attend<number>;
-  checkForTicketHumanReply: CheckForTicketHumanReply;
-  claudeHarnessConfig: ClaudeHarness;
-  codexHarnessConfig: CodexHarness;
-  gateFn: PullRequestGateFn;
-  gateWake: PullRequestWake;
-  markerKind: MarkerKind;
-  markerLedger: MarkerLedger;
-  mergeRefusal: MergeRefusal;
-  prMarker: PullRequestMarker;
-  prState: PullRequestState;
-  statusReason: StatusReason;
-  haltForHumanDeps: HaltForHumanDependencies;
-  haltForHumanFn: HaltForHumanFn;
-  handoff: TicketHandoff;
-  harnessConfig: Harness;
-  harnessName: HarnessKind;
   halt: Halt;
-  haltOptionSchema: HaltOption;
-  haltQuestionSchema: HaltQuestion;
-  modelKind: ModelKind;
-  modelSource: ModelSource;
+  haltOption: HaltOption;
+  haltQuestion: HaltQuestion;
+  harness: Harness;
+  harnessKind: HarnessKind;
   humanReply: HumanReply;
   jsonValue: JsonValue;
   mcpHttpServer: McpHttpServerConfig;
-  mcpProbe: McpToolProbe;
-  mcpServerConfig: McpServerConfig;
+  mcpServer: McpServerConfig;
   mcpStdioServer: McpStdioServerConfig;
+  mcpProbe: McpToolProbe;
+  mergePolicy: MergePolicy;
+  modelKind: ModelKind;
+  modelRequest: ModelRequest;
+  modelResult: ModelResult;
+  modelSource: ModelSource;
+  outputJsonSchema: OutputJsonSchema;
   piMcpHttpServer: PiMcpHttpServerConfig;
   piMcpServer: PiMcpServerConfig;
   piMcpStdioServer: PiMcpStdioServerConfig;
-  postTicketHumanInputRequest: PostTicketHumanInputRequest;
-  postPullRequestNoteOptions: PostPullRequestNoteOptions;
-  postReviewAnswersOptions: PostReviewAnswersOptions;
-  postTicketNote: PostTicketNote;
+  prMarker: PullRequestMarker;
   prRef: PullRequestRef;
+  prWake: PullRequestWake;
   rebuildContextPrompt: RebuildContextPrompt;
   rebuildContextPromptInput: RebuildContextPromptInput;
-  resumeOrRebuildOptions: ResumeOrRebuildOptions<undefined>;
-  resumeOrRebuildResult: ResumeOrRebuildResult<undefined>;
-  reviewTicketOptions: ReviewTicketOptions;
-  executeAgentStep: ExecuteAgentStep;
-  executeModelRequestStep: ExecuteModelStep;
-  snapshotComment: TicketComment;
-  stepResult: ModelResult;
+  releasePolicy: ReleasePolicy;
+  releaseReport: ReleaseReport;
+  reviewThread: ReviewThread;
+  runAgentOptions: RunAgentOptions;
+  runResource: RunResource;
+  statusReason: StatusReason;
   threadAnswers: ThreadAnswers;
   ticketClaim: TicketClaim;
+  ticketComment: TicketComment;
+  ticketHandoff: TicketHandoff;
   ticketLink: TicketLink;
   ticketNote: TicketNote;
   ticketRef: TicketRef;
   ticketReviewPrompt: TicketReviewPrompt;
   ticketReviewPromptInput: TicketReviewPromptInput;
   ticketSnapshot: TicketSnapshot;
-  wireJsonSchema: OutputJsonSchema;
+  worktree: Worktree;
 };
 
 type StepsTypeSurface = {
@@ -180,7 +149,7 @@ type StepsTypeSurface = {
   worktreeRequest: WorktreeRequest;
 };
 
-test("every barrel still exports every type a factory names", () => {
-  const surfaces: Array<BlocksTypeSurface | StepsTypeSurface | undefined> = [undefined, undefined];
+test("the root and the step entries still export every type a factory names", () => {
+  const surfaces: Array<RootTypeSurface | StepsTypeSurface | undefined> = [undefined, undefined];
   expect(surfaces).toHaveLength(2);
 });

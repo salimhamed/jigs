@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { z } from "zod";
-import type { Factory, WorkflowInputs } from "../blocks/factory.ts";
+import type { Factory, WorkflowInputs } from "../workflow/factory.ts";
 
 const { start, resolveIssueRef, preflightChecks } = vi.hoisted(() => ({
   start: vi.fn(async (_workflow: unknown, _args: unknown[]) => ({ runId: "wrun_test" })),

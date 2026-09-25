@@ -1,5 +1,3 @@
-import { type MergeRefusal, mergeRefusal } from "../../blocks/pull-requests/merge-ready.ts";
-import type { MergePolicy } from "../../blocks/pull-requests/policy.ts";
 import {
   bindingMergePolicy,
   readFactoryConfig,
@@ -25,6 +23,8 @@ import {
 import { GithubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity } from "../../providers/github-auth.ts";
 import { parseGithubRemote } from "../../providers/github-webhook.ts";
+import { type MergeRefusal, mergeRefusal } from "../../workflow/pull-requests/merge-ready.ts";
+import type { MergePolicy } from "../../workflow/pull-requests/policy.ts";
 
 /** Identifies a GitHub repository by its owner and name. */
 export interface GitHubRepoRef {

@@ -2,9 +2,9 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
 import { z } from "zod";
-import { runAgent } from "../../../../blocks/agents/agent.ts";
-import { harnesses, models } from "../../../../blocks/agents/harness-config.ts";
-import { buildAgentRequest } from "../../../../blocks/agents/plan.ts";
+import { runAgent } from "../../../../workflow/agents/agent.ts";
+import { harnesses, models } from "../../../../workflow/agents/harness-config.ts";
+import { buildAgentRequest } from "../../../../workflow/agents/plan.ts";
 import { type DriverResolver, driverFor } from "../../drivers/index.ts";
 import { createPiDriver } from "../../drivers/pi.ts";
 import {

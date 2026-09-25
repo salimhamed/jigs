@@ -2,16 +2,16 @@ import { SPEC_VERSION_CURRENT } from "@workflow/world";
 import { afterEach, expect, test, vi } from "vitest";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
-import type { Factory } from "../blocks/factory.ts";
+import type { RegistrySql } from "../steps/workspaces/registry.ts";
+import type { Factory } from "../workflow/factory.ts";
 import {
   CLEANUP_DIRECTIVE_ATTRIBUTE,
   CLEANUP_STATE_ATTRIBUTE,
   type CleanupAction,
   type CleanupOutcome,
   encodeCleanupProgress,
-} from "../blocks/runtime/cleanup.ts";
-import { resourceAttribute } from "../blocks/runtime/resources.ts";
-import type { RegistrySql } from "../steps/workspaces/registry.ts";
+} from "../workflow/runtime/cleanup.ts";
+import { resourceAttribute } from "../workflow/runtime/resources.ts";
 import {
   type AutomaticReleaseDeps,
   automaticReleaseAction,

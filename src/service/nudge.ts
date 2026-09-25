@@ -1,16 +1,16 @@
 // How a parked run hears from its provider when no webhook tells it. On a
 // timer per provider, the service resumes each held hook through the same path
-// the ingress and `jigs poke` use, and the woken block re-reads the provider
+// the ingress and `jigs poke` use, and the woken routine re-reads the provider
 // from scratch: the wake carries nothing, so a nudge and a delivery are the
 // same event. With webhooks on, this is the floor under a lost delivery —
 // GitHub never retries one it failed to make.
 
 import { resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
-import { TICKET_TOKEN_PREFIX } from "../blocks/linear/claim.ts";
-import { NEEDS_HUMAN_TOKEN_PREFIX } from "../blocks/linear/halt-for-human.ts";
-import { PULL_REQUEST_TOKEN_PREFIX } from "../blocks/pull-requests/gate.ts";
 import type { WebhookProvider } from "../config/factory-config.ts";
+import { TICKET_TOKEN_PREFIX } from "../workflow/linear/claim.ts";
+import { NEEDS_HUMAN_TOKEN_PREFIX } from "../workflow/linear/halt-for-human.ts";
+import { PULL_REQUEST_TOKEN_PREFIX } from "../workflow/pull-requests/gate.ts";
 import { listWorldHooks } from "./runs.ts";
 import { runsWithActiveStep } from "./stalls.ts";
 import { recordWake } from "./wake-note.ts";

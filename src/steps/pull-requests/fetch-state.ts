@@ -1,5 +1,5 @@
-import type { FetchPrState } from "../../blocks/pull-requests/gate.ts";
 import { fetchPrSnapshot, type PullRequestRef } from "../../providers/github.ts";
+import type { FetchPrState } from "../../workflow/pull-requests/gate.ts";
 
 /** Read the pull request’s checks, reviews, and open review threads. */
 export const fetchPullRequestState: FetchPrState = async (pr: PullRequestRef) => {

@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { z } from "zod";
-import { askModel } from "../../blocks/agents/ask-model.ts";
-import { harnesses, models } from "../../blocks/agents/harness-config.ts";
+import { askModel } from "../../workflow/agents/ask-model.ts";
+import { harnesses, models } from "../../workflow/agents/harness-config.ts";
 import {
   type AskJevOptions,
   askJev,
@@ -9,8 +9,8 @@ import {
   type JevQuestions,
   score,
   yesNo,
-} from "../../blocks/agents/jev.ts";
-import { buildAskAgentRequest, buildModelRequest } from "../../blocks/agents/plan.ts";
+} from "../../workflow/agents/jev.ts";
+import { buildAskAgentRequest, buildModelRequest } from "../../workflow/agents/plan.ts";
 import { drivers } from "./drivers/index.ts";
 import { defaultAgentExecutionDependencies } from "./execute-agent.ts";
 import { executeJev, executeModel } from "./execute-model-request.ts";

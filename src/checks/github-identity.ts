@@ -3,7 +3,6 @@
 // token versus an App whose key, installation or permissions are wrong — so
 // each gets its own checks and its own repair.
 
-import type { MergePolicy } from "../blocks/pull-requests/policy.ts";
 import {
   type AppIdentity,
   type BindingEntry,
@@ -18,6 +17,7 @@ import {
   readAppPrivateKey,
 } from "../providers/github-auth.ts";
 import { parseGithubRemote } from "../providers/github-webhook.ts";
+import type { MergePolicy } from "../workflow/pull-requests/policy.ts";
 import { type Check, type CheckResult, PROBE_TIMEOUT_MS } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 

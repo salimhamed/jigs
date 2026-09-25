@@ -1,7 +1,4 @@
 import { experimental_evaluate, generateText, jsonSchema, Output, type OutputInterface } from "ai";
-import type { ExecuteAgentStep } from "../../blocks/agents/agent.ts";
-import { type AgentRequest, assertAskableHarness } from "../../blocks/agents/plan.ts";
-import { extractAgentSession, toModelResult } from "../../blocks/agents/result.ts";
 import {
   type FailedCheck,
   failedChecks,
@@ -11,6 +8,9 @@ import {
   runChecks,
 } from "../../checks/index.ts";
 import { JigsError } from "../../errors.ts";
+import type { ExecuteAgentStep } from "../../workflow/agents/agent.ts";
+import { type AgentRequest, assertAskableHarness } from "../../workflow/agents/plan.ts";
+import { extractAgentSession, toModelResult } from "../../workflow/agents/result.ts";
 import type { RunMetadata } from "../runtime/run-context.ts";
 import {
   type DriverDependencies,

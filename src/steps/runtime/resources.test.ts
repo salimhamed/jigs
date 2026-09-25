@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
-import { resourcesFromAttributes } from "../../blocks/runtime/resources.ts";
 import type { JigsError } from "../../errors.ts";
+import { resourcesFromAttributes } from "../../workflow/runtime/resources.ts";
 import { registerResourceWith } from "./resources.ts";
 
 const pr = (number: number, url = `https://github.com/acme/api/pull/${number}`) => ({

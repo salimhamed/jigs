@@ -1,6 +1,6 @@
 import { afterAll, expect, test, vi } from "vitest";
 import { z } from "zod";
-import type { Factory, Schedule } from "../blocks/factory.ts";
+import type { Factory, Schedule } from "../workflow/factory.ts";
 import type { RunRow } from "./runs.ts";
 import { fireSchedule, listSchedules, scheduleChecks, startSchedules } from "./schedules.ts";
 import type { StartRunResult } from "./trigger.ts";

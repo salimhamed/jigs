@@ -3,9 +3,9 @@ import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, expect, test } from "vitest";
-import { defineFactory, RESERVED_AGENT_ENV } from "../blocks/factory.ts";
 import { CLAUDE_ENV } from "../steps/agents/drivers/claude-support.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import { defineFactory, RESERVED_AGENT_ENV } from "../workflow/factory.ts";
 import { addWorkflow, removeBinding, upsertBinding } from "./config-edit.ts";
 import {
   bindingMergePolicy,
@@ -159,7 +159,7 @@ test("each provider's poll interval defaults on its own and may sit at the floor
   ).toEqual({ github: 300, linear: 30 });
 });
 
-test("without a webhooks block no provider sends webhooks", () => {
+test("without a webhooks section no provider sends webhooks", () => {
   expect(parseFactoryConfig({ service: { dashboardPort: 3456 } }).webhooks).toBeUndefined();
 });
 

@@ -20,4 +20,4 @@ does not decide which state means started, review, done or stopped.
   of the run lifecycle. Adding one would be a regression.
 - `reviewTicket` and the ship recipe's delivery expose optional callbacks at
   useful moments. They run as ordinary durable workflow code and do not make
-  those blocks lifecycle owners.
+  those routines lifecycle owners.

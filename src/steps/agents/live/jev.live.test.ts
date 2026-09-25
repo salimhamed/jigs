@@ -1,5 +1,6 @@
 import { expect, expectTypeOf, test } from "vitest";
-import { askJev, choice, models, score, yesNo } from "../../../blocks/agents/index.ts";
+import { choice, models, score, yesNo } from "../../../index.ts";
+import { askJev } from "../../../workflow/agents/jev.ts";
 import { executeJev } from "../execute-model-request.ts";
 
 const configured = Boolean(process.env.OPENROUTER_API_KEY);

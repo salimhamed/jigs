@@ -1,16 +1,16 @@
 import path from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { harnesses } from "../../../blocks/agents/harness-config.ts";
+import { harnesses } from "../../../workflow/agents/harness-config.ts";
 import {
   buildAgentRequest,
   parseOutput,
   type RunAgentOptions,
-} from "../../../blocks/agents/plan.ts";
-import type { RunAgentFn } from "../../../blocks/agents/resume-or-rebuild.ts";
-import type { TicketClaim } from "../../../blocks/linear/claim.ts";
-import type { HaltForHumanFn, HumanReply } from "../../../blocks/linear/halt-for-human.ts";
-import { reviewTicket } from "../../../blocks/linear/review.ts";
-import type { TicketSnapshot } from "../../../blocks/linear/snapshot.ts";
+} from "../../../workflow/agents/plan.ts";
+import type { RunAgentFn } from "../../../workflow/agents/resume-or-rebuild.ts";
+import type { TicketClaim } from "../../../workflow/linear/claim.ts";
+import type { HaltForHumanFn, HumanReply } from "../../../workflow/linear/halt-for-human.ts";
+import { reviewTicket } from "../../../workflow/linear/review.ts";
+import type { TicketSnapshot } from "../../../workflow/linear/snapshot.ts";
 import { createCodexDriver } from "../drivers/codex.ts";
 import { withCodexAppServer } from "../drivers/codex-support.ts";
 import { type DriverResolver, driverFor } from "../drivers/index.ts";

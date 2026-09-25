@@ -340,7 +340,7 @@ test("bind names other jigs hook hosts after its result", async () => {
   );
 });
 
-test("bind without a webhooks block skips the webhook leg and says PR waits poll", async () => {
+test("bind without a webhooks section skips the webhook leg and says PR waits poll", async () => {
   stubWebhookEnv();
   const result = await bindRepo(API, deps());
   expect(result.webhook).toBe("skipped");

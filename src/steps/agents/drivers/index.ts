@@ -1,4 +1,4 @@
-import type { HarnessKind, ModelKind } from "../../../blocks/agents/harness-config.ts";
+import type { HarnessKind, ModelKind } from "../../../workflow/agents/harness-config.ts";
 import { claudeDriver } from "./claude.ts";
 import { codexDriver } from "./codex.ts";
 import { openaiCompatibleDriver } from "./openai-compatible.ts";
