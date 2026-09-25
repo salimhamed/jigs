@@ -58,6 +58,22 @@ The service hosts its own dashboard. Do not run the Workflow SDK's
 `workflow web` against a factory; see
 [Troubleshooting](/guide/troubleshooting#runs-stop-moving-after-you-ran-workflow-web).
 
+### Service lifetime
+
+On Linux with systemd, enable lingering once so the service keeps running after
+you log out:
+
+```sh
+loginctl enable-linger "$USER"
+```
+
+On hosts without systemd, including macOS, the service runs unsupervised and
+stops when you log out. `jigs doctor` reports whether service supervision and
+lingering are available.
+
+`jigs service stop` stops the service and dashboard while leaving Postgres
+running. `jigs down` stops both and keeps Postgres's data for the next start.
+
 ## Advanced
 
 | Command | What it does |

@@ -17,6 +17,21 @@ The kinds are fixed: a factory cannot add a harness or model kind,
 `models.openaiCompatible` reaches any endpoint that speaks the OpenAI API, and a
 native Anthropic or Gemini API becomes a built-in kind when a factory needs one.
 
+## Install and log in
+
+Install only the harness CLIs your workflows use. Keep each on the `PATH` of
+the shell that starts the service, and log in before starting agent work:
+
+| Harness | Command | Log in |
+| --- | --- | --- |
+| Claude Code | `claude` | `claude auth login` |
+| Codex | `codex` | `codex login` |
+| Pi | `pi` | Run `pi`, then `/login` |
+
+Model API credentials belong in your factory's `.env`; see the source-specific
+sections below for the variables to set. A workflow such as `hello` that calls
+no agent or model needs none of this setup.
+
 ## The four verbs
 
 Import them from `#jigs/routines`.

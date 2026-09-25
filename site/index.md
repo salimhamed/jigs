@@ -7,28 +7,39 @@ hero:
   actions:
     - theme: brand
       text: Get started
-      link: /guide/why-jigs
+      link: /guide/getting-started
 ---
 
-## What jigs is
+## What is jigs?
 
-jigs runs durable TypeScript workflows that combine coding agents, model calls,
-questions for a person and operations such as opening a pull request. A run
-waits for a reply, a review or a CI build and continues where it left off.
-Your workflows live in a **factory repo** that installs jigs from npm as
-`@jigs-ai/jigs`. Create one with
-`pnpm --config.minimum-release-age-exclude=@jigs-ai/jigs dlx @jigs-ai/jigs init`,
-then follow [Install and run a first workflow](/guide/getting-started).
+**jigs turns one-off AI interactions into repeatable workflows.** Combine coding
+agents, models, deterministic code, human input, and external events in
+TypeScript, then let the workflow coordinate the process for you.
 
-## Getting started for agents
+AI makes individual tasks easier to automate. Workflows make the larger process
+explicit and repeatable: what happens, what runs where, when human judgment is
+needed, and what can continue automatically.
 
-Install the jigs skill, which adds a single skill named `/jigs`:
+Workflows live in your own **factory** repository, which installs jigs and runs
+the service that executes and tracks them.
+
+## Set up with a coding agent
+
+The fastest way to get started is to let your coding agent do the setup.
 
 ```sh
 npx skills add salimhamed/jigs
 ```
 
-Then ask your agent `/jigs set up a factory in this empty directory`. To give
-an agent the docs, point it at
-<https://salimhamed.github.io/jigs/llms.txt> (every page) or
-<https://salimhamed.github.io/jigs/llms-full.txt> (the whole site in one file).
+Then ask your agent:
+
+```text
+/jigs set up a factory in this empty directory
+```
+
+## Using these docs with a coding agent?
+
+Give your agent [llms.txt](https://salimhamed.github.io/jigs/llms.txt) for the
+documentation index and links to individual pages, or
+[llms-full.txt](https://salimhamed.github.io/jigs/llms-full.txt) for the complete
+documentation in one file.

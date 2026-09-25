@@ -63,7 +63,7 @@ export async function noteOnTicket(
 
 /**
  * What a ticket review hands the builder: the brief plus the snapshot it
- * was written from. Both travel together on purpose — the ticket is
+ * was written from. Both travel together on purpose: the ticket is
  * authoritative wherever the two conflict, and review or verify steps judge
  * the work against the snapshot's acceptance criteria, never against the
  * brief, so a re-planning agent cannot move the goalposts.
