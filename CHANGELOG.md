@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.64.0](https://github.com/salimhamed/jigs/compare/jigs-v0.63.0...jigs-v0.64.0) (2026-09-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* Driver, DriverContext, AgentRunner and the types they reach are now a published contract under the steps entry. Driver gains a required setsEnv member. docsAnchor, the Pi delta callback, ClaudeStepOptions, RegisteredDriverKind and the harnesses index module are removed. See #399 for the upgrade notes.
+
+### Code Refactoring
+
+* publish the driver contract, remove dead agent code, fix the Pi probe environment ([#399](https://github.com/salimhamed/jigs/issues/399)) ([573c9ce](https://github.com/salimhamed/jigs/commit/573c9cec6123ac66fff56e81dafb500e63a0d6be))
+
 ## [0.63.0](https://github.com/salimhamed/jigs/compare/jigs-v0.62.0...jigs-v0.63.0) (2026-09-25)
 
 
