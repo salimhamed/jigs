@@ -211,8 +211,6 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "mergePolicySchema",
     "models",
     "parseMarkers",
-    "parseNameStatus",
-    "parseNumstat",
     "rebuildContextPrompt",
     "renderChangeSummary",
     "renderChecks",

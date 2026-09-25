@@ -34,6 +34,7 @@ _Avoid_: helper, primitive, sub-workflow
 **Workflow code**: Everything in `src/workflow/`: code that runs inside the
 workflow bundle and so must be replay-safe, with no Node built-ins, environment
 or network. Routines, descriptors, schemas and pure renderers live here.
+_Avoid_: block, workflow-side
 
 **Recipe**: A workflow jigs ships as source under `recipes/`, which
 `jigs recipe add` copies into a factory. Once copied it is factory code.

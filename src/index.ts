@@ -94,8 +94,6 @@ export {
   type ChangeStatus,
   type ChangeSummary,
   type FileChange,
-  parseNameStatus,
-  parseNumstat,
   renderChangeSummary,
 } from "./workflow/git/change.ts";
 export {
@@ -142,7 +140,6 @@ export {
 } from "./workflow/pull-requests/policy.ts";
 export { defaultPullRequestScope } from "./workflow/pull-requests/writer.ts";
 
-export type { CleanupProgress, CleanupView } from "./workflow/runtime/cleanup.ts";
 export type { ReleasePolicy, ReleaseReport } from "./workflow/runtime/release.ts";
 export type { RunResource } from "./workflow/runtime/resources.ts";
 export { unreachable } from "./workflow/unreachable.ts";
