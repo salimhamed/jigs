@@ -271,7 +271,7 @@ function touch(root: string, relative: string, offsetMs: number): void {
 test("only the sources edited since the build are named stale", () => {
   const root = builtFactory();
   touch(root, SERVICE_ENTRY, 0);
-  touch(root, "jigs.ts", -60_000);
+  touch(root, "jigs/steps.ts", -60_000);
   touch(root, "jigs.config.ts", 60_000);
   touch(root, "workflows/nested/ship.ts", 60_000);
 

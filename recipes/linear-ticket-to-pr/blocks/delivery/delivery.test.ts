@@ -13,7 +13,8 @@ const resumeFailed = (detail: string) => unwrapAgentStep({ resumeFailed: detail 
 
 import type { MergePolicy, PullRequestWake } from "@jigs-ai/jigs/blocks/pull-requests";
 import { parseMarkers, pullRequestGate } from "@jigs-ai/jigs/blocks/pull-requests";
-import * as jigs from "#jigs";
+import * as jigsRoutines from "#jigs/routines";
+import * as jigsSteps from "#jigs/steps";
 import * as delivery from "./delivery.ts";
 import { pullRequestDescription } from "./outputs.ts";
 
@@ -32,9 +33,12 @@ interface DeliverySteps {
   replyToPullRequestReviewThread: typeof import("@jigs-ai/jigs/steps/pull-requests").replyToPullRequestReviewThread;
   mergePullRequest: typeof jigs.mergePullRequest;
 }
-vi.mock("#jigs", () => ({
+const jigs = { ...jigsRoutines, ...jigsSteps };
+vi.mock("#jigs/routines", () => ({
   runAgent: vi.fn(),
   pullRequestGate: vi.fn(),
+}));
+vi.mock("#jigs/steps", () => ({
   readBranchState: vi.fn(),
   readWorktreeDiff: vi.fn(),
   pushBranch: vi.fn(),

@@ -43,10 +43,11 @@ test("scaffolds a factory that can be installed and built", async () => {
       "docker-compose.yml",
       "jigs.config.test.ts",
       "jigs.config.ts",
-      "jigs.ts",
+      "jigs/routines.ts",
+      "jigs/steps.ts",
       "nitro.config.ts",
       "package.json",
-      "workflows/hello.ts",
+      "workflows/hello/hello.ts",
       "pnpm-workspace.yaml",
       "tsconfig.json",
       "vitest.config.ts",
@@ -105,21 +106,15 @@ test("the scaffold's imports map mirrors its layout with plain .ts targets", asy
   await init(dir);
 
   const pkg = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8"));
-  expect(pkg.imports).toEqual({
-    "#jigs": "./jigs.ts",
-    "#blocks/*": "./blocks/*.ts",
-    "#steps/*": "./steps/*.ts",
-  });
+  expect(pkg.imports).toEqual({ "#jigs/*": "./jigs/*.ts" });
   for (const target of Object.values(pkg.imports as Record<string, unknown>)) {
     expect(typeof target, String(target)).toBe("string");
     expect(String(target).endsWith(".ts"), String(target)).toBe(true);
   }
-  // jigs resolves immediately; factories add blocks/ and steps/ later.
-  // A mapping with nothing behind it is
-  // inert — nothing resolves it, so nothing complains about it.
-  expect(existsSync(path.join(dir, "jigs.ts"))).toBe(true);
-  expect(existsSync(path.join(dir, "blocks", "tickets", "linear.ts"))).toBe(false);
-  expect(existsSync(path.join(dir, "steps"))).toBe(false);
+  expect(existsSync(path.join(dir, "jigs", "steps.ts"))).toBe(true);
+  expect(existsSync(path.join(dir, "jigs", "routines.ts"))).toBe(true);
+  expect(existsSync(path.join(dir, "jigs", "index.ts"))).toBe(false);
+  expect(existsSync(path.join(dir, "jigs.ts"))).toBe(false);
 });
 
 // Both spellings of a relative parent import: `from "../x"` and the dynamic
@@ -128,10 +123,12 @@ test("the scaffold's imports map mirrors its layout with plain .ts targets", asy
 const RELATIVE_PARENT_IMPORT = /(?:from|import\s*\()\s*["']\.\.\//;
 
 test("the relative-import guard catches both import spellings", () => {
-  expect('import { a } from "../jigs.ts";').toMatch(RELATIVE_PARENT_IMPORT);
-  expect('const a = await import("../jigs.ts");').toMatch(RELATIVE_PARENT_IMPORT);
-  expect('import { a } from "#jigs";').not.toMatch(RELATIVE_PARENT_IMPORT);
-  expect('const a = await import("./workflows/hello.ts");').not.toMatch(RELATIVE_PARENT_IMPORT);
+  expect('import { a } from "../../jigs/steps.ts";').toMatch(RELATIVE_PARENT_IMPORT);
+  expect('const a = await import("../../jigs/steps.ts");').toMatch(RELATIVE_PARENT_IMPORT);
+  expect('import { a } from "#jigs/steps";').not.toMatch(RELATIVE_PARENT_IMPORT);
+  expect('const a = await import("./workflows/hello/hello.ts");').not.toMatch(
+    RELATIVE_PARENT_IMPORT,
+  );
 });
 
 // The factory code scaffolded beside the map has to be written in it, or the
@@ -140,16 +137,16 @@ test("the scaffolded factory code imports through the root-anchored map", async 
   const dir = scaffold("kappa");
   await init(dir);
 
-  const authored = ["workflows/hello.ts"];
+  const authored = ["workflows/hello/hello.ts"];
   for (const file of authored) {
     const source = readFileSync(path.join(dir, file), "utf8");
     expect(source, file).not.toMatch(RELATIVE_PARENT_IMPORT);
-    expect(source, file).toMatch(/["']#(?:jigs|blocks|steps)/);
+    expect(source, file).toMatch(/["']#jigs\/(?:steps|routines)["']/);
   }
   // The deferred loaders are registrations rather than import sites, and stay
   // relative on purpose.
   expect(readFileSync(path.join(dir, "jigs.config.ts"), "utf8")).toContain(
-    'import("./workflows/hello.ts")',
+    'import("./workflows/hello/hello.ts")',
   );
 });
 
@@ -158,10 +155,12 @@ test("the tsconfig compiles the code this factory starts with", async () => {
   await init(dir);
 
   const tsconfig = readFileSync(path.join(dir, "tsconfig.json"), "utf8");
-  expect(tsconfig).toContain('"steps"');
-  expect(tsconfig).toContain('"workflows"');
-  expect(tsconfig).toContain('"blocks"');
-  expect(tsconfig).toContain('"jigs.ts"');
+  const { include, exclude } = JSON.parse(tsconfig) as { include: string[]; exclude: string[] };
+  // A recipe's tests sit in blocks/ and nested workflow directories.
+  expect(include).toEqual(
+    expect.arrayContaining(["workflows/**/*.ts", "blocks/**/*.ts", "jigs/**/*.ts"]),
+  );
+  expect(exclude).toEqual(["node_modules", ".jigs"]);
   expect(tsconfig).toContain('"jigs.config.test.ts"');
   expect(tsconfig).toContain('"erasableSyntaxOnly": true');
 });
@@ -174,9 +173,9 @@ test("the wrappers scaffolded are the step ids this repo has recorded", async ()
   const dir = scaffold("theta");
   await init(dir);
 
-  const wrappers = readFileSync(path.join(dir, "jigs.ts"), "utf8");
+  const wrappers = readFileSync(path.join(dir, "jigs", "steps.ts"), "utf8");
   const steps = [...wrappers.matchAll(/^export async function (\w+)\(/gm)]
-    .map((match) => `step//./jigs//${match[1]}`)
+    .map((match) => `step//./jigs/steps//${match[1]}`)
     .sort();
   expect(steps).toHaveLength(30);
   const recorded = readFileSync(
@@ -184,7 +183,7 @@ test("the wrappers scaffolded are the step ids this repo has recorded", async ()
     "utf8",
   )
     .split("\n")
-    .filter((line) => line.startsWith("step//./jigs//"))
+    .filter((line) => line.startsWith("step//./jigs/steps//"))
     .sort();
   expect(recorded).toEqual(steps);
   // Every wrapper has its directive: one without it compiles clean and runs
@@ -263,7 +262,7 @@ test("the next steps are printed, not run", async () => {
     "pnpm install",
     "cp .env.example .env",
     "pnpm exec jigs up",
-    "pnpm exec jigs run hello --input message=hello",
+    "pnpm exec jigs run hello",
     "pnpm exec jigs doctor",
   ]);
   expect(printed).not.toContain("--no-doctor");

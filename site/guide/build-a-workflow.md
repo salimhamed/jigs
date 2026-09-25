@@ -17,24 +17,26 @@ pnpm exec jigs up
 ```
 
 The binding's name comes from the repository name, here `app`. A workflow that
-needs no repository can skip this and use `createRunDirectory()` for a scratch
-directory instead, as `hello` does.
+needs no repository can skip this and use `createRunDirectory()` from
+`#jigs/steps` for a scratch directory instead, as `hello` does.
 
 ## 2. Write the workflow
 
-Create `workflows/triage.ts`:
+Create `workflows/triage/triage.ts`:
 
 ```ts
-import { JigsError, type WorkflowEntry, type WorkflowInputs } from "@jigs-ai/jigs";
+import { defineWorkflow, JigsError, type WorkflowInputs } from "@jigs-ai/jigs";
 import { harnesses, models } from "@jigs-ai/jigs/blocks/agents";
 import { z } from "zod";
-import { askModel, provisionWorktree, runAgent } from "#jigs";
+import { askModel, runAgent } from "#jigs/routines";
+import { provisionWorktree } from "#jigs/steps";
 
-export const triageInputs = z.object({
+const inputs = z.object({
   binding: z.string().default("app"),
   report: z.string().min(1),
 });
 
+const agents = { investigator: harnesses.claude("sonnet") };
 const summarizer = models.openrouter("google/gemini-2.5-flash-lite");
 
 const verdict = z.object({
@@ -43,18 +45,18 @@ const verdict = z.object({
   summary: z.string(),
 });
 
-export async function triageWorkflow(inputs: WorkflowInputs<typeof triageInputs>) {
+export async function triage(input: WorkflowInputs<typeof inputs>) {
   "use workflow";
 
   const worktree = await provisionWorktree({
-    binding: inputs.binding,
-    branch: `triage/${inputs.triggerId}`,
+    binding: input.binding,
+    branch: `triage/${input.triggerId}`,
   });
 
   const investigation = await runAgent({
-    harness: harnesses.claude("sonnet"),
+    harness: agents.investigator,
     cwd: worktree.path,
-    prompt: `Investigate this bug report. Try to reproduce it and find the cause. Do not change files.\n\n${inputs.report}`,
+    prompt: `Investigate this bug report. Try to reproduce it and find the cause. Do not change files.\n\n${input.report}`,
   });
 
   const result = await askModel({
@@ -72,23 +74,25 @@ export async function triageWorkflow(inputs: WorkflowInputs<typeof triageInputs>
   return result.output;
 }
 
-export default {
-  workflow: triageWorkflow,
-  inputs: triageInputs,
-  requires: { bindings: ["app"], harnesses: ["claude"], models: [summarizer] },
-} satisfies WorkflowEntry<typeof triageInputs>;
+export default defineWorkflow({
+  inputs,
+  requires: { agents, bindings: ["app"], models: [summarizer] },
+  workflow: triage,
+});
 ```
 
 What each part does:
 
-- **`triageInputs`** is a zod schema. `jigs run` checks `--input` values against
+- **`inputs`** is a zod schema. `jigs run` checks `--input` values against
   it before a run is created. jigs also adds `triggerId`, an ID unique to the
   run, which here gives each run its own branch.
 - **`"use workflow"`** marks the function as a durable workflow. Its body must
   be safe to replay, so all real work happens in the steps it calls.
+- **`agents`** names each agent the workflow runs, by the part it plays. A
+  harness descriptor is plain data, so it can be passed to a step.
 - **`provisionWorktree`** cuts a worktree for this run from the binding's clone,
   on the branch you name. A resumed run gets the same worktree back.
-- **`runAgent`** runs a harness, here Claude Code, in that directory with its
+- **`runAgent`** runs an agent, here Claude Code, in that directory with its
   tools. `result.text` is its final answer. Pass `output` a zod schema to get a
   parsed `result.output` instead.
 - **`askModel`** calls a model API directly, with no tools and no directory. It
@@ -96,9 +100,13 @@ What each part does:
   checks the answer's shape, not whether it is right.
 - **`JigsError`** ends the run as failed, with a hint for whoever reads it.
   Returning a value always means success.
-- **`requires`** lists what the workflow needs: the binding, the harness CLI and
-  the model source. Preflight checks each one before every run and refuses to
-  start with a repair when one is missing. `jigs doctor` runs the same checks.
+- **`defineWorkflow`** ties the function, its inputs and its requirements
+  together, and makes TypeScript check the function's parameter against the
+  schema. It is the file's default export.
+- **`requires`** lists what the workflow needs: its agents, the binding and the
+  model source. jigs derives the harness CLIs to check from the agents.
+  Preflight checks each one before every run and refuses to start with a repair
+  when one is missing. `jigs doctor` runs the same checks.
 
 This model source reads `OPENROUTER_API_KEY` from the factory's `.env`. See
 [Models and harnesses](/guide/models-and-harnesses) for the other harnesses and
@@ -110,8 +118,8 @@ Add the workflow to the `workflows` map in `jigs.config.ts`:
 
 ```ts
 workflows: {
-  hello: () => import("./workflows/hello.ts"),
-  triage: () => import("./workflows/triage.ts"),
+  hello: () => import("./workflows/hello/hello.ts"),
+  triage: () => import("./workflows/triage/triage.ts"),
 },
 ```
 
@@ -140,9 +148,10 @@ Claiming also makes sure only one run works on a ticket at a time:
 
 ```ts
 import { claimTicket } from "@jigs-ai/jigs/blocks/linear";
-import { haltForHuman, resolveLinearIssue } from "#jigs";
+import { haltForHuman } from "#jigs/routines";
+import { resolveLinearIssue } from "#jigs/steps";
 
-const issue = await resolveLinearIssue(inputs.ticket);
+const issue = await resolveLinearIssue(input.ticket);
 const claim = await claimTicket(issue.id, issue.identifier);
 
 const reply = await haltForHuman(claim, {
@@ -159,7 +168,7 @@ const reply = await haltForHuman(claim, {
 // reply.body is the person's answer, as free text.
 ```
 
-Add `ticket: z.string()` to `triageInputs` and `integrations: ["linear"]` to
+Add `ticket: z.string()` to `inputs` and `integrations: ["linear"]` to
 `requires`.
 `jigs status <run-id>` shows the question and the link to answer it. The run
 notices a reply on its next [check](/guide/configuration#webhooks);
@@ -172,7 +181,7 @@ Answer the existing run rather than starting another one.
 anything else a person may need to find with `registerResource`:
 
 ```ts
-import { registerResource } from "#jigs";
+import { registerResource } from "#jigs/steps";
 
 await registerResource({
   kind: "s3-report",

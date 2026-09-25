@@ -63,7 +63,7 @@ The service hosts its own dashboard. Do not run the Workflow SDK's
 | Command | What it does |
 | --- | --- |
 | `jigs build` | Compile the workflows into the service bundle. `jigs up` runs it for you. |
-| `jigs generate` | Refresh the generated `jigs.ts` from the installed jigs version. |
+| `jigs generate` | Refresh the generated `jigs/steps.ts` and `jigs/routines.ts` from the installed jigs version. |
 | `jigs poke <run>` | Make a waiting run check its condition now. It does not answer the wait for it. |
 
 ## Choosing a run
@@ -95,7 +95,7 @@ it and run `jigs up` again.
 
 `jigs upgrade` moves the factory's jigs pin to the latest release, or to
 `--to-version <version>`. Then, using the newly installed version, it
-regenerates `jigs.ts`, runs `jigs up` and runs the factory's typecheck. Review
+regenerates `jigs/`, runs `jigs up` and runs the factory's typecheck. Review
 and commit the changes it makes. Your workflows and copied recipes are yours to
 update: a new release can change an API they use, and the typecheck tells you
 where.

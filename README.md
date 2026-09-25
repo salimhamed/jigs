@@ -27,7 +27,7 @@ pnpm exec jigs up
 listing what it started, with the dashboard URL. Then run the starter workflow:
 
 ```sh
-pnpm exec jigs run hello --input message=hello
+pnpm exec jigs run hello
 pnpm exec jigs status
 ```
 

@@ -14,7 +14,7 @@ import { locateTemplates, packageRoot, TEMPLATE_SUFFIX } from "../templates.ts";
 
 // Scaffolds infrastructure, editable factory code, and the committed generated
 // integration. Existing files are preserved; `jigs generate` explicitly
-// refreshes jigs.ts. `jigs up` owns operations on the machine.
+// refreshes jigs/. `jigs up` owns operations on the machine.
 
 /** Which GitHub credential the scaffolded factory is written for. */
 export type IdentityMode = "pat" | "app";
@@ -143,7 +143,7 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   deps.out("  pnpm install");
   deps.out("  cp .env.example .env    # then fill in what your workflows need");
   deps.out("  pnpm exec jigs up       # start Postgres and the service; ends by running doctor");
-  deps.out("  pnpm exec jigs run hello --input message=hello");
+  deps.out("  pnpm exec jigs run hello");
   deps.out("  pnpm exec jigs doctor   # re-check what your workflows need, any time");
 
   return { created, skipped, ...ports };

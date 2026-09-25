@@ -21,8 +21,8 @@ const DRAIN_MS = 1_000;
 
 const fixtureSource = `import { appendFileSync, existsSync } from "node:fs";
 import { setTimeout as wait } from "node:timers/promises";
-import type { WorkflowEntry, WorkflowInputs } from "@jigs-ai/jigs";
-import { createRunDirectory } from "#jigs";
+import { defineWorkflow, type WorkflowInputs } from "@jigs-ai/jigs";
+import { createRunDirectory } from "#jigs/steps";
 import { RetryableError, sleep } from "workflow";
 import { z } from "zod";
 
@@ -76,11 +76,11 @@ export async function cancelE2eWorkflow(inputs: WorkflowInputs<typeof cancelE2eI
   await record(inputs.marker, "turbo-successor");
 }
 
-export default {
-  workflow: cancelE2eWorkflow,
+export default defineWorkflow({
   inputs: cancelE2eInputs,
   release: { onSuccess: "release", onFailure: "keep" },
-} satisfies WorkflowEntry<typeof cancelE2eInputs>;
+  workflow: cancelE2eWorkflow,
+});
 `;
 
 export function installCompiledCancellationFixture(factory, ports) {

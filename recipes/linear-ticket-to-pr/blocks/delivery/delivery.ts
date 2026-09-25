@@ -11,11 +11,11 @@ import {
   renderChecks,
 } from "@jigs-ai/jigs/blocks/pull-requests";
 import type { z } from "zod";
+import { pullRequestGate, runAgent } from "#jigs/routines";
 import {
   commentOnPullRequest,
   mergePullRequest,
   openPullRequest,
-  pullRequestGate,
   pushApprovedChange,
   pushBranch,
   readBranchState,
@@ -23,8 +23,7 @@ import {
   registerResource,
   replyToPullRequestReviewThread,
   resolveRepository,
-  runAgent,
-} from "#jigs";
+} from "#jigs/steps";
 import { pullRequestDescription, type ThreadAnswers, threadAnswers } from "./outputs.ts";
 import {
   defaultCiRepairPrompt,

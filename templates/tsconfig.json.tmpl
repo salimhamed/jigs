@@ -14,14 +14,13 @@
     "plugins": [{ "name": "workflow" }]
   },
   "include": [
-    "workflows",
-    "blocks",
-    "steps",
-    "jigs.ts",
-    ".jigs",
+    "workflows/**/*.ts",
+    "blocks/**/*.ts",
+    "jigs/**/*.ts",
     "jigs.config.ts",
     "jigs.config.test.ts",
     "nitro.config.ts",
     "vitest.config.ts"
-  ]
+  ],
+  "exclude": ["node_modules", ".jigs"]
 }

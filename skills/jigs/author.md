@@ -1,7 +1,7 @@
 # Author a workflow
 
-Work in the factory repo. Read its `jigs.config.ts`, generated `jigs.ts`,
-`workflows/`, and `blocks/` and `steps/` if present, before editing. The
+Work in the factory repo. Read its `jigs.config.ts`, the generated
+`jigs/steps.ts` and `jigs/routines.ts`, and `workflows/` before editing. The
 installed `node_modules/@jigs-ai/jigs/templates/` is the bare scaffold for that
 version; its only workflow is `hello`.
 
@@ -14,21 +14,26 @@ The guides, in the order you need them:
 For the linear-ticket-to-pr process, run `jigs recipe add linear-ticket-to-pr`. It adds
 `"linear-ticket-to-pr": () => import("./workflows/linear-ticket-to-pr.ts"),` to the config's `workflows` map,
 preserves existing files and reports created/kept paths. Recipes
-become editable factory source; upgrades only regenerate `jigs.ts`.
+become editable factory source; upgrades only regenerate `jigs/`.
 
 ## Code responsibilities
 
 - A workflow is a named process with a `"use workflow"` async function.
 - A block coordinates durable steps and makes replay-safe decisions. It has no
   directive. No filesystem, network, environment reads, or Node built-ins.
-- A step has `"use step"` and performs work the runtime records. Keep custom
-  steps in `steps/`; their implementations may use Node and external services.
-- `jigs.ts` is generated and committed. Import built-in steps and bound blocks
-  from it as `#jigs`. Never add custom behavior or prompts there. `jigs generate`
-  refreshes it; builds check for drift and upgrades regenerate it automatically.
-- Imports are anchored at the factory root by the `imports` map in its
-  `package.json`: `#jigs`, `#blocks/<path>`, `#steps/<path>`, never `../`. The
-  deferred workflow loaders in `jigs.config.ts` stay relative.
+- A step has `"use step"` and performs work the runtime records. Keep a
+  workflow's own steps in a `steps.ts` in its directory; their implementations
+  may use Node and external services.
+- A routine is a function a workflow calls that runs steps and may wait, such
+  as `runAgent`, `reviewTicket` or `pullRequestGate`.
+- `jigs/` is generated and committed. `jigs/steps.ts` holds every built-in step
+  and is the only generated file with `"use step"`; `jigs/routines.ts` holds the
+  routines bound to them. Import them as `#jigs/steps` and `#jigs/routines`.
+  Never edit either. `jigs generate` refreshes them; builds check for drift and
+  upgrades regenerate them automatically.
+- Each workflow lives in its own directory, `workflows/<name>/<name>.ts`, with
+  its own files beside it, imported with `./` paths. The deferred workflow
+  loaders in `jigs.config.ts` stay relative.
 
 A workflow calls blocks and steps. A step calls an implementation. Only the
 factory carries directives, so library version changes do not rename its steps.
@@ -51,22 +56,25 @@ its Markdown paths mirror the package import paths.
 
 ## Add a workflow
 
-1. Write `workflows/<name>.ts` with a zod input schema and an exported async
-   function whose first statement is `"use workflow"`.
+1. Write `workflows/<name>/<name>.ts` with a zod input schema and an exported
+   async function whose first statement is `"use workflow"`.
 2. Type inputs as `WorkflowInputs<typeof inputs>`. Only `triggerId` is injected.
    Resolve and claim tickets explicitly in factory code; a `ticket` input has no special behavior.
-3. Default-export `{ workflow: functionName, inputs, requires }` from the module.
-4. Register `name: () => import("./workflows/<name>.ts")` in the config's
+3. Default-export `defineWorkflow({ inputs, requires, workflow: functionName })`,
+   importing `defineWorkflow` from `@jigs-ai/jigs`. Name each agent the
+   workflow runs in `requires.agents`, as a plain object of harness
+   descriptors; jigs checks the harness CLIs those agents use.
+4. Register `name: () => import("./workflows/<name>/<name>.ts")` in the config's
    `workflows` object. Keep imports deferred so operating commands don't load
    workflow code.
 5. Build and test the factory. Its config test checks the emitted durable IDs.
 
 The service automatically applies the effective release policy after a run is
 terminal. The default is `{ onSuccess: "release", onFailure: "keep" }`; set
-`release` on the factory config or workflow entry. Failed and cancelled runs
+`release` on the factory config or in `defineWorkflow`. Failed and cancelled runs
 both use `onFailure`. Live and suspended runs retain their resources.
 
-Call `await release()` from `#jigs` as the workflow's last successful action
+Call `await release()` from `#jigs/routines` as the workflow's last successful action
 when it needs a report before returning. `release(policy)` persists the
 callsite's success choice, so an explicit keep is not reversed by automatic
 cleanup. Failed cleanup stays visible in `jigs status <run-id>`, is retried by the
@@ -125,14 +133,15 @@ For different durable behavior, write a named custom `"use step"` function and
 bind the appropriate module: `bindAgentSteps` from
 `@jigs-ai/jigs/blocks/agents`, `bindLinearSteps` from
 `@jigs-ai/jigs/blocks/linear`, or `bindPullRequestSteps` from
-`@jigs-ai/jigs/blocks/pull-requests`. Generated integration exports each
-module's dependencies for selective replacement. Keep functions workflow-side;
+`@jigs-ai/jigs/blocks/pull-requests`. The generated files export only what a
+workflow calls, so pass your own step alongside the generated ones from
+`#jigs/steps`. Keep functions workflow-side;
 never send a prompt or callback through a durable step argument.
 
 ### Record a custom resource
 
 After a workflow creates something an operator may need to find, call the
-generated `registerResource({ kind, identity, url })` step from `#jigs`. Kind
+generated `registerResource({ kind, identity, url })` step from `#jigs/steps`. Kind
 plus identity is stable: retrying the same URL is idempotent, while a later URL
 updates that identity. `jigs status <run-id>` reads these records independently of the
 workflow's result.

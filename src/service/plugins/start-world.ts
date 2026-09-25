@@ -6,7 +6,7 @@
 
 import type { World } from "@workflow/world";
 import { WorkflowRunNotFoundError } from "workflow/errors";
-import type { AnyWorkflowEntry, FactoryDefinition } from "../../blocks/factory.ts";
+import type { FactoryDefinition, WorkflowDefinition } from "../../blocks/factory.ts";
 import type { HarnessKind, HarnessRuntime } from "../../checks/harness-runtime.ts";
 import type { WebhooksConfig } from "../../config/factory-config.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
@@ -31,7 +31,7 @@ async function configuredHarnesses(): Promise<Map<HarnessKind, string[]>> {
   const definition = readFactoryConfig(factoryRoot()) as unknown as FactoryDefinition;
   const entries = await Promise.all(
     Object.entries(definition.workflows).map(
-      async ([name, load]): Promise<[string, AnyWorkflowEntry]> => [name, (await load()).default],
+      async ([name, load]): Promise<[string, WorkflowDefinition]> => [name, (await load()).default],
     ),
   );
   return harnessUsers(Object.fromEntries(entries));

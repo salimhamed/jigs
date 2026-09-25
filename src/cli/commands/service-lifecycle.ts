@@ -171,7 +171,7 @@ export function builtBundleHash(factoryRoot: string): string | undefined {
 // What `jigs build` compiles into the bundle. An edit to one of them that was
 // never built is invisible at run time: the service keeps executing the bundle
 // it booted from.
-const WORKFLOW_SOURCES = ["jigs.config.ts", "jigs.ts", "workflows", "blocks", "steps"];
+const WORKFLOW_SOURCES = ["jigs.config.ts", "jigs", "workflows", "blocks", "steps"];
 
 // A test file beside a workflow is compiled into no bundle, so editing one
 // leaves the build current.

@@ -112,7 +112,7 @@ Resources:
 
 Generated code:
   build                     Compile workflows into the service bundle
-  generate                  Refresh the generated jigs.ts
+  generate                  Refresh the generated jigs/ directory
 
 Run selectors accept a complete run ID, unique ID prefix, ticket ID such as
 AGE-123, or a supported ticket UUID. In a factory, run every command as
@@ -197,7 +197,7 @@ recipe
 
 program
   .command("generate")
-  .description("refresh the committed jigs.ts integration from the factory's installed jigs")
+  .description("refresh the generated jigs/ directory from the factory's installed jigs")
   .action(async () => {
     await generateIntegration({ cwd: process.cwd(), out });
   });

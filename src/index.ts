@@ -11,9 +11,9 @@
 export { JigsError } from "./blocks/errors.ts";
 export {
   type AgentsDefinition,
-  type AnyWorkflowEntry,
   type BindingDefinition,
   defineFactory,
+  defineWorkflow,
   type Factory,
   type FactoryDefinition,
   type GitHubDefinition,
@@ -23,7 +23,7 @@ export {
   type TicketWorkflowInputs,
   ticketInputSchema,
   type WebhooksDefinition,
-  type WorkflowEntry,
+  type WorkflowDefinition,
   type WorkflowInputs,
 } from "./blocks/factory.ts";
 export type { Worktree } from "./blocks/workspaces/worktree.ts";

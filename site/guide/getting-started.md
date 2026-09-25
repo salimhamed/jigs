@@ -52,7 +52,7 @@ pnpm holds back packages published in the last day. The flag lets you get the
 newest jigs, and it applies only to jigs.
 
 `init` writes the starting files and prints the next steps. It does not start
-anything. `workflows/hello.ts` is the first workflow, and `jigs.config.ts`
+anything. `workflows/hello/hello.ts` is the first workflow, and `jigs.config.ts`
 registers it under the name `hello`.
 
 ## 3. Start the service
@@ -90,7 +90,7 @@ Postgres running; `pnpm exec jigs down` stops both and keeps Postgres's data.
 ## 4. Run hello
 
 ```sh
-pnpm exec jigs run hello --input message=hello
+pnpm exec jigs run hello
 pnpm exec jigs status
 ```
 

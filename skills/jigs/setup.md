@@ -43,8 +43,8 @@ key path and the operator's login; approval is then a GitHub review.
 `--linear-identity-mode key|app` does the same for Linear. Both are written to
 `jigs.config.ts`, so changing one later is a config edit.
 
-`jigs init` writes `jigs.config.ts`, the generated `jigs.ts`, a `hello`
-workflow, the package manifest, Docker Compose, `.env.example` and build
+`jigs init` writes `jigs.config.ts`, the generated `jigs/steps.ts` and
+`jigs/routines.ts`, a `hello` workflow in `workflows/hello/hello.ts`, the package manifest, Docker Compose, `.env.example` and build
 settings. It preserves existing files. Its printed ports come from the factory
 path; adjust them in `jigs.config.ts` if they are taken.
 
@@ -105,7 +105,7 @@ in-flight runs.
 Then:
 
 ```sh
-jigs run hello --input message=hello
+jigs run hello
 jigs status
 ```
 
@@ -147,5 +147,9 @@ configuration guide's webhooks section has the steps.
 jigs upgrade
 ```
 
-It bumps jigs, regenerates `jigs.ts`, runs `jigs up` and typechecks the
-factory. Review and commit the regenerated `jigs.ts`.
+It bumps jigs, regenerates `jigs/`, runs `jigs up` and typechecks the
+factory. Review and commit the regenerated `jigs/steps.ts` and
+`jigs/routines.ts`. From a release that generated `jigs.ts`, it also deletes
+that file and replaces `#jigs`, `#blocks/*` and `#steps/*` in `package.json`
+imports with `#jigs/*`; move the factory's `#jigs` imports to `#jigs/steps` and
+`#jigs/routines` by hand.

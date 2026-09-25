@@ -1,0 +1,13 @@
+import { defineWorkflow, type WorkflowInputs } from "@jigs-ai/jigs";
+import { z } from "zod";
+import { createRunDirectory } from "#jigs/steps";
+
+const inputs = z.object({});
+
+/** Create this run's directory: proves a step runs with no repository, ticket, agent or credentials. */
+export async function hello(_input: WorkflowInputs<typeof inputs>) {
+  "use workflow";
+  return await createRunDirectory();
+}
+
+export default defineWorkflow({ inputs, workflow: hello });

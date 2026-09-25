@@ -19,6 +19,6 @@ export default defineFactory({
   // These loaders stay relative: they register workflow files for the build,
   // rather than being import sites factory code reads from.
   workflows: {
-    hello: () => import("./workflows/hello.ts"),
+    hello: () => import("./workflows/hello/hello.ts"),
   },
 });

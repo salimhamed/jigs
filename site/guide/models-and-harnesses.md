@@ -15,7 +15,7 @@ models.openrouter("google/gemini-2.5-flash-lite");
 
 ## The four verbs
 
-Import them from `#jigs`.
+Import them from `#jigs/routines`.
 
 | Verb | Takes | Use it to |
 | --- | --- | --- |
@@ -29,10 +29,25 @@ answers). An agent result can carry a `session`; pass it as `resume` to a later
 `runAgent` to continue that conversation. Give an independent reviewer its own
 session, and never share one between harnesses.
 
-Add each harness a workflow runs to its `requires.harnesses`, and each model
-source it calls to `requires.models`. The service checks those harness CLIs when
-it starts, and preflight checks everything listed before each run. A factory
-whose workflows use no harness needs none installed.
+Name each agent a workflow runs in its `requires.agents`, and add each model
+source it calls to `requires.models`:
+
+```ts
+const agents = {
+  builder: harnesses.codex("gpt-5.6-sol"),
+  reviewer: harnesses.claude("opus"),
+};
+
+export default defineWorkflow({
+  inputs,
+  requires: { agents, models: [summarizer] },
+  workflow: ship,
+});
+```
+
+jigs reads the harness kinds from the agents. The service checks those harness
+CLIs when it starts, and preflight checks everything listed before each run. A
+factory whose workflows run no agent needs no harness installed.
 
 jigs does not track spend. Watch it in each provider's own dashboard.
 
@@ -96,7 +111,7 @@ returns probabilities rather than prose:
 
 ```ts
 import { models, score, yesNo } from "@jigs-ai/jigs/blocks/agents";
-import { askJev } from "#jigs";
+import { askJev } from "#jigs/routines";
 
 const result = await askJev({
   model: models.openrouter("typesafe/jev-1.13"),

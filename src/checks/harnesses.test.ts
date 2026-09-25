@@ -1,6 +1,7 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
+import { harnesses } from "../blocks/agents/harness-config.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import type { CheckResult } from "./catalog.ts";
 import {
@@ -204,12 +205,20 @@ test("the CLI check fails with the same line as the reason, and the PATH caveat 
   expect(failure.repair).toContain("same PATH as your shell");
 });
 
-test("harness users are read from each workflow's requires", () => {
+test("harness users are derived from each workflow's agents", () => {
   expect(
     harnessUsers({
       hello: {},
-      review: { requires: { harnesses: ["claude", "claude"] } },
-      ship: { requires: { harnesses: ["codex", "claude"] } },
+      review: {
+        requires: {
+          agents: { reviewer: harnesses.claude("opus"), second: harnesses.claude("sonnet") },
+        },
+      },
+      ship: {
+        requires: {
+          agents: { builder: harnesses.codex("gpt-5.5"), reviewer: harnesses.claude("opus") },
+        },
+      },
     }),
   ).toEqual(
     new Map([

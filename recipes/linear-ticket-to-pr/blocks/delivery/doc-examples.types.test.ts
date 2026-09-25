@@ -1,7 +1,7 @@
 // The examples in README.md beside this file, kept compiling by tsc. A doc
 // example that does not typecheck is worse than no example: a factory author
 // pastes it and the failure is theirs. Two edits from the README. The import
-// line: a factory reaches its bound operations at `#jigs`, which resolves
+// line: a factory reaches its bound operations at `#jigs/*`, which resolves
 // through the factory's own package.json imports map and cannot resolve here,
 // so the operations are declared from the binder's return type instead. And
 // `onlyApprovedWorkPublishes`, which has no counterpart in the README: it
