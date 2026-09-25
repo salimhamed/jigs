@@ -3,7 +3,7 @@
 // forbidden. The credential comes from github-auth.ts, whichever identity the
 // factory configured.
 
-import type { MergeMethod } from "../workflow/pull-requests/policy.ts";
+import type { MergeMethod } from "../config/factory-config.ts";
 import type {
   CheckRun,
   PullRequestSnapshot,
@@ -184,7 +184,10 @@ function groupThreads(
   return [...byRoot.values()];
 }
 
-export async function fetchPrSnapshot(pr: PullRequestRef): Promise<PullRequestSnapshot> {
+// Approval is left to the caller: reading it needs the factory's configured signal.
+export async function fetchPrSnapshot(
+  pr: PullRequestRef,
+): Promise<Omit<PullRequestSnapshot, "approval">> {
   const repoPath = `/repos/${pr.owner}/${pr.repo}`;
   const prPath = `${repoPath}/pulls/${pr.number}`;
   const pull = await githubGet<{

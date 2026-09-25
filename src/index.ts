@@ -141,13 +141,9 @@ export {
 } from "./workflow/pull-requests/marker.ts";
 export { isPullRequestMergeReady } from "./workflow/pull-requests/merge-ready.ts";
 export {
-  APPROVED_LABEL,
-  type MergeApproval,
-  type MergeMethod,
-  type MergeSettings,
-} from "./workflow/pull-requests/policy.ts";
-export {
+  type ApprovalState,
   type CheckRun,
+  type PullRequestApproval,
   type PullRequestComment,
   type PullRequestReview,
   type PullRequestSnapshot,

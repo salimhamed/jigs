@@ -57,8 +57,8 @@ beforeEach(() => {
 });
 
 const prSnapshot = (
-  patch: Partial<github.PullRequestSnapshot> = {},
-): github.PullRequestSnapshot => ({
+  patch: Partial<Omit<github.PullRequestSnapshot, "approval">> = {},
+): Omit<github.PullRequestSnapshot, "approval"> => ({
   state: "open",
   merged: false,
   draft: false,

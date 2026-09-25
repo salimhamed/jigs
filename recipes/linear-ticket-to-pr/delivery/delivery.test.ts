@@ -35,7 +35,6 @@ vi.mock("#jigs/steps", async (importOriginal) => ({
   readBranchState: vi.fn(),
   readWorktreeDiff: vi.fn(async () => "diff --git a/x b/x"),
   registerResource: vi.fn(),
-  resolveMergeSettings: vi.fn(),
 }));
 vi.mock("workflow", () => ({
   createHook: vi.fn(),
@@ -107,9 +106,8 @@ function watch(...wakes: PullRequestSnapshot[]) {
     yield* wakes;
   });
 }
-const policy = (by: Delivery["mergedBy"]) => {
+const mergesBy = (by: Delivery["mergedBy"]) => {
   delivery.mergedBy = by;
-  vi.mocked(steps.resolveMergeSettings).mockResolvedValue({ method: "squash", approval: "review" });
 };
 
 const stopped = (promise: Promise<unknown>) =>
@@ -226,6 +224,12 @@ const snapshot: PullRequestSnapshot = {
   ],
   reviewThreads: [],
   conversationComments: [],
+  approval: { signal: "review", state: "approved" },
+};
+const unapproved: PullRequestSnapshot = {
+  ...snapshot,
+  reviews: [],
+  approval: { signal: "review", state: "none" },
 };
 const closed = { ...snapshot, state: "closed" as const, merged: true };
 const finished = { status: "finished", summary: "All requests addressed." };
@@ -235,7 +239,7 @@ const builder = () =>
 const follow = (config = delivery) => followPullRequest(config, pr, builder());
 
 test("the implementation builder resumes to judge the PR and merges only after GitHub readiness", async () => {
-  policy("jigs");
+  mergesBy("jigs");
   answer(implementationReport, { responses: [] });
   answer(reviewVerdict, { verdict: "approved", findings: [] });
   answer(maintenanceReport, finished);
@@ -248,15 +252,11 @@ test("the implementation builder resumes to judge the PR and merges only after G
   expect(calls[2]?.harness).toBe(delivery.builder);
   expect(calls[2]?.resumed).toBe(true);
   expect(calls[2]?.prompt).not.toContain("THE TASK BRIEF");
-  expect(steps.mergePullRequest).toHaveBeenCalledWith(
-    pr,
-    "h1",
-    expect.objectContaining({ method: "squash" }),
-  );
+  expect(steps.mergePullRequest).toHaveBeenCalledWith(worktree, pr, "h1");
 });
 
 test("an unavailable session gets the task, local diff and PR facts in a fresh prompt", async () => {
-  policy("human");
+  mergesBy("human");
   answer(maintenanceReport, finished);
   watch(snapshot, closed);
   await follow();
@@ -277,7 +277,7 @@ const stoppedMaintenance = async (promise: Promise<unknown>) => {
 };
 
 test("attempt allowance resets for every update and permits more than six updates", async () => {
-  policy("human");
+  mergesBy("human");
   const updates = Array.from({ length: 8 }, (_, i) => ({ ...snapshot, labels: [`update-${i}`] }));
   answer(maintenanceReport, ...updates.map(() => finished));
   watch(...updates, closed);
@@ -287,7 +287,7 @@ test("attempt allowance resets for every update and permits more than six update
 });
 
 test("a human merger means jigs never merges", async () => {
-  policy("human");
+  mergesBy("human");
   answer(maintenanceReport, finished);
   watch(snapshot, closed);
   await follow();
@@ -295,7 +295,7 @@ test("a human merger means jigs never merges", async () => {
 });
 
 test("closed snapshots run no agent and closing without merging stops without a push", async () => {
-  policy("human");
+  mergesBy("human");
   watch({ ...closed, merged: false });
   const error = await stoppedMaintenance(follow());
   expect(error.findings[0]).toContain("closed unmerged");
@@ -303,7 +303,7 @@ test("closed snapshots run no agent and closing without merging stops without a 
 });
 
 test.each(["pending", "needs-human"])("%s does not authorize a merge", async (status) => {
-  policy("jigs");
+  mergesBy("jigs");
   answer(maintenanceReport, { status, summary: "Waiting for a decision." });
   watch(snapshot, closed);
   if (status === "needs-human") await stoppedMaintenance(follow());
@@ -311,21 +311,20 @@ test.each(["pending", "needs-human"])("%s does not authorize a merge", async (st
   expect(steps.mergePullRequest).not.toHaveBeenCalled();
 });
 
-test.each([
-  { ...snapshot, ci: "red" as const },
-  { ...snapshot, reviews: [] },
-  { ...snapshot, draft: true },
-])("agent completion cannot replace GitHub readiness %#", async (state) => {
-  policy("jigs");
-  answer(maintenanceReport, finished);
-  watch(state, closed);
-  vi.mocked(steps.fetchPullRequestState).mockResolvedValue(state);
-  await follow();
-  expect(steps.mergePullRequest).not.toHaveBeenCalled();
-});
+test.each([{ ...snapshot, ci: "red" as const }, unapproved, { ...snapshot, draft: true }])(
+  "agent completion cannot replace GitHub readiness %#",
+  async (state) => {
+    mergesBy("jigs");
+    answer(maintenanceReport, finished);
+    watch(state, closed);
+    vi.mocked(steps.fetchPullRequestState).mockResolvedValue(state);
+    await follow();
+    expect(steps.mergePullRequest).not.toHaveBeenCalled();
+  },
+);
 
 test("a successful push aligning local and published heads defers merging the new code", async () => {
-  policy("jigs");
+  mergesBy("jigs");
   answer(maintenanceReport, () => {
     at("h2");
     return finished;
@@ -339,16 +338,16 @@ test("a successful push aligning local and published heads defers merging the ne
 });
 
 test("new feedback arriving during the agent turn must be judged before merging", async () => {
-  policy("jigs");
+  mergesBy("jigs");
   answer(maintenanceReport, finished);
   watch(snapshot, closed);
-  vi.mocked(steps.fetchPullRequestState).mockResolvedValue({ ...snapshot, reviews: [] });
+  vi.mocked(steps.fetchPullRequestState).mockResolvedValue(unapproved);
   await follow();
   expect(steps.mergePullRequest).not.toHaveBeenCalled();
 });
 
 test("a failed merge stops clearly without an automatic push", async () => {
-  policy("jigs");
+  mergesBy("jigs");
   answer(maintenanceReport, finished);
   watch(snapshot);
   vi.mocked(steps.mergePullRequest).mockRejectedValue(new Error("GitHub 502"));
@@ -366,7 +365,7 @@ test("a failed implementation preservation push does not hide why delivery stopp
 });
 
 test("reordered GitHub collections do not prevent a ready merge", async () => {
-  policy("jigs");
+  mergesBy("jigs");
   answer(maintenanceReport, finished);
   const state = { ...snapshot, labels: ["one", "two"] };
   watch(state);
@@ -379,7 +378,7 @@ test("reordered GitHub collections do not prevent a ready merge", async () => {
 test.each(["jigs", "human"] as const)(
   "a forgotten push recovers immediately in %s mode without another watcher yield",
   async (by) => {
-    policy(by);
+    mergesBy(by);
     let published = "h1";
     vi.mocked(steps.fetchPullRequestState).mockImplementation(async () => ({
       ...snapshot,
@@ -408,7 +407,7 @@ test.each(["jigs", "human"] as const)(
 );
 
 test("remote branch advancement is recovered immediately with current GitHub facts", async () => {
-  policy("human");
+  mergesBy("human");
   const advanced = { ...snapshot, headSha: "h3" };
   vi.mocked(steps.fetchPullRequestState).mockResolvedValue(advanced);
   answer(maintenanceReport, finished, () => {
@@ -423,7 +422,7 @@ test("remote branch advancement is recovered immediately with current GitHub fac
 });
 
 test("dirty work is recovered immediately without waiting or another watcher yield", async () => {
-  policy("human");
+  mergesBy("human");
   answer(
     maintenanceReport,
     () => {
@@ -445,7 +444,7 @@ test("dirty work is recovered immediately without waiting or another watcher yie
 test.each(["dirty", "unpublished"])(
   "persistent %s state exhausts only this update's allowance and preserves local work",
   async (kind) => {
-    policy("human");
+    mergesBy("human");
     at(kind === "dirty" ? "h1" : "h2", kind === "dirty");
     answer(maintenanceReport, finished, finished);
     watch(snapshot);
@@ -460,7 +459,7 @@ test.each(["dirty", "unpublished"])(
 );
 
 test("GitHub head lag resolves during bounded rechecks without another agent attempt", async () => {
-  policy("human");
+  mergesBy("human");
   at("h2");
   answer(maintenanceReport, finished);
   watch(snapshot, closed);
@@ -477,7 +476,7 @@ test("GitHub head lag resolves during bounded rechecks without another agent att
 test.each([true, false])(
   "PR closure while rechecking mismatched heads is handled (merged=%s)",
   async (merged) => {
-    policy("human");
+    mergesBy("human");
     at("h2");
     answer(maintenanceReport, finished);
     watch(snapshot);
@@ -492,7 +491,7 @@ test.each([true, false])(
 );
 
 test("needs-human with mismatched local state stops without publishing or spending recovery attempts", async () => {
-  policy("human");
+  mergesBy("human");
   at("h2", true);
   answer(maintenanceReport, { status: "needs-human", summary: "Credentials unavailable." });
   watch(snapshot);
@@ -503,7 +502,7 @@ test("needs-human with mismatched local state stops without publishing or spendi
 });
 
 test("a fresh recovery prompt includes the same actionable facts when no session survives", async () => {
-  policy("human");
+  mergesBy("human");
   const run = vi
     .fn()
     .mockImplementationOnce(async (turn) => {
@@ -546,7 +545,7 @@ async function useRealWatcher(states: PullRequestSnapshot[]) {
 }
 
 test("real watcher does not repeat facts already assessed during recovery but delivers genuinely new facts", async () => {
-  policy("human");
+  mergesBy("human");
   const recovered = { ...snapshot, headSha: "h2" };
   const changed = { ...recovered, labels: ["new-feedback"] };
   // Initial watch, turn read, two lag checks, recovery read, watch of the
@@ -582,7 +581,7 @@ test("real watcher does not repeat facts already assessed during recovery but de
 });
 
 test("real watcher still runs the builder for unseen facts first fetched after its turn", async () => {
-  policy("human");
+  mergesBy("human");
   const changed = { ...snapshot, labels: ["unseen-feedback"] };
   const hook = await useRealWatcher([snapshot, changed, changed, changed, closed]);
   answer(maintenanceReport, finished, finished);
@@ -595,7 +594,7 @@ test("real watcher still runs the builder for unseen facts first fetched after i
 });
 
 test("maintenance failure note names the retained path once and directs takeover of the existing PR", async () => {
-  policy("human");
+  mergesBy("human");
   watch(snapshot);
   answer(maintenanceReport, { status: "needs-human", summary: "Please inspect the conflict." });
   const error = await stoppedMaintenance(follow());

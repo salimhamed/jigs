@@ -9,6 +9,7 @@ import type {
   AgentRequest,
   AgentResult,
   AgentSessionRef,
+  ApprovalState,
   AskAgentOptions,
   AskModelOptions,
   ChangePatch,
@@ -33,9 +34,6 @@ import type {
   McpServerConfig,
   McpStdioServerConfig,
   McpToolProbe,
-  MergeApproval,
-  MergeMethod,
-  MergeSettings,
   ModelKind,
   ModelRequest,
   ModelResult,
@@ -44,6 +42,7 @@ import type {
   PiMcpHttpServerConfig,
   PiMcpServerConfig,
   PiMcpStdioServerConfig,
+  PullRequestApproval,
   PullRequestMarker,
   PullRequestRef,
   PullRequestWake,
@@ -76,11 +75,7 @@ import type {
   TicketParticipants,
   TicketStatusResult,
 } from "./steps/linear/index.ts";
-import type {
-  GitHubRepoRef,
-  MergeOutcome,
-  OpenedPullRequest,
-} from "./steps/pull-requests/index.ts";
+import type { MergeOutcome, OpenedPullRequest } from "./steps/pull-requests/index.ts";
 import type { ProvisionWorktreeDependencies, WorktreeRequest } from "./steps/workspaces/index.ts";
 
 type RootTypeSurface = {
@@ -93,6 +88,7 @@ type RootTypeSurface = {
   changeStatus: ChangeStatus;
   changeSummary: ChangeSummary;
   checkRun: CheckRun;
+  approvalState: ApprovalState;
   claudeHarness: ClaudeHarness;
   claudeHarnessSettings: ClaudeHarnessSettings;
   claudePolicyKey: ClaudePolicyKey;
@@ -111,9 +107,6 @@ type RootTypeSurface = {
   mcpServer: McpServerConfig;
   mcpStdioServer: McpStdioServerConfig;
   mcpProbe: McpToolProbe;
-  mergeApproval: MergeApproval;
-  mergeMethod: MergeMethod;
-  mergeSettings: MergeSettings;
   modelKind: ModelKind;
   modelRequest: ModelRequest;
   modelResult: ModelResult;
@@ -122,6 +115,7 @@ type RootTypeSurface = {
   piMcpHttpServer: PiMcpHttpServerConfig;
   piMcpServer: PiMcpServerConfig;
   piMcpStdioServer: PiMcpStdioServerConfig;
+  prApproval: PullRequestApproval;
   prMarker: PullRequestMarker;
   prRef: PullRequestRef;
   prWake: PullRequestWake;
@@ -149,7 +143,6 @@ type RootTypeSurface = {
 type StepsTypeSurface = {
   agentRunner: AgentRunner;
   agentRunnerOptions: AgentRunnerOptions;
-  githubRepoRef: GitHubRepoRef;
   mergeOutcome: MergeOutcome;
   openedPullRequest: OpenedPullRequest;
   linearIssueMatch: LinearIssueMatch;

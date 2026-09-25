@@ -30,9 +30,7 @@ step//./jigs/steps//releaseRunResources
 step//./jigs/steps//removeRunDirectory
 step//./jigs/steps//replyToPullRequestReviewThread
 step//./jigs/steps//resolveLinearIssue
-step//./jigs/steps//resolveMergeSettings
 step//./jigs/steps//resolveReleasePolicy
-step//./jigs/steps//resolveRepository
 step//./jigs/steps//reviewPullRequest
 step//./jigs/steps//setTicketStatus
 workflow//./workflows/hello/hello//hello

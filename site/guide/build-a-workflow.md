@@ -237,7 +237,9 @@ A second owner receives a claim conflict. The service's polling, webhooks and
 
 The watcher never merges. Factory code decides who may merge and calls
 `mergePullRequest` when appropriate; that step rechecks current GitHub facts
-and the [merge approval](/guide/configuration#merging). The
+and the [merge approval](/guide/configuration#merging), and merges with the
+binding's merge method. Each snapshot's `approval` already reads the factory's
+approval setting, so `isPullRequestMergeReady(snapshot)` needs nothing else. The
 [linear-ticket-to-pr recipe](/guide/recipes#linear-ticket-to-pr) demonstrates
 continuing the builder session after publication and deciding who merges.
 
@@ -250,7 +252,7 @@ wake says what is outstanding right now.
 ```ts
 function pullRequestGate(
   pr: PullRequestRef,
-  options: { scope: string; approval: MergeApproval; worktree?: Worktree },
+  options: { scope: string; worktree?: Worktree },
 ): AsyncIterable<PullRequestWake>;
 
 type PullRequestWake =
@@ -262,16 +264,15 @@ type PullRequestWake =
 
 ```ts
 import { postPullRequestNote, pullRequestGate } from "#jigs/routines";
-import { mergePullRequest, resolveMergeSettings } from "#jigs/steps";
+import { mergePullRequest } from "#jigs/steps";
 
-const merge = await resolveMergeSettings(input.binding);
 const scope = `triage/${input.ticket}`;
 
-const gate = pullRequestGate(pr, { scope, approval: merge.approval, worktree });
+const gate = pullRequestGate(pr, { scope, worktree });
 for await (const wake of gate) {
   if (wake.kind === "closed") return { merged: wake.merged };
   if (wake.kind === "merge-ready") {
-    const result = await mergePullRequest(pr, wake.headSha, merge);
+    const result = await mergePullRequest(worktree, pr, wake.headSha);
     if (result.merged) return { merged: true };
     await postPullRequestNote({
       pr,

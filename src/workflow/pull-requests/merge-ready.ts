@@ -1,12 +1,10 @@
-import type { PullRequestReview, PullRequestSnapshot } from "../../providers/github.ts";
 import { APPROVED_LABEL, type MergeApproval } from "./policy.ts";
-
-/**
- * How the operator's consent reads right now. `stale` is an approval that
- * named an earlier commit — a different thing to tell an operator than a pull
- * request nobody has approved.
- */
-export type ApprovalState = "approved" | "changes-requested" | "stale" | "none";
+import type {
+  ApprovalState,
+  PullRequestApproval,
+  PullRequestReview,
+  PullRequestSnapshot,
+} from "./snapshot.ts";
 
 /**
  * Is the operator's consent recorded on the pull request, as this factory
@@ -19,7 +17,7 @@ export type ApprovalState = "approved" | "changes-requested" | "stale" | "none";
  *   ready", so it survives later pushes and jigs never removes it.
  */
 export function approvalState(
-  snapshot: PullRequestSnapshot,
+  snapshot: Pick<PullRequestSnapshot, "labels" | "reviews" | "headSha">,
   approval: MergeApproval,
 ): ApprovalState {
   if (approval === "label") {
@@ -40,24 +38,12 @@ export function approvalState(
   return approved.length === 0 ? "none" : "stale";
 }
 
-/** {@link approvalState} as the single question a merge asks of it. */
-export function isApprovalSatisfied(
-  snapshot: PullRequestSnapshot,
-  approval: MergeApproval,
-): boolean {
-  return approvalState(snapshot, approval) === "approved";
-}
-
 // Written for the operator reading a parked pull request: this sentence is
 // also the `blocker` line `jigs status <run-id>` prints.
-function approvalMissing(
-  state: ApprovalState,
-  approval: MergeApproval,
-  expectedHeadSha: string,
-): string {
+function approvalMissing({ signal, state }: PullRequestApproval, expectedHeadSha: string): string {
   if (state === "changes-requested") return "a review requests changes";
   if (state === "stale") return `the approval does not cover ${expectedHeadSha}`;
-  return approval === "label"
+  return signal === "label"
     ? `the ${APPROVED_LABEL} label is not on the pull request`
     : "no approving review yet";
 }
@@ -99,7 +85,6 @@ export interface MergeRefusal {
 export function mergeRefusal(
   snapshot: PullRequestSnapshot,
   expectedHeadSha: string,
-  approval: MergeApproval,
 ): MergeRefusal | null {
   if (snapshot.headSha !== expectedHeadSha) {
     return {
@@ -118,9 +103,8 @@ export function mergeRefusal(
   }
   // Approving again is all this takes, and the approval names this same
   // commit, so the wake that carries it is the one that merges.
-  const consent = approvalState(snapshot, approval);
-  if (consent !== "approved") {
-    return { reason: approvalMissing(consent, approval, expectedHeadSha), transient: true };
+  if (snapshot.approval.state !== "approved") {
+    return { reason: approvalMissing(snapshot.approval, expectedHeadSha), transient: true };
   }
   if (snapshot.mergeState !== "clean") {
     return { reason: `GitHub reports the merge state as ${snapshot.mergeState}`, transient: true };
@@ -140,9 +124,6 @@ export function mergeRefusal(
 }
 
 /** Whether current GitHub facts satisfy the configured approval and merge requirements. */
-export function isPullRequestMergeReady(
-  snapshot: PullRequestSnapshot,
-  approval: MergeApproval,
-): boolean {
-  return mergeRefusal(snapshot, snapshot.headSha, approval) === null;
+export function isPullRequestMergeReady(snapshot: PullRequestSnapshot): boolean {
+  return mergeRefusal(snapshot, snapshot.headSha) === null;
 }

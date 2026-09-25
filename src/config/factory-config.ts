@@ -6,16 +6,24 @@ import { z } from "zod";
 import { JigsError } from "../errors.ts";
 import { factorySlug } from "../steps/workspaces/layout.ts";
 import { agentsSchema } from "../workflow/factory.ts";
-import {
-  type MergeApproval,
-  mergeApprovalSchema,
-  mergeMethodSchema,
-} from "../workflow/pull-requests/policy.ts";
+import { type MergeApproval, mergeApprovalSchema } from "../workflow/pull-requests/policy.ts";
 import { releaseSchema } from "../workflow/runtime/release.ts";
 
 export const FACTORY_CONFIG_FILE = "jigs.config.ts";
 
 const require = createRequire(import.meta.url);
+
+const mergeMethodSchema = z.enum(["squash", "merge", "rebase"]) as z.ZodEnum<{
+  /** Combine the branch into one commit. */
+  squash: "squash";
+  /** Create a merge commit that preserves the branch history. */
+  merge: "merge";
+  /** Replay the branch commits onto the base branch. */
+  rebase: "rebase";
+}>;
+
+/** The GitHub merge method: squash, merge commit or rebase. */
+export type MergeMethod = z.output<typeof mergeMethodSchema>;
 
 // A binding is a name, a remote URL, how jigs merges there, and how a
 // worktree cut from that remote is provisioned — the single place that story

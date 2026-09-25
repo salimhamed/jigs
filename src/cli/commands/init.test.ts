@@ -175,7 +175,7 @@ test("the wrappers scaffolded are the step ids this repo has recorded", async ()
   const steps = [...wrappers.matchAll(/^export async function (\w+)\(/gm)]
     .map((match) => `step//./jigs/steps//${match[1]}`)
     .sort();
-  expect(steps).toHaveLength(31);
+  expect(steps).toHaveLength(29);
   const recorded = readFileSync(
     path.join(packageRoot(), "e2e", "expected-ids.linear-ticket-to-pr.txt"),
     "utf8",

@@ -9,7 +9,7 @@ import {
   tokenFromGitHubPayload,
 } from "./gate.ts";
 import { type MarkerKind, markBody, type StatusReason } from "./marker.ts";
-import type { MergeApproval } from "./policy.ts";
+import { approvalState } from "./merge-ready.ts";
 
 // The gate reaches the SDK through this one hook, so a stand-in that counts
 // awaits and hands back a resolver is enough to drive the loop.
@@ -50,23 +50,27 @@ beforeEach(() => {
 const SCOPE = "ship/AGE-403";
 const AT = "2026-08-26T12:00:00Z";
 
-const APPROVAL: MergeApproval = "review";
-
-const snapshot = (overrides: Partial<PullRequestSnapshot> = {}): PullRequestSnapshot => ({
-  state: "open",
-  merged: false,
-  draft: false,
-  mergeState: "clean",
-  labels: [],
-  mergeCommitSha: null,
-  headSha: "head-1",
-  reviews: [],
-  reviewThreads: [],
-  conversationComments: [],
-  ci: "pending",
-  failingChecks: [],
-  ...overrides,
-});
+const snapshot = (overrides: Partial<PullRequestSnapshot> = {}): PullRequestSnapshot => {
+  const facts = {
+    state: "open" as const,
+    merged: false,
+    draft: false,
+    mergeState: "clean",
+    labels: [],
+    mergeCommitSha: null,
+    headSha: "head-1",
+    reviews: [],
+    reviewThreads: [],
+    conversationComments: [],
+    ci: "pending" as const,
+    failingChecks: [],
+    ...overrides,
+  };
+  return {
+    ...facts,
+    approval: overrides.approval ?? { signal: "review", state: approvalState(facts, "review") },
+  };
+};
 
 const review = (id: number, state: string, user = "reviewer", body?: string) => ({
   id,
@@ -125,10 +129,10 @@ const branchContains = vi.fn(async () => false);
 const check = (name: string) => ({ name, conclusion: "failure", url: "http://ci.test/1" });
 
 const wakesOf = (state: PullRequestSnapshot, scope = SCOPE): PullRequestWake[] =>
-  classifyPullRequestState(state, scope, APPROVAL).wakes;
+  classifyPullRequestState(state, scope).wakes;
 
 test("a pull request with nothing outstanding yields no wakes", () => {
-  const state = classifyPullRequestState(snapshot(), SCOPE, APPROVAL);
+  const state = classifyPullRequestState(snapshot(), SCOPE);
   expect(state.wakes).toEqual([]);
   expect(state.done).toBe(false);
 });
@@ -170,7 +174,7 @@ test("another scope's marker is jigs' own comment, but answers nothing of ours",
     comment(900, "reviewer"),
     comment(901, "salim", answering("900@2026-08-26T12:00:00Z", "reply", "review/outstanding")),
   ]);
-  const state = classifyPullRequestState(snapshot({ reviewThreads: [other] }), SCOPE, APPROVAL);
+  const state = classifyPullRequestState(snapshot({ reviewThreads: [other] }), SCOPE);
   expect(state.wakes).toHaveLength(1);
   // Its own comment is never read back as feedback, whoever wrote it.
   expect(state.wakes[0]).toEqual({ kind: "review-comments", threads: [other] });
@@ -233,7 +237,6 @@ test("a conversation comment jigs posted is never feedback", () => {
       conversationComments: [conversationComment(503, "salim", standingDown("head-9", "ci"))],
     }),
     SCOPE,
-    APPROVAL,
   );
   expect(state.wakes).toEqual([]);
   expect(state.ownComments).toBe(1);
@@ -320,7 +323,7 @@ test("a failed commit status wakes ci-red and its successful recovery clears it"
     ci: "red",
     failingChecks: [check("AWS CodeBuild us-west-2")],
   });
-  expect(classifyPullRequestState(failed, SCOPE, APPROVAL)).toMatchObject({
+  expect(classifyPullRequestState(failed, SCOPE)).toMatchObject({
     wakes: [{ kind: "ci-red", headSha: "head-1" }],
     done: false,
   });
@@ -329,7 +332,7 @@ test("a failed commit status wakes ci-red and its successful recovery clears it"
   // success the snapshot is ci-green and the old red work is no longer due.
   const recovered = { ...failed, ci: "green" as const, failingChecks: [] };
   expect(recovered.ci).toBe("green");
-  expect(classifyPullRequestState(recovered, SCOPE, APPROVAL)).toMatchObject({
+  expect(classifyPullRequestState(recovered, SCOPE)).toMatchObject({
     wakes: [],
     done: false,
   });
@@ -387,7 +390,7 @@ test("a human quoting jigs' reply is a human, and is answered again", () => {
     comment(901, "salim", answering(`900@${AT}`)),
     comment(902, "reviewer", quoted),
   ]);
-  const state = classifyPullRequestState(snapshot({ reviewThreads: [followed] }), SCOPE, APPROVAL);
+  const state = classifyPullRequestState(snapshot({ reviewThreads: [followed] }), SCOPE);
   expect(state.wakes).toHaveLength(1);
   // Only the real reply counts as jigs' own; the quotation of it does not.
   expect(state.ownComments).toBe(1);
@@ -405,7 +408,7 @@ test("the identical snapshot classifies identically, every time", () => {
 
 test("a closed PR yields closed with the merged flag and finishes the gate", () => {
   for (const merged of [true, false]) {
-    const state = classifyPullRequestState(snapshot({ state: "closed", merged }), SCOPE, APPROVAL);
+    const state = classifyPullRequestState(snapshot({ state: "closed", merged }), SCOPE);
     expect(state.wakes).toEqual([{ kind: "closed", merged }]);
     expect(state.done).toBe(true);
   }
@@ -413,11 +416,7 @@ test("a closed PR yields closed with the merged flag and finishes the gate", () 
 
 test("the gate classifies a first snapshot before it ever awaits the hook", async () => {
   const fetchState = vi.fn(async () => snapshot({ state: "closed", merged: true }));
-  const gate = pullRequestGate(
-    pr,
-    { fetchState, readLocalHead, branchContains },
-    { scope: SCOPE, approval: APPROVAL },
-  );
+  const gate = pullRequestGate(pr, { fetchState, readLocalHead, branchContains }, { scope: SCOPE });
 
   expect(await gate.next()).toEqual({
     done: false,
@@ -439,11 +438,7 @@ test("a second round re-reads the pull request and re-classifies it", async () =
   // The generator stays suspended on the hook when the test ends; nothing is
   // waiting on it.
   const fetchState = vi.fn(async () => states.shift() ?? snapshot());
-  const gate = pullRequestGate(
-    pr,
-    { fetchState, readLocalHead, branchContains },
-    { scope: SCOPE, approval: APPROVAL },
-  );
+  const gate = pullRequestGate(pr, { fetchState, readLocalHead, branchContains }, { scope: SCOPE });
 
   expect((await gate.next()).value).toMatchObject({ kind: "review-comments" });
   const next = gate.next();
@@ -470,11 +465,7 @@ test("a wake whose head the branch moved past is not yielded", async () => {
     snapshot({ headSha: "head-2", reviewThreads: [answered] }),
   ];
   const fetchState = vi.fn(async () => states.shift() ?? snapshot({ headSha: "head-2" }));
-  const gate = pullRequestGate(
-    pr,
-    { fetchState, readLocalHead, branchContains },
-    { scope: SCOPE, approval: APPROVAL },
-  );
+  const gate = pullRequestGate(pr, { fetchState, readLocalHead, branchContains }, { scope: SCOPE });
 
   expect((await gate.next()).value).toMatchObject({ kind: "review-comments" });
   const next = gate.next();
@@ -491,11 +482,7 @@ test("a later wake in the same round is yielded while the head stays put", async
   const fetchState = vi.fn(async () =>
     snapshot({ ci: "red", failingChecks: [check("test")], reviewThreads: [asked] }),
   );
-  const gate = pullRequestGate(
-    pr,
-    { fetchState, readLocalHead, branchContains },
-    { scope: SCOPE, approval: APPROVAL },
-  );
+  const gate = pullRequestGate(pr, { fetchState, readLocalHead, branchContains }, { scope: SCOPE });
 
   expect((await gate.next()).value).toMatchObject({ kind: "review-comments" });
   expect((await gate.next()).value).toMatchObject({ kind: "ci-red", headSha: "head-1" });
@@ -520,7 +507,7 @@ describe("with a worktree", () => {
       readLocalHead: vi.fn(async () => ({ headSha: localHead })),
       branchContains: vi.fn(async (_worktree: Worktree, sha: string) => contains.includes(sha)),
     };
-    const gate = pullRequestGate(pr, steps, { scope: SCOPE, approval: APPROVAL, worktree });
+    const gate = pullRequestGate(pr, steps, { scope: SCOPE, worktree });
     return { gate, steps };
   };
 
@@ -551,11 +538,7 @@ describe("with a worktree", () => {
 test("without a worktree the local head is never read", async () => {
   readLocalHead.mockClear();
   const fetchState = vi.fn(async () => snapshot({ ci: "red", failingChecks: [check("test")] }));
-  const gate = pullRequestGate(
-    pr,
-    { fetchState, readLocalHead, branchContains },
-    { scope: SCOPE, approval: APPROVAL },
-  );
+  const gate = pullRequestGate(pr, { fetchState, readLocalHead, branchContains }, { scope: SCOPE });
   expect((await gate.next()).value).toMatchObject({ kind: "ci-red" });
   expect(readLocalHead).not.toHaveBeenCalled();
 });
@@ -565,7 +548,7 @@ test("leaving the loop stops watching", async () => {
   for await (const wake of pullRequestGate(
     pr,
     { fetchState, readLocalHead, branchContains },
-    { scope: SCOPE, approval: APPROVAL },
+    { scope: SCOPE },
   )) {
     expect(wake.kind).toBe("ci-red");
     break;
@@ -579,11 +562,7 @@ test("a pr another run already holds is a claim conflict, never fetched", async 
   const fetchState = vi.fn(async () => snapshot());
 
   await expect(
-    pullRequestGate(
-      pr,
-      { fetchState, readLocalHead, branchContains },
-      { scope: SCOPE, approval: APPROVAL },
-    ).next(),
+    pullRequestGate(pr, { fetchState, readLocalHead, branchContains }, { scope: SCOPE }).next(),
   ).rejects.toThrow("is already claimed by run wrun_OWNER");
   expect(fetchState).not.toHaveBeenCalled();
   expect(hook.disposed).toBe(1);
@@ -616,11 +595,7 @@ test("a remote typed in canonical casing matches a lowercase webhook", () => {
 test("the gate claims the casing-independent token", async () => {
   const pr = { owner: "Junglescout", repo: "API", number: 7 };
   const fetchState = vi.fn(async () => snapshot({ state: "closed" }));
-  await pullRequestGate(
-    pr,
-    { fetchState, readLocalHead, branchContains },
-    { scope: SCOPE, approval: APPROVAL },
-  ).next();
+  await pullRequestGate(pr, { fetchState, readLocalHead, branchContains }, { scope: SCOPE }).next();
   expect(createHook).toHaveBeenCalledWith({ token: "github:pr:junglescout/api#7" });
 });
 

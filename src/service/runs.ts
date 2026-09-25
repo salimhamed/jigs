@@ -5,18 +5,17 @@
 import { getHookByToken, getRun } from "workflow/api";
 import { hydrateData, observabilityRevivers } from "workflow/observability";
 import { getWorld } from "workflow/runtime";
-import { readFactoryConfig } from "../config/factory-config.ts";
-import { factoryRoot } from "../config/factory-root.ts";
-import { fetchPrSnapshot, type PullRequestRef } from "../providers/github.ts";
+import type { PullRequestRef } from "../providers/github.ts";
 import { getComment, resolveIssueRef } from "../providers/linear.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import type { RunSuspension } from "../run-suspension.ts";
+import { readPullRequestSnapshot } from "../steps/pull-requests/fetch-state.ts";
 import { registrySql } from "../steps/workspaces/sql.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { TICKET_TOKEN_PREFIX, ticketToken } from "../workflow/linear/claim.ts";
 import { NEEDS_HUMAN_TOKEN_PREFIX } from "../workflow/linear/halt-for-human.ts";
 import { PULL_REQUEST_TOKEN_PREFIX } from "../workflow/pull-requests/gate.ts";
-import { approvalState, mergeRefusal } from "../workflow/pull-requests/merge-ready.ts";
+import { mergeRefusal } from "../workflow/pull-requests/merge-ready.ts";
 import { type CleanupView, cleanupFromAttributes } from "../workflow/runtime/cleanup.ts";
 import { type RunResource, resourcesFromAttributes } from "../workflow/runtime/resources.ts";
 import { type JobRunIds, listJobRunIds } from "./queue.ts";
@@ -227,17 +226,15 @@ async function withPrState(
   const wake = lastWake(suspension.token, runId);
   const withWake = wake === undefined ? suspension : { ...suspension, lastWake: wake };
   try {
-    const approval = readFactoryConfig(factoryRoot()).github.mergeApproval;
-    const snapshot = await fetchPrSnapshot(pr);
+    const snapshot = await readPullRequestSnapshot(pr);
     return {
       ...withWake,
       headSha: snapshot.headSha.slice(0, 7),
       ci: snapshot.ci,
-      approval: approvalState(snapshot, approval),
+      approval: snapshot.approval.state,
       draft: snapshot.draft,
       mergeState: snapshot.mergeState,
-      blocker:
-        mergeRefusal(snapshot, snapshot.headSha, approval)?.reason ?? "nothing — it can merge",
+      blocker: mergeRefusal(snapshot, snapshot.headSha)?.reason ?? "nothing — it can merge",
     };
   } catch {
     return withWake;

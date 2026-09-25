@@ -144,9 +144,9 @@ binds, whichever approval you use.
 
 Who merges is not configuration. The linear-ticket-to-pr recipe sets it with
 `mergedBy` in its workflow file, and waits for you to merge by default. A custom
-workflow decides in its own code: `resolveMergeSettings(binding)` reads the two
-settings above, and `mergePullRequest` rereads GitHub and enforces readiness
-and approval before it merges. `watchPullRequest` only reports facts and never
+workflow decides in its own code and calls `mergePullRequest`, which applies
+the two settings above, rereads GitHub and enforces readiness and approval
+before it merges. `watchPullRequest` only reports facts and never
 merges. None of this restricts an agent that merges through its own GitHub
 tools.
 
