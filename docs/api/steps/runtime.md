@@ -1,10 +1,14 @@
-# @jigs-ai/jigs v0.69.0
+# @jigs-ai/jigs v0.69.1
 
-Read run context and update run resources outside workflow code.
+Run directories, resource records and release operations for factory-owned steps.
+Workflow code normally calls the generated `#jigs/steps` wrappers.
 
-Wrap steps in a factory-owned `"use step"` file. Never call them directly from a workflow.
+A run directory is scratch space owned by one run, kept across waits and retries
+until released. Resource records help people find what a run created; a record
+alone never authorizes deletion. The generated `release` step can release early
+or return a report; the service applies configured release policy when runs end.
 
-## Functions
+## Run directories
 
 ### createRunDirectory()
 
@@ -24,26 +28,23 @@ Create a working directory that survives retries and pauses in this run.
 
 ***
 
-### dashboardRunUrl()
+### removeRunDirectory()
 
-> **dashboardRunUrl**(`runId`): `string` \| `undefined`
+> **removeRunDirectory**(`metadata`): `Promise`\<`void`\>
 
-The run's page on the dashboard this service hosts, or undefined when the
-service was started without one. Never a standalone `workflow web` URL: run
-against a live World it opens a second queue worker and steals the jobs the
-run is waiting on.
+Remove this run's working directory after its work is finished, never while paused.
 
 #### Parameters
 
-##### runId
+##### metadata
 
-`string`
+`RunMetadata`
 
 #### Returns
 
-`string` \| `undefined`
+`Promise`\<`void`\>
 
-***
+## Recorded resources
 
 ### registerResource()
 
@@ -65,7 +66,7 @@ identities occupy distinct atomic keys.
 
 `Promise`\<`RunResource`\>
 
-***
+## Release
 
 ### releaseRunResources()
 
@@ -107,20 +108,23 @@ Without a policy, uses the workflow's `release`, then the factory's, then the de
 releasing successful runs and keeping failed ones. The success action is recorded first, so
 automatic cleanup after the run ends never reverses it.
 
-***
+## Advanced run context
 
-### removeRunDirectory()
+### dashboardRunUrl()
 
-> **removeRunDirectory**(`metadata`): `Promise`\<`void`\>
+> **dashboardRunUrl**(`runId`): `string` \| `undefined`
 
-Remove this run's working directory after its work is finished, never while paused.
+The run's page on the dashboard this service hosts, or undefined when the
+service was started without one. Never a standalone `workflow web` URL: run
+against a live World it opens a second queue worker and steals the jobs the
+run is waiting on.
 
 #### Parameters
 
-##### metadata
+##### runId
 
-`RunMetadata`
+`string`
 
 #### Returns
 
-`Promise`\<`void`\>
+`string` \| `undefined`
