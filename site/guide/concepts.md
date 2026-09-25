@@ -143,7 +143,7 @@ around jigs' operations. It is the only generated file with a directive, so
 every name in it is recorded and replayed.
 
 `jigs/routines.ts` holds the routines, bound to those steps. `runAgent`,
-`reviewTicket`, `watchPullRequest` and `pullRequestGate` are routines.
+`reviewTicket` and `watchPullRequest` are routines.
 
 Commit `jigs/` and never edit it. `jigs generate` refreshes it from the
 installed jigs version, a build fails with that repair if it is out of date,

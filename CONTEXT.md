@@ -25,7 +25,7 @@ binds the library's routines to those wrappers. Workflows import them as
 `#jigs/steps` and `#jigs/routines`. Custom code lives outside it.
 
 **Routine**: A function a workflow calls that runs steps and may wait on
-something outside the run, such as `runAgent` or `pullRequestGate`. It lives
+something outside the run, such as `runAgent` or `watchPullRequest`. It lives
 in `src/workflow/`, has no directive and no recorded result of its own, and
 reaches a factory through the generated `jigs/routines.ts`, which binds it to
 the factory's step wrappers.

@@ -273,7 +273,6 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "releaseRunResources",
   ],
   "steps/git/index.ts": [
-    "branchContains",
     "readChange",
     "readPatch",
     "pushApprovedChange",
