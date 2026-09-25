@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.68.0
+# @jigs-ai/jigs v0.68.1
 
 Inspect committed changes and push branches in a Git worktree.
 
@@ -73,7 +73,7 @@ Push the worktree's current HEAD and register a GitHub branch resource when appl
 
 ### readBranchState()
 
-> **readBranchState**(`worktree`, `baseSha`): `Promise`\<\{ `commits`: `number`; `dirty`: `boolean`; `headSha`: `string`; \}\>
+> **readBranchState**(`worktree`, `baseSha`): `Promise`\<`BranchState`\>
 
 Inspect branch readiness, counting commits since the worktree's base unless overridden.
 
@@ -89,7 +89,7 @@ Inspect branch readiness, counting commits since the worktree's base unless over
 
 #### Returns
 
-`Promise`\<\{ `commits`: `number`; `dirty`: `boolean`; `headSha`: `string`; \}\>
+`Promise`\<`BranchState`\>
 
 ***
 
