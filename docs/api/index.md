@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.64.0
+# @jigs-ai/jigs v0.65.0
 
 Everything a factory's configuration and workflows import from jigs: the factory and workflow
 definitions, harness and model descriptors, the data steps hand back, question helpers, and
@@ -464,6 +464,38 @@ The first human ticket reply that wakes a halted run.
 
 ***
 
+### PullRequestComment
+
+A comment on the pull request conversation, which hangs off no thread.
+
+#### Properties
+
+##### body
+
+> **body**: `string`
+
+##### createdAt
+
+> **createdAt**: `string`
+
+##### id
+
+> **id**: `number`
+
+##### updatedAt
+
+> **updatedAt**: `string`
+
+##### user
+
+> **user**: `string`
+
+##### userType
+
+> **userType**: `string`
+
+***
+
 ### PullRequestMarker
 
 Hidden progress metadata stored in a pull request comment.
@@ -508,6 +540,103 @@ What this answers: a comment as `id@updatedAt`, or a commit sha.
 
 ***
 
+### PullRequestReview
+
+A submitted GitHub review of a pull request.
+
+#### Properties
+
+##### body
+
+> **body**: `string`
+
+##### commitSha?
+
+> `optional` **commitSha**: `string`
+
+##### id
+
+> **id**: `number`
+
+##### state
+
+> **state**: `string`
+
+##### submittedAt
+
+> **submittedAt**: `string`
+
+##### user
+
+> **user**: `string`
+
+***
+
+### PullRequestSnapshot
+
+GitHub facts about a pull request, without a judgment about outstanding work.
+
+#### Properties
+
+##### ci
+
+> **ci**: `"red"` \| `"green"` \| `"pending"`
+
+##### conversationComments
+
+> **conversationComments**: [`PullRequestComment`](#pullrequestcomment)[]
+
+##### draft
+
+> **draft**: `boolean`
+
+##### failingChecks
+
+> **failingChecks**: [`CheckRun`](#checkrun)[]
+
+##### headSha
+
+> **headSha**: `string`
+
+##### labels
+
+> **labels**: `string`[]
+
+Label names on the pull request; the `label` approval signal reads these.
+
+##### mergeCommitSha
+
+> **mergeCommitSha**: `string` \| `null`
+
+The merge commit, once GitHub has made one.
+
+##### merged
+
+> **merged**: `boolean`
+
+##### mergeState
+
+> **mergeState**: `string`
+
+GitHub's own verdict on whether the pull request can merge right now,
+folding in conflicts, required checks and required reviews. `"clean"` is
+the only value that permits a merge; `"unknown"` means GitHub has not
+finished computing it, so the answer is "not yet, ask again".
+
+##### reviews
+
+> **reviews**: [`PullRequestReview`](#pullrequestreview)[]
+
+##### reviewThreads
+
+> **reviewThreads**: [`ReviewThread`](#reviewthread)[]
+
+##### state
+
+> **state**: `"open"` \| `"closed"`
+
+***
+
 ### ReleaseReport
 
 The result of applying a release policy to one run's managed resources.
@@ -547,6 +676,46 @@ counts and reasons for anything retained.
 
 ***
 
+### ReviewComment
+
+A comment anchored to a file in a pull request review.
+
+#### Properties
+
+##### body
+
+> **body**: `string`
+
+##### createdAt
+
+> **createdAt**: `string`
+
+##### id
+
+> **id**: `number`
+
+##### line
+
+> **line**: `number` \| `null`
+
+##### path
+
+> **path**: `string`
+
+##### rootId
+
+> **rootId**: `number`
+
+##### updatedAt
+
+> **updatedAt**: `string`
+
+##### user
+
+> **user**: `string`
+
+***
+
 ### ReviewThread
 
 A pull request review conversation, with its optional file location.
@@ -555,7 +724,7 @@ A pull request review conversation, with its optional file location.
 
 ##### comments
 
-> **comments**: `ReviewComment`[]
+> **comments**: [`ReviewComment`](#reviewcomment)[]
 
 ##### line
 
@@ -2677,6 +2846,50 @@ Replace named `{{ placeholders }}` once, leaving unknown names unchanged.
 
 ***
 
+### isPullRequestMergeReady()
+
+> **isPullRequestMergeReady**(`snapshot`, `approval`): `boolean`
+
+Whether current GitHub facts satisfy the configured approval and merge requirements.
+
+#### Parameters
+
+##### snapshot
+
+[`PullRequestSnapshot`](#pullrequestsnapshot)
+
+##### approval
+
+\{ `kind`: `"review"`; \}
+
+###### kind
+
+`"review"` = `...`
+
+Require an approving review of the current commit.
+
+|
+
+\{ `kind`: `"label"`; `name`: `string`; \}
+
+###### kind
+
+`"label"` = `...`
+
+Require a named label, which remains valid after later pushes.
+
+###### name
+
+`string` = `...`
+
+The label that authorizes merging whenever the pull request is ready.
+
+#### Returns
+
+`boolean`
+
+***
+
 ### parseMarkers()
 
 > **parseMarkers**(`body`): [`PullRequestMarker`](#pullrequestmarker)[]
@@ -2692,6 +2905,29 @@ Every marker in one comment body, in the order they appear.
 #### Returns
 
 [`PullRequestMarker`](#pullrequestmarker)[]
+
+***
+
+### pullRequestSnapshotKey()
+
+> **pullRequestSnapshotKey**(`snapshot`): `string`
+
+A comparison key for the facts in a pull request snapshot.
+
+#### Parameters
+
+##### snapshot
+
+[`PullRequestSnapshot`](#pullrequestsnapshot)
+
+#### Returns
+
+`string`
+
+#### Remarks
+
+Collection ordering and incidental fields do not change the key. Compare keys for equality;
+the key format is opaque and is not a durable identifier.
 
 ***
 
