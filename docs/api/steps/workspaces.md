@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.68.1
+# @jigs-ai/jigs v0.69.0
 
 Provision a repository worktree outside workflow code.
 
