@@ -21,57 +21,55 @@ boundary between workflow orchestration and step execution.
 
 ## How durable execution works
 
-This small example uses a fixed issue record and a durable wait:
+A workflow can pause while waiting and continue later, even after the service
+restarts. The Workflow SDK saves its progress in your factory's Postgres
+database.
+
+This version of `workflows/hello/hello.ts` creates a working directory, waits
+one minute, then returns the directory's path:
 
 ```ts
+import { defineWorkflow } from "@jigs-ai/jigs";
 import { sleep } from "workflow";
+import { z } from "zod";
+import { createRunDirectory } from "#jigs/steps";
 
-async function loadIssue(issueId: string) {
-  "use step";
+const inputs = z.object({});
 
-  // The completed call's input and result are saved in the database.
-  return { id: issueId, title: "Fix authentication bug", priority: "high" };
-}
-
-export async function inspectIssue(issueId: string) {
+export async function hello() {
   "use workflow";
 
-  // Execution begins here again whenever the workflow resumes.
-  const issue = await loadIssue(issueId);
-  // On replay, this receives the saved result without rerunning loadIssue.
+  // Create a working directory for this run.
+  const directory = await createRunDirectory();
 
+  // Wait without keeping this function running.
   await sleep("1 minute");
-  // The run waits. After waking, it replays from the top, then continues here.
-  return issue.title;
+
+  return { directory };
 }
+
+export default defineWorkflow({ inputs, workflow: hello });
 ```
 
-Each time a workflow starts or resumes, its code executes from the beginning.
-The SDK keeps track of completed step calls in its database. When replay
-reaches one, the SDK returns its recorded result instead of executing the
-step again. Execution continues until it reaches new work or another wait.
+`createRunDirectory` is a jigs-provided step. Its generated function already
+contains `"use step"`. `sleep` comes from the Workflow SDK's `workflow` package,
+which is installed in your factory.
 
-A **conceptual representation** of persisted step data looks like this:
+Here is what happens:
 
-```json
-{
-  "step": "loadIssue",
-  "input": ["ENG-123"],
-  "result": {
-    "id": "ENG-123",
-    "title": "Fix authentication bug",
-    "priority": "high"
-  }
-}
-```
+1. `createRunDirectory()` creates a directory and returns its path. The SDK
+   saves the completed step's result in Postgres.
+2. `sleep("1 minute")` records when the workflow should continue, then pauses
+   it.
+3. When the workflow resumes, its function runs again from the beginning. At
+   `createRunDirectory()`, the SDK returns the saved path without running the
+   step again.
+4. The SDK also remembers the wait. Once its deadline has passed, execution
+   continues to `return`. Replaying does not start another one-minute wait.
 
-The JSON above illustrates the information the SDK saves for a step. You do
-not write this record yourself; the SDK handles saving and loading it. jigs
-uses Postgres, so the saved inputs and result survive a service restart.
-
-**Workflow code replays; completed step calls return results from the database.**
-That is the durable boundary. A step that fails before completion may be
-retried, so external writes should be safe to repeat.
+The saved progress survives a service restart. **Workflow code runs again;
+completed step calls reuse their saved results.** A step whose completion has
+not been recorded may be retried, so external writes should be safe to repeat.
 
 ## Serializable inputs and results
 
