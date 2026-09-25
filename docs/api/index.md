@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.62.0
+# @jigs-ai/jigs v0.63.0
 
 Everything a factory's configuration and workflows import from jigs: the factory and workflow
 definitions, harness and model descriptors, the data steps hand back, question helpers, and
