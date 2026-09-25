@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.61.0](https://github.com/salimhamed/jigs/compare/jigs-v0.60.0...jigs-v0.61.0) (2026-09-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* resumeOrRebuild, attend, listen and finished are removed. AgentSession now names the live object and AgentSessionRef the reference that crosses the boundary. pullRequestGate returns an AsyncIterable. Runs parked on a pull request before this release do not replay cleanly; let them finish or cancel them before upgrading. See #393 for the upgrade notes.
+
+### Features
+
+* add agentSession, make pullRequestGate an async iterable, rename the session pointer to AgentSessionRef ([#393](https://github.com/salimhamed/jigs/issues/393)) ([862b8aa](https://github.com/salimhamed/jigs/commit/862b8aa6c5599448c9749c1e5ebe5dbdc28b47fd))
+
 ## [0.60.0](https://github.com/salimhamed/jigs/compare/jigs-v0.59.0...jigs-v0.60.0) (2026-09-25)
 
 
