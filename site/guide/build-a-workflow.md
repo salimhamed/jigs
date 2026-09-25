@@ -184,20 +184,10 @@ This example continues a builder session created earlier in the workflow.
 `pr` identifies the pull request by `owner`, `repo` and `number`:
 
 ```ts
-import { JigsError } from "@jigs-ai/jigs";
 import { watchPullRequest } from "#jigs/routines";
 
-let turns = 0;
 for await (const snapshot of watchPullRequest(pr)) {
   if (snapshot.state === "closed") return { merged: snapshot.merged };
-
-  if (turns >= input.budget.prTurns) {
-    throw new JigsError(
-      "The pull request maintenance budget is exhausted.",
-      "Review the unfinished pull request before starting another run.",
-    );
-  }
-  turns += 1;
 
   const situation = JSON.stringify(snapshot);
   await builder.run({
@@ -213,9 +203,11 @@ Current facts: ${situation}`,
 }
 ```
 
-The example's `task`, `builder`, and `input.budget.prTurns` belong to the
-factory. See [agent sessions](/guide/models-and-harnesses#agent-sessions) for
-creating the builder and supplying recovery context in `fresh`.
+The example's `task` and `builder` belong to the factory. It shows one agent
+invocation per update; see the [recipe](/guide/recipes#linear-ticket-to-pr) for
+checking the agent's work and retrying incomplete local changes within a
+factory-owned limit. See [agent sessions](/guide/models-and-harnesses#agent-sessions)
+for creating the builder and supplying recovery context in `fresh`.
 
 `snapshot.state` and `snapshot.merged` come from GitHub. The snapshot also
 includes `headSha`, draft and merge state, labels, reviews, inline review
@@ -223,11 +215,19 @@ threads and conversation comments. jigs summarizes GitHub checks and commit
 statuses as `ci` (`"red"`, `"green"` or `"pending"`) and includes `failingChecks`.
 These are observed facts, not an assessment that the work is finished.
 
+To compare a fresh read with an earlier snapshot, import
+`pullRequestSnapshotKey` from `@jigs-ai/jigs` and compare their keys. It uses the
+same fact comparison as the watcher, ignoring collection ordering and incidental
+fetch metadata.
+
 Repeated notifications with unchanged facts produce no new snapshot. An
 agent's own comments and pushes do change the facts and can produce another
-turn. Keep an explicit limit in factory code; the watcher has no hidden agent
-budget. Agents may post using their GitHub tools: no hidden jigs marker is
-required, and an unmarked comment does not automatically mean unresolved work.
+turn. An agent invocation that decides nothing needs doing is normal. The
+watcher has no hidden agent budget or conversation filter. The recipe bounds
+recovery attempts for each update, rather than limiting the total number of
+updates a PR can receive. Agents may post using their GitHub tools: no hidden
+jigs marker is required, and an unmarked comment does not automatically mean
+unresolved work.
 
 The watcher yields a closed snapshot once, then ends. Leaving the loop by
 `return`, `break` or a throw releases the watch. It shares the existing PR hook

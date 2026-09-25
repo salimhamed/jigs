@@ -6,6 +6,7 @@ import {
   type PullRequestSnapshot,
 } from "@jigs-ai/jigs";
 import { beforeEach, expect, test, vi } from "vitest";
+import { sleep } from "workflow";
 import * as routines from "#jigs/routines";
 import * as steps from "#jigs/steps";
 import {
@@ -44,6 +45,7 @@ vi.mock("#jigs/steps", async (importOriginal) => ({
   resolveRepository: vi.fn(async () => ({ owner: "acme", repo: "app" })),
 }));
 vi.mock("workflow", () => ({
+  sleep: vi.fn(async () => {}),
   getWorkflowMetadata: () => ({
     workflowRunId: "wrun_TEST",
     workflowName: "workflow//./workflows/linear-ticket-to-pr/linear-ticket-to-pr//linearTicketToPr",
@@ -57,7 +59,7 @@ const delivery: Delivery = {
   binding: "app",
   builder: harnesses.codex({ model: "gpt-5.6-sol" }),
   reviewer: harnesses.claude({ model: "opus" }),
-  budget: { reviewRounds: 2, prTurns: 6 },
+  budget: { reviewRounds: 2, attemptsPerUpdate: 3 },
 };
 const pr = { owner: "acme", repo: "app", number: 7, url: "https://github.com/acme/app/pull/7" };
 
@@ -80,6 +82,7 @@ beforeEach(() => {
   answers = new Map();
   at("h1");
   vi.mocked(steps.pushBranch).mockResolvedValue({ headSha: "h1" });
+  vi.mocked(steps.fetchPullRequestState).mockResolvedValue(snapshot);
   vi.mocked(routines.runAgent).mockImplementation((async (options: {
     harness: Harness;
     prompt: string;
@@ -87,7 +90,8 @@ beforeEach(() => {
     output?: unknown;
   }) => {
     calls.push({ ...options, resumed: options.resume !== undefined });
-    const output = answers.get(options.output)?.shift();
+    const queued = answers.get(options.output)?.shift();
+    const output = typeof queued === "function" ? queued() : queued;
     const session = {
       harness: options.harness.kind,
       id: `s${calls.length}`,
@@ -266,42 +270,47 @@ test("an unavailable session gets the task, local diff and PR facts in a fresh p
   expect(calls[0]?.prompt).toContain("Current GitHub facts:");
 });
 
-test("a spent factory budget stops with the unfinished PR and runs no agent", async () => {
-  policy("human");
-  watch(snapshot);
-  const error = await stopped(follow({ ...delivery, budget: { ...delivery.budget, prTurns: 0 } }));
-  expect(error.findings).toEqual([`Unfinished pull request: ${pr.url}`]);
-  expect(calls).toHaveLength(0);
-});
+const stoppedMaintenance = async (promise: Promise<unknown>) => {
+  const error = await promise.then(
+    () => expect.unreachable("maintenance should stop"),
+    (error: unknown) => error,
+  );
+  expect(error).toBeInstanceOf(DeliveryStopped);
+  expect(steps.pushBranch).not.toHaveBeenCalled();
+  return error as DeliveryStopped;
+};
 
-test("each agent invocation including doing nothing spends one turn", async () => {
+test("attempt allowance resets for every update and permits more than six updates", async () => {
   policy("human");
-  answer(maintenanceReport, finished);
-  watch(snapshot, { ...snapshot, labels: ["changed"] });
-  await stopped(follow({ ...delivery, budget: { ...delivery.budget, prTurns: 1 } }));
-  expect(calls).toHaveLength(1);
-});
-
-test("human merge policy never merges and closed snapshots do not spend the budget", async () => {
-  policy("human");
-  answer(maintenanceReport, finished);
-  watch(snapshot, closed);
-  await follow({ ...delivery, budget: { ...delivery.budget, prTurns: 1 } });
+  const updates = Array.from({ length: 8 }, (_, i) => ({ ...snapshot, labels: [`update-${i}`] }));
+  answer(maintenanceReport, ...updates.map(() => finished));
+  watch(...updates, closed);
+  await follow({ ...delivery, budget: { ...delivery.budget, attemptsPerUpdate: 1 } });
+  expect(calls).toHaveLength(8);
   expect(steps.mergePullRequest).not.toHaveBeenCalled();
 });
 
-test("closing without merging stops", async () => {
+test("human merge policy never merges", async () => {
+  policy("human");
+  answer(maintenanceReport, finished);
+  watch(snapshot, closed);
+  await follow();
+  expect(steps.mergePullRequest).not.toHaveBeenCalled();
+});
+
+test("closed snapshots run no agent and closing without merging stops without a push", async () => {
   policy("human");
   watch({ ...closed, merged: false });
-  const error = await stopped(follow());
-  expect(error.message).toContain("closed unmerged");
+  const error = await stoppedMaintenance(follow());
+  expect(error.findings[0]).toContain("closed unmerged");
+  expect(calls).toHaveLength(0);
 });
 
 test.each(["pending", "needs-human"])("%s does not authorize a merge", async (status) => {
   policy("jigs");
   answer(maintenanceReport, { status, summary: "Waiting for a decision." });
   watch(snapshot, closed);
-  if (status === "needs-human") await stopped(follow());
+  if (status === "needs-human") await stoppedMaintenance(follow());
   else await follow();
   expect(steps.mergePullRequest).not.toHaveBeenCalled();
 });
@@ -314,16 +323,22 @@ test.each([
   policy("jigs");
   answer(maintenanceReport, finished);
   watch(state, closed);
+  vi.mocked(steps.fetchPullRequestState).mockResolvedValue(state);
   await follow();
   expect(steps.mergePullRequest).not.toHaveBeenCalled();
 });
 
-test("local changes to the head require another snapshot before merging", async () => {
+test("a successful push aligning local and published heads defers merging the new code", async () => {
   policy("jigs");
-  answer(maintenanceReport, finished);
+  answer(maintenanceReport, () => {
+    at("h2");
+    return finished;
+  });
   watch(snapshot, closed);
-  at("h2");
+  vi.mocked(steps.fetchPullRequestState).mockResolvedValue({ ...snapshot, headSha: "h2" });
   await follow();
+  expect(calls).toHaveLength(1);
+  expect(sleep).not.toHaveBeenCalled();
   expect(steps.mergePullRequest).not.toHaveBeenCalled();
 });
 
@@ -336,32 +351,21 @@ test("new feedback arriving during the agent turn must be judged before merging"
   expect(steps.mergePullRequest).not.toHaveBeenCalled();
 });
 
-test("uncommitted maintenance stops without merging", async () => {
+test("a failed merge stops clearly without an automatic push", async () => {
   policy("jigs");
   answer(maintenanceReport, finished);
   watch(snapshot);
-  at("h1", true);
-  const error = await stopped(follow());
-  expect(error.message).toContain("uncommitted changes");
-  expect(steps.mergePullRequest).not.toHaveBeenCalled();
-});
-
-test("a failed merge stops clearly instead of waiting forever on unchanged facts", async () => {
-  policy("jigs");
-  answer(maintenanceReport, finished);
-  watch(snapshot);
-  vi.mocked(steps.fetchPullRequestState).mockResolvedValue(snapshot);
   vi.mocked(steps.mergePullRequest).mockRejectedValue(new Error("GitHub 502"));
-  const error = await stopped(follow());
+  const error = await stoppedMaintenance(follow());
   expect(error.findings[0]).toContain("GitHub 502");
 });
 
-test("a failed preservation push does not hide why the delivery stopped", async () => {
-  policy("human");
-  watch(snapshot);
+test("a failed implementation preservation push does not hide why delivery stopped", async () => {
+  answer(implementationReport, { responses: [] });
+  at("h1", true);
   vi.mocked(steps.pushBranch).mockRejectedValueOnce(new Error("remote denied"));
-  const error = await stopped(follow({ ...delivery, budget: { ...delivery.budget, prTurns: 0 } }));
-  expect(error.message).toContain("0 pull request agent turn");
+  const error = await stopped(implementAndReview(delivery, builder()));
+  expect(error.message).toContain("review round 1");
   expect(error.findings.at(-1)).toContain("Recover the work from /tmp/wt");
 });
 
@@ -374,4 +378,152 @@ test("reordered GitHub collections do not prevent a ready merge", async () => {
   vi.mocked(steps.mergePullRequest).mockResolvedValue({ merged: true, mergeCommitSha: "m" });
   await follow();
   expect(steps.mergePullRequest).toHaveBeenCalledOnce();
+});
+
+test.each(["jigs", "human"] as const)(
+  "a forgotten push recovers immediately in %s mode without another watcher yield",
+  async (by) => {
+    policy(by);
+    let published = "h1";
+    vi.mocked(steps.fetchPullRequestState).mockImplementation(async () => ({
+      ...snapshot,
+      headSha: published,
+    }));
+    answer(
+      maintenanceReport,
+      () => {
+        at("h2");
+        return finished;
+      },
+      () => {
+        published = "h2";
+        return finished;
+      },
+    );
+    watch(snapshot, closed);
+    await follow();
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.resumed).toBe(true);
+    expect(calls[1]?.prompt).toContain("Recovery required:");
+    expect(calls[1]?.prompt).toContain("Local HEAD: h2. Published PR head: h1.");
+    expect(sleep).toHaveBeenCalledTimes(2);
+    expect(steps.pushBranch).not.toHaveBeenCalled();
+  },
+);
+
+test("remote branch advancement is recovered immediately with current GitHub facts", async () => {
+  policy("human");
+  const advanced = { ...snapshot, headSha: "h3" };
+  vi.mocked(steps.fetchPullRequestState).mockResolvedValue(advanced);
+  answer(maintenanceReport, finished, () => {
+    at("h3");
+    return finished;
+  });
+  watch(snapshot, closed);
+  await follow();
+  expect(calls).toHaveLength(2);
+  expect(calls[1]?.prompt).toContain('"headSha":"h3"');
+  expect(calls[1]?.prompt).toContain("Local HEAD: h1. Published PR head: h3.");
+});
+
+test("dirty work is recovered immediately without waiting or another watcher yield", async () => {
+  policy("human");
+  answer(
+    maintenanceReport,
+    () => {
+      at("h1", true);
+      return { status: "pending", summary: "Not committed yet." };
+    },
+    () => {
+      at("h1");
+      return finished;
+    },
+  );
+  watch(snapshot, closed);
+  await follow();
+  expect(calls).toHaveLength(2);
+  expect(calls[1]?.prompt).toContain("dirty (uncommitted changes remain)");
+  expect(sleep).not.toHaveBeenCalled();
+});
+
+test.each(["dirty", "unpublished"])(
+  "persistent %s state exhausts only this update's allowance and preserves local work",
+  async (kind) => {
+    policy("human");
+    at(kind === "dirty" ? "h1" : "h2", kind === "dirty");
+    answer(maintenanceReport, finished, finished);
+    watch(snapshot);
+    const error = await stoppedMaintenance(
+      follow({ ...delivery, budget: { ...delivery.budget, attemptsPerUpdate: 2 } }),
+    );
+    expect(calls).toHaveLength(2);
+    expect(error.findings[0]).toContain("Exhausted 2 attempts for this pull request update");
+    expect(error.findings[0]).toContain(`Local HEAD: ${head.headSha}`);
+    expect(error.findings.at(-1)).toContain("without an automatic push");
+  },
+);
+
+test("GitHub head lag resolves during bounded rechecks without another agent attempt", async () => {
+  policy("human");
+  at("h2");
+  answer(maintenanceReport, finished);
+  watch(snapshot, closed);
+  vi.mocked(steps.fetchPullRequestState)
+    .mockResolvedValueOnce(snapshot)
+    .mockResolvedValueOnce(snapshot)
+    .mockResolvedValueOnce({ ...snapshot, headSha: "h2" });
+  await follow({ ...delivery, budget: { ...delivery.budget, attemptsPerUpdate: 1 } });
+  expect(calls).toHaveLength(1);
+  expect(sleep).toHaveBeenCalledTimes(2);
+  expect(steps.fetchPullRequestState).toHaveBeenCalledTimes(3);
+});
+
+test.each([true, false])(
+  "PR closure while rechecking mismatched heads is handled (merged=%s)",
+  async (merged) => {
+    policy("human");
+    at("h2");
+    answer(maintenanceReport, finished);
+    watch(snapshot);
+    vi.mocked(steps.fetchPullRequestState)
+      .mockResolvedValueOnce(snapshot)
+      .mockResolvedValueOnce({ ...closed, merged });
+    if (merged) await follow();
+    else await stoppedMaintenance(follow());
+    expect(calls).toHaveLength(1);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  },
+);
+
+test("needs-human with mismatched local state stops without publishing or spending recovery attempts", async () => {
+  policy("human");
+  at("h2", true);
+  answer(maintenanceReport, { status: "needs-human", summary: "Credentials unavailable." });
+  watch(snapshot);
+  const error = await stoppedMaintenance(follow());
+  expect(error.findings[0]).toContain("Credentials unavailable");
+  expect(calls).toHaveLength(1);
+  expect(sleep).not.toHaveBeenCalled();
+});
+
+test("a fresh recovery prompt includes the same actionable facts when no session survives", async () => {
+  policy("human");
+  const run = vi
+    .fn()
+    .mockImplementationOnce(async (turn) => {
+      at("h1", true);
+      expect(await turn.fresh()).toContain("THE TASK BRIEF");
+      return finished;
+    })
+    .mockImplementationOnce(async (turn) => {
+      const prompt = await turn.fresh();
+      expect(prompt).toContain("THE TASK BRIEF");
+      expect(prompt).toContain("Recovery required:");
+      expect(prompt).toContain("dirty (uncommitted changes remain)");
+      at("h1");
+      return finished;
+    });
+  watch(snapshot, closed);
+  await followPullRequest(delivery, pr, { harness: delivery.builder, run });
+  expect(run).toHaveBeenCalledTimes(2);
 });

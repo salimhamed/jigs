@@ -76,3 +76,41 @@ export interface PullRequestSnapshot {
   ci: "red" | "green" | "pending";
   failingChecks: CheckRun[];
 }
+
+// Snapshot arrays are collections, not sequences: API ordering alone is not new activity.
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).sort().join(",")}]`;
+  if (typeof value === "object" && value !== null) {
+    return `{${Object.entries(value)
+      .filter(([, field]) => field !== undefined)
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .map(([key, field]) => `${JSON.stringify(key)}:${canonical(field)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+/**
+ * A comparison key for the facts in a pull request snapshot.
+ *
+ * @remarks
+ * Collection ordering and incidental fields do not change the key. Compare keys for equality;
+ * the key format is opaque and is not a durable identifier.
+ */
+export function pullRequestSnapshotKey(snapshot: PullRequestSnapshot): string {
+  // Name the facts explicitly: incidental fetch metadata must not become a wake trigger.
+  return canonical({
+    state: snapshot.state,
+    merged: snapshot.merged,
+    draft: snapshot.draft,
+    headSha: snapshot.headSha,
+    mergeState: snapshot.mergeState,
+    labels: snapshot.labels,
+    mergeCommitSha: snapshot.mergeCommitSha,
+    reviews: snapshot.reviews,
+    reviewThreads: snapshot.reviewThreads,
+    conversationComments: snapshot.conversationComments,
+    ci: snapshot.ci,
+    failingChecks: snapshot.failingChecks,
+  });
+}

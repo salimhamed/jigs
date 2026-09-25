@@ -33,7 +33,7 @@ const inputs = z.object({
   budget: z
     .object({
       reviewRounds: z.number().int().positive().default(3),
-      prTurns: z.number().int().nonnegative().default(6),
+      attemptsPerUpdate: z.number().int().positive().default(3),
     })
     .prefault({}),
 });

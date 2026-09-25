@@ -46,7 +46,7 @@ pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input binding=ap
 | `binding` | | The repository to change. |
 | `builder` | `builder` | The agent, by name, that builds the change. |
 | `reviewer` | `reviewer` | The agent, by name, that reviews it. |
-| `budget` | `{ reviewRounds: 3, prTurns: 6 }` | How many implementation review rounds and PR maintenance agent turns the run may spend. |
+| `budget` | `{ reviewRounds: 3, attemptsPerUpdate: 3 }` | Implementation review rounds, and agent attempts allowed for each PR update. `attemptsPerUpdate` must be positive. |
 
 The agent names are `builder` and `reviewer`, defined in the workflow file.
 A run picks among them; it cannot name a model. To change a model, edit the
@@ -63,11 +63,24 @@ configure agent tools. For a tool using a token from the service environment,
 explicitly allow its variable through [`agents.env`](/guide/configuration#agents-env).
 No JEV model is required.
 
-Each invocation after publication spends one `prTurns` turn, even if the agent
-decides no action is needed. Duplicate notifications with unchanged facts spend
-none. The budget and stopping behavior are in the copied recipe, so you can
-change them. Exhausting the budget or requesting human attention fails the run
-with an explanation; unfinished work remains available.
+Each changed snapshot starts a fresh `attemptsPerUpdate` allowance, including
+the first snapshot. There is no lifetime limit on PR updates. An agent can read
+an update and decide nothing needs doing; that is an ordinary successful visit.
+Duplicate notifications with unchanged facts do not invoke it again.
+
+After each attempt, recipe code checks the local work and the GitHub head. If
+the worktree is dirty, commits are unpublished, or the local branch is out of
+sync, it immediately gives the same agent the problem and another attempt. It
+does not wait for another GitHub notification to recover. Short, bounded reads
+allow GitHub's head to catch up after a push; these reads do not spend agent
+attempts.
+
+The allowance includes the initial attempt and resets only when the watcher
+yields a new update. Recovery cannot reset its own budget. If the agent requests
+human attention or exhausts its attempts without leaving the work ready to wait,
+the run fails with an explanation. It preserves local changes and does not
+automatically push them while stopping. The budget and recovery policy are in
+the copied recipe, so you can change them.
 
 The builder is instructed not to merge. This is a prompt rule, not a restriction
 on its GitHub tools. Recipe code follows the binding's
@@ -102,6 +115,7 @@ linear-ticket-to-pr:
 5. Configure GitHub tools for the builder harness so it can read discussions,
    post replies and push fixes.
 6. Carry your own edits across, and launch with the new inputs above. Replace
-   old `ciFixes` and `revisionRounds` budgets with `prTurns`. `jigs run` rejects
+   old `ciFixes`, `revisionRounds` or `prTurns` budgets with
+   `attemptsPerUpdate`. `jigs run` rejects
    an `--input` the workflow does not declare, so an old input such as
    `implementationModel` fails before the run starts.

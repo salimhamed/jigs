@@ -112,6 +112,7 @@ export {
   type JsonValue,
 } from "./workflow/human/questions.ts";
 export { interpolate } from "./workflow/interpolate.ts";
+
 export { ClaimConflictError, type TicketClaim } from "./workflow/linear/claim.ts";
 export type { Halt, HumanReply } from "./workflow/linear/halt-for-human.ts";
 export {
@@ -131,6 +132,7 @@ export {
   type TicketReviewPromptInput,
   ticketReviewPrompt,
 } from "./workflow/linear/ticket-review.prompt.ts";
+
 export { renderChecks, type ThreadAnswers } from "./workflow/pull-requests/answers.ts";
 export type { PullRequestRef, PullRequestWake } from "./workflow/pull-requests/gate.ts";
 export {
@@ -145,13 +147,14 @@ export {
   type MergePolicy,
   mergePolicySchema,
 } from "./workflow/pull-requests/policy.ts";
-export type {
-  CheckRun,
-  PullRequestComment,
-  PullRequestReview,
-  PullRequestSnapshot,
-  ReviewComment,
-  ReviewThread,
+export {
+  type CheckRun,
+  type PullRequestComment,
+  type PullRequestReview,
+  type PullRequestSnapshot,
+  pullRequestSnapshotKey,
+  type ReviewComment,
+  type ReviewThread,
 } from "./workflow/pull-requests/snapshot.ts";
 export { defaultPullRequestScope } from "./workflow/pull-requests/writer.ts";
 

@@ -76,7 +76,7 @@ test("a delivered ticket moves through In Progress, In Review and Done", async (
   );
   expect(handed()?.task).toMatchObject({ key: "ABC-123", url: snapshot.url });
   expect(handed()?.task.instructions).toContain("## Implementation brief\nUse the flag.");
-  expect(handed()?.budget).toEqual({ reviewRounds: 3, prTurns: 6 });
+  expect(handed()?.budget).toEqual({ reviewRounds: 3, attemptsPerUpdate: 3 });
 });
 
 test("a run picks its builder and reviewer by name", async () => {
@@ -125,4 +125,11 @@ test("the workflow requires its two agents, Linear and GitHub", () => {
     integrations: ["linear", "github"],
   });
   expect(entry.inputs.safeParse({ ticket: "", binding: "app" }).success).toBe(false);
+});
+
+test("attempts per update must be positive", () => {
+  expect(
+    entry.inputs.safeParse({ ticket: "ABC-123", binding: "app", budget: { attemptsPerUpdate: 0 } })
+      .success,
+  ).toBe(false);
 });

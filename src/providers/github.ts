@@ -3,12 +3,15 @@
 // forbidden. The credential comes from github-auth.ts, whichever identity the
 // factory configured.
 
+import type { MergePolicy } from "../workflow/pull-requests/policy.ts";
 import type {
   CheckRun,
   PullRequestSnapshot,
   ReviewComment,
   ReviewThread,
 } from "../workflow/pull-requests/snapshot.ts";
+
+import { GithubApiError, githubGet, githubGetAll, githubRequest } from "./github-api.ts";
 
 export type {
   CheckRun,
@@ -18,9 +21,6 @@ export type {
   ReviewComment,
   ReviewThread,
 } from "../workflow/pull-requests/snapshot.ts";
-
-import type { MergePolicy } from "../workflow/pull-requests/policy.ts";
-import { GithubApiError, githubGet, githubGetAll, githubRequest } from "./github-api.ts";
 
 export type PullRequestRef = {
   owner: string;

@@ -17,6 +17,7 @@ import {
   pullRequestGate,
   type ReadLocalHead,
 } from "./gate.ts";
+import { watchPullRequest } from "./watch.ts";
 
 /**
  * The factory's `"use step"` wrappers the pull request routines run.
@@ -30,8 +31,6 @@ export interface PullRequestSteps {
   commentOnPullRequest: typeof commentOnPullRequest;
   replyToPullRequestReviewThread: typeof replyToPullRequestReviewThread;
 }
-
-import { watchPullRequest } from "./watch.ts";
 
 type StepFields = keyof PullRequestSteps;
 

@@ -1,6 +1,6 @@
 // Deliver one work item in three phases, each a plain function the workflow
 // calls in order: build and review until approved, publish, follow the pull
-// request until it merges. A delivery that stops short pushes its branch and
+// request until it merges. A delivery that stops short retains its work and
 // throws DeliveryStopped; the workflow decides what to tell whom.
 
 import {
@@ -8,9 +8,11 @@ import {
   isPullRequestMergeReady,
   JigsError,
   type PullRequestRef,
+  pullRequestSnapshotKey,
   type TicketNote,
   type Worktree,
 } from "@jigs-ai/jigs";
+import { sleep } from "workflow";
 import { z } from "zod";
 import { agentSession, runAgent, watchPullRequest } from "#jigs/routines";
 import {
@@ -48,8 +50,8 @@ export interface WorkItem {
 export interface Budget {
   /** One round is one build plus one review of what it committed. */
   reviewRounds: number;
-  /** Every invocation after publication counts, including a decision to wait. */
-  prTurns: number;
+  /** Builder invocations allowed to handle each changed PR snapshot, including recovery. */
+  attemptsPerUpdate: number;
 }
 
 export interface Delivery {
@@ -208,78 +210,95 @@ export async function followPullRequest(
 ): Promise<void> {
   const { task, worktree, budget } = delivery;
   const merge = await resolveMergePolicy(delivery.binding);
-  let turns = 0;
-
   for await (const snapshot of watchPullRequest(pr)) {
     if (snapshot.state === "closed") {
       if (snapshot.merged) return;
-      return stop(
-        delivery,
-        `Pull request ${pr.owner}/${pr.repo}#${pr.number} was closed unmerged.`,
-        [],
-      );
+      return maintenanceStopped(delivery, pr, "The pull request was closed unmerged.");
     }
 
-    if (turns >= budget.prTurns) {
-      return stop(
-        delivery,
-        `jigs stopped work on ${task.key} after ${budget.prTurns} pull request agent turn(s).`,
-        [`Unfinished pull request: https://github.com/${pr.owner}/${pr.repo}/pull/${pr.number}`],
-      );
-    }
-    turns += 1;
-    const report = await builder.run({
-      output: maintenanceReport,
-      resume: prompts.maintenance.resume(pr, snapshot),
-      fresh: async () =>
-        prompts.maintenance.fresh(
-          task,
-          worktree,
-          await readWorktreeDiff(worktree.path, worktree.baseSha),
+    let assessed = snapshot;
+    let recovery: string | undefined;
+    for (let attempt = 1; attempt <= budget.attemptsPerUpdate; attempt++) {
+      const report = await builder.run({
+        output: maintenanceReport,
+        resume: prompts.maintenance.resume(pr, assessed, recovery),
+        fresh: async () =>
+          prompts.maintenance.fresh(
+            task,
+            worktree,
+            await readWorktreeDiff(worktree.path, worktree.baseSha),
+            pr,
+            assessed,
+            recovery,
+          ),
+      });
+      let local = await readBranchState(worktree.path, worktree.baseSha);
+      let current = await fetchPullRequestState(pr);
+      if (current.state === "closed") {
+        if (current.merged) return;
+        return maintenanceStopped(delivery, pr, "The pull request was closed unmerged.");
+      }
+      if (report.status === "needs-human") {
+        return maintenanceStopped(
+          delivery,
           pr,
-          snapshot,
-        ),
-    });
-    const local = await readBranchState(worktree.path, worktree.baseSha);
-    if (local.dirty) {
-      return stop(
-        delivery,
-        `jigs stopped work on ${task.key}: pull request maintenance left uncommitted changes.`,
-        [report.summary],
-      );
+          `The builder needs human attention: ${report.summary}`,
+        );
+      }
+
+      // A successful push may reach GitHub's PR reader shortly afterward.
+      // These two durable waits do not consume another builder attempt.
+      for (
+        let recheck = 0;
+        !local.dirty && local.headSha !== current.headSha && recheck < 2;
+        recheck++
+      ) {
+        await sleep("2s");
+        current = await fetchPullRequestState(pr);
+        local = await readBranchState(worktree.path, worktree.baseSha);
+        if (current.state === "closed") {
+          if (current.merged) return;
+          return maintenanceStopped(delivery, pr, "The pull request was closed unmerged.");
+        }
+      }
+
+      if (local.dirty || local.headSha !== current.headSha) {
+        recovery = [
+          `The worktree is ${local.dirty ? "dirty (uncommitted changes remain)" : "clean"}.`,
+          `Local HEAD: ${local.headSha}. Published PR head: ${current.headSha}.`,
+          "Inspect these facts and safely finish, commit, push, or synchronize the work as needed. Do not discard work or force-push.",
+        ].join(" ");
+        if (attempt === budget.attemptsPerUpdate) {
+          return maintenanceStopped(
+            delivery,
+            pr,
+            `Exhausted ${budget.attemptsPerUpdate} attempts for this pull request update. ${recovery}`,
+          );
+        }
+        // Recovery is local work, not an external event: retry without waiting
+        // for a new watcher yield, even if GitHub has not changed at all.
+        assessed = current;
+        continue;
+      }
+
+      // Pending means the builder is waiting for an external event. A newly
+      // published head or changed discussion is assessed on the next watch yield.
+      if (
+        report.status !== "finished" ||
+        merge.by === "human" ||
+        pullRequestSnapshotKey(current) !== pullRequestSnapshotKey(assessed) ||
+        !isPullRequestMergeReady(current, merge.approval)
+      )
+        break;
+
+      const result = await mergePullRequest(pr, current.headSha, merge).catch((error: unknown) => ({
+        merged: false as const,
+        reason: String(error),
+        transient: true,
+      }));
+      if (result.merged) return;
+      return maintenanceStopped(delivery, pr, `Could not merge the pull request: ${result.reason}`);
     }
-    if (report.status === "needs-human") {
-      return stop(
-        delivery,
-        `jigs stopped work on ${task.key}: pull request maintenance needs human attention.`,
-        [report.summary],
-      );
-    }
-
-    // The agent handles conversation meaning. GitHub approval and checks still
-    // govern merging, and a changed head needs a new snapshot and assessment.
-    if (
-      report.status !== "finished" ||
-      merge.by === "human" ||
-      local.headSha !== snapshot.headSha ||
-      !isPullRequestMergeReady(snapshot, merge.approval)
-    )
-      continue;
-
-    // The agent may have posted, or a person may have added feedback during
-    // its turn. Let the watcher deliver those facts before considering a merge.
-    const current = await fetchPullRequestState(pr);
-    if (facts(current) !== facts(snapshot)) continue;
-
-    const result = await mergePullRequest(pr, snapshot.headSha, merge).catch((error: unknown) => ({
-      merged: false as const,
-      reason: String(error),
-      transient: true,
-    }));
-    if (result.merged) return;
-    return stop(delivery, `jigs could not merge the pull request for ${task.key}.`, [
-      result.reason,
-    ]);
   }
 
   throw new JigsError(
@@ -287,21 +306,22 @@ export async function followPullRequest(
   );
 }
 
-// GitHub collections can arrive in a different order without new activity.
-function facts(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(facts).sort().join(",")}]`;
-  if (typeof value === "object" && value !== null) {
-    return `{${Object.entries(value)
-      .filter(([, field]) => field !== undefined)
-      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-      .map(([key, field]) => `${JSON.stringify(key)}:${facts(field)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value) ?? "null";
+// An unresolved local/publication state must never be pushed as a side effect
+// of stopping. Keep it available for the person taking over.
+function maintenanceStopped(delivery: Delivery, pr: PullRequestRef, reason: string): never {
+  throw new DeliveryStopped(
+    `jigs stopped pull request maintenance for ${delivery.task.key}.`,
+    [
+      reason,
+      `Unfinished pull request: https://github.com/${pr.owner}/${pr.repo}/pull/${pr.number}`,
+      `Local work was retained without an automatic push at ${delivery.worktree.path}.`,
+    ],
+    delivery.worktree,
+  );
 }
 
-// A delivery that stops short pushes first, so the commits outlive the
-// worktree, then throws with what is still open.
+// Before publication, try to preserve implementation commits remotely, then
+// throw with what is still open. Maintenance deliberately does not call this.
 async function stop(delivery: Delivery, reason: string, findings: string[]): Promise<never> {
   const retained = [...findings];
   await pushBranch(delivery.worktree.path, delivery.worktree.branch).catch((error: unknown) => {

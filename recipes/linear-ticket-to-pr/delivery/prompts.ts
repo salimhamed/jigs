@@ -82,11 +82,22 @@ export const review = {
 };
 
 export const maintenance = {
-  job: "Continue maintaining the pull request you implemented. Read the discussion, code, and checks and decide what needs attention; a new message may need no action, including your own replies. Use GitHub tools to investigate and respond directly when useful. Safely synchronize the worktree with the PR branch before editing; never discard other people's work or force-push. Fix issues, run relevant checks, commit and push any changes. Do not merge or approve the PR yourself: the workflow applies the factory's merge policy. Return finished only when no work remains for you on the current code and discussion; pending when waiting for checks or another external change; needs-human when you cannot proceed without help. Explain the result in summary. Do not repeat a reply or change already made. When everything is settled, post nothing. Return needs-human if GitHub tools or credentials are unavailable; do not claim completion.",
-  resume: (pr: PullRequestRef, snapshot: PullRequestSnapshot) =>
+  job: join([
+    "Continue maintaining the pull request you implemented.",
+    "Read the discussion, code, and checks and decide what needs attention; a new message may need no action, including your own replies.",
+    "Use GitHub tools to investigate and respond directly when useful.",
+    "Safely synchronize the worktree with the PR branch before editing; never discard other people's work or force-push.",
+    "Fix issues, run relevant checks, commit and push any changes. Uncommitted or unpublished work needs recovery now, not waiting for GitHub activity.",
+    "Do not merge or approve the PR yourself: the workflow applies the factory's merge policy.",
+    "Return finished only when no work remains for you on the current code and discussion; pending only when waiting for checks or another external change; needs-human when you cannot proceed without help.",
+    "Explain the result in summary. Do not repeat a reply or change already made. When everything is settled, post nothing.",
+    "Return needs-human if GitHub tools or credentials are unavailable; do not claim completion.",
+  ]),
+  resume: (pr: PullRequestRef, snapshot: PullRequestSnapshot, recovery?: string) =>
     join([
       `Pull request: https://github.com/${pr.owner}/${pr.repo}/pull/${pr.number}`,
       `Current GitHub facts:\n${JSON.stringify(snapshot)}`,
+      recovery === undefined ? "" : `Recovery required:\n${recovery}`,
       maintenance.job,
     ]),
   fresh: (
@@ -95,8 +106,13 @@ export const maintenance = {
     diff: string,
     pr: PullRequestRef,
     snapshot: PullRequestSnapshot,
+    recovery?: string,
   ) =>
-    join([taskBrief(task, worktree), `Current diff:\n${diff}`, maintenance.resume(pr, snapshot)]),
+    join([
+      taskBrief(task, worktree),
+      `Current diff:\n${diff}`,
+      maintenance.resume(pr, snapshot, recovery),
+    ]),
 };
 
 export const description = (task: WorkItem, worktree: Worktree, diff: string) =>
