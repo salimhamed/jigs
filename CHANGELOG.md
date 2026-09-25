@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.69.0](https://github.com/salimhamed/jigs/compare/jigs-v0.68.1...jigs-v0.69.0) (2026-09-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove pullRequestGate ([#412](https://github.com/salimhamed/jigs/issues/412))
+
+### Code Refactoring
+
+* remove pullRequestGate ([#412](https://github.com/salimhamed/jigs/issues/412)) ([7e5523b](https://github.com/salimhamed/jigs/commit/7e5523be181d8912f11842c6bb78fccf4cfcaa45))
+
 ## [0.68.1](https://github.com/salimhamed/jigs/compare/jigs-v0.68.0...jigs-v0.68.1) (2026-09-25)
 
 
