@@ -1,5 +1,4 @@
 import {
-  defaultMergePolicy,
   FACTORY_CONFIG_FILE,
   type LinearIdentity,
   readFactoryConfig,
@@ -61,11 +60,8 @@ export { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 export {
   type GithubIdentityCheckOptions,
   type GithubIdentityProbes,
-  type GithubMergePolicyProbes,
   githubIdentityChecks,
-  mergePolicyCheck,
   realGithubIdentityProbes,
-  realGithubMergePolicyProbes,
 } from "./github-identity.ts";
 export {
   type HarnessRuntime,
@@ -102,18 +98,17 @@ const githubProbes: GithubIdentityProbes = realGithubIdentityProbes(getAuthentic
 // Which credential jigs holds and what it is allowed to do with it. Both come
 // from `jigs.config.ts`; where there is none to read, the defaults are what a
 // factory would get, and the credential is still worth checking.
-function githubChecks(checkBindings = false): Check[] {
+function githubChecks(): Check[] {
   try {
-    const { merge, bindings, webhooks } = readFactoryConfig(factoryRoot());
-    return githubIdentityChecks(resolveGithubIdentities(), merge, githubProbes, process.env, {
-      bindings: checkBindings ? bindings : {},
+    const { webhooks } = readFactoryConfig(factoryRoot());
+    return githubIdentityChecks(resolveGithubIdentities(), githubProbes, process.env, {
       webhooks: webhooks?.github.enabled ?? false,
     });
   } catch {
     // A configuration that cannot be read is the binding checks' diagnosis;
     // the credential is still worth checking, against what a factory that
     // states nothing would get.
-    return githubIdentityChecks([{ mode: "pat" }], defaultMergePolicy(), githubProbes);
+    return githubIdentityChecks([{ mode: "pat" }], githubProbes);
   }
 }
 
@@ -195,7 +190,7 @@ export function doctorChecks(workflows: WorkflowManifests): Check[] {
   const aws = users.get("aws") ?? [];
   return [
     ...provider("linear", linearChecks),
-    ...provider("github", () => githubChecks(true)),
+    ...provider("github", githubChecks),
     // Keyed on the config rather than the Linear credential: a Linear webhook
     // switched on without its secret is a failure even where that is missing too.
     ...linearWebhookChecks({ factoryRoot }),

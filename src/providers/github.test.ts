@@ -262,7 +262,7 @@ test("review comments group into threads by in_reply_to_id", async () => {
   ]);
 });
 
-test("check runs collapse to red, green, pending, and pending again with no CI at all", async () => {
+test("check runs collapse to red, green, pending, and none with no CI at all", async () => {
   const run = (overrides: Record<string, unknown>) => ({
     name: "build",
     conclusion: "success",
@@ -289,11 +289,11 @@ test("check runs collapse to red, green, pending, and pending again with no CI a
   });
   expect((await fetchPrSnapshot(pr)).ci).toBe("pending");
 
-  // A repo with no CI must never escalate, so zero runs is never green.
+  // A repo with no CI must never escalate, so zero runs is neither green nor red.
   fetchMock.mockReset();
   stubSnapshot({ checkRuns: [] });
   const none = await fetchPrSnapshot(pr);
-  expect(none.ci).toBe("pending");
+  expect(none.ci).toBe("none");
   expect(none.failingChecks).toEqual([]);
 });
 

@@ -1,14 +1,9 @@
-import {
-  bindingMergePolicy,
-  readFactoryConfig,
-  resolveBinding,
-} from "../../config/factory-config.ts";
+import { type MergeMethod, resolveBinding } from "../../config/factory-config.ts";
 import { factoryRoot } from "../../config/factory-root.ts";
 import {
   assignPullRequest,
   createPullRequest,
   fetchPrCommitMessages,
-  fetchPrSnapshot,
   fetchPrTitle,
   findOpenPullRequestByBranch,
   markPrReady,
@@ -24,16 +19,8 @@ import { GithubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity } from "../../providers/github-auth.ts";
 import { parseGithubRemote } from "../../providers/github-webhook.ts";
 import { type MergeRefusal, mergeRefusal } from "../../workflow/pull-requests/merge-ready.ts";
-import type { MergePolicy } from "../../workflow/pull-requests/policy.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
-
-/** Identifies a GitHub repository by its owner and name. */
-export interface GitHubRepoRef {
-  /** The GitHub organization or account that owns the repository. */
-  owner: string;
-  /** The repository name. */
-  repo: string;
-}
+import { readPullRequestSnapshot } from "./fetch-state.ts";
 
 /** A newly opened or adopted pull request and its browser URL. */
 export type OpenedPullRequest = PullRequestRef & {
@@ -41,8 +28,7 @@ export type OpenedPullRequest = PullRequestRef & {
   url: string;
 };
 
-/** Find the GitHub repository configured for a binding. */
-export async function resolveRepository(binding: string): Promise<GitHubRepoRef> {
+function repositoryOf(binding: string) {
   const { remote } = resolveBinding(factoryRoot(), binding);
   const ref = parseGithubRemote(remote);
   if (ref === null) {
@@ -51,13 +37,6 @@ export async function resolveRepository(binding: string): Promise<GitHubRepoRef>
     );
   }
   return ref;
-}
-
-/** Read the effective merge policy for a factory binding. */
-export async function resolveMergePolicy(binding: string): Promise<MergePolicy> {
-  const root = factoryRoot();
-  const { merge } = readFactoryConfig(root);
-  return bindingMergePolicy(merge, resolveBinding(root, binding));
 }
 
 /**
@@ -75,7 +54,7 @@ export async function openPullRequest(request: {
   draft?: boolean | undefined;
 }): Promise<OpenedPullRequest> {
   const { worktree, title, body, draft } = request;
-  const repo = await resolveRepository(worktree.binding);
+  const repo = repositoryOf(worktree.binding);
   const { branch: head, defaultBranch: base } = worktree;
   const identity = resolveGithubIdentity(repo.owner);
   // In App mode the pull request's author is the bot, which is what lets the
@@ -103,7 +82,7 @@ export async function openPullRequest(request: {
 /** Mark a draft pull request ready and return its freshly read state. */
 export async function markPullRequestReady(pr: PullRequestRef): Promise<PullRequestSnapshot> {
   await markPrReady(pr);
-  return fetchPrSnapshot(pr);
+  return readPullRequestSnapshot(pr);
 }
 
 /** Reply to a review thread and return the posted comment id. */
@@ -170,7 +149,7 @@ export type MergeOutcome =
 const STATE_CHANGED = new Set([405, 409]);
 
 /**
- * Merge the pull request with the configured method, pinned to the head the
+ * Merge the pull request with the worktree binding's `mergeMethod`, pinned to the head the
  * caller judged ready.
  *
  * The title is re-read here rather than carried in from `describePullRequest`:
@@ -181,20 +160,21 @@ const STATE_CHANGED = new Set([405, 409]);
  * reports `merged` only if GitHub says so.
  */
 export async function mergePullRequest(
+  worktree: Worktree,
   pr: PullRequestRef,
   expectedHeadSha: string,
-  policy: MergePolicy,
 ): Promise<MergeOutcome> {
-  const before = await fetchPrSnapshot(pr);
+  const before = await readPullRequestSnapshot(pr);
   if (before.merged) return { merged: true, mergeCommitSha: before.mergeCommitSha };
-  const refusal = mergeRefusal(before, expectedHeadSha, policy.approval);
+  const refusal = mergeRefusal(before, expectedHeadSha);
   if (refusal !== null) return { merged: false, ...refusal };
-  const message = await suppliedCommitMessageBody(pr, policy.method);
+  const method = resolveBinding(factoryRoot(), worktree.binding).mergeMethod;
+  const message = await suppliedCommitMessageBody(pr, method);
   try {
     const result = await mergePr(pr, {
       title: await fetchPrTitle(pr),
       expectedHeadSha,
-      method: policy.method,
+      method,
       ...(message === undefined ? {} : { message }),
     });
     if (result.merged) return { merged: true, mergeCommitSha: result.sha };
@@ -205,7 +185,7 @@ export async function mergePullRequest(
     );
   }
   // Ambiguous either way: GitHub is the only authority on whether it merged.
-  const after = await fetchPrSnapshot(pr);
+  const after = await readPullRequestSnapshot(pr);
   if (after.merged) return { merged: true, mergeCommitSha: after.mergeCommitSha };
   // A snapshot that still reads mergeable after GitHub refused the merge is
   // one no later wake will read differently: the configured method is disabled
@@ -213,7 +193,7 @@ export async function mergePullRequest(
   // `mergeable_state` stopped it. Retrying that on every nudge would never end.
   return {
     merged: false,
-    ...(mergeRefusal(after, expectedHeadSha, policy.approval) ?? {
+    ...(mergeRefusal(after, expectedHeadSha) ?? {
       reason: `GitHub refused to merge ${expectedHeadSha} and still reports it as ${after.mergeState}`,
       transient: false,
     }),
@@ -235,7 +215,7 @@ export async function mergePullRequest(
  */
 async function suppliedCommitMessageBody(
   pr: PullRequestRef,
-  method: MergePolicy["method"],
+  method: MergeMethod,
 ): Promise<undefined | string> {
   const identity = resolveGithubIdentity(pr.owner);
   if (method === "rebase" || identity.mode !== "app" || identity.coAuthor === undefined) {

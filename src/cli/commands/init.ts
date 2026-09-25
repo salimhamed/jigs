@@ -8,7 +8,6 @@ import {
 } from "../../config/factory-config.ts";
 import { JigsError } from "../../errors.ts";
 import { interpolate } from "../../workflow/interpolate.ts";
-import type { MergePolicy } from "../../workflow/pull-requests/policy.ts";
 import { copyFiles, reportCopied } from "../copy-files.ts";
 import { locateTemplates, packageRoot, TEMPLATE_SUFFIX } from "../templates.ts";
 
@@ -112,7 +111,6 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   const ports = factoryPorts(root);
   const identity = deps.identity ?? { mode: "pat" };
   const linearIdentity = deps.linearIdentity ?? { mode: "key" };
-  const merge = MERGE_POLICY[identity.mode];
   const values: Record<string, string> = {
     FACTORY_NAME: factoryName(root),
     JIGS_VERSION: jigsVersion(),
@@ -121,12 +119,10 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
     POSTGRES_PORT: String(ports.postgresPort),
     GITHUB_IDENTITY: `  github: {\n${IDENTITY_COMMENT[identity.mode]}\n    identities: [${literal(identity, "    ")}],\n  },`,
     LINEAR_IDENTITY: `  linear: {\n${LINEAR_IDENTITY_COMMENT[linearIdentity.mode]}\n    identity: ${literal(linearIdentity, "    ")},\n  },`,
-    MERGE_POLICY: `  merge: ${literal({ ...merge }, "  ", MERGE_COMMENT[identity.mode])},`,
     // The scaffolded test asserts what the scaffolded config declares, and both
     // are written from the one value here, so neither mode can scaffold red.
     GITHUB_EXPECTED: literal({ identities: [identity] }, "  "),
     LINEAR_EXPECTED: literal({ identity: linearIdentity }, "  "),
-    MERGE_EXPECTED: literal({ ...merge }, "  "),
   };
 
   const { created, skipped } = copyFiles(templates, root, {
@@ -149,21 +145,6 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   return { created, skipped, ...ports };
 }
 
-// Written out in full rather than left to a default, because the approval
-// signal has to match the identity and nothing derives one from the other at
-// run time: a personal token makes jigs the pull request's author, and GitHub
-// refuses to let an author approve their own, so a label is the only consent
-// the operator can give. An App is a different author, so a review works.
-const MERGE_POLICY: Record<IdentityMode, MergePolicy> = {
-  pat: {
-    by: "human",
-    method: "squash",
-    // "Merge whenever ready": the label survives later pushes.
-    approval: { kind: "label", name: "jigs:approved" },
-  },
-  app: { by: "human", method: "squash", approval: { kind: "review" } },
-};
-
 const IDENTITY_COMMENT: Record<IdentityMode, string> = {
   pat: "    // jigs acts as you, using GITHUB_TOKEN from .env.",
   app: "    // jigs acts as <app-slug>[bot], minting installation tokens from the key.",
@@ -174,27 +155,20 @@ const LINEAR_IDENTITY_COMMENT: Record<LinearIdentity["mode"], string> = {
   app: "    // jigs acts as your Linear OAuth app, from LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET in .env.",
 };
 
-// Keyed by the key it explains, since the renderer emits them in place.
-const MERGE_COMMENT: Record<IdentityMode, Record<string, string>> = {
-  pat: { approval: '// "Merge whenever ready": the label survives later pushes.' },
-  app: { approval: "// An approving review of the commit; a push withdraws it." },
-};
-
 const literalKey = (key: string): string =>
   /^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key);
 
 // A TypeScript literal of a plain settings object, on one line while it fits.
-function literal(value: unknown, indent: string, comments: Record<string, string> = {}): string {
+function literal(value: unknown, indent: string): string {
   if (typeof value !== "object" || value === null) return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map((entry) => literal(entry, indent)).join(", ")}]`;
   const entries = Object.entries(value);
   const flat = `{ ${entries.map(([key, nested]) => `${literalKey(key)}: ${JSON.stringify(nested)}`).join(", ")} }`;
   const plain = entries.every(([, nested]) => typeof nested !== "object");
-  if (plain && flat.length <= 72 && Object.keys(comments).length === 0) return flat;
-  const lines = entries.flatMap(([key, nested]) => [
-    ...(comments[key] === undefined ? [] : [`${indent}  ${comments[key]}`]),
-    `${indent}  ${literalKey(key)}: ${literal(nested, `${indent}  `)},`,
-  ]);
+  if (plain && flat.length <= 72) return flat;
+  const lines = entries.map(
+    ([key, nested]) => `${indent}  ${literalKey(key)}: ${literal(nested, `${indent}  `)},`,
+  );
   return `{\n${lines.join("\n")}\n${indent}}`;
 }
 

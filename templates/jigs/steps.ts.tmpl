@@ -7,7 +7,6 @@ import type {
   Halt,
   JevQuestions,
   JevResult,
-  MergePolicy,
   ModelRequest,
   PullRequestRef,
   ReleasePolicy,
@@ -102,7 +101,7 @@ export async function checkForTicketHumanReply(
   return linearOperations.checkForTicketHumanReply(issueId, sinceIso, postedCommentIds);
 }
 
-/** Read a pull request's reviews, comments, CI results, and merge state. */
+/** Read a pull request's reviews, comments, CI results, approval, and merge state. */
 export async function fetchPullRequestState(pullRequest: PullRequestRef) {
   "use step";
   return pullRequestsOperations.fetchPullRequestState(pullRequest);
@@ -150,18 +149,6 @@ export async function removeRunDirectory() {
   "use step";
   const metadata = getWorkflowMetadata();
   return runtimeOperations.removeRunDirectory(metadata);
-}
-
-/** Find the GitHub repository configured for a factory binding. */
-export async function resolveRepository(binding: string) {
-  "use step";
-  return pullRequestsOperations.resolveRepository(binding);
-}
-
-/** Read the effective merge policy for a factory binding. */
-export async function resolveMergePolicy(binding: string) {
-  "use step";
-  return pullRequestsOperations.resolveMergePolicy(binding);
 }
 
 /** Check commits since the base, the branch's current commit, and uncommitted changes. */
@@ -262,12 +249,12 @@ export async function markPullRequestReady(pullRequest: PullRequestRef) {
   return pullRequestsOperations.markPullRequestReady(pullRequest);
 }
 
-/** Merge the pull request with the configured method, pinned to the approved head. */
+/** Merge the pull request with its binding's merge method, pinned to the approved head. */
 export async function mergePullRequest(
+  worktree: Worktree,
   pullRequest: PullRequestRef,
   expectedHeadSha: string,
-  policy: MergePolicy,
 ) {
   "use step";
-  return pullRequestsOperations.mergePullRequest(pullRequest, expectedHeadSha, policy);
+  return pullRequestsOperations.mergePullRequest(worktree, pullRequest, expectedHeadSha);
 }

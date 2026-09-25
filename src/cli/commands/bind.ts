@@ -1,14 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { formatFailures, runChecks } from "../../checks/catalog.ts";
-import {
-  type GithubMergePolicyProbes,
-  mergePolicyCheck,
-  realGithubMergePolicyProbes,
-} from "../../checks/github-identity.ts";
 import { upsertBinding } from "../../config/config-edit.ts";
 import {
-  bindingMergePolicy,
   installationFor,
   readFactoryConfig,
   readFactoryConfigText,
@@ -25,7 +18,11 @@ import {
 import { JigsError } from "../../errors.ts";
 import { GithubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity, useFactoryRoot } from "../../providers/github-auth.ts";
-import { type EnsureRepoLabelOptions, ensureRepoLabel } from "../../providers/github-label.ts";
+import {
+  type EnsureRepoLabelOptions,
+  ensureRepoLabel,
+  JIGS_LABELS,
+} from "../../providers/github-label.ts";
 import { ensureRepoWebhook, parseGithubRemote } from "../../providers/github-webhook.ts";
 import { hasBindingClone } from "../../steps/workspaces/clone.ts";
 import { bindingDir, bindingRepoDir } from "../../steps/workspaces/layout.ts";
@@ -35,7 +32,6 @@ const BINDING_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 export interface BindDeps {
   cwd: string;
   out: (line: string) => void;
-  mergePolicyProbes?: GithubMergePolicyProbes;
   ensureLabel?: (options: EnsureRepoLabelOptions) => Promise<"created" | "verified">;
 }
 
@@ -49,9 +45,8 @@ export interface BindResult {
   webhook: "created" | "verified" | "updated" | "skipped";
 }
 
-// A config edit plus jigs-owned repository furniture: the webhook and approval
-// label legs may write, while merge-policy inspection is read-only and
-// non-fatal. The clone is the service's to make at its next start.
+// A config edit plus jigs-owned repository furniture: the webhook and the jigs
+// labels. The clone is the service's to make at its next start.
 export async function bindRepo(
   remoteUrl: string,
   deps: BindDeps,
@@ -125,8 +120,7 @@ export async function bindRepo(
 
   // Last, so furniture that cannot be ensured leaves the binding recorded and
   // the whole verb re-runnable: the config edit above and both operations below
-  // are idempotent. Ensure the webhook first because it wakes every run; label
-  // approval is only one possible merge signal.
+  // are idempotent. Ensure the webhook first because it wakes every run.
   const reBindCommand =
     options.name !== undefined || name !== derivedName
       ? `pnpm exec jigs bind ${remoteUrl} --binding-name ${name}`
@@ -141,40 +135,21 @@ export async function bindRepo(
     reBindCommand,
     deps,
   });
-  const binding = {
-    remote: remoteUrl,
-    ...(existing?.merge ? { merge: existing.merge } : {}),
-  };
-  await ensureApprovalLabel(
-    remoteUrl,
-    bindingMergePolicy(config.merge, binding).approval,
-    factoryRoot,
-    reBindCommand,
-    deps,
-  );
-  const report = await runChecks([
-    mergePolicyCheck(
-      resolveGithubIdentity(account ?? "", factoryRoot),
-      config.merge,
-      { [name]: binding },
-      deps.mergePolicyProbes ?? realGithubMergePolicyProbes,
-    ),
-  ]);
-  if (!report.ok) deps.out(formatFailures(report));
+  await ensureJigsLabels(remoteUrl, factoryRoot, reBindCommand, deps);
   return { name, remote: remoteUrl, webhook };
 }
 
-async function ensureApprovalLabel(
+// Every label, whatever this factory's approval: a switch to label approval
+// later should not need a re-bind of every repository.
+async function ensureJigsLabels(
   remoteUrl: string,
-  approval: ReturnType<typeof readFactoryConfig>["merge"]["approval"],
   factoryRoot: string,
   reBindCommand: string,
   deps: BindDeps,
 ): Promise<void> {
-  if (approval.kind !== "label") return;
   const repoRef = parseGithubRemote(remoteUrl);
   if (repoRef === null) {
-    deps.out(`note: skipping approval label (${remoteUrl} is not a github.com remote)`);
+    deps.out(`note: skipping jigs labels (${remoteUrl} is not a github.com remote)`);
     return;
   }
   const slug = `${repoRef.owner}/${repoRef.repo}`;
@@ -183,23 +158,27 @@ async function ensureApprovalLabel(
     identity.mode === "app"
       ? `grant the App "Issues: read & write", accept it on the installation for ${slug}, then re-run: ${reBindCommand}`
       : `set GITHUB_TOKEN in ${path.join(factoryRoot, ".env")} to a classic PAT with repo (or public_repo for a public repository) on ${slug} (an exported GITHUB_TOKEN wins over the file), then re-run: ${reBindCommand}`;
-  const outcome = await (deps.ensureLabel ?? ensureRepoLabel)({
-    ...repoRef,
-    name: approval.name,
-  }).catch((err: unknown) => {
-    const repair = tokenWasRejected(err)
-      ? credentialRepair
-      : err instanceof GithubApiError && err.status === 404 && identity.mode === "app"
-        ? `check the remote, and install the App on ${slug} or grant its installation access to the repo, then re-run: ${reBindCommand}`
-        : err instanceof GithubApiError && err.status === 404
-          ? `check the remote, and that this token can see ${slug}, then re-run: ${reBindCommand}`
-          : `once that clears, re-run: ${reBindCommand}`;
-    throw new JigsError(
-      `${slug}'s ${approval.name} label could not be ensured: ${err instanceof Error ? err.message : String(err)}`,
-      repair,
+  for (const label of JIGS_LABELS) {
+    const outcome = await (deps.ensureLabel ?? ensureRepoLabel)({ ...repoRef, label }).catch(
+      (err: unknown) => {
+        const tokenMissing =
+          identity.mode === "pat" && factoryEnvValue(factoryRoot, "GITHUB_TOKEN") === undefined;
+        const repair =
+          tokenMissing || tokenWasRejected(err)
+            ? credentialRepair
+            : err instanceof GithubApiError && err.status === 404 && identity.mode === "app"
+              ? `check the remote, and install the App on ${slug} or grant its installation access to the repo, then re-run: ${reBindCommand}`
+              : err instanceof GithubApiError && err.status === 404
+                ? `check the remote, and that this token can see ${slug}, then re-run: ${reBindCommand}`
+                : `once that clears, re-run: ${reBindCommand}`;
+        throw new JigsError(
+          `${slug}'s ${label.name} label could not be ensured: ${err instanceof Error ? err.message : String(err)}`,
+          repair,
+        );
+      },
     );
-  });
-  deps.out(`label ${outcome}: ${repoRef.owner}/${repoRef.repo}#${approval.name}`);
+    deps.out(`label ${outcome}: ${slug}#${label.name}`);
+  }
 }
 
 // The likeliest operator error, given that bind used to take a checkout path.

@@ -6,27 +6,33 @@ import { z } from "zod";
 import { JigsError } from "../errors.ts";
 import { factorySlug } from "../steps/workspaces/layout.ts";
 import { agentsSchema } from "../workflow/factory.ts";
-import { type MergePolicy, mergePolicySchema } from "../workflow/pull-requests/policy.ts";
+import { type MergeApproval, mergeApprovalSchema } from "../workflow/pull-requests/policy.ts";
 import { releaseSchema } from "../workflow/runtime/release.ts";
 
 export const FACTORY_CONFIG_FILE = "jigs.config.ts";
 
 const require = createRequire(import.meta.url);
 
-// A binding is a name, a remote URL, repository-specific policy, and how a
+const mergeMethodSchema = z.enum(["squash", "merge", "rebase"]) as z.ZodEnum<{
+  /** Combine the branch into one commit. */
+  squash: "squash";
+  /** Create a merge commit that preserves the branch history. */
+  merge: "merge";
+  /** Replay the branch commits onto the base branch. */
+  rebase: "rebase";
+}>;
+
+/** The GitHub merge method: squash, merge commit or rebase. */
+export type MergeMethod = z.output<typeof mergeMethodSchema>;
+
+// A binding is a name, a remote URL, how jigs merges there, and how a
 // worktree cut from that remote is provisioned — the single place that story
 // is told. Where the clone lives is jigs' business, and every other fact is
 // derived from git at each activation.
 export const bindingSchema = z.strictObject({
   remote: z.string().min(1),
-  // Repository policy may differ between bindings. Approval remains a
-  // factory identity concern and is deliberately not accepted here.
-  merge: z
-    .strictObject({
-      by: z.enum(["jigs", "human"]).optional(),
-      method: z.enum(["squash", "merge", "rebase"]).optional(),
-    })
-    .optional(),
+  /** The GitHub merge method jigs uses on this repository. Defaults to `squash`. */
+  mergeMethod: mergeMethodSchema.default("squash"),
   // Paths, or globs, relative to this binding's own `bindings/<name>/`
   // directory in the factory repo; each lands at that same relative path in
   // the worktree. For what git does not carry.
@@ -94,8 +100,20 @@ export const githubSchema = z
       .array(githubIdentitySchema)
       .min(1)
       .default([{ mode: "pat" }]),
+    /**
+     * How the operator approves a pull request for merging. Defaults to `label` with a personal
+     * access token and to `review` with a GitHub App.
+     */
+    mergeApproval: mergeApprovalSchema.optional(),
   })
-  .superRefine(({ identities }, ctx) => {
+  .superRefine(({ identities, mergeApproval }, ctx) => {
+    if (mergeApproval === "review" && identities.some((identity) => identity.mode === "pat"))
+      ctx.addIssue({
+        code: "custom",
+        path: ["mergeApproval"],
+        message:
+          'with a PAT, jigs opens pull requests as you, and GitHub does not let the author of a pull request approve it; use "label", or a GitHub App identity',
+      });
     const accounts = new Set<string>();
     for (const [index, identity] of identities.entries()) {
       if (identity.mode === "pat") {
@@ -117,7 +135,17 @@ export const githubSchema = z
         accounts.add(account.toLowerCase());
       }
     }
-  });
+  })
+  .transform(({ identities, mergeApproval }) => ({
+    identities,
+    mergeApproval: mergeApproval ?? defaultMergeApproval(identities),
+  }));
+
+// A PAT makes the operator the author of every pull request, and GitHub
+// refuses an author's own approving review.
+function defaultMergeApproval(identities: GithubIdentity[]): MergeApproval {
+  return identities.some((identity) => identity.mode === "pat") ? "label" : "review";
+}
 
 /**
  * Who jigs is on Linear. `key` is a personal API key, so jigs acts as that user.
@@ -169,14 +197,10 @@ const factoryConfigSchema = z.looseObject({
   // the factory's own .env. An absent section is read as an empty one, so what
   // it is missing reports itself by name.
   service: z.preprocess((section) => section ?? {}, serviceSchema),
-  // Which GitHub credential jigs uses. Nothing downstream reads the identity
-  // to decide policy — `merge` below states the policy outright.
+  // Which GitHub credential jigs uses, and how the operator approves a merge.
   github: z.preprocess((section) => section ?? {}, githubSchema),
   linear: z.preprocess((section) => section ?? {}, linearSchema),
-  // This factory's merge policy: who merges, by which of GitHub's three merge
-  // methods, and what signal permits it.
   release: releaseSchema.optional(),
-  merge: z.preprocess((section) => section ?? {}, mergePolicySchema),
   // Service variables every agent harness receives beyond jigs' base set.
   agents: z.preprocess((section) => section ?? {}, agentsSchema),
 });
@@ -196,23 +220,12 @@ export type ResolvedAppIdentity = Omit<AppIdentity, "installations"> & {
 };
 export type ResolvedGithubIdentity = Extract<GithubIdentity, { mode: "pat" }> | ResolvedAppIdentity;
 
-/** The policy a factory that states none gets: a human merges, by squash, on an approving review. */
-export const defaultMergePolicy = (): MergePolicy => mergePolicySchema.parse({});
-
 export function parseFactoryConfig(value: unknown): FactoryConfig {
   const result = factoryConfigSchema.safeParse(value);
   if (!result.success) {
-    const lines = result.error.issues.map((issue) => {
-      const path = issue.path.join(".") || "(root)";
-      if (
-        issue.code === "unrecognized_keys" &&
-        issue.path.at(-1) === "merge" &&
-        issue.keys.includes("approval")
-      ) {
-        return `${path}.approval: approval is factory-level because it follows github.identities; a binding may only override merge.by and merge.method`;
-      }
-      return `${path}: ${issue.message}`;
-    });
+    const lines = result.error.issues.map(
+      (issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`,
+    );
     throw new JigsError(`invalid ${FACTORY_CONFIG_FILE}:\n  ${lines.join("\n  ")}`);
   }
   return result.data;
@@ -250,14 +263,6 @@ export function resolveBinding(factoryRoot: string, name: string): Binding {
     );
   }
   return { name, ...binding };
-}
-
-/** Apply a binding's repository-specific overrides to the factory policy. */
-export function bindingMergePolicy(
-  merge: MergePolicy,
-  binding: Pick<BindingEntry, "merge">,
-): MergePolicy {
-  return { ...merge, ...binding.merge };
 }
 
 export interface ResolvedService {

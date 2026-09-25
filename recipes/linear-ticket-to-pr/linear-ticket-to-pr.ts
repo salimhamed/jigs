@@ -24,6 +24,10 @@ const agents = {
 };
 const agentName = z.enum(["builder", "reviewer"]);
 
+// Who merges a pull request once it is approved and CI is green:
+// "jigs" merges it, "human" leaves the merge to you.
+const mergedBy: "jigs" | "human" = "human";
+
 const inputs = z.object({
   ticket: z.string().min(1),
   binding: z.string(),
@@ -59,6 +63,7 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
     builder: agents[input.builder],
     reviewer: agents[input.reviewer],
     budget: input.budget,
+    mergedBy,
   };
 
   const builder = agentSession({ name: "builder", harness: delivery.builder, cwd: worktree.path });

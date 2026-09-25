@@ -1,8 +1,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { GithubMergePolicyProbes } from "../../checks/github-identity.ts";
 import { GithubApiError } from "../../providers/github-api.ts";
+import { JIGS_LABELS } from "../../providers/github-label.ts";
 import { bindingRepoDir } from "../../steps/workspaces/layout.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import { type BindDeps, bindRepo } from "./bind.ts";
@@ -25,6 +25,7 @@ function deps(overrides: Partial<BindDeps> = {}): BindDeps {
   return {
     cwd: factory,
     out: (line) => lines.push(line),
+    ensureLabel: async () => "verified",
     ...overrides,
   };
 }
@@ -350,7 +351,21 @@ test("bind without a webhooks section skips the webhook leg and says PR waits po
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-test("bind with GitHub webhooks off needs neither secret nor token, and names the interval", async () => {
+test("the label leg without GITHUB_TOKEN fails with the credential repair, after recording the binding", async () => {
+  stubWebhookEnv();
+  vi.stubEnv("GITHUB_TOKEN", "");
+
+  const failure = await bindRepo(API, { cwd: factory, out: (line) => lines.push(line) }).catch(
+    (err: unknown) => err,
+  );
+
+  expect(jigsConfig()).toContain(`remote: "${API}"`);
+  expect(String(failure)).toContain("jigs:approved label could not be ensured");
+  expect((failure as { hint?: string }).hint).toContain("set GITHUB_TOKEN in");
+  expect((failure as { hint?: string }).hint).toContain("repo (or public_repo");
+});
+
+test("bind with GitHub webhooks off needs no webhook secret, and names the interval", async () => {
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "");
   vi.stubEnv("GITHUB_TOKEN", "");
   writeFileSync(
@@ -365,50 +380,43 @@ test("bind with GitHub webhooks off needs neither secret nor token, and names th
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-test("bind ensures the configured approval label on every run", async () => {
+test("bind ensures every jigs label on every run, whatever the approval", async () => {
   writeFileSync(
     path.join(factory, "jigs.config.ts"),
-    'export default { merge: { by: "jigs", method: "squash", approval: { kind: "label", name: "ship-it" } }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
+    'export default { github: { identities: [{ mode: "pat" }], mergeApproval: "label" }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
   );
   const ensureLabel = vi.fn().mockResolvedValueOnce("created").mockResolvedValueOnce("verified");
-  const mergePolicyProbes: GithubMergePolicyProbes = {
-    repository: async () => ({ default_branch: "main" }),
-    checkRuns: async () => 1,
-    commitStatuses: async () => 0,
-    actionsWorkflows: async () => 0,
-    labelExists: async () => true,
-    protection: async () => ({
-      requiredApprovingReviews: 0,
-      unread: null,
-    }),
-  };
 
-  await bindRepo(API, deps({ ensureLabel, mergePolicyProbes }));
-  await bindRepo(API, deps({ ensureLabel, mergePolicyProbes }));
+  await bindRepo(API, deps({ ensureLabel }));
+  await bindRepo(API, deps({ ensureLabel }));
 
-  expect(ensureLabel).toHaveBeenCalledTimes(2);
+  expect(ensureLabel).toHaveBeenCalledTimes(2 * JIGS_LABELS.length);
   expect(ensureLabel).toHaveBeenCalledWith({
     owner: "acme",
     repo: "Api",
-    name: "ship-it",
+    label: expect.objectContaining({ name: "jigs:approved" }),
   });
-  expect(lines).toContain("label created: acme/Api#ship-it");
-  expect(lines).toContain("label verified: acme/Api#ship-it");
+  expect(lines).toContain("label created: acme/Api#jigs:approved");
+  expect(lines).toContain("label verified: acme/Api#jigs:approved");
 });
 
-test("review approval does not ensure a repository label", async () => {
-  const ensureLabel = vi.fn();
+test("a factory approving by review still gets the jigs labels", async () => {
+  const ensureLabel = vi.fn().mockResolvedValue("verified");
+  writeFileSync(
+    path.join(factory, "jigs.config.ts"),
+    'export default { github: { identities: [{ mode: "app", appId: 1, installations: { acme: 2 }, privateKeyPath: "key.pem", operator: "me" }] }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
+  );
 
   await bindRepo(API, deps({ ensureLabel }));
 
-  expect(ensureLabel).not.toHaveBeenCalled();
+  expect(ensureLabel).toHaveBeenCalledTimes(JIGS_LABELS.length);
 });
 
 test("a label permission failure preserves the binding after ensuring the webhook", async () => {
   stubWebhookEnv();
   writeFileSync(
     path.join(factory, "jigs.config.ts"),
-    'export default { webhooks: { url: "https://factory.example.ts.net", github: { enabled: true }, linear: { enabled: false } }, merge: { by: "jigs", method: "squash", approval: { kind: "label", name: "ship-it" } }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
+    'export default { webhooks: { url: "https://factory.example.ts.net", github: { enabled: true }, linear: { enabled: false } }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
   );
   fetchMock
     .mockResolvedValueOnce(new Response("[]"))
@@ -427,37 +435,9 @@ test("a label permission failure preserves the binding after ensuring the webhoo
 
   expect(lines).toContain("webhook created: acme/Api");
   expect(jigsConfig()).toContain(`remote: "${API}"`);
-  expect(String(failure)).toContain("ship-it label could not be ensured");
+  expect(String(failure)).toContain("jigs:approved label could not be ensured");
   expect((failure as { hint?: string }).hint).toContain("repo (or public_repo");
   expect((failure as { hint?: string }).hint).toContain(`re-run: pnpm exec jigs bind ${API}`);
-});
-
-test("bind prints a merge-policy repair but still resolves successfully", async () => {
-  writeFileSync(
-    path.join(factory, "jigs.config.ts"),
-    'export default { merge: { by: "jigs", method: "squash", approval: { kind: "review" } }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
-  );
-  const result = await bindRepo(
-    API,
-    deps({
-      mergePolicyProbes: {
-        repository: async () => ({
-          default_branch: "main",
-          allow_merge_commit: true,
-          allow_squash_merge: true,
-          allow_rebase_merge: true,
-        }),
-        checkRuns: async () => 0,
-        commitStatuses: async () => 0,
-        actionsWorkflows: async () => 0,
-        labelExists: async () => true,
-        protection: async () => null,
-      },
-    }),
-  );
-  expect(result.name).toBe("api");
-  expect(lines.join("\n")).toContain("api: acme/Api has no active Actions workflows");
-  expect(lines.join("\n")).toContain('set bindings.api.merge.by to "human" in jigs.config.ts');
 });
 
 test("no GITHUB_TOKEN anywhere fails with the repair, and the retry ensures the webhook", async () => {

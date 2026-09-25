@@ -85,11 +85,11 @@ automatically push them while stopping. The budget and recovery policy are in
 the copied recipe, so you can change them.
 
 The builder is instructed not to merge. This is a prompt rule, not a restriction
-on its GitHub tools. Recipe code follows the binding's
-[merge policy](/guide/configuration#merge): in human mode it waits for you;
-in automatic mode it requires the builder to report finished and still checks
-GitHub approval, CI and mergeability before merging. An agent's judgment does
-not replace those checks. If a merge attempt is refused, the recipe fails with
+on its GitHub tools. `mergedBy` at the top of the workflow file says who
+merges: with `"human"`, the default, it waits for you; with `"jigs"` it
+requires the builder to report finished and still checks the
+[approval](/guide/configuration#merging), CI and mergeability before merging.
+An agent's judgment does not replace those checks. If a merge attempt is refused, the recipe fails with
 the reason so you can inspect the PR before starting another run.
 
 ## Updating a recipe you already added

@@ -212,7 +212,10 @@ for creating the builder and supplying recovery context in `fresh`.
 `snapshot.state` and `snapshot.merged` come from GitHub. The snapshot also
 includes `headSha`, draft and merge state, labels, reviews, inline review
 threads and conversation comments. jigs summarizes GitHub checks and commit
-statuses as `ci` (`"red"`, `"green"` or `"pending"`) and includes `failingChecks`.
+statuses as `ci` (`"red"`, `"green"`, `"pending"`, or `"none"` when nothing has
+reported on the head yet) and includes `failingChecks`. `approval` gives the
+factory's approval signal and its `state` (`"approved"`, `"changes-requested"`,
+`"stale"` or `"none"`).
 These are observed facts, not an assessment that the work is finished.
 
 To compare a fresh read with an earlier snapshot, import
@@ -237,9 +240,11 @@ A second owner receives a claim conflict. The service's polling, webhooks and
 
 The watcher never merges. Factory code decides who may merge and calls
 `mergePullRequest` when appropriate; that step rechecks current GitHub facts
-and the [merge approval policy](/guide/configuration#merge). The
+and the [merge approval](/guide/configuration#merging), and merges with the
+binding's merge method. Each snapshot's `approval` already reads the factory's
+approval setting, so `isPullRequestMergeReady(snapshot)` needs nothing else. The
 [linear-ticket-to-pr recipe](/guide/recipes#linear-ticket-to-pr) demonstrates
-continuing the builder session after publication with this policy.
+continuing the builder session after publication and deciding who merges.
 
 ### Use the rules-based gate
 
@@ -250,7 +255,7 @@ wake says what is outstanding right now.
 ```ts
 function pullRequestGate(
   pr: PullRequestRef,
-  options: { scope: string; approval: MergePolicy["approval"]; worktree?: Worktree },
+  options: { scope: string; worktree?: Worktree },
 ): AsyncIterable<PullRequestWake>;
 
 type PullRequestWake =
@@ -262,16 +267,15 @@ type PullRequestWake =
 
 ```ts
 import { postPullRequestNote, pullRequestGate } from "#jigs/routines";
-import { mergePullRequest, resolveMergePolicy } from "#jigs/steps";
+import { mergePullRequest } from "#jigs/steps";
 
-const merge = await resolveMergePolicy(input.binding);
 const scope = `triage/${input.ticket}`;
 
-const gate = pullRequestGate(pr, { scope, approval: merge.approval, worktree });
+const gate = pullRequestGate(pr, { scope, worktree });
 for await (const wake of gate) {
   if (wake.kind === "closed") return { merged: wake.merged };
   if (wake.kind === "merge-ready") {
-    const result = await mergePullRequest(pr, wake.headSha, merge);
+    const result = await mergePullRequest(worktree, pr, wake.headSha);
     if (result.merged) return { merged: true };
     await postPullRequestNote({
       pr,

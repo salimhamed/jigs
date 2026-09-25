@@ -24,7 +24,6 @@ import {
   readBranchState,
   readWorktreeDiff,
   registerResource,
-  resolveMergePolicy,
 } from "#jigs/steps";
 import * as prompts from "./prompts.ts";
 import {
@@ -59,6 +58,8 @@ export interface Delivery {
   builder: Harness;
   reviewer: Harness;
   budget: Budget;
+  /** Who merges the pull request once it is approved and CI is green. */
+  mergedBy: "jigs" | "human";
 }
 
 export interface Approved {
@@ -207,7 +208,6 @@ export async function followPullRequest(
   builder: BuilderSession,
 ): Promise<void> {
   const { task, worktree, budget } = delivery;
-  const merge = await resolveMergePolicy(worktree.binding);
   let lastAssessed: string | undefined;
   for await (const snapshot of watchPullRequest(pr)) {
     if (snapshot.state === "closed") {
@@ -290,17 +290,19 @@ export async function followPullRequest(
       // published head or changed discussion is assessed on the next watch yield.
       if (
         report.status !== "finished" ||
-        merge.by === "human" ||
+        delivery.mergedBy === "human" ||
         pullRequestSnapshotKey(current) !== pullRequestSnapshotKey(assessed) ||
-        !isPullRequestMergeReady(current, merge.approval)
+        !isPullRequestMergeReady(current)
       )
         break;
 
-      const result = await mergePullRequest(pr, current.headSha, merge).catch((error: unknown) => ({
-        merged: false as const,
-        reason: String(error),
-        transient: true,
-      }));
+      const result = await mergePullRequest(worktree, pr, current.headSha).catch(
+        (error: unknown) => ({
+          merged: false as const,
+          reason: String(error),
+          transient: true,
+        }),
+      );
       if (result.merged) return;
       return maintenanceStopped(delivery, pr, `Could not merge the pull request: ${result.reason}`);
     }

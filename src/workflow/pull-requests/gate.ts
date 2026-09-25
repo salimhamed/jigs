@@ -10,7 +10,6 @@ import { ClaimConflictError } from "../linear/claim.ts";
 import type { Worktree } from "../workspaces/worktree.ts";
 import { carriesMarker, commentSource, type MarkerLedger, readLedger } from "./marker.ts";
 import { isPullRequestMergeReady } from "./merge-ready.ts";
-import type { ApprovalSignal } from "./policy.ts";
 
 /** The durable hook-token prefix for pull request activity. */
 export const PULL_REQUEST_TOKEN_PREFIX = "github:pr:";
@@ -179,14 +178,13 @@ export interface PullRequestState {
 
 /**
  * What this scope still owes the pull request, derived from the snapshot, the
- * markers in it, and the approval signal the factory configured. Pure: two
+ * markers in it, and the approval it reads. Pure: two
  * identical snapshots classify identically, and a snapshot whose comments
  * already carry this scope's answers yields nothing.
  */
 export function classifyPullRequestState(
   snapshot: PullRequestSnapshot,
   scope: string,
-  approval: ApprovalSignal,
 ): PullRequestState {
   const ownComments = bodies(snapshot).filter(carriesMarker).length;
   if (snapshot.state === "closed") {
@@ -250,7 +248,7 @@ export function classifyPullRequestState(
   // Feedback first: merging over an unanswered review comment would answer it
   // with a merge.
   if (
-    isPullRequestMergeReady(snapshot, approval) &&
+    isPullRequestMergeReady(snapshot) &&
     threads.length === 0 &&
     !ledger.settled.merge.has(snapshot.headSha)
   ) {
@@ -289,8 +287,6 @@ export interface PullRequestGateSteps {
 export interface PullRequestGateOptions {
   /** The continuation identity whose markers say what is already done. */
   scope: string;
-  /** The signal that makes an open pull request merge-ready. */
-  approval: ApprovalSignal;
   /**
    * The worktree this run pushes the pull request's branch from. With it, a `ci-red` or
    * `review-comments` wake is dropped when its head is an older commit of the local branch: the
@@ -348,7 +344,7 @@ export async function* pullRequestGate(
   options: PullRequestGateOptions,
 ): AsyncGenerator<PullRequestWake, void, undefined> {
   const { fetchState } = steps;
-  const { scope, approval, worktree } = options;
+  const { scope, worktree } = options;
   const token = pullRequestToken(pr);
   const hook = createHook<unknown>({ token });
   try {
@@ -358,7 +354,7 @@ export async function* pullRequestGate(
     }
     let snapshot = await fetchState(pr);
     while (true) {
-      const round = classifyPullRequestState(snapshot, scope, approval);
+      const round = classifyPullRequestState(snapshot, scope);
       console.log(
         `[prGate] ${pr.owner}/${pr.repo}#${pr.number} scope=${scope} wakes=${round.wakes.length} jigs-comments=${round.ownComments}`,
       );

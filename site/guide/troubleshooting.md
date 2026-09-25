@@ -52,6 +52,11 @@ Once you have answered, the run notices on its next
 [check](/guide/configuration#webhooks). `pnpm exec jigs poke <run>` makes it
 check now. A poke cannot stand in for the answer or approval itself.
 
+If the pull request is approved but `jigs status <run>` shows `CI: none` and a
+blocker saying no checks have reported, either CI has not started on that
+commit yet or the repository has none. jigs never merges without CI: add a CI
+workflow to the repository, or merge it yourself.
+
 If `jigs status` reports a run as `stalled`, nothing is going to move it; its
 detail view shows the step or queue job that died and how to requeue it.
 

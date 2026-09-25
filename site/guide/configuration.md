@@ -16,9 +16,8 @@ export default defineFactory({
   bindings: {
     app: { remote: "git@github.com:owner/app.git" },
   },
-  github: { identities: [{ mode: "pat" }] },
+  github: { identities: [{ mode: "pat" }], mergeApproval: "label" },
   linear: { identity: { mode: "key" } },
-  merge: { by: "human", method: "squash", approval: { kind: "label", name: "jigs:approved" } },
   workflows: {
     hello: () => import("./workflows/hello/hello.ts"),
   },
@@ -63,7 +62,7 @@ bindings: {
     copy: [".env"],
     postCreate: ["pnpm install"],
     hookTimeoutMinutes: 20,
-    merge: { by: "jigs" },
+    mergeMethod: "rebase",
   },
 },
 ```
@@ -74,7 +73,7 @@ bindings: {
 | `copy` | `[]` | Files to copy into each new worktree. |
 | `postCreate` | `[]` | Commands to run in each new worktree, in order. The first failure stops provisioning. |
 | `hookTimeoutMinutes` | `10` | The total time `postCreate` may take. |
-| `merge.by`, `merge.method` | the factory's | Override the [merge policy](#merge) for this repository. |
+| `mergeMethod` | `"squash"` | How jigs [merges](#merging) a pull request here: `"squash"`, `"merge"` or `"rebase"`. |
 
 Each `copy` entry is a path, or a glob, inside `bindings/<name>/` in the
 factory, and lands at the same path in the worktree. `bindings/app/.env`
@@ -123,53 +122,42 @@ Release never throws away work: a worktree with uncommitted or unmerged changes
 stays, and a branch is deleted only when its commits are proven merged. See
 `jigs resources` in [CLI commands](/guide/cli) to inspect what is left.
 
-## `merge` {#merge}
+## Merging {#merging}
 
-Who merges a pull request, how, and on what signal:
+Two settings say how a pull request is merged, and your workflow says who
+merges it.
 
-```ts
-merge: {
-  by: "human",
-  method: "squash",
-  approval: { kind: "review" },
-},
-```
+- **`github.mergeApproval`**: what counts as your consent. `"review"` is an
+  approving review of the current commit; a new push withdraws it. `"label"`
+  is the `jigs:approved` label on the pull request; it survives later pushes,
+  so it means "merge whenever ready". The default follows the
+  [identity](#github-identity): `"label"` with a PAT, `"review"` with an App.
+  A PAT cannot use `"review"`: jigs opens pull requests as you, and GitHub does
+  not let you approve your own.
+- **`bindings.<name>.mergeMethod`**: `"squash"`, `"merge"` or `"rebase"`, as on
+  GitHub. Default `"squash"`. With `squash` and `merge`, the pull request title
+  becomes the commit title. With `rebase`, each commit is rewritten and loses
+  its signature.
 
-- **`by`**: `"human"` means jigs follows the pull request and answers feedback,
-  and you press Merge. `"jigs"` means jigs merges it once it is ready. Default
-  `"human"`.
-- **`method`**: `"squash"`, `"merge"` or `"rebase"`, as on GitHub. Default
-  `"squash"`. With `squash` and `merge`, the pull request title becomes the
-  commit title. With `rebase`, each commit is rewritten and loses its signature.
-- **`approval`**: what counts as your consent. `{ kind: "review" }` is an
-  approving review of the current commit; a new push withdraws it. `{ kind:
-  "label", name: "jigs:approved" }` is a label on the pull request; it survives
-  later pushes, so it means "merge whenever ready". GitHub does not let you
-  approve your own pull request, so the label is the signal to use when jigs
-  acts as you ([PAT mode](#github-identity)). `jigs init` writes the pairing that
-  fits the identity you chose.
+`jigs bind` creates the `jigs:approved` label on each GitHub repository it
+binds, whichever approval you use.
 
-A binding may override `by` and `method`, but not `approval`.
+Who merges is not configuration. The linear-ticket-to-pr recipe sets it with
+`mergedBy` in its workflow file, and waits for you to merge by default. A custom
+workflow decides in its own code and calls `mergePullRequest`, which applies
+the two settings above, rereads GitHub and enforces readiness and approval
+before it merges. `watchPullRequest` only reports facts and never
+merges. None of this restricts an agent that merges through its own GitHub
+tools.
 
-`resolveMergePolicy(binding)` reads these settings for factory code. The
-linear-ticket-to-pr recipe checks `by` before calling `mergePullRequest`, which
-rereads GitHub and enforces readiness and approval. `watchPullRequest` only
-reports facts: it neither consumes a merge policy nor performs a merge. Custom
-workflows must apply `by` themselves. These settings do not restrict an agent
-that merges independently through its own GitHub tools.
-
-jigs merges only when the approval signal is present, GitHub reports the pull
-request mergeable, it is not a draft, and at least one check has run and
-passed. **jigs never merges in a repository with no CI**, so set
-`merge.by: "human"` for such a binding. While GitHub reports `behind`,
-`blocked` or `unknown`, jigs waits and checks again later. A label cannot
-satisfy a branch rule that requires approving reviews, so label approval only
-works on repositories without that rule.
-
-`jigs doctor` prints each binding's effective policy. When jigs merges, it also
-reports a repository with no CI, a disabled merge method, a missing label, or a
-required-review rule the label cannot meet. jigs never changes branch
-protection itself.
+jigs merges only when the approval is present, GitHub reports the pull request
+mergeable, it is not a draft, and at least one check has run and passed.
+**jigs never merges in a repository with no CI**: when no check has reported,
+`jigs status` says so, since CI may not have started yet or the repository may
+have none. While GitHub reports `behind`, `blocked` or `unknown`, jigs waits and
+checks again later. A label cannot satisfy a branch rule that requires approving
+reviews, so label approval only works on repositories without that rule. jigs
+never changes branch protection.
 
 ## `agents.env` {#agents-env}
 
@@ -201,8 +189,8 @@ github: { identities: [{ mode: "pat" }] },
 ```
 
 Put a personal access token in `.env` as `GITHUB_TOKEN`. Pull requests jigs
-opens are authored by you, so GitHub will not let you approve them: use label
-approval. You can still send work back with review comments or a comment on the
+opens are authored by you, so GitHub will not let you approve them: jigs uses
+[label approval](#merging). You can still send work back with review comments or a comment on the
 pull request. A classic token needs `repo` (or `public_repo`), plus
 `admin:repo_hook` if you turn on GitHub webhooks.
 
@@ -222,15 +210,14 @@ github: {
 ```
 
 Pull requests come from `<app-slug>[bot]`, and you review them like anyone
-else's. `jigs init --github-identity-mode app` takes all of these values as
+else's, so jigs uses [review approval](#merging) unless you choose the label. `jigs init --github-identity-mode app` takes all of these values as
 flags. To set one up:
 
 1. **Register a GitHub App** under Settings → Developer settings → GitHub Apps.
    Leave OAuth and device flow off, and turn its webhook off.
 2. **Grant repository permissions**: Contents, Pull requests and Issues read
-   and write; Administration read; Metadata, Checks and Commit statuses read.
-   Add Actions read when jigs merges, and Repository webhooks read and write if
-   you turn on GitHub webhooks. `jigs doctor` names any that are missing.
+   and write; Metadata, Checks and Commit statuses read. Add Repository
+   webhooks read and write if you turn on GitHub webhooks. `jigs doctor` names any that are missing.
 3. **`appId`** is the App ID on its settings page.
 4. **`privateKeyPath`** is the key GitHub generates under Private keys. Save it
    in the factory (`.gitignore` already excludes `*.private-key.pem`) and run

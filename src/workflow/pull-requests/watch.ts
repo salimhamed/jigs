@@ -9,7 +9,7 @@ import { type PullRequestSnapshot, pullRequestSnapshotKey } from "./snapshot.ts"
  * @remarks
  * The factory supplies a durable step to read GitHub. Duplicate wakes and collection ordering
  * changes do not yield again. Comments are included regardless of author or hidden metadata;
- * the consumer decides what needs attention and owns its action limits and merge policy.
+ * the consumer decides what needs attention, owns its action limits and decides who merges.
  * The service poll and GitHub webhooks wake the same exclusive hook used by `pullRequestGate`.
  * Closing the iterator releases that hook. A closed snapshot is yielded before the iterator ends.
  */

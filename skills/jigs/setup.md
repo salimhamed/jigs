@@ -2,7 +2,7 @@
 
 From nothing to a service that answers. The human-facing walkthrough is
 `https://salimhamed.github.io/jigs/guide/getting-started`; identity, merge
-policy, bindings and webhooks are in
+settings, bindings and webhooks are in
 `https://salimhamed.github.io/jigs/guide/configuration`.
 
 Print each command for the human to run, or run it and show them the output.
@@ -39,9 +39,10 @@ Choose the GitHub identity now; `jigs init --help` lists the flags.
 `--github-identity-mode pat` (the default) makes jigs act as the operator, with
 a `jigs:approved` label as the merge approval. `--github-identity-mode app`
 makes jigs act as a GitHub App and takes the App's id, installations, private
-key path and the operator's login; approval is then a GitHub review.
-`--linear-identity-mode key|app` does the same for Linear. Both are written to
-`jigs.config.ts`, so changing one later is a config edit.
+key path and the operator's login; approval is then a GitHub review. An App
+factory may set `github.mergeApproval: "label"` instead; a PAT factory cannot
+use review. `--linear-identity-mode key|app` does the same for Linear. Both are
+written to `jigs.config.ts`, so changing one later is a config edit.
 
 `jigs init` writes `jigs.config.ts`, the generated `jigs/steps.ts` and
 `jigs/routines.ts`, a `hello` workflow in `workflows/hello/hello.ts`, the package manifest, Docker Compose, `.env.example` and build
@@ -127,8 +128,8 @@ jigs up
 ```
 
 `jigs bind` adds the binding to `jigs.config.ts` and, with the configured
-identity, creates the approval label when approval is a label and the webhook
-when GitHub webhooks are on. The service clones each binding when it starts, so the
+identity, creates the `jigs:approved` label and, when GitHub webhooks are on,
+the webhook. The service clones each binding when it starts, so the
 `jigs up` above is what makes a new binding usable. Worktree provisioning
 (`copy`, `postCreate`) is a hand edit described in the configuration guide.
 

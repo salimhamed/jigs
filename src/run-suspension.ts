@@ -1,5 +1,5 @@
 import type { WakeNote } from "./service/wake-note.ts";
-import type { ApprovalState } from "./workflow/pull-requests/merge-ready.ts";
+import type { ApprovalState, PullRequestSnapshot } from "./workflow/pull-requests/snapshot.ts";
 
 /**
  * One hook a run is currently parked on. Everything below `question` is read
@@ -18,7 +18,7 @@ export interface RunSuspension {
   question?: string;
   /** The commit the pull request is on, shortened. */
   headSha?: string;
-  ci?: "green" | "red" | "pending";
+  ci?: PullRequestSnapshot["ci"];
   approval?: ApprovalState;
   draft?: boolean;
   /** GitHub's own `mergeable_state`, as the merge gate reads it. */

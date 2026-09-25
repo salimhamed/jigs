@@ -1,12 +1,10 @@
-import type { PullRequestReview, PullRequestSnapshot } from "../../providers/github.ts";
-import type { ApprovalSignal } from "./policy.ts";
-
-/**
- * How the operator's consent reads right now. `stale` is an approval that
- * named an earlier commit — a different thing to tell an operator than a pull
- * request nobody has approved.
- */
-export type ApprovalState = "approved" | "changes-requested" | "stale" | "none";
+import { APPROVED_LABEL, type MergeApproval } from "./policy.ts";
+import type {
+  ApprovalState,
+  PullRequestApproval,
+  PullRequestReview,
+  PullRequestSnapshot,
+} from "./snapshot.ts";
 
 /**
  * Is the operator's consent recorded on the pull request, as this factory
@@ -15,15 +13,15 @@ export type ApprovalState = "approved" | "changes-requested" | "stale" | "none";
  * - `review`: the latest review each person left is the one that counts, and
  *   at least one of them approves this exact commit with none requesting
  *   changes. An approval names a commit, so a push withdraws it.
- * - `label`: the label is on the pull request. It means "merge whenever
+ * - `label`: the `jigs:approved` label is on the pull request. It means "merge whenever
  *   ready", so it survives later pushes and jigs never removes it.
  */
 export function approvalState(
-  snapshot: PullRequestSnapshot,
-  approval: ApprovalSignal,
+  snapshot: Pick<PullRequestSnapshot, "labels" | "reviews" | "headSha">,
+  approval: MergeApproval,
 ): ApprovalState {
-  if (approval.kind === "label") {
-    return snapshot.labels.includes(approval.name) ? "approved" : "none";
+  if (approval === "label") {
+    return snapshot.labels.includes(APPROVED_LABEL) ? "approved" : "none";
   }
   const latest = new Map<string, PullRequestReview>();
   for (const review of [...snapshot.reviews].sort(
@@ -40,25 +38,13 @@ export function approvalState(
   return approved.length === 0 ? "none" : "stale";
 }
 
-/** {@link approvalState} as the single question a merge asks of it. */
-export function isApprovalSatisfied(
-  snapshot: PullRequestSnapshot,
-  approval: ApprovalSignal,
-): boolean {
-  return approvalState(snapshot, approval) === "approved";
-}
-
 // Written for the operator reading a parked pull request: this sentence is
 // also the `blocker` line `jigs status <run-id>` prints.
-function approvalMissing(
-  state: ApprovalState,
-  approval: ApprovalSignal,
-  expectedHeadSha: string,
-): string {
+function approvalMissing({ signal, state }: PullRequestApproval, expectedHeadSha: string): string {
   if (state === "changes-requested") return "a review requests changes";
   if (state === "stale") return `the approval does not cover ${expectedHeadSha}`;
-  return approval.kind === "label"
-    ? `the ${approval.name} label is not on the pull request`
+  return signal === "label"
+    ? `the ${APPROVED_LABEL} label is not on the pull request`
     : "no approving review yet";
 }
 
@@ -94,12 +80,11 @@ export interface MergeRefusal {
  * registers, so a label-approved pull request could merge ahead of its own
  * build. `ci` closes that: it is green only when there is at least one check
  * and every one of them passed. The cost is deliberate — jigs never merges a
- * repository with no CI, and such a repository needs `merge.by: "human"`.
+ * repository with no CI, so a person merges there.
  */
 export function mergeRefusal(
   snapshot: PullRequestSnapshot,
   expectedHeadSha: string,
-  approval: ApprovalSignal,
 ): MergeRefusal | null {
   if (snapshot.headSha !== expectedHeadSha) {
     return {
@@ -118,12 +103,19 @@ export function mergeRefusal(
   }
   // Approving again is all this takes, and the approval names this same
   // commit, so the wake that carries it is the one that merges.
-  const consent = approvalState(snapshot, approval);
-  if (consent !== "approved") {
-    return { reason: approvalMissing(consent, approval, expectedHeadSha), transient: true };
+  if (snapshot.approval.state !== "approved") {
+    return { reason: approvalMissing(snapshot.approval, expectedHeadSha), transient: true };
   }
   if (snapshot.mergeState !== "clean") {
     return { reason: `GitHub reports the merge state as ${snapshot.mergeState}`, transient: true };
+  }
+  // Either CI has not registered yet or the repository has none; from one
+  // snapshot jigs cannot tell which, so the reason names both.
+  if (snapshot.ci === "none") {
+    return {
+      reason: `no checks have reported on ${expectedHeadSha}; CI may not have started yet, or the repository has none, and jigs won't merge without CI`,
+      transient: true,
+    };
   }
   if (snapshot.ci !== "green") {
     return { reason: `CI is ${snapshot.ci}`, transient: true };
@@ -132,9 +124,6 @@ export function mergeRefusal(
 }
 
 /** Whether current GitHub facts satisfy the configured approval and merge requirements. */
-export function isPullRequestMergeReady(
-  snapshot: PullRequestSnapshot,
-  approval: ApprovalSignal,
-): boolean {
-  return mergeRefusal(snapshot, snapshot.headSha, approval) === null;
+export function isPullRequestMergeReady(snapshot: PullRequestSnapshot): boolean {
+  return mergeRefusal(snapshot, snapshot.headSha) === null;
 }

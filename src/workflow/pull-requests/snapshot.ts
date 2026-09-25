@@ -73,8 +73,25 @@ export interface PullRequestSnapshot {
   reviews: PullRequestReview[];
   reviewThreads: ReviewThread[];
   conversationComments: PullRequestComment[];
-  ci: "red" | "green" | "pending";
+  /** `none`: no check or status has reported on this head yet. It is never green. */
+  ci: "red" | "green" | "pending" | "none";
   failingChecks: CheckRun[];
+  /** The operator's consent, read the way this factory's `github.mergeApproval` asks for it. */
+  approval: PullRequestApproval;
+}
+
+/**
+ * How the operator's consent reads right now. `stale` is an approval that
+ * named an earlier commit — a different thing to tell an operator than a pull
+ * request nobody has approved.
+ */
+export type ApprovalState = "approved" | "changes-requested" | "stale" | "none";
+
+/** The factory's approval signal and how it reads on the pull request. */
+export interface PullRequestApproval {
+  /** `review` is an approving review of the head; `label` is the `jigs:approved` label. */
+  signal: "review" | "label";
+  state: ApprovalState;
 }
 
 // Snapshot arrays are collections, not sequences: API ordering alone is not new activity.
@@ -112,5 +129,6 @@ export function pullRequestSnapshotKey(snapshot: PullRequestSnapshot): string {
     conversationComments: snapshot.conversationComments,
     ci: snapshot.ci,
     failingChecks: snapshot.failingChecks,
+    approval: snapshot.approval,
   });
 }

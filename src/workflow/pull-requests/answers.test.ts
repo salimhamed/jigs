@@ -88,6 +88,7 @@ const unannotated = async (): Promise<PullRequestSnapshot> => ({
   conversationComments: [],
   ci: "green",
   failingChecks: [],
+  approval: { signal: "review", state: "none" },
 });
 
 const sources = (body: string) => parseMarkers(body).map((marker) => marker.source);

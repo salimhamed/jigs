@@ -205,13 +205,10 @@ test("workflows check only explicitly declared integrations", async () => {
   vi.stubEnv("LINEAR_API_KEY", "");
   vi.stubEnv("GITHUB_TOKEN", "");
   expect(preflightIds({ integrations: ["linear"] })).toEqual(["linear.identity"]);
-  expect(preflightIds({ integrations: ["github"] })).toEqual([
-    "github.identity",
-    "github.merge-policy",
-  ]);
+  expect(preflightIds({ integrations: ["github"] })).toEqual(["github.identity"]);
   const report = await runChecks(preflightChecks({ integrations: ["linear", "github"] }));
   expect(report.ok).toBe(false);
-  expect(report.checks).toHaveLength(3);
+  expect(report.checks).toHaveLength(2);
 });
 
 function factoryWith(config: string): void {

@@ -16,13 +16,11 @@ import {
 import { GithubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity } from "../../providers/github-auth.ts";
 import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
-import type { MergePolicy } from "../../workflow/pull-requests/policy.ts";
 import {
   markPullRequestReady,
   mergePullRequest,
   openPullRequest,
   preservedCommitMessageBody,
-  resolveMergePolicy,
   reviewPullRequest,
 } from "./pr.ts";
 
@@ -49,7 +47,6 @@ const worktree = {
   baseSha: "base",
 };
 let root: string;
-const SQUASH: MergePolicy = { by: "jigs", method: "squash", approval: { kind: "review" } };
 
 const asApp = (coAuthor?: string) =>
   vi.mocked(resolveGithubIdentity).mockReturnValue({
@@ -61,12 +58,13 @@ const asApp = (coAuthor?: string) =>
     ...(coAuthor === undefined ? {} : { coAuthor }),
   });
 
-const snapshot: PullRequestSnapshot = {
+// The provider reads facts; the step adds the approval, which is by label for a PAT factory.
+const snapshot: Omit<PullRequestSnapshot, "approval"> = {
   state: "open",
   merged: false,
   draft: false,
   mergeState: "clean",
-  labels: [],
+  labels: ["jigs:approved"],
   mergeCommitSha: null,
   headSha: "head",
   ci: "green",
@@ -78,36 +76,16 @@ const snapshot: PullRequestSnapshot = {
   ],
 };
 
-test("resolveMergePolicy applies a named binding's overrides to the factory policy", async () => {
-  const root = makeTmpDir();
-  writeFileSync(
-    path.join(root, "jigs.config.ts"),
-    `export default {
-      service: { dashboardPort: 9090 },
-      merge: { by: "jigs", method: "squash", approval: { kind: "review" } },
-      bindings: { docs: { remote: "git@github.com:acme/docs.git", merge: { by: "human", method: "rebase" } } },
-    };`,
-  );
-  vi.stubEnv("JIGS_FACTORY_ROOT", root);
-  try {
-    await expect(resolveMergePolicy("docs")).resolves.toEqual({
-      by: "human",
-      method: "rebase",
-      approval: { kind: "review" },
-    });
-  } finally {
-    vi.unstubAllEnvs();
-    removeTmpDir(root);
-  }
-});
-
 beforeEach(() => {
   root = makeTmpDir();
   writeFileSync(
     path.join(root, "jigs.config.ts"),
     `export default {
     service: { dashboardPort: 9090 },
-    bindings: { app: { remote: "git@github.com:owner/repo.git" } },
+    bindings: {
+      app: { remote: "git@github.com:owner/repo.git" },
+      docs: { remote: "git@github.com:owner/repo.git", mergeMethod: "rebase" },
+    },
   };`,
   );
   vi.stubEnv("JIGS_FACTORY_ROOT", root);
@@ -150,7 +128,7 @@ test("reviewPullRequest surfaces a GitHub error unchanged", async () => {
 });
 
 test("checks readiness again and pins the approved head on the merge call", async () => {
-  expect(await mergePullRequest(pr, "head", SQUASH)).toEqual({
+  expect(await mergePullRequest(worktree, pr, "head")).toEqual({
     merged: true,
     mergeCommitSha: "merged",
   });
@@ -161,8 +139,8 @@ test("checks readiness again and pins the approved head on the merge call", asyn
   });
 });
 
-test("the configured method is the one GitHub is asked for", async () => {
-  await mergePullRequest(pr, "head", { ...SQUASH, method: "rebase" });
+test("the binding's merge method is the one GitHub is asked for", async () => {
+  await mergePullRequest({ ...worktree, binding: "docs" }, pr, "head");
   expect(mergePr).toHaveBeenCalledWith(
     expect.anything(),
     expect.objectContaining({ method: "rebase" }),
@@ -170,19 +148,19 @@ test("the configured method is the one GitHub is asked for", async () => {
 });
 
 test("does not merge when the head or readiness changed after the gate wake", async () => {
-  expect(await mergePullRequest(pr, "old", SQUASH)).toMatchObject({ merged: false });
+  expect(await mergePullRequest(worktree, pr, "old")).toMatchObject({ merged: false });
   vi.mocked(fetchPrSnapshot).mockResolvedValue({ ...snapshot, mergeState: "blocked" });
-  expect(await mergePullRequest(pr, "head", SQUASH)).toMatchObject({ merged: false });
+  expect(await mergePullRequest(worktree, pr, "head")).toMatchObject({ merged: false });
   expect(mergePr).not.toHaveBeenCalled();
 });
 
 test("a refusal says whether asking again could merge the same commit", async () => {
   vi.mocked(fetchPrSnapshot).mockResolvedValue({ ...snapshot, mergeState: "unstable" });
-  expect(await mergePullRequest(pr, "head", SQUASH)).toMatchObject({ transient: true });
+  expect(await mergePullRequest(worktree, pr, "head")).toMatchObject({ transient: true });
   vi.mocked(fetchPrSnapshot).mockResolvedValue({ ...snapshot, mergeState: "dirty" });
-  expect(await mergePullRequest(pr, "head", SQUASH)).toMatchObject({ transient: false });
+  expect(await mergePullRequest(worktree, pr, "head")).toMatchObject({ transient: false });
   vi.mocked(fetchPrSnapshot).mockResolvedValue({ ...snapshot, state: "closed" });
-  expect(await mergePullRequest(pr, "head", SQUASH)).toMatchObject({ transient: false });
+  expect(await mergePullRequest(worktree, pr, "head")).toMatchObject({ transient: false });
 });
 
 test("a pull request GitHub already merged is merged, not re-merged", async () => {
@@ -192,7 +170,7 @@ test("a pull request GitHub already merged is merged, not re-merged", async () =
     state: "closed",
     mergeCommitSha: "already",
   });
-  expect(await mergePullRequest(pr, "head", SQUASH)).toEqual({
+  expect(await mergePullRequest(worktree, pr, "head")).toEqual({
     merged: true,
     mergeCommitSha: "already",
   });
@@ -208,7 +186,7 @@ test.each([405, 409])("a %i is state that changed, re-read rather than failed", 
   vi.mocked(fetchPrSnapshot)
     .mockResolvedValueOnce(snapshot)
     .mockResolvedValueOnce({ ...snapshot, headSha: "moved" });
-  expect(await mergePullRequest(pr, "head", SQUASH)).toMatchObject({
+  expect(await mergePullRequest(worktree, pr, "head")).toMatchObject({
     merged: false,
     transient: true,
   });
@@ -223,7 +201,7 @@ test("a refusal nothing in the snapshot explains is not tried again", async () =
   vi.mocked(mergePr).mockRejectedValue(
     new GithubApiError(405, "/merge", "Merge method not allowed"),
   );
-  expect(await mergePullRequest(pr, "head", SQUASH)).toMatchObject({
+  expect(await mergePullRequest(worktree, pr, "head")).toMatchObject({
     merged: false,
     transient: false,
   });
@@ -236,7 +214,7 @@ test("a refusal that GitHub then reports as merged is a merge", async () => {
   vi.mocked(fetchPrSnapshot)
     .mockResolvedValueOnce(snapshot)
     .mockResolvedValueOnce({ ...snapshot, merged: true, state: "closed", mergeCommitSha: "late" });
-  expect(await mergePullRequest(pr, "head", SQUASH)).toEqual({
+  expect(await mergePullRequest(worktree, pr, "head")).toEqual({
     merged: true,
     mergeCommitSha: "late",
   });
@@ -244,14 +222,14 @@ test("a refusal that GitHub then reports as merged is a merge", async () => {
 
 test("any other GitHub error is a real failure", async () => {
   vi.mocked(mergePr).mockRejectedValue(new GithubApiError(500, "/merge", "boom"));
-  await expect(mergePullRequest(pr, "head", SQUASH)).rejects.toThrow("500");
+  await expect(mergePullRequest(worktree, pr, "head")).rejects.toThrow("500");
 });
 
 test("the co-author trailer follows preserved commit content", async () => {
   // `commit_message` replaces the body GitHub would generate, so jigs keeps
   // the commit content where the BREAKING CHANGE footer lives.
   asApp("Salim Hamed <salim@example.com>");
-  await mergePullRequest(pr, "head", SQUASH);
+  await mergePullRequest(worktree, pr, "head");
   expect(mergePr).toHaveBeenCalledWith(
     pr,
     expect.objectContaining({
@@ -267,7 +245,7 @@ test("the preservation policy keeps several commits in a bulleted list", async (
     "feat: first\n\nWhy the first.",
     "fix: second",
   ]);
-  await mergePullRequest(pr, "head", SQUASH);
+  await mergePullRequest(worktree, pr, "head");
   expect(vi.mocked(mergePr).mock.calls[0]?.[1].message).toBe(
     "* feat: first\n\nWhy the first.\n\n* fix: second\n\nCo-authored-by: Salim Hamed <salim@example.com>",
   );
@@ -275,14 +253,14 @@ test("the preservation policy keeps several commits in a bulleted list", async (
 
 test("with no co-author configured GitHub writes its own body, unasked", async () => {
   asApp();
-  await mergePullRequest(pr, "head", SQUASH);
+  await mergePullRequest(worktree, pr, "head");
   expect(vi.mocked(mergePr).mock.calls[0]?.[1].message).toBeUndefined();
   expect(fetchPrCommitMessages).not.toHaveBeenCalled();
 });
 
 test("a rebase has no merge message to carry a trailer in", async () => {
   asApp("Salim Hamed <salim@example.com>");
-  await mergePullRequest(pr, "head", { ...SQUASH, method: "rebase" });
+  await mergePullRequest({ ...worktree, binding: "docs" }, pr, "head");
   expect(vi.mocked(mergePr).mock.calls[0]?.[1].message).toBeUndefined();
 });
 
@@ -294,7 +272,7 @@ test("pat mode adds no trailer, no assignee and no requested-by line", async () 
   expect(findOpenPullRequestByBranch).toHaveBeenCalledExactlyOnceWith(repo, "fix", "main");
   expect(createPullRequest).toHaveBeenCalledWith(expect.objectContaining({ body: "Body." }));
   expect(assignPullRequest).not.toHaveBeenCalled();
-  await mergePullRequest(pr, "head", SQUASH);
+  await mergePullRequest(worktree, pr, "head");
   expect(vi.mocked(mergePr).mock.calls[0]?.[1].message).toBeUndefined();
 });
 
