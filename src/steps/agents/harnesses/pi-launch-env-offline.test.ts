@@ -6,7 +6,8 @@ import { harnesses, models } from "../../../workflow/agents/harness-config.ts";
 import { buildAgentRequest } from "../../../workflow/agents/plan.ts";
 import { type DriverResolver, driverFor } from "../drivers/index.ts";
 import { createPiDriver } from "../drivers/pi.ts";
-import { defaultAgentExecutionDependencies, executeAgent } from "../execute-agent.ts";
+import { executeAgentWith } from "../execute-agent.ts";
+import { executionSeams } from "../seams.ts";
 import { harnessEnv } from "./env.ts";
 import { executePi } from "./pi.ts";
 import { piMcpToolNames } from "./pi-extension.ts";
@@ -185,13 +186,13 @@ test.skipIf(skipPi || process.platform !== "linux")(
     const declared = ["SYNTHETIC_DECLARED"];
     const expectedPiEnv = harnessEnv([...allowlist, ...declared]);
 
-    let result: Awaited<ReturnType<typeof executeAgent>>;
+    let result: Awaited<ReturnType<typeof executeAgentWith>>;
     try {
-      result = await executeAgent(
+      result = await executeAgentWith(
         wire,
         { workflowRunId: runId },
         {
-          ...defaultAgentExecutionDependencies,
+          ...executionSeams,
           factoryEnv: () => declared,
           resolveDriver: ((kind) => (kind === "pi" ? pi : driverFor(kind))) as DriverResolver,
         },

@@ -1,9 +1,17 @@
-import type { CodexAppServerProvider, CodexAppServerSettings } from "ai-sdk-provider-codex-cli";
+import { defaultSettingsMiddleware, wrapLanguageModel } from "ai";
+import {
+  type CodexAppServerProvider,
+  type CodexAppServerSettings,
+  createCodexAppServer,
+} from "ai-sdk-provider-codex-cli";
 import { codexAuthCheck, harnessRuntimeCheck } from "../../../checks/harnesses.ts";
 import { codexWorktreeConfigCheck } from "../../../checks/mcp.ts";
 import { JigsError } from "../../../errors.ts";
-import type { CodexHarness, McpServerConfig } from "../../../workflow/agents/harness-config.ts";
-import type { AgentRequest } from "../../../workflow/agents/plan.ts";
+import {
+  type CodexHarness,
+  codexPolicyKeys,
+  type McpServerConfig,
+} from "../../../workflow/agents/harness-config.ts";
 import {
   codexSessionFile,
   type PreparedCodexHome,
@@ -12,8 +20,9 @@ import {
 import { resolveCodexExecutable } from "../harnesses/executables.ts";
 import { DEFAULT_MIN_CODEX_VERSION } from "../harnesses/index.ts";
 import { AgentSessionError } from "../session-error.ts";
-import { codexAppServerStepSettings, withCodexAppServer } from "./codex-support.ts";
-import type { Driver, DriverContext, RunRequest } from "./types.ts";
+import { codexAppServerStepSettings } from "./codex-support.ts";
+import { descriptorSettings } from "./descriptor-settings.ts";
+import type { Driver, DriverRequest, HarnessTarget, OpenContext, OpenedModel } from "./types.ts";
 
 type CodexMcpServerConfig = NonNullable<CodexAppServerSettings["mcpServers"]>[string];
 function mcpServers(
@@ -37,8 +46,8 @@ function mcpServers(
     ]),
   );
 }
-function descriptor(request: AgentRequest): CodexHarness {
-  if (request.harness.kind !== "codex")
+function descriptor(request: DriverRequest): CodexHarness {
+  if (!("harness" in request) || request.harness.kind !== "codex")
     throw new JigsError("the Codex driver requires a Codex request");
   return request.harness;
 }
@@ -46,65 +55,81 @@ function descriptor(request: AgentRequest): CodexHarness {
 export interface CodexDriverDependencies {
   prepareCodexHome(runId: string): PreparedCodexHome;
   sessionFile(sessionDir: string, threadId: string): string | undefined;
-  withCodexAppServer<T>(fn: (provider: CodexAppServerProvider) => Promise<T>): Promise<T>;
+  createAppServer(): CodexAppServerProvider;
 }
 
 const defaultDependencies: CodexDriverDependencies = {
   prepareCodexHome: (runId) => prepareCodexInvocationHome(runId),
   sessionFile: codexSessionFile,
-  withCodexAppServer,
+  createAppServer: () => createCodexAppServer(),
 };
 
 export function createCodexDriver(
   deps: CodexDriverDependencies = defaultDependencies,
 ): Driver<"codex"> {
-  async function run(request: RunRequest, context: DriverContext) {
-    const harness = descriptor(request);
-    const { resume } = request;
+  // Each step gets its own app server and private home; closing the model
+  // stops the one and removes the other.
+  async function open(target: HarnessTarget, context: OpenContext): Promise<OpenedModel> {
+    const harness = descriptor(target);
+    const { resume } = target;
     const prepared = deps.prepareCodexHome(context.metadata.workflowRunId);
+    let provider: CodexAppServerProvider | undefined;
+    const close = async () => {
+      try {
+        await provider?.close();
+      } finally {
+        prepared.cleanup();
+      }
+    };
     try {
       if (resume !== undefined && deps.sessionFile(prepared.sessionDir, resume.id) === undefined) {
         throw new AgentSessionError(
           `Codex session ${resume.id} is missing from ${prepared.sessionDir}`,
         );
       }
-      return await deps.withCodexAppServer((provider) =>
-        context.deps.generateText({
-          model: provider(
-            harness.model,
-            codexAppServerStepSettings({
-              cwd: request.cwd,
-              codexHome: prepared.home,
-              env: context.env,
-              ...(harness.effort === undefined ? {} : { effort: harness.effort }),
-              approvalPolicy: "never",
-              sandboxPolicy: "danger-full-access",
-              autoApprove: true,
-              ...(harness.mcpServers === undefined
-                ? {}
-                : { mcpServers: mcpServers(harness.mcpServers) }),
-            }),
-          ),
-          prompt: request.prompt,
-          ...(context.output === undefined ? {} : { output: context.output }),
-          ...(resume === undefined
+      provider = deps.createAppServer();
+      const model = provider(
+        harness.model,
+        codexAppServerStepSettings({
+          ...descriptorSettings(harness, codexPolicyKeys),
+          cwd: target.cwd,
+          codexHome: prepared.home,
+          env: context.env,
+          approvalPolicy: "never",
+          sandboxPolicy: "danger-full-access",
+          autoApprove: true,
+          ...(harness.mcpServers === undefined
             ? {}
-            : { providerOptions: { "codex-app-server": { threadId: resume.id } } }),
+            : { mcpServers: mcpServers(harness.mcpServers) }),
         }),
       );
-    } finally {
-      prepared.cleanup();
+      // The thread rides on the call, not the settings: a persistent-mode
+      // model given a resume setting warns on every launch.
+      return {
+        model:
+          resume === undefined
+            ? model
+            : wrapLanguageModel({
+                model,
+                middleware: defaultSettingsMiddleware({
+                  settings: { providerOptions: { "codex-app-server": { threadId: resume.id } } },
+                }),
+              }),
+        close,
+      };
+    } catch (err) {
+      await close();
+      throw err;
     }
   }
 
   return {
     kind: "codex",
     family: "harness",
-    run,
+    open,
     installationChecks: () => [harnessRuntimeCheck("codex"), codexAuthCheck()],
     requestChecks: () => [],
-    jitChecks: (request) =>
-      request.cwd === undefined ? [] : [codexWorktreeConfigCheck(request.cwd)],
+    jitChecks: (target) => [codexWorktreeConfigCheck(target.cwd)],
     envAllowlist: () => [],
     sessionPointer: { providerKey: "codex-app-server", field: "threadId" },
     docsAnchor: "codex",

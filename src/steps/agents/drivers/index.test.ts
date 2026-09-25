@@ -15,8 +15,12 @@ const localSource = models.openaiCompatible({
   model: "local",
 });
 const contractRequests: Record<keyof typeof drivers, DriverRequest> = {
-  claude: buildAskAgentRequest({ harness: harnesses.claude("sonnet"), prompt: "hello" }),
-  codex: buildAgentRequest({ harness: harnesses.codex("gpt-5.5"), cwd: "/work", prompt: "hello" }),
+  claude: buildAskAgentRequest({ harness: harnesses.claude({ model: "sonnet" }), prompt: "hello" }),
+  codex: buildAgentRequest({
+    harness: harnesses.codex({ model: "gpt-5.5" }),
+    cwd: "/work",
+    prompt: "hello",
+  }),
   "openai-compatible": buildModelRequest({ model: localSource, prompt: "hello" }),
   openrouter: buildModelRequest({ model: models.openrouter("model"), prompt: "hello" }),
   pi: buildAskAgentRequest({ harness: harnesses.pi(localSource), prompt: "hello" }),

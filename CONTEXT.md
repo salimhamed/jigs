@@ -115,6 +115,19 @@ _Avoid_: sweep, cleanup job
 the agent loop, tools and session.
 _Avoid_: model, backend
 
+**Harness descriptor**: The plain data a workflow builds to name a harness,
+`harnesses.claude({ model, ...settings })` and the like. For Claude Code and
+Codex it is the provider's own settings type, kept to the keys whose values are
+data and minus a policy deny list (`ClaudePolicyKey`, `CodexPolicyKey`); Pi's
+is jigs-shaped. The driver spreads the settings first and its policy last.
+_Avoid_: harness options, harness config
+
+**Agent runner**: What `createAgentRunner` in `@jigs-ai/jigs/steps` returns: a
+Claude Code or Codex harness opened inside a factory's own step, with the same
+checks, environment, lock and private home as the built-in agent step, and the
+live provider model. The built-in step runs on it too.
+_Avoid_: executor, injected dependencies
+
 **Model source**: An API endpoint that answers directly, with no agent program.
 
 **Driver**: The step-side code for one harness or model source, in

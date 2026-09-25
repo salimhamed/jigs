@@ -35,7 +35,7 @@ const inputs = z.object({
   report: z.string().min(1),
 });
 
-const agents = { investigator: harnesses.claude("sonnet") };
+const agents = { investigator: harnesses.claude({ model: "sonnet" }) };
 const summarizer = models.openrouter("google/gemini-2.5-flash-lite");
 
 const verdict = z.object({

@@ -65,7 +65,7 @@ test("a Claude server is probed under the step environment and a Pi server under
   const server = { command: "node", args: [PROBE_SERVER], probe: { tool: "get_probe_token" } };
   const claude = await runChecks(
     jitChecks(
-      { harness: { kind: "claude", model: "m", mcpServers: { s: server } }, cwd: tmp, prompt: "p" },
+      { harness: { kind: "claude", model: "m", mcpServers: { s: server } }, cwd: tmp },
       stepEnv,
     ),
   );
@@ -80,7 +80,6 @@ test("a Claude server is probed under the step environment and a Pi server under
           mcpServers: { s: { ...server, tools: ["get_probe_token"] } },
         },
         cwd: tmp,
-        prompt: "p",
       },
       stepEnv,
     ),

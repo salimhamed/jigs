@@ -31,11 +31,13 @@ export function apiEntries(manifest, buildEntries) {
 }
 
 /**
- * Factories import the package root and `steps/*`. `routines` is only for the generated
+ * Factories import the package root, `steps` and `steps/*`. `routines` is only for the generated
  * `jigs/routines.ts`, and the other entries host the service.
  */
 export function isPublicEntry(entry) {
-  return entry.subpath === "." || entry.subpath.startsWith("./steps/");
+  return (
+    entry.subpath === "." || entry.subpath === "./steps" || entry.subpath.startsWith("./steps/")
+  );
 }
 
 async function walkTypeScriptFiles(directory) {

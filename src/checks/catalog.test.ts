@@ -116,13 +116,13 @@ test("a workflow requiring aws gets the credentials check", () => {
 });
 
 test("a workflow that does not require aws does not get it", () => {
-  expect(preflightIds({ agents: { builder: harnesses.claude("opus") } })).not.toContain(
+  expect(preflightIds({ agents: { builder: harnesses.claude({ model: "opus" }) } })).not.toContain(
     "aws.credentials",
   );
 });
 
 test("preflight installs only the harnesses declared by the workflow", () => {
-  const ids = preflightIds({ agents: { builder: harnesses.claude("opus") } });
+  const ids = preflightIds({ agents: { builder: harnesses.claude({ model: "opus" }) } });
   expect(ids).toContain("harness.claude-cli");
   expect(ids).not.toContain("harness.codex-cli");
   expect(ids).not.toContain("harness.pi-cli");
@@ -301,10 +301,13 @@ test("doctor checks each required harness and names the workflows that need it",
   vi.stubEnv("JIGS_CLAUDE_EXECUTABLE", "");
   const harness = doctorChecks({
     hello: {},
-    review: { requires: { agents: { reviewer: harnesses.claude("opus") } } },
+    review: { requires: { agents: { reviewer: harnesses.claude({ model: "opus" }) } } },
     ship: {
       requires: {
-        agents: { builder: harnesses.claude("opus"), reviewer: harnesses.codex("gpt-5.5") },
+        agents: {
+          builder: harnesses.claude({ model: "opus" }),
+          reviewer: harnesses.codex({ model: "gpt-5.5" }),
+        },
       },
     },
   }).filter((check) => check.id.startsWith("harness."));

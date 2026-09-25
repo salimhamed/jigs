@@ -12,8 +12,13 @@ import {
 } from "../../workflow/agents/jev.ts";
 import { buildAskAgentRequest, buildModelRequest } from "../../workflow/agents/plan.ts";
 import { drivers } from "./drivers/index.ts";
-import { defaultAgentExecutionDependencies } from "./execute-agent.ts";
-import { executeJev, executeModel } from "./execute-model-request.ts";
+import {
+  executeJev,
+  executeJevWith,
+  executeModel,
+  executeModelWith,
+} from "./execute-model-request.ts";
+import { executionSeams } from "./seams.ts";
 
 const openaiCompatible = vi.hoisted(() => ({ create: vi.fn() }));
 
@@ -86,14 +91,14 @@ test("askJev rejects cyclic state before calling the provider", async () => {
   state.self = state;
   const evaluate = vi.fn();
   await expect(
-    executeJev(
+    executeJevWith(
       {
         model: models.openrouter("typesafe/jev-1.13"),
         state,
         questions: { match: yesNo("Does it match?") },
       },
       { workflowRunId: "run-1" },
-      { ...defaultAgentExecutionDependencies, evaluate },
+      { ...executionSeams, evaluate },
     ),
   ).rejects.toThrow("state must be JSON-compatible");
   expect(evaluate).not.toHaveBeenCalled();
@@ -138,11 +143,11 @@ test("OpenRouter evaluates typed questions and normalizes metadata", async () =>
       },
     },
     (wire) =>
-      executeJev(
+      executeJevWith(
         wire,
         { workflowRunId: "run-1" },
         {
-          ...defaultAgentExecutionDependencies,
+          ...executionSeams,
           evaluate,
         },
       ),
@@ -191,7 +196,7 @@ test("a malformed question raises a JigsError naming its key before the provider
     throw new Error("provider must not run");
   });
   await expect(
-    executeJev(
+    executeJevWith(
       {
         model: models.openrouter("typesafe/jev-1.13"),
         state: "evidence",
@@ -204,7 +209,7 @@ test("a malformed question raises a JigsError naming its key before the provider
         },
       },
       { workflowRunId: "run-1" },
-      { ...defaultAgentExecutionDependencies, evaluate },
+      { ...executionSeams, evaluate },
     ),
   ).rejects.toThrow('question "accountRisk" is malformed');
   expect(evaluate).not.toHaveBeenCalled();
@@ -217,7 +222,7 @@ test("a provider argument error is translated to the offending question key", as
   );
   providerError.name = "AI_InvalidArgumentError";
   await expect(
-    executeJev(
+    executeJevWith(
       {
         model: models.openrouter("typesafe/jev-1.13"),
         state: "evidence",
@@ -227,7 +232,7 @@ test("a provider argument error is translated to the offending question key", as
       },
       { workflowRunId: "run-1" },
       {
-        ...defaultAgentExecutionDependencies,
+        ...executionSeams,
         evaluate: async () => {
           throw providerError;
         },
@@ -279,7 +284,7 @@ test.each(malformedProviderCases)(
   async ({ questions, answers, metadata, key }) => {
     vi.stubEnv("OPENROUTER_API_KEY", "test-key");
     await expect(
-      executeJev(
+      executeJevWith(
         {
           model: models.openrouter("typesafe/jev-1.13"),
           state: "evidence",
@@ -287,7 +292,7 @@ test.each(malformedProviderCases)(
         },
         { workflowRunId: "run-1" },
         {
-          ...defaultAgentExecutionDependencies,
+          ...executionSeams,
           evaluate: async () => ({
             answers,
             providerMetadata: { openrouter: { answers: metadata } },
@@ -301,13 +306,16 @@ test.each(malformedProviderCases)(
 test("the OpenRouter driver accepts only OpenRouter model descriptors", async () => {
   const context = {
     metadata: { workflowRunId: "run-1" },
-    deps: defaultAgentExecutionDependencies,
+    deps: executionSeams,
     env: {},
   };
 
   await expect(
     drivers.openrouter.ask(
-      buildAskAgentRequest({ harness: harnesses.claude("sonnet"), prompt: "wrong family" }),
+      buildAskAgentRequest({
+        harness: harnesses.claude({ model: "sonnet" }),
+        prompt: "wrong family",
+      }),
       context,
     ),
   ).rejects.toThrow("the OpenRouter driver requires an OpenRouter model request");
@@ -367,11 +375,11 @@ test("an OpenAI-compatible source answers structured requests without requiring 
       output: verdict,
     },
     (wire) =>
-      executeModel(
+      executeModelWith(
         wire,
         { workflowRunId: "run-1" },
         {
-          ...defaultAgentExecutionDependencies,
+          ...executionSeams,
           generateText: (options) => import("ai").then(({ generateText }) => generateText(options)),
         },
       ),
@@ -495,11 +503,11 @@ test("OpenRouter answers one structured request directly", async () => {
       output: verdict,
     },
     (wire) =>
-      executeModel(
+      executeModelWith(
         wire,
         { workflowRunId: "run-1" },
         {
-          ...defaultAgentExecutionDependencies,
+          ...executionSeams,
           generateText: (options) => import("ai").then(({ generateText }) => generateText(options)),
         },
       ),

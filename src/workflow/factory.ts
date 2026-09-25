@@ -71,8 +71,8 @@ export interface WorkflowDefinition<S extends z.ZodType = z.ZodType> {
    * @example
    * ```ts
    * const agents = {
-   *   builder: harnesses.claude("opus"),
-   *   reviewer: harnesses.codex("gpt-5.6-sol"),
+   *   builder: harnesses.claude({ model: "opus" }),
+   *   reviewer: harnesses.codex({ model: "gpt-5.6-sol" }),
    * };
    *
    * export default defineWorkflow({

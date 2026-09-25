@@ -9,14 +9,13 @@ import { getAuthenticatedUser } from "../providers/github.ts";
 import { resolveGithubIdentities } from "../providers/github-auth.ts";
 import { getViewer } from "../providers/linear.ts";
 import { resolveLinearIdentity } from "../providers/linear-auth.ts";
-import { driverFor } from "../steps/agents/drivers/index.ts";
+import { driverFor, type HarnessTarget } from "../steps/agents/drivers/index.ts";
 import type {
   AskableModelSource,
   Harness,
   McpServerConfig,
   PiMcpServerConfig,
 } from "../workflow/agents/harness-config.ts";
-import type { AgentRequest } from "../workflow/agents/plan.ts";
 import { awsCredentialsCheck } from "./aws.ts";
 import { bindingChecks } from "./bindings.ts";
 import {
@@ -242,9 +241,8 @@ function piProbeServer(server: PiMcpServerConfig): McpServerConfig {
 // Preflight's backstop: everything a step can only learn at hydration, once
 // the body has built its harness config — which no manifest could declare
 // ahead of the run. `env` is the environment the step hands its harness.
-export function jitChecks(wire: AgentRequest, env: Record<string, string>): Check[] {
-  const harness = wire.harness;
-  if (wire.cwd === undefined) return [];
+export function jitChecks(target: HarnessTarget, env: Record<string, string>): Check[] {
+  const harness = target.harness;
   const driver = driverFor(harness.kind);
   const probeableServers =
     harness.kind === "pi"
@@ -255,10 +253,10 @@ export function jitChecks(wire: AgentRequest, env: Record<string, string>): Chec
         )
       : (harness.mcpServers ?? {});
   return [
-    ...(driver?.jitChecks?.(wire) ?? []),
+    ...(driver?.jitChecks?.(target) ?? []),
     // Pi's pinned adapter owns OAuth refresh and secure-store access. A raw MCP
     // client cannot reproduce that flow without adding a second integration,
     // so OAuth servers are exercised by the Pi tool call itself.
-    ...mcpServerChecks(probeableServers, wire.cwd, harness.kind === "pi" ? {} : env),
+    ...mcpServerChecks(probeableServers, target.cwd, harness.kind === "pi" ? {} : env),
   ];
 }

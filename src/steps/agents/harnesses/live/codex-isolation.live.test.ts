@@ -1,7 +1,8 @@
 import { generateText } from "ai";
 import { parse } from "smol-toml";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { codexAppServerStepSettings, withCodexAppServer } from "../../drivers/codex-support.ts";
+import { codexAppServerStepSettings } from "../../drivers/codex-support.ts";
+import { withCodexAppServer } from "../../harnesses/test-fixtures.ts";
 import { harnessEnv } from "../env.ts";
 import { codexInvocationHomeState, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import {

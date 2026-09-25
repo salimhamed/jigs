@@ -80,8 +80,8 @@ const result = await deliverChange({
   task,
   worktree,
   binding: "application",
-  implementation: { harness: harnesses.codex("gpt-5.6-sol") },
-  review: { harness: harnesses.claude("opus") },
+  implementation: { harness: harnesses.codex({ model: "gpt-5.6-sol" }) },
+  review: { harness: harnesses.claude({ model: "opus" }) },
   limits: {
     implementationReviewRounds: 5,
     ciFixAttempts: 3,
@@ -109,12 +109,12 @@ const result = await deliverChange({
   task,
   worktree,
   binding: "application",
-  implementation: { harness: harnesses.codex("gpt-5.6-sol") },
-  review: { harness: harnesses.claude("opus") },
+  implementation: { harness: harnesses.codex({ model: "gpt-5.6-sol" }) },
+  review: { harness: harnesses.claude({ model: "opus" }) },
   ciRepair: { harness: harnesses.pi(models.openaiCodex("gpt-5.5"), { thinking: "high" }) },
-  pullRequestRevision: { harness: harnesses.claude("sonnet") },
+  pullRequestRevision: { harness: harnesses.claude({ model: "sonnet" }) },
   pullRequestDescription: {
-    harness: harnesses.claude("haiku"),
+    harness: harnesses.claude({ model: "haiku" }),
     transform: (description) => ({ ...description, title: `[factory] ${description.title}` }),
   },
   limits: {
@@ -171,7 +171,7 @@ import { harnesses } from "@jigs-ai/jigs";
 import type { ReviewPromptContext } from "./linear-ticket-to-pr/delivery/types.ts";
 
 const review = {
-  harness: harnesses.claude("opus"),
+  harness: harnesses.claude({ model: "opus" }),
   prompt: async (context: ReviewPromptContext) =>
     `${await context.renderDefaultPrompt()}
 
@@ -186,7 +186,7 @@ import { harnesses } from "@jigs-ai/jigs";
 import type { ImplementationPromptContext } from "./linear-ticket-to-pr/delivery/types.ts";
 
 const implementation = {
-  harness: harnesses.codex("gpt-5.6-sol"),
+  harness: harnesses.codex({ model: "gpt-5.6-sol" }),
   prompt: (context: ImplementationPromptContext) => `
 Round ${context.attempt} on ${context.task.key}: ${context.task.title}
 
@@ -231,7 +231,7 @@ const result = await deliverChange({
   worktree,
   binding: "application",
   implementation: {
-    harness: harnesses.codex("gpt-5.6-sol"),
+    harness: harnesses.codex({ model: "gpt-5.6-sol" }),
     prompt: async (context) =>
       [
         await context.renderDefaultPrompt(),
@@ -239,7 +239,7 @@ const result = await deliverChange({
         `Acceptance criteria:\n${context.task.acceptance.join("\n")}`,
       ].join("\n\n"),
   },
-  review: { harness: harnesses.claude("opus") },
+  review: { harness: harnesses.claude({ model: "opus" }) },
   limits: {
     implementationReviewRounds: 5,
     ciFixAttempts: 3,

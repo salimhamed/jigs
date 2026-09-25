@@ -7,9 +7,5 @@
  * @packageDocumentation
  */
 
-export {
-  type AgentExecutionDependencies,
-  defaultAgentExecutionDependencies,
-  executeAgent,
-} from "./execute-agent.ts";
+export { executeAgent } from "./execute-agent.ts";
 export { executeJev, executeModel } from "./execute-model-request.ts";

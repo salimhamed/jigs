@@ -1,12 +1,13 @@
 // Subprocess fixture for the clean-exit acceptance criterion: runs one
-// app-server step through withCodexAppServer and must EXIT — a hung event
+// app-server step, closing the provider after it, and must EXIT — a hung event
 // loop (the bug the finally-close exists for) makes the parent test fail on
 // deadline instead of hanging vitest. The result goes to a file, not stdout —
 // the provider writes its own noise there.
 // argv: <cwd> <codexHome> <resultFile>
 import { writeFileSync } from "node:fs";
 import { generateText } from "ai";
-import { codexAppServerStepSettings, withCodexAppServer } from "../../../drivers/codex-support.ts";
+import { codexAppServerStepSettings } from "../../../drivers/codex-support.ts";
+import { withCodexAppServer } from "../../../harnesses/test-fixtures.ts";
 import { harnessEnv } from "../../env.ts";
 
 const [cwd, codexHome, resultFile] = process.argv.slice(2);

@@ -4,18 +4,19 @@ import type { AskJevOptions, JevQuestions, JevResult } from "../../workflow/agen
 import type { ModelRequest } from "../../workflow/agents/plan.ts";
 import { type ModelResult, toModelResult } from "../../workflow/agents/result.ts";
 import type { RunMetadata } from "../runtime/run-context.ts";
-import {
-  type AgentExecutionDependencies,
-  defaultAgentExecutionDependencies,
-  outputSpec,
-} from "./execute-agent.ts";
+import { outputSpec } from "./execute-agent.ts";
 import { harnessEnv } from "./harnesses/env.ts";
+import { type ExecutionSeams, executionSeams } from "./seams.ts";
 
 /** Ask an API-backed model source. */
-export async function executeModel(
+export function executeModel(wire: ModelRequest, metadata: RunMetadata): Promise<ModelResult> {
+  return executeModelWith(wire, metadata, executionSeams);
+}
+
+export async function executeModelWith(
   wire: ModelRequest,
   metadata: RunMetadata,
-  deps: AgentExecutionDependencies = defaultAgentExecutionDependencies,
+  deps: ExecutionSeams,
 ): Promise<ModelResult> {
   const driver = deps.resolveDriver(wire.model.kind);
   if (driver?.ask === undefined)
@@ -34,10 +35,17 @@ export async function executeModel(
 }
 
 /** Evaluate typed questions with a decision-capable model. */
-export async function executeJev<const QUESTIONS extends JevQuestions>(
+export function executeJev<const QUESTIONS extends JevQuestions>(
   wire: AskJevOptions<QUESTIONS>,
   metadata: RunMetadata,
-  deps: AgentExecutionDependencies = defaultAgentExecutionDependencies,
+): Promise<JevResult<QUESTIONS>> {
+  return executeJevWith(wire, metadata, executionSeams);
+}
+
+export async function executeJevWith<const QUESTIONS extends JevQuestions>(
+  wire: AskJevOptions<QUESTIONS>,
+  metadata: RunMetadata,
+  deps: ExecutionSeams,
 ): Promise<JevResult<QUESTIONS>> {
   const driver = deps.resolveDriver(wire.model.kind);
   if (driver?.decide === undefined)

@@ -5,11 +5,8 @@ import { askAgent } from "../../../../workflow/agents/ask-agent.ts";
 import { harnesses, models } from "../../../../workflow/agents/harness-config.ts";
 import { type DriverResolver, driverFor } from "../../drivers/index.ts";
 import { createPiDriver } from "../../drivers/pi.ts";
-import {
-  type AgentExecutionDependencies,
-  defaultAgentExecutionDependencies,
-  executeAgent,
-} from "../../execute-agent.ts";
+import { executeAgentWith } from "../../execute-agent.ts";
+import { type ExecutionSeams, executionSeams } from "../../seams.ts";
 import { executePi, type PiExecutionOptions } from "../pi.ts";
 import { SUBMIT_RESULT_TOOL } from "../pi-extension.ts";
 import { preparePiInvocationHome, realPiAuthPath } from "../pi-home.ts";
@@ -40,7 +37,7 @@ const answer = z.object({ word: z.string(), count: z.number() });
 // Records each Pi launch so a test can prove which tools the ask exposed. The
 // result can only come from submit_result: requireResult rejects a turn whose
 // answer is JSON-looking text.
-function recordingDeps(): { deps: AgentExecutionDependencies; launches: PiExecutionOptions[] } {
+function recordingDeps(): { deps: ExecutionSeams; launches: PiExecutionOptions[] } {
   const launches: PiExecutionOptions[] = [];
   const pi = createPiDriver({
     preparePiHome: (runId, plan) => preparePiInvocationHome(runId, plan),
@@ -52,7 +49,7 @@ function recordingDeps(): { deps: AgentExecutionDependencies; launches: PiExecut
   return {
     launches,
     deps: {
-      ...defaultAgentExecutionDependencies,
+      ...executionSeams,
       factoryEnv: () => [],
       resolveDriver: ((kind) => (kind === "pi" ? pi : driverFor(kind))) as DriverResolver,
     },
@@ -82,7 +79,11 @@ test.skipIf(!localConfigured || !localReachable)(
     const plain = await askAgent(
       { harness: harnesses.pi(model), prompt: "Reply with exactly PONG." },
       (wire) =>
-        executeAgent(wire, { workflowRunId: `live-pi-local-plain-${crypto.randomUUID()}` }, deps),
+        executeAgentWith(
+          wire,
+          { workflowRunId: `live-pi-local-plain-${crypto.randomUUID()}` },
+          deps,
+        ),
     );
     const structured = await askAgent(
       {
@@ -91,7 +92,11 @@ test.skipIf(!localConfigured || !localReachable)(
         output: answer,
       },
       (wire) =>
-        executeAgent(wire, { workflowRunId: `live-pi-local-json-${crypto.randomUUID()}` }, deps),
+        executeAgentWith(
+          wire,
+          { workflowRunId: `live-pi-local-json-${crypto.randomUUID()}` },
+          deps,
+        ),
     );
     expect(plain.text.toUpperCase()).toContain("PONG");
     expect(structured.output).toEqual({ word: "sky", count: 3 });
@@ -107,7 +112,11 @@ test.skipIf(!hasOpenaiCodexLogin())(
     const plain = await askAgent(
       { harness: harnesses.pi(model, { thinking: "low" }), prompt: "Reply with exactly PONG." },
       (wire) =>
-        executeAgent(wire, { workflowRunId: `live-pi-codex-plain-${crypto.randomUUID()}` }, deps),
+        executeAgentWith(
+          wire,
+          { workflowRunId: `live-pi-codex-plain-${crypto.randomUUID()}` },
+          deps,
+        ),
     );
     const structured = await askAgent(
       {
@@ -116,7 +125,11 @@ test.skipIf(!hasOpenaiCodexLogin())(
         output: answer,
       },
       (wire) =>
-        executeAgent(wire, { workflowRunId: `live-pi-codex-json-${crypto.randomUUID()}` }, deps),
+        executeAgentWith(
+          wire,
+          { workflowRunId: `live-pi-codex-json-${crypto.randomUUID()}` },
+          deps,
+        ),
     );
     expect(plain.text.toUpperCase()).toContain("PONG");
     expect(structured.output).toEqual({ word: "sky", count: 3 });

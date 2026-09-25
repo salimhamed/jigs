@@ -8,6 +8,7 @@ export default defineConfig({
     index: "src/index.ts",
     cli: "src/cli/cli.ts",
     routines: "src/workflow/routines.ts",
+    "steps/index": "src/steps/index.ts",
     "steps/agents/index": "src/steps/agents/index.ts",
     "steps/human/index": "src/steps/human/index.ts",
     "steps/linear/index": "src/steps/linear/index.ts",

@@ -7,7 +7,8 @@ import { buildAgentRequest } from "../../../../../workflow/agents/plan.ts";
 import type { AgentSessionRef } from "../../../../../workflow/agents/result.ts";
 import { type DriverResolver, driverFor } from "../../../drivers/index.ts";
 import { createPiDriver } from "../../../drivers/pi.ts";
-import { defaultAgentExecutionDependencies, executeAgent } from "../../../execute-agent.ts";
+import { executeAgentWith } from "../../../execute-agent.ts";
+import { executionSeams } from "../../../seams.ts";
 import { executePi } from "../../pi.ts";
 import { preparePiInvocationHome } from "../../pi-home.ts";
 
@@ -27,7 +28,7 @@ const pi = createPiDriver({
   preparePiHome: (runId, plan) => preparePiInvocationHome(runId, plan, { baseDir: input.baseDir }),
   executePi,
 });
-const result = await executeAgent(
+const result = await executeAgentWith(
   buildAgentRequest({
     harness: harnesses.pi(
       models.openaiCompatible({ name: "lmstudio", baseUrl: input.baseUrl, model: input.model }),
@@ -38,7 +39,7 @@ const result = await executeAgent(
   }),
   { workflowRunId: input.runId },
   {
-    ...defaultAgentExecutionDependencies,
+    ...executionSeams,
     factoryEnv: () => [],
     resolveDriver: ((kind) => (kind === "pi" ? pi : driverFor(kind))) as DriverResolver,
   },

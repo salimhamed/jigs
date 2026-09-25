@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, expect, type TestContext, test } from "vitest";
 import { harnesses, models } from "../../../../workflow/agents/harness-config.ts";
 import { buildAgentRequest } from "../../../../workflow/agents/plan.ts";
-import { executeAgent } from "../../execute-agent.ts";
+import { executeAgentWith } from "../../execute-agent.ts";
 import { piRunStatePath, piSessionsDir, removePiRunState } from "../pi-home.ts";
 import { factorylessDeps, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 
@@ -96,7 +96,7 @@ test.skipIf(!existsSync(globalMcpPath) || !localConfigured || !localReachable)(
     });
 
     runId = `pi-linear-${crypto.randomUUID()}`;
-    const result = await executeAgent(request, { workflowRunId: runId }, factorylessDeps);
+    const result = await executeAgentWith(request, { workflowRunId: runId }, factorylessDeps);
     if ("jitFailure" in result)
       throw new Error(
         `blocked live test: ${result.jitFailure.map((failure) => failure.reason).join("; ")}`,

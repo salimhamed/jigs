@@ -162,7 +162,10 @@ test("linear-ticket-to-pr accepts ticket identifiers and IDs and declares its in
   }
   expect(entry.inputs.safeParse({ ticket: "", binding: "repo" }).success).toBe(false);
   expect(entry.requires).toEqual({
-    agents: { claude: harnesses.claude("opus"), codex: harnesses.codex("gpt-5.6-sol") },
+    agents: {
+      claude: harnesses.claude({ model: "opus" }),
+      codex: harnesses.codex({ model: "gpt-5.6-sol" }),
+    },
     integrations: ["linear", "github"],
   });
 });

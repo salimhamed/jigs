@@ -4,12 +4,17 @@ import {
 } from "ai-sdk-provider-claude-code";
 import { claudeAuthCheck, harnessRuntimeCheck } from "../../../checks/harnesses.ts";
 import { JigsError } from "../../../errors.ts";
-import type { ClaudeHarness, McpServerConfig } from "../../../workflow/agents/harness-config.ts";
+import {
+  type ClaudeHarness,
+  claudePolicyKeys,
+  type McpServerConfig,
+} from "../../../workflow/agents/harness-config.ts";
 import { resolveClaudeExecutable } from "../harnesses/executables.ts";
 import { claudeCode } from "../harnesses/index.ts";
 import { AgentSessionError } from "../session-error.ts";
 import { CLAUDE_ENV, claudeStepSettings } from "./claude-support.ts";
-import type { Driver, DriverRequest, ExecutorGeneration } from "./types.ts";
+import { descriptorSettings } from "./descriptor-settings.ts";
+import type { Driver, DriverRequest, ExecutorGeneration, OpenedModel } from "./types.ts";
 
 function mcpServers(
   servers: Record<string, McpServerConfig>,
@@ -59,32 +64,29 @@ export function createClaudeDriver(
   const driver: Driver<"claude"> = {
     kind: "claude",
     family: "harness",
-    run: async (request, context): Promise<ExecutorGeneration> => {
-      const harness = descriptor(request);
-      const { cwd, resume } = request;
+    open: async (target, context): Promise<OpenedModel> => {
+      const harness = descriptor(target);
+      const { cwd, resume } = target;
       if (resume !== undefined && (await deps.sessionMessages(resume.id, cwd)).length === 0) {
         throw new AgentSessionError(`Claude session ${resume.id} is missing for ${cwd}`);
       }
-      return context.deps.generateText({
-        model: claudeCode(
-          harness.model,
-          claudeStepSettings({
-            cwd,
-            env: context.env,
-            strictMcpConfig: true,
-            settingSources: ["project"],
-            permissionMode: "bypassPermissions",
-            allowDangerouslySkipPermissions: true,
-            ...(harness.effort === undefined ? {} : { effort: harness.effort }),
-            ...(resume === undefined ? {} : { resume: resume.id }),
-            ...(harness.mcpServers === undefined
-              ? {}
-              : { mcpServers: mcpServers(harness.mcpServers) }),
-          }),
-        ),
-        prompt: request.prompt,
-        ...(context.output === undefined ? {} : { output: context.output }),
-      });
+      const model = claudeCode(
+        harness.model,
+        claudeStepSettings({
+          ...descriptorSettings(harness, claudePolicyKeys),
+          cwd,
+          env: context.env,
+          strictMcpConfig: true,
+          settingSources: ["project"],
+          permissionMode: "bypassPermissions",
+          allowDangerouslySkipPermissions: true,
+          ...(resume === undefined ? {} : { resume: resume.id }),
+          ...(harness.mcpServers === undefined
+            ? {}
+            : { mcpServers: mcpServers(harness.mcpServers) }),
+        }),
+      );
+      return { model, close: async () => {} };
     },
     ask: async (request, context): Promise<ExecutorGeneration> => {
       const harness = descriptor(request);

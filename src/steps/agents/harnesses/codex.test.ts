@@ -2,13 +2,9 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "n
 import path from "node:path";
 import { generateText } from "ai";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import {
-  codexAppServerStepSettings,
-  withCodexAppServer,
-  writeCodexLauncher,
-} from "../drivers/codex-support.ts";
+import { codexAppServerStepSettings, writeCodexLauncher } from "../drivers/codex-support.ts";
 import { harnessEnv } from "./env.ts";
-import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
+import { makeTmpDir, removeTmpDir, withCodexAppServer } from "./test-fixtures.ts";
 
 // These settings look for the CLI eagerly, so every test that is not about
 // finding it passes a path instead of needing a codex installed.
@@ -98,15 +94,6 @@ test("app-server settings resolve the executable on PATH when the caller names n
     env: {},
   }).codexPath;
   expect(readFileSync(launcher ?? "", "utf8")).toContain(`'${codex}' "$@"`);
-});
-
-// Real-provider smoke: createCodexAppServer() spawns nothing until first
-// model use, so this exercises the actual close() path cheaply. The
-// close-on-throw contract is covered in codex-lifecycle.test.ts.
-test("withCodexAppServer with the real provider resolves and closes", async () => {
-  await expect(withCodexAppServer(async (provider) => typeof provider.close)).resolves.toBe(
-    "function",
-  );
 });
 
 test("the launcher refuses a name that is not shell-safe and writes nothing", () => {

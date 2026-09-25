@@ -2,7 +2,7 @@ import { existsSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
-import { withFileLock } from "./lock.ts";
+import { acquireFileLock, type FileLockOptions } from "./lock.ts";
 
 let tmp: string;
 let lockPath: string;
@@ -14,6 +14,19 @@ beforeEach(() => {
 afterEach(() => {
   removeTmpDir(tmp);
 });
+
+async function withFileLock<T>(
+  lockPath: string,
+  fn: () => Promise<T>,
+  options?: FileLockOptions,
+): Promise<T> {
+  const release = await acquireFileLock(lockPath, options);
+  try {
+    return await fn();
+  } finally {
+    release();
+  }
+}
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 

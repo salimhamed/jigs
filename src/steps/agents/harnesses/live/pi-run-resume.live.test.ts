@@ -10,11 +10,8 @@ import { buildAgentRequest } from "../../../../workflow/agents/plan.ts";
 import type { AgentResult } from "../../../../workflow/agents/result.ts";
 import { type DriverResolver, driverFor } from "../../drivers/index.ts";
 import { createPiDriver } from "../../drivers/pi.ts";
-import {
-  type AgentExecutionDependencies,
-  defaultAgentExecutionDependencies,
-  executeAgent,
-} from "../../execute-agent.ts";
+import { executeAgentWith } from "../../execute-agent.ts";
+import { type ExecutionSeams, executionSeams } from "../../seams.ts";
 import { executePi } from "../pi.ts";
 import { piRunStatePath, piSessionsDir, preparePiInvocationHome } from "../pi-home.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
@@ -32,7 +29,7 @@ const localReachable = localConfigured
 
 let tmp: string;
 let piHomes: string;
-let deps: AgentExecutionDependencies;
+let deps: ExecutionSeams;
 beforeAll(() => {
   tmp = makeTmpDir();
   piHomes = path.join(tmp, "pi-homes");
@@ -41,14 +38,14 @@ beforeAll(() => {
     executePi,
   });
   deps = {
-    ...defaultAgentExecutionDependencies,
+    ...executionSeams,
     factoryEnv: () => [],
     resolveDriver: ((kind) => (kind === "pi" ? pi : driverFor(kind))) as DriverResolver,
   };
 });
 afterAll(() => removeTmpDir(tmp));
 
-function success(result: Awaited<ReturnType<typeof executeAgent>>): AgentResult<unknown> {
+function success(result: Awaited<ReturnType<typeof executeAgentWith>>): AgentResult<unknown> {
   if ("jitFailure" in result) throw new Error("unexpected JIT failure");
   if ("resumeFailed" in result)
     throw new Error(`unexpected resume failure: ${result.resumeFailed}`);
@@ -70,7 +67,7 @@ test.skipIf(!localConfigured || !localReachable)(
     const metadata = { workflowRunId: `live-pi-run-${crypto.randomUUID()}` };
 
     const first = success(
-      await executeAgent(
+      await executeAgentWith(
         buildAgentRequest({
           harness,
           cwd: worktree,
@@ -120,13 +117,13 @@ test.skipIf(!localConfigured || !localReachable)(
         prompt: "Read PI_RUN_PROOF.txt with a tool, then submit its file name and exact contents.",
         output: z.object({ file: z.string(), content: z.string() }),
       },
-      (wire) => executeAgent(wire, metadata, deps),
+      (wire) => executeAgentWith(wire, metadata, deps),
     );
     expect(structured.output.file).toContain("PI_RUN_PROOF.txt");
     expect(structured.output.content.trim()).toBe("created");
     expect(structured.session?.id).not.toBe(first.session?.id);
 
-    const stale = await executeAgent(
+    const stale = await executeAgentWith(
       buildAgentRequest({
         harness,
         cwd: worktree,

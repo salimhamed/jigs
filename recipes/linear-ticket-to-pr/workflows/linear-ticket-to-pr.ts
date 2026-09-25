@@ -20,8 +20,8 @@ import { acquireLinearTicket, workItemFromHandoff } from "./linear-ticket-to-pr/
 // provider's default. A harness missing here, such as Pi, needs a model
 // source rather than a model name: build its role below with `harnesses.pi`.
 const inputHarnesses: Partial<Record<HarnessKind, (model?: string) => Harness>> = {
-  claude: (model = "opus") => harnesses.claude(model),
-  codex: (model = "gpt-5.6-sol") => harnesses.codex(model),
+  claude: (model = "opus") => harnesses.claude({ model }),
+  codex: (model = "gpt-5.6-sol") => harnesses.codex({ model }),
 };
 
 function unbuildable(kind: HarnessKind) {

@@ -35,4 +35,7 @@ export type {
   DriverDependencies,
   EvaluationGeneration,
   ExecutorGeneration,
+  HarnessTarget,
+  OpenedModel,
+  RunRequest,
 } from "./types.ts";
