@@ -53,7 +53,7 @@ const STRUCTURED_PROMPT =
   "Answer as structured output: set ok to true and word to exactly 'sky'. Do not create or modify any files.";
 
 // executeAgent answers a union; a step that declares no MCP servers and carries
-// no resume pointer can only take the successful arm.
+// no session reference to resume can only take the successful arm.
 async function runAgent(wire: AgentRequest, runId: string): Promise<AgentResult<unknown>> {
   const result = await executeAgent(wire, { workflowRunId: runId }, deps);
   if ("jitFailure" in result) {

@@ -39,7 +39,7 @@ and replaces the older entries in the `imports` map in `package.json` with
 
 `@jigs-ai/jigs` has one entry for workflow code: the root. Import descriptors,
 types, schemas and renderers from `@jigs-ai/jigs`. Import routines such as
-`claimTicket`, `resumeOrRebuild` or `attend` from `#jigs/routines`, after
+`claimTicket`, `agentSession` or `pullRequestGate` from `#jigs/routines`, after
 `pnpm exec jigs generate`.
 
 ## A run is waiting

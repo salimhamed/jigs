@@ -6,9 +6,9 @@
 import type { TicketClaim } from "../linear/claim.ts";
 import type { HaltForHumanFn } from "../linear/halt-for-human.ts";
 import { JitCheckError } from "./agent.ts";
+import type { RunAgentFn } from "./agent-session.ts";
 import type { RunAgentOptions } from "./plan.ts";
 import type { AgentResult } from "./result.ts";
-import type { RunAgentFn } from "./resume-or-rebuild.ts";
 
 /** Bound operations used to turn agent startup failures into human halts. */
 export interface RunAgentOrHaltDependencies {

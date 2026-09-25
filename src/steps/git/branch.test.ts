@@ -3,7 +3,7 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { pushCommit } from "../../providers/git.ts";
 import { git, makeRemoteBackedRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
-import { pushApprovedChange } from "./branch.ts";
+import { branchContains, pushApprovedChange } from "./branch.ts";
 
 let tmp: string;
 let checkout: string;
@@ -50,4 +50,17 @@ test("the push uses an explicit commit even when HEAD has moved", async () => {
   await pushCommit(checkout, "feature", approved);
   expect(git(remoteDir, "rev-parse", "refs/heads/feature")).toBe(approved);
   expect(git(checkout, "rev-parse", "HEAD")).not.toBe(approved);
+});
+
+test("a branch contains its head and its ancestors, not a later or unknown commit", async () => {
+  const parent = git(checkout, "rev-parse", "HEAD~1");
+  git(checkout, "checkout", "-qb", "other", parent);
+  git(checkout, "commit", "--allow-empty", "-qm", "someone else's work");
+  const elsewhere = git(checkout, "rev-parse", "HEAD");
+  git(checkout, "checkout", "-q", "feature");
+
+  expect(await branchContains(checkout, approved)).toBe(true);
+  expect(await branchContains(checkout, parent)).toBe(true);
+  expect(await branchContains(checkout, elsewhere)).toBe(false);
+  expect(await branchContains(checkout, "0".repeat(40))).toBe(false);
 });

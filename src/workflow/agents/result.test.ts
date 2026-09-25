@@ -1,5 +1,14 @@
 import { expect, test } from "vitest";
-import { extractAgentSession, type ModelGeneration, toModelResult } from "./result.ts";
+import { harnesses } from "./harness-config.ts";
+import {
+  describeHarness,
+  extractAgentSession,
+  type ModelGeneration,
+  toModelResult,
+} from "./result.ts";
+
+const claude = harnesses.claude("sonnet");
+const codex = harnesses.codex("gpt");
 
 test("toModelResult maps text and structured output into the uniform shape", () => {
   const generation: ModelGeneration = { text: "done" };
@@ -14,47 +23,58 @@ test("toModelResult omits the output when no structured answer was requested", (
   expect(result).toEqual({ text: "done", output: undefined });
 });
 
-test("extractAgentSession reads the driver pointer", () => {
+test("extractAgentSession reads the session reference the driver names", () => {
   expect(
     extractAgentSession(
-      "claude",
+      claude,
       { "claude-code": { sessionId: "s-42" } },
       { providerKey: "claude-code", field: "sessionId" },
     ),
   ).toEqual({
     harness: "claude",
     id: "s-42",
+    descriptor: describeHarness(claude),
   });
 });
 
 test("extractAgentSession reads the Codex app-server threadId", () => {
   expect(
     extractAgentSession(
-      "codex",
+      codex,
       { "codex-app-server": { threadId: "t-7" } },
       { providerKey: "codex-app-server", field: "threadId" },
     ),
   ).toEqual({
     harness: "codex",
     id: "t-7",
+    descriptor: describeHarness(codex),
   });
 });
 
 test("extractAgentSession is best-effort: absent or malformed metadata yields undefined", () => {
-  const pointer = { providerKey: "claude-code", field: "sessionId" };
-  expect(extractAgentSession("claude", undefined, pointer)).toBeUndefined();
-  expect(extractAgentSession("claude", {}, pointer)).toBeUndefined();
+  const ref = { providerKey: "claude-code", field: "sessionId" };
+  expect(extractAgentSession(claude, undefined, ref)).toBeUndefined();
+  expect(extractAgentSession(claude, {}, ref)).toBeUndefined();
   expect(
     extractAgentSession(
-      "codex",
+      codex,
       { "codex-app-server": { threadId: 9 } },
       { providerKey: "codex-app-server", field: "threadId" },
     ),
   ).toBeUndefined();
+  expect(extractAgentSession(claude, { "claude-code": { sessionId: "" } }, ref)).toBeUndefined();
   expect(
-    extractAgentSession("claude", { "claude-code": { sessionId: "" } }, pointer),
+    extractAgentSession(claude, { "claude-code": { sessionId: "s" } }, undefined),
   ).toBeUndefined();
-  expect(
-    extractAgentSession("claude", { "claude-code": { sessionId: "s" } }, undefined),
-  ).toBeUndefined();
+});
+
+test("describeHarness ignores field order, including a nested model source", () => {
+  const pi = harnesses.pi({ kind: "openrouter", model: "m", apiKeyEnv: "K" }, { thinking: "low" });
+  const reordered = {
+    thinking: "low",
+    model: { apiKeyEnv: "K", model: "m", kind: "openrouter" },
+    kind: "pi",
+  };
+  expect(describeHarness(reordered as typeof pi)).toBe(describeHarness(pi));
+  expect(describeHarness(harnesses.claude("opus"))).not.toBe(describeHarness(claude));
 });

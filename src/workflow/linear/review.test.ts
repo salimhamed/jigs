@@ -1,7 +1,7 @@
 import { beforeEach, expect, test, vi } from "vitest";
+import type { RunAgentFn } from "../agents/agent-session.ts";
 import { harnesses } from "../agents/harness-config.ts";
 import { parseOutput, type RunAgentOptions } from "../agents/plan.ts";
-import type { RunAgentFn } from "../agents/resume-or-rebuild.ts";
 import type { TicketClaim } from "./claim.ts";
 import type { Halt, HaltForHumanFn, HumanReply } from "./halt-for-human.ts";
 import {

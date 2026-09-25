@@ -250,6 +250,7 @@ test("a stand-down note is what keeps an approval from asking twice", async () =
 
   // The merge is refused; the note records that this commit was tried.
   await postPullRequestNote({
+    fetchPullRequestState: github.snapshot,
     commentOnPullRequest: github.comment,
     pr,
     scope: SHIP,
@@ -285,6 +286,7 @@ test("a red head is outstanding until the branch moves or jigs says it could not
   ]);
 
   await postPullRequestNote({
+    fetchPullRequestState: github.snapshot,
     commentOnPullRequest: github.comment,
     pr,
     scope: SHIP,
@@ -317,6 +319,7 @@ test("a merge refused while a check is still running is retried, not stood down"
   // out, and the note it leaves says so.
   github.setMergeState("unstable");
   await postPullRequestNote({
+    fetchPullRequestState: github.snapshot,
     commentOnPullRequest: github.comment,
     pr,
     scope: SHIP,
@@ -334,4 +337,27 @@ test("a merge refused while a check is still running is retried, not stood down"
     { kind: "merge-ready", headSha: "head-1", retryNoted: true },
   ]);
   expect(github.conversation).toHaveLength(1);
+});
+
+test("a repeated note for the same head and reason posts once", async () => {
+  const github = fakePullRequest();
+  const note = (reason: "merge-retry" | "merge", headSha: string) =>
+    postPullRequestNote({
+      fetchPullRequestState: github.snapshot,
+      commentOnPullRequest: github.comment,
+      pr,
+      scope: SHIP,
+      reason,
+      headSha,
+      body: `I could not merge ${headSha} yet.`,
+    });
+
+  await note("merge-retry", "head-1");
+  await note("merge-retry", "head-1");
+  expect(github.conversation).toHaveLength(1);
+
+  // Another reason, or another head, is another note.
+  await note("merge", "head-1");
+  await note("merge-retry", "head-2");
+  expect(github.conversation).toHaveLength(3);
 });

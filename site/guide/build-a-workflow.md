@@ -173,6 +173,73 @@ notices a reply on its next [check](/guide/configuration#webhooks);
 `jigs poke <run-id>` checks now.
 Answer the existing run rather than starting another one.
 
+## Wait on a pull request
+
+`pullRequestGate` watches one pull request until it closes. Loop over it with
+`for await`: each wake says what is outstanding right now.
+
+```ts
+function pullRequestGate(
+  pr: PullRequestRef,
+  options: { scope: string; approval: MergePolicy["approval"]; worktree?: Worktree },
+): AsyncIterable<PullRequestWake>;
+
+type PullRequestWake =
+  | { kind: "closed"; merged: boolean }
+  | { kind: "merge-ready"; headSha: string; retryNoted: boolean }
+  | { kind: "ci-red"; headSha: string; failing: CheckRun[]; mentionLogin: string | null }
+  | { kind: "review-comments"; threads: ReviewThread[]; body?: string };
+```
+
+```ts
+import { postPullRequestNote, pullRequestGate } from "#jigs/routines";
+import { mergePullRequest, resolveMergePolicy } from "#jigs/steps";
+
+const merge = await resolveMergePolicy(input.binding);
+const scope = `triage/${input.ticket}`;
+
+const gate = pullRequestGate(pr, { scope, approval: merge.approval, worktree });
+for await (const wake of gate) {
+  if (wake.kind === "closed") return { merged: wake.merged };
+  if (wake.kind === "merge-ready") {
+    const result = await mergePullRequest(pr, wake.headSha, merge);
+    if (result.merged) return { merged: true };
+    await postPullRequestNote({
+      pr,
+      scope,
+      reason: result.transient ? "merge-retry" : "merge",
+      headSha: wake.headSha,
+      body: `I could not merge this pull request: ${result.reason}.`,
+    });
+    continue;
+  }
+  // ci-red and review-comments: fix, push, answer the threads
+}
+```
+
+Leaving the loop stops watching, whether by `return`, `break` or a throw. Only
+one run can watch a pull request at a time, so a second gate on the same pull
+request fails with a claim conflict.
+
+The `scope` names this workflow's work on the pull request. Every comment
+jigs posts carries it in a hidden marker, and the gate reads those markers
+back to decide what is still outstanding. Keep the scope stable, so a later
+run recognises its own answers.
+
+A wake is delivered only while its head is still the pull request's head. If
+the branch moved while you handled an earlier wake, a red build on the old
+commit is dropped rather than repaired twice.
+
+Pass the `worktree` your workflow pushes from, and the gate also checks each
+red build and review wake against the local branch. A wake for an older commit
+of that branch is dropped: the run has moved past it, even if GitHub still
+reports it in the moment after a push. A wake for a commit the worktree does
+not have is delivered, because someone else pushed it and it still needs an
+answer.
+
+`postPullRequestNote` posts once per commit and reason, so a merge you retry on
+every wake reports its refusal once.
+
 ## Record what the workflow created
 
 `jigs status <run-id>` lists a run's resources, such as its worktree. Record

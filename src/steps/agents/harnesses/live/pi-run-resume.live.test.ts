@@ -56,7 +56,7 @@ function success(result: Awaited<ReturnType<typeof executeAgent>>): AgentResult<
 }
 
 test.skipIf(!localConfigured || !localReachable)(
-  "Pi runs in a worktree, resumes in a new process, submits a structured run, and rejects a stale pointer",
+  "Pi runs in a worktree, resumes in a new process, submits a structured run, and rejects a stale session reference",
   async () => {
     const worktree = makeScratchRepo(tmp, "pi-run-resume");
     const secret = `memory-${crypto.randomUUID()}`;
@@ -131,7 +131,7 @@ test.skipIf(!localConfigured || !localReachable)(
         harness,
         cwd: worktree,
         prompt: "continue",
-        resume: { harness: "pi", id: `missing-${crypto.randomUUID()}` },
+        resume: { harness: "pi", id: `missing-${crypto.randomUUID()}`, descriptor: "" },
       }),
       metadata,
       deps,

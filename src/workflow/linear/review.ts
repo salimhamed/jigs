@@ -4,8 +4,8 @@
 // invocation is approval.
 
 import { z } from "zod";
+import type { RunAgentFn } from "../agents/agent-session.ts";
 import type { Harness } from "../agents/harness-config.ts";
-import type { RunAgentFn } from "../agents/resume-or-rebuild.ts";
 import { haltQuestionSchema } from "../human/questions.ts";
 import type { TicketClaim } from "./claim.ts";
 import type { HaltForHumanFn } from "./halt-for-human.ts";
@@ -94,12 +94,14 @@ export interface ReviewTicketOptions {
   cwd: string;
   // The words, which the factory owns: its own function in place of the one
   // shipped beside this routine.
-  prompt?: TicketReviewPrompt;
+  prompt?: TicketReviewPrompt | undefined;
   /** Optional workflow policy around a human clarification. */
-  on?: {
-    needsHuman?: () => Promise<void>;
-    humanReplied?: () => Promise<void>;
-  };
+  on?:
+    | {
+        needsHuman?: (() => Promise<void>) | undefined;
+        humanReplied?: (() => Promise<void>) | undefined;
+      }
+    | undefined;
 }
 
 /** Review a ticket until it is actionable, asking a human when a decision is missing. */

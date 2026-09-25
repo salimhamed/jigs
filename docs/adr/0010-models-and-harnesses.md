@@ -6,7 +6,7 @@ Model sources are API endpoints; harnesses are agent programs jigs spawns.
 Workflow code passes only tagged, serializable descriptors built with
 `models.*` and `harnesses.*`. Step-side drivers in one registry
 (`src/steps/agents/drivers`) turn a descriptor into a live provider and own its
-execution, checks, environment and session pointers. `runAgent` and `askAgent`
+execution, checks, environment and session references. `runAgent` and `askAgent`
 take harnesses; `askModel` and `askJev` take model sources. Results report no
 token usage or cost.
 
@@ -48,6 +48,6 @@ token usage or cost.
 - Retries are layered, not added: Pi's own request retries, the AI SDK's for
   direct model calls, and Workflow step replay. The drivers add no loop.
 - Descriptors are reusable configuration, not sessions. Continuation happens
-  only from an explicit session pointer validated before launch; only a missing
+  only from an explicit session reference validated before launch; only a missing
   or incompatible session permits a fresh-context rebuild.
 - A descriptor kind with no registered driver fails explicitly at execution.

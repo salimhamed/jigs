@@ -7,6 +7,7 @@ import type {
   ReviewThread,
 } from "../../providers/github.ts";
 import { ClaimConflictError } from "../linear/claim.ts";
+import type { Worktree } from "../workspaces/worktree.ts";
 import { carriesMarker, commentSource, type MarkerLedger, readLedger } from "./marker.ts";
 import { isPullRequestMergeReady } from "./merge-ready.ts";
 import type { ApprovalSignal } from "./policy.ts";
@@ -271,12 +272,59 @@ export function classifyPullRequestState(
 // side free of any value import into steps/.
 export type FetchPrState = (pr: PullRequestRef) => Promise<PullRequestSnapshot>;
 
-/** {@link pullRequestGate} with its step already bound. */
-export type PullRequestGateFn = (
+/** The slice of the factory's `readBranchState` step the gate reads the local head with. */
+export type ReadLocalHead = (worktreePath: string, baseSha: string) => Promise<{ headSha: string }>;
+
+/** The factory's `branchContains` step: whether a commit is the worktree's HEAD or an ancestor. */
+export type BranchContains = (worktreePath: string, sha: string) => Promise<boolean>;
+
+/** The steps a pull request gate reads through. */
+export interface PullRequestGateSteps {
+  fetchState: FetchPrState;
+  readLocalHead: ReadLocalHead;
+  branchContains: BranchContains;
+}
+
+/** What a pull request gate watches for. */
+export interface PullRequestGateOptions {
+  /** The continuation identity whose markers say what is already done. */
+  scope: string;
+  /** The signal that makes an open pull request merge-ready. */
+  approval: ApprovalSignal;
+  /**
+   * The worktree this run pushes the pull request's branch from. With it, a `ci-red` or
+   * `review-comments` wake is dropped when its head is an older commit of the local branch: the
+   * run has moved past it, even if GitHub still reports it. The wake is delivered when its head
+   * is the local head, or when the pull request has commits the worktree does not, because
+   * someone else pushed.
+   */
+  worktree?: Pick<Worktree, "path" | "baseSha"> | undefined;
+}
+
+// GitHub can report the old head for a moment after a push; the local branch
+// already knows better. Only a head the local branch has moved past is stale: a
+// head the worktree lacks is someone else's push, and it is still owed an answer.
+async function passedLocally(
   pr: PullRequestRef,
-  scope: string,
-  approval: ApprovalSignal,
-) => AsyncGenerator<PullRequestWake, void, undefined>;
+  kind: PullRequestWake["kind"],
+  head: string,
+  worktree: Pick<Worktree, "path" | "baseSha">,
+  steps: PullRequestGateSteps,
+): Promise<boolean> {
+  const local = await steps.readLocalHead(worktree.path, worktree.baseSha);
+  if (local.headSha === head) return false;
+  const where = `[prGate] ${pr.owner}/${pr.repo}#${pr.number}`;
+  if (await steps.branchContains(worktree.path, head)) {
+    console.log(
+      `${where} dropping ${kind} for ${head}: the worktree has moved past it to ${local.headSha}`,
+    );
+    return true;
+  }
+  console.log(
+    `${where} delivering ${kind} for ${head}: the branch has commits the worktree at ${local.headSha} does not`,
+  );
+  return false;
+}
 
 // One hook per PR, held across the whole review until the PR closes — the
 // token is never released mid-review. Holding it is the single-writer rule; a
@@ -289,13 +337,18 @@ export type PullRequestGateFn = (
  * @remarks
  * Only one run can hold a pull request's token. The injected state reader must be wrapped in a
  * factory-owned `"use step"` function so each snapshot is durable and workflow replay stays pure.
+ * A wake is yielded only while the head it was read from is still the pull request's head. With
+ * `worktree`, a `ci-red` or `review-comments` wake is also checked against the local branch, the
+ * record of what this run has pushed, so the gate never delivers a wake for a head the run has
+ * already moved past. A head someone else pushed is still delivered.
  */
 export async function* pullRequestGate(
   pr: PullRequestRef,
-  fetchState: FetchPrState,
-  scope: string,
-  approval: ApprovalSignal,
+  steps: PullRequestGateSteps,
+  options: PullRequestGateOptions,
 ): AsyncGenerator<PullRequestWake, void, undefined> {
+  const { fetchState } = steps;
+  const { scope, approval, worktree } = options;
   const token = pullRequestToken(pr);
   const hook = createHook<unknown>({ token });
   try {
@@ -303,16 +356,45 @@ export async function* pullRequestGate(
     if (conflict !== null) {
       throw new ClaimConflictError(token, conflict.runId);
     }
+    let snapshot = await fetchState(pr);
     while (true) {
-      const round = classifyPullRequestState(await fetchState(pr), scope, approval);
+      const round = classifyPullRequestState(snapshot, scope, approval);
       console.log(
         `[prGate] ${pr.owner}/${pr.repo}#${pr.number} scope=${scope} wakes=${round.wakes.length} jigs-comments=${round.ownComments}`,
       );
-      for (const wake of round.wakes) yield wake;
+      let moved: PullRequestSnapshot | undefined;
+      for (const [index, wake] of round.wakes.entries()) {
+        // The first wake was read just now. A later one was read before the
+        // consumer handled the one ahead of it, which may have pushed; a wake
+        // about a commit the branch has moved past is not delivered.
+        if (index > 0 && wake.kind !== "closed") {
+          const current = await fetchState(pr);
+          if (current.headSha !== snapshot.headSha) {
+            console.log(
+              `[prGate] ${pr.owner}/${pr.repo}#${pr.number} head moved ${snapshot.headSha} -> ${current.headSha}; dropping ${round.wakes.length - index} stale wake(s)`,
+            );
+            moved = current;
+            break;
+          }
+        }
+        if (
+          worktree !== undefined &&
+          (wake.kind === "ci-red" || wake.kind === "review-comments") &&
+          (await passedLocally(pr, wake.kind, snapshot.headSha, worktree, steps))
+        ) {
+          continue;
+        }
+        yield wake;
+      }
       if (round.done) return;
+      if (moved !== undefined) {
+        snapshot = moved;
+        continue;
+      }
       // Suspend until the service's poll resumes this PR, or a GitHub
       // webhook reports activity on it sooner.
       await hook;
+      snapshot = await fetchState(pr);
     }
   } finally {
     hook.dispose();

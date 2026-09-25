@@ -5,6 +5,7 @@ import type { CodexAppServerProvider, CodexAppServerSettings } from "ai-sdk-prov
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { unwrapAgentStep } from "../../workflow/agents/agent.ts";
+import { bindAgentSession, type RunAgentFn } from "../../workflow/agents/agent-session.ts";
 import { harnesses, models } from "../../workflow/agents/harness-config.ts";
 import {
   buildAgentRequest,
@@ -13,7 +14,6 @@ import {
   type RunAgentOptions,
 } from "../../workflow/agents/plan.ts";
 import type { AgentResult } from "../../workflow/agents/result.ts";
-import { type RunAgentFn, resumeOrRebuild } from "../../workflow/agents/resume-or-rebuild.ts";
 import { createClaudeDriver } from "./drivers/claude.ts";
 import { createCodexDriver } from "./drivers/codex.ts";
 import { type DriverResolver, driverFor, drivers } from "./drivers/index.ts";
@@ -358,7 +358,7 @@ test("without an output schema no output spec is passed and output is undefined"
   expect(result.output).toBeUndefined();
 });
 
-test("the Claude session pointer is captured", async () => {
+test("the Claude session reference is captured", async () => {
   const wire = buildAgentRequest({
     harness: harnesses.claude("sonnet"),
     cwd: worktree,
@@ -370,10 +370,10 @@ test("the Claude session pointer is captured", async () => {
 
   const result = await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
-  expect(result.session).toEqual({ harness: "claude", id: "s-42" });
+  expect(result.session).toMatchObject({ harness: "claude", id: "s-42" });
 });
 
-test("the Codex threadId is captured, and a missing pointer is omitted, never an error", async () => {
+test("the Codex threadId is captured, and a missing session reference is omitted, never an error", async () => {
   const codexWire = buildAgentRequest({
     harness: harnesses.codex("gpt-5.5"),
     cwd: worktree,
@@ -384,7 +384,7 @@ test("the Codex threadId is captured, and a missing pointer is omitted, never an
     providerMetadata: { "codex-app-server": { threadId: "t-7" } },
   });
   const threaded = await agentStep(codexWire, { workflowRunId: "run-1" }, withThread.deps);
-  expect(threaded.session).toEqual({ harness: "codex", id: "t-7" });
+  expect(threaded.session).toMatchObject({ harness: "codex", id: "t-7" });
 
   const bare = makeDeps();
   const sessionless = await agentStep(codexWire, { workflowRunId: "run-1" }, bare.deps);
@@ -397,7 +397,7 @@ test("a claude resume rides on the settings' resume field", async () => {
     harness: harnesses.claude("sonnet"),
     cwd: worktree,
     prompt: "answer the review",
-    resume: { harness: "claude", id: "s-42" },
+    resume: { harness: "claude", id: "s-42", descriptor: "" },
   });
   const { deps, captured } = makeDeps();
 
@@ -412,7 +412,7 @@ test("a Claude transcript with messages but no summary resumes", async () => {
     harness: harnesses.claude("sonnet"),
     cwd: worktree,
     prompt: "answer the review",
-    resume: { harness: "claude", id: "summaryless-session" },
+    resume: { harness: "claude", id: "summaryless-session", descriptor: "" },
   });
   const { deps, captured } = makeDeps();
   const summaryless = createClaudeDriver({
@@ -432,7 +432,7 @@ test("a missing Claude transcript reports resumeFailed before launch", async () 
     harness: harnesses.claude("sonnet"),
     cwd: worktree,
     prompt: "answer the review",
-    resume: { harness: "claude", id: "missing-session" },
+    resume: { harness: "claude", id: "missing-session", descriptor: "" },
   });
   const { deps, captured } = makeDeps();
   const missing = createClaudeDriver({ sessionMessages: async () => [] });
@@ -453,7 +453,7 @@ test("a codex resume rides on providerOptions['codex-app-server'].threadId", asy
     harness: harnesses.codex("gpt-5.5"),
     cwd: worktree,
     prompt: "answer the review",
-    resume: { harness: "codex", id: "0199-thread" },
+    resume: { harness: "codex", id: "0199-thread", descriptor: "" },
   });
   const { deps, captured } = makeDeps();
 
@@ -466,12 +466,12 @@ test("a codex resume rides on providerOptions['codex-app-server'].threadId", asy
   expect(captured.codexSettings?.resume).toBeUndefined();
 });
 
-test("a session pointer recorded on the other harness reports resumeFailed, not a silently fresh session", async () => {
+test("a session reference recorded on the other harness reports resumeFailed, not a silently fresh session", async () => {
   const wire = buildAgentRequest({
     harness: harnesses.claude("sonnet"),
     cwd: worktree,
     prompt: "answer the review",
-    resume: { harness: "codex", id: "0199-thread" },
+    resume: { harness: "codex", id: "0199-thread", descriptor: "" },
   });
   const { deps, captured } = makeDeps();
   const jitFailures = vi.fn(async () => undefined);
@@ -481,7 +481,7 @@ test("a session pointer recorded on the other harness reports resumeFailed, not 
 
   // The resume prompt was written for an agent that already holds the change,
   // so running it against a brand-new session would be a lie. The marker sends
-  // the caller down the same rebuild path a stale pointer does.
+  // the caller down the same rebuild path a stale session reference does.
   expect(result).toEqual({
     resumeFailed: expect.stringContaining("recorded on the codex harness"),
   });
@@ -509,7 +509,7 @@ test("a Codex execution failure during resume still throws", async () => {
     harness: harnesses.codex("gpt-5.5"),
     cwd: worktree,
     prompt: "answer the review",
-    resume: { harness: "codex", id: "0199-gone" },
+    resume: { harness: "codex", id: "0199-gone", descriptor: "" },
   });
   const { deps } = makeDeps();
   // The raw JSON-RPC error codex 0.149.1 actually raises — it matches no
@@ -528,7 +528,7 @@ test("a Claude execution failure during resume still throws", async () => {
     harness: harnesses.claude("sonnet"),
     cwd: worktree,
     prompt: "answer the review",
-    resume: { harness: "claude", id: "s-42" },
+    resume: { harness: "claude", id: "s-42", descriptor: "" },
   });
   const { deps } = makeDeps();
   deps.generateText = () => {
@@ -935,7 +935,7 @@ test("pi run mints and records a matching session with tools in the worktree", a
     path.join(tmp, "pi-home", "run-pi-worktree", "sessions"),
   );
   expect(captured.piOptions?.cwd).toBe(worktree);
-  expect(result.session).toEqual({ harness: "pi", id: sessionId });
+  expect(result.session).toMatchObject({ harness: "pi", id: sessionId });
   expect(result.output).toEqual({ ok: true });
   expect(captured.piOptions?.requireResult).toBe(true);
   const extension = args[args.indexOf("-e") + 1];
@@ -1147,7 +1147,7 @@ test("pi run returns a stale resume marker before spawning Pi", async () => {
     harness: harnesses.pi(models.openrouter("openai/gpt-oss")),
     cwd: worktree,
     prompt: "continue",
-    resume: { harness: "pi", id: "missing-session" },
+    resume: { harness: "pi", id: "missing-session", descriptor: "" },
   });
   const { deps, captured } = makeDeps();
 
@@ -1166,7 +1166,7 @@ test("pi run resumes only after finding the real session file", async () => {
     harness,
     cwd: worktree,
     prompt: "continue",
-    resume: { harness: "pi", id: sessionId },
+    resume: { harness: "pi", id: sessionId, descriptor: "" },
   });
   const { deps, captured, piDeps } = makeDeps();
   const prepared = piDeps.preparePiHome("run-pi-resume", planPiModel(harness));
@@ -1183,7 +1183,7 @@ test("pi run resumes only after finding the real session file", async () => {
   expect(args[args.indexOf("--session") + 1]).toBe(
     path.join(prepared.sessionDir, `2026-09-21T00-00-00_${sessionId}.jsonl`),
   );
-  expect(result.session).toEqual({ harness: "pi", id: sessionId });
+  expect(result.session).toMatchObject({ harness: "pi", id: sessionId });
 });
 
 test("pi run rejects a different session id reported by Pi", async () => {
@@ -1210,7 +1210,7 @@ test("a Pi execution failure during resume still throws", async () => {
     harness: harnesses.pi(source),
     cwd: worktree,
     prompt: "continue",
-    resume: { harness: "pi", id: sessionId },
+    resume: { harness: "pi", id: sessionId, descriptor: "" },
   });
   const { deps, piDeps } = makeDeps();
   const prepared = piDeps.preparePiHome(
@@ -1234,7 +1234,7 @@ test("a resumed Pi session-id mismatch still throws after launch", async () => {
     harness: harnesses.pi(source),
     cwd: worktree,
     prompt: "continue",
-    resume: { harness: "pi", id: sessionId },
+    resume: { harness: "pi", id: sessionId, descriptor: "" },
   });
   const { deps, piDeps } = makeDeps();
   const prepared = piDeps.preparePiHome(
@@ -1294,13 +1294,15 @@ test("pi run rejects an unreachable nested endpoint before spawning Pi", async (
   expect(captured.piOptions).toBeUndefined();
 });
 
-test("pi stale sessions take resumeOrRebuild's fresh arm", async () => {
+test("a pi session that cannot resume takes the agent session's fresh arm", async () => {
   const harness = harnesses.pi(models.openrouter("openai/gpt-oss"));
   const { deps, piDeps } = makeDeps({ output: { ok: true } });
-  let spawned = 0;
+  const spawnedIds: Array<string | undefined> = [];
+  // The fake never writes a session file, so the first turn's session is
+  // missing by the time the second turn tries to resume it.
   piDeps.executePi = async (options) => {
-    spawned += 1;
     const id = options.args[options.args.indexOf("--session-id") + 1];
+    spawnedIds.push(id);
     return {
       text: "done",
       output: { ok: true },
@@ -1316,22 +1318,14 @@ test("pi stale sessions take resumeOrRebuild's fresh arm", async () => {
     const result = unwrapAgentStep(stepResult);
     return { ...result, output: parseOutput(config.output, result.output) } as AgentResult<T>;
   };
+  const session = bindAgentSession(runAgent)({ name: "pi-test", harness, cwd: worktree });
 
-  const result = await resumeOrRebuild({
-    runAgent,
-    harness,
-    cwd: worktree,
-    session: { harness: "pi", id: "gone" },
-    resumePrompt: "continue",
-    freshPrompt: "start again",
-    output: verdict,
-    label: "pi-test",
-  });
+  await session.run({ resume: "continue", fresh: "start", output: verdict });
+  const output = await session.run({ resume: "continue", fresh: "start again", output: verdict });
 
-  expect(spawned).toBe(1);
-  expect(result.output).toEqual({ ok: true });
-  expect(result.session?.harness).toBe("pi");
-  expect(result.session?.id).not.toBe("gone");
+  expect(output).toEqual({ ok: true });
+  expect(spawnedIds).toHaveLength(2);
+  expect(spawnedIds[1]).not.toBe(spawnedIds[0]);
 });
 
 test("pi run honors JIT failure before creating its invocation home or spawning", async () => {

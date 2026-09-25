@@ -8,7 +8,7 @@ import { expect, test } from "vitest";
 import type {
   AgentRequest,
   AgentResult,
-  AgentSession,
+  AgentSessionRef,
   AskAgentOptions,
   AskModelOptions,
   ChangePatch,
@@ -80,7 +80,7 @@ import type { ProvisionWorktreeDependencies, WorktreeRequest } from "./steps/wor
 type RootTypeSurface = {
   agentRequest: AgentRequest;
   agentResult: AgentResult;
-  agentSession: AgentSession;
+  agentSessionRef: AgentSessionRef;
   askAgentOptions: AskAgentOptions;
   askModelOptions: AskModelOptions;
   changePatch: ChangePatch;

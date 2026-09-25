@@ -2,29 +2,30 @@ import type { z } from "zod";
 import { JigsError } from "../errors.ts";
 import type { AskableHarness, AskableModelSource, Harness } from "./harness-config.ts";
 import { dropNullOptionals, type OutputJsonSchema, toOutputJsonSchema } from "./output-schema.ts";
-import type { AgentSession } from "./result.ts";
+import type { AgentSessionRef } from "./result.ts";
 
 /** Options for an agent that works inside a directory. */
 export type RunAgentOptions<T = undefined> = {
   harness: Harness;
   cwd: string;
   prompt: string;
-  resume?: AgentSession;
-  output?: z.ZodType<T>;
+  /** The session reference of an earlier run to continue. */
+  resume?: AgentSessionRef | undefined;
+  output?: z.ZodType<T> | undefined;
 };
 /** Options for one harness turn without tools or a worktree. */
 export type AskAgentOptions<T = undefined> = {
   harness: AskableHarness;
   prompt: string;
-  system?: string;
-  output?: z.ZodType<T>;
+  system?: string | undefined;
+  output?: z.ZodType<T> | undefined;
 };
 /** Options for one API model call. */
 export type AskModelOptions<T = undefined> = {
   model: AskableModelSource;
   prompt: string;
-  system?: string;
-  output?: z.ZodType<T>;
+  system?: string | undefined;
+  output?: z.ZodType<T> | undefined;
 };
 
 export type { OutputJsonSchema } from "./output-schema.ts";
@@ -51,8 +52,13 @@ function withOutputSchema<T extends object>(
   wire: T,
   output: z.ZodType | undefined,
 ): T & { outputSchema?: OutputJsonSchema } {
+  // An option passed as `undefined` stays off the wire, so the recorded request
+  // reads the same as one that left the option out.
+  const defined = Object.fromEntries(
+    Object.entries(wire).filter(([, value]) => value !== undefined),
+  ) as T;
   const outputSchema = output === undefined ? undefined : toOutputJsonSchema(output);
-  return outputSchema === undefined ? wire : { ...wire, outputSchema };
+  return outputSchema === undefined ? defined : { ...defined, outputSchema };
 }
 
 /**

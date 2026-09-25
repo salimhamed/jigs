@@ -29,9 +29,9 @@ export function needsHumanToken(issueId: string, commentId: string): string {
 export type Halt = {
   headline: string;
   where: string;
-  about?: string;
-  questions?: HaltQuestion[];
-  notes?: string[];
+  about?: string | undefined;
+  questions?: HaltQuestion[] | undefined;
+  notes?: string[] | undefined;
   onReply: "continue" | "retry";
 };
 

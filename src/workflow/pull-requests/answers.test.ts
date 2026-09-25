@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import type { CheckRun, ReviewThread } from "../../providers/github.ts";
+import type { CheckRun, PullRequestSnapshot, ReviewThread } from "../../providers/github.ts";
 import { postPullRequestNote, postReviewAnswers, renderChecks } from "./answers.ts";
 import { parseMarkers } from "./marker.ts";
 
@@ -73,6 +73,22 @@ function recorder(failOn: (body: string) => boolean = () => false) {
     },
   };
 }
+
+// A pull request carrying no notes yet, so every note is new.
+const unannotated = async (): Promise<PullRequestSnapshot> => ({
+  state: "open",
+  merged: false,
+  draft: false,
+  mergeState: "clean",
+  labels: [],
+  mergeCommitSha: null,
+  headSha: "head-1",
+  reviews: [],
+  reviewThreads: [],
+  conversationComments: [],
+  ci: "green",
+  failingChecks: [],
+});
 
 const sources = (body: string) => parseMarkers(body).map((marker) => marker.source);
 
@@ -236,6 +252,7 @@ test("a missing commit explanation degrades to posting the answers", async () =>
 test("a note names the commit it settles, and a failed note does not throw", async () => {
   const posted = recorder();
   await postPullRequestNote({
+    fetchPullRequestState: unannotated,
     commentOnPullRequest: posted.commentOnPullRequest,
     pr,
     scope: SCOPE,
@@ -249,6 +266,7 @@ test("a note names the commit it settles, and a failed note does not throw", asy
 
   const failing = recorder(() => true);
   await postPullRequestNote({
+    fetchPullRequestState: unannotated,
     commentOnPullRequest: failing.commentOnPullRequest,
     pr,
     scope: SCOPE,

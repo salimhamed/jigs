@@ -3,11 +3,28 @@ import type { Harness } from "./harness-config.ts";
 // Type aliases, not interfaces: aliases carry an implicit index signature,
 // which keeps step returns assignable to the SDK's Serializable types.
 
-/** A provider session pointer that can resume the same harness. */
-export type AgentSession = {
+/**
+ * A session reference: the small piece of data that lets a later `runAgent` call resume the same
+ * harness session. Pass it back as `resume`.
+ */
+export type AgentSessionRef = {
   harness: Harness["kind"];
   id: string;
+  /** The harness descriptor the session was recorded on, as {@link describeHarness} renders it. */
+  descriptor: string;
 };
+
+/**
+ * A harness descriptor as a string that ignores field order: two descriptors that list the same
+ * settings in another order render the same.
+ */
+export function describeHarness(harness: Harness): string {
+  return JSON.stringify(harness, (_key, field: unknown) =>
+    field !== null && typeof field === "object" && !Array.isArray(field)
+      ? Object.fromEntries(Object.entries(field).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : field,
+  );
+}
 
 /** Text and structured output returned by a model call. */
 export type ModelResult<T = unknown> = {
@@ -15,9 +32,9 @@ export type ModelResult<T = unknown> = {
   output: T;
 };
 
-/** A model result with the optional session pointer from an agent harness. */
+/** A model result with the session reference an agent harness returned, when it returned one. */
 export type AgentResult<T = unknown> = ModelResult<T> & {
-  session?: AgentSession;
+  session?: AgentSessionRef;
 };
 
 type ProviderMetadataLike = Record<string, Record<string, unknown>> | null;
@@ -33,15 +50,15 @@ export function toModelResult(generation: ModelGeneration, output: unknown): Mod
   return { text: generation.text, output };
 }
 
-// Best-effort: session pointers are capturable only at step time, but a
+// Best-effort: a session reference is capturable only at step time, but a
 // missing one must never fail the step the agent just finished.
 export function extractAgentSession(
-  harness: AgentSession["harness"],
+  harness: Harness,
   providerMetadata: ProviderMetadataLike | undefined,
-  pointer: { providerKey: string; field: string } | undefined,
-): AgentSession | undefined {
-  if (pointer === undefined) return undefined;
-  const id = providerMetadata?.[pointer.providerKey]?.[pointer.field];
+  ref: { providerKey: string; field: string } | undefined,
+): AgentSessionRef | undefined {
+  if (ref === undefined) return undefined;
+  const id = providerMetadata?.[ref.providerKey]?.[ref.field];
   if (typeof id !== "string" || id === "") return undefined;
-  return { harness, id };
+  return { harness: harness.kind, id, descriptor: describeHarness(harness) };
 }

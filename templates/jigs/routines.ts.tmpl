@@ -3,13 +3,16 @@
 
 import {
   acquireTicket as acquireTicketRoutine,
+  bindAgentSession,
   bindAgentSteps,
   bindLinearSteps,
   bindPullRequestSteps,
   bindReleaseSteps,
 } from "@jigs-ai/jigs/routines";
 import {
+  branchContains,
   checkForTicketHumanReply,
+  commentOnPullRequest,
   executeAgent,
   executeJev,
   executeModel,
@@ -17,7 +20,9 @@ import {
   fetchTicketSnapshot,
   postTicketHumanInputRequest,
   postTicketNote,
+  readBranchState,
   releaseRunResources,
+  replyToPullRequestReviewThread,
   resolveLinearIssue,
   resolveReleasePolicy,
 } from "./steps.ts";
@@ -29,6 +34,9 @@ const agents = bindAgentSteps({ executeAgent, executeJev, executeModel });
 
 /** Run an agent with tools and validate its answer against your output schema. */
 export const runAgent = agents.runAgent;
+
+/** One agent across several turns: resumes the session it holds, or starts fresh when it cannot. */
+export const agentSession = bindAgentSession(runAgent);
 
 /** Ask an agent harness without tools or a worktree. */
 export const askAgent = agents.askAgent;
@@ -63,18 +71,26 @@ export const noteOnTicket = linear.noteOnTicket;
 export const acquireTicket = (reference: string) =>
   acquireTicketRoutine(reference, { resolveLinearIssue, fetchTicketSnapshot });
 
-const pullRequests = bindPullRequestSteps({ fetchPullRequestState });
+const pullRequests = bindPullRequestSteps({
+  fetchPullRequestState,
+  readBranchState,
+  branchContains,
+  commentOnPullRequest,
+  replyToPullRequestReviewThread,
+});
 
-/** Watch pull-request reviews, CI results, and closure for a marker scope. */
+/** Wake on a pull request's reviews, CI and merge readiness until it closes. */
 export const pullRequestGate = pullRequests.pullRequestGate;
 
-// Routines a workflow composes itself. Where one takes a step, pass it from ./steps.ts.
+/** Post one revision round's answers, each marked with what it answers. */
+export const postReviewAnswers = pullRequests.postReviewAnswers;
+
+/** Post a note about a commit, once per head and reason. */
+export const postPullRequestNote = pullRequests.postPullRequestNote;
+
+// Routines bound to no step, and the types a workflow names.
 export {
-  attend,
+  type AgentSession,
+  type AgentSessionTurn,
   claimTicket,
-  finished,
-  listen,
-  postPullRequestNote,
-  postReviewAnswers,
-  resumeOrRebuild,
 } from "@jigs-ai/jigs/routines";

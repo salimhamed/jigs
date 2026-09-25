@@ -109,7 +109,7 @@ export async function executeAgent(
           return { resumeFailed: String(err) };
         }
         const session = extractAgentSession(
-          wire.harness.kind,
+          wire.harness,
           generation.providerMetadata,
           driver.sessionPointer,
         );

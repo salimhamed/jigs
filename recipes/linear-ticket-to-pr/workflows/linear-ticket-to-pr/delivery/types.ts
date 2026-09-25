@@ -3,7 +3,7 @@ import type { PullRequestRef, PullRequestWake } from "@jigs-ai/jigs";
 type CheckRun = Extract<PullRequestWake, { kind: "ci-red" }>["failing"][number];
 type ReviewThread = Extract<PullRequestWake, { kind: "review-comments" }>["threads"][number];
 
-import type { AgentSession, Harness, MergePolicy, TicketNote, Worktree } from "@jigs-ai/jigs";
+import type { Harness, MergePolicy, TicketNote, Worktree } from "@jigs-ai/jigs";
 import type { PullRequestDescription } from "./outputs.ts";
 import type { FindingResponse, ReviewFinding, ReviewRound } from "./review.ts";
 
@@ -29,7 +29,6 @@ export interface WorkItem {
 }
 
 export type DeliveryPhase = "implementation-review" | "ci-repair" | "pull-request-revision";
-export type AgentRoleName = "implementation" | "review" | "ciRepair" | "pullRequestRevision";
 
 /**
  * What every role is told, whatever its job: the work item as the factory
@@ -97,7 +96,7 @@ export interface PullRequestRevisionPromptContext<TTask extends WorkItem = WorkI
   /** Empty when a review requested changes without leaving line comments. */
   threads: ReviewThread[];
   /** The summary of the review that requested changes, when it had one. */
-  reviewBody?: string;
+  reviewBody?: string | undefined;
   pr: PullRequestRef;
   /** Direction an `onLimit` continuation supplied; empty until a limit is extended. */
   instructions: string;
@@ -219,11 +218,6 @@ export interface DeliveryChange<TTask extends WorkItem = WorkItem> {
   task: TTask;
   worktree: Worktree;
   attempts: DeliveryAttempts;
-  /**
-   * Each role's live agent session, kept so the next attempt resumes rather
-   * than rebuilds. Dropped for a role whose harness configuration changed.
-   */
-  sessions: Partial<Record<AgentRoleName, { harness: Harness; session: AgentSession }>>;
   /**
    * Every implementation-review round in order. It is what a rebuilt reviewer
    * is given in place of its lost session, and where the approving round's
