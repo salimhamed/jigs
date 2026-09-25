@@ -5,6 +5,7 @@ import type { CodexAppServerProvider, CodexAppServerSettings } from "ai-sdk-prov
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { unwrapAgentStep } from "../../workflow/agents/agent.ts";
+import { bindAgentSession, type RunAgentFn } from "../../workflow/agents/agent-session.ts";
 import { harnesses, models } from "../../workflow/agents/harness-config.ts";
 import {
   buildAgentRequest,
@@ -13,7 +14,6 @@ import {
   type RunAgentOptions,
 } from "../../workflow/agents/plan.ts";
 import type { AgentResult } from "../../workflow/agents/result.ts";
-import { type RunAgentFn, resumeOrRebuild } from "../../workflow/agents/resume-or-rebuild.ts";
 import { createClaudeDriver } from "./drivers/claude.ts";
 import { createCodexDriver } from "./drivers/codex.ts";
 import { type DriverResolver, driverFor, drivers } from "./drivers/index.ts";
@@ -1294,13 +1294,15 @@ test("pi run rejects an unreachable nested endpoint before spawning Pi", async (
   expect(captured.piOptions).toBeUndefined();
 });
 
-test("pi stale sessions take resumeOrRebuild's fresh arm", async () => {
+test("a pi session that cannot resume takes the agent session's fresh arm", async () => {
   const harness = harnesses.pi(models.openrouter("openai/gpt-oss"));
   const { deps, piDeps } = makeDeps({ output: { ok: true } });
-  let spawned = 0;
+  const spawnedIds: Array<string | undefined> = [];
+  // The fake never writes a session file, so the first turn's session is
+  // missing by the time the second turn tries to resume it.
   piDeps.executePi = async (options) => {
-    spawned += 1;
     const id = options.args[options.args.indexOf("--session-id") + 1];
+    spawnedIds.push(id);
     return {
       text: "done",
       output: { ok: true },
@@ -1316,22 +1318,14 @@ test("pi stale sessions take resumeOrRebuild's fresh arm", async () => {
     const result = unwrapAgentStep(stepResult);
     return { ...result, output: parseOutput(config.output, result.output) } as AgentResult<T>;
   };
+  const session = bindAgentSession(runAgent)({ name: "pi-test", harness, cwd: worktree });
 
-  const result = await resumeOrRebuild({
-    runAgent,
-    harness,
-    cwd: worktree,
-    session: { harness: "pi", id: "gone" },
-    resumePrompt: "continue",
-    freshPrompt: "start again",
-    output: verdict,
-    label: "pi-test",
-  });
+  await session.run({ resume: "continue", fresh: "start", output: verdict });
+  const output = await session.run({ resume: "continue", fresh: "start again", output: verdict });
 
-  expect(spawned).toBe(1);
-  expect(result.output).toEqual({ ok: true });
-  expect(result.session?.harness).toBe("pi");
-  expect(result.session?.id).not.toBe("gone");
+  expect(output).toEqual({ ok: true });
+  expect(spawnedIds).toHaveLength(2);
+  expect(spawnedIds[1]).not.toBe(spawnedIds[0]);
 });
 
 test("pi run honors JIT failure before creating its invocation home or spawning", async () => {

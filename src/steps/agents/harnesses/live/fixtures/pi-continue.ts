@@ -4,7 +4,7 @@
 import { writeFileSync } from "node:fs";
 import { harnesses, models } from "../../../../../workflow/agents/harness-config.ts";
 import { buildAgentRequest } from "../../../../../workflow/agents/plan.ts";
-import type { AgentSession } from "../../../../../workflow/agents/result.ts";
+import type { AgentSessionRef } from "../../../../../workflow/agents/result.ts";
 import { type DriverResolver, driverFor } from "../../../drivers/index.ts";
 import { createPiDriver } from "../../../drivers/pi.ts";
 import { defaultAgentExecutionDependencies, executeAgent } from "../../../execute-agent.ts";
@@ -18,7 +18,7 @@ type Input = {
   runId: string;
   cwd: string;
   prompt: string;
-  resume: AgentSession;
+  resume: AgentSessionRef;
   resultFile: string;
 };
 

@@ -7,10 +7,7 @@ type PullRequestComment = PullRequestSnapshot["conversationComments"][number];
 type ReviewThread = PullRequestSnapshot["reviewThreads"][number];
 
 import {
-  type Harness,
-  harnesses,
   type MergePolicy,
-  models,
   type PullRequestWake,
   parseMarkers,
   unwrapAgentStep,
@@ -41,11 +38,18 @@ interface DeliverySteps {
   mergePullRequest: typeof jigs.mergePullRequest;
 }
 const jigs = { ...jigsRoutines, ...jigsSteps };
-vi.mock("#jigs/routines", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("#jigs/routines")>()),
-  runAgent: vi.fn(),
-  pullRequestGate: vi.fn(),
-}));
+// The agent session is rebuilt around the mocked runAgent, so each test's fake
+// agent is what every session turn reaches.
+vi.mock("#jigs/routines", async (importOriginal) => {
+  const { bindAgentSession } = await import("@jigs-ai/jigs/routines");
+  const runAgent = vi.fn();
+  return {
+    ...(await importOriginal<typeof import("#jigs/routines")>()),
+    runAgent,
+    agentSession: bindAgentSession(runAgent),
+    pullRequestGate: vi.fn(),
+  };
+});
 vi.mock("#jigs/steps", async (importOriginal) => ({
   ...(await importOriginal<typeof import("#jigs/steps")>()),
   fetchPullRequestState: vi.fn(),
@@ -186,6 +190,9 @@ function setup(wakes: PullRequestWake[] = [{ kind: "closed", merged: true }]) {
     return { text: "", output, session: { harness: config.harness.kind, id: "session" } };
   };
   const closed = vi.fn();
+  // What a note reads to see whether it was already posted: nothing, unless a
+  // test says otherwise.
+  vi.mocked(jigs.fetchPullRequestState).mockImplementation(async () => openSnapshot());
   async function* gate(): AsyncGenerator<PullRequestWake, void, undefined> {
     try {
       for (const wake of wakes) yield wake;
@@ -215,7 +222,6 @@ const approved: ApprovedChange = {
   task: options.task,
   worktree: options.worktree,
   attempts: { implementationReviewRounds: 1, ciFixAttempts: 0, pullRequestRevisionRounds: 0 },
-  sessions: {},
   review: [],
   approval: { reviewedCommit: "new" },
 };
@@ -417,10 +423,6 @@ describe("delivery", () => {
     expect(reviews[1]?.prompt).toContain("not changed: The caller guards it");
     // The resumed reviewer already holds its earlier rounds.
     expect(reviews[1]?.prompt).not.toContain("Earlier rounds of this review");
-    expect(result.change.sessions.review).toEqual({
-      harness: options.review.harness,
-      session: { harness: "claude", id: "reviewer-session" },
-    });
     expect(result.change.review.map((entry) => entry.verdict)).toEqual([
       "changes-requested",
       "approved",
@@ -548,14 +550,8 @@ describe("delivery", () => {
     expect(onLimit).toHaveBeenCalledTimes(2);
   });
 
-  it("counts CI repairs cumulatively across heads and skips a red the branch moved past", async () => {
-    const { steps, calls, closed } = setup([red("first"), red("stale"), red("second")]);
-    vi.mocked(steps.readBranchState)
-      .mockResolvedValueOnce({ commits: 1, headSha: "new", dirty: false })
-      .mockResolvedValueOnce({ commits: 1, headSha: "first", dirty: false })
-      .mockResolvedValueOnce({ commits: 1, headSha: "new", dirty: false })
-      .mockResolvedValueOnce({ commits: 1, headSha: "first", dirty: false })
-      .mockResolvedValueOnce({ commits: 1, headSha: "second", dirty: false });
+  it("counts CI repairs cumulatively across heads", async () => {
+    const { steps, calls, closed } = setup([red("first"), red("second")]);
     await expect(
       useSteps(steps).deliverChange({
         ...options,
@@ -653,7 +649,7 @@ describe("delivery", () => {
     })) as RunAgentFn;
 
     const result = await useSteps(steps).followPullRequest({
-      change: { ...approved, attempts: { ...approved.attempts }, sessions: {}, review: [] },
+      change: { ...approved, attempts: { ...approved.attempts }, review: [] },
       pr,
       implementation: options.implementation,
       postNote: options.postNote,
@@ -712,7 +708,7 @@ describe("delivery", () => {
       { kind: "closed", merged: true },
     ]);
     await useSteps(steps).followPullRequest({
-      change: { ...approved, attempts: { ...approved.attempts }, sessions: {}, review: [] },
+      change: { ...approved, attempts: { ...approved.attempts }, review: [] },
       pr,
       implementation: options.implementation,
       postNote: options.postNote,
@@ -802,7 +798,7 @@ describe("delivery", () => {
     steps.pullRequestGate = actual.pullRequestGate;
 
     const result = await useSteps(steps).followPullRequest({
-      change: { ...approved, attempts: { ...approved.attempts }, sessions: {}, review: [] },
+      change: { ...approved, attempts: { ...approved.attempts }, review: [] },
       pr,
       implementation: options.implementation,
       postNote: options.postNote,
@@ -830,18 +826,35 @@ describe("delivery", () => {
   });
 
   it("retries a merge refused for a state that passes, and says so once", async () => {
-    const { steps } = setup([mergeReady("new"), mergeReady("new", true)]);
+    const { steps } = setup([mergeReady("new"), mergeReady("new", true), mergeReady("new", true)]);
+    const refused = {
+      merged: false as const,
+      reason: "GitHub reports the merge state as unstable",
+      transient: true,
+    };
     vi.mocked(steps.mergePullRequest)
-      .mockResolvedValueOnce({
-        merged: false,
-        reason: "GitHub reports the merge state as unstable",
-        transient: true,
-      })
+      .mockResolvedValueOnce(refused)
+      .mockResolvedValueOnce(refused)
       .mockResolvedValueOnce({ merged: true, mergeCommitSha: "merged" });
+    // The pull request keeps what is posted to it, which is what the note reads.
+    vi.mocked(jigs.fetchPullRequestState).mockImplementation(async () =>
+      openSnapshot({
+        conversationComments: vi
+          .mocked(steps.commentOnPullRequest)
+          .mock.calls.map(([, body], index) => ({
+            id: 9000 + index,
+            body,
+            user: "jigs",
+            userType: "User",
+            createdAt: "2026-01-02",
+            updatedAt: "2026-01-02",
+          })),
+      }),
+    );
     const result = await useSteps(steps).deliverChange({ ...options, merge: JIGS_MERGE });
 
     expect(result.pr).toEqual(pr);
-    expect(steps.mergePullRequest).toHaveBeenCalledTimes(2);
+    expect(steps.mergePullRequest).toHaveBeenCalledTimes(3);
     // One note, and it does not stand the commit down.
     expect(steps.commentOnPullRequest).toHaveBeenCalledOnce();
     const [, body] = vi.mocked(steps.commentOnPullRequest).mock.calls[0] ?? [];
@@ -1086,13 +1099,6 @@ describe("delivery", () => {
     expect(calls[0]?.prompt).toContain("bucket-a: unexpected growth");
     expect(result.change.task.key).toBe("overnight audit / storage");
   });
-  it("ignores an old CI failure after a revision has moved the branch", async () => {
-    const { steps, calls } = setup([red("old"), { kind: "closed", merged: true }]);
-    const result = await useSteps(steps).deliverChange(options);
-    expect(result.change.attempts.ciFixAttempts).toBe(0);
-    expect(calls).toHaveLength(3);
-  });
-
   it("merges the ready commit the wake named", async () => {
     const { steps } = setup([mergeReady("new")]);
     const result = await useSteps(steps).deliverChange({ ...options, merge: JIGS_MERGE });
@@ -1153,19 +1159,13 @@ describe("delivery", () => {
         { kind: "closed", merged: true },
       ]);
       vi.mocked(steps.readWorktreeDiff).mockRejectedValue(new Error("Diff unavailable"));
-      if (role === "ciRepair") {
-        vi.mocked(steps.readBranchState)
-          .mockResolvedValueOnce({ commits: 1, headSha: "first", dirty: false })
-          .mockResolvedValue({ commits: 2, headSha: "second", dirty: false });
-      } else {
-        vi.mocked(steps.readBranchState).mockResolvedValue({
-          commits: 1,
-          headSha: "first",
-          dirty: false,
-        });
-      }
+      vi.mocked(steps.readBranchState).mockResolvedValue(
+        role === "ciRepair"
+          ? { commits: 2, headSha: "second", dirty: false }
+          : { commits: 1, headSha: "first", dirty: false },
+      );
       await useSteps(steps).followPullRequest({
-        change: { ...approved, attempts: { ...approved.attempts }, sessions: {}, review: [] },
+        change: { ...approved, attempts: { ...approved.attempts }, review: [] },
         pr,
         implementation: options.implementation,
         postNote: options.postNote,
@@ -1179,7 +1179,7 @@ describe("delivery", () => {
   );
 
   it("skips unused diffs even when a replacement rebuilds an expired session", async () => {
-    const { steps, calls } = setup([red("first"), { kind: "closed", merged: true }]);
+    const { steps, calls } = setup([red("first"), red("second"), { kind: "closed", merged: true }]);
     const runAgent = steps.runAgent;
     steps.runAgent = async (config) => {
       if (config.resume) resumeFailed("expired");
@@ -1187,28 +1187,21 @@ describe("delivery", () => {
     };
     vi.mocked(steps.readWorktreeDiff).mockRejectedValue(new Error("Diff unavailable"));
     vi.mocked(steps.readBranchState)
-      .mockResolvedValueOnce({ commits: 1, headSha: "first", dirty: false })
-      .mockResolvedValue({ commits: 2, headSha: "second", dirty: false });
+      .mockResolvedValueOnce({ commits: 2, headSha: "second", dirty: false })
+      .mockResolvedValue({ commits: 3, headSha: "third", dirty: false });
     await useSteps(steps).followPullRequest({
-      change: {
-        ...approved,
-        attempts: { ...approved.attempts },
-        sessions: {
-          ciRepair: {
-            harness: options.implementation.harness,
-            session: { harness: "codex", id: "expired" },
-          },
-        },
-      },
+      change: { ...approved, attempts: { ...approved.attempts } },
       pr,
       implementation: options.implementation,
       postNote: options.postNote,
       ciRepair: { ...options.implementation, prompt: () => "Follow TASK.md" },
-      limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
+      limits: { ciFixAttempts: 2, pullRequestRevisionRounds: 1 },
       merge: HUMAN_MERGE,
     });
-    expect(calls[0]?.prompt).toBe("Follow TASK.md");
-    expect(calls[0]?.resume).toBeUndefined();
+    // The second repair tried to resume, found the session gone, and rebuilt.
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.prompt).toBe("Follow TASK.md");
+    expect(calls[1]?.resume).toBeUndefined();
     expect(steps.readWorktreeDiff).not.toHaveBeenCalled();
   });
 
@@ -1318,7 +1311,7 @@ describe("delivery", () => {
       { kind: "closed", merged: true },
     ]);
     await useSteps(steps).followPullRequest({
-      change: { ...approved, attempts: { ...approved.attempts }, sessions: {}, review: [] },
+      change: { ...approved, attempts: { ...approved.attempts }, review: [] },
       pr,
       implementation: options.implementation,
       postNote: options.postNote,
@@ -1341,41 +1334,24 @@ describe("delivery", () => {
   });
 
   it("reads no diff on the resume arm and renders one on the rebuild arm", async () => {
-    const follow = (sessions: ApprovedChange["sessions"]): FollowPullRequestOptions => ({
-      change: { ...approved, attempts: { ...approved.attempts }, sessions, review: [] },
+    const follow: FollowPullRequestOptions = {
+      change: { ...approved, attempts: { ...approved.attempts }, review: [] },
       pr,
       implementation: options.implementation,
       postNote: options.postNote,
-      limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
+      limits: { ciFixAttempts: 2, pullRequestRevisionRounds: 1 },
       merge: HUMAN_MERGE,
-    });
-    const branchStates = (steps: DeliverySteps) =>
-      vi
-        .mocked(steps.readBranchState)
-        .mockResolvedValueOnce({ commits: 1, headSha: "first", dirty: false })
-        .mockResolvedValueOnce({ commits: 2, headSha: "second", dirty: false });
+    };
+    const { steps, calls } = setup([red("first"), red("second"), { kind: "closed", merged: true }]);
+    vi.mocked(steps.readBranchState)
+      .mockResolvedValueOnce({ commits: 2, headSha: "second", dirty: false })
+      .mockResolvedValueOnce({ commits: 3, headSha: "third", dirty: false });
+    await useSteps(steps).followPullRequest(follow);
 
-    const resumed = setup([red("first"), { kind: "closed", merged: true }]);
-    branchStates(resumed.steps);
-    await useSteps(resumed.steps).followPullRequest(
-      follow({
-        ciRepair: {
-          harness: options.implementation.harness,
-          session: { harness: "codex", id: "saved" },
-        },
-      }),
-    );
-    expect(resumed.steps.readWorktreeDiff).not.toHaveBeenCalled();
-    expect(resumed.calls[0]?.resume).toEqual({ harness: "codex", id: "saved" });
-    expect(resumed.calls[0]?.prompt).not.toContain("Current diff:");
-
-    const rebuilt = setup([red("first"), { kind: "closed", merged: true }]);
-    branchStates(rebuilt.steps);
-    await useSteps(rebuilt.steps).followPullRequest(follow({}));
-    expect(rebuilt.steps.readWorktreeDiff).toHaveBeenCalledExactlyOnceWith("/work", "base");
-    expect(rebuilt.calls[0]?.resume).toBeUndefined();
-    expect(rebuilt.calls[0]?.prompt).toContain("Current diff:\ndiff");
-    expect(rebuilt.calls[0]?.prompt).toBe(
+    // The first repair starts from nothing and is given the diff.
+    expect(steps.readWorktreeDiff).toHaveBeenCalledExactlyOnceWith("/work", "base");
+    expect(calls[0]?.resume).toBeUndefined();
+    expect(calls[0]?.prompt).toBe(
       await defaultCiRepairPrompt({
         task: options.task,
         worktree: options.worktree,
@@ -1387,50 +1363,8 @@ describe("delivery", () => {
         renderDefaultPrompt: async () => "",
       }),
     );
-  });
-});
-
-describe("role sessions across harness changes", () => {
-  const source = { apiKeyEnv: "OPENROUTER_API_KEY", model: "vendor/model", kind: "openrouter" };
-  const pi = harnesses.pi(models.openrouter("vendor/model"), { thinking: "low" });
-
-  async function repairWith(saved: Harness, current: Harness) {
-    const { steps, calls } = setup([red("first"), { kind: "closed", merged: true }]);
-    vi.mocked(steps.readBranchState)
-      .mockResolvedValueOnce({ commits: 1, headSha: "first", dirty: false })
-      .mockResolvedValueOnce({ commits: 2, headSha: "second", dirty: false });
-    await useSteps(steps).followPullRequest({
-      change: {
-        ...approved,
-        attempts: { ...approved.attempts },
-        sessions: { ciRepair: { harness: saved, session: { harness: saved.kind, id: "saved" } } },
-        review: [],
-      },
-      pr,
-      implementation: options.implementation,
-      postNote: options.postNote,
-      ciRepair: { harness: current },
-      limits: { ciFixAttempts: 1, pullRequestRevisionRounds: 1 },
-      merge: HUMAN_MERGE,
-    });
-    return calls[0]?.resume;
-  }
-
-  it("resumes a Pi role whose descriptor lists the same fields in another order", async () => {
-    const reordered = { thinking: "low", model: source, kind: "pi" } as Harness;
-    expect(await repairWith(pi, reordered)).toEqual({ harness: "pi", id: "saved" });
-  });
-
-  it("starts a Pi role fresh when its nested model source changes", async () => {
-    const other = harnesses.pi(models.openrouter("vendor/other"), { thinking: "low" });
-    expect(await repairWith(pi, other)).toBeUndefined();
-    const otherKey = harnesses.pi(models.openrouter("vendor/model", { apiKeyEnv: "TEAM_KEY" }), {
-      thinking: "low",
-    });
-    expect(await repairWith(pi, otherKey)).toBeUndefined();
-  });
-
-  it("starts a role fresh when it moves to a different harness kind", async () => {
-    expect(await repairWith(pi, harnesses.codex("builder"))).toBeUndefined();
+    // The second resumes the session the first recorded and reads no diff.
+    expect(calls[1]?.resume).toEqual({ harness: "codex", id: "session" });
+    expect(calls[1]?.prompt).not.toContain("Current diff:");
   });
 });

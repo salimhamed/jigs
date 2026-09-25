@@ -271,12 +271,13 @@ export function classifyPullRequestState(
 // side free of any value import into steps/.
 export type FetchPrState = (pr: PullRequestRef) => Promise<PullRequestSnapshot>;
 
-/** {@link pullRequestGate} with its step already bound. */
-export type PullRequestGateFn = (
-  pr: PullRequestRef,
-  scope: string,
-  approval: ApprovalSignal,
-) => AsyncGenerator<PullRequestWake, void, undefined>;
+/** What a pull request gate watches for. */
+export interface PullRequestGateOptions {
+  /** The continuation identity whose markers say what is already done. */
+  scope: string;
+  /** The signal that makes an open pull request merge-ready. */
+  approval: ApprovalSignal;
+}
 
 // One hook per PR, held across the whole review until the PR closes — the
 // token is never released mid-review. Holding it is the single-writer rule; a
@@ -289,13 +290,14 @@ export type PullRequestGateFn = (
  * @remarks
  * Only one run can hold a pull request's token. The injected state reader must be wrapped in a
  * factory-owned `"use step"` function so each snapshot is durable and workflow replay stays pure.
+ * A wake is yielded only while the head it was read from is still the pull request's head.
  */
 export async function* pullRequestGate(
   pr: PullRequestRef,
   fetchState: FetchPrState,
-  scope: string,
-  approval: ApprovalSignal,
+  options: PullRequestGateOptions,
 ): AsyncGenerator<PullRequestWake, void, undefined> {
+  const { scope, approval } = options;
   const token = pullRequestToken(pr);
   const hook = createHook<unknown>({ token });
   try {
@@ -303,16 +305,38 @@ export async function* pullRequestGate(
     if (conflict !== null) {
       throw new ClaimConflictError(token, conflict.runId);
     }
+    let snapshot = await fetchState(pr);
     while (true) {
-      const round = classifyPullRequestState(await fetchState(pr), scope, approval);
+      const round = classifyPullRequestState(snapshot, scope, approval);
       console.log(
         `[prGate] ${pr.owner}/${pr.repo}#${pr.number} scope=${scope} wakes=${round.wakes.length} jigs-comments=${round.ownComments}`,
       );
-      for (const wake of round.wakes) yield wake;
+      let moved: PullRequestSnapshot | undefined;
+      for (const [index, wake] of round.wakes.entries()) {
+        // The first wake was read just now. A later one was read before the
+        // consumer handled the one ahead of it, which may have pushed; a wake
+        // about a commit the branch has moved past is not delivered.
+        if (index > 0 && wake.kind !== "closed") {
+          const current = await fetchState(pr);
+          if (current.headSha !== snapshot.headSha) {
+            console.log(
+              `[prGate] ${pr.owner}/${pr.repo}#${pr.number} head moved ${snapshot.headSha} -> ${current.headSha}; dropping ${round.wakes.length - index} stale wake(s)`,
+            );
+            moved = current;
+            break;
+          }
+        }
+        yield wake;
+      }
       if (round.done) return;
+      if (moved !== undefined) {
+        snapshot = moved;
+        continue;
+      }
       // Suspend until the service's poll resumes this PR, or a GitHub
       // webhook reports activity on it sooner.
       await hook;
+      snapshot = await fetchState(pr);
     }
   } finally {
     hook.dispose();

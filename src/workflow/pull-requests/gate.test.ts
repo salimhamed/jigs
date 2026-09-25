@@ -407,7 +407,7 @@ test("a closed PR yields closed with the merged flag and finishes the gate", () 
 
 test("the gate classifies a first snapshot before it ever awaits the hook", async () => {
   const fetchState = vi.fn(async () => snapshot({ state: "closed", merged: true }));
-  const gate = pullRequestGate(pr, fetchState, SCOPE, APPROVAL);
+  const gate = pullRequestGate(pr, fetchState, { scope: SCOPE, approval: APPROVAL });
 
   expect(await gate.next()).toEqual({
     done: false,
@@ -429,7 +429,7 @@ test("a second round re-reads the pull request and re-classifies it", async () =
   // The generator stays suspended on the hook when the test ends; nothing is
   // waiting on it.
   const fetchState = vi.fn(async () => states.shift() ?? snapshot());
-  const gate = pullRequestGate(pr, fetchState, SCOPE, APPROVAL);
+  const gate = pullRequestGate(pr, fetchState, { scope: SCOPE, approval: APPROVAL });
 
   expect((await gate.next()).value).toMatchObject({ kind: "review-comments" });
   const next = gate.next();
@@ -443,13 +443,61 @@ test("a second round re-reads the pull request and re-classifies it", async () =
   expect(hook.awaited).toBe(2);
 });
 
+test("a wake whose head the branch moved past is not yielded", async () => {
+  const asked = thread(900, [comment(900, "reviewer")]);
+  const answered = thread(900, [
+    comment(900, "reviewer"),
+    comment(901, "salim", answering(`900@${AT}`)),
+  ]);
+  const red = { ci: "red" as const, failingChecks: [check("test")] };
+  const states = [
+    snapshot({ ...red, reviewThreads: [asked] }),
+    // The consumer answered the thread and pushed before asking for the next wake.
+    snapshot({ headSha: "head-2", reviewThreads: [answered] }),
+  ];
+  const fetchState = vi.fn(async () => states.shift() ?? snapshot({ headSha: "head-2" }));
+  const gate = pullRequestGate(pr, fetchState, { scope: SCOPE, approval: APPROVAL });
+
+  expect((await gate.next()).value).toMatchObject({ kind: "review-comments" });
+  const next = gate.next();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  // The red build was on head-1; the new head owes nothing, so the gate
+  // suspends instead of delivering it.
+  expect(await Promise.race([next, Promise.resolve("suspended")])).toBe("suspended");
+  expect(fetchState).toHaveBeenCalledTimes(2);
+  expect(hook.awaited).toBe(1);
+});
+
+test("a later wake in the same round is yielded while the head stays put", async () => {
+  const asked = thread(900, [comment(900, "reviewer")]);
+  const fetchState = vi.fn(async () =>
+    snapshot({ ci: "red", failingChecks: [check("test")], reviewThreads: [asked] }),
+  );
+  const gate = pullRequestGate(pr, fetchState, { scope: SCOPE, approval: APPROVAL });
+
+  expect((await gate.next()).value).toMatchObject({ kind: "review-comments" });
+  expect((await gate.next()).value).toMatchObject({ kind: "ci-red", headSha: "head-1" });
+  expect(fetchState).toHaveBeenCalledTimes(2);
+  expect(hook.awaited).toBe(0);
+});
+
+test("leaving the loop stops watching", async () => {
+  const fetchState = vi.fn(async () => snapshot({ ci: "red", failingChecks: [check("test")] }));
+  for await (const wake of pullRequestGate(pr, fetchState, { scope: SCOPE, approval: APPROVAL })) {
+    expect(wake.kind).toBe("ci-red");
+    break;
+  }
+  expect(hook.disposed).toBe(1);
+  expect(hook.awaited).toBe(0);
+});
+
 test("a pr another run already holds is a claim conflict, never fetched", async () => {
   hook.conflict = { runId: "wrun_OWNER" };
   const fetchState = vi.fn(async () => snapshot());
 
-  await expect(pullRequestGate(pr, fetchState, SCOPE, APPROVAL).next()).rejects.toThrow(
-    "is already claimed by run wrun_OWNER",
-  );
+  await expect(
+    pullRequestGate(pr, fetchState, { scope: SCOPE, approval: APPROVAL }).next(),
+  ).rejects.toThrow("is already claimed by run wrun_OWNER");
   expect(fetchState).not.toHaveBeenCalled();
   expect(hook.disposed).toBe(1);
 });
@@ -481,7 +529,7 @@ test("a remote typed in canonical casing matches a lowercase webhook", () => {
 test("the gate claims the casing-independent token", async () => {
   const pr = { owner: "Junglescout", repo: "API", number: 7 };
   const fetchState = vi.fn(async () => snapshot({ state: "closed" }));
-  await pullRequestGate(pr, fetchState, SCOPE, APPROVAL).next();
+  await pullRequestGate(pr, fetchState, { scope: SCOPE, approval: APPROVAL }).next();
   expect(createHook).toHaveBeenCalledWith({ token: "github:pr:junglescout/api#7" });
 });
 

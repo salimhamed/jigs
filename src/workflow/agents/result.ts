@@ -3,8 +3,11 @@ import type { Harness } from "./harness-config.ts";
 // Type aliases, not interfaces: aliases carry an implicit index signature,
 // which keeps step returns assignable to the SDK's Serializable types.
 
-/** A provider session pointer that can resume the same harness. */
-export type AgentSession = {
+/**
+ * A session reference: the small piece of data that lets a later `runAgent` call resume the same
+ * harness session. Pass it back as `resume`.
+ */
+export type AgentSessionRef = {
   harness: Harness["kind"];
   id: string;
 };
@@ -15,9 +18,9 @@ export type ModelResult<T = unknown> = {
   output: T;
 };
 
-/** A model result with the optional session pointer from an agent harness. */
+/** A model result with the session reference an agent harness returned, when it returned one. */
 export type AgentResult<T = unknown> = ModelResult<T> & {
-  session?: AgentSession;
+  session?: AgentSessionRef;
 };
 
 type ProviderMetadataLike = Record<string, Record<string, unknown>> | null;
@@ -33,13 +36,13 @@ export function toModelResult(generation: ModelGeneration, output: unknown): Mod
   return { text: generation.text, output };
 }
 
-// Best-effort: session pointers are capturable only at step time, but a
+// Best-effort: a session reference is capturable only at step time, but a
 // missing one must never fail the step the agent just finished.
 export function extractAgentSession(
-  harness: AgentSession["harness"],
+  harness: AgentSessionRef["harness"],
   providerMetadata: ProviderMetadataLike | undefined,
   pointer: { providerKey: string; field: string } | undefined,
-): AgentSession | undefined {
+): AgentSessionRef | undefined {
   if (pointer === undefined) return undefined;
   const id = providerMetadata?.[pointer.providerKey]?.[pointer.field];
   if (typeof id !== "string" || id === "") return undefined;

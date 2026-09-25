@@ -73,7 +73,7 @@ export async function openPullRequest(request: {
   base: string;
   title: string;
   body: string;
-  draft?: boolean;
+  draft?: boolean | undefined;
 }): Promise<OpenedPullRequest> {
   const { repo, head, base, title, body, draft } = request;
   const identity = resolveGithubIdentity(repo.owner);

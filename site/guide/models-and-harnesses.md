@@ -25,9 +25,8 @@ Import them from `#jigs/routines`.
 | `askJev` | an OpenRouter jev model | Get calibrated probabilities for named yes/no, choice or score questions. |
 
 Each verb takes an optional zod `output` schema (`askJev` returns its own typed
-answers). An agent result can carry a `session`; pass it as `resume` to a later
-`runAgent` to continue that conversation. Give an independent reviewer its own
-session, and never share one between harnesses.
+answers). An optional field also accepts `undefined`, so you can pass a value
+that may be missing without a conditional spread.
 
 Name each agent a workflow runs in its `requires.agents`, and add each model
 source it calls to `requires.models`:
@@ -50,6 +49,59 @@ CLIs when it starts, and preflight checks everything listed before each run. A
 factory whose workflows run no agent needs no harness installed.
 
 jigs does not track spend. Watch it in each provider's own dashboard.
+
+## Agent sessions
+
+A workflow often talks to the same agent several times: a builder that writes
+code, hears the review, and fixes it. `agentSession` is that agent across
+turns. Each `run` resumes the harness session it holds, so the agent remembers
+the turns before it.
+
+```ts
+interface AgentSession {
+  readonly harness: Harness;
+  run<T>(turn: { resume: Prompt; fresh: Prompt; output: z.ZodType<T> }): Promise<T>;
+  run(turn: { resume: Prompt; fresh: Prompt }): Promise<void>;
+}
+type Prompt = string | (() => Promise<string>);
+
+function agentSession(options: { name: string; harness: Harness; cwd: string }): AgentSession;
+```
+
+A turn states the job twice. `resume` goes to an agent that already holds the
+earlier turns, so it carries only what is new. `fresh` goes to an agent starting
+from nothing, so it carries everything. Pass a function for either one when
+building it costs a step, such as reading a diff: only the prompt that is sent
+gets built.
+
+```ts
+import { agentSession } from "#jigs/routines";
+import { readWorktreeDiff } from "#jigs/steps";
+
+const builderSession = agentSession({ name: "builder", harness: agents.builder, cwd });
+
+for (let round = 1; round <= 3; round++) {
+  const report = await builderSession.run({
+    output: implementationReport,
+    resume: `The reviewer found:\n${findings}`,
+    fresh: async () =>
+      `${task}\n\nThe work so far:\n${await readWorktreeDiff(cwd, baseSha)}\n\n${findings}`,
+  });
+  // ...
+}
+```
+
+A harness session can be lost: a restart, a thread the harness no longer has,
+a harness you switched between deploys. When that happens `run` sends
+`fresh` to a new session and the workflow carries on, instead of failing in
+round four. Give an independent reviewer an agent session of its own.
+
+The data that makes a resume possible is a session reference,
+`AgentSessionRef`. `runAgent` returns it as `session` and takes it back as
+`resume`. You need it only when you call `runAgent` directly; an agent session
+keeps its own. It is plain data, which is why an agent session survives
+replay: the workflow rebuilds the object on every replay, and the reference
+comes back from the recorded steps.
 
 ## Claude Code
 

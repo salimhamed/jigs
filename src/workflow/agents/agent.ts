@@ -7,9 +7,9 @@
 // ../../steps/agents/execute-agent.ts is the step side of the same split.
 
 import type { FailedCheck } from "../../checks/catalog.ts";
+import { resumeFailed } from "./agent-session.ts";
 import { type AgentRequest, buildAgentRequest, parseOutput, type RunAgentOptions } from "./plan.ts";
 import type { AgentResult } from "./result.ts";
-import { resumeFailed } from "./resume-or-rebuild.ts";
 
 // Thrown in the workflow, never inside the step: a step's rejection is rebuilt
 // from its message alone, so a JIT failure crosses the boundary as a returned
@@ -52,7 +52,7 @@ export type ExecuteAgentStep = (
 export function unwrapAgentStep(result: Awaited<ReturnType<ExecuteAgentStep>>): AgentResult {
   if ("jitFailure" in result) throw new JitCheckError(result.jitFailure);
   // Same shape, same reason as the JIT marker, but the error it becomes is
-  // ./resume-or-rebuild's business: only the fallback there may recognize it.
+  // ./agent-session's business: only the fallback there may recognize it.
   if ("resumeFailed" in result) resumeFailed(result.resumeFailed);
   return result;
 }

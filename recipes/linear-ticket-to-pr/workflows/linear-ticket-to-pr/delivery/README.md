@@ -96,7 +96,7 @@ Posting notes through `noteOnTicket` records them on the claim, so a later
 `haltForHuman` never mistakes them for a human reply.
 
 `ciRepair`, `pullRequestRevision` and `pullRequestDescription` use the
-implementation harness unless you set them. Each role keeps its own session;
+implementation harness unless you set them. Each role keeps its own agent session;
 changing a role's harness or model starts it fresh.
 
 ```ts

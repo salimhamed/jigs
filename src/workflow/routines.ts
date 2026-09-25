@@ -8,13 +8,14 @@
  * @packageDocumentation
  */
 
-export { type AgentSteps, bindAgentSteps } from "./agents/bind.ts";
 export {
-  type ResumeOrRebuildOptions,
-  type ResumeOrRebuildResult,
+  type AgentSession,
+  type AgentSessionOptions,
+  type AgentSessionTurn,
+  bindAgentSession,
   type RunAgentFn,
-  resumeOrRebuild,
-} from "./agents/resume-or-rebuild.ts";
+} from "./agents/agent-session.ts";
+export { type AgentSteps, bindAgentSteps } from "./agents/bind.ts";
 export { type BoundReviewTicketOptions, bindLinearSteps, type LinearSteps } from "./linear/bind.ts";
 export { claimTicket } from "./linear/claim.ts";
 export { type AcquireTicketSteps, acquireTicket } from "./linear/prelude.ts";
@@ -24,6 +25,5 @@ export {
   postPullRequestNote,
   postReviewAnswers,
 } from "./pull-requests/answers.ts";
-export { type Attend, attend, finished, listen } from "./pull-requests/attend.ts";
-export { bindPullRequestSteps } from "./pull-requests/bind.ts";
+export { bindPullRequestSteps, type PullRequestSteps } from "./pull-requests/bind.ts";
 export { bindReleaseSteps, type ReleaseSteps } from "./runtime/release.ts";

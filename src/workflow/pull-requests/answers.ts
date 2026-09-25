@@ -3,7 +3,7 @@ import type {
   commentOnPullRequest,
   replyToPullRequestReviewThread,
 } from "../../steps/pull-requests/pr.ts";
-
+import { type FetchPrState, readPullRequestLedger } from "./gate.ts";
 import {
   assertUsableScope,
   carriesMarker,
@@ -41,13 +41,15 @@ export interface PostReviewAnswersOptions {
   /** Replies and optional commit explanation produced for this revision round. */
   answers: ThreadAnswers;
   /** The commit the round pushed, when it pushed one; the explanation names it. */
-  committedSha?: string;
+  committedSha?: string | undefined;
   /** The wake's known threads, used to reject invented anchors and route each answer. */
   threads: ReviewThread[];
 }
 
 /** Inputs for posting one commit-scoped pull request status note. */
 export interface PostPullRequestNoteOptions {
+  /** Factory-owned step used to read what the pull request already records. */
+  fetchPullRequestState: FetchPrState;
   /** Factory-owned step used to post on the pull request conversation. */
   commentOnPullRequest: typeof commentOnPullRequest;
   /** The pull request receiving the note. */
@@ -167,12 +169,16 @@ export async function postReviewAnswers(options: PostReviewAnswersOptions): Prom
 /**
  * Posts a note about a commit — a merge jigs could not make, CI it could not
  * repair — marked with the commit it settles, so the next wake does not ask
- * for the same attempt again. A note that cannot be posted is logged and the
- * wake ends; the state it describes is still there to be reassessed.
+ * for the same attempt again. It posts once per head and reason: when the pull
+ * request already carries this scope's note for them, it posts nothing. A note
+ * that cannot be posted is logged and the wake ends; the state it describes is
+ * still there to be reassessed.
  */
 export async function postPullRequestNote(options: PostPullRequestNoteOptions): Promise<void> {
-  const { pr, headSha } = options;
+  const { pr, headSha, reason } = options;
   assertUsableScope(options.scope);
+  const ledger = readPullRequestLedger(await options.fetchPullRequestState(pr), options.scope);
+  if (ledger.settled[reason].has(headSha)) return;
   try {
     await options.commentOnPullRequest(
       pr,

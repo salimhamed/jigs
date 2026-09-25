@@ -1,23 +1,13 @@
+import { defaultPullRequestScope, JigsError, renderChecks, type StatusReason } from "@jigs-ai/jigs";
 import {
-  defaultPullRequestScope,
-  type Harness,
-  JigsError,
-  renderChecks,
-  type StatusReason,
-} from "@jigs-ai/jigs";
-import type { z } from "zod";
-import {
-  attend,
-  finished,
-  listen,
+  type AgentSessionTurn,
+  agentSession,
   postPullRequestNote,
   postReviewAnswers,
   pullRequestGate,
-  resumeOrRebuild,
   runAgent,
 } from "#jigs/routines";
 import {
-  commentOnPullRequest,
   mergePullRequest,
   openPullRequest,
   pushApprovedChange,
@@ -25,7 +15,6 @@ import {
   readBranchState,
   readWorktreeDiff,
   registerResource,
-  replyToPullRequestReviewThread,
   resolveRepository,
 } from "#jigs/steps";
 import { pullRequestDescription, type ThreadAnswers, threadAnswers } from "./outputs.ts";
@@ -46,7 +35,6 @@ import {
   reviewVerdict,
 } from "./review.ts";
 import type {
-  AgentRoleName,
   CiRepairPromptContext,
   DeliverChangeOptions,
   DeliveryAgent,
@@ -112,57 +100,18 @@ function lazyDiff(change: DeliveryChange) {
   return () => (diff ??= readWorktreeDiff(change.worktree.path, change.worktree.baseSha));
 }
 
-// Field order is not identity: a descriptor, or a Pi descriptor's nested model
-// source, built with its fields in another order is the same harness.
-function sameHarness(a: Harness, b: Harness) {
-  return canonical(a) === canonical(b);
-}
-
-function canonical(value: unknown) {
-  return JSON.stringify(value, (_key, field: unknown) =>
-    field !== null && typeof field === "object" && !Array.isArray(field)
-      ? Object.fromEntries(Object.entries(field).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
-      : field,
-  );
-}
-
-interface RoleRun<TTask extends WorkItem, TContext, T> {
-  change: DeliveryChange<TTask>;
-  name: AgentRoleName;
-  role: DeliveryAgent<TContext>;
-  renderDefault: (context: TContext) => string | Promise<string>;
-  /** The job as stated to the agent that already holds the change. */
-  resume: PromptFields<TContext>;
-  /** The same job for an agent holding nothing. Deferred: the diff read is a step. */
-  fresh: () => Promise<PromptFields<TContext>>;
-  output?: z.ZodType<T>;
-}
-
-async function runRole<
-  TTask extends WorkItem,
-  TContext extends { renderDefaultPrompt: () => Promise<string> },
-  T = undefined,
->(run: RoleRun<TTask, TContext, T>) {
-  const { change, name, role, renderDefault } = run;
-  const saved = change.sessions[name];
-  const session =
-    saved !== undefined && sameHarness(saved.harness, role.harness) ? saved.session : undefined;
-  const result = await resumeOrRebuild({
-    runAgent,
-    harness: role.harness,
-    cwd: change.worktree.path,
-    ...(session === undefined ? {} : { session }),
-    resumePrompt: () => renderPrompt(role, renderDefault, run.resume),
-    freshPrompt: async () => renderPrompt(role, renderDefault, await run.fresh()),
-    ...(run.output === undefined ? {} : { output: run.output }),
-    label: `delivery:${name}`,
-  });
-  if (result.session !== undefined) {
-    change.sessions[name] = { harness: role.harness, session: result.session };
-  } else {
-    delete change.sessions[name];
-  }
-  return result.output;
+// A role's prompt renders inside the session's turn, so the fresh arm's extra
+// context (a diff read is a step) costs nothing when the resume is taken.
+function roleTurn<TContext extends { renderDefaultPrompt: () => Promise<string> }>(
+  role: DeliveryAgent<TContext>,
+  renderDefault: (context: TContext) => string | Promise<string>,
+  resume: PromptFields<TContext>,
+  fresh: () => Promise<PromptFields<TContext>>,
+): AgentSessionTurn {
+  return {
+    resume: () => renderPrompt(role, renderDefault, resume),
+    fresh: async () => renderPrompt(role, renderDefault, await fresh()),
+  };
 }
 
 // A delivery that stops short first pushes, so the commits outlive `jigs
@@ -200,9 +149,15 @@ export async function implementAndReview<TTask extends WorkItem = WorkItem>(
     task: options.task,
     worktree: options.worktree,
     attempts: { implementationReviewRounds: 0, ciFixAttempts: 0, pullRequestRevisionRounds: 0 },
-    sessions: {},
     review: [],
   };
+  const cwd = change.worktree.path;
+  const builderSession = agentSession({
+    name: "builder",
+    harness: options.implementation.harness,
+    cwd,
+  });
+  const reviewerSession = agentSession({ name: "reviewer", harness: options.review.harness, cwd });
   let budget = options.limits.implementationReviewRounds;
   let findings: ReviewFinding[] = [];
   let instructions = "";
@@ -235,16 +190,11 @@ export async function implementAndReview<TTask extends WorkItem = WorkItem>(
       findings,
       instructions,
     };
-    const report = await runRole<TTask, ImplementationPromptContext<TTask>, ImplementationReport>({
-      change,
-      name: "implementation",
-      role: options.implementation,
-      renderDefault: defaultImplementationPrompt,
-      resume: built,
-      fresh: async () => ({
+    const report: ImplementationReport = await builderSession.run({
+      ...roleTurn(options.implementation, defaultImplementationPrompt, built, async () => ({
         ...built,
         readDiff: lazyDiff(change),
-      }),
+      })),
       output: implementationReport,
     });
     const state = await readBranchState(change.worktree.path, change.worktree.baseSha);
@@ -276,13 +226,11 @@ export async function implementAndReview<TTask extends WorkItem = WorkItem>(
     // Read before the round is recorded, so the ledger a rebuilt reviewer
     // gets is the rounds it has already judged and not this one.
     const ledger = [...change.review];
-    const verdict = await runRole<TTask, ReviewPromptContext<TTask>, ReviewVerdict>({
-      change,
-      name: "review",
-      role: options.review,
-      renderDefault: defaultReviewPrompt,
-      resume: reviewed,
-      fresh: async () => ({ ...reviewed, ledger }),
+    const verdict: ReviewVerdict = await reviewerSession.run({
+      ...roleTurn(options.review, defaultReviewPrompt, reviewed, async () => ({
+        ...reviewed,
+        ledger,
+      })),
       output: reviewVerdict,
     });
     findings = verdict.findings;
@@ -362,13 +310,23 @@ export async function followPullRequest<TTask extends WorkItem = WorkItem>(
   const budgets = { ...options.limits };
   const instructions = { ciFixAttempts: "", pullRequestRevisionRounds: "" };
   const note = (reason: StatusReason, headSha: string, body: string) =>
-    postPullRequestNote({ commentOnPullRequest, pr, scope, reason, headSha, body });
-  const gate = pullRequestGate(pr, scope, options.merge.approval);
-  return attend<DeliveryResult<TTask>>(gate, async (wake) => {
+    postPullRequestNote({ pr, scope, reason, headSha, body });
+  const cwd = change.worktree.path;
+  const ciRepair = options.ciRepair ?? { harness: options.implementation.harness };
+  const pullRequestRevision = options.pullRequestRevision ?? {
+    harness: options.implementation.harness,
+  };
+  const ciRepairSession = agentSession({ name: "ciRepair", harness: ciRepair.harness, cwd });
+  const revisionSession = agentSession({
+    name: "pullRequestRevision",
+    harness: pullRequestRevision.harness,
+    cwd,
+  });
+  for await (const wake of pullRequestGate(pr, { scope, approval: options.merge.approval })) {
     if (wake.kind === "closed") {
       if (wake.merged) {
         await options.on?.merged?.(pr);
-        return finished({ change, pr });
+        return { change, pr };
       }
       return stopDelivery(
         change,
@@ -385,13 +343,13 @@ export async function followPullRequest<TTask extends WorkItem = WorkItem>(
       );
     }
     if (wake.kind === "merge-ready") {
-      if (options.merge.by === "human") return listen();
+      if (options.merge.by === "human") continue;
       let refused: { reason: string; transient: boolean };
       try {
         const result = await mergePullRequest(pr, wake.headSha, options.merge);
         if (result.merged) {
           await options.on?.merged?.(pr);
-          return finished({ change, pr });
+          return { change, pr };
         }
         refused = result;
       } catch (error) {
@@ -406,23 +364,17 @@ export async function followPullRequest<TTask extends WorkItem = WorkItem>(
           wake.headSha,
           `I could not merge this pull request: ${refused.reason}. I am standing down on ${wake.headSha}: nothing I can do here changes that, so it needs a new commit or a change to the repository.`,
         );
-      } else if (!wake.retryNoted) {
-        // Marked so the refusal is reported once rather than on every nudge,
-        // and with a reason the gate does not read as a stand-down, so this
-        // commit stays merge-ready.
+      } else {
+        // Posted once per commit however often it is retried, and with a
+        // reason the gate does not read as a stand-down, so this commit stays
+        // merge-ready.
         await note(
           "merge-retry",
           wake.headSha,
           `I could not merge this pull request yet: ${refused.reason}. I will try again when GitHub reports a change, and I will not repeat this note for ${wake.headSha}.`,
         );
       }
-      return listen();
-    }
-    if (wake.kind === "ci-red") {
-      // The worktree, not the snapshot: a repair pushed seconds ago is on
-      // the branch before GitHub reports the new head.
-      const current = await readBranchState(change.worktree.path, change.worktree.baseSha);
-      if (current.headSha !== wake.headSha) return listen();
+      continue;
     }
     const ci = wake.kind === "ci-red";
     const counter = ci ? "ciFixAttempts" : "pullRequestRevisionRounds";
@@ -463,14 +415,12 @@ export async function followPullRequest<TTask extends WorkItem = WorkItem>(
         ...shared,
         failing: wake.failing,
       };
-      await runRole<TTask, CiRepairPromptContext<TTask>>({
-        change,
-        name: "ciRepair",
-        role: options.ciRepair ?? { harness: options.implementation.harness },
-        renderDefault: defaultCiRepairPrompt,
-        resume: repairing,
-        fresh: async () => ({ ...repairing, readDiff: lazyDiff(change) }),
-      });
+      await ciRepairSession.run(
+        roleTurn(ciRepair, defaultCiRepairPrompt, repairing, async () => ({
+          ...repairing,
+          readDiff: lazyDiff(change),
+        })),
+      );
       const state = await readBranchState(change.worktree.path, change.worktree.baseSha);
       if (state.headSha === wake.headSha || state.dirty) {
         // Marked as given up on: this red head is settled, so a later run
@@ -496,38 +446,36 @@ export async function followPullRequest<TTask extends WorkItem = WorkItem>(
         );
       }
       await pushBranch(change.worktree.path, change.worktree.branch);
-      return listen();
+      continue;
     }
     const threads = wake.kind === "review-comments" ? wake.threads : [];
     const revising: PromptFields<PullRequestRevisionPromptContext<TTask>> = {
       ...shared,
       threads,
-      ...(wake.body === undefined ? {} : { reviewBody: wake.body }),
+      reviewBody: wake.body,
     };
     const startingState = await readBranchState(change.worktree.path, change.worktree.baseSha);
-    const answers = await runRole<TTask, PullRequestRevisionPromptContext<TTask>, ThreadAnswers>({
-      change,
-      name: "pullRequestRevision",
-      role: options.pullRequestRevision ?? { harness: options.implementation.harness },
-      renderDefault: defaultRevisionPrompt,
-      resume: revising,
-      fresh: async () => ({ ...revising, readDiff: lazyDiff(change) }),
+    const answers: ThreadAnswers = await revisionSession.run({
+      ...roleTurn(pullRequestRevision, defaultRevisionPrompt, revising, async () => ({
+        ...revising,
+        readDiff: lazyDiff(change),
+      })),
       output: threadAnswers,
     });
     const state = await readBranchState(change.worktree.path, change.worktree.baseSha);
     if (state.dirty) throw new Error("Pull request revision left uncommitted changes");
     await pushBranch(change.worktree.path, change.worktree.branch);
     await postReviewAnswers({
-      commentOnPullRequest,
-      replyToPullRequestReviewThread,
       pr,
       scope,
       answers,
-      ...(state.headSha === startingState.headSha ? {} : { committedSha: state.headSha }),
+      committedSha: state.headSha === startingState.headSha ? undefined : state.headSha,
       threads,
     });
-    return listen();
-  });
+  }
+  throw new Error(
+    `the pull request gate for ${pr.owner}/${pr.repo}#${pr.number} stopped delivering wakes before the PR closed`,
+  );
 }
 
 /** Deliver a work item using configurable agents, budgets, and merge policy. */

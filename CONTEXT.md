@@ -118,14 +118,26 @@ _Avoid_: model, backend
 **Model source**: An API endpoint that answers directly, with no agent program.
 
 **Driver**: The step-side code for one harness or model source, in
-`src/steps/agents/drivers/`: its checks, environment allowlist, session pointer
-and supported verbs.
+`src/steps/agents/drivers/`: its checks, environment allowlist, how it reads a
+session reference, and supported verbs.
 _Avoid_: adapter, provider
 
 **The four verbs**: `runAgent` runs a harness in a directory with tools;
 `askAgent` asks a harness for one answer without tools; `askModel` asks a model
 source directly; `askJev` asks a model source typed yes-no, choice or score
 questions about one state.
+
+**Agent session**: One agent across several turns of a workflow, the live
+`AgentSession` from `agentSession()`. It resumes the harness session it holds,
+and starts fresh when the step reports that session unusable or the reference
+was recorded on another harness.
+_Avoid_: role session, resumeOrRebuild
+
+**Session reference**: The small plain data, `AgentSessionRef`, that lets a
+later step resume the same harness session: the harness kind and the
+provider's session id. `runAgent` returns it as `session` and takes it as
+`resume`; an agent session holds one between turns.
+_Avoid_: session pointer, agent session (for the data)
 
 **Invocation home**: A private config directory made for one Codex or Pi
 invocation, holding generated config and a link to the operator's login.

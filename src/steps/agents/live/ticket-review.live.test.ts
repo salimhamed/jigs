@@ -1,12 +1,12 @@
 import path from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
+import type { RunAgentFn } from "../../../workflow/agents/agent-session.ts";
 import { harnesses } from "../../../workflow/agents/harness-config.ts";
 import {
   buildAgentRequest,
   parseOutput,
   type RunAgentOptions,
 } from "../../../workflow/agents/plan.ts";
-import type { RunAgentFn } from "../../../workflow/agents/resume-or-rebuild.ts";
 import type { TicketClaim } from "../../../workflow/linear/claim.ts";
 import type { HaltForHumanFn, HumanReply } from "../../../workflow/linear/halt-for-human.ts";
 import { reviewTicket } from "../../../workflow/linear/review.ts";
