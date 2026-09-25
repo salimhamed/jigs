@@ -30,9 +30,12 @@ export function apiEntries(manifest, buildEntries) {
   });
 }
 
-/** Factories import the package root, `blocks/*` and `steps/*`; the other entries host the service. */
+/**
+ * Factories import the package root and `steps/*`. `routines` is only for the generated
+ * `jigs/routines.ts`, and the other entries host the service.
+ */
 export function isPublicEntry(entry) {
-  return entry.subpath === "." || /^\.\/(?:blocks|steps)\//.test(entry.subpath);
+  return entry.subpath === "." || entry.subpath.startsWith("./steps/");
 }
 
 async function walkTypeScriptFiles(directory) {

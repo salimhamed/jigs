@@ -2,8 +2,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node
 import { createServer, type Server, type ServerResponse } from "node:http";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { harnesses, models } from "../../../blocks/agents/harness-config.ts";
-import { buildAgentRequest } from "../../../blocks/agents/plan.ts";
+import { harnesses, models } from "../../../workflow/agents/harness-config.ts";
+import { buildAgentRequest } from "../../../workflow/agents/plan.ts";
 import { type DriverResolver, driverFor } from "../drivers/index.ts";
 import { createPiDriver } from "../drivers/pi.ts";
 import { defaultAgentExecutionDependencies, executeAgent } from "../execute-agent.ts";

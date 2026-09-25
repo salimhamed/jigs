@@ -1,5 +1,5 @@
-import type { ApprovalState } from "./blocks/pull-requests/merge-ready.ts";
 import type { WakeNote } from "./service/wake-note.ts";
+import type { ApprovalState } from "./workflow/pull-requests/merge-ready.ts";
 
 /**
  * One hook a run is currently parked on. Everything below `question` is read

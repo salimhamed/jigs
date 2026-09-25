@@ -38,8 +38,9 @@ jigs is one package, `@jigs-ai/jigs`. `src/` is the library and CLI,
 
 ```
 src/
-  blocks/     workflow-side code: replay-safe, no Node built-ins, env or network
-  steps/      the real work that factory "use step" wrappers call
+  workflow/   code that runs inside the workflow bundle: replay-safe, no Node
+              built-ins, env or network
+  steps/      code that runs in steps, called by factory "use step" wrappers
               (both split by topic: agents, git, human, linear,
                pull-requests, runtime, workspaces)
   service/    the long-running process: routes, ingress, schedules, release
@@ -51,18 +52,20 @@ src/
 
 The Workflow SDK replays a workflow from its first line on every wake, and
 bundles it into a sandbox without Node built-ins. So anything a workflow
-imports (`blocks/`) must be side-effect free, and real work goes in steps. No
+imports (`workflow/`) must be side-effect free, and real work goes in steps. No
 file under `src/` carries `"use workflow"` or `"use step"`: a step's durable ID
 comes from its file path and function name, so the directives live in factory
 code and the generated `jigs/steps.ts`, and a jigs upgrade never renames a step.
 
-Public import paths follow the folders: `@jigs-ai/jigs`,
-`@jigs-ai/jigs/blocks/<topic>` and `@jigs-ai/jigs/steps/<topic>`. The other
-subpaths (`/app`, `/nitro`, `/schedules`, `/automatic-release`, `/build`,
-`/plugins/*`) belong to the service a factory builds. The Workflow SDK, its
-Postgres World, the dashboard and zod are peer dependencies the factory installs.
-All but zod are optional peers, so `pnpm dlx @jigs-ai/jigs init` installs none
-of them or the native builds they bring; the CLI must never import them.
+Factory code imports the library from the root `@jigs-ai/jigs`. The generated
+`jigs/steps.ts` imports `@jigs-ai/jigs/steps/<topic>`, and the generated
+`jigs/routines.ts` is the only importer of `@jigs-ai/jigs/routines`, where the
+routines that take steps as arguments live. The other subpaths (`/app`,
+`/nitro`, `/schedules`, `/automatic-release`, `/build`, `/plugins/*`) belong
+to the service a factory builds. The Workflow SDK, its Postgres World, the
+dashboard and zod are peer dependencies the factory installs. All but zod are
+optional peers, so `pnpm dlx @jigs-ai/jigs init` installs none of them or the
+native builds they bring; the CLI must never import them.
 
 ## Releases
 

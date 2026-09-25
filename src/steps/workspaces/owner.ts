@@ -1,9 +1,9 @@
 import { getRun } from "workflow/api";
-import type { Factory } from "../../blocks/factory.ts";
-import type { ReleasePolicy } from "../../blocks/runtime/release.ts";
 import { readFactoryConfig } from "../../config/factory-config.ts";
 import { factoryRoot } from "../../config/factory-root.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
+import type { Factory } from "../../workflow/factory.ts";
+import type { ReleasePolicy } from "../../workflow/runtime/release.ts";
 import { effectiveReleasePolicy, workflowReleasePolicy } from "../runtime/release-policy.ts";
 
 export interface OwnerState {

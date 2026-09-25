@@ -6,9 +6,9 @@
 
 import { Cron } from "croner";
 import type { z } from "zod";
-import type { Factory, Schedule } from "../blocks/factory.ts";
 import { type Check, failedCheck, formatFailures } from "../checks/index.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
+import type { Factory, Schedule } from "../workflow/factory.ts";
 import { listRuns, type RunRow, scheduleTriggerId, scheduleTriggerLabel } from "./runs.ts";
 import { onShutdown } from "./shutdown.ts";
 import { type StartRunResult, startRun } from "./trigger.ts";

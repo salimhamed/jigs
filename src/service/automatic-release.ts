@@ -5,14 +5,6 @@
  */
 
 import { getWorld } from "workflow/runtime";
-import type { Factory } from "../blocks/factory.ts";
-import {
-  type CleanupAction,
-  type CleanupOutcome,
-  cleanupFromAttributes,
-} from "../blocks/runtime/cleanup.ts";
-import type { ReleasePolicy } from "../blocks/runtime/release.ts";
-import { resourcesFromAttributes } from "../blocks/runtime/resources.ts";
 import { readFactoryConfig } from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
@@ -25,6 +17,14 @@ import {
 } from "../steps/workspaces/registry.ts";
 import { releaseRunResources } from "../steps/workspaces/release.ts";
 import { registrySql } from "../steps/workspaces/sql.ts";
+import type { Factory } from "../workflow/factory.ts";
+import {
+  type CleanupAction,
+  type CleanupOutcome,
+  cleanupFromAttributes,
+} from "../workflow/runtime/cleanup.ts";
+import type { ReleasePolicy } from "../workflow/runtime/release.ts";
+import { resourcesFromAttributes } from "../workflow/runtime/resources.ts";
 import { isReady } from "./readiness.ts";
 import { onShutdown } from "./shutdown.ts";
 import { runsWithActiveStep } from "./stalls.ts";

@@ -1,7 +1,6 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { beforeEach, expect, test, vi } from "vitest";
-import type { MergePolicy } from "../../blocks/pull-requests/policy.ts";
 import type { PullRequestSnapshot } from "../../providers/github.ts";
 import {
   assignPullRequest,
@@ -17,6 +16,7 @@ import {
 import { GithubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity } from "../../providers/github-auth.ts";
 import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
+import type { MergePolicy } from "../../workflow/pull-requests/policy.ts";
 import {
   markPullRequestReady,
   mergePullRequest,

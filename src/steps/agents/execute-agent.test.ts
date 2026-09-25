@@ -4,16 +4,16 @@ import type { ClaudeCodeSettings } from "ai-sdk-provider-claude-code";
 import type { CodexAppServerProvider, CodexAppServerSettings } from "ai-sdk-provider-codex-cli";
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
 import { z } from "zod";
-import { unwrapAgentStep } from "../../blocks/agents/agent.ts";
-import { harnesses, models } from "../../blocks/agents/harness-config.ts";
+import { unwrapAgentStep } from "../../workflow/agents/agent.ts";
+import { harnesses, models } from "../../workflow/agents/harness-config.ts";
 import {
   buildAgentRequest,
   buildAskAgentRequest,
   parseOutput,
   type RunAgentOptions,
-} from "../../blocks/agents/plan.ts";
-import type { AgentResult } from "../../blocks/agents/result.ts";
-import { type RunAgentFn, resumeOrRebuild } from "../../blocks/agents/resume-or-rebuild.ts";
+} from "../../workflow/agents/plan.ts";
+import type { AgentResult } from "../../workflow/agents/result.ts";
+import { type RunAgentFn, resumeOrRebuild } from "../../workflow/agents/resume-or-rebuild.ts";
 import { createClaudeDriver } from "./drivers/claude.ts";
 import { createCodexDriver } from "./drivers/codex.ts";
 import { type DriverResolver, driverFor, drivers } from "./drivers/index.ts";

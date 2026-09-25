@@ -235,6 +235,6 @@ Confirm these actions when the current request has not already authorized them:
 - `jigs service restart`, `jigs service stop`, `jigs down`, `jigs up --restart-service` or
   `jigs upgrade` while `jigs status` shows a running or suspended run. `up` and
   `upgrade` ask before restarting over one; `--force` is the human's call.
-- Editing the `bindings` block in `jigs.config.ts` — changing a `remote:` repoints
+- Editing the `bindings` section in `jigs.config.ts` — changing a `remote:` repoints
   that binding's clone, and a new binding is not cloned until the next
   `jigs up`.

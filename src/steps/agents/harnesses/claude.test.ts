@@ -3,7 +3,7 @@ import path from "node:path";
 import { generateText } from "ai";
 import { getErrorMetadata, isAuthenticationError } from "ai-sdk-provider-claude-code";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
-import { buildAgentRequest, buildAskAgentRequest } from "../../../blocks/agents/plan.ts";
+import { buildAgentRequest, buildAskAgentRequest } from "../../../workflow/agents/plan.ts";
 import { claudeDriver } from "../drivers/claude.ts";
 import { claudeProcessSpawner, claudeStepSettings } from "../drivers/claude-support.ts";
 import { defaultAgentExecutionDependencies } from "../execute-agent.ts";

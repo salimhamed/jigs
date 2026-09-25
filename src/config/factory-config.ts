@@ -3,11 +3,11 @@ import { createRequire } from "node:module";
 import path from "node:path";
 
 import { z } from "zod";
-import { agentsSchema } from "../blocks/factory.ts";
-import { type MergePolicy, mergePolicySchema } from "../blocks/pull-requests/policy.ts";
-import { releaseSchema } from "../blocks/runtime/release.ts";
 import { JigsError } from "../errors.ts";
 import { factorySlug } from "../steps/workspaces/layout.ts";
+import { agentsSchema } from "../workflow/factory.ts";
+import { type MergePolicy, mergePolicySchema } from "../workflow/pull-requests/policy.ts";
+import { releaseSchema } from "../workflow/runtime/release.ts";
 
 export const FACTORY_CONFIG_FILE = "jigs.config.ts";
 
@@ -50,7 +50,7 @@ const serviceSchema = z.strictObject({
   // How often the service wakes each parked run to re-read its provider. With
   // that provider's webhook on, this is only the floor under a lost delivery.
   pollIntervalSeconds: z.preprocess(
-    (block) => block ?? {},
+    (section) => section ?? {},
     z.strictObject({ github: pollIntervalSchema, linear: pollIntervalSchema }),
   ),
 });
@@ -166,19 +166,19 @@ const factoryConfigSchema = z.looseObject({
   // One service per factory repo, so the addresses belong to the factory
   // rather than the machine. Only non-secret operating parameters live here —
   // the World the service writes is a credential-bearing URL, so it stays in
-  // the factory's own .env. An absent block is read as an empty one, so what
+  // the factory's own .env. An absent section is read as an empty one, so what
   // it is missing reports itself by name.
-  service: z.preprocess((block) => block ?? {}, serviceSchema),
+  service: z.preprocess((section) => section ?? {}, serviceSchema),
   // Which GitHub credential jigs uses. Nothing downstream reads the identity
   // to decide policy — `merge` below states the policy outright.
-  github: z.preprocess((block) => block ?? {}, githubSchema),
-  linear: z.preprocess((block) => block ?? {}, linearSchema),
+  github: z.preprocess((section) => section ?? {}, githubSchema),
+  linear: z.preprocess((section) => section ?? {}, linearSchema),
   // This factory's merge policy: who merges, by which of GitHub's three merge
   // methods, and what signal permits it.
   release: releaseSchema.optional(),
-  merge: z.preprocess((block) => block ?? {}, mergePolicySchema),
+  merge: z.preprocess((section) => section ?? {}, mergePolicySchema),
   // Service variables every agent harness receives beyond jigs' base set.
-  agents: z.preprocess((block) => block ?? {}, agentsSchema),
+  agents: z.preprocess((section) => section ?? {}, agentsSchema),
 });
 
 export type BindingEntry = z.output<typeof bindingSchema>;

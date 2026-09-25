@@ -27,5 +27,5 @@ Then run `pnpm exec jigs up`.
 
 - **linear-ticket-to-pr**: takes a Linear ticket to a merged pull request, with
   one agent implementing and a second reviewing. After
-  `jigs recipe add linear-ticket-to-pr`, read `blocks/delivery/README.md` in
+  `jigs recipe add linear-ticket-to-pr`, read `workflows/linear-ticket-to-pr/delivery/README.md` in
   your factory for what it needs and how to change it.

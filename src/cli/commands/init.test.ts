@@ -156,10 +156,8 @@ test("the tsconfig compiles the code this factory starts with", async () => {
 
   const tsconfig = readFileSync(path.join(dir, "tsconfig.json"), "utf8");
   const { include, exclude } = JSON.parse(tsconfig) as { include: string[]; exclude: string[] };
-  // A recipe's tests sit in blocks/ and nested workflow directories.
-  expect(include).toEqual(
-    expect.arrayContaining(["workflows/**/*.ts", "blocks/**/*.ts", "jigs/**/*.ts"]),
-  );
+  // A recipe's tests sit in nested workflow directories.
+  expect(include).toEqual(expect.arrayContaining(["workflows/**/*.ts", "jigs/**/*.ts"]));
   expect(exclude).toEqual(["node_modules", ".jigs"]);
   expect(tsconfig).toContain('"jigs.config.test.ts"');
   expect(tsconfig).toContain('"erasableSyntaxOnly": true');

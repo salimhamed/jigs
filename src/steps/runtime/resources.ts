@@ -1,12 +1,12 @@
 import { getWorkflowMetadata, setAttributes } from "workflow";
 import { getWorld } from "workflow/runtime";
+import { JigsError } from "../../errors.ts";
 import {
   RESOURCE_ATTRIBUTE_PREFIX,
   RUN_ATTRIBUTE_COUNT_LIMIT,
   type RunResource,
   resourceAttribute,
-} from "../../blocks/runtime/resources.ts";
-import { JigsError } from "../../errors.ts";
+} from "../../workflow/runtime/resources.ts";
 
 interface ResourceRegistrationDependencies {
   readAttributes: () => Promise<Record<string, string>>;

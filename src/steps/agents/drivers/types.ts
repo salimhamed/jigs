@@ -5,11 +5,15 @@ import type {
   LanguageModel,
   OutputInterface,
 } from "ai";
-import type { HarnessKind, ModelKind, ModelSource } from "../../../blocks/agents/harness-config.ts";
-import type { AskJevOptions, JevAnswers, JevQuestions } from "../../../blocks/agents/jev.ts";
-import type { AgentRequest, ModelRequest } from "../../../blocks/agents/plan.ts";
-import type { ModelGeneration } from "../../../blocks/agents/result.ts";
 import type { Check } from "../../../checks/catalog.ts";
+import type {
+  HarnessKind,
+  ModelKind,
+  ModelSource,
+} from "../../../workflow/agents/harness-config.ts";
+import type { AskJevOptions, JevAnswers, JevQuestions } from "../../../workflow/agents/jev.ts";
+import type { AgentRequest, ModelRequest } from "../../../workflow/agents/plan.ts";
+import type { ModelGeneration } from "../../../workflow/agents/result.ts";
 import type { RunMetadata } from "../../runtime/run-context.ts";
 
 export type ExecutorGeneration = ModelGeneration & { output?: unknown };

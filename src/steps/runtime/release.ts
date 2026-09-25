@@ -1,6 +1,6 @@
 import { getWorld } from "workflow/runtime";
-import type { ReleasePolicy, ReleaseReport } from "../../blocks/runtime/release.ts";
-import { resourcesFromAttributes } from "../../blocks/runtime/resources.ts";
+import type { ReleasePolicy, ReleaseReport } from "../../workflow/runtime/release.ts";
+import { resourcesFromAttributes } from "../../workflow/runtime/resources.ts";
 import { withRunResourceLock } from "../workspaces/registry.ts";
 import { releaseRunResources as applyRelease } from "../workspaces/release.ts";
 import { registrySql } from "../workspaces/sql.ts";

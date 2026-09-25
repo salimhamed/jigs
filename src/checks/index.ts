@@ -1,10 +1,3 @@
-import type {
-  AskableModelSource,
-  Harness,
-  McpServerConfig,
-  PiMcpServerConfig,
-} from "../blocks/agents/harness-config.ts";
-import type { AgentRequest } from "../blocks/agents/plan.ts";
 import {
   defaultMergePolicy,
   FACTORY_CONFIG_FILE,
@@ -17,6 +10,13 @@ import { resolveGithubIdentities } from "../providers/github-auth.ts";
 import { getViewer } from "../providers/linear.ts";
 import { resolveLinearIdentity } from "../providers/linear-auth.ts";
 import { driverFor } from "../steps/agents/drivers/index.ts";
+import type {
+  AskableModelSource,
+  Harness,
+  McpServerConfig,
+  PiMcpServerConfig,
+} from "../workflow/agents/harness-config.ts";
+import type { AgentRequest } from "../workflow/agents/plan.ts";
 import { awsCredentialsCheck } from "./aws.ts";
 import { bindingChecks } from "./bindings.ts";
 import {

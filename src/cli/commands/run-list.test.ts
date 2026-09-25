@@ -116,7 +116,7 @@ test("a scheduled run names the schedule that fired it", async () => {
   });
   await showRuns(deps(), { now: NOW });
   expect(lines[1]).toContain("schedule:nightly-sweep");
-  // The schedule table is its own block, after the runs.
+  // The schedule table is its own section, after the runs.
   expect(lines[2]).toBe("");
   expect(lines[3]).toBe(
     "SCHEDULE       WORKFLOW         CRON       NEXT                      ACTIVE",

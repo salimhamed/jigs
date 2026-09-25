@@ -1,10 +1,10 @@
 import { existsSync, lstatSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { cleanupFromAttributes } from "../../blocks/runtime/cleanup.ts";
-import { type RunResource, resourcesFromAttributes } from "../../blocks/runtime/resources.ts";
 import { tryGit } from "../../providers/git.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
+import { cleanupFromAttributes } from "../../workflow/runtime/cleanup.ts";
+import { type RunResource, resourcesFromAttributes } from "../../workflow/runtime/resources.ts";
 import { factorySlug } from "./layout.ts";
 import {
   deleteWorktree,

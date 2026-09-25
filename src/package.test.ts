@@ -106,24 +106,30 @@ test("every tsdown entry is reachable through the exports map or the bin", () =>
   }
 });
 
-test("public block and step paths match the seven source topics", () => {
+test("the root, the routines entry and the seven step topics are the factory's subpaths", () => {
   const topics = ["agents", "human", "linear", "pull-requests", "workspaces", "git", "runtime"];
-  const paths = Object.keys(pkg.exports).filter((key) => /^\.\/(blocks|steps)(\/|$)/.test(key));
-  expect(paths.sort()).toEqual(
-    ["blocks", "steps"].flatMap((kind) => topics.map((topic) => `./${kind}/${topic}`)).sort(),
+  const service = ["./app", "./nitro", "./schedules", "./automatic-release", "./build"];
+  const plugins = ["./plugins/start-world", "./plugins/start-dashboard"];
+  expect(Object.keys(pkg.exports).sort()).toEqual(
+    [
+      ".",
+      "./routines",
+      ...service,
+      ...plugins,
+      ...topics.map((topic) => `./steps/${topic}`),
+    ].sort(),
   );
-  for (const kind of ["blocks", "steps"]) {
-    expect(existsSync(path.join(packageDir, "src", kind, "index.ts"))).toBe(false);
-    for (const topic of topics) {
-      expect(pkg.exports[`./${kind}/${topic}`]).toEqual({
-        types: `./dist/${kind}/${topic}/index.d.ts`,
-        default: `./dist/${kind}/${topic}/index.js`,
-      });
-    }
+  expect(existsSync(path.join(packageDir, "src", "steps", "index.ts"))).toBe(false);
+  for (const topic of topics) {
+    expect(pkg.exports[`./steps/${topic}`]).toEqual({
+      types: `./dist/steps/${topic}/index.d.ts`,
+      default: `./dist/steps/${topic}/index.js`,
+    });
   }
-  for (const removed of ["./agents", "./linear", "./pull-requests", "./blocks", "./steps"]) {
-    expect(pkg.exports[removed]).toBeUndefined();
-  }
+  expect(pkg.exports["./routines"]).toEqual({
+    types: "./dist/routines.d.ts",
+    default: "./dist/routines.js",
+  });
 });
 
 // What a factory must install itself, so it is a peer here rather than a
@@ -188,82 +194,49 @@ test("the factory template pins the same versions this package peers on", async 
 
 // Public value exports are checked here; TypeScript checks the type surface.
 const BARREL_EXPORTS: Record<string, string[]> = {
-  "index.ts": ["defineFactory", "defineWorkflow", "ticketInputSchema", "JigsError"],
-  "blocks/human/index.ts": ["haltOptionSchema", "haltQuestionSchema"],
-  "blocks/workspaces/index.ts": [],
-  "blocks/linear/index.ts": [
-    "bindLinearSteps",
+  "index.ts": [
     "ClaimConflictError",
-    "claimTicket",
-    "TICKET_TOKEN_PREFIX",
-    "ticketToken",
-    "tokenFromLinearPayload",
-    "haltForHuman",
-    "NEEDS_HUMAN_TOKEN_PREFIX",
-    "needsHumanToken",
-    "acquireTicket",
-    "noteOnTicket",
-    "reviewTicket",
-    "ticketReviewVerdictSchema",
-    "renderTicketSnapshot",
-    "toTicketSnapshot",
-    "ticketReviewPrompt",
-  ],
-  "blocks/pull-requests/index.ts": [
-    "postPullRequestNote",
-    "postReviewAnswers",
-    "renderChecks",
-    "attend",
-    "finished",
-    "listen",
-    "bindPullRequestSteps",
-    "classifyPullRequestState",
-    "PULL_REQUEST_TOKEN_PREFIX",
-    "pullRequestToken",
-    "pullRequestGate",
-    "readPullRequestLedger",
-    "tokenFromGitHubPayload",
-    "carriesMarker",
-    "commentSource",
-    "markBody",
-    "parseMarkers",
-    "pullRequestScope",
-    "readLedger",
-    "renderMarker",
-    "approvalState",
-    "isApprovalSatisfied",
-    "isPullRequestMergeReady",
-    "mergeRefusal",
-    "approvalSignalSchema",
-    "mergePolicySchema",
-    "currentRunId",
-    "defaultPullRequestScope",
-  ],
-  "blocks/agents/index.ts": [
+    "JigsError",
     "JitCheckError",
-    "runAgent",
-    "unwrapAgentStep",
-    "runAgentOrHalt",
-    "askAgent",
-    "askJev",
-    "askModel",
+    "approvalSignalSchema",
     "choice",
-    "bindAgentSteps",
+    "defaultPullRequestScope",
+    "defineFactory",
+    "defineWorkflow",
+    "haltOptionSchema",
+    "haltQuestionSchema",
     "harnessKinds",
     "harnesses",
-    "models",
-    "buildAgentRequest",
-    "buildAskAgentRequest",
-    "buildModelRequest",
-    "parseOutput",
-    "rebuildContextPrompt",
-    "resumeOrRebuild",
-    "score",
-    "yesNo",
     "interpolate",
+    "mergePolicySchema",
+    "models",
+    "parseMarkers",
+    "rebuildContextPrompt",
+    "renderChangeSummary",
+    "renderChecks",
+    "renderTicketSnapshot",
+    "score",
+    "ticketInputSchema",
+    "ticketReviewPrompt",
+    "ticketReviewVerdictSchema",
+    "unreachable",
+    "unwrapAgentStep",
+    "yesNo",
   ],
-  "blocks/runtime/index.ts": ["bindReleaseSteps", "release", "unreachable"],
-  "blocks/git/index.ts": ["parseNameStatus", "parseNumstat", "renderChangeSummary"],
+  "workflow/routines.ts": [
+    "acquireTicket",
+    "attend",
+    "bindAgentSteps",
+    "bindLinearSteps",
+    "bindPullRequestSteps",
+    "bindReleaseSteps",
+    "claimTicket",
+    "finished",
+    "listen",
+    "postPullRequestNote",
+    "postReviewAnswers",
+    "resumeOrRebuild",
+  ],
   "steps/human/index.ts": [],
   "steps/workspaces/index.ts": ["provisionWorktree"],
   "steps/linear/index.ts": [

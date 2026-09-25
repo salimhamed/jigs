@@ -103,7 +103,7 @@ test("an API refusal fails with an admin-key repair", async () => {
 });
 
 test.each([
-  ["no webhooks block", null],
+  ["no webhooks section", null],
   ["Linear switched off", enabled("https://factory.example.test", false)],
 ])("%s emits no Linear webhook checks", (_name, config) => {
   expect(checks([], config)).toEqual([]);

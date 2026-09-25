@@ -72,7 +72,7 @@ credential slots), `install`, `compose` (Postgres, its output streamed),
 `bootstrap` (migrations), `build`, `service` (start, or restart only when the
 built bundle or `jigs.config.ts` changed), `ready` (waits until every binding
 is cloned and the World is up) and `doctor`. Doctor checks only what the
-workflows require and what `jigs.config.ts` turns on. The closing block names
+workflows require and what `jigs.config.ts` turns on. The closing lines name
 what runs and the one command that stops it all:
 
 ```
@@ -118,7 +118,7 @@ jigs recipe add linear-ticket-to-pr
 
 `recipe add` copies source without overwriting and registers the workflow under
 `workflows` in `jigs.config.ts`. If it cannot edit the config, it names the line
-to add by hand. The copied code is the factory's to edit; `blocks/delivery/README.md` explains the linear-ticket-to-pr recipe.
+to add by hand. The copied code is the factory's to edit; `workflows/linear-ticket-to-pr/delivery/README.md` explains the linear-ticket-to-pr recipe.
 
 ```sh
 jigs bind git@github.com:owner/repo.git
@@ -138,7 +138,7 @@ A parked run wakes without webhooks: the service re-reads each waiting pull
 request and ticket every `service.pollIntervalSeconds.github` / `.linear`
 seconds (default 300), and `jigs poke <run-id>` wakes one sooner. Webhooks
 only make the wake immediate. They need a public tunnel URL, a
-`webhooks` block in `jigs.config.ts` and a secret per provider in `.env`; the
+`webhooks` section in `jigs.config.ts` and a secret per provider in `.env`; the
 configuration guide's webhooks section has the steps.
 
 ## Upgrading later
@@ -150,6 +150,7 @@ jigs upgrade
 It bumps jigs, regenerates `jigs/`, runs `jigs up` and typechecks the
 factory. Review and commit the regenerated `jigs/steps.ts` and
 `jigs/routines.ts`. From a release that generated `jigs.ts`, it also deletes
-that file and replaces `#jigs`, `#blocks/*` and `#steps/*` in `package.json`
-imports with `#jigs/*`; move the factory's `#jigs` imports to `#jigs/steps` and
-`#jigs/routines` by hand.
+that file and replaces the older `package.json` imports entries with
+`#jigs/*`; move the factory's `#jigs` imports to `#jigs/steps` and
+`#jigs/routines` by hand. Library imports come from the root `@jigs-ai/jigs`;
+routines such as `claimTicket` or `attend` come from `#jigs/routines`.

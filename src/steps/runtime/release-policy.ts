@@ -1,11 +1,11 @@
-import type { Factory, FactoryDefinition } from "../../blocks/factory.ts";
+import { readFactoryConfig } from "../../config/factory-config.ts";
+import { factoryRoot } from "../../config/factory-root.ts";
+import type { Factory, FactoryDefinition } from "../../workflow/factory.ts";
 import {
   defaultReleasePolicy,
   type ReleasePolicy,
   releaseSchema,
-} from "../../blocks/runtime/release.ts";
-import { readFactoryConfig } from "../../config/factory-config.ts";
-import { factoryRoot } from "../../config/factory-root.ts";
+} from "../../workflow/runtime/release.ts";
 import type { NamedRunMetadata } from "./run-context.ts";
 
 /** Match the compiled ID the SDK records, not the factory's friendly key. */

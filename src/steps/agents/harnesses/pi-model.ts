@@ -2,7 +2,7 @@ import type {
   OpenaiCompatibleSource,
   PiHarness,
   PiOpenaiCompatibleOptions,
-} from "../../../blocks/agents/harness-config.ts";
+} from "../../../workflow/agents/harness-config.ts";
 
 type PiCredential = { sourceEnv: string; targetEnv: string };
 type PiModels = {

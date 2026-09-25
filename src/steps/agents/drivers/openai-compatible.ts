@@ -1,8 +1,8 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import type { OpenaiCompatibleSource } from "../../../blocks/agents/harness-config.ts";
-import type { AgentRequest, ModelRequest } from "../../../blocks/agents/plan.ts";
 import { modelApiKeyCheck, openaiCompatibleRuntimeCheck } from "../../../checks/models.ts";
 import { JigsError } from "../../../errors.ts";
+import type { OpenaiCompatibleSource } from "../../../workflow/agents/harness-config.ts";
+import type { AgentRequest, ModelRequest } from "../../../workflow/agents/plan.ts";
 import type { Driver, DriverContext, DriverRequest } from "./types.ts";
 
 function descriptor(request: DriverRequest): OpenaiCompatibleSource | undefined {

@@ -61,33 +61,9 @@
       "types": "./dist/plugins/start-dashboard.d.ts",
       "default": "./dist/plugins/start-dashboard.js"
     },
-    "./blocks/agents": {
-      "types": "./dist/blocks/agents/index.d.ts",
-      "default": "./dist/blocks/agents/index.js"
-    },
-    "./blocks/human": {
-      "types": "./dist/blocks/human/index.d.ts",
-      "default": "./dist/blocks/human/index.js"
-    },
-    "./blocks/linear": {
-      "types": "./dist/blocks/linear/index.d.ts",
-      "default": "./dist/blocks/linear/index.js"
-    },
-    "./blocks/pull-requests": {
-      "types": "./dist/blocks/pull-requests/index.d.ts",
-      "default": "./dist/blocks/pull-requests/index.js"
-    },
-    "./blocks/workspaces": {
-      "types": "./dist/blocks/workspaces/index.d.ts",
-      "default": "./dist/blocks/workspaces/index.js"
-    },
-    "./blocks/git": {
-      "types": "./dist/blocks/git/index.d.ts",
-      "default": "./dist/blocks/git/index.js"
-    },
-    "./blocks/runtime": {
-      "types": "./dist/blocks/runtime/index.d.ts",
-      "default": "./dist/blocks/runtime/index.js"
+    "./routines": {
+      "types": "./dist/routines.d.ts",
+      "default": "./dist/routines.js"
     },
     "./steps/agents": {
       "types": "./dist/steps/agents/index.d.ts",

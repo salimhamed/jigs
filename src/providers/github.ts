@@ -3,7 +3,7 @@
 // forbidden. The credential comes from github-auth.ts, whichever identity the
 // factory configured.
 
-import type { MergePolicy } from "../blocks/pull-requests/policy.ts";
+import type { MergePolicy } from "../workflow/pull-requests/policy.ts";
 import { GithubApiError, githubGet, githubGetAll, githubRequest } from "./github-api.ts";
 
 export type PullRequestRef = {
@@ -58,6 +58,7 @@ export interface PullRequestComment {
   updatedAt: string;
 }
 
+/** A check or commit status reported on a pull request head. */
 export interface CheckRun {
   name: string;
   conclusion: string | null;

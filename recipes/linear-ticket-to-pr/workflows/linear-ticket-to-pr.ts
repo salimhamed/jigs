@@ -1,15 +1,17 @@
-import { defineWorkflow, JigsError, type WorkflowInputs } from "@jigs-ai/jigs";
 import {
+  defineWorkflow,
   type Harness,
   type HarnessKind,
   harnesses,
   harnessKinds,
-} from "@jigs-ai/jigs/blocks/agents";
+  JigsError,
+  type WorkflowInputs,
+} from "@jigs-ai/jigs";
 import { z } from "zod";
 import { noteOnTicket, release, reviewTicket } from "#jigs/routines";
 import { provisionWorktree, resolveMergePolicy, setTicketStatus } from "#jigs/steps";
-import { deliverChange } from "../blocks/delivery/delivery.ts";
-import { acquireLinearTicket, workItemFromHandoff } from "../blocks/tickets/linear.ts";
+import { deliverChange } from "./linear-ticket-to-pr/delivery/delivery.ts";
+import { acquireLinearTicket, workItemFromHandoff } from "./linear-ticket-to-pr/tickets/linear.ts";
 
 // The harnesses a run can choose by name, each with this factory's default
 // model. A model input left unset takes the default of the harness that was

@@ -5,12 +5,12 @@
 //
 // Everything below reaches node builtins, so this module must only ever be
 // imported from inside a step body. `WorktreeRequest` is a type, so a
-// workflow-side `import type` of it is erased and stays safe.
+// type-only import of it from workflow/ is erased and stays safe.
 
-import type { Worktree } from "../../blocks/workspaces/worktree.ts";
 import { resolveBinding } from "../../config/factory-config.ts";
 import { factoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
+import type { Worktree } from "../../workflow/workspaces/worktree.ts";
 import type { RunMetadata } from "../runtime/run-context.ts";
 import { hasBindingClone } from "./clone.ts";
 import { createWorktree, worktreeStatus } from "./create.ts";

@@ -1,11 +1,11 @@
+import { JigsError } from "../../errors.ts";
+import { git } from "../../providers/git.ts";
 import {
   type ChangePatch,
   type ChangeSummary,
   parseNameStatus,
   parseNumstat,
-} from "../../blocks/git/change.ts";
-import { JigsError } from "../../errors.ts";
-import { git } from "../../providers/git.ts";
+} from "../../workflow/git/change.ts";
 
 export const MAX_CHANGE_FILES = 1_000;
 export const MAX_CHANGE_COMMITS = 1_000;

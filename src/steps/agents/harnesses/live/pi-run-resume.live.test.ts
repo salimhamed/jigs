@@ -4,10 +4,10 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { z } from "zod";
-import { runAgent } from "../../../../blocks/agents/agent.ts";
-import { harnesses, models } from "../../../../blocks/agents/harness-config.ts";
-import { buildAgentRequest } from "../../../../blocks/agents/plan.ts";
-import type { AgentResult } from "../../../../blocks/agents/result.ts";
+import { runAgent } from "../../../../workflow/agents/agent.ts";
+import { harnesses, models } from "../../../../workflow/agents/harness-config.ts";
+import { buildAgentRequest } from "../../../../workflow/agents/plan.ts";
+import type { AgentResult } from "../../../../workflow/agents/result.ts";
 import { type DriverResolver, driverFor } from "../../drivers/index.ts";
 import { createPiDriver } from "../../drivers/pi.ts";
 import {

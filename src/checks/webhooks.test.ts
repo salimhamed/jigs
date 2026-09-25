@@ -208,7 +208,7 @@ test("an installed App missing hook permission gets the permission repair", asyn
   expect(result.repair).not.toContain("install the App");
 });
 
-test("no webhooks block emits no webhook checks", () => {
+test("no webhooks section emits no webhook checks", () => {
   expect(checks()).toEqual([]);
 });
 

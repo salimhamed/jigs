@@ -1,4 +1,4 @@
-import type { OpenaiCompatibleSource } from "../blocks/agents/harness-config.ts";
+import type { OpenaiCompatibleSource } from "../workflow/agents/harness-config.ts";
 import type { Check, CheckResult } from "./catalog.ts";
 import { PROBE_TIMEOUT_MS } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";

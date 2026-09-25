@@ -1,8 +1,8 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { harnesses } from "../blocks/agents/harness-config.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import { harnesses } from "../workflow/agents/harness-config.ts";
 import type { CheckResult } from "./catalog.ts";
 import {
   claudeAuthCheck,

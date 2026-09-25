@@ -9,9 +9,9 @@ import { Pool } from "pg";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
-import type { Factory } from "../blocks/factory.ts";
 import { ensureWorktreeRegistry } from "../steps/workspaces/registry.ts";
 import { registrySql } from "../steps/workspaces/sql.ts";
+import type { Factory } from "../workflow/factory.ts";
 import { createApp } from "./app.ts";
 import { listJobRunIds, listRunDeadJobs } from "./queue.ts";
 

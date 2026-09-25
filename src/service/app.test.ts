@@ -8,16 +8,16 @@ import { resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
-import { type Factory, ticketInputSchema } from "../blocks/factory.ts";
-import { ticketToken } from "../blocks/linear/claim.ts";
-import { needsHumanToken } from "../blocks/linear/halt-for-human.ts";
-import { pullRequestToken } from "../blocks/pull-requests/gate.ts";
-import { resourceAttribute } from "../blocks/runtime/resources.ts";
 import { resetGithubAuth } from "../providers/github-auth.ts";
 import * as linear from "../providers/linear.ts";
 import { resetLinearAuth } from "../providers/linear-auth.ts";
 import * as sql from "../steps/workspaces/sql.ts";
 import { makeFakeSql } from "../steps/workspaces/test-fixtures.ts";
+import { type Factory, ticketInputSchema } from "../workflow/factory.ts";
+import { ticketToken } from "../workflow/linear/claim.ts";
+import { needsHumanToken } from "../workflow/linear/halt-for-human.ts";
+import { pullRequestToken } from "../workflow/pull-requests/gate.ts";
+import { resourceAttribute } from "../workflow/runtime/resources.ts";
 import * as queue from "./queue.ts";
 import { clearWakes, lastWake } from "./wake-note.ts";
 
@@ -156,7 +156,7 @@ const commentPayload = () =>
   });
 
 test.each([
-  ["no webhooks block", undefined],
+  ["no webhooks section", undefined],
   [
     "each provider switched off",
     {

@@ -1,16 +1,16 @@
-vi.mock("../blocks/delivery/delivery.ts", () => ({
+vi.mock("./linear-ticket-to-pr/delivery/delivery.ts", () => ({
   deliverChange: vi.fn(async () => ({
     change: {} as never,
     pr: { owner: "acme", repo: "repo", number: 1 },
   })),
 }));
 
+import type { TicketClaim, TicketHandoff, TicketSnapshot } from "@jigs-ai/jigs";
 // The composition the unit tests cannot see: parsing an input, choosing a
 // harness from it, and what deliverChange is actually handed. A model left
 // unset has to arrive as the chosen harness's own default, and only running
 // the workflow body against mocked durable steps shows that it does.
-import { harnesses, harnessKinds } from "@jigs-ai/jigs/blocks/agents";
-import type { TicketClaim, TicketHandoff, TicketSnapshot } from "@jigs-ai/jigs/blocks/linear";
+import { harnesses, harnessKinds } from "@jigs-ai/jigs";
 import { expect, test, vi } from "vitest";
 import { z } from "zod";
 
@@ -37,8 +37,8 @@ vi.mock("#jigs/routines", async (importOriginal) => ({
   release: vi.fn(async () => {}),
 }));
 
-vi.mock("../blocks/tickets/linear.ts", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../blocks/tickets/linear.ts")>()),
+vi.mock("./linear-ticket-to-pr/tickets/linear.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./linear-ticket-to-pr/tickets/linear.ts")>()),
   acquireLinearTicket: vi.fn(async () => ({ claim, snapshot })),
 }));
 
@@ -63,8 +63,8 @@ const claim = { issueId: snapshot.id, identifier: snapshot.identifier } as Ticke
 const handoff: TicketHandoff = { brief: "Do the thing.", snapshot, assumptions: [] };
 
 const jigs = { ...(await import("#jigs/steps")), ...(await import("#jigs/routines")) };
-const delivery = await import("../blocks/delivery/delivery.ts");
-const tickets = await import("../blocks/tickets/linear.ts");
+const delivery = await import("./linear-ticket-to-pr/delivery/delivery.ts");
+const tickets = await import("./linear-ticket-to-pr/tickets/linear.ts");
 const {
   default: entry,
   linearTicketToPrInputs,

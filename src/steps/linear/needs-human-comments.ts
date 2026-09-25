@@ -1,7 +1,7 @@
-// The Linear calls the halt block is handed: posting the question and
+// The Linear calls the halt routine is handed: posting the question and
 // re-reading the thread for an answer, plus the non-blocking note a ticket
 // review posts when it proceeds on assumptions. All three reach the network,
-// so the factory wraps them as steps and a block only ever sees their
+// so the factory wraps them as steps and a routine only ever sees their
 // memoized results.
 //
 // The markdown itself lives in ./render-comment.ts. Each posting step takes
@@ -9,14 +9,14 @@
 // different-looking comment passes its own function from its step wrapper and
 // replaces no step.
 
+import { createComment, getIssueParticipants, listCommentsSince } from "../../providers/linear.ts";
 import type {
   CheckForTicketHumanReply,
   Halt,
   HumanReply,
   PostTicketHumanInputRequest,
-} from "../../blocks/linear/halt-for-human.ts";
-import type { PostTicketNote, TicketNote } from "../../blocks/linear/review.ts";
-import { createComment, getIssueParticipants, listCommentsSince } from "../../providers/linear.ts";
+} from "../../workflow/linear/halt-for-human.ts";
+import type { PostTicketNote, TicketNote } from "../../workflow/linear/review.ts";
 import { dashboardRunUrl, type NamedRunMetadata } from "../runtime/run-context.ts";
 import {
   type NeedsHumanContext,

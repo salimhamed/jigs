@@ -1,6 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { RUN_TICKET_ATTRIBUTE } from "../../blocks/factory.ts";
 import { factoryEnvValue } from "../../config/factory-env.ts";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { jigsDataDir } from "../../config/paths.ts";
@@ -11,6 +10,7 @@ import type {
   ResourceInventory,
   ResourceRun,
 } from "../../steps/workspaces/resources.ts";
+import { RUN_TICKET_ATTRIBUTE } from "../../workflow/factory.ts";
 import {
   acquireServiceExclusion,
   liveServicePid,

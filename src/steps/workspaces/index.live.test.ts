@@ -1,17 +1,17 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, expect, test, vi } from "vitest";
-import type { Factory } from "../../blocks/factory.ts";
-import {
-  CLEANUP_DIRECTIVE_ATTRIBUTE,
-  CLEANUP_STATE_ATTRIBUTE,
-  encodeCleanupProgress,
-} from "../../blocks/runtime/cleanup.ts";
 import {
   type AutomaticReleaseDeps,
   type CleanupRun,
   reconcileAutomaticRelease,
 } from "../../service/automatic-release.ts";
+import type { Factory } from "../../workflow/factory.ts";
+import {
+  CLEANUP_DIRECTIVE_ATTRIBUTE,
+  CLEANUP_STATE_ATTRIBUTE,
+  encodeCleanupProgress,
+} from "../../workflow/runtime/cleanup.ts";
 import { createRunDirectory } from "../runtime/run-directory/index.ts";
 import { provisionWorktree } from "./index.ts";
 import { bindingDir, worktreePath } from "./layout.ts";

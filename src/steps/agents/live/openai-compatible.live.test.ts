@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { z } from "zod";
-import { askModel } from "../../../blocks/agents/ask-model.ts";
-import { models } from "../../../blocks/agents/harness-config.ts";
+import { askModel } from "../../../workflow/agents/ask-model.ts";
+import { models } from "../../../workflow/agents/harness-config.ts";
 import { executeModel } from "../execute-model-request.ts";
 
 const baseUrl = process.env.JIGS_TEST_OPENAI_COMPATIBLE_BASE_URL;

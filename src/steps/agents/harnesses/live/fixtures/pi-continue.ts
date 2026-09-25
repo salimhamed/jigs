@@ -2,9 +2,9 @@
 // lean on anything the first turn's process still holds in memory.
 
 import { writeFileSync } from "node:fs";
-import { harnesses, models } from "../../../../../blocks/agents/harness-config.ts";
-import { buildAgentRequest } from "../../../../../blocks/agents/plan.ts";
-import type { AgentSession } from "../../../../../blocks/agents/result.ts";
+import { harnesses, models } from "../../../../../workflow/agents/harness-config.ts";
+import { buildAgentRequest } from "../../../../../workflow/agents/plan.ts";
+import type { AgentSession } from "../../../../../workflow/agents/result.ts";
 import { type DriverResolver, driverFor } from "../../../drivers/index.ts";
 import { createPiDriver } from "../../../drivers/pi.ts";
 import { defaultAgentExecutionDependencies, executeAgent } from "../../../execute-agent.ts";

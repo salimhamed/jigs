@@ -4,10 +4,10 @@ import path from "node:path";
 import { drizzle } from "drizzle-orm/node-postgres";
 import type { Pool, QueryConfig } from "pg";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { RUN_TICKET_ATTRIBUTE } from "../../blocks/factory.ts";
-import { resourceAttribute } from "../../blocks/runtime/resources.ts";
 import { factorySlug } from "../../steps/workspaces/layout.ts";
 import type { RegistrySql } from "../../steps/workspaces/registry.ts";
+import { RUN_TICKET_ATTRIBUTE } from "../../workflow/factory.ts";
+import { resourceAttribute } from "../../workflow/runtime/resources.ts";
 import { listResources, runResourcesPrune } from "./resources.ts";
 import { servicePidfilePath, serviceSupervisionPath } from "./service-lifecycle.ts";
 

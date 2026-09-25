@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { z } from "zod";
-import { bindReleaseSteps } from "../../blocks/runtime/release.ts";
 import { parseFactoryConfig } from "../../config/factory-config.ts";
+import { bindReleaseSteps } from "../../workflow/runtime/release.ts";
 import {
   effectiveReleasePolicy,
   resolveReleasePolicy,

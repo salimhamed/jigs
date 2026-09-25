@@ -19,22 +19,25 @@ release-please reads to cut a release
 `src` is split by what the Workflow SDK does with the code. The rules a change
 has to keep:
 
-- `blocks/` is workflow-side. It may import other `blocks/` files, zod, the
-  `workflow` SDK, and `import type` from anywhere. It may not import a *value*
-  from a node built-in, read `process.env`, reach the network, or import a
-  value from `steps/`, `service/`, `cli/`, `checks/`, `config/` or
-  `providers/`.
-- `steps/` is the real work. It may import `providers/`, `config/`, `checks/`,
-  `errors.ts`, and `blocks/`. A step may call a block as a value because
-  `blocks/` is pure by construction; the snapshot and step-result normalizers
-  are called that way.
+- `workflow/` is code that runs inside the workflow bundle. It may import
+  other `workflow/` files, zod, the `workflow` SDK, and `import type` from
+  anywhere. It may not import a *value* from a node built-in, read
+  `process.env`, reach the network, or import a value from `steps/`,
+  `service/`, `cli/`, `checks/`, `config/` or `providers/`.
+- `steps/` is code that runs in steps. It may import `providers/`,
+  `config/`, `checks/`, `errors.ts`, and `workflow/`. A step may call a
+  `workflow/` function as a value because `workflow/` is pure by
+  construction; the snapshot and step-result normalizers are called that way.
 - `service/` is the long-running process. It may import `steps/`,
-  `providers/`, `config/`, `checks/` and `blocks/`; the webhook ingress parses
-  hook tokens that `blocks/` defines.
+  `providers/`, `config/`, `checks/` and `workflow/`; the webhook ingress
+  parses hook tokens that `workflow/` defines.
 - A type used by one module stays in that module. A type used on both sides of
-  the blocks/steps line lives in `blocks/`, under the same topic. There is no
-  shared types folder.
-- Extract a shipped block only when a recipe and at least one other concrete
+  the workflow/steps line lives in `workflow/`, under the same topic. There is
+  no shared types folder.
+- A factory imports the library from the root `@jigs-ai/jigs`. Routines that
+  take steps as arguments go in `src/workflow/routines.ts`, which only the
+  generated `jigs/routines.ts` imports; never add them to the root.
+- Extract a shipped routine only when a recipe and at least one other concrete
   workflow use the same mechanism; single-caller composition stays in the recipe.
 
 No file under `src/` carries a `"use workflow"` or `"use step"` directive; both

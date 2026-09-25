@@ -1,16 +1,16 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import semver from "semver";
-import type { HarnessKind } from "../blocks/agents/harness-config.ts";
 import { driverFor } from "../steps/agents/drivers/index.ts";
 import { factoryAgentEnv, harnessEnv } from "../steps/agents/harnesses/env.ts";
+import type { HarnessKind } from "../workflow/agents/harness-config.ts";
 import { PROBE_TIMEOUT_MS } from "./catalog.ts";
 
 // Are the harness CLIs installed, and is codex new enough? The service's
 // startup gate and `jigs doctor` share this so they cannot disagree. The
 // minimum comes from the codex provider; claude has none.
 
-export type { HarnessKind } from "../blocks/agents/harness-config.ts";
+export type { HarnessKind } from "../workflow/agents/harness-config.ts";
 
 /** `line` is the one line to show an operator, pass or fail. */
 export type HarnessRuntime =

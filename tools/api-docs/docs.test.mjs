@@ -35,27 +35,34 @@ test("package exports determine the API reference layout", () => {
     {
       exports: {
         ".": { types: "./dist/index.d.ts", default: "./dist/index.js" },
-        "./blocks/agents": {
-          types: "./dist/blocks/agents/index.d.ts",
-          default: "./dist/blocks/agents/index.js",
+        "./steps/agents": {
+          types: "./dist/steps/agents/index.d.ts",
+          default: "./dist/steps/agents/index.js",
         },
       },
     },
-    { index: "src/index.ts", "blocks/agents/index": "src/blocks/agents/index.ts" },
+    { index: "src/index.ts", "steps/agents/index": "src/steps/agents/index.ts" },
   );
   expect(entries).toEqual([
     { subpath: ".", source: "src/index.ts", output: "index.md" },
     {
-      subpath: "./blocks/agents",
-      source: "src/blocks/agents/index.ts",
-      output: "blocks/agents.md",
+      subpath: "./steps/agents",
+      source: "src/steps/agents/index.ts",
+      output: "steps/agents.md",
     },
   ]);
 });
 
-test("only the root, blocks and steps entries are published", () => {
-  const published = [".", "./blocks/agents", "./steps/linear"];
-  const service = ["./app", "./nitro", "./build", "./schedules", "./plugins/start-world"];
+test("only the root and steps entries are published", () => {
+  const published = [".", "./steps/agents", "./steps/linear"];
+  const service = [
+    "./app",
+    "./nitro",
+    "./build",
+    "./schedules",
+    "./plugins/start-world",
+    "./routines",
+  ];
   expect(published.every((subpath) => isPublicEntry({ subpath }))).toBe(true);
   expect(service.some((subpath) => isPublicEntry({ subpath }))).toBe(false);
 });
@@ -232,10 +239,10 @@ test("the website covers the public entries, llms.txt and the favicon inside the
 
   const llms = await readFile(path.join(destination, "llms.txt"), "utf8");
   expect(llms).toContain("https://salimhamed.github.io/jigs/guide/getting-started.md");
-  expect(llms).toContain("https://salimhamed.github.io/jigs/api/blocks/agents.md");
+  expect(llms).toContain("https://salimhamed.github.io/jigs/api/steps/agents.md");
   expect(llms).not.toMatch(/salimhamed\.github\.io\/(?!jigs\/)/);
   const llmsFull = await readFile(path.join(destination, "llms-full.txt"), "utf8");
-  expect(llmsFull).toContain("# blocks/agents");
+  expect(llmsFull).toContain("# steps/agents");
 
   const landing = await readFile(path.join(destination, "index.html"), "utf8");
   expect(landing).toContain(`v${manifest.version}`);

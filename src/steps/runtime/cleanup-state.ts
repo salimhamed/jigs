@@ -5,7 +5,7 @@ import {
   type CleanupAction,
   type CleanupProgress,
   encodeCleanupProgress,
-} from "../../blocks/runtime/cleanup.ts";
+} from "../../workflow/runtime/cleanup.ts";
 
 export interface CleanupAttributeStore {
   write(runId: string, changes: Array<{ key: string; value: string }>): Promise<void>;

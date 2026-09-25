@@ -1,6 +1,6 @@
-import type { CleanupView } from "../../blocks/runtime/cleanup.ts";
-import type { RunResource } from "../../blocks/runtime/resources.ts";
 import { JigsError } from "../../errors.ts";
+import type { CleanupView } from "../../workflow/runtime/cleanup.ts";
+import type { RunResource } from "../../workflow/runtime/resources.ts";
 import { formatTable } from "../table.ts";
 import { age, type RunListRun, suspensionLine } from "./run-list.ts";
 import { readErrorBody, runRefError, type ServiceDeps, serviceFetch } from "./service-client.ts";

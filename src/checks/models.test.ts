@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { models } from "../blocks/agents/harness-config.ts";
+import { models } from "../workflow/agents/harness-config.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 import { preflightChecks } from "./index.ts";
 import { modelApiKeyCheck, openaiCompatibleRuntimeCheck } from "./models.ts";

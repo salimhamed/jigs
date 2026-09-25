@@ -10,10 +10,10 @@
 // Linear does not renumber a markdown list, so every number and letter below
 // is written out.
 
-import type { HaltQuestion } from "../../blocks/human/index.ts";
-import type { Halt } from "../../blocks/linear/halt-for-human.ts";
-import type { TicketNote } from "../../blocks/linear/review.ts";
 import { type LinearUser, mention } from "../../providers/linear.ts";
+import type { HaltQuestion } from "../../workflow/human/questions.ts";
+import type { Halt } from "../../workflow/linear/halt-for-human.ts";
+import type { TicketNote } from "../../workflow/linear/review.ts";
 
 const LETTERS = "abcdefghijklmnopqrstuvwxyz";
 
@@ -27,8 +27,8 @@ export type TicketParticipants = {
  * What the comment's footer says about the run that posted it. The factory's
  * step wrapper builds it: the run id and the workflow name come from the
  * Workflow SDK's metadata, and the dashboard link from the service's own
- * configuration — none of it visible to a block. Where the run paused is the
- * halt's, not the context's: only the block that raised it knows.
+ * configuration — none of it visible to the workflow. Where the run paused is the
+ * halt's, not the context's: only the routine that raised it knows.
  */
 export type NeedsHumanContext = {
   runId: string;
@@ -60,7 +60,7 @@ function greet(participants: TicketParticipants, headline: string): string {
   return people.length === 0 ? headline : `${people.map(mention).join(" ")} — ${headline}`;
 }
 
-function questionBlock(question: HaltQuestion, index: number): string {
+function questionSection(question: HaltQuestion, index: number): string {
   const parts = [`### ${index + 1}. ${question.question}`];
   if (question.context !== undefined && question.context !== "") {
     parts.push(question.context);
@@ -96,24 +96,24 @@ function footer(halt: Halt, context: NeedsHumanContext): string {
 
 /** Render the default human-input request as Linear Markdown. */
 export const renderNeedsHumanComment: RenderNeedsHumanComment = (halt, context, participants) => {
-  const blocks = [greet(participants, halt.headline)];
+  const sections = [greet(participants, halt.headline)];
   if (halt.about !== undefined && halt.about !== "") {
-    blocks.push(`**What this ticket is about.** ${halt.about}`);
+    sections.push(`**What this ticket is about.** ${halt.about}`);
   }
-  blocks.push(
+  sections.push(
     halt.onReply === "retry"
       ? "Once this is fixed, reply with anything and jigs will try the step again."
       : "Reply to this comment with your choices, for example `1a, 2b`. Plain words or a question are fine too. Any reply wakes the run.",
   );
   for (const [index, question] of (halt.questions ?? []).entries()) {
-    blocks.push("---", questionBlock(question, index));
+    sections.push("---", questionSection(question, index));
   }
   const notes = halt.notes ?? [];
   if (notes.length > 0) {
-    blocks.push("---", notes.map((note) => `- ${note}`).join("\n"));
+    sections.push("---", notes.map((note) => `- ${note}`).join("\n"));
   }
-  blocks.push("---", footer(halt, context));
-  return `${blocks.join("\n\n")}\n`;
+  sections.push("---", footer(halt, context));
+  return `${sections.join("\n\n")}\n`;
 };
 
 /** Render the default non-blocking ticket note as Linear Markdown. */

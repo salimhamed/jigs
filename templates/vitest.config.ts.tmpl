@@ -1,6 +1,6 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  // Let workflow SDK mocks reach the library blocks a factory tests.
+  // Let workflow SDK mocks reach the library routines a factory tests.
   test: { server: { deps: { inline: ["@jigs-ai/jigs"] } } },
 });

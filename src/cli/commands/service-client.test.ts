@@ -39,7 +39,7 @@ test("an empty --service-url / JIGS_SERVICE_URL names no service at all", () => 
   expect(resolveServiceUrl(factory, "")).toBe("http://localhost:9100");
 });
 
-test("a factory with no service block keeps the historic port", () => {
+test("a factory with no service section keeps the historic port", () => {
   const factory = makeFactoryRepo(tmp, { bindings: {} });
   expect(resolveServiceUrl(factory)).toBe("http://localhost:8990");
 });

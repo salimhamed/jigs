@@ -4,8 +4,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { Pool } from "pg";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { CLEANUP_STATE_ATTRIBUTE, encodeCleanupProgress } from "../../blocks/runtime/cleanup.ts";
-import { resourceAttribute } from "../../blocks/runtime/resources.ts";
+import { CLEANUP_STATE_ATTRIBUTE, encodeCleanupProgress } from "../../workflow/runtime/cleanup.ts";
+import { resourceAttribute } from "../../workflow/runtime/resources.ts";
 import { factorySlug } from "./layout.ts";
 import {
   connectRegistry,
