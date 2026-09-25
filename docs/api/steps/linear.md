@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.59.0
+# @jigs-ai/jigs v0.60.0
 
 Read and update Linear issues outside workflow code.
 
