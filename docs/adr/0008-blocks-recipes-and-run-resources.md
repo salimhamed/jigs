@@ -39,10 +39,9 @@ SDK's attribute limits and never truncated.
 The factory service owns release. Policy resolves from the workflow entry, then
 the factory default, then `{ onSuccess: "release", onFailure: "keep" }`;
 `completed` uses `onSuccess`, `failed` and `cancelled` use `onFailure`. A
-workflow may call the `release` block as its last line (never in a `finally`,
-which suspension would fire) to get the report; an explicit `keep` it records
-is final for the run. Each worktree is then decided by the
-[teardown rules](./0002-worktree-lifecycle.md).
+workflow may call the `release` block as its last line to get the report; an
+explicit `keep` it records is final for the run. Each worktree is then decided
+by the [teardown rules](./0002-worktree-lifecycle.md).
 
 ## Consequences
 

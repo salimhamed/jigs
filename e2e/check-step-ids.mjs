@@ -555,6 +555,9 @@ async function ready(workflow) {
   }
 }
 
+const CATCH_OBSERVED = "runtime-e2e: catch observed";
+const FINALLY_OBSERVED = "runtime-e2e: finally observed";
+
 function installRuntimeFixture() {
   const workflow = path.join(factory, "workflows", "runtime-e2e.ts");
   writeFileSync(
@@ -600,33 +603,46 @@ export async function runtimeE2eWorkflow(
   inputs: WorkflowInputs<typeof runtimeE2eInputs>,
 ) {
   "use workflow";
-  const sequential = await recordedStep(inputs.marker, "long", inputs.delayMs);
-  await sleep("1s");
-  const parallel = await Promise.all([
-    recordedStep(inputs.marker, "parallel-a", 250),
-    recordedStep(inputs.marker, "parallel-b", 250),
-  ]);
-  await Promise.all([
-    registerResource({
+  // Every step, sleep and hook suspension below happens inside this try. The
+  // console lines reach the service output on every replay that runs them, so
+  // the scenario can see a catch or finally that a suspension fired.
+  let result;
+  try {
+    const sequential = await recordedStep(inputs.marker, "long", inputs.delayMs);
+    await sleep("1s");
+    const parallel = await Promise.all([
+      recordedStep(inputs.marker, "parallel-a", 250),
+      recordedStep(inputs.marker, "parallel-b", 250),
+    ]);
+    await Promise.all([
+      registerResource({
+        kind: "custom-report",
+        identity: "audit/7",
+        url: "https://example.test/reports/audit-7",
+      }),
+      registerCustomResource({
+        kind: "custom-dashboard",
+        identity: "operations",
+        url: "https://example.test/dashboards/operations",
+      }),
+    ]);
+    await registerResource({
       kind: "custom-report",
       identity: "audit/7",
-      url: "https://example.test/reports/audit-7",
-    }),
-    registerCustomResource({
-      kind: "custom-dashboard",
-      identity: "operations",
-      url: "https://example.test/dashboards/operations",
-    }),
-  ]);
-  await registerResource({
-    kind: "custom-report",
-    identity: "audit/7",
-    url: "https://example.test/reports/audit-7-final",
-  });
-  const hook = restartHook.create({ token: inputs.token });
-  await hook;
-  const resumed = await recordedStep(inputs.marker, "resumed");
-  return { sequential, parallel: parallel.sort(), resumed, lines: await markerLines(inputs.marker) };
+      url: "https://example.test/reports/audit-7-final",
+    });
+    const hook = restartHook.create({ token: inputs.token });
+    await hook;
+    const resumed = await recordedStep(inputs.marker, "resumed");
+    result = { sequential, parallel: parallel.sort(), resumed };
+  } catch (error) {
+    console.log("${CATCH_OBSERVED}", error);
+    throw error;
+  } finally {
+    console.log("${FINALLY_OBSERVED}");
+    await recordedStep(inputs.marker, "finally");
+  }
+  return { ...result, lines: await markerLines(inputs.marker) };
 }
 
 export default {
@@ -747,6 +763,7 @@ async function runtimeScenario(postgresUrl) {
     const resourcesBeforeRestart = (await runtimeRun(runId)).resources;
     assertRuntimeResources(resourcesBeforeRestart, runId, "before restart");
 
+    const outputBeforeRestart = service.output();
     await stopRuntimeService(service);
     service = await startRuntimeService(postgresUrl);
 
@@ -782,6 +799,13 @@ async function runtimeScenario(postgresUrl) {
       );
     }
 
+    const beforeResume = `${outputBeforeRestart}${service.output()}`;
+    if (beforeResume.includes(CATCH_OBSERVED) || beforeResume.includes(FINALLY_OBSERVED)) {
+      throw new Error(
+        `runtime workflow ${runId} ran its catch or finally while suspended\n${beforeResume}`,
+      );
+    }
+
     execFileSync(
       process.execPath,
       [
@@ -811,6 +835,8 @@ async function runtimeScenario(postgresUrl) {
       "end parallel-b",
       "start resumed",
       "end resumed",
+      "start finally",
+      "end finally",
     ];
     const lines = terminal.returnValue.lines;
     if (JSON.stringify([...lines].sort()) !== JSON.stringify([...expectedLines].sort())) {
@@ -826,11 +852,21 @@ async function runtimeScenario(postgresUrl) {
       at("end long") === 1 &&
       Math.max(...parallelStarts) < Math.min(...parallelEnds) &&
       Math.max(...parallelEnds) < at("start resumed") &&
-      at("start resumed") < at("end resumed");
+      at("start resumed") < at("end resumed") &&
+      at("end resumed") < at("start finally");
     if (!ordered) {
       throw new Error(
         `step ordering or parallel overlap was not preserved: ${JSON.stringify(lines)}`,
       );
+    }
+    const afterResume = `${outputBeforeRestart}${service.output()}`;
+    if (afterResume.includes(CATCH_OBSERVED)) {
+      throw new Error(`runtime workflow ${runId} ran its catch on a run that never failed`);
+    }
+    // Without this the checks above could pass on workflow output that never
+    // reaches the service log.
+    if (!afterResume.includes(FINALLY_OBSERVED)) {
+      throw new Error(`runtime workflow ${runId} completed but its finally was never logged`);
     }
     if (
       terminal.returnValue.sequential !== "long" ||
@@ -840,7 +876,7 @@ async function runtimeScenario(postgresUrl) {
       throw new Error(`unexpected runtime return value: ${JSON.stringify(terminal.returnValue)}`);
     }
     console.log(
-      `run ${runId} completed after ${LONG_STEP_MS}ms step, concurrent resource registration, URL update, durable sleep, restart persistence, hook resume, and dashboard response`,
+      `run ${runId} completed after ${LONG_STEP_MS}ms step, concurrent resource registration, URL update, durable sleep, restart persistence, hook resume, catch and finally untouched by suspension, and dashboard response`,
     );
   } finally {
     if (service.child.exitCode === null && service.child.signalCode === null) {

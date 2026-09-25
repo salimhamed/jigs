@@ -62,7 +62,7 @@ export interface ReleaseSteps {
  * @remarks
  * Without an argument, resolves the workflow policy, then the factory policy, then the default of
  * releasing successful runs and keeping failed runs. An explicit choice remains authoritative for
- * later automatic cleanup. Never call this from `finally` or `catch`, because waits also throw.
+ * later automatic cleanup.
  */
 export async function release(steps: ReleaseSteps, policy?: ReleasePolicy): Promise<ReleaseReport> {
   return steps.releaseRunResources(policy ?? (await steps.resolveReleasePolicy()));

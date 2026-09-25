@@ -49,7 +49,7 @@ export async function provisionWorktree(request: WorktreeRequest): Promise<Workt
   return worktree;
 }
 
-/** Release finished run resources. Never call from finally or catch: suspension throws too. */
+/** Release finished run resources. */
 export async function releaseRunResources(policy: ReleasePolicy) {
   "use step";
   return runtimeOperations.releaseRunResources(policy, getWorkflowMetadata());
