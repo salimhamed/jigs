@@ -14,7 +14,7 @@ import {
 } from "@jigs-ai/jigs";
 import { sleep } from "workflow";
 import { z } from "zod";
-import { agentSession, runAgent, watchPullRequest } from "#jigs/routines";
+import { agentSession, committedWork, runAgent, watchPullRequest } from "#jigs/routines";
 import {
   fetchPullRequestState,
   mergePullRequest,
@@ -127,14 +127,12 @@ export async function implementAndReview(
       fresh: async () => prompts.implementation.fresh(task, worktree, findings, await diff()),
     });
 
-    const state = await readBranchState(worktree);
-    if (state.dirty || state.commits === 0) {
+    const state = await committedWork(worktree).catch((error: unknown) => {
+      if (!(error instanceof JigsError)) throw error;
       return stop(delivery, `jigs stopped work on ${task.key} in review round ${round}.`, [
-        state.dirty
-          ? "The implementation left uncommitted changes; only committed work is reviewed."
-          : "The implementation added no commits since the base commit.",
+        `${error.message}; ${error.hint}`,
       ]);
-    }
+    });
 
     const current = await diff();
     const verdict = await reviewerSession.run({

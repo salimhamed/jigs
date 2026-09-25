@@ -170,6 +170,20 @@ test("uncommitted work stops the delivery before any review", async () => {
   const error = await stopped(implementAndReview(delivery, builder()));
 
   expect(error.findings[0]).toContain("uncommitted changes");
+  expect(error.findings[0]).toContain("git -C /tmp/wt status");
+  expect(steps.pushBranch).toHaveBeenCalledWith(worktree);
+  expect(calls).toHaveLength(1);
+});
+
+test("a build round that commits nothing stops the delivery before any review", async () => {
+  answer(implementationReport, { responses: [] });
+  head = { headSha: "base", dirty: false, commits: 0 };
+
+  const error = await stopped(implementAndReview(delivery, builder()));
+
+  expect(error.message).toBe("jigs stopped work on ABC-1 in review round 1.");
+  expect(error.findings[0]).toContain("committed nothing on acme/abc-1");
+  expect(steps.readBranchState).toHaveBeenCalledWith(worktree, "base");
   expect(calls).toHaveLength(1);
 });
 

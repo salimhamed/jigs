@@ -111,6 +111,19 @@ This model source reads `OPENROUTER_API_KEY` from the factory's `.env`. See
 [Models and harnesses](/guide/models-and-harnesses) for the other harnesses and
 sources and what each one needs.
 
+The triage agent changes no files. An agent asked to change code may still stop
+with nothing committed, or leave changes uncommitted. When the next step needs a
+clean, committed change, such as pushing a branch or opening a pull request,
+check first with `committedWork` from `#jigs/routines`:
+
+```ts
+const { headSha } = await committedWork(worktree);
+```
+
+It returns the branch's head and commit count, or fails the run with a hint
+when the worktree has uncommitted changes or no commit since its base. Pass
+`{ since: sha }` to require a commit newer than `sha` instead.
+
 ## 3. Register it
 
 Add the workflow to the `workflows` map in `jigs.config.ts`:

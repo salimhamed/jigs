@@ -5,6 +5,7 @@ import {
   acquireTicket as acquireTicketRoutine,
   bindAgentSession,
   bindAgentSteps,
+  bindGitSteps,
   bindLinearSteps,
   bindPullRequestSteps,
 } from "@jigs-ai/jigs/routines";
@@ -64,6 +65,9 @@ export const noteOnTicket = linear.noteOnTicket;
 /** Resolve a Linear ticket, claim it, and read its requirements, before any protected work. */
 export const acquireTicket = (reference: string) =>
   acquireTicketRoutine(reference, { resolveLinearIssue, fetchTicketSnapshot });
+
+/** Read the branch state, failing unless the agent left a new commit and nothing uncommitted. */
+export const { committedWork } = bindGitSteps({ readBranchState });
 
 const pullRequests = bindPullRequestSteps({
   fetchPullRequestState,
