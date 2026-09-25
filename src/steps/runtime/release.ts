@@ -16,6 +16,8 @@ import type { NamedRunMetadata } from "./run-context.ts";
  * Without a policy, uses the workflow's `release`, then the factory's, then the default of
  * releasing successful runs and keeping failed ones. The success action is recorded first, so
  * automatic cleanup after the run ends never reverses it.
+ *
+ * @group Release
  */
 export async function releaseRunResources(
   metadata: NamedRunMetadata,

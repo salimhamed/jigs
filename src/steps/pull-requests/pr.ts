@@ -22,7 +22,11 @@ import { type MergeRefusal, mergeRefusal } from "../../workflow/pull-requests/me
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
 import { readPullRequestSnapshot } from "./fetch-state.ts";
 
-/** A newly opened or adopted pull request and its browser URL. */
+/**
+ * A newly opened or adopted pull request and its browser URL.
+ *
+ * @group Open/update
+ */
 export type OpenedPullRequest = PullRequestRef & {
   /** The pull request's browser URL. */
   url: string;
@@ -46,6 +50,8 @@ function repositoryOf(binding: string) {
  * before the assignment failed, or whose response was lost, leaves a pull
  * request GitHub will refuse to open twice. The retry adopts that pull request
  * and re-attempts only what did not finish.
+ *
+ * @group Open/update
  */
 export async function openPullRequest(request: {
   worktree: Worktree;
@@ -79,13 +85,21 @@ export async function openPullRequest(request: {
   return opened;
 }
 
-/** Mark a draft pull request ready and return its freshly read state. */
+/**
+ * Mark a draft pull request ready and return its freshly read state.
+ *
+ * @group Open/update
+ */
 export async function markPullRequestReady(pr: PullRequestRef): Promise<PullRequestSnapshot> {
   await markPrReady(pr);
   return readPullRequestSnapshot(pr);
 }
 
-/** Reply to a review thread and return the posted comment id. */
+/**
+ * Reply to a review thread and return the posted comment id.
+ *
+ * @group Discuss/review
+ */
 export async function replyToPullRequestReviewThread(
   pr: PullRequestRef,
   rootId: number,
@@ -97,7 +111,11 @@ export async function replyToPullRequestReviewThread(
   return replyToReviewThread(pr, rootId, body);
 }
 
-/** Post a comment on the pull request conversation and return its id. */
+/**
+ * Post a comment on the pull request conversation and return its id.
+ *
+ * @group Discuss/review
+ */
 export async function commentOnPullRequest(
   pr: PullRequestRef,
   body: string,
@@ -112,6 +130,8 @@ export async function commentOnPullRequest(
  * Post a pull request review and return its id. GitHub refuses an approval from
  * the pull request's own author with 422 Unprocessable Entity; Jigs lets
  * GitHub's GithubApiError surface unchanged.
+ *
+ * @group Discuss/review
  */
 export async function reviewPullRequest(
   pr: PullRequestRef,
@@ -124,9 +144,11 @@ export async function reviewPullRequest(
 }
 
 /**
- * What GitHub did, and when it did not, why — and whether asking again could
+ * What GitHub did, why it declined, and whether asking again could
  * change the answer, which is what decides between standing the commit down
  * and leaving it merge-ready.
+ *
+ * @group Merge
  */
 export type MergeOutcome =
   // `null` when GitHub has not reported the commit yet, which a re-read after
@@ -153,11 +175,13 @@ const STATE_CHANGED = new Set([405, 409]);
  * caller judged ready.
  *
  * The title is re-read here rather than carried in from `describePullRequest`:
- * a reviewer who corrects it — to satisfy a conventional-commit check on the
- * target repo, usually — does so between the pull request opening and this
+ * a reviewer who corrects it, usually to satisfy a conventional-commit check
+ * on the target repo, does so between the pull request opening and this
  * merge, and a title captured at open time would ship the one they corrected
  * away. After any ambiguous answer the pull request is read again, and this
  * reports `merged` only if GitHub says so.
+ *
+ * @group Merge
  */
 export async function mergePullRequest(
   worktree: Worktree,

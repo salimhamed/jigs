@@ -4,7 +4,11 @@ import type { AskableHarness, AskableModelSource, Harness } from "./harness-conf
 import { dropNullOptionals, type OutputJsonSchema, toOutputJsonSchema } from "./output-schema.ts";
 import type { AgentSessionRef } from "./result.ts";
 
-/** Options for an agent that works inside a directory. */
+/**
+ * Options for an agent that works inside a directory.
+ *
+ * @group Agent and model requests/results
+ */
 export type RunAgentOptions<T = undefined> = {
   harness: Harness;
   cwd: string;
@@ -13,14 +17,22 @@ export type RunAgentOptions<T = undefined> = {
   resume?: AgentSessionRef | undefined;
   output?: z.ZodType<T> | undefined;
 };
-/** Options for one harness turn without tools or a worktree. */
+/**
+ * Options for one harness turn without tools or a worktree.
+ *
+ * @group Agent and model requests/results
+ */
 export type AskAgentOptions<T = undefined> = {
   harness: AskableHarness;
   prompt: string;
   system?: string | undefined;
   output?: z.ZodType<T> | undefined;
 };
-/** Options for one API model call. */
+/**
+ * Options for one API model call.
+ *
+ * @group Agent and model requests/results
+ */
 export type AskModelOptions<T = undefined> = {
   model: AskableModelSource;
   prompt: string;

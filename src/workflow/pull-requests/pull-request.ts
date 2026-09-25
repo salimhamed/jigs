@@ -49,7 +49,11 @@ export function tokenFromGitHubPayload(payload: unknown): string | null {
   return pullRequestToken({ owner, repo, number });
 }
 
-/** Identifies a pull request by repository owner, repository name and number. */
+/**
+ * Identifies a pull request by repository owner, repository name and number.
+ *
+ * @group Pull requests
+ */
 export type PullRequestRef = {
   /** The GitHub organization or account that owns the repository. */
   owner: string;

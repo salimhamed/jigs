@@ -17,7 +17,11 @@ import type { TicketNote } from "../../workflow/linear/review.ts";
 
 const LETTERS = "abcdefghijklmnopqrstuvwxyz";
 
-/** Who the comment greets. Either may be absent, and they are often the same. */
+/**
+ * Who the comment greets. Either may be absent, and they are often the same.
+ *
+ * @group Rendering/customization
+ */
 export type TicketParticipants = {
   creator: LinearUser | null;
   assignee: LinearUser | null;
@@ -27,8 +31,10 @@ export type TicketParticipants = {
  * What the comment's footer says about the run that posted it. The factory's
  * step wrapper builds it: the run id and the workflow name come from the
  * Workflow SDK's metadata, and the dashboard link from the service's own
- * configuration — none of it visible to the workflow. Where the run paused is the
- * halt's, not the context's: only the routine that raised it knows.
+ * configuration. None of it is visible to the workflow. Where the run paused
+ * belongs to the halt, not the context: only the routine that raised it knows.
+ *
+ * @group Rendering/customization
  */
 export type NeedsHumanContext = {
   runId: string;
@@ -36,14 +42,22 @@ export type NeedsHumanContext = {
   dashboardUrl?: string;
 };
 
-/** Renders the Linear comment that asks a person to unblock a run. */
+/**
+ * Renders the Linear comment that asks a person to unblock a run.
+ *
+ * @group Rendering/customization
+ */
 export type RenderNeedsHumanComment = (
   halt: Halt,
   context: NeedsHumanContext,
   participants: TicketParticipants,
 ) => string;
 
-/** Renders a non-blocking Linear note for ticket participants. */
+/**
+ * Renders a non-blocking Linear note for ticket participants.
+ *
+ * @group Rendering/customization
+ */
 export type RenderTicketNote = (note: TicketNote, participants: TicketParticipants) => string;
 
 // Creator and assignee, in that order, each named once. Either may be absent;
@@ -94,7 +108,11 @@ function footer(halt: Halt, context: NeedsHumanContext): string {
   return `<sub>${parts.join(" · ")}</sub>`;
 }
 
-/** Render the default human-input request as Linear Markdown. */
+/**
+ * Render the default human-input request as Linear Markdown.
+ *
+ * @group Rendering/customization
+ */
 export const renderNeedsHumanComment: RenderNeedsHumanComment = (halt, context, participants) => {
   const sections = [greet(participants, halt.headline)];
   if (halt.about !== undefined && halt.about !== "") {
@@ -116,7 +134,11 @@ export const renderNeedsHumanComment: RenderNeedsHumanComment = (halt, context, 
   return `${sections.join("\n\n")}\n`;
 };
 
-/** Render the default non-blocking ticket note as Linear Markdown. */
+/**
+ * Render the default non-blocking ticket note as Linear Markdown.
+ *
+ * @group Rendering/customization
+ */
 export const renderTicketNote: RenderTicketNote = (note, participants) =>
   `${[
     greet(participants, note.headline),

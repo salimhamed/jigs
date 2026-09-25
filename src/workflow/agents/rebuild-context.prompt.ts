@@ -1,14 +1,26 @@
-/** Material a fresh agent needs to continue work after a session cannot resume. */
+/**
+ * Material a fresh agent needs to continue work after a session cannot resume.
+ *
+ * @group Agent and model requests/results
+ */
 export type RebuildContextPromptInput = {
   ticket: string;
   brief: string;
   diff: string;
   threads: string;
 };
-/** Renders instructions for rebuilding an agent's working context. */
+/**
+ * Renders instructions for rebuilding an agent's working context.
+ *
+ * @group Agent and model requests/results
+ */
 export type RebuildContextPrompt = (input: RebuildContextPromptInput) => string;
 
-/** The default prompt for continuing reviewed work in a fresh agent session. */
+/**
+ * The default prompt for continuing reviewed work in a fresh agent session.
+ *
+ * @group Agent and model requests/results
+ */
 export const rebuildContextPrompt: RebuildContextPrompt = ({
   ticket,
   brief,

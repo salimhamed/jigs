@@ -1,7 +1,9 @@
 /**
- * Inspect committed changes and push branches in a Git worktree.
+ * Low-level Git operations for factory-owned steps. Workflow code normally uses
+ * the generated `#jigs/steps` wrappers.
  *
- * Wrap steps in a factory-owned `"use step"` file. Never call them directly from a workflow.
+ * Inspect changes before publishing them. `pushApprovedChange` requires the
+ * reviewed commit to remain HEAD and the worktree to be clean, including on retries.
  *
  * @module steps/git
  * @packageDocumentation

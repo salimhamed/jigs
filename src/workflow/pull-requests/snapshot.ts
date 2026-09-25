@@ -1,4 +1,8 @@
-/** A submitted GitHub review of a pull request. */
+/**
+ * A submitted GitHub review of a pull request.
+ *
+ * @group Pull requests
+ */
 export interface PullRequestReview {
   id: number;
   state: string;
@@ -8,7 +12,11 @@ export interface PullRequestReview {
   commitSha?: string;
 }
 
-/** A comment anchored to a file in a pull request review. */
+/**
+ * A comment anchored to a file in a pull request review.
+ *
+ * @group Pull requests
+ */
 export interface ReviewComment {
   id: number;
   rootId: number;
@@ -22,7 +30,11 @@ export interface ReviewComment {
   updatedAt: string;
 }
 
-/** A pull request review conversation, with its optional file location. */
+/**
+ * A pull request review conversation, with its optional file location.
+ *
+ * @group Pull requests
+ */
 export interface ReviewThread {
   rootId: number;
   path: string;
@@ -34,7 +46,11 @@ export interface ReviewThread {
   origin?: "conversation";
 }
 
-/** A comment on the pull request conversation, which hangs off no thread. */
+/**
+ * A comment on the pull request conversation, which hangs off no thread.
+ *
+ * @group Pull requests
+ */
 export interface PullRequestComment {
   id: number;
   body: string;
@@ -46,14 +62,22 @@ export interface PullRequestComment {
   updatedAt: string;
 }
 
-/** A check or commit status reported on a pull request head. */
+/**
+ * A check or commit status reported on a pull request head.
+ *
+ * @group Pull requests
+ */
 export interface CheckRun {
   name: string;
   conclusion: string | null;
   url: string;
 }
 
-/** GitHub facts about a pull request, without a judgment about outstanding work. */
+/**
+ * GitHub facts about a pull request, without a judgment about outstanding work.
+ *
+ * @group Pull requests
+ */
 export interface PullRequestSnapshot {
   state: "open" | "closed";
   merged: boolean;
@@ -82,12 +106,18 @@ export interface PullRequestSnapshot {
 
 /**
  * How the operator's consent reads right now. `stale` is an approval that
- * named an earlier commit — a different thing to tell an operator than a pull
+ * named an earlier commit. This differs from a pull
  * request nobody has approved.
+ *
+ * @group Pull requests
  */
 export type ApprovalState = "approved" | "changes-requested" | "stale" | "none";
 
-/** The factory's approval signal and how it reads on the pull request. */
+/**
+ * The factory's approval signal and how it reads on the pull request.
+ *
+ * @group Pull requests
+ */
 export interface PullRequestApproval {
   /** `review` is an approving review of the head; `label` is the `jigs:approved` label. */
   signal: "review" | "label";
@@ -113,6 +143,8 @@ function canonical(value: unknown): string {
  * @remarks
  * Collection ordering and incidental fields do not change the key. Compare keys for equality;
  * the key format is opaque and is not a durable identifier.
+ *
+ * @group Pull requests
  */
 export function pullRequestSnapshotKey(snapshot: PullRequestSnapshot): string {
   // Name the facts explicitly: incidental fetch metadata must not become a wake trigger.

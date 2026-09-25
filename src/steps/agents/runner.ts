@@ -15,6 +15,8 @@ import { AgentSessionError } from "./session-error.ts";
  * A harness ready to run in a worktree, from {@link createAgentRunner}. Pass `model` to the AI
  * SDK's `generateText`, read the session reference from its result with `sessionFrom`, and call
  * `close` when the call is done.
+ *
+ * @group Agent runner
  */
 export interface AgentRunner {
   /** The live provider model, with jigs' policy already applied. */
@@ -27,7 +29,11 @@ export interface AgentRunner {
   close(): Promise<void>;
 }
 
-/** Where {@link createAgentRunner} runs a harness, and the session it resumes. */
+/**
+ * Where {@link createAgentRunner} runs a harness, and the session it resumes.
+ *
+ * @group Agent runner
+ */
 export interface AgentRunnerOptions {
   /** The worktree the agent works in. */
   cwd: string;
@@ -156,6 +162,8 @@ export async function openAgentRunner(
  *   }
  * }
  * ```
+ *
+ * @group Agent runner
  */
 export function createAgentRunner(
   harness: Harness,

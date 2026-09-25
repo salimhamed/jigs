@@ -1,43 +1,33 @@
-# Install and run a first workflow
+# Install and run a workflow
 
 This guide creates a factory, starts its service and runs `hello`, the workflow
-every new factory includes. `hello` calls no model and changes no repository,
-so you need no credentials to try it.
+every new factory includes.
 
-## Set up with your agent
+## Set up with a coding agent
 
-If you use a coding agent, you can let it do the steps below. Install the jigs
-skill, which adds a single skill named `/jigs`:
+The fastest way to get started is to let your coding agent do the setup.
+Install the jigs skill:
 
 ```sh
 npx skills add salimhamed/jigs
 ```
 
-Then ask your agent `/jigs set up a factory in this empty directory`.
+Then ask your agent:
 
-The rest of this page is the same process by hand.
+```text
+/jigs set up a factory in this empty directory
+```
 
-## 1. Host dependencies
+The rest of this page shows the same process manually.
 
-- **Node.js 24 or newer** and **pnpm**.
-- **Docker**, with its daemon running. Each factory runs its own Postgres
-  container.
-- **Agent CLIs, only for the harnesses your workflows use.** `hello` uses none.
-  Install each one yourself, keep it on the `PATH` of the shell that starts the
-  service, and log in:
+## 1. Prerequisites
 
-  | Harness | Command | Log in |
-  | --- | --- | --- |
-  | Claude Code | `claude` | `claude auth login` |
-  | Codex | `codex` | `codex login` |
-  | Pi | `pi` | run `pi`, then `/login` |
+- **Node.js 24 or newer**
+- **pnpm**
+- **Docker**, with Docker running
 
-- **On Linux**, run `loginctl enable-linger "$USER"` once, so the service keeps
-  running after you log out. On a host without systemd, such as macOS, the
-  service runs unsupervised and stops when you log out.
-
-jigs installs from public npm as `@jigs-ai/jigs`. Each factory pins its own
-version, so there is nothing to install globally and no registry token.
+`hello` doesn't use a model or coding agent, so you don't need any model
+credentials or agent CLIs yet.
 
 ## 2. Create a factory
 
@@ -45,14 +35,22 @@ version, so there is nothing to install globally and no registry token.
 mkdir my-factory
 cd my-factory
 git init
+pnpm dlx @jigs-ai/jigs init
+```
+
+::: tip Recently published versions
+jigs is changing rapidly. If pnpm's minimum release age setting holds back a
+recent release, use this variant to exempt jigs from that restriction:
+
+```sh
 pnpm --config.minimum-release-age-exclude=@jigs-ai/jigs dlx @jigs-ai/jigs init
 ```
 
-pnpm holds back packages published in the last day. The flag lets you get the
-newest jigs, and it applies only to jigs.
+The exception applies only to jigs. It does not refresh pnpm's `dlx` cache.
+:::
 
-`init` writes the starting files and prints the next steps. It does not start
-anything. `workflows/hello/hello.ts` is the first workflow, and `jigs.config.ts`
+`init` writes the starting files without starting the service.
+`workflows/hello/hello.ts` contains your first workflow, and `jigs.config.ts`
 registers it under the name `hello`.
 
 ## 3. Start the service
@@ -63,45 +61,32 @@ cp .env.example .env
 pnpm exec jigs up
 ```
 
-`pnpm install` puts this factory's jigs in place for `pnpm exec`. `hello`
-needs nothing filled in `.env`. `jigs up` starts Postgres, builds the factory,
-starts the service and waits until it is ready. It then runs `jigs doctor`,
-which checks only what your workflows use; rerun it any time with
-`pnpm exec jigs doctor`.
-
-It ends by naming the two things it runs, one Postgres container and one service
-process that also serves the dashboard, and the one command that stops both:
-
-```
-my-factory is up
-
-  postgres    localhost:5440  (Docker container my-factory-postgres-1)
-  service     http://localhost:8990  (pid 53812)
-  dashboard   http://localhost:9090
-  logs        ~/.local/share/jigs/services/my-factory-2286ac2a.log
-
-  stop:  pnpm exec jigs down
-```
-
-Open the dashboard URL from your own output. It shows every run and its steps.
-`pnpm exec jigs service stop` stops the service and its dashboard and leaves
-Postgres running; `pnpm exec jigs down` stops both and keeps Postgres's data.
+`hello` needs nothing filled in `.env`. `jigs up` starts everything your factory
+needs and checks that it is ready. When it finishes, the service and dashboard
+are available. Open the dashboard URL it prints to inspect workflow runs and
+individual steps.
 
 ## 4. Run hello
 
 ```sh
 pnpm exec jigs run hello
+```
+
+`jigs run hello` starts the workflow in the jigs service and gives you a run ID
+and dashboard link. The workflow continues independently of the command that
+started it. Use the dashboard or `jigs status` to check its progress:
+
+```sh
 pnpm exec jigs status
 ```
 
-`run` prints the new run's ID and its dashboard link. `status` lists runs; pass
-a run ID to see one run in detail:
+Wait for the run to show as completed.
+
+**That's it. You now have a running jigs factory and have completed your first
+workflow.**
+
+When you're finished, stop the factory:
 
 ```sh
-pnpm exec jigs status <run-id>
+pnpm exec jigs down
 ```
-
-The run should finish as completed. From here, write your own workflow with
-[Build a workflow](/guide/build-a-workflow). Binding a repository needs GitHub
-credentials, so set them first: see
-[GitHub identity](/guide/configuration#github-identity).

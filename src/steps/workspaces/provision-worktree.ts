@@ -22,7 +22,11 @@ import { getWorktree, setWorktreeState, upsertWorktree, withRunResourceLock } fr
 import { assertReusable, WorktreeOwnedError } from "./reuse.ts";
 import { registrySql } from "./sql.ts";
 
-/** The binding and branch used to provision a run's worktree. */
+/**
+ * The binding and branch used to provision a run's worktree.
+ *
+ * @group Worktrees
+ */
 export interface WorktreeRequest {
   binding: string;
   branch: string;
@@ -30,7 +34,11 @@ export interface WorktreeRequest {
 
 // `sql` and `readOwner` wrap the two external systems this path consults —
 // the registry and the World — and nothing else here is an option.
-/** Injectable registry and ownership operations used while provisioning a worktree. */
+/**
+ * Injectable registry and ownership operations used while provisioning a worktree.
+ *
+ * @group Advanced implementation/testing
+ */
 export interface ProvisionWorktreeDependencies {
   sql?: RegistrySql;
   readOwner?: (runId: string) => Promise<OwnerState>;
@@ -38,7 +46,11 @@ export interface ProvisionWorktreeDependencies {
 }
 
 // The clone is the service's to make at start, so this path only asserts it.
-/** Create or reuse a worktree for this run and prepare its files and dependencies. */
+/**
+ * Create or reuse a worktree for this run and prepare its files and dependencies.
+ *
+ * @group Worktrees
+ */
 export async function provisionWorktree(
   request: WorktreeRequest,
   metadata: RunMetadata,

@@ -26,7 +26,11 @@ export function tokenFromLinearPayload(payload: unknown): string | null {
   return ticketToken(issueId);
 }
 
-/** A ticket-claim failure that identifies the run already holding the ticket. */
+/**
+ * A ticket-claim failure that identifies the run already holding the ticket.
+ *
+ * @group Errors and utilities
+ */
 export class ClaimConflictError extends Error {
   readonly resource: string;
   readonly owningRunId: string;
@@ -41,7 +45,11 @@ export class ClaimConflictError extends Error {
   }
 }
 
-/** A ticket held exclusively by the current workflow run. */
+/**
+ * A ticket held exclusively by the current workflow run.
+ *
+ * @group Linear tickets
+ */
 export interface TicketClaim {
   issueId: string;
   identifier: string;
@@ -63,7 +71,11 @@ export interface TicketClaim {
 // One hook, on the issue's UUID: an operator naming a run by its ticket
 // identifier is resolved through Linear by the run-ref resolver, so a second
 // hook keyed on the identifier would index nothing.
-/** Claim a Linear ticket for the lifetime of the current workflow run. */
+/**
+ * Claim a Linear ticket for the lifetime of the current workflow run.
+ *
+ * @group Linear tickets
+ */
 export async function claimTicket(issueId: string, identifier: string): Promise<TicketClaim> {
   const token = ticketToken(issueId);
   const hook = createHook<unknown>({ token });

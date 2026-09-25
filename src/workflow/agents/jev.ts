@@ -1,31 +1,59 @@
 import type { OpenrouterSource } from "./harness-config.ts";
 
-/** A calibrated yes-or-no question. */
+/**
+ * A calibrated yes-or-no question.
+ *
+ * @group Decision models
+ */
 export type YesNoQuestion = { type: "yes-no"; instructions: string };
 
-/** A question answered with one named option. */
+/**
+ * A question answered with one named option.
+ *
+ * @group Decision models
+ */
 export type ChoiceQuestion<OPTIONS extends Record<string, string> = Record<string, string>> = {
   type: "choice";
   instructions: string;
   options: OPTIONS;
 };
 
-/** A question scored over ordered levels, from lowest to highest. */
+/**
+ * A question scored over ordered levels, from lowest to highest.
+ *
+ * @group Decision models
+ */
 export type ScoreQuestion = { type: "score"; instructions: string; levels: string[] };
 
-/** Any question accepted by `askJev`. */
+/**
+ * Any question accepted by `askJev`.
+ *
+ * @group Decision models
+ */
 export type JevQuestion = YesNoQuestion | ChoiceQuestion | ScoreQuestion;
 
-/** Named decision questions evaluated against one shared state. */
+/**
+ * Named decision questions evaluated against one shared state.
+ *
+ * @group Decision models
+ */
 export type JevQuestions = Record<string, JevQuestion>;
 
 type JevJsonValue = null | boolean | number | string | JevJsonValue[] | JevJsonObject;
 type JevJsonObject = { [key: string]: JevJsonValue };
 
-/** JSON-compatible evidence evaluated by a decision model. */
+/**
+ * JSON-compatible evidence evaluated by a decision model.
+ *
+ * @group Decision models
+ */
 export type JevState = string | JevJsonObject | JevJsonValue[];
 
-/** The calibrated answer shape selected by one question descriptor. */
+/**
+ * The calibrated answer shape selected by one question descriptor.
+ *
+ * @group Decision models
+ */
 export type JevAnswer<QUESTION extends JevQuestion> =
   QUESTION extends ChoiceQuestion<infer OPTIONS>
     ? {
@@ -43,19 +71,31 @@ export type JevAnswer<QUESTION extends JevQuestion> =
         }
       : { probability: number };
 
-/** Answers narrowed independently for every named question. */
+/**
+ * Answers narrowed independently for every named question.
+ *
+ * @group Decision models
+ */
 export type JevAnswers<QUESTIONS extends JevQuestions> = {
   [KEY in keyof QUESTIONS]: JevAnswer<QUESTIONS[KEY]>;
 };
 
-/** A decision request in workflow and durable wire form. */
+/**
+ * A decision request in workflow and durable wire form.
+ *
+ * @group Decision models
+ */
 export type AskJevOptions<QUESTIONS extends JevQuestions> = {
   model: OpenrouterSource;
   state: JevState;
   questions: QUESTIONS;
 };
 
-/** A typed decision result. */
+/**
+ * A typed decision result.
+ *
+ * @group Decision models
+ */
 export type JevResult<QUESTIONS extends JevQuestions> = {
   answers: JevAnswers<QUESTIONS>;
 };
@@ -69,12 +109,20 @@ export type ExecuteJevStep = <const QUESTIONS extends JevQuestions>(
   request: AskJevOptions<QUESTIONS>,
 ) => Promise<JevResult<QUESTIONS>>;
 
-/** Build a calibrated yes-or-no question. */
+/**
+ * Build a calibrated yes-or-no question.
+ *
+ * @group Decision models
+ */
 export function yesNo(instructions: string): YesNoQuestion {
   return { type: "yes-no", instructions };
 }
 
-/** Build a question answered with one named option. */
+/**
+ * Build a question answered with one named option.
+ *
+ * @group Decision models
+ */
 export function choice<const OPTIONS extends Record<string, string>>(
   instructions: string,
   options: OPTIONS,
@@ -82,7 +130,11 @@ export function choice<const OPTIONS extends Record<string, string>>(
   return { type: "choice", instructions, options };
 }
 
-/** Build a question scored over ordered levels, from lowest to highest. */
+/**
+ * Build a question scored over ordered levels, from lowest to highest.
+ *
+ * @group Decision models
+ */
 export function score(instructions: string, levels: string[]): ScoreQuestion {
   return { type: "score", instructions, levels };
 }

@@ -25,6 +25,8 @@ export function needsHumanToken(issueId: string, commentId: string): string {
  * ticket itself, `notes` are plain bullet lines, and `onReply` decides what
  * the comment asks the human to do: choose between the questions ("continue")
  * or repair something and let the step run again ("retry").
+ *
+ * @group Human input
  */
 export type Halt = {
   headline: string;
@@ -35,7 +37,11 @@ export type Halt = {
   onReply: "continue" | "retry";
 };
 
-/** The first human ticket reply that wakes a halted run. */
+/**
+ * The first human ticket reply that wakes a halted run.
+ *
+ * @group Human input
+ */
 export interface HumanReply {
   commentId: string;
   body: string;

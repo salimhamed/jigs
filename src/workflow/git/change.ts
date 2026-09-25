@@ -1,7 +1,15 @@
-/** How a file differs between the base and head trees. */
+/**
+ * How a file differs between the base and head trees.
+ *
+ * @group Git/change data
+ */
 export type ChangeStatus = "added" | "modified" | "deleted" | "renamed" | "other";
 
-/** One file changed between the base and head trees. */
+/**
+ * One file changed between the base and head trees.
+ *
+ * @group Git/change data
+ */
 export interface FileChange {
   /** The changed path. Renames use the path in the head tree. */
   path: string;
@@ -13,7 +21,11 @@ export interface FileChange {
   deletions: number;
 }
 
-/** A bounded description of the committed changes between two Git refs. */
+/**
+ * A bounded description of the committed changes between two Git refs.
+ *
+ * @group Git/change data
+ */
 export interface ChangeSummary {
   /** The resolved base commit. */
   base: string;
@@ -34,7 +46,11 @@ export interface ChangeSummary {
   truncated: boolean;
 }
 
-/** Patches for selected paths between two resolved commits. */
+/**
+ * Patches for selected paths between two resolved commits.
+ *
+ * @group Git/change data
+ */
 export interface ChangePatch {
   /** Patch text for each selected path, in first-requested order. */
   patches: {
@@ -95,7 +111,11 @@ export function parseNumstat(
 
 const MAX_LISTED_FILES = 60;
 
-/** Render a Markdown review summary with commits, totals and up to 60 changed-file rows. */
+/**
+ * Render a Markdown review summary with commits, totals and up to 60 changed-file rows.
+ *
+ * @group Git/change data
+ */
 export function renderChangeSummary(summary: ChangeSummary): string {
   const listed = summary.files.slice(0, MAX_LISTED_FILES);
   const hidden = summary.files.length - listed.length;

@@ -21,10 +21,10 @@ export interface RunSuspension {
   ci?: PullRequestSnapshot["ci"];
   approval?: ApprovalState;
   draft?: boolean;
-  /** GitHub's own `mergeable_state`, as the merge gate reads it. */
+  /** GitHub's own `mergeable_state`, as the readiness check reads it. */
   mergeState?: string;
-  /** Why the merge gate will not merge this, or that nothing is stopping it. */
+  /** Why the readiness check refuses a merge, or that nothing is stopping it. */
   blocker?: string;
-  /** What last resumed this run's gate, if the service has woken it since it started. */
+  /** What last resumed this run's pull request wait, if the service has woken it since it started. */
   lastWake?: WakeNote;
 }

@@ -6,6 +6,8 @@ import type { Harness } from "./harness-config.ts";
 /**
  * A session reference: the small piece of data that lets a later `runAgent` call resume the same
  * harness session. Pass it back as `resume`.
+ *
+ * @group Agent and model requests/results
  */
 export type AgentSessionRef = {
   harness: Harness["kind"];
@@ -17,6 +19,8 @@ export type AgentSessionRef = {
 /**
  * A harness descriptor as a string that ignores field order: two descriptors that list the same
  * settings in another order render the same.
+ *
+ * @group Agent and model requests/results
  */
 export function describeHarness(harness: Harness): string {
   return JSON.stringify(harness, (_key, field: unknown) =>
@@ -26,13 +30,21 @@ export function describeHarness(harness: Harness): string {
   );
 }
 
-/** Text and structured output returned by a model call. */
+/**
+ * Text and structured output returned by a model call.
+ *
+ * @group Agent and model requests/results
+ */
 export type ModelResult<T = unknown> = {
   text: string;
   output: T;
 };
 
-/** A model result with the session reference an agent harness returned, when it returned one. */
+/**
+ * A model result with the session reference an agent harness returned, when it returned one.
+ *
+ * @group Agent and model requests/results
+ */
 export type AgentResult<T = unknown> = ModelResult<T> & {
   session?: AgentSessionRef;
 };

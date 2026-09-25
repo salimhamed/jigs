@@ -49,7 +49,11 @@ async function registerGithubBranch(worktreePath: string, branch: string): Promi
   });
 }
 
-/** Inspect branch readiness, counting commits since the worktree's base unless overridden. */
+/**
+ * Inspect branch readiness, counting commits since the worktree's base unless overridden.
+ *
+ * @group Inspect changes
+ */
 export async function readBranchState(
   worktree: Worktree,
   baseSha: string = worktree.baseSha,
@@ -61,7 +65,11 @@ export async function readBranchState(
   return { commits, headSha: head, dirty };
 }
 
-/** Push the worktree's current HEAD and register a GitHub branch resource when applicable. */
+/**
+ * Push the worktree's current HEAD and register a GitHub branch resource when applicable.
+ *
+ * @group Publish changes
+ */
 export async function pushBranch(worktree: Worktree): Promise<{
   /** The worktree's HEAD commit after the push succeeds. */
   headSha: string;
@@ -76,6 +84,8 @@ export async function pushBranch(worktree: Worktree): Promise<{
  * Push a reviewed commit only while it is still HEAD and the worktree is clean.
  *
  * Safe to retry after a successful push. Rejects if HEAD moved or any uncommitted change exists.
+ *
+ * @group Publish changes
  */
 export async function pushApprovedChange(
   worktree: Worktree,
@@ -105,6 +115,8 @@ export async function pushApprovedChange(
 /**
  * Read a raw patch from the merge base of `baseSha` and HEAD, truncating after 200,000 characters.
  * Defaults to the worktree's base commit.
+ *
+ * @group Inspect changes
  */
 export async function readWorktreeDiff(
   worktree: Worktree,

@@ -232,7 +232,11 @@ export async function fetchIssueSnapshot(issueId: string): Promise<RawIssueSnaps
   return data.issue;
 }
 
-/** Post a comment on a ticket. */
+/**
+ * Post a comment on a ticket.
+ *
+ * @group Create and update
+ */
 export async function createComment(
   issueId: string,
   body: string,
@@ -300,14 +304,22 @@ async function resolveProject(ref: string): Promise<RawProject> {
   return project;
 }
 
-/** Fields used to create a Linear ticket in a project's first team. */
+/**
+ * Fields used to create a Linear ticket in a project's first team.
+ *
+ * @group Create and update
+ */
 export interface CreateIssueInProjectInput {
   project: string;
   title: string;
   description: string;
 }
 
-/** Create a ticket in the project’s first team. */
+/**
+ * Create a ticket in the project’s first team.
+ *
+ * @group Create and update
+ */
 export async function createIssueInProject(
   input: CreateIssueInProjectInput,
 ): Promise<{ id: string; identifier: string; url: string }> {
@@ -350,7 +362,11 @@ interface RawIssueMatch {
   trashed: boolean | null;
 }
 
-/** A matching Linear ticket returned by a project title search. */
+/**
+ * A matching Linear ticket returned by a project title search.
+ *
+ * @group Resolve and read
+ */
 export interface LinearIssueMatch {
   id: string;
   identifier: string;
@@ -360,7 +376,11 @@ export interface LinearIssueMatch {
   state: string;
 }
 
-/** Find the newest ticket in a project whose title starts with the given text. */
+/**
+ * Find the newest ticket in a project whose title starts with the given text.
+ *
+ * @group Resolve and read
+ */
 export async function findIssueInProject(input: {
   project: string;
   titlePrefix: string;

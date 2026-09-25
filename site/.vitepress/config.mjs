@@ -24,7 +24,7 @@ export default {
   },
   themeConfig: {
     nav: [
-      { text: "Guide", link: "/guide/why-jigs", activeMatch: "/guide/" },
+      { text: "Guide", link: "/guide/getting-started", activeMatch: "/guide/" },
       { text: "API reference", link: "/api/", activeMatch: "/api/" },
       {
         text: `v${manifest.version}`,
@@ -36,25 +36,20 @@ export default {
         text: "Start here",
         collapsed: false,
         items: [
+          { text: "Install and run a workflow", link: "/guide/getting-started" },
           { text: "Why jigs", link: "/guide/why-jigs" },
-          { text: "Install and run a first workflow", link: "/guide/getting-started" },
           { text: "Core concepts", link: "/guide/concepts" },
         ],
       },
       {
-        text: "Build",
+        text: "Using jigs",
         collapsed: false,
         items: [
           { text: "Build a workflow", link: "/guide/build-a-workflow" },
           { text: "Models and harnesses", link: "/guide/models-and-harnesses" },
-          { text: "Write your own agent step", link: "/guide/custom-agent-step" },
+          { text: "Waiting and external events", link: "/guide/waiting-and-events" },
           { text: "Recipes", link: "/guide/recipes" },
-        ],
-      },
-      {
-        text: "Operate",
-        collapsed: false,
-        items: [
+          { text: "Custom agent steps", link: "/guide/custom-agent-step" },
           { text: "Configuration", link: "/guide/configuration" },
           { text: "CLI commands", link: "/guide/cli" },
           { text: "Troubleshooting", link: "/guide/troubleshooting" },

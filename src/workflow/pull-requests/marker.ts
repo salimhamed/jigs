@@ -2,29 +2,33 @@
 export type MarkerKind = "reply" | "completion" | "status";
 
 /**
- * Why a `status` note was written, so one note never silences another.
- * `merge` and `ci` stand a commit down; `merge-retry` only records that the
- * refusal was already reported, and leaves the commit merge-ready.
+ * Label a status note as a merge refusal, CI failure or temporary merge refusal.
+ * Distinct reasons keep notes for the same commit independent. They do not
+ * change merge readiness or schedule more work.
+ *
+ * @group Pull requests
  */
 export type StatusReason = "merge" | "ci" | "merge-retry";
 
 const KINDS = new Set<string>(["reply", "completion", "status"]);
 const REASONS = new Set<string>(["merge", "ci", "merge-retry"]);
 
-/** Hidden progress metadata stored in a pull request comment. */
+/**
+ * Hidden progress metadata stored in a pull request comment.
+ *
+ * @group Pull requests
+ */
 export interface PullRequestMarker {
   /**
-   * The continuation identity. It survives run replacement, so a later run
-   * answering for the same scope sees this work as its own and does not redo
-   * it. Another scope's marker means "some jigs workflow wrote this", never
-   * "my work is done".
+   * Names this workflow's work on the pull request. Keep it stable across
+   * replacement runs to recognize earlier notes and replies.
    */
   scope: string;
   /** The run that wrote it. Provenance for a reader; never matched on. */
   run: string;
   /**
    * `reply` answers the thing named by `source`, `completion` records work
-   * finished for it, and `status` is a note about a commit — a stand-down
+   * finished for it, and `status` is a note about a commit, such as a stand-down
    * after a refused merge, a CI failure jigs could not repair, or a merge
    * refused for a state that will pass.
    */
@@ -100,7 +104,11 @@ function quoted(body: string, at: number): boolean {
 const text = (value: unknown): string | undefined =>
   typeof value === "string" ? value : undefined;
 
-/** Every marker in one comment body, in the order they appear. */
+/**
+ * Every marker in one comment body, in the order they appear.
+ *
+ * @group Pull requests
+ */
 export function parseMarkers(body: string): PullRequestMarker[] {
   const markers: PullRequestMarker[] = [];
   for (const match of body.matchAll(MARKER)) {

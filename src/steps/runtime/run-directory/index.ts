@@ -10,14 +10,22 @@ export function runDirectory(metadata: RunMetadata): string {
   return path.join(jigsDataDir(), "scratch", metadata.workflowRunId);
 }
 
-/** Create a working directory that survives retries and pauses in this run. */
+/**
+ * Create a working directory that survives retries and pauses in this run.
+ *
+ * @group Run directories
+ */
 export async function createRunDirectory(metadata: RunMetadata): Promise<string> {
   const directory = runDirectory(metadata);
   await mkdir(directory, { recursive: true });
   return directory;
 }
 
-/** Remove this run's working directory after its work is finished, never while paused. */
+/**
+ * Remove this run's working directory after its work is finished, never while paused.
+ *
+ * @group Run directories
+ */
 export async function removeRunDirectory(metadata: RunMetadata): Promise<void> {
   await rm(runDirectory(metadata), { recursive: true, force: true });
 }

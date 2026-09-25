@@ -22,7 +22,11 @@ import {
 import type { FetchPrState } from "./pull-request.ts";
 import { currentRunId } from "./writer.ts";
 
-/** Answers routed back to pull-request threads and an optional commit explanation. */
+/**
+ * Answers routed back to pull-request threads and an optional commit explanation.
+ *
+ * @group Pull requests
+ */
 export interface ThreadAnswers {
   /** Replies to post, using `null` to answer feedback on the pull request conversation. */
   answers: Array<{
@@ -65,11 +69,7 @@ export interface PostPullRequestNoteOptions {
   scope: string;
   /** The commit the note is about: a red head, or a head it could not merge. */
   headSha: string;
-  /**
-   * What the note says about that commit, so one note never silences another.
-   * `merge` and `ci` stand it down; `merge-retry` only records that jigs
-   * already reported a refusal it is waiting out.
-   */
+  /** Labels the update so CI and merge notes for the same commit stay independent. */
   reason: StatusReason;
   /** The Markdown note body. */
   body: string;
@@ -92,10 +92,12 @@ function postFailed(pr: PullRequestRef, what: string, error: unknown): void {
 }
 
 /**
- * Posts each answer where it belongs, marked with the sources it answers. A
- * synthetic conversation thread has no inline anchor, so its answer lands on
- * the conversation. Posting stops at the first failure: what is still
- * unanswered comes back on the next wake.
+ * Post replies to review threads or the pull request conversation, marked with the feedback answered.
+ *
+ * @remarks
+ * Each call posts the supplied answers; the workflow decides which feedback still needs a reply.
+ * Posting stops and logs the error on the first failure. The caller decides whether and when
+ * to retry after reading fresh facts. An optional commit explanation is posted after the replies.
  */
 export async function postReviewAnswers(options: PostReviewAnswersOptions): Promise<void> {
   const { commentOnPullRequest: comment, replyToPullRequestReviewThread: reply, pr } = options;
@@ -187,12 +189,12 @@ function readPullRequestLedger(snapshot: PullRequestSnapshot, scope: string): Ma
 }
 
 /**
- * Posts a note about a commit — a merge jigs could not make, CI it could not
- * repair — marked with the commit it settles, so the next wake does not ask
- * for the same attempt again. It posts once per head and reason: when the pull
- * request already carries this scope's note for them, it posts nothing. A note
- * that cannot be posted is logged and the wake ends; the state it describes is
- * still there to be reassessed.
+ * Post a status note once per scope, commit and reason.
+ *
+ * @remarks
+ * Reads current pull request comments and skips a note whose marker is already present.
+ * A posting failure is logged and returns without throwing. The workflow decides whether
+ * and when to try again; the note does not change merge readiness or schedule another action.
  */
 export async function postPullRequestNote(options: PostPullRequestNoteOptions): Promise<void> {
   const { pr, headSha, reason } = options;
@@ -217,7 +219,11 @@ export async function postPullRequestNote(options: PostPullRequestNoteOptions): 
   }
 }
 
-/** Render failed checks as a Markdown list for a pull request note. */
+/**
+ * Render failed checks as a Markdown list for a pull request note.
+ *
+ * @group Pull requests
+ */
 export function renderChecks(failing: CheckRun[]): string {
   return failing.length === 0
     ? "_(the provider reported a red build without naming a check)_"

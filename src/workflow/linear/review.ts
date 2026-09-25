@@ -15,7 +15,11 @@ import { type TicketReviewPrompt, ticketReviewPrompt } from "./ticket-review.pro
 // strictObject so the harness's native structured output carries
 // additionalProperties:false and a malformed verdict throws at the
 // parse in the workflow rather than degrading into a guess.
-/** Structured verdict returned by the agent that reviews a ticket before work starts. */
+/**
+ * Structured verdict returned by the agent that reviews a ticket before work starts.
+ *
+ * @group Linear tickets
+ */
 export const ticketReviewVerdictSchema = z.strictObject({
   verdict: z.enum(["proceed", "needs-human"]),
   brief: z.string().min(1),
@@ -29,6 +33,8 @@ export const ticketReviewVerdictSchema = z.strictObject({
  * A comment jigs posts on the ticket that asks for nothing and suspends
  * nothing. It carries its own words, the way a halt does, so the
  * renderer owns the layout and every caller owns what it says.
+ *
+ * @group Linear tickets
  */
 export type TicketNote = {
   /** One plain sentence naming what jigs is about to do, or has stopped doing. */
@@ -63,13 +69,15 @@ export async function noteOnTicket(
 
 /**
  * What a ticket review hands the builder: the brief plus the snapshot it
- * was written from. Both travel together on purpose — the ticket is
+ * was written from. Both travel together on purpose: the ticket is
  * authoritative wherever the two conflict, and review or verify steps judge
  * the work against the snapshot's acceptance criteria, never against the
  * brief, so a re-planning agent cannot move the goalposts.
  *
  * `assumptions` is what the review decided for itself rather than asked
  * about. It is posted to the ticket, so a human can still correct it.
+ *
+ * @group Linear tickets
  */
 export type TicketHandoff = {
   brief: string;
