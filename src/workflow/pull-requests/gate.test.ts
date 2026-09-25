@@ -1,4 +1,4 @@
-import { beforeEach, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { PullRequestSnapshot, ReviewThread } from "../../providers/github.ts";
 import {
   classifyPullRequestState,
@@ -119,6 +119,7 @@ const pr = { owner: "acme", repo: "app", number: 7 };
 
 // Only read when a gate is given a worktree.
 const readLocalHead = vi.fn(async () => ({ headSha: "head-1" }));
+const branchContains = vi.fn(async () => false);
 
 const check = (name: string) => ({ name, conclusion: "failure", url: "http://ci.test/1" });
 
@@ -412,7 +413,7 @@ test("the gate classifies a first snapshot before it ever awaits the hook", asyn
   const fetchState = vi.fn(async () => snapshot({ state: "closed", merged: true }));
   const gate = pullRequestGate(
     pr,
-    { fetchState, readLocalHead },
+    { fetchState, readLocalHead, branchContains },
     { scope: SCOPE, approval: APPROVAL },
   );
 
@@ -438,7 +439,7 @@ test("a second round re-reads the pull request and re-classifies it", async () =
   const fetchState = vi.fn(async () => states.shift() ?? snapshot());
   const gate = pullRequestGate(
     pr,
-    { fetchState, readLocalHead },
+    { fetchState, readLocalHead, branchContains },
     { scope: SCOPE, approval: APPROVAL },
   );
 
@@ -469,7 +470,7 @@ test("a wake whose head the branch moved past is not yielded", async () => {
   const fetchState = vi.fn(async () => states.shift() ?? snapshot({ headSha: "head-2" }));
   const gate = pullRequestGate(
     pr,
-    { fetchState, readLocalHead },
+    { fetchState, readLocalHead, branchContains },
     { scope: SCOPE, approval: APPROVAL },
   );
 
@@ -490,7 +491,7 @@ test("a later wake in the same round is yielded while the head stays put", async
   );
   const gate = pullRequestGate(
     pr,
-    { fetchState, readLocalHead },
+    { fetchState, readLocalHead, branchContains },
     { scope: SCOPE, approval: APPROVAL },
   );
 
@@ -500,31 +501,43 @@ test("a later wake in the same round is yielded while the head stays put", async
   expect(hook.awaited).toBe(0);
 });
 
-test("with a worktree, a ci-red wake behind the local head is not yielded", async () => {
-  const red = snapshot({ ci: "red", failingChecks: [check("test")] });
-  const fetchState = vi.fn(async () => red);
+describe("with a worktree", () => {
   const worktree = { path: "/work", baseSha: "base" };
+  const red = snapshot({ ci: "red", failingChecks: [check("test")] });
 
-  // The run pushed head-2 already; GitHub still reports head-1 red.
-  const ahead = vi.fn(async () => ({ headSha: "head-2" }));
-  const stale = pullRequestGate(
-    pr,
-    { fetchState, readLocalHead: ahead },
-    { scope: SCOPE, approval: APPROVAL, worktree },
-  );
-  const next = stale.next();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(await Promise.race([next, Promise.resolve("suspended")])).toBe("suspended");
-  expect(ahead).toHaveBeenCalledExactlyOnceWith("/work", "base");
-  expect(hook.awaited).toBe(1);
+  // The local head, and which commits the local branch contains.
+  const gateOver = (localHead: string, contains: string[]) => {
+    const steps = {
+      fetchState: vi.fn(async () => red),
+      readLocalHead: vi.fn(async () => ({ headSha: localHead })),
+      branchContains: vi.fn(async (_path: string, sha: string) => contains.includes(sha)),
+    };
+    const gate = pullRequestGate(pr, steps, { scope: SCOPE, approval: APPROVAL, worktree });
+    return { gate, steps };
+  };
 
-  const level = vi.fn(async () => ({ headSha: "head-1" }));
-  const current = pullRequestGate(
-    pr,
-    { fetchState, readLocalHead: level },
-    { scope: SCOPE, approval: APPROVAL, worktree },
-  );
-  expect((await current.next()).value).toMatchObject({ kind: "ci-red", headSha: "head-1" });
+  test("a wake for a head the run has moved past is dropped", async () => {
+    // The run pushed head-2 on top of head-1; GitHub still reports head-1 red.
+    const { gate, steps } = gateOver("head-2", ["head-1", "head-2"]);
+    const next = gate.next();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(await Promise.race([next, Promise.resolve("suspended")])).toBe("suspended");
+    expect(steps.readLocalHead).toHaveBeenCalledExactlyOnceWith("/work", "base");
+    expect(steps.branchContains).toHaveBeenCalledExactlyOnceWith("/work", "head-1");
+    expect(hook.awaited).toBe(1);
+  });
+
+  test("a wake for a head someone else pushed is delivered", async () => {
+    // head-1 is not in the worktree: a human pushed it.
+    const { gate } = gateOver("head-0", ["head-0"]);
+    expect((await gate.next()).value).toMatchObject({ kind: "ci-red", headSha: "head-1" });
+  });
+
+  test("a wake for the local head is delivered", async () => {
+    const { gate, steps } = gateOver("head-1", ["head-1"]);
+    expect((await gate.next()).value).toMatchObject({ kind: "ci-red", headSha: "head-1" });
+    expect(steps.branchContains).not.toHaveBeenCalled();
+  });
 });
 
 test("without a worktree the local head is never read", async () => {
@@ -532,7 +545,7 @@ test("without a worktree the local head is never read", async () => {
   const fetchState = vi.fn(async () => snapshot({ ci: "red", failingChecks: [check("test")] }));
   const gate = pullRequestGate(
     pr,
-    { fetchState, readLocalHead },
+    { fetchState, readLocalHead, branchContains },
     { scope: SCOPE, approval: APPROVAL },
   );
   expect((await gate.next()).value).toMatchObject({ kind: "ci-red" });
@@ -543,7 +556,7 @@ test("leaving the loop stops watching", async () => {
   const fetchState = vi.fn(async () => snapshot({ ci: "red", failingChecks: [check("test")] }));
   for await (const wake of pullRequestGate(
     pr,
-    { fetchState, readLocalHead },
+    { fetchState, readLocalHead, branchContains },
     { scope: SCOPE, approval: APPROVAL },
   )) {
     expect(wake.kind).toBe("ci-red");
@@ -558,7 +571,11 @@ test("a pr another run already holds is a claim conflict, never fetched", async 
   const fetchState = vi.fn(async () => snapshot());
 
   await expect(
-    pullRequestGate(pr, { fetchState, readLocalHead }, { scope: SCOPE, approval: APPROVAL }).next(),
+    pullRequestGate(
+      pr,
+      { fetchState, readLocalHead, branchContains },
+      { scope: SCOPE, approval: APPROVAL },
+    ).next(),
   ).rejects.toThrow("is already claimed by run wrun_OWNER");
   expect(fetchState).not.toHaveBeenCalled();
   expect(hook.disposed).toBe(1);
@@ -593,7 +610,7 @@ test("the gate claims the casing-independent token", async () => {
   const fetchState = vi.fn(async () => snapshot({ state: "closed" }));
   await pullRequestGate(
     pr,
-    { fetchState, readLocalHead },
+    { fetchState, readLocalHead, branchContains },
     { scope: SCOPE, approval: APPROVAL },
   ).next();
   expect(createHook).toHaveBeenCalledWith({ token: "github:pr:junglescout/api#7" });

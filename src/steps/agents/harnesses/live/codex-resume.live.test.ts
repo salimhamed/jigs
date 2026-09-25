@@ -15,7 +15,7 @@ import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { assertLivePreconditions, makeScratchRepo } from "./fixtures/live-env.ts";
 
 // The staleness half of the resume contract, against the real harnesses: a
-// session pointer that names nothing must surface as the resumeFailed marker,
+// session reference that names nothing must surface as the resumeFailed marker,
 // never as a thrown step (which the SDK would retry three times) and never as
 // a silently fresh session pretending to hold the context.
 
@@ -47,7 +47,7 @@ test("a codex thread id with no rollout behind it reports resumeFailed", async (
     harness: harnesses.codex("gpt-5.5"),
     cwd: makeScratchRepo(tmp, "codex-resume"),
     prompt: "Reply with exactly OK and nothing else.",
-    resume: { harness: "codex", id: `0199${crypto.randomUUID().slice(4)}` },
+    resume: { harness: "codex", id: `0199${crypto.randomUUID().slice(4)}`, descriptor: "" },
   });
 
   const result = await executeAgent(wire, { workflowRunId: "live-codex-resume" }, deps);
@@ -65,7 +65,7 @@ test("a claude session id with no transcript behind it reports resumeFailed", as
     harness: harnesses.claude("sonnet"),
     cwd: makeScratchRepo(tmp, "claude-resume"),
     prompt: "Reply with exactly OK and nothing else.",
-    resume: { harness: "claude", id: crypto.randomUUID() },
+    resume: { harness: "claude", id: crypto.randomUUID(), descriptor: "" },
   });
 
   const result = await executeAgent(wire, { workflowRunId: "live-claude-resume" }, deps);

@@ -134,8 +134,8 @@ was recorded on another harness.
 _Avoid_: role session, resumeOrRebuild
 
 **Session reference**: The small plain data, `AgentSessionRef`, that lets a
-later step resume the same harness session: the harness kind and the
-provider's session id. `runAgent` returns it as `session` and takes it as
+later step resume the same harness session: the harness kind, the provider's
+session id, and the descriptor it was recorded on. `runAgent` returns it as `session` and takes it as
 `resume`; an agent session holds one between turns.
 _Avoid_: session pointer, agent session (for the data)
 

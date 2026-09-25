@@ -9,6 +9,7 @@ import {
   postReviewAnswers,
 } from "./answers.ts";
 import {
+  type BranchContains,
   type FetchPrState,
   type PullRequestGateOptions,
   type PullRequestRef,
@@ -25,6 +26,7 @@ import {
 export interface PullRequestSteps {
   fetchPullRequestState: FetchPrState;
   readBranchState: ReadLocalHead;
+  branchContains: BranchContains;
   commentOnPullRequest: typeof commentOnPullRequest;
   replyToPullRequestReviewThread: typeof replyToPullRequestReviewThread;
 }
@@ -44,7 +46,11 @@ export function bindPullRequestSteps(steps: PullRequestSteps) {
     ): AsyncIterable<PullRequestWake> =>
       pullRequestGate(
         pr,
-        { fetchState: steps.fetchPullRequestState, readLocalHead: steps.readBranchState },
+        {
+          fetchState: steps.fetchPullRequestState,
+          readLocalHead: steps.readBranchState,
+          branchContains: steps.branchContains,
+        },
         options,
       ),
     postReviewAnswers: (options: Omit<PostReviewAnswersOptions, StepFields>) =>

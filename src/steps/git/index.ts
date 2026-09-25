@@ -8,6 +8,7 @@
  */
 
 export {
+  branchContains,
   pushApprovedChange,
   pushBranch,
   readBranchState,

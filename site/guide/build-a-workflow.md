@@ -228,13 +228,17 @@ run recognises its own answers.
 
 A wake is delivered only while its head is still the pull request's head. If
 the branch moved while you handled an earlier wake, a red build on the old
-commit is dropped rather than repaired twice. Pass the `worktree` your workflow
-pushes from, and the gate also checks each red build and review wake against
-the local branch. It then never delivers a wake for a head the run has already
-moved past, even in the moment after a push when GitHub still reports the old
-one. `postPullRequestNote` posts once
-per commit and reason, so a merge you retry on every wake reports its refusal
-once.
+commit is dropped rather than repaired twice.
+
+Pass the `worktree` your workflow pushes from, and the gate also checks each
+red build and review wake against the local branch. A wake for an older commit
+of that branch is dropped: the run has moved past it, even if GitHub still
+reports it in the moment after a push. A wake for a commit the worktree does
+not have is delivered, because someone else pushed it and it still needs an
+answer.
+
+`postPullRequestNote` posts once per commit and reason, so a merge you retry on
+every wake reports its refusal once.
 
 ## Record what the workflow created
 

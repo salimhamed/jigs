@@ -7,11 +7,20 @@ type PullRequestComment = PullRequestSnapshot["conversationComments"][number];
 type ReviewThread = PullRequestSnapshot["reviewThreads"][number];
 
 import {
+  describeHarness,
+  type Harness,
   type MergePolicy,
   type PullRequestWake,
   parseMarkers,
   unwrapAgentStep,
 } from "@jigs-ai/jigs";
+
+// What the step records: the reference names the descriptor it ran on.
+const sessionOf = (harness: Harness, id: string) => ({
+  harness: harness.kind,
+  id,
+  descriptor: describeHarness(harness),
+});
 
 const resumeFailed = (detail: string) => unwrapAgentStep({ resumeFailed: detail });
 
@@ -187,7 +196,7 @@ function setup(wakes: PullRequestWake[] = [{ kind: "closed", merged: true }]) {
   const runAgent: RunAgentFn = async <T>(config: Parameters<RunAgentFn>[0]) => {
     calls.push(config);
     const output = config.output?.parse(answerFor(config.output)) as T;
-    return { text: "", output, session: { harness: config.harness.kind, id: "session" } };
+    return { text: "", output, session: sessionOf(config.harness, "session") };
   };
   const closed = vi.fn();
   // What a note reads to see whether it was already posted: nothing, unless a
@@ -399,7 +408,7 @@ describe("delivery", () => {
             ++round === 1
               ? blocking("The check never fires")
               : { verdict: "approved", findings: [] },
-          session: { harness: "claude" as const, id: "reviewer-session" },
+          session: sessionOf(config.harness, "reviewer-session"),
         };
       }
       return {
@@ -409,7 +418,7 @@ describe("delivery", () => {
             { finding: "The check never fires", changed: false, detail: "The caller guards it" },
           ],
         },
-        session: { harness: "codex" as const, id: "builder-session" },
+        session: sessionOf(config.harness, "builder-session"),
       };
     }) as RunAgentFn;
     const result = await useSteps(steps).implementAndReview({
@@ -419,7 +428,7 @@ describe("delivery", () => {
     expect(result.change.approval.reviewedCommit).toBe("new");
     const reviews = calls.filter((call) => call.harness.model === "reviewer");
     expect(reviews[0]?.resume).toBeUndefined();
-    expect(reviews[1]?.resume).toEqual({ harness: "claude", id: "reviewer-session" });
+    expect(reviews[1]?.resume).toMatchObject({ harness: "claude", id: "reviewer-session" });
     expect(reviews[1]?.prompt).toContain("not changed: The caller guards it");
     // The resumed reviewer already holds its earlier rounds.
     expect(reviews[1]?.prompt).not.toContain("Earlier rounds of this review");
@@ -448,7 +457,7 @@ describe("delivery", () => {
                   ],
                 }
               : { verdict: "approved", findings: [] },
-          session: { harness: "claude" as const, id: "reviewer-session" },
+          session: sessionOf(config.harness, "reviewer-session"),
         };
       }
       return {
@@ -458,7 +467,7 @@ describe("delivery", () => {
             { finding: "The check never fires", changed: true, detail: "Called it from bind" },
           ],
         },
-        session: { harness: "codex" as const, id: "builder-session" },
+        session: sessionOf(config.harness, "builder-session"),
       };
     }) as RunAgentFn;
     const result = await useSteps(steps).implementAndReview({
@@ -905,12 +914,12 @@ describe("delivery", () => {
           text: "",
           output:
             ++reviews === 1 ? blocking("Missing test") : { verdict: "approved", findings: [] },
-          session: { harness: "claude", id: "reviewer" },
+          session: sessionOf(config.harness, "reviewer"),
         };
       return {
         text: "",
         output: { responses: [] },
-        session: { harness: "codex", id: "saved" },
+        session: sessionOf(config.harness, "saved"),
       };
     }) as RunAgentFn;
     const result = await useSteps(steps).implementAndReview({
@@ -1364,7 +1373,7 @@ describe("delivery", () => {
       }),
     );
     // The second resumes the session the first recorded and reads no diff.
-    expect(calls[1]?.resume).toEqual({ harness: "codex", id: "session" });
+    expect(calls[1]?.resume).toMatchObject({ harness: "codex", id: "session" });
     expect(calls[1]?.prompt).not.toContain("Current diff:");
   });
 });

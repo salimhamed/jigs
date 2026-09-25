@@ -171,6 +171,12 @@ export async function readBranchState(worktreePath: string, baseSha: string) {
   return gitOperations.readBranchState(worktreePath, baseSha);
 }
 
+/** Whether a commit is the worktree's HEAD or one of its ancestors. */
+export async function branchContains(worktreePath: string, sha: string) {
+  "use step";
+  return gitOperations.branchContains(worktreePath, sha);
+}
+
 /** Push the worktree's branch to its remote, including any newly committed changes. */
 export async function pushBranch(worktreePath: string, branch: string) {
   "use step";

@@ -7,7 +7,7 @@
 import type { z } from "zod";
 import type { Harness } from "./harness-config.ts";
 import type { RunAgentOptions } from "./plan.ts";
-import type { AgentResult, AgentSessionRef } from "./result.ts";
+import { type AgentResult, type AgentSessionRef, describeHarness } from "./result.ts";
 
 // Private on purpose: `instanceof` only means something on this side of the
 // step boundary, and only to the fallback below.
@@ -62,16 +62,6 @@ export interface AgentSessionOptions {
   cwd: string;
 }
 
-// Field order is not identity: a descriptor, or a Pi descriptor's nested model
-// source, built with its fields in another order is the same harness.
-function canonical(harness: Harness): string {
-  return JSON.stringify(harness, (_key, field: unknown) =>
-    field !== null && typeof field === "object" && !Array.isArray(field)
-      ? Object.fromEntries(Object.entries(field).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
-      : field,
-  );
-}
-
 async function render(prompt: string | (() => Promise<string>)): Promise<string> {
   return typeof prompt === "string" ? prompt : prompt();
 }
@@ -91,21 +81,18 @@ export function bindAgentSession(runAgent: RunAgentFn) {
    */
   return function agentSession(options: AgentSessionOptions): AgentSession {
     const { name, harness, cwd } = options;
-    // A reference is resumed only on the descriptor it was recorded with, and
-    // only on the harness kind it names: a replay after a redeploy can hand
-    // back a reference another harness recorded.
-    let held: { descriptor: string; ref: AgentSessionRef } | undefined;
-    const record = (ref: AgentSessionRef | undefined) => {
-      held = ref === undefined ? undefined : { descriptor: canonical(harness), ref };
-    };
+    // The reference records the descriptor its step ran on, so a replay after
+    // a redeploy that changed this harness hands back a reference the new
+    // descriptor does not match, and the next turn starts fresh.
+    let held: AgentSessionRef | undefined;
 
     function resumable(): AgentSessionRef | undefined {
       if (held === undefined) return undefined;
-      if (held.ref.harness === harness.kind && held.descriptor === canonical(harness)) {
-        return held.ref;
+      if (held.harness === harness.kind && held.descriptor === describeHarness(harness)) {
+        return held;
       }
       console.log(
-        `[agentSession:${name}] session ${held.ref.id} was recorded on another harness; starting fresh`,
+        `[agentSession:${name}] session ${held.id} was recorded on another harness; starting fresh`,
       );
       return undefined;
     }
@@ -123,7 +110,7 @@ export function bindAgentSession(runAgent: RunAgentFn) {
             prompt: await render(turn.resume),
             output: turn.output,
           });
-          record(resumed.session ?? resume);
+          held = resumed.session ?? resume;
           return resumed.output;
         } catch (err) {
           if (!(err instanceof ResumeFailedError)) throw err;
@@ -136,7 +123,7 @@ export function bindAgentSession(runAgent: RunAgentFn) {
         prompt: await render(turn.fresh),
         output: turn.output,
       });
-      record(started.session);
+      held = started.session;
       return started.output;
     }
 

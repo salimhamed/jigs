@@ -201,6 +201,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "approvalSignalSchema",
     "choice",
     "defaultPullRequestScope",
+    "describeHarness",
     "defineFactory",
     "defineWorkflow",
     "haltOptionSchema",
@@ -275,6 +276,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "releaseRunResources",
   ],
   "steps/git/index.ts": [
+    "branchContains",
     "readChange",
     "readPatch",
     "pushApprovedChange",

@@ -70,7 +70,12 @@ export {
   type RebuildContextPromptInput,
   rebuildContextPrompt,
 } from "./workflow/agents/rebuild-context.prompt.ts";
-export type { AgentResult, AgentSessionRef, ModelResult } from "./workflow/agents/result.ts";
+export {
+  type AgentResult,
+  type AgentSessionRef,
+  describeHarness,
+  type ModelResult,
+} from "./workflow/agents/result.ts";
 export { JigsError } from "./workflow/errors.ts";
 export {
   type AgentsDefinition,

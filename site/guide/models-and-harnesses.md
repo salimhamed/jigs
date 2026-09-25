@@ -92,7 +92,7 @@ for (let round = 1; round <= 3; round++) {
 ```
 
 A harness session can be lost: a restart, a thread the harness no longer has,
-a harness you switched between deploys. When that happens `run` sends
+a harness you changed between deploys. When that happens `run` sends
 `fresh` to a new session and the workflow carries on, instead of failing in
 round four. Give an independent reviewer an agent session of its own.
 
@@ -102,6 +102,12 @@ The data that makes a resume possible is a session reference,
 keeps its own. It is plain data, which is why an agent session survives
 replay: the workflow rebuilds the object on every replay, and the reference
 comes back from the recorded steps.
+
+A session reference records the harness it was made on: its kind, and the
+whole descriptor. An agent session resumes a reference only on the same
+descriptor, compared by value. So a deploy that changes an agent's model or
+settings starts that agent fresh on its next turn, rather than resuming a
+session another configuration made.
 
 ## Claude Code
 

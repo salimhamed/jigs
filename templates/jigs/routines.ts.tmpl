@@ -10,6 +10,7 @@ import {
   bindReleaseSteps,
 } from "@jigs-ai/jigs/routines";
 import {
+  branchContains,
   checkForTicketHumanReply,
   commentOnPullRequest,
   executeAgent,
@@ -73,6 +74,7 @@ export const acquireTicket = (reference: string) =>
 const pullRequests = bindPullRequestSteps({
   fetchPullRequestState,
   readBranchState,
+  branchContains,
   commentOnPullRequest,
   replyToPullRequestReviewThread,
 });
