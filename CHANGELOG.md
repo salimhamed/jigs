@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.68.1](https://github.com/salimhamed/jigs/compare/jigs-v0.68.0...jigs-v0.68.1) (2026-09-25)
+
+
+### Features
+
+* add a committedWork routine for the clean-commit check ([#409](https://github.com/salimhamed/jigs/issues/409)) ([e6517f8](https://github.com/salimhamed/jigs/commit/e6517f8d89d674e617ffce26fe4bb4e9e6ded0ca))
+
 ## [0.68.0](https://github.com/salimhamed/jigs/compare/jigs-v0.67.0...jigs-v0.68.0) (2026-09-25)
 
 
