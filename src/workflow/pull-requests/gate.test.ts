@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { PullRequestSnapshot, ReviewThread } from "../../providers/github.ts";
+import type { Worktree } from "../workspaces/worktree.ts";
 import {
   classifyPullRequestState,
   type PullRequestWake,
@@ -516,7 +517,7 @@ describe("with a worktree", () => {
     const steps = {
       fetchState: vi.fn(async () => red),
       readLocalHead: vi.fn(async () => ({ headSha: localHead })),
-      branchContains: vi.fn(async (_path: string, sha: string) => contains.includes(sha)),
+      branchContains: vi.fn(async (_worktree: Worktree, sha: string) => contains.includes(sha)),
     };
     const gate = pullRequestGate(pr, steps, { scope: SCOPE, approval: APPROVAL, worktree });
     return { gate, steps };
@@ -529,7 +530,7 @@ describe("with a worktree", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(await Promise.race([next, Promise.resolve("suspended")])).toBe("suspended");
     expect(steps.readLocalHead).toHaveBeenCalledExactlyOnceWith(worktree);
-    expect(steps.branchContains).toHaveBeenCalledExactlyOnceWith("/work", "head-1");
+    expect(steps.branchContains).toHaveBeenCalledExactlyOnceWith(worktree, "head-1");
     expect(hook.awaited).toBe(1);
   });
 

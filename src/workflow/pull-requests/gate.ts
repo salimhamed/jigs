@@ -276,7 +276,7 @@ export type FetchPrState = (pr: PullRequestRef) => Promise<PullRequestSnapshot>;
 export type ReadLocalHead = (worktree: Worktree) => Promise<{ headSha: string }>;
 
 /** The factory's `branchContains` step: whether a commit is the worktree's HEAD or an ancestor. */
-export type BranchContains = (worktreePath: string, sha: string) => Promise<boolean>;
+export type BranchContains = (worktree: Worktree, sha: string) => Promise<boolean>;
 
 /** The steps a pull request gate reads through. */
 export interface PullRequestGateSteps {
@@ -314,7 +314,7 @@ async function passedLocally(
   const local = await steps.readLocalHead(worktree);
   if (local.headSha === head) return false;
   const where = `[prGate] ${pr.owner}/${pr.repo}#${pr.number}`;
-  if (await steps.branchContains(worktree.path, head)) {
+  if (await steps.branchContains(worktree, head)) {
     console.log(
       `${where} dropping ${kind} for ${head}: the worktree has moved past it to ${local.headSha}`,
     );

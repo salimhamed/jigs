@@ -66,10 +66,10 @@ test("a branch contains its head and its ancestors, not a later or unknown commi
   const elsewhere = git(checkout, "rev-parse", "HEAD");
   git(checkout, "checkout", "-q", "feature");
 
-  expect(await branchContains(checkout, approved)).toBe(true);
-  expect(await branchContains(checkout, parent)).toBe(true);
-  expect(await branchContains(checkout, elsewhere)).toBe(false);
-  expect(await branchContains(checkout, "0".repeat(40))).toBe(false);
+  expect(await branchContains(worktree, approved)).toBe(true);
+  expect(await branchContains(worktree, parent)).toBe(true);
+  expect(await branchContains(worktree, elsewhere)).toBe(false);
+  expect(await branchContains(worktree, "0".repeat(40))).toBe(false);
 });
 
 test("branch state and diff default to the provisioned base and accept another comparison commit", async () => {

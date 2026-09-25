@@ -119,7 +119,13 @@ test("a terminal owner's clean worktree is reused and re-owned", async () => {
 
   const facts = await provisionWorktree(request, { workflowRunId: "run_new" }, ownedBy("run_done"));
 
-  expect(facts).toMatchObject({ binding: request.binding, path: target, baseSha: originMain() });
+  expect(facts).toEqual({
+    binding: request.binding,
+    path: target,
+    branch: request.branch,
+    defaultBranch: "main",
+    baseSha: originMain(),
+  });
   // Reused, not re-cut: the work the previous run left is still checked out.
   expect(git(target, "rev-parse", "HEAD")).toBe(head);
   expect(store.get(target)).toMatchObject({

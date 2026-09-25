@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, expect, test } from "vitest";
 import { JigsError } from "../../errors.ts";
 import { git } from "../../providers/git.ts";
+import type { Worktree } from "../../workflow/workspaces/worktree.ts";
 import {
   MAX_CHANGE_COMMITS,
   MAX_CHANGE_FILES,
@@ -26,6 +27,15 @@ async function repo() {
   await git(["commit", "--allow-empty", "-m", "base"], dir);
   return dir;
 }
+async function worktreeAt(dir: string): Promise<Worktree> {
+  return {
+    binding: "app",
+    path: dir,
+    branch: "main",
+    defaultBranch: "main",
+    baseSha: await git(["rev-parse", "HEAD"], dir),
+  };
+}
 async function commit(dir: string, subject: string) {
   await git(["add", "-A"], dir);
   await git(["commit", "--allow-empty", "-m", subject], dir);
@@ -34,13 +44,7 @@ async function commit(dir: string, subject: string) {
 
 test("reads resolved commits, all subjects, statuses, binary counts and rename paths", async () => {
   const dir = await repo();
-  const worktree = {
-    binding: "app",
-    path: dir,
-    branch: "main",
-    defaultBranch: "main",
-    baseSha: await git(["rev-parse", "HEAD"], dir),
-  };
+  const worktree = await worktreeAt(dir);
   await writeFile(path.join(dir, "old"), "rename me\n");
   await writeFile(path.join(dir, "delete"), "gone\n");
   await writeFile(path.join(dir, "modify"), "before\n");
@@ -79,14 +83,8 @@ test("reads resolved commits, all subjects, statuses, binary counts and rename p
 
 test("reads raw author names independently of committers across multiple commits", async () => {
   const dir = await repo();
-  const worktree = {
-    binding: "app",
-    path: dir,
-    branch: "main",
-    defaultBranch: "main",
-    baseSha: await git(["rev-parse", "HEAD"], dir),
-  };
-  const base = await git(["rev-parse", "HEAD"], dir);
+  const worktree = await worktreeAt(dir);
+  const base = worktree.baseSha;
   await writeFile(
     path.join(dir, ".mailmap"),
     "Mapped Name <mapped@example.com> José da Silva <jose@example.com>\n",
@@ -113,13 +111,7 @@ test("reads raw author names independently of committers across multiple commits
 
 test("patches stay pinned after HEAD moves, use literal paths, and match diverged endpoint trees", async () => {
   const dir = await repo();
-  const worktree = {
-    binding: "app",
-    path: dir,
-    branch: "main",
-    defaultBranch: "main",
-    baseSha: await git(["rev-parse", "HEAD"], dir),
-  };
+  const worktree = await worktreeAt(dir);
   await git(["checkout", "-b", "base"], dir);
   await writeFile(path.join(dir, "base-only"), "base side\n");
   await commit(dir, "base branch");
@@ -144,14 +136,8 @@ test("patches stay pinned after HEAD moves, use literal paths, and match diverge
 
 test("patch budget is shared across files and reports only actual text loss", async () => {
   const dir = await repo();
-  const worktree = {
-    binding: "app",
-    path: dir,
-    branch: "main",
-    defaultBranch: "main",
-    baseSha: await git(["rev-parse", "HEAD"], dir),
-  };
-  const base = await git(["rev-parse", "HEAD"], dir);
+  const worktree = await worktreeAt(dir);
+  const base = worktree.baseSha;
   await writeFile(path.join(dir, "one"), `${"a".repeat(MAX_PATCH_CHARS / 2)}\n`);
   await writeFile(path.join(dir, "two"), `${"b".repeat(MAX_PATCH_CHARS / 2)}\n`);
   const head = await commit(dir, "large");
@@ -166,14 +152,8 @@ test("patch budget is shared across files and reports only actual text loss", as
 
 test("file and commit caps report truncation only when results are omitted", async () => {
   const dir = await repo();
-  const worktree = {
-    binding: "app",
-    path: dir,
-    branch: "main",
-    defaultBranch: "main",
-    baseSha: await git(["rev-parse", "HEAD"], dir),
-  };
-  const base = await git(["rev-parse", "HEAD"], dir);
+  const worktree = await worktreeAt(dir);
+  const base = worktree.baseSha;
   await Promise.all(
     Array.from({ length: MAX_CHANGE_FILES }, (_, i) =>
       writeFile(path.join(dir, `file-${i}`), "x\n"),

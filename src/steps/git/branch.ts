@@ -72,8 +72,8 @@ export async function readBranchState(
  * Whether `sha` is the worktree's HEAD or one of its ancestors. A commit the worktree has never
  * fetched is not contained.
  */
-export async function branchContains(worktreePath: string, sha: string): Promise<boolean> {
-  return (await tryGit(["merge-base", "--is-ancestor", sha, "HEAD"], worktreePath)) !== null;
+export async function branchContains(worktree: Worktree, sha: string): Promise<boolean> {
+  return (await tryGit(["merge-base", "--is-ancestor", sha, "HEAD"], worktree.path)) !== null;
 }
 
 /** Push the worktree's current HEAD and register a GitHub branch resource when applicable. */

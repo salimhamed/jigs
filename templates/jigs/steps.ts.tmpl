@@ -171,9 +171,9 @@ export async function readBranchState(worktree: Worktree, baseSha?: string) {
 }
 
 /** Whether a commit is the worktree's HEAD or one of its ancestors. */
-export async function branchContains(worktreePath: string, sha: string) {
+export async function branchContains(worktree: Worktree, sha: string) {
   "use step";
-  return gitOperations.branchContains(worktreePath, sha);
+  return gitOperations.branchContains(worktree, sha);
 }
 
 /** Push the worktree's branch to its remote, including any newly committed changes. */
@@ -188,13 +188,13 @@ export async function pushApprovedChange(worktree: Worktree, approvedCommit: str
   return gitOperations.pushApprovedChange(worktree, approvedCommit);
 }
 
-/** Read committed changes since the base commit. Large diffs are truncated. */
+/** Read committed changes, defaulting to the worktree's base commit. Large diffs are truncated. */
 export async function readWorktreeDiff(worktree: Worktree, baseSha?: string) {
   "use step";
   return gitOperations.readWorktreeDiff(worktree, baseSha);
 }
 
-/** Read committed file changes and commit subjects between base and HEAD. */
+/** Read committed file changes and subjects up to HEAD, defaulting to the worktree's base. */
 export async function readChange(worktree: Worktree, base?: string) {
   "use step";
   return gitOperations.readChange(worktree, base);
