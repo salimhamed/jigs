@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.60.0
+# @jigs-ai/jigs v0.61.0
 
 Everything a factory's configuration and workflows import from jigs: the factory and workflow
 definitions, harness and model descriptors, the data steps hand back, question helpers, and
@@ -788,13 +788,13 @@ A provisioned repository worktree and the commit it was cut from.
 
 > **AgentResult**\<`T`\> = [`ModelResult`](#modelresult)\<`T`\> & `object`
 
-A model result with the optional session pointer from an agent harness.
+A model result with the session reference an agent harness returned, when it returned one.
 
 #### Type Declaration
 
 ##### session?
 
-> `optional` **session**: [`AgentSession`](#agentsession)
+> `optional` **session**: [`AgentSessionRef`](#agentsessionref)
 
 #### Type Parameters
 
@@ -804,13 +804,20 @@ A model result with the optional session pointer from an agent harness.
 
 ***
 
-### AgentSession
+### AgentSessionRef
 
-> **AgentSession** = `object`
+> **AgentSessionRef** = `object`
 
-A provider session pointer that can resume the same harness.
+A session reference: the small piece of data that lets a later `runAgent` call resume the same
+harness session. Pass it back as `resume`.
 
 #### Properties
+
+##### descriptor
+
+> **descriptor**: `string`
+
+The harness descriptor the session was recorded on, as [describeHarness](#describeharness) renders it.
 
 ##### harness
 
@@ -1784,7 +1791,9 @@ Options for an agent that works inside a directory.
 
 ##### resume?
 
-> `optional` **resume**: [`AgentSession`](#agentsession)
+> `optional` **resume**: [`AgentSessionRef`](#agentsessionref)
+
+The session reference of an earlier run to continue.
 
 ***
 
@@ -2549,6 +2558,25 @@ export async function hello(input: WorkflowInputs<typeof inputs>) {
 
 export default defineWorkflow({ inputs, workflow: hello });
 ```
+
+***
+
+### describeHarness()
+
+> **describeHarness**(`harness`): `string`
+
+A harness descriptor as a string that ignores field order: two descriptors that list the same
+settings in another order render the same.
+
+#### Parameters
+
+##### harness
+
+[`Harness`](#harness-2)
+
+#### Returns
+
+`string`
 
 ***
 
