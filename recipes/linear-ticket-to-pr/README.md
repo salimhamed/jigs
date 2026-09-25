@@ -144,6 +144,8 @@ try {
   snapshot and changed facts. Each open snapshot gets its own attempt allowance. Its
   own comments can cause another turn; the agent should post nothing when no
   action is needed. Duplicate notifications with unchanged facts spend nothing.
+  A snapshot already assessed during recovery is skipped if the watcher later
+  delivers it; new facts still reach the builder.
   The builder returns `finished`, `pending`, or `needs-human` with a summary.
   `pending` waits only for an external change; unfinished local or unpublished
   work is recovered immediately instead. `needs-human` stops with the explanation.

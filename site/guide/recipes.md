@@ -66,7 +66,9 @@ No JEV model is required.
 Each changed snapshot starts a fresh `attemptsPerUpdate` allowance, including
 the first snapshot. There is no lifetime limit on PR updates. An agent can read
 an update and decide nothing needs doing; that is an ordinary successful visit.
-Duplicate notifications with unchanged facts do not invoke it again.
+Duplicate notifications with unchanged facts do not invoke it again. If recovery
+already assessed an update, a later watcher delivery of those exact facts is
+also skipped; facts the agent has not seen still receive an assessment.
 
 After each attempt, recipe code checks the local work and the GitHub head. If
 the worktree is dirty, commits are unpublished, or the local branch is out of
@@ -115,7 +117,7 @@ linear-ticket-to-pr:
 5. Configure GitHub tools for the builder harness so it can read discussions,
    post replies and push fixes.
 6. Carry your own edits across, and launch with the new inputs above. Replace
-   old `ciFixes`, `revisionRounds` or `prTurns` budgets with
-   `attemptsPerUpdate`. `jigs run` rejects
+   old `ciFixes` and `revisionRounds` budgets with `attemptsPerUpdate`.
+   `jigs run` rejects
    an `--input` the workflow does not declare, so an old input such as
    `implementationModel` fails before the run starts.

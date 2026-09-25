@@ -6,7 +6,7 @@ import {
   type PullRequestSnapshot,
 } from "@jigs-ai/jigs";
 import { beforeEach, expect, test, vi } from "vitest";
-import { sleep } from "workflow";
+import { createHook, sleep } from "workflow";
 import * as routines from "#jigs/routines";
 import * as steps from "#jigs/steps";
 import {
@@ -45,6 +45,7 @@ vi.mock("#jigs/steps", async (importOriginal) => ({
   resolveRepository: vi.fn(async () => ({ owner: "acme", repo: "app" })),
 }));
 vi.mock("workflow", () => ({
+  createHook: vi.fn(),
   sleep: vi.fn(async () => {}),
   getWorkflowMetadata: () => ({
     workflowRunId: "wrun_TEST",
@@ -526,4 +527,89 @@ test("a fresh recovery prompt includes the same actionable facts when no session
   watch(snapshot, closed);
   await followPullRequest(delivery, pr, { harness: delivery.builder, run });
   expect(run).toHaveBeenCalledTimes(2);
+});
+
+async function useRealWatcher(states: PullRequestSnapshot[]) {
+  const actual = await vi.importActual<typeof import("#jigs/routines")>("#jigs/routines");
+  vi.mocked(routines.watchPullRequest).mockImplementation(actual.watchPullRequest);
+  const dispose = vi.fn();
+  const wake = vi.fn(async () => undefined);
+  vi.mocked(createHook).mockReturnValue({
+    getConflict: async () => null,
+    // biome-ignore lint/suspicious/noThenProperty: the real Workflow hook is thenable
+    then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) =>
+      wake().then(resolve, reject),
+    dispose,
+  } as unknown as ReturnType<typeof createHook>);
+  const remaining = [...states];
+  vi.mocked(steps.fetchPullRequestState).mockImplementation(async () => {
+    const state = remaining.shift();
+    if (state === undefined) throw new Error("Unexpected extra PR read");
+    return state;
+  });
+  return { dispose, wake, remaining };
+}
+
+test("real watcher does not repeat facts already assessed during recovery but delivers genuinely new facts", async () => {
+  policy("human");
+  const recovered = { ...snapshot, headSha: "h2" };
+  const changed = { ...recovered, labels: ["new-feedback"] };
+  // Initial watch, turn read, two lag checks, recovery read, watch of the
+  // already-assessed facts, new watch, turn read, then closure.
+  const hook = await useRealWatcher([
+    snapshot,
+    recovered,
+    recovered,
+    recovered,
+    recovered,
+    recovered,
+    changed,
+    changed,
+    closed,
+  ]);
+  answer(
+    maintenanceReport,
+    finished,
+    () => {
+      at("h2");
+      return finished;
+    },
+    finished,
+  );
+  await follow();
+  expect(calls).toHaveLength(3);
+  expect(calls[1]?.prompt).toContain('"headSha":"h2"');
+  expect(calls[1]?.prompt).toContain("Recovery required:");
+  expect(calls[2]?.prompt).toContain("new-feedback");
+  expect(hook.remaining).toHaveLength(0);
+  expect(hook.wake).toHaveBeenCalledTimes(3);
+  expect(hook.dispose).toHaveBeenCalledOnce();
+});
+
+test("real watcher still runs the builder for unseen facts first fetched after its turn", async () => {
+  policy("human");
+  const changed = { ...snapshot, labels: ["unseen-feedback"] };
+  const hook = await useRealWatcher([snapshot, changed, changed, changed, closed]);
+  answer(maintenanceReport, finished, finished);
+  await follow();
+  expect(calls).toHaveLength(2);
+  expect(calls[0]?.prompt).not.toContain("unseen-feedback");
+  expect(calls[1]?.prompt).toContain("unseen-feedback");
+  expect(hook.remaining).toHaveLength(0);
+  expect(hook.dispose).toHaveBeenCalledOnce();
+});
+
+test("maintenance failure note names the retained path once and directs takeover of the existing PR", async () => {
+  policy("human");
+  watch(snapshot);
+  answer(maintenanceReport, { status: "needs-human", summary: "Please inspect the conflict." });
+  const error = await stoppedMaintenance(follow());
+  const note = error.note();
+  const rendered = JSON.stringify(note);
+  expect(rendered.split(worktree.path)).toHaveLength(2);
+  expect(rendered).toContain(pr.url);
+  expect(note.closing).toContain("existing pull request");
+  expect(note.closing).toContain("take over");
+  expect(note.closing).not.toContain("Start another run");
+  expect(note.closing).not.toContain("resume");
 });

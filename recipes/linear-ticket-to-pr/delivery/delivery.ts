@@ -73,12 +73,19 @@ export interface Approved {
 export class DeliveryStopped extends JigsError {
   readonly findings: string[];
   readonly worktree: Worktree;
+  readonly closing: string;
 
-  constructor(message: string, findings: string[], worktree: Worktree) {
+  constructor(
+    message: string,
+    findings: string[],
+    worktree: Worktree,
+    closing = "Nothing is waiting on a reply here. Start another run to continue, or take the branch over by hand.",
+  ) {
     super(message, findings.length === 0 ? undefined : findings.join("\n"));
     this.name = "DeliveryStopped";
     this.findings = findings;
     this.worktree = worktree;
+    this.closing = closing;
   }
 
   /** What to tell a person: what is still open and where the work is. */
@@ -89,8 +96,7 @@ export class DeliveryStopped extends JigsError {
         ...this.findings,
         `The work is on branch \`${this.worktree.branch}\`, in the worktree at \`${this.worktree.path}\`.`,
       ],
-      closing:
-        "Nothing is waiting on a reply here. Start another run to continue, or take the branch over by hand.",
+      closing: this.closing,
     };
   }
 }
@@ -210,11 +216,14 @@ export async function followPullRequest(
 ): Promise<void> {
   const { task, worktree, budget } = delivery;
   const merge = await resolveMergePolicy(delivery.binding);
+  let lastAssessed: string | undefined;
   for await (const snapshot of watchPullRequest(pr)) {
     if (snapshot.state === "closed") {
       if (snapshot.merged) return;
       return maintenanceStopped(delivery, pr, "The pull request was closed unmerged.");
     }
+
+    if (pullRequestSnapshotKey(snapshot) === lastAssessed) continue;
 
     let assessed = snapshot;
     let recovery: string | undefined;
@@ -281,6 +290,10 @@ export async function followPullRequest(
         continue;
       }
 
+      // Recovery may have assessed facts the watcher has not yielded yet.
+      // Remember only what the builder saw, never a newer post-turn read.
+      lastAssessed = pullRequestSnapshotKey(assessed);
+
       // Pending means the builder is waiting for an external event. A newly
       // published head or changed discussion is assessed on the next watch yield.
       if (
@@ -314,9 +327,10 @@ function maintenanceStopped(delivery: Delivery, pr: PullRequestRef, reason: stri
     [
       reason,
       `Unfinished pull request: https://github.com/${pr.owner}/${pr.repo}/pull/${pr.number}`,
-      `Local work was retained without an automatic push at ${delivery.worktree.path}.`,
+      "Local work was retained without an automatic push.",
     ],
     delivery.worktree,
+    "Inspect the existing pull request and retained worktree, then take over the unfinished work by hand.",
   );
 }
 
