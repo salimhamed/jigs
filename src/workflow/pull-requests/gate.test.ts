@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { PullRequestSnapshot, ReviewThread } from "../../providers/github.ts";
+import type { Worktree } from "../workspaces/worktree.ts";
 import {
   classifyPullRequestState,
   type PullRequestWake,
@@ -502,7 +503,13 @@ test("a later wake in the same round is yielded while the head stays put", async
 });
 
 describe("with a worktree", () => {
-  const worktree = { path: "/work", baseSha: "base" };
+  const worktree = {
+    binding: "app",
+    path: "/work",
+    branch: "feature",
+    defaultBranch: "main",
+    baseSha: "base",
+  };
   const red = snapshot({ ci: "red", failingChecks: [check("test")] });
 
   // The local head, and which commits the local branch contains.
@@ -510,7 +517,7 @@ describe("with a worktree", () => {
     const steps = {
       fetchState: vi.fn(async () => red),
       readLocalHead: vi.fn(async () => ({ headSha: localHead })),
-      branchContains: vi.fn(async (_path: string, sha: string) => contains.includes(sha)),
+      branchContains: vi.fn(async (_worktree: Worktree, sha: string) => contains.includes(sha)),
     };
     const gate = pullRequestGate(pr, steps, { scope: SCOPE, approval: APPROVAL, worktree });
     return { gate, steps };
@@ -522,8 +529,8 @@ describe("with a worktree", () => {
     const next = gate.next();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(await Promise.race([next, Promise.resolve("suspended")])).toBe("suspended");
-    expect(steps.readLocalHead).toHaveBeenCalledExactlyOnceWith("/work", "base");
-    expect(steps.branchContains).toHaveBeenCalledExactlyOnceWith("/work", "head-1");
+    expect(steps.readLocalHead).toHaveBeenCalledExactlyOnceWith(worktree);
+    expect(steps.branchContains).toHaveBeenCalledExactlyOnceWith(worktree, "head-1");
     expect(hook.awaited).toBe(1);
   });
 

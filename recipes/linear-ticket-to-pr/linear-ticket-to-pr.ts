@@ -56,7 +56,6 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
   const delivery = {
     task: workItem(handoff),
     worktree,
-    binding: input.binding,
     builder: agents[input.builder],
     reviewer: agents[input.reviewer],
     budget: input.budget,

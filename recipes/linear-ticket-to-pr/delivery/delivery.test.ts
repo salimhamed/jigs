@@ -42,7 +42,6 @@ vi.mock("#jigs/steps", async (importOriginal) => ({
   readWorktreeDiff: vi.fn(async () => "diff --git a/x b/x"),
   registerResource: vi.fn(),
   resolveMergePolicy: vi.fn(),
-  resolveRepository: vi.fn(async () => ({ owner: "acme", repo: "app" })),
 }));
 vi.mock("workflow", () => ({
   createHook: vi.fn(),
@@ -53,11 +52,16 @@ vi.mock("workflow", () => ({
   }),
 }));
 
-const worktree = { path: "/tmp/wt", branch: "acme/abc-1", defaultBranch: "main", baseSha: "base" };
+const worktree = {
+  binding: "app",
+  path: "/tmp/wt",
+  branch: "acme/abc-1",
+  defaultBranch: "main",
+  baseSha: "base",
+};
 const delivery: Delivery = {
   task: { id: "id-1", key: "ABC-1", title: "Add a flag", instructions: "THE TASK BRIEF" },
   worktree,
-  binding: "app",
   builder: harnesses.codex({ model: "gpt-5.6-sol" }),
   reviewer: harnesses.claude({ model: "opus" }),
   budget: { reviewRounds: 2, attemptsPerUpdate: 3 },
@@ -120,7 +124,7 @@ const stopped = (promise: Promise<unknown>) =>
     () => expect.unreachable("delivery should stop"),
     (error: unknown) => {
       expect(error).toBeInstanceOf(DeliveryStopped);
-      expect(steps.pushBranch).toHaveBeenCalledWith(worktree.path, worktree.branch);
+      expect(steps.pushBranch).toHaveBeenCalledWith(worktree);
       return error as DeliveryStopped;
     },
   );
@@ -195,12 +199,10 @@ test("publish pushes the reviewed commit and appends the reviewer's notes", asyn
   });
 
   expect(opened).toBe(pr);
-  expect(steps.pushApprovedChange).toHaveBeenCalledWith(worktree.path, worktree.branch, "h1");
+  expect(steps.pushApprovedChange).toHaveBeenCalledWith(worktree, "h1");
   expect(calls[0]?.harness).toBe(delivery.builder);
   expect(steps.openPullRequest).toHaveBeenCalledWith({
-    repo: { owner: "acme", repo: "app" },
-    head: worktree.branch,
-    base: "main",
+    worktree,
     title: "Add a flag",
     body: "Adds it.\n\n## Reviewer notes\n\n- Rename x",
   });

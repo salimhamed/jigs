@@ -119,7 +119,13 @@ test("a terminal owner's clean worktree is reused and re-owned", async () => {
 
   const facts = await provisionWorktree(request, { workflowRunId: "run_new" }, ownedBy("run_done"));
 
-  expect(facts).toMatchObject({ path: target, baseSha: originMain() });
+  expect(facts).toEqual({
+    binding: request.binding,
+    path: target,
+    branch: request.branch,
+    defaultBranch: "main",
+    baseSha: originMain(),
+  });
   // Reused, not re-cut: the work the previous run left is still checked out.
   expect(git(target, "rev-parse", "HEAD")).toBe(head);
   expect(store.get(target)).toMatchObject({
@@ -140,6 +146,7 @@ test("a registry row whose directory is gone is cut afresh and re-owned", async 
   const facts = await provisionWorktree(request, { workflowRunId: "run_new" }, ownedBy("run_done"));
 
   expect(facts).toEqual({
+    binding: request.binding,
     path: target,
     branch: request.branch,
     defaultBranch: "main",
@@ -176,6 +183,7 @@ test("no worktree on disk cuts one from the default branch and registers the run
   const facts = await provisionWorktree(request, { workflowRunId: "run_new" }, registry());
 
   expect(facts).toEqual({
+    binding: request.binding,
     path: target,
     branch: request.branch,
     defaultBranch: "main",

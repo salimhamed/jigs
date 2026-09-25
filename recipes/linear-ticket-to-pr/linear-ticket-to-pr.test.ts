@@ -32,6 +32,7 @@ vi.mock("#jigs/routines", async (importOriginal) => ({
 
 const pr = { owner: "acme", repo: "app", number: 7, url: "https://github.com/acme/app/pull/7" };
 const worktree = {
+  binding: "app",
   path: "/tmp/wt",
   branch: "acme/abc-123",
   defaultBranch: "main",

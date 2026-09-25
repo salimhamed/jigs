@@ -6,6 +6,7 @@ import {
   parseNameStatus,
   parseNumstat,
 } from "../../workflow/git/change.ts";
+import type { Worktree } from "../../workflow/workspaces/worktree.ts";
 
 export const MAX_CHANGE_FILES = 1_000;
 export const MAX_CHANGE_COMMITS = 1_000;
@@ -16,13 +17,17 @@ function resolveCommit(worktreePath: string, ref: string): Promise<string> {
 }
 
 /**
- * Describe committed changes between a base ref and the worktree's current HEAD.
+ * Describe committed changes from the worktree's base to HEAD, or supply another base ref.
  *
  * @remarks
  * Resolves both endpoints once, compares their trees directly and lists commits reachable only
  * from HEAD. Returns at most 1,000 files and 1,000 commits; `truncated` reports omitted results.
  */
-export async function readChange(worktreePath: string, base: string): Promise<ChangeSummary> {
+export async function readChange(
+  worktree: Worktree,
+  base: string = worktree.baseSha,
+): Promise<ChangeSummary> {
+  const worktreePath = worktree.path;
   const [baseSha, head] = await Promise.all([
     resolveCommit(worktreePath, base),
     resolveCommit(worktreePath, "HEAD"),
@@ -75,11 +80,12 @@ export async function readChange(worktreePath: string, base: string): Promise<Ch
  * deduplicated, empty paths are rejected and all returned patches share a 200,000-character limit.
  */
 export async function readPatch(
-  worktreePath: string,
+  worktree: Worktree,
   base: string,
   head: string,
   paths: string[],
 ): Promise<ChangePatch> {
+  const worktreePath = worktree.path;
   if (paths.length === 0 || paths.some((path) => path.length === 0)) {
     throw new JigsError(
       "readPatch requires named paths",

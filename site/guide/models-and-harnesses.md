@@ -82,14 +82,18 @@ gets built.
 import { agentSession } from "#jigs/routines";
 import { readWorktreeDiff } from "#jigs/steps";
 
-const builderSession = agentSession({ name: "builder", harness: agents.builder, cwd });
+const builderSession = agentSession({
+  name: "builder",
+  harness: agents.builder,
+  cwd: worktree.path,
+});
 
 for (let round = 1; round <= 3; round++) {
   const report = await builderSession.run({
     output: implementationReport,
     resume: `The reviewer found:\n${findings}`,
     fresh: async () =>
-      `${task}\n\nThe work so far:\n${await readWorktreeDiff(cwd, baseSha)}\n\n${findings}`,
+      `${task}\n\nThe work so far:\n${await readWorktreeDiff(worktree)}\n\n${findings}`,
   });
   // ...
 }

@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, expect, test } from "vitest";
 import { JigsError } from "../../errors.ts";
 import { git } from "../../providers/git.ts";
+import type { Worktree } from "../../workflow/workspaces/worktree.ts";
 import {
   MAX_CHANGE_COMMITS,
   MAX_CHANGE_FILES,
@@ -26,6 +27,15 @@ async function repo() {
   await git(["commit", "--allow-empty", "-m", "base"], dir);
   return dir;
 }
+async function worktreeAt(dir: string): Promise<Worktree> {
+  return {
+    binding: "app",
+    path: dir,
+    branch: "main",
+    defaultBranch: "main",
+    baseSha: await git(["rev-parse", "HEAD"], dir),
+  };
+}
 async function commit(dir: string, subject: string) {
   await git(["add", "-A"], dir);
   await git(["commit", "--allow-empty", "-m", subject], dir);
@@ -34,6 +44,7 @@ async function commit(dir: string, subject: string) {
 
 test("reads resolved commits, all subjects, statuses, binary counts and rename paths", async () => {
   const dir = await repo();
+  const worktree = await worktreeAt(dir);
   await writeFile(path.join(dir, "old"), "rename me\n");
   await writeFile(path.join(dir, "delete"), "gone\n");
   await writeFile(path.join(dir, "modify"), "before\n");
@@ -45,7 +56,11 @@ test("reads resolved commits, all subjects, statuses, binary counts and rename p
   await commit(dir, "first change");
   await writeFile(path.join(dir, "added"), "added\n");
   const head = await commit(dir, "second change");
-  const result = await readChange(dir, "HEAD~2");
+  const result = await readChange(worktree, "HEAD~2");
+  const full = await readChange(worktree);
+  expect(full.base).toBe(worktree.baseSha);
+  expect(full.head).toBe(head);
+  expect(full.commits.map((c) => c.subject)).toEqual(["second change", "first change", "start"]);
   expect(result).toMatchObject({ base, head, truncated: false });
   expect(result.commits.map((c) => c.subject)).toEqual(["second change", "first change"]);
   expect(result.files).toEqual(
@@ -57,7 +72,7 @@ test("reads resolved commits, all subjects, statuses, binary counts and rename p
       { path: "added", status: "added", additions: 1, deletions: 0 },
     ]),
   );
-  expect(await readChange(dir, "HEAD")).toEqual({
+  expect(await readChange(worktree, "HEAD")).toEqual({
     base: head,
     head,
     files: [],
@@ -68,7 +83,8 @@ test("reads resolved commits, all subjects, statuses, binary counts and rename p
 
 test("reads raw author names independently of committers across multiple commits", async () => {
   const dir = await repo();
-  const base = await git(["rev-parse", "HEAD"], dir);
+  const worktree = await worktreeAt(dir);
+  const base = worktree.baseSha;
   await writeFile(
     path.join(dir, ".mailmap"),
     "Mapped Name <mapped@example.com> José da Silva <jose@example.com>\n",
@@ -85,7 +101,7 @@ test("reads raw author names independently of committers across multiple commits
   );
   const second = await git(["rev-parse", "HEAD"], dir);
   expect(await git(["show", "-s", "--format=%cn", "HEAD"], dir)).toBe("Test");
-  const result = await readChange(dir, base);
+  const result = await readChange(worktree, base);
   expect(result).toMatchObject({ base, head: second, truncated: false });
   expect(result.commits).toEqual([
     { sha: second, subject: "second: 修正", authorName: "山田 太郎" },
@@ -95,6 +111,7 @@ test("reads raw author names independently of committers across multiple commits
 
 test("patches stay pinned after HEAD moves, use literal paths, and match diverged endpoint trees", async () => {
   const dir = await repo();
+  const worktree = await worktreeAt(dir);
   await git(["checkout", "-b", "base"], dir);
   await writeFile(path.join(dir, "base-only"), "base side\n");
   await commit(dir, "base branch");
@@ -102,29 +119,32 @@ test("patches stay pinned after HEAD moves, use literal paths, and match diverge
   await writeFile(path.join(dir, "*.txt"), "selected\n");
   await writeFile(path.join(dir, "other.txt"), "not selected\n");
   await commit(dir, "head branch");
-  const summary = await readChange(dir, "base");
+  const summary = await readChange(worktree, "base");
   expect(summary.files.find((f) => f.path === "base-only")?.status).toBe("deleted");
   await writeFile(path.join(dir, "*.txt"), "later change\n");
   await commit(dir, "later");
-  const result = await readPatch(dir, summary.base, summary.head, ["*.txt", "base-only"]);
+  const result = await readPatch(worktree, summary.base, summary.head, ["*.txt", "base-only"]);
   expect(result.truncated).toBe(false);
   expect(result.patches[0]?.text).toContain("+selected");
   expect(result.patches[0]?.text).not.toContain("not selected");
   expect(result.patches[0]?.text).not.toContain("later change");
   expect(result.patches[1]?.text).toContain("-base side");
-  await expect(readPatch(dir, summary.base, summary.head, [])).rejects.toBeInstanceOf(JigsError);
+  await expect(readPatch(worktree, summary.base, summary.head, [])).rejects.toBeInstanceOf(
+    JigsError,
+  );
 });
 
 test("patch budget is shared across files and reports only actual text loss", async () => {
   const dir = await repo();
-  const base = await git(["rev-parse", "HEAD"], dir);
+  const worktree = await worktreeAt(dir);
+  const base = worktree.baseSha;
   await writeFile(path.join(dir, "one"), `${"a".repeat(MAX_PATCH_CHARS / 2)}\n`);
   await writeFile(path.join(dir, "two"), `${"b".repeat(MAX_PATCH_CHARS / 2)}\n`);
   const head = await commit(dir, "large");
-  const result = await readPatch(dir, base, head, ["one", "two"]);
+  const result = await readPatch(worktree, base, head, ["one", "two"]);
   expect(result.truncated).toBe(true);
   expect(result.patches.reduce((sum, patch) => sum + patch.text.length, 0)).toBe(MAX_PATCH_CHARS);
-  expect(await readPatch(dir, head, head, ["one"])).toEqual({
+  expect(await readPatch(worktree, head, head, ["one"])).toEqual({
     patches: [{ path: "one", text: "" }],
     truncated: false,
   });
@@ -132,17 +152,18 @@ test("patch budget is shared across files and reports only actual text loss", as
 
 test("file and commit caps report truncation only when results are omitted", async () => {
   const dir = await repo();
-  const base = await git(["rev-parse", "HEAD"], dir);
+  const worktree = await worktreeAt(dir);
+  const base = worktree.baseSha;
   await Promise.all(
     Array.from({ length: MAX_CHANGE_FILES }, (_, i) =>
       writeFile(path.join(dir, `file-${i}`), "x\n"),
     ),
   );
   await commit(dir, "many files");
-  expect((await readChange(dir, base)).truncated).toBe(false);
+  expect((await readChange(worktree, base)).truncated).toBe(false);
   await writeFile(path.join(dir, "overflow"), "x\n");
   await commit(dir, "overflow");
-  const files = await readChange(dir, base);
+  const files = await readChange(worktree, base);
   expect(files.files).toHaveLength(MAX_CHANGE_FILES);
   expect(files.truncated).toBe(true);
   const tree = await git(["rev-parse", "HEAD^{tree}"], dir);
@@ -151,12 +172,12 @@ test("file and commit caps report truncation only when results are omitted", asy
   for (let i = 0; i < MAX_CHANGE_COMMITS; i++)
     parent = await git(["commit-tree", tree, "-p", parent, "-m", `commit ${i}`], dir);
   await git(["update-ref", "HEAD", parent], dir);
-  const exact = await readChange(dir, branchBase);
+  const exact = await readChange(worktree, branchBase);
   expect(exact.commits).toHaveLength(MAX_CHANGE_COMMITS);
   expect(exact.truncated).toBe(false);
   parent = await git(["commit-tree", tree, "-p", parent, "-m", "overflow"], dir);
   await git(["update-ref", "HEAD", parent], dir);
-  const overflow = await readChange(dir, branchBase);
+  const overflow = await readChange(worktree, branchBase);
   expect(overflow.commits).toHaveLength(MAX_CHANGE_COMMITS);
   expect(overflow.truncated).toBe(true);
 }, 30_000);

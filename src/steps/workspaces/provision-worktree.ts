@@ -83,8 +83,9 @@ export async function provisionWorktree(
     if (disk !== null) assertReusable({ path: target, sameOwner, disk });
     const facts: Worktree =
       disk === null
-        ? await createWorktree(cut)
+        ? { binding: binding.name, ...(await createWorktree(cut)) }
         : {
+            binding: binding.name,
             path: target,
             branch: request.branch,
             defaultBranch: disk.defaultBranch,

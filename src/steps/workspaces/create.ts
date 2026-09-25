@@ -62,7 +62,7 @@ interface CutOptions {
   branch: string;
 }
 
-export async function createWorktree(options: CutOptions): Promise<Worktree> {
+export async function createWorktree(options: CutOptions): Promise<Omit<Worktree, "binding">> {
   const { repoDir, worktreePath, branch } = options;
   const defaultBranch = await resolveDefaultBranch(repoDir);
   await fetchFreshness(repoDir, defaultBranch, branch);

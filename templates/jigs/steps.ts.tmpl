@@ -18,7 +18,6 @@ import type {
 import * as agentsOperations from "@jigs-ai/jigs/steps/agents";
 import * as gitOperations from "@jigs-ai/jigs/steps/git";
 import * as linearOperations from "@jigs-ai/jigs/steps/linear";
-import type { GitHubRepoRef } from "@jigs-ai/jigs/steps/pull-requests";
 import * as pullRequestsOperations from "@jigs-ai/jigs/steps/pull-requests";
 import * as runtimeOperations from "@jigs-ai/jigs/steps/runtime";
 import type { WorktreeRequest } from "@jigs-ai/jigs/steps/workspaces";
@@ -166,56 +165,50 @@ export async function resolveMergePolicy(binding: string) {
 }
 
 /** Check commits since the base, the branch's current commit, and uncommitted changes. */
-export async function readBranchState(worktreePath: string, baseSha: string) {
+export async function readBranchState(worktree: Worktree, baseSha?: string) {
   "use step";
-  return gitOperations.readBranchState(worktreePath, baseSha);
+  return gitOperations.readBranchState(worktree, baseSha);
 }
 
 /** Whether a commit is the worktree's HEAD or one of its ancestors. */
-export async function branchContains(worktreePath: string, sha: string) {
+export async function branchContains(worktree: Worktree, sha: string) {
   "use step";
-  return gitOperations.branchContains(worktreePath, sha);
+  return gitOperations.branchContains(worktree, sha);
 }
 
 /** Push the worktree's branch to its remote, including any newly committed changes. */
-export async function pushBranch(worktreePath: string, branch: string) {
+export async function pushBranch(worktree: Worktree) {
   "use step";
-  return gitOperations.pushBranch(worktreePath, branch);
+  return gitOperations.pushBranch(worktree);
 }
 
 /** Recheck approval and push only the reviewed commit, including on retries. */
-export async function pushApprovedChange(
-  worktreePath: string,
-  branch: string,
-  approvedCommit: string,
-) {
+export async function pushApprovedChange(worktree: Worktree, approvedCommit: string) {
   "use step";
-  return gitOperations.pushApprovedChange(worktreePath, branch, approvedCommit);
+  return gitOperations.pushApprovedChange(worktree, approvedCommit);
 }
 
-/** Read committed changes since the base commit. Large diffs are truncated. */
-export async function readWorktreeDiff(worktreePath: string, baseSha: string) {
+/** Read committed changes, defaulting to the worktree's base commit. Large diffs are truncated. */
+export async function readWorktreeDiff(worktree: Worktree, baseSha?: string) {
   "use step";
-  return gitOperations.readWorktreeDiff(worktreePath, baseSha);
+  return gitOperations.readWorktreeDiff(worktree, baseSha);
 }
 
-/** Read committed file changes and commit subjects between base and HEAD. */
-export async function readChange(worktreePath: string, base: string) {
+/** Read committed file changes and subjects up to HEAD, defaulting to the worktree's base. */
+export async function readChange(worktree: Worktree, base?: string) {
   "use step";
-  return gitOperations.readChange(worktreePath, base);
+  return gitOperations.readChange(worktree, base);
 }
 
 /** Read capped patches for literal named paths between the summary's commits. */
-export async function readPatch(worktreePath: string, base: string, head: string, paths: string[]) {
+export async function readPatch(worktree: Worktree, base: string, head: string, paths: string[]) {
   "use step";
-  return gitOperations.readPatch(worktreePath, base, head, paths);
+  return gitOperations.readPatch(worktree, base, head, paths);
 }
 
 /** Open a pull request for a branch that has already been pushed. */
 export async function openPullRequest(request: {
-  repo: GitHubRepoRef;
-  head: string;
-  base: string;
+  worktree: Worktree;
   title: string;
   body: string;
   draft?: boolean;

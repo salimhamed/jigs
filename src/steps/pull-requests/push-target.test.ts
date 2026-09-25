@@ -26,6 +26,14 @@ vi.mock("../../providers/git.ts", () => ({
 vi.mock("../../providers/github-auth.ts", () => ({ githubAuthFor: vi.fn() }));
 vi.mock("../runtime/resources.ts", () => ({ registerResource: vi.fn() }));
 
+const worktree = {
+  binding: "api",
+  path: "/work",
+  branch: "feature",
+  defaultBranch: "main",
+  baseSha: "base",
+};
+
 const APP = {
   mode: "app",
   appId: 1,
@@ -47,9 +55,9 @@ beforeEach(() => {
 
 test("pat mode pushes to the binding's own remote, over SSH as the operator", async () => {
   authAs({ mode: "pat" });
-  await pushApprovedChange("/work", "feature", "approved");
+  await pushApprovedChange(worktree, "approved");
   expect(pushCommit).toHaveBeenCalledWith("/work", "feature", "approved", { remote: "origin" });
-  await pushBranch("/work", "feature");
+  await pushBranch(worktree);
   expect(gitPushBranch).toHaveBeenCalledWith("/work", "feature", { remote: "origin" });
   expect(registerResource).toHaveBeenCalledWith({
     kind: "branch",
@@ -60,7 +68,7 @@ test("pat mode pushes to the binding's own remote, over SSH as the operator", as
 
 test("app mode pushes over HTTPS, with the token beside the URL rather than in it", async () => {
   authAs(APP);
-  await pushApprovedChange("/work", "feature", "approved");
+  await pushApprovedChange(worktree, "approved");
   expect(pushCommit).toHaveBeenCalledWith("/work", "feature", "approved", {
     remote: "https://github.com/acme/api.git",
     token: "ghs_installation",
@@ -73,7 +81,5 @@ test("an installation token can only push to GitHub, and says so", async () => {
     remote: "origin",
     url: "git@gitlab.com:acme/api.git",
   });
-  await expect(pushApprovedChange("/work", "feature", "approved")).rejects.toThrow(
-    "not a github.com remote",
-  );
+  await expect(pushApprovedChange(worktree, "approved")).rejects.toThrow("not a github.com remote");
 });
