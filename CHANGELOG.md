@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.59.0](https://github.com/salimhamed/jigs/compare/jigs-v0.58.0...jigs-v0.59.0) (2026-09-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* jigs.ts is replaced by jigs/steps.ts and jigs/routines.ts. The #jigs, #blocks/* and #steps/* imports are replaced by #jigs/*. WorkflowEntry is replaced by defineWorkflow, and requires.harnesses by requires.agents. Run jigs upgrade, then replace jigs.config.test.ts with the new template and update any copied recipe. See #388.
+
+### Features
+
+* release note for the generated jigs directory ([#389](https://github.com/salimhamed/jigs/issues/389)) ([bc56a7a](https://github.com/salimhamed/jigs/commit/bc56a7aac293ab1969b49639a023a32cae56a97d))
+
 ## [0.58.0](https://github.com/salimhamed/jigs/compare/jigs-v0.57.1...jigs-v0.58.0) (2026-09-24)
 
 
