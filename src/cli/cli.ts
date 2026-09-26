@@ -65,8 +65,7 @@ function makeConfirm(): ((question: string) => Promise<boolean>) | undefined {
 
 const out = (line: string) => console.log(line);
 
-const RUN_SELECTOR_HELP =
-  "complete run ID, unique ID prefix, ticket ID (AGE-123), or supported ticket UUID";
+const RUN_ID_HELP = "the run's full ID, as listed by jigs status";
 
 const ROOT_HELP = `Usage: jigs <command> [options]
 
@@ -114,8 +113,8 @@ Generated code:
   build                     Compile workflows into the service bundle
   generate                  Refresh the generated jigs/ directory
 
-Run selectors accept a complete run ID, unique ID prefix, ticket ID such as
-AGE-123, or a supported ticket UUID. In a factory, run every command as
+A <run-id> is the run's full ID, which jigs status lists under RUN.
+In a factory, run every command as
 pnpm exec jigs <command>; add --help for its options.
 
 Options:
@@ -302,7 +301,7 @@ program
 program
   .command("status")
   .description("show all runs, or one run's status, steps, results, resources and dashboard link")
-  .argument("[run-id]", RUN_SELECTOR_HELP)
+  .argument("[run-id]", RUN_ID_HELP)
   .option("--json", "print one JSON document instead of text output")
   .addOption(serviceOption())
   .action(async (runId: string | undefined, options: { json?: boolean; serviceUrl?: string }) => {
@@ -313,8 +312,8 @@ program
 
 program
   .command("watch")
-  .description("follow all runs, or only one selected run: one line per change")
-  .argument("[run-id]", RUN_SELECTOR_HELP)
+  .description("follow all runs, or only one run: one line per change")
+  .argument("[run-id]", RUN_ID_HELP)
   .option("--json", "emit one JSON event per line instead of text")
   .option(
     "--poll-interval-seconds <seconds>",
@@ -339,7 +338,7 @@ program
         { out, serviceUrl: serviceUrl(options.serviceUrl) },
         {
           json: options.json,
-          selector: runId,
+          runId,
           ...(options.pollIntervalSeconds === undefined
             ? {}
             : { intervalMs: options.pollIntervalSeconds * 1000 }),
@@ -351,7 +350,7 @@ program
 program
   .command("cancel")
   .description("cancel a run; an operation or agent already executing may still finish")
-  .argument("<run-id>", RUN_SELECTOR_HELP)
+  .argument("<run-id>", RUN_ID_HELP)
   .option("--force", "skip the confirmation for an in-flight run")
   .addOption(serviceOption())
   .action(async (run: string, options: { force?: boolean; serviceUrl?: string }) => {
@@ -366,7 +365,7 @@ program
 program
   .command("poke")
   .description("ask a suspended run to evaluate again; does not bypass approvals or add answers")
-  .argument("<run-id>", RUN_SELECTOR_HELP)
+  .argument("<run-id>", RUN_ID_HELP)
   .addOption(serviceOption())
   .action(async (runId: string, options: { serviceUrl?: string }) => {
     await pokeRun(runId, { out, serviceUrl: serviceUrl(options.serviceUrl) });
@@ -387,7 +386,7 @@ const resources = program
 resources
   .command("list")
   .description("list registered resources without changing them")
-  .option("--run <run-id>", `limit the inventory to one ${RUN_SELECTOR_HELP}`)
+  .option("--run <run-id>", `limit the inventory to one run: ${RUN_ID_HELP}`)
   .option("--json", "print one JSON document")
   .action(async (options: { run?: string; json?: boolean }) => {
     await listResources({ cwd: process.cwd(), out }, options);
@@ -396,7 +395,7 @@ resources
 resources
   .command("prune")
   .description("preview safe local resource cleanup; --apply performs it offline")
-  .option("--run <run-id>", `limit the inventory to one ${RUN_SELECTOR_HELP}`)
+  .option("--run <run-id>", `limit the inventory to one run: ${RUN_ID_HELP}`)
   .option("--apply", "perform eligible cleanup after proving the service and children stopped")
   .option("--include-kept", "consider policy-kept resources, without bypassing Git safety")
   .option("--json", "print one JSON document")

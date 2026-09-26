@@ -1,7 +1,7 @@
 import { JigsError } from "../../errors.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { listFactoryRuns, type RunListRun, suspensionLine, waitingCell } from "./run-list.ts";
-import { readErrorBody, runRefError, type ServiceDeps, serviceFetch } from "./service-client.ts";
+import { runNotFound, type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 // One long-lived process for the whole factory: a watcher that re-ran `jigs
 // status` would pay a node start-up per poll, and the service hosts no event
@@ -31,7 +31,8 @@ export interface WatchEvent {
 export interface WatchOptions {
   json?: boolean;
   intervalMs?: number;
-  selector?: string;
+  /** Follow only this run. */
+  runId?: string;
   /** Stop after this many polls. The CLI passes none and runs until killed. */
   polls?: number;
 }
@@ -47,8 +48,8 @@ export async function watchRuns(deps: WatchDeps, options: WatchOptions = {}): Pr
   const intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS;
   const sleep = deps.sleep ?? ((ms: number) => new Promise((done) => setTimeout(done, ms)));
   const now = deps.now ?? (() => new Date());
-  const selectedRunId =
-    options.selector === undefined ? undefined : await resolveWatchedRun(options.selector, deps);
+  const selectedRunId = options.runId;
+  if (selectedRunId !== undefined) await requireRun(selectedRunId, deps);
   let previous: Map<string, RunListRun> | undefined;
 
   for (let poll = 0; options.polls === undefined || poll < options.polls; poll++) {
@@ -82,15 +83,12 @@ export async function watchRuns(deps: WatchDeps, options: WatchOptions = {}): Pr
   }
 }
 
-async function resolveWatchedRun(selector: string, deps: ServiceDeps): Promise<string> {
-  const res = await serviceFetch(deps.serviceUrl, `/api/runs/${encodeURIComponent(selector)}`);
-  if (res.status === 404 || res.status === 409) {
-    throw runRefError(selector, await readErrorBody(res));
-  }
+async function requireRun(runId: string, deps: ServiceDeps): Promise<void> {
+  const res = await serviceFetch(deps.serviceUrl, `/api/runs/${encodeURIComponent(runId)}`);
+  if (res.status === 404) throw runNotFound(runId);
   if (!res.ok) {
     throw new JigsError(`watch failed: HTTP ${res.status} ${await res.text()}`);
   }
-  return ((await res.json()) as { runId: string }).runId;
 }
 
 /** What the factory looks like the moment a watch starts: every run still in

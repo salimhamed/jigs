@@ -20,7 +20,7 @@ import type { ReleasePolicy } from "./runtime/release.ts";
  */
 export const ticketInputSchema = z.union([z.uuid(), z.string().regex(/^[A-Z][A-Z0-9]*-\d+$/)]);
 
-/** Plaintext run metadata used by read-only tooling to resolve ticket selectors. */
+/** Plaintext run attribute naming the ticket a run was launched for, readable without its inputs. */
 export const RUN_TICKET_ATTRIBUTE = "$jigs.ticket";
 
 // A driver sets or passes these itself, and a model credential comes from the

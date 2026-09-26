@@ -67,39 +67,10 @@ function database(status = "completed", ticket?: string): RegistrySql {
   return drizzle(pool as unknown as Pool);
 }
 
-function ambiguousTicketDatabase(): RegistrySql {
-  const pool = {
-    async query(config: string | (QueryConfig & { rowMode?: string })) {
-      const text = typeof config === "string" ? config : config.text;
-      if (text.includes('"workflow"."workflow_runs"')) {
-        return {
-          rows: [
-            {
-              id: RUN,
-              name: WORKFLOW,
-              status: "completed",
-              attributes: { [RUN_TICKET_ATTRIBUTE]: "AGE-317" },
-            },
-            {
-              id: "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ",
-              name: WORKFLOW,
-              status: "failed",
-              attributes: { [RUN_TICKET_ATTRIBUTE]: "AGE-317" },
-            },
-          ],
-        };
-      }
-      return { rows: [] };
-    },
-    async end() {},
-  };
-  return drizzle(pool as unknown as Pool);
-}
-
-test("list supports run selection and JSON without mutating", async () => {
+test("list selects a run by its full ID and prints JSON without mutating", async () => {
   const report = await listResources(
     { cwd: root, out: (line) => lines.push(line), connect: () => database() },
-    { run: RUN.slice(5, 13), json: true },
+    { run: RUN, json: true },
   );
   expect(report).toMatchObject({
     complete: true,
@@ -108,33 +79,24 @@ test("list supports run selection and JSON without mutating", async () => {
   expect(JSON.parse(lines.join("\n"))).toEqual(report);
 });
 
-test("list resolves a recorded ticket selector without starting the service", async () => {
-  const report = await listResources(
-    {
-      cwd: root,
-      out: (line) => lines.push(line),
-      connect: () => database("completed", "AGE-317"),
-    },
-    { run: "age-317", json: true },
-  );
-  expect(report.entries).toEqual(
-    expect.arrayContaining([expect.objectContaining({ runId: RUN, kind: "pull-request" })]),
-  );
-});
-
-test("a ticket naming multiple runs is actionable and never guesses", async () => {
+test.each([
+  ["a prefix", RUN.slice(5, 13)],
+  ["a prefix with wrun_", RUN.slice(0, 13)],
+  ["the ticket the run was launched for", "AGE-317"],
+  ["an unknown ref", "wrun_01ZZZZZZZZZZZZZZZZZZZZZZZZ"],
+])("--run rejects %s and points at jigs status", async (_label, ref) => {
   await expect(
     listResources(
       {
         cwd: root,
         out: (line) => lines.push(line),
-        connect: () => ambiguousTicketDatabase(),
+        connect: () => database("completed", "AGE-317"),
       },
-      { run: "AGE-317" },
+      { run: ref },
     ),
   ).rejects.toMatchObject({
-    message: "run ref AGE-317 is ambiguous",
-    hint: expect.stringContaining("use a run ID or unique prefix"),
+    message: `run ${ref} not found`,
+    hint: expect.stringContaining("pnpm exec jigs status"),
   });
   expect(lines).toEqual([]);
 });

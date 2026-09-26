@@ -114,14 +114,14 @@ test("--json emits one JSON event per line", async () => {
   expect(JSON.parse(lines[0] ?? "")).not.toHaveProperty("pullRequest");
 });
 
-test("a selector resolves once and no unrelated run event leaks", async () => {
+test("a selected run is checked once and no unrelated run event leaks", async () => {
   const other = run({ runId: "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ", ticket: "AGE-999" });
   fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(run())));
   respond([other, run()]);
 
-  await watchRuns(deps(), { polls: 1, selector: "AGE-317" });
+  await watchRuns(deps(), { polls: 1, runId: RUN });
 
-  expect(fetchMock.mock.calls[0]?.[0]).toBe("http://svc.test:8990/api/runs/AGE-317");
+  expect(fetchMock.mock.calls[0]?.[0]).toBe(`http://svc.test:8990/api/runs/${RUN}`);
   expect(lines).toEqual([`${AT} ${RUN} AGE-317 watching -`]);
   expect(lines.join("\n")).not.toContain("AGE-999");
 });
@@ -130,29 +130,21 @@ test("a selected watch keeps newline-delimited JSON", async () => {
   fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(run())));
   respond([run(), run({ runId: "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ" })]);
 
-  await watchRuns(deps(), { polls: 1, selector: "01K3ANBZ", json: true });
+  await watchRuns(deps(), { polls: 1, runId: RUN, json: true });
 
   expect(lines).toHaveLength(1);
   expect(JSON.parse(lines[0] ?? "")).toMatchObject({ runId: RUN, event: "watching" });
 });
 
-test("unknown and ambiguous selectors fail actionably before polling", async () => {
+test("a ref that is not a full run ID fails before polling", async () => {
   fetchMock.mockResolvedValueOnce(
     new Response(JSON.stringify({ error: "not found" }), { status: 404 }),
   );
-  await expect(watchRuns(deps(), { polls: 1, selector: "AGE-999" })).rejects.toThrow(
-    "run AGE-999 not found",
-  );
-
-  fetchMock.mockResolvedValueOnce(
-    new Response(JSON.stringify({ candidates: [RUN, "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ"] }), {
-      status: 409,
-    }),
-  );
-  await expect(watchRuns(deps(), { polls: 1, selector: "01K3AN" })).rejects.toMatchObject({
-    message: "run ref 01K3AN is ambiguous",
-    hint: expect.stringContaining("use more characters"),
+  await expect(watchRuns(deps(), { polls: 1, runId: "AGE-317" })).rejects.toMatchObject({
+    message: "run AGE-317 not found",
+    hint: expect.stringContaining("pnpm exec jigs status"),
   });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
 test("a service that goes away is one line, not the end of the watch", async () => {

@@ -124,7 +124,8 @@ test("workflow and run command help uses explicit placeholders", () => {
   expect(run(cwd, "run", "--help").stdout).toContain("<workflow-name>");
   const status = run(cwd, "status", "--help").stdout;
   expect(status).toContain("[run-id]");
-  expect(status).toContain("unique ID prefix");
+  expect(status).toContain("the run's full ID");
+  expect(status).not.toContain("prefix");
   expect(run(cwd, "watch", "--help").stdout).toContain("[run-id]");
   expect(run(cwd, "cancel", "--help").stdout).toContain("<run-id>");
 });

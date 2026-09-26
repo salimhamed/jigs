@@ -30,9 +30,8 @@ import {
   enrichSuspensions,
   listRunResources,
   listRuns,
-  type RunRef,
   readRunCleanup,
-  resolveRunRef,
+  runExists,
 } from "./runs.ts";
 import { listSchedules, scheduleChecks } from "./schedules.ts";
 import { listRunSteps } from "./stalls.ts";
@@ -141,9 +140,9 @@ export function createApp(factory: Factory): Hono {
   // Manual wake on the same code path as the ingress: resume every token the
   // run's suspensions are satisfied by. The fallback when a delivery was missed.
   app.post("/api/runs/:runId/poke", async (c) => {
-    const ref = await resolveRunRef(c.req.param("runId"));
-    if (ref.kind !== "found") return unresolvedRunResponse(c, ref);
-    const run = getRun(ref.runId);
+    const runId = c.req.param("runId");
+    if (!(await runExists(runId))) return c.json({ error: "not found" }, 404);
+    const run = getRun(runId);
     const tokens = await runResourceTokens(run.runId);
     if (tokens.length === 0) {
       return c.json({ error: "run has no suspensions to poke" }, 409);
@@ -183,14 +182,14 @@ export function createApp(factory: Factory): Hono {
   // retention, so the World removes them on run_cancelled. Capture their names
   // before the public cancellation call so the response can say what changed.
   app.post("/api/runs/:runId/cancel", async (c) => {
-    const ref = await resolveRunRef(c.req.param("runId"));
-    if (ref.kind !== "found") return unresolvedRunResponse(c, ref);
-    const run = getRun(ref.runId);
+    const runId = c.req.param("runId");
+    if (!(await runExists(runId))) return c.json({ error: "not found" }, 404);
+    const run = getRun(runId);
     const status = await run.status;
     if (TERMINAL_RUN_STATUSES.has(status) && status !== "cancelled") {
-      return c.json({ error: `run ${ref.runId} is already ${status}`, status }, 409);
+      return c.json({ error: `run ${runId} is already ${status}`, status }, 409);
     }
-    const claimedTokens = await runResourceTokens(ref.runId);
+    const claimedTokens = await runResourceTokens(runId);
     if (status !== "cancelled") {
       try {
         await run.cancel();
@@ -201,25 +200,25 @@ export function createApp(factory: Factory): Hono {
         const settledStatus = await run.status;
         if (TERMINAL_RUN_STATUSES.has(settledStatus) && settledStatus !== "cancelled") {
           return c.json(
-            { error: `run ${ref.runId} is already ${settledStatus}`, status: settledStatus },
+            { error: `run ${runId} is already ${settledStatus}`, status: settledStatus },
             409,
           );
         }
         throw error;
       }
     }
-    const retainedTokens = await runResourceTokens(ref.runId);
+    const retainedTokens = await runResourceTokens(runId);
     const retained = new Set(retainedTokens);
     const releasedTokens = claimedTokens.filter((token) => !retained.has(token));
     // Cancel leaves the worktree behind: name what stays so the operator knows
     // where it is and that offline resource prune is the way to reclaim it.
-    const worktrees = (await listWorktreesForRun(registrySql(), ref.runId)).map((row) => row.path);
+    const worktrees = (await listWorktreesForRun(registrySql(), runId)).map((row) => row.path);
     // A merged run's workflow tears its own worktree down; everything else —
     // cancel included — leaves the tree on disk for the operator's offline
     // resource prune. A cancelled run's dirty tree is diagnosis evidence that
     // prune surfaces but will not delete.
     return c.json({
-      runId: ref.runId,
+      runId,
       cancelled: true,
       releasedTokens,
       retainedTokens,
@@ -231,11 +230,11 @@ export function createApp(factory: Factory): Hono {
   // job died holding its resume. Both are what `jigs status <run-id>` renders as a
   // timeline, and the second is the only sign of a stall.
   app.get("/api/runs/:runId/steps", async (c) => {
-    const ref = await resolveRunRef(c.req.param("runId"));
-    if (ref.kind !== "found") return unresolvedRunResponse(c, ref);
+    const runId = c.req.param("runId");
+    if (!(await runExists(runId))) return c.json({ error: "not found" }, 404);
     const [steps, deadJobs] = await Promise.all([
-      listRunSteps(ref.runId),
-      listRunDeadJobs(registrySql(), ref.runId),
+      listRunSteps(runId),
+      listRunDeadJobs(registrySql(), runId),
     ]);
     return c.json({ steps, deadJobs });
   });
@@ -245,23 +244,23 @@ export function createApp(factory: Factory): Hono {
   // will not spend on every run: its steps, terminal or not, and a round trip
   // per halt to read the comment back from Linear.
   app.get("/api/runs/:runId", async (c) => {
-    const ref = await resolveRunRef(c.req.param("runId"));
-    if (ref.kind !== "found") return unresolvedRunResponse(c, ref);
-    const described = await describeRun(ref.runId, { steps: await listRunSteps(ref.runId) });
+    const runId = c.req.param("runId");
+    if (!(await runExists(runId))) return c.json({ error: "not found" }, 404);
+    const described = await describeRun(runId, { steps: await listRunSteps(runId) });
     const body: Record<string, unknown> = {
       ...described,
-      resources: await listRunResources(ref.runId),
-      cleanup: await readRunCleanup(ref.runId),
-      suspensions: await enrichSuspensions(described.suspensions, ref.runId),
-      dashboard: dashboardPointer(ref.runId),
+      resources: await listRunResources(runId),
+      cleanup: await readRunCleanup(runId),
+      suspensions: await enrichSuspensions(described.suspensions, runId),
+      dashboard: dashboardPointer(runId),
     };
     // Read only where there is one: a running run's return value is a promise
     // that settles long after this response.
     if (described.status === "completed") {
-      body.returnValue = await getRun(ref.runId).returnValue;
+      body.returnValue = await getRun(runId).returnValue;
     }
     if (described.status === "failed") {
-      body.error = await getRun(ref.runId).returnValue.then(
+      body.error = await getRun(runId).returnValue.then(
         () => undefined,
         (err: unknown) => String(err),
       );
@@ -370,12 +369,6 @@ function factoryRootOrNull(): string | null {
   } catch {
     return null;
   }
-}
-
-function unresolvedRunResponse(c: Context, ref: Exclude<RunRef, { kind: "found" }>): Response {
-  return ref.kind === "ambiguous"
-    ? c.json({ error: "ambiguous run ref", candidates: ref.candidates }, 409)
-    : c.json({ error: "not found" }, 404);
 }
 
 // The run's page on the dashboard this service hosts. A service started

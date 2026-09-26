@@ -1,18 +1,16 @@
-// Run identity and the run listing behind `jigs status`. Resolution lives here,
-// server-side, because every route that names a run needs it — a CLI-side
-// resolver would need its own index and a second round trip.
+// Run identity and the run listing behind `jigs status`.
 
-import { getHookByToken, getRun } from "workflow/api";
+import { getRun } from "workflow/api";
 import { hydrateData, observabilityRevivers } from "workflow/observability";
 import { getWorld } from "workflow/runtime";
 import type { PullRequestRef } from "../providers/github.ts";
-import { getComment, resolveIssueRef } from "../providers/linear.ts";
+import { getComment } from "../providers/linear.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import type { RunSuspension } from "../run-suspension.ts";
 import { readPullRequestSnapshot } from "../steps/pull-requests/fetch-state.ts";
 import { registrySql } from "../steps/workspaces/sql.ts";
 import type { Factory } from "../workflow/factory.ts";
-import { TICKET_TOKEN_PREFIX, ticketToken } from "../workflow/linear/claim.ts";
+import { TICKET_TOKEN_PREFIX } from "../workflow/linear/claim.ts";
 import { NEEDS_HUMAN_TOKEN_PREFIX } from "../workflow/linear/halt-for-human.ts";
 import { mergeRefusal } from "../workflow/pull-requests/merge-ready.ts";
 import { PULL_REQUEST_TOKEN_PREFIX } from "../workflow/pull-requests/pull-request.ts";
@@ -22,70 +20,13 @@ import { type JobRunIds, listJobRunIds } from "./queue.ts";
 import { hasActiveStep, listRunSteps, listStepsByRun, type StepView } from "./stalls.ts";
 import { lastWake } from "./wake-note.ts";
 
-// The SDK mints run ids as `wrun_` + a ULID, so a ref is run-id-shaped (with
-// or without the prefix, full or truncated) or it is a ticket ref. Crockford
-// base32 excludes I/L/O/U, and both ticket ref shapes we accept — AGE-123 and
-// a UUID — carry a `-`, so the two branches can never claim the same string.
-const RUN_ID_SHAPE = /^(?:wrun_)?([0-9A-HJKMNP-TV-Z]{1,26})$/i;
-const RUN_ID_PREFIX = "wrun_";
-const RUN_ID_LENGTH = RUN_ID_PREFIX.length + 26;
+// The SDK mints run IDs as `wrun_` + a ULID. Anything else names no run, and
+// never reaches the World as a lookup key.
+const RUN_ID_SHAPE = /^wrun_[0-9A-HJKMNP-TV-Z]{26}$/;
 
-// A Linear identifier: team key then issue number. Only this shape is worth a
-// Linear round trip — every other ticket ref is already the UUID the claim is
-// keyed on, or is nothing Linear could place.
-const TICKET_IDENTIFIER = /^[A-Za-z][A-Za-z0-9]*-\d+$/;
-
-export type RunRef =
-  | { kind: "found"; runId: string }
-  | { kind: "unknown" }
-  | { kind: "ambiguous"; candidates: string[] };
-
-export async function resolveRunRef(ref: string): Promise<RunRef> {
-  const shaped = RUN_ID_SHAPE.exec(ref);
-  if (shaped?.[1] !== undefined) {
-    const prefix = RUN_ID_PREFIX + shaped[1].toUpperCase();
-    if (prefix.length === RUN_ID_LENGTH && (await worldRunExists(prefix))) {
-      return { kind: "found", runId: prefix };
-    }
-    const matches = (await worldRunIds()).filter((id) => id.startsWith(prefix));
-    const only = matches[0];
-    if (matches.length === 1 && only !== undefined) {
-      return { kind: "found", runId: only };
-    }
-    if (matches.length > 1) return { kind: "ambiguous", candidates: matches };
-  }
-  // Stored launch inputs keep ticket selection useful after terminal cleanup
-  // removes the ticket claim. Multiple executions for one ticket are
-  // intentionally ambiguous: choosing the newest one would hide history.
-  const runs = await worldRuns();
-  const candidates = new Set(ticketRunIds(runs, ref));
-
-  // Ticket claims are keyed by provider UUID. Resolve an identifier only
-  // after reading stored inputs, then consider both historical UUID inputs
-  // and the active claim owner before deciding whether the selector is unique.
-  const issueId = TICKET_IDENTIFIER.test(ref) ? await linearIssueId(ref.toUpperCase()) : ref;
-  if (issueId !== null) {
-    for (const runId of ticketRunIds(runs, issueId)) candidates.add(runId);
-    const owner = await worldHookRunId(ticketToken(issueId));
-    if (owner !== null) candidates.add(owner);
-  }
-  const matches = [...candidates];
-  if (matches.length === 1) return { kind: "found", runId: matches[0] as string };
-  return matches.length > 1 ? { kind: "ambiguous", candidates: matches } : { kind: "unknown" };
-}
-
-const ticketRunIds = (runs: WorldRun[], ref: string): string[] => {
-  const normalized = TICKET_IDENTIFIER.test(ref) ? ref.toUpperCase() : ref.toLowerCase();
-  return runs
-    .filter((run) => {
-      const ticket = ticketOf(run.input);
-      if (ticket === null) return false;
-      return TICKET_IDENTIFIER.test(ref)
-        ? ticket.toUpperCase() === normalized
-        : ticket.toLowerCase() === normalized;
-    })
-    .map((run) => run.runId);
-};
+/** Whether a run with exactly this ID exists; commands name runs by full ID only. */
+export const runExists = async (runId: string): Promise<boolean> =>
+  RUN_ID_SHAPE.test(runId) && (await getRun(runId).exists);
 
 export interface WorldRun {
   runId: string;
@@ -418,23 +359,7 @@ const latest = (times: Array<string | null>): string =>
 
 const iso = (at: Date | undefined): string | null => at?.toISOString() ?? null;
 
-const worldRunExists = (runId: string) => getRun(runId).exists;
-
 const worldJobRunIds = (): Promise<JobRunIds> => listJobRunIds(registrySql());
-
-const worldHookRunId = (token: string) =>
-  getHookByToken(token).then(
-    (hook) => hook.runId,
-    () => null,
-  );
-
-// A ref Linear cannot place — or cannot be asked about, with no API key
-// configured — is a ref no run holds, which is the answer either way.
-const linearIssueId = (ref: string) =>
-  resolveIssueRef(ref).then(
-    (issue) => issue.id,
-    () => null,
-  );
 
 async function worldRuns(): Promise<WorldRun[]> {
   const runs: WorldRun[] = [];
@@ -512,8 +437,6 @@ const triggerIdOf = (input: unknown): string | undefined =>
 
 const ticketOf = (input: unknown): string | null =>
   stringField(launchInputs(input), "ticket") ?? null;
-
-const worldRunIds = () => worldRuns().then((runs) => runs.map((r) => r.runId));
 
 /** Every hook the world holds, whichever run owns it. */
 export async function listWorldHooks(): Promise<Array<{ runId: string; token: string }>> {

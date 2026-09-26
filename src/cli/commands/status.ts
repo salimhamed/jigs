@@ -3,7 +3,7 @@ import type { CleanupView } from "../../workflow/runtime/cleanup.ts";
 import type { RunResource } from "../../workflow/runtime/resources.ts";
 import { formatTable } from "../table.ts";
 import { age, type RunListRun, suspensionLine } from "./run-list.ts";
-import { readErrorBody, runRefError, type ServiceDeps, serviceFetch } from "./service-client.ts";
+import { runNotFound, type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 // jigs contributes the two things the dashboard cannot — resolving a ticket id
 // or a ULID prefix to a run, and the queue jobs that died holding its resume —
@@ -46,14 +46,12 @@ export interface StatusOptions {
 }
 
 export async function showRunStatus(
-  ref: string,
+  runId: string,
   deps: ServiceDeps,
   options: StatusOptions = {},
 ): Promise<StatusResult> {
-  const res = await serviceFetch(deps.serviceUrl, `/api/runs/${encodeURIComponent(ref)}`);
-  if (res.status === 404 || res.status === 409) {
-    throw runRefError(ref, await readErrorBody(res));
-  }
+  const res = await serviceFetch(deps.serviceUrl, `/api/runs/${encodeURIComponent(runId)}`);
+  if (res.status === 404) throw runNotFound(runId);
   if (!res.ok) {
     throw new JigsError(`status failed: HTTP ${res.status} ${await res.text()}`);
   }
