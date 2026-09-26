@@ -1,6 +1,6 @@
-import type { AsyncLocalStorage } from "node:async_hooks";
 import type { TextStreamPart, ToolSet } from "ai";
-import { getStepMetadata, getWritable } from "workflow";
+import { getStepMetadata, getWorkflowMetadata } from "workflow";
+import { getRun } from "workflow/api";
 import type { HarnessKind } from "../../workflow/agents/harness-config.ts";
 
 /** One record in an agent step's Workflow stream, as the dashboard shows it. */
@@ -26,30 +26,19 @@ export type AttemptStart = Omit<
 const COALESCE_MS = 1000;
 const PAYLOAD_CAP = 4096;
 
-// Symbol.for global the Workflow SDK keeps its step context under.
-const STEP_CONTEXT = Symbol.for("WORKFLOW_STEP_CONTEXT_STORAGE");
-
 /**
  * The current step's stream, namespaced by its step id, or undefined outside a step.
  *
  * @remarks
- * The SDK awaits every stream a step opened before it completes the step, and
- * fails the step when a flush fails or takes over 30 seconds. The writable is
- * opened under a copy of the step context with its own pending-op list, so the
- * flush runs in the background and a broken stream never fails the agent step.
+ * Opened through the run handle rather than the step's own `getWritable`: the
+ * step then never waits on the stream's flush, so a broken stream cannot fail
+ * or hold the agent step.
  */
 export function openStepStream(): StepStream | undefined {
   try {
-    const storage = (globalThis as Record<symbol, AsyncLocalStorage<object> | undefined>)[
-      STEP_CONTEXT
-    ];
-    const context = storage?.getStore();
-    if (storage === undefined || context === undefined) return undefined;
     const { stepId, attempt } = getStepMetadata();
-    const detached = { ...context, ops: [], streamStates: undefined, writables: undefined };
-    const writable = storage.run(detached, () =>
-      getWritable<AgentStreamPart>({ namespace: stepId }),
-    );
+    const { workflowRunId } = getWorkflowMetadata();
+    const writable = getRun(workflowRunId).getWritable<AgentStreamPart>({ namespace: stepId });
     return { attempt, writable };
   } catch {
     return undefined;
@@ -64,11 +53,13 @@ export async function teeAgentStream(
   parts: AsyncIterable<TextStreamPart<ToolSet>>,
   stream: StepStream | undefined,
   start: AttemptStart,
-  now: () => number = Date.now,
 ): Promise<void> {
   const sink = openSink(stream);
-  let pending: { type: "text" | "reasoning"; text: string; since: number } | undefined;
+  let pending: { type: "text" | "reasoning"; text: string } | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const flush = () => {
+    clearTimeout(timer);
+    timer = undefined;
     if (pending !== undefined && pending.text !== "") {
       sink.write({ type: pending.type, text: pending.text });
     }
@@ -82,10 +73,12 @@ export async function teeAgentStream(
         const type = part.type === "text-delta" ? "text" : "reasoning";
         if (pending?.type !== type) {
           flush();
-          pending = { type, text: "", since: now() };
+          pending = { type, text: "" };
+          // A silent tool call can follow; the timer shows buffered text anyway.
+          timer = setTimeout(flush, COALESCE_MS);
+          timer.unref();
         }
         pending.text += part.text;
-        if (now() - pending.since >= COALESCE_MS) flush();
         continue;
       }
       if (part.type === "error") throw part.error;
@@ -100,6 +93,7 @@ export async function teeAgentStream(
     sink.write({ type: "error", message: truncate(errorMessage(error)) });
     throw error;
   } finally {
+    clearTimeout(timer);
     sink.release();
   }
 }

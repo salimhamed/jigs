@@ -1,5 +1,5 @@
 import type { TextStreamPart, ToolSet } from "ai";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import {
   type AgentStreamPart,
   openStepStream,
@@ -32,14 +32,8 @@ function recorder(fail?: (part: AgentStreamPart, index: number) => boolean): {
   };
 }
 
-async function* partsOf(
-  parts: TextStreamPart<ToolSet>[],
-  tick?: () => void,
-): AsyncGenerator<TextStreamPart<ToolSet>> {
-  for (const part of parts) {
-    tick?.();
-    yield part;
-  }
+async function* partsOf(parts: TextStreamPart<ToolSet>[]): AsyncGenerator<TextStreamPart<ToolSet>> {
+  yield* parts;
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -91,24 +85,38 @@ test("each attempt opens with attempt-start, then deltas coalesce until a bounda
   expect(stream.writable.locked).toBe(false);
 });
 
-test("a long run of deltas is cut about once a second", async () => {
-  const { stream, parts } = recorder();
-  let clock = 0;
+test("buffered text is written after about a second, even while the agent is silent", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const { stream, parts } = recorder();
+    let resume = () => {};
+    const toolCall = new Promise<void>((resolve) => {
+      resume = resolve;
+    });
+    async function* agent(): AsyncGenerator<TextStreamPart<ToolSet>> {
+      yield text("a");
+      yield text("b");
+      await toolCall;
+      yield text("c");
+    }
 
-  await teeAgentStream(
-    partsOf([text("a"), text("b"), text("c"), text("d")], () => {
-      clock += 600;
-    }),
-    stream,
-    start,
-    () => clock,
-  );
-  await settle();
+    const run = teeAgentStream(agent(), stream, start);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(parts.slice(1)).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(parts.slice(1)).toEqual([{ type: "text", text: "ab" }]);
 
-  expect(parts.slice(1)).toEqual([
-    { type: "text", text: "abc" },
-    { type: "text", text: "d" },
-  ]);
+    resume();
+    await run;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(parts.slice(1)).toEqual([
+      { type: "text", text: "ab" },
+      { type: "text", text: "c" },
+    ]);
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("tool payloads are truncated to a fixed cap with a marker", async () => {
