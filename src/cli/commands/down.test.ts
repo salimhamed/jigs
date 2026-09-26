@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { resolveService } from "../../config/factory-config.ts";
 import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import { downFactory } from "./down.ts";
-import { servicePidfilePath } from "./service-lifecycle.ts";
+import { servicePidfilePath, serviceSupervisionPath } from "./service-lifecycle.ts";
 import {
   execError,
   type FakeProcesses,
@@ -40,6 +40,7 @@ function running(root: string, procs: FakeProcesses, pid: number): string {
   const pidfile = servicePidfilePath(slug);
   mkdirSync(path.dirname(pidfile), { recursive: true });
   writeFileSync(pidfile, `${pid}\n`);
+  writeFileSync(serviceSupervisionPath(slug), `${JSON.stringify({ processGroup: pid })}\n`);
   procs.alive.add(pid);
   return slug;
 }

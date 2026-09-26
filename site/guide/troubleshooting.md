@@ -87,6 +87,18 @@ keep their resources. Inspect them with `pnpm exec jigs resources list`, then
 preview `pnpm exec jigs resources prune` before you remove anything. See
 [CLI commands](/guide/cli#cleaning-up-resources).
 
+`pnpm exec jigs resources prune --apply` refuses while the service or anything
+it started is still running, on macOS and Linux alike. Run
+`pnpm exec jigs service stop`, then apply again.
+
+## `jigs service stop` says processes are still running
+
+The stop ended everything it could and lists each process that survived, with
+its process ID and command. That is usually a process the stopping user may not
+signal, such as one started with `sudo`. End each listed process yourself, then
+run the command again. See
+[Stopping the service](/guide/cli#stopping-the-service).
+
 ## Runs stop moving after you ran `workflow web`
 
 Never run the Workflow SDK's standalone `workflow web` against a factory's

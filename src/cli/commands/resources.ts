@@ -13,10 +13,9 @@ import type {
 import { runNotFound } from "./service-client.ts";
 import {
   acquireServiceExclusion,
-  liveServicePid,
-  serviceSupervision,
+  requireServiceStopped,
+  type ServiceProcesses,
 } from "./service-lifecycle.ts";
-import { type SystemdUserManager, systemdUserManager } from "./systemd-user.ts";
 
 export interface ResourcesOptions {
   run?: string;
@@ -28,7 +27,7 @@ export interface ResourcesOptions {
 export interface ResourcesDeps {
   cwd: string;
   out: (line: string) => void;
-  systemd?: SystemdUserManager;
+  processes?: ServiceProcesses;
   connect?: (url: string) => RegistrySql;
 }
 
@@ -205,35 +204,7 @@ export async function runResourcesPrune(
   const { slug } = (await import("../../config/factory-config.ts")).resolveService(factoryRoot);
   const releaseExclusion = acquireServiceExclusion(slug, "resources-prune");
   try {
-    const systemd = deps.systemd ?? systemdUserManager;
-    if (!systemd.available()) {
-      throw new JigsError(
-        "cannot prove the factory's child processes are stopped without systemd user scopes",
-        "run preview only here, or perform --apply on the supervised host after pnpm exec jigs service stop",
-      );
-    }
-    const pid = liveServicePid({ cwd: factoryRoot, out: deps.out });
-    if (pid !== undefined) {
-      throw new JigsError(
-        `factory service is still running as pid ${pid}`,
-        "stop it first with pnpm exec jigs service stop; prune never stops or kills processes",
-      );
-    }
-    if (serviceSupervision(slug) !== "systemd-scope") {
-      throw new JigsError(
-        "cannot prove that prior factory child processes were contained in its systemd scope",
-        "start and stop this factory once with the current jigs service command, then retry; prune never stops or kills processes",
-      );
-    }
-    const scope = systemd.scopeState(`jigs-${slug}`);
-    if (scope !== "inactive") {
-      throw new JigsError(
-        scope === "active"
-          ? `factory scope jigs-${slug}.scope still has a service or child process`
-          : `could not verify that factory scope jigs-${slug}.scope is inactive`,
-        "stop the surviving process and verify the user scope is inactive; prune never kills it",
-      );
-    }
+    requireServiceStopped({ cwd: factoryRoot, out: deps.out, processes: deps.processes });
 
     const report = await withDatabase(deps, async (sql) => {
       const { report: preview, input } = await readInventory(deps, sql, options);

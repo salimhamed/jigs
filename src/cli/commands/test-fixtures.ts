@@ -139,9 +139,11 @@ export function fakeProcesses(): FakeProcesses {
     },
     signal(pid, sig) {
       state.signals.push({ pid, sig });
-      if (sig === "SIGTERM") state.alive.delete(pid);
+      if (sig === "SIGTERM" || sig === "SIGKILL") state.alive.delete(pid);
       return state.alive.has(pid);
     },
+    snapshot: () =>
+      [...state.alive].map((pid) => `${pid} 1 ${pid} S node .output/server/index.mjs\n`).join(""),
   };
   return state;
 }

@@ -77,7 +77,7 @@ jigs keeps each binding's clone and worktrees under
 | --- | --- |
 | `jigs resources list` | List each run's worktrees, scratch directories and recorded resources. Changes nothing. |
 | `jigs resources prune` | Preview what could be safely removed. |
-| `jigs resources prune --apply` | Remove it. Needs the service stopped. |
+| `jigs resources prune --apply` | Remove it. Needs `jigs service stop` first. |
 
 ## Service
 
@@ -88,7 +88,7 @@ managing only the service.
 | Command | What it does |
 | --- | --- |
 | `jigs service start` | Start the service from the current build and wait until it is ready. |
-| `jigs service stop` | Stop the service, giving in-flight work a few seconds to finish. Postgres keeps running. |
+| `jigs service stop` | Stop the service and everything it started, giving in-flight work up to 10 seconds to finish. Postgres keeps running. |
 | `jigs service restart` | Stop, then start. |
 | `jigs service status` | Say whether the service runs, with its service and dashboard URLs. |
 | `jigs service logs` | Print the service's recent output. `--lines` sets how many. |
@@ -97,21 +97,93 @@ The service hosts its own dashboard. Do not run the Workflow SDK's
 `workflow web` against a factory; see
 [Troubleshooting](/guide/troubleshooting#runs-stop-moving-after-you-ran-workflow-web).
 
+### Stopping the service
+
+`jigs service stop`, `jigs service restart`, `jigs down` and a restart inside
+`jigs up` all stop the service the same way, on macOS and Linux. They stop the
+service and every process it started, such as running agents, their commands
+and anything those commands started. Each gets a termination signal and up to
+10 seconds to exit; whatever is still running after that is killed. An agent's
+step that was cut off runs again after the next start.
+
+If a process survives, the command fails and lists its process ID and command
+so you can end it yourself.
+
+Two kinds of process can outlive a stop:
+
+- A process an agent fully detached from the service, for example with
+  `setsid` or a double fork, can survive.
+- Docker containers an agent started, for example with `docker compose up`, run
+  under the Docker daemon and are not stopped.
+
 ### Service lifetime
 
-On Linux with systemd, enable lingering once so the service keeps running after
-you log out:
+jigs starts and stops the service process itself. It keeps running until you
+stop it, log out or restart the machine. To start the factory each time you log
+in, have the operating system run `pnpm exec jigs up` once in the factory
+directory.
 
-```sh
-loginctl enable-linger "$USER"
+Do not point launchd's `KeepAlive` or systemd's `Restart=` at the service. The
+manager would restart it after `jigs service stop`, and jigs would lose track
+of it.
+
+**macOS.** Save a LaunchAgent as `~/Library/LaunchAgents/dev.jigs.my-factory.plist`,
+with your factory's path in place of `/Users/me/my-factory`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>dev.jigs.my-factory</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>-lc</string>
+    <string>pnpm exec jigs up</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/me/my-factory</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/me/Library/Logs/my-factory-up.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/me/Library/Logs/my-factory-up.log</string>
+</dict>
+</plist>
 ```
 
-On hosts without systemd, including macOS, the service runs unsupervised and
-stops when you log out. `jigs doctor` reports whether service supervision and
-lingering are available.
+The login shell (`zsh -l`) loads your profile, so `pnpm` and `node` are found.
+Load it with
+`launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.jigs.my-factory.plist`,
+which runs it now and at every login from then on. Your Docker runtime must
+also start at login, since `jigs up` starts Postgres with Docker Compose.
 
-`jigs service stop` stops the service and dashboard while leaving Postgres
-running. `jigs down` stops both and keeps Postgres's data for the next start.
+**Linux.** Save a systemd user unit as `~/.config/systemd/user/my-factory.service`:
+
+```ini
+[Unit]
+Description=Start my-factory
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=%h/my-factory
+ExecStart=/bin/bash -lc 'pnpm exec jigs up'
+
+[Install]
+WantedBy=default.target
+```
+
+Enable it with `systemctl --user enable my-factory.service`. It runs once at
+login. To have it run at boot without logging in, also run
+`loginctl enable-linger "$USER"`.
+
+`jigs up` exits once the factory is running, and `oneshot` with
+`RemainAfterExit` tells systemd that is expected. Stop the factory with
+`pnpm exec jigs down` as usual, not with `systemctl`.
 
 ## Advanced/build
 
@@ -160,6 +232,8 @@ you add `--apply`. To apply:
 Only resources of finished runs owned by this factory are removed. A worktree
 with uncommitted changes, an unmerged branch, a waiting run's resources and
 anything jigs cannot prove it owns are always kept. Resources a release policy
-chose to keep need `--include-kept`, which relaxes nothing else. Applying needs
-proof that the service and its agents have stopped, which jigs gets from the
-factory's systemd user scope, so it only works on Linux hosts with systemd.
+chose to keep need `--include-kept`, which relaxes nothing else.
+
+Applying works on macOS and Linux. It never stops or kills anything itself: it
+refuses, and tells you to run `jigs service stop`, while the service or any
+process it started is still running.

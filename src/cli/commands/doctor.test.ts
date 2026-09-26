@@ -17,12 +17,6 @@ afterEach(() => {
 const deps = () => ({
   out: (line: string) => lines.push(line),
   serviceUrl: "http://svc.test:8990",
-  systemd: {
-    available: () => true,
-    linger: () => true,
-    scopeState: () => "inactive",
-    stopScope: () => undefined,
-  },
 });
 
 const respond = (body: unknown) =>
@@ -39,11 +33,7 @@ test("a green report prints one ok line per check and does not throw", async () 
   const report = await runDoctor(deps());
   expect(fetchMock.mock.calls[0]?.[0]).toBe("http://svc.test:8990/api/doctor");
   expect(report.ok).toBe(true);
-  expect(lines).toEqual([
-    "ok   systemd user service supervision",
-    "ok   Linear identity",
-    "ok   binding api",
-  ]);
+  expect(lines).toEqual(["ok   Linear identity", "ok   binding api"]);
 });
 
 test("a red report prints the reason and repair for each failure and throws a JigsError", async () => {
@@ -74,7 +64,6 @@ test("a red report prints the reason and repair for each failure and throws a Ji
   expect(failure).toBeInstanceOf(JigsError);
   expect((failure as JigsError).message).toBe("doctor found 2 problem(s)");
   expect(lines).toEqual([
-    "ok   systemd user service supervision",
     "ok   Linear identity",
     "FAIL binding api: no binding named 'api'",
     "  → run: jigs bind <the-api-remote-url> --binding-name api",
@@ -98,12 +87,6 @@ test("a trailing slash on the service URL does not break the doctor route", asyn
   await runDoctor({
     out: (line: string) => lines.push(line),
     serviceUrl: "http://svc.test:8990/",
-    systemd: {
-      available: () => true,
-      linger: () => true,
-      scopeState: () => "inactive",
-      stopScope: () => undefined,
-    },
   });
   expect(fetchMock.mock.calls[0]?.[0]).toBe("http://svc.test:8990/api/doctor");
 });
@@ -122,43 +105,6 @@ test("a passing check that found something prints what it found", async () => {
   });
   await runDoctor(deps());
   expect(lines).toEqual([
-    "ok   systemd user service supervision",
     "ok   Codex CLI: codex 0.153.4 at /usr/local/bin/codex (minimum 0.153.0)",
   ]);
-});
-
-test("doctor warns with the linger repair when linger is off", async () => {
-  vi.stubEnv("USER", "salim");
-  respond({ ok: true, checks: [] });
-
-  await runDoctor({
-    ...deps(),
-    systemd: {
-      available: () => true,
-      linger: () => false,
-      scopeState: () => "inactive",
-      stopScope: () => undefined,
-    },
-  });
-
-  expect(lines).toContain(
-    "WARN systemd linger is off; the service may die when the last login session ends",
-  );
-  expect(lines).toContain("  → loginctl enable-linger $USER");
-});
-
-test("doctor warns when systemd user scopes are unavailable", async () => {
-  respond({ ok: true, checks: [] });
-
-  await runDoctor({
-    ...deps(),
-    systemd: {
-      available: () => false,
-      linger: () => undefined,
-      scopeState: () => "unknown",
-      stopScope: () => undefined,
-    },
-  });
-
-  expect(lines[0]).toContain("unsupervised and dies on logout");
 });

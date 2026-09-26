@@ -52,6 +52,9 @@ interface Fake {
   signals: Array<{ pid: number; sig: NodeJS.Signals | 0 }>;
   probes: string[];
   alive: Set<number>;
+  // Parent, group and command of a live pid; a pid missing here is a service
+  // that leads its own group.
+  table: Map<number, { ppid: number; pgid: number; command: string }>;
 }
 
 const READY: ServiceHealth = { ready: true, phase: "ready" };
@@ -65,6 +68,7 @@ function fake(health: Array<ServiceHealth | null> = [READY]): Fake {
     signals: [],
     probes: [],
     alive: new Set(),
+    table: new Map(),
     processes: undefined as unknown as ServiceProcesses,
     probe: undefined as unknown as Fake["probe"],
   };
@@ -76,14 +80,29 @@ function fake(health: Array<ServiceHealth | null> = [READY]): Fake {
     },
     signal(pid, sig) {
       state.signals.push({ pid, sig });
+      if (sig === "SIGKILL") state.alive.delete(pid);
       return state.alive.has(pid);
     },
+    snapshot: () => psRows(state),
   };
   state.probe = async (url) => {
     state.probes.push(url);
     return health[Math.min(state.probes.length, health.length) - 1] ?? null;
   };
   return state;
+}
+
+function psRows(io: Fake): string {
+  return [...io.alive]
+    .map((pid) => {
+      const row = io.table.get(pid) ?? {
+        ppid: 1,
+        pgid: pid,
+        command: "node .output/server/index.mjs",
+      };
+      return `${pid} ${row.ppid} ${row.pgid} S ${row.command}\n`;
+    })
+    .join("");
 }
 
 // A factory repo that has already built its service, which is what every
@@ -110,45 +129,10 @@ const deps = (
   out: (line: string) => lines.push(line),
   processes: io.processes,
   probe: io.probe,
-  systemd: {
-    available: () => false,
-    linger: () => undefined,
-    scopeState: () => "unknown",
-    stopScope: () => undefined,
-  },
   // The fake answers at once; the wait between probes is for a real boot.
   startPollMs: 0,
+  killWaitMs: 0,
   ...timeouts,
-});
-
-test("start clears a stale systemd scope before reusing its transient unit name", async () => {
-  const root = builtFactory();
-  const io = fake();
-  const d = deps(root, io);
-
-  const stopped: string[] = [];
-  await startService({
-    ...d,
-    systemd: {
-      available: () => true,
-      linger: () => true,
-      scopeState: () => "inactive",
-      stopScope: (unit) => stopped.push(unit),
-    },
-  });
-
-  expect(stopped).toEqual([`jigs-${factorySlug(root)}`]);
-  expect(io.spawns[0]?.command).toBe("systemd-run");
-  expect(io.spawns[0]?.args).toEqual([
-    "--user",
-    "--scope",
-    `--unit=jigs-${factorySlug(root)}`,
-    process.execPath,
-    SERVICE_ENTRY,
-  ]);
-  expect(readFileSync(serviceSupervisionPath(factorySlug(root)), "utf8").trim()).toBe(
-    "systemd-scope",
-  );
 });
 
 test("resource maintenance exclusion closes the service restart race", async () => {
@@ -175,7 +159,7 @@ const failure = (run: Promise<void>) =>
 function exitsOnTerm(io: Fake) {
   io.processes.signal = (pid, sig) => {
     io.signals.push({ pid, sig });
-    if (sig === "SIGTERM") io.alive.delete(pid);
+    if (sig === "SIGTERM" || sig === "SIGKILL") io.alive.delete(pid);
     return io.alive.has(pid);
   };
 }
@@ -225,14 +209,16 @@ test("the factory's own .env owns the world the service writes", async () => {
   );
 });
 
-test("start records the pid in a pidfile keyed by factory slug", async () => {
+test("start runs node directly and records the pid and its process group", async () => {
   const root = builtFactory();
-  await startService(deps(root, fake()));
+  const io = fake();
+  await startService(deps(root, io));
+  expect(io.spawns[0]?.command).toBe(process.execPath);
   const pidfile = servicePidfilePath(factorySlug(root));
   expect(readFileSync(pidfile, "utf8").trim()).toBe("4242");
-  expect(readFileSync(serviceSupervisionPath(factorySlug(root)), "utf8").trim()).toBe(
-    "unsupervised",
-  );
+  expect(JSON.parse(readFileSync(serviceSupervisionPath(factorySlug(root)), "utf8"))).toEqual({
+    processGroup: 4242,
+  });
 });
 
 test("start records which bundle the process runs, and a dead pid runs none", async () => {
@@ -510,6 +496,59 @@ test("stop escalates to SIGKILL when the process outlives the timeout", async ()
 
   expect(io.signals.map((s) => s.sig)).toContain("SIGKILL");
   expect(existsSync(servicePidfilePath(factorySlug(root)))).toBe(false);
+});
+
+test("stop ends what the service started, in its group or below it", async () => {
+  const root = builtFactory();
+  const io = fake();
+  await startService(deps(root, io));
+  exitsOnTerm(io);
+  io.alive.add(4300).add(4301).add(4302);
+  io.table.set(4300, { ppid: 4242, pgid: 4242, command: "claude --print hi" });
+  io.table.set(4301, { ppid: 4300, pgid: 4301, command: "bash -c pnpm test" });
+  io.table.set(4302, { ppid: 1, pgid: 4242, command: "sleep 600" });
+  lines = [];
+
+  await stopService(deps(root, io));
+
+  expect(io.alive.size).toBe(0);
+  expect(lines).toEqual([
+    `stopped service ${factorySlug(root)} (pid 4242 and 3 process(es) it started)`,
+  ]);
+  // Prune reads the group after the stop.
+  expect(existsSync(serviceSupervisionPath(factorySlug(root)))).toBe(true);
+});
+
+test("a stop that leaves a survivor fails and keeps the pidfile for another try", async () => {
+  const root = builtFactory();
+  const io = fake();
+  await startService(deps(root, io));
+  io.processes.signal = (pid, sig) => {
+    io.signals.push({ pid, sig });
+    return io.alive.has(pid);
+  };
+
+  const err = await failure(stopService(deps(root, io, { stopTimeoutMs: 0 })));
+
+  expect(err?.message).toContain("pid 4242: node .output/server/index.mjs");
+  expect(existsSync(servicePidfilePath(factorySlug(root)))).toBe(true);
+});
+
+test("start first ends what a service that died without a stop left running", async () => {
+  const root = builtFactory();
+  const io = fake();
+  await startService(deps(root, io));
+  exitsOnTerm(io);
+  io.alive.delete(4242);
+  io.alive.add(4300);
+  io.table.set(4300, { ppid: 1, pgid: 4242, command: "claude --print hi" });
+  lines = [];
+
+  await startService(deps(root, io));
+
+  expect(io.signals).toContainEqual({ pid: 4300, sig: "SIGTERM" });
+  expect(lines[0]).toBe("stopped 1 process(es) left by the previous service");
+  expect(io.spawns).toHaveLength(2);
 });
 
 test("stop without a pidfile says so instead of failing", async () => {

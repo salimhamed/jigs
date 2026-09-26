@@ -8,7 +8,11 @@ import { factorySlug } from "../../steps/workspaces/layout.ts";
 import type { RegistrySql } from "../../steps/workspaces/registry.ts";
 import { resourceAttribute } from "../../workflow/runtime/resources.ts";
 import { listResources, runResourcesPrune } from "./resources.ts";
-import { servicePidfilePath, serviceSupervisionPath } from "./service-lifecycle.ts";
+import {
+  type ServiceProcesses,
+  servicePidfilePath,
+  serviceSupervisionPath,
+} from "./service-lifecycle.ts";
 
 const RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 const WORKFLOW = "workflow//./workflows/ship//shipWorkflow";
@@ -113,73 +117,74 @@ test("a workflow database read failure reports that nothing changed", async () =
   ).rejects.toThrow("could not read workflow runs");
 });
 
-test("apply refuses a running service without opening the database", async () => {
+// A machine with the given ps rows; `signal` answers liveness from them.
+function machine(rows: string[] = []): ServiceProcesses {
+  const output = rows.map((row) => `${row}\n`).join("");
+  const alive = new Set(output.split("\n").map((row) => Number(row.trim().split(/\s+/)[0])));
+  return {
+    spawn: () => undefined,
+    signal: (pid) => alive.has(pid),
+    snapshot: () => output,
+  };
+}
+
+function recordService(pid: number, processGroup = pid): void {
   const slug = factorySlug(root);
   const pidfile = servicePidfilePath(slug);
   mkdirSync(path.dirname(pidfile), { recursive: true });
-  writeFileSync(pidfile, `${process.pid}\n`);
+  writeFileSync(pidfile, `${pid}\n`);
+  writeFileSync(serviceSupervisionPath(slug), `${JSON.stringify({ processGroup })}\n`);
+}
+
+const prune = (processes: ServiceProcesses, connect: () => RegistrySql) =>
+  runResourcesPrune(
+    { cwd: root, out: (line) => lines.push(line), connect, processes },
+    { apply: true },
+  );
+
+test("apply refuses a running service without opening the database", async () => {
+  recordService(700);
   const connect = vi.fn(() => database());
 
   await expect(
-    runResourcesPrune(
-      {
-        cwd: root,
-        out: (line) => lines.push(line),
-        connect,
-        systemd: {
-          available: () => true,
-          linger: () => true,
-          scopeState: () => "active",
-          stopScope: () => undefined,
-        },
-      },
-      { apply: true },
-    ),
-  ).rejects.toThrow("still running");
+    prune(machine(["700 1 700 Ss node .output/server/index.mjs"]), connect),
+  ).rejects.toMatchObject({
+    message: "factory service is still running as pid 700",
+    hint: expect.stringContaining("pnpm exec jigs service stop"),
+  });
   expect(connect).not.toHaveBeenCalled();
 });
 
-test("apply refuses a surviving child in the factory scope", async () => {
-  const supervision = serviceSupervisionPath(factorySlug(root));
-  mkdirSync(path.dirname(supervision), { recursive: true });
-  writeFileSync(supervision, "systemd-scope\n");
+test("apply refuses while a process the service started is left in its group", async () => {
+  recordService(700);
   const connect = vi.fn(() => database());
+
   await expect(
-    runResourcesPrune(
-      {
-        cwd: root,
-        out: (line) => lines.push(line),
-        connect,
-        systemd: {
-          available: () => true,
-          linger: () => true,
-          scopeState: () => "active",
-          stopScope: () => undefined,
-        },
-      },
-      { apply: true },
-    ),
-  ).rejects.toThrow("still has a service or child process");
+    prune(machine(["1 0 1 Ss init", "812 1 700 S claude --print hello world"]), connect),
+  ).rejects.toMatchObject({
+    message: expect.stringContaining("pid 812: claude --print hello world"),
+    hint: expect.stringContaining("pnpm exec jigs service stop"),
+  });
   expect(connect).not.toHaveBeenCalled();
 });
 
-test("apply refuses when prior child containment cannot be proven", async () => {
+test("apply refuses without a record of the service's process group", async () => {
   const connect = vi.fn(() => database());
-  await expect(
-    runResourcesPrune(
-      {
-        cwd: root,
-        out: (line) => lines.push(line),
-        connect,
-        systemd: {
-          available: () => true,
-          linger: () => true,
-          scopeState: () => "inactive",
-          stopScope: () => undefined,
-        },
-      },
-      { apply: true },
-    ),
-  ).rejects.toThrow("cannot prove that prior factory child processes were contained");
+
+  await expect(prune(machine(["1 0 1 Ss init"]), connect)).rejects.toMatchObject({
+    message: expect.stringContaining("no record of the"),
+    hint: expect.stringContaining("pnpm exec jigs service stop"),
+  });
   expect(connect).not.toHaveBeenCalled();
+});
+
+test("apply proceeds once the service and its group are gone", async () => {
+  recordService(700);
+  rmSync(servicePidfilePath(factorySlug(root)));
+  const connect = vi.fn(() => database());
+
+  const report = await prune(machine(["1 0 1 Ss init", "900 1 900 Ss bash"]), connect);
+
+  expect(connect).toHaveBeenCalled();
+  expect(report.complete).toBe(true);
 });
