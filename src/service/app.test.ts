@@ -614,7 +614,7 @@ test("GET /api/runs answers with empty runs when nothing has launched", async ()
 
 test("GET /api/runs lists each run with the resources it recorded and their states", async () => {
   const at = new Date("2026-09-04T10:00:00.000Z");
-  const row = (kind: string, state: "kept" | "released", reason: string) => ({
+  const row = (kind: string, state: "kept" | "live", reason: string | null) => ({
     factory: "factory-test",
     runId: RUN,
     kind,
@@ -630,7 +630,7 @@ test("GET /api/runs lists each run with the resources it recorded and their stat
   });
   vi.spyOn(sql, "listResources").mockResolvedValue([
     row("worktree", "kept", "uncommitted work kept"),
-    row("pull-request", "released", "recorded only"),
+    row("pull-request", "live", null),
   ]);
   setWorld({
     specVersion: SPEC_VERSION_CURRENT,
@@ -656,7 +656,7 @@ test("GET /api/runs lists each run with the resources it recorded and their stat
       status: "failed",
       resources: [
         { kind: "worktree", state: "kept", reason: "uncommitted work kept" },
-        { kind: "pull-request", state: "released", reason: "recorded only" },
+        { kind: "pull-request", state: "live", reason: null },
       ],
     },
   ]);

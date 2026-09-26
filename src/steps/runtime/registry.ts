@@ -167,7 +167,10 @@ export async function listResources(
       and(
         eq(resources.factory, filter.factory),
         filter.runId === undefined ? undefined : eq(resources.runId, filter.runId),
-        filter.runIds === undefined ? undefined : inArray(resources.runId, [...filter.runIds]),
+        // One array parameter, not one per run: Postgres caps a query at 65,535.
+        filter.runIds === undefined
+          ? undefined
+          : sql`${resources.runId} = any(${sql.param([...filter.runIds])}::text[])`,
         filter.kind === undefined ? undefined : eq(resources.kind, filter.kind),
         filter.kinds === undefined ? undefined : inArray(resources.kind, [...filter.kinds]),
         filter.identity === undefined ? undefined : eq(resources.identity, filter.identity),

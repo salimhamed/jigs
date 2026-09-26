@@ -176,6 +176,10 @@ test("rows are this factory's alone and filter by run, kind, identity and state"
     ),
   ).toEqual(["factory-a"]);
   expect(await listResources(db, { factory: "factory-c" })).toEqual([]);
+  expect(
+    (await listResources(db, { factory: "factory-a", runIds: ["run_1", "run_other"] })).length,
+  ).toBe(2);
+  expect(await listResources(db, { factory: "factory-a", runIds: [] })).toEqual([]);
 });
 
 test("a run's state is its records plus the hooks the World holds", async () => {
