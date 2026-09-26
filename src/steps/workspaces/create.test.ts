@@ -1,4 +1,4 @@
-import { rmSync, symlinkSync } from "node:fs";
+import { rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { createWorktree, findWorktree } from "./create.ts";
@@ -29,18 +29,36 @@ function wtPath(name: string): string {
 
 const localBranches = () => git(repoDir, "for-each-ref", "--format=%(refname)", "refs/heads");
 
-test("a branch left without a worktree is cut again from origin default", async () => {
-  const stale = git(repoDir, "rev-parse", "refs/remotes/origin/main");
-  git(repoDir, "branch", "agent/retry", stale);
-  const advancedRemoteMain = commitToRemote(tmp, remoteDir, "main", { "b.txt": "newer" });
+// A worktree removed mid-run leaves its branch holding the run's commits.
+async function branchWithWorkButNoWorktree(name: string): Promise<string> {
+  const wt = wtPath(name);
+  await createWorktree({ repoDir, worktreePath: wt, branch: `agent/${name}` });
+  writeFileSync(path.join(wt, "work.txt"), "work\n");
+  git(wt, "add", "work.txt");
+  git(wt, "commit", "-q", "-m", "work");
+  const work = git(wt, "rev-parse", "HEAD");
+  git(repoDir, "worktree", "remove", "--force", wt);
+  commitToRemote(tmp, remoteDir, "main", { "b.txt": "newer" });
+  return work;
+}
 
-  const facts = await createWorktree({
-    repoDir,
-    worktreePath: wtPath("retry"),
-    branch: "agent/retry",
-  });
-  expect(facts.baseSha).toBe(advancedRemoteMain);
-  expect(git(wtPath("retry"), "rev-parse", "HEAD")).toBe(advancedRemoteMain);
+test("a branch holding work but no worktree is checked out as-is", async () => {
+  const work = await branchWithWorkButNoWorktree("kept");
+
+  await createWorktree({ repoDir, worktreePath: wtPath("kept"), branch: "agent/kept" });
+
+  expect(git(wtPath("kept"), "rev-parse", "HEAD")).toBe(work);
+  expect(git(repoDir, "rev-parse", "refs/heads/agent/kept")).toBe(work);
+});
+
+test("a path holding something else is refused, naming it, and no branch moves", async () => {
+  const work = await branchWithWorkButNoWorktree("taken");
+  await createWorktree({ repoDir, worktreePath: wtPath("taken"), branch: "agent/other" });
+
+  await expect(
+    createWorktree({ repoDir, worktreePath: wtPath("taken"), branch: "agent/taken" }),
+  ).rejects.toThrow(`${wtPath("taken")} exists but is not a worktree on agent/taken`);
+  expect(git(repoDir, "rev-parse", "refs/heads/agent/taken")).toBe(work);
 });
 
 test("a new branch forks from origin default, not a stale local one", async () => {

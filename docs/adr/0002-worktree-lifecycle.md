@@ -18,9 +18,10 @@ path hash) keeps two factories' same-named bindings apart.
   fresh from `origin/<default>` after a `git fetch` of the default branch; no
   other branch is fetched. A run never adopts another run's worktree or branch,
   so there is no ownership check, handoff or reuse test. Only the run's own
-  retry finds its worktree at the path on its branch and takes it as-is, and a
-  branch left without a worktree is re-cut (`worktree add -B`), since
-  provisioning had not returned. Every git call passes an explicit `cwd`,
+  retry finds its worktree at the path on its branch and takes it as-is. A
+  branch is never reset: one left without a worktree is checked out as-is, so
+  work on it survives, and a path holding anything else is refused untouched.
+  Every git call passes an explicit `cwd`,
   because removing a worktree deletes the working directory of whoever runs it.
 - **Provisioning fails fast.** `copy` globs match dotfiles, never overwrite,
   and fail the request when a pattern matches nothing or leaves

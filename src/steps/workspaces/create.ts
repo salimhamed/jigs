@@ -1,4 +1,4 @@
-import { mkdirSync, realpathSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { JigsError } from "../../errors.ts";
 import { deriveDefaultBranch, git, tryGit } from "../../providers/git.ts";
@@ -55,10 +55,23 @@ export async function createWorktree(options: CutOptions): Promise<WorktreeFacts
   // makes `worktree add` at the same path fail; prune only clears entries for
   // missing, unlocked worktrees, so it is safe here.
   await tryGit(["worktree", "prune"], repoDir);
-  // -B: a retry of the run's own provisioning can find its branch made but no
-  // worktree on it, and nothing has been committed there yet.
+  if (existsSync(worktreePath)) {
+    throw new JigsError(
+      `${worktreePath} exists but is not a worktree on ${branch}; it was left untouched`,
+      "inspect it, keep any work in it, then remove it and retry",
+    );
+  }
+  // Never reset a branch: an existing one is checked out as-is, because it may
+  // hold the run's work (a worktree removed mid-run, or a second provisioning
+  // of the same branch). A provisioning retry's branch has no commits yet.
+  const exists = await tryGit(
+    ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`],
+    repoDir,
+  );
   await git(
-    ["worktree", "add", "-B", branch, worktreePath, `origin/${cut.defaultBranch}`],
+    exists === null
+      ? ["worktree", "add", "-b", branch, worktreePath, `origin/${cut.defaultBranch}`]
+      : ["worktree", "add", worktreePath, branch],
     repoDir,
   );
   return cut;
