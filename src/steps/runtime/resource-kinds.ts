@@ -2,12 +2,6 @@ import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { git, tryGit } from "../../providers/git.ts";
 import {
-  GithubApiError,
-  githubGet,
-  githubGetAll,
-  githubRequest,
-} from "../../providers/github-api.ts";
-import {
   RELEASABLE_KINDS,
   type ReleasableKind,
   type ResourceState,
@@ -93,68 +87,6 @@ const worktree: ResourceKind = async (row) => {
   };
 };
 
-function githubBranch(identity: string) {
-  const parsed = /^([^/:]+)\/([^/:]+):(.+)$/.exec(identity);
-  if (parsed === null) throw new Error(`branch record ${identity} is not owner/repo:branch`);
-  const [, owner = "", repo = "", name = ""] = parsed;
-  const encoded = name.split("/").map(encodeURIComponent).join("/");
-  return { owner, repo, name, ref: `/repos/${owner}/${repo}/git/ref/heads/${encoded}` };
-}
-
-/** The branch's head SHA on GitHub, or null when it does not exist. */
-async function headOf(ref: string): Promise<string | null> {
-  try {
-    return (await githubGet<{ object: { sha: string } }>(ref)).object.sha;
-  } catch (error) {
-    if (error instanceof GithubApiError && error.status === 404) return null;
-    throw error;
-  }
-}
-
-const branch: ResourceKind = async (row) => {
-  const { owner, repo, name, ref } = githubBranch(row.identity);
-  const sha = await headOf(ref);
-  if (sha === null) return released("already absent on GitHub");
-  const pulls = await githubGetAll<{
-    number: number;
-    state: string;
-    merged_at: string | null;
-    head: { ref: string; sha: string };
-  }>(`/repos/${owner}/${repo}/pulls?state=all&head=${encodeURIComponent(`${owner}:${name}`)}`);
-  const own = pulls.filter((pull) => pull.head.ref === name);
-  const open = own.find((pull) => pull.state === "open");
-  if (open !== undefined) return keep(`pull request #${open.number} is still open`);
-  // A squash merge leaves the branch's commits off the default branch, so a
-  // merged pull request at this exact head is the other proof of merged work.
-  if (!own.some((pull) => pull.merged_at !== null && pull.head.sha === sha)) {
-    const { default_branch } = await githubGet<{ default_branch: string }>(
-      `/repos/${owner}/${repo}`,
-    );
-    const { ahead_by } = await githubGet<{ ahead_by: number }>(
-      `/repos/${owner}/${repo}/compare/${encodeURIComponent(default_branch)}...${sha}`,
-    );
-    if (ahead_by > 0) return keep(`${ahead_by} commit(s) are not on ${default_branch}`);
-  }
-  return async () => {
-    // GitHub has no conditional delete, so the head is read again just before it.
-    if ((await headOf(ref)) !== sha) {
-      return { state: "live", reason: "the branch moved after it was checked" };
-    }
-    try {
-      await githubRequest("DELETE", ref.replace("/git/ref/", "/git/refs/"));
-      return released("deleted on GitHub");
-    } catch (error) {
-      if (!(error instanceof GithubApiError && (error.status === 404 || error.status === 422))) {
-        throw error;
-      }
-      // 422 is both "no such ref" and a refusal, such as a protected branch.
-      return (await headOf(ref)) === null
-        ? released("already absent on GitHub")
-        : keep(`GitHub refused the delete: ${error.body}`);
-    }
-  };
-};
-
 // Harness homes hold the agent sessions that resume work in the run's worktree,
 // so they wait for its outcome and stay when it stays.
 const harnessHome =
@@ -172,7 +104,6 @@ const harnessHome =
 // known before the harness homes that depend on it.
 const KINDS: Record<ReleasableKind, ResourceKind> = {
   worktree,
-  branch,
   "run-directory": removeDirectory((runId) => runDirectory({ workflowRunId: runId })),
   "codex-home": harnessHome((runId) => codexRunStatePath(runId)),
   "pi-home": harnessHome((runId) => piRunStatePath(runId)),

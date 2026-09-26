@@ -1,6 +1,6 @@
 import { getWorkflowMetadata } from "workflow";
 import { JigsError } from "../../errors.ts";
-import { type RunResource, releasable } from "../../workflow/runtime/resources.ts";
+import { RESERVED_KINDS, type RunResource } from "../../workflow/runtime/resources.ts";
 import { currentFactory, recordResource, registrySql } from "./registry.ts";
 
 function assertResource(resource: RunResource): void {
@@ -12,9 +12,9 @@ function assertResource(resource: RunResource): void {
   if (!URL.canParse(resource.url)) {
     throw new JigsError(`resource URL is not an absolute URL: ${JSON.stringify(resource.url)}`);
   }
-  if (releasable(resource.kind)) {
+  if (RESERVED_KINDS.includes(resource.kind)) {
     throw new JigsError(
-      `resource kind ${resource.kind} is reserved: jigs records and releases it itself`,
+      `resource kind ${resource.kind} is reserved: jigs records it itself`,
       "register what your workflow created under a kind of its own, such as report or deployment",
     );
   }
@@ -25,7 +25,7 @@ function assertResource(resource: RunResource): void {
  *
  * Repeating kind + identity is idempotent; a new URL for that identity replaces the old one.
  * The record is observation only: it stays `live` as the run's history and jigs never deletes
- * what it names. The kinds jigs releases itself (`worktree`, `run-directory`, `branch`,
+ * what it names. The kinds jigs records itself (`worktree`, `run-directory`, `branch`,
  * `codex-home`, `pi-home`) are reserved.
  *
  * @group Recorded resources

@@ -40,22 +40,23 @@ else records it.
   failed attempt.
   Every row carries the reason for its state. `UNRELEASED_STATES` names the
   three that status and prune show.
-- **Kinds.** `worktree`, `run-directory`, `codex-home`, `pi-home` and `branch`
-  have release handlers and are reserved: only jigs records them.
-  `pull-request` and any kind a factory registers are recorded only: they stay
+- **Kinds.** `worktree`, `run-directory`, `codex-home` and `pi-home` have
+  release handlers. They and `branch` are reserved: only jigs records them.
+  `branch`, `pull-request` and any kind a factory registers are recorded only: they stay
   `live` as history, and release, prune and every listing of what is still
   held (`RELEASABLE_KINDS`, `unreleased`) leave them out. One module (`steps/runtime/resource-kinds.ts`) holds the handlers and
   their safety checks; explicit and automatic release and prune all go through
   it and write each outcome through one function (`releaseOne`). Handlers
   delete only what jigs recorded itself (run ID, identity, a worktree's clone
   and branch), never a factory-supplied URL.
-- **Branches.** jigs records a `branch` only when the run's push created it; a
-  branch already on the remote (`staging`, a person's branch) is never
-  recorded, so never deleted. A branch kept because its pull request was open
-  stays `kept` after the merge: `jigs resources prune --apply` removes
-  it then, or records it `released` if GitHub's auto-delete already did. The
-  head is read again just before the delete, and a branch that moved is left
-  `live`.
+- **Branches.** jigs never deletes remote branches. Every branch a run pushes
+  is recorded (before the push, with the clone it was pushed from), and stays
+  `live`. `jigs resources prune` asks each clone's remote once which of the
+  finished runs' branches still exist, lists those with the command that
+  deletes them, and on `--apply` marks the ones already gone `released`
+  ("deleted outside jigs"). GitHub's "automatically delete head branches"
+  setting removes merged pull requests' branches; nothing in jigs calls the
+  GitHub API to delete one.
 - **Ownership** is "this factory has a row for it". Several factories may share
   one database, so every query filters on the factory slug.
 - **Registration.** jigs records its own resources where it creates them.

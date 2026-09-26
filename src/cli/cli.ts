@@ -107,7 +107,7 @@ Recipes:
 Resources:
   resources list            Show run resources and working folders
   resources prune           Preview what --apply would release, policy-kept included
-  resources prune --apply   Release it after the Git and GitHub safety checks
+  resources prune --apply   Release it after the Git safety checks
 
 Generated code:
   build                     Compile workflows into the service bundle

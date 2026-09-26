@@ -81,8 +81,8 @@ terminal. The default is `{ onSuccess: "release", onFailure: "keep" }`; set
 both use `onFailure`. Live and suspended runs retain their resources.
 
 Release never throws away work: dirty worktrees stay, local branches go only
-when their commits are on the remote default branch, and a pushed branch is
-deleted on GitHub only when it is merged and has no open pull request. Each
+when their commits are on the remote default branch, and jigs never deletes
+remote branches (`jigs resources prune` lists the ones runs left). Each
 resource's state (`live`, `kept`, `released`, `failed`) and reason stays visible
 in `jigs status <run-id>`; failed releases are retried by the service, and
 leftovers are inspectable with `jigs resources list` and preview-first

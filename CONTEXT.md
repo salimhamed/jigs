@@ -109,9 +109,8 @@ on), read as plain data by `readRunState`.
 
 **Release**: Removing a finished run's eligible resources under the factory's
 or workflow's release policy. The service applies it after a run ends and
-reconciles missed ones on a timer. Dirty or unmerged work is kept, and a branch
-is deleted only on evidence its commits are merged, never while it has an open
-pull request.
+reconciles missed ones on a timer. Dirty or unmerged work is kept, and remote
+branches are never deleted: prune lists the ones runs left on GitHub.
 _Avoid_: teardown (for the request), gc
 
 **Kept resource**: A resource release left in place, by policy or because a

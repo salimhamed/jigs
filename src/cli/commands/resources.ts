@@ -38,10 +38,23 @@ export interface ResourceEntry extends ResourceRecord {
   error?: string;
 }
 
+/** A branch a finished run pushed that is still on GitHub; jigs never deletes remote branches. */
+export interface LeftBranch {
+  runId: string;
+  /** `owner/repo:branch`. */
+  identity: string;
+  url: string;
+  /** False when the remote could not be asked, so the branch may already be gone. */
+  checked: boolean;
+  /** How to delete it by hand. */
+  command: string;
+}
+
 export interface ResourceInventory {
   complete: boolean;
   errors: string[];
   entries: ResourceEntry[];
+  leftOnGitHub: LeftBranch[];
 }
 
 // The CLI never opens the World, and prune runs with the service stopped. The
@@ -70,7 +83,59 @@ const modules = async () => ({
   ...(await import("../../steps/runtime/release.ts")),
   ...(await import("../../steps/runtime/resource-kinds.ts")),
   ...(await import("../../steps/runtime/run-state.ts")),
+  ...(await import("../../providers/git.ts")),
 });
+
+/**
+ * The branches finished runs left on GitHub, asking each clone's remote once which still exist.
+ * On apply, the ones gone are marked released; a preview writes nothing.
+ */
+async function leftBranches(
+  sql: RegistrySql,
+  factory: string,
+  options: ResourcesOptions,
+): Promise<LeftBranch[]> {
+  const m = await modules();
+  const rows = await m.listResources(sql, {
+    factory,
+    ...(options.run === undefined ? {} : { runId: options.run }),
+    kind: "branch",
+    states: ["live"],
+  });
+  const statuses = new Map<string, boolean>();
+  for (const runId of new Set(rows.map((row) => row.runId))) {
+    statuses.set(
+      runId,
+      m.finished({ status: (await offlineFacts(sql)(runId)).run?.status ?? null }),
+    );
+  }
+  const left: LeftBranch[] = [];
+  for (const [repoDir, branches] of Map.groupBy(
+    rows.filter((row) => statuses.get(row.runId)),
+    (row) => row.repoDir ?? "",
+  )) {
+    const heads =
+      repoDir === "" ? null : await m.tryGit(["ls-remote", "--heads", "origin"], repoDir);
+    const existing =
+      heads === null ? null : new Set(heads.split("\n").map((line) => line.split("\t")[1]));
+    for (const row of branches) {
+      if (existing !== null && !existing.has(`refs/heads/${row.branch}`)) {
+        if (options.apply === true) {
+          await m.setResourceState(sql, row, "released", "deleted outside jigs");
+        }
+        continue;
+      }
+      left.push({
+        runId: row.runId,
+        identity: row.identity,
+        url: row.url,
+        checked: existing !== null,
+        command: `git push origin --delete ${row.branch}`,
+      });
+    }
+  }
+  return left;
+}
 
 /**
  * Visit one run's unreleased resources in release order. Prune overrides the release policy: a
@@ -166,9 +231,19 @@ async function visit(
   return entries;
 }
 
-function report(entries: ResourceEntry[]): ResourceInventory {
+async function inventory(
+  sql: RegistrySql,
+  factory: string,
+  options: ResourcesOptions,
+): Promise<ResourceInventory> {
+  const entries = await visit(sql, factory, options);
   const errors = entries.flatMap((entry) => (entry.error === undefined ? [] : [entry.error]));
-  return { complete: errors.length === 0, errors, entries };
+  return {
+    complete: errors.length === 0,
+    errors,
+    entries,
+    leftOnGitHub: await leftBranches(sql, factory, options),
+  };
 }
 
 function output(result: ResourceInventory, deps: ResourcesDeps, options: ResourcesOptions): void {
@@ -182,6 +257,11 @@ function output(result: ResourceInventory, deps: ResourcesDeps, options: Resourc
     );
   }
   for (const error of result.errors) deps.out(`failed: ${error}`);
+  for (const branch of result.leftOnGitHub) {
+    deps.out(
+      `left on GitHub${branch.checked ? "" : " (could not check the remote; it may be gone)"}: ${branch.identity} — jigs doesn't delete remote branches; to remove it: ${branch.command}`,
+    );
+  }
   const { entries } = result;
   const removable = entries.filter((entry) => entry.eligible).length;
   const removed = entries.filter((entry) => entry.action === "remove").length;
@@ -217,7 +297,7 @@ export async function listResources(
   deps: ResourcesDeps,
   options: ResourcesOptions = {},
 ): Promise<ResourceInventory> {
-  const result = report(await withDatabase(deps, (sql, factory) => visit(sql, factory, options)));
+  const result = await withDatabase(deps, (sql, factory) => inventory(sql, factory, options));
   output(result, deps, options);
   return result;
 }
@@ -235,7 +315,7 @@ export async function runResourcesPrune(
   );
   try {
     requireServiceStopped({ cwd: factoryRoot, out: deps.out, processes: deps.processes });
-    const result = report(await withDatabase(deps, (sql, factory) => visit(sql, factory, options)));
+    const result = await withDatabase(deps, (sql, factory) => inventory(sql, factory, options));
     output(result, deps, options);
     return result;
   } finally {

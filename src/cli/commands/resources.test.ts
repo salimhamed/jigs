@@ -6,7 +6,7 @@ import type { RegistrySql, ResourceRow } from "../../steps/runtime/registry.ts";
 import { readRunState } from "../../steps/runtime/run-state.ts";
 import { memoryLock, memoryRows } from "../../steps/runtime/test-fixtures.ts";
 import { factorySlug } from "../../steps/workspaces/layout.ts";
-import { git, makeClonedBinding } from "../../steps/workspaces/test-fixtures.ts";
+import { commitToRemote, git, makeClonedBinding } from "../../steps/workspaces/test-fixtures.ts";
 import { listResources, offlineFacts, runResourcesPrune } from "./resources.ts";
 import {
   type ServiceProcesses,
@@ -289,6 +289,79 @@ test("one apply releases a worktree and then the harness homes that waited for i
 
   expect(existsSync(tree.identity)).toBe(false);
   expect(existsSync(pi)).toBe(false);
+});
+
+function leftover() {
+  const parent = path.join(tmp, "leftover");
+  mkdirSync(parent);
+  const { remoteDir, repoDir } = makeClonedBinding(parent);
+  commitToRemote(parent, remoteDir, "still-there", { "a.txt": "a" });
+  const branch = (name: string, over: Partial<ResourceRow> = {}) =>
+    seed("branch", {
+      identity: `acme/api:${name}`,
+      url: `https://github.com/acme/api/tree/${name}`,
+      repoDir,
+      branch: name,
+      ...over,
+    });
+  return { repoDir, branch };
+}
+
+test("the preview lists branches finished runs left on GitHub, with how to delete them", async () => {
+  const { branch } = leftover();
+  branch("still-there");
+  branch("gone");
+  branch("running-run", { runId: LIVE });
+  const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+  const report = await listResources(deps({ [RUN]: "completed", [LIVE]: "running" }), {});
+
+  expect(report.leftOnGitHub).toEqual([
+    {
+      runId: RUN,
+      identity: "acme/api:still-there",
+      url: "https://github.com/acme/api/tree/still-there",
+      checked: true,
+      command: "git push origin --delete still-there",
+    },
+  ]);
+  expect(lines).toContain(
+    "left on GitHub: acme/api:still-there — jigs doesn't delete remote branches; to remove it: git push origin --delete still-there",
+  );
+  // A preview writes nothing, not even for the branch that is gone.
+  expect(memoryRows.every((row) => row.state === "live")).toBe(true);
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+test("apply marks branches deleted outside jigs released and keeps listing the rest", async () => {
+  const { branch } = leftover();
+  branch("still-there");
+  branch("gone");
+
+  const report = await pruneAll({ [RUN]: "completed" });
+
+  expect(report.leftOnGitHub.map((left) => left.identity)).toEqual(["acme/api:still-there"]);
+  expect(memoryRows.map((row) => [row.branch, row.state, row.reason])).toEqual([
+    ["still-there", "live", null],
+    ["gone", "released", "deleted outside jigs"],
+  ]);
+});
+
+test("a remote that cannot be asked still lists its branches, saying so", async () => {
+  seed("branch", {
+    identity: "acme/api:unknown",
+    url: "https://github.com/acme/api/tree/unknown",
+    repoDir: path.join(tmp, "no-such-clone"),
+    branch: "unknown",
+  });
+
+  const report = await pruneAll({ [RUN]: "completed" });
+
+  expect(report.leftOnGitHub).toMatchObject([{ identity: "acme/api:unknown", checked: false }]);
+  expect(memoryRows[0]?.state).toBe("live");
+  expect(lines.some((line) => line.startsWith("left on GitHub (could not check the remote"))).toBe(
+    true,
+  );
 });
 
 test("the offline read has the run's status and nothing it cannot see", async () => {

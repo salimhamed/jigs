@@ -64,10 +64,16 @@ afterEach(() => {
   rmSync(data, { recursive: true, force: true });
 });
 
-test("release removes run-owned directories and leaves recorded-only kinds live as history", async () => {
+test("release removes run-owned directories and leaves branches and recorded-only kinds live", async () => {
   const scratch = directory("scratch", RUN);
   const codex = directory("codex-homes", RUN);
-  seed(row("run-directory"), row("codex-home"), row("pull-request", { identity: "a/b#1" }));
+  seed(
+    row("run-directory"),
+    row("codex-home"),
+    row("pull-request", { identity: "a/b#1" }),
+    row("branch", { identity: "a/b:feature" }),
+  );
+  const fetchSpy = vi.spyOn(globalThis, "fetch");
 
   const records = await releaseRun({} as never, "factory-a", RUN, "release", "success");
 
@@ -77,8 +83,11 @@ test("release removes run-owned directories and leaves recorded-only kinds live 
     "run-directory": ["released", "removed"],
     "codex-home": ["released", "removed"],
     "pull-request": ["live", null],
+    branch: ["live", null],
   });
-  expect(records.map((record) => record.state)).toEqual(["released", "released", "live"]);
+  expect(records.map((record) => record.state)).toEqual(["released", "released", "live", "live"]);
+  // jigs never deletes remote branches, so release never talks to GitHub.
+  expect(fetchSpy).not.toHaveBeenCalled();
 });
 
 test("keep marks every releasable resource kept with the policy's reason", async () => {

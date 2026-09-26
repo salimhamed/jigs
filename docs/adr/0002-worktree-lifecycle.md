@@ -45,21 +45,19 @@ match the fetched ref counts as no answer. Before deleting, the local branch
 ref is pinned to its current sha and rechecked, so a branch that moved in the
 meantime survives.
 
-The pushed branch is its own `branch` resource, recorded only when the run's
-push created it, and deleted on GitHub with the factory's identity. It is kept
-while it has an open pull request, and deleted only when a merged pull request
-has its exact head or the default branch contains it. A branch kept for its
-open pull request stays kept; after the merge, `jigs resources prune --apply`
-removes it. The local tracking ref of a deleted remote branch
-is dropped the next time a worktree for that branch is cut.
+jigs never deletes the pushed branch on the remote. It is recorded as a
+`branch` resource, and `jigs resources prune` lists the ones finished runs left
+on GitHub with the command that deletes them; GitHub's "automatically delete
+head branches" setting handles merged pull requests. The local tracking ref of
+a remote branch deleted that way is dropped the next time a worktree for that
+branch is cut.
 
 ## Consequences
 
-- Deleting a branch needs positive evidence. There is no force flag, no
+- Deleting a local branch needs positive evidence. There is no force flag, no
   automatic WIP commit and no deletion of unmerged work.
 - A squash-merged local branch is not contained in the default branch, so it
-  stays in the clone; its remote branch goes once the merged pull request is
-  seen at its head.
+  stays in the clone.
 - Kept resources and their reasons are visible in `jigs status` and
   `jigs resources list`.
 - The copy globber must keep matching dotfiles, or `.env`-class copies vanish.

@@ -247,15 +247,17 @@ kept, what failed to release, and what the service never got to. The preview
 marks each resource the policy kept, with the reason, so you see what
 `--apply` overrides. It never overrides the safety checks: only resources of
 finished runs recorded by this factory are removed, and a worktree with
-uncommitted changes, an unmerged branch, a branch with an open pull request
-and a waiting run's resources are always kept. A release that fails is retried
+uncommitted changes, an unmerged local branch and a waiting run's resources
+are always kept. A release that fails is retried
 by the service with a growing wait between tries, and kept after the fifth
 failed attempt with its last error.
 
-jigs records a pushed branch only when the run created it, so a branch that
-already existed, such as `staging`, is never deleted. A branch kept because its
-pull request was still open stays kept after the merge: prune removes it then,
-or marks it released if GitHub already deleted it. Pull requests and resources
+jigs never deletes remote branches. The preview (and `--apply`) lists each
+branch a finished run left on GitHub, with the command that deletes it:
+`left on GitHub: owner/repo:branch — jigs doesn't delete remote branches; to
+remove it: git push origin --delete <branch>`. Turn on GitHub's "automatically
+delete head branches" setting and merged pull requests take their branches
+with them; `--apply` notes the ones that are gone. Pull requests and resources
 a workflow registers itself stay in `jigs status <run>` as history, and are
 never removed.
 

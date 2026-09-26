@@ -4,11 +4,11 @@
 
 import { beforeEach, expect, test, vi } from "vitest";
 import {
+  git,
   pushBranch as gitPushBranch,
   headSha,
   pushCommit,
   resolveRemoteUrl,
-  tryGit,
 } from "../../providers/git.ts";
 import { githubAuthFor } from "../../providers/github-auth.ts";
 import { pushApprovedChange, pushBranch } from "../git/branch.ts";
@@ -23,7 +23,6 @@ vi.mock("../../providers/git.ts", () => ({
   pushBranch: vi.fn(),
   pushCommit: vi.fn(),
   resolveRemoteUrl: vi.fn(),
-  tryGit: vi.fn(),
 }));
 vi.mock("../../providers/github-auth.ts", () => ({ githubAuthFor: vi.fn() }));
 vi.mock("workflow", () => ({ getWorkflowMetadata: () => ({ workflowRunId: "wrun_push" }) }));
@@ -54,8 +53,7 @@ const branches = () => memoryRows.map((row) => [row.kind, row.identity, row.url]
 
 beforeEach(() => {
   memoryRows.length = 0;
-  // `ls-remote` answers empty: the branch is not on the remote before the first push.
-  vi.mocked(tryGit).mockResolvedValue("");
+  vi.mocked(git).mockResolvedValue("");
   vi.mocked(headSha).mockResolvedValue("approved");
   vi.mocked(resolveRemoteUrl).mockResolvedValue({
     remote: "origin",
@@ -74,26 +72,14 @@ test("pat mode pushes to the binding's own remote, over SSH as the operator", as
   ]);
 });
 
-test("a branch that was on the remote before the run pushed is never recorded", async () => {
+test("every branch the run pushes is recorded once, with the clone to ask about it", async () => {
   authAs({ mode: "pat" });
-  vi.mocked(tryGit).mockResolvedValue("abc123\trefs/heads/feature");
+  vi.mocked(git).mockImplementation(async (args) =>
+    args[0] === "rev-parse" ? "/data/clones/api/repo.git" : "",
+  );
   await pushBranch(worktree);
-  expect(gitPushBranch).toHaveBeenCalled();
-  expect(branches()).toEqual([]);
-});
-
-test("an unreadable remote counts as a branch that already existed", async () => {
-  authAs({ mode: "pat" });
-  vi.mocked(tryGit).mockResolvedValue(null);
-  await pushBranch(worktree);
-  expect(branches()).toEqual([]);
-});
-
-test("a later push of the run's own branch keeps its record, though the branch now exists", async () => {
-  authAs({ mode: "pat" });
-  await pushBranch(worktree);
-  vi.mocked(tryGit).mockResolvedValue("abc123\trefs/heads/feature");
   await pushApprovedChange(worktree, "approved");
+  expect(memoryRows[0]).toMatchObject({ repoDir: "/data/clones/api/repo.git", branch: "feature" });
   expect(branches()).toEqual([
     ["branch", "acme/api:feature", "https://github.com/acme/api/tree/feature"],
   ]);
@@ -121,7 +107,7 @@ test("a push retried after the remote branch appeared is still recorded as the r
   authAs({ mode: "pat" });
   vi.mocked(gitPushBranch).mockRejectedValueOnce(new Error("connection reset after the push"));
   await expect(pushBranch(worktree)).rejects.toThrow("connection reset");
-  vi.mocked(tryGit).mockResolvedValue("abc123\trefs/heads/feature");
+  expect(branches()).toHaveLength(1);
   await pushBranch(worktree);
   expect(branches()).toEqual([
     ["branch", "acme/api:feature", "https://github.com/acme/api/tree/feature"],

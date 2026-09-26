@@ -209,8 +209,9 @@ are read-only. To apply a preview, run `jigs service stop`, then
 the release policy (the preview names what the policy kept, and why) but never
 the safety checks. Apply never stops anything: it refuses
 while the service or any process in its recorded process group is still
-running. Dirty and unmerged work, and a branch with an open pull request,
-remain.
+running. Dirty and unmerged work remains. jigs never deletes remote branches:
+prune lists the ones finished runs left on GitHub, each with its
+`git push origin --delete <branch>` command.
 
 `jigs service stop`, `restart`, `jigs down` and a restart inside `jigs up` stop
 the service and every process it started, killing what is still running after

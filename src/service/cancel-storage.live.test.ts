@@ -26,7 +26,13 @@ const sql = new Pool({ connectionString: testUrl.toString(), max: 1 });
 const deliveries = new Map<string, number>();
 const deliveryHandlers = new Map<string, () => Promise<void>>();
 const server = createServer(async (req, res) => {
-  const body = JSON.parse(Buffer.concat(await req.toArray()).toString()) as { runId: string };
+  const text = Buffer.concat(await req.toArray()).toString();
+  // A delivery cut off while the World shuts down arrives with no body.
+  if (text === "") {
+    res.writeHead(400).end();
+    return;
+  }
+  const body = JSON.parse(text) as { runId: string };
   deliveries.set(body.runId, (deliveries.get(body.runId) ?? 0) + 1);
   try {
     await deliveryHandlers.get(body.runId)?.();

@@ -9,13 +9,12 @@ import {
   type PushTarget,
   pushCommit,
   resolveRemoteUrl,
-  tryGit,
 } from "../../providers/git.ts";
 import { githubAuthFor } from "../../providers/github-auth.ts";
 import { parseGithubRemote } from "../../providers/github-webhook.ts";
 import type { BranchState } from "../../workflow/git/committed-work.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
-import { currentFactory, listResources, recordResource, registrySql } from "../runtime/registry.ts";
+import { currentFactory, recordResource, registrySql } from "../runtime/registry.ts";
 import { isWorktreeDirty } from "../workspaces/git-safety.ts";
 
 // A binding's remote is an SSH URL, which authenticates as whoever owns the
@@ -41,34 +40,24 @@ async function pushTarget(worktreePath: string): Promise<PushTarget> {
 }
 
 /**
- * Push, recording the branch as this run's when the push creates it. A branch that was already
- * on the remote, such as `staging` or a person's branch, is never recorded, so release never
- * deletes it.
+ * Push, recording the branch as this run's. jigs never deletes remote branches; the record is
+ * how `jigs resources prune` finds the ones a run left on GitHub, and the clone recorded with it
+ * is where prune asks the remote which still exist.
  */
 async function pushAndRecord(worktreePath: string, branch: string, push: () => Promise<void>) {
   const { url } = await resolveRemoteUrl(worktreePath);
   const ref = parseGithubRemote(url);
   if (ref === null) return push();
-  const record = {
+  // Recorded before the push, so a push whose step is retried is still recorded.
+  await recordResource(registrySql(), {
     factory: currentFactory(),
     runId: getWorkflowMetadata().workflowRunId,
     kind: "branch",
     identity: `${ref.owner}/${ref.repo}:${branch}`,
-  };
-  const db = registrySql();
-  const ours = (await listResources(db, record)).length > 0;
-  // An unreadable remote counts as "it existed": not recording is the safe side.
-  const existed =
-    !ours &&
-    (await tryGit(["ls-remote", "--heads", "origin", `refs/heads/${branch}`], worktreePath)) !== "";
-  // Recorded before the push, so a push whose step is retried is still this
-  // run's; a record for a push that then failed is released as already absent.
-  if (!existed) {
-    await recordResource(db, {
-      ...record,
-      url: `https://github.com/${ref.owner}/${ref.repo}/tree/${encodeURIComponent(branch)}`,
-    });
-  }
+    url: `https://github.com/${ref.owner}/${ref.repo}/tree/${encodeURIComponent(branch)}`,
+    repoDir: await git(["rev-parse", "--path-format=absolute", "--git-common-dir"], worktreePath),
+    branch,
+  });
   await push();
 }
 

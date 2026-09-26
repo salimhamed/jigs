@@ -137,8 +137,8 @@ A workflow that wants to release early, or needs the report, can call
 `await release()` from `#jigs/steps`.
 
 jigs does not delete uncommitted or unmerged work it cannot prove is safe to
-remove. A pushed branch is deleted only when its commits are proven merged, and
-never while it has an open pull request. See
+remove, and never deletes remote branches: `jigs resources prune` lists the ones
+runs left on GitHub. See
 `jigs resources` in [CLI commands](/guide/cli) to inspect what is left.
 
 ## `agents.env` {#agents-env}

@@ -31,18 +31,15 @@ export const UNRELEASED_STATES = [
  * The kinds jigs records and releases itself, in the order release visits them. Every other kind
  * is recorded only: it stays `live` as history and is never deleted.
  */
-export const RELEASABLE_KINDS = [
-  "worktree",
-  "branch",
-  "run-directory",
-  "codex-home",
-  "pi-home",
-] as const;
+export const RELEASABLE_KINDS = ["worktree", "run-directory", "codex-home", "pi-home"] as const;
 
 export type ReleasableKind = (typeof RELEASABLE_KINDS)[number];
 
 export const releasable = (kind: string): kind is ReleasableKind =>
   (RELEASABLE_KINDS as readonly string[]).includes(kind);
+
+/** The kinds only jigs records: the releasable ones, and the branches runs push. */
+export const RESERVED_KINDS: readonly string[] = [...RELEASABLE_KINDS, "branch"];
 
 /** Whether a resource still holds something release has to deal with. */
 export const unreleased = (resource: Pick<ResourceRecord, "kind" | "state">): boolean =>
