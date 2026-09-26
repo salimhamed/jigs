@@ -34,13 +34,13 @@ const run = (over: Partial<RunListRun> = {}): RunListRun => ({
   lastActivityAt: "2026-08-26T11:59:00.000Z",
   steps: 0,
   lastStep: null,
-  suspended: false,
   suspensions: [],
+  resources: [],
   ...over,
 });
 
 test("an empty service prints no runs", async () => {
-  respond({ runs: [], worktrees: [], schedules: [] });
+  respond({ runs: [], schedules: [] });
   await showRuns(deps(), { now: NOW });
   expect(lines).toEqual(["no runs"]);
 });
@@ -51,7 +51,6 @@ test("a suspended run names its ticket and what it waits for", async () => {
       run({
         status: "suspended",
         ticket: "AGE-317",
-        suspended: true,
         suspensions: [
           {
             token: "github:pr:acme/api#41",
@@ -62,7 +61,6 @@ test("a suspended run names its ticket and what it waits for", async () => {
         ],
       }),
     ],
-    worktrees: [],
     schedules: [],
   });
   await showRuns(deps(), { now: NOW });
@@ -80,7 +78,6 @@ test("runs are distinguished by SDK status", async () => {
       run({ status: "failed" }),
       run({ runId: "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ", status: "completed" }),
     ],
-    worktrees: [],
     schedules: [],
   });
   await showRuns(deps(), { now: NOW });
@@ -91,7 +88,6 @@ test("runs are distinguished by SDK status", async () => {
 test("--json prints the service's answer verbatim, tables and all", async () => {
   const body = {
     runs: [run({ ticket: "AGE-317" })],
-    worktrees: [],
     schedules: [],
   };
   respond(body);
@@ -103,7 +99,6 @@ test("--json prints the service's answer verbatim, tables and all", async () => 
 test("a scheduled run names the schedule that fired it", async () => {
   respond({
     runs: [run({ trigger: "schedule:nightly-sweep" })],
-    worktrees: [],
     schedules: [
       {
         name: "nightly-sweep",
@@ -129,7 +124,6 @@ test("a scheduled run names the schedule that fired it", async () => {
 test("a declared schedule that has never fired shows dashes, not blanks", async () => {
   respond({
     runs: [],
-    worktrees: [],
     schedules: [
       {
         name: "weekly-audit",
@@ -145,25 +139,43 @@ test("a declared schedule that has never fired shows dashes, not blanks", async 
   expect(lines[3]).toBe("weekly-audit  audit     nonsense  -     -");
 });
 
-test("a worktree the registry marks abandoned-dirty is shown, not filtered", async () => {
+test("a resource release kept is shown with its reason", async () => {
   respond({
-    runs: [run({ status: "failed" })],
-    worktrees: [
-      {
-        path: "/home/dev/worktrees/api/age-317",
-        branch: "salimhamed/age-317",
-        state: "abandoned-dirty",
-        ownerRunId: RUN,
-      },
+    runs: [
+      run({
+        status: "failed",
+        resources: [
+          {
+            runId: RUN,
+            kind: "worktree",
+            identity: "/home/dev/worktrees/api/age-317",
+            url: "file:///home/dev/worktrees/api/age-317",
+            state: "kept",
+            reason: "uncommitted work kept",
+            updatedAt: "2026-09-04T10:00:00.000Z",
+          },
+          {
+            runId: RUN,
+            kind: "run-directory",
+            identity: "released-history",
+            url: "file:///scratch",
+            state: "released",
+            reason: "removed",
+            updatedAt: "2026-09-04T10:00:00.000Z",
+          },
+        ],
+      }),
     ],
     schedules: [],
   });
   await showRuns(deps(), { now: NOW });
-  const worktreeLine = lines.find((line) => line.includes("age-317"));
-  expect(worktreeLine).toContain("/home/dev/worktrees/api/age-317");
-  expect(worktreeLine).toContain("abandoned-dirty");
-  expect(worktreeLine).toContain(RUN);
-  expect(lines.some((line) => line.startsWith("WORKTREE  "))).toBe(true);
+  const resourceLine = lines.find((line) => line.includes("age-317"));
+  expect(resourceLine).toContain("/home/dev/worktrees/api/age-317");
+  expect(resourceLine).toContain("kept");
+  expect(resourceLine).toContain("uncommitted work kept");
+  expect(resourceLine).toContain(RUN);
+  expect(lines.some((line) => line.startsWith("RESOURCE  "))).toBe(true);
+  expect(lines.some((line) => line.includes("released-history"))).toBe(false);
   // A blank line separates the two tables.
   expect(lines[2]).toBe("");
 });

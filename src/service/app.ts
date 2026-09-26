@@ -14,25 +14,17 @@ import { factoryRoot } from "../config/factory-root.ts";
 import { webhookSecret } from "../config/webhook-secret.ts";
 import { findOpenPullRequestsByHeadSha } from "../providers/github.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
-import { readOwner } from "../steps/workspaces/owner.ts";
-import { listWorktreesForRun } from "../steps/workspaces/registry.ts";
-import { registrySql } from "../steps/workspaces/sql.ts";
-import { listWorktreeStates } from "../steps/workspaces/worktree-state.ts";
+import { currentFactory, listResources, registrySql } from "../steps/runtime/registry.ts";
+import { readRunState } from "../steps/runtime/run-state.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { tokenFromLinearPayload } from "../workflow/linear/claim.ts";
 import { NEEDS_HUMAN_TOKEN_PREFIX } from "../workflow/linear/halt-for-human.ts";
 import { tokenFromGitHubPayload } from "../workflow/pull-requests/pull-request.ts";
+import { UNRELEASED_STATES } from "../workflow/runtime/resources.ts";
 import { verifyGithubSignature, verifyLinearSignature } from "./ingress.ts";
 import { listRunDeadJobs } from "./queue.ts";
 import { bootPhase, isReady } from "./readiness.ts";
-import {
-  describeRun,
-  enrichSuspensions,
-  listRunResources,
-  listRuns,
-  readRunCleanup,
-  runExists,
-} from "./runs.ts";
+import { enrichSuspensions, listRuns, runExists, worldRunFacts } from "./runs.ts";
 import { listSchedules, scheduleChecks } from "./schedules.ts";
 import { listRunSteps } from "./stalls.ts";
 import { startRun } from "./trigger.ts";
@@ -162,20 +154,17 @@ export function createApp(factory: Factory): Hono {
     return c.json({ runId: run.runId, poked });
   });
 
-  // Everything `jigs status` renders: the SDK's runs overlaid with jigs' suspended
-  // status, plus the registry's current worktree state.
+  // Everything `jigs status` renders: each run's state, described as the
+  // single-run route describes it, with the resources it recorded.
   app.get("/api/runs", async (c) => {
-    const [runs, worktrees] = await Promise.all([
-      listRuns(factory),
-      listWorktreeStates(registrySql(), (runId) => readOwner(runId, factory)),
-    ]);
+    const runs = await listRuns(factory);
     // The schedules ride along on the same run listing the table above
     // renders, so status stays one round trip and the two tables can never
     // disagree about which schedule is busy.
     const schedules = await listSchedules(factory, {
       listRuns: async () => runs,
     });
-    return c.json({ runs, worktrees, schedules });
+    return c.json({ runs, schedules });
   });
 
   // The escape hatch for a zombie claim owner. Jigs' hooks request no minimum
@@ -212,7 +201,14 @@ export function createApp(factory: Factory): Hono {
     const releasedTokens = claimedTokens.filter((token) => !retained.has(token));
     // Cancel leaves the worktree behind: name what stays so the operator knows
     // where it is and that offline resource prune is the way to reclaim it.
-    const worktrees = (await listWorktreesForRun(registrySql(), runId)).map((row) => row.path);
+    const worktrees = (
+      await listResources(registrySql(), {
+        factory: currentFactory(),
+        runId,
+        kind: "worktree",
+        states: UNRELEASED_STATES,
+      })
+    ).map((row) => row.identity);
     // A merged run's workflow tears its own worktree down; everything else —
     // cancel included — leaves the tree on disk for the operator's offline
     // resource prune. A cancelled run's dirty tree is diagnosis evidence that
@@ -239,27 +235,26 @@ export function createApp(factory: Factory): Hono {
     return c.json({ steps, deadJobs });
   });
 
-  // The run described by the one function `jigs status` reads, or list and detail
-  // answer differently about the same run. One run is worth what the listing
-  // will not spend on every run: its steps, terminal or not, and a round trip
-  // per halt to read the comment back from Linear.
+  // The run's state from the one reader release and prune also use. One run is
+  // worth what the listing will not spend on every run: its steps, terminal or
+  // not, and a round trip per halt to read the comment back from Linear.
   app.get("/api/runs/:runId", async (c) => {
     const runId = c.req.param("runId");
     if (!(await runExists(runId))) return c.json({ error: "not found" }, 404);
-    const described = await describeRun(runId, { steps: await listRunSteps(runId) });
+    const state = await readRunState(registrySql(), currentFactory(), runId, (id) =>
+      worldRunFacts(id, true),
+    );
     const body: Record<string, unknown> = {
-      ...described,
-      resources: await listRunResources(runId),
-      cleanup: await readRunCleanup(runId),
-      suspensions: await enrichSuspensions(described.suspensions, runId),
+      ...state,
+      suspensions: await enrichSuspensions(state.suspensions, runId),
       dashboard: dashboardPointer(runId),
     };
     // Read only where there is one: a running run's return value is a promise
     // that settles long after this response.
-    if (described.status === "completed") {
+    if (state.status === "completed") {
       body.returnValue = await getRun(runId).returnValue;
     }
-    if (described.status === "failed") {
+    if (state.status === "failed") {
       body.error = await getRun(runId).returnValue.then(
         () => undefined,
         (err: unknown) => String(err),

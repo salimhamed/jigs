@@ -55,7 +55,6 @@ const respondCancelWithWorktrees = (worktrees: string[]) =>
 const suspended = {
   runId: RUN,
   status: "suspended",
-  suspended: true,
   suspensions: [
     {
       token: "github:pr:acme/api#41",

@@ -40,7 +40,7 @@ const answer = z.object({ word: z.string(), count: z.number() });
 function recordingDeps(): { deps: ExecutionSeams; launches: PiExecutionOptions[] } {
   const launches: PiExecutionOptions[] = [];
   const pi = createPiDriver({
-    preparePiHome: (runId, plan) => preparePiInvocationHome(runId, plan),
+    preparePiHome: async (runId, plan) => preparePiInvocationHome(runId, plan),
     executePi: (options) => {
       launches.push(options);
       return executePi(options);

@@ -13,7 +13,9 @@ import {
   codexPolicyKeys,
   type McpServerConfig,
 } from "../../../workflow/agents/harness-config.ts";
+import { recordRunDirectory } from "../../runtime/registry.ts";
 import {
+  codexRunStatePath,
   codexSessionFile,
   type PreparedCodexHome,
   prepareCodexInvocationHome,
@@ -53,13 +55,16 @@ function descriptor(request: DriverRequest): CodexHarness {
 }
 
 export interface CodexDriverDependencies {
-  prepareCodexHome(runId: string): PreparedCodexHome;
+  prepareCodexHome(runId: string): Promise<PreparedCodexHome>;
   sessionFile(sessionDir: string, threadId: string): string | undefined;
   createAppServer(): CodexAppServerProvider;
 }
 
 const defaultDependencies: CodexDriverDependencies = {
-  prepareCodexHome: (runId) => prepareCodexInvocationHome(runId),
+  prepareCodexHome: async (runId) => {
+    await recordRunDirectory("codex-home", runId, codexRunStatePath(runId));
+    return prepareCodexInvocationHome(runId);
+  },
   sessionFile: codexSessionFile,
   createAppServer: () => createCodexAppServer(),
 };
@@ -72,7 +77,7 @@ export function createCodexDriver(
   async function open(target: HarnessTarget, context: OpenContext): Promise<OpenedModel> {
     const harness = descriptor(target);
     const { resume } = target;
-    const prepared = deps.prepareCodexHome(context.metadata.workflowRunId);
+    const prepared = await deps.prepareCodexHome(context.metadata.workflowRunId);
     let provider: CodexAppServerProvider | undefined;
     const close = async () => {
       try {

@@ -2,9 +2,6 @@ import { execFileSync } from "node:child_process";
 import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { drizzle } from "drizzle-orm/node-postgres";
-import type { Pool, QueryConfig } from "pg";
-import type { RegistrySql, WorktreeRow } from "./registry.ts";
 
 export function makeTmpDir(): string {
   return mkdtempSync(path.join(tmpdir(), "jigs-test-"));
@@ -131,52 +128,4 @@ export function commitToRemote(
   const sha = git(clone, "rev-parse", "HEAD");
   rmSync(clone, { recursive: true, force: true });
   return sha;
-}
-
-// Exercise real Drizzle query generation/mapping against an in-memory pg
-// transport. Live registry tests cover PostgreSQL semantics and ordering.
-export function makeFakeSql(store: Map<string, WorktreeRow>): RegistrySql {
-  const pool = {
-    async query(config: QueryConfig & { rowMode?: string }, values: unknown[]) {
-      const statement = config.text.replaceAll('"', "").trimStart().toUpperCase();
-      let rows: WorktreeRow[] = [];
-      if (statement.startsWith("SELECT") && statement.includes("JIGS_WORKTREES")) {
-        if (values.length === 0) rows = [...store.values()];
-        else if (statement.includes("OWNER_RUN_ID =")) {
-          rows = [...store.values()].filter((row) => row.ownerRunId === values[0]);
-        } else {
-          const row = store.get(values[0] as string);
-          rows = row === undefined ? [] : [row];
-        }
-      } else if (statement.startsWith("INSERT")) {
-        const [path, branch, ownerRunId, state, repoDir] = values as [
-          string,
-          string,
-          string,
-          string,
-          string,
-        ];
-        store.set(path, {
-          path: path,
-          branch: branch,
-          ownerRunId: ownerRunId,
-          state: state,
-          repoDir: repoDir,
-        });
-      } else if (statement.startsWith("UPDATE")) {
-        const [state, path] = values as [string, string];
-        const row = store.get(path);
-        if (row !== undefined) store.set(path, { ...row, state });
-      } else if (statement.startsWith("DELETE")) {
-        store.delete(values[0] as string);
-      }
-      return {
-        rows:
-          config.rowMode === "array"
-            ? rows.map((row) => [row.path, row.branch, row.ownerRunId, row.state, row.repoDir])
-            : rows,
-      };
-    },
-  };
-  return drizzle(pool as unknown as Pool);
 }

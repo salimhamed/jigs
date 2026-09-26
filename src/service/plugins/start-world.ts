@@ -10,8 +10,8 @@ import type { HarnessKind, HarnessRuntime } from "../../checks/harness-runtime.t
 import type { WebhooksConfig } from "../../config/factory-config.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { stopPiProcesses } from "../../steps/agents/harnesses/pi.ts";
+import type { RegistrySql } from "../../steps/runtime/registry.ts";
 import type { BindingClone } from "../../steps/workspaces/clone.ts";
-import type { RegistrySql } from "../../steps/workspaces/registry.ts";
 import type { FactoryDefinition, WorkflowDefinition } from "../../workflow/factory.ts";
 import { READY_PHASE, setBootPhase } from "../readiness.ts";
 import { installShutdown, onShutdown } from "../shutdown.ts";
@@ -144,27 +144,24 @@ export interface RegistryGateDeps {
 // unhandled rejection, so a throw out of here would leave the service up with
 // the World already polling against a registry it cannot use. Exiting is the
 // point; the boolean is for an injected exit that returns.
-/** Refuse service startup when the worktree registry cannot be prepared. */
-export async function gateOnWorktreeRegistry(deps: RegistryGateDeps = {}): Promise<boolean> {
+/** Refuse service startup when the jigs registry cannot be prepared. */
+export async function gateOnRegistry(deps: RegistryGateDeps = {}): Promise<boolean> {
   const log = deps.log ?? ((line: string) => console.log(line));
   try {
     // Opening the connection belongs inside the try: a missing or malformed
     // WORKFLOW_POSTGRES_URL throws synchronously, and that escape is the very
     // thing this gate exists to stop.
-    const resolveSql = deps.sql ?? (await import("../../steps/workspaces/sql.ts")).registrySql;
+    const resolveSql = deps.sql ?? (await import("../../steps/runtime/registry.ts")).registrySql;
     const sql = resolveSql();
-    const ensure =
-      deps.ensure ?? (await import("../../steps/workspaces/registry.ts")).ensureWorktreeRegistry;
+    const ensure = deps.ensure ?? (await import("../../steps/runtime/registry.ts")).ensureRegistry;
     await ensure(sql);
   } catch (err) {
     const error = deps.error ?? ((line: string) => console.error(line));
-    error(
-      `[service] worktree registry unusable: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    error(`[service] jigs registry unusable: ${err instanceof Error ? err.message : String(err)}`);
     (deps.exit ?? process.exit)(1);
     return false;
   }
-  log("[service] worktree registry ensured");
+  log("[service] jigs registry ensured");
   return true;
 }
 
@@ -345,7 +342,7 @@ export default async function startWorld() {
   // Also before the World starts: a run that asks for a worktree against an
   // unusable registry has already burned an agent.
   setBootPhase("registry");
-  if (!(await gateOnWorktreeRegistry())) return;
+  if (!(await gateOnRegistry())) return;
 
   // And before it too: a binding whose clone does not exist yet fails every
   // run that names it, so the fetch happens once, here, where it is a startup

@@ -25,7 +25,8 @@ type Input = {
 
 const input = JSON.parse(process.argv[2] ?? "") as Input;
 const pi = createPiDriver({
-  preparePiHome: (runId, plan) => preparePiInvocationHome(runId, plan, { baseDir: input.baseDir }),
+  preparePiHome: async (runId, plan) =>
+    preparePiInvocationHome(runId, plan, { baseDir: input.baseDir }),
   executePi,
 });
 const result = await executeAgentWith(

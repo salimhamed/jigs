@@ -26,42 +26,93 @@ use it.
 
 ## Run resources
 
-What a run creates (worktree, run directory, branch, pull request) is recorded
-against the run as kind, identity and URL on Workflow SDK run attributes, one
-reserved key per resource (`$jigs.resource.v1:<kind>:<identity>`, the URL as
-value). There is no jigs table. The record knows kinds, not pull requests, so a
-run with several pull requests or a custom kind records them the same way.
-Registration is a separate idempotent step from creation, is observation only,
-and grants no deletion authority. `jigs status <run-id>` lists the resources
-independently of the workflow's return value. Keys and values are capped by the
-SDK's attribute limits and never truncated.
+What a run owns is one row per resource in the `jigs_resources` table, in the
+same Postgres as the World: factory slug, run ID, kind, identity, URL, state,
+reason, timestamps, and a worktree's clone and branch. It is the only store.
+Rows stay after release as history, so `jigs status` shows what a run had and
+what happened to each item. A run's cleanup status is its rows' states; nothing
+else records it.
+
+- **States** are `live` until release decides, then `kept` (by policy or a
+  safety check), `released`, or `failed`. A failed row is retried by the next
+  pass that is due (2^attempts minutes after the last try, at most an hour)
+  and counts its attempts; it is kept, with its last error, after the fifth
+  failed attempt.
+  Every row carries the reason for its state. `UNRELEASED_STATES` names the
+  three that status and prune show.
+- **Kinds.** `worktree`, `run-directory`, `codex-home` and `pi-home` have
+  release handlers. They and `branch` are reserved: only jigs records them.
+  `branch`, `pull-request` and any kind a factory registers are recorded only: they stay
+  `live` as history, and release, prune and every listing of what is still
+  held (`RELEASABLE_KINDS`, `unreleased`) leave them out. One module (`steps/runtime/resource-kinds.ts`) holds the handlers and
+  their safety checks; explicit and automatic release and prune all go through
+  it and write each outcome through one function (`releaseOne`). Handlers
+  delete only what jigs recorded itself (run ID, identity, a worktree's clone
+  and branch), never a factory-supplied URL.
+- **Branches.** jigs never deletes remote branches. A branch is recorded, with
+  the clone it was pushed from, only when the run's push created it (`git push
+  --porcelain` flags the ref as new), so the default branch or a person's
+  branch a run pushed to is never listed; prune also skips the clone's default
+  branch. The record stays `live`. `jigs resources prune` asks each clone's
+  remote once which of the finished runs' branches still exist, lists those
+  with the command that deletes them, and on `--apply` marks the ones already
+  gone `released`
+  ("deleted outside jigs"). GitHub's "automatically delete head branches"
+  setting removes merged pull requests' branches; nothing in jigs calls the
+  GitHub API to delete one.
+- **Ownership** is "this factory has a row for it". Several factories may share
+  one database, so every query filters on the factory slug.
+- **Registration.** jigs records its own resources where it creates them.
+  The `registerResource` step (kind, identity, URL) writes a row for anything
+  else and refuses the reserved kinds; registering again refreshes the URL and
+  marks the row live.
+- **One read.** `readRunState` returns a run's state as plain data: the World's
+  status with the `suspended`/`stalled` overlay, workflow, trigger, ticket,
+  steps, the ticket claim, what it is parked on, and its rows. `jigs status`,
+  `/api/runs/:id`, automatic release and prune read runs through it (the
+  listing describes each run with the same function), and it is the snapshot
+  later decisions are asked over. A run the World does not know has status
+  `null` and counts as finished.
 
 ## Release
 
 The factory service owns release. Policy resolves from the workflow entry, then
 the factory default, then `{ onSuccess: "release", onFailure: "keep" }`;
 `completed` uses `onSuccess`, `failed` and `cancelled` use `onFailure`. A
-workflow may call the `release` routine as its last line to get the report; an
-explicit `keep` it records is final for the run. Each worktree is then decided
-by the [teardown rules](./0002-worktree-lifecycle.md).
+workflow may call the `release` step to get the report early; the rows it marks
+`kept` are final for the run. Each worktree is then decided by the
+[teardown rules](./0002-worktree-lifecycle.md). Harness homes hold the sessions
+that resume a worktree, so they stay `live` while any of the run's worktrees is
+`live` or `failed`, become `kept` with a `kept` worktree, and are removed once
+every worktree is released. Release visits worktrees first, so one pass does
+both.
 
 ## Consequences
 
-- The service waits on the World's terminal-status signal and also reconciles
-  every terminal run at startup and on a timer, so a lost signal, a restart or
-  a transient error is retried. Suspended runs, including one parked on a pull
-  request, are never candidates.
-- Progress lives in a fixed pair of reserved attributes (`pending`, `running`,
-  `kept`, `complete`, `failed`). Released, kept and unknown resources stay
-  visible; an unknown kind is never passed to deletion code. Release tolerates
-  already-absent resources, so repeated attempts converge.
+- The service waits on the World's terminal-status signal and also reconciles,
+  at startup and on a timer, every terminal run that still has live or failed
+  rows, so a lost signal, a restart or a transient error is retried. Suspended
+  runs, including one parked on a pull request, are never candidates.
 - Cancellation lets a running step finish, so cleanup waits until the World
   shows no active step, takes a run-scoped Postgres advisory lock that
   provisioning also takes, and checks again under it. The lock is held through
   the git safety checks and deletion. Shutdown stops timers and drains admitted
   attempts before the World closes.
-- `jigs resources prune` is the operator path for kept resources: preview until
-  `--apply`, which requires the service and its children to be stopped and uses
-  the same lock and teardown decision. Dirty or unmerged work has no bypass.
+- `jigs resources prune` is the operator's explicit override of the release
+  policy: it releases every unreleased resource of this factory's finished
+  runs, kept ones included, and the preview names what the policy kept and
+  why. Safety comes from each kind's checks, which it never overrides. It
+  previews until
+  `--apply`, which requires the service and its children to be stopped, takes
+  each run's lock, reads the run afresh and handles it as a unit in release
+  order. It reads only the run's status from the World's table, because the
+  offline CLI cannot open the World. Dirty or unmerged work has no bypass.
+- Provisioning that adopts a finished run's worktree also takes that run's
+  lock, so a release of it already under way cannot race the adoption.
+- The schema is Drizzle, with hand-written migrations in `migrations/`; there
+  is no `drizzle-kit`. Upgrading from run attributes kept no old records: runs
+  had to finish and be pruned first.
 - Rejected: a workflow DSL, scaffolding recipes with `jigs init`, an editable
-  `jigs.ts`, and a jigs-owned resources table.
+  `jigs.ts`, and resource records on Workflow SDK run attributes (per-key
+  limits, no transactions with provisioning, and a second store beside the
+  worktree table).

@@ -35,11 +35,6 @@ export function piRunStatePath(runId: string, options: PiHomeOptions = {}): stri
   return path.join(options.baseDir ?? path.join(jigsDataDir(), "pi-homes"), runId);
 }
 
-/** Remove durable Pi sessions after all of a run's worktrees are released. */
-export function removePiRunState(runId: string, options: PiHomeOptions = {}): void {
-  rmSync(piRunStatePath(runId, options), { recursive: true, force: true });
-}
-
 /** Return the durable directory that holds a run's Pi sessions. */
 export function piSessionsDir(runState: string): string {
   return path.join(runState, "sessions");

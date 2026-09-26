@@ -10,12 +10,7 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { harnesses, models } from "../../../workflow/agents/harness-config.ts";
 import { writePiSubmitResultExtension } from "./pi-extension.ts";
-import {
-  piRunStatePath,
-  piSessionFile,
-  preparePiInvocationHome,
-  removePiRunState,
-} from "./pi-home.ts";
+import { piRunStatePath, piSessionFile, preparePiInvocationHome } from "./pi-home.ts";
 import { planPiModel } from "./pi-model.ts";
 import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
@@ -137,19 +132,4 @@ test("Pi resumes only an exact durable session file", () => {
   );
   expect(piSessionFile(prepared.sessionDir, "missing")).toBeUndefined();
   prepared.cleanup();
-});
-
-test("removePiRunState deletes durable sessions with the run", () => {
-  const options = { baseDir: path.join(tmp, "pi-homes") };
-  const prepared = preparePiInvocationHome(
-    "run-1",
-    planPiModel(harnesses.pi(models.openrouter("openai/gpt-oss"))),
-    options,
-  );
-  writeFileSync(path.join(prepared.sessionDir, "session.jsonl"), "durable until teardown");
-  prepared.cleanup();
-
-  removePiRunState("run-1", options);
-
-  expect(existsSync(piRunStatePath("run-1", options))).toBe(false);
 });

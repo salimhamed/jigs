@@ -1,3 +1,4 @@
+import { getWorkflowMetadata } from "workflow";
 import {
   commitsAhead,
   DEFAULT_PUSH_TARGET,
@@ -5,6 +6,7 @@ import {
   git,
   pushBranch as gitPushBranch,
   headSha,
+  type Pushed,
   type PushTarget,
   pushCommit,
   resolveRemoteUrl,
@@ -13,8 +15,8 @@ import { githubAuthFor } from "../../providers/github-auth.ts";
 import { parseGithubRemote } from "../../providers/github-webhook.ts";
 import type { BranchState } from "../../workflow/git/committed-work.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
-import { registerResource } from "../runtime/resources.ts";
-import { isWorktreeDirty } from "../workspaces/teardown.ts";
+import { currentFactory, recordResource, registrySql } from "../runtime/registry.ts";
+import { isWorktreeDirty } from "../workspaces/git-safety.ts";
 
 // A binding's remote is an SSH URL, which authenticates as whoever owns the
 // key on this machine — the operator. An installation token cannot travel that
@@ -38,14 +40,27 @@ async function pushTarget(worktreePath: string): Promise<PushTarget> {
   };
 }
 
-async function registerGithubBranch(worktreePath: string, branch: string): Promise<void> {
+/**
+ * Push, recording the branch as this run's only when this push created it on the remote, so a
+ * branch the run merely pushed to (the default branch, a person's pull request branch) is never
+ * offered for deletion. jigs never deletes remote branches; the record is how
+ * `jigs resources prune` lists the ones a run left on GitHub.
+ */
+async function pushAndRecord(worktreePath: string, branch: string, push: () => Promise<Pushed>) {
+  const { created } = await push();
   const { url } = await resolveRemoteUrl(worktreePath);
   const ref = parseGithubRemote(url);
-  if (ref === null) return;
-  await registerResource({
+  // A retry after a push that created the branch but died before this point
+  // sees an existing ref and records nothing: the branch is then never listed.
+  if (!created || ref === null) return;
+  await recordResource(registrySql(), {
+    factory: currentFactory(),
+    runId: getWorkflowMetadata().workflowRunId,
     kind: "branch",
     identity: `${ref.owner}/${ref.repo}:${branch}`,
     url: `https://github.com/${ref.owner}/${ref.repo}/tree/${encodeURIComponent(branch)}`,
+    repoDir: await git(["rev-parse", "--path-format=absolute", "--git-common-dir"], worktreePath),
+    branch,
   });
 }
 
@@ -75,8 +90,9 @@ export async function pushBranch(worktree: Worktree): Promise<{
   headSha: string;
 }> {
   const { path: worktreePath, branch } = worktree;
-  await gitPushBranch(worktreePath, branch, await pushTarget(worktreePath));
-  await registerGithubBranch(worktreePath, branch);
+  await pushAndRecord(worktreePath, branch, async () =>
+    gitPushBranch(worktreePath, branch, await pushTarget(worktreePath)),
+  );
   return { headSha: await headSha(worktreePath) };
 }
 
@@ -107,8 +123,9 @@ export async function pushApprovedChange(
       `Cannot publish ${branch}: ${head} is not the approved commit ${approvedCommit}`,
     );
   }
-  await pushCommit(worktreePath, branch, approvedCommit, await pushTarget(worktreePath));
-  await registerGithubBranch(worktreePath, branch);
+  await pushAndRecord(worktreePath, branch, async () =>
+    pushCommit(worktreePath, branch, approvedCommit, await pushTarget(worktreePath)),
+  );
   return { headSha: approvedCommit };
 }
 

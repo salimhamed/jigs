@@ -71,7 +71,8 @@ process, so it costs one node start-up rather than one per poll, and it says
 poll.
 
 `jigs status` is the snapshot: `RUN WORKFLOW TICKET STATUS TRIGGER AGE
-ACTIVITY WAITING`, then the worktrees the registry holds, then the schedules if
+ACTIVITY WAITING`, then every resource release has not removed (with its state,
+run and reason), then the schedules if
 the factory declares any. `TICKET` is the ticket the run was launched with, as
 the operator typed it. `TRIGGER` says how the run started; a
 scheduled fire reads `schedule:<name>`. `AGE` counts from launch, `ACTIVITY`
@@ -84,12 +85,14 @@ and green CI on acme/api#41 → <pull request url>`. A needs-human halt reads
 `waiting for a human reply on AGE-123` with no link, because the comment URL
 costs a Linear round trip the listing will not pay per poll. `jigs status <run-id>`
 is where that URL and the question the halt asked come from; it also prints the
-run's error, its resources as kind/identity/URL rows, and the step timeline.
+run's error, its resources as kind/identity/URL rows with each one's state and
+reason, and the step timeline. Released resources stay listed as history.
 `resources none` is an explicit empty set; `jigs status <run-id> --json` carries the same
-records in `resources`, independently of `returnValue`.
+records in `resources`, and the ticket claim in `claim`, independently of `returnValue`.
 
-Prefer `--json` to the tables: `jigs status --json` is `{runs, worktrees,
-schedules}`, `jigs status <run-id> --json` is the run's fields plus its timeline, and
+Prefer `--json` to the tables: `jigs status --json` is `{runs, schedules}`, each
+run carrying every resource it recorded (released ones included) in `resources`;
+`jigs status <run-id> --json` is the run's fields plus its timeline, and
 `jigs watch --json` is one JSON event per line. Read fields rather than parsing
 columns.
 
@@ -202,10 +205,13 @@ A suspended run holds its worktree because it will return to it. Automatic
 release handles terminal runs when its policy and Git safety checks allow it.
 For leftovers, inspect `jigs resources list` and `jigs resources prune`; both
 are read-only. To apply a preview, run `jigs service stop`, then
-`jigs resources prune --apply`; this works on macOS and Linux. Policy-kept
-resources also need `--include-kept`. Apply never stops anything: it refuses
+`jigs resources prune --apply`; this works on macOS and Linux. Prune overrides
+the release policy (the preview names what the policy kept, and why) but never
+the safety checks. Apply never stops anything: it refuses
 while the service or any process in its recorded process group is still
-running. Dirty and unmerged work remains.
+running. Dirty and unmerged work remains. jigs never deletes remote branches:
+prune lists the ones finished runs left on GitHub, each with its
+`git push origin --delete <branch>` command.
 
 `jigs service stop`, `restart`, `jigs down` and a restart inside `jigs up` stop
 the service and every process it started, killing what is still running after

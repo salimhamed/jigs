@@ -75,9 +75,9 @@ jigs keeps each binding's clone and worktrees under
 
 | Command | What it does |
 | --- | --- |
-| `jigs resources list` | List each run's worktrees, scratch directories and recorded resources. Changes nothing. |
-| `jigs resources prune` | Preview what could be safely removed. |
-| `jigs resources prune --apply` | Remove it. Needs `jigs service stop` first. |
+| `jigs resources list` | List what finished and running runs still hold, with each item's state and reason. Changes nothing. |
+| `jigs resources prune` | Preview what `--apply` would release, including what the release policy kept. |
+| `jigs resources prune --apply` | Release it. Needs `jigs service stop` first. |
 
 ## Service
 
@@ -231,18 +231,37 @@ worktrees it leaves behind.
 
 ## Cleaning up resources
 
-Resource cleanup is conservative. jigs removes only finished-run resources it
-can prove it owns and can safely remove. `jigs resources prune` previews unless
+jigs records every worktree, scratch directory, agent session home, pushed
+branch and pull request a run creates, and keeps the record after release, so
+`jigs status <run>` shows what the run had and what happened to each item:
+`live`, `kept`, `released` or `failed`, with the reason. Release runs by itself
+when a run ends; `jigs resources prune` handles what it left. It previews unless
 you add `--apply`. To apply:
 
 1. Run `jigs service stop`.
 2. Check the preview, optionally for one run with `--run <run>`.
 3. Run `jigs resources prune --apply`.
 
-Only resources of finished runs owned by this factory are removed. A worktree
-with uncommitted changes, an unmerged branch, a waiting run's resources and
-anything jigs cannot prove it owns are always kept. Resources a release policy
-chose to keep need `--include-kept`, which relaxes nothing else.
+Prune is your override of the release policy: it releases what the policy
+kept, what failed to release, and what the service never got to. The preview
+marks each resource the policy kept, with the reason, so you see what
+`--apply` overrides. It never overrides the safety checks: only resources of
+finished runs recorded by this factory are removed, and a worktree with
+uncommitted changes, an unmerged local branch and a waiting run's resources
+are always kept. A release that fails is retried
+by the service with a growing wait between tries, and kept after the fifth
+failed attempt with its last error.
+
+jigs never deletes remote branches. The preview (and `--apply`) lists each
+branch a finished run created and left on GitHub, with the command that deletes
+it: `left on GitHub: owner/repo:branch — jigs doesn't delete remote branches;
+if its pull request is merged or closed, remove it with: git push origin
+--delete <branch>`. A branch the run only pushed to, such as the default
+branch or a person's branch, is never listed. Turn on GitHub's "automatically
+delete head branches" setting and merged pull requests take their branches
+with them; `--apply` notes the ones that are gone. Pull requests and resources
+a workflow registers itself stay in `jigs status <run>` as history, and are
+never removed.
 
 Applying works on macOS and Linux. It never stops or kills anything itself: it
 refuses, and tells you to run `jigs service stop`, while the service or any

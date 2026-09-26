@@ -131,7 +131,7 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
     await runner.run("bootstrap", async () => {
       const url = await bootstrapWorld(execFile, factoryRoot, env, deps.out);
       const migrate =
-        deps.migrate ?? (await import("../../steps/workspaces/registry.ts")).migrateRegistry;
+        deps.migrate ?? (await import("../../steps/runtime/registry.ts")).migrateRegistry;
       await migrate(url);
     });
 

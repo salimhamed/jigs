@@ -29,12 +29,6 @@ import type { WorktreeRequest } from "@jigs-ai/jigs/steps/workspaces";
 import * as workspacesOperations from "@jigs-ai/jigs/steps/workspaces";
 import { getStepMetadata, getWorkflowMetadata } from "workflow";
 
-function localFileUrl(path: string): string {
-  const url = new URL("file://");
-  url.pathname = path;
-  return url.href;
-}
-
 /**
  * Prepare a worktree for this run, reusing it when the run resumes.
  *
@@ -43,13 +37,7 @@ function localFileUrl(path: string): string {
 export async function provisionWorktree(request: WorktreeRequest): Promise<Worktree> {
   "use step";
   const metadata = getWorkflowMetadata();
-  const worktree = await workspacesOperations.provisionWorktree(request, metadata);
-  await runtimeOperations.registerResource({
-    kind: "worktree",
-    identity: worktree.path,
-    url: localFileUrl(worktree.path),
-  });
-  return worktree;
+  return workspacesOperations.provisionWorktree(request, metadata);
 }
 
 /**
@@ -193,13 +181,7 @@ export async function resolveLinearIssue(reference: string) {
 export async function createRunDirectory() {
   "use step";
   const metadata = getWorkflowMetadata();
-  const directory = await runtimeOperations.createRunDirectory(metadata);
-  await runtimeOperations.registerResource({
-    kind: "run-directory",
-    identity: metadata.workflowRunId,
-    url: localFileUrl(directory),
-  });
-  return directory;
+  return runtimeOperations.createRunDirectory(metadata);
 }
 
 /**
@@ -211,8 +193,9 @@ export async function createRunDirectory() {
  * Register anything a person may need to find in `jigs status`. Kind and identity
  * together name the record; registering again updates its URL. Create external
  * resources in a separate step when creation is not safe to repeat, then register
- * them here so registration retries cannot repeat creation. A record alone never
- * permits deletion.
+ * them here so registration retries cannot repeat creation. The record is observation
+ * only: jigs never deletes what it names. The kinds jigs records and releases itself
+ * (`worktree`, `branch`, `run-directory`, `codex-home`, `pi-home`) are reserved.
  */
 export async function registerResource(resource: RunResource) {
   "use step";

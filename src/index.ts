@@ -159,6 +159,10 @@ export {
 export { defaultPullRequestScope } from "./workflow/pull-requests/writer.ts";
 
 export type { ReleasePolicy, ReleaseReport } from "./workflow/runtime/release.ts";
-export type { RunResource } from "./workflow/runtime/resources.ts";
+export type {
+  ResourceRecord,
+  ResourceState,
+  RunResource,
+} from "./workflow/runtime/resources.ts";
 export { unreachable } from "./workflow/unreachable.ts";
 export type { Worktree } from "./workflow/workspaces/worktree.ts";

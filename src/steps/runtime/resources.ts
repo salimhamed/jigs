@@ -1,93 +1,43 @@
-import { getWorkflowMetadata, setAttributes } from "workflow";
-import { getWorld } from "workflow/runtime";
+import { getWorkflowMetadata } from "workflow";
 import { JigsError } from "../../errors.ts";
-import {
-  RESOURCE_ATTRIBUTE_PREFIX,
-  RUN_ATTRIBUTE_COUNT_LIMIT,
-  type RunResource,
-  resourceAttribute,
-} from "../../workflow/runtime/resources.ts";
+import { RESERVED_KINDS, type RunResource } from "../../workflow/runtime/resources.ts";
+import { currentFactory, recordResource, registrySql } from "./registry.ts";
 
-interface ResourceRegistrationDependencies {
-  readAttributes: () => Promise<Record<string, string>>;
-  writeAttribute: (key: string, value: string) => Promise<void>;
-}
-
-function registrationFailure(resource: RunResource, detail: string): JigsError {
-  return new JigsError(
-    `could not register ${resource.kind} ${JSON.stringify(resource.identity)}: ${detail}`,
-    "the resource may already exist; retry registration separately instead of recreating it",
-  );
-}
-
-function capacityFailure(resource: RunResource, attributes: Record<string, string>): JigsError {
-  const keys = Object.keys(attributes);
-  const resources = keys.filter((key) => key.startsWith(RESOURCE_ATTRIBUTE_PREFIX)).length;
-  const otherReserved = keys.filter(
-    (key) => key.startsWith("$") && !key.startsWith(RESOURCE_ATTRIBUTE_PREFIX),
-  ).length;
-  const user = keys.length - resources - otherReserved;
-  return registrationFailure(
-    resource,
-    `the run already uses ${keys.length}/${RUN_ATTRIBUTE_COUNT_LIMIT} attributes (${resources} jigs resources, ${otherReserved} other reserved, ${user} user); the SDK has no free attribute key`,
-  );
+function assertResource(resource: RunResource): void {
+  for (const field of ["kind", "identity", "url"] as const) {
+    const value = resource[field];
+    if (value.length === 0) throw new JigsError(`resource ${field} must not be empty`);
+    if (!value.isWellFormed()) throw new JigsError(`resource ${field} must contain valid Unicode`);
+  }
+  if (!URL.canParse(resource.url)) {
+    throw new JigsError(`resource URL is not an absolute URL: ${JSON.stringify(resource.url)}`);
+  }
+  if (RESERVED_KINDS.includes(resource.kind)) {
+    throw new JigsError(
+      `resource kind ${resource.kind} is reserved: jigs records it itself`,
+      "register what your workflow created under a kind of its own, such as report or deployment",
+    );
+  }
 }
 
 /**
- * The implementation behind the public durable registration step.
+ * Register one resource on the active run so `jigs status` shows it.
  *
- * Kept separate for tests: the production adapter below is the only place
- * that knows how to find the active run or invoke the Workflow SDK.
- */
-export async function registerResourceWith(
-  resource: RunResource,
-  deps: ResourceRegistrationDependencies,
-): Promise<RunResource> {
-  const { key, value } = resourceAttribute(resource);
-  const before = await deps.readAttributes();
-  if (before[key] === value) return resource;
-  if (!(key in before) && Object.keys(before).length >= RUN_ATTRIBUTE_COUNT_LIMIT) {
-    throw capacityFailure(resource, before);
-  }
-
-  try {
-    await deps.writeAttribute(key, value);
-  } catch (error) {
-    // A transport can fail after the World committed the write. Reading the
-    // exact value makes that ambiguous outcome an idempotent success.
-    const after = await deps.readAttributes().catch(() => undefined);
-    if (after?.[key] === value) return resource;
-    if (
-      after !== undefined &&
-      !(key in after) &&
-      Object.keys(after).length >= RUN_ATTRIBUTE_COUNT_LIMIT
-    ) {
-      throw capacityFailure(resource, after);
-    }
-    throw registrationFailure(resource, error instanceof Error ? error.message : String(error));
-  }
-  return resource;
-}
-
-/**
- * Register one resource on the active run.
- *
- * Repeating kind + identity is idempotent. A new URL for that identity
- * replaces the old URL; concurrent updates are last-committed-wins. Distinct
- * identities occupy distinct atomic keys.
+ * Repeating kind + identity is idempotent; a new URL for that identity replaces the old one.
+ * The record is observation only: it stays `live` as the run's history and jigs never deletes
+ * what it names. The kinds jigs records itself (`worktree`, `run-directory`, `branch`,
+ * `codex-home`, `pi-home`) are reserved.
  *
  * @group Recorded resources
  */
 export async function registerResource(resource: RunResource): Promise<RunResource> {
-  const runId = getWorkflowMetadata().workflowRunId;
-  const readAttributes = async () => {
-    const run = await (await getWorld()).runs.get(runId, { resolveData: "none" });
-    return { ...(run.attributes ?? {}) };
-  };
-  return registerResourceWith(resource, {
-    readAttributes,
-    writeAttribute: async (key, value) => {
-      await setAttributes({ [key]: value }, { allowReservedAttributes: true });
-    },
+  assertResource(resource);
+  await recordResource(registrySql(), {
+    factory: currentFactory(),
+    runId: getWorkflowMetadata().workflowRunId,
+    kind: resource.kind,
+    identity: resource.identity,
+    url: resource.url,
   });
+  return resource;
 }

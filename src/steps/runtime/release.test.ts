@@ -1,54 +1,275 @@
-import { beforeEach, expect, test, vi } from "vitest";
-import type { ReleasePolicy } from "../../workflow/runtime/release.ts";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { git, makeClonedBinding } from "../workspaces/test-fixtures.ts";
+import type { ResourceRow } from "./registry.ts";
+import { memoryRows } from "./test-fixtures.ts";
 
-const mocks = vi.hoisted(() => ({
-  resolveReleasePolicy: vi.fn(),
-  applyRelease: vi.fn(),
-  writeCleanupDirective: vi.fn(),
+// The registry is the one stand-in: release runs the real kind handlers
+// against real directories and records their outcomes in these rows.
+const policy = vi.hoisted(() => ({ resolveReleasePolicy: vi.fn() }));
+
+vi.mock("./release-policy.ts", () => ({ resolveReleasePolicy: policy.resolveReleasePolicy }));
+vi.mock("./registry.ts", async (original) => ({
+  ...(await original<typeof import("./registry.ts")>()),
+  ...(await import("./test-fixtures.ts")).memoryRegistry(),
 }));
 
-vi.mock("./release-policy.ts", () => ({ resolveReleasePolicy: mocks.resolveReleasePolicy }));
-vi.mock("./cleanup-state.ts", () => ({
-  writeCleanupDirective: mocks.writeCleanupDirective,
-  writeCleanupProgress: vi.fn(),
-}));
-vi.mock("../workspaces/release.ts", () => ({ releaseRunResources: mocks.applyRelease }));
-vi.mock("../workspaces/sql.ts", () => ({ registrySql: () => ({}) }));
-vi.mock("../workspaces/registry.ts", () => ({
-  withRunResourceLock: (_sql: unknown, _runId: string, action: (sql: unknown) => unknown) =>
-    action({}),
-}));
-vi.mock("workflow/runtime", () => ({
-  getWorld: async () => ({ runs: { get: async () => ({ attributes: {} }) } }),
-}));
+const { MAX_RELEASE_ATTEMPTS, releaseDue, releaseRun, releaseRunResources } = await import(
+  "./release.ts"
+);
 
-const { releaseRunResources } = await import("./release.ts");
+let data: string;
+const RUN = "wrun_release";
+const at = new Date("2026-09-25T00:00:00.000Z");
 
-const keep = { onSuccess: "keep", onFailure: "keep" } as const;
-const discard = { onSuccess: "release", onFailure: "release" } as const;
-const metadata = { workflowRunId: "run_1", workflowName: "compiled" };
-const definition = { service: { dashboardPort: 9000 }, workflows: {} };
+function row(kind: string, over: Partial<ResourceRow> = {}): ResourceRow {
+  return {
+    factory: "factory-a",
+    runId: RUN,
+    kind,
+    identity: RUN,
+    url: `file:///${kind}`,
+    state: "live",
+    reason: null,
+    attempts: 0,
+    repoDir: null,
+    branch: null,
+    createdAt: at,
+    updatedAt: at,
+    ...over,
+  };
+}
+
+const directory = (...parts: string[]) => {
+  const target = path.join(data, "jigs", ...parts);
+  mkdirSync(target, { recursive: true });
+  return target;
+};
+
+const seed = (...rows: ResourceRow[]) => memoryRows.splice(0, Infinity, ...rows);
+
+const states = () =>
+  Object.fromEntries(memoryRows.map((entry) => [entry.kind, [entry.state, entry.reason]]));
 
 beforeEach(() => {
-  vi.clearAllMocks();
-  mocks.resolveReleasePolicy.mockResolvedValue(discard);
-  mocks.applyRelease.mockImplementation(async (policy: ReleasePolicy) => ({
-    policy,
-    worktrees: [],
-    runDirectory: { path: "scratch", removed: false, reason: "kept" },
-  }));
+  data = mkdtempSync(path.join(tmpdir(), "jigs-release-"));
+  vi.stubEnv("XDG_DATA_HOME", data);
+  memoryRows.length = 0;
+  policy.resolveReleasePolicy.mockReset();
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+  rmSync(data, { recursive: true, force: true });
 });
 
-test("an explicit policy wins without reading the configured one", async () => {
-  const report = await releaseRunResources(metadata, definition, keep);
-  expect(mocks.resolveReleasePolicy).not.toHaveBeenCalled();
-  expect(mocks.writeCleanupDirective).toHaveBeenCalledWith("run_1", "keep");
+test("release removes run-owned directories and leaves branches and recorded-only kinds live", async () => {
+  const scratch = directory("scratch", RUN);
+  const codex = directory("codex-homes", RUN);
+  seed(
+    row("run-directory"),
+    row("codex-home"),
+    row("pull-request", { identity: "a/b#1" }),
+    row("branch", { identity: "a/b:feature" }),
+  );
+  const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+  const records = await releaseRun({} as never, "factory-a", RUN, "release", "success");
+
+  expect(existsSync(scratch)).toBe(false);
+  expect(existsSync(codex)).toBe(false);
+  expect(states()).toEqual({
+    "run-directory": ["released", "removed"],
+    "codex-home": ["released", "removed"],
+    "pull-request": ["live", null],
+    branch: ["live", null],
+  });
+  expect(records.map((record) => record.state)).toEqual(["released", "released", "live", "live"]);
+  // jigs never deletes remote branches, so release never talks to GitHub.
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+test("keep marks every releasable resource kept with the policy's reason", async () => {
+  const scratch = directory("scratch", RUN);
+  seed(row("run-directory"), row("pull-request", { identity: "a/b#1" }));
+
+  await releaseRun({} as never, "factory-a", RUN, "keep", "failure");
+
+  expect(existsSync(scratch)).toBe(true);
+  expect(states()).toEqual({
+    "run-directory": ["kept", "onFailure policy keeps run resources"],
+    "pull-request": ["live", null],
+  });
+});
+
+function worktreeRow(branch: string, commit = false): ResourceRow {
+  const { repoDir, worktreesDir } = makeClonedBinding(data);
+  const target = path.join(worktreesDir, branch);
+  git(repoDir, "worktree", "add", "-q", target, "-b", branch, "refs/remotes/origin/main");
+  if (commit) {
+    writeFileSync(path.join(target, "work.txt"), "work\n");
+    git(target, "add", "work.txt");
+    git(target, "commit", "-q", "-m", "work");
+  }
+  return row("worktree", { identity: target, repoDir, branch });
+}
+
+test("one pass releases a clean worktree and then the harness homes waiting for it", async () => {
+  const pi = directory("pi-homes", RUN);
+  const tree = worktreeRow("feat");
+  seed(row("pi-home"), tree);
+
+  await releaseRun({} as never, "factory-a", RUN, "release", "success");
+
+  expect(existsSync(tree.identity)).toBe(false);
+  expect(existsSync(pi)).toBe(false);
+  expect(states()).toEqual({
+    "pi-home": ["released", "removed"],
+    worktree: ["released", "worktree and merged branch removed"],
+  });
+});
+
+test("a dirty worktree is kept, and the harness homes that hold its sessions with it", async () => {
+  const pi = directory("pi-homes", RUN);
+  const tree = worktreeRow("dirty");
+  writeFileSync(path.join(tree.identity, "wip.txt"), "uncommitted\n");
+  seed(row("pi-home"), tree);
+
+  await releaseRun({} as never, "factory-a", RUN, "release", "success");
+
+  expect(existsSync(path.join(tree.identity, "wip.txt"))).toBe(true);
+  expect(existsSync(pi)).toBe(true);
+  expect(states()).toEqual({
+    "pi-home": ["kept", "kept with the run's worktree"],
+    worktree: ["kept", "uncommitted work kept"],
+  });
+});
+
+test("a failing worktree leaves the harness homes live until a later attempt", async () => {
+  const codex = directory("codex-homes", RUN);
+  const tree = worktreeRow("locked");
+  git(tree.repoDir as string, "worktree", "lock", tree.identity);
+  seed(row("codex-home"), tree);
+
+  await releaseRun({} as never, "factory-a", RUN, "release", "success");
+
+  expect(existsSync(codex)).toBe(true);
+  expect(memoryRows.find((entry) => entry.kind === "worktree")).toMatchObject({
+    state: "failed",
+    attempts: 1,
+  });
+  expect(memoryRows.find((entry) => entry.kind === "codex-home")).toMatchObject({
+    state: "live",
+    reason: "waits for the run's worktree",
+  });
+});
+
+test("a failed resource is retried until the attempt cap, then kept with its last error", async () => {
+  const tree = worktreeRow("stuck");
+  git(tree.repoDir as string, "worktree", "lock", tree.identity);
+  seed(tree);
+
+  // Each retry waits out its back-off, which the test skips by ageing the row.
+  const retry = () => {
+    Object.assign(memoryRows[0] as ResourceRow, { updatedAt: new Date(0) });
+    return releaseRun({} as never, "factory-a", RUN, "release", "success");
+  };
+  for (let attempt = 1; attempt < MAX_RELEASE_ATTEMPTS; attempt += 1) {
+    await retry();
+    expect(memoryRows[0]).toMatchObject({ state: "failed", attempts: attempt });
+  }
+  await retry();
+
+  expect(memoryRows[0]?.state).toBe("kept");
+  expect(memoryRows[0]?.reason).toMatch(
+    new RegExp(`^release failed: .*\\(gave up after ${MAX_RELEASE_ATTEMPTS} attempts\\)$`, "s"),
+  );
+  expect(existsSync(tree.identity)).toBe(true);
+});
+
+test("a failed resource is not retried before its back-off of 2^attempts minutes", async () => {
+  const scratch = directory("scratch", RUN);
+  const failed = (minutesAgo: number, attempts: number) =>
+    row("run-directory", {
+      state: "failed",
+      reason: "release failed: EBUSY",
+      attempts,
+      updatedAt: new Date(Date.now() - minutesAgo * 60_000),
+    });
+
+  seed(failed(5, 3));
+  await releaseRun({} as never, "factory-a", RUN, "release", "success");
+  expect(existsSync(scratch)).toBe(true);
+  expect(memoryRows[0]?.state).toBe("failed");
+
+  seed(failed(9, 3));
+  await releaseRun({} as never, "factory-a", RUN, "release", "success");
+  expect(existsSync(scratch)).toBe(false);
+  expect(memoryRows[0]?.state).toBe("released");
+});
+
+test("the back-off never waits more than an hour", () => {
+  const hourAgo = new Date(Date.now() - 60 * 60_000);
+  expect(releaseDue({ state: "failed", attempts: 10, updatedAt: hourAgo })).toBe(true);
+  expect(releaseDue({ state: "failed", attempts: 10, updatedAt: new Date() })).toBe(false);
+  expect(releaseDue({ state: "kept", attempts: 0, updatedAt: hourAgo })).toBe(false);
+});
+
+test("kept and released records are final; failed ones are tried again", async () => {
+  directory("scratch", RUN);
+  seed(
+    row("run-directory", { state: "failed", reason: "release failed: EBUSY", attempts: 2 }),
+    row("codex-home", { state: "kept", reason: "onSuccess policy keeps run resources" }),
+    row("pi-home", { state: "released", reason: "removed" }),
+  );
+
+  await releaseRun({} as never, "factory-a", RUN, "release", "success");
+
+  expect(states()).toEqual({
+    "run-directory": ["released", "removed"],
+    "codex-home": ["kept", "onSuccess policy keeps run resources"],
+    "pi-home": ["released", "removed"],
+  });
+});
+
+test("another factory's records are never visited", async () => {
+  const scratch = directory("scratch", RUN);
+  seed(row("run-directory", { factory: "factory-b" }));
+
+  await releaseRun({} as never, "factory-a", RUN, "release", "success");
+
+  expect(existsSync(scratch)).toBe(true);
+  expect(memoryRows[0]?.state).toBe("live");
+});
+
+test("the release step applies an explicit policy's success action without resolving one", async () => {
+  directory("scratch", RUN);
+  seed(row("run-directory"));
+  const keep = { onSuccess: "keep", onFailure: "keep" } as const;
+
+  const report = await releaseRunResources(
+    { workflowRunId: RUN, workflowName: "compiled" },
+    { service: { dashboardPort: 9000 }, workflows: {} },
+    keep,
+  );
+
+  expect(policy.resolveReleasePolicy).not.toHaveBeenCalled();
   expect(report.policy).toEqual(keep);
+  expect(report.resources).toMatchObject([
+    { kind: "run-directory", state: "kept", reason: "onSuccess policy keeps run resources" },
+  ]);
 });
 
-test("without a policy, the configured one is resolved and applied", async () => {
+test("without a policy, the release step resolves the configured one", async () => {
+  memoryRows.length = 0;
+  const discard = { onSuccess: "release", onFailure: "release" } as const;
+  policy.resolveReleasePolicy.mockResolvedValue(discard);
+  const metadata = { workflowRunId: RUN, workflowName: "compiled" };
+  const definition = { service: { dashboardPort: 9000 }, workflows: {} };
+
   const report = await releaseRunResources(metadata, definition);
-  expect(mocks.resolveReleasePolicy).toHaveBeenCalledWith(metadata, definition);
-  expect(mocks.writeCleanupDirective).toHaveBeenCalledWith("run_1", "release");
-  expect(report.policy).toEqual(discard);
+
+  expect(policy.resolveReleasePolicy).toHaveBeenCalledWith(metadata, definition);
+  expect(report).toEqual({ policy: discard, resources: [] });
 });

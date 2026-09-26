@@ -23,7 +23,7 @@ beforeAll(() => {
   assertLivePreconditions();
   tmp = makeTmpDir();
   const codex = createCodexDriver({
-    prepareCodexHome: (runId) =>
+    prepareCodexHome: async (runId) =>
       prepareCodexInvocationHome(runId, {
         baseDir: path.join(tmp, "codex-homes"),
       }),

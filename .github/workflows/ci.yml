@@ -64,7 +64,7 @@ jobs:
       # Claude Code and Codex are unpinned: the check reads the minimum codex version from the provider.
       # No login needed — the check only runs `--version`.
       - run: npm install --global @anthropic-ai/claude-code @openai/codex @earendil-works/pi-coding-agent@0.87.0
-      - run: pnpm exec vitest run --config vitest.live.config.ts src/steps/workspaces/registry.live.test.ts
+      - run: pnpm exec vitest run --config vitest.live.config.ts src/steps/runtime/registry.live.test.ts src/steps/workspaces/index.live.test.ts src/service/automatic-release.live.test.ts src/service/cancel-storage.live.test.ts
         env:
           WORKFLOW_POSTGRES_URL: postgres://jigs:jigs@localhost:5432/jigs
       - run: pnpm e2e

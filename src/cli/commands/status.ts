@@ -1,6 +1,5 @@
 import { JigsError } from "../../errors.ts";
-import type { CleanupView } from "../../workflow/runtime/cleanup.ts";
-import type { RunResource } from "../../workflow/runtime/resources.ts";
+import type { ResourceRecord } from "../../workflow/runtime/resources.ts";
 import { formatTable } from "../table.ts";
 import { age, type RunListRun, suspensionLine } from "./run-list.ts";
 import { runNotFound, type ServiceDeps, serviceFetch } from "./service-client.ts";
@@ -13,8 +12,8 @@ export interface StatusResult extends Omit<RunListRun, "workflow"> {
   error?: string;
   returnValue?: unknown;
   dashboard: string;
-  resources: RunResource[];
-  cleanup: CleanupView;
+  resources: ResourceRecord[];
+  claim: string | null;
 }
 
 interface StepRow {
@@ -70,7 +69,6 @@ export async function showRunStatus(
   if (result.ticket !== null) deps.out(`ticket ${result.ticket}`);
   deps.out(`last activity ${age(result.lastActivityAt, now)} ago (${result.lastActivityAt})`);
   showResources(result.resources, deps);
-  showCleanup(result.cleanup, deps);
   if (result.error !== undefined) deps.out(`error ${result.error}`);
   if (result.status === "completed") {
     showResult(result.returnValue, deps);
@@ -103,23 +101,6 @@ export async function showRunStatus(
   return result;
 }
 
-function showCleanup(cleanup: CleanupView, deps: ServiceDeps): void {
-  if (cleanup.status === "waiting") return;
-  const counts = [
-    ["released", cleanup.released],
-    ["kept", cleanup.kept],
-    ["failed", cleanup.failed],
-    ["unknown", cleanup.unknown],
-  ]
-    .filter((entry): entry is [string, number] => entry[1] !== undefined)
-    .map(([label, count]) => `${count} ${label}`)
-    .join(", ");
-  deps.out(
-    `cleanup ${cleanup.status} (${cleanup.directive}${cleanup.outcome === undefined ? "" : `, ${cleanup.outcome}`}${counts === "" ? "" : `; ${counts}`})`,
-  );
-  if (cleanup.detail !== undefined) deps.out(`  ${singleLine(cleanup.detail)}`);
-}
-
 const RESULT_KEY_LIMIT = 12;
 
 function showResult(value: unknown, deps: ServiceDeps): void {
@@ -138,16 +119,18 @@ function showResult(value: unknown, deps: ServiceDeps): void {
   if (omitted > 0) deps.out(`  … ${omitted} more ${omitted === 1 ? "key" : "keys"}`);
 }
 
-function showResources(resources: readonly RunResource[], deps: ServiceDeps): void {
+function showResources(resources: readonly ResourceRecord[], deps: ServiceDeps): void {
   if (resources.length === 0) {
     deps.out("resources none");
     return;
   }
   deps.out("resources:");
   for (const resource of resources) {
+    const reason = resource.reason === null ? "" : ` (${singleLine(resource.reason)})`;
     deps.out(
       `  ${singleLine(resource.kind)} ${singleLine(resource.identity)} → ${singleLine(resource.url)}`,
     );
+    deps.out(`    ${resource.state}${reason}`);
   }
 }
 

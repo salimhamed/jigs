@@ -3,9 +3,9 @@
  * Workflow code normally calls the generated `#jigs/steps` wrappers.
  *
  * A run directory is scratch space owned by one run, kept across waits and retries
- * until released. Resource records help people find what a run created; a record
- * alone never authorizes deletion. The generated `release` step can release early
- * or return a report; the service applies configured release policy when runs end.
+ * until released. Every resource a run records shows in `jigs status` with its state;
+ * jigs releases only the kinds it creates itself. The generated `release` step can
+ * release early or return a report; the service applies release policy when runs end.
  *
  * @module steps/runtime
  * @packageDocumentation

@@ -125,8 +125,3 @@ export function prepareCodexInvocationHome(
     cleanup: () => rmSync(home, { recursive: true, force: true }),
   };
 }
-
-/** Remove durable Codex sessions after all of a run's worktrees are released. */
-export function removeCodexRunState(runId: string, options: CodexHomeOptions = {}): void {
-  rmSync(codexRunStatePath(runId, options), { recursive: true, force: true });
-}

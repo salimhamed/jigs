@@ -385,11 +385,11 @@ function withFakeVersion(packJigs) {
 // start exits the service.)
 //
 // The service refuses to start without a WORKFLOW_POSTGRES_URL, though: the
-// worktree registry gate creates its tables there before the World starts. So
-// the boot runs only when the runner's environment carries one — CI's
-// step-ids job brings a Postgres service container for it — and says so and
-// skips when it does not. The registry needs no bootstrap: its ensure is a
-// CREATE TABLE IF NOT EXISTS, so an empty database will do.
+// registry gate applies jigs' Drizzle migrations (the jigs_resources table)
+// there before the World starts. So the boot runs only when the runner's
+// environment carries one — CI's step-ids job brings a Postgres service
+// container for it — and says so and skips when it does not. The migrations
+// need no bootstrap, so an empty database will do.
 //
 // Then the exit. Nothing under the service ends the process on SIGTERM —
 // nitro wires no close hook, srvx only closes its listener, and
@@ -774,11 +774,8 @@ async function runtimeScenario(postgresUrl) {
         encoding: "utf8",
       }),
     );
-    if (
-      listed.complete !== true ||
-      listed.entries.length !== 2 ||
-      listed.entries.some((entry) => entry.runId !== runId || entry.eligible !== false)
-    ) {
+    // Recorded-only kinds are the run's history, not something prune holds.
+    if (listed.complete !== true || listed.entries.length !== 0) {
       throw new Error(
         `resource list CLI returned an unexpected inventory: ${JSON.stringify(listed)}`,
       );
@@ -882,19 +879,24 @@ async function runtimeScenario(postgresUrl) {
   }
 }
 
-function assertRuntimeResources(resources, runId, stage) {
+function assertRuntimeResources(records, runId, stage) {
   const expected = [
     {
       kind: "custom-dashboard",
       identity: "operations",
       url: "https://example.test/dashboards/operations",
+      state: "live",
     },
     {
       kind: "custom-report",
       identity: "audit/7",
       url: "https://example.test/reports/audit-7-final",
+      state: "live",
     },
   ];
+  const resources = records
+    .map(({ kind, identity, url, state }) => ({ kind, identity, url, state }))
+    .sort((left, right) => left.kind.localeCompare(right.kind));
   if (JSON.stringify(resources) !== JSON.stringify(expected)) {
     throw new Error(
       `runtime workflow ${runId} resources ${stage} were ${JSON.stringify(resources)}, expected ${JSON.stringify(expected)}`,

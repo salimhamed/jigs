@@ -1,5 +1,6 @@
 import { JigsError } from "../../errors.ts";
 import type { RunSuspension } from "../../run-suspension.ts";
+import { type ResourceRecord, unreleased } from "../../workflow/runtime/resources.ts";
 import { formatTable } from "../table.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 
@@ -16,8 +17,9 @@ export interface RunListRun {
   /** How far the run got, or null when nothing read its steps. */
   steps: number | null;
   lastStep: { name: string; status: string; at: string | null } | null;
-  suspended: boolean;
   suspensions: RunListSuspension[];
+  /** Every resource the run recorded, released ones included. */
+  resources: ResourceRecord[];
 }
 
 export interface RunListSchedule {
@@ -28,16 +30,8 @@ export interface RunListSchedule {
   active: string | null;
 }
 
-export interface RunListWorktree {
-  path: string;
-  branch: string;
-  state: string;
-  ownerRunId: string;
-}
-
 export interface RunListResult {
   runs: RunListRun[];
-  worktrees: RunListWorktree[];
   schedules: RunListSchedule[];
 }
 
@@ -87,18 +81,17 @@ export async function showRuns(
     }
   }
 
-  if (result.worktrees.length > 0) {
+  const held = result.runs.flatMap((run) => run.resources.filter(unreleased));
+  if (held.length > 0) {
     deps.out("");
-    // The registry's state string is printed verbatim, never filtered or
-    // mapped: an abandoned-dirty worktree has to be visible here, and any
-    // state jigs does not yet know about is exactly the one worth showing.
     for (const line of formatTable(
-      ["WORKTREE", "BRANCH", "STATE", "RUN"],
-      result.worktrees.map((worktree) => [
-        worktree.path,
-        worktree.branch,
-        worktree.state,
-        worktree.ownerRunId,
+      ["RESOURCE", "KIND", "STATE", "RUN", "REASON"],
+      held.map((resource) => [
+        resource.identity,
+        resource.kind,
+        resource.state,
+        resource.runId,
+        resource.reason ?? "-",
       ]),
     )) {
       deps.out(line);

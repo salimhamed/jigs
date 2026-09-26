@@ -7,6 +7,7 @@ import { modelApiKeyCheck, openaiCompatibleRuntimeCheck } from "../../../checks/
 import { JigsError } from "../../../errors.ts";
 import type { PiHarness } from "../../../workflow/agents/harness-config.ts";
 import type { AgentRequest } from "../../../workflow/agents/plan.ts";
+import { recordRunDirectory } from "../../runtime/registry.ts";
 import { MIN_PI_VERSION, resolvePiExecutable } from "../harnesses/executables.ts";
 import type { PiExecutionOptions } from "../harnesses/pi.ts";
 import { executePi } from "../harnesses/pi.ts";
@@ -20,6 +21,7 @@ import {
 } from "../harnesses/pi-extension.ts";
 import {
   type PreparedPiHome,
+  piRunStatePath,
   piSessionFile,
   preparePiInvocationHome,
 } from "../harnesses/pi-home.ts";
@@ -66,12 +68,15 @@ function promptFor(request: AgentRequest): string {
 }
 
 export interface PiDriverDependencies {
-  preparePiHome(runId: string, plan: PiModelPlan): PreparedPiHome;
+  preparePiHome(runId: string, plan: PiModelPlan): Promise<PreparedPiHome>;
   executePi(options: PiExecutionOptions): Promise<ExecutorGeneration>;
 }
 
 const defaultDependencies: PiDriverDependencies = {
-  preparePiHome: (runId, source) => preparePiInvocationHome(runId, source),
+  preparePiHome: async (runId, source) => {
+    await recordRunDirectory("pi-home", runId, piRunStatePath(runId));
+    return preparePiInvocationHome(runId, source);
+  },
   executePi,
 };
 
@@ -79,7 +84,7 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
   async function ask(request: AgentRequest, context: DriverContext): Promise<ExecutorGeneration> {
     const harness = descriptor(request);
     const model = planPiModel(harness);
-    const prepared = deps.preparePiHome(context.metadata.workflowRunId, model);
+    const prepared = await deps.preparePiHome(context.metadata.workflowRunId, model);
     let scratch: string | undefined;
     try {
       scratch = mkdtempSync(path.join(tmpdir(), "jigs-pi-ask-"));
@@ -121,7 +126,7 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
   async function run(request: RunRequest, context: DriverContext): Promise<ExecutorGeneration> {
     const harness = descriptor(request);
     const model = planPiModel(harness);
-    const prepared = deps.preparePiHome(context.metadata.workflowRunId, model);
+    const prepared = await deps.preparePiHome(context.metadata.workflowRunId, model);
     const { resume } = request;
     const sessionId = resume?.id ?? `jigs-${randomUUID()}`;
     try {

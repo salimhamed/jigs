@@ -1,13 +1,13 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { drizzle } from "drizzle-orm/node-postgres";
-import type { Pool, QueryConfig } from "pg";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import type { RegistrySql, ResourceRow } from "../../steps/runtime/registry.ts";
+import { readRunState } from "../../steps/runtime/run-state.ts";
+import { memoryLock, memoryRows } from "../../steps/runtime/test-fixtures.ts";
 import { factorySlug } from "../../steps/workspaces/layout.ts";
-import type { RegistrySql } from "../../steps/workspaces/registry.ts";
-import { resourceAttribute } from "../../workflow/runtime/resources.ts";
-import { listResources, runResourcesPrune } from "./resources.ts";
+import { commitToRemote, git, makeClonedBinding } from "../../steps/workspaces/test-fixtures.ts";
+import { listResources, offlineFacts, runResourcesPrune } from "./resources.ts";
 import {
   type ServiceProcesses,
   servicePidfilePath,
@@ -15,8 +15,13 @@ import {
 } from "./service-lifecycle.ts";
 import { FAKE_BOOT, FAKE_START, SERVICE_COMMAND, serviceRecord } from "./test-fixtures.ts";
 
+vi.mock("../../steps/runtime/registry.ts", async (original) => ({
+  ...(await original<typeof import("../../steps/runtime/registry.ts")>()),
+  ...(await import("../../steps/runtime/test-fixtures.ts")).memoryRegistry(),
+}));
+
 const RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
-const WORKFLOW = "workflow//./workflows/ship//shipWorkflow";
+const LIVE = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7LIV";
 let tmp: string;
 let root: string;
 let lines: string[];
@@ -24,14 +29,15 @@ let lines: string[];
 beforeEach(() => {
   tmp = mkdtempSync(path.join(tmpdir(), "jigs-resource-command-"));
   root = path.join(tmp, "factory");
-  mkdirSync(path.join(root, ".output", "server"), { recursive: true });
+  mkdirSync(root, { recursive: true });
   writeFileSync(
     path.join(root, "jigs.config.ts"),
     "export default { service: { port: 8990, dashboardPort: 9090 }, workflows: {} };\n",
   );
   writeFileSync(path.join(root, ".env"), "WORKFLOW_POSTGRES_URL=postgres://unused/test\n");
-  writeFileSync(path.join(root, ".output", "server", "index.mjs"), `const id = "${WORKFLOW}";\n`);
   vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
+  memoryRows.length = 0;
+  memoryLock.taken = undefined;
   lines = [];
 });
 
@@ -40,82 +46,351 @@ afterEach(() => {
   rmSync(tmp, { recursive: true, force: true });
 });
 
-function database(status = "completed"): RegistrySql {
-  const resource = resourceAttribute({
-    kind: "pull-request",
-    identity: "acme/repo#1",
-    url: "https://github.com/acme/repo/pull/1",
-  });
-  const pool = {
-    async query(config: string | (QueryConfig & { rowMode?: string })) {
-      const text = typeof config === "string" ? config : config.text;
-      if (text.includes('"workflow"."workflow_runs"')) {
-        return {
-          rows: [
-            {
-              id: RUN,
-              name: WORKFLOW,
-              status,
-              attributes: {
-                [resource.key]: resource.value,
-              },
-            },
-          ],
-        };
-      }
-      return { rows: [] };
+// Only the World's run status is read offline; the registry is the memory one.
+function database(statuses: Record<string, string> = { [RUN]: "completed" }): RegistrySql {
+  return {
+    $client: {
+      async query(_text: string, [runId]: string[]) {
+        const status = statuses[runId as string];
+        return { rows: status === undefined ? [] : [{ status, name: "workflow//./ship//ship" }] };
+      },
+      async end() {},
     },
-    async end() {},
-  };
-  return drizzle(pool as unknown as Pool);
+  } as unknown as RegistrySql;
 }
 
-test("list selects a run by its full ID and prints JSON without mutating", async () => {
-  const report = await listResources(
-    { cwd: root, out: (line) => lines.push(line), connect: () => database() },
-    { run: RUN, json: true },
-  );
-  expect(report).toMatchObject({
-    complete: true,
-    entries: [{ runId: RUN, kind: "pull-request", exists: null, eligible: false }],
+function seed(kind: string, over: Partial<ResourceRow> = {}): ResourceRow {
+  const row: ResourceRow = {
+    factory: factorySlug(root),
+    runId: RUN,
+    kind,
+    identity: over.runId ?? RUN,
+    url: "file:///scratch",
+    state: "live",
+    reason: null,
+    attempts: 0,
+    repoDir: null,
+    branch: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...over,
+  };
+  memoryRows.push(row);
+  return row;
+}
+
+function scratch(runId = RUN): string {
+  const directory = path.join(tmp, "data", "jigs", "scratch", runId);
+  mkdirSync(directory, { recursive: true });
+  return directory;
+}
+
+const deps = (statuses?: Record<string, string>) => ({
+  cwd: root,
+  out: (line: string) => lines.push(line),
+  connect: () => database(statuses),
+});
+
+test("list shows this factory's unreleased records with what prune would do", async () => {
+  seed("run-directory");
+  seed("pull-request", { identity: "acme/api#1" });
+  seed("codex-home", { state: "kept", reason: "onFailure policy keeps run resources" });
+  seed("pi-home", { state: "released", reason: "removed" });
+  seed("run-directory", { runId: LIVE });
+  seed("run-directory", { factory: "another-factory" });
+
+  const report = await listResources(deps({ [RUN]: "completed", [LIVE]: "running" }), {
+    json: true,
   });
+
+  expect(report.complete).toBe(true);
+  expect(
+    report.entries.map((entry) => [
+      entry.runId,
+      entry.kind,
+      entry.state,
+      entry.eligible,
+      entry.decision,
+    ]),
+  ).toEqual([
+    [RUN, "run-directory", "live", true, "would be released"],
+    [
+      RUN,
+      "codex-home",
+      "kept",
+      true,
+      "would be released; overrides the kept decision (onFailure policy keeps run resources)",
+    ],
+    [LIVE, "run-directory", "live", false, "the run is not finished"],
+  ]);
   expect(JSON.parse(lines.join("\n"))).toEqual(report);
 });
 
-test.each([
-  ["a prefix", RUN.slice(5, 13)],
-  ["a prefix with wrun_", RUN.slice(0, 13)],
-  ["a ticket", "AGE-317"],
-  ["an unknown ref", "wrun_01ZZZZZZZZZZZZZZZZZZZZZZZZ"],
-])("--run rejects %s and points at jigs status", async (_label, ref) => {
+test("prune overrides the policy: live, kept and failed records of finished runs alike", async () => {
+  seed("run-directory");
+  seed("codex-home", { state: "kept", reason: "onFailure policy keeps run resources" });
+  seed("pi-home", { state: "failed", reason: "release failed: EBUSY", attempts: 2 });
+
+  const report = await listResources(deps(), {});
+
+  expect(report.entries.map((entry) => [entry.kind, entry.eligible])).toEqual([
+    ["run-directory", true],
+    ["codex-home", true],
+    ["pi-home", true],
+  ]);
+});
+
+const pruneAll = (statuses: Record<string, string> = { [RUN]: "cancelled" }) =>
+  runResourcesPrune({ ...deps(statuses), processes: machine() }, { apply: true });
+
+test("apply releases finished runs' records and never a running run's", async () => {
+  const done = scratch();
+  const live = scratch(LIVE);
+  seed("run-directory");
+  seed("codex-home", { state: "kept", reason: "onFailure policy keeps run resources" });
+  seed("run-directory", { runId: LIVE });
+  seed("pull-request", { identity: "acme/api#1" });
+  const codex = path.join(tmp, "data", "jigs", "codex-homes", RUN);
+  mkdirSync(codex, { recursive: true });
+
+  const report = await pruneAll({ [RUN]: "cancelled", [LIVE]: "running" });
+
+  expect(
+    report.entries.map((entry) => [entry.runId, entry.kind, entry.state, entry.action]),
+  ).toEqual([
+    [RUN, "run-directory", "released", "remove"],
+    [RUN, "codex-home", "released", "remove"],
+    [LIVE, "run-directory", "live", "skip"],
+  ]);
+  expect(existsSync(done)).toBe(false);
+  expect(existsSync(codex)).toBe(false);
+  expect(existsSync(live)).toBe(true);
+  expect(lines.at(-1)).toBe("2 removed, 0 failed, 1 retained");
+  // A recorded-only pull request is history, never visited.
+  expect(memoryRows.find((row) => row.kind === "pull-request")?.state).toBe("live");
+});
+
+test("a preview never changes anything", async () => {
+  const done = scratch();
+  seed("run-directory");
+
+  await runResourcesPrune(deps(), {});
+
+  expect(existsSync(done)).toBe(true);
+  expect(memoryRows[0]?.state).toBe("live");
+  expect(lines.at(-1)).toBe("1 proposed removal, 0 retained; preview only");
+});
+
+test("apply never touches another factory's records", async () => {
+  const theirs = scratch();
+  seed("run-directory", { factory: "another-factory" });
+
+  const report = await pruneAll();
+
+  expect(report.entries).toEqual([]);
+  expect(existsSync(theirs)).toBe(true);
+  expect(memoryRows[0]?.state).toBe("live");
+});
+
+test("a run the World no longer knows counts as finished", async () => {
+  const lost = scratch();
+  seed("run-directory");
+
+  await pruneAll({});
+
+  expect(existsSync(lost)).toBe(false);
+  expect(memoryRows[0]?.state).toBe("released");
+});
+
+test("apply decides again under the run's lock: a run that resumed keeps its records", async () => {
+  const done = scratch();
+  seed("run-directory");
+  const statuses: Record<string, string> = { [RUN]: "cancelled" };
+  memoryLock.taken = () => {
+    statuses[RUN] = "running";
+  };
+
+  const report = await runResourcesPrune(
+    { ...deps(statuses), processes: machine() },
+    { apply: true },
+  );
+
+  expect(report.entries[0]).toMatchObject({ action: "skip", decision: "the run is not finished" });
+  expect(existsSync(done)).toBe(true);
+});
+
+test("a record released between listing and the lock is not visited again", async () => {
+  seed("run-directory");
+  memoryLock.taken = () => {
+    Object.assign(memoryRows[0] as ResourceRow, { state: "released", reason: "removed" });
+  };
+
+  expect((await pruneAll()).entries).toEqual([]);
+});
+
+function worktree(branch: string, runId = RUN): ResourceRow {
+  const parent = path.join(tmp, `clone-${branch}`);
+  mkdirSync(parent);
+  const { repoDir, worktreesDir } = makeClonedBinding(parent);
+  const target = path.join(worktreesDir, branch);
+  git(repoDir, "worktree", "add", "-q", target, "-b", branch, "refs/remotes/origin/main");
+  return seed("worktree", { runId, identity: target, repoDir, branch });
+}
+
+test("a failure is reported and prune carries on with independent resources", async () => {
+  const stuck = worktree("stuck");
+  git(stuck.repoDir as string, "worktree", "lock", stuck.identity);
+  const other = scratch(LIVE);
+  seed("run-directory", { runId: LIVE });
+
+  const report = await pruneAll({ [RUN]: "failed", [LIVE]: "failed" });
+
+  expect(report.complete).toBe(false);
+  expect(report.errors).toEqual([expect.stringContaining(`${stuck.identity}: release failed:`)]);
+  expect(report.entries.map((entry) => [entry.kind, entry.state])).toEqual([
+    ["worktree", "failed"],
+    ["run-directory", "released"],
+  ]);
+  expect(existsSync(stuck.identity)).toBe(true);
+  expect(existsSync(other)).toBe(false);
+});
+
+test("apply keeps a dirty worktree and keeps an unmerged branch's commits", async () => {
+  const dirty = worktree("dirty");
+  writeFileSync(path.join(dirty.identity, "wip.txt"), "uncommitted\n");
+  const unmerged = worktree("unmerged", LIVE);
+  writeFileSync(path.join(unmerged.identity, "work.txt"), "work\n");
+  git(unmerged.identity, "add", "work.txt");
+  git(unmerged.identity, "commit", "-q", "-m", "work");
+
+  await pruneAll({ [RUN]: "failed", [LIVE]: "failed" });
+
+  expect(existsSync(path.join(dirty.identity, "wip.txt"))).toBe(true);
+  expect(memoryRows.find((row) => row.branch === "dirty")).toMatchObject({
+    state: "kept",
+    reason: "uncommitted work kept",
+  });
+  expect(existsSync(unmerged.identity)).toBe(false);
+  expect(git(unmerged.repoDir as string, "branch", "--list", "unmerged")).toContain("unmerged");
+});
+
+test("one apply releases a worktree and then the harness homes that waited for it", async () => {
+  const tree = worktree("clean");
+  seed("pi-home");
+  const pi = path.join(tmp, "data", "jigs", "pi-homes", RUN);
+  mkdirSync(pi, { recursive: true });
+
+  const preview = await listResources(deps({ [RUN]: "failed" }), {});
+  expect(preview.entries.map((entry) => [entry.kind, entry.eligible])).toEqual([
+    ["worktree", true],
+    ["pi-home", true],
+  ]);
+  await pruneAll({ [RUN]: "failed" });
+
+  expect(existsSync(tree.identity)).toBe(false);
+  expect(existsSync(pi)).toBe(false);
+});
+
+function leftover() {
+  const parent = path.join(tmp, "leftover");
+  mkdirSync(parent);
+  const { remoteDir, repoDir } = makeClonedBinding(parent);
+  commitToRemote(parent, remoteDir, "still-there", { "a.txt": "a" });
+  const branch = (name: string, over: Partial<ResourceRow> = {}) =>
+    seed("branch", {
+      identity: `acme/api:${name}`,
+      url: `https://github.com/acme/api/tree/${name}`,
+      repoDir,
+      branch: name,
+      ...over,
+    });
+  return { repoDir, branch };
+}
+
+test("the preview lists branches finished runs left on GitHub, with how to delete them", async () => {
+  const { branch } = leftover();
+  branch("still-there");
+  branch("gone");
+  branch("running-run", { runId: LIVE });
+  const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+  const report = await listResources(deps({ [RUN]: "completed", [LIVE]: "running" }), {});
+
+  expect(report.leftOnGitHub).toEqual([
+    {
+      runId: RUN,
+      identity: "acme/api:still-there",
+      url: "https://github.com/acme/api/tree/still-there",
+      checked: true,
+      command: "git push origin --delete still-there",
+    },
+  ]);
+  expect(lines).toContain(
+    "left on GitHub: acme/api:still-there — jigs doesn't delete remote branches; if its pull request is merged or closed, remove it with: git push origin --delete still-there",
+  );
+  // A preview writes nothing, not even for the branch that is gone.
+  expect(memoryRows.every((row) => row.state === "live")).toBe(true);
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+test("the clone's default branch is never listed, whatever the records say", async () => {
+  const { branch } = leftover();
+  branch("main");
+
+  const report = await pruneAll({ [RUN]: "completed" });
+
+  expect(report.leftOnGitHub).toEqual([]);
+  expect(memoryRows[0]?.state).toBe("live");
+});
+
+test("apply marks branches deleted outside jigs released and keeps listing the rest", async () => {
+  const { branch } = leftover();
+  branch("still-there");
+  branch("gone");
+
+  const report = await pruneAll({ [RUN]: "completed" });
+
+  expect(report.leftOnGitHub.map((left) => left.identity)).toEqual(["acme/api:still-there"]);
+  expect(memoryRows.map((row) => [row.branch, row.state, row.reason])).toEqual([
+    ["still-there", "live", null],
+    ["gone", "released", "deleted outside jigs"],
+  ]);
+});
+
+test("a remote that cannot be asked still lists its branches, saying so", async () => {
+  seed("branch", {
+    identity: "acme/api:unknown",
+    url: "https://github.com/acme/api/tree/unknown",
+    repoDir: path.join(tmp, "no-such-clone"),
+    branch: "unknown",
+  });
+
+  const report = await pruneAll({ [RUN]: "completed" });
+
+  expect(report.leftOnGitHub).toMatchObject([{ identity: "acme/api:unknown", checked: false }]);
+  expect(memoryRows[0]?.state).toBe("live");
+  expect(lines.some((line) => line.startsWith("left on GitHub (could not check the remote"))).toBe(
+    true,
+  );
+});
+
+test("the offline read has the run's status and nothing it cannot see", async () => {
+  const state = await readRunState(database(), factorySlug(root), RUN, offlineFacts(database()));
+  expect(state).toMatchObject({
+    status: "completed",
+    claim: null,
+    suspensions: [],
+  });
+});
+
+test("--run names a run the World does not know and points at jigs status", async () => {
   await expect(
-    listResources(
-      {
-        cwd: root,
-        out: (line) => lines.push(line),
-        connect: () => database(),
-      },
-      { run: ref },
-    ),
+    listResources(deps(), { run: "wrun_01ZZZZZZZZZZZZZZZZZZZZZZZZ" }),
   ).rejects.toMatchObject({
-    message: `run ${ref} not found`,
+    message: "run wrun_01ZZZZZZZZZZZZZZZZZZZZZZZZ not found",
     hint: expect.stringContaining("pnpm exec jigs status"),
   });
   expect(lines).toEqual([]);
-});
-
-test("a workflow database read failure reports that nothing changed", async () => {
-  const pool = {
-    async query() {
-      throw new Error("database unavailable");
-    },
-    async end() {},
-  };
-  const failed = drizzle(pool as unknown as Pool);
-
-  await expect(
-    listResources({ cwd: root, out: (line) => lines.push(line), connect: () => failed }),
-  ).rejects.toThrow("could not read workflow runs");
 });
 
 // A machine with the given ps rows; `signal` answers liveness from them.

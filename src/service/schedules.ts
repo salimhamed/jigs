@@ -7,7 +7,7 @@
 import { Cron } from "croner";
 import type { z } from "zod";
 import { type Check, failedCheck, formatFailures } from "../checks/index.ts";
-import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
+import { finished } from "../steps/runtime/run-state.ts";
 import type { Factory, Schedule } from "../workflow/factory.ts";
 import { listRuns, type RunRow, scheduleTriggerId, scheduleTriggerLabel } from "./runs.ts";
 import { onShutdown } from "./shutdown.ts";
@@ -181,9 +181,7 @@ function scheduleProblem(
 
 function activeRunId(rows: RunRow[], name: string): string | null {
   const trigger = scheduleTriggerLabel(name);
-  const active = rows.find(
-    (row) => row.trigger === trigger && !TERMINAL_RUN_STATUSES.has(row.status),
-  );
+  const active = rows.find((row) => row.trigger === trigger && !finished(row));
   return active?.runId ?? null;
 }
 

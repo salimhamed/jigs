@@ -87,26 +87,40 @@ _Avoid_: checkout, workspace
 
 **Run directory**: A scratch directory held for a run, with no repository.
 
-**Run resource**: Anything recorded against a run as a run attribute (kind,
-identity, URL): worktrees, run directories, branches, pull requests. Listing,
-release and pruning read these records. A record alone never permits deletion.
+**Run resource**: A durable thing a run owns, recorded as one row of the
+`jigs_resources` table (kind, identity, URL, state, reason): worktrees, run
+directories, harness homes, branches, pull requests. Rows stay after release
+as history. Status, release and pruning read these rows; a row is this
+factory's proof of ownership.
 _Avoid_: artifact
 
-**Worktree registry**: The Postgres table of managed worktrees, their owning
-runs and states.
+**Resource state**: `live`, `kept`, `released` or `failed`, with the reason. A
+run's cleanup status is its resources' states.
 
-**Release**: Removing a finished run's eligible local resources under the
-factory's or workflow's release policy. The service applies it after a run
-ends and reconciles missed ones on a timer. Dirty or unmerged work is kept, and
-a branch is deleted only on evidence the remote default branch has its commits.
+**Resource kind**: What a resource is, and whether jigs can release it.
+`pull-request` and factory-registered kinds are recorded only and stay `live`
+as history.
+
+**Run state**: One run's resources plus its hook facts (claim, what it waits
+on), read as plain data by `readRunState`.
+
+**Registry**: The jigs tables in the World's Postgres; today only
+`jigs_resources`.
+
+**Release**: Removing a finished run's eligible resources under the factory's
+or workflow's release policy. The service applies it after a run ends and
+reconciles missed ones on a timer. Dirty or unmerged work is kept, and remote
+branches are never deleted: prune lists the ones runs left on GitHub.
 _Avoid_: teardown (for the request), gc
 
-**Abandoned worktree**: A worktree whose run ended or was interrupted.
-`abandoned-dirty` means it still holds uncommitted or unmerged work.
-_Avoid_: orphan
+**Kept resource**: A resource release left in place, by policy or because a
+safety check refused, such as a worktree with uncommitted work.
+_Avoid_: orphan, abandoned
 
-**Resource prune**: `jigs resources prune`: previews what is eligible, and with
-`--apply` removes only what passes the ownership and safety checks.
+**Resource prune**: `jigs resources prune`: the operator's override of the
+release policy. It previews what release kept, failed or never decided for
+this factory's finished runs, and with `--apply` releases what passes the same
+safety checks as release.
 _Avoid_: sweep, cleanup job
 
 ## Agents

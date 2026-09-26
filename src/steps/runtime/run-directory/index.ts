@@ -1,6 +1,7 @@
-import { mkdir, readdir, rm } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { jigsDataDir } from "../../../config/paths.ts";
+import { currentFactory, recordRunDirectory, registrySql, setResourceState } from "../registry.ts";
 import type { RunMetadata } from "../run-context.ts";
 
 export function runDirectory(metadata: RunMetadata): string {
@@ -18,6 +19,7 @@ export function runDirectory(metadata: RunMetadata): string {
 export async function createRunDirectory(metadata: RunMetadata): Promise<string> {
   const directory = runDirectory(metadata);
   await mkdir(directory, { recursive: true });
+  await recordRunDirectory("run-directory", metadata.workflowRunId, directory);
   return directory;
 }
 
@@ -28,18 +30,11 @@ export async function createRunDirectory(metadata: RunMetadata): Promise<string>
  */
 export async function removeRunDirectory(metadata: RunMetadata): Promise<void> {
   await rm(runDirectory(metadata), { recursive: true, force: true });
-}
-
-/** Only direct real directories with valid run IDs are candidates for resource pruning. */
-export async function listRunDirectories(): Promise<{ path: string; runId: string }[]> {
-  const root = path.join(jigsDataDir(), "scratch");
-  const entries = await readdir(root, { withFileTypes: true }).catch(
-    (error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return [];
-      throw error;
-    },
+  const runId = metadata.workflowRunId;
+  await setResourceState(
+    registrySql(),
+    { factory: currentFactory(), runId, kind: "run-directory", identity: runId },
+    "released",
+    "removed by the workflow",
   );
-  return entries
-    .filter((entry) => entry.isDirectory() && /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(entry.name))
-    .map((entry) => ({ path: runDirectory({ workflowRunId: entry.name }), runId: entry.name }));
 }

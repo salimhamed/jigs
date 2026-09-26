@@ -83,9 +83,17 @@ the current secret.
 ## An old worktree or directory is still there
 
 That is often on purpose: failed runs, waiting runs and unfinished Git work
-keep their resources. Inspect them with `pnpm exec jigs resources list`, then
+keep their resources. `pnpm exec jigs status <run>` says why each one was kept.
+Inspect them with `pnpm exec jigs resources list`, then
 preview `pnpm exec jigs resources prune` before you remove anything. See
 [CLI commands](/guide/cli#cleaning-up-resources).
+
+## A run's branch is still on GitHub
+
+jigs never deletes remote branches. `pnpm exec jigs resources prune` lists the
+branches finished runs left, each with the `git push origin --delete <branch>`
+that removes it. GitHub's "automatically delete head branches" repository
+setting deletes the branch when its pull request merges.
 
 `pnpm exec jigs resources prune --apply` refuses while the service or anything
 it started is still running, on macOS and Linux alike. Run

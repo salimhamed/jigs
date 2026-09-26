@@ -6,33 +6,19 @@ import { createWorld } from "@workflow/world-postgres";
 import { Pool } from "pg";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { setWorld } from "workflow/runtime";
-import { writeCleanupProgress } from "../steps/runtime/cleanup-state.ts";
+import {
+  currentFactory,
+  ensureRegistry,
+  listResources,
+  type RegistrySql,
+  registrySql,
+} from "../steps/runtime/registry.ts";
 import { createRunDirectory } from "../steps/runtime/run-directory/index.ts";
 import { provisionWorktree } from "../steps/workspaces/index.ts";
 import { cloneDir, worktreePath } from "../steps/workspaces/layout.ts";
-import {
-  connectRegistry,
-  ensureWorktreeRegistry,
-  getWorktree,
-  listWorktreesForRun,
-  type RegistrySql,
-  withRunResourceLock,
-} from "../steps/workspaces/registry.ts";
-import { releaseRunResources } from "../steps/workspaces/release.ts";
 import { makeClonedBinding, makeTmpDir, removeTmpDir } from "../steps/workspaces/test-fixtures.ts";
 import type { Factory } from "../workflow/factory.ts";
-import {
-  CLEANUP_DIRECTIVE_ATTRIBUTE,
-  CLEANUP_STATE_ATTRIBUTE,
-  cleanupFromAttributes,
-  encodeCleanupProgress,
-} from "../workflow/runtime/cleanup.ts";
-import {
-  type AutomaticReleaseDeps,
-  type CleanupRun,
-  startAutomaticRelease,
-} from "./automatic-release.ts";
-import { runsWithActiveStep } from "./stalls.ts";
+import { automaticReleaseDeps, startAutomaticRelease } from "./automatic-release.ts";
 
 const adminUrl = new URL(
   process.env.WORKFLOW_POSTGRES_URL ?? "postgres://jigs:jigs@localhost:5439/jigs",
@@ -85,8 +71,8 @@ beforeAll(async () => {
     path.join(factoryRoot, "jigs.config.ts"),
     `export default ${JSON.stringify({ bindings: { api: { remote: remoteDir } }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} })};`,
   );
-  registry = connectRegistry(testUrl.toString(), { max: 2 });
-  await ensureWorktreeRegistry(registry);
+  registry = registrySql();
+  await ensureRegistry(registry);
   world = await startWorld();
 });
 
@@ -112,58 +98,56 @@ afterAll(async () => {
   removeTmpDir(tmp);
 });
 
-test("startup reconciliation recovers persisted cleanup after a World restart", async () => {
+const states = async (runId: string) =>
+  (await listResources(registry, { factory: currentFactory(), runId })).map((row) => [
+    row.kind,
+    row.state,
+    row.reason,
+  ]);
+
+test("startup reconciliation releases what a failed pass before a World restart left live", async () => {
   const runId = await createCompletedRun();
   const metadata = { workflowRunId: runId };
-  await provisionWorktree({ binding: "api", branch }, metadata, { sql: registry });
+  await provisionWorktree({ binding: "api", branch }, metadata);
   const directory = await createRunDirectory(metadata);
 
-  const first = startAutomaticRelease(
-    factory,
-    coordinatorDeps(async () => {
+  const warn = vi.fn();
+  const first = startAutomaticRelease(factory, {
+    ...automaticReleaseDeps(),
+    ready: () => true,
+    warn,
+    release: async () => {
       throw new Error("transient cleanup failure before restart");
-    }),
-  );
-  await until(async () => {
-    const run = await world.runs.get(runId, { resolveData: "none" });
-    return cleanupFromAttributes(run.attributes).status === "failed";
-  }, "first coordinator did not persist failed cleanup");
+    },
+  });
+  await until(() => warn.mock.calls.length > 0, "first coordinator did not attempt release");
   await first.stop();
   expect(existsSync(target)).toBe(true);
-  expect(await getWorktree(registry, target)).not.toBeNull();
+  expect(await states(runId)).toEqual([
+    ["worktree", "live", null],
+    ["run-directory", "live", null],
+  ]);
 
   await world.close?.();
   setWorld(undefined);
   world = await startWorld();
-  const persisted = cleanupFromAttributes(
-    (await world.runs.get(runId, { resolveData: "none" })).attributes,
-  );
-  expect(persisted).toMatchObject({
-    status: "failed",
-    action: "release",
-    outcome: "success",
-  });
 
-  const restarted = startAutomaticRelease(factory, coordinatorDeps());
-  await until(async () => {
-    const run = await world.runs.get(runId, { resolveData: "none" });
-    return cleanupFromAttributes(run.attributes).status === "complete";
-  }, "restarted coordinator did not finish persisted cleanup");
+  const restarted = startAutomaticRelease(factory, {
+    ...automaticReleaseDeps(),
+    ready: () => true,
+  });
+  await until(
+    async () => (await states(runId)).every(([, state]) => state === "released"),
+    "restarted coordinator did not release the run's resources",
+  );
   await restarted.stop();
 
-  const completed = cleanupFromAttributes(
-    (await world.runs.get(runId, { resolveData: "none" })).attributes,
-  );
-  expect(completed).toMatchObject({
-    status: "complete",
-    action: "release",
-    outcome: "success",
-    released: 2,
-    failed: 0,
-  });
+  expect(await states(runId)).toEqual([
+    ["worktree", "released", "worktree and merged branch removed"],
+    ["run-directory", "released", "removed"],
+  ]);
   expect(existsSync(target)).toBe(false);
   expect(existsSync(directory)).toBe(false);
-  expect(await getWorktree(registry, target)).toBeNull();
 });
 
 async function startWorld(): Promise<ReturnType<typeof createWorld>> {
@@ -189,60 +173,11 @@ async function createCompletedRun(): Promise<string> {
   if (created.run === undefined) throw new Error("run_created returned no run");
   const runId = created.run.runId;
   await world.events.create(runId, { eventType: "run_started" });
-  const setter = world.runs.experimentalSetAttributes;
-  if (setter === undefined) throw new Error("Postgres World does not support run attributes");
-  await setter(
-    runId,
-    [
-      { key: CLEANUP_DIRECTIVE_ATTRIBUTE, value: "automatic" },
-      { key: CLEANUP_STATE_ATTRIBUTE, value: encodeCleanupProgress({ status: "waiting" }) },
-    ],
-    { allowReservedAttributes: true },
-  );
   await world.events.create(runId, {
     eventType: "run_completed",
     eventData: { output: new Uint8Array() },
   });
   return runId;
-}
-
-function coordinatorDeps(
-  release: AutomaticReleaseDeps["release"] = (run, action, outcome, sql) =>
-    releaseRunResources(
-      { onSuccess: action, onFailure: action },
-      { workflowRunId: run.runId },
-      sql,
-      outcome,
-    ),
-): AutomaticReleaseDeps {
-  return {
-    listRuns: async () => {
-      const page = await world.runs.list({
-        resolveData: "none",
-        pagination: { limit: 1000 },
-      });
-      return page.data as CleanupRun[];
-    },
-    waitForTerminal: async (runId, signal) => {
-      const wait = world.runs.waitForTerminalStatus;
-      if (wait === undefined) throw new Error("Postgres World does not support terminal waits");
-      return wait(runId, {
-        resolveData: "none",
-        timeoutMs: 60_000,
-        signal,
-      }) as Promise<CleanupRun>;
-    },
-    hasActiveStep: async (runId) => (await runsWithActiveStep([runId])).length > 0,
-    policy: () => "release",
-    withLock: (runId, action) => withRunResourceLock(registry, runId, action),
-    worktreeCount: async (runId, sql) => (await listWorktreesForRun(sql, runId)).length,
-    release,
-    writeProgress: (runId, progress) => writeCleanupProgress(runId, progress),
-    ready: () => true,
-    log: () => undefined,
-    warn: () => undefined,
-    setTimer: () => () => undefined,
-  };
 }
 
 async function until(

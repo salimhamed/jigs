@@ -16,6 +16,9 @@ import {
   skipWithoutSupportedPi,
 } from "./test-fixtures.ts";
 
+// The Pi home is recorded as a run resource; this offline test has no registry.
+vi.mock("../../runtime/registry.ts", () => ({ recordRunDirectory: async () => undefined }));
+
 // These tests start the installed Pi against a scripted OpenAI-compatible
 // server on localhost, so every model turn is deterministic and offline.
 
