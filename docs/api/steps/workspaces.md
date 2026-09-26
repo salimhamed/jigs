@@ -1,9 +1,9 @@
-# @jigs-ai/jigs v0.76.0
+# @jigs-ai/jigs v0.77.0
 
 Prepare a run-owned worktree for a configured GitHub binding.
 
-`provisionWorktree` creates or reuses the run's working copy from the binding's
-clone. Call its generated `#jigs/steps` wrapper from workflow code so a resumed
+`provisionWorktree` cuts the run's own branch and working copy from the
+binding's clone. Call its generated `#jigs/steps` wrapper from workflow code so a resumed
 workflow receives the recorded workspace information. The low-level function
 here belongs inside a factory-owned `"use step"` implementation.
 
@@ -23,13 +23,16 @@ The binding and branch used to provision a run's worktree.
 
 > **branch**: `string`
 
+The branch name to start from; the run's own branch adds a suffix from its run ID.
+
 ***
 
 ### provisionWorktree()
 
-> **provisionWorktree**(`request`, `metadata`, `deps`): `Promise`\<`Worktree`\>
+> **provisionWorktree**(`request`, `metadata`): `Promise`\<`Worktree`\>
 
-Create or reuse a worktree for this run and prepare its files and dependencies.
+Create this run's own branch and worktree from the default branch, and prepare its files and
+dependencies.
 
 #### Parameters
 
@@ -41,62 +44,11 @@ Create or reuse a worktree for this run and prepare its files and dependencies.
 
 `RunMetadata`
 
-##### deps
-
-[`ProvisionWorktreeDependencies`](#provisionworktreedependencies) = `{}`
-
 #### Returns
 
 `Promise`\<`Worktree`\>
 
-## Advanced implementation/testing
+#### Remarks
 
-### ProvisionWorktreeDependencies
-
-Injectable registry and ownership operations used while provisioning a worktree.
-
-#### Properties
-
-##### runStatus()?
-
-> `optional` **runStatus**: (`runId`) => `Promise`\<`string` \| `null`\>
-
-The World's status for a run, or null when it has no such run.
-
-###### Parameters
-
-###### runId
-
-`string`
-
-###### Returns
-
-`Promise`\<`string` \| `null`\>
-
-##### sql?
-
-> `optional` **sql**: `RegistrySql`
-
-##### withLock()?
-
-> `optional` **withLock**: \<`T`\>(`runId`, `action`) => `Promise`\<`T`\>
-
-###### Type Parameters
-
-###### T
-
-`T`
-
-###### Parameters
-
-###### runId
-
-`string`
-
-###### action
-
-(`sql`) => `Promise`\<`T`\>
-
-###### Returns
-
-`Promise`\<`T`\>
+Every run gets a new branch, so a run never picks up another run's work. The returned
+`branch` is the one to push and open a pull request from.
