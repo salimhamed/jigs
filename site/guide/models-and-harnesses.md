@@ -202,6 +202,25 @@ confident as its more likely side, and `yes` says which side that is. Every
 answered `askJev` or `decide` call appends a line, tagged with its `site`, to
 `decisions.jsonl` in the run's working directory.
 
+### Where jigs asks Jev itself
+
+Jigs asks Jev a few questions of its own. When Jev is unsure (under 0.9), jigs
+behaves as it would without it.
+
+- `haltForHuman` asks whether a new ticket comment answers the question. A
+  comment Jev is sure is not an answer, such as a "+1" or a mention of someone
+  else, is passed over and the run keeps waiting.
+- `reviewTicket` asks whether the ticket is ready before the reviewer reads it.
+  A ticket Jev is sure is not ready gets one fixed question for the reason
+  (no way to tell when it is done, no reproduction steps, conflicting
+  requirements, or too large), and the reviewer reads the reply.
+- The webhook ingress asks whether a delivery could matter to the run it would
+  wake. A delivery Jev is sure cannot matter, such as a label change or a bot
+  comment, is acknowledged without waking the run. Closes, pushes and CI results
+  always wake, and polling still catches anything skipped. This needs
+  `OPENROUTER_API_KEY` in the service's environment; without it every delivery
+  wakes.
+
 ## Agent environment
 
 Agents do not automatically inherit the service environment. Add additional

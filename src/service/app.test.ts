@@ -20,6 +20,7 @@ import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
 import { resourceAttribute } from "../workflow/runtime/resources.ts";
 import * as queue from "./queue.ts";
 import { clearWakes, lastWake } from "./wake-note.ts";
+import * as relevance from "./wake-relevance.ts";
 
 const ambientWorkflowEnv = vi.hoisted(() => {
   const targetWorld = process.env.WORKFLOW_TARGET_WORLD;
@@ -118,6 +119,7 @@ beforeEach(() => {
   vi.stubEnv("GITHUB_TOKEN", "gh-service-token");
   vi.stubEnv("GITHUB_API_URL", "http://mock.test/github");
   vi.stubEnv("LINEAR_WEBHOOK_SECRET", "linear-hook-secret");
+  vi.stubEnv("OPENROUTER_API_KEY", undefined);
   resumeHookMock.mockReset().mockRejectedValue(new HookNotFoundError("unclaimed-test-token"));
   resetGithubAuth();
   resetLinearAuth();
@@ -445,6 +447,25 @@ test("a validly signed Comment delivery for an unclaimed issue is acknowledged",
   expect(await res.json()).toEqual({ delivered: false });
   expect(log).toHaveBeenCalledExactlyOnceWith(
     `[ingress] linear dropped reason=no-matching-hook token=linear:ticket:${issueId} event=Comment`,
+  );
+});
+
+test("a delivery Jev is sure cannot matter is acknowledged without waking the run", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+  const irrelevant = vi.spyOn(relevance, "isIrrelevantWake").mockResolvedValue(true);
+  const res = await postGithub(reviewPayload, {
+    "x-hub-signature-256": `sha256=${sign(reviewPayload, "gh-hook-secret")}`,
+    "x-github-event": "pull_request_review",
+  });
+  expect(await res.json()).toEqual({ ignored: true });
+  expect(irrelevant).toHaveBeenCalledWith(
+    "github",
+    "pull_request_review",
+    JSON.parse(reviewPayload),
+  );
+  expect(resumeHookMock).not.toHaveBeenCalled();
+  expect(log).toHaveBeenCalledExactlyOnceWith(
+    "[ingress] github ignored reason=not-relevant token=github:pr:acme/api#41 event=pull_request_review",
   );
 });
 
