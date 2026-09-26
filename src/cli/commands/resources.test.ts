@@ -171,14 +171,12 @@ test("apply refuses while a process is left in the service's recorded group", as
   expect(connect).not.toHaveBeenCalled();
 });
 
-test("apply refuses without a service record", async () => {
+test("apply proceeds in a factory whose service never ran", async () => {
   const connect = vi.fn(() => database());
 
-  await expect(prune(machine(["1 0 1 Ss init"]), connect)).rejects.toMatchObject({
-    message: expect.stringContaining("no service record at"),
-    hint: expect.stringContaining("pnpm exec jigs service start and pnpm exec jigs service stop"),
-  });
-  expect(connect).not.toHaveBeenCalled();
+  await prune(machine(["1 0 1 Ss init"]), connect);
+
+  expect(connect).toHaveBeenCalled();
 });
 
 test("apply proceeds once the service and its group are gone", async () => {
@@ -191,14 +189,28 @@ test("apply proceeds once the service and its group are gone", async () => {
   expect(report.complete).toBe(true);
 });
 
-test("apply proceeds after a restart of the machine, whatever now has the recorded pid", async () => {
+test("apply proceeds after a restart of the machine, every time, whatever now has the recorded pid", async () => {
   recordService(700);
   const connect = vi.fn(() => database());
+  const rebooted = machine(["700 1 700 Ss tmux", "701 700 700 S -zsh"], "boot-2");
 
-  await prune(machine(["700 1 700 Ss tmux", "701 700 700 S -zsh"], "boot-2"), connect);
-
-  expect(connect).toHaveBeenCalled();
+  await prune(rebooted, connect);
   expect(existsSync(serviceSupervisionPath(factorySlug(root)))).toBe(false);
+  await prune(rebooted, connect);
+
+  expect(connect).toHaveBeenCalledTimes(2);
+});
+
+test("apply fails loudly when a live pidfile pid has no service record", async () => {
+  const slug = factorySlug(root);
+  mkdirSync(path.dirname(servicePidfilePath(slug)), { recursive: true });
+  writeFileSync(servicePidfilePath(slug), "700\n");
+  const connect = vi.fn(() => database());
+
+  await expect(prune(machine(["700 1 700 Ss tmux"]), connect)).rejects.toMatchObject({
+    message: expect.stringContaining("pid 700"),
+  });
+  expect(connect).not.toHaveBeenCalled();
 });
 
 test("apply proceeds when another program took the group after a clean stop", async () => {

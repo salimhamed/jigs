@@ -146,14 +146,14 @@ function parseRecord(text: string): ServiceRecord | undefined {
 /**
  * The service as its records and the running processes describe it.
  *
- * - `none`: nothing recorded; `discarded` when the records were from before
- *   the machine last restarted and were deleted.
+ * - `none`: nothing recorded, or records from before the machine last
+ *   restarted, which are deleted.
  * - `running`: the recorded service is running.
  * - `stopped`: the service has exited. `orphanGroup` is its process group
  *   while processes it started could still be in it.
  */
 type ServiceState =
-  | { kind: "none"; discarded: boolean }
+  | { kind: "none" }
   | { kind: "running"; pid: number; processGroup: number }
   | { kind: "stopped"; orphanGroup: number | undefined };
 
@@ -173,11 +173,11 @@ function inspectService(slug: string, processes: ServiceProcesses): ServiceState
     );
 
   if (record === undefined) {
-    if (pid === undefined) return { kind: "none", discarded: false };
+    if (pid === undefined) return { kind: "none" };
     const alive = entries.find((entry) => entry.pid === pid);
     if (alive !== undefined) throw unverified(alive, `there is no service record at ${recordFile}`);
     rmSync(pidfile, { force: true });
-    return { kind: "none", discarded: false };
+    return { kind: "none" };
   }
   if (pid !== undefined && pid !== record.processGroup) {
     throw new JigsError(
@@ -195,7 +195,7 @@ function inspectService(slug: string, processes: ServiceProcesses): ServiceState
     case "previous-boot":
       rmSync(pidfile, { force: true });
       rmSync(recordFile, { force: true });
-      return { kind: "none", discarded: true };
+      return { kind: "none" };
     case "service":
       return { kind: "running", pid: verdict.leader.pid, processGroup: record.processGroup };
     case "leader-gone":
@@ -588,13 +588,8 @@ export function requireServiceStopped(deps: ServiceLifecycleDeps): void {
   if (state.kind === "running") {
     throw new JigsError(`factory service is still running as pid ${state.pid}`, stop);
   }
-  if (state.kind === "none") {
-    if (state.discarded) return;
-    throw new JigsError(
-      `no service record at ${serviceSupervisionPath(slug)}`,
-      "start and stop the service with pnpm exec jigs service start and pnpm exec jigs service stop; prune never stops or kills processes",
-    );
-  }
+  // Nothing recorded means nothing jigs started can be running.
+  if (state.kind === "none") return;
   const group = state.orphanGroup;
   if (group === undefined) return;
   const members = parsePs(processes.snapshot()).filter((entry) => entry.pgid === group);

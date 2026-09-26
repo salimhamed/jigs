@@ -204,9 +204,7 @@ are read-only. To apply a preview, run `jigs service stop`, then
 `jigs resources prune --apply`; this works on macOS and Linux. Policy-kept
 resources also need `--include-kept`. Apply never stops anything: it refuses
 while the service or any process in its recorded process group is still
-running, and when there is no service record, in which case start and stop the
-service with `jigs service start` and `jigs service stop`. Dirty and unmerged
-work remains.
+running. Dirty and unmerged work remains.
 
 `jigs service stop`, `restart`, `jigs down` and a restart inside `jigs up` stop
 the service and every process it started, killing what is still running after
