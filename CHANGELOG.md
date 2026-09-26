@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.76.0](https://github.com/salimhamed/jigs/compare/jigs-v0.75.0...jigs-v0.76.0) (2026-09-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* report the Workflow SDK's run status verbatim ([#432](https://github.com/salimhamed/jigs/issues/432))
+
+### Code Refactoring
+
+* report the Workflow SDK's run status verbatim ([#432](https://github.com/salimhamed/jigs/issues/432)) ([ec44b4e](https://github.com/salimhamed/jigs/commit/ec44b4ecd92db34aa6695be9e751b281ddc9a335))
+
 ## [0.75.0](https://github.com/salimhamed/jigs/compare/jigs-v0.74.0...jigs-v0.75.0) (2026-09-26)
 
 
