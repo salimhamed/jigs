@@ -25,7 +25,7 @@ import {
 } from "../../providers/github-label.ts";
 import { ensureRepoWebhook, parseGithubRemote } from "../../providers/github-webhook.ts";
 import { hasBindingClone } from "../../steps/workspaces/clone.ts";
-import { cloneDir, cloneRepoDir } from "../../steps/workspaces/layout.ts";
+import { bindingFilesDir, cloneDir, cloneRepoDir } from "../../steps/workspaces/layout.ts";
 
 const BINDING_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
@@ -189,7 +189,7 @@ async function ensureJigsLabels(
 // Only a missing folder is created: an existing one may hold secrets the
 // operator put there, so nothing inside it is ever rewritten.
 function createBindingFilesDir(factoryRoot: string, name: string): boolean {
-  const dir = path.join(factoryRoot, "bindings", name);
+  const dir = bindingFilesDir(factoryRoot, name);
   if (existsSync(dir)) return false;
   mkdirSync(dir, { recursive: true });
   writeFileSync(path.join(dir, "README.md"), bindingFilesReadme(name));

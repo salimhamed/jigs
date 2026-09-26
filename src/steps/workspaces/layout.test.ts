@@ -1,6 +1,7 @@
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
+  bindingFilesDir,
   branchDirname,
   cloneDir,
   cloneRepoDir,
@@ -56,4 +57,8 @@ test("the central root is the XDG data home, wherever it moves", () => {
   expect(worktreePath({ ...options, branch: "main" })).toBe(
     path.join("/elsewhere/jigs/clones", factorySlug("/f/acme"), "api", "worktrees", "main"),
   );
+});
+
+test("bindingFilesDir is the factory repo's bindings folder, not the clone", () => {
+  expect(bindingFilesDir("/f/acme", "api")).toBe(path.join("/f/acme", "bindings", "api"));
 });

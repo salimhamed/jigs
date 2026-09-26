@@ -38,6 +38,11 @@ export function cloneDir(options: CloneDirOptions): string {
   return path.join(factoryClonesDir(options.factoryRoot), options.bindingName);
 }
 
+/** The factory repo's folder of files a binding's `copy` lists, distinct from its {@link cloneDir}. */
+export function bindingFilesDir(factoryRoot: string, bindingName: string): string {
+  return path.join(factoryRoot, "bindings", bindingName);
+}
+
 export function cloneRepoDir(options: CloneDirOptions): string {
   return path.join(cloneDir(options), "repo.git");
 }

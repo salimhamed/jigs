@@ -4,6 +4,7 @@ import path from "node:path";
 import { globSync } from "tinyglobby";
 import type { Binding } from "../../config/factory-config.ts";
 import { JigsError } from "../../errors.ts";
+import { bindingFilesDir } from "./layout.ts";
 
 // Provisioning ports .worktreerc.yml semantics: gitignore-blind disk globs
 // that must match dotfiles, a directory match copying its whole tree, existing
@@ -95,8 +96,8 @@ function copySources(
   worktreePath: string,
   entries: string[],
 ): void {
-  const copyDir = path.join("bindings", bindingName);
-  const sourceDir = path.join(factoryRoot, copyDir);
+  const sourceDir = bindingFilesDir(factoryRoot, bindingName);
+  const copyDir = path.relative(factoryRoot, sourceDir);
   for (const entry of entries) {
     assertInsideCopyDir(bindingName, copyDir, sourceDir, worktreePath, entry, entry);
     // dot:true is load-bearing — the point of `copy` is .env-class files, and
