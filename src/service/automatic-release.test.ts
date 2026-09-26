@@ -13,7 +13,7 @@ import {
   reconcileAutomaticRelease,
   startAutomaticRelease,
 } from "./automatic-release.ts";
-import { runsWithActiveStep } from "./stalls.ts";
+import { runsWithActiveStep } from "./runs.ts";
 
 const factory = { workflows: {} } as Factory;
 

@@ -14,12 +14,14 @@ import { ticketToken } from "../workflow/linear/claim.ts";
 import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
 import {
   enrichSuspensions,
+  listRunSteps,
   listRuns,
   runExists,
+  runsWithActiveStep,
+  type StepView,
   scheduleTriggerId,
   type WorldRun,
 } from "./runs.ts";
-import type * as stalls from "./stalls.ts";
 import { clearWakes, recordWake } from "./wake-note.ts";
 
 const ambientWorkflowEnv = vi.hoisted(() => {
@@ -284,7 +286,7 @@ test("a run parked on a hook keeps the SDK's status and lists what it waits for"
   });
 });
 
-const inFlight: stalls.StepView = {
+const inFlight: StepView = {
   name: "executeAgent",
   status: "running",
   attempt: 1,
@@ -448,7 +450,7 @@ test("a terminal run's step count is null in the listing, not a zero it never re
 // What the single-run route does: it holds the steps already, so a finished
 // run says how far it got rather than reporting nothing.
 test("a terminal run reports its steps to a caller that already read them", async () => {
-  const steps: stalls.StepView[] = [
+  const steps: StepView[] = [
     {
       ...inFlight,
       name: "claimTicket",
@@ -496,4 +498,143 @@ test("last activity is the run's newest step, not the moment it was created", as
     status: "running",
     at: "2026-08-26T10:20:00.000Z",
   });
+});
+
+type World = Parameters<typeof setWorld>[0];
+
+const step = (over: Record<string, unknown> = {}) => ({
+  runId: RUN_A,
+  stepId: "01K3ANBZ4TQ8W9YV6H2E5C7DKM",
+  stepName: "step//./steps/jigs//worktree",
+  status: "completed",
+  attempt: 1,
+  createdAt: new Date("2026-09-04T10:00:00.000Z"),
+  updatedAt: new Date("2026-09-04T10:00:01.000Z"),
+  startedAt: new Date("2026-09-04T10:00:00.000Z"),
+  completedAt: new Date("2026-09-04T10:00:01.000Z"),
+  ...over,
+});
+
+const worldWithSteps = (steps: Array<Record<string, unknown>>) =>
+  setWorld({
+    specVersion: SPEC_VERSION_CURRENT,
+    steps: { list: async () => ({ data: steps, cursor: null, hasMore: false }) },
+  } as unknown as World);
+
+function worldWithPages(pages: Array<Array<Record<string, unknown>>>, failure?: Error) {
+  let page = 0;
+  const cursors: Array<string | undefined> = [];
+  setWorld({
+    specVersion: SPEC_VERSION_CURRENT,
+    steps: {
+      list: async (_params: { pagination?: { cursor?: string } }) => {
+        cursors.push(_params.pagination?.cursor);
+        if (failure !== undefined && page === pages.length - 1) throw failure;
+        const data = pages[page] ?? [];
+        const hasMore = page < pages.length - 1;
+        page += 1;
+        return { data, cursor: hasMore ? `cursor-${page}` : null, hasMore };
+      },
+    },
+  } as unknown as World);
+  return cursors;
+}
+
+test("a run's steps are reported oldest first, with a null for what has not happened", async () => {
+  worldWithSteps([
+    step({
+      stepName: "second",
+      createdAt: new Date("2026-09-04T10:00:05.000Z"),
+      status: "running",
+      attempt: 2,
+      completedAt: undefined,
+      error: { message: "the harness exited 1" },
+    }),
+    step({ stepName: "first" }),
+  ]);
+  expect(await listRunSteps(RUN_A)).toEqual([
+    {
+      name: "first",
+      status: "completed",
+      attempt: 1,
+      startedAt: "2026-09-04T10:00:00.000Z",
+      completedAt: "2026-09-04T10:00:01.000Z",
+      error: null,
+    },
+    {
+      name: "second",
+      status: "running",
+      attempt: 2,
+      startedAt: "2026-09-04T10:00:00.000Z",
+      completedAt: null,
+      error: "the harness exited 1",
+    },
+  ]);
+});
+
+test("a run whose every step is terminal has nothing in flight", async () => {
+  worldWithSteps([step(), step({ stepName: "other", status: "failed" })]);
+  expect(await runsWithActiveStep([RUN_A])).toEqual([]);
+});
+
+test("a pending step counts as in flight, like a running one", async () => {
+  worldWithSteps([step({ status: "pending" })]);
+  expect(await runsWithActiveStep([RUN_A])).toEqual([RUN_A]);
+});
+
+test("an active step on a later page counts as in flight", async () => {
+  const cursors = worldWithPages([
+    [step({ stepName: "first" })],
+    [step({ stepName: "later", status: "running" })],
+  ]);
+  expect(await runsWithActiveStep([RUN_A])).toEqual([RUN_A]);
+  expect(cursors).toEqual([undefined, "cursor-1"]);
+});
+
+test("all completed steps across pages have no active step", async () => {
+  worldWithPages([[step()], [step({ stepName: "later", status: "failed" })]]);
+  expect(await runsWithActiveStep([RUN_A])).toEqual([]);
+});
+
+test("a pending step on a later page counts as in flight", async () => {
+  worldWithPages([[step()], [step({ stepName: "later", status: "pending" })]]);
+  expect(await runsWithActiveStep([RUN_A])).toEqual([RUN_A]);
+});
+
+test("empty and single pages are handled", async () => {
+  worldWithPages([[]]);
+  expect(await listRunSteps(RUN_A)).toEqual([]);
+
+  worldWithPages([[step()]]);
+  expect(await listRunSteps(RUN_A)).toHaveLength(1);
+});
+
+test("a later-page listing failure is propagated", async () => {
+  const failure = new Error("later page unavailable");
+  worldWithPages([[step()], []], failure);
+  await expect(listRunSteps(RUN_A)).rejects.toThrow(failure);
+});
+
+test("an incomplete continuation page fails closed", async () => {
+  setWorld({
+    specVersion: SPEC_VERSION_CURRENT,
+    steps: {
+      list: async () => ({ data: [step()], cursor: null, hasMore: true }),
+    },
+  } as unknown as World);
+  await expect(listRunSteps(RUN_A)).rejects.toThrow(
+    "World returned hasMore=true without a continuation cursor",
+  );
+});
+
+test("an omitted continuation cursor also fails closed", async () => {
+  setWorld({
+    specVersion: SPEC_VERSION_CURRENT,
+    steps: {
+      list: async () => ({ data: [step()], hasMore: true }),
+    },
+  } as unknown as World);
+  await expect(listRunSteps(RUN_A)).rejects.toThrow(
+    "World returned hasMore=true without a continuation cursor",
+  );
 });
