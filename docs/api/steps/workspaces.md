@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.70.0
+# @jigs-ai/jigs v0.71.0
 
 Prepare a run-owned worktree for a configured GitHub binding.
 

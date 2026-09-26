@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.70.0
+# @jigs-ai/jigs v0.71.0
 
 Run directories, resource records and release operations for factory-owned steps.
 Workflow code normally calls the generated `#jigs/steps` wrappers.
