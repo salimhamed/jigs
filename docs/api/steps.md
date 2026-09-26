@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.69.1
+# @jigs-ai/jigs v0.69.2
 
 APIs for implementing a factory-owned custom agent step. Most workflows use
 `runAgent` and other generated routines instead.
