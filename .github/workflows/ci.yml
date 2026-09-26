@@ -70,3 +70,20 @@ jobs:
       - run: pnpm e2e
         env:
           WORKFLOW_POSTGRES_URL: postgres://jigs:jigs@localhost:5432/jigs
+
+  # Report-only: accuracy lands in the job summary and a wrong answer never
+  # blocks a merge. Without the secret, as on fork pull requests, every eval skips.
+  evals:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm eval
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
