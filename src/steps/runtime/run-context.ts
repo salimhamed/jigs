@@ -1,4 +1,4 @@
-import type { WorkflowMetadata } from "workflow";
+import type { StepMetadata, WorkflowMetadata } from "workflow";
 
 /**
  * The run a step belongs to: `getWorkflowMetadata()` inside the step.
@@ -7,6 +7,14 @@ import type { WorkflowMetadata } from "workflow";
  */
 export type RunMetadata = Pick<WorkflowMetadata, "workflowRunId">;
 export type NamedRunMetadata = Pick<WorkflowMetadata, "workflowRunId" | "workflowName">;
+
+/**
+ * The run and the step a posting belongs to: `{ ...getWorkflowMetadata(), stepId: getStepMetadata().stepId }`
+ * inside the step. The step id is the same on every retry of that step.
+ *
+ * @group Runtime metadata
+ */
+export type StepRunMetadata = NamedRunMetadata & Pick<StepMetadata, "stepId">;
 
 // What a step can tell a human about the run it is inside. The Workflow SDK's
 // metadata carries the run id and the workflow name; the dashboard link is

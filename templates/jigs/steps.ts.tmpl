@@ -27,7 +27,7 @@ import * as pullRequestsOperations from "@jigs-ai/jigs/steps/pull-requests";
 import * as runtimeOperations from "@jigs-ai/jigs/steps/runtime";
 import type { WorktreeRequest } from "@jigs-ai/jigs/steps/workspaces";
 import * as workspacesOperations from "@jigs-ai/jigs/steps/workspaces";
-import { getWorkflowMetadata } from "workflow";
+import { getStepMetadata, getWorkflowMetadata } from "workflow";
 
 function localFileUrl(path: string): string {
   const url = new URL("file://");
@@ -110,7 +110,7 @@ export async function postTicketHumanInputRequest(issueId: string, halt: Halt) {
   return linearOperations.postTicketHumanInputRequest(
     issueId,
     halt,
-    getWorkflowMetadata(),
+    { ...getWorkflowMetadata(), stepId: getStepMetadata().stepId },
     definition,
   );
 }
@@ -123,7 +123,12 @@ export async function postTicketHumanInputRequest(issueId: string, halt: Halt) {
 export async function postTicketNote(issueId: string, note: TicketNote) {
   "use step";
   const { default: definition } = await import("../jigs.config.ts");
-  return linearOperations.postTicketNote(issueId, note, definition);
+  return linearOperations.postTicketNote(
+    issueId,
+    note,
+    { ...getWorkflowMetadata(), stepId: getStepMetadata().stepId },
+    definition,
+  );
 }
 
 /**

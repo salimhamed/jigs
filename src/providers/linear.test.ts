@@ -4,6 +4,7 @@ import {
   createIssueInProject,
   fetchIssueSnapshot,
   fetchIssueStates,
+  findComment,
   findIssueInProject,
   getIssueParticipants,
   listCommentsSince,
@@ -145,6 +146,24 @@ test("createComment posts a commentCreate mutation with the body verbatim", asyn
   expect(request.query).toContain("commentCreate");
   expect(request.variables.input).toEqual({ issueId: "issue-uuid", body });
   expect(request.variables.input.body).toContain("@[salim](u1)");
+});
+
+test("createComment names the comment when given an id", async () => {
+  respond({ commentCreate: { success: true, comment: { id: "c-id", createdAt: "t" } } });
+  await createComment("issue-uuid", "hi", "c-id");
+  expect(lastRequest().body.variables.input).toEqual({
+    issueId: "issue-uuid",
+    body: "hi",
+    id: "c-id",
+  });
+});
+
+test("findComment returns the comment by id, or null when there is none", async () => {
+  respond({ comments: { nodes: [{ id: "c-id", createdAt: "t" }] } });
+  await expect(findComment("c-id")).resolves.toEqual({ id: "c-id", createdAt: "t" });
+  expect(lastRequest().body.variables).toEqual({ id: "c-id" });
+  respond({ comments: { nodes: [] } });
+  await expect(findComment("c-id")).resolves.toBeNull();
 });
 
 const projectQuery = {
