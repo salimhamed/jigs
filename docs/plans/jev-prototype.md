@@ -85,19 +85,27 @@ with each answer. The unit tests use a stubbed `executeJev`.
    - **Acts:**
      - idle: record the snapshot as assessed and keep watching.
      - human: `maintenanceStopped`.
-     - merge: merge only if `isPullRequestMergeReady` and `mergedBy === "jigs"`.
-       Otherwise fall through to builder.
+     - merge: with `mergedBy === "jigs"`, read the pull request again and merge
+       only if its facts are unchanged and `isPullRequestMergeReady` passes.
+       Otherwise fall through to builder. With `mergedBy === "human"`, treat it
+       as idle.
      - builder: run the builder as today.
    - **Fallback:** builder.
+   - **Status:** done. The question is in `delivery/decisions.ts`.
 2. **Comment triage**
-   - **Where:** a new `triageComments` routine in `src/workflow/pull-requests/`.
-   - **Decides:** one Jev call with one choice per new comment, keyed by comment
-     ID: question, change request, FYI, praise, or automated.
+   - **Where:** `triageComments` in the recipe's `delivery/delivery.ts`, not a
+     library routine: the library only ships a routine once two workflows use
+     it.
+   - **Decides:** one `askJev` call with one choice per new comment, keyed by
+     comment ID: question, change request, FYI, praise, automated, or an author
+     reply. At most the 20 newest comments are triaged.
    - **Acts:**
      - The labels feed site 1's state and the maintenance prompt.
-     - If every new comment is FYI, praise or automated, and CI has not
-       changed, site 1 may skip its call and treat the wake as idle.
+     - If every new comment is FYI, praise, automated or an author reply, no
+       review arrived, and the head, CI, merge state, approval, draft flag and
+       labels are unchanged, the wake is idle without asking site 1.
    - **Fallback:** comments go unlabeled.
+   - **Status:** done.
 3. **Ticket reply**
    - **Where:** `haltForHuman` in `src/workflow/linear/halt-for-human.ts`, after a
      candidate reply is found. `checkForTicketHumanReply` is a step, so the
@@ -123,8 +131,10 @@ with each answer. The unit tests use a stubbed `executeJev`.
    - **State:** the ledger of rounds: how many findings each round had, and
      which ones repeat.
    - **Decides:** a score of converging, slow, or stalled.
-   - **Acts:** stalled stops early with the open findings.
+   - **Acts:** stalled stops early with the open findings. It is not asked
+     after the last round, which the budget already ends.
    - **Fallback:** keep going until the round budget is spent.
+   - **Status:** done.
 6. **Webhook relevance**
    - **Where:** GitHub and Linear ingress in `src/service/app.ts`, before
      `resumeAndLog`.
@@ -150,22 +160,32 @@ with each answer. The unit tests use a stubbed `executeJev`.
      - Trivial and small tickets use `builderLight` and `reviewerLight`, new
        entries in the recipe's `agents` map. By default those are Claude Sonnet.
      - The size sets `budget.reviewRounds` (1, 2, 3, 3) and
-       `budget.attemptsPerUpdate` (1, 2, 3, 3). A budget passed as a run input
-       still wins.
+       `budget.attemptsPerUpdate` (1, 2, 3, 3). An agent or budget passed as a
+       run input still wins, so the `builder`, `reviewer` and budget inputs no
+       longer have defaults.
+     - The recipe declares `jevModel` in `requires.models`, so a missing
+       `OPENROUTER_API_KEY` fails the service's startup checks instead of the
+       first run.
    - **Fallback:** the default agents and budgets.
+   - **Status:** done. The question is in the recipe's root `decisions.ts`.
 8. **Failure triage**
    - **Where:** the recipe's error handling, for an agent or step error that is
      not `DeliveryStopped`.
    - **Decides:** transient, needs a human, or a jigs bug.
    - **Acts:**
      - transient: retry the phase once.
-     - needs a human: note on the ticket and move it to Todo.
+     - needs a human: throw `DeliveryStopped` with the error, so the ticket
+       gets a note and moves to Todo.
      - a jigs bug: rethrow.
    - **Fallback:** rethrow, as today.
+   - **Status:** done, as `withFailureTriage` around each phase call.
+   - **Risk:** a retried `publish` could open a second pull request if the
+     first attempt failed after GitHub created one, and a retried
+     `followPullRequest` starts a new watcher for the same pull request.
 
 ### More candidates
 
-These were found while building sites 3, 4 and 6 and are not built yet.
+These were found while building the Phase 2 sites and are not built yet.
 
 - **Agent start failures** (`runAgentOrHalt`): today only failed tool checks
   halt. Jev could sort any other agent error into transient (retry), needs a
@@ -184,6 +204,18 @@ These were found while building sites 3, 4 and 6 and are not built yet.
   less often while waiting on a person.
 - **Workflow routing** (`src/service/trigger.ts`): a choice of which workflow a
   new ticket should start, for factories with several.
+- **Finding severity** (`implementAndReview`): a yes/no per review finding,
+  "is this blocking under the rubric?". A confident no would downgrade a
+  preference the reviewer marked blocking, so rounds are not spent on naming.
+  It overrides the reviewer, so it needs eval evidence first.
+- **Second opinion on needs-human** (`followPullRequest`): before stopping on a
+  builder's `needs-human`, a yes/no on whether the builder could resolve it
+  itself, such as a merge conflict it called a blocker, with one more turn.
+- **Red CI cause** (`followPullRequest`): the `fix-ci-loop` question of caused by
+  the change, flaky or base branch broken. Flaky would re-run checks without a
+  builder turn, which needs a new re-run-checks step.
+- **Light reviewer on late rounds** (`implementAndReview`): from round 2, when
+  only small findings remain, review with `reviewerLight`.
 
 ## Phase 3: factory sites (jigs-factory-js)
 
