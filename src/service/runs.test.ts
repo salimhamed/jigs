@@ -12,7 +12,6 @@ import { describeRunState } from "../steps/runtime/run-state.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { ticketToken } from "../workflow/linear/claim.ts";
 import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
-import * as queue from "./queue.ts";
 import {
   enrichSuspensions,
   listRuns,
@@ -20,7 +19,7 @@ import {
   scheduleTriggerId,
   type WorldRun,
 } from "./runs.ts";
-import * as stalls from "./stalls.ts";
+import type * as stalls from "./stalls.ts";
 import { clearWakes, recordWake } from "./wake-note.ts";
 
 const ambientWorkflowEnv = vi.hoisted(() => {
@@ -42,14 +41,12 @@ const RUN_A = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 const RUN_B = "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ";
 
 // Everything here is read off the world the SDK hands jigs, so the world is
-// what a test stands up — the same seam app.test.ts uses. The dead-job read
-// would otherwise open a real connection to the operator's own World.
+// what a test stands up — the same seam app.test.ts uses.
 beforeEach(() => {
   clearWakes();
   vi.spyOn(sql, "registrySql").mockReturnValue({} as never);
   vi.spyOn(sql, "currentFactory").mockReturnValue("factory-test");
   vi.spyOn(sql, "listResources").mockResolvedValue([]);
-  vi.spyOn(queue, "listJobRunIds").mockResolvedValue({ dead: [], live: [] });
   world();
 });
 
@@ -275,17 +272,17 @@ test("the listing follows every SDK cursor", async () => {
   expect(rows.map((row) => row.runId).sort()).toEqual([RUN_A, RUN_B]);
 });
 
-test("a non-terminal run holding a park hook is reported suspended", async () => {
+test("a run parked on a hook keeps the SDK's status and lists what it waits for", async () => {
   world({
     runs: [worldRun()],
     hooks: [{ runId: RUN_A, token: PARK_TOKEN }],
   });
   const rows = await listRuns(factory);
-  expect(rows[0]?.status).toBe("suspended");
+  expect(rows[0]).toMatchObject({
+    status: "running",
+    suspensions: [{ reason: "waiting for pull request activity on acme/api#41" }],
+  });
 });
-
-const jobs = (dead: string[], live: string[] = []) =>
-  vi.spyOn(queue, "listJobRunIds").mockResolvedValue({ dead, live });
 
 const inFlight: stalls.StepView = {
   name: "executeAgent",
@@ -295,52 +292,6 @@ const inFlight: stalls.StepView = {
   completedAt: null,
   error: null,
 };
-
-test("a running run with a dead job and nothing in flight is stalled", async () => {
-  world({ runs: [worldRun()] });
-  jobs([RUN_A]);
-  vi.spyOn(stalls, "listStepsByRun").mockResolvedValue(new Map([[RUN_A, []]]));
-  const rows = await listRuns(factory);
-  expect(rows[0]?.status).toBe("stalled");
-});
-
-test("a dead job beside a step still in flight is not a stall", async () => {
-  world({ runs: [worldRun()] });
-  jobs([RUN_A]);
-  vi.spyOn(stalls, "listStepsByRun").mockResolvedValue(new Map([[RUN_A, [inFlight]]]));
-  const rows = await listRuns(factory);
-  expect(rows[0]?.status).toBe("running");
-});
-
-test("a healed run is not stalled: the dead row stays, but a live job replaced it", async () => {
-  // A requeue and the World's own restart reconciliation each add a job
-  // beside the dead one, which nothing ever clears — so a recovered run would
-  // otherwise read stalled in every gap between its steps.
-  world({ runs: [worldRun()] });
-  jobs([RUN_A], [RUN_A]);
-  vi.spyOn(stalls, "listStepsByRun").mockResolvedValue(new Map([[RUN_A, []]]));
-  const rows = await listRuns(factory);
-  expect(rows[0]?.status).toBe("running");
-});
-
-test("a run parked on a hook reads suspended even with a dead job", async () => {
-  world({
-    runs: [worldRun()],
-    hooks: [{ runId: RUN_A, token: PARK_TOKEN }],
-  });
-  jobs([RUN_A]);
-  vi.spyOn(stalls, "listStepsByRun").mockResolvedValue(new Map([[RUN_A, []]]));
-  const rows = await listRuns(factory);
-  expect(rows[0]?.status).toBe("suspended");
-});
-
-test("a dead job left behind by a terminal run does not restate its status", async () => {
-  world({ runs: [worldRun({ status: "completed" })] });
-  jobs([RUN_A]);
-  vi.spyOn(stalls, "listStepsByRun").mockResolvedValue(new Map([[RUN_A, []]]));
-  const rows = await listRuns(factory);
-  expect(rows[0]?.status).toBe("completed");
-});
 
 // The run route reads one run's facts and the listing every run's, and both
 // describe them with describeRunState. Same answers.
@@ -353,15 +304,16 @@ const storedRun = (status: string) => ({
 });
 
 test("describeRunState is the one thing status list and detail both read", async () => {
-  const describe = (status: string, tokens: string[], stalled: boolean) =>
-    describeRunState(RUN_A, { run: storedRun(status), tokens, stalled }, []);
+  const describe = (status: string, tokens: string[]) =>
+    describeRunState(RUN_A, { run: storedRun(status), tokens }, []);
   const PARK = [PARK_TOKEN];
 
-  expect(await describe("running", [], true)).toMatchObject({
-    status: "stalled",
+  expect(await describe("running", [])).toMatchObject({
+    status: "running",
+    suspensions: [],
   });
-  expect(await describe("running", PARK, true)).toMatchObject({
-    status: "suspended",
+  expect(await describe("running", PARK)).toMatchObject({
+    status: "running",
     suspensions: [
       {
         token: PARK[0],
@@ -369,20 +321,16 @@ test("describeRunState is the one thing status list and detail both read", async
       },
     ],
   });
-  expect(await describe("failed", [], true)).toMatchObject({
+  expect(await describe("failed", [])).toMatchObject({
     status: "failed",
   });
-  expect(await describe("pending", [], true)).toMatchObject({
+  expect(await describe("pending", PARK)).toMatchObject({
     status: "pending",
-  });
-  // The disagreement this replaced: the run route derived a status only for a
-  // `running` run, so list and detail once disagreed about a parked pending run.
-  expect(await describe("pending", PARK, false)).toMatchObject({
-    status: "suspended",
+    suspensions: [{ token: PARK[0] }],
   });
 });
 
-test("a run holding only its ticket claim is still running, not suspended", async () => {
+test("a run holding only its ticket claim is not parked", async () => {
   world({
     runs: [worldRun()],
     hooks: [{ runId: RUN_A, token: ticketToken(crypto.randomUUID()) }],

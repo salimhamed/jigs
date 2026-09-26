@@ -200,7 +200,7 @@ test("a run's state is its records plus the hooks the World holds", async () => 
 
   expect(state).toEqual({
     runId: "run_1",
-    status: "suspended",
+    status: "running",
     workflowName: "workflow//./workflows/ship//ship",
     trigger: "manual",
     ticket: "AGE-12",

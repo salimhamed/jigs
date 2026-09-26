@@ -45,7 +45,7 @@ const respond = (body: unknown) =>
 test("status says what the run waits for, where to act, and what was asked", async () => {
   respond(
     result({
-      status: "suspended",
+      status: "running",
       ticket: "AGE-317",
       dashboard: DASHBOARD,
       suspensions: [
@@ -67,7 +67,7 @@ test("status says what the run waits for, where to act, and what was asked", asy
   expect(fetchMock.mock.calls[1]?.[0]).toBe(`http://svc.test:8990/api/runs/${RUN}/steps`);
   expect(lines).toEqual([
     `run ${RUN}`,
-    "status suspended",
+    "status running",
     "trigger manual",
     "ticket AGE-317",
     "last activity 1m ago (2026-09-04T10:09:00.000Z)",
@@ -130,7 +130,7 @@ test("each resource shows its state and the reason release recorded", async () =
 test("status prints live pull-request gate state under its suspension", async () => {
   respond(
     result({
-      status: "suspended",
+      status: "running",
       suspensions: [
         {
           token: "github:pr:acme/api#41",
@@ -164,7 +164,7 @@ test("status prints live pull-request gate state under its suspension", async ()
 test("a pull request GitHub could not be asked about prints as it always did", async () => {
   respond(
     result({
-      status: "suspended",
+      status: "running",
       suspensions: [
         {
           token: "github:pr:acme/api#41",

@@ -13,8 +13,7 @@ import { currentFactory, listResources, registrySql, toRecord } from "../steps/r
 import { describeRunState, type RunFacts, type RunState } from "../steps/runtime/run-state.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { mergeRefusal } from "../workflow/pull-requests/merge-ready.ts";
-import { type JobRunIds, listJobRunIds } from "./queue.ts";
-import { hasActiveStep, listRunSteps, listStepsByRun, type StepView } from "./stalls.ts";
+import { listRunSteps } from "./stalls.ts";
 import { lastWake } from "./wake-note.ts";
 
 // The SDK mints run IDs as `wrun_` + a ULID. Anything else names no run, and
@@ -112,31 +111,6 @@ async function withPrState(
   }
 }
 
-/** Which runs are stalled, and the steps that answer cost — the listing hands
- *  them straight back so no run is read twice in one request. */
-interface StallReading {
-  stalled: Set<string>;
-  steps: Map<string, StepView[]>;
-}
-
-/**
- * The runs nothing is coming back for: the queue gave up on a job of theirs,
- * holds no live one to replace it, and no step is in flight. All three,
- * because a dead row is never cleared — a requeue and the World's own restart
- * reconciliation each add a job beside it, and a healed run would otherwise
- * read stalled in every gap between its steps.
- */
-async function stalledRuns(): Promise<StallReading> {
-  const jobs = await worldJobRunIds();
-  const live = new Set(jobs.live);
-  const stranded = [...new Set(jobs.dead)].filter((id) => !live.has(id));
-  const steps = await listStepsByRun(stranded);
-  return {
-    stalled: new Set(stranded.filter((runId) => !hasActiveStep(steps.get(runId) ?? []))),
-    steps,
-  };
-}
-
 export interface RunRow extends RunState {
   workflow: string;
 }
@@ -153,8 +127,7 @@ const runFacts = (run: WorldRun): NonNullable<RunFacts["run"]> => ({
 
 /**
  * What the World says about one run, for `readRunState`. A live run's hooks and steps are
- * read; `detail` also reads a finished run's steps and asks the queue whether a running one is
- * stalled, which only the single-run route pays for.
+ * read; `detail` also reads a finished run's steps, which only the single-run route pays for.
  */
 export async function worldRunFacts(runId: string, detail = false): Promise<RunFacts> {
   let run: WorldRun;
@@ -169,19 +142,13 @@ export async function worldRunFacts(runId: string, detail = false): Promise<RunF
       ? { run: runFacts(run), steps: await listRunSteps(runId) }
       : { run: runFacts(run) };
   }
-  const [tokens, steps, stalled] = await Promise.all([
-    worldRunTokens(runId),
-    listRunSteps(runId),
-    detail && run.status === "running"
-      ? stalledRuns().then((reading) => reading.stalled.has(runId))
-      : false,
-  ]);
-  return { run: runFacts(run), tokens, steps, stalled };
+  const [tokens, steps] = await Promise.all([worldRunTokens(runId), listRunSteps(runId)]);
+  return { run: runFacts(run), tokens, steps };
 }
 
 /** Every run this factory's World holds, described the way `readRunState` describes one. */
 export async function listRuns(factory: Factory): Promise<RunRow[]> {
-  const [runs, hooks, stranded] = await Promise.all([worldRuns(), listWorldHooks(), stalledRuns()]);
+  const [runs, hooks] = await Promise.all([worldRuns(), listWorldHooks()]);
   const rows = await listResources(registrySql(), {
     factory: currentFactory(),
     runIds: runs.map((run) => run.runId),
@@ -197,8 +164,7 @@ export async function listRuns(factory: Factory): Promise<RunRow[]> {
       return id === undefined ? [] : [[id, name] as [string, string]];
     }),
   );
-  // A finished run's steps are history the listing does not pay to read; the
-  // stall check already listed the stranded runs' own.
+  // A finished run's steps are history the listing does not pay to read.
   const described = await Promise.all(
     runs.map(async (run) => ({
       ...describeRunState(
@@ -206,10 +172,9 @@ export async function listRuns(factory: Factory): Promise<RunRow[]> {
         {
           run: runFacts(run),
           tokens: (tokensByRun.get(run.runId) ?? []).map((hook) => hook.token),
-          stalled: stranded.stalled.has(run.runId),
           ...(TERMINAL_RUN_STATUSES.has(run.status)
             ? {}
-            : { steps: stranded.steps.get(run.runId) ?? (await listRunSteps(run.runId)) }),
+            : { steps: await listRunSteps(run.runId) }),
         },
         (rowsByRun.get(run.runId) ?? []).map(toRecord),
       ),
@@ -218,8 +183,6 @@ export async function listRuns(factory: Factory): Promise<RunRow[]> {
   );
   return described.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 }
-
-const worldJobRunIds = (): Promise<JobRunIds> => listJobRunIds(registrySql());
 
 async function worldRuns(): Promise<WorldRun[]> {
   const runs: WorldRun[] = [];

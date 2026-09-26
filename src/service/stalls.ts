@@ -1,5 +1,4 @@
-// The step half of stall diagnosis: what the World recorded and whether any
-// operation is still in flight. Read-only queue evidence lives in queue.ts.
+// What steps the World recorded for a run, and whether any is still in flight.
 
 import { getWorld } from "workflow/runtime";
 
@@ -49,22 +48,14 @@ export async function listRunSteps(runId: string): Promise<StepView[]> {
     }));
 }
 
-/** The steps each of these runs recorded, so a caller that needs both the
- *  answer below and the steps themselves reads each run once. */
-export async function listStepsByRun(runIds: readonly string[]): Promise<Map<string, StepView[]>> {
-  const listed = await Promise.all(
-    runIds.map(async (runId) => [runId, await listRunSteps(runId)] as const),
-  );
-  return new Map(listed);
-}
-
-export const hasActiveStep = (steps: readonly StepView[]): boolean =>
-  steps.some((step) => ACTIVE_STEP_STATUSES.has(step.status));
-
 /** Which of these runs still has a step in flight. */
 export async function runsWithActiveStep(runIds: string[]): Promise<string[]> {
-  const steps = await listStepsByRun(runIds);
-  return runIds.filter((runId) => hasActiveStep(steps.get(runId) ?? []));
+  const active = await Promise.all(
+    runIds.map(async (runId) =>
+      (await listRunSteps(runId)).some((step) => ACTIVE_STEP_STATUSES.has(step.status)),
+    ),
+  );
+  return runIds.filter((_, index) => active[index]);
 }
 
 const iso = (at: Date | undefined) => at?.toISOString() ?? null;

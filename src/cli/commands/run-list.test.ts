@@ -45,11 +45,10 @@ test("an empty service prints no runs", async () => {
   expect(lines).toEqual(["no runs"]);
 });
 
-test("a suspended run names its ticket and what it waits for", async () => {
+test("a parked run names its ticket and what it waits for", async () => {
   respond({
     runs: [
       run({
-        status: "suspended",
         ticket: "AGE-317",
         suspensions: [
           {
@@ -65,10 +64,10 @@ test("a suspended run names its ticket and what it waits for", async () => {
   });
   await showRuns(deps(), { now: NOW });
   expect(lines[0]).toBe(
-    "RUN                              WORKFLOW         TICKET   STATUS     TRIGGER  AGE  ACTIVITY  WAITING",
+    "RUN                              WORKFLOW         TICKET   STATUS   TRIGGER  AGE  ACTIVITY  WAITING",
   );
   expect(lines[1]).toBe(
-    `${RUN}  deliver-feature  AGE-317  suspended  manual   30m  1m        waiting for an approving review and green CI on acme/api#41 → https://github.com/acme/api/pull/41`,
+    `${RUN}  deliver-feature  AGE-317  running  manual   30m  1m        waiting for an approving review and green CI on acme/api#41 → https://github.com/acme/api/pull/41`,
   );
 });
 

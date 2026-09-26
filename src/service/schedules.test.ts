@@ -189,19 +189,6 @@ test("a fire while a run of the same schedule is active is skipped, naming the r
   expect(lines).toEqual([`[schedule] nightly skipped: run ${RUN} is still active`]);
 });
 
-test("a suspended run of the same schedule blocks the next fire too", async () => {
-  let starts = 0;
-  await fireSchedule(nightly, "nightly", nightlySchedule, {
-    listRuns: async () => [row({ status: "suspended" })],
-    startRun: async () => {
-      starts += 1;
-      return started;
-    },
-    log: () => {},
-  });
-  expect(starts).toBe(0);
-});
-
 test("a terminal run of the same schedule does not block the next fire", async () => {
   const triggerIds: string[] = [];
   await fireSchedule(nightly, "nightly", nightlySchedule, {

@@ -52,9 +52,9 @@ const respondCancelWithWorktrees = (worktrees: string[]) =>
     ),
   );
 
-const suspended = {
+const parked = {
   runId: RUN,
-  status: "suspended",
+  status: "running",
   suspensions: [
     {
       token: "github:pr:acme/api#41",
@@ -71,8 +71,8 @@ const failure = (promise: Promise<unknown>) =>
     (err: unknown) => err as JigsError,
   );
 
-test("a suspended run cancels with no confirmation prompt", async () => {
-  respondLookup(suspended);
+test("a parked run cancels with no confirmation prompt", async () => {
+  respondLookup(parked);
   respondCancel(["github:pr:acme/api#41"]);
   const confirm = vi.fn();
   await cancelRun("AGE-317", deps({ confirm }));
@@ -81,7 +81,7 @@ test("a suspended run cancels with no confirmation prompt", async () => {
 });
 
 test("the released claim tokens are printed without promising queue cleanup", async () => {
-  respondLookup(suspended);
+  respondLookup(parked);
   respondCancel(["linear:ticket:AGE-317", "github:pr:acme/api#41"]);
   await cancelRun("AGE-317", deps());
   expect(lines).toEqual([
@@ -92,7 +92,7 @@ test("the released claim tokens are printed without promising queue cleanup", as
 });
 
 test("a minimum-retention hook is reported as retained", async () => {
-  respondLookup(suspended);
+  respondLookup(parked);
   fetchMock.mockResolvedValueOnce(
     new Response(
       JSON.stringify({
@@ -111,7 +111,7 @@ test("a minimum-retention hook is reported as retained", async () => {
 });
 
 test("cancel keeps and points each worktree at offline resource pruning", async () => {
-  respondLookup(suspended);
+  respondLookup(parked);
   respondCancelWithWorktrees(["/data/wt/one"]);
 
   await cancelRun("AGE-317", deps());

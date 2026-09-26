@@ -1,5 +1,6 @@
 // Graphile's documented jobs view omits the payload that identifies a run, so
-// read-only stall diagnosis owns this small private-schema adapter.
+// finding one run's dead jobs for `jigs status <run-id>` needs this small
+// read-only private-schema adapter.
 
 import { sql } from "drizzle-orm";
 import type { RegistrySql } from "../steps/runtime/registry.ts";
@@ -18,11 +19,6 @@ type JobRow = Omit<DeadJobView, "createdAt"> & {
   payload: unknown;
 };
 
-export interface JobRunIds {
-  dead: string[];
-  live: string[];
-}
-
 async function jobRows(db: RegistrySql): Promise<JobRow[]> {
   return (
     await db.execute<JobRow>(sql`
@@ -34,17 +30,6 @@ async function jobRows(db: RegistrySql): Promise<JobRow[]> {
     ORDER BY jobs.created_at
   `)
   ).rows;
-}
-
-export async function listJobRunIds(db: RegistrySql): Promise<JobRunIds> {
-  const named = (await jobRows(db)).flatMap((row) => {
-    const runId = runIdOf(row.payload);
-    return runId === null ? [] : [{ runId, dead: row.dead }];
-  });
-  return {
-    dead: named.filter((job) => job.dead).map((job) => job.runId),
-    live: named.filter((job) => !job.dead).map((job) => job.runId),
-  };
 }
 
 /** The jobs the queue gave up on for one run. */
