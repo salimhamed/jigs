@@ -113,7 +113,8 @@ function report(site: string, cutoff: number, outcomes: Outcome[]): void {
     "",
   ].join("\n");
 
-  console.log(summary);
+  // Vitest swallows console output from passing tests; stdout reaches the terminal.
+  process.stdout.write(`${summary}\n`);
   const stepSummary = process.env.GITHUB_STEP_SUMMARY;
   if (stepSummary) appendFileSync(stepSummary, `${summary}\n`);
 }
