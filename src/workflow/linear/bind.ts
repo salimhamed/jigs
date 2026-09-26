@@ -21,7 +21,7 @@ import {
 /** Ticket-review options left after the factory's durable steps are bound. */
 export type BoundReviewTicketOptions = Omit<
   ReviewTicketOptions,
-  "runAgent" | "haltForHuman" | "fetchTicketSnapshot" | "postTicketNote" | "executeJev"
+  "runAgent" | "haltForHuman" | "fetchTicketSnapshot" | "postTicketNote"
 >;
 
 /**
@@ -65,7 +65,6 @@ export function bindLinearSteps(steps: LinearSteps) {
       haltForHuman,
       postTicketNote: steps.postTicketNote,
       fetchTicketSnapshot: steps.fetchTicketSnapshot,
-      executeJev: steps.executeJev,
     });
   }
   function noteOnTicket(claim: TicketClaim, note: TicketNote) {

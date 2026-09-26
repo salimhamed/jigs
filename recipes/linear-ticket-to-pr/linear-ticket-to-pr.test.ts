@@ -1,14 +1,11 @@
 import {
   harnesses,
-  type JevQuestions,
-  JigsError,
   jevModel,
   type TicketClaim,
   type TicketHandoff,
   type TicketSnapshot,
 } from "@jigs-ai/jigs";
 import { beforeEach, expect, test, vi } from "vitest";
-import { sleep } from "workflow";
 import * as routines from "#jigs/routines";
 import * as steps from "#jigs/steps";
 import * as delivery from "./delivery/delivery.ts";
@@ -16,10 +13,6 @@ import entry, { linearTicketToPr } from "./linear-ticket-to-pr.ts";
 
 // The workflow body against mocked phases: which agents it hands delivery, and
 // the ticket status it sets around each phase.
-vi.mock("workflow", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("workflow")>()),
-  sleep: vi.fn(async () => {}),
-}));
 vi.mock("./delivery/delivery.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./delivery/delivery.ts")>()),
   implementAndReview: vi.fn(async () => ({ reviewedCommit: "h1", ledger: [] })),
@@ -28,7 +21,6 @@ vi.mock("./delivery/delivery.ts", async (importOriginal) => ({
 }));
 vi.mock("#jigs/steps", async (importOriginal) => ({
   ...(await importOriginal<typeof import("#jigs/steps")>()),
-  executeJev: vi.fn(),
   provisionWorktree: vi.fn(async () => worktree),
   setTicketStatus: vi.fn(async () => ({})),
 }));
@@ -74,38 +66,7 @@ const run = (inputs: Record<string, unknown> = {}) =>
 const statuses = () => vi.mocked(steps.setTicketStatus).mock.calls.map(([, status]) => status);
 const handed = () => vi.mocked(delivery.implementAndReview).mock.calls[0]?.[0];
 
-// Jev answers are queued by decision site; an unqueued decision is unsure.
-let decisions: Map<string, unknown[]>;
-function jev(site: string, ...replies: unknown[]) {
-  decisions.set(site, [...(decisions.get(site) ?? []), ...replies]);
-}
-const sized = (score: number) => ({
-  decision: { score, probabilities: {}, legend: {}, confidence: 0.95 },
-});
-const failure = (choice: string) => ({
-  decision: { choice, probabilities: {}, confidence: 0.95 },
-});
-function unsure(questions: JevQuestions) {
-  return Object.fromEntries(
-    Object.entries(questions).map(([key, question]) => [
-      key,
-      question.type === "choice"
-        ? { choice: Object.keys(question.options)[0], probabilities: {}, confidence: 0.3 }
-        : { score: 0, probabilities: {}, legend: {}, confidence: 0.3 },
-    ]),
-  );
-}
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  decisions = new Map();
-  vi.mocked(steps.executeJev).mockImplementation((async (wire: {
-    site?: string;
-    questions: JevQuestions;
-  }) => ({
-    answers: decisions.get(wire.site ?? "")?.shift() ?? unsure(wire.questions),
-  })) as never);
-});
+beforeEach(() => vi.clearAllMocks());
 
 test("a delivered ticket moves through In Progress, In Review and Done", async () => {
   await expect(run()).resolves.toEqual({ pr: pr.url });
@@ -157,13 +118,11 @@ test("any other failure leaves the ticket alone", async () => {
   expect(statuses()).toEqual(["In Progress"]);
 });
 
-test("the workflow requires its agents, the Jev model, Linear and GitHub", () => {
+test("the workflow requires its two agents, the Jev model, Linear and GitHub", () => {
   expect(entry.requires).toEqual({
     agents: {
       builder: harnesses.codex({ model: "gpt-5.6-sol" }),
       reviewer: harnesses.claude({ model: "opus" }),
-      builderLight: harnesses.claude({ model: "sonnet" }),
-      reviewerLight: harnesses.claude({ model: "sonnet" }),
     },
     models: [jevModel],
     integrations: ["linear", "github"],
@@ -176,87 +135,4 @@ test("attempts per update must be positive", () => {
     entry.inputs.safeParse({ ticket: "ABC-123", binding: "app", budget: { attemptsPerUpdate: 0 } })
       .success,
   ).toBe(false);
-});
-
-// ---- Jev decisions ------------------------------------------------------------
-
-const agents = () => entry.requires?.agents;
-
-test("a trivial ticket gets the light agents and the smallest budgets", async () => {
-  jev("ticket-size", sized(0));
-  await run();
-  expect(handed()).toMatchObject({
-    builder: agents()?.builderLight,
-    reviewer: agents()?.reviewerLight,
-    budget: { reviewRounds: 1, attemptsPerUpdate: 1 },
-  });
-  const [[wire]] = vi.mocked(steps.executeJev).mock.calls as unknown as [
-    [{ state: { ticket: string; brief: string } }],
-  ];
-  expect(wire.state.ticket).toContain("Ship it");
-  expect(wire.state.brief).toBe("Use the flag.");
-});
-
-test("a large ticket keeps the default agents and budgets", async () => {
-  jev("ticket-size", sized(3));
-  await run();
-  expect(handed()).toMatchObject({
-    builder: agents()?.builder,
-    reviewer: agents()?.reviewer,
-    budget: { reviewRounds: 3, attemptsPerUpdate: 3 },
-  });
-});
-
-test("agents and budgets a run names win over the ticket's size", async () => {
-  jev("ticket-size", sized(1));
-  await run({ builder: "builder", budget: { reviewRounds: 5 } });
-  expect(handed()).toMatchObject({
-    builder: agents()?.builder,
-    reviewer: agents()?.reviewerLight,
-    budget: { reviewRounds: 5, attemptsPerUpdate: 2 },
-  });
-});
-
-test("an outage waits, then retries its phase once", async () => {
-  vi.mocked(delivery.publish).mockRejectedValueOnce(new Error("socket hang up"));
-  jev("failure-triage", failure("outage"));
-  await expect(run()).resolves.toEqual({ pr: pr.url });
-  expect(delivery.publish).toHaveBeenCalledTimes(2);
-  expect(sleep).toHaveBeenCalledExactlyOnceWith("5m");
-  expect(statuses()).toEqual(["In Progress", "In Review", "Done"]);
-});
-
-test("a second outage in the same phase is rethrown", async () => {
-  vi.mocked(delivery.publish)
-    .mockRejectedValueOnce(new Error("socket hang up"))
-    .mockRejectedValueOnce(new Error("socket hang up again"));
-  jev("failure-triage", failure("outage"), failure("outage"));
-  await expect(run()).rejects.toThrow("socket hang up again");
-  expect(delivery.publish).toHaveBeenCalledTimes(2);
-  expect(routines.noteOnTicket).not.toHaveBeenCalled();
-});
-
-test("a failure a person must fix notes the ticket and sets Todo", async () => {
-  vi.mocked(delivery.implementAndReview).mockRejectedValueOnce(
-    new JigsError("GitHub rejected the token", "grant the app contents: write"),
-  );
-  jev("failure-triage", failure("needs-human"));
-  const error = await run().catch((caught: unknown) => caught);
-  expect(error).toBeInstanceOf(delivery.DeliveryStopped);
-  expect(routines.noteOnTicket).toHaveBeenCalledWith(
-    claim,
-    expect.objectContaining({
-      notes: expect.arrayContaining(["GitHub rejected the token; grant the app contents: write"]),
-    }),
-  );
-  expect(statuses()).toEqual(["In Progress", "Todo"]);
-});
-
-test("a failure Jev calls a bug is rethrown untouched", async () => {
-  const bug = new TypeError("cannot read properties of undefined");
-  vi.mocked(delivery.implementAndReview).mockRejectedValueOnce(bug);
-  jev("failure-triage", failure("bug"));
-  await expect(run()).rejects.toBe(bug);
-  expect(delivery.implementAndReview).toHaveBeenCalledOnce();
-  expect(routines.noteOnTicket).not.toHaveBeenCalled();
 });

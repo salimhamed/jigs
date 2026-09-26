@@ -1,7 +1,6 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import type { RunAgentFn } from "../agents/agent-session.ts";
 import { harnesses } from "../agents/harness-config.ts";
-import { confidentChoice, jevAnswering, unsureJev } from "../agents/jev-test-fixtures.ts";
 import { parseOutput, type RunAgentOptions } from "../agents/plan.ts";
 import type { TicketClaim } from "./claim.ts";
 import type { Halt, HaltForHumanFn, HumanReply } from "./halt-for-human.ts";
@@ -87,7 +86,6 @@ const review = (mention?: string[]) =>
     haltForHuman: fakeHaltForHuman,
     postTicketNote: fakePostTicketNote,
     fetchTicketSnapshot: fakeFetchSnapshot,
-    executeJev: unsureJev(),
     claim,
     snapshot,
     harness: harnesses.claude({ model: "sonnet" }),
@@ -251,7 +249,6 @@ test("optional callbacks run around the human halt, never around proceed", async
       events.push("refresh");
       return fakeFetchSnapshot(issueId);
     },
-    executeJev: unsureJev(),
     claim,
     snapshot,
     harness: harnesses.claude({ model: "sonnet" }),
@@ -274,7 +271,6 @@ test("optional callbacks run around the human halt, never around proceed", async
     haltForHuman: fakeHaltForHuman,
     postTicketNote: fakePostTicketNote,
     fetchTicketSnapshot: fakeFetchSnapshot,
-    executeJev: unsureJev(),
     claim,
     snapshot,
     harness: harnesses.claude({ model: "sonnet" }),
@@ -326,7 +322,6 @@ test("a caller-supplied prompt replaces the one shipped beside the routine", asy
     haltForHuman: fakeHaltForHuman,
     postTicketNote: fakePostTicketNote,
     fetchTicketSnapshot: fakeFetchSnapshot,
-    executeJev: unsureJev(),
     claim,
     snapshot,
     harness: harnesses.claude({ model: "sonnet" }),
@@ -345,47 +340,4 @@ test("the verdict schema is declared on the agent step so the harness emits it n
   await review();
   expect(agentCalls[0]?.output).toBe(ticketReviewVerdictSchema);
   expect(agentCalls[0]?.cwd).toBe("/tmp/worktree");
-});
-
-test("a ticket Jev is sure is not ready gets the fixed question for its reason, then the reviewer judges the reply", async () => {
-  verdicts = [proceed()];
-  const executeJev = jevAnswering(() => confidentChoice("missing-reproduction"));
-  const handoff = await reviewTicket({
-    runAgent: fakeAgent,
-    haltForHuman: fakeHaltForHuman,
-    postTicketNote: fakePostTicketNote,
-    fetchTicketSnapshot: fakeFetchSnapshot,
-    executeJev,
-    claim,
-    snapshot,
-    harness: harnesses.claude({ model: "sonnet" }),
-    cwd: "/tmp/worktree",
-  });
-
-  expect(humanCalls).toHaveLength(1);
-  expect(humanCalls[0]?.halt.questions?.[0]?.question).toBe("How can the problem be reproduced?");
-  expect(executeJev).toHaveBeenCalledOnce();
-  expect(agentCalls).toHaveLength(1);
-  expect(handoff.snapshot.description).toContain("Round 1");
-});
-
-test("a ticket Jev is sure is ready, or is unsure about, goes straight to the reviewer", async () => {
-  for (const executeJev of [jevAnswering(() => confidentChoice("ready")), unsureJev()]) {
-    humanCalls = [];
-    agentCalls = [];
-    verdicts = [proceed()];
-    await reviewTicket({
-      runAgent: fakeAgent,
-      haltForHuman: fakeHaltForHuman,
-      postTicketNote: fakePostTicketNote,
-      fetchTicketSnapshot: fakeFetchSnapshot,
-      executeJev,
-      claim,
-      snapshot,
-      harness: harnesses.claude({ model: "sonnet" }),
-      cwd: "/tmp/worktree",
-    });
-    expect(humanCalls).toEqual([]);
-    expect(agentCalls).toHaveLength(1);
-  }
 });

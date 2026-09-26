@@ -37,7 +37,6 @@ import { listSchedules, scheduleChecks } from "./schedules.ts";
 import { listRunSteps } from "./stalls.ts";
 import { startRun } from "./trigger.ts";
 import { noteWake, recordWake } from "./wake-note.ts";
-import { isIrrelevantWake } from "./wake-relevance.ts";
 
 // The app is library code: a factory repo installs this package and hands in
 // its own workflows, so nothing here may import a workflow module.
@@ -332,12 +331,6 @@ function mountGithubIngress(app: Hono): void {
       console.log(`[ingress] github ignored reason=unrecognized-event event=${event}`);
       return c.json({ ignored: true });
     }
-    if (await isIrrelevantWake("github", event, payload, token)) {
-      console.log(
-        `[ingress] github ignored reason=not-relevant token=${sanitizeForLog(token)} event=${event}`,
-      );
-      return c.json({ ignored: true });
-    }
     return resumeAndLog(c, "github", [token], event, resumeHook);
   });
 }
@@ -361,12 +354,6 @@ function mountLinearIngress(app: Hono): void {
     if (token === null) {
       console.log(
         `[ingress] linear ignored reason=unrecognized-event${event === null ? "" : ` event=${event}`}`,
-      );
-      return c.json({ ignored: true });
-    }
-    if (await isIrrelevantWake("linear", event, payload, token)) {
-      console.log(
-        `[ingress] linear ignored reason=not-relevant token=${sanitizeForLog(token)}${event === null ? "" : ` event=${event}`}`,
       );
       return c.json({ ignored: true });
     }

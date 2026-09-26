@@ -3,7 +3,6 @@ import { createCodexAppServer } from "ai-sdk-provider-codex-cli";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import type { RunAgentFn } from "../../../workflow/agents/agent-session.ts";
 import { harnesses } from "../../../workflow/agents/harness-config.ts";
-import { unsureJev } from "../../../workflow/agents/jev-test-fixtures.ts";
 import {
   buildAgentRequest,
   parseOutput,
@@ -115,7 +114,6 @@ test("ticket review asks every knowable decision in one needs-human round", asyn
     haltForHuman,
     postTicketNote: async () => ({ commentId: "note" }),
     fetchTicketSnapshot: async () => answeredSnapshot,
-    executeJev: unsureJev(),
     claim: {
       issueId: snapshot.id,
       identifier: snapshot.identifier,

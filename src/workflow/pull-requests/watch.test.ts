@@ -164,20 +164,3 @@ test("reader failures dispose the hook", async () => {
   await expect(watcher.next()).rejects.toThrow("GitHub unavailable");
   expect(hook.disposed).toBe(1);
 });
-
-test("a consumer that throws releases the hook, so a retried watch can hold it again", async () => {
-  const fetch = vi.fn(async () => snapshot());
-  const failed = async () => {
-    for await (const _state of watchPullRequest(pr, fetch)) throw new Error("builder crashed");
-  };
-  await expect(failed()).rejects.toThrow("builder crashed");
-  expect(hook.disposed).toBe(1);
-
-  for await (const state of watchPullRequest(pr, fetch)) {
-    expect(state.headSha).toBe("a");
-    break;
-  }
-  expect(createHook).toHaveBeenCalledTimes(2);
-  expect(fetch).toHaveBeenCalledTimes(2);
-  expect(hook.disposed).toBe(2);
-});

@@ -125,7 +125,7 @@ function prFromToken(token: string): { slug: string; url?: string; pr?: PullRequ
 }
 
 /** `jigs:needs-human:<issue>:<comment>` — the halt marker, taken apart. */
-export function needsHumanParts(token: string): { issueId: string; commentId: string } | null {
+function needsHumanParts(token: string): { issueId: string; commentId: string } | null {
   if (!token.startsWith(NEEDS_HUMAN_TOKEN_PREFIX)) return null;
   const [issueId, commentId] = token.slice(NEEDS_HUMAN_TOKEN_PREFIX.length).split(":");
   return issueId === undefined || commentId === undefined ? null : { issueId, commentId };
