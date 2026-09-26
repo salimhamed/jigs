@@ -11,6 +11,8 @@ overwrites them.
 | File | What it holds |
 | --- | --- |
 | `linear-ticket-to-pr.ts` | The workflow: its agents, inputs, and the ticket status it sets between phases. |
+| `decisions.ts` | The Jev questions the workflow asks: ticket size and failure triage. |
+| `delivery/decisions.ts` | The Jev questions delivery asks: pull request wake, comment triage and review convergence. |
 | `delivery/delivery.ts` | The three phases and `DeliveryStopped`. |
 | `delivery/prompts.ts` | Every prompt the agents are sent. |
 | `delivery/review.ts` | What a review returns and how it is rendered. |
@@ -24,6 +26,8 @@ overwrites them.
 - **Linear states named `Todo`, `In Progress`, `In Review` and `Done`** on the
   ticket's team. The workflow moves the ticket through them and fails on a
   missing one.
+- **`OPENROUTER_API_KEY`** for the Jev decisions. The model is declared in
+  `requires.models` and checked when the service starts.
 - **Claude Code and Codex**, installed and logged in. Both are declared in
   `requires.agents` and checked when the service starts.
 - **Builder access to GitHub tools**, such as authenticated `gh` or a configured
@@ -50,7 +54,9 @@ pnpm exec jigs watch
 ```
 
 A run picks its builder and reviewer by name. By default the `builder` agent
-builds and the `reviewer` agent reviews. To have Claude Code build too:
+builds and the `reviewer` agent reviews, except that a ticket Jev sizes as
+trivial or small gets `builderLight` and `reviewerLight`. A name the run passes
+always wins. To have Claude Code build too:
 
 ```sh
 pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input binding=app --input builder=reviewer
@@ -62,8 +68,11 @@ A run cannot type a model name. To change a model, edit its line in `agents`.
 
 | Budget | One unit buys | Default |
 | --- | --- | --- |
-| `reviewRounds` | One build plus one review of what it committed | 3 |
-| `attemptsPerUpdate` | Builder attempts to handle each changed PR snapshot, including immediate recovery | 3 |
+| `reviewRounds` | One build plus one review of what it committed | 3, or by ticket size |
+| `attemptsPerUpdate` | Builder attempts to handle each changed PR snapshot, including immediate recovery | 3, or by ticket size |
+
+When Jev sizes the ticket confidently, trivial to large, a budget the run does
+not set is 1, 2, 3 or 3.
 
 ```sh
 pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input binding=app --input 'budget={"reviewRounds":5}'
@@ -109,6 +118,28 @@ The builder session continues from implementation into PR maintenance. It
 judges the discussion and checks, then responds and pushes through its own
 GitHub tools. No hidden comment markers are required. If its saved session is
 unavailable, a fresh prompt supplies the ticket, current diff, and PR facts.
+
+## Jev decisions
+
+The workflow asks Jev, a fast decision model, short typed questions through
+`decide`. Each answer counts only at 0.9 confidence or above; below that, the
+workflow does what it would have done without Jev.
+
+- **Ticket size** picks the agents and default budgets above.
+- **Pull request wake** runs before every builder turn in `followPullRequest`.
+  `idle` skips the turn, `human` stops maintenance, and `merge` merges only
+  when fresh GitHub facts pass the same readiness gate a builder-finished merge
+  needs. With `mergedBy: "human"`, `merge` skips the turn.
+- **Comment triage** labels each new comment in one call. The labels reach the
+  builder's prompt, and new comments that ask nothing on unchanged facts skip
+  the wake question and the turn.
+- **Review convergence** runs after each blocked review round from the second
+  on, and stops early when the same findings keep coming back.
+- **Failure triage** runs when a phase throws anything but `DeliveryStopped`.
+  A transient failure retries the phase once; one a person must fix becomes a
+  ticket note and `Todo`.
+
+Each answered decision is appended to `decisions.jsonl` in the run's directory.
 
 ## The three phases
 
