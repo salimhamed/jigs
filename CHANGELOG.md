@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.77.1](https://github.com/salimhamed/jigs/compare/jigs-v0.77.0...jigs-v0.77.1) (2026-09-26)
+
+
+### Features
+
+* stream agent step output into workflow streams ([#436](https://github.com/salimhamed/jigs/issues/436)) ([62c1d39](https://github.com/salimhamed/jigs/commit/62c1d395d9ff3349c2a6a6eca4712121fb632698))
+
 ## [0.77.0](https://github.com/salimhamed/jigs/compare/jigs-v0.76.0...jigs-v0.77.0) (2026-09-26)
 
 
