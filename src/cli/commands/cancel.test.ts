@@ -15,7 +15,6 @@ afterEach(() => {
 });
 
 const RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
-const OTHER = "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ";
 
 const out = (line: string) => lines.push(line);
 const deps = (over: Record<string, unknown> = {}) => ({
@@ -166,19 +165,13 @@ test("cancelling an already-cancelled run is idempotent", async () => {
   expect(lines).toEqual([`cancelled ${RUN}`]);
 });
 
-test("an ambiguous ref lists the candidates in the hint", async () => {
-  respondLookup({ error: "ambiguous run ref", candidates: [RUN, OTHER] }, 409);
-  const err = await failure(cancelRun("01K3AN", deps({ force: true })));
-  expect(err?.message).toBe("run ref 01K3AN is ambiguous");
-  expect(err?.hint).toContain(RUN);
-  expect(err?.hint).toContain(OTHER);
-  expect(err?.hint).toContain("use more characters");
-});
-
-test("a ref nothing holds is a not-found naming the ref", async () => {
+test("a ref that is not a full run ID is a not-found pointing at jigs status", async () => {
   respondLookup({ error: "not found" }, 404);
   const err = await failure(cancelRun("AGE-999", deps({ force: true })));
   expect(err?.message).toBe("run AGE-999 not found");
+  expect(err?.hint).toBe(
+    "commands take a full run ID: pnpm exec jigs status lists each run's ID under RUN and its ticket under TICKET",
+  );
 });
 
 test("an unreachable service surfaces the shared unreachable error", async () => {

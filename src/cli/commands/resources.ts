@@ -10,7 +10,7 @@ import type {
   ResourceInventory,
   ResourceRun,
 } from "../../steps/workspaces/resources.ts";
-import { RUN_TICKET_ATTRIBUTE } from "../../workflow/factory.ts";
+import { runNotFound } from "./service-client.ts";
 import {
   acquireServiceExclusion,
   liveServicePid,
@@ -39,11 +39,7 @@ interface RunRow {
   attributes: Record<string, string> | null;
 }
 
-interface SelectableResourceRun extends ResourceRun {
-  ticket: string | null;
-}
-
-async function readRuns(sql: RegistrySql): Promise<SelectableResourceRun[]> {
+async function readRuns(sql: RegistrySql): Promise<ResourceRun[]> {
   const result = await sql.$client.query<RunRow>(
     'select id, name, status, attributes from "workflow"."workflow_runs" order by created_at desc',
   );
@@ -52,7 +48,6 @@ async function readRuns(sql: RegistrySql): Promise<SelectableResourceRun[]> {
     workflowName: row.name,
     status: row.status,
     attributes: row.attributes ?? {},
-    ticket: row.attributes?.[RUN_TICKET_ATTRIBUTE] ?? null,
   }));
 }
 
@@ -67,29 +62,9 @@ function emittedWorkflowIds(factoryRoot: string): Set<string> {
   );
 }
 
-function resolveRun(runs: SelectableResourceRun[], ref: string | undefined): string | undefined {
-  if (ref === undefined) return undefined;
-  const exact = runs.find((run) => run.runId === ref);
-  if (exact !== undefined) return exact.runId;
-  const prefix = ref.startsWith("wrun_") ? ref : `wrun_${ref}`;
-  const matches = runs.filter((run) => run.runId.startsWith(prefix));
-  if (matches.length === 1) return matches[0]?.runId;
-  if (matches.length > 1) {
-    throw new JigsError(
-      `run ${ref} is ambiguous`,
-      `matches: ${matches.map((run) => run.runId).join(", ")}`,
-    );
-  }
-  const normalized = ref.toLowerCase();
-  const ticketMatches = runs.filter((run) => run.ticket?.toLowerCase() === normalized);
-  if (ticketMatches.length === 1) return ticketMatches[0]?.runId;
-  if (ticketMatches.length > 1) {
-    throw new JigsError(
-      `run ref ${ref} is ambiguous`,
-      `matches: ${ticketMatches.map((run) => run.runId).join(", ")} — use a run ID or unique prefix`,
-    );
-  }
-  throw new JigsError(`run ${ref} not found`);
+function requireRun(runs: ResourceRun[], runId: string | undefined): string | undefined {
+  if (runId === undefined || runs.some((run) => run.runId === runId)) return runId;
+  throw runNotFound(runId);
 }
 
 async function readInventory(
@@ -107,7 +82,7 @@ async function readInventory(
       "check WORKFLOW_POSTGRES_URL and database availability; no resources were changed",
     );
   });
-  const runId = resolveRun(runs, options.run);
+  const runId = requireRun(runs, options.run);
   const errors: string[] = [];
   const { listWorktrees } = await import("../../steps/workspaces/registry.ts");
   const worktrees = await listWorktrees(sql).catch((error) => {

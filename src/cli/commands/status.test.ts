@@ -414,7 +414,7 @@ test("a timeline the service cannot read says so rather than reading as no steps
   ]);
 });
 
-test("an unresolvable ref fails before the pointer is printed", async () => {
+test("a ref that is not a full run ID fails before the pointer is printed", async () => {
   fetchMock.mockResolvedValueOnce(
     new Response(JSON.stringify({ error: "not found" }), { status: 404 }),
   );
@@ -423,5 +423,6 @@ test("an unresolvable ref fails before the pointer is printed", async () => {
     (thrown: unknown) => thrown as JigsError,
   );
   expect(err?.message).toBe("run AGE-999 not found");
+  expect(err?.hint).toContain("pnpm exec jigs status lists each run's ID under RUN");
   expect(lines).toEqual([]);
 });

@@ -55,9 +55,10 @@ factory /home/you/my-factory
 
 ## Naming a run
 
-`<run-id>` is a complete run id, a unique prefix of one, or the ticket the run claimed —
-its Linear identifier (`AGE-123`) or its UUID. An ambiguous prefix lists the
-candidates instead of guessing; pass a longer one.
+`<run-id>` is the run's full ID, such as `wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM`. A
+prefix or a ticket is not found; to go from a ticket to its run, read the `RUN`
+column of `jigs status` on the row whose `TICKET` matches. A ticket run more
+than once has a row per run.
 
 ## Watching
 

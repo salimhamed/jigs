@@ -39,10 +39,12 @@ This bypasses that restriction for jigs. It does not force a `dlx` cache refresh
 
 ### Choosing a run
 
-Wherever a command takes a run, you can give a complete run ID, a unique prefix
-of one, or the ticket the run claimed, such as `AGE-123`. An ambiguous prefix
-lists the matches instead of guessing. `status`, `watch` and `resources` take
-`--json` for machine-readable output.
+Wherever a command takes a run, give its full run ID, such as
+`wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM`. A prefix of an ID or a ticket such as
+`AGE-123` is not found. To find a run's ID, run `jigs status`: its `RUN` column
+lists each run's ID and its `TICKET` column the ticket the run was launched
+for. `status`, `watch` and `resources` take `--json` for machine-readable
+output.
 
 ### Input values
 

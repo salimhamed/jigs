@@ -6,7 +6,6 @@ import { z } from "zod";
 import * as config from "../config/factory-config.ts";
 import * as root from "../config/factory-root.ts";
 import * as github from "../providers/github.ts";
-import * as linear from "../providers/linear.ts";
 import type { RunSuspension } from "../run-suspension.ts";
 import * as sql from "../steps/workspaces/sql.ts";
 import type { Factory } from "../workflow/factory.ts";
@@ -21,7 +20,7 @@ import {
   enrichSuspensions,
   listRunResources,
   listRuns,
-  resolveRunRef,
+  runExists,
   scheduleTriggerId,
   type WorldRun,
 } from "./runs.ts";
@@ -216,24 +215,26 @@ function world(fixture: Fixture = {}): void {
   } as unknown as Parameters<typeof setWorld>[0]);
 }
 
-// Refusing the Linear lookup is how a test asserts that a ref never left the
-// machine; `issues` stands in for the identifiers a workspace can place.
-function linearPlaces(issues: Record<string, string> = {}): void {
-  vi.spyOn(linear, "resolveIssueRef").mockImplementation(async (ref) => {
-    const id = issues[ref];
-    if (id === undefined) throw new Error(`Linear issue not found: ${ref}`);
-    return { id, identifier: ref };
-  });
-}
+const storedTicket = (ticket: string) => [[1], { ticket: 2 }, ticket];
 
-const NO_LINEAR = () =>
-  vi.spyOn(linear, "resolveIssueRef").mockImplementation(() => {
-    throw new Error("Linear must not be asked about this ref");
-  });
-
-test("a full run id resolves to itself", async () => {
+test("only a run's exact, full ID names it", async () => {
   world({ runs: [worldRun(), worldRun({ runId: RUN_B })] });
-  expect(await resolveRunRef(RUN_A)).toEqual({ kind: "found", runId: RUN_A });
+  expect(await runExists(RUN_A)).toBe(true);
+  expect(await runExists(RUN_A.toLowerCase())).toBe(false);
+  expect(await runExists("01K3ANBZ")).toBe(false);
+  expect(await runExists("wrun_01K3ANBZ")).toBe(false);
+  expect(await runExists(RUN_A.slice("wrun_".length))).toBe(false);
+});
+
+test("a ticket names no run, even the one launched for it", async () => {
+  world({ runs: [worldRun({ input: storedTicket("AGE-317") })] });
+  expect(await runExists("AGE-317")).toBe(false);
+  expect(await runExists("age-317")).toBe(false);
+});
+
+test("a full-length run ID nobody minted names no run", async () => {
+  world({ runs: [worldRun()] });
+  expect(await runExists("wrun_01ZZZZZZZZZZZZZZZZZZZZZZZZ")).toBe(false);
 });
 
 test("run resources are decoded from attributes without reading workflow output", async () => {
@@ -255,154 +256,6 @@ test("run resources are decoded from attributes without reading workflow output"
     ],
   });
   expect(await listRunResources(RUN_A)).toEqual([resource]);
-});
-
-test("a unique ULID prefix resolves, case-insensitively and bare", async () => {
-  world({ runs: [worldRun(), worldRun({ runId: RUN_B })] });
-  expect(await resolveRunRef("01k3anbz")).toEqual({
-    kind: "found",
-    runId: RUN_A,
-  });
-});
-
-test("the same prefix resolves with the wrun_ prefix typed out", async () => {
-  world({ runs: [worldRun(), worldRun({ runId: RUN_B })] });
-  expect(await resolveRunRef("wrun_01K3ANBZ")).toEqual({
-    kind: "found",
-    runId: RUN_A,
-  });
-});
-
-test("prefix resolution follows every SDK cursor before deciding uniqueness", async () => {
-  world({
-    runs: [worldRun({ runId: RUN_B }), worldRun()],
-    runPages: [[worldRun({ runId: RUN_B })], [worldRun()]],
-  });
-  expect(await resolveRunRef("01K3ANBZ")).toEqual({ kind: "found", runId: RUN_A });
-});
-
-test("a prefix matching two runs is ambiguous and names both", async () => {
-  world({ runs: [worldRun(), worldRun({ runId: RUN_B })] });
-  const ref = await resolveRunRef("01K3AN");
-  expect(ref.kind).toBe("ambiguous");
-  expect(ref.kind === "ambiguous" && ref.candidates).toEqual([RUN_A, RUN_B]);
-});
-
-const ISSUE_317 = "68bc9696-35d5-442d-ab56-214c8cfefbec";
-const storedTicket = (ticket: string) => [[1], { ticket: 2 }, ticket];
-
-test("a terminal run remains selectable by its stored ticket identifier", async () => {
-  world({ runs: [worldRun({ status: "completed", input: storedTicket("AGE-317") })] });
-  linearPlaces({ "AGE-317": ISSUE_317 });
-  expect(await resolveRunRef("age-317")).toEqual({ kind: "found", runId: RUN_A });
-});
-
-test("multiple executions for one ticket are ambiguous", async () => {
-  world({
-    runs: [
-      worldRun({ status: "completed", input: storedTicket("AGE-317") }),
-      worldRun({ runId: RUN_B, input: storedTicket("AGE-317") }),
-    ],
-  });
-  linearPlaces({ "AGE-317": ISSUE_317 });
-  expect(await resolveRunRef("AGE-317")).toEqual({
-    kind: "ambiguous",
-    candidates: [RUN_A, RUN_B],
-  });
-});
-
-test("a historical ticket match and its current claim owner are ambiguous", async () => {
-  world({
-    runs: [
-      worldRun({ status: "completed", input: storedTicket("AGE-317") }),
-      worldRun({ runId: RUN_B }),
-    ],
-    hooks: [{ runId: RUN_B, token: ticketToken(ISSUE_317) }],
-  });
-  linearPlaces({ "AGE-317": ISSUE_317 });
-  expect(await resolveRunRef("AGE-317")).toEqual({
-    kind: "ambiguous",
-    candidates: [RUN_A, RUN_B],
-  });
-});
-
-test("a terminal run remains selectable by its stored ticket UUID", async () => {
-  world({ runs: [worldRun({ status: "failed", input: storedTicket(ISSUE_317) })] });
-  NO_LINEAR();
-  expect(await resolveRunRef(ISSUE_317.toUpperCase())).toEqual({
-    kind: "found",
-    runId: RUN_A,
-  });
-});
-
-test("a ticket identifier resolves through Linear, then the claim hook", async () => {
-  world({
-    runs: [worldRun()],
-    hooks: [{ runId: RUN_A, token: ticketToken(ISSUE_317) }],
-  });
-  linearPlaces({ "AGE-317": ISSUE_317 });
-  expect(await resolveRunRef("AGE-317")).toEqual({
-    kind: "found",
-    runId: RUN_A,
-  });
-});
-
-test("a lowercase ticket identifier retries with its canonical casing", async () => {
-  world({
-    runs: [worldRun()],
-    hooks: [{ runId: RUN_A, token: ticketToken(ISSUE_317) }],
-  });
-  linearPlaces({ "AGE-317": ISSUE_317 });
-  expect(await resolveRunRef("age-317")).toEqual({
-    kind: "found",
-    runId: RUN_A,
-  });
-});
-
-test("an identifier Linear places on a ticket no run holds is unknown", async () => {
-  world({ runs: [worldRun()] });
-  linearPlaces({ "AGE-317": ISSUE_317 });
-  expect(await resolveRunRef("AGE-317")).toEqual({ kind: "unknown" });
-});
-
-test("a ticket UUID — what the claim hook is keyed on — makes no Linear call", async () => {
-  const issueId = crypto.randomUUID();
-  world({
-    runs: [worldRun({ runId: RUN_B })],
-    hooks: [{ runId: RUN_B, token: ticketToken(issueId) }],
-  });
-  NO_LINEAR();
-  expect(await resolveRunRef(issueId)).toEqual({
-    kind: "found",
-    runId: RUN_B,
-  });
-});
-
-test("a ticket UUID no run holds is unknown, still without a Linear call", async () => {
-  world({ runs: [worldRun({ runId: RUN_B })] });
-  NO_LINEAR();
-  expect(await resolveRunRef(crypto.randomUUID())).toEqual({ kind: "unknown" });
-});
-
-test("a ref shaped like neither a run nor an identifier asks Linear nothing", async () => {
-  world({ runs: [worldRun()] });
-  NO_LINEAR();
-  expect(await resolveRunRef("not-a-ticket-at-all")).toEqual({
-    kind: "unknown",
-  });
-});
-
-test("an identifier Linear cannot place is unknown", async () => {
-  world({ runs: [worldRun()] });
-  linearPlaces();
-  expect(await resolveRunRef("AGE-999")).toEqual({ kind: "unknown" });
-});
-
-test("a full-length run id nobody minted falls through to unknown", async () => {
-  world({ runs: [worldRun()] });
-  expect(await resolveRunRef("wrun_01ZZZZZZZZZZZZZZZZZZZZZZZZ")).toEqual({
-    kind: "unknown",
-  });
 });
 
 // Read through the minters, never through a token spelled out here: a reason
@@ -486,6 +339,12 @@ const worldRun = (over: Partial<StoredRun> = {}): StoredRun => ({
 const storedArgs = (triggerId: string) => [[1], { triggerId: 2 }, triggerId];
 
 const PARK_TOKEN = pullRequestToken({ owner: "acme", repo: "api", number: 41 });
+
+test("the listing follows every SDK cursor", async () => {
+  world({ runPages: [[worldRun({ runId: RUN_B })], [worldRun()]] });
+  const rows = await listRuns(factory);
+  expect(rows.map((row) => row.runId).sort()).toEqual([RUN_A, RUN_B]);
+});
 
 test("a non-terminal run holding a park hook is reported suspended", async () => {
   world({

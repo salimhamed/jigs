@@ -1,5 +1,5 @@
 import { JigsError } from "../../errors.ts";
-import { readErrorBody, runRefError, type ServiceDeps, serviceFetch } from "./service-client.ts";
+import { runNotFound, type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 export interface PokeResult {
   runId: string;
@@ -10,15 +10,12 @@ export async function pokeRun(runId: string, deps: ServiceDeps): Promise<PokeRes
   const res = await serviceFetch(deps.serviceUrl, `/api/runs/${encodeURIComponent(runId)}/poke`, {
     method: "POST",
   });
-  if (res.status === 404 || res.status === 409) {
-    const body = await readErrorBody(res);
-    if (res.status === 409 && body.candidates === undefined) {
-      throw new JigsError(
-        "run has no suspensions to poke",
-        `inspect it: pnpm exec jigs status ${runId}`,
-      );
-    }
-    throw runRefError(runId, body);
+  if (res.status === 404) throw runNotFound(runId);
+  if (res.status === 409) {
+    throw new JigsError(
+      "run has no suspensions to poke",
+      `inspect it: pnpm exec jigs status ${runId}`,
+    );
   }
   if (!res.ok) {
     throw new JigsError(`poke failed: HTTP ${res.status} ${await res.text()}`);

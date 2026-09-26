@@ -1,6 +1,6 @@
 // Shared plumbing for the verbs that are HTTP clients of the service. One
-// place for the unreachable-service and run-ref errors, so every verb renders
-// them identically.
+// place for the unreachable-service and unknown-run errors, so every verb
+// renders them identically.
 
 import { resolveService } from "../../config/factory-config.ts";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
@@ -42,22 +42,10 @@ export async function serviceFetch(
   }
 }
 
-export interface RunRefErrorBody {
-  candidates?: string[];
-}
-
-export async function readErrorBody(res: Response): Promise<RunRefErrorBody> {
-  return (await res.json().catch(() => ({}))) as RunRefErrorBody;
-}
-
-// The service resolves run refs (ULID, unique prefix, ticket id); these are
-// the two ways it can answer that no single run was named. The candidate
-// list, not the status, is what tells them apart.
-export function runRefError(ref: string, body: RunRefErrorBody): JigsError {
-  return body.candidates === undefined
-    ? new JigsError(`run ${ref} not found`)
-    : new JigsError(
-        `run ref ${ref} is ambiguous`,
-        `matches: ${body.candidates.join(", ")} — use more characters`,
-      );
+/** The one error for a run argument that is not an existing run's full ID. */
+export function runNotFound(ref: string): JigsError {
+  return new JigsError(
+    `run ${ref} not found`,
+    "commands take a full run ID: pnpm exec jigs status lists each run's ID under RUN and its ticket under TICKET",
+  );
 }

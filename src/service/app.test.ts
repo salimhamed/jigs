@@ -505,6 +505,31 @@ test("cancel of a run nobody holds is a 404", async () => {
   expect(await res.json()).toEqual({ error: "not found" });
 });
 
+test.each([
+  ["a prefix", RUN.slice(0, 13)],
+  ["a bare prefix", RUN.slice(5, 13)],
+  ["a ticket", "AGE-317"],
+])("a run route answers 404 for %s, even when a run matches it", async (_label, ref) => {
+  const lookups: string[] = [];
+  setWorld({
+    specVersion: SPEC_VERSION_CURRENT,
+    runs: {
+      get: async (runId: string) => {
+        lookups.push(runId);
+        return { runId: RUN, status: "running", createdAt: new Date() };
+      },
+      list: async () => ({ data: [{ runId: RUN }], hasMore: false, cursor: null }),
+    },
+    hooks: { list: async () => ({ data: [] }) },
+  } as unknown as Parameters<typeof setWorld>[0]);
+
+  const res = await app.request(`/api/runs/${ref}`);
+
+  expect(res.status).toBe(404);
+  expect(await res.json()).toEqual({ error: "not found" });
+  expect(lookups).toEqual([]);
+});
+
 test("a workflow's inputs route answers with its JSON Schema", async () => {
   const res = await app.request("/api/workflows/plain/inputs");
   expect(res.status).toBe(200);
@@ -591,7 +616,7 @@ test("GET /api/runs answers with empty runs and worktrees when nothing has launc
   });
 });
 
-test("GET /api/runs/:ref/steps answers with the run's steps and its dead jobs", async () => {
+test("GET /api/runs/:runId/steps answers with the run's steps and its dead jobs", async () => {
   setWorld({
     specVersion: SPEC_VERSION_CURRENT,
     runs: { get: async () => ({}) },
@@ -630,12 +655,12 @@ test("GET /api/runs/:ref/steps answers with the run's steps and its dead jobs", 
   });
 });
 
-test("a steps request for a run nobody launched answers on the ref", async () => {
+test("a steps request for a run nobody launched is a 404", async () => {
   const res = await app.request(`/api/runs/${RUN}/steps`);
   expect(res.status).toBe(404);
 });
 
-test("GET /api/runs/:ref reports a stalled run as stalled, like `jigs status` does", async () => {
+test("GET /api/runs/:runId reports a stalled run as stalled, like `jigs status` does", async () => {
   // Status list and detail must not disagree about the same run, so both
   // read the one derivation in runs.ts.
   setWorld({
@@ -659,7 +684,7 @@ test("GET /api/runs/:ref reports a stalled run as stalled, like `jigs status` do
   });
 });
 
-test("GET /api/runs/:ref includes zero or many resources independently of output", async () => {
+test("GET /api/runs/:runId includes zero or many resources independently of output", async () => {
   const first = {
     kind: "pull-request",
     identity: "acme/api#41",
@@ -717,7 +742,7 @@ const runHolding = (...tokens: string[]) =>
     } as unknown as Parameters<typeof setWorld>[0]);
   })();
 
-test("GET /api/runs/:ref says what each park is waiting for, and where to act", async () => {
+test("GET /api/runs/:runId says what each park is waiting for, and where to act", async () => {
   runHolding(CLAIM, MARKER, PR);
   // The halt's comment is read back from Linear; a Linear nobody can ask
   // leaves the suspension as the token alone describes it.
