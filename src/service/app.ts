@@ -332,7 +332,7 @@ function mountGithubIngress(app: Hono): void {
       console.log(`[ingress] github ignored reason=unrecognized-event event=${event}`);
       return c.json({ ignored: true });
     }
-    if (await isIrrelevantWake("github", event, payload)) {
+    if (await isIrrelevantWake("github", event, payload, token)) {
       console.log(
         `[ingress] github ignored reason=not-relevant token=${sanitizeForLog(token)} event=${event}`,
       );
@@ -364,7 +364,7 @@ function mountLinearIngress(app: Hono): void {
       );
       return c.json({ ignored: true });
     }
-    if (await isIrrelevantWake("linear", event, payload)) {
+    if (await isIrrelevantWake("linear", event, payload, token)) {
       console.log(
         `[ingress] linear ignored reason=not-relevant token=${sanitizeForLog(token)}${event === null ? "" : ` event=${event}`}`,
       );

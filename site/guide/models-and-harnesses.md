@@ -215,8 +215,10 @@ behaves as it would without it.
   (no way to tell when it is done, no reproduction steps, conflicting
   requirements, or too large), and the reviewer reads the reply.
 - The webhook ingress asks whether a delivery could matter to the run it would
-  wake. A delivery Jev is sure cannot matter, such as a label change or a bot
-  comment, is acknowledged without waking the run. Closes, pushes and CI results
+  wake, and tells Jev what that run is waiting for: activity on its pull
+  request, a reply to the question it asked on the ticket, or nothing on the
+  ticket at all. A delivery Jev is sure cannot matter, such as a label change,
+  a bot comment or jigs' own note, is acknowledged without waking the run. Closes, pushes and CI results
   always wake, and polling still catches anything skipped. This needs
   `OPENROUTER_API_KEY` in the service's environment; without it every delivery
   wakes.
