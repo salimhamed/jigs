@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.72.0
+# @jigs-ai/jigs v0.73.0
 
 Low-level Linear operations for factory-owned steps. Workflow code calls their
 `#jigs/steps` wrappers; higher-level waiting such as `haltForHuman` comes from
@@ -232,7 +232,7 @@ Post a question or failure on the ticket so a person can help the run continue.
 
 ##### definition
 
-`FactoryDefinition`
+`Pick`\<`FactoryDefinition`, `"linear"`\>
 
 ##### render
 
@@ -244,16 +244,17 @@ Post a question or failure on the ticket so a person can help the run continue.
 
 #### Remarks
 
-Mentions the operator (the workflow's `linear.operator`, else the factory's),
-or the ticket's creator when neither is set, then the assignee and the halt's
-`mention` emails, each person once. A person Linear cannot find is skipped
-with a warning; the comment always posts.
+Mentions the factory's `linear.operator`, or the ticket's creator when it is
+not set, then the assignee and the halt's `mention` emails, each person once.
+A person Linear cannot find is skipped with a warning; the comment always
+posts. `definition` is the built factory definition the step wrapper passes
+in, so a changed operator takes effect after a rebuild, which `jigs up` does.
 
 ***
 
 ### postTicketNote()
 
-> **postTicketNote**(`issueId`, `note`, `metadata`, `definition`, `render`): `Promise`\<\{ `commentId`: `string`; \}\>
+> **postTicketNote**(`issueId`, `note`, `definition`, `render`): `Promise`\<\{ `commentId`: `string`; \}\>
 
 Tell ticket participants something the run decided, without waiting for a reply.
 
@@ -267,13 +268,9 @@ Tell ticket participants something the run decided, without waiting for a reply.
 
 `TicketNote`
 
-##### metadata
-
-`NamedRunMetadata`
-
 ##### definition
 
-`FactoryDefinition`
+`Pick`\<`FactoryDefinition`, `"linear"`\>
 
 ##### render
 

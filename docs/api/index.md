@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.72.0
+# @jigs-ai/jigs v0.73.0
 
 Factory and workflow definitions, harness and model descriptors, types and pure helpers.
 
@@ -97,7 +97,7 @@ Operating settings and deferred workflow modules declared by a factory.
 
 ###### identities?
 
-> `optional` **identities**: (\{ `appId`: `number`; `coAuthor?`: `string`; `installations`: `Record`\<`string`, `number`\>; `mode`: `"app"`; `operator`: `string`; `privateKeyPath`: `string`; \} \| \{ `mode`: `"pat"`; \})[]
+> `optional` **identities**: (\{ `mode`: `"pat"`; \} \| \{ `appId`: `number`; `coAuthor?`: `string`; `installations`: `Record`\<`string`, `number`\>; `mode`: `"app"`; `operator`: `string`; `privateKeyPath`: `string`; \})[]
 
 ###### mergeApproval?
 
@@ -237,24 +237,6 @@ may start.
 
 > **inputs**: `S`
 
-##### linear?
-
-> `optional` **linear**: [`WorkflowLinearDefinition`](#workflowlineardefinition)
-
-Linear settings for this workflow alone. `operator` replaces the factory's
-`linear.operator` for every Linear comment the workflow posts: each one
-mentions this person and the ticket's assignee.
-
-###### Example
-
-```ts
-export default defineWorkflow({
-  inputs,
-  linear: { operator: "dana@example.com" },
-  workflow: shipTicket,
-});
-```
-
 ##### release?
 
 > `optional` **release**: `object`
@@ -308,19 +290,6 @@ export default defineWorkflow({
 ###### Returns
 
 `Promise`\<`unknown`\>
-
-***
-
-### WorkflowLinearDefinition
-
-A workflow's own Linear settings. Only the operator, the Linear user's email,
-can differ from the factory's.
-
-#### Properties
-
-##### operator?
-
-> `optional` **operator**: `string`
 
 ***
 
@@ -381,7 +350,8 @@ acts as a Linear OAuth application from `LINEAR_CLIENT_ID` and
 `operator` is the email of the Linear user who runs the factory. With it,
 every Linear comment jigs posts mentions the operator and the ticket's
 assignee; without it, the ticket's creator and assignee. `jigs doctor` fails
-when no Linear user has the email.
+when no Linear user has the email. Steps read it from the built factory, so
+a change takes effect after a rebuild, which `jigs up` does.
 
 #### Example
 
