@@ -726,7 +726,6 @@ test("GET /api/runs/:runId reports a stalled run as stalled, like `jigs status` 
   expect(await res.json()).toMatchObject({
     runId: RUN,
     status: "stalled",
-    suspended: false,
   });
 });
 
@@ -821,7 +820,6 @@ test("GET /api/runs/:runId says what each park is waiting for, and where to act"
   // never appears; the other two explain themselves without a metadata read.
   expect(await res.json()).toMatchObject({
     status: "suspended",
-    suspended: true,
     suspensions: [
       {
         token: MARKER,
@@ -864,7 +862,6 @@ test("a run holding only its ticket claim is running, not suspended", async () =
 
   expect(await res.json()).toMatchObject({
     status: "running",
-    suspended: false,
     suspensions: [],
     trigger: "manual",
   });

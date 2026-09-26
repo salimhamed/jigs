@@ -359,11 +359,9 @@ test("describeRunState is the one thing status list and detail both read", async
 
   expect(await describe("running", [], true)).toMatchObject({
     status: "stalled",
-    suspended: false,
   });
   expect(await describe("running", PARK, true)).toMatchObject({
     status: "suspended",
-    suspended: true,
     suspensions: [
       {
         token: PARK[0],
@@ -381,7 +379,6 @@ test("describeRunState is the one thing status list and detail both read", async
   // `running` run, so list and detail once disagreed about a parked pending run.
   expect(await describe("pending", PARK, false)).toMatchObject({
     status: "suspended",
-    suspended: true,
   });
 });
 

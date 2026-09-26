@@ -27,12 +27,11 @@ export async function cancelRun(runId: string, deps: CancelDeps): Promise<Cancel
   const run = (await lookup.json()) as {
     runId: string;
     status: string;
-    suspended?: boolean;
   };
 
-  // A suspended run holds no process, so there is nothing to destroy and
-  // nothing to ask about. Only work actually in flight earns the prompt.
-  if (run.status === "running" && run.suspended !== true && deps.force !== true) {
+  // A suspended run (status `suspended`) holds no process, so there is nothing
+  // to destroy and nothing to ask about. Only work actually in flight earns the prompt.
+  if (run.status === "running" && deps.force !== true) {
     if (deps.confirm === undefined) {
       throw new JigsError(
         "refusing to cancel an in-flight run without confirmation",
@@ -63,7 +62,7 @@ export async function cancelRun(runId: string, deps: CancelDeps): Promise<Cancel
   // every child stopped before it considers local resources.
   for (const path of worktrees) {
     deps.out(
-      `worktree kept at ${path} — pnpm exec jigs resources prune --include-kept --run ${result.runId} to review`,
+      `worktree kept at ${path} — pnpm exec jigs resources prune --run ${result.runId} to review`,
     );
   }
   return result;

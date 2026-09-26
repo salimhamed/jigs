@@ -55,7 +55,6 @@ const respondCancelWithWorktrees = (worktrees: string[]) =>
 const suspended = {
   runId: RUN,
   status: "suspended",
-  suspended: true,
   suspensions: [
     {
       token: "github:pr:acme/api#41",
@@ -119,7 +118,7 @@ test("cancel keeps and points each worktree at offline resource pruning", async 
 
   expect(fetchMock).toHaveBeenCalledTimes(2);
   expect(lines.at(-1)).toBe(
-    `worktree kept at /data/wt/one — pnpm exec jigs resources prune --include-kept --run ${RUN} to review`,
+    `worktree kept at /data/wt/one — pnpm exec jigs resources prune --run ${RUN} to review`,
   );
 });
 

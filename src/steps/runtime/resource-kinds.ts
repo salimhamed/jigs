@@ -7,7 +7,12 @@ import {
   githubGetAll,
   githubRequest,
 } from "../../providers/github-api.ts";
-import type { ResourceState } from "../../workflow/runtime/resources.ts";
+import {
+  RELEASABLE_KINDS,
+  type ReleasableKind,
+  type ResourceState,
+  releasable,
+} from "../../workflow/runtime/resources.ts";
 import { codexRunStatePath } from "../agents/harnesses/codex-home.ts";
 import { piRunStatePath } from "../agents/harnesses/pi-home.ts";
 import { fetchOriginDefault } from "../workspaces/create.ts";
@@ -163,9 +168,9 @@ const harnessHome =
     return removeDirectory(directory)(row, run);
   };
 
-// Release visits kinds in this order, so a worktree's outcome is known before
-// the harness homes that depend on it.
-const KINDS: Record<string, ResourceKind> = {
+// Release visits kinds in RELEASABLE_KINDS order, so a worktree's outcome is
+// known before the harness homes that depend on it.
+const KINDS: Record<ReleasableKind, ResourceKind> = {
   worktree,
   branch,
   "run-directory": removeDirectory((runId) => runDirectory({ workflowRunId: runId })),
@@ -173,14 +178,10 @@ const KINDS: Record<string, ResourceKind> = {
   "pi-home": harnessHome((runId) => piRunStatePath(runId)),
 };
 
-/** Whether jigs releases this kind; pull requests and factory kinds are recorded only. */
-export const releasable = (kind: string): boolean => Object.hasOwn(KINDS, kind);
-
-/** Order rows the way release must visit them, recorded-only kinds last. */
+/** The releasable rows, in the order release must visit them; recorded-only kinds are left out. */
 export const releaseOrder = (rows: readonly ResourceRow[]): ResourceRow[] => {
-  const order = Object.keys(KINDS);
-  const rank = (kind: string) => (releasable(kind) ? order.indexOf(kind) : order.length);
-  return rows.toSorted((left, right) => rank(left.kind) - rank(right.kind));
+  const rank = (kind: string) => (RELEASABLE_KINDS as readonly string[]).indexOf(kind);
+  return rows.filter((row) => releasable(row.kind)).toSorted((a, b) => rank(a.kind) - rank(b.kind));
 };
 
 /** Decide what release would do with one releasable resource, changing nothing. */
@@ -188,7 +189,6 @@ export async function decideRelease(
   row: ResourceRow,
   run: readonly RunResourceState[],
 ): Promise<ReleaseDecision> {
-  const kind = KINDS[row.kind];
-  if (kind === undefined) return released("recorded only");
-  return kind(row, run);
+  if (!releasable(row.kind)) throw new Error(`jigs does not release ${row.kind} resources`);
+  return KINDS[row.kind](row, run);
 }

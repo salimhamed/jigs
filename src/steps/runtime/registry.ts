@@ -149,7 +149,9 @@ export async function setResourceState(
 export interface ResourceFilter {
   factory: string;
   runId?: string;
+  runIds?: readonly string[];
   kind?: string;
+  kinds?: readonly string[];
   identity?: string;
   states?: readonly ResourceState[];
 }
@@ -165,7 +167,9 @@ export async function listResources(
       and(
         eq(resources.factory, filter.factory),
         filter.runId === undefined ? undefined : eq(resources.runId, filter.runId),
+        filter.runIds === undefined ? undefined : inArray(resources.runId, [...filter.runIds]),
         filter.kind === undefined ? undefined : eq(resources.kind, filter.kind),
+        filter.kinds === undefined ? undefined : inArray(resources.kind, [...filter.kinds]),
         filter.identity === undefined ? undefined : eq(resources.identity, filter.identity),
         filter.states === undefined ? undefined : inArray(resources.state, [...filter.states]),
       ),

@@ -774,11 +774,8 @@ async function runtimeScenario(postgresUrl) {
         encoding: "utf8",
       }),
     );
-    if (
-      listed.complete !== true ||
-      listed.entries.length !== 2 ||
-      listed.entries.some((entry) => entry.runId !== runId || entry.eligible !== false)
-    ) {
+    // Recorded-only kinds are the run's history, not something prune holds.
+    if (listed.complete !== true || listed.entries.length !== 0) {
       throw new Error(
         `resource list CLI returned an unexpected inventory: ${JSON.stringify(listed)}`,
       );

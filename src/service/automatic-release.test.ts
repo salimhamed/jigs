@@ -5,12 +5,11 @@ import { z } from "zod";
 import type { RegistrySql } from "../steps/runtime/registry.ts";
 import type { RunState } from "../steps/runtime/run-state.ts";
 import type { Factory } from "../workflow/factory.ts";
+import type { ReleaseAction, RunOutcome } from "../workflow/runtime/release.ts";
 import type { ResourceRecord } from "../workflow/runtime/resources.ts";
 import {
   type AutomaticReleaseDeps,
   automaticReleaseAction,
-  type CleanupAction,
-  type CleanupOutcome,
   reconcileAutomaticRelease,
   startAutomaticRelease,
 } from "./automatic-release.ts";
@@ -54,7 +53,6 @@ function run(status: string): RunState {
     lastActivityAt: null,
     steps: null,
     lastStep: null,
-    suspended: false,
     suspensions: [],
     claim: null,
     resources: [],
@@ -76,7 +74,7 @@ const record = (runId: string, state: ResourceRecord["state"]): ResourceRecord =
 function harness(
   runs: RunState[],
   options: {
-    action?: (outcome: CleanupOutcome) => CleanupAction;
+    action?: (outcome: RunOutcome) => ReleaseAction;
     active?: () => boolean;
     release?: AutomaticReleaseDeps["release"];
   } = {},
@@ -84,7 +82,7 @@ function harness(
   const settled = new Set<string>();
   const release = vi.fn(
     options.release ??
-      (async (_sql: RegistrySql, runId: string, action: CleanupAction) => [
+      (async (_sql: RegistrySql, runId: string, action: ReleaseAction) => [
         record(runId, action === "keep" ? "kept" : "released"),
       ]),
   );
@@ -112,7 +110,7 @@ function harness(
 
 test("completed runs release while failed and cancelled runs use the failure policy", async () => {
   const runs = [run("completed"), run("failed"), run("cancelled")];
-  const seen: CleanupOutcome[] = [];
+  const seen: RunOutcome[] = [];
   const h = harness(runs, {
     action: (outcome) => {
       seen.push(outcome);
@@ -144,7 +142,7 @@ test("a run that is still running or suspended is never released", async () => {
 
 test("a run the World no longer knows is released by its failure policy", async () => {
   const lost = { ...run("lost"), status: null, workflowName: null };
-  const seen: CleanupOutcome[] = [];
+  const seen: RunOutcome[] = [];
   const h = harness([lost], {
     action: (outcome) => {
       seen.push(outcome);
@@ -243,7 +241,7 @@ test("transient failures stay visible and retry on the next reconciliation", asy
 
   expect((await reconcileAutomaticRelease(factory, h.deps)).failed).toBe(1);
   expect(h.deps.warn).toHaveBeenCalledWith(
-    "[cleanup] run wrun_completed failed: temporary database failure",
+    "[release] run wrun_completed failed: temporary database failure",
   );
   expect((await reconcileAutomaticRelease(factory, h.deps)).failed).toBe(1);
   expect((await reconcileAutomaticRelease(factory, h.deps)).released).toBe(1);
@@ -316,7 +314,7 @@ test("a failed in-flight scan cannot wedge shutdown", async () => {
 
   await expect(stopping).resolves.toBeUndefined();
   expect(h.deps.warn).toHaveBeenCalledWith(
-    "[cleanup] reconciliation failed: Error: World closed early",
+    "[release] reconciliation failed: Error: World closed early",
   );
 });
 

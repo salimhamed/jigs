@@ -1,5 +1,10 @@
 import type { FactoryDefinition } from "../../workflow/factory.ts";
-import type { ReleasePolicy, ReleaseReport } from "../../workflow/runtime/release.ts";
+import type {
+  ReleaseAction,
+  ReleasePolicy,
+  ReleaseReport,
+  RunOutcome,
+} from "../../workflow/runtime/release.ts";
 import type { ResourceRecord } from "../../workflow/runtime/resources.ts";
 import {
   currentFactory,
@@ -12,13 +17,26 @@ import {
   withRunResourceLock,
 } from "./registry.ts";
 import { resolveReleasePolicy } from "./release-policy.ts";
-import { decideRelease, type ReleaseDecision, releasable, releaseOrder } from "./resource-kinds.ts";
+import { decideRelease, type ReleaseDecision, releaseOrder } from "./resource-kinds.ts";
 import type { NamedRunMetadata } from "./run-context.ts";
 
 /** Failed attempts after which a resource is kept with its last error instead of retried. */
 export const MAX_RELEASE_ATTEMPTS = 5;
 
-export const keepReason = (outcome: "success" | "failure"): string =>
+/**
+ * Whether a resource is due for release now. A failed one waits 2^attempts minutes (at most an
+ * hour) after its last attempt, so an outage does not use up its attempts in a few passes.
+ */
+export function releaseDue(
+  row: Pick<ResourceRow, "state" | "attempts" | "updatedAt">,
+  now = new Date(),
+): boolean {
+  if (row.state === "live") return true;
+  if (row.state !== "failed") return false;
+  return now.getTime() - row.updatedAt.getTime() >= Math.min(2 ** row.attempts, 60) * 60_000;
+}
+
+export const keepReason = (outcome: RunOutcome): string =>
   `${outcome === "success" ? "onSuccess" : "onFailure"} policy keeps run resources`;
 
 /**
@@ -51,26 +69,20 @@ export async function releaseOne(
 }
 
 /**
- * Apply one release decision to a run's live and failed resources and return every record.
- * Recorded-only kinds are marked released either way: jigs never held them.
+ * Apply one release decision to a run's live resources, and failed ones whose retry is due, and
+ * return every record. Recorded-only kinds are not visited.
  */
 export async function releaseRun(
   db: RegistrySql,
   factory: string,
   runId: string,
-  action: "release" | "keep",
-  outcome: "success" | "failure",
+  action: ReleaseAction,
+  outcome: RunOutcome,
 ): Promise<ResourceRecord[]> {
   const rows = await listResources(db, { factory, runId });
+  const kept = { state: "kept" as const, reason: keepReason(outcome) };
   for (const row of releaseOrder(rows)) {
-    if (row.state !== "live" && row.state !== "failed") continue;
-    const kept = action === "keep" && releasable(row.kind);
-    await releaseOne(
-      db,
-      row,
-      rows,
-      kept ? { state: "kept", reason: keepReason(outcome) } : undefined,
-    );
+    if (releaseDue(row)) await releaseOne(db, row, rows, action === "keep" ? kept : undefined);
   }
   return rows.map(toRecord);
 }

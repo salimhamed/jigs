@@ -1,9 +1,13 @@
 import { factoryEnvValue } from "../../config/factory-env.ts";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
-import type { RegistrySql, ResourceRow } from "../../steps/runtime/registry.ts";
+import type { RegistrySql } from "../../steps/runtime/registry.ts";
 import type { RunFacts } from "../../steps/runtime/run-state.ts";
-import { type ResourceRecord, UNRELEASED_STATES } from "../../workflow/runtime/resources.ts";
+import {
+  RELEASABLE_KINDS,
+  type ResourceRecord,
+  UNRELEASED_STATES,
+} from "../../workflow/runtime/resources.ts";
 import { runNotFound } from "./service-client.ts";
 import {
   acquireServiceExclusion,
@@ -15,7 +19,6 @@ export interface ResourcesOptions {
   run?: string;
   json?: boolean;
   apply?: boolean;
-  includeKept?: boolean;
 }
 
 export interface ResourcesDeps {
@@ -69,23 +72,11 @@ const modules = async () => ({
   ...(await import("../../steps/runtime/run-state.ts")),
 });
 
-// Everything prune can remove is something release chose to keep, failed to
-// remove, or has not decided yet, so each needs --include-kept.
-function gate(row: ResourceRow, done: boolean, options: ResourcesOptions, releasable: boolean) {
-  if (!releasable) return "recorded only";
-  if (!done) return "the run is not finished";
-  if (options.includeKept === true) return null;
-  if (row.state === "live") {
-    return "the release policy has not been applied; start the service to apply it, or pass --include-kept";
-  }
-  return row.state === "failed"
-    ? "release failed; the service retries it, or pass --include-kept"
-    : "kept; pass --include-kept to consider it";
-}
-
 /**
- * Visit one run's unreleased resources in release order. A preview changes nothing but lets
- * later kinds see what applying would do; applying writes each outcome through `releaseOne`.
+ * Visit one run's unreleased resources in release order. Prune overrides the release policy: a
+ * resource the policy kept is released too, but only past the same safety checks as release. A
+ * preview changes nothing but lets later kinds see what applying would do; applying writes each
+ * outcome through `releaseOne`.
  */
 async function visitRun(
   sql: RegistrySql,
@@ -94,15 +85,18 @@ async function visitRun(
   options: ResourcesOptions,
 ): Promise<ResourceEntry[]> {
   const m = await modules();
-  const state = await m.readRunState(sql, factory, runId, offlineFacts(sql));
-  const rows = await m.listResources(sql, { factory, runId });
+  const rows = await m.listResources(sql, { factory, runId, kinds: RELEASABLE_KINDS });
+  const state = m.describeRunState(runId, await offlineFacts(sql)(runId), rows.map(m.toRecord));
   const entries: ResourceEntry[] = [];
   for (const row of m.releaseOrder(rows)) {
     if (row.state === "released") continue;
     const entry = { ...m.toRecord(row), status: state.status, eligible: false };
-    const refused = gate(row, m.finished(state), options, m.releasable(row.kind));
-    if (refused !== null) {
-      entries.push({ ...entry, decision: refused, ...(options.apply ? { action: "skip" } : {}) });
+    if (!m.finished(state)) {
+      entries.push({
+        ...entry,
+        decision: "the run is not finished",
+        ...(options.apply ? { action: "skip" } : {}),
+      });
       continue;
     }
     if (options.apply === true) {
@@ -124,10 +118,11 @@ async function visitRun(
           ({ state: "failed", reason: `could not check: ${String(error)}` }) as const,
       );
     const removes = typeof decided === "function" || decided.state === "released";
+    const overrides = row.state === "kept" ? `; overrides the kept decision (${row.reason})` : "";
     entries.push({
       ...entry,
       eligible: removes,
-      decision: removes ? "would be released" : decided.reason,
+      decision: removes ? `would be released${overrides}` : decided.reason,
     });
     if (removes) row.state = "released";
   }
@@ -144,6 +139,7 @@ async function visit(
     .listResources(sql, {
       factory,
       ...(options.run === undefined ? {} : { runId: options.run }),
+      kinds: RELEASABLE_KINDS,
       states: UNRELEASED_STATES,
     })
     .catch((error) => {

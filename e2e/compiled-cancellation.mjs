@@ -254,7 +254,7 @@ await (await getWorld()).close?.();`,
     assert.equal((await runtimeRun(activeRunId, ports.service)).resources[0].state, "live");
 
     const activeApply = runCli(
-      ["resources", "prune", "--run", activeRunId, "--include-kept", "--apply", "--json"],
+      ["resources", "prune", "--run", activeRunId, "--apply", "--json"],
       env,
       { allowFailure: true },
     );
@@ -380,20 +380,14 @@ await (await getWorld()).close?.();`,
     const listed = JSON.parse(
       runCli(["resources", "list", "--run", activeRunId, "--json"], env).output,
     );
-    assertResourceReport(listed, activeRunId, false, undefined);
+    assertResourceReport(listed, activeRunId, true, undefined);
+    assert.match(listed.entries[0].decision, /overrides the kept decision/);
     const preview = JSON.parse(
       runCli(["resources", "prune", "--run", activeRunId, "--json"], env).output,
     );
-    assertResourceReport(preview, activeRunId, false, undefined);
-    const included = JSON.parse(
-      runCli(["resources", "prune", "--run", activeRunId, "--include-kept", "--json"], env).output,
-    );
-    assertResourceReport(included, activeRunId, true, undefined);
+    assertResourceReport(preview, activeRunId, true, undefined);
     const applied = JSON.parse(
-      runCli(
-        ["resources", "prune", "--run", activeRunId, "--include-kept", "--apply", "--json"],
-        env,
-      ).output,
+      runCli(["resources", "prune", "--run", activeRunId, "--apply", "--json"], env).output,
     );
     assertResourceReport(applied, activeRunId, true, "remove");
     assert.equal(existsSync(activeDirectory), false);

@@ -1,8 +1,7 @@
 import { getWorkflowMetadata } from "workflow";
 import { JigsError } from "../../errors.ts";
-import type { RunResource } from "../../workflow/runtime/resources.ts";
+import { type RunResource, releasable } from "../../workflow/runtime/resources.ts";
 import { currentFactory, recordResource, registrySql } from "./registry.ts";
-import { releasable } from "./resource-kinds.ts";
 
 function assertResource(resource: RunResource): void {
   for (const field of ["kind", "identity", "url"] as const) {
@@ -25,9 +24,9 @@ function assertResource(resource: RunResource): void {
  * Register one resource on the active run so `jigs status` shows it.
  *
  * Repeating kind + identity is idempotent; a new URL for that identity replaces the old one.
- * The record is observation only: jigs never deletes what it names, and marks it released with
- * the run's other resources. The kinds jigs releases itself (`worktree`, `run-directory`,
- * `branch`, `codex-home`, `pi-home`) are reserved.
+ * The record is observation only: it stays `live` as the run's history and jigs never deletes
+ * what it names. The kinds jigs releases itself (`worktree`, `run-directory`, `branch`,
+ * `codex-home`, `pi-home`) are reserved.
  *
  * @group Recorded resources
  */

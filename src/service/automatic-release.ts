@@ -14,12 +14,12 @@ import {
   registrySql,
   withRunResourceLock,
 } from "../steps/runtime/registry.ts";
-import { releaseRun } from "../steps/runtime/release.ts";
+import { releaseDue, releaseRun } from "../steps/runtime/release.ts";
 import { effectiveReleasePolicy, workflowReleasePolicy } from "../steps/runtime/release-policy.ts";
 import { finished, type RunState, readRunState } from "../steps/runtime/run-state.ts";
 import type { Factory } from "../workflow/factory.ts";
-import type { ReleasePolicy } from "../workflow/runtime/release.ts";
-import type { ResourceRecord } from "../workflow/runtime/resources.ts";
+import type { ReleaseAction, ReleasePolicy, RunOutcome } from "../workflow/runtime/release.ts";
+import { RELEASABLE_KINDS, type ResourceRecord } from "../workflow/runtime/resources.ts";
 import { isReady } from "./readiness.ts";
 import { worldRunFacts } from "./runs.ts";
 import { onShutdown } from "./shutdown.ts";
@@ -28,25 +28,20 @@ import { runsWithActiveStep } from "./stalls.ts";
 /** Recovery interval for discovering terminal runs that still need cleanup. */
 export const AUTOMATIC_RELEASE_INTERVAL_MS = 60_000;
 
-/** What release policy chose for a finished run. */
-export type CleanupAction = "release" | "keep";
-/** Whether a finished run completed, or failed or was cancelled. */
-export type CleanupOutcome = "success" | "failure";
-
 /** Injectable operations used by automatic release reconciliation. */
 export interface AutomaticReleaseDeps {
-  /** Runs that still hold live or failed resources. */
+  /** Runs holding releasable resources that are live, or failed and due for a retry. */
   pendingRuns: () => Promise<RunState[]>;
   readState: (runId: string) => Promise<RunState>;
   waitForTerminal: (runId: string, signal: AbortSignal) => Promise<unknown>;
   hasActiveStep: (runId: string) => Promise<boolean>;
-  policy: (factory: Factory, run: RunState, outcome: CleanupOutcome) => CleanupAction;
+  policy: (factory: Factory, run: RunState, outcome: RunOutcome) => ReleaseAction;
   withLock: <T>(runId: string, action: (sql: RegistrySql) => Promise<T>) => Promise<T>;
   release: (
     sql: RegistrySql,
     runId: string,
-    action: CleanupAction,
-    outcome: CleanupOutcome,
+    action: ReleaseAction,
+    outcome: RunOutcome,
   ) => Promise<ResourceRecord[]>;
   ready: () => boolean;
   log: (line: string) => void;
@@ -67,9 +62,9 @@ export interface AutomaticReleaseReport {
 export function automaticReleaseAction(
   factory: Factory,
   workflowName: string,
-  outcome: CleanupOutcome,
+  outcome: RunOutcome,
   factoryPolicy?: ReleasePolicy,
-): CleanupAction {
+): ReleaseAction {
   const policy = effectiveReleasePolicy(
     workflowReleasePolicy(factory, workflowName),
     factoryPolicy,
@@ -93,17 +88,17 @@ export async function reconcileAutomaticRelease(
   for (const run of (await deps.pendingRuns()).filter(finished)) {
     if (options.canStart?.() === false) break;
     report.considered += 1;
-    report[await cleanupTerminalRun(factory, run, deps)] += 1;
+    report[await releaseFinishedRun(factory, run, deps)] += 1;
   }
   return report;
 }
 
-async function cleanupTerminalRun(
+async function releaseFinishedRun(
   factory: Factory,
   run: RunState,
   deps: AutomaticReleaseDeps,
 ): Promise<"released" | "kept" | "busy" | "failed"> {
-  const outcome: CleanupOutcome = run.status === "completed" ? "success" : "failure";
+  const outcome: RunOutcome = run.status === "completed" ? "success" : "failure";
   const action = deps.policy(factory, run, outcome);
   if (await deps.hasActiveStep(run.runId)) return "busy";
   try {
@@ -117,7 +112,7 @@ async function cleanupTerminalRun(
     });
   } catch (error) {
     deps.warn(
-      `[cleanup] run ${run.runId} failed: ${error instanceof Error ? error.message : String(error)}`,
+      `[release] run ${run.runId} failed: ${error instanceof Error ? error.message : String(error)}`,
     );
     return "failed";
   }
@@ -156,11 +151,11 @@ export function startAutomaticRelease(
       .then(() => deps.readState(run.runId))
       .then((settled) => {
         if (stopped || !finished(settled)) return;
-        track(cleanupTerminalRun(factory, settled, deps).then(() => undefined));
+        track(releaseFinishedRun(factory, settled, deps).then(() => undefined));
       })
       .catch((error) => {
         if (!controller.signal.aborted)
-          deps.warn(`[cleanup] watch ${run.runId} failed: ${String(error)}`);
+          deps.warn(`[release] watch ${run.runId} failed: ${String(error)}`);
       })
       .finally(() => watches.delete(run.runId));
   };
@@ -186,10 +181,10 @@ export function startAutomaticRelease(
       );
       if (stopped) return;
       deps.log(
-        `[cleanup] reconciled ${report.considered}: ${report.released} released, ${report.kept} kept, ${report.busy} active, ${report.failed} failed`,
+        `[release] reconciled ${report.considered}: ${report.released} released, ${report.kept} kept, ${report.busy} active, ${report.failed} failed`,
       );
     } catch (error) {
-      deps.warn(`[cleanup] reconciliation failed: ${String(error)}`);
+      deps.warn(`[release] reconciliation failed: ${String(error)}`);
     } finally {
       schedule();
     }
@@ -223,9 +218,11 @@ export function automaticReleaseDeps(): AutomaticReleaseDeps {
     pendingRuns: async () => {
       const rows = await listResources(registrySql(), {
         factory: currentFactory(),
+        kinds: RELEASABLE_KINDS,
         states: ["live", "failed"],
       });
-      return Promise.all([...new Set(rows.map((row) => row.runId))].map(readState));
+      const due = rows.filter((row) => releaseDue(row));
+      return Promise.all([...new Set(due.map((row) => row.runId))].map(readState));
     },
     readState,
     waitForTerminal: async (runId, signal) => {

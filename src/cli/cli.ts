@@ -106,8 +106,8 @@ Recipes:
 
 Resources:
   resources list            Show run resources and working folders
-  resources prune           Preview safe resource cleanup
-  resources prune --apply   Perform eligible cleanup after safety checks
+  resources prune           Preview what --apply would release, policy-kept included
+  resources prune --apply   Release it after the Git and GitHub safety checks
 
 Generated code:
   build                     Compile workflows into the service bundle
@@ -394,16 +394,15 @@ resources
 
 resources
   .command("prune")
-  .description("preview safe local resource cleanup; --apply performs it offline")
+  .description(
+    "preview releasing finished runs' resources, overriding the release policy; --apply does it offline",
+  )
   .option("--run <run-id>", `limit the inventory to one run: ${RUN_ID_HELP}`)
-  .option("--apply", "perform eligible cleanup after proving the service and children stopped")
-  .option("--include-kept", "consider policy-kept resources, without bypassing Git safety")
+  .option("--apply", "release after proving the service and children stopped")
   .option("--json", "print one JSON document")
-  .action(
-    async (options: { run?: string; apply?: boolean; includeKept?: boolean; json?: boolean }) => {
-      await runResourcesPrune({ cwd: process.cwd(), out }, options);
-    },
-  );
+  .action(async (options: { run?: string; apply?: boolean; json?: boolean }) => {
+    await runResourcesPrune({ cwd: process.cwd(), out }, options);
+  });
 
 const service = program
   .command("service")

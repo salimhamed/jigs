@@ -35,14 +35,16 @@ else records it.
 
 - **States** are `live` until release decides, then `kept` (by policy or a
   safety check), `released`, or `failed`. A failed row is retried by the next
-  pass and counts its attempts; the fifth failure keeps it with its last error.
+  pass that is due (2^attempts minutes after the last try, at most an hour)
+  and counts its attempts; it is kept, with its last error, after the fifth
+  failed attempt.
   Every row carries the reason for its state. `UNRELEASED_STATES` names the
   three that status and prune show.
 - **Kinds.** `worktree`, `run-directory`, `codex-home`, `pi-home` and `branch`
   have release handlers and are reserved: only jigs records them.
-  `pull-request` and any kind a factory registers are recorded only, and are
-  marked `released` ("recorded only") when the run's resources are released or
-  kept. One module (`steps/runtime/resource-kinds.ts`) holds the handlers and
+  `pull-request` and any kind a factory registers are recorded only: they stay
+  `live` as history, and release, prune and every listing of what is still
+  held (`RELEASABLE_KINDS`, `unreleased`) leave them out. One module (`steps/runtime/resource-kinds.ts`) holds the handlers and
   their safety checks; explicit and automatic release and prune all go through
   it and write each outcome through one function (`releaseOne`). Handlers
   delete only what jigs recorded itself (run ID, identity, a worktree's clone
@@ -50,7 +52,7 @@ else records it.
 - **Branches.** jigs records a `branch` only when the run's push created it; a
   branch already on the remote (`staging`, a person's branch) is never
   recorded, so never deleted. A branch kept because its pull request was open
-  stays `kept` after the merge: `jigs resources prune --include-kept` removes
+  stays `kept` after the merge: `jigs resources prune --apply` removes
   it then, or records it `released` if GitHub's auto-delete already did. The
   head is read again just before the delete, and a branch that moved is left
   `live`.
@@ -92,11 +94,11 @@ both.
   provisioning also takes, and checks again under it. The lock is held through
   the git safety checks and deletion. Shutdown stops timers and drains admitted
   attempts before the World closes.
-- `jigs resources prune` is the operator path for what release left. It acts
-  only on this factory's rows of finished runs, and only with `--include-kept`:
-  every row it could remove is one release kept, failed to remove, or never
-  decided (the service stopped before applying the policy), and the offline
-  CLI cannot load the workflow's policy to decide for it. It previews until
+- `jigs resources prune` is the operator's explicit override of the release
+  policy: it releases every unreleased resource of this factory's finished
+  runs, kept ones included, and the preview names what the policy kept and
+  why. Safety comes from each kind's checks, which it never overrides. It
+  previews until
   `--apply`, which requires the service and its children to be stopped, takes
   each run's lock, reads the run afresh and handles it as a unit in release
   order. It reads only the run's status from the World's table, because the

@@ -32,7 +32,6 @@ const result = (over: Partial<StatusResult> = {}): StatusResult => ({
   lastActivityAt: "2026-09-04T10:09:00.000Z",
   steps: 0,
   lastStep: null,
-  suspended: false,
   suspensions: [],
   dashboard: "",
   resources: [],
@@ -48,7 +47,6 @@ test("status says what the run waits for, where to act, and what was asked", asy
     result({
       status: "suspended",
       ticket: "AGE-317",
-      suspended: true,
       dashboard: DASHBOARD,
       suspensions: [
         {
@@ -133,7 +131,6 @@ test("status prints live pull-request gate state under its suspension", async ()
   respond(
     result({
       status: "suspended",
-      suspended: true,
       suspensions: [
         {
           token: "github:pr:acme/api#41",
@@ -168,7 +165,6 @@ test("a pull request GitHub could not be asked about prints as it always did", a
   respond(
     result({
       status: "suspended",
-      suspended: true,
       suspensions: [
         {
           token: "github:pr:acme/api#41",

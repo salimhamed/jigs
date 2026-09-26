@@ -192,7 +192,6 @@ export async function fakeService(routes: ServiceRoutes = {}): Promise<number> {
             lastActivityAt: at,
             steps: 0,
             lastStep: null,
-            suspended: false,
             suspensions: [],
             resources: [],
             ...run,

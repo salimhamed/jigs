@@ -61,7 +61,6 @@ export interface RunState {
   /** How many steps the run recorded, or null where nothing read them. */
   steps: number | null;
   lastStep: RunStep | null;
-  suspended: boolean;
   /** What the run is parked on: a pull request watch, a needs-human halt, or another event. */
   suspensions: RunSuspension[];
   /** The ticket claim hook the run holds for its whole life, or null. */
@@ -110,7 +109,6 @@ export function describeRunState(
       last === undefined
         ? null
         : { name: last.name, status: last.status, at: last.completedAt ?? last.startedAt },
-    suspended: false,
     suspensions: [],
     claim: null,
     resources,
@@ -129,7 +127,7 @@ export function describeRunState(
     claim: tokens.find((token) => token.startsWith(TICKET_TOKEN_PREFIX)) ?? null,
   };
   const suspensions = tokens.flatMap((token) => describeSuspension(token, run.ticket) ?? []);
-  if (suspensions.length > 0) return { ...live, status: "suspended", suspended: true, suspensions };
+  if (suspensions.length > 0) return { ...live, status: "suspended", suspensions };
   // Only a running run can be stalled: nothing was handed to the queue for a pending one.
   return run.status === "running" && facts.stalled === true ? { ...live, status: "stalled" } : live;
 }
@@ -142,7 +140,7 @@ export function describeRunState(
  * ```ts
  * await readRunState(registrySql(), currentFactory(), runId, worldRunFacts);
  * // { runId: "wrun_01K…", status: "suspended", workflowName: "workflow//./workflows/ship//ship",
- * //   trigger: "manual", ticket: "<ticket>", …, suspended: true,
+ * //   trigger: "manual", ticket: "<ticket>", …,
  * //   suspensions: [{ kind: "pull-request", reason: "waiting for pull request activity on acme/api#41", … }],
  * //   claim: "linear:ticket:…",
  * //   resources: [{ kind: "worktree", identity: "/…/worktrees/<branch>", state: "live", reason: null, … }] }

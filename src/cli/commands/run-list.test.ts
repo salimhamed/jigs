@@ -34,7 +34,6 @@ const run = (over: Partial<RunListRun> = {}): RunListRun => ({
   lastActivityAt: "2026-08-26T11:59:00.000Z",
   steps: 0,
   lastStep: null,
-  suspended: false,
   suspensions: [],
   resources: [],
   ...over,
@@ -52,7 +51,6 @@ test("a suspended run names its ticket and what it waits for", async () => {
       run({
         status: "suspended",
         ticket: "AGE-317",
-        suspended: true,
         suspensions: [
           {
             token: "github:pr:acme/api#41",

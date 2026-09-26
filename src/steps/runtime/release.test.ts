@@ -16,7 +16,9 @@ vi.mock("./registry.ts", async (original) => ({
   ...(await import("./test-fixtures.ts")).memoryRegistry(),
 }));
 
-const { MAX_RELEASE_ATTEMPTS, releaseRun, releaseRunResources } = await import("./release.ts");
+const { MAX_RELEASE_ATTEMPTS, releaseDue, releaseRun, releaseRunResources } = await import(
+  "./release.ts"
+);
 
 let data: string;
 const RUN = "wrun_release";
@@ -62,7 +64,7 @@ afterEach(() => {
   rmSync(data, { recursive: true, force: true });
 });
 
-test("release removes run-owned directories and marks recorded-only kinds released", async () => {
+test("release removes run-owned directories and leaves recorded-only kinds live as history", async () => {
   const scratch = directory("scratch", RUN);
   const codex = directory("codex-homes", RUN);
   seed(row("run-directory"), row("codex-home"), row("pull-request", { identity: "a/b#1" }));
@@ -74,9 +76,9 @@ test("release removes run-owned directories and marks recorded-only kinds releas
   expect(states()).toEqual({
     "run-directory": ["released", "removed"],
     "codex-home": ["released", "removed"],
-    "pull-request": ["released", "recorded only"],
+    "pull-request": ["live", null],
   });
-  expect(records.map((record) => record.state)).toEqual(["released", "released", "released"]);
+  expect(records.map((record) => record.state)).toEqual(["released", "released", "live"]);
 });
 
 test("keep marks every releasable resource kept with the policy's reason", async () => {
@@ -88,7 +90,7 @@ test("keep marks every releasable resource kept with the policy's reason", async
   expect(existsSync(scratch)).toBe(true);
   expect(states()).toEqual({
     "run-directory": ["kept", "onFailure policy keeps run resources"],
-    "pull-request": ["released", "recorded only"],
+    "pull-request": ["live", null],
   });
 });
 
@@ -159,17 +161,50 @@ test("a failed resource is retried until the attempt cap, then kept with its las
   git(tree.repoDir as string, "worktree", "lock", tree.identity);
   seed(tree);
 
+  // Each retry waits out its back-off, which the test skips by ageing the row.
+  const retry = () => {
+    Object.assign(memoryRows[0] as ResourceRow, { updatedAt: new Date(0) });
+    return releaseRun({} as never, "factory-a", RUN, "release", "success");
+  };
   for (let attempt = 1; attempt < MAX_RELEASE_ATTEMPTS; attempt += 1) {
-    await releaseRun({} as never, "factory-a", RUN, "release", "success");
+    await retry();
     expect(memoryRows[0]).toMatchObject({ state: "failed", attempts: attempt });
   }
-  await releaseRun({} as never, "factory-a", RUN, "release", "success");
+  await retry();
 
   expect(memoryRows[0]?.state).toBe("kept");
   expect(memoryRows[0]?.reason).toMatch(
     new RegExp(`^release failed: .*\\(gave up after ${MAX_RELEASE_ATTEMPTS} attempts\\)$`, "s"),
   );
   expect(existsSync(tree.identity)).toBe(true);
+});
+
+test("a failed resource is not retried before its back-off of 2^attempts minutes", async () => {
+  const scratch = directory("scratch", RUN);
+  const failed = (minutesAgo: number, attempts: number) =>
+    row("run-directory", {
+      state: "failed",
+      reason: "release failed: EBUSY",
+      attempts,
+      updatedAt: new Date(Date.now() - minutesAgo * 60_000),
+    });
+
+  seed(failed(5, 3));
+  await releaseRun({} as never, "factory-a", RUN, "release", "success");
+  expect(existsSync(scratch)).toBe(true);
+  expect(memoryRows[0]?.state).toBe("failed");
+
+  seed(failed(9, 3));
+  await releaseRun({} as never, "factory-a", RUN, "release", "success");
+  expect(existsSync(scratch)).toBe(false);
+  expect(memoryRows[0]?.state).toBe("released");
+});
+
+test("the back-off never waits more than an hour", () => {
+  const hourAgo = new Date(Date.now() - 60 * 60_000);
+  expect(releaseDue({ state: "failed", attempts: 10, updatedAt: hourAgo })).toBe(true);
+  expect(releaseDue({ state: "failed", attempts: 10, updatedAt: new Date() })).toBe(false);
+  expect(releaseDue({ state: "kept", attempts: 0, updatedAt: hourAgo })).toBe(false);
 });
 
 test("kept and released records are final; failed ones are tried again", async () => {

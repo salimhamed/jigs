@@ -76,8 +76,8 @@ jigs keeps each binding's clone and worktrees under
 | Command | What it does |
 | --- | --- |
 | `jigs resources list` | List what finished and running runs still hold, with each item's state and reason. Changes nothing. |
-| `jigs resources prune --include-kept` | Preview what could be safely removed. |
-| `jigs resources prune --include-kept --apply` | Remove it. Needs `jigs service stop` first. |
+| `jigs resources prune` | Preview what `--apply` would release, including what the release policy kept. |
+| `jigs resources prune --apply` | Release it. Needs `jigs service stop` first. |
 
 ## Service
 
@@ -240,22 +240,23 @@ you add `--apply`. To apply:
 
 1. Run `jigs service stop`.
 2. Check the preview, optionally for one run with `--run <run>`.
-3. Run `jigs resources prune --include-kept --apply`.
+3. Run `jigs resources prune --apply`.
 
-Everything prune can remove is something release kept, failed to remove, or
-never got to (the service stopped before the run ended), so each needs
-`--include-kept`; without it prune only explains what it would leave. The flag
-relaxes nothing else: only resources of finished runs recorded by this factory
-are removed, and a worktree with uncommitted changes, an unmerged branch, a
-branch with an open pull request and a waiting run's resources are always
-kept. A release that fails is retried by the service five times, then kept with
-its last error.
+Prune is your override of the release policy: it releases what the policy
+kept, what failed to release, and what the service never got to. The preview
+marks each resource the policy kept, with the reason, so you see what
+`--apply` overrides. It never overrides the safety checks: only resources of
+finished runs recorded by this factory are removed, and a worktree with
+uncommitted changes, an unmerged branch, a branch with an open pull request
+and a waiting run's resources are always kept. A release that fails is retried
+by the service with a growing wait between tries, and kept after the fifth
+failed attempt with its last error.
 
 jigs records a pushed branch only when the run created it, so a branch that
 already existed, such as `staging`, is never deleted. A branch kept because its
 pull request was still open stays kept after the merge: prune removes it then,
 or marks it released if GitHub already deleted it. Pull requests and resources
-a workflow registers itself are listed and marked released with the run, but
+a workflow registers itself stay in `jigs status <run>` as history, and are
 never removed.
 
 Applying works on macOS and Linux. It never stops or kills anything itself: it

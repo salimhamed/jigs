@@ -163,11 +163,10 @@ test("harness homes wait for a live or failed worktree and stay with a kept one"
   expect(await refusal(home, [{ kind: "worktree", state: "released" }])).toBeNull();
 });
 
-test("recorded-only kinds are marked released without anything being deleted", async () => {
-  expect(await releaseResource(row("pull-request", "acme/api#1"), [])).toEqual({
-    state: "released",
-    reason: "recorded only",
-  });
+test("recorded-only kinds are never dispatched", async () => {
+  await expect(releaseResource(row("pull-request", "acme/api#1"), [])).rejects.toThrow(
+    "jigs does not release pull-request resources",
+  );
   expect(fetchMock).not.toHaveBeenCalled();
 });
 

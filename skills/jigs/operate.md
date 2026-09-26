@@ -90,8 +90,9 @@ reason, and the step timeline. Released resources stay listed as history.
 `resources none` is an explicit empty set; `jigs status <run-id> --json` carries the same
 records in `resources`, and the ticket claim in `claim`, independently of `returnValue`.
 
-Prefer `--json` to the tables: `jigs status --json` is `{runs, resources,
-schedules}`, `jigs status <run-id> --json` is the run's fields plus its timeline, and
+Prefer `--json` to the tables: `jigs status --json` is `{runs, schedules}`, each
+run carrying every resource it recorded (released ones included) in `resources`;
+`jigs status <run-id> --json` is the run's fields plus its timeline, and
 `jigs watch --json` is one JSON event per line. Read fields rather than parsing
 columns.
 
@@ -204,9 +205,9 @@ A suspended run holds its worktree because it will return to it. Automatic
 release handles terminal runs when its policy and Git safety checks allow it.
 For leftovers, inspect `jigs resources list` and `jigs resources prune`; both
 are read-only. To apply a preview, run `jigs service stop`, then
-`jigs resources prune --include-kept --apply`; this works on macOS and Linux.
-Everything prune removes was kept, failed, or never decided by release, so it
-always needs `--include-kept`. Apply never stops anything: it refuses
+`jigs resources prune --apply`; this works on macOS and Linux. Prune overrides
+the release policy (the preview names what the policy kept, and why) but never
+the safety checks. Apply never stops anything: it refuses
 while the service or any process in its recorded process group is still
 running. Dirty and unmerged work, and a branch with an open pull request,
 remain.

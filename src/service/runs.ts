@@ -181,12 +181,11 @@ export async function worldRunFacts(runId: string, detail = false): Promise<RunF
 
 /** Every run this factory's World holds, described the way `readRunState` describes one. */
 export async function listRuns(factory: Factory): Promise<RunRow[]> {
-  const [runs, hooks, stranded, rows] = await Promise.all([
-    worldRuns(),
-    listWorldHooks(),
-    stalledRuns(),
-    listResources(registrySql(), { factory: currentFactory() }),
-  ]);
+  const [runs, hooks, stranded] = await Promise.all([worldRuns(), listWorldHooks(), stalledRuns()]);
+  const rows = await listResources(registrySql(), {
+    factory: currentFactory(),
+    runIds: runs.map((run) => run.runId),
+  });
   const tokensByRun = Map.groupBy(hooks, (hook) => hook.runId);
   const rowsByRun = Map.groupBy(rows, (row) => row.runId);
   // The compiler stamps each workflow with the workflowId the world stores as

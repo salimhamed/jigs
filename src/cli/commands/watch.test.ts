@@ -27,7 +27,6 @@ const run = (over: Partial<RunListRun> = {}): RunListRun => ({
   lastActivityAt: "2026-08-26T11:59:00.000Z",
   steps: 1,
   lastStep: { name: "claimTicket", status: "completed", at: "2026-08-26T11:59:00.000Z" },
-  suspended: false,
   suspensions: [],
   resources: [],
   ...over,
@@ -51,7 +50,6 @@ test("a finished step and the park that follows it are two lines, in that order"
   const before = run();
   const after = run({
     status: "suspended",
-    suspended: true,
     steps: 2,
     lastStep: { name: "openPullRequest", status: "completed", at: "2026-08-26T12:00:00.000Z" },
     suspensions: [
@@ -72,7 +70,7 @@ test("a finished step and the park that follows it are two lines, in that order"
 });
 
 test("a woken run resumes, and an unchanged one says nothing", () => {
-  const parked = run({ status: "suspended", suspended: true });
+  const parked = run({ status: "suspended" });
   expect(names(runEvents(parked, run(), AT))).toEqual(["resumed"]);
   expect(runEvents(parked, parked, AT)).toEqual([]);
 });

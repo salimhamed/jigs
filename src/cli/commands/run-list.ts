@@ -1,6 +1,6 @@
 import { JigsError } from "../../errors.ts";
 import type { RunSuspension } from "../../run-suspension.ts";
-import type { ResourceRecord } from "../../workflow/runtime/resources.ts";
+import { type ResourceRecord, unreleased } from "../../workflow/runtime/resources.ts";
 import { formatTable } from "../table.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 
@@ -17,7 +17,6 @@ export interface RunListRun {
   /** How far the run got, or null when nothing read its steps. */
   steps: number | null;
   lastStep: { name: string; status: string; at: string | null } | null;
-  suspended: boolean;
   suspensions: RunListSuspension[];
   /** Every resource the run recorded, released ones included. */
   resources: ResourceRecord[];
@@ -82,14 +81,12 @@ export async function showRuns(
     }
   }
 
-  const unreleased = result.runs.flatMap((run) =>
-    run.resources.filter((resource) => resource.state !== "released"),
-  );
-  if (unreleased.length > 0) {
+  const held = result.runs.flatMap((run) => run.resources.filter(unreleased));
+  if (held.length > 0) {
     deps.out("");
     for (const line of formatTable(
       ["RESOURCE", "KIND", "STATE", "RUN", "REASON"],
-      unreleased.map((resource) => [
+      held.map((resource) => [
         resource.identity,
         resource.kind,
         resource.state,

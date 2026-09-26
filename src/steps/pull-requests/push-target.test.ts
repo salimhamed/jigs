@@ -116,3 +116,14 @@ test("an installation token can only push to GitHub, and says so", async () => {
   });
   await expect(pushApprovedChange(worktree, "approved")).rejects.toThrow("not a github.com remote");
 });
+
+test("a push retried after the remote branch appeared is still recorded as the run's", async () => {
+  authAs({ mode: "pat" });
+  vi.mocked(gitPushBranch).mockRejectedValueOnce(new Error("connection reset after the push"));
+  await expect(pushBranch(worktree)).rejects.toThrow("connection reset");
+  vi.mocked(tryGit).mockResolvedValue("abc123\trefs/heads/feature");
+  await pushBranch(worktree);
+  expect(branches()).toEqual([
+    ["branch", "acme/api:feature", "https://github.com/acme/api/tree/feature"],
+  ]);
+});

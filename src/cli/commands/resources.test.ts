@@ -91,9 +91,6 @@ const deps = (statuses?: Record<string, string>) => ({
   connect: () => database(statuses),
 });
 
-const UNAPPLIED =
-  "the release policy has not been applied; start the service to apply it, or pass --include-kept";
-
 test("list shows this factory's unreleased records with what prune would do", async () => {
   seed("run-directory");
   seed("pull-request", { identity: "acme/api#1" });
@@ -116,20 +113,25 @@ test("list shows this factory's unreleased records with what prune would do", as
       entry.decision,
     ]),
   ).toEqual([
-    [RUN, "run-directory", "live", false, UNAPPLIED],
-    [RUN, "codex-home", "kept", false, "kept; pass --include-kept to consider it"],
-    [RUN, "pull-request", "live", false, "recorded only"],
+    [RUN, "run-directory", "live", true, "would be released"],
+    [
+      RUN,
+      "codex-home",
+      "kept",
+      true,
+      "would be released; overrides the kept decision (onFailure policy keeps run resources)",
+    ],
     [LIVE, "run-directory", "live", false, "the run is not finished"],
   ]);
   expect(JSON.parse(lines.join("\n"))).toEqual(report);
 });
 
-test("--include-kept considers live, kept and failed records of finished runs alike", async () => {
+test("prune overrides the policy: live, kept and failed records of finished runs alike", async () => {
   seed("run-directory");
   seed("codex-home", { state: "kept", reason: "onFailure policy keeps run resources" });
   seed("pi-home", { state: "failed", reason: "release failed: EBUSY", attempts: 2 });
 
-  const report = await listResources(deps(), { includeKept: true });
+  const report = await listResources(deps(), {});
 
   expect(report.entries.map((entry) => [entry.kind, entry.eligible])).toEqual([
     ["run-directory", true],
@@ -139,10 +141,7 @@ test("--include-kept considers live, kept and failed records of finished runs al
 });
 
 const pruneAll = (statuses: Record<string, string> = { [RUN]: "cancelled" }) =>
-  runResourcesPrune(
-    { ...deps(statuses), processes: machine() },
-    { apply: true, includeKept: true },
-  );
+  runResourcesPrune({ ...deps(statuses), processes: machine() }, { apply: true });
 
 test("apply releases finished runs' records and never a running run's", async () => {
   const done = scratch();
@@ -150,6 +149,7 @@ test("apply releases finished runs' records and never a running run's", async ()
   seed("run-directory");
   seed("codex-home", { state: "kept", reason: "onFailure policy keeps run resources" });
   seed("run-directory", { runId: LIVE });
+  seed("pull-request", { identity: "acme/api#1" });
   const codex = path.join(tmp, "data", "jigs", "codex-homes", RUN);
   mkdirSync(codex, { recursive: true });
 
@@ -166,23 +166,15 @@ test("apply releases finished runs' records and never a running run's", async ()
   expect(existsSync(codex)).toBe(false);
   expect(existsSync(live)).toBe(true);
   expect(lines.at(-1)).toBe("2 removed, 0 failed, 1 retained");
-});
-
-test("without --include-kept, apply leaves records whose policy was never applied", async () => {
-  const done = scratch();
-  seed("run-directory");
-
-  await runResourcesPrune({ ...deps(), processes: machine() }, { apply: true });
-
-  expect(existsSync(done)).toBe(true);
-  expect(memoryRows[0]?.state).toBe("live");
+  // A recorded-only pull request is history, never visited.
+  expect(memoryRows.find((row) => row.kind === "pull-request")?.state).toBe("live");
 });
 
 test("a preview never changes anything", async () => {
   const done = scratch();
   seed("run-directory");
 
-  await runResourcesPrune(deps(), { includeKept: true });
+  await runResourcesPrune(deps(), {});
 
   expect(existsSync(done)).toBe(true);
   expect(memoryRows[0]?.state).toBe("live");
@@ -220,7 +212,7 @@ test("apply decides again under the run's lock: a run that resumed keeps its rec
 
   const report = await runResourcesPrune(
     { ...deps(statuses), processes: machine() },
-    { apply: true, includeKept: true },
+    { apply: true },
   );
 
   expect(report.entries[0]).toMatchObject({ action: "skip", decision: "the run is not finished" });
@@ -263,7 +255,7 @@ test("a failure is reported and prune carries on with independent resources", as
   expect(existsSync(other)).toBe(false);
 });
 
-test("--include-kept keeps a dirty worktree and keeps an unmerged branch's commits", async () => {
+test("apply keeps a dirty worktree and keeps an unmerged branch's commits", async () => {
   const dirty = worktree("dirty");
   writeFileSync(path.join(dirty.identity, "wip.txt"), "uncommitted\n");
   const unmerged = worktree("unmerged", LIVE);
@@ -288,7 +280,7 @@ test("one apply releases a worktree and then the harness homes that waited for i
   const pi = path.join(tmp, "data", "jigs", "pi-homes", RUN);
   mkdirSync(pi, { recursive: true });
 
-  const preview = await listResources(deps({ [RUN]: "failed" }), { includeKept: true });
+  const preview = await listResources(deps({ [RUN]: "failed" }), {});
   expect(preview.entries.map((entry) => [entry.kind, entry.eligible])).toEqual([
     ["worktree", true],
     ["pi-home", true],
@@ -304,7 +296,6 @@ test("the offline read has the run's status and nothing it cannot see", async ()
   expect(state).toMatchObject({
     status: "completed",
     claim: null,
-    suspended: false,
     suspensions: [],
   });
 });

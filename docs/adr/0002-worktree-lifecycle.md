@@ -49,8 +49,8 @@ The pushed branch is its own `branch` resource, recorded only when the run's
 push created it, and deleted on GitHub with the factory's identity. It is kept
 while it has an open pull request, and deleted only when a merged pull request
 has its exact head or the default branch contains it. A branch kept for its
-open pull request stays kept; after the merge, `jigs resources prune
---include-kept` removes it. The local tracking ref of a deleted remote branch
+open pull request stays kept; after the merge, `jigs resources prune --apply`
+removes it. The local tracking ref of a deleted remote branch
 is dropped the next time a worktree for that branch is cut.
 
 ## Consequences

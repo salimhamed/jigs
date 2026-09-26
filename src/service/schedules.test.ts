@@ -52,7 +52,6 @@ const row = (over: Partial<RunRow> = {}): RunRow => ({
   lastActivityAt: "2026-08-26T03:00:00.000Z",
   steps: 0,
   lastStep: null,
-  suspended: false,
   suspensions: [],
   workflowName: "workflow//./workflows/sweep//sweep",
   claim: null,

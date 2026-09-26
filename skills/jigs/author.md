@@ -163,8 +163,8 @@ resource. An idempotent custom step may instead import `registerResource` from
 `@jigs-ai/jigs/steps/runtime` and call it before returning.
 
 Use a short stable identity and an absolute URL. A registered resource is recorded
-only: `jigs status` and `jigs resources list` show it, it is marked released with
-the run's other resources, and nothing ever deletes it.
+only: `jigs status <run-id>` shows it as the run's history, and nothing ever
+deletes it.
 
 For delivery, run `jigs recipe add linear-ticket-to-pr`; it registers the workflow. The copied
 `workflows/linear-ticket-to-pr/` holds the workflow file and `delivery/`: the three phases

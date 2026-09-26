@@ -41,7 +41,7 @@ async function pushTarget(worktreePath: string): Promise<PushTarget> {
 }
 
 /**
- * Push, and record the branch as this run's when the push created it. A branch that was already
+ * Push, recording the branch as this run's when the push creates it. A branch that was already
  * on the remote, such as `staging` or a person's branch, is never recorded, so release never
  * deletes it.
  */
@@ -61,12 +61,15 @@ async function pushAndRecord(worktreePath: string, branch: string, push: () => P
   const existed =
     !ours &&
     (await tryGit(["ls-remote", "--heads", "origin", `refs/heads/${branch}`], worktreePath)) !== "";
+  // Recorded before the push, so a push whose step is retried is still this
+  // run's; a record for a push that then failed is released as already absent.
+  if (!existed) {
+    await recordResource(db, {
+      ...record,
+      url: `https://github.com/${ref.owner}/${ref.repo}/tree/${encodeURIComponent(branch)}`,
+    });
+  }
   await push();
-  if (existed) return;
-  await recordResource(db, {
-    ...record,
-    url: `https://github.com/${ref.owner}/${ref.repo}/tree/${encodeURIComponent(branch)}`,
-  });
 }
 
 /**

@@ -98,7 +98,8 @@ _Avoid_: artifact
 run's cleanup status is its resources' states.
 
 **Resource kind**: What a resource is, and whether jigs can release it.
-`pull-request` and factory-registered kinds are recorded only.
+`pull-request` and factory-registered kinds are recorded only and stay `live`
+as history.
 
 **Run state**: One run's resources plus its hook facts (claim, what it waits
 on), read as plain data by `readRunState`.
@@ -117,9 +118,10 @@ _Avoid_: teardown (for the request), gc
 safety check refused, such as a worktree with uncommitted work.
 _Avoid_: orphan, abandoned
 
-**Resource prune**: `jigs resources prune --include-kept`: previews what
-release kept, failed or never decided for this factory's finished runs, and
-with `--apply` releases what passes the same safety checks as release.
+**Resource prune**: `jigs resources prune`: the operator's override of the
+release policy. It previews what release kept, failed or never decided for
+this factory's finished runs, and with `--apply` releases what passes the same
+safety checks as release.
 _Avoid_: sweep, cleanup job
 
 ## Agents
