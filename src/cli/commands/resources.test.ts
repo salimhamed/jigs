@@ -6,7 +6,6 @@ import type { Pool, QueryConfig } from "pg";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { factorySlug } from "../../steps/workspaces/layout.ts";
 import type { RegistrySql } from "../../steps/workspaces/registry.ts";
-import { RUN_TICKET_ATTRIBUTE } from "../../workflow/factory.ts";
 import { resourceAttribute } from "../../workflow/runtime/resources.ts";
 import { listResources, runResourcesPrune } from "./resources.ts";
 import { servicePidfilePath, serviceSupervisionPath } from "./service-lifecycle.ts";
@@ -36,7 +35,7 @@ afterEach(() => {
   rmSync(tmp, { recursive: true, force: true });
 });
 
-function database(status = "completed", ticket?: string): RegistrySql {
+function database(status = "completed"): RegistrySql {
   const resource = resourceAttribute({
     kind: "pull-request",
     identity: "acme/repo#1",
@@ -54,7 +53,6 @@ function database(status = "completed", ticket?: string): RegistrySql {
               status,
               attributes: {
                 [resource.key]: resource.value,
-                ...(ticket === undefined ? {} : { [RUN_TICKET_ATTRIBUTE]: ticket }),
               },
             },
           ],
@@ -82,7 +80,7 @@ test("list selects a run by its full ID and prints JSON without mutating", async
 test.each([
   ["a prefix", RUN.slice(5, 13)],
   ["a prefix with wrun_", RUN.slice(0, 13)],
-  ["the ticket the run was launched for", "AGE-317"],
+  ["a ticket", "AGE-317"],
   ["an unknown ref", "wrun_01ZZZZZZZZZZZZZZZZZZZZZZZZ"],
 ])("--run rejects %s and points at jigs status", async (_label, ref) => {
   await expect(
@@ -90,7 +88,7 @@ test.each([
       {
         cwd: root,
         out: (line) => lines.push(line),
-        connect: () => database("completed", "AGE-317"),
+        connect: () => database(),
       },
       { run: ref },
     ),

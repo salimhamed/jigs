@@ -39,7 +39,6 @@ test("a ticket field is ordinary input and never triggers Linear resolution", as
       attributes: {
         "$jigs.cleanup.v1.directive": "automatic",
         "$jigs.cleanup.v1.state": '{"status":"waiting"}',
-        "$jigs.ticket": "abc",
       },
       allowReservedAttributes: true,
     },

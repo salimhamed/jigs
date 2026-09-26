@@ -1,7 +1,7 @@
 import { start } from "workflow/api";
 import type { z } from "zod";
 import { type CheckReport, preflightChecks, runChecks } from "../checks/index.ts";
-import { type Factory, type Injected, RUN_TICKET_ATTRIBUTE } from "../workflow/factory.ts";
+import type { Factory, Injected } from "../workflow/factory.ts";
 import {
   CLEANUP_DIRECTIVE_ATTRIBUTE,
   CLEANUP_STATE_ATTRIBUTE,
@@ -41,19 +41,10 @@ export async function startRun(
   if (!report.ok) return { kind: "preflight-failed", report };
 
   const injection = { triggerId } satisfies Injected;
-  const ticket =
-    typeof parsed.data === "object" &&
-    parsed.data !== null &&
-    "ticket" in parsed.data &&
-    typeof parsed.data.ticket === "string"
-      ? parsed.data.ticket
-      : undefined;
-
   const run = await start(entry.workflow, [{ ...parsed.data, ...injection }], {
     attributes: {
       [CLEANUP_DIRECTIVE_ATTRIBUTE]: "automatic",
       [CLEANUP_STATE_ATTRIBUTE]: encodeCleanupProgress({ status: "waiting" }),
-      ...(ticket === undefined ? {} : { [RUN_TICKET_ATTRIBUTE]: ticket }),
     },
     allowReservedAttributes: true,
   });
