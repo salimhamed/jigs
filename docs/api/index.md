@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.71.0
+# @jigs-ai/jigs v0.72.0
 
 Factory and workflow definitions, harness and model descriptors, types and pure helpers.
 
@@ -97,7 +97,7 @@ Operating settings and deferred workflow modules declared by a factory.
 
 ###### identities?
 
-> `optional` **identities**: (\{ `mode`: `"pat"`; \} \| \{ `appId`: `number`; `coAuthor?`: `string`; `installations`: `Record`\<`string`, `number`\>; `mode`: `"app"`; `operator`: `string`; `privateKeyPath`: `string`; \})[]
+> `optional` **identities**: (\{ `appId`: `number`; `coAuthor?`: `string`; `installations`: `Record`\<`string`, `number`\>; `mode`: `"app"`; `operator`: `string`; `privateKeyPath`: `string`; \} \| \{ `mode`: `"pat"`; \})[]
 
 ###### mergeApproval?
 
@@ -113,6 +113,10 @@ access token and to `review` with a GitHub App.
 ###### identity?
 
 > `optional` **identity**: \{ `mode`: `"key"`; \} \| \{ `mode`: `"app"`; \}
+
+###### operator?
+
+> `optional` **operator**: `string`
 
 ##### release?
 
@@ -233,6 +237,24 @@ may start.
 
 > **inputs**: `S`
 
+##### linear?
+
+> `optional` **linear**: [`WorkflowLinearDefinition`](#workflowlineardefinition)
+
+Linear settings for this workflow alone. `operator` replaces the factory's
+`linear.operator` for every Linear comment the workflow posts: each one
+mentions this person and the ticket's assignee.
+
+###### Example
+
+```ts
+export default defineWorkflow({
+  inputs,
+  linear: { operator: "dana@example.com" },
+  workflow: shipTicket,
+});
+```
+
 ##### release?
 
 > `optional` **release**: `object`
@@ -289,6 +311,19 @@ export default defineWorkflow({
 
 ***
 
+### WorkflowLinearDefinition
+
+A workflow's own Linear settings. Only the operator, the Linear user's email,
+can differ from the factory's.
+
+#### Properties
+
+##### operator?
+
+> `optional` **operator**: `string`
+
+***
+
 ### BindingDefinition
 
 > **BindingDefinition** = `z.input`\<*typeof* `bindingSchema`\>
@@ -335,14 +370,23 @@ github: { identities: [{ mode: "pat" }], mergeApproval: "label" },
 
 > **LinearDefinition** = `z.input`\<*typeof* `linearSchema`\>
 
-Who jigs is on Linear: `key` acts as the user whose `LINEAR_API_KEY` is in
-`.env`, `app` acts as a Linear OAuth application from `LINEAR_CLIENT_ID` and
+Who jigs is on Linear, and who its comments mention.
+
+#### Remarks
+
+`identity`: `key` acts as the user whose `LINEAR_API_KEY` is in `.env`, `app`
+acts as a Linear OAuth application from `LINEAR_CLIENT_ID` and
 `LINEAR_CLIENT_SECRET`. Defaults to `key`.
+
+`operator` is the email of the Linear user who runs the factory. With it,
+every Linear comment jigs posts mentions the operator and the ticket's
+assignee; without it, the ticket's creator and assignee. `jigs doctor` fails
+when no Linear user has the email.
 
 #### Example
 
 ```ts
-linear: { identity: { mode: "app" } },
+linear: { identity: { mode: "app" }, operator: "salim@example.com" },
 ```
 
 ***
@@ -1733,7 +1777,9 @@ What the ticket comment says, in the words a stranger to the repo reads.
 names the routine it paused in so the footer can say so, `about` restates the
 ticket itself, `notes` are plain bullet lines, and `onReply` decides what
 the comment asks the human to do: choose between the questions ("continue")
-or repair something and let the step run again ("retry").
+or repair something and let the step run again ("retry"). `mention` adds
+people, by Linear email, to the operator (or the creator) and the assignee
+the comment already mentions; an email no Linear user has is skipped.
 
 #### Properties
 
@@ -1744,6 +1790,10 @@ or repair something and let the step run again ("retry").
 ##### headline
 
 > **headline**: `string`
+
+##### mention?
+
+> `optional` **mention**: `string`[]
 
 ##### notes?
 
@@ -1928,6 +1978,14 @@ What the reader should do with it.
 > **headline**: `string`
 
 One plain sentence naming what jigs is about to do, or has stopped doing.
+
+##### mention?
+
+> `optional` **mention**: `string`[]
+
+More people to mention, by Linear email, beyond the operator (or the
+creator) and the assignee. Each person is named once; an email no Linear
+user has is skipped with a warning.
 
 ##### notes
 

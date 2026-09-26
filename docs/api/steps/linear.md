@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.71.0
+# @jigs-ai/jigs v0.72.0
 
 Low-level Linear operations for factory-owned steps. Workflow code calls their
 `#jigs/steps` wrappers; higher-level waiting such as `haltForHuman` comes from
@@ -212,7 +212,7 @@ Look for a reply since the last check, excluding every comment the run posted.
 
 ### postTicketHumanInputRequest()
 
-> **postTicketHumanInputRequest**(`issueId`, `halt`, `metadata`, `render`): `Promise`\<\{ `commentId`: `string`; `postedAt`: `string`; \}\>
+> **postTicketHumanInputRequest**(`issueId`, `halt`, `metadata`, `definition`, `render`): `Promise`\<\{ `commentId`: `string`; `postedAt`: `string`; \}\>
 
 Post a question or failure on the ticket so a person can help the run continue.
 
@@ -230,6 +230,10 @@ Post a question or failure on the ticket so a person can help the run continue.
 
 `NamedRunMetadata`
 
+##### definition
+
+`FactoryDefinition`
+
 ##### render
 
 [`RenderNeedsHumanComment`](#renderneedshumancomment) = `renderNeedsHumanComment`
@@ -238,11 +242,18 @@ Post a question or failure on the ticket so a person can help the run continue.
 
 `Promise`\<\{ `commentId`: `string`; `postedAt`: `string`; \}\>
 
+#### Remarks
+
+Mentions the operator (the workflow's `linear.operator`, else the factory's),
+or the ticket's creator when neither is set, then the assignee and the halt's
+`mention` emails, each person once. A person Linear cannot find is skipped
+with a warning; the comment always posts.
+
 ***
 
 ### postTicketNote()
 
-> **postTicketNote**(`issueId`, `note`, `render`): `Promise`\<\{ `commentId`: `string`; \}\>
+> **postTicketNote**(`issueId`, `note`, `metadata`, `definition`, `render`): `Promise`\<\{ `commentId`: `string`; \}\>
 
 Tell ticket participants something the run decided, without waiting for a reply.
 
@@ -256,6 +267,14 @@ Tell ticket participants something the run decided, without waiting for a reply.
 
 `TicketNote`
 
+##### metadata
+
+`NamedRunMetadata`
+
+##### definition
+
+`FactoryDefinition`
+
 ##### render
 
 [`RenderTicketNote`](#renderticketnote) = `renderTicketNote`
@@ -263,6 +282,11 @@ Tell ticket participants something the run decided, without waiting for a reply.
 #### Returns
 
 `Promise`\<\{ `commentId`: `string`; \}\>
+
+#### Remarks
+
+Mentions the same people as [postTicketHumanInputRequest](#posttickethumaninputrequest), with the
+note's `mention` emails as the extras.
 
 ## Rendering/customization
 
@@ -344,7 +368,11 @@ Renders a non-blocking Linear note for ticket participants.
 
 > **TicketParticipants** = `object`
 
-Who the comment greets. Either may be absent, and they are often the same.
+Who the comment is for. `mentions` is the final list the comment greets, in
+order and each person once: the operator (or, without one, the ticket's
+creator), the assignee, then any extra people the step was asked to mention.
+A custom renderer greets `mentions` rather than working it out again; the
+other fields are there for context and may be null.
 
 #### Properties
 
@@ -355,6 +383,16 @@ Who the comment greets. Either may be absent, and they are often the same.
 ##### creator
 
 > **creator**: `LinearUser` \| `null`
+
+##### mentions
+
+> **mentions**: `LinearUser`[]
+
+##### operator
+
+> **operator**: `LinearUser` \| `null`
+
+The configured operator, or null when none is set or Linear could not find them.
 
 ***
 

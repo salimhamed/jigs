@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.71.0
+# @jigs-ai/jigs v0.72.0
 
 Workflow operations bound to your factory's durable step wrappers.
 Routines compose recorded steps and waits; they have no recorded result of their own.
@@ -263,7 +263,9 @@ Ask for help on the Linear ticket and wait for a human reply.
 
 Posts the question on the claimed Linear ticket and waits for a verified human
 reply. Polling and optional webhooks recheck the ticket. Answer on the ticket
-to continue the same run; `jigs poke` only requests a recheck.
+to continue the same run; `jigs poke` only requests a recheck. The comment
+mentions the operator (or the ticket's creator) and the assignee; list more
+emails in the halt's `mention`.
 
 ***
 
@@ -311,6 +313,12 @@ Clarify a Linear ticket and prepare an implementation brief.
 
 `Harness`
 
+###### mention?
+
+`string`[]
+
+More people, by Linear email, for the review's note and questions to mention.
+
 ###### on?
 
 \{ `humanReplied?`: () => `Promise`\<`void`\>; `needsHuman?`: () => `Promise`\<`void`\>; \}
@@ -341,9 +349,10 @@ Optional workflow policy around a human clarification.
 
 ### runAgentOrHalt()
 
-> `const` **runAgentOrHalt**: \<`T`\>(`claim`, `config`) => `Promise`\<`AgentResult`\<`T`\>\> = `linear.runAgentOrHalt`
+> `const` **runAgentOrHalt**: \<`T`\>(`claim`, `config`, `options?`) => `Promise`\<`AgentResult`\<`T`\>\> = `linear.runAgentOrHalt`
 
 Run an agent, asking a human to fix missing capabilities before retrying.
+A third argument, `{ mention }`, lists more emails for the request to mention.
 
 #### Type Parameters
 
@@ -360,6 +369,10 @@ Run an agent, asking a human to fix missing capabilities before retrying.
 ##### config
 
 `RunAgentOptions`\<`T`\>
+
+##### options?
+
+`RunAgentOrHaltOptions`
 
 #### Returns
 
