@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import {
+  type GithubIdentity,
   type LinearIdentity,
   type ResolvedService,
   readFactoryConfig,
@@ -82,9 +83,9 @@ export interface UpOptions {
 
 // Read by the suspension primitives; empty slots are the expected state of a
 // freshly copied .env, so they are reported, not refused.
-const credentialSlots = (linear: LinearIdentity): string[] => [
+const credentialSlots = (linear: LinearIdentity, github: GithubIdentity[]): string[] => [
   ...LINEAR_IDENTITY_VARIABLES[linear.mode],
-  "GITHUB_TOKEN",
+  ...(github.some((identity) => identity.mode === "pat") ? ["GITHUB_TOKEN"] : []),
 ];
 
 export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<UpResult> {
@@ -93,7 +94,7 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
   const result: UpResult = { ok: false, steps: runner.steps };
 
   try {
-    const { factoryRoot, service, linear } = await runner.run("locate", (note) => {
+    const { factoryRoot, service, linear, github } = await runner.run("locate", (note) => {
       const located = locate(deps.cwd);
       note(located.factoryRoot);
       return located;
@@ -109,7 +110,7 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
     };
 
     const env = await runner.run("env", () => ensureEnv(factoryRoot));
-    reportEmptyCredentials(env, credentialSlots(linear), deps.out);
+    reportEmptyCredentials(env, credentialSlots(linear, github), deps.out);
 
     await runner.run("install", () =>
       execOrExplain(execFile, "pnpm", ["install"], { cwd: factoryRoot }, deps.out, {
@@ -196,10 +197,17 @@ function locate(cwd: string): {
   factoryRoot: string;
   service: ResolvedService;
   linear: LinearIdentity;
+  github: GithubIdentity[];
 } {
   const factoryRoot = locateFactoryRoot(cwd);
   const service = resolveService(factoryRoot);
-  return { factoryRoot, service, linear: readFactoryConfig(factoryRoot).linear.identity };
+  const config = readFactoryConfig(factoryRoot);
+  return {
+    factoryRoot,
+    service,
+    linear: config.linear.identity,
+    github: config.github.identities,
+  };
 }
 
 // Never copied for the operator: a .env is where they decide which

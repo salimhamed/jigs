@@ -23,6 +23,7 @@ export interface FactoryShape {
   compose?: boolean;
   config?: boolean;
   linearIdentity?: "key" | "app";
+  githubIdentity?: "pat" | "app";
   bins?: string[];
 }
 
@@ -43,9 +44,13 @@ export function factory(tmp: string, shape: FactoryShape): string {
     );
   }
   if (shape.config !== false) {
+    const github =
+      shape.githubIdentity === "app"
+        ? `github: {identities: [{mode: "app", appId: 1, installations: {acme: 2}, privateKeyPath: "app.pem", operator: "octocat"}]}, `
+        : "";
     writeFileSync(
       path.join(root, "jigs.config.ts"),
-      `export default {service: {port: ${shape.port}, dashboardPort: 9200}, linear: {identity: {mode: "${shape.linearIdentity ?? "key"}"}}, workflows: {}};\n`,
+      `export default {service: {port: ${shape.port}, dashboardPort: 9200}, linear: {identity: {mode: "${shape.linearIdentity ?? "key"}"}}, ${github}workflows: {}};\n`,
     );
   }
   const bin = path.join(root, "node_modules", ".bin");
