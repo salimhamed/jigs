@@ -9,7 +9,8 @@
 // different-looking comment passes its own function from its step wrapper and
 // replaces no step.
 
-import { createComment, listCommentsSince } from "../../providers/linear.ts";
+import { createHash } from "node:crypto";
+import { createComment, findComment, listCommentsSince } from "../../providers/linear.ts";
 import type { FactoryDefinition } from "../../workflow/factory.ts";
 import type {
   CheckForTicketHumanReply,
@@ -52,11 +53,17 @@ export const postTicketHumanInputRequest = async (
     workflow: metadata.workflowName,
     dashboardUrl: dashboardRunUrl(metadata.workflowRunId),
   };
-  const participants = await resolveParticipants(issueId, {
-    operator: definition.linear?.operator,
-    mention: halt.mention,
-  });
-  const comment = await createComment(issueId, render(halt, context, participants));
+  const comment = await postOnce(
+    ticketCommentId(metadata.workflowRunId, issueId, { halt }),
+    issueId,
+    async () => {
+      const participants = await resolveParticipants(issueId, {
+        operator: definition.linear?.operator,
+        mention: halt.mention,
+      });
+      return render(halt, context, participants);
+    },
+  );
   console.log(`[postTicketHumanInputRequest] posted comment=${comment.id} issue=${issueId}`);
   return { commentId: comment.id, postedAt: comment.createdAt };
 };
@@ -73,17 +80,60 @@ export const postTicketHumanInputRequest = async (
 export const postTicketNote = async (
   issueId: string,
   note: TicketNote,
+  metadata: NamedRunMetadata,
   definition: Pick<FactoryDefinition, "linear">,
   render: RenderTicketNote = renderTicketNote,
 ): ReturnType<PostTicketNote> => {
-  const participants = await resolveParticipants(issueId, {
-    operator: definition.linear?.operator,
-    mention: note.mention,
-  });
-  const comment = await createComment(issueId, render(note, participants));
+  const comment = await postOnce(
+    ticketCommentId(metadata.workflowRunId, issueId, { note }),
+    issueId,
+    async () => {
+      const participants = await resolveParticipants(issueId, {
+        operator: definition.linear?.operator,
+        mention: note.mention,
+      });
+      return render(note, participants);
+    },
+  );
   console.log(`[postTicketNote] posted comment=${comment.id} issue=${issueId}`);
   return { commentId: comment.id };
 };
+
+/**
+ * The id a run's comment is created under: a UUID v4 derived from the run, the issue and what the
+ * comment says, so a retry of the same post names the same comment. It hashes the input rather
+ * than the rendered text, which @-mentions participants who can change between attempts.
+ */
+export function ticketCommentId(runId: string, issueId: string, input: unknown): string {
+  const hex = createHash("sha256")
+    .update(JSON.stringify([runId, issueId, input]))
+    .digest("hex")
+    .slice(0, 32)
+    .split("");
+  hex[12] = "4";
+  hex[16] = "89ab"[Number.parseInt(hex[16] ?? "0", 16) % 4] ?? "8";
+  const id = hex.join("");
+  return `${id.slice(0, 8)}-${id.slice(8, 12)}-${id.slice(12, 16)}-${id.slice(16, 20)}-${id.slice(20)}`;
+}
+
+// A step retry may follow a create whose response was lost. The comment then
+// already exists under this id, and creating it again would either post a
+// duplicate or fail on the id, so look first and look again after a failure.
+async function postOnce(
+  id: string,
+  issueId: string,
+  body: () => Promise<string>,
+): Promise<{ id: string; createdAt: string }> {
+  const existing = await findComment(id);
+  if (existing !== null) return existing;
+  try {
+    return await createComment(issueId, await body(), id);
+  } catch (error) {
+    const created = await findComment(id).catch(() => null);
+    if (created !== null) return created;
+    throw error;
+  }
+}
 
 /**
  * Look for a reply since the last check, excluding every comment the run posted.

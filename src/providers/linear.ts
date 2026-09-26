@@ -246,13 +246,15 @@ export async function fetchIssueSnapshot(issueId: string): Promise<RawIssueSnaps
 }
 
 /**
- * Post a comment on a ticket.
+ * Post a comment on a ticket. An `id` (UUID v4) names the comment in advance, so a caller can
+ * find it again after a lost response instead of posting twice.
  *
  * @group Create and update
  */
 export async function createComment(
   issueId: string,
   body: string,
+  id?: string,
 ): Promise<{ id: string; createdAt: string }> {
   const data = await linearGraphql<{
     commentCreate: {
@@ -263,12 +265,30 @@ export async function createComment(
     `mutation CreateComment($input: CommentCreateInput!) {
       commentCreate(input: $input) { success comment { id createdAt } }
     }`,
-    { input: { issueId, body } },
+    { input: { issueId, body, ...(id === undefined ? {} : { id }) } },
   );
   if (!data.commentCreate.success) {
     throw new Error(`Linear commentCreate failed for issue ${issueId}`);
   }
   return data.commentCreate.comment;
+}
+
+/**
+ * A comment by id, or null when none exists. Filters rather than fetching by id, so a missing
+ * comment is an empty answer and not an error.
+ *
+ * @group Resolve and read
+ */
+export async function findComment(id: string): Promise<{ id: string; createdAt: string } | null> {
+  const data = await linearGraphql<{
+    comments: { nodes: Array<{ id: string; createdAt: string }> };
+  }>(
+    `query FindComment($id: ID!) {
+      comments(filter: { id: { eq: $id } }, first: 1) { nodes { id createdAt } }
+    }`,
+    { id },
+  );
+  return data.comments.nodes[0] ?? null;
 }
 
 /** One comment by id: where a human replies to it, and what it says. Linear
