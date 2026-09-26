@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.73.0
+# @jigs-ai/jigs v0.74.0
 
 Low-level Linear operations for factory-owned steps. Workflow code calls their
 `#jigs/steps` wrappers; higher-level waiting such as `haltForHuman` comes from
@@ -142,9 +142,10 @@ The before-and-after state names from a ticket status update.
 
 ### createComment()
 
-> **createComment**(`issueId`, `body`): `Promise`\<\{ `createdAt`: `string`; `id`: `string`; \}\>
+> **createComment**(`issueId`, `body`, `id?`): `Promise`\<\{ `createdAt`: `string`; `id`: `string`; \}\>
 
-Post a comment on a ticket.
+Post a comment on a ticket. An `id` (UUID v4) names the comment in advance, so a caller can
+find it again after a lost response instead of posting twice.
 
 #### Parameters
 
@@ -153,6 +154,10 @@ Post a comment on a ticket.
 `string`
 
 ##### body
+
+`string`
+
+##### id?
 
 `string`
 
@@ -228,7 +233,7 @@ Post a question or failure on the ticket so a person can help the run continue.
 
 ##### metadata
 
-`NamedRunMetadata`
+`StepRunMetadata`
 
 ##### definition
 
@@ -254,7 +259,7 @@ in, so a changed operator takes effect after a rebuild, which `jigs up` does.
 
 ### postTicketNote()
 
-> **postTicketNote**(`issueId`, `note`, `definition`, `render`): `Promise`\<\{ `commentId`: `string`; \}\>
+> **postTicketNote**(`issueId`, `note`, `metadata`, `definition`, `render`): `Promise`\<\{ `commentId`: `string`; \}\>
 
 Tell ticket participants something the run decided, without waiting for a reply.
 
@@ -267,6 +272,10 @@ Tell ticket participants something the run decided, without waiting for a reply.
 ##### note
 
 `TicketNote`
+
+##### metadata
+
+`StepRunMetadata`
 
 ##### definition
 

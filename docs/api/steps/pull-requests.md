@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.73.0
+# @jigs-ai/jigs v0.74.0
 
 Low-level GitHub operations for factory-owned steps. Call their durable
 `#jigs/steps` wrappers from workflow code.
