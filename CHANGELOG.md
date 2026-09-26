@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.71.0](https://github.com/salimhamed/jigs/compare/jigs-v0.70.0...jigs-v0.71.0) (2026-09-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* stop everything the service started and prune on macOS and Linux ([#421](https://github.com/salimhamed/jigs/issues/421))
+
+### Features
+
+* stop everything the service started and prune on macOS and Linux ([#421](https://github.com/salimhamed/jigs/issues/421)) ([8f6efca](https://github.com/salimhamed/jigs/commit/8f6efcab2fa796c2c0ce9c2b6652d340bf1b0405))
+
 ## [0.70.0](https://github.com/salimhamed/jigs/compare/jigs-v0.69.2...jigs-v0.70.0) (2026-09-26)
 
 
