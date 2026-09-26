@@ -162,9 +162,14 @@ export const linearIdentitySchema = z.discriminatedUnion("mode", [
   z.strictObject({ mode: z.literal("app") }),
 ]);
 
-/** A factory's Linear settings. It holds exactly one Linear identity. */
+/**
+ * A factory's Linear settings: exactly one Linear identity, and optionally the
+ * operator, the Linear user's email that every comment jigs posts mentions
+ * together with the ticket's assignee.
+ */
 export const linearSchema = z.strictObject({
   identity: linearIdentitySchema.default({ mode: "key" }),
+  operator: z.email().optional(),
 });
 
 /** Resolve the credentials for one account. */

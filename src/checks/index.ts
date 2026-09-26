@@ -6,7 +6,7 @@ import {
 import { factoryRoot } from "../config/factory-root.ts";
 import { getAuthenticatedUser } from "../providers/github.ts";
 import { resolveGithubIdentities } from "../providers/github-auth.ts";
-import { getViewer } from "../providers/linear.ts";
+import { findUserByEmail, getViewer } from "../providers/linear.ts";
 import { resolveLinearIdentity } from "../providers/linear-auth.ts";
 import { driverFor, type HarnessTarget } from "../steps/agents/drivers/index.ts";
 import type {
@@ -38,7 +38,12 @@ import {
   requiredHarnessKinds,
   usedHarnessChecks,
 } from "./harnesses.ts";
-import { type LinearIdentityProbes, linearIdentityChecks } from "./linear-identity.ts";
+import {
+  type LinearIdentityProbes,
+  linearIdentityChecks,
+  linearOperatorChecks,
+  type OperatorSetting,
+} from "./linear-identity.ts";
 import { linearWebhookChecks } from "./linear-webhook.ts";
 import { mcpServerChecks } from "./mcp.ts";
 import { webhookChecks } from "./webhooks.ts";
@@ -76,7 +81,13 @@ export {
   harnessChecks,
   harnessRuntimeCheck,
 } from "./harnesses.ts";
-export { type LinearIdentityProbes, linearIdentityChecks } from "./linear-identity.ts";
+export {
+  type LinearIdentityProbes,
+  type LinearOperatorProbes,
+  linearIdentityChecks,
+  linearOperatorChecks,
+  type OperatorSetting,
+} from "./linear-identity.ts";
 export { codexWorktreeConfigCheck, mcpServerChecks } from "./mcp.ts";
 export { type WebhookChecksOptions, webhookChecks } from "./webhooks.ts";
 
@@ -131,6 +142,29 @@ function linearChecks(): Check[] {
   return linearIdentityChecks(identity, linearProbes);
 }
 
+// The factory's operator and every workflow override. An unreadable config is
+// the identity check's diagnosis, so it adds nothing here.
+function linearOperatorDoctorChecks(workflows: WorkflowManifests): Check[] {
+  let identity: LinearIdentity;
+  let factoryOperator: string | undefined;
+  try {
+    identity = resolveLinearIdentity();
+    factoryOperator = readFactoryConfig(factoryRoot()).linear.operator;
+  } catch {
+    return [];
+  }
+  const settings: OperatorSetting[] = [
+    ...(factoryOperator === undefined ? [] : [{ email: factoryOperator }]),
+    ...Object.entries(workflows).flatMap(([workflow, entry]) =>
+      entry.linear?.operator === undefined ? [] : [{ email: entry.linear.operator, workflow }],
+    ),
+  ];
+  return linearOperatorChecks(identity, settings, {
+    viewer: getViewer,
+    userByEmail: findUserByEmail,
+  });
+}
+
 export function preflightChecks(
   requires: WorkflowRequires,
   inputs?: Record<string, unknown>,
@@ -168,7 +202,10 @@ function configuredProviders(): Record<Integration, boolean> {
         Object.keys(bindings).length > 0 ||
         (webhooks?.github.enabled ?? false) ||
         github.identities.some((identity) => identity.mode === "app"),
-      linear: (webhooks?.linear.enabled ?? false) || linear.identity.mode === "app",
+      linear:
+        (webhooks?.linear.enabled ?? false) ||
+        linear.identity.mode === "app" ||
+        linear.operator !== undefined,
     };
   } catch {
     return { github: false, linear: false };
@@ -183,13 +220,17 @@ export function doctorChecks(workflows: WorkflowManifests): Check[] {
     ...(requires.aws ? (["aws"] as const) : []),
   ]);
   const configured = configuredProviders();
+  // An operator override asks for Linear even where no workflow requires it.
+  if (Object.values(workflows).some((entry) => entry.linear?.operator !== undefined)) {
+    configured.linear = true;
+  }
   const provider = (name: Integration, checks: () => Check[]): Check[] => {
     const needing = users.get(name) ?? [];
     return needing.length > 0 || configured[name] ? neededByWorkflows(checks(), needing) : [];
   };
   const aws = users.get("aws") ?? [];
   return [
-    ...provider("linear", linearChecks),
+    ...provider("linear", () => [...linearChecks(), ...linearOperatorDoctorChecks(workflows)]),
     ...provider("github", githubChecks),
     // Keyed on the config rather than the Linear credential: a Linear webhook
     // switched on without its secret is a failure even where that is missing too.

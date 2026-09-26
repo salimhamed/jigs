@@ -426,6 +426,16 @@ test("a Linear identity is key or app and carries nothing else", () => {
   expect(() => withSettings({ linear: { identities: [{ mode: "key" }] } })).toThrow("identities");
 });
 
+test("a Linear operator is optional and must be an email", () => {
+  expect(withSettings({ linear: { operator: "salim@example.com" } }).linear).toEqual({
+    identity: { mode: "key" },
+    operator: "salim@example.com",
+  });
+  expect(withSettings({ linear: {} }).linear.operator).toBeUndefined();
+  expect(() => withSettings({ linear: { operator: "salim" } })).toThrow("linear.operator");
+  expect(() => withSettings({ linear: { operator: "" } })).toThrow("linear.operator");
+});
+
 const APP_IDENTITY = {
   mode: "app",
   appId: 1,

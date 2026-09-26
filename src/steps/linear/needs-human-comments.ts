@@ -9,7 +9,8 @@
 // different-looking comment passes its own function from its step wrapper and
 // replaces no step.
 
-import { createComment, getIssueParticipants, listCommentsSince } from "../../providers/linear.ts";
+import { createComment, listCommentsSince } from "../../providers/linear.ts";
+import type { FactoryDefinition } from "../../workflow/factory.ts";
 import type {
   CheckForTicketHumanReply,
   Halt,
@@ -18,6 +19,7 @@ import type {
 } from "../../workflow/linear/halt-for-human.ts";
 import type { PostTicketNote, TicketNote } from "../../workflow/linear/review.ts";
 import { dashboardRunUrl, type NamedRunMetadata } from "../runtime/run-context.ts";
+import { resolveParticipants, runOperator } from "./mentions.ts";
 import {
   type NeedsHumanContext,
   type RenderNeedsHumanComment,
@@ -29,12 +31,19 @@ import {
 /**
  * Post a question or failure on the ticket so a person can help the run continue.
  *
+ * @remarks
+ * Mentions the operator (the workflow's `linear.operator`, else the factory's),
+ * or the ticket's creator when neither is set, then the assignee and the halt's
+ * `mention` emails, each person once. A person Linear cannot find is skipped
+ * with a warning; the comment always posts.
+ *
  * @group Human interaction primitives
  */
 export const postTicketHumanInputRequest = async (
   issueId: string,
   halt: Halt,
   metadata: NamedRunMetadata,
+  definition: FactoryDefinition,
   render: RenderNeedsHumanComment = renderNeedsHumanComment,
 ): ReturnType<PostTicketHumanInputRequest> => {
   const context: NeedsHumanContext = {
@@ -42,7 +51,10 @@ export const postTicketHumanInputRequest = async (
     workflow: metadata.workflowName,
     dashboardUrl: dashboardRunUrl(metadata.workflowRunId),
   };
-  const participants = await getIssueParticipants(issueId);
+  const participants = await resolveParticipants(issueId, {
+    operator: await runOperator(metadata, definition),
+    mention: halt.mention,
+  });
   const comment = await createComment(issueId, render(halt, context, participants));
   console.log(`[postTicketHumanInputRequest] posted comment=${comment.id} issue=${issueId}`);
   return { commentId: comment.id, postedAt: comment.createdAt };
@@ -51,14 +63,23 @@ export const postTicketHumanInputRequest = async (
 /**
  * Tell ticket participants something the run decided, without waiting for a reply.
  *
+ * @remarks
+ * Mentions the same people as {@link postTicketHumanInputRequest}, with the
+ * note's `mention` emails as the extras.
+ *
  * @group Human interaction primitives
  */
 export const postTicketNote = async (
   issueId: string,
   note: TicketNote,
+  metadata: NamedRunMetadata,
+  definition: FactoryDefinition,
   render: RenderTicketNote = renderTicketNote,
 ): ReturnType<PostTicketNote> => {
-  const participants = await getIssueParticipants(issueId);
+  const participants = await resolveParticipants(issueId, {
+    operator: await runOperator(metadata, definition),
+    mention: note.mention,
+  });
   const comment = await createComment(issueId, render(note, participants));
   console.log(`[postTicketNote] posted comment=${comment.id} issue=${issueId}`);
   return { commentId: comment.id };

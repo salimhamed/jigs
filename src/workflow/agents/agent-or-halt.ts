@@ -16,6 +16,12 @@ export interface RunAgentOrHaltDependencies {
   haltForHuman: HaltForHumanFn;
 }
 
+/** Who else the repair request mentions on the ticket. */
+export interface RunAgentOrHaltOptions {
+  /** More people, by Linear email, beyond the operator (or the creator) and the assignee. */
+  mention?: string[] | undefined;
+}
+
 // Unbounded on purpose: the halt is a pause the human ends, and each loop
 // iteration is a fresh step slot, which is what makes the retry a re-run
 // from zero rather than a replay of the memoized failure.
@@ -24,6 +30,7 @@ export async function runAgentOrHalt<T = undefined>(
   claim: TicketClaim,
   config: RunAgentOptions<T>,
   deps: RunAgentOrHaltDependencies,
+  options: RunAgentOrHaltOptions = {},
 ): Promise<AgentResult<T>> {
   for (;;) {
     try {
@@ -36,6 +43,7 @@ export async function runAgentOrHalt<T = undefined>(
         // The comment is not a console: one failure, one plain line.
         notes: err.failures.map(({ label, reason, repair }) => `${label}: ${reason}. ${repair}`),
         onReply: "retry",
+        mention: options.mention,
       });
     }
   }

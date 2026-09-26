@@ -79,8 +79,9 @@ const fakeFetchSnapshot = async (issueId: string): Promise<TicketSnapshot> => {
   };
 };
 
-const review = () =>
+const review = (mention?: string[]) =>
   reviewTicket({
+    mention,
     runAgent: fakeAgent,
     haltForHuman: fakeHaltForHuman,
     postTicketNote: fakePostTicketNote,
@@ -219,6 +220,13 @@ test("a needs-human verdict routes the questions and the about to haltForHuman, 
     onReply: "continue",
   });
   expect(JSON.stringify(call?.halt)).not.toContain("SECRET-BRIEF-TEXT");
+});
+
+test("extra mentions reach both the assumptions note and the questions", async () => {
+  verdicts = [needsHuman(), proceed({ assumptions: ["Only the validate script changes."] })];
+  await review(["dana@example.com"]);
+  expect(humanCalls[0]?.halt.mention).toEqual(["dana@example.com"]);
+  expect(noteCalls[0]?.mention).toEqual(["dana@example.com"]);
 });
 
 test("a needs-human verdict with nothing to say about the ticket carries no about", async () => {

@@ -89,12 +89,15 @@ const linear = bindLinearSteps({
  * @remarks
  * Posts the question on the claimed Linear ticket and waits for a verified human
  * reply. Polling and optional webhooks recheck the ticket. Answer on the ticket
- * to continue the same run; `jigs poke` only requests a recheck.
+ * to continue the same run; `jigs poke` only requests a recheck. The comment
+ * mentions the operator (or the ticket's creator) and the assignee; list more
+ * emails in the halt's `mention`.
  */
 export const haltForHuman = linear.haltForHuman;
 
 /**
  * Run an agent, asking a human to fix missing capabilities before retrying.
+ * A third argument, `{ mention }`, lists more emails for the request to mention.
  *
  * @group Linear and human input
  */
