@@ -1,4 +1,10 @@
-import { describeHarness, type Harness, harnesses, type PullRequestSnapshot } from "@jigs-ai/jigs";
+import {
+  describeHarness,
+  type Harness,
+  harnesses,
+  type JevQuestions,
+  type PullRequestSnapshot,
+} from "@jigs-ai/jigs";
 import { beforeEach, expect, test, vi } from "vitest";
 import { createHook, sleep } from "workflow";
 import * as routines from "#jigs/routines";
@@ -27,6 +33,7 @@ vi.mock("#jigs/routines", async (importOriginal) => {
 });
 vi.mock("#jigs/steps", async (importOriginal) => ({
   ...(await importOriginal<typeof import("#jigs/steps")>()),
+  executeJev: vi.fn(),
   fetchPullRequestState: vi.fn(),
   mergePullRequest: vi.fn(),
   openPullRequest: vi.fn(),
@@ -70,6 +77,33 @@ let answers: Map<unknown, unknown[]>;
 function answer(schema: unknown, ...outputs: unknown[]) {
   answers.set(schema, [...(answers.get(schema) ?? []), ...outputs]);
 }
+// Jev answers are queued by decision site. An unqueued decision is unsure, so
+// the site behaves exactly as it did before Jev.
+let decisions: Map<string, unknown[]>;
+function jev(site: string, ...replies: unknown[]) {
+  decisions.set(site, [...(decisions.get(site) ?? []), ...replies]);
+}
+const sure = (choice: string) => ({
+  decision: { choice, probabilities: { [choice]: 0.97 }, confidence: 0.97 },
+});
+const scored = (score: number, confidence = 0.95) => ({
+  decision: { score, probabilities: {}, legend: {}, confidence },
+});
+function unsure(questions: JevQuestions) {
+  return Object.fromEntries(
+    Object.entries(questions).map(([key, question]) => [
+      key,
+      question.type === "yes-no"
+        ? { probability: 0.5 }
+        : question.type === "choice"
+          ? { choice: Object.keys(question.options)[0], probabilities: {}, confidence: 0.3 }
+          : { score: 0, probabilities: {}, legend: {}, confidence: 0.3 },
+    ]),
+  );
+}
+const asked = (site: string) =>
+  vi.mocked(steps.executeJev).mock.calls.filter(([wire]) => wire.site === site);
+
 let head: { headSha: string; dirty: boolean; commits: number };
 const at = (headSha: string, dirty = false) => {
   head = { headSha, dirty, commits: 1 };
@@ -79,6 +113,16 @@ beforeEach(() => {
   vi.clearAllMocks();
   calls = [];
   answers = new Map();
+  decisions = new Map();
+  vi.mocked(steps.executeJev).mockImplementation((async (wire: {
+    site?: string;
+    questions: JevQuestions;
+  }) => {
+    const queued = decisions.get(wire.site ?? "")?.shift();
+    return {
+      answers: typeof queued === "function" ? queued(wire) : (queued ?? unsure(wire.questions)),
+    };
+  }) as never);
   at("h1");
   vi.mocked(steps.pushBranch).mockResolvedValue({ headSha: "h1" });
   vi.mocked(steps.fetchPullRequestState).mockResolvedValue(snapshot);
@@ -620,4 +664,152 @@ test("maintenance failure note names the retained path once and directs takeover
   expect(note.closing).toContain("take over");
   expect(note.closing).not.toContain("Start another run");
   expect(note.closing).not.toContain("resume");
+});
+
+// ---- Jev decisions ------------------------------------------------------------
+
+test("a stalled review stops early instead of spending the rest of the budget", async () => {
+  const blocked = {
+    verdict: "changes-requested",
+    findings: [{ summary: "Broken", blocking: true }],
+  };
+  answer(implementationReport, { responses: [] }, { responses: [] });
+  answer(reviewVerdict, blocked, blocked);
+  jev("review-convergence", scored(2));
+
+  const error = await stopped(
+    implementAndReview({ ...delivery, budget: { ...delivery.budget, reviewRounds: 4 } }, builder()),
+  );
+
+  expect(error.message).toContain("after 2 of 4 review round(s)");
+  expect(error.findings).toEqual(["Broken"]);
+  expect(calls).toHaveLength(4);
+  const [[wire]] = asked("review-convergence") as unknown as [[{ state: { rounds: unknown[] } }]];
+  expect(wire.state.rounds).toHaveLength(2);
+});
+
+test.each([
+  ["converging", scored(0)],
+  ["an unsure stall", scored(2, 0.5)],
+])("%s keeps reviewing until the budget is spent", async (_, reply) => {
+  const blocked = {
+    verdict: "changes-requested",
+    findings: [{ summary: "Broken", blocking: true }],
+  };
+  answer(implementationReport, { responses: [] }, { responses: [] }, { responses: [] });
+  answer(reviewVerdict, blocked, blocked, blocked);
+  jev("review-convergence", reply);
+
+  const error = await stopped(
+    implementAndReview({ ...delivery, budget: { ...delivery.budget, reviewRounds: 3 } }, builder()),
+  );
+
+  expect(error.message).toContain("after 3 review round(s)");
+  expect(asked("review-convergence")).toHaveLength(1);
+});
+
+test("an idle wake runs no builder turn and is not assessed again", async () => {
+  mergesBy("jigs");
+  jev("pull-request-wake", sure("idle"));
+  watch(snapshot, snapshot, closed);
+  await follow();
+  expect(calls).toHaveLength(0);
+  expect(asked("pull-request-wake")).toHaveLength(1);
+  expect(steps.mergePullRequest).not.toHaveBeenCalled();
+});
+
+test("a wake that needs a person stops maintenance without a builder turn", async () => {
+  mergesBy("human");
+  jev("comment-triage", { c5: { choice: "question", probabilities: {}, confidence: 0.95 } });
+  jev("pull-request-wake", sure("human"));
+  watch({
+    ...snapshot,
+    conversationComments: [
+      {
+        id: 5,
+        body: "Keep v1 or drop it?",
+        user: "sam",
+        userType: "User",
+        createdAt: "2026-01-02",
+        updatedAt: "2026-01-02",
+      },
+    ],
+  });
+  const error = await stoppedMaintenance(follow());
+  expect(error.findings[0]).toContain('most recently from sam: "Keep v1 or drop it?"');
+  expect(calls).toHaveLength(0);
+});
+
+test("a merge wake merges through the readiness gate without a builder turn", async () => {
+  mergesBy("jigs");
+  jev("pull-request-wake", sure("merge"));
+  watch(snapshot);
+  vi.mocked(steps.mergePullRequest).mockResolvedValue({ merged: true, mergeCommitSha: "m" });
+  await follow();
+  expect(calls).toHaveLength(0);
+  expect(steps.mergePullRequest).toHaveBeenCalledWith(worktree, pr, "h1");
+});
+
+test("a merge wake on facts that fail the readiness gate goes to the builder", async () => {
+  mergesBy("jigs");
+  answer(maintenanceReport, finished);
+  jev("pull-request-wake", sure("merge"));
+  watch(unapproved, closed);
+  vi.mocked(steps.fetchPullRequestState).mockResolvedValue(unapproved);
+  await follow();
+  expect(calls).toHaveLength(1);
+  expect(steps.mergePullRequest).not.toHaveBeenCalled();
+});
+
+test("a merge wake leaves the merge to a human merger and wakes no builder", async () => {
+  mergesBy("human");
+  jev("pull-request-wake", sure("merge"));
+  watch(snapshot, closed);
+  await follow();
+  expect(calls).toHaveLength(0);
+  expect(steps.mergePullRequest).not.toHaveBeenCalled();
+  expect(steps.fetchPullRequestState).not.toHaveBeenCalled();
+});
+
+const comment = (id: number, body: string, user = "dana") => ({
+  id,
+  body,
+  user,
+  userType: "User",
+  createdAt: `2026-01-0${id}`,
+  updatedAt: `2026-01-0${id}`,
+});
+
+test("new comments triaged as asking nothing, on unchanged facts, skip the wake question", async () => {
+  mergesBy("human");
+  const praised = { ...snapshot, conversationComments: [comment(2, "Nice work 👍")] };
+  answer(maintenanceReport, finished);
+  jev("comment-triage", { c2: { choice: "praise", probabilities: {}, confidence: 0.96 } });
+  watch(snapshot, praised, closed);
+  await follow();
+  expect(calls).toHaveLength(1);
+  expect(asked("pull-request-wake")).toHaveLength(1);
+  expect(asked("comment-triage")).toHaveLength(1);
+});
+
+test("triage labels reach the builder, and only comments it has not seen are triaged", async () => {
+  mergesBy("human");
+  const first = { ...snapshot, conversationComments: [comment(1, "Thanks!")] };
+  const second = {
+    ...first,
+    conversationComments: [...first.conversationComments, comment(2, "Why no retry here?")],
+  };
+  answer(maintenanceReport, finished, finished);
+  jev(
+    "comment-triage",
+    { c1: { choice: "praise", probabilities: {}, confidence: 0.4 } },
+    { c2: { choice: "question", probabilities: {}, confidence: 0.95 } },
+  );
+  watch(first, second, closed);
+  await follow();
+  expect(calls).toHaveLength(2);
+  expect(calls[0]?.prompt).not.toContain("fast classifier");
+  expect(calls[1]?.prompt).toContain("- comment 2 by dana: question");
+  const triaged = asked("comment-triage").map(([wire]) => Object.keys(wire.questions));
+  expect(triaged).toEqual([["c1"], ["c2"]]);
 });
