@@ -42,7 +42,7 @@ beforeAll(async () => {
   db = connectRegistry(testUrl.toString(), { max: 2 });
   await ensureWorktreeRegistry(db);
   mkdirSync(factoryRoot, { recursive: true });
-  const binding = path.join(dataDir, "bindings", factorySlug(factoryRoot), "api");
+  const binding = path.join(dataDir, "clones", factorySlug(factoryRoot), "api");
   ({ repoDir, worktreesDir } = makeClonedBinding(tmp, binding));
 });
 

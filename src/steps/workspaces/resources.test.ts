@@ -23,7 +23,7 @@ beforeEach(() => {
   dataDir = path.join(tmp, "data", "jigs");
   factoryRoot = path.join(tmp, "factory");
   mkdirSync(factoryRoot, { recursive: true });
-  const binding = path.join(dataDir, "bindings", factorySlug(factoryRoot), "api");
+  const binding = path.join(dataDir, "clones", factorySlug(factoryRoot), "api");
   ({ repoDir, remoteDir, worktreesDir } = makeClonedBinding(tmp, binding));
   store = new Map();
 });
@@ -213,7 +213,7 @@ test("nonterminal, cross-factory, unknown-owner, arbitrary URLs and symlink esca
 });
 
 test("a registry row from another factory cannot authorize deletion", async () => {
-  const otherBinding = path.join(dataDir, "bindings", "other-factory", "api");
+  const otherBinding = path.join(dataDir, "clones", "other-factory", "api");
   const otherRepo = path.join(otherBinding, "repo.git");
   const otherTarget = path.join(otherBinding, "worktrees", "foreign");
   mkdirSync(otherRepo, { recursive: true });
@@ -296,7 +296,7 @@ test("a symlinked registry repository cannot escape the factory binding root", a
   const externalParent = path.join(tmp, "external-symlink");
   mkdirSync(externalParent);
   const external = makeClonedBinding(externalParent, path.join(externalParent, "binding"));
-  const binding = path.join(dataDir, "bindings", factorySlug(factoryRoot), "escaped-repo");
+  const binding = path.join(dataDir, "clones", factorySlug(factoryRoot), "escaped-repo");
   const escapedRepo = path.join(binding, "repo.git");
   const target = path.join(binding, "worktrees", "escaped-repo");
   mkdirSync(path.dirname(escapedRepo), { recursive: true });

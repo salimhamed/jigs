@@ -44,6 +44,11 @@ A binding names a GitHub repository that workflows may operate on. jigs keeps
 its own clone and provisions a separate working copy, called a worktree, for
 each run.
 
+The clone and its worktrees live in
+`~/.local/share/jigs/clones/<factory>/<name>/` (`$XDG_DATA_HOME/jigs/clones/`
+when that is set). That folder belongs to jigs and is separate from the
+factory's own `bindings/<name>/` folder described below.
+
 ```ts
 bindings: {
   app: {
@@ -70,8 +75,11 @@ arrives as `.env` at the worktree root. Keep secret files there; the
 scaffold's `.gitignore` already ignores every `.env`. An entry that matches nothing fails the
 worktree with a message naming it.
 
-`jigs bind <remote>` adds a binding with its `remote`, and `jigs unbind <name>`
-removes one; add the other keys by hand. Both commands edit a plain object
+`jigs bind <remote>` adds a binding with its `remote` and creates
+`bindings/<name>/` with a short `README.md` when the folder is missing. It
+never touches a folder that already exists, and it does not add `copy`; list
+the files you put there yourself. `jigs unbind <name>` removes the binding and
+keeps the folder, since it may hold secrets. Add the other keys by hand. Both commands edit a plain object
 literal. If `bindings` is computed, they explain why and leave the file alone.
 
 ## `service`

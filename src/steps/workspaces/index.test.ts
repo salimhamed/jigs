@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { provisionWorktree } from "./index.ts";
-import { bindingDir, worktreePath } from "./layout.ts";
+import { cloneDir, worktreePath } from "./layout.ts";
 import type { OwnerState } from "./owner.ts";
 import { PostCreateFailedError } from "./provision.ts";
 import type { RegistrySql, WorktreeRow } from "./registry.ts";
@@ -37,7 +37,7 @@ beforeEach(() => {
 
   const dirs = { factoryRoot, bindingName: "api" };
   // The clone goes exactly where the layout says the service put it.
-  ({ repoDir, remoteDir } = makeClonedBinding(tmp, bindingDir(dirs)));
+  ({ repoDir, remoteDir } = makeClonedBinding(tmp, cloneDir(dirs)));
   target = worktreePath({ ...dirs, branch: request.branch });
   writeBinding();
   store = new Map();

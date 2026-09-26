@@ -1,9 +1,9 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { GithubApiError } from "../../providers/github-api.ts";
 import { JIGS_LABELS } from "../../providers/github-label.ts";
-import { bindingRepoDir } from "../../steps/workspaces/layout.ts";
+import { cloneRepoDir } from "../../steps/workspaces/layout.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import { type BindDeps, bindRepo } from "./bind.ts";
 import { unbindRepo } from "./unbind.ts";
@@ -151,7 +151,7 @@ test("re-bind is idempotent: no duplicate entries, comments preserved, bytes unc
 
 function markCloned(bindingName: string): void {
   const originRefs = path.join(
-    bindingRepoDir({ factoryRoot: factory, bindingName }),
+    cloneRepoDir({ factoryRoot: factory, bindingName }),
     "refs/remotes/origin",
   );
   mkdirSync(originRefs, { recursive: true });
@@ -641,4 +641,46 @@ test("bind refuses an uncovered account before editing config or provisioning fu
   });
   expect(jigsConfig()).toBe(before);
   expect(lines).toEqual([]);
+});
+
+const bindingFiles = (name: string) => path.join(factory, "bindings", name);
+const CREATED_API =
+  "created bindings/api/ — files listed in the binding's copy are copied into each worktree";
+
+test("a first bind creates the binding's files folder with a README", async () => {
+  await bindRepo(API, deps());
+
+  const readme = readFileSync(path.join(bindingFiles("api"), "README.md"), "utf8");
+  expect(readme).toContain("`bindings/api/.env` arrives as `.env` at the worktree root");
+  expect(readme).toContain("https://salimhamed.github.io/jigs/guide/configuration#bindings");
+  expect(lines).toContain(CREATED_API);
+});
+
+test("re-binding an existing binding creates its missing files folder", async () => {
+  writeConfig(`api: { remote: ${JSON.stringify(API)} }`);
+
+  await bindRepo(API, deps());
+
+  expect(existsSync(path.join(bindingFiles("api"), "README.md"))).toBe(true);
+  expect(lines).toContain(CREATED_API);
+});
+
+test("an existing files folder is left untouched", async () => {
+  mkdirSync(bindingFiles("api"), { recursive: true });
+  writeFileSync(path.join(bindingFiles("api"), "README.md"), "mine\n");
+  writeFileSync(path.join(bindingFiles("api"), ".env"), "SECRET=1\n");
+
+  await bindRepo(API, deps());
+
+  expect(readFileSync(path.join(bindingFiles("api"), "README.md"), "utf8")).toBe("mine\n");
+  expect(readFileSync(path.join(bindingFiles("api"), ".env"), "utf8")).toBe("SECRET=1\n");
+  expect(lines.some((line) => line.startsWith("created bindings/"))).toBe(false);
+});
+
+test("a bind that fails before recording the binding leaves no files folder", async () => {
+  writeConfig(`api: { remote: "git@github.com:acme/other.git" }`);
+
+  await expect(bindRepo(API, deps())).rejects.toThrow("already bound");
+
+  expect(existsSync(bindingFiles("api"))).toBe(false);
 });

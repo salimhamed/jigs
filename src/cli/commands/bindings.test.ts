@@ -1,7 +1,7 @@
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { ensureBindingClone } from "../../steps/workspaces/clone.ts";
-import { bindingRepoDir } from "../../steps/workspaces/layout.ts";
+import { cloneRepoDir } from "../../steps/workspaces/layout.ts";
 import {
   git,
   makeFactoryRepo,
@@ -33,7 +33,7 @@ const printed = async (cwd = factory) => {
   return lines;
 };
 
-const cloneDir = () => bindingRepoDir({ factoryRoot: factory, bindingName: "api" });
+const cloneDir = () => cloneRepoDir({ factoryRoot: factory, bindingName: "api" });
 
 // "api" pads to the NAME header's width; the remote, clone and state columns
 // are each already wider than their header.

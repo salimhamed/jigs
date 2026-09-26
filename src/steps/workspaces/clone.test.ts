@@ -3,7 +3,7 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { git, makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import { bindingClones, ensureBindingClone, hasBindingClone } from "./clone.ts";
-import { bindingRepoDir } from "./layout.ts";
+import { cloneRepoDir } from "./layout.ts";
 
 let tmp: string;
 let remoteDir: string;
@@ -121,7 +121,7 @@ test("every declared binding is listed with the directory its clone belongs in",
     {
       name: "api",
       remote: remoteDir,
-      repoDir: bindingRepoDir({ factoryRoot: root, bindingName: "api" }),
+      repoDir: cloneRepoDir({ factoryRoot: root, bindingName: "api" }),
     },
   ]);
 });

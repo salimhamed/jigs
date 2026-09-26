@@ -14,7 +14,7 @@ import {
 } from "../../workflow/runtime/cleanup.ts";
 import { createRunDirectory } from "../runtime/run-directory/index.ts";
 import { provisionWorktree } from "./index.ts";
-import { bindingDir, worktreePath } from "./layout.ts";
+import { cloneDir, worktreePath } from "./layout.ts";
 import {
   connectRegistry,
   deleteWorktree,
@@ -42,7 +42,7 @@ vi.stubEnv("JIGS_FACTORY_ROOT", factoryRoot);
 vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
 
 const dirs = { factoryRoot, bindingName: "api" };
-const { repoDir, remoteDir } = makeClonedBinding(tmp, bindingDir(dirs));
+const { repoDir, remoteDir } = makeClonedBinding(tmp, cloneDir(dirs));
 const testPath = worktreePath({ ...dirs, branch: "feat" });
 const dirtyPath = worktreePath({ ...dirs, branch: "automatic-dirty" });
 writeFileSync(

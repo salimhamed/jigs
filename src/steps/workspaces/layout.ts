@@ -15,32 +15,35 @@ export function branchDirname(branch: string): string {
   return branch.replaceAll("/", "-");
 }
 
-export interface BindingDirOptions {
+export interface CloneDirOptions {
   factoryRoot: string;
   bindingName: string;
 }
 
-export interface WorktreePathOptions extends BindingDirOptions {
+export interface WorktreePathOptions extends CloneDirOptions {
   branch: string;
+}
+
+/**
+ * The directory holding every binding clone and its worktrees for one factory.
+ * It is separate from the factory repo's own `bindings/<name>/` folders.
+ */
+export function factoryClonesDir(factoryRoot: string, dataDir: string = jigsDataDir()): string {
+  return path.join(dataDir, "clones", factorySlug(factoryRoot));
 }
 
 // Everything a binding owns is co-located, so "where does this binding live"
 // has one answer that `du -sh` prices and `rm -rf` resets.
-export function bindingDir(options: BindingDirOptions): string {
-  return path.join(
-    jigsDataDir(),
-    "bindings",
-    factorySlug(options.factoryRoot),
-    options.bindingName,
-  );
+export function cloneDir(options: CloneDirOptions): string {
+  return path.join(factoryClonesDir(options.factoryRoot), options.bindingName);
 }
 
-export function bindingRepoDir(options: BindingDirOptions): string {
-  return path.join(bindingDir(options), "repo.git");
+export function cloneRepoDir(options: CloneDirOptions): string {
+  return path.join(cloneDir(options), "repo.git");
 }
 
-export function worktreeParentDir(options: BindingDirOptions): string {
-  return path.join(bindingDir(options), "worktrees");
+export function worktreeParentDir(options: CloneDirOptions): string {
+  return path.join(cloneDir(options), "worktrees");
 }
 
 export function worktreePath(options: WorktreePathOptions): string {

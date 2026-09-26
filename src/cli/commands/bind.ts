@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { upsertBinding } from "../../config/config-edit.ts";
 import {
@@ -25,7 +25,7 @@ import {
 } from "../../providers/github-label.ts";
 import { ensureRepoWebhook, parseGithubRemote } from "../../providers/github-webhook.ts";
 import { hasBindingClone } from "../../steps/workspaces/clone.ts";
-import { bindingDir, bindingRepoDir } from "../../steps/workspaces/layout.ts";
+import { cloneDir, cloneRepoDir } from "../../steps/workspaces/layout.ts";
 
 const BINDING_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
@@ -95,7 +95,7 @@ export async function bindRepo(
     // store that already holds another repo's.
     throw new JigsError(
       `${name} is already bound to ${existing.remote}`,
-      `pnpm exec jigs unbind ${name}, then bind again — the clone at ${bindingDir({ factoryRoot, bindingName: name })} holds the old repo's objects`,
+      `pnpm exec jigs unbind ${name}, then bind again — the clone at ${cloneDir({ factoryRoot, bindingName: name })} holds the old repo's objects`,
     );
   }
   const updated = upsertBinding(text, name, remoteUrl);
@@ -108,12 +108,17 @@ export async function bindRepo(
       ? `bound ${name} → ${remoteUrl}`
       : `${name} already points at ${remoteUrl}`,
   );
+  if (createBindingFilesDir(factoryRoot, name)) {
+    deps.out(
+      `created bindings/${name}/ — files listed in the binding's copy are copied into each worktree`,
+    );
+  }
   // A new entry has nothing cloned yet, or — after the unbind a repoint takes
   // — the old repo's objects sitting where its clone goes. An entry a failed
   // webhook leg already wrote owes the clone as much on the re-run.
   if (
     existing === undefined ||
-    !hasBindingClone(bindingRepoDir({ factoryRoot, bindingName: name }))
+    !hasBindingClone(cloneRepoDir({ factoryRoot, bindingName: name }))
   ) {
     deps.out(`run pnpm exec jigs up to apply the config and clone ${name}`);
   }
@@ -179,6 +184,32 @@ async function ensureJigsLabels(
     );
     deps.out(`label ${outcome}: ${slug}#${label.name}`);
   }
+}
+
+// Only a missing folder is created: an existing one may hold secrets the
+// operator put there, so nothing inside it is ever rewritten.
+function createBindingFilesDir(factoryRoot: string, name: string): boolean {
+  const dir = path.join(factoryRoot, "bindings", name);
+  if (existsSync(dir)) return false;
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, "README.md"), bindingFilesReadme(name));
+  return true;
+}
+
+// Git keeps no empty folder, so the README is what lets it survive a clone.
+function bindingFilesReadme(name: string): string {
+  return `# bindings/${name}
+
+Files in this folder are copied into each new worktree of the \`${name}\`
+binding when they are listed in the binding's \`copy\` option in
+\`jigs.config.ts\`. Each file lands at the same relative path in the worktree:
+\`bindings/${name}/.env\` arrives as \`.env\` at the worktree root.
+
+The factory's \`.gitignore\` ignores \`.env\` files, so secrets kept here stay
+out of git.
+
+See https://salimhamed.github.io/jigs/guide/configuration#bindings
+`;
 }
 
 // The likeliest operator error, given that bind used to take a checkout path.

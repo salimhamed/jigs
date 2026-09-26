@@ -3,7 +3,7 @@ import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
 import { deriveDefaultBranch, resolveRemoteUrl } from "../../providers/git.ts";
 import { hasBindingClone } from "../../steps/workspaces/clone.ts";
-import { bindingRepoDir } from "../../steps/workspaces/layout.ts";
+import { cloneRepoDir } from "../../steps/workspaces/layout.ts";
 import { formatTable } from "../table.ts";
 
 export interface BindingsDeps {
@@ -18,7 +18,7 @@ export async function listBindings(deps: BindingsDeps): Promise<void> {
   const config = readFactoryConfig(factoryRoot);
   const rows: string[][] = [];
   for (const [name, binding] of Object.entries(config.bindings)) {
-    const clone = bindingRepoDir({ factoryRoot, bindingName: name });
+    const clone = cloneRepoDir({ factoryRoot, bindingName: name });
     rows.push([name, binding.remote, clone, await resolveState(clone, binding.remote)]);
   }
   if (rows.length === 0) {
