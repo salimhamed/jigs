@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.69.2](https://github.com/salimhamed/jigs/compare/jigs-v0.69.1...jigs-v0.69.2) (2026-09-26)
+
+
+### Bug Fixes
+
+* **cli:** only warn about GITHUB_TOKEN in up for a PAT identity ([#416](https://github.com/salimhamed/jigs/issues/416)) ([f058b2f](https://github.com/salimhamed/jigs/commit/f058b2f1d79d9198b5a1ab5f9a7e0443f439faae))
+* say plainly that the ticket-review assumptions note does not wait ([#415](https://github.com/salimhamed/jigs/issues/415)) ([c06090c](https://github.com/salimhamed/jigs/commit/c06090cb7a3e0af53da588081d581281e36d2d49))
+
 ## [0.69.1](https://github.com/salimhamed/jigs/compare/jigs-v0.69.0...jigs-v0.69.1) (2026-09-25)
 
 
