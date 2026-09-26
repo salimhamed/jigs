@@ -19,7 +19,7 @@ import { createRunDirectory } from "../runtime/run-directory/index.ts";
 import { readRunState } from "../runtime/run-state.ts";
 import { provisionWorktree } from "./index.ts";
 import { cloneDir } from "./layout.ts";
-import { git, makeClonedBinding, makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
+import { makeClonedBinding, makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
 // Real Postgres, a real clone and real cuts: provisioning, explicit release and
 // automatic release all through the one registry and the one release function.
@@ -46,7 +46,6 @@ writeFileSync(
 );
 
 const sql = () => registrySql();
-const finished = { runStatus: async () => "completed" };
 const states = async (runId: string) =>
   (await listResources(sql(), { factory: currentFactory(), runId })).map((row) => [
     row.kind,
@@ -66,37 +65,16 @@ afterAll(async () => {
   removeTmpDir(tmp);
 });
 
-test("a relaunched ticket adopts the leftover worktree and the old record steps aside", async () => {
-  const request = { binding: "api", branch: "adopt" };
-  const first = await provisionWorktree(request, { workflowRunId: "run_first" });
-  writeFileSync(path.join(first.path, "shipped.txt"), "shipped\n");
-  git(first.path, "add", "shipped.txt");
-  git(first.path, "commit", "-q", "-m", "shipped");
-  const head = git(first.path, "rev-parse", "HEAD");
+test("a second run asking for the same branch works on its own branch and worktree", async () => {
+  const request = { binding: "api", branch: "same" };
+  const first = await provisionWorktree(request, { workflowRunId: "wrun_first1" });
+  const second = await provisionWorktree(request, { workflowRunId: "wrun_second" });
 
-  const second = await provisionWorktree(request, { workflowRunId: "run_second" }, finished);
-
-  expect(second.path).toBe(first.path);
-  expect(git(second.path, "rev-parse", "HEAD")).toBe(head);
-  expect(await states("run_first")).toEqual([["worktree", "released", "reused by run run_second"]]);
-  expect(await states("run_second")).toEqual([["worktree", "live", null]]);
-  // The first run's lock, taken for the adoption, ended with the second run's.
-  await withRunResourceLock(sql(), "run_first", async () => undefined);
-});
-
-test("a live owner read back from the registry refuses the second run by name", async () => {
-  const request = { binding: "api", branch: "held" };
-  await provisionWorktree(request, { workflowRunId: "run_live" });
-
-  await expect(
-    provisionWorktree(
-      request,
-      { workflowRunId: "run_other" },
-      { runStatus: async () => "running" },
-    ),
-  ).rejects.toThrow(/run_live/);
-  expect(await states("run_live")).toEqual([["worktree", "live", null]]);
-  expect(await states("run_other")).toEqual([]);
+  expect(first.branch).toBe("same-first1");
+  expect(second.branch).toBe("same-second");
+  expect(second.path).not.toBe(first.path);
+  expect(await states("wrun_first1")).toEqual([["worktree", "live", null]]);
+  expect(await states("wrun_second")).toEqual([["worktree", "live", null]]);
 });
 
 test("explicit release keeps, then removes, through the real registry", async () => {

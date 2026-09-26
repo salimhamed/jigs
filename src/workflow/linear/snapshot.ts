@@ -2,7 +2,7 @@
 // description, labels, comments, blocker/blocking relations, attached links,
 // sub-issue ids/titles — no file attachments, and deep or live reads are
 // opt-in through a per-step Linear MCP server rather than widened here.
-// `branchName` is Linear's gitBranchName, the worktree branch default. Every
+// `branchName` is Linear's gitBranchName, which a run's branch name starts from. Every
 // step in one activation reads the same snapshot value.
 
 import type { RawIssueSnapshot } from "../../providers/linear.ts";

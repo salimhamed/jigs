@@ -81,8 +81,9 @@ merge overrides and worktree provisioning settings.
 worktrees from. Nobody edits it by hand.
 _Avoid_: mirror, bare repo
 
-**Worktree**: An agent's working copy for a run, forked from the binding
-clone's `origin/<default>`.
+**Worktree**: An agent's working copy for a run, on the run's own branch (the
+requested name plus a suffix from the run ID), forked fresh from the binding
+clone's `origin/<default>`. No other run ever uses it.
 _Avoid_: checkout, workspace
 
 **Run directory**: A scratch directory held for a run, with no repository.

@@ -83,8 +83,9 @@ commit, publish, or synchronize the work, or explain why it needs human help.
 Exhausted recovery attempts, a request for human help, refused or failed merge,
 or unmerged closure stop maintenance. The workflow retains local work without
 an automatic push, posts a ticket note explaining what remains, sets `Todo`, and
-fails the run. Take over the retained worktree or start another run after resolving
-the problem. A stop during initial implementation still attempts to preserve
+fails the run. To keep the work, take over the retained worktree, its branch and any
+pull request by hand. Another run starts over on a new branch and opens a new pull
+request. A stop during initial implementation still attempts to preserve
 committed work by pushing; a failed preservation push is included in the note.
 
 ## The agents

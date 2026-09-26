@@ -12,15 +12,17 @@ path hash) keeps two factories' same-named bindings apart.
   while the service runs needs a restart. The clone is four idempotent steps
   (`init --bare`, point `origin`, `fetch`, `remote set-head --auto`) and
   `refs/remotes/origin/HEAD` marks it finished, so an interrupted clone resumes.
-- **Freshness is `git fetch`.** New branches fork from `origin/<default>`. An
-  existing local branch is checked out as-is and never reset; a remote-only
-  branch is tracked. Every git call passes an explicit `cwd`, because removing
-  a worktree deletes the working directory of whoever runs it.
-- **Reuse is refused, not repaired.** A worktree owned by another live or
-  suspended run is a hard error naming the owner. An unowned worktree that is
-  dirty, diverged from its remote branch or on another branch is preserved
-  untouched and the request fails with guidance. The owner's own re-entry
-  reuses its worktree as-is.
+- **Every run gets its own branch.** The branch is the requested name plus
+  `-` and the last six characters of the run ID, lowercased, so a step retry
+  lands on the same branch and path and no other run does. It is always cut
+  fresh from `origin/<default>` after a `git fetch` of the default branch; no
+  other branch is fetched. A run never adopts another run's worktree or branch,
+  so there is no ownership check, handoff or reuse test. Only the run's own
+  retry finds its worktree at the path on its branch and takes it as-is. A
+  branch is never reset: one left without a worktree is checked out as-is, so
+  work on it survives, and a path holding anything else is refused untouched.
+  Every git call passes an explicit `cwd`,
+  because removing a worktree deletes the working directory of whoever runs it.
 - **Provisioning fails fast.** `copy` globs match dotfiles, never overwrite,
   and fail the request when a pattern matches nothing or leaves
   `bindings/<name>/`. `postCreate` runs with `VIRTUAL_ENV` removed and stdin
@@ -48,12 +50,15 @@ meantime survives.
 jigs never deletes the pushed branch on the remote. It is recorded as a
 `branch` resource, and `jigs resources prune` lists the ones finished runs left
 on GitHub with the command that deletes them; GitHub's "automatically delete
-head branches" setting handles merged pull requests. The local tracking ref of
-a remote branch deleted that way is dropped the next time a worktree for that
-branch is cut.
+head branches" setting handles merged pull requests.
 
 ## Consequences
 
+- Relaunching a ticket starts over on a new branch and opens a new pull
+  request; an older pull request stays open until someone closes it. Picking up
+  a stopped run's work is a person's job.
+- Branches with unmerged work accumulate, one per run, in the clone and on
+  GitHub; `jigs resources` lists them.
 - Deleting a local branch needs positive evidence. There is no force flag, no
   automatic WIP commit and no deletion of unmerged work.
 - A squash-merged local branch is not contained in the default branch, so it

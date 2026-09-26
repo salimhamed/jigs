@@ -15,7 +15,7 @@ import {
 } from "../steps/runtime/registry.ts";
 import { createRunDirectory } from "../steps/runtime/run-directory/index.ts";
 import { provisionWorktree } from "../steps/workspaces/index.ts";
-import { cloneDir, worktreePath } from "../steps/workspaces/layout.ts";
+import { cloneDir } from "../steps/workspaces/layout.ts";
 import { makeClonedBinding, makeTmpDir, removeTmpDir } from "../steps/workspaces/test-fixtures.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { automaticReleaseDeps, startAutomaticRelease } from "./automatic-release.ts";
@@ -65,7 +65,6 @@ beforeAll(async () => {
   process.env.XDG_DATA_HOME = dataRoot;
 
   remoteDir = makeClonedBinding(tmp, cloneDir(dirs)).remoteDir;
-  target = worktreePath({ ...dirs, branch });
   mkdirSync(factoryRoot, { recursive: true });
   writeFileSync(
     path.join(factoryRoot, "jigs.config.ts"),
@@ -108,7 +107,7 @@ const states = async (runId: string) =>
 test("startup reconciliation releases what a failed pass before a World restart left live", async () => {
   const runId = await createCompletedRun();
   const metadata = { workflowRunId: runId };
-  await provisionWorktree({ binding: "api", branch }, metadata);
+  target = (await provisionWorktree({ binding: "api", branch }, metadata)).path;
   const directory = await createRunDirectory(metadata);
 
   const warn = vi.fn();

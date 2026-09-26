@@ -5,7 +5,6 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { memoryRows } from "../runtime/test-fixtures.ts";
 import { cloneDir, worktreePath } from "./layout.ts";
 import { PostCreateFailedError } from "./provision.ts";
-import { WorktreeOwnedError } from "./reuse.ts";
 import { git, makeClonedBinding, makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
 vi.mock("../runtime/registry.ts", async (original) => ({
@@ -16,9 +15,7 @@ vi.mock("../runtime/registry.ts", async (original) => ({
 const { provisionWorktree } = await import("./index.ts");
 
 // A real factory repo, a real clone of a real origin, and real cuts on disk:
-// the registry is the only stand-in, so what these tests are about is the
-// three-way resolution around it — who owns the tree, what is on disk, and
-// what the row ends up saying.
+// the registry is the only stand-in.
 
 let tmp: string;
 let factoryRoot: string;
@@ -27,7 +24,11 @@ let remoteDir: string;
 let target: string;
 let log: string[];
 
+const RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
+const OTHER = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7XYZ";
 const request = { binding: "api", branch: "feat" };
+const branch = "feat-5c7dkm";
+const run = { workflowRunId: RUN };
 
 beforeEach(() => {
   tmp = makeTmpDir();
@@ -43,7 +44,7 @@ beforeEach(() => {
   const dirs = { factoryRoot, bindingName: "api" };
   // The clone goes exactly where the layout says the service put it.
   ({ repoDir, remoteDir } = makeClonedBinding(tmp, cloneDir(dirs)));
-  target = worktreePath({ ...dirs, branch: request.branch });
+  target = worktreePath({ ...dirs, branch });
   writeBinding();
   memoryRows.length = 0;
 });
@@ -60,158 +61,62 @@ function writeBinding(provisioning: Record<string, unknown> = {}): void {
   );
 }
 
-const registry = () => ({ sql: {} as never });
-
-// The status read is the World, the one external system this path consults.
-const ownedBy = (runId: string, status: string | null = "completed") => ({
-  sql: {} as never,
-  runStatus: async (asked: string) => {
-    expect(asked).toBe(runId);
-    return status;
-  },
-});
-
-const records = (identity = target) =>
+const records = () =>
   memoryRows
-    .filter((row) => row.kind === "worktree" && row.identity === identity)
+    .filter((row) => row.kind === "worktree")
     .map((row) => ({ runId: row.runId, state: row.state, reason: row.reason }));
-
-// The tree a previous run left behind, cut the way the request path cuts it.
-const existingWorktree = (ownerRunId: string) =>
-  provisionWorktree(request, { workflowRunId: ownerRunId }, registry());
 
 const originMain = () => git(repoDir, "rev-parse", "refs/remotes/origin/main");
 
-test("a worktree registered to a live run is refused, naming the owner", async () => {
-  await existingWorktree("run_owner");
-  const failure = await provisionWorktree(
-    request,
-    { workflowRunId: "run_new" },
-    ownedBy("run_owner", "running"),
-  ).then(
-    () => null,
-    (err: unknown) => err,
-  );
-  expect(failure).toBeInstanceOf(WorktreeOwnedError);
-  expect((failure as WorktreeOwnedError).owningRunId).toBe("run_owner");
-  // The escape hatch the message names has to keep existing.
-  expect((failure as WorktreeOwnedError).message).toContain("jigs cancel run_owner");
-  expect(records()).toEqual([{ runId: "run_owner", state: "live", reason: null }]);
-});
-
-test("a live foreign owner is refused before disk is ever inspected", async () => {
-  await existingWorktree("run_owner");
-  // Inspecting the tree fetches, so with origin gone that read would throw:
-  // the refusal proves the owner was answered for first.
-  git(repoDir, "remote", "set-url", "origin", path.join(tmp, "nonexistent"));
-
-  await expect(
-    provisionWorktree(request, { workflowRunId: "run_new" }, ownedBy("run_owner", "running")),
-  ).rejects.toThrow(WorktreeOwnedError);
-});
-
-test("a terminal owner's clean worktree is reused and re-owned", async () => {
-  await existingWorktree("run_done");
-  // Committed, so the tree stays clean while its HEAD moves off the default
-  // branch — which is the only place a re-cut could land it.
-  writeFileSync(path.join(target, "shipped.txt"), "shipped\n");
-  git(target, "add", "shipped.txt");
-  git(target, "commit", "-q", "-m", "shipped");
-  const head = git(target, "rev-parse", "HEAD");
-  expect(head).not.toBe(originMain());
-
-  const facts = await provisionWorktree(request, { workflowRunId: "run_new" }, ownedBy("run_done"));
+test("a run cuts its own branch from the default branch and registers it", async () => {
+  const facts = await provisionWorktree(request, run);
 
   expect(facts).toEqual({
     binding: request.binding,
     path: target,
-    branch: request.branch,
+    branch,
     defaultBranch: "main",
     baseSha: originMain(),
   });
-  // Reused, not re-cut: the work the previous run left is still checked out.
-  expect(git(target, "rev-parse", "HEAD")).toBe(head);
-  // The finished run's record steps aside, so its release cannot delete this tree.
-  expect(records()).toEqual([
-    { runId: "run_done", state: "released", reason: "reused by run run_new" },
-    { runId: "run_new", state: "live", reason: null },
-  ]);
-});
-
-test("a registry row whose directory is gone is cut afresh and re-owned", async () => {
-  memoryRows.push({
-    factory: "factory-a",
-    runId: "run_done",
-    kind: "worktree",
-    identity: target,
-    url: `file://${target}`,
-    state: "kept",
-    reason: "onFailure policy keeps run resources",
-    attempts: 0,
-    repoDir,
-    branch: request.branch,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  });
-
-  const facts = await provisionWorktree(request, { workflowRunId: "run_new" }, ownedBy("run_done"));
-
-  expect(facts).toEqual({
-    binding: request.binding,
-    path: target,
-    branch: request.branch,
-    defaultBranch: "main",
-    baseSha: originMain(),
-  });
-  expect(records()).toEqual([
-    { runId: "run_done", state: "released", reason: "reused by run run_new" },
-    { runId: "run_new", state: "live", reason: null },
-  ]);
-});
-
-test("the owning run re-enters its own dirty worktree without asking whether it is live", async () => {
-  await existingWorktree("run_owner");
-  writeFileSync(path.join(target, "wip.txt"), "half-finished\n");
-
-  const facts = await provisionWorktree(
-    request,
-    { workflowRunId: "run_owner" },
-    {
-      sql: {} as never,
-      runStatus: () => {
-        throw new Error("the owner's own liveness is beside the point");
-      },
-    },
-  );
-
-  expect(facts.baseSha).toBe(originMain());
-  expect(readFileSync(path.join(target, "wip.txt"), "utf8")).toBe("half-finished\n");
-  expect(records()).toEqual([{ runId: "run_owner", state: "live", reason: null }]);
-});
-
-test("no worktree on disk cuts one from the default branch and registers the run", async () => {
-  const facts = await provisionWorktree(request, { workflowRunId: "run_new" }, registry());
-
-  expect(facts).toEqual({
-    binding: request.binding,
-    path: target,
-    branch: request.branch,
-    defaultBranch: "main",
-    baseSha: originMain(),
-  });
-  expect(git(target, "rev-parse", "--abbrev-ref", "HEAD")).toBe("feat");
+  expect(git(target, "rev-parse", "--abbrev-ref", "HEAD")).toBe(branch);
   expect(git(target, "rev-parse", "HEAD")).toBe(originMain());
   expect(memoryRows).toMatchObject([
     {
       factory: "factory-a",
-      runId: "run_new",
+      runId: RUN,
       kind: "worktree",
       identity: target,
       url: pathToFileURL(target).href,
       state: "live",
       repoDir,
-      branch: "feat",
+      branch,
     },
+  ]);
+});
+
+test("a retry of the run's own provisioning re-enters its worktree as it is", async () => {
+  await provisionWorktree(request, run);
+  writeFileSync(path.join(target, "wip.txt"), "half-finished\n");
+
+  const facts = await provisionWorktree(request, run);
+
+  expect(facts.path).toBe(target);
+  expect(readFileSync(path.join(target, "wip.txt"), "utf8")).toBe("half-finished\n");
+  expect(records()).toEqual([{ runId: RUN, state: "live", reason: null }]);
+});
+
+test("another run asking for the same branch gets a branch and worktree of its own", async () => {
+  const first = await provisionWorktree(request, run);
+  writeFileSync(path.join(first.path, "wip.txt"), "first run's work\n");
+
+  const second = await provisionWorktree(request, { workflowRunId: OTHER });
+
+  expect(second.branch).toBe("feat-5c7xyz");
+  expect(second.path).not.toBe(first.path);
+  expect(existsSync(path.join(second.path, "wip.txt"))).toBe(false);
+  expect(records()).toEqual([
+    { runId: RUN, state: "live", reason: null },
+    { runId: OTHER, state: "live", reason: null },
   ]);
 });
 
@@ -221,7 +126,7 @@ test("the binding's own provisioning is what the worktree is provisioned with", 
   writeFileSync(path.join(bindingFiles, ".env"), "TOKEN=secret\n");
   writeBinding({ copy: [".env"], postCreate: ["echo ran > provisioned"] });
 
-  await provisionWorktree(request, { workflowRunId: "run_a" }, registry());
+  await provisionWorktree(request, run);
 
   expect(readFileSync(path.join(target, ".env"), "utf8")).toBe("TOKEN=secret\n");
   expect(existsSync(path.join(target, "provisioned"))).toBe(true);
@@ -230,20 +135,20 @@ test("the binding's own provisioning is what the worktree is provisioned with", 
 test("a failing postCreate keeps the record for diagnosis and rethrows", async () => {
   writeBinding({ postCreate: ["exit 3"] });
 
-  const failure = await provisionWorktree(request, { workflowRunId: "run_a" }, registry()).then(
+  const failure = await provisionWorktree(request, run).then(
     () => null,
     (err: unknown) => err,
   );
 
   expect(failure).toBeInstanceOf(PostCreateFailedError);
   expect(records()).toEqual([
-    { runId: "run_a", state: "kept", reason: "provisioning failed; kept for diagnosis" },
+    { runId: RUN, state: "kept", reason: "provisioning failed; kept for diagnosis" },
   ]);
 });
 
 test("a binding with no clone is refused, naming the restart that makes one", async () => {
   rmSync(repoDir, { recursive: true, force: true });
-  const failure = await provisionWorktree(request, { workflowRunId: "run_a" }, registry()).then(
+  const failure = await provisionWorktree(request, run).then(
     () => null,
     (err: unknown) => err,
   );
@@ -253,6 +158,6 @@ test("a binding with no clone is refused, naming the restart that makes one", as
 });
 
 test("a provisioned worktree logs its binding, branch, and path", async () => {
-  await provisionWorktree(request, { workflowRunId: "run_a" }, registry());
-  expect(log).toContain(`[worktree] provisioned binding=api branch=feat path=${target}`);
+  await provisionWorktree(request, run);
+  expect(log).toContain(`[worktree] provisioned binding=api branch=${branch} path=${target}`);
 });

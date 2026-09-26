@@ -5,7 +5,6 @@ import { afterAll, beforeAll, expect, test } from "vitest";
 import { ticketToken } from "../../workflow/linear/claim.ts";
 import { pullRequestToken } from "../../workflow/pull-requests/pull-request.ts";
 import {
-  alsoLockRun,
   connectRegistry,
   ensureRegistry,
   listResources,
@@ -35,10 +34,8 @@ async function freshDatabase(): Promise<{ url: string; db: RegistrySql }> {
 }
 
 let db: RegistrySql;
-let dbUrl: string;
-const adminUrlFor = (_db: RegistrySql) => dbUrl;
 beforeAll(async () => {
-  ({ db, url: dbUrl } = await freshDatabase());
+  ({ db } = await freshDatabase());
   await ensureRegistry(db);
 });
 afterAll(async () => {
@@ -259,17 +256,4 @@ test("the run lock serializes holders of the same run", async () => {
   release();
   await Promise.all([first, second]);
   expect(order).toEqual(["first", "first done", "second"]);
-});
-
-test("a run locked alongside another is freed when the outer lock ends", async () => {
-  await withRunResourceLock(db, "run_outer", (locked) => alsoLockRun(locked, "run_inner"));
-  const other = connectRegistry(adminUrlFor(db), { max: 1 });
-  try {
-    const { rows } = await other.$client.query(
-      "select pg_try_advisory_lock(hashtextextended('run_inner', 464)) as free",
-    );
-    expect(rows[0].free).toBe(true);
-  } finally {
-    await other.$client.end();
-  }
 });

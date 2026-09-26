@@ -98,8 +98,10 @@ log in to Claude Code and set `OPENROUTER_API_KEY` in the factory's `.env`; see
 
 `"use workflow"` marks durable orchestration in the Vercel Workflow SDK. The
 workflow decides what happens, while the routines and steps it calls perform
-the work. `provisionWorktree` prepares a working copy for this run; its recorded
-result gives a resumed workflow the same directory information.
+the work. `provisionWorktree` prepares a working copy for this run on a branch of
+its own: the `branch` you pass plus a short suffix from the run ID, cut fresh from
+the default branch. Push and open pull requests from `worktree.branch`. Its
+recorded result gives a resumed workflow the same directory information.
 
 ### Requirements and preflight
 

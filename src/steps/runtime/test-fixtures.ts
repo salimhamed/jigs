@@ -24,7 +24,6 @@ export function memoryRegistry() {
       memoryLock.taken?.(runId);
       return action(db);
     },
-    alsoLockRun: async () => undefined,
     listResources: async (_db: unknown, filter: ResourceFilter) =>
       memoryRows
         .filter(

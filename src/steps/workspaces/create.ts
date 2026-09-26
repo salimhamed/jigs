@@ -1,4 +1,4 @@
-import { mkdirSync, realpathSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { JigsError } from "../../errors.ts";
 import { deriveDefaultBranch, git, tryGit } from "../../providers/git.ts";
@@ -24,36 +24,13 @@ async function resolveDefaultBranch(repoDir: string): Promise<string> {
   return branch;
 }
 
-const missingRemoteRef = (err: unknown): boolean =>
-  /couldn't find remote ref/i.test(String((err as { stderr?: string }).stderr ?? ""));
-
-// The freshness gate is fetch, never pull: refs/heads/* holds jigs' own run
-// branches only, and new branches fork from origin/<default>.
-async function fetchFreshness(
-  repoDir: string,
-  defaultBranch: string,
-  branch: string,
-): Promise<void> {
-  await git(["fetch", "origin", defaultBranch], repoDir);
-  if (branch === defaultBranch) return;
-  try {
-    await git(["fetch", "origin", branch], repoDir);
-  } catch (err) {
-    // Non-fatal: the branch may not exist upstream yet. But git leaves the
-    // tracking ref of a branch the remote has since deleted in place, and the
-    // three-way resolution would then take the remote arm and re-present the
-    // pre-squash lineage of an already-merged run. Only the missing-ref case:
-    // an unreachable remote must not cost a ref that is still real.
-    if (!missingRemoteRef(err)) return;
-    await tryGit(["update-ref", "-d", `refs/remotes/origin/${branch}`], repoDir);
-  }
-}
-
-// Resource release and pruning read refs/remotes/origin/<default>, and nothing
-// else in those passes refreshes it.
-export async function fetchOriginDefault(repoDir: string): Promise<void> {
+// Fetch, never pull: refs/heads/* holds jigs' own run branches only, and each
+// forks from origin/<default>. Release and prune read that ref too, and
+// nothing else in those passes refreshes it.
+export async function fetchOriginDefault(repoDir: string): Promise<string> {
   const defaultBranch = await resolveDefaultBranch(repoDir);
   await git(["fetch", "origin", defaultBranch], repoDir);
+  return defaultBranch;
 }
 
 interface CutOptions {
@@ -62,83 +39,52 @@ interface CutOptions {
   branch: string;
 }
 
-export async function createWorktree(options: CutOptions): Promise<Omit<Worktree, "binding">> {
+type WorktreeFacts = Omit<Worktree, "binding">;
+
+async function facts(options: CutOptions): Promise<WorktreeFacts> {
+  const defaultBranch = await fetchOriginDefault(options.repoDir);
+  const baseSha = await git(["rev-parse", `origin/${defaultBranch}`], options.repoDir);
+  return { path: options.worktreePath, branch: options.branch, defaultBranch, baseSha };
+}
+
+export async function createWorktree(options: CutOptions): Promise<WorktreeFacts> {
   const { repoDir, worktreePath, branch } = options;
-  const defaultBranch = await resolveDefaultBranch(repoDir);
-  await fetchFreshness(repoDir, defaultBranch, branch);
-  const baseSha = await git(["rev-parse", `origin/${defaultBranch}`], repoDir);
+  const cut = await facts(options);
   mkdirSync(path.dirname(worktreePath), { recursive: true });
   // A worktree directory deleted without pruning leaves an admin entry that
   // makes `worktree add` at the same path fail; prune only clears entries for
   // missing, unlocked worktrees, so it is safe here.
   await tryGit(["worktree", "prune"], repoDir);
-
-  const localRef = await tryGit(
+  if (existsSync(worktreePath)) {
+    throw new JigsError(
+      `${worktreePath} exists but is not a worktree on ${branch}; it was left untouched`,
+      "inspect it, keep any work in it, then remove it and retry",
+    );
+  }
+  // Never reset a branch: an existing one is checked out as-is, because it may
+  // hold the run's work (a worktree removed mid-run, or a second provisioning
+  // of the same branch). A provisioning retry's branch has no commits yet.
+  const exists = await tryGit(
     ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`],
     repoDir,
   );
-  const remoteRef = await tryGit(
-    ["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${branch}`],
+  await git(
+    exists === null
+      ? ["worktree", "add", "-b", branch, worktreePath, `origin/${cut.defaultBranch}`]
+      : ["worktree", "add", worktreePath, branch],
     repoDir,
   );
-
-  if (localRef !== null) {
-    // Checked out as-is, never auto-reset — even when origin/<branch> moved.
-    await git(["worktree", "add", worktreePath, branch], repoDir);
-  } else if (remoteRef !== null) {
-    await git(
-      ["worktree", "add", "--track", "-b", branch, worktreePath, `origin/${branch}`],
-      repoDir,
-    );
-  } else {
-    await git(["worktree", "add", worktreePath, "-b", branch, `origin/${defaultBranch}`], repoDir);
-  }
-
-  return { path: worktreePath, branch, defaultBranch, baseSha };
+  return cut;
 }
 
-interface WorktreeStatus {
-  branchMatches: boolean;
-  clean: boolean;
-  diverged: boolean;
-  defaultBranch: string;
-  baseSha: string;
-}
-
-export async function worktreeStatus(options: CutOptions): Promise<WorktreeStatus | null> {
-  const { repoDir, worktreePath, branch } = options;
+/** The worktree a retry of this run's own provisioning left at the path, on the branch. */
+export async function findWorktree(options: CutOptions): Promise<WorktreeFacts | null> {
+  const { worktreePath, branch } = options;
   const toplevel = await tryGit(["rev-parse", "--show-toplevel"], worktreePath);
   if (toplevel === null) return null;
   // git reports the physical toplevel, so a symlinked component in the
   // requested path needs realpath, not lexical resolution, to match.
-  if (path.resolve(toplevel) !== realpathSync(path.resolve(worktreePath))) {
-    return null;
-  }
-
-  const defaultBranch = await resolveDefaultBranch(repoDir);
-  await fetchFreshness(repoDir, defaultBranch, branch);
-  const checkedOut = await git(["rev-parse", "--abbrev-ref", "HEAD"], worktreePath);
-  const clean = (await git(["status", "--porcelain"], worktreePath)) === "";
-  const headSha = await git(["rev-parse", "HEAD"], worktreePath);
-
-  // Diverged = local and origin/<branch> each hold commits the other lacks;
-  // behind-only or ahead-only is ff-safe and stays reusable.
-  const remoteSha = await tryGit(
-    ["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${branch}`],
-    repoDir,
-  );
-  let diverged = false;
-  if (remoteSha !== null && remoteSha !== headSha) {
-    const mergeBase = await tryGit(["merge-base", headSha, remoteSha], repoDir);
-    diverged = mergeBase !== headSha && mergeBase !== remoteSha;
-  }
-
-  const baseSha = await git(["rev-parse", `origin/${defaultBranch}`], repoDir);
-  return {
-    branchMatches: checkedOut === branch,
-    clean,
-    diverged,
-    defaultBranch,
-    baseSha,
-  };
+  if (path.resolve(toplevel) !== realpathSync(path.resolve(worktreePath))) return null;
+  if ((await git(["rev-parse", "--abbrev-ref", "HEAD"], worktreePath)) !== branch) return null;
+  return facts(options);
 }
