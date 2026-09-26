@@ -166,7 +166,7 @@ async function createCompletedRun(): Promise<string> {
       deploymentId: "postgres",
       workflowName: "workflow//./workflows/cleanup//cleanup",
       input: new Uint8Array(),
-      executionContext: { workflowCoreVersion: "5.0.0-beta.53", workflowVm: "node" },
+      executionContext: { workflowCoreVersion: "5.0.0-beta.57", workflowVm: "node" },
     },
   });
   if (created.run === undefined) throw new Error("run_created returned no run");
