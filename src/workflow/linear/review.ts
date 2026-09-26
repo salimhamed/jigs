@@ -137,10 +137,10 @@ export async function reviewTicket(options: ReviewTicketOptions): Promise<Ticket
         await noteOnTicket(
           options.claim,
           {
-            headline: `jigs is starting work on ${snapshot.identifier}. Before writing code, the reviewer read the ticket and is going ahead on these assumptions:`,
+            headline: `jigs is starting work on ${snapshot.identifier}. Before writing code, the reviewer read the ticket and made these assumptions:`,
             notes: assumptions,
             closing:
-              "If one of these is wrong, reply here now, or comment on the pull request when it opens. Once the builder starts, a reply on this ticket is not read again until the pull request's review threads.",
+              "jigs is going ahead with these assumptions. To change one, comment on the pull request once it opens.",
           },
           { postTicketNote },
         );
