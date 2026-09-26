@@ -73,6 +73,13 @@ export const askModel = agents.askModel;
  */
 export const askJev = agents.askJev;
 
+/**
+ * Ask a decision model one question and learn whether its answer clears your cutoff.
+ *
+ * @group Agents and models
+ */
+export const decide = agents.decide;
+
 const linear = bindLinearSteps({
   runAgent,
   postTicketHumanInputRequest,

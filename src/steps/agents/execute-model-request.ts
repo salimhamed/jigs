@@ -4,6 +4,7 @@ import type { AskJevOptions, JevQuestions, JevResult } from "../../workflow/agen
 import type { ModelRequest } from "../../workflow/agents/plan.ts";
 import { type ModelResult, toModelResult } from "../../workflow/agents/result.ts";
 import type { RunMetadata } from "../runtime/run-context.ts";
+import { recordDecision } from "./decision-log.ts";
 import { outputSpec } from "./execute-agent.ts";
 import { harnessEnv } from "./harnesses/env.ts";
 import { type ExecutionSeams, executionSeams } from "./seams.ts";
@@ -90,6 +91,7 @@ export async function executeJevWith<const QUESTIONS extends JevQuestions>(
     deps,
     env: harnessEnv(driver.envAllowlist(wire)),
   });
+  await recordDecision(metadata, wire, generation.answers);
   return { answers: generation.answers };
 }
 

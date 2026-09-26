@@ -175,6 +175,33 @@ const result = await askJev({
 
 See [decision types](/api/jigs#decision-models) for choice and score questions.
 
+### One decision with a cutoff
+
+`decide` asks a single question with `jevModel` and tells you whether the answer
+is confident enough to act on. Below the cutoff, do what the workflow would do
+without Jev:
+
+```ts
+import { choice } from "@jigs-ai/jigs";
+import { decide } from "#jigs/routines";
+
+const wake = await decide({
+  site: "pull-request-wake",
+  state: { ci: "pending", newComments: [] },
+  question: choice("What does this pull request need now?", {
+    idle: "Nothing to act on yet",
+    builder: "The builder should act",
+  }),
+  cutoff: 0.9,
+});
+if (wake.confident && wake.answer.choice === "idle") return;
+```
+
+A choice or score is as confident as the model says. A yes-or-no answer is as
+confident as its more likely side, and `yes` says which side that is. Every
+answered `askJev` or `decide` call appends a line, tagged with its `site`, to
+`decisions.jsonl` in the run's working directory.
+
 ## Agent environment
 
 Agents do not automatically inherit the service environment. Add additional

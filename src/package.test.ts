@@ -213,6 +213,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "harnesses",
     "interpolate",
     "isPullRequestMergeReady",
+    "jevModel",
     "models",
     "parseMarkers",
     "pullRequestSnapshotKey",
