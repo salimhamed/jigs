@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { ensureBindingClone } from "../steps/workspaces/clone.ts";
-import { bindingRepoDir } from "../steps/workspaces/layout.ts";
+import { cloneRepoDir } from "../steps/workspaces/layout.ts";
 import {
   makeFactoryRepo,
   makeRemoteBackedRepo,
@@ -30,7 +30,7 @@ const yml = (name: string, remote: string) => ({
 // Stands in for the clone the service makes at start, for the cases whose
 // remote is deliberately unreachable.
 function markClone(factoryRoot: string, name: string): void {
-  const dir = path.join(bindingRepoDir({ factoryRoot, bindingName: name }), "refs/remotes/origin");
+  const dir = path.join(cloneRepoDir({ factoryRoot, bindingName: name }), "refs/remotes/origin");
   mkdirSync(dir, { recursive: true });
   writeFileSync(path.join(dir, "HEAD"), "ref: refs/remotes/origin/main\n");
 }
@@ -81,7 +81,7 @@ test("a declared, cloned binding whose remote answers passes", async () => {
   const { remoteDir } = makeRemoteBackedRepo(tmp);
   const factory = makeFactoryRepo(tmp, yml("api", remoteDir));
   await ensureBindingClone({
-    repoDir: bindingRepoDir({ factoryRoot: factory, bindingName: "api" }),
+    repoDir: cloneRepoDir({ factoryRoot: factory, bindingName: "api" }),
     remote: remoteDir,
   });
   expect(await check(factory, "api")).toEqual({

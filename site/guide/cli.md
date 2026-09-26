@@ -56,9 +56,13 @@ the workflow's schema rejects fails before any run is created.
 
 | Command | What it does |
 | --- | --- |
-| `jigs bind <remote-url>` | Add a binding for a repository, create the `jigs:approved` label, and create its webhook when configured. |
+| `jigs bind <remote-url>` | Add a binding for a repository, create the factory's `bindings/<name>/` folder for [copied files](/guide/configuration#bindings) if it is missing, create the `jigs:approved` label, and create its webhook when configured. |
 | `jigs bindings` | List bindings, their clone paths and whether each clone exists. |
-| `jigs unbind <name>` | Remove a binding. The clone stays on disk for you to delete. |
+| `jigs unbind <name>` | Remove a binding. The clone stays on disk for you to delete, and so does the factory's `bindings/<name>/` folder. |
+
+jigs keeps each binding's clone and worktrees under
+`~/.local/share/jigs/clones/`. That folder is separate from the factory's
+`bindings/<name>/`, which holds files you want copied into each worktree.
 
 ## Recipes
 

@@ -1,9 +1,10 @@
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
-  bindingDir,
-  bindingRepoDir,
+  bindingFilesDir,
   branchDirname,
+  cloneDir,
+  cloneRepoDir,
   factorySlug,
   worktreeParentDir,
   worktreePath,
@@ -11,7 +12,7 @@ import {
 
 // Every path below hangs off the XDG data home, so the whole file is read
 // against one the test names.
-const BINDINGS = "/xdg-data/jigs/bindings";
+const CLONES = "/xdg-data/jigs/clones";
 
 beforeEach(() => vi.stubEnv("XDG_DATA_HOME", "/xdg-data"));
 afterEach(() => vi.unstubAllEnvs());
@@ -33,27 +34,31 @@ test("branchDirname maps slashes to dashes", () => {
   expect(branchDirname("main")).toBe("main");
 });
 
-test("bindingDir joins the data home, factory slug, and binding name", () => {
-  expect(bindingDir(options)).toBe(path.join(BINDINGS, factorySlug("/f/acme"), "api"));
+test("cloneDir joins the data home, factory slug, and binding name", () => {
+  expect(cloneDir(options)).toBe(path.join(CLONES, factorySlug("/f/acme"), "api"));
 });
 
-test("the clone sits inside the binding directory", () => {
-  expect(bindingRepoDir(options)).toBe(path.join(bindingDir(options), "repo.git"));
+test("the clone sits inside the clone directory", () => {
+  expect(cloneRepoDir(options)).toBe(path.join(cloneDir(options), "repo.git"));
 });
 
 test("worktreeParentDir is the binding's worktrees directory", () => {
-  expect(worktreeParentDir(options)).toBe(path.join(bindingDir(options), "worktrees"));
+  expect(worktreeParentDir(options)).toBe(path.join(cloneDir(options), "worktrees"));
 });
 
 test("worktreePath joins the binding's worktrees dir and the branch dirname", () => {
   const p = worktreePath({ ...options, branch: "salim/fix" });
   expect(p).toBe(path.join(worktreeParentDir(options), "salim-fix"));
-  expect(p).toBe(path.join(BINDINGS, factorySlug("/f/acme"), "api", "worktrees", "salim-fix"));
+  expect(p).toBe(path.join(CLONES, factorySlug("/f/acme"), "api", "worktrees", "salim-fix"));
 });
 
 test("the central root is the XDG data home, wherever it moves", () => {
   vi.stubEnv("XDG_DATA_HOME", "/elsewhere");
   expect(worktreePath({ ...options, branch: "main" })).toBe(
-    path.join("/elsewhere/jigs/bindings", factorySlug("/f/acme"), "api", "worktrees", "main"),
+    path.join("/elsewhere/jigs/clones", factorySlug("/f/acme"), "api", "worktrees", "main"),
   );
+});
+
+test("bindingFilesDir is the factory repo's bindings folder, not the clone", () => {
+  expect(bindingFilesDir("/f/acme", "api")).toBe(path.join("/f/acme", "bindings", "api"));
 });

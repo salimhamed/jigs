@@ -9,7 +9,7 @@ import { JigsError } from "../errors.ts";
 import { probeRemoteAuth } from "../providers/git.ts";
 import { parseGithubRemote } from "../providers/github-webhook.ts";
 import { hasBindingClone } from "../steps/workspaces/clone.ts";
-import { bindingRepoDir } from "../steps/workspaces/layout.ts";
+import { cloneRepoDir } from "../steps/workspaces/layout.ts";
 import { type Check, type CheckResult, failedCheck, PROBE_TIMEOUT_MS } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 
@@ -88,7 +88,7 @@ async function checkBinding(
 
   // A binding declared while the service was running has no clone, and the
   // worktree request would be the first thing to say so — mid-run.
-  if (!hasBindingClone(bindingRepoDir({ factoryRoot, bindingName: name }))) {
+  if (!hasBindingClone(cloneRepoDir({ factoryRoot, bindingName: name }))) {
     return {
       ok: false,
       reason: `binding ${name} has no clone yet`,

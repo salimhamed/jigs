@@ -3,7 +3,7 @@ import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { ensureBindingClone } from "../steps/workspaces/clone.ts";
-import { bindingRepoDir } from "../steps/workspaces/layout.ts";
+import { cloneRepoDir } from "../steps/workspaces/layout.ts";
 // Real git fixtures, reached by path: they are test-only, so they stay out
 // of the package's export map.
 import {
@@ -184,7 +184,7 @@ test("an input-driven workflow ignores an unrelated static binding", async () =>
   });
   vi.stubEnv("JIGS_FACTORY_ROOT", factory);
   await ensureBindingClone({
-    repoDir: bindingRepoDir({ factoryRoot: factory, bindingName: "playground" }),
+    repoDir: cloneRepoDir({ factoryRoot: factory, bindingName: "playground" }),
     remote: remoteDir,
   });
 
@@ -229,7 +229,7 @@ test("a green preflight lets the trigger call start()", async () => {
   vi.stubEnv("XDG_DATA_HOME", path.join(workspace, "data"));
   // What the service does at start: preflight refuses a binding with no clone.
   await ensureBindingClone({
-    repoDir: bindingRepoDir({ factoryRoot: factory, bindingName: "api" }),
+    repoDir: cloneRepoDir({ factoryRoot: factory, bindingName: "api" }),
     remote: remoteDir,
   });
   vi.stubEnv("LINEAR_API_KEY", "lin_live");

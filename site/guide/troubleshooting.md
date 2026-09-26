@@ -22,7 +22,8 @@ Read `jigs service logs`. The usual causes:
   for Claude Code set `JIGS_CLAUDE_EXECUTABLE` in `.env`.
 - **Codex or Pi is too old.** The log names the minimum version; upgrade the CLI.
 - **A binding's remote cannot be reached.** The service clones every binding
-  before it is ready, and exits with the Git error if it cannot.
+  into `~/.local/share/jigs/clones/` before it is ready, and exits with the Git
+  error if it cannot.
 
 Fix the cause and run `jigs up` again. Harness installation and authentication
 are covered in [Models and harnesses](/guide/models-and-harnesses).

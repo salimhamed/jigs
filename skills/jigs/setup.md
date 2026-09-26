@@ -127,11 +127,15 @@ jigs bindings
 jigs up
 ```
 
-`jigs bind` adds the binding to `jigs.config.ts` and, with the configured
-identity, creates the `jigs:approved` label and, when GitHub webhooks are on,
-the webhook. The service clones each binding when it starts, so the
-`jigs up` above is what makes a new binding usable. Worktree provisioning
-(`copy`, `postCreate`) is a hand edit described in the configuration guide.
+`jigs bind` adds the binding to `jigs.config.ts`, creates the factory's
+`bindings/<name>/` folder with a README when it is missing, and, with the
+configured identity, creates the `jigs:approved` label and, when GitHub webhooks
+are on, the webhook. The service clones each binding into
+`~/.local/share/jigs/clones/<factory>/<name>/` when it starts, so the `jigs up`
+above is what makes a new binding usable. That data folder is jigs's own and is
+separate from the factory's `bindings/<name>/`, whose files `copy` lists for
+each new worktree. Worktree provisioning (`copy`, `postCreate`) is a hand edit
+described in the configuration guide.
 
 ## 5. Webhooks are optional
 

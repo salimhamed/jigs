@@ -212,7 +212,7 @@ test("no configured Postgres exits at the gate instead of starting a registry-le
 const forge = {
   name: "forge",
   remote: "git@github.com:acme/forge.git",
-  repoDir: "/data/bindings/factory/forge/repo.git",
+  repoDir: "/data/clones/factory/forge/repo.git",
 };
 
 test("every declared binding is ensured, and says so before the fetch runs", async () => {

@@ -14,7 +14,7 @@ import type { Worktree } from "../../workflow/workspaces/worktree.ts";
 import type { RunMetadata } from "../runtime/run-context.ts";
 import { hasBindingClone } from "./clone.ts";
 import { createWorktree, worktreeStatus } from "./create.ts";
-import { bindingRepoDir, worktreePath } from "./layout.ts";
+import { cloneRepoDir, worktreePath } from "./layout.ts";
 import { type OwnerState, readOwner } from "./owner.ts";
 import { provisionWorktree as provisionWorktreeFiles } from "./provision.ts";
 import type { RegistrySql } from "./registry.ts";
@@ -65,7 +65,7 @@ export async function provisionWorktree(
   return lock(runId, async (lockedSql) => {
     const binding = resolveBinding(factoryRoot(), request.binding);
     const dirs = { factoryRoot: factoryRoot(), bindingName: binding.name };
-    const repoDir = bindingRepoDir(dirs);
+    const repoDir = cloneRepoDir(dirs);
     const target = worktreePath({ ...dirs, branch: request.branch });
 
     // Only reachable when the binding was declared after this service booted:

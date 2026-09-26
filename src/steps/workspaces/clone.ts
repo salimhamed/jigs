@@ -3,7 +3,7 @@ import path from "node:path";
 import { readFactoryConfig } from "../../config/factory-config.ts";
 import { JigsError } from "../../errors.ts";
 import { git, tryGit } from "../../providers/git.ts";
-import { bindingRepoDir } from "./layout.ts";
+import { cloneRepoDir } from "./layout.ts";
 
 // jigs' own bare clone of a binding's remote, which every worktree of that
 // binding is cut from. Built with `init --bare` + `remote add` + `fetch`
@@ -30,7 +30,7 @@ export function bindingClones(factoryRoot: string): BindingClone[] {
   return Object.entries(bindings).map(([name, binding]) => ({
     name,
     remote: binding.remote,
-    repoDir: bindingRepoDir({ factoryRoot, bindingName: name }),
+    repoDir: cloneRepoDir({ factoryRoot, bindingName: name }),
   }));
 }
 

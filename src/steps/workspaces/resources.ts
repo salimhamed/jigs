@@ -5,7 +5,7 @@ import { tryGit } from "../../providers/git.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { cleanupFromAttributes } from "../../workflow/runtime/cleanup.ts";
 import { type RunResource, resourcesFromAttributes } from "../../workflow/runtime/resources.ts";
-import { factorySlug } from "./layout.ts";
+import { factoryClonesDir } from "./layout.ts";
 import {
   deleteWorktree,
   listWorktrees,
@@ -189,7 +189,7 @@ async function classifyWorktree(
   }
   // The caller supplies only rows from the shared registry. Ownership is proved
   // by the selected factory's slug in both the bare clone and worktree paths.
-  const managedRoot = path.join(input.dataDir, "bindings", factorySlug(input.factoryRoot));
+  const managedRoot = factoryClonesDir(input.factoryRoot, input.dataDir);
   const bindingRoot = path.dirname(row.repoDir);
   const worktreeRoot = path.join(bindingRoot, "worktrees");
   if (
@@ -353,7 +353,7 @@ async function classify(input: ResourceInventoryInput): Promise<ClassifiedResour
     if (input.runId !== undefined && row.ownerRunId !== input.runId) continue;
     if (registeredWorktrees.has(row.path)) continue;
     const run = runById.get(row.ownerRunId);
-    const managedRoot = path.join(input.dataDir, "bindings", factorySlug(input.factoryRoot));
+    const managedRoot = factoryClonesDir(input.factoryRoot, input.dataDir);
     const rowOwned = within(managedRoot, row.repoDir) && within(managedRoot, row.path);
     classified.push({
       row,

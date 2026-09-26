@@ -36,7 +36,7 @@ export interface ClonedBinding {
 
 // Builds exactly what ensureBindingClone builds — a bare "GitHub" with one
 // commit on its default branch, and jigs' own bare clone of it — so a test's
-// clone and a service's clone cannot drift apart. `bindingDir` is where the
+// clone and a service's clone cannot drift apart. `cloneDir` is where the
 // clone lands, for a test that has to put it where the layout says it lives.
 //
 // Building it costs fifteen git processes, so a suite that rebuilds it per
@@ -45,16 +45,16 @@ export interface ClonedBinding {
 // gets a remote and a clone it alone writes to.
 export function makeClonedBinding(
   parent: string,
-  bindingDir: string = path.join(parent, "binding"),
+  cloneDir: string = path.join(parent, "binding"),
 ): ClonedBinding {
   const template = clonedBindingTemplate();
   const remoteDir = path.join(parent, "remote.git");
-  const repoDir = path.join(bindingDir, "repo.git");
+  const repoDir = path.join(cloneDir, "repo.git");
   cpSync(template.remoteDir, remoteDir, { recursive: true });
   cpSync(template.repoDir, repoDir, { recursive: true });
   // The copy arrives pointing at the template's remote, which it must not share.
   git(repoDir, "remote", "set-url", "origin", remoteDir);
-  return { remoteDir, repoDir, worktreesDir: path.join(bindingDir, "worktrees") };
+  return { remoteDir, repoDir, worktreesDir: path.join(cloneDir, "worktrees") };
 }
 
 let template: ClonedBinding | undefined;
@@ -68,7 +68,7 @@ function clonedBindingTemplate(): ClonedBinding {
   return template;
 }
 
-function buildClonedBinding(parent: string, bindingDir: string): ClonedBinding {
+function buildClonedBinding(parent: string, cloneDir: string): ClonedBinding {
   const defaultBranch = "main";
   const remoteDir = path.join(parent, "remote.git");
   git(parent, "init", "-q", "--bare", "--initial-branch", defaultBranch, remoteDir);
@@ -85,9 +85,9 @@ function buildClonedBinding(parent: string, bindingDir: string): ClonedBinding {
   git(bootstrap, "push", "-q", "origin", defaultBranch);
   rmSync(bootstrap, { recursive: true, force: true });
 
-  const repoDir = path.join(bindingDir, "repo.git");
-  mkdirSync(bindingDir, { recursive: true });
-  git(bindingDir, "init", "-q", "--bare", repoDir);
+  const repoDir = path.join(cloneDir, "repo.git");
+  mkdirSync(cloneDir, { recursive: true });
+  git(cloneDir, "init", "-q", "--bare", repoDir);
   // commit-tree and friends need an identity, and the fixture git() reads no
   // global config.
   git(repoDir, "config", "user.name", "jigs-fixture");
@@ -98,7 +98,7 @@ function buildClonedBinding(parent: string, bindingDir: string): ClonedBinding {
   return {
     remoteDir,
     repoDir,
-    worktreesDir: path.join(bindingDir, "worktrees"),
+    worktreesDir: path.join(cloneDir, "worktrees"),
   };
 }
 

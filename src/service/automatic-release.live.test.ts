@@ -9,7 +9,7 @@ import { setWorld } from "workflow/runtime";
 import { writeCleanupProgress } from "../steps/runtime/cleanup-state.ts";
 import { createRunDirectory } from "../steps/runtime/run-directory/index.ts";
 import { provisionWorktree } from "../steps/workspaces/index.ts";
-import { bindingDir, worktreePath } from "../steps/workspaces/layout.ts";
+import { cloneDir, worktreePath } from "../steps/workspaces/layout.ts";
 import {
   connectRegistry,
   ensureWorktreeRegistry,
@@ -78,7 +78,7 @@ beforeAll(async () => {
   process.env.JIGS_FACTORY_ROOT = factoryRoot;
   process.env.XDG_DATA_HOME = dataRoot;
 
-  remoteDir = makeClonedBinding(tmp, bindingDir(dirs)).remoteDir;
+  remoteDir = makeClonedBinding(tmp, cloneDir(dirs)).remoteDir;
   target = worktreePath({ ...dirs, branch });
   mkdirSync(factoryRoot, { recursive: true });
   writeFileSync(
