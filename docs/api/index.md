@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.74.0
+# @jigs-ai/jigs v0.75.0
 
 Factory and workflow definitions, harness and model descriptors, types and pure helpers.
 
@@ -124,13 +124,13 @@ access token and to `review` with a GitHub App.
 
 ###### onFailure
 
-> **onFailure**: `"release"` \| `"keep"`
+> **onFailure**: `"release"` \| `"keep"` = `releaseAction`
 
 What to do with eligible resources after a failed or cancelled run.
 
 ###### onSuccess
 
-> **onSuccess**: `"release"` \| `"keep"`
+> **onSuccess**: `"release"` \| `"keep"` = `releaseAction`
 
 What to do with eligible resources after a completed run.
 
@@ -243,13 +243,13 @@ may start.
 
 ###### onFailure
 
-> **onFailure**: `"release"` \| `"keep"`
+> **onFailure**: `"release"` \| `"keep"` = `releaseAction`
 
 What to do with eligible resources after a failed or cancelled run.
 
 ###### onSuccess
 
-> **onSuccess**: `"release"` \| `"keep"`
+> **onSuccess**: `"release"` \| `"keep"` = `releaseAction`
 
 What to do with eligible resources after a completed run.
 
@@ -2730,7 +2730,7 @@ Render a Markdown review summary with commits, totals and up to 60 changed-file 
 
 ### ReleaseReport
 
-The result of applying a release policy to one run's managed resources.
+The result of applying a release policy to one run's resources.
 
 #### Properties
 
@@ -2742,34 +2742,95 @@ The policy applied by this release attempt.
 
 ###### onFailure
 
-> **onFailure**: `"release"` \| `"keep"`
+> **onFailure**: `"release"` \| `"keep"` = `releaseAction`
 
 What to do with eligible resources after a failed or cancelled run.
 
 ###### onSuccess
 
-> **onSuccess**: `"release"` \| `"keep"`
+> **onSuccess**: `"release"` \| `"keep"` = `releaseAction`
 
 What to do with eligible resources after a completed run.
 
-##### runDirectory
+##### resources
 
-> **runDirectory**: `ReleasedResource`
+> **resources**: [`ResourceRecord`](#resourcerecord)[]
 
-The scratch directory's local path, removal flag and reason for the result.
+Every resource the run recorded, with its state and reason after this attempt.
 
-##### worktrees
+***
 
-> **worktrees**: `ReleasedResource` & `object`[]
+### ResourceRecord
 
-Results for the run's worktrees, including paths, branches, removal flags, unmerged commit
-counts and reasons for anything retained.
+One recorded resource and what has happened to it. Records stay after release as history.
+
+#### Extends
+
+- [`RunResource`](#runresource)
+
+#### Properties
+
+##### identity
+
+> **identity**: `string`
+
+The stable name that distinguishes this resource from others of the same kind.
+
+###### Inherited from
+
+[`RunResource`](#runresource).[`identity`](#identity-1)
+
+##### kind
+
+> **kind**: `string`
+
+The resource category, such as `worktree` or `run-directory`.
+
+###### Inherited from
+
+[`RunResource`](#runresource).[`kind`](#kind-2)
+
+##### reason
+
+> **reason**: `string` \| `null`
+
+Why the resource is in its state, or null while it is live and untouched.
+
+##### runId
+
+> **runId**: `string`
+
+The run that owns the resource.
+
+##### state
+
+> **state**: [`ResourceState`](#resourcestate)
+
+##### updatedAt
+
+> **updatedAt**: `string`
+
+When the state last changed, as an ISO timestamp.
+
+##### url
+
+> **url**: `string`
+
+An absolute URL where a human can inspect the resource.
+
+###### Inherited from
+
+[`RunResource`](#runresource).[`url`](#url-2)
 
 ***
 
 ### RunResource
 
 A durable thing that a run created or otherwise owns a reference to.
+
+#### Extended by
+
+- [`ResourceRecord`](#resourcerecord)
 
 #### Properties
 
@@ -2828,6 +2889,15 @@ The named repository binding in the factory configuration.
 > **ReleasePolicy** = `z.input`\<*typeof* `releaseSchema`\>
 
 Selects whether eligible run resources are released for each terminal outcome.
+
+***
+
+### ResourceState
+
+> **ResourceState** = `"live"` \| `"kept"` \| `"released"` \| `"failed"`
+
+Where a recorded resource stands: `live` until release decides, then `kept` by policy or a
+safety check, `released`, or `failed` when the release attempt errored and will be retried.
 
 ## Errors and utilities
 

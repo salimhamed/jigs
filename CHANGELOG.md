@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.75.0](https://github.com/salimhamed/jigs/compare/jigs-v0.74.0...jigs-v0.75.0) (2026-09-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* run resources move from Workflow SDK run attributes and the `jigs_worktrees` table to a single `jigs_resources` table, and old records are not read or migrated.
+
+### Code Refactoring
+
+* keep run resources in one jigs_resources table ([#428](https://github.com/salimhamed/jigs/issues/428)) ([c26416e](https://github.com/salimhamed/jigs/commit/c26416efd85a270a234c12d4e26d8d8bae8c8f6c))
+
 ## [0.74.0](https://github.com/salimhamed/jigs/compare/jigs-v0.73.0...jigs-v0.74.0) (2026-09-26)
 
 

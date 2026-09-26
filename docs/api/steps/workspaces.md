@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.74.0
+# @jigs-ai/jigs v0.75.0
 
 Prepare a run-owned worktree for a configured GitHub binding.
 
@@ -57,9 +57,11 @@ Injectable registry and ownership operations used while provisioning a worktree.
 
 #### Properties
 
-##### readOwner()?
+##### runStatus()?
 
-> `optional` **readOwner**: (`runId`) => `Promise`\<`OwnerState`\>
+> `optional` **runStatus**: (`runId`) => `Promise`\<`string` \| `null`\>
+
+The World's status for a run, or null when it has no such run.
 
 ###### Parameters
 
@@ -69,7 +71,7 @@ Injectable registry and ownership operations used while provisioning a worktree.
 
 ###### Returns
 
-`Promise`\<`OwnerState`\>
+`Promise`\<`string` \| `null`\>
 
 ##### sql?
 

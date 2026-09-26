@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.74.0
+# @jigs-ai/jigs v0.75.0
 
 Durable steps generated into your factory. Call them from workflow code.
 Each wrapper carries its own "use step" directive and stable factory identity.
@@ -554,8 +554,9 @@ Record a resource on this run independently of the workflow's return value.
 Register anything a person may need to find in `jigs status`. Kind and identity
 together name the record; registering again updates its URL. Create external
 resources in a separate step when creation is not safe to repeat, then register
-them here so registration retries cannot repeat creation. A record alone never
-permits deletion.
+them here so registration retries cannot repeat creation. The record is observation
+only: jigs never deletes what it names. The kinds jigs records and releases itself
+(`worktree`, `branch`, `run-directory`, `codex-home`, `pi-home`) are reserved.
 
 ***
 
@@ -572,13 +573,13 @@ the run ends; call it to release early, to read the report, or to pass this run'
 
 ###### onFailure
 
-`"release"` \| `"keep"` = `...`
+`"release"` \| `"keep"` = `releaseAction`
 
 What to do with eligible resources after a failed or cancelled run.
 
 ###### onSuccess
 
-`"release"` \| `"keep"` = `...`
+`"release"` \| `"keep"` = `releaseAction`
 
 What to do with eligible resources after a completed run.
 
