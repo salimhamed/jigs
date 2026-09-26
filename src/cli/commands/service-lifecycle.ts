@@ -159,8 +159,13 @@ type ServiceState =
 
 // Throws rather than guess when the pidfile names a live process that the
 // record cannot vouch for: stopping it could kill someone else's process, and
-// ignoring it could start a second service.
-function inspectService(slug: string, processes: ServiceProcesses): ServiceState {
+// ignoring it could start a second service. Only commands that stop, start or
+// prune pass `cleanUp`, which deletes records that name nothing.
+function inspectService(
+  slug: string,
+  processes: ServiceProcesses,
+  { cleanUp }: { cleanUp: boolean },
+): ServiceState {
   const pidfile = servicePidfilePath(slug);
   const recordFile = serviceSupervisionPath(slug);
   const pid = readPid(slug);
@@ -176,7 +181,7 @@ function inspectService(slug: string, processes: ServiceProcesses): ServiceState
     if (pid === undefined) return { kind: "none" };
     const alive = entries.find((entry) => entry.pid === pid);
     if (alive !== undefined) throw unverified(alive, `there is no service record at ${recordFile}`);
-    rmSync(pidfile, { force: true });
+    if (cleanUp) rmSync(pidfile, { force: true });
     return { kind: "none" };
   }
   if (pid !== undefined && pid !== record.processGroup) {
@@ -193,8 +198,13 @@ function inspectService(slug: string, processes: ServiceProcesses): ServiceState
   });
   switch (verdict.kind) {
     case "previous-boot":
-      rmSync(pidfile, { force: true });
-      rmSync(recordFile, { force: true });
+      if (verdict.lookalike !== undefined && pid !== undefined) {
+        throw unverified(
+          verdict.lookalike,
+          "the service record is from an earlier boot, yet this process matches its start time and command",
+        );
+      }
+      if (cleanUp) removeRecords(slug);
       return { kind: "none" };
     case "service":
       return { kind: "running", pid: verdict.leader.pid, processGroup: record.processGroup };
@@ -209,6 +219,11 @@ function inspectService(slug: string, processes: ServiceProcesses): ServiceState
       }
       return { kind: "stopped", orphanGroup: undefined };
   }
+}
+
+function removeRecords(slug: string): void {
+  rmSync(servicePidfilePath(slug), { force: true });
+  rmSync(serviceSupervisionPath(slug), { force: true });
 }
 
 /**
@@ -333,7 +348,7 @@ function readPid(slug: string): number | undefined {
 }
 
 function livePid(slug: string, processes: ServiceProcesses): number | undefined {
-  const state = inspectService(slug, processes);
+  const state = inspectService(slug, processes, { cleanUp: false });
   return state.kind === "running" ? state.pid : undefined;
 }
 
@@ -376,7 +391,7 @@ export async function startService(
   const { slug, serviceUrl, dashboardUrl } = service;
   const releaseExclusion = acquireServiceExclusion(slug, "start");
   try {
-    const state = inspectService(slug, processes);
+    const state = inspectService(slug, processes, { cleanUp: true });
     if (state.kind === "running") {
       out(`already running: pid ${state.pid} at ${serviceUrl}`);
       return;
@@ -411,12 +426,20 @@ export async function startService(
       throw new JigsError(`the service process for ${slug} did not start`, `check ${logFile}`);
     }
 
+    const startTime = processes.startTime(pid);
+    if (startTime === undefined && processes.signal(pid, 0)) {
+      processes.signal(pid, "SIGKILL");
+      throw new JigsError(
+        `could not read the start time of the new service process (pid ${pid}), so it was killed`,
+        "jigs needs it to recognise the service later; rerun the command, and report it if it keeps failing",
+      );
+    }
     // A process already gone has no start time; the readiness wait below
     // reports its failed boot.
     const record: ServiceRecord = {
       processGroup: pid,
       bootId: processes.bootId(),
-      startTime: processes.startTime(pid) ?? "",
+      startTime: startTime ?? "",
       command: `${process.execPath} ${SERVICE_ENTRY}`,
     };
     const pidfile = servicePidfilePath(slug);
@@ -528,7 +551,7 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 export async function stopService(deps: ServiceLifecycleDeps): Promise<void> {
   const { out, processes = nodeProcesses } = deps;
   const { slug } = resolveService(locateFactoryRoot(deps.cwd));
-  const state = inspectService(slug, processes);
+  const state = inspectService(slug, processes, { cleanUp: true });
   const target: ServiceTarget =
     state.kind === "running"
       ? { servicePid: state.pid, processGroup: state.processGroup }
@@ -570,7 +593,9 @@ async function stopRecorded(
           killWaitMs,
         });
   for (const entry of killed) out(`pid ${entry.pid} ignored SIGTERM — killed: ${entry.command}`);
-  rmSync(servicePidfilePath(slug), { force: true });
+  // The group is empty now, so the record has nothing left to find. Kept, it
+  // would claim whatever group later reuses that ID.
+  removeRecords(slug);
   rmSync(serviceRunStatePath(slug), { force: true });
   return stopped;
 }
@@ -584,24 +609,28 @@ export function requireServiceStopped(deps: ServiceLifecycleDeps): void {
   const { processes = nodeProcesses } = deps;
   const { slug } = resolveService(locateFactoryRoot(deps.cwd));
   const stop = "run pnpm exec jigs service stop first; prune never stops or kills processes";
-  const state = inspectService(slug, processes);
+  const state = inspectService(slug, processes, { cleanUp: true });
   if (state.kind === "running") {
     throw new JigsError(`factory service is still running as pid ${state.pid}`, stop);
   }
   // Nothing recorded means nothing jigs started can be running.
   if (state.kind === "none") return;
   const group = state.orphanGroup;
-  if (group === undefined) return;
-  const members = parsePs(processes.snapshot()).filter((entry) => entry.pgid === group);
-  if (members.length > 0) {
-    throw new JigsError(
-      [
-        `${members.length} process(es) are still running in the service's recorded process group ${group}:`,
-        ...members.map((entry) => `  pid ${entry.pid}: ${entry.command}`),
-      ].join("\n"),
-      stop,
-    );
+  const members =
+    group === undefined
+      ? []
+      : parsePs(processes.snapshot()).filter((entry) => entry.pgid === group);
+  if (members.length === 0) {
+    removeRecords(slug);
+    return;
   }
+  throw new JigsError(
+    [
+      `${members.length} process(es) are still running in the service's recorded process group ${group}:`,
+      ...members.map((entry) => `  pid ${entry.pid}: ${entry.command}`),
+    ].join("\n"),
+    stop,
+  );
 }
 
 export async function restartService(

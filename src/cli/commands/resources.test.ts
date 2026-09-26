@@ -213,6 +213,25 @@ test("apply fails loudly when a live pidfile pid has no service record", async (
   expect(connect).not.toHaveBeenCalled();
 });
 
+test("apply ignores a reused group once a clean stop removed the record", async () => {
+  const connect = vi.fn(() => database());
+
+  await prune(machine(["701 1 700 S node /Users/me/other-app/server.js"]), connect);
+
+  expect(connect).toHaveBeenCalled();
+});
+
+test("apply removes a crashed service's record once its group is empty", async () => {
+  recordService(700);
+  const connect = vi.fn(() => database());
+
+  await prune(machine(["1 0 1 Ss init"]), connect);
+
+  expect(connect).toHaveBeenCalled();
+  expect(existsSync(serviceSupervisionPath(factorySlug(root)))).toBe(false);
+  expect(existsSync(servicePidfilePath(factorySlug(root)))).toBe(false);
+});
+
 test("apply proceeds when another program took the group after a clean stop", async () => {
   recordService(700, { pidfile: false });
   const connect = vi.fn(() => database());

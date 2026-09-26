@@ -22,9 +22,13 @@ export interface ProcessControl {
   snapshot(): string;
   /** node's `kill(pid, sig)`: false when the process is gone, throws on any other error. */
   signal(pid: number, sig: NodeJS.Signals | 0): boolean;
-  /** Changes on every restart of the machine. */
+  /** Changes on every restart of the machine, and only then. */
   bootId(): string;
-  /** When `pid` started, as `ps` reports it; undefined when there is no such process. */
+  /**
+   * When `pid` started, in a form that stays the same for the life of the
+   * process even if the wall clock is changed; undefined when there is no
+   * such process.
+   */
   startTime(pid: number): string | undefined;
 }
 
@@ -65,16 +69,27 @@ export const systemProcesses: ProcessControl = {
       return readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
     }
     if (process.platform === "darwin") {
-      const result = spawnSync("sysctl", ["-n", "kern.boottime"], { encoding: "utf8" });
-      const sec = /sec\s*=\s*(\d+)/.exec(result.stdout ?? "")?.[1];
-      if (sec !== undefined) return sec;
+      const result = spawnSync("sysctl", ["-n", "kern.bootsessionuuid"], { encoding: "utf8" });
+      const uuid = result.status === 0 ? result.stdout.trim() : "";
+      if (uuid !== "") return uuid;
       throw new JigsError(
-        `could not read the boot time with sysctl -n kern.boottime: ${result.error?.message ?? result.stderr}`,
+        `could not read the boot session with sysctl -n kern.bootsessionuuid: ${result.error?.message ?? result.stderr}`,
       );
     }
     throw new JigsError(`jigs manages its service on macOS and Linux, not ${process.platform}`);
   },
   startTime(pid) {
+    // Linux's lstart is computed from the wall-clock boot time and moves when
+    // the clock is stepped; the kernel's tick count since boot does not.
+    if (process.platform === "linux") {
+      let stat: string;
+      try {
+        stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+      } catch {
+        return undefined;
+      }
+      return procStatStartTime(stat);
+    }
     const result = spawnSync("ps", ["-o", "lstart=", "-p", String(pid)], {
       encoding: "utf8",
       env: PS_ENV,
@@ -85,6 +100,22 @@ export const systemProcesses: ProcessControl = {
 };
 
 const normalize = (text: string) => text.trim().replace(/\s+/g, " ");
+
+/**
+ * The start time field (22nd) of a Linux `/proc/<pid>/stat` line, in clock
+ * ticks since boot. Fields are counted after the last `)`, since the command
+ * name before it can hold spaces and parentheses.
+ */
+export function procStatStartTime(stat: string): string | undefined {
+  const close = stat.lastIndexOf(")");
+  if (close === -1) return undefined;
+  // What follows `)` starts at field 3, the state.
+  const field = stat
+    .slice(close + 1)
+    .trim()
+    .split(/\s+/)[22 - 3];
+  return field !== undefined && /^\d+$/.test(field) ? field : undefined;
+}
 
 const ROW = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s?(.*)$/;
 
@@ -122,15 +153,18 @@ export interface ServiceRecord {
  * What a service record says about the processes running now.
  *
  * - `previous-boot`: the record is from before the machine restarted, so
- *   nothing it names is running.
+ *   nothing it names is running. `lookalike` is a process that still matches
+ *   the record's pid, start time and command, which should not happen.
  * - `service`: the recorded service is running.
- * - `leader-gone`: the service has exited; processes it started may remain
- *   in its group, which no other group can take while they do.
+ * - `leader-gone`: the service has exited and processes it started may remain
+ *   in its group. A stop deletes the record once the group is empty, so this
+ *   arises between a crash and the next start or stop; the group ID is not
+ *   handed out again while anything is still in the group.
  * - `reused`: an unrelated process now has the service's pid, so the group
  *   is no longer the service's either.
  */
 export type RecordVerdict =
-  | { kind: "previous-boot" }
+  | { kind: "previous-boot"; lookalike?: ProcessEntry }
   | { kind: "service"; leader: ProcessEntry }
   | { kind: "leader-gone" }
   | { kind: "reused"; leader: ProcessEntry };
@@ -143,12 +177,15 @@ export function judgeRecord(
     startTime: (pid: number) => string | undefined;
   },
 ): RecordVerdict {
-  if (record.bootId !== observed.bootId) return { kind: "previous-boot" };
   const leader = observed.entries.find((entry) => entry.pid === record.processGroup);
-  if (leader === undefined) return { kind: "leader-gone" };
   const same =
+    leader !== undefined &&
     normalize(leader.command) === normalize(record.command) &&
     observed.startTime(leader.pid) === record.startTime;
+  if (record.bootId !== observed.bootId) {
+    return same ? { kind: "previous-boot", lookalike: leader } : { kind: "previous-boot" };
+  }
+  if (leader === undefined) return { kind: "leader-gone" };
   return same ? { kind: "service", leader } : { kind: "reused", leader };
 }
 

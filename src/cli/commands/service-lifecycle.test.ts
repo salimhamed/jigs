@@ -522,8 +522,8 @@ test("stop ends what the service started, in its group or below it", async () =>
   expect(lines).toEqual([
     `stopped service ${factorySlug(root)} (pid 4242 and 3 process(es) it started)`,
   ]);
-  // Prune reads the group after the stop.
-  expect(existsSync(serviceSupervisionPath(factorySlug(root)))).toBe(true);
+  // The group is empty, so the record would only ever find someone else's.
+  expect(existsSync(serviceSupervisionPath(factorySlug(root)))).toBe(false);
 });
 
 test("a stop that leaves a survivor fails and keeps the pidfile for another try", async () => {
@@ -644,6 +644,64 @@ test("an unreadable service record is an error, not a missing one", async () => 
   const err = await failure(stopService(deps(root, fake())));
 
   expect(err?.message).toContain("unreadable");
+});
+
+test("after a clean stop, a new group that reuses the id is never signalled", async () => {
+  const root = builtFactory();
+  const io = fake();
+  await startService(deps(root, io));
+  exitsOnTerm(io);
+  await stopService(deps(root, io));
+  io.signals.length = 0;
+  // Another program got pid 4242, led its own group, and exited, leaving a
+  // background server in that group.
+  io.alive.add(4243);
+  io.table.set(4243, { ppid: 1, pgid: 4242, command: "node /Users/me/other-app/server.js" });
+
+  await stopService(deps(root, io));
+  await startService(deps(root, io));
+
+  expect(io.signals.filter((s) => s.pid === 4243 && s.sig !== 0)).toEqual([]);
+  expect(io.alive.has(4243)).toBe(true);
+});
+
+test("an earlier boot's record whose pid still matches is not silently discarded", async () => {
+  const root = builtFactory();
+  const io = fake();
+  await startService(deps(root, io));
+  io.boot = "boot-2";
+
+  const err = await failure(stopService(deps(root, io)));
+
+  expect(err?.message).toContain("cannot be verified");
+  expect(err?.hint).toContain("earlier boot");
+  expect(existsSync(servicePidfilePath(factorySlug(root)))).toBe(true);
+});
+
+test("status reads the records without deleting them; stop cleans them up", async () => {
+  const root = builtFactory();
+  const io = fake();
+  const slug = reusedByTmux(root, io);
+  io.boot = "boot-2";
+
+  serviceStatus(deps(root, io));
+  expect(existsSync(servicePidfilePath(slug))).toBe(true);
+  expect(existsSync(serviceSupervisionPath(slug))).toBe(true);
+
+  await stopService(deps(root, io));
+  expect(existsSync(serviceSupervisionPath(slug))).toBe(false);
+});
+
+test("a new service whose start time cannot be read is killed and the start fails", async () => {
+  const root = builtFactory();
+  const io = fake();
+  io.processes.startTime = () => undefined;
+
+  const err = await failure(startService(deps(root, io)));
+
+  expect(err?.message).toContain("could not read the start time");
+  expect(io.signals).toContainEqual({ pid: 4242, sig: "SIGKILL" });
+  expect(existsSync(servicePidfilePath(factorySlug(root)))).toBe(false);
 });
 
 test("stop without a pidfile says so instead of failing", async () => {

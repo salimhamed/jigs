@@ -4,6 +4,7 @@ import {
   judgeRecord,
   type ProcessControl,
   parsePs,
+  procStatStartTime,
   type ServiceRecord,
   selectServiceProcesses,
   stopProcessTree,
@@ -231,4 +232,12 @@ test("a process already gone when signalled is fine", async () => {
   await expect(stopProcessTree(control, service, quick)).resolves.toMatchObject({
     killed: [],
   });
+});
+
+test("the start time is read after the last parenthesis of a Linux stat line", () => {
+  const fields = Array.from({ length: 50 }, (_, i) => String(i + 3));
+  fields[0] = "S";
+  const stat = `4242 (node (worker) x) ${fields.join(" ")}\n`;
+  expect(procStatStartTime(stat)).toBe("22");
+  expect(procStatStartTime("4242 (node")).toBeUndefined();
 });

@@ -111,9 +111,10 @@ so you can end it yourself.
 
 jigs stops only processes it can tell are its own. It records the machine's
 boot, the service's start time and its command when it starts the service. A
-record from before the machine last restarted is discarded, and a process that
-has since been given the service's process ID is never signalled: the command
-fails and names it instead.
+record from before the machine last restarted is discarded, a stop deletes the
+record once nothing the service started is left, and a process that has since
+been given the service's process ID is never signalled: the command fails and
+names it instead.
 
 Two kinds of process can outlive a stop:
 
