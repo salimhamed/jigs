@@ -89,6 +89,8 @@ export type AskJevOptions<QUESTIONS extends JevQuestions> = {
   model: OpenrouterSource;
   state: JevState;
   questions: QUESTIONS;
+  /** A stable name for the decision point, recorded in the run's decision log. */
+  site?: string;
 };
 
 /**
