@@ -19,7 +19,7 @@ import type {
 } from "../../workflow/linear/halt-for-human.ts";
 import type { PostTicketNote, TicketNote } from "../../workflow/linear/review.ts";
 import { dashboardRunUrl, type NamedRunMetadata } from "../runtime/run-context.ts";
-import { resolveParticipants, runOperator } from "./mentions.ts";
+import { resolveParticipants } from "./mentions.ts";
 import {
   type NeedsHumanContext,
   type RenderNeedsHumanComment,
@@ -32,10 +32,11 @@ import {
  * Post a question or failure on the ticket so a person can help the run continue.
  *
  * @remarks
- * Mentions the operator (the workflow's `linear.operator`, else the factory's),
- * or the ticket's creator when neither is set, then the assignee and the halt's
- * `mention` emails, each person once. A person Linear cannot find is skipped
- * with a warning; the comment always posts.
+ * Mentions the factory's `linear.operator`, or the ticket's creator when it is
+ * not set, then the assignee and the halt's `mention` emails, each person once.
+ * A person Linear cannot find is skipped with a warning; the comment always
+ * posts. `definition` is the built factory definition the step wrapper passes
+ * in, so a changed operator takes effect after a rebuild, which `jigs up` does.
  *
  * @group Human interaction primitives
  */
@@ -43,7 +44,7 @@ export const postTicketHumanInputRequest = async (
   issueId: string,
   halt: Halt,
   metadata: NamedRunMetadata,
-  definition: FactoryDefinition,
+  definition: Pick<FactoryDefinition, "linear">,
   render: RenderNeedsHumanComment = renderNeedsHumanComment,
 ): ReturnType<PostTicketHumanInputRequest> => {
   const context: NeedsHumanContext = {
@@ -52,7 +53,7 @@ export const postTicketHumanInputRequest = async (
     dashboardUrl: dashboardRunUrl(metadata.workflowRunId),
   };
   const participants = await resolveParticipants(issueId, {
-    operator: await runOperator(metadata, definition),
+    operator: definition.linear?.operator,
     mention: halt.mention,
   });
   const comment = await createComment(issueId, render(halt, context, participants));
@@ -72,12 +73,11 @@ export const postTicketHumanInputRequest = async (
 export const postTicketNote = async (
   issueId: string,
   note: TicketNote,
-  metadata: NamedRunMetadata,
-  definition: FactoryDefinition,
+  definition: Pick<FactoryDefinition, "linear">,
   render: RenderTicketNote = renderTicketNote,
 ): ReturnType<PostTicketNote> => {
   const participants = await resolveParticipants(issueId, {
-    operator: await runOperator(metadata, definition),
+    operator: definition.linear?.operator,
     mention: note.mention,
   });
   const comment = await createComment(issueId, render(note, participants));

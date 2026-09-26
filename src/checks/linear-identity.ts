@@ -69,27 +69,18 @@ export interface LinearOperatorProbes {
   userByEmail(email: string): Promise<LinearUser | null>;
 }
 
-/** Where an operator email is configured: the factory, or one workflow's override. */
-export interface OperatorSetting {
-  email: string;
-  workflow?: string;
-}
-
 // Doctor only, never preflight: a mention must never stop a run from starting.
-/** Whether each configured operator email belongs to a Linear user who will be notified. */
+/** Whether the factory's operator email belongs to a Linear user who will be notified. */
 export function linearOperatorChecks(
   identity: LinearIdentity,
-  settings: OperatorSetting[],
+  email: string | undefined,
   probes: LinearOperatorProbes,
 ): Check[] {
-  return settings.map(({ email, workflow }) => {
-    const where =
-      workflow === undefined
-        ? `linear.operator in ${FACTORY_CONFIG_FILE}`
-        : `linear.operator in workflow ${workflow}'s defineWorkflow`;
-    return {
-      id: workflow === undefined ? "linear.operator" : `linear.operator.${workflow}`,
-      label: workflow === undefined ? "Linear operator" : `Linear operator (workflow ${workflow})`,
+  if (email === undefined) return [];
+  return [
+    {
+      id: "linear.operator",
+      label: "Linear operator",
       run: async () => {
         let user: LinearUser | null;
         try {
@@ -105,7 +96,7 @@ export function linearOperatorChecks(
           return {
             ok: false,
             reason: `no active Linear user has the email ${email}`,
-            repair: `set ${where} to the email of an active user in this Linear workspace, or remove it to mention the ticket's creator, then: pnpm exec jigs up`,
+            repair: `set linear.operator in ${FACTORY_CONFIG_FILE} to the email of an active user in this Linear workspace, or remove it to mention the ticket's creator, then: pnpm exec jigs up`,
           };
         }
         if (identity.mode === "key") {
@@ -119,6 +110,6 @@ export function linearOperatorChecks(
         }
         return { ok: true, detail: `mentions ${user.name}` };
       },
-    };
-  });
+    },
+  ];
 }

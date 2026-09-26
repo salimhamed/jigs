@@ -42,7 +42,6 @@ import {
   type LinearIdentityProbes,
   linearIdentityChecks,
   linearOperatorChecks,
-  type OperatorSetting,
 } from "./linear-identity.ts";
 import { linearWebhookChecks } from "./linear-webhook.ts";
 import { mcpServerChecks } from "./mcp.ts";
@@ -86,7 +85,6 @@ export {
   type LinearOperatorProbes,
   linearIdentityChecks,
   linearOperatorChecks,
-  type OperatorSetting,
 } from "./linear-identity.ts";
 export { codexWorktreeConfigCheck, mcpServerChecks } from "./mcp.ts";
 export { type WebhookChecksOptions, webhookChecks } from "./webhooks.ts";
@@ -142,24 +140,17 @@ function linearChecks(): Check[] {
   return linearIdentityChecks(identity, linearProbes);
 }
 
-// The factory's operator and every workflow override. An unreadable config is
-// the identity check's diagnosis, so it adds nothing here.
-function linearOperatorDoctorChecks(workflows: WorkflowManifests): Check[] {
+// An unreadable config is the identity check's diagnosis, so it adds nothing here.
+function linearOperatorDoctorChecks(): Check[] {
   let identity: LinearIdentity;
-  let factoryOperator: string | undefined;
+  let operator: string | undefined;
   try {
     identity = resolveLinearIdentity();
-    factoryOperator = readFactoryConfig(factoryRoot()).linear.operator;
+    operator = readFactoryConfig(factoryRoot()).linear.operator;
   } catch {
     return [];
   }
-  const settings: OperatorSetting[] = [
-    ...(factoryOperator === undefined ? [] : [{ email: factoryOperator }]),
-    ...Object.entries(workflows).flatMap(([workflow, entry]) =>
-      entry.linear?.operator === undefined ? [] : [{ email: entry.linear.operator, workflow }],
-    ),
-  ];
-  return linearOperatorChecks(identity, settings, {
+  return linearOperatorChecks(identity, operator, {
     viewer: getViewer,
     userByEmail: findUserByEmail,
   });
@@ -220,17 +211,13 @@ export function doctorChecks(workflows: WorkflowManifests): Check[] {
     ...(requires.aws ? (["aws"] as const) : []),
   ]);
   const configured = configuredProviders();
-  // An operator override asks for Linear even where no workflow requires it.
-  if (Object.values(workflows).some((entry) => entry.linear?.operator !== undefined)) {
-    configured.linear = true;
-  }
   const provider = (name: Integration, checks: () => Check[]): Check[] => {
     const needing = users.get(name) ?? [];
     return needing.length > 0 || configured[name] ? neededByWorkflows(checks(), needing) : [];
   };
   const aws = users.get("aws") ?? [];
   return [
-    ...provider("linear", () => [...linearChecks(), ...linearOperatorDoctorChecks(workflows)]),
+    ...provider("linear", () => [...linearChecks(), ...linearOperatorDoctorChecks()]),
     ...provider("github", githubChecks),
     // Keyed on the config rather than the Linear credential: a Linear webhook
     // switched on without its secret is a failure even where that is missing too.

@@ -123,7 +123,7 @@ export async function postTicketHumanInputRequest(issueId: string, halt: Halt) {
 export async function postTicketNote(issueId: string, note: TicketNote) {
   "use step";
   const { default: definition } = await import("../jigs.config.ts");
-  return linearOperations.postTicketNote(issueId, note, getWorkflowMetadata(), definition);
+  return linearOperations.postTicketNote(issueId, note, definition);
 }
 
 /**

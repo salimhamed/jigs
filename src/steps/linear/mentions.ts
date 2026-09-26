@@ -2,36 +2,8 @@
 // effort: a mention decides only who gets notified, so a person Linear cannot
 // find is left out with a warning and the comment still posts.
 
-import { readFactoryConfig } from "../../config/factory-config.ts";
-import { factoryRoot } from "../../config/factory-root.ts";
 import { findUserByEmail, getIssueParticipants, type LinearUser } from "../../providers/linear.ts";
-import type { FactoryDefinition } from "../../workflow/factory.ts";
-import type { NamedRunMetadata } from "../runtime/run-context.ts";
-import { loadRunWorkflow } from "../runtime/run-workflow.ts";
 import type { TicketParticipants } from "./render-comment.ts";
-
-/**
- * The operator email this run's comments mention: the workflow's own, else the
- * factory's. Undefined when neither sets one; null when the configuration
- * could not be read, which the comment treats like an operator Linear cannot find.
- */
-export async function runOperator(
-  metadata: NamedRunMetadata,
-  definition: FactoryDefinition,
-): Promise<string | null | undefined> {
-  try {
-    const workflow = await loadRunWorkflow(metadata, definition);
-    if (workflow === undefined) {
-      console.warn(
-        `[mentions] no workflow in the factory matches ${metadata.workflowName}; using the factory's linear.operator`,
-      );
-    }
-    return workflow?.linear?.operator ?? readFactoryConfig(factoryRoot()).linear.operator;
-  } catch (err) {
-    console.warn(`[mentions] could not read the Linear operator; skipping: ${err}`);
-    return null;
-  }
-}
 
 async function lookup(email: string, role: "operator" | "mention"): Promise<LinearUser | null> {
   try {
@@ -71,23 +43,23 @@ function once(users: Array<LinearUser | null>): LinearUser[] {
 /**
  * Resolve who a comment on the issue mentions: the operator, or the creator
  * when there is no operator, then the assignee, then the extra emails, each
- * person once. An operator Linear cannot find, or a null operator, leaves the
- * assignee and extras; a ticket whose people cannot be read leaves the rest.
+ * person once. An operator Linear cannot find leaves the assignee and extras;
+ * a ticket whose people cannot be read leaves the rest.
  */
 export async function resolveParticipants(
   issueId: string,
-  who: { operator?: string | null | undefined; mention?: readonly string[] | undefined },
+  who: { operator?: string | undefined; mention?: readonly string[] | undefined },
 ): Promise<TicketParticipants> {
   const [{ creator, assignee }, operator, ...extra] = await Promise.all([
     ticketPeople(issueId),
-    typeof who.operator === "string" ? lookup(who.operator, "operator") : null,
+    who.operator === undefined ? null : lookup(who.operator, "operator"),
     ...(who.mention ?? []).map((email) => lookup(email, "mention")),
   ]);
-  const lead = who.operator === undefined ? creator : (operator ?? null);
+  const lead = who.operator === undefined ? creator : operator;
   return {
     creator,
     assignee,
-    operator: operator ?? null,
+    operator,
     mentions: once([lead, assignee, ...extra]),
   };
 }

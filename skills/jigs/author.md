@@ -107,11 +107,11 @@ than the `postTicketNote` step. The claim records every comment the run posts,
 and `haltForHuman` skips them all when it looks for a human's reply.
 
 Every jigs comment on a ticket mentions the operator (or, without one, the
-ticket's creator) and the assignee. Set `linear: { operator: "<email>" }` in
-`defineWorkflow` to replace the factory's `linear.operator` for one workflow.
-To notify more people, add `mention: ["<email>"]` to a halt or note, or pass
-`mention` to `reviewTicket` or as `runAgentOrHalt`'s third argument. Unknown
-emails are skipped with a warning; the comment still posts.
+ticket's creator) and the assignee. The operator is the factory's
+`linear.operator` in `jigs.config.ts`, and a change takes effect after `jigs up`
+rebuilds. To notify more people, add `mention: ["<email>"]` to a halt or note,
+or pass `mention` to `reviewTicket` or as `runAgentOrHalt`'s third argument.
+Unknown emails are skipped with a warning; the comment still posts.
 
 ## Validation ownership
 

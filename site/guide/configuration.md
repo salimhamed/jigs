@@ -291,14 +291,14 @@ linear: { identity: { mode: "app" }, operator: "you@example.com" },
 
 Each person is mentioned once, even when the operator is also the assignee.
 Anyone's reply wakes a paused run; the mention only decides who is notified.
+The operator is one setting for the whole factory. Like the rest of
+`jigs.config.ts`, a change takes effect after a rebuild, which `jigs up` does.
 
-A workflow can name its own operator with
-`defineWorkflow({ ..., linear: { operator: "dana@example.com" } })`, which
-replaces the factory's for every comment that workflow posts. A step or routine
-that posts a comment, such as `haltForHuman` or `noteOnTicket`, also takes a
-`mention` list of extra emails to mention alongside these people.
+A step or routine that posts a comment, such as `haltForHuman` or
+`noteOnTicket`, also takes a `mention` list of extra emails to mention
+alongside these people.
 
-`jigs doctor`, and `jigs up`, look each operator email up in Linear and fail
+`jigs doctor`, and `jigs up`, look the operator email up in Linear and fail
 when no active Linear user has it. With the `key` identity, jigs posts as the
 key's owner, so if that is also the operator, doctor warns that the mentions
 will not notify you and suggests the `app` identity.
