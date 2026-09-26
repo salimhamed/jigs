@@ -180,8 +180,6 @@ Record in this doc, for each site:
 
 Then decide which sites to keep, move to shadow mode, or drop.
 
-## Open questions
-
 ## Resolved
 
 - **Site 7:** do both model routing and budgets. Use Jev as aggressively as
