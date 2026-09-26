@@ -118,7 +118,10 @@ async function leftBranches(
       repoDir === "" ? null : await m.tryGit(["ls-remote", "--heads", "origin"], repoDir);
     const existing =
       heads === null ? null : new Set(heads.split("\n").map((line) => line.split("\t")[1]));
+    // Never offer the default branch for deletion, whatever the records say.
+    const defaultBranch = repoDir === "" ? null : await m.deriveDefaultBranch(repoDir);
     for (const row of branches) {
+      if (row.branch === defaultBranch) continue;
       if (existing !== null && !existing.has(`refs/heads/${row.branch}`)) {
         if (options.apply === true) {
           await m.setResourceState(sql, row, "released", "deleted outside jigs");
@@ -259,7 +262,7 @@ function output(result: ResourceInventory, deps: ResourcesDeps, options: Resourc
   for (const error of result.errors) deps.out(`failed: ${error}`);
   for (const branch of result.leftOnGitHub) {
     deps.out(
-      `left on GitHub${branch.checked ? "" : " (could not check the remote; it may be gone)"}: ${branch.identity} — jigs doesn't delete remote branches; to remove it: ${branch.command}`,
+      `left on GitHub${branch.checked ? "" : " (could not check the remote; it may be gone)"}: ${branch.identity} — jigs doesn't delete remote branches; if its pull request is merged or closed, remove it with: ${branch.command}`,
     );
   }
   const { entries } = result;

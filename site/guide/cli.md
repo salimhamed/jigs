@@ -253,9 +253,11 @@ by the service with a growing wait between tries, and kept after the fifth
 failed attempt with its last error.
 
 jigs never deletes remote branches. The preview (and `--apply`) lists each
-branch a finished run left on GitHub, with the command that deletes it:
-`left on GitHub: owner/repo:branch — jigs doesn't delete remote branches; to
-remove it: git push origin --delete <branch>`. Turn on GitHub's "automatically
+branch a finished run created and left on GitHub, with the command that deletes
+it: `left on GitHub: owner/repo:branch — jigs doesn't delete remote branches;
+if its pull request is merged or closed, remove it with: git push origin
+--delete <branch>`. A branch the run only pushed to, such as the default
+branch or a person's branch, is never listed. Turn on GitHub's "automatically
 delete head branches" setting and merged pull requests take their branches
 with them; `--apply` notes the ones that are gone. Pull requests and resources
 a workflow registers itself stay in `jigs status <run>` as history, and are

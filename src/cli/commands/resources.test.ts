@@ -326,11 +326,21 @@ test("the preview lists branches finished runs left on GitHub, with how to delet
     },
   ]);
   expect(lines).toContain(
-    "left on GitHub: acme/api:still-there — jigs doesn't delete remote branches; to remove it: git push origin --delete still-there",
+    "left on GitHub: acme/api:still-there — jigs doesn't delete remote branches; if its pull request is merged or closed, remove it with: git push origin --delete still-there",
   );
   // A preview writes nothing, not even for the branch that is gone.
   expect(memoryRows.every((row) => row.state === "live")).toBe(true);
   expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+test("the clone's default branch is never listed, whatever the records say", async () => {
+  const { branch } = leftover();
+  branch("main");
+
+  const report = await pruneAll({ [RUN]: "completed" });
+
+  expect(report.leftOnGitHub).toEqual([]);
+  expect(memoryRows[0]?.state).toBe("live");
 });
 
 test("apply marks branches deleted outside jigs released and keeps listing the rest", async () => {

@@ -54,6 +54,9 @@ const branches = () => memoryRows.map((row) => [row.kind, row.identity, row.url]
 beforeEach(() => {
   memoryRows.length = 0;
   vi.mocked(git).mockResolvedValue("");
+  // The first push creates the branch; every later one updates it.
+  vi.mocked(pushCommit).mockResolvedValue({ created: false });
+  vi.mocked(gitPushBranch).mockResolvedValue({ created: false });
   vi.mocked(headSha).mockResolvedValue("approved");
   vi.mocked(resolveRemoteUrl).mockResolvedValue({
     remote: "origin",
@@ -63,6 +66,7 @@ beforeEach(() => {
 
 test("pat mode pushes to the binding's own remote, over SSH as the operator", async () => {
   authAs({ mode: "pat" });
+  vi.mocked(pushCommit).mockResolvedValueOnce({ created: true });
   await pushApprovedChange(worktree, "approved");
   expect(pushCommit).toHaveBeenCalledWith("/work", "feature", "approved", { remote: "origin" });
   await pushBranch(worktree);
@@ -72,17 +76,24 @@ test("pat mode pushes to the binding's own remote, over SSH as the operator", as
   ]);
 });
 
-test("every branch the run pushes is recorded once, with the clone to ask about it", async () => {
+test("a push that creates the branch records it, with the clone to ask about it", async () => {
   authAs({ mode: "pat" });
   vi.mocked(git).mockImplementation(async (args) =>
     args[0] === "rev-parse" ? "/data/clones/api/repo.git" : "",
   );
+  vi.mocked(gitPushBranch).mockResolvedValueOnce({ created: true });
   await pushBranch(worktree);
   await pushApprovedChange(worktree, "approved");
-  expect(memoryRows[0]).toMatchObject({ repoDir: "/data/clones/api/repo.git", branch: "feature" });
-  expect(branches()).toEqual([
-    ["branch", "acme/api:feature", "https://github.com/acme/api/tree/feature"],
+  expect(memoryRows).toMatchObject([
+    { kind: "branch", repoDir: "/data/clones/api/repo.git", branch: "feature" },
   ]);
+});
+
+test("a push to a branch that already existed records nothing", async () => {
+  authAs({ mode: "pat" });
+  await pushBranch(worktree);
+  await pushApprovedChange(worktree, "approved");
+  expect(branches()).toEqual([]);
 });
 
 test("app mode pushes over HTTPS, with the token beside the URL rather than in it", async () => {
@@ -103,11 +114,12 @@ test("an installation token can only push to GitHub, and says so", async () => {
   await expect(pushApprovedChange(worktree, "approved")).rejects.toThrow("not a github.com remote");
 });
 
-test("a push retried after the remote branch appeared is still recorded as the run's", async () => {
+test("a push that fails records nothing, and its retry records the branch it creates", async () => {
   authAs({ mode: "pat" });
-  vi.mocked(gitPushBranch).mockRejectedValueOnce(new Error("connection reset after the push"));
+  vi.mocked(gitPushBranch).mockRejectedValueOnce(new Error("connection reset"));
   await expect(pushBranch(worktree)).rejects.toThrow("connection reset");
-  expect(branches()).toHaveLength(1);
+  expect(branches()).toEqual([]);
+  vi.mocked(gitPushBranch).mockResolvedValueOnce({ created: true });
   await pushBranch(worktree);
   expect(branches()).toEqual([
     ["branch", "acme/api:feature", "https://github.com/acme/api/tree/feature"],

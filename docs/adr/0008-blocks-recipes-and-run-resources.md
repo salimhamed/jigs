@@ -49,11 +49,14 @@ else records it.
   it and write each outcome through one function (`releaseOne`). Handlers
   delete only what jigs recorded itself (run ID, identity, a worktree's clone
   and branch), never a factory-supplied URL.
-- **Branches.** jigs never deletes remote branches. Every branch a run pushes
-  is recorded (before the push, with the clone it was pushed from), and stays
-  `live`. `jigs resources prune` asks each clone's remote once which of the
-  finished runs' branches still exist, lists those with the command that
-  deletes them, and on `--apply` marks the ones already gone `released`
+- **Branches.** jigs never deletes remote branches. A branch is recorded, with
+  the clone it was pushed from, only when the run's push created it (`git push
+  --porcelain` flags the ref as new), so the default branch or a person's
+  branch a run pushed to is never listed; prune also skips the clone's default
+  branch. The record stays `live`. `jigs resources prune` asks each clone's
+  remote once which of the finished runs' branches still exist, lists those
+  with the command that deletes them, and on `--apply` marks the ones already
+  gone `released`
   ("deleted outside jigs"). GitHub's "automatically delete head branches"
   setting removes merged pull requests' branches; nothing in jigs calls the
   GitHub API to delete one.

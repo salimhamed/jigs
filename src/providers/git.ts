@@ -123,14 +123,20 @@ function pushEnv(target: PushTarget): NodeJS.ProcessEnv {
   };
 }
 
+/** What a push did to the remote branch. */
+export interface Pushed {
+  /** Whether this push created the branch on the remote. */
+  created: boolean;
+}
+
 // No force: the branch is jigs-owned and only ever appended to, so a plain
 // push is create-or-fast-forward and stays idempotent on a re-push.
 export async function pushBranch(
   worktreePath: string,
   branch: string,
   target: PushTarget = DEFAULT_PUSH_TARGET,
-): Promise<void> {
-  await push(worktreePath, target, `HEAD:refs/heads/${branch}`);
+): Promise<Pushed> {
+  return push(worktreePath, target, `HEAD:refs/heads/${branch}`);
 }
 
 /** Push an exact commit even if the local branch moves before Git sends it. */
@@ -139,13 +145,19 @@ export async function pushCommit(
   branch: string,
   commit: string,
   target: PushTarget = DEFAULT_PUSH_TARGET,
-): Promise<void> {
-  await push(worktreePath, target, `${commit}:refs/heads/${branch}`);
+): Promise<Pushed> {
+  return push(worktreePath, target, `${commit}:refs/heads/${branch}`);
 }
 
-async function push(worktreePath: string, target: PushTarget, refspec: string): Promise<void> {
+// Porcelain output flags each ref it updated; `*` is a ref the push created.
+async function push(worktreePath: string, target: PushTarget, refspec: string): Promise<Pushed> {
   try {
-    await git(["push", "--end-of-options", target.remote, refspec], worktreePath, pushEnv(target));
+    const out = await git(
+      ["push", "--porcelain", "--end-of-options", target.remote, refspec],
+      worktreePath,
+      pushEnv(target),
+    );
+    return { created: out.split("\n").some((line) => line.startsWith("*\t")) };
   } catch (error) {
     throw new Error(scrubCredentials(error instanceof Error ? error.message : String(error)));
   }

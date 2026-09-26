@@ -95,24 +95,24 @@ function branchWithWork(
   return { tree, baseSha };
 }
 
-test("pushBranch creates the remote branch and is idempotent on a second call", async () => {
+test("pushBranch creates the remote branch, says so, and is idempotent on a second call", async () => {
   const { remoteDir, checkout } = makeRemoteBackedRepo(tmp);
   const { tree } = branchWithWork(tmp, checkout, "feature", {
     "shipped.txt": "shipped\n",
   });
 
-  await pushBranch(tree, "feature");
+  expect(await pushBranch(tree, "feature")).toEqual({ created: true });
   expect(git(checkout, "ls-remote", "--heads", "origin", "feature")).toContain(
     "refs/heads/feature",
   );
 
   // No new commits: the same push is a no-op rather than a rejection.
-  await expect(pushBranch(tree, "feature")).resolves.toBeUndefined();
+  await expect(pushBranch(tree, "feature")).resolves.toEqual({ created: false });
 
   writeFileSync(path.join(tree, "more.txt"), "more\n");
   git(tree, "add", ".");
   git(tree, "commit", "-q", "-m", "more work");
-  await pushBranch(tree, "feature");
+  expect(await pushBranch(tree, "feature")).toEqual({ created: false });
   expect(git(remoteDir, "rev-parse", "refs/heads/feature")).toBe(git(tree, "rev-parse", "HEAD"));
 });
 

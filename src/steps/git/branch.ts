@@ -6,6 +6,7 @@ import {
   git,
   pushBranch as gitPushBranch,
   headSha,
+  type Pushed,
   type PushTarget,
   pushCommit,
   resolveRemoteUrl,
@@ -40,15 +41,18 @@ async function pushTarget(worktreePath: string): Promise<PushTarget> {
 }
 
 /**
- * Push, recording the branch as this run's. jigs never deletes remote branches; the record is
- * how `jigs resources prune` finds the ones a run left on GitHub, and the clone recorded with it
- * is where prune asks the remote which still exist.
+ * Push, recording the branch as this run's only when this push created it on the remote, so a
+ * branch the run merely pushed to (the default branch, a person's pull request branch) is never
+ * offered for deletion. jigs never deletes remote branches; the record is how
+ * `jigs resources prune` lists the ones a run left on GitHub.
  */
-async function pushAndRecord(worktreePath: string, branch: string, push: () => Promise<void>) {
+async function pushAndRecord(worktreePath: string, branch: string, push: () => Promise<Pushed>) {
+  const { created } = await push();
   const { url } = await resolveRemoteUrl(worktreePath);
   const ref = parseGithubRemote(url);
-  if (ref === null) return push();
-  // Recorded before the push, so a push whose step is retried is still recorded.
+  // A retry after a push that created the branch but died before this point
+  // sees an existing ref and records nothing: the branch is then never listed.
+  if (!created || ref === null) return;
   await recordResource(registrySql(), {
     factory: currentFactory(),
     runId: getWorkflowMetadata().workflowRunId,
@@ -58,7 +62,6 @@ async function pushAndRecord(worktreePath: string, branch: string, push: () => P
     repoDir: await git(["rev-parse", "--path-format=absolute", "--git-common-dir"], worktreePath),
     branch,
   });
-  await push();
 }
 
 /**
