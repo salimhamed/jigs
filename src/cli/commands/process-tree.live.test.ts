@@ -1,6 +1,10 @@
 import { spawn } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { expect, test } from "vitest";
 import {
+  judgeRecord,
   parsePs,
   selectServiceProcesses,
   stopProcessTree,
@@ -50,4 +54,34 @@ test("stopping a real service ends its child in another group and its orphan in 
   expect(result.killed).toHaveLength(1);
   const left = new Set(parsePs(systemProcesses.snapshot()).map((entry) => entry.pid));
   for (const entry of started) expect(left.has(entry.pid)).toBe(false);
+});
+
+test("a service is known again by boot ID, start time and command as ps reports them", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "jigs-process-tree-"));
+  const entry = path.join(dir, "index.mjs");
+  writeFileSync(entry, `${IDLE};\n`);
+  const service = spawn(process.execPath, [entry], { detached: true, stdio: "ignore" });
+  const pid = service.pid as number;
+  try {
+    const record = {
+      processGroup: pid,
+      bootId: systemProcesses.bootId(),
+      startTime: systemProcesses.startTime(pid) ?? "",
+      command: `${process.execPath} ${entry}`,
+    };
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
+
+    const verdict = judgeRecord(record, {
+      bootId: systemProcesses.bootId(),
+      entries: parsePs(systemProcesses.snapshot()),
+      startTime: (leader) => systemProcesses.startTime(leader),
+    });
+
+    expect(record.bootId).not.toBe("");
+    expect(record.startTime).not.toBe("");
+    expect(verdict.kind).toBe("service");
+  } finally {
+    process.kill(pid, "SIGKILL");
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

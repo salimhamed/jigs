@@ -1,9 +1,10 @@
 import { expect, test } from "vitest";
 import { JigsError } from "../../errors.ts";
 import {
+  judgeRecord,
   type ProcessControl,
   parsePs,
-  processGroupMembers,
+  type ServiceRecord,
   selectServiceProcesses,
   stopProcessTree,
 } from "./process-tree.ts";
@@ -44,29 +45,69 @@ test("selection is the service, its descendants in any group, and orphans still 
   expect(pids(selected)).toEqual([700, 710, 720, 721, 730]);
 });
 
-test("the stopping process and its ancestors are never selected, even inside the group", () => {
-  const ps = `${PS}  750   710   700 S    node /usr/bin/jigs service stop\n`;
-  const selected = selectServiceProcesses(parsePs(ps), service, { self: 750 });
-  expect(pids(selected)).toEqual([720, 721, 730]);
-});
-
-test("a recorded pid that no longer leads the recorded group is someone else's", () => {
-  const ps = "  700     1   999 Ss   vim notes.txt\n  701   700   999 S    less\n";
-  expect(selectServiceProcesses(parsePs(ps), service, { self: 1 })).toEqual([]);
+test("stopping the service from inside it is refused", () => {
+  const ps = `${PS}  750   710   760 S    node /usr/bin/jigs service restart\n`;
+  expect(() => selectServiceProcesses(parsePs(ps), service, { self: 750 })).toThrow(
+    "refusing to stop the service from inside it",
+  );
 });
 
 test("a process selected earlier stays selected after its parent exits, by pid and command", () => {
   const ps = "  720     1   720 Ss   bash -c pnpm test\n  721   720   720 S    node vitest run\n";
   const known = new Map([[720, "bash -c pnpm test"]]);
-  expect(pids(selectServiceProcesses(parsePs(ps), service, { self: 1, known }))).toEqual([
-    720, 721,
-  ]);
+  expect(pids(selectServiceProcesses(parsePs(ps), {}, { self: 1, known }))).toEqual([720, 721]);
   const reused = new Map([[720, "something else"]]);
-  expect(selectServiceProcesses(parsePs(ps), service, { self: 1, known: reused })).toEqual([]);
+  expect(selectServiceProcesses(parsePs(ps), {}, { self: 1, known: reused })).toEqual([]);
 });
 
-test("group members are only the processes in the group", () => {
-  expect(pids(processGroupMembers(parsePs(PS), 700, 501))).toEqual([700, 710, 730]);
+const RECORD: ServiceRecord = {
+  processGroup: 700,
+  bootId: "boot-1",
+  startTime: "Fri Sep 25 09:00:00 2026",
+  command: "/usr/bin/node .output/server/index.mjs",
+};
+
+const observe = (ps: string, bootId = "boot-1", startTime = RECORD.startTime) => ({
+  bootId,
+  entries: parsePs(ps),
+  startTime: () => startTime,
+});
+
+// The records name pid 612, which a tmux server now has, with shells in it.
+const TMUX = `
+  612     1   612 Ss   tmux new -s work
+  613   612   613 Ss   -zsh
+  614   613   613 S+   vim notes.md
+`;
+
+test("a record whose pid now leads someone else's group selects nothing", () => {
+  const record = { ...RECORD, processGroup: 612 };
+  const verdict = judgeRecord(record, observe(TMUX, "boot-1", "Fri Sep 25 08:00:00 2026"));
+  expect(verdict.kind).toBe("reused");
+  expect(selectServiceProcesses(parsePs(TMUX), {}, { self: 1 })).toEqual([]);
+});
+
+test("a record from before the machine restarted names nothing running", () => {
+  const record = { ...RECORD, processGroup: 612 };
+  expect(judgeRecord(record, observe(TMUX, "boot-2")).kind).toBe("previous-boot");
+});
+
+test("with the service gone, what is left in its group is still its own", () => {
+  const ps = "  730     1   700 S    sleep 600\n  800     1   800 Ss   postgres\n";
+  expect(judgeRecord(RECORD, observe(ps)).kind).toBe("leader-gone");
+  expect(pids(selectServiceProcesses(parsePs(ps), { processGroup: 700 }, { self: 1 }))).toEqual([
+    730,
+  ]);
+});
+
+test("the recorded pid is the service only when its start time and command both match", () => {
+  const ps = `  700     1   700 Ss   ${RECORD.command}\n`;
+  expect(judgeRecord(RECORD, observe(ps)).kind).toBe("service");
+  expect(judgeRecord(RECORD, observe(ps, "boot-1", "Fri Sep 25 10:00:00 2026")).kind).toBe(
+    "reused",
+  );
+  const other = "  700     1   700 Ss   /usr/bin/node other.mjs\n";
+  expect(judgeRecord(RECORD, observe(other)).kind).toBe("reused");
 });
 
 type Behaviour = "exits" | "ignores-term" | "immortal" | "denied";
@@ -84,6 +125,8 @@ function machine(table: Map<number, FakeProcess>) {
   const control: ProcessControl = {
     snapshot: () =>
       [...table].map(([pid, p]) => `${pid} ${p.ppid} ${p.pgid} S ${p.command}\n`).join(""),
+    bootId: () => "boot-1",
+    startTime: () => undefined,
     signal(pid, sig) {
       signals.push([pid, sig]);
       const p = table.get(pid);

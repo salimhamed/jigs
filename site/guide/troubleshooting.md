@@ -99,6 +99,15 @@ signal, such as one started with `sudo`. End each listed process yourself, then
 run the command again. See
 [Stopping the service](/guide/cli#stopping-the-service).
 
+## A service command says a process ID cannot be verified as the service
+
+The pidfile names a process that is running, but its start time or command does
+not match what jigs recorded when it started the service. Usually another
+program was given that process ID after the service exited. jigs signals
+nothing and does not start a second service. Check the named process with `ps`;
+if it is not the factory's service, delete the two files the message names and
+run the command again.
+
 ## Runs stop moving after you ran `workflow web`
 
 Never run the Workflow SDK's standalone `workflow web` against a factory's

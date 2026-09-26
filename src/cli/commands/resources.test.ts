@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -13,6 +13,7 @@ import {
   servicePidfilePath,
   serviceSupervisionPath,
 } from "./service-lifecycle.ts";
+import { FAKE_BOOT, FAKE_START, SERVICE_COMMAND, serviceRecord } from "./test-fixtures.ts";
 
 const RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 const WORKFLOW = "workflow//./workflows/ship//shipWorkflow";
@@ -118,22 +119,24 @@ test("a workflow database read failure reports that nothing changed", async () =
 });
 
 // A machine with the given ps rows; `signal` answers liveness from them.
-function machine(rows: string[] = []): ServiceProcesses {
+function machine(rows: string[] = [], boot = FAKE_BOOT): ServiceProcesses {
   const output = rows.map((row) => `${row}\n`).join("");
   const alive = new Set(output.split("\n").map((row) => Number(row.trim().split(/\s+/)[0])));
   return {
     spawn: () => undefined,
     signal: (pid) => alive.has(pid),
     snapshot: () => output,
+    bootId: () => boot,
+    startTime: (pid) => (alive.has(pid) ? FAKE_START : undefined),
   };
 }
 
-function recordService(pid: number, processGroup = pid): void {
+function recordService(pid: number, options: { pidfile?: boolean } = {}): void {
   const slug = factorySlug(root);
   const pidfile = servicePidfilePath(slug);
   mkdirSync(path.dirname(pidfile), { recursive: true });
-  writeFileSync(pidfile, `${pid}\n`);
-  writeFileSync(serviceSupervisionPath(slug), `${JSON.stringify({ processGroup })}\n`);
+  if (options.pidfile !== false) writeFileSync(pidfile, `${pid}\n`);
+  writeFileSync(serviceSupervisionPath(slug), serviceRecord(pid));
 }
 
 const prune = (processes: ServiceProcesses, connect: () => RegistrySql) =>
@@ -146,45 +149,63 @@ test("apply refuses a running service without opening the database", async () =>
   recordService(700);
   const connect = vi.fn(() => database());
 
-  await expect(
-    prune(machine(["700 1 700 Ss node .output/server/index.mjs"]), connect),
-  ).rejects.toMatchObject({
+  await expect(prune(machine([`700 1 700 Ss ${SERVICE_COMMAND}`]), connect)).rejects.toMatchObject({
     message: "factory service is still running as pid 700",
     hint: expect.stringContaining("pnpm exec jigs service stop"),
   });
   expect(connect).not.toHaveBeenCalled();
 });
 
-test("apply refuses while a process the service started is left in its group", async () => {
+test("apply refuses while a process is left in the service's recorded group", async () => {
   recordService(700);
   const connect = vi.fn(() => database());
 
   await expect(
     prune(machine(["1 0 1 Ss init", "812 1 700 S claude --print hello world"]), connect),
   ).rejects.toMatchObject({
-    message: expect.stringContaining("pid 812: claude --print hello world"),
+    message: expect.stringMatching(
+      /still running in the service's recorded process group 700:\n {2}pid 812: claude --print hello world/,
+    ),
     hint: expect.stringContaining("pnpm exec jigs service stop"),
   });
   expect(connect).not.toHaveBeenCalled();
 });
 
-test("apply refuses without a record of the service's process group", async () => {
+test("apply refuses without a service record", async () => {
   const connect = vi.fn(() => database());
 
   await expect(prune(machine(["1 0 1 Ss init"]), connect)).rejects.toMatchObject({
-    message: expect.stringContaining("no record of the"),
-    hint: expect.stringContaining("pnpm exec jigs service stop"),
+    message: expect.stringContaining("no service record at"),
+    hint: expect.stringContaining("pnpm exec jigs service start and pnpm exec jigs service stop"),
   });
   expect(connect).not.toHaveBeenCalled();
 });
 
 test("apply proceeds once the service and its group are gone", async () => {
-  recordService(700);
-  rmSync(servicePidfilePath(factorySlug(root)));
+  recordService(700, { pidfile: false });
   const connect = vi.fn(() => database());
 
   const report = await prune(machine(["1 0 1 Ss init", "900 1 900 Ss bash"]), connect);
 
   expect(connect).toHaveBeenCalled();
   expect(report.complete).toBe(true);
+});
+
+test("apply proceeds after a restart of the machine, whatever now has the recorded pid", async () => {
+  recordService(700);
+  const connect = vi.fn(() => database());
+
+  await prune(machine(["700 1 700 Ss tmux", "701 700 700 S -zsh"], "boot-2"), connect);
+
+  expect(connect).toHaveBeenCalled();
+  expect(existsSync(serviceSupervisionPath(factorySlug(root)))).toBe(false);
+});
+
+test("apply proceeds when another program took the group after a clean stop", async () => {
+  recordService(700, { pidfile: false });
+  const connect = vi.fn(() => database());
+
+  await prune(machine(["700 1 700 Ss tmux", "701 700 700 S -zsh"]), connect);
+
+  expect(connect).toHaveBeenCalled();
 });

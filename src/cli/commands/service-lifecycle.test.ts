@@ -29,6 +29,7 @@ import {
   startService,
   stopService,
 } from "./service-lifecycle.ts";
+import { FAKE_BOOT, FAKE_START, SERVICE_COMMAND, serviceRecord } from "./test-fixtures.ts";
 
 let tmp: string;
 let lines: string[];
@@ -55,6 +56,8 @@ interface Fake {
   // Parent, group and command of a live pid; a pid missing here is a service
   // that leads its own group.
   table: Map<number, { ppid: number; pgid: number; command: string }>;
+  boot: string;
+  startTimes: Map<number, string>;
 }
 
 const READY: ServiceHealth = { ready: true, phase: "ready" };
@@ -69,6 +72,8 @@ function fake(health: Array<ServiceHealth | null> = [READY]): Fake {
     probes: [],
     alive: new Set(),
     table: new Map(),
+    boot: FAKE_BOOT,
+    startTimes: new Map(),
     processes: undefined as unknown as ServiceProcesses,
     probe: undefined as unknown as Fake["probe"],
   };
@@ -84,6 +89,9 @@ function fake(health: Array<ServiceHealth | null> = [READY]): Fake {
       return state.alive.has(pid);
     },
     snapshot: () => psRows(state),
+    bootId: () => state.boot,
+    startTime: (pid) =>
+      state.alive.has(pid) ? (state.startTimes.get(pid) ?? FAKE_START) : undefined,
   };
   state.probe = async (url) => {
     state.probes.push(url);
@@ -95,11 +103,7 @@ function fake(health: Array<ServiceHealth | null> = [READY]): Fake {
 function psRows(io: Fake): string {
   return [...io.alive]
     .map((pid) => {
-      const row = io.table.get(pid) ?? {
-        ppid: 1,
-        pgid: pid,
-        command: "node .output/server/index.mjs",
-      };
+      const row = io.table.get(pid) ?? { ppid: 1, pgid: pid, command: SERVICE_COMMAND };
       return `${pid} ${row.ppid} ${row.pgid} S ${row.command}\n`;
     })
     .join("");
@@ -218,6 +222,9 @@ test("start runs node directly and records the pid and its process group", async
   expect(readFileSync(pidfile, "utf8").trim()).toBe("4242");
   expect(JSON.parse(readFileSync(serviceSupervisionPath(factorySlug(root)), "utf8"))).toEqual({
     processGroup: 4242,
+    bootId: FAKE_BOOT,
+    startTime: FAKE_START,
+    command: SERVICE_COMMAND,
   });
 });
 
@@ -530,7 +537,7 @@ test("a stop that leaves a survivor fails and keeps the pidfile for another try"
 
   const err = await failure(stopService(deps(root, io, { stopTimeoutMs: 0 })));
 
-  expect(err?.message).toContain("pid 4242: node .output/server/index.mjs");
+  expect(err?.message).toContain(`pid 4242: ${SERVICE_COMMAND}`);
   expect(existsSync(servicePidfilePath(factorySlug(root)))).toBe(true);
 });
 
@@ -549,6 +556,94 @@ test("start first ends what a service that died without a stop left running", as
   expect(io.signals).toContainEqual({ pid: 4300, sig: "SIGTERM" });
   expect(lines[0]).toBe("stopped 1 process(es) left by the previous service");
   expect(io.spawns).toHaveLength(2);
+});
+
+// After a restart of the machine, or a pid handed to another program, the
+// records name someone else's processes: a tmux server and the shells in it.
+function reusedByTmux(root: string, io: Fake, pidfile = true): string {
+  const slug = factorySlug(root);
+  mkdirSync(path.dirname(servicePidfilePath(slug)), { recursive: true });
+  if (pidfile) writeFileSync(servicePidfilePath(slug), "612\n");
+  writeFileSync(serviceSupervisionPath(slug), serviceRecord(612));
+  io.alive.add(612).add(613).add(614);
+  io.table.set(612, { ppid: 1, pgid: 612, command: "tmux new -s work" });
+  io.table.set(613, { ppid: 612, pgid: 613, command: "-zsh" });
+  io.table.set(614, { ppid: 613, pgid: 613, command: "vim notes.md" });
+  io.startTimes.set(612, "Fri Sep 25 08:00:00 2026");
+  return slug;
+}
+
+test("records from before the machine restarted are discarded and nothing is signalled", async () => {
+  const root = builtFactory();
+  const io = fake();
+  const slug = reusedByTmux(root, io);
+  io.boot = "boot-2";
+
+  await stopService(deps(root, io));
+
+  expect(io.signals.filter((s) => s.sig !== 0)).toEqual([]);
+  expect(lines).toEqual([`service ${slug} was not running`]);
+  expect(existsSync(servicePidfilePath(slug))).toBe(false);
+  expect(existsSync(serviceSupervisionPath(slug))).toBe(false);
+});
+
+test("a recorded pid now run by another program fails the stop and signals nothing", async () => {
+  const root = builtFactory();
+  const io = fake();
+  const slug = reusedByTmux(root, io);
+
+  const err = await failure(stopService(deps(root, io)));
+
+  expect(err?.message).toContain("pid 612");
+  expect(err?.message).toContain("tmux new -s work");
+  expect(err?.hint).toContain(servicePidfilePath(slug));
+  expect(io.signals.filter((s) => s.sig !== 0)).toEqual([]);
+  expect(existsSync(servicePidfilePath(slug))).toBe(true);
+});
+
+test("start refuses rather than run a second service beside an unverified pid", async () => {
+  const root = builtFactory();
+  const io = fake();
+  reusedByTmux(root, io);
+
+  const err = await failure(startService(deps(root, io)));
+
+  expect(err?.message).toContain("cannot be verified");
+  expect(io.spawns).toHaveLength(0);
+});
+
+test("a group taken over after a clean stop is someone else's, so stop selects nothing", async () => {
+  const root = builtFactory();
+  const io = fake();
+  const slug = reusedByTmux(root, io, false);
+
+  await stopService(deps(root, io));
+
+  expect(io.signals.filter((s) => s.sig !== 0)).toEqual([]);
+  expect(lines).toEqual([`service ${slug} was not running`]);
+});
+
+test("a live pid whose command differs from the record is not the service", async () => {
+  const root = builtFactory();
+  const io = fake();
+  await startService(deps(root, io));
+  io.table.set(4242, { ppid: 1, pgid: 4242, command: "node other-app.js" });
+
+  const err = await failure(stopService(deps(root, io)));
+
+  expect(err?.message).toContain("node other-app.js");
+  expect(io.signals.filter((s) => s.sig !== 0)).toEqual([]);
+});
+
+test("an unreadable service record is an error, not a missing one", async () => {
+  const root = builtFactory();
+  const slug = factorySlug(root);
+  mkdirSync(path.dirname(serviceSupervisionPath(slug)), { recursive: true });
+  writeFileSync(serviceSupervisionPath(slug), "systemd-scope\n");
+
+  const err = await failure(stopService(deps(root, fake())));
+
+  expect(err?.message).toContain("unreadable");
 });
 
 test("stop without a pidfile says so instead of failing", async () => {

@@ -109,6 +109,12 @@ step that was cut off runs again after the next start.
 If a process survives, the command fails and lists its process ID and command
 so you can end it yourself.
 
+jigs stops only processes it can tell are its own. It records the machine's
+boot, the service's start time and its command when it starts the service. A
+record from before the machine last restarted is discarded, and a process that
+has since been given the service's process ID is never signalled: the command
+fails and names it instead.
+
 Two kinds of process can outlive a stop:
 
 - A process an agent fully detached from the service, for example with
@@ -119,9 +125,9 @@ Two kinds of process can outlive a stop:
 ### Service lifetime
 
 jigs starts and stops the service process itself. It keeps running until you
-stop it, log out or restart the machine. To start the factory each time you log
-in, have the operating system run `pnpm exec jigs up` once in the factory
-directory.
+stop it or restart the machine; depending on the system, it may also stop when
+you log out. To start the factory each time you log in, have the operating
+system run `pnpm exec jigs up` once in the factory directory.
 
 Do not point launchd's `KeepAlive` or systemd's `Restart=` at the service. The
 manager would restart it after `jigs service stop`, and jigs would lose track
@@ -155,7 +161,9 @@ with your factory's path in place of `/Users/me/my-factory`:
 </plist>
 ```
 
-The login shell (`zsh -l`) loads your profile, so `pnpm` and `node` are found.
+The login shell (`zsh -l`) reads `~/.zprofile`, not `~/.zshrc`. If `node` and
+`pnpm` are set up only in `~/.zshrc`, for example by nvm or fnm, they are not
+found: move that setup to `~/.zprofile`, or use full paths in the command.
 Load it with
 `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.jigs.my-factory.plist`,
 which runs it now and at every login from then on. Your Docker runtime must
@@ -181,9 +189,10 @@ Enable it with `systemctl --user enable my-factory.service`. It runs once at
 login. To have it run at boot without logging in, also run
 `loginctl enable-linger "$USER"`.
 
-`jigs up` exits once the factory is running, and `oneshot` with
-`RemainAfterExit` tells systemd that is expected. Stop the factory with
-`pnpm exec jigs down` as usual, not with `systemctl`.
+`RemainAfterExit=yes` is required: without it, systemd kills the service jigs
+started as soon as `jigs up` exits. `systemctl --user stop` or `restart` of this
+unit also kills the service and its agents, so stop the factory with
+`pnpm exec jigs down` or `pnpm exec jigs service stop` instead.
 
 ## Advanced/build
 

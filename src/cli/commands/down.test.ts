@@ -11,6 +11,7 @@ import {
   fakeExec,
   fakeProcesses,
   factory as scaffold,
+  serviceRecord,
 } from "./test-fixtures.ts";
 
 let tmp: string;
@@ -40,7 +41,7 @@ function running(root: string, procs: FakeProcesses, pid: number): string {
   const pidfile = servicePidfilePath(slug);
   mkdirSync(path.dirname(pidfile), { recursive: true });
   writeFileSync(pidfile, `${pid}\n`);
-  writeFileSync(serviceSupervisionPath(slug), `${JSON.stringify({ processGroup: pid })}\n`);
+  writeFileSync(serviceSupervisionPath(slug), serviceRecord(pid));
   procs.alive.add(pid);
   return slug;
 }

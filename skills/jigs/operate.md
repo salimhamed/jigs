@@ -203,16 +203,19 @@ For leftovers, inspect `jigs resources list` and `jigs resources prune`; both
 are read-only. To apply a preview, run `jigs service stop`, then
 `jigs resources prune --apply`; this works on macOS and Linux. Policy-kept
 resources also need `--include-kept`. Apply never stops anything: it refuses
-while the service or any process it started is still running, and when there
-is no record of the service's process group (a factory whose service never ran
-under the current jigs), in which case start and stop the service once. Dirty
-and unmerged work remains.
+while the service or any process in its recorded process group is still
+running, and when there is no service record, in which case start and stop the
+service with `jigs service start` and `jigs service stop`. Dirty and unmerged
+work remains.
 
 `jigs service stop`, `restart`, `jigs down` and a restart inside `jigs up` stop
 the service and every process it started, killing what is still running after
 10 seconds; interrupted steps retry after the next start. A stop that fails
 lists each surviving pid and command; show them to the human rather than
-killing them yourself. A process an agent fully detached (`setsid`, double
+killing them yourself. A service command that says a pid cannot be verified as
+the service has signalled nothing: another program probably has that pid now.
+Show the human the pid and command; deleting the named pidfile and service
+record is their call. A process an agent fully detached (`setsid`, double
 fork) can survive a stop, and Docker containers an agent started are never
 stopped.
 
