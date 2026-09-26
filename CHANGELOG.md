@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.77.0](https://github.com/salimhamed/jigs/compare/jigs-v0.76.0...jigs-v0.77.0) (2026-09-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* give every run its own branch ([#434](https://github.com/salimhamed/jigs/issues/434))
+
+### Features
+
+* give every run its own branch ([#434](https://github.com/salimhamed/jigs/issues/434)) ([951b7ac](https://github.com/salimhamed/jigs/commit/951b7ac7c18237468f2c20f30a1cdfcb8f2843ed))
+
 ## [0.76.0](https://github.com/salimhamed/jigs/compare/jigs-v0.75.0...jigs-v0.76.0) (2026-09-26)
 
 
