@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.70.0](https://github.com/salimhamed/jigs/compare/jigs-v0.69.2...jigs-v0.70.0) (2026-09-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* create bindings/<name>/ on bind and keep clones under clones/ ([#419](https://github.com/salimhamed/jigs/issues/419))
+
+### Features
+
+* create bindings/&lt;name&gt;/ on bind and keep clones under clones/ ([#419](https://github.com/salimhamed/jigs/issues/419)) ([1861333](https://github.com/salimhamed/jigs/commit/1861333677cd6b7f0c0b4a628f4526182ff24db4))
+
 ## [0.69.2](https://github.com/salimhamed/jigs/compare/jigs-v0.69.1...jigs-v0.69.2) (2026-09-26)
 
 
