@@ -5,12 +5,13 @@ import { beforeEach, expect, test, vi } from "vitest";
 import type { FactoryDefinition } from "../../workflow/factory.ts";
 import type { Halt } from "../../workflow/linear/halt-for-human.ts";
 
-const { createComment, findUserByEmail, getIssueParticipants, listCommentsSince } = vi.hoisted(
-  () => ({
+const { createComment, findComment, findUserByEmail, getIssueParticipants, listCommentsSince } =
+  vi.hoisted(() => ({
+    findComment: vi.fn(async (_id: string) => null as { id: string; createdAt: string } | null),
     findUserByEmail: vi.fn(
       async (_email: string): Promise<{ id: string; name: string } | null> => null,
     ),
-    createComment: vi.fn(async (_issueId: string, _body: string) => ({
+    createComment: vi.fn(async (_issueId: string, _body: string, _id?: string) => ({
       id: "comment-1",
       createdAt: "2026-08-31T12:00:00.000Z",
     })),
@@ -33,24 +34,24 @@ const { createComment, findUserByEmail, getIssueParticipants, listCommentsSince 
         name: string;
       } | null,
     })),
-  }),
-);
+  }));
 
 vi.mock("../../providers/linear.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../providers/linear.ts")>()),
   createComment,
+  findComment,
   findUserByEmail,
   getIssueParticipants,
   listCommentsSince,
 }));
 
-const { checkForTicketHumanReply, postTicketHumanInputRequest, postTicketNote } = await import(
-  "./needs-human-comments.ts"
-);
+const { checkForTicketHumanReply, postTicketHumanInputRequest, postTicketNote, ticketCommentId } =
+  await import("./needs-human-comments.ts");
 
 const context = {
   workflowRunId: "wrun_01M26",
   workflowName: "ship",
+  stepId: "step_01",
 };
 
 const definition: Pick<FactoryDefinition, "linear"> = {};
@@ -63,6 +64,8 @@ const body = (): string => createComment.mock.calls[0]?.[1] ?? "";
 beforeEach(() => {
   vi.stubEnv("JIGS_DASHBOARD_PORT", "9040");
   createComment.mockClear();
+  findComment.mockReset();
+  findComment.mockResolvedValue(null);
   getIssueParticipants.mockClear();
   findUserByEmail.mockReset();
   findUserByEmail.mockResolvedValue(null);
@@ -137,7 +140,7 @@ The ticket offers two, but they behave differently.
 <sub>Run wrun_01M26 · workflow \`ship\` · paused at ticket review · [dashboard](http://localhost:9040/run/wrun_01M26)</sub>
 `,
   );
-  expect(createComment).toHaveBeenCalledWith("issue-1", body());
+  expect(createComment).toHaveBeenCalledWith("issue-1", body(), expect.any(String));
 });
 
 test("a retry halt renders its notes and asks for any reply at all", async () => {
@@ -152,7 +155,7 @@ test("a retry halt renders its notes and asks for any reply at all", async () =>
       ],
       onReply: "retry",
     },
-    { workflowRunId: "wrun_2", workflowName: "ship" },
+    { workflowRunId: "wrun_2", workflowName: "ship", stepId: "step_01" },
     definition,
   );
 
@@ -216,6 +219,7 @@ test("a note greets the participants, bullets its lines, and closes with what to
       closing:
         "jigs is going ahead with these assumptions. To change one, comment on the pull request once it opens.",
     },
+    context,
     definition,
   );
 
@@ -245,8 +249,76 @@ test("a factory's own renderer replaces the comment without replacing the step",
 
 test("a note returns the id of the comment it posted", async () => {
   expect(
-    await postTicketNote("issue-1", { headline: "Done.", notes: [], closing: "" }, definition),
+    await postTicketNote(
+      "issue-1",
+      { headline: "Done.", notes: [], closing: "" },
+      context,
+      definition,
+    ),
   ).toEqual({ commentId: "comment-1" });
+});
+
+const done = { headline: "Done.", notes: [], closing: "" };
+
+test("a note is created under an id derived from the run, the step and the issue", async () => {
+  await postTicketNote("issue-1", done, context, definition);
+  const id = ticketCommentId(context, "issue-1");
+  expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  expect(findComment).toHaveBeenCalledWith(id);
+  expect(createComment).toHaveBeenCalledWith("issue-1", expect.any(String), id);
+  expect(ticketCommentId({ ...context, workflowRunId: "wrun_other" }, "issue-1")).not.toBe(id);
+  expect(ticketCommentId(context, "issue-2")).not.toBe(id);
+});
+
+test("a retry of the same step reuses the id, even when the mentions changed", async () => {
+  await postTicketNote("issue-1", done, context, definition);
+  await postTicketNote("issue-1", done, context, operator("op@example.com"));
+  const id = ticketCommentId(context, "issue-1");
+  expect(findComment.mock.calls).toEqual([[id], [id]]);
+});
+
+test("the same text posted from two steps is two comments", async () => {
+  await postTicketNote("issue-1", done, context, definition);
+  await postTicketNote("issue-1", done, { ...context, stepId: "step_02" }, definition);
+  const [first, second] = createComment.mock.calls.map((call) => call[2]);
+  expect(first).not.toBe(second);
+});
+
+test("a retried note that already landed is returned, not posted again", async () => {
+  findComment.mockResolvedValueOnce({ id: "landed", createdAt: "2026-08-31T12:00:00.000Z" });
+  expect(await postTicketNote("issue-1", done, context, definition)).toEqual({
+    commentId: "landed",
+  });
+  expect(createComment).not.toHaveBeenCalled();
+  expect(getIssueParticipants).not.toHaveBeenCalled();
+  expect(findUserByEmail).not.toHaveBeenCalled();
+});
+
+test("a create that fails after the comment landed returns the comment", async () => {
+  createComment.mockRejectedValueOnce(new Error("socket hang up"));
+  findComment
+    .mockResolvedValueOnce(null)
+    .mockResolvedValueOnce({ id: "landed", createdAt: "2026-08-31T12:00:00.000Z" });
+  expect(await postTicketNote("issue-1", done, context, definition)).toEqual({
+    commentId: "landed",
+  });
+});
+
+test("a create that fails without a comment rethrows, so the step retries", async () => {
+  createComment.mockRejectedValueOnce(new Error("Linear API 503"));
+  await expect(postTicketNote("issue-1", done, context, definition)).rejects.toThrow(
+    "Linear API 503",
+  );
+});
+
+test("a retried halt question is found under the same id instead of posted twice", async () => {
+  findComment.mockResolvedValueOnce({ id: "asked", createdAt: "2026-08-31T12:05:00.000Z" });
+  expect(await postTicketHumanInputRequest("issue-1", questions, context, definition)).toEqual({
+    commentId: "asked",
+    postedAt: "2026-08-31T12:05:00.000Z",
+  });
+  expect(findComment).toHaveBeenCalledWith(ticketCommentId(context, "issue-1"));
+  expect(createComment).not.toHaveBeenCalled();
 });
 
 const users: Record<string, { id: string; name: string }> = {
@@ -269,7 +341,12 @@ test("the operator comes from the passed definition, never from jigs.config.ts o
   vi.stubEnv("JIGS_FACTORY_ROOT", root);
   findUserByEmail.mockImplementation(byEmail);
   try {
-    await postTicketNote("issue-1", { headline: "Done.", notes: [], closing: "" }, definition);
+    await postTicketNote(
+      "issue-1",
+      { headline: "Done.", notes: [], closing: "" },
+      context,
+      definition,
+    );
     expect(greeting()).toBe("@[Salim](user-1) @[Dana](user-2)");
 
     writeFileSync(
@@ -280,6 +357,7 @@ test("the operator comes from the passed definition, never from jigs.config.ts o
     await postTicketNote(
       "issue-1",
       { headline: "Done.", notes: [], closing: "" },
+      context,
       operator("op@example.com"),
     );
     expect(greeting()).toBe("@[Olu](user-9) @[Dana](user-2)");
@@ -313,6 +391,7 @@ test("a failed operator lookup still posts, mentioning the assignee", async () =
   const posted = await postTicketNote(
     "issue-1",
     { headline: "Done.", notes: [], closing: "" },
+    context,
     definition,
   );
   expect(posted).toEqual({ commentId: "comment-1" });
@@ -333,6 +412,7 @@ test("extra mentions follow the operator and assignee, once each, skipping unkno
       closing: "",
       mention: ["kim@example.com", "dana@example.com", "nobody@example.com", "kim@example.com"],
     },
+    context,
     definition,
   );
   expect(greeting()).toBe("@[Olu](user-9) @[Dana](user-2) @[Kim](user-5)");
@@ -376,6 +456,7 @@ test("a custom renderer receives the resolved mentions", async () => {
   await postTicketNote(
     "issue-1",
     { headline: "Done.", notes: [], closing: "", mention: ["kim@example.com"] },
+    context,
     definition,
     render,
   );
