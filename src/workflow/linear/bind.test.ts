@@ -1,4 +1,5 @@
 import { expect, test, vi } from "vitest";
+import { unsureJev } from "../agents/jev-test-fixtures.ts";
 import { bindLinearSteps, type LinearSteps } from "./bind.ts";
 import { claimTicket } from "./claim.ts";
 
@@ -21,6 +22,7 @@ const defaults: LinearSteps = {
   postTicketNote: unused,
   checkForTicketHumanReply: unused,
   fetchTicketSnapshot: unused,
+  executeJev: unsureJev(),
 };
 
 test("custom comment steps receive only serializable halt data and no step-object receiver", async () => {

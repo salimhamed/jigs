@@ -1,4 +1,5 @@
 import { expect, test, vi } from "vitest";
+import { jevAnswering, unsureJev, yesProbability } from "../agents/jev-test-fixtures.ts";
 import type { TicketClaim } from "./claim.ts";
 import { type CheckForTicketHumanReply, type Halt, haltForHuman } from "./halt-for-human.ts";
 
@@ -48,6 +49,7 @@ test("a wake with no payload re-reads Linear, and only a found reply ends the ha
       postedAt: "2026-09-23T10:00:00Z",
     }),
     checkForTicketHumanReply: check,
+    executeJev: unsureJev(),
   });
 
   expect(reply).toEqual(REPLY);
@@ -66,7 +68,48 @@ test("a delivered payload is ignored in favour of what Linear says now", async (
   const reply = await haltForHuman(claimWaking(forged), HALT, {
     postTicketHumanInputRequest: async () => ({ commentId: "c-q", postedAt: "t0" }),
     checkForTicketHumanReply: check,
+    executeJev: unsureJev(),
   });
   expect(reply).toBe(REPLY);
   expect(check).toHaveBeenCalledExactlyOnceWith("issue-uuid", "t0", ["c-earlier-note", "c-q"]);
+});
+
+test("a comment Jev is sure does not answer is passed over by id, and the next one ends the halt", async () => {
+  const chatter = { ...REPLY, commentId: "c-plus-one", body: "+1" };
+  const check = vi
+    .fn<CheckForTicketHumanReply>()
+    .mockResolvedValueOnce({ reply: chatter, cursor: "2026-09-23T10:06:00Z" })
+    .mockResolvedValueOnce({ reply: REPLY, cursor: "2026-09-23T10:06:00Z" });
+  const executeJev = jevAnswering((_site, state) =>
+    yesProbability((state as { reply: string }).reply === "+1" ? 0.03 : 0.95),
+  );
+  const reply = await haltForHuman(claimWaking(undefined), HALT, {
+    postTicketHumanInputRequest: async () => ({ commentId: "c-q", postedAt: "t0" }),
+    checkForTicketHumanReply: check,
+    executeJev,
+  });
+
+  expect(reply).toBe(REPLY);
+  // Both reads happen on one wake, and the cursor never moves past the passed-over comment.
+  expect(check.mock.calls).toEqual([
+    ["issue-uuid", "t0", ["c-earlier-note", "c-q"]],
+    ["issue-uuid", "t0", ["c-earlier-note", "c-q", "c-plus-one"]],
+  ]);
+  expect(executeJev.mock.calls[0]?.[0]).toMatchObject({
+    site: "ticket-reply",
+    state: { asked: { headline: "Which way?", questions: [], notes: [] }, reply: "+1" },
+  });
+});
+
+test("an unsure answer accepts the comment, as without Jev", async () => {
+  const chatter = { ...REPLY, body: "+1" };
+  const check = vi
+    .fn<CheckForTicketHumanReply>()
+    .mockResolvedValue({ reply: chatter, cursor: "x" });
+  const reply = await haltForHuman(claimWaking(undefined), HALT, {
+    postTicketHumanInputRequest: async () => ({ commentId: "c-q", postedAt: "t0" }),
+    checkForTicketHumanReply: check,
+    executeJev: jevAnswering(() => yesProbability(0.2)),
+  });
+  expect(reply).toBe(chatter);
 });

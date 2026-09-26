@@ -5,9 +5,17 @@
 
 import { z } from "zod";
 import type { RunAgentFn } from "../agents/agent-session.ts";
+import { decide } from "../agents/decide.ts";
 import type { Harness } from "../agents/harness-config.ts";
+import type { ExecuteJevStep } from "../agents/jev.ts";
 import { haltQuestionSchema } from "../human/questions.ts";
 import type { TicketClaim } from "./claim.ts";
+import {
+  LINEAR_DECISION_CUTOFF,
+  type NotReadyReason,
+  notReadyQuestions,
+  ticketReadiness,
+} from "./decisions.ts";
 import type { HaltForHumanFn } from "./halt-for-human.ts";
 import { renderTicketSnapshot, type TicketSnapshot } from "./snapshot.ts";
 import { type TicketReviewPrompt, ticketReviewPrompt } from "./ticket-review.prompt.ts";
@@ -99,6 +107,7 @@ export interface ReviewTicketOptions {
   // Re-read between rounds: a human's reply lands on the ticket, not in the
   // verdict, so a round that does not re-snapshot reviews the same words again.
   fetchTicketSnapshot: (issueId: string) => Promise<TicketSnapshot>;
+  executeJev: ExecuteJevStep;
   claim: TicketClaim;
   // The routine never fetches the first one: the workflow body owns
   // per-activation snapshots and passes one in, which is what keeps every step
@@ -120,10 +129,40 @@ export interface ReviewTicketOptions {
     | undefined;
 }
 
-/** Review a ticket until it is actionable, asking a human when a decision is missing. */
+/**
+ * Review a ticket until it is actionable, asking a human when a decision is missing.
+ *
+ * @remarks
+ * Before the first review, Jev judges whether the ticket is ready. A ticket it is sure is not
+ * ready gets a fixed question for the reason, without spending a reviewer turn; the reviewer
+ * judges the human's answer.
+ */
 export async function reviewTicket(options: ReviewTicketOptions): Promise<TicketHandoff> {
-  const { runAgent, haltForHuman, fetchTicketSnapshot, postTicketNote } = options;
+  const { runAgent, haltForHuman, fetchTicketSnapshot, postTicketNote, executeJev } = options;
   let snapshot = options.snapshot;
+
+  const readiness = await decide(
+    {
+      site: "ticket-readiness",
+      state: renderTicketSnapshot(snapshot),
+      question: ticketReadiness,
+      cutoff: LINEAR_DECISION_CUTOFF,
+    },
+    executeJev,
+  );
+  const reason = readiness.answer.choice;
+  if (readiness.confident && reason !== "ready") {
+    console.log(`[reviewTicket] ${snapshot.identifier} not ready: ${reason}`);
+    await options.on?.needsHuman?.();
+    await haltForHuman(options.claim, {
+      headline: `jigs paused work on **${snapshot.identifier}**: the ticket is not ready to implement yet.`,
+      where: "ticket review",
+      questions: [notReadyQuestions[reason as NotReadyReason]],
+      onReply: "continue",
+    });
+    await options.on?.humanReplied?.();
+    snapshot = await fetchTicketSnapshot(snapshot.id);
+  }
 
   for (;;) {
     const review = await runAgent({

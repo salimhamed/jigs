@@ -5,8 +5,11 @@
 // from step returns, never from Date.now() or process.env.
 
 import { createHook } from "workflow";
+import { decide } from "../agents/decide.ts";
+import type { ExecuteJevStep } from "../agents/jev.ts";
 import type { HaltQuestion } from "../human/questions.ts";
 import type { TicketClaim } from "./claim.ts";
+import { LINEAR_DECISION_CUTOFF, ticketReply, ticketReplyState } from "./decisions.ts";
 
 // The halt's marker hook. It names no external resource and nothing resumes
 // it: the reply that ends the halt lands on the ticket claim.
@@ -72,6 +75,7 @@ export type CheckForTicketHumanReply = (
 export type HaltForHumanDependencies = {
   postTicketHumanInputRequest: PostTicketHumanInputRequest;
   checkForTicketHumanReply: CheckForTicketHumanReply;
+  executeJev: ExecuteJevStep;
 };
 
 /** {@link haltForHuman} with its steps already bound, as a workflow calls it. */
@@ -82,7 +86,8 @@ export type HaltForHumanFn = (claim: TicketClaim, halt: Halt) => Promise<HumanRe
 // service's poll or, with Linear webhooks on, a comment delivery, and either
 // carries nothing: each one re-reads the comment thread from Linear and
 // re-suspends when no human has replied — no agent step executes on an
-// unsatisfied wake.
+// unsatisfied wake. A comment Jev is confident does not answer the question is
+// passed over, and the wait goes on.
 /** Post a ticket question and suspend until a human replies to the claim hook. */
 export async function haltForHuman(
   claim: TicketClaim,
@@ -92,7 +97,7 @@ export async function haltForHuman(
   // Destructured, never invoked as `deps.postTicketHumanInputRequest(...)`: the SDK
   // serializes a step call's receiver along with its arguments, and this
   // object holds functions.
-  const { checkForTicketHumanReply, postTicketHumanInputRequest } = deps;
+  const { checkForTicketHumanReply, postTicketHumanInputRequest, executeJev } = deps;
   const posted = await postTicketHumanInputRequest(claim.issueId, halt);
   claim.postedCommentIds.push(posted.commentId);
   // The halt's only signal: the claim hook is held for the run's whole life,
@@ -103,12 +108,34 @@ export async function haltForHuman(
   });
   try {
     let cursor = posted.postedAt;
+    // Passed-over comments are excluded by id, not by moving the cursor: a real
+    // answer may share the read that surfaced them.
+    const passedOver: string[] = [];
     for await (const _hint of claim.hook) {
-      const check = await checkForTicketHumanReply(claim.issueId, cursor, [
-        ...claim.postedCommentIds,
-      ]);
-      if (check.reply !== null) return check.reply;
-      cursor = check.cursor;
+      for (;;) {
+        const check = await checkForTicketHumanReply(claim.issueId, cursor, [
+          ...claim.postedCommentIds,
+          ...passedOver,
+        ]);
+        if (check.reply === null) {
+          cursor = check.cursor;
+          break;
+        }
+        const answers = await decide(
+          {
+            site: "ticket-reply",
+            state: ticketReplyState(halt, check.reply.body),
+            question: ticketReply,
+            cutoff: LINEAR_DECISION_CUTOFF,
+          },
+          executeJev,
+        );
+        if (!answers.confident || answers.yes) return check.reply;
+        console.log(
+          `[haltForHuman] ${claim.identifier} passed over comment=${check.reply.commentId}: not an answer`,
+        );
+        passedOver.push(check.reply.commentId);
+      }
     }
     throw new Error("claim hook stopped delivering wakes before a human replied");
   } finally {
