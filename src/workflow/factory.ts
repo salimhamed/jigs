@@ -94,32 +94,7 @@ export interface WorkflowDefinition<S extends z.ZodType = z.ZodType> {
    */
   requires?: WorkflowRequires;
   release?: ReleasePolicy;
-  /**
-   * Linear settings for this workflow alone. `operator` replaces the factory's
-   * `linear.operator` for every Linear comment the workflow posts: each one
-   * mentions this person and the ticket's assignee.
-   *
-   * @example
-   * ```ts
-   * export default defineWorkflow({
-   *   inputs,
-   *   linear: { operator: "dana@example.com" },
-   *   workflow: shipTicket,
-   * });
-   * ```
-   */
-  linear?: WorkflowLinearDefinition;
   workflow: (inputs: WorkflowInputs<S>) => Promise<unknown>;
-}
-
-/**
- * A workflow's own Linear settings. Only the operator, the Linear user's email,
- * can differ from the factory's.
- *
- * @group Factory and workflows
- */
-export interface WorkflowLinearDefinition {
-  operator?: string;
 }
 
 /**
@@ -205,7 +180,8 @@ export type GitHubDefinition = z.input<typeof githubSchema>;
  * `operator` is the email of the Linear user who runs the factory. With it,
  * every Linear comment jigs posts mentions the operator and the ticket's
  * assignee; without it, the ticket's creator and assignee. `jigs doctor` fails
- * when no Linear user has the email.
+ * when no Linear user has the email. Steps read it from the built factory, so
+ * a change takes effect after a rebuild, which `jigs up` does.
  *
  * @example
  * ```ts

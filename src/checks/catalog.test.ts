@@ -253,7 +253,7 @@ test("doctor checks each provider a workflow requires and names the workflows", 
   });
 });
 
-test("doctor checks the factory's and each workflow's Linear operator, preflight never does", () => {
+test("doctor checks the factory's Linear operator, preflight never does", () => {
   factoryWith(
     '{ service: { dashboardPort: 9090 }, linear: { identity: { mode: "key" }, operator: "salim@example.com" } }',
   );
@@ -261,9 +261,8 @@ test("doctor checks the factory's and each workflow's Linear operator, preflight
   expect(
     doctorChecks({
       ship: { requires: linear },
-      triage: { requires: linear, linear: { operator: "dana@example.com" } },
     }).map((check) => check.id),
-  ).toEqual(["linear.identity", "linear.operator", "linear.operator.triage"]);
+  ).toEqual(["linear.identity", "linear.operator"]);
   expect(preflightIds(linear)).toEqual(["linear.identity"]);
 });
 
@@ -275,10 +274,6 @@ test("doctor checks a set Linear operator even when no workflow requires Linear"
     "linear.identity",
     "linear.operator",
   ]);
-  factoryWith('{ service: { dashboardPort: 9090 }, linear: { identity: { mode: "key" } } }');
-  expect(
-    doctorChecks({ hello: { linear: { operator: "dana@example.com" } } }).map((check) => check.id),
-  ).toEqual(["linear.identity", "linear.operator.hello"]);
 });
 
 test("doctor checks a provider the factory configuration asks for", () => {

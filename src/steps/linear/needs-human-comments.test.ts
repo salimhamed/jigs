@@ -1,10 +1,12 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { beforeEach, expect, test, vi } from "vitest";
 import type { FactoryDefinition } from "../../workflow/factory.ts";
 import type { Halt } from "../../workflow/linear/halt-for-human.ts";
 
-const { createComment, findUserByEmail, getIssueParticipants, listCommentsSince, runOperator } =
-  vi.hoisted(() => ({
-    runOperator: vi.fn(async (): Promise<string | null | undefined> => undefined),
+const { createComment, findUserByEmail, getIssueParticipants, listCommentsSince } = vi.hoisted(
+  () => ({
     findUserByEmail: vi.fn(
       async (_email: string): Promise<{ id: string; name: string } | null> => null,
     ),
@@ -31,7 +33,8 @@ const { createComment, findUserByEmail, getIssueParticipants, listCommentsSince,
         name: string;
       } | null,
     })),
-  }));
+  }),
+);
 
 vi.mock("../../providers/linear.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../providers/linear.ts")>()),
@@ -39,11 +42,6 @@ vi.mock("../../providers/linear.ts", async (importOriginal) => ({
   findUserByEmail,
   getIssueParticipants,
   listCommentsSince,
-}));
-
-vi.mock("./mentions.ts", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./mentions.ts")>()),
-  runOperator,
 }));
 
 const { checkForTicketHumanReply, postTicketHumanInputRequest, postTicketNote } = await import(
@@ -55,8 +53,10 @@ const context = {
   workflowName: "ship",
 };
 
-// The step reads the operator through runOperator, which is mocked here.
-const definition = { workflows: {} } as unknown as FactoryDefinition;
+const definition: Pick<FactoryDefinition, "linear"> = {};
+const operator = (email: string): Pick<FactoryDefinition, "linear"> => ({
+  linear: { operator: email },
+});
 
 const body = (): string => createComment.mock.calls[0]?.[1] ?? "";
 
@@ -64,8 +64,6 @@ beforeEach(() => {
   vi.stubEnv("JIGS_DASHBOARD_PORT", "9040");
   createComment.mockClear();
   getIssueParticipants.mockClear();
-  runOperator.mockReset();
-  runOperator.mockResolvedValue(undefined);
   findUserByEmail.mockReset();
   findUserByEmail.mockResolvedValue(null);
   getIssueParticipants.mockResolvedValue({
@@ -218,7 +216,6 @@ test("a note greets the participants, bullets its lines, and closes with what to
       closing:
         "jigs is going ahead with these assumptions. To change one, comment on the pull request once it opens.",
     },
-    context,
     definition,
   );
 
@@ -248,12 +245,7 @@ test("a factory's own renderer replaces the comment without replacing the step",
 
 test("a note returns the id of the comment it posted", async () => {
   expect(
-    await postTicketNote(
-      "issue-1",
-      { headline: "Done.", notes: [], closing: "" },
-      context,
-      definition,
-    ),
+    await postTicketNote("issue-1", { headline: "Done.", notes: [], closing: "" }, definition),
   ).toEqual({ commentId: "comment-1" });
 });
 
@@ -266,15 +258,39 @@ const byEmail = async (email: string) => users[email] ?? null;
 const greeting = (): string => body().split(" — ")[0] ?? "";
 
 test("with an operator, a comment mentions the operator and the assignee, not the creator", async () => {
-  runOperator.mockResolvedValue("op@example.com");
+  const definition = operator("op@example.com");
   findUserByEmail.mockImplementation(byEmail);
   await postTicketHumanInputRequest("issue-1", questions, context, definition);
-  expect(runOperator).toHaveBeenCalledWith(context, definition);
   expect(greeting()).toBe("@[Olu](user-9) @[Dana](user-2)");
 });
 
+test("the operator comes from the passed definition, never from jigs.config.ts on disk", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "jigs-operator-"));
+  vi.stubEnv("JIGS_FACTORY_ROOT", root);
+  findUserByEmail.mockImplementation(byEmail);
+  try {
+    await postTicketNote("issue-1", { headline: "Done.", notes: [], closing: "" }, definition);
+    expect(greeting()).toBe("@[Salim](user-1) @[Dana](user-2)");
+
+    writeFileSync(
+      path.join(root, "jigs.config.ts"),
+      'export default { service: { dashboardPort: 9000 }, linear: { operator: "kim@example.com" } };',
+    );
+    createComment.mockClear();
+    await postTicketNote(
+      "issue-1",
+      { headline: "Done.", notes: [], closing: "" },
+      operator("op@example.com"),
+    );
+    expect(greeting()).toBe("@[Olu](user-9) @[Dana](user-2)");
+    expect(findUserByEmail).not.toHaveBeenCalledWith("kim@example.com");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("an operator who is also the assignee is mentioned once", async () => {
-  runOperator.mockResolvedValue("dana@example.com");
+  const definition = operator("dana@example.com");
   findUserByEmail.mockImplementation(byEmail);
   await postTicketHumanInputRequest("issue-1", questions, context, definition);
   expect(greeting()).toBe("@[Dana](user-2)");
@@ -282,7 +298,7 @@ test("an operator who is also the assignee is mentioned once", async () => {
 
 test("an operator Linear cannot find leaves the assignee alone, with a warning", async () => {
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-  runOperator.mockResolvedValue("gone@example.com");
+  const definition = operator("gone@example.com");
   findUserByEmail.mockImplementation(byEmail);
   await postTicketHumanInputRequest("issue-1", questions, context, definition);
   expect(greeting()).toBe("@[Dana](user-2)");
@@ -292,12 +308,11 @@ test("an operator Linear cannot find leaves the assignee alone, with a warning",
 
 test("a failed operator lookup still posts, mentioning the assignee", async () => {
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-  runOperator.mockResolvedValue("op@example.com");
+  const definition = operator("op@example.com");
   findUserByEmail.mockRejectedValue(new Error("Linear API 500"));
   const posted = await postTicketNote(
     "issue-1",
     { headline: "Done.", notes: [], closing: "" },
-    context,
     definition,
   );
   expect(posted).toEqual({ commentId: "comment-1" });
@@ -308,7 +323,7 @@ test("a failed operator lookup still posts, mentioning the assignee", async () =
 
 test("extra mentions follow the operator and assignee, once each, skipping unknown emails", async () => {
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-  runOperator.mockResolvedValue("op@example.com");
+  const definition = operator("op@example.com");
   findUserByEmail.mockImplementation(byEmail);
   await postTicketNote(
     "issue-1",
@@ -318,7 +333,6 @@ test("extra mentions follow the operator and assignee, once each, skipping unkno
       closing: "",
       mention: ["kim@example.com", "dana@example.com", "nobody@example.com", "kim@example.com"],
     },
-    context,
     definition,
   );
   expect(greeting()).toBe("@[Olu](user-9) @[Dana](user-2) @[Kim](user-5)");
@@ -338,21 +352,9 @@ test("without an operator, extra mentions join the creator and assignee", async 
   expect(greeting()).toBe("@[Salim](user-1) @[Dana](user-2) @[Kim](user-5)");
 });
 
-test("an operator that could not be read still posts, mentioning the assignee and extras", async () => {
-  runOperator.mockResolvedValue(null);
-  findUserByEmail.mockImplementation(byEmail);
-  await postTicketNote(
-    "issue-1",
-    { headline: "Done.", notes: [], closing: "", mention: ["kim@example.com"] },
-    context,
-    definition,
-  );
-  expect(greeting()).toBe("@[Dana](user-2) @[Kim](user-5)");
-});
-
 test("a ticket whose people cannot be read still posts, mentioning the operator and extras", async () => {
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-  runOperator.mockResolvedValue("op@example.com");
+  const definition = operator("op@example.com");
   findUserByEmail.mockImplementation(byEmail);
   getIssueParticipants.mockRejectedValueOnce(new Error("Linear API 502"));
   await postTicketHumanInputRequest(
@@ -368,13 +370,12 @@ test("a ticket whose people cannot be read still posts, mentioning the operator 
 });
 
 test("a custom renderer receives the resolved mentions", async () => {
-  runOperator.mockResolvedValue("op@example.com");
+  const definition = operator("op@example.com");
   findUserByEmail.mockImplementation(byEmail);
   const render = vi.fn(() => "custom");
   await postTicketNote(
     "issue-1",
     { headline: "Done.", notes: [], closing: "", mention: ["kim@example.com"] },
-    context,
     definition,
     render,
   );

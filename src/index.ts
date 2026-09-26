@@ -100,7 +100,6 @@ export {
   type WebhooksDefinition,
   type WorkflowDefinition,
   type WorkflowInputs,
-  type WorkflowLinearDefinition,
 } from "./workflow/factory.ts";
 export {
   type ChangePatch,

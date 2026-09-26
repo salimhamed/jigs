@@ -6,7 +6,6 @@ import {
   type LinearOperatorProbes,
   linearIdentityChecks,
   linearOperatorChecks,
-  type OperatorSetting,
 } from "./linear-identity.ts";
 
 function probes(overrides: Partial<LinearIdentityProbes> = {}) {
@@ -104,16 +103,11 @@ const operatorProbes = (
   userByEmail: async (email) => users[email] ?? null,
 });
 
-const operatorOutcomes = async (
-  identity: LinearIdentity,
-  settings: OperatorSetting[],
-  p: LinearOperatorProbes,
-) => (await runChecks(linearOperatorChecks(identity, settings, p))).checks;
+const operatorOutcomes = async (identity: LinearIdentity, email: string, p: LinearOperatorProbes) =>
+  (await runChecks(linearOperatorChecks(identity, email, p))).checks;
 
 test("an operator email no Linear user has fails with a repair naming the setting", async () => {
-  expect(
-    await operatorOutcomes({ mode: "app" }, [{ email: "typo@example.com" }], operatorProbes({})),
-  ).toEqual([
+  expect(await operatorOutcomes({ mode: "app" }, "typo@example.com", operatorProbes({}))).toEqual([
     {
       id: "linear.operator",
       label: "Linear operator",
@@ -124,26 +118,12 @@ test("an operator email no Linear user has fails with a repair naming the settin
   ]);
 });
 
-test("a workflow's operator override is checked on its own line", async () => {
-  const [outcome] = await operatorOutcomes(
-    { mode: "app" },
-    [{ email: "typo@example.com", workflow: "ship" }],
-    operatorProbes({}),
-  );
-  expect(outcome).toMatchObject({
-    id: "linear.operator.ship",
-    label: "Linear operator (workflow ship)",
-    ok: false,
-    repair: expect.stringContaining("workflow ship's defineWorkflow"),
-  });
-});
-
 test("a found operator passes and names who is mentioned", async () => {
   const salim = { id: "u2", name: "Salim" };
   expect(
     await operatorOutcomes(
       { mode: "app" },
-      [{ email: "salim@example.com" }],
+      "salim@example.com",
       operatorProbes({ "salim@example.com": salim }, salim),
     ),
   ).toEqual([
@@ -155,7 +135,7 @@ test("in key mode, an operator who owns the API key passes with a warning to use
   const salim = { id: "u2", name: "Salim" };
   const [outcome] = await operatorOutcomes(
     { mode: "key" },
-    [{ email: "salim@example.com" }],
+    "salim@example.com",
     operatorProbes({ "salim@example.com": salim }, salim),
   );
   expect(outcome).toMatchObject({ ok: true, detail: expect.stringContaining("warning") });
@@ -166,28 +146,28 @@ test("in key mode, an operator who owns the API key passes with a warning to use
 test("in key mode, an operator who is someone else passes without a warning", async () => {
   const [outcome] = await operatorOutcomes(
     { mode: "key" },
-    [{ email: "dana@example.com" }],
+    "dana@example.com",
     operatorProbes({ "dana@example.com": { id: "u3", name: "Dana" } }),
   );
   expect(outcome).toMatchObject({ ok: true, detail: "mentions Dana" });
 });
 
 test("no operator configured means no operator check", () => {
-  expect(linearOperatorChecks({ mode: "key" }, [], operatorProbes({}))).toEqual([]);
+  expect(linearOperatorChecks({ mode: "key" }, undefined, operatorProbes({}))).toEqual([]);
 });
 
 test("in app mode, an operator who is the viewer gets no key-mode warning", async () => {
   const salim = { id: "u2", name: "Salim" };
   const [outcome] = await operatorOutcomes(
     { mode: "app" },
-    [{ email: "salim@example.com" }],
+    "salim@example.com",
     operatorProbes({ "salim@example.com": salim }, salim),
   );
   expect(outcome).toMatchObject({ ok: true, detail: "mentions Salim" });
 });
 
 test("in key mode, a viewer lookup that fails still passes the found operator", async () => {
-  const [outcome] = await operatorOutcomes({ mode: "key" }, [{ email: "salim@example.com" }], {
+  const [outcome] = await operatorOutcomes({ mode: "key" }, "salim@example.com", {
     viewer: async () => {
       throw new Error("Linear API 500");
     },
