@@ -43,6 +43,12 @@ export type TicketNote = {
   notes: string[];
   /** What the reader should do with it. */
   closing: string;
+  /**
+   * More people to mention, by Linear email, beyond the operator (or the
+   * creator) and the assignee. Each person is named once; an email no Linear
+   * user has is skipped with a warning.
+   */
+  mention?: string[] | undefined;
 };
 
 /**
@@ -103,6 +109,8 @@ export interface ReviewTicketOptions {
   // The words, which the factory owns: its own function in place of the one
   // shipped beside this routine.
   prompt?: TicketReviewPrompt | undefined;
+  /** More people, by Linear email, for the review's note and questions to mention. */
+  mention?: string[] | undefined;
   /** Optional workflow policy around a human clarification. */
   on?:
     | {
@@ -141,6 +149,7 @@ export async function reviewTicket(options: ReviewTicketOptions): Promise<Ticket
             notes: assumptions,
             closing:
               "jigs is going ahead with these assumptions. To change one, comment on the pull request once it opens.",
+            mention: options.mention,
           },
           { postTicketNote },
         );
@@ -158,6 +167,7 @@ export async function reviewTicket(options: ReviewTicketOptions): Promise<Ticket
       ...(about === "" ? {} : { about }),
       questions,
       onReply: "continue",
+      mention: options.mention,
     });
     await options.on?.humanReplied?.();
     snapshot = await fetchTicketSnapshot(snapshot.id);

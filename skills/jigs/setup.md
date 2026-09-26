@@ -40,7 +40,10 @@ makes jigs act as a GitHub App and takes the App's id, installations, private
 key path and the operator's login; approval is then a GitHub review. An App
 factory may set `github.mergeApproval: "label"` instead; a PAT factory cannot
 use review. `--linear-identity-mode key|app` does the same for Linear. Both are
-written to `jigs.config.ts`, so changing one later is a config edit.
+written to `jigs.config.ts`, so changing one later is a config edit. Add
+`linear.operator: "<operator's Linear email>"` there so ticket comments mention
+the operator and the assignee rather than the ticket's creator; with `key`
+mode and the operator's own key, Linear will not notify them, so prefer `app`.
 
 `jigs init` writes `jigs.config.ts`, the generated `jigs/steps.ts` and
 `jigs/routines.ts`, a `hello` workflow in `workflows/hello/hello.ts`, the package manifest, Docker Compose, `.env.example` and build

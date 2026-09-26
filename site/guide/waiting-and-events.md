@@ -36,6 +36,10 @@ const reply = await haltForHuman(claim, {
 // reply.body contains the person's answer.
 ```
 
+The comment mentions the ticket's creator and assignee, or your
+[`linear.operator`](/guide/configuration#linear-operator) and the assignee. Pass
+`mention: ["dana@example.com"]` in the halt to mention more people.
+
 Answer the existing question on Linear. Starting a second run does not answer
 it. The [routine reference](/api/factory/routines#haltforhuman) covers the options.
 

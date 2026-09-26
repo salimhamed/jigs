@@ -87,6 +87,19 @@ export async function getViewer(): Promise<LinearUser> {
   return data.viewer;
 }
 
+/** The active Linear user with this email, or null when none has it. */
+export async function findUserByEmail(email: string): Promise<LinearUser | null> {
+  // Linear leaves deactivated users out unless includeDisabled is set, so one
+  // who left the workspace reads as nobody.
+  const data = await linearGraphql<{ users: { nodes: LinearUser[] } }>(
+    `query UserByEmail($email: String!) {
+      users(filter: { email: { eqIgnoreCase: $email } }, first: 1) { nodes { id name } }
+    }`,
+    { email },
+  );
+  return data.users.nodes[0] ?? null;
+}
+
 export interface LinearWebhook {
   url: string;
   enabled: boolean;

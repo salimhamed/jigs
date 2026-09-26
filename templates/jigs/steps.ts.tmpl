@@ -106,8 +106,13 @@ export async function executeJev(request: AskJevOptions<JevQuestions>) {
  */
 export async function postTicketHumanInputRequest(issueId: string, halt: Halt) {
   "use step";
-  const metadata = getWorkflowMetadata();
-  return linearOperations.postTicketHumanInputRequest(issueId, halt, metadata);
+  const { default: definition } = await import("../jigs.config.ts");
+  return linearOperations.postTicketHumanInputRequest(
+    issueId,
+    halt,
+    getWorkflowMetadata(),
+    definition,
+  );
 }
 
 /**
@@ -117,7 +122,8 @@ export async function postTicketHumanInputRequest(issueId: string, halt: Halt) {
  */
 export async function postTicketNote(issueId: string, note: TicketNote) {
   "use step";
-  return linearOperations.postTicketNote(issueId, note);
+  const { default: definition } = await import("../jigs.config.ts");
+  return linearOperations.postTicketNote(issueId, note, getWorkflowMetadata(), definition);
 }
 
 /**

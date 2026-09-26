@@ -8,6 +8,7 @@
  * @packageDocumentation
  */
 
+export type { RunAgentOrHaltOptions } from "./agents/agent-or-halt.ts";
 export {
   type AgentSession,
   type AgentSessionOptions,

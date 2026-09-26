@@ -1,4 +1,7 @@
-import { runAgentOrHalt as agentOrHaltRoutine } from "../agents/agent-or-halt.ts";
+import {
+  runAgentOrHalt as agentOrHaltRoutine,
+  type RunAgentOrHaltOptions,
+} from "../agents/agent-or-halt.ts";
 import type { RunAgentOptions } from "../agents/plan.ts";
 import type { TicketClaim } from "./claim.ts";
 import {
@@ -45,8 +48,12 @@ export function bindLinearSteps(steps: LinearSteps) {
       postTicketHumanInputRequest: steps.postTicketHumanInputRequest,
       checkForTicketHumanReply: steps.checkForTicketHumanReply,
     });
-  function runAgentOrHalt<T = undefined>(claim: TicketClaim, config: RunAgentOptions<T>) {
-    return agentOrHaltRoutine(claim, config, { runAgent, haltForHuman });
+  function runAgentOrHalt<T = undefined>(
+    claim: TicketClaim,
+    config: RunAgentOptions<T>,
+    options?: RunAgentOrHaltOptions,
+  ) {
+    return agentOrHaltRoutine(claim, config, { runAgent, haltForHuman }, options);
   }
   function reviewTicket(options: BoundReviewTicketOptions) {
     return reviewRoutine({

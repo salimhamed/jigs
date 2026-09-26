@@ -138,7 +138,8 @@ A run that is suspended is not stuck; a run that is stalled is.
 ## Needs-human halts
 
 A step can raise a halt instead of proceeding. The run then suspends and jigs
-comments on the Linear ticket, mentioning its creator and its assignee. The
+comments on the Linear ticket, mentioning the factory's `linear.operator` (or,
+without one, the ticket's creator) and its assignee, each once. The
 comment says in plain words what paused and why, what the ticket is about, and
 either numbered questions to choose between or what to repair before retrying;
 its footer names the run, where it paused, and links its dashboard page.

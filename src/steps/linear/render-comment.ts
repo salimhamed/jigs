@@ -18,13 +18,20 @@ import type { TicketNote } from "../../workflow/linear/review.ts";
 const LETTERS = "abcdefghijklmnopqrstuvwxyz";
 
 /**
- * Who the comment greets. Either may be absent, and they are often the same.
+ * Who the comment is for. `mentions` is the final list the comment greets, in
+ * order and each person once: the operator (or, without one, the ticket's
+ * creator), the assignee, then any extra people the step was asked to mention.
+ * A custom renderer greets `mentions` rather than working it out again; the
+ * other fields are there for context and may be null.
  *
  * @group Rendering/customization
  */
 export type TicketParticipants = {
   creator: LinearUser | null;
   assignee: LinearUser | null;
+  /** The configured operator, or null when none is set or Linear could not find them. */
+  operator: LinearUser | null;
+  mentions: LinearUser[];
 };
 
 /**
@@ -60,18 +67,9 @@ export type RenderNeedsHumanComment = (
  */
 export type RenderTicketNote = (note: TicketNote, participants: TicketParticipants) => string;
 
-// Creator and assignee, in that order, each named once. Either may be absent;
-// a ticket nobody created and nobody owns gets no greeting rather than a
-// dangling dash.
-function greet(participants: TicketParticipants, headline: string): string {
-  const seen = new Set<string>();
-  const people: LinearUser[] = [];
-  for (const user of [participants.creator, participants.assignee]) {
-    if (user === null || seen.has(user.id)) continue;
-    seen.add(user.id);
-    people.push(user);
-  }
-  return people.length === 0 ? headline : `${people.map(mention).join(" ")} — ${headline}`;
+// Nobody to mention gets no greeting rather than a dangling dash.
+function greet({ mentions }: TicketParticipants, headline: string): string {
+  return mentions.length === 0 ? headline : `${mentions.map(mention).join(" ")} — ${headline}`;
 }
 
 function questionSection(question: HaltQuestion, index: number): string {

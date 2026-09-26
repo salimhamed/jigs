@@ -7,15 +7,13 @@ import {
   releaseSchema,
 } from "../../workflow/runtime/release.ts";
 import type { NamedRunMetadata } from "./run-context.ts";
+import { findRunWorkflow, loadRunWorkflow } from "./run-workflow.ts";
 
-/** Match the compiled ID the SDK records, not the factory's friendly key. */
 export function workflowReleasePolicy(
   factory: Factory,
   workflowName: string,
 ): ReleasePolicy | undefined {
-  return Object.values(factory.workflows).find(
-    (entry) => (entry.workflow as { workflowId?: string }).workflowId === workflowName,
-  )?.release;
+  return findRunWorkflow(factory, workflowName)?.release;
 }
 
 export function effectiveReleasePolicy(
@@ -30,16 +28,8 @@ export async function resolveReleasePolicy(
   metadata: NamedRunMetadata,
   definition: FactoryDefinition,
 ): Promise<ReleasePolicy> {
-  const workflows = Object.fromEntries(
-    await Promise.all(
-      Object.entries(definition.workflows).map(async ([name, load]) => [
-        name,
-        (await load()).default,
-      ]),
-    ),
-  );
   return effectiveReleasePolicy(
-    workflowReleasePolicy({ workflows }, metadata.workflowName),
+    (await loadRunWorkflow(metadata, definition))?.release,
     readFactoryConfig(factoryRoot()).release,
   );
 }

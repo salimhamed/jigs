@@ -1,4 +1,4 @@
-import type { LinearIdentity } from "../config/factory-config.ts";
+import { FACTORY_CONFIG_FILE, type LinearIdentity } from "../config/factory-config.ts";
 import type { LinearUser } from "../providers/linear.ts";
 import {
   type EnvLookup,
@@ -61,4 +61,64 @@ export function linearIdentityChecks(
       },
     },
   ];
+}
+
+/** The Linear lookups the operator check makes. */
+export interface LinearOperatorProbes {
+  viewer(): Promise<LinearUser>;
+  userByEmail(email: string): Promise<LinearUser | null>;
+}
+
+/** Where an operator email is configured: the factory, or one workflow's override. */
+export interface OperatorSetting {
+  email: string;
+  workflow?: string;
+}
+
+// Doctor only, never preflight: a mention must never stop a run from starting.
+/** Whether each configured operator email belongs to a Linear user who will be notified. */
+export function linearOperatorChecks(
+  identity: LinearIdentity,
+  settings: OperatorSetting[],
+  probes: LinearOperatorProbes,
+): Check[] {
+  return settings.map(({ email, workflow }) => {
+    const where =
+      workflow === undefined
+        ? `linear.operator in ${FACTORY_CONFIG_FILE}`
+        : `linear.operator in workflow ${workflow}'s defineWorkflow`;
+    return {
+      id: workflow === undefined ? "linear.operator" : `linear.operator.${workflow}`,
+      label: workflow === undefined ? "Linear operator" : `Linear operator (workflow ${workflow})`,
+      run: async () => {
+        let user: LinearUser | null;
+        try {
+          user = await probes.userByEmail(email);
+        } catch (err) {
+          return {
+            ok: false,
+            reason: `could not look up ${email} in Linear: ${err}`,
+            repair: "repair the Linear identity check, then: pnpm exec jigs doctor",
+          };
+        }
+        if (user === null) {
+          return {
+            ok: false,
+            reason: `no active Linear user has the email ${email}`,
+            repair: `set ${where} to the email of an active user in this Linear workspace, or remove it to mention the ticket's creator, then: pnpm exec jigs up`,
+          };
+        }
+        if (identity.mode === "key") {
+          const viewer = await probes.viewer().catch(() => null);
+          if (viewer?.id === user.id) {
+            return {
+              ok: true,
+              detail: `${user.name} — warning: LINEAR_API_KEY belongs to ${user.name}, so jigs posts as them and Linear will not notify them of their own comments. Set linear.identity to { mode: "app" } in ${FACTORY_CONFIG_FILE} so jigs posts as itself`,
+            };
+          }
+        }
+        return { ok: true, detail: `mentions ${user.name}` };
+      },
+    };
+  });
 }

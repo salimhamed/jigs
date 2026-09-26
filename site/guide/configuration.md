@@ -262,7 +262,7 @@ never changes branch protection.
 - **`key`: jigs acts as you.** Put a Linear personal API key in `.env` as
   `LINEAR_API_KEY`. Linear does not notify you of your own comments, so when a
   run asks you a question on a ticket, the mention may never reach your inbox.
-  A key for a separate Linear user avoids this.
+  A key for a separate Linear user, or the `app` identity, avoids this.
 - **`app`: jigs acts as an app.** Its comments and mentions reach you like
   anyone else's. In Linear, go to Settings → API → OAuth applications and create
   one with **Client credentials** on, Public off and Webhooks off (any redirect
@@ -272,6 +272,40 @@ never changes branch protection.
 ```ts
 linear: { identity: { mode: "app" } },
 ```
+
+### Who comments mention {#linear-operator}
+
+Every comment jigs posts on a Linear ticket starts by mentioning people, so
+Linear notifies them. That covers the questions a paused run asks and the notes
+it leaves, such as the assumptions a ticket review made.
+
+- **Without `linear.operator`**, a comment mentions the ticket's creator and
+  its assignee.
+- **With `linear.operator`**, set to the email of your Linear user, a comment
+  mentions you and the ticket's assignee instead. Set it when colleagues create
+  tickets for the factory, so its questions reach you rather than them.
+
+```ts
+linear: { identity: { mode: "app" }, operator: "you@example.com" },
+```
+
+Each person is mentioned once, even when the operator is also the assignee.
+Anyone's reply wakes a paused run; the mention only decides who is notified.
+
+A workflow can name its own operator with
+`defineWorkflow({ ..., linear: { operator: "dana@example.com" } })`, which
+replaces the factory's for every comment that workflow posts. A step or routine
+that posts a comment, such as `haltForHuman` or `noteOnTicket`, also takes a
+`mention` list of extra emails to mention alongside these people.
+
+`jigs doctor`, and `jigs up`, look each operator email up in Linear and fail
+when no active Linear user has it. With the `key` identity, jigs posts as the
+key's owner, so if that is also the operator, doctor warns that the mentions
+will not notify you and suggests the `app` identity.
+
+When a run posts, jigs looks the emails up again. If Linear cannot find one,
+for example because the user was deactivated since, jigs leaves that person
+out, logs a warning and posts the comment anyway. A mention never stops a run.
 
 ## Webhooks {#webhooks}
 

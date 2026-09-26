@@ -88,7 +88,10 @@ export function failedCheck(id: string, label: string, reason: string, repair: s
 }
 
 /** A factory's workflows by name, as far as the check catalog reads them. */
-export type WorkflowManifests = Record<string, { requires?: WorkflowRequires }>;
+export type WorkflowManifests = Record<
+  string,
+  { requires?: WorkflowRequires; linear?: { operator?: string } }
+>;
 
 /** Map each requirement `pick` reads from a workflow's `requires` to the workflows that name it. */
 export function requirementUsers<K extends string>(

@@ -24,7 +24,9 @@ export function needsHumanToken(issueId: string, commentId: string): string {
  * names the routine it paused in so the footer can say so, `about` restates the
  * ticket itself, `notes` are plain bullet lines, and `onReply` decides what
  * the comment asks the human to do: choose between the questions ("continue")
- * or repair something and let the step run again ("retry").
+ * or repair something and let the step run again ("retry"). `mention` adds
+ * people, by Linear email, to the operator (or the creator) and the assignee
+ * the comment already mentions; an email no Linear user has is skipped.
  *
  * @group Human input
  */
@@ -35,6 +37,7 @@ export type Halt = {
   questions?: HaltQuestion[] | undefined;
   notes?: string[] | undefined;
   onReply: "continue" | "retry";
+  mention?: string[] | undefined;
 };
 
 /**
@@ -74,7 +77,8 @@ export type HaltForHumanDependencies = {
 /** {@link haltForHuman} with its steps already bound, as a workflow calls it. */
 export type HaltForHumanFn = (claim: TicketClaim, halt: Halt) => Promise<HumanReply>;
 
-// Posts the halt to the Linear ticket (@-mentioning its creator and assignee),
+// Posts the halt to the Linear ticket (@-mentioning the operator, or the
+// creator, and the assignee),
 // then suspends on the claim hook. A wake is the service's poll or, with
 // Linear webhooks on, a comment delivery, and either carries nothing: each one
 // re-reads the comment thread from Linear and re-suspends when no human has

@@ -94,3 +94,26 @@ test("runAgentOrHalt rethrows a non-JIT step failure instead of halting", async 
   await expect(runAgentOrHalt(claim, config, deps)).rejects.toThrow("could not build the project");
   expect(halts).toBe(0);
 });
+
+test("runAgentOrHalt passes extra mentions to the repair request", async () => {
+  const halts: Halt[] = [];
+  let attempts = 0;
+  const deps = {
+    runAgent: async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw new JitCheckError([
+          { ok: false, id: "aws", label: "AWS", reason: "expired", repair: "log in" },
+        ]);
+      }
+      return stepResult;
+    },
+    haltForHuman: async (_claim: TicketClaim, halt: Halt) => {
+      halts.push(halt);
+      return reply;
+    },
+  } as unknown as RunAgentOrHaltDependencies;
+
+  await runAgentOrHalt(claim, config, deps, { mention: ["ops@example.com"] });
+  expect(halts[0]?.mention).toEqual(["ops@example.com"]);
+});
