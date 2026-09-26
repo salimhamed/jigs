@@ -136,6 +136,31 @@ test("an app Linear identity names its client variables as the empty slots", asy
   );
 });
 
+test("a GitHub App identity does not name GITHUB_TOKEN as an empty slot", async () => {
+  const port = await fakeService();
+  const root = factory({
+    port,
+    githubIdentity: "app",
+    env: "WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\nLINEAR_API_KEY=\n",
+  });
+  const io = { exec: fakeExec(), procs: fakeProcesses() };
+  expect((await up(root, io)).ok).toBe(true);
+  const printed = lines.join("\n");
+  expect(printed).toContain("LINEAR_API_KEY empty in .env");
+  expect(printed).not.toContain("GITHUB_TOKEN");
+});
+
+test("a PAT identity names a missing GITHUB_TOKEN as an empty slot", async () => {
+  const port = await fakeService();
+  const root = factory({
+    port,
+    env: "WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\nLINEAR_API_KEY=lin\n",
+  });
+  const io = { exec: fakeExec(), procs: fakeProcesses() };
+  expect((await up(root, io)).ok).toBe(true);
+  expect(lines.join("\n")).toContain("     GITHUB_TOKEN empty in .env");
+});
+
 test("bootstrap is handed the World URL from .env explicitly", async () => {
   const port = await fakeService();
   const root = factory({ port });
