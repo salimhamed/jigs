@@ -175,53 +175,69 @@ const result = await askJev({
 
 See [decision types](/api/jigs#decision-models) for choice and score questions.
 
-### One decision with a cutoff
+### Decisions with a safe default
 
-`decide` asks a single question with `jevModel` and tells you whether the answer
-is confident enough to act on. Below the cutoff, do what the workflow would do
-without Jev:
+`decide` asks named questions about one state, with `jevModel`. Each question
+names `whenUnsure`: the answer to act on when Jev is less sure than the cutoff
+(0.9 unless the question sets `cutoff`). Pick the answer that does what the
+workflow would do without Jev. Every value comes back ready to act on:
 
 ```ts
 import { choice } from "@jigs-ai/jigs";
 import { decide } from "#jigs/routines";
 
-const wake = await decide({
+const { wake } = await decide({
   site: "pull-request-wake",
   state: { ci: "pending", newComments: [] },
-  question: choice("What does this pull request need now?", {
-    idle: "Nothing to act on yet",
-    builder: "The builder should act",
-  }),
-  cutoff: 0.9,
+  questions: {
+    wake: {
+      question: choice("What does this pull request need now?", {
+        idle: "Nothing to act on yet",
+        builder: "The builder should act",
+      }),
+      whenUnsure: "builder",
+    },
+  },
 });
-if (wake.confident && wake.answer.choice === "idle") return;
+if (wake === "idle") return;
 ```
 
-A choice or score is as confident as the model says. A yes-or-no answer is as
-confident as its more likely side, and `yes` says which side that is. Every
-answered `askJev` or `decide` call appends a line, tagged with its `site`, to
-`decisions.jsonl` in the run's working directory.
+A choice resolves to its option key, a yes-or-no to a boolean, and a score to
+its nearest level's index. Several questions in one call are answered in one
+model request. Every answered `askJev` or `decide` call appends a line, tagged
+with its `site`, to `decisions.jsonl` in the run's working directory; for
+`decide`, the line also records each answer's confidence and whether
+`whenUnsure` was used.
 
 ### Where jigs asks Jev itself
 
-Jigs asks Jev a few questions of its own. When Jev is unsure (under 0.9), jigs
-behaves as it would without it.
+`haltForHuman` asks whether a new ticket comment answers the question. A comment
+Jev is sure is not an answer, such as a "+1" or a mention of someone else, is
+passed over and the run keeps waiting. When unsure, the comment counts as the
+reply. So any workflow that declares the `linear` integration needs
+`OPENROUTER_API_KEY`, and preflight checks it.
 
-- `haltForHuman` asks whether a new ticket comment answers the question. A
-  comment Jev is sure is not an answer, such as a "+1" or a mention of someone
-  else, is passed over and the run keeps waiting.
-- `reviewTicket` asks whether the ticket is ready before the reviewer reads it.
-  A ticket Jev is sure is not ready gets one fixed question for the reason
-  (no way to tell when it is done, no reproduction steps, conflicting
-  requirements, or too large), and the reviewer reads the reply.
-- The webhook ingress asks whether a delivery could matter to the run it would
-  wake, and tells Jev what that run is waiting for: activity on its pull
-  request, a reply to the question it asked on the ticket, or nothing on the
-  ticket at all. A delivery Jev is sure cannot matter, such as a label change,
-  a bot comment or jigs' own note, is acknowledged without waking the run. Closes, pushes and CI results
-  always wake, and polling still catches anything skipped. This needs
-  `OPENROUTER_API_KEY` in the service's environment; without it every delivery
-  wakes.
+### Evals
+
+`@jigs-ai/jigs/evals` runs hand-written cases for one decision against the live
+model and prints how often Jev was right, how often it was sure enough to act,
+and how often it was sure but wrong. Wrap it in your test runner:
+
+```ts
+import { test } from "vitest";
+import { evalsConfigured, runEvalSet } from "@jigs-ai/jigs/evals";
+
+test.skipIf(!evalsConfigured())("pull-request-wake", async () => {
+  await runEvalSet({
+    site: "pull-request-wake",
+    rule: { question: pullRequestWake, whenUnsure: "builder" },
+    cases: [{ name: "CI still running", state: { ci: "pending" }, expected: "idle" }],
+  });
+});
+```
+
+A wrong answer never fails; the set throws only when every case errors. In CI,
+the report is also appended to `$GITHUB_STEP_SUMMARY`.
 
 ## Agent environment
 

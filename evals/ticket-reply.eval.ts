@@ -1,10 +1,7 @@
-import {
-  LINEAR_DECISION_CUTOFF,
-  ticketReply,
-  ticketReplyState,
-} from "../src/workflow/linear/decisions.ts";
+import { test } from "vitest";
+import { evalsConfigured, runEvalSet } from "../src/evals/index.ts";
+import { ticketReply, ticketReplyState } from "../src/workflow/linear/decisions.ts";
 import type { Halt } from "../src/workflow/linear/halt-for-human.ts";
-import { evalSite } from "./harness.ts";
 
 const retryPolicy: Halt = {
   headline: "jigs paused work on **AGE-41** and needs your answers before it writes any code.",
@@ -23,55 +20,60 @@ const brokenLogin: Halt = {
   onReply: "retry",
 };
 
-evalSite("ticket-reply", {
-  question: ticketReply,
-  cutoff: LINEAR_DECISION_CUTOFF,
-  cases: [
-    {
-      name: "direct answer to both questions",
-      state: ticketReplyState(
-        retryPolicy,
-        "Retry up to 5 times with exponential backoff, capped at 10 minutes.",
-      ),
-      expected: true,
-    },
-    {
-      name: "plus one",
-      state: ticketReplyState(retryPolicy, "+1"),
-      expected: false,
-    },
-    {
-      name: "pings someone else",
-      state: ticketReplyState(
-        retryPolicy,
-        "@dana you know the webhook side better, can you answer this?",
-      ),
-      expected: false,
-    },
-    {
-      name: "tells the agent to use its judgement",
-      state: ticketReplyState(retryPolicy, "Whatever you think is sensible, go ahead."),
-      expected: true,
-    },
-    {
-      name: "status chatter",
-      state: ticketReplyState(retryPolicy, "Moving this to next sprint's board."),
-      expected: false,
-    },
-    {
-      name: "credential fixed, asks to retry",
-      state: ticketReplyState(brokenLogin, "Fixed the token, try again."),
-      expected: true,
-    },
-    {
-      name: "acknowledges without fixing",
-      state: ticketReplyState(brokenLogin, "Thanks, will look at this tomorrow."),
-      expected: false,
-    },
-    {
-      name: "answers one question and defers the other",
-      state: ticketReplyState(retryPolicy, "Yes, retry 3 times. Pick whichever backoff you like."),
-      expected: true,
-    },
-  ],
+test.skipIf(!evalsConfigured())("ticket-reply", async () => {
+  await runEvalSet({
+    site: "ticket-reply",
+    rule: { question: ticketReply, whenUnsure: true },
+    cases: [
+      {
+        name: "direct answer to both questions",
+        state: ticketReplyState(
+          retryPolicy,
+          "Retry up to 5 times with exponential backoff, capped at 10 minutes.",
+        ),
+        expected: true,
+      },
+      {
+        name: "plus one",
+        state: ticketReplyState(retryPolicy, "+1"),
+        expected: false,
+      },
+      {
+        name: "pings someone else",
+        state: ticketReplyState(
+          retryPolicy,
+          "@dana you know the webhook side better, can you answer this?",
+        ),
+        expected: false,
+      },
+      {
+        name: "tells the agent to use its judgement",
+        state: ticketReplyState(retryPolicy, "Whatever you think is sensible, go ahead."),
+        expected: true,
+      },
+      {
+        name: "status chatter",
+        state: ticketReplyState(retryPolicy, "Moving this to next sprint's board."),
+        expected: false,
+      },
+      {
+        name: "credential fixed, asks to retry",
+        state: ticketReplyState(brokenLogin, "Fixed the token, try again."),
+        expected: true,
+      },
+      {
+        name: "acknowledges without fixing",
+        state: ticketReplyState(brokenLogin, "Thanks, will look at this tomorrow."),
+        expected: false,
+      },
+      {
+        name: "answers one question and defers the other",
+        state: ticketReplyState(
+          retryPolicy,
+          "Yes, retry 3 times. Pick whichever backoff you like.",
+        ),
+        expected: true,
+      },
+    ],
+  });
 });

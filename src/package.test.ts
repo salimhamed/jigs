@@ -106,7 +106,7 @@ test("every tsdown entry is reachable through the exports map or the bin", () =>
   }
 });
 
-test("the root, the routines entry, the steps entry and the seven step topics are the factory's subpaths", () => {
+test("the root, the routines, steps and evals entries and the seven step topics are the factory's subpaths", () => {
   const topics = ["agents", "human", "linear", "pull-requests", "workspaces", "git", "runtime"];
   const service = ["./app", "./nitro", "./schedules", "./automatic-release", "./build"];
   const plugins = ["./plugins/start-world", "./plugins/start-dashboard"];
@@ -115,6 +115,7 @@ test("the root, the routines entry, the steps entry and the seven step topics ar
       ".",
       "./routines",
       "./steps",
+      "./evals",
       ...service,
       ...plugins,
       ...topics.map((topic) => `./steps/${topic}`),
@@ -266,6 +267,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "reviewPullRequest",
   ],
   "steps/index.ts": ["AgentSessionError", "createAgentRunner"],
+  "evals/index.ts": ["evalsConfigured", "runEvalSet"],
   "steps/agents/index.ts": ["executeAgent", "executeJev", "executeModel"],
   "steps/runtime/index.ts": [
     "dashboardRunUrl",

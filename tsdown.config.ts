@@ -16,6 +16,7 @@ export default defineConfig({
     "steps/workspaces/index": "src/steps/workspaces/index.ts",
     "steps/git/index": "src/steps/git/index.ts",
     "steps/runtime/index": "src/steps/runtime/index.ts",
+    "evals/index": "src/evals/index.ts",
     app: "src/service/app.ts",
     build: "src/service/build.ts",
     nitro: "src/service/nitro.ts",

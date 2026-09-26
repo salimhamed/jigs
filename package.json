@@ -96,6 +96,10 @@
     "./steps/runtime": {
       "types": "./dist/steps/runtime/index.d.ts",
       "default": "./dist/steps/runtime/index.js"
+    },
+    "./evals": {
+      "types": "./dist/evals/index.d.ts",
+      "default": "./dist/evals/index.js"
     }
   },
   "files": [
