@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.72.0](https://github.com/salimhamed/jigs/compare/jigs-v0.71.0...jigs-v0.72.0) (2026-09-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* postTicketHumanInputRequest(issueId, halt, metadata, definition, render?) and postTicketNote(issueId, note, metadata, definition, render?) take new required metadata and definition parameters, and render moved to the end. TicketParticipants gains required operator and mentions fields. Run jigs upgrade (or jigs generate) to regenerate the factory's step wrappers.
+
+### Features
+
+* make who jigs mentions on Linear comments configurable ([#423](https://github.com/salimhamed/jigs/issues/423)) ([664066d](https://github.com/salimhamed/jigs/commit/664066deb81b8a5847777f644d1846a7f98f22b0))
+
 ## [0.71.0](https://github.com/salimhamed/jigs/compare/jigs-v0.70.0...jigs-v0.71.0) (2026-09-26)
 
 
