@@ -8,37 +8,43 @@ const failed = (phase: string, name: string, message: string, hint: string | nul
   message,
   hint,
 });
+// How a step's error reaches the workflow once its own retries are spent.
+const exhausted = (phase: string, step: string, message: string) =>
+  failed(
+    phase,
+    "FatalError",
+    `Step "step//./jigs/steps//${step}" failed after 3 retries: ${message}`,
+  );
 
 evalSite("failure-triage", {
   question: failureTriage,
   cutoff: 0.9,
   cases: [
     {
-      name: "GitHub 502",
-      state: failed("publish", "Error", "GitHub API responded 502 Bad Gateway"),
-      expected: "transient",
+      name: "GitHub 502 through every retry",
+      state: exhausted("publish", "openPullRequest", "GitHub API responded 502 Bad Gateway"),
+      expected: "outage",
     },
     {
-      name: "socket reset",
-      state: failed("follow the pull request", "Error", "read ECONNRESET"),
-      expected: "transient",
+      name: "socket reset through every retry",
+      state: exhausted("follow the pull request", "fetchPullRequestState", "read ECONNRESET"),
+      expected: "outage",
     },
     {
-      name: "rate limited",
-      state: failed(
+      name: "rate limited through every retry",
+      state: exhausted(
         "implement and review",
-        "Error",
+        "executeAgent",
         "429 Too Many Requests: rate limit exceeded, retry after 30s",
       ),
-      expected: "transient",
+      expected: "outage",
     },
     {
       name: "token lacks permission",
-      state: failed(
+      state: exhausted(
         "publish",
-        "JigsError",
+        "pushApprovedChange",
         "GitHub rejected the push: Resource not accessible by integration",
-        "grant the GitHub App contents: write on this repository",
       ),
       expected: "needs-human",
     },

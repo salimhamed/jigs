@@ -8,6 +8,7 @@ import {
   type TicketSnapshot,
 } from "@jigs-ai/jigs";
 import { beforeEach, expect, test, vi } from "vitest";
+import { sleep } from "workflow";
 import * as routines from "#jigs/routines";
 import * as steps from "#jigs/steps";
 import * as delivery from "./delivery/delivery.ts";
@@ -15,6 +16,10 @@ import entry, { linearTicketToPr } from "./linear-ticket-to-pr.ts";
 
 // The workflow body against mocked phases: which agents it hands delivery, and
 // the ticket status it sets around each phase.
+vi.mock("workflow", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("workflow")>()),
+  sleep: vi.fn(async () => {}),
+}));
 vi.mock("./delivery/delivery.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./delivery/delivery.ts")>()),
   implementAndReview: vi.fn(async () => ({ reviewedCommit: "h1", ledger: [] })),
@@ -212,19 +217,20 @@ test("agents and budgets a run names win over the ticket's size", async () => {
   });
 });
 
-test("a transient failure retries its phase once", async () => {
+test("an outage waits, then retries its phase once", async () => {
   vi.mocked(delivery.publish).mockRejectedValueOnce(new Error("socket hang up"));
-  jev("failure-triage", failure("transient"));
+  jev("failure-triage", failure("outage"));
   await expect(run()).resolves.toEqual({ pr: pr.url });
   expect(delivery.publish).toHaveBeenCalledTimes(2);
+  expect(sleep).toHaveBeenCalledExactlyOnceWith("5m");
   expect(statuses()).toEqual(["In Progress", "In Review", "Done"]);
 });
 
-test("a second transient failure in the same phase is rethrown", async () => {
+test("a second outage in the same phase is rethrown", async () => {
   vi.mocked(delivery.publish)
     .mockRejectedValueOnce(new Error("socket hang up"))
     .mockRejectedValueOnce(new Error("socket hang up again"));
-  jev("failure-triage", failure("transient"), failure("transient"));
+  jev("failure-triage", failure("outage"), failure("outage"));
   await expect(run()).rejects.toThrow("socket hang up again");
   expect(delivery.publish).toHaveBeenCalledTimes(2);
   expect(routines.noteOnTicket).not.toHaveBeenCalled();

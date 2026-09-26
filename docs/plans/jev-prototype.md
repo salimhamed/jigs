@@ -184,17 +184,45 @@ with each answer. The unit tests use a stubbed `executeJev`.
 8. **Failure triage**
    - **Where:** the recipe's error handling, for an agent or step error that is
      not `DeliveryStopped`.
-   - **Decides:** transient, needs a human, or a jigs bug.
+   - **What reaches it:** the Workflow SDK (`workflow` 5.0.0-beta.53) retries a
+     failed step 3 more times by default (`DEFAULT_STEP_MAX_RETRIES`), unless
+     the error is a `FatalError` or the step sets `maxRetries`. A `JigsError`
+     is an ordinary `Error`, so a step that throws one is retried too. Once
+     the retries are spent, the workflow sees a `FatalError` whose message
+     begins `Step "<id>" failed after 3 retries:`. Errors thrown in workflow
+     code, such as routine invariants, reach it directly with no retry. So a
+     brief blip never gets here: what arrives is an outage or rate limit that
+     outlasted the quick retries, something a person must fix, or a bug.
+   - **Decides:** outage, needs a human, or a jigs bug. The question tells Jev
+     about the step retries.
    - **Acts:**
-     - transient: retry the phase once.
+     - outage: wait five minutes (a durable `sleep`), then retry the phase once.
      - needs a human: throw `DeliveryStopped` with the error, so the ticket
        gets a note and moves to Todo.
      - a jigs bug: rethrow.
    - **Fallback:** rethrow, as today.
    - **Status:** done, as `withFailureTriage` around each phase call.
-   - **Risk:** a retried `publish` could open a second pull request if the
-     first attempt failed after GitHub created one, and a retried
-     `followPullRequest` starts a new watcher for the same pull request.
+   - **Why every phase is safe to retry:**
+     - `openPullRequest` adopts the branch's open pull request, and pushing
+       the same commit again does nothing.
+     - A failed `followPullRequest` leaves the `for await` loop, which closes
+       the watch generator and disposes its pull request hook. The retried
+       watch creates the hook again in the same run, and the World deletes a
+       disposed hook, so there is no conflict. `watch.test.ts` covers this.
+     - Ticket notes are idempotent too; see "Idempotent ticket notes" below.
+   - **Evals:** 8/8 right, 7/8 over the cutoff, with outage cases written the
+     way a spent step retry reads.
+
+### Idempotent ticket notes
+
+- **Why:** `postTicketNote` and `postTicketHumanInputRequest` are steps the
+  SDK retries. If Linear created the comment but the response was lost, the
+  retry would post it a second time.
+- **How:** each comment is created with a client-chosen id
+  (`CommentCreateInput.id`). The id is a UUID v4 derived from the run id, the
+  issue and the note's input, not its rendered text, since the rendering
+  includes participants that can change between attempts. Before creating,
+  the step looks for a comment with that id and returns it if it exists.
 
 ### More candidates
 

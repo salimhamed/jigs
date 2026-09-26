@@ -8,6 +8,7 @@ import {
   type WorkflowInputs,
   type Worktree,
 } from "@jigs-ai/jigs";
+import { sleep } from "workflow";
 import { z } from "zod";
 import { acquireTicket, agentSession, decide, noteOnTicket, reviewTicket } from "#jigs/routines";
 import { provisionWorktree, setTicketStatus } from "#jigs/steps";
@@ -128,9 +129,14 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
   }
 }
 
+// Steps already retried within seconds, so a phase retry only helps once an outage has had time
+// to clear. Every phase is safe to repeat: publishing adopts the branch's open pull request, a
+// push of the same commit is a no-op, and a failed watch released its pull request hook.
+const OUTAGE_WAIT = "5m";
+
 /**
  * Run a phase; when it fails with anything but DeliveryStopped, ask Jev what kind of failure it
- * is. A transient failure retries the phase once, and one a person must fix becomes a
+ * is. An outage waits and retries the phase once, and one a person must fix becomes a
  * DeliveryStopped so the ticket gets a note. Anything else, or an unsure answer, is rethrown.
  */
 async function withFailureTriage<T>(
@@ -158,7 +164,10 @@ async function withFailureTriage<T>(
         cutoff: CUTOFF,
       });
       if (!failure.confident) throw error;
-      if (failure.answer.choice === "transient" && attempt === 1) continue;
+      if (failure.answer.choice === "outage" && attempt === 1) {
+        await sleep(OUTAGE_WAIT);
+        continue;
+      }
       if (failure.answer.choice === "needs-human")
         throw new DeliveryStopped(
           `jigs stopped work on ${key} while trying to ${phase}: something outside the code needs fixing first.`,
