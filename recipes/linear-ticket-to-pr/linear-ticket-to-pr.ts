@@ -1,6 +1,7 @@
 import {
   defineWorkflow,
   harnesses,
+  jevModel,
   renderTicketSnapshot,
   type TicketHandoff,
   type WorkflowInputs,
@@ -97,6 +98,6 @@ function workItem(handoff: TicketHandoff): WorkItem {
 
 export default defineWorkflow({
   inputs,
-  requires: { agents, integrations: ["linear", "github"] },
+  requires: { agents, models: [jevModel], integrations: ["linear", "github"] },
   workflow: linearTicketToPr,
 });

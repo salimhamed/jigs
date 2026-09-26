@@ -102,6 +102,7 @@ beforeEach(() => {
   vi.stubEnv("WORKFLOW_TARGET_WORLD", undefined);
   vi.stubEnv("WORKFLOW_POSTGRES_URL", undefined);
   vi.stubEnv("JIGS_CLAUDE_EXECUTABLE", claudeStub);
+  vi.stubEnv("OPENROUTER_API_KEY", "configured");
 });
 afterEach(() => {
   vi.unstubAllGlobals();

@@ -8,13 +8,14 @@ import {
   isPullRequestMergeReady,
   JigsError,
   type PullRequestRef,
+  type PullRequestSnapshot,
   pullRequestSnapshotKey,
   type TicketNote,
   type Worktree,
 } from "@jigs-ai/jigs";
 import { sleep } from "workflow";
 import { z } from "zod";
-import { agentSession, committedWork, runAgent, watchPullRequest } from "#jigs/routines";
+import { agentSession, committedWork, decide, runAgent, watchPullRequest } from "#jigs/routines";
 import {
   fetchPullRequestState,
   mergePullRequest,
@@ -25,6 +26,14 @@ import {
   readWorktreeDiff,
   registerResource,
 } from "#jigs/steps";
+import {
+  commentKind,
+  type NewComment,
+  type PullRequestWakeState,
+  pullRequestWake,
+  quietKinds,
+  type TriagedComment,
+} from "./decisions.ts";
 import * as prompts from "./prompts.ts";
 import {
   implementationReport,
@@ -207,6 +216,11 @@ export async function followPullRequest(
 ): Promise<void> {
   const { task, worktree, budget } = delivery;
   let lastAssessed: string | undefined;
+  let assessedBefore: PullRequestSnapshot | undefined;
+  const skip = (snapshot: PullRequestSnapshot) => {
+    lastAssessed = pullRequestSnapshotKey(snapshot);
+    assessedBefore = snapshot;
+  };
   for await (const snapshot of watchPullRequest(pr)) {
     if (snapshot.state === "closed") {
       if (snapshot.merged) return;
@@ -214,6 +228,38 @@ export async function followPullRequest(
     }
 
     if (pullRequestSnapshotKey(snapshot) === lastAssessed) continue;
+
+    const { wake, triaged } = await judgeWake(snapshot, assessedBefore);
+    if (wake === "idle") {
+      skip(snapshot);
+      continue;
+    }
+    if (wake === "human") {
+      const latest = triaged.filter((comment) => !quietKinds.has(comment.kind)).at(-1);
+      return maintenanceStopped(
+        delivery,
+        pr,
+        `The pull request needs a person's decision${latest === undefined ? "" : `, most recently from ${latest.user}: "${latest.body}"`}`,
+      );
+    }
+    if (wake === "merge") {
+      if (delivery.mergedBy === "human") {
+        skip(snapshot);
+        continue;
+      }
+      // Jev's judgement never merges on its own: the exact readiness gate on
+      // freshly read facts still decides, and anything new goes to the builder.
+      const current = await fetchPullRequestState(pr);
+      if (current.state === "closed") {
+        if (current.merged) return;
+        return maintenanceStopped(delivery, pr, "The pull request was closed unmerged.");
+      }
+      if (
+        pullRequestSnapshotKey(current) === pullRequestSnapshotKey(snapshot) &&
+        isPullRequestMergeReady(current)
+      )
+        return merge(delivery, pr, current.headSha);
+    }
 
     let assessed = snapshot;
     let recovery: string | undefined;
@@ -282,7 +328,7 @@ export async function followPullRequest(
 
       // Recovery may have assessed facts the watcher has not yielded yet.
       // Remember only what the builder saw, never a newer post-turn read.
-      lastAssessed = pullRequestSnapshotKey(assessed);
+      skip(assessed);
 
       // Pending means the builder is waiting for an external event. A newly
       // published head or changed discussion is assessed on the next watch yield.
@@ -294,20 +340,135 @@ export async function followPullRequest(
       )
         break;
 
-      const result = await mergePullRequest(worktree, pr, current.headSha).catch(
-        (error: unknown) => ({
-          merged: false as const,
-          reason: String(error),
-          transient: true,
-        }),
-      );
-      if (result.merged) return;
-      return maintenanceStopped(delivery, pr, `Could not merge the pull request: ${result.reason}`);
+      return merge(delivery, pr, current.headSha);
     }
   }
 
   throw new JigsError(
     `the pull request watch for ${pr.owner}/${pr.repo}#${pr.number} ended without a close`,
+  );
+}
+
+async function merge(delivery: Delivery, pr: PullRequestRef, headSha: string): Promise<void> {
+  const result = await mergePullRequest(delivery.worktree, pr, headSha).catch((error: unknown) => ({
+    merged: false as const,
+    reason: String(error),
+    transient: true,
+  }));
+  if (result.merged) return;
+  return maintenanceStopped(delivery, pr, `Could not merge the pull request: ${result.reason}`);
+}
+
+type Wake = "idle" | "builder" | "human" | "merge";
+
+// Newest first, so a burst of comments keeps the ones the builder most needs.
+const TRIAGE_LIMIT = 20;
+
+/** Decide whether a changed pull request needs the builder, with each new comment triaged. */
+async function judgeWake(
+  snapshot: PullRequestSnapshot,
+  before: PullRequestSnapshot | undefined,
+): Promise<{ wake: Wake; triaged: TriagedComment[] }> {
+  const triaged = await triageComments(newComments(snapshot, before));
+  const reviews = newReviews(snapshot, before);
+
+  // Talk that asks nothing, on facts that did not move, needs no second opinion.
+  if (
+    before !== undefined &&
+    triaged.length > 0 &&
+    reviews.length === 0 &&
+    triaged.every((comment) => quietKinds.has(comment.kind)) &&
+    sameFacts(snapshot, before)
+  )
+    return { wake: "idle", triaged };
+
+  const { wake } = await decide({
+    site: "pull-request-wake",
+    state: {
+      ci: snapshot.ci,
+      failingChecks: snapshot.failingChecks.map((check) => ({ name: check.name })),
+      approval: snapshot.approval.state,
+      mergeState: snapshot.mergeState,
+      newComments: triaged.map(({ id: _, ...comment }) => comment),
+      newReviews: reviews.map(({ user, state, body }) => ({ user, state, body })),
+    } satisfies PullRequestWakeState,
+    questions: { wake: { question: pullRequestWake, whenUnsure: "builder" } },
+  });
+  return { wake, triaged };
+}
+
+/** Label each comment in one Jev call; an unsure label is a question, which owes an answer. */
+async function triageComments(comments: NewComment[]): Promise<TriagedComment[]> {
+  if (comments.length === 0) return [];
+  const kinds = await decide({
+    site: "comment-triage",
+    state: {
+      comments: comments.map(({ id, user, body, path }) => ({
+        id,
+        user,
+        body,
+        path: path ?? null,
+      })),
+    },
+    questions: Object.fromEntries(
+      comments.map((comment) => [
+        `c${comment.id}`,
+        { question: commentKind(comment.id), whenUnsure: "question" as const },
+      ]),
+    ),
+  });
+  return comments.map((comment) => ({ ...comment, kind: kinds[`c${comment.id}`] ?? "question" }));
+}
+
+function newComments(
+  snapshot: PullRequestSnapshot,
+  before: PullRequestSnapshot | undefined,
+): NewComment[] {
+  const seen = new Set<string>();
+  for (const comment of before?.conversationComments ?? [])
+    seen.add(`${comment.id}@${comment.updatedAt}`);
+  for (const thread of before?.reviewThreads ?? [])
+    for (const comment of thread.comments) seen.add(`${comment.id}@${comment.updatedAt}`);
+
+  const conversation = snapshot.conversationComments
+    .filter((comment) => !seen.has(`${comment.id}@${comment.updatedAt}`))
+    .map((comment) => ({
+      at: comment.updatedAt,
+      id: comment.id,
+      user: comment.user,
+      body: comment.body,
+    }));
+  const inline = snapshot.reviewThreads.flatMap((thread) =>
+    thread.comments
+      .filter((comment) => !seen.has(`${comment.id}@${comment.updatedAt}`))
+      .map((comment) => ({
+        at: comment.updatedAt,
+        id: comment.id,
+        user: comment.user,
+        body: comment.body,
+        path: comment.path,
+      })),
+  );
+  return [...conversation, ...inline]
+    .sort((left, right) => (left.at < right.at ? 1 : left.at > right.at ? -1 : 0))
+    .slice(0, TRIAGE_LIMIT)
+    .reverse()
+    .map(({ at: _, ...comment }) => comment);
+}
+
+function newReviews(snapshot: PullRequestSnapshot, before: PullRequestSnapshot | undefined) {
+  const seen = new Set((before?.reviews ?? []).map((review) => review.id));
+  return snapshot.reviews.filter((review) => !seen.has(review.id));
+}
+
+function sameFacts(snapshot: PullRequestSnapshot, before: PullRequestSnapshot): boolean {
+  return (
+    snapshot.headSha === before.headSha &&
+    snapshot.ci === before.ci &&
+    snapshot.mergeState === before.mergeState &&
+    snapshot.draft === before.draft &&
+    snapshot.approval.state === before.approval.state &&
+    [...snapshot.labels].sort().join("\n") === [...before.labels].sort().join("\n")
   );
 }
 

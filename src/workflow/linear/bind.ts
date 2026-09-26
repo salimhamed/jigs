@@ -2,6 +2,7 @@ import {
   runAgentOrHalt as agentOrHaltRoutine,
   type RunAgentOrHaltOptions,
 } from "../agents/agent-or-halt.ts";
+import type { ExecuteJevStep } from "../agents/jev.ts";
 import type { RunAgentOptions } from "../agents/plan.ts";
 import type { TicketClaim } from "./claim.ts";
 import {
@@ -34,6 +35,7 @@ export interface LinearSteps {
   postTicketNote: ReviewTicketOptions["postTicketNote"];
   checkForTicketHumanReply: CheckForTicketHumanReply;
   fetchTicketSnapshot: ReviewTicketOptions["fetchTicketSnapshot"];
+  executeJev: ExecuteJevStep;
 }
 
 /**
@@ -47,6 +49,7 @@ export function bindLinearSteps(steps: LinearSteps) {
     haltRoutine(claim, halt, {
       postTicketHumanInputRequest: steps.postTicketHumanInputRequest,
       checkForTicketHumanReply: steps.checkForTicketHumanReply,
+      executeJev: steps.executeJev,
     });
   function runAgentOrHalt<T = undefined>(
     claim: TicketClaim,

@@ -1,6 +1,7 @@
 import { type ExecuteAgentStep, runAgent as runAgentRoutine } from "./agent.ts";
 import { askAgent as askAgentRoutine } from "./ask-agent.ts";
 import { askModel as askModelRoutine, type ExecuteModelStep } from "./ask-model.ts";
+import { type DecideOptions, type DecisionRules, decide as decideRoutine } from "./decide.ts";
 import {
   type AskJevOptions,
   askJev as askJevRoutine,
@@ -40,5 +41,8 @@ export function bindAgentSteps(steps: AgentSteps) {
   function askJev<const QUESTIONS extends JevQuestions>(config: AskJevOptions<QUESTIONS>) {
     return askJevRoutine(config, steps.executeJev);
   }
-  return { runAgent, askAgent, askModel, askJev };
+  function decide<const RULES extends DecisionRules>(config: DecideOptions<RULES>) {
+    return decideRoutine(config, steps.executeJev);
+  }
+  return { runAgent, askAgent, askModel, askJev, decide };
 }

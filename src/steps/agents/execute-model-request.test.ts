@@ -1,4 +1,7 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { askModel } from "../../workflow/agents/ask-model.ts";
 import { harnesses, models } from "../../workflow/agents/harness-config.ts";
@@ -44,7 +47,15 @@ vi.mock("node:fs", async (importOriginal) => ({
   mkdtempSync: boundaries.mkdtempSync,
 }));
 
-afterEach(() => {
+// Answered decisions append to the run's decision log; keep it out of the real data directory.
+let dataHome: string;
+beforeEach(async () => {
+  dataHome = await mkdtemp(path.join(tmpdir(), "jigs-model-request-test-"));
+  vi.stubEnv("XDG_DATA_HOME", dataHome);
+});
+
+afterEach(async () => {
+  await rm(dataHome, { recursive: true, force: true });
   vi.restoreAllMocks();
   vi.clearAllMocks();
   vi.unstubAllEnvs();

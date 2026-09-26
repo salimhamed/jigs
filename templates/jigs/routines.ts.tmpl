@@ -73,12 +73,20 @@ export const askModel = agents.askModel;
  */
 export const askJev = agents.askJev;
 
+/**
+ * Ask a decision model named questions; each answers with a value, or its safe default when unsure.
+ *
+ * @group Agents and models
+ */
+export const decide = agents.decide;
+
 const linear = bindLinearSteps({
   runAgent,
   postTicketHumanInputRequest,
   postTicketNote,
   checkForTicketHumanReply,
   fetchTicketSnapshot,
+  executeJev,
 });
 
 /**

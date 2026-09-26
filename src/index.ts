@@ -16,6 +16,16 @@
 
 export { JitCheckError, unwrapAgentStep } from "./workflow/agents/agent.ts";
 export {
+  DECISION_CUTOFF,
+  type Decided,
+  type DecideOptions,
+  type DecisionRule,
+  type DecisionRules,
+  type DecisionValue,
+  jevModel,
+  type ResolvedAnswer,
+} from "./workflow/agents/decide.ts";
+export {
   type AskableHarness,
   type AskableModelSource,
   type ClaudeHarness,

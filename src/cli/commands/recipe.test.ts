@@ -23,6 +23,7 @@ test("lists linear-ticket-to-pr, installs its source and registers its workflow"
   expect(recipeNames()).toContain("linear-ticket-to-pr");
   expect(addRecipe("linear-ticket-to-pr", deps).created).toEqual([
     "workflows/linear-ticket-to-pr/README.md",
+    "workflows/linear-ticket-to-pr/delivery/decisions.ts",
     "workflows/linear-ticket-to-pr/delivery/delivery.test.ts",
     "workflows/linear-ticket-to-pr/delivery/delivery.ts",
     "workflows/linear-ticket-to-pr/delivery/prompts.ts",
@@ -55,7 +56,7 @@ test("keeps edited files when a recipe is added again", async () => {
   expect(result.created).toEqual([]);
   expect(deps.lines).toContain("linear-ticket-to-pr is already registered in jigs.config.ts");
   expect(readFileSync(path.join(deps.cwd, "jigs.config.ts"), "utf8")).toBe(config);
-  expect(result.skipped).toHaveLength(8);
+  expect(result.skipped).toHaveLength(9);
   expect(deps.lines).toContain("kept    workflows/linear-ticket-to-pr/linear-ticket-to-pr.ts");
   expect(
     readFileSync(

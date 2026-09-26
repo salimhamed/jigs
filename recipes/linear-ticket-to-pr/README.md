@@ -11,6 +11,7 @@ overwrites them.
 | File | What it holds |
 | --- | --- |
 | `linear-ticket-to-pr.ts` | The workflow: its agents, inputs, and the ticket status it sets between phases. |
+| `delivery/decisions.ts` | The Jev questions delivery asks: pull request wake and comment triage. |
 | `delivery/delivery.ts` | The three phases and `DeliveryStopped`. |
 | `delivery/prompts.ts` | Every prompt the agents are sent. |
 | `delivery/review.ts` | What a review returns and how it is rendered. |
@@ -24,6 +25,8 @@ overwrites them.
 - **Linear states named `Todo`, `In Progress`, `In Review` and `Done`** on the
   ticket's team. The workflow moves the ticket through them and fails on a
   missing one.
+- **`OPENROUTER_API_KEY`** for the Jev decisions. The model is declared in
+  `requires.models` and checked when the service starts.
 - **Claude Code and Codex**, installed and logged in. Both are declared in
   `requires.agents` and checked when the service starts.
 - **Builder access to GitHub tools**, such as authenticated `gh` or a configured
@@ -109,6 +112,23 @@ The builder session continues from implementation into PR maintenance. It
 judges the discussion and checks, then responds and pushes through its own
 GitHub tools. No hidden comment markers are required. If its saved session is
 unavailable, a fresh prompt supplies the ticket, current diff, and PR facts.
+
+## Jev decisions
+
+Delivery asks Jev, a fast decision model, short typed questions through
+`decide`. Each question names the answer to act on when Jev is less than 0.9
+sure, so an unsure answer does what the workflow would have done without Jev.
+
+- **Pull request wake** runs before every builder turn in `followPullRequest`.
+  `idle` skips the turn, `human` stops maintenance, and `merge` merges only
+  when fresh GitHub facts pass the same readiness gate a builder-finished merge
+  needs. With `mergedBy: "human"`, `merge` skips the turn. Unsure means
+  `builder`.
+- **Comment triage** labels each new comment in one call; an unsure label is
+  `question`. New comments that ask nothing, on unchanged facts, skip the wake
+  question and the turn.
+
+Each answered decision is appended to `decisions.jsonl` in the run's directory.
 
 ## The three phases
 

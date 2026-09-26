@@ -175,6 +175,70 @@ const result = await askJev({
 
 See [decision types](/api/jigs#decision-models) for choice and score questions.
 
+### Decisions with a safe default
+
+`decide` asks named questions about one state, with `jevModel`. Each question
+names `whenUnsure`: the answer to act on when Jev is less sure than the cutoff
+(0.9 unless the question sets `cutoff`). Pick the answer that does what the
+workflow would do without Jev. Every value comes back ready to act on:
+
+```ts
+import { choice } from "@jigs-ai/jigs";
+import { decide } from "#jigs/routines";
+
+const { wake } = await decide({
+  site: "pull-request-wake",
+  state: { ci: "pending", newComments: [] },
+  questions: {
+    wake: {
+      question: choice("What does this pull request need now?", {
+        idle: "Nothing to act on yet",
+        builder: "The builder should act",
+      }),
+      whenUnsure: "builder",
+    },
+  },
+});
+if (wake === "idle") return;
+```
+
+A choice resolves to its option key, a yes-or-no to a boolean, and a score to
+its nearest level's index. Several questions in one call are answered in one
+model request. Every answered `askJev` or `decide` call appends a line, tagged
+with its `site`, to `decisions.jsonl` in the run's working directory; for
+`decide`, the line also records each answer's confidence and whether
+`whenUnsure` was used.
+
+### Where jigs asks Jev itself
+
+`haltForHuman` asks whether a new ticket comment answers the question. A comment
+Jev is sure is not an answer, such as a "+1" or a mention of someone else, is
+passed over and the run keeps waiting. When unsure, the comment counts as the
+reply. So any workflow that declares the `linear` integration needs
+`OPENROUTER_API_KEY`, and preflight checks it.
+
+### Evals
+
+`@jigs-ai/jigs/evals` runs hand-written cases for one decision against the live
+model and prints how often Jev was right, how often it was sure enough to act,
+and how often it was sure but wrong. Wrap it in your test runner:
+
+```ts
+import { test } from "vitest";
+import { evalsConfigured, runEvalSet } from "@jigs-ai/jigs/evals";
+
+test.skipIf(!evalsConfigured())("pull-request-wake", async () => {
+  await runEvalSet({
+    site: "pull-request-wake",
+    rule: { question: pullRequestWake, whenUnsure: "builder" },
+    cases: [{ name: "CI still running", state: { ci: "pending" }, expected: "idle" }],
+  });
+});
+```
+
+A wrong answer never fails; the set throws only when every case errors. In CI,
+the report is also appended to `$GITHUB_STEP_SUMMARY`.
+
 ## Agent environment
 
 Agents do not automatically inherit the service environment. Add additional

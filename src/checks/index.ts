@@ -9,6 +9,7 @@ import { resolveGithubIdentities } from "../providers/github-auth.ts";
 import { findUserByEmail, getViewer } from "../providers/linear.ts";
 import { resolveLinearIdentity } from "../providers/linear-auth.ts";
 import { driverFor, type HarnessTarget } from "../steps/agents/drivers/index.ts";
+import { jevModel } from "../workflow/agents/decide.ts";
 import type {
   AskableModelSource,
   Harness,
@@ -171,13 +172,29 @@ export function preflightChecks(
     ...(integrations.includes("github") ? githubChecks() : []),
     ...bindingChecks({ factoryRoot, names: bindings }),
     ...harnessChecks(requiredHarnessKinds(requires)),
-    ...(requires.models ?? []).flatMap((source) => {
+    ...requiredModels(requires).flatMap((source) => {
       const driver = driverFor(source.kind);
       if (driver === undefined) return [missingDriverCheck(source.kind)];
       return [...driver.installationChecks(), ...(driver.descriptorChecks?.(source) ?? [])];
     }),
     ...(requires.aws ? [awsCredentialsCheck()] : []),
   ];
+}
+
+// A Linear workflow may halt for a human, and haltForHuman asks Jev whether a
+// comment answers its question, so Linear brings the Jev model with it.
+function requiredModels(requires: WorkflowRequires): AskableModelSource[] {
+  const declared = [
+    ...(requires.models ?? []),
+    ...((requires.integrations ?? []).includes("linear") ? [jevModel] : []),
+  ];
+  const seen = new Set<string>();
+  return declared.filter((source) => {
+    const key = JSON.stringify(source);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 // Beyond what a workflow requires, the configuration can ask for a provider

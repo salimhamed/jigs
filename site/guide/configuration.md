@@ -353,7 +353,7 @@ is missing, and lists the credentials still empty.
 | `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` | Linear [`app` mode](#linear-identity). |
 | `GITHUB_WEBHOOK_SECRET` | GitHub [webhooks](#webhooks) enabled. |
 | `LINEAR_WEBHOOK_SECRET` | Linear [webhooks](#webhooks) enabled. |
-| `OPENROUTER_API_KEY` | Workflows that use `models.openrouter()`. |
+| `OPENROUTER_API_KEY` | Workflows that use `models.openrouter()` or `decide`, and every workflow that declares the `linear` integration. |
 | `JIGS_CLAUDE_EXECUTABLE` | Optional. Path to `claude` when it is not on the service's `PATH`. |
 | `AWS_PROFILE` | Workflows that declare `requires: { aws: true }`. Preflight checks the profile with `aws sts get-caller-identity`. |
 

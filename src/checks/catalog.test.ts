@@ -2,6 +2,7 @@ import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, expect, onTestFinished, test, vi } from "vitest";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import { jevModel } from "../workflow/agents/decide.ts";
 import { harnesses, models } from "../workflow/agents/harness-config.ts";
 import { type Check, failedCheck, formatFailures, runChecks } from "./catalog.ts";
 import { doctorChecks, preflightChecks, type WorkflowRequires } from "./index.ts";
@@ -141,6 +142,16 @@ test("model-source requirements check the descriptor's exact credential", () => 
   ).not.toContain("model.openrouter-api-key");
 });
 
+test("a Linear workflow needs the Jev model's credential once, declared or not", () => {
+  const ids = (requires: WorkflowRequires) =>
+    preflightIds(requires).filter((id) => id === "model.openrouter-api-key");
+  expect(ids({ integrations: ["linear"] })).toEqual(["model.openrouter-api-key"]);
+  expect(ids({ integrations: ["linear"], models: [jevModel] })).toEqual([
+    "model.openrouter-api-key",
+  ]);
+  expect(ids({ integrations: ["github"] })).toEqual([]);
+});
+
 test("preflight rejects a missing selected credential even when the default is present", async () => {
   vi.stubEnv("TEAM_OPENROUTER_KEY", "");
   vi.stubEnv("OPENROUTER_API_KEY", "unrelated-secret");
@@ -204,11 +215,15 @@ test("generic workflows require neither Linear nor GitHub credentials", async ()
 test("workflows check only explicitly declared integrations", async () => {
   vi.stubEnv("LINEAR_API_KEY", "");
   vi.stubEnv("GITHUB_TOKEN", "");
-  expect(preflightIds({ integrations: ["linear"] })).toEqual(["linear.identity"]);
+  vi.stubEnv("OPENROUTER_API_KEY", "");
+  expect(preflightIds({ integrations: ["linear"] })).toEqual([
+    "linear.identity",
+    "model.openrouter-api-key",
+  ]);
   expect(preflightIds({ integrations: ["github"] })).toEqual(["github.identity"]);
   const report = await runChecks(preflightChecks({ integrations: ["linear", "github"] }));
   expect(report.ok).toBe(false);
-  expect(report.checks).toHaveLength(2);
+  expect(report.checks).toHaveLength(3);
 });
 
 function factoryWith(config: string): void {
@@ -263,7 +278,7 @@ test("doctor checks the factory's Linear operator, preflight never does", () => 
       ship: { requires: linear },
     }).map((check) => check.id),
   ).toEqual(["linear.identity", "linear.operator"]);
-  expect(preflightIds(linear)).toEqual(["linear.identity"]);
+  expect(preflightIds(linear)).toEqual(["linear.identity", "model.openrouter-api-key"]);
 });
 
 test("doctor checks a set Linear operator even when no workflow requires Linear", () => {
@@ -298,7 +313,7 @@ test("a factory config that cannot be read fails the Linear check as itself", as
   vi.stubEnv("JIGS_FACTORY_ROOT", factory);
   vi.stubEnv("LINEAR_API_KEY", "configured");
   const report = await runChecks(preflightChecks({ integrations: ["linear"] }));
-  expect(report.checks).toEqual([
+  expect(report.checks.filter((check) => check.id.startsWith("linear."))).toEqual([
     expect.objectContaining({
       id: "linear.identity",
       ok: false,
