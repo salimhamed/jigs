@@ -4,6 +4,7 @@
 // is for an agent starting from nothing and is told everything.
 
 import type { PullRequestRef, PullRequestSnapshot, Worktree } from "@jigs-ai/jigs";
+import type { NewComment } from "./decisions.ts";
 import type { WorkItem } from "./delivery.ts";
 import {
   type FindingResponse,
@@ -81,6 +82,16 @@ export const review = {
     ]),
 };
 
+// A fast classifier's labels: a hint for where to look, never a reason to skip a comment.
+const renderTriage = (triaged: NewComment[]) => {
+  const labeled = triaged.filter((comment) => comment.kind !== undefined);
+  return labeled.length === 0
+    ? ""
+    : `New comments, as a fast classifier labeled them (a hint, not a verdict):\n${labeled
+        .map((comment) => `- comment ${comment.id} by ${comment.user}: ${comment.kind}`)
+        .join("\n")}`;
+};
+
 export const maintenance = {
   job: join([
     "Continue maintaining the pull request you implemented.",
@@ -94,10 +105,16 @@ export const maintenance = {
     "Explain the result in summary. Do not repeat a reply or change already made. When everything is settled, post nothing.",
     "Return needs-human if GitHub tools or credentials are unavailable; do not claim completion.",
   ]),
-  resume: (pr: PullRequestRef, snapshot: PullRequestSnapshot, recovery?: string) =>
+  resume: (
+    pr: PullRequestRef,
+    snapshot: PullRequestSnapshot,
+    recovery?: string,
+    triaged: NewComment[] = [],
+  ) =>
     join([
       `Pull request: https://github.com/${pr.owner}/${pr.repo}/pull/${pr.number}`,
       `Current GitHub facts:\n${JSON.stringify(snapshot)}`,
+      renderTriage(triaged),
       recovery === undefined ? "" : `Recovery required:\n${recovery}`,
       maintenance.job,
     ]),
@@ -108,11 +125,12 @@ export const maintenance = {
     pr: PullRequestRef,
     snapshot: PullRequestSnapshot,
     recovery?: string,
+    triaged: NewComment[] = [],
   ) =>
     join([
       taskBrief(task, worktree),
       `Current diff:\n${diff}`,
-      maintenance.resume(pr, snapshot, recovery),
+      maintenance.resume(pr, snapshot, recovery, triaged),
     ]),
 };
 
