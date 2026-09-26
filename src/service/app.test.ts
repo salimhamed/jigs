@@ -462,6 +462,7 @@ test("a delivery Jev is sure cannot matter is acknowledged without waking the ru
     "github",
     "pull_request_review",
     JSON.parse(reviewPayload),
+    "github:pr:acme/api#41",
   );
   expect(resumeHookMock).not.toHaveBeenCalled();
   expect(log).toHaveBeenCalledExactlyOnceWith(

@@ -138,9 +138,22 @@ with each answer. The unit tests use a stubbed `executeJev`.
 6. **Webhook relevance**
    - **Where:** GitHub and Linear ingress in `src/service/app.ts`, before
      `resumeAndLog`.
-   - **Decides:** yes/no, "could this event change what the waiting run should
-     do?"
+   - **Decides:** yes/no, "should this event wake the paused run described in
+     `waiting`?"
+   - **State:** the trimmed event, including `fromJigs` when a comment carries
+     jigs' marker, beside what the run is waiting for:
+     - pull request activity, with the head and draft flag from the payload
+       and the last wake;
+     - a reply to the run's open question, whose text is read from Linear;
+     - nothing on this ticket, when the run holding it has no question open.
+     
+     The ingress reads this from the World's hooks, plus one Linear read for
+     an open question. A token no run holds wakes without asking.
    - **Acts:** no logs `reason=not-relevant` and does not wake the run.
+   - **Evals:** before the waiting context, 8/8 right and 1/8 over the cutoff.
+     With it and a crisper question, 10/10 right and 7/10 over the cutoff,
+     including every "no" case. Only a confident "no" changes behaviour, so an
+     unsure "yes" costs nothing.
    - **Never asked:** pull request closed, reopened, synchronize and
      ready_for_review; completed check suites; `status` events; Linear removals.
    - **Fallback:** wake the run. A missing `OPENROUTER_API_KEY` or a failed
