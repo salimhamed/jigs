@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.73.0](https://github.com/salimhamed/jigs/compare/jigs-v0.72.0...jigs-v0.73.0) (2026-09-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* WorkflowDefinition.linear and WorkflowLinearDefinition are removed; the Linear operator is only the factory-wide linear.operator, read from the built factory definition (changes take effect after jigs up rebuilds). postTicketNote is now postTicketNote(issueId, note, definition, render?) without metadata; postTicketHumanInputRequest(issueId, halt, metadata, definition, render?) is unchanged. Run jigs upgrade (or jigs generate) to regenerate the factory's step wrappers.
+
+### Code Refactoring
+
+* remove the per-workflow Linear operator override ([#426](https://github.com/salimhamed/jigs/issues/426)) ([404b7cd](https://github.com/salimhamed/jigs/commit/404b7cdd404b09129d800ac9ab7550d814b05dcb))
+
 ## [0.72.0](https://github.com/salimhamed/jigs/compare/jigs-v0.71.0...jigs-v0.72.0) (2026-09-26)
 
 
