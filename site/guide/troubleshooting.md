@@ -75,6 +75,22 @@ A run that shows `running` but whose `ACTIVITY` age keeps growing with no step
 in flight may be stuck. `pnpm exec jigs status <run>` lists any dead queue job
 and how to requeue it.
 
+## Watch an agent step while it runs
+
+An agent step that runs in a worktree writes what the agent does to a stream
+while it works: its text and reasoning, and each tool call and result. To watch
+it, open the run in the dashboard the service hosts (`jigs service status`
+prints its URL, on `dashboardPort`), go to the **Streams** tab and pick the
+stream of the step. The stream updates every few seconds while the run is
+active. Each attempt of a step starts with an `attempt-start` record naming the
+attempt, the harness and the worktree. Questions to an agent without a
+worktree, and Pi runs, write no stream.
+
+The stream is stored in the factory's Postgres database with the run and never
+expires. Tool output can include file contents, command output and secrets the
+agent read, so treat the database as sensitive. Use only the service's
+dashboard: `workflow web` run against the factory takes its queue jobs.
+
 ## Doctor reports webhook deliveries rejected with 401
 
 GitHub's copy of the webhook secret does not match `GITHUB_WEBHOOK_SECRET` in

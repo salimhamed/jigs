@@ -14,6 +14,7 @@ import { harnessEnv } from "./harnesses/env.ts";
 import { openAgentRunner, prepareAgentRun } from "./runner.ts";
 import { type ExecutionSeams, executionSeams } from "./seams.ts";
 import { AgentSessionError } from "./session-error.ts";
+import { teeAgentStream } from "./step-stream.ts";
 
 export function outputSpec(
   schema: Record<string, unknown> | undefined,
@@ -90,11 +91,21 @@ async function runAgent(
   );
   const output = outputSpec(wire.outputSchema);
   try {
-    const generation = await seams.generateText({
+    const result = seams.streamText({
       model: runner.model,
       prompt: wire.prompt,
       ...(output === undefined ? {} : { output }),
     });
+    await teeAgentStream(result.fullStream, seams.openStepStream(), {
+      harness: wire.harness.kind,
+      cwd: wire.cwd,
+      resume: wire.resume !== undefined,
+    });
+    const generation: ExecutorGeneration = {
+      text: await result.text,
+      providerMetadata: await result.providerMetadata,
+      ...(output === undefined ? {} : { output: await result.output }),
+    };
     return resultOf(wire, generation, runner.sessionFrom(generation));
   } finally {
     await runner.close();

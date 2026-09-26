@@ -16,6 +16,7 @@ import { codexSessionFile, prepareCodexInvocationHome } from "../harnesses/codex
 import { assertLivePreconditions, makeScratchRepo } from "../harnesses/live/fixtures/live-env.ts";
 import { makeTmpDir, removeTmpDir } from "../harnesses/test-fixtures.ts";
 import { type ExecutionSeams, executionSeams } from "../seams.ts";
+import type { AgentStreamPart, StepStream } from "../step-stream.ts";
 
 let tmp: string;
 let deps: ExecutionSeams;
@@ -46,13 +47,34 @@ const verdict = z.object({
   word: z.string(),
 });
 
+// The parts that reached the step stream by the time the step returned.
+function recordingStream(): { stream: StepStream; parts: AgentStreamPart[] } {
+  const parts: AgentStreamPart[] = [];
+  const writable = new WritableStream<AgentStreamPart>({ write: (part) => void parts.push(part) });
+  return { stream: { attempt: 1, writable }, parts };
+}
+
+function expectStreamed(parts: AgentStreamPart[], harness: string): void {
+  expect(parts[0]).toMatchObject({ type: "attempt-start", attempt: 1, harness, resume: false });
+  expect(parts.some((part) => part.type === "text" || part.type === "reasoning")).toBe(true);
+  expect(parts.at(-1)).toMatchObject({ type: "finish" });
+}
+
 const STRUCTURED_PROMPT =
   "Answer as structured output: set ok to true and word to exactly 'sky'. Do not create or modify any files.";
 
 // executeAgent answers a union; a step that declares no MCP servers and carries
 // no session reference to resume can only take the successful arm.
-async function runAgent(wire: AgentRequest, runId: string): Promise<AgentResult<unknown>> {
-  const result = await executeAgentWith(wire, { workflowRunId: runId }, deps);
+async function runAgent(
+  wire: AgentRequest,
+  runId: string,
+  stream?: StepStream,
+): Promise<AgentResult<unknown>> {
+  const result = await executeAgentWith(
+    wire,
+    { workflowRunId: runId },
+    { ...deps, openStepStream: () => stream },
+  );
   if ("jitFailure" in result) {
     throw new Error(`unexpected JIT failure: ${JSON.stringify(result.jitFailure)}`);
   }
@@ -70,11 +92,14 @@ test("claude agent step: structured output round-trips typed, session captured",
     prompt: STRUCTURED_PROMPT,
     output: verdict,
   });
+  const { stream, parts } = recordingStream();
 
-  const result = await runAgent(wire, runId);
+  const result = await runAgent(wire, runId, stream);
+  const streamed = [...parts];
   const parsed = verdict.parse(result.output);
 
   expect(parsed).toEqual({ ok: true, word: "sky" });
+  expectStreamed(streamed, "claude");
   expect(result.session?.harness).toBe("claude");
   expect(result.session?.id).toBeTruthy();
 });
@@ -87,11 +112,14 @@ test("codex agent step: structured output round-trips typed, threadId captured",
     prompt: STRUCTURED_PROMPT,
     output: verdict,
   });
+  const { stream, parts } = recordingStream();
 
-  const result = await runAgent(wire, runId);
+  const result = await runAgent(wire, runId, stream);
+  const streamed = [...parts];
   const parsed = verdict.parse(result.output);
 
   expect(parsed).toEqual({ ok: true, word: "sky" });
+  expectStreamed(streamed, "codex");
   expect(result.session?.harness).toBe("codex");
   expect(result.session?.id).toBeTruthy();
 });

@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { MockLanguageModelV4 } from "ai/test";
+import { generateText, type TextStreamPart, type ToolSet } from "ai";
+import { convertArrayToReadableStream, MockLanguageModelV4 } from "ai/test";
 import type { ClaudeCodeSettings } from "ai-sdk-provider-claude-code";
 import type { CodexAppServerProvider, CodexAppServerSettings } from "ai-sdk-provider-codex-cli";
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
@@ -19,11 +20,12 @@ import { createClaudeDriver } from "./drivers/claude.ts";
 import { createCodexDriver } from "./drivers/codex.ts";
 import { type DriverResolver, driverFor, drivers } from "./drivers/index.ts";
 import { createPiDriver, type PiDriverDependencies } from "./drivers/pi.ts";
-import { executeAgentWith } from "./execute-agent.ts";
+import { type ExecutorGeneration, executeAgentWith } from "./execute-agent.ts";
 import type { PiExecutionOptions } from "./harnesses/pi.ts";
 import { planPiModel } from "./harnesses/pi-model.ts";
 import { makeTmpDir, removeTmpDir } from "./harnesses/test-fixtures.ts";
 import { type ExecutionSeams, executionSeams } from "./seams.ts";
+import type { AgentStreamPart, StepStream } from "./step-stream.ts";
 
 // The settings look for the CLI eagerly, so these tests would need a codex
 // installed. Claude's half is stubbed below, through JIGS_CLAUDE_EXECUTABLE.
@@ -87,6 +89,10 @@ function makeDeps(
     captured.options = options;
     return { text: "done", ...generation };
   };
+  const streamText: ExecutionSeams["streamText"] = (options) => {
+    captured.options = options;
+    return streamOf({ text: "done", ...generation });
+  };
   const preparePiHome: PiDriverDependencies["preparePiHome"] = async (runId, model) => {
     captured.piHome = { runId, model };
     const home = path.join(tmp, "pi-home", runId, crypto.randomUUID());
@@ -145,6 +151,8 @@ function makeDeps(
   };
   const deps: ExecutionSeams = {
     generateText,
+    streamText,
+    openStepStream: () => undefined,
     evaluate: async () => {
       throw new Error("unexpected decision call");
     },
@@ -160,6 +168,30 @@ function makeDeps(
     jitFailures: async () => undefined,
   };
   return { deps, captured, piDeps };
+}
+
+function streamOf(
+  generation: ExecutorGeneration,
+  parts: TextStreamPart<ToolSet>[] = [],
+): ReturnType<ExecutionSeams["streamText"]> {
+  return {
+    fullStream: (async function* () {
+      yield* parts;
+    })(),
+    text: Promise.resolve(generation.text),
+    output: Promise.resolve(generation.output),
+    providerMetadata: Promise.resolve(generation.providerMetadata ?? undefined),
+  };
+}
+
+function throwingStream(error: Error): ReturnType<ExecutionSeams["streamText"]> {
+  return {
+    ...streamOf({ text: "" }),
+    fullStream: (async function* () {
+      yield* [];
+      throw error;
+    })(),
+  };
 }
 
 // executeAgent answers a union; every test but the resume-failure ones wants the
@@ -554,9 +586,7 @@ test("a Codex execution failure during resume still throws", async () => {
   const { deps } = makeDeps();
   // The raw JSON-RPC error codex 0.149.1 actually raises — it matches no
   // wrapper the provider documents, which is why any error reads as stale.
-  deps.generateText = () => {
-    throw new Error("no rollout found for thread id 0199-gone");
-  };
+  deps.streamText = () => throwingStream(new Error("no rollout found for thread id 0199-gone"));
 
   await expect(executeAgentWith(wire, { workflowRunId: "run-1" }, deps)).rejects.toThrow(
     "no rollout found for thread id",
@@ -571,9 +601,7 @@ test("a Claude execution failure during resume still throws", async () => {
     resume: { harness: "claude", id: "s-42", descriptor: "" },
   });
   const { deps } = makeDeps();
-  deps.generateText = () => {
-    throw new Error("Claude stopped after launch");
-  };
+  deps.streamText = () => throwingStream(new Error("Claude stopped after launch"));
 
   await expect(executeAgentWith(wire, { workflowRunId: "run-1" }, deps)).rejects.toThrow(
     "Claude stopped after launch",
@@ -587,9 +615,7 @@ test("a failure with no resume to blame still throws", async () => {
     prompt: "go",
   });
   const { deps } = makeDeps();
-  deps.generateText = () => {
-    throw new Error("the harness fell over");
-  };
+  deps.streamText = () => throwingStream(new Error("the harness fell over"));
 
   await expect(executeAgentWith(wire, { workflowRunId: "run-1" }, deps)).rejects.toThrow(
     "the harness fell over",
@@ -604,12 +630,15 @@ test("a second agent in the same worktree is refused while the first is running"
   });
   let releaseFirst = () => {};
   const first = makeDeps();
-  first.deps.generateText = async () => {
-    await new Promise<void>((resolve) => {
-      releaseFirst = resolve;
-    });
-    return { text: "done" };
-  };
+  first.deps.streamText = () => ({
+    ...streamOf({ text: "done" }),
+    fullStream: (async function* () {
+      yield* [];
+      await new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+    })(),
+  });
 
   const inFlight = agentStep(wire, { workflowRunId: "run-1" }, first.deps);
   // Yield so the first call is inside the lock before the second tries.
@@ -635,12 +664,15 @@ test("a busy worktree does not block an agent in another one", async () => {
   mkdirSync(other, { recursive: true });
   let releaseFirst = () => {};
   const first = makeDeps();
-  first.deps.generateText = async () => {
-    await new Promise<void>((resolve) => {
-      releaseFirst = resolve;
-    });
-    return { text: "done" };
-  };
+  first.deps.streamText = () => ({
+    ...streamOf({ text: "done" }),
+    fullStream: (async function* () {
+      yield* [];
+      await new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+    })(),
+  });
 
   const inFlight = agentStep(
     buildAgentRequest({
@@ -1416,7 +1448,7 @@ test("the JIT checks and the harness get the same environment, built from the ba
   };
   const deps: ExecutionSeams = {
     ...executionSeams,
-    generateText: async () => ({ text: "done" }),
+    streamText: () => streamOf({ text: "done" }),
     resolveDriver: (() => driver) as unknown as DriverResolver,
     factoryEnv: () => ["FACTORY_VAR"],
     jitFailures: async (_wire, env) => {
@@ -1442,4 +1474,170 @@ test("the JIT checks and the harness get the same environment, built from the ba
   expect(names).toEqual(expect.arrayContaining(["PATH", "DRIVER_VAR", "FACTORY_VAR"]));
   expect(names).not.toContain("SYNTHETIC_DATABASE_URL");
   expect(names).not.toContain("SYNTHETIC_PRIVATE_KEY");
+});
+
+type ModelStreamPart =
+  Awaited<ReturnType<MockLanguageModelV4["doStream"]>>["stream"] extends ReadableStream<infer P>
+    ? P
+    : never;
+
+const usage = {
+  inputTokens: { total: 0, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+  outputTokens: { total: 0, text: 0, reasoning: 0 },
+};
+
+// The real AI SDK streamText against a mock provider model, so the result and
+// error contract is the SDK's own, not a fake's.
+function sdkSeams(model: MockLanguageModelV4, stream?: StepStream): ExecutionSeams {
+  const driver = {
+    ...createClaudeDriver(),
+    requestChecks: () => [],
+    open: async () => ({ model, close: async () => {} }),
+  };
+  return {
+    ...executionSeams,
+    openStepStream: () => stream,
+    resolveDriver: (() => driver) as unknown as DriverResolver,
+    factoryEnv: () => [],
+    jitFailures: async () => undefined,
+  };
+}
+
+function recordingStream(): { stream: StepStream; parts: AgentStreamPart[] } {
+  const parts: AgentStreamPart[] = [];
+  const writable = new WritableStream<AgentStreamPart>({ write: (part) => void parts.push(part) });
+  return { stream: { attempt: 1, writable }, parts };
+}
+
+test("a run streams its output and still returns the text, output and session", async () => {
+  const model = new MockLanguageModelV4({
+    doStream: async () => ({
+      stream: convertArrayToReadableStream<ModelStreamPart>([
+        { type: "stream-start", warnings: [] },
+        { type: "text-start", id: "1" },
+        { type: "text-delta", id: "1", delta: '{"ok":' },
+        { type: "text-delta", id: "1", delta: "true}" },
+        { type: "text-end", id: "1" },
+        {
+          type: "finish",
+          finishReason: { unified: "stop", raw: undefined },
+          usage,
+          providerMetadata: { "claude-code": { sessionId: "s-9" } },
+        },
+      ]),
+    }),
+  });
+  const { stream, parts } = recordingStream();
+  const wire = buildAgentRequest({
+    harness: harnesses.claude({ model: "sonnet" }),
+    cwd: worktree,
+    prompt: "go",
+    output: verdict,
+  });
+
+  const result = await agentStep(wire, { workflowRunId: "run-stream" }, sdkSeams(model, stream));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  expect(result).toMatchObject({
+    text: '{"ok":true}',
+    output: { ok: true },
+    session: { harness: "claude", id: "s-9" },
+  });
+  expect(parts).toEqual([
+    { type: "attempt-start", attempt: 1, harness: "claude", cwd: worktree, resume: false },
+    { type: "text", text: '{"ok":true}' },
+    { type: "finish", finishReason: "stop" },
+  ]);
+  expect(stream.writable.locked).toBe(false);
+});
+
+test("a provider error reaches the caller as the same error generateText raises", async () => {
+  const wire = buildAgentRequest({
+    harness: harnesses.claude({ model: "sonnet" }),
+    cwd: worktree,
+    prompt: "go",
+  });
+  const run = (model: MockLanguageModelV4) =>
+    executeAgentWith(wire, { workflowRunId: "run-error" }, sdkSeams(model));
+
+  const refused = new Error("claude exited with code 1");
+  const failing = new MockLanguageModelV4({
+    doGenerate: async () => {
+      throw refused;
+    },
+    doStream: async () => {
+      throw refused;
+    },
+  });
+  await expect(generateText({ model: failing, prompt: "go" })).rejects.toBe(refused);
+  await expect(run(failing)).rejects.toBe(refused);
+
+  const midStream = new Error("rate limited");
+  await expect(
+    run(
+      new MockLanguageModelV4({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream<ModelStreamPart>([
+            { type: "stream-start", warnings: [] },
+            { type: "text-start", id: "1" },
+            { type: "text-delta", id: "1", delta: "half" },
+            { type: "error", error: midStream },
+          ]),
+        }),
+      }),
+    ),
+  ).rejects.toBe(midStream);
+
+  const broken = new Error("app-server closed");
+  await expect(
+    run(
+      new MockLanguageModelV4({
+        doStream: async () => ({
+          stream: new ReadableStream<ModelStreamPart>({
+            start(controller) {
+              controller.enqueue({ type: "stream-start", warnings: [] });
+              controller.error(broken);
+            },
+          }),
+        }),
+      }),
+    ),
+  ).rejects.toBe(broken);
+});
+
+test("asks and pi runs open no step stream", async () => {
+  const openStepStream = vi.fn(() => undefined);
+  const { deps, piDeps } = makeDeps();
+  deps.openStepStream = openStepStream;
+  piDeps.executePi = async (options) => {
+    const id = options.args[options.args.indexOf("--session-id") + 1];
+    return { text: "done", providerMetadata: { pi: { sessionId: id } } };
+  };
+
+  await agentStep(
+    buildAskAgentRequest({ harness: harnesses.claude({ model: "sonnet" }), prompt: "summarize" }),
+    { workflowRunId: "run-1" },
+    deps,
+  );
+  await agentStep(
+    buildAgentRequest({
+      harness: harnesses.pi(models.openaiCodex("gpt-5.5")),
+      cwd: worktree,
+      prompt: "implement it",
+    }),
+    { workflowRunId: "run-pi-stream" },
+    deps,
+  );
+  expect(openStepStream).not.toHaveBeenCalled();
+
+  await agentStep(
+    buildAgentRequest({
+      harness: harnesses.claude({ model: "sonnet" }),
+      cwd: worktree,
+      prompt: "go",
+    }),
+    { workflowRunId: "run-1" },
+    deps,
+  );
+  expect(openStepStream).toHaveBeenCalledOnce();
 });
