@@ -142,7 +142,7 @@ test("a rejected ensure exits the process instead of leaving the service up", as
 
   const proceed = await gateOnRegistry({
     sql: connected,
-    ensure: () => Promise.reject(new Error("jigs_worktrees predates repo_dir")),
+    ensure: () => Promise.reject(new Error("migration 0001_resource_table failed")),
     exit: (code) => exits.push(code),
     error: (line) => errors.push(line),
     log: () => {},
@@ -150,7 +150,7 @@ test("a rejected ensure exits the process instead of leaving the service up", as
 
   expect(proceed).toBe(false);
   expect(exits).toEqual([1]);
-  expect(errors[0]).toContain("jigs_worktrees predates repo_dir");
+  expect(errors[0]).toContain("migration 0001_resource_table failed");
 });
 
 test("a connection that cannot be opened exits too, rather than throwing past the gate", async () => {

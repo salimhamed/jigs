@@ -76,8 +76,8 @@ jigs keeps each binding's clone and worktrees under
 | Command | What it does |
 | --- | --- |
 | `jigs resources list` | List what finished and running runs still hold, with each item's state and reason. Changes nothing. |
-| `jigs resources prune` | Preview what could be safely removed. |
-| `jigs resources prune --apply` | Remove it. Needs `jigs service stop` first. |
+| `jigs resources prune --include-kept` | Preview what could be safely removed. |
+| `jigs resources prune --include-kept --apply` | Remove it. Needs `jigs service stop` first. |
 
 ## Service
 
@@ -240,14 +240,23 @@ you add `--apply`. To apply:
 
 1. Run `jigs service stop`.
 2. Check the preview, optionally for one run with `--run <run>`.
-3. Run `jigs resources prune --apply`.
+3. Run `jigs resources prune --include-kept --apply`.
 
-Only resources of finished runs recorded by this factory are removed. A
-worktree with uncommitted changes, an unmerged branch, a branch with an open
-pull request and a waiting run's resources are always kept. Resources a release
-policy chose to keep need `--include-kept`, which relaxes nothing else. Pull
-requests and resources a workflow registers itself are listed but never
-removed.
+Everything prune can remove is something release kept, failed to remove, or
+never got to (the service stopped before the run ended), so each needs
+`--include-kept`; without it prune only explains what it would leave. The flag
+relaxes nothing else: only resources of finished runs recorded by this factory
+are removed, and a worktree with uncommitted changes, an unmerged branch, a
+branch with an open pull request and a waiting run's resources are always
+kept. A release that fails is retried by the service five times, then kept with
+its last error.
+
+jigs records a pushed branch only when the run created it, so a branch that
+already existed, such as `staging`, is never deleted. A branch kept because its
+pull request was still open stays kept after the merge: prune removes it then,
+or marks it released if GitHub already deleted it. Pull requests and resources
+a workflow registers itself are listed and marked released with the run, but
+never removed.
 
 Applying works on macOS and Linux. It never stops or kills anything itself: it
 refuses, and tells you to run `jigs service stop`, while the service or any

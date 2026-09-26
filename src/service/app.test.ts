@@ -606,14 +606,60 @@ test("health outside a factory reports a null root rather than failing liveness"
   }
 });
 
-test("GET /api/runs answers with empty runs and resources when nothing has launched", async () => {
+test("GET /api/runs answers with empty runs when nothing has launched", async () => {
   const res = await app.request("/api/runs");
   expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({
-    runs: [],
-    resources: [],
-    schedules: [],
+  expect(await res.json()).toEqual({ runs: [], schedules: [] });
+});
+
+test("GET /api/runs lists each run with the resources it recorded and their states", async () => {
+  const at = new Date("2026-09-04T10:00:00.000Z");
+  const row = (kind: string, state: "kept" | "released", reason: string) => ({
+    factory: "factory-test",
+    runId: RUN,
+    kind,
+    identity: `${kind}-1`,
+    url: `https://example.test/${kind}`,
+    state,
+    reason,
+    attempts: 0,
+    repoDir: null,
+    branch: null,
+    createdAt: at,
+    updatedAt: at,
   });
+  vi.spyOn(sql, "listResources").mockResolvedValue([
+    row("worktree", "kept", "uncommitted work kept"),
+    row("pull-request", "released", "recorded only"),
+  ]);
+  setWorld({
+    specVersion: SPEC_VERSION_CURRENT,
+    runs: {
+      list: async () => ({
+        data: [
+          { runId: RUN, status: "failed", workflowName: "wf", createdAt: at, completedAt: at },
+        ],
+        hasMore: false,
+      }),
+    },
+    hooks: { list: async () => ({ data: [], hasMore: false }) },
+    steps: { list: async () => ({ data: [], hasMore: false }) },
+  } as unknown as Parameters<typeof setWorld>[0]);
+
+  const body = (await (await app.request("/api/runs")).json()) as {
+    runs: Array<{ runId: string; status: string; resources: unknown[] }>;
+  };
+
+  expect(body.runs).toMatchObject([
+    {
+      runId: RUN,
+      status: "failed",
+      resources: [
+        { kind: "worktree", state: "kept", reason: "uncommitted work kept" },
+        { kind: "pull-request", state: "released", reason: "recorded only" },
+      ],
+    },
+  ]);
 });
 
 test("GET /api/runs/:runId/steps answers with the run's steps and its dead jobs", async () => {
@@ -693,6 +739,7 @@ test("GET /api/runs/:runId reports the run's resources and claim from its state 
     url: "https://github.com/acme/api/pull/41",
     state: "live" as const,
     reason: null,
+    attempts: 0,
     repoDir: null,
     branch: null,
     createdAt: new Date("2026-09-04T10:00:00.000Z"),

@@ -1,10 +1,8 @@
 import { getWorkflowMetadata } from "workflow";
-import { getRun } from "workflow/api";
-import { getWorld } from "workflow/runtime";
 import { JigsError } from "../../errors.ts";
 import type { RunResource } from "../../workflow/runtime/resources.ts";
 import { currentFactory, recordResource, registrySql } from "./registry.ts";
-import type { WorldRunFacts } from "./run-state.ts";
+import { releasable } from "./resource-kinds.ts";
 
 function assertResource(resource: RunResource): void {
   for (const field of ["kind", "identity", "url"] as const) {
@@ -15,14 +13,21 @@ function assertResource(resource: RunResource): void {
   if (!URL.canParse(resource.url)) {
     throw new JigsError(`resource URL is not an absolute URL: ${JSON.stringify(resource.url)}`);
   }
+  if (releasable(resource.kind)) {
+    throw new JigsError(
+      `resource kind ${resource.kind} is reserved: jigs records and releases it itself`,
+      "register what your workflow created under a kind of its own, such as report or deployment",
+    );
+  }
 }
 
 /**
- * Register one resource on the active run.
+ * Register one resource on the active run so `jigs status` shows it.
  *
- * Repeating kind + identity is idempotent. A new URL for that identity replaces the old one and
- * marks the record live again. Kinds jigs knows how to release (`worktree`, `run-directory`,
- * `branch`, `codex-home`, `pi-home`) are released with the run; every other kind is recorded only.
+ * Repeating kind + identity is idempotent; a new URL for that identity replaces the old one.
+ * The record is observation only: jigs never deletes what it names, and marks it released with
+ * the run's other resources. The kinds jigs releases itself (`worktree`, `run-directory`,
+ * `branch`, `codex-home`, `pi-home`) are reserved.
  *
  * @group Recorded resources
  */
@@ -36,16 +41,4 @@ export async function registerResource(resource: RunResource): Promise<RunResour
     url: resource.url,
   });
   return resource;
-}
-
-/** The World's side of {@link readRunState}, for code running in the service. */
-export async function worldRunFacts(runId: string): Promise<WorldRunFacts> {
-  const run = getRun(runId);
-  if (!(await run.exists)) return { status: null, workflowName: null, tokens: [] };
-  const [status, workflowName, hooks] = await Promise.all([
-    run.status,
-    run.workflowName,
-    getWorld().then((world) => world.hooks.list({ runId })),
-  ]);
-  return { status, workflowName, tokens: hooks.data.map((hook) => hook.token) };
 }

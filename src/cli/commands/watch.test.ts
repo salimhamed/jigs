@@ -29,6 +29,7 @@ const run = (over: Partial<RunListRun> = {}): RunListRun => ({
   lastStep: { name: "claimTicket", status: "completed", at: "2026-08-26T11:59:00.000Z" },
   suspended: false,
   suspensions: [],
+  resources: [],
   ...over,
 });
 
@@ -83,9 +84,7 @@ test("a finished event carries only the run status", () => {
 });
 
 const respond = (runs: RunListRun[]) =>
-  fetchMock.mockResolvedValueOnce(
-    new Response(JSON.stringify({ runs, resources: [], schedules: [] })),
-  );
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ runs, schedules: [] })));
 
 const deps = () => ({
   out: (line: string) => lines.push(line),

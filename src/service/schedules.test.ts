@@ -54,6 +54,9 @@ const row = (over: Partial<RunRow> = {}): RunRow => ({
   lastStep: null,
   suspended: false,
   suspensions: [],
+  workflowName: "workflow//./workflows/sweep//sweep",
+  claim: null,
+  resources: [],
   ...over,
 });
 

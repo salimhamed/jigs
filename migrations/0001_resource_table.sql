@@ -6,6 +6,7 @@ CREATE TABLE "jigs_resources" (
   "url" text NOT NULL,
   "state" text NOT NULL,
   "reason" text,
+  "attempts" integer NOT NULL DEFAULT 0,
   "repo_dir" text,
   "branch" text,
   "created_at" timestamptz NOT NULL DEFAULT now(),

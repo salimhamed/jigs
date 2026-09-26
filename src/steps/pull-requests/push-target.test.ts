@@ -8,10 +8,11 @@ import {
   headSha,
   pushCommit,
   resolveRemoteUrl,
+  tryGit,
 } from "../../providers/git.ts";
 import { githubAuthFor } from "../../providers/github-auth.ts";
 import { pushApprovedChange, pushBranch } from "../git/branch.ts";
-import { registerResource } from "../runtime/resources.ts";
+import { memoryRows } from "../runtime/test-fixtures.ts";
 
 vi.mock("../../providers/git.ts", () => ({
   commitsAhead: vi.fn(),
@@ -22,9 +23,13 @@ vi.mock("../../providers/git.ts", () => ({
   pushBranch: vi.fn(),
   pushCommit: vi.fn(),
   resolveRemoteUrl: vi.fn(),
+  tryGit: vi.fn(),
 }));
 vi.mock("../../providers/github-auth.ts", () => ({ githubAuthFor: vi.fn() }));
-vi.mock("../runtime/resources.ts", () => ({ registerResource: vi.fn() }));
+vi.mock("workflow", () => ({ getWorkflowMetadata: () => ({ workflowRunId: "wrun_push" }) }));
+vi.mock("../runtime/registry.ts", async () =>
+  (await import("../runtime/test-fixtures.ts")).memoryRegistry(),
+);
 
 const worktree = {
   binding: "api",
@@ -45,7 +50,12 @@ const APP = {
 const authAs = (identity: { mode: "pat" } | typeof APP, token = "ghs_installation") =>
   vi.mocked(githubAuthFor).mockReturnValue({ identity, bearer: async () => token });
 
+const branches = () => memoryRows.map((row) => [row.kind, row.identity, row.url]);
+
 beforeEach(() => {
+  memoryRows.length = 0;
+  // `ls-remote` answers empty: the branch is not on the remote before the first push.
+  vi.mocked(tryGit).mockResolvedValue("");
   vi.mocked(headSha).mockResolvedValue("approved");
   vi.mocked(resolveRemoteUrl).mockResolvedValue({
     remote: "origin",
@@ -59,11 +69,34 @@ test("pat mode pushes to the binding's own remote, over SSH as the operator", as
   expect(pushCommit).toHaveBeenCalledWith("/work", "feature", "approved", { remote: "origin" });
   await pushBranch(worktree);
   expect(gitPushBranch).toHaveBeenCalledWith("/work", "feature", { remote: "origin" });
-  expect(registerResource).toHaveBeenCalledWith({
-    kind: "branch",
-    identity: "acme/api:feature",
-    url: "https://github.com/acme/api/tree/feature",
-  });
+  expect(branches()).toEqual([
+    ["branch", "acme/api:feature", "https://github.com/acme/api/tree/feature"],
+  ]);
+});
+
+test("a branch that was on the remote before the run pushed is never recorded", async () => {
+  authAs({ mode: "pat" });
+  vi.mocked(tryGit).mockResolvedValue("abc123\trefs/heads/feature");
+  await pushBranch(worktree);
+  expect(gitPushBranch).toHaveBeenCalled();
+  expect(branches()).toEqual([]);
+});
+
+test("an unreadable remote counts as a branch that already existed", async () => {
+  authAs({ mode: "pat" });
+  vi.mocked(tryGit).mockResolvedValue(null);
+  await pushBranch(worktree);
+  expect(branches()).toEqual([]);
+});
+
+test("a later push of the run's own branch keeps its record, though the branch now exists", async () => {
+  authAs({ mode: "pat" });
+  await pushBranch(worktree);
+  vi.mocked(tryGit).mockResolvedValue("abc123\trefs/heads/feature");
+  await pushApprovedChange(worktree, "approved");
+  expect(branches()).toEqual([
+    ["branch", "acme/api:feature", "https://github.com/acme/api/tree/feature"],
+  ]);
 });
 
 test("app mode pushes over HTTPS, with the token beside the URL rather than in it", async () => {

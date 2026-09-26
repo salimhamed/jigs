@@ -63,7 +63,7 @@ export async function cancelRun(runId: string, deps: CancelDeps): Promise<Cancel
   // every child stopped before it considers local resources.
   for (const path of worktrees) {
     deps.out(
-      `worktree kept at ${path} — pnpm exec jigs resources prune --run ${result.runId} to review`,
+      `worktree kept at ${path} — pnpm exec jigs resources prune --include-kept --run ${result.runId} to review`,
     );
   }
   return result;

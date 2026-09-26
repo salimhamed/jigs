@@ -1,5 +1,3 @@
-import type { RunSuspension } from "../../run-suspension.ts";
-
 /**
  * A durable thing that a run created or otherwise owns a reference to.
  *
@@ -22,6 +20,13 @@ export interface RunResource {
  */
 export type ResourceState = "live" | "kept" | "released" | "failed";
 
+/** The states of resources release has not removed, which status and prune show. */
+export const UNRELEASED_STATES = [
+  "live",
+  "kept",
+  "failed",
+] as const satisfies readonly ResourceState[];
+
 /**
  * One recorded resource and what has happened to it. Records stay after release as history.
  *
@@ -35,24 +40,4 @@ export interface ResourceRecord extends RunResource {
   reason: string | null;
   /** When the state last changed, as an ISO timestamp. */
   updatedAt: string;
-}
-
-/**
- * Everything jigs knows about one run as plain data: the World's status, the resources the run
- * recorded, and the hooks it holds.
- *
- * @group Runtime and resources
- */
-export interface RunState {
-  runId: string;
-  /** The World's run status, or null when the World has no such run. */
-  status: string | null;
-  /** The workflow ID the World stores for the run, or null when it has no such run. */
-  workflowName: string | null;
-  /** Every resource the run recorded in this factory, released ones included. */
-  resources: ResourceRecord[];
-  /** The ticket claim hook the run holds for its whole life, or null. */
-  claim: string | null;
-  /** The hooks the run is parked on: a pull request watch, a needs-human halt, or another event. */
-  waitingOn: RunSuspension[];
 }

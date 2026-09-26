@@ -2,7 +2,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import { integer, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import { Pool, type PoolConfig } from "pg";
 import { factoryRoot } from "../../config/factory-root.ts";
 import type { ResourceRecord, ResourceState } from "../../workflow/runtime/resources.ts";
@@ -20,6 +20,8 @@ export const resources = pgTable(
     url: text("url").notNull(),
     state: text("state").$type<ResourceState>().notNull(),
     reason: text("reason"),
+    /** Release attempts that failed since the row was last live. */
+    attempts: integer("attempts").notNull().default(0),
     repoDir: text("repo_dir"),
     branch: text("branch"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -96,6 +98,7 @@ export async function recordResource(
     url: row.url,
     state: "live" as const,
     reason: null,
+    attempts: 0,
     ...(row.repoDir === undefined ? {} : { repoDir: row.repoDir }),
     ...(row.branch === undefined ? {} : { branch: row.branch }),
   };
@@ -128,10 +131,11 @@ export async function setResourceState(
   key: ResourceKey,
   state: ResourceState,
   reason: string | null,
+  attempts?: number,
 ): Promise<void> {
   await db
     .update(resources)
-    .set({ state, reason, updatedAt: sql`now()` })
+    .set({ state, reason, ...(attempts === undefined ? {} : { attempts }), updatedAt: sql`now()` })
     .where(
       and(
         eq(resources.factory, key.factory),
@@ -190,10 +194,19 @@ export async function withRunResourceLock<T>(
     await client.query("select pg_advisory_lock(hashtextextended($1, 464))", [runId]);
     return await action(drizzle(client) as unknown as RegistrySql);
   } finally {
-    try {
-      await client.query("select pg_advisory_unlock(hashtextextended($1, 464))", [runId]);
-    } finally {
-      client.release();
-    }
+    // Session locks end with the session, so a connection that cannot unlock
+    // is destroyed rather than returned to the pool still holding them.
+    await client.query("select pg_advisory_unlock_all()").then(
+      () => client.release(),
+      (error: Error) => client.release(error),
+    );
   }
+}
+
+/**
+ * Also hold another run's lock on a connection {@link withRunResourceLock} gave out, until that
+ * outer lock ends. Only a run that is finished may be locked this way, so nothing waits in reverse.
+ */
+export async function alsoLockRun(locked: RegistrySql, runId: string): Promise<void> {
+  await locked.$client.query("select pg_advisory_lock(hashtextextended($1, 464))", [runId]);
 }

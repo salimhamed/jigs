@@ -194,9 +194,9 @@ export async function fakeService(routes: ServiceRoutes = {}): Promise<number> {
             lastStep: null,
             suspended: false,
             suspensions: [],
+            resources: [],
             ...run,
           })),
-          resources: [],
           schedules: [],
         }),
       );

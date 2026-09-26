@@ -168,7 +168,7 @@ test.skipIf(skipPi || process.platform !== "linux")(
     const piHomes = path.join(tmp, "pi-homes");
     const invocationFiles: Array<{ file: string; content: string }> = [];
     const pi = createPiDriver({
-      preparePiHome: (runId, plan) => {
+      preparePiHome: async (runId, plan) => {
         const prepared = preparePiInvocationHome(runId, plan, { baseDir: piHomes });
         return {
           ...prepared,

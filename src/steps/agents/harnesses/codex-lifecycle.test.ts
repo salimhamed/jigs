@@ -21,7 +21,7 @@ function lifecycle(options: { sessionFound?: boolean; providerThrows?: boolean }
   ) as unknown as CodexAppServerProvider;
   const createAppServer = vi.fn(() => provider);
   const driver = createCodexDriver({
-    prepareCodexHome: () => ({ home: "/tmp", sessionDir: "/tmp/sessions", cleanup }),
+    prepareCodexHome: async () => ({ home: "/tmp", sessionDir: "/tmp/sessions", cleanup }),
     sessionFile: () => (options.sessionFound === false ? undefined : "/rollout.jsonl"),
     createAppServer,
   });

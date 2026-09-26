@@ -2,7 +2,8 @@ import { beforeEach, expect, test, vi } from "vitest";
 
 const recorded = vi.hoisted(() => vi.fn());
 vi.mock("workflow", () => ({ getWorkflowMetadata: () => ({ workflowRunId: "wrun_active" }) }));
-vi.mock("./registry.ts", () => ({
+vi.mock("./registry.ts", async (original) => ({
+  ...(await original<typeof import("./registry.ts")>()),
   currentFactory: () => "factory-a",
   recordResource: recorded,
   registrySql: () => ({}),
@@ -32,3 +33,13 @@ test.each([
   await expect(registerResource(resource)).rejects.toThrow(message);
   expect(recorded).not.toHaveBeenCalled();
 });
+
+test.each(["worktree", "branch", "run-directory", "codex-home", "pi-home"])(
+  "the %s kind jigs releases itself is reserved",
+  async (kind) => {
+    await expect(registerResource({ ...pr, kind })).rejects.toThrow(
+      `resource kind ${kind} is reserved`,
+    );
+    expect(recorded).not.toHaveBeenCalled();
+  },
+);

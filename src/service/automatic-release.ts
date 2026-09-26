@@ -7,7 +7,6 @@
 import { getWorld } from "workflow/runtime";
 import { readFactoryConfig } from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";
-import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import {
   currentFactory,
   listResources,
@@ -17,13 +16,12 @@ import {
 } from "../steps/runtime/registry.ts";
 import { releaseRun } from "../steps/runtime/release.ts";
 import { effectiveReleasePolicy, workflowReleasePolicy } from "../steps/runtime/release-policy.ts";
-import { releasable } from "../steps/runtime/resource-kinds.ts";
-import { worldRunFacts } from "../steps/runtime/resources.ts";
-import { readRunState } from "../steps/runtime/run-state.ts";
+import { finished, type RunState, readRunState } from "../steps/runtime/run-state.ts";
 import type { Factory } from "../workflow/factory.ts";
 import type { ReleasePolicy } from "../workflow/runtime/release.ts";
-import type { ResourceRecord, RunState } from "../workflow/runtime/resources.ts";
+import type { ResourceRecord } from "../workflow/runtime/resources.ts";
 import { isReady } from "./readiness.ts";
+import { worldRunFacts } from "./runs.ts";
 import { onShutdown } from "./shutdown.ts";
 import { runsWithActiveStep } from "./stalls.ts";
 
@@ -37,7 +35,7 @@ export type CleanupOutcome = "success" | "failure";
 
 /** Injectable operations used by automatic release reconciliation. */
 export interface AutomaticReleaseDeps {
-  /** Runs that still hold live or failed resources jigs can release. */
+  /** Runs that still hold live or failed resources. */
   pendingRuns: () => Promise<RunState[]>;
   readState: (runId: string) => Promise<RunState>;
   waitForTerminal: (runId: string, signal: AbortSignal) => Promise<unknown>;
@@ -46,9 +44,9 @@ export interface AutomaticReleaseDeps {
   withLock: <T>(runId: string, action: (sql: RegistrySql) => Promise<T>) => Promise<T>;
   release: (
     sql: RegistrySql,
-    run: RunState,
+    runId: string,
     action: CleanupAction,
-    keepReason: string,
+    outcome: CleanupOutcome,
   ) => Promise<ResourceRecord[]>;
   ready: () => boolean;
   log: (line: string) => void;
@@ -64,11 +62,6 @@ export interface AutomaticReleaseReport {
   busy: number;
   failed: number;
 }
-
-// A run the World no longer knows is as finished as one that completed:
-// nothing will ever come back for its resources.
-const finished = (run: RunState): boolean =>
-  run.status === null || TERMINAL_RUN_STATUSES.has(run.status);
 
 /** Resolve the cleanup action for a workflow outcome and its effective release policy. */
 export function automaticReleaseAction(
@@ -112,14 +105,13 @@ async function cleanupTerminalRun(
 ): Promise<"released" | "kept" | "busy" | "failed"> {
   const outcome: CleanupOutcome = run.status === "completed" ? "success" : "failure";
   const action = deps.policy(factory, run, outcome);
-  const keepReason = `${outcome === "success" ? "onSuccess" : "onFailure"} policy keeps run resources`;
   if (await deps.hasActiveStep(run.runId)) return "busy";
   try {
     return await deps.withLock(run.runId, async (sql) => {
       // Cancellation can settle the run before its active step completes.
       // Recheck after acquiring the same lock provisioning holds.
       if (await deps.hasActiveStep(run.runId)) return "busy";
-      const records = await deps.release(sql, run, action, keepReason);
+      const records = await deps.release(sql, run.runId, action, outcome);
       if (records.some((record) => record.state === "failed")) return "failed";
       return action === "keep" ? "kept" : "released";
     });
@@ -233,8 +225,7 @@ export function automaticReleaseDeps(): AutomaticReleaseDeps {
         factory: currentFactory(),
         states: ["live", "failed"],
       });
-      const runIds = new Set(rows.filter((row) => releasable(row.kind)).map((row) => row.runId));
-      return Promise.all([...runIds].map(readState));
+      return Promise.all([...new Set(rows.map((row) => row.runId))].map(readState));
     },
     readState,
     waitForTerminal: async (runId, signal) => {
@@ -253,8 +244,8 @@ export function automaticReleaseDeps(): AutomaticReleaseDeps {
         readFactoryConfig(factoryRoot()).release,
       ),
     withLock: async (runId, action) => withRunResourceLock(registrySql(), runId, action),
-    release: (sql, run, action, keepReason) =>
-      releaseRun(sql, currentFactory(), run.runId, action, keepReason),
+    release: (sql, runId, action, outcome) =>
+      releaseRun(sql, currentFactory(), runId, action, outcome),
     ready: isReady,
     log: console.log,
     warn: console.error,

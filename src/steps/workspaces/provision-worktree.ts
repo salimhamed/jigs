@@ -7,12 +7,15 @@
 // type-only import of it from workflow/ is erased and stays safe.
 
 import { pathToFileURL } from "node:url";
+import { getRun } from "workflow/api";
 import { resolveBinding } from "../../config/factory-config.ts";
 import { factoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
+import { UNRELEASED_STATES } from "../../workflow/runtime/resources.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
 import {
+  alsoLockRun,
   currentFactory,
   listResources,
   type RegistrySql,
@@ -21,7 +24,6 @@ import {
   setResourceState,
   withRunResourceLock,
 } from "../runtime/registry.ts";
-import { worldRunFacts } from "../runtime/resources.ts";
 import type { RunMetadata } from "../runtime/run-context.ts";
 import { hasBindingClone } from "./clone.ts";
 import { createWorktree, worktreeStatus } from "./create.ts";
@@ -66,7 +68,12 @@ export async function provisionWorktree(
 ): Promise<Worktree> {
   const runId = metadata.workflowRunId;
   const sql = deps.sql ?? registrySql();
-  const runStatus = deps.runStatus ?? (async (id: string) => (await worldRunFacts(id)).status);
+  const runStatus =
+    deps.runStatus ??
+    (async (id: string) => {
+      const run = getRun(id);
+      return (await run.exists) ? await run.status : null;
+    });
   const lock =
     deps.withLock ?? ((ownerRunId, action) => withRunResourceLock(sql, ownerRunId, action));
 
@@ -93,18 +100,21 @@ export async function provisionWorktree(
       factory,
       kind: "worktree",
       identity: target,
-      states: ["live", "kept", "failed"],
+      states: UNRELEASED_STATES,
     });
     const sameOwner = holders.some((holder) => holder.runId === runId);
     const others = holders.filter((holder) => holder.runId !== runId);
     // Refuse before touching disk: worktreeStatus fetches, and a foreign live
     // owner should never surface as a network error or pay for the fetch. A
     // run the World no longer knows is as finished as one that completed.
+    // Its lock keeps a release of that finished run already under way from
+    // racing this read of the disk; a finished run never waits on this one.
     for (const other of others) {
       const status = await runStatus(other.runId);
       if (status !== null && !TERMINAL_RUN_STATUSES.has(status)) {
         throw new WorktreeOwnedError(target, other.runId);
       }
+      await alsoLockRun(lockedSql, other.runId);
     }
 
     const cut = { repoDir, worktreePath: target, branch: request.branch };

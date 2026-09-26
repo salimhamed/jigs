@@ -3,8 +3,9 @@ import { afterEach, expect, test, vi } from "vitest";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
 import type { RegistrySql } from "../steps/runtime/registry.ts";
+import type { RunState } from "../steps/runtime/run-state.ts";
 import type { Factory } from "../workflow/factory.ts";
-import type { ResourceRecord, RunState } from "../workflow/runtime/resources.ts";
+import type { ResourceRecord } from "../workflow/runtime/resources.ts";
 import {
   type AutomaticReleaseDeps,
   automaticReleaseAction,
@@ -47,9 +48,16 @@ function run(status: string): RunState {
     runId: `wrun_${status}`,
     status,
     workflowName: "workflow//./workflows/ship//ship",
-    resources: [],
+    trigger: "manual",
+    ticket: null,
+    createdAt: null,
+    lastActivityAt: null,
+    steps: null,
+    lastStep: null,
+    suspended: false,
+    suspensions: [],
     claim: null,
-    waitingOn: [],
+    resources: [],
   };
 }
 
@@ -76,8 +84,8 @@ function harness(
   const settled = new Set<string>();
   const release = vi.fn(
     options.release ??
-      (async (_sql: RegistrySql, target: RunState, action: CleanupAction) => [
-        record(target.runId, action === "keep" ? "kept" : "released"),
+      (async (_sql: RegistrySql, runId: string, action: CleanupAction) => [
+        record(runId, action === "keep" ? "kept" : "released"),
       ]),
   );
   const deps: AutomaticReleaseDeps = {
@@ -91,7 +99,7 @@ function harness(
     withLock: async (_runId, action) => action({} as RegistrySql),
     release: async (...args) => {
       const records = await release(...args);
-      if (records.every((entry) => entry.state !== "failed")) settled.add(args[1].runId);
+      if (records.every((entry) => entry.state !== "failed")) settled.add(args[1]);
       return records;
     },
     ready: () => true,
@@ -121,9 +129,9 @@ test("completed runs release while failed and cancelled runs use the failure pol
   });
   expect(seen).toEqual(["success", "failure", "failure"]);
   expect(h.release.mock.calls.map((call) => [call[2], call[3]])).toEqual([
-    ["release", "onSuccess policy keeps run resources"],
-    ["keep", "onFailure policy keeps run resources"],
-    ["keep", "onFailure policy keeps run resources"],
+    ["release", "success"],
+    ["keep", "failure"],
+    ["keep", "failure"],
   ]);
 });
 

@@ -55,7 +55,7 @@ function descriptor(request: DriverRequest): CodexHarness {
 }
 
 export interface CodexDriverDependencies {
-  prepareCodexHome(runId: string): PreparedCodexHome | Promise<PreparedCodexHome>;
+  prepareCodexHome(runId: string): Promise<PreparedCodexHome>;
   sessionFile(sessionDir: string, threadId: string): string | undefined;
   createAppServer(): CodexAppServerProvider;
 }

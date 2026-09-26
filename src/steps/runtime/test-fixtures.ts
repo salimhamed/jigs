@@ -3,6 +3,9 @@ import type { ResourceFilter, ResourceKey, ResourceRow } from "./registry.ts";
 /** The rows behind {@link memoryRegistry}; tests read and seed them directly. */
 export const memoryRows: ResourceRow[] = [];
 
+/** Runs just after a run's lock is taken, so a test can change the world under it. */
+export const memoryLock: { taken?: (runId: string) => void } = {};
+
 const same = (row: ResourceRow, key: ResourceKey) =>
   row.factory === key.factory &&
   row.runId === key.runId &&
@@ -17,8 +20,11 @@ export function memoryRegistry() {
   return {
     registrySql: () => ({}),
     currentFactory: () => "factory-a",
-    withRunResourceLock: <T>(db: never, _runId: string, action: (db: never) => Promise<T>) =>
-      action(db),
+    withRunResourceLock: <T>(db: never, runId: string, action: (db: never) => Promise<T>) => {
+      memoryLock.taken?.(runId);
+      return action(db);
+    },
+    alsoLockRun: async () => undefined,
     listResources: async (_db: unknown, filter: ResourceFilter) =>
       memoryRows
         .filter(
@@ -36,7 +42,13 @@ export function memoryRegistry() {
     ) => {
       const existing = memoryRows.find((candidate) => same(candidate, row));
       const now = new Date();
-      const refreshed = { url: row.url, state: "live" as const, reason: null, updatedAt: now };
+      const refreshed = {
+        url: row.url,
+        state: "live" as const,
+        reason: null,
+        attempts: 0,
+        updatedAt: now,
+      };
       if (existing === undefined) {
         memoryRows.push({ repoDir: null, branch: null, createdAt: now, ...row, ...refreshed });
       } else {
@@ -51,9 +63,15 @@ export function memoryRegistry() {
       key: ResourceKey,
       state: ResourceRow["state"],
       reason: string | null,
+      attempts?: number,
     ) => {
       const row = memoryRows.find((candidate) => same(candidate, key));
-      if (row !== undefined) Object.assign(row, { state, reason, updatedAt: new Date() });
+      if (row === undefined) return;
+      Object.assign(
+        row,
+        { state, reason, updatedAt: new Date() },
+        attempts === undefined ? {} : { attempts },
+      );
     },
   };
 }

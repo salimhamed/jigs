@@ -1,3 +1,4 @@
+import { getWorkflowMetadata } from "workflow";
 import {
   commitsAhead,
   DEFAULT_PUSH_TARGET,
@@ -8,13 +9,14 @@ import {
   type PushTarget,
   pushCommit,
   resolveRemoteUrl,
+  tryGit,
 } from "../../providers/git.ts";
 import { githubAuthFor } from "../../providers/github-auth.ts";
 import { parseGithubRemote } from "../../providers/github-webhook.ts";
 import type { BranchState } from "../../workflow/git/committed-work.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
-import { registerResource } from "../runtime/resources.ts";
-import { isWorktreeDirty } from "../workspaces/teardown.ts";
+import { currentFactory, listResources, recordResource, registrySql } from "../runtime/registry.ts";
+import { isWorktreeDirty } from "../workspaces/git-safety.ts";
 
 // A binding's remote is an SSH URL, which authenticates as whoever owns the
 // key on this machine — the operator. An installation token cannot travel that
@@ -38,13 +40,31 @@ async function pushTarget(worktreePath: string): Promise<PushTarget> {
   };
 }
 
-async function registerGithubBranch(worktreePath: string, branch: string): Promise<void> {
+/**
+ * Push, and record the branch as this run's when the push created it. A branch that was already
+ * on the remote, such as `staging` or a person's branch, is never recorded, so release never
+ * deletes it.
+ */
+async function pushAndRecord(worktreePath: string, branch: string, push: () => Promise<void>) {
   const { url } = await resolveRemoteUrl(worktreePath);
   const ref = parseGithubRemote(url);
-  if (ref === null) return;
-  await registerResource({
+  if (ref === null) return push();
+  const record = {
+    factory: currentFactory(),
+    runId: getWorkflowMetadata().workflowRunId,
     kind: "branch",
     identity: `${ref.owner}/${ref.repo}:${branch}`,
+  };
+  const db = registrySql();
+  const ours = (await listResources(db, record)).length > 0;
+  // An unreadable remote counts as "it existed": not recording is the safe side.
+  const existed =
+    !ours &&
+    (await tryGit(["ls-remote", "--heads", "origin", `refs/heads/${branch}`], worktreePath)) !== "";
+  await push();
+  if (existed) return;
+  await recordResource(db, {
+    ...record,
     url: `https://github.com/${ref.owner}/${ref.repo}/tree/${encodeURIComponent(branch)}`,
   });
 }
@@ -75,8 +95,9 @@ export async function pushBranch(worktree: Worktree): Promise<{
   headSha: string;
 }> {
   const { path: worktreePath, branch } = worktree;
-  await gitPushBranch(worktreePath, branch, await pushTarget(worktreePath));
-  await registerGithubBranch(worktreePath, branch);
+  await pushAndRecord(worktreePath, branch, async () =>
+    gitPushBranch(worktreePath, branch, await pushTarget(worktreePath)),
+  );
   return { headSha: await headSha(worktreePath) };
 }
 
@@ -107,8 +128,9 @@ export async function pushApprovedChange(
       `Cannot publish ${branch}: ${head} is not the approved commit ${approvedCommit}`,
     );
   }
-  await pushCommit(worktreePath, branch, approvedCommit, await pushTarget(worktreePath));
-  await registerGithubBranch(worktreePath, branch);
+  await pushAndRecord(worktreePath, branch, async () =>
+    pushCommit(worktreePath, branch, approvedCommit, await pushTarget(worktreePath)),
+  );
   return { headSha: approvedCommit };
 }
 

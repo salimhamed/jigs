@@ -2,10 +2,24 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { countUnmergedCommits, isWorktreeDirty } from "../workspaces/teardown.ts";
+import { countUnmergedCommits, isWorktreeDirty } from "../workspaces/git-safety.ts";
 import { git, makeClonedBinding } from "../workspaces/test-fixtures.ts";
 import type { ResourceRow } from "./registry.ts";
-import { releaseRefusal, releaseResource } from "./resource-kinds.ts";
+import { decideRelease } from "./resource-kinds.ts";
+
+type Run = Parameters<typeof decideRelease>[1];
+
+// What release would do, and then does: the decision, run when it is a removal.
+async function releaseResource(row: ResourceRow, run: Run) {
+  const decided = await decideRelease(row, run);
+  return typeof decided === "function" ? decided() : decided;
+}
+
+/** Why release would leave the resource, or null when it would remove it. */
+async function refusal(row: ResourceRow, run: Run) {
+  const decided = await decideRelease(row, run);
+  return typeof decided === "function" ? null : decided;
+}
 
 // Each kind's release against the real thing it deletes: git worktrees in a
 // real clone, and GitHub branches through a faked API.
@@ -40,6 +54,7 @@ function row(kind: string, identity: string, over: Partial<ResourceRow> = {}): R
     url: "https://example.test/",
     state: "live",
     reason: null,
+    attempts: 0,
     repoDir: null,
     branch: null,
     createdAt: at,
@@ -96,7 +111,7 @@ test("a dirty worktree is kept untouched, even when its branch is merged", async
   merge("feat");
   writeFileSync(path.join(tree.identity, "notes.txt"), "uncommitted\n");
 
-  expect(await releaseRefusal(tree, [])).toBe("uncommitted work kept");
+  expect(await refusal(tree, [])).toEqual({ state: "kept", reason: "uncommitted work kept" });
   expect(await releaseResource(tree, [])).toEqual({
     state: "kept",
     reason: "uncommitted work kept",
@@ -125,38 +140,32 @@ test("a worktree already gone from disk is released and its admin entry pruned",
   expect(git(repoDir, "worktree", "list")).not.toContain(tree.identity);
 });
 
-test("a worktree record jigs did not provision is never deleted", async () => {
-  const tree = runWorktree("feat");
-
-  expect(await releaseResource({ ...tree, repoDir: null, branch: null }, [])).toEqual({
-    state: "kept",
-    reason: "not provisioned by jigs",
-  });
-  expect(existsSync(tree.identity)).toBe(true);
-});
-
-test("a git failure during removal is recorded as failed, and the tree stays", async () => {
+test("a git failure during removal throws, and the tree stays", async () => {
   const tree = runWorktree("feat");
   git(repoDir, "worktree", "lock", tree.identity);
 
-  const outcome = await releaseResource(tree, []);
-
-  expect(outcome.state).toBe("failed");
-  expect(outcome.reason).toMatch(/^release failed: /);
+  await expect(releaseResource(tree, [])).rejects.toThrow();
   expect(existsSync(tree.identity)).toBe(true);
 });
 
-test("harness homes stay while any worktree of the run is not released", async () => {
+test("harness homes wait for a live or failed worktree and stay with a kept one", async () => {
   const home = row("codex-home", "wrun_1");
-  expect(await releaseRefusal(home, [{ kind: "worktree", state: "kept" }])).toBe(
-    "kept with the run's worktree",
-  );
-  expect(await releaseRefusal(home, [{ kind: "worktree", state: "released" }])).toBeNull();
+  expect(await refusal(home, [{ kind: "worktree", state: "kept" }])).toEqual({
+    state: "kept",
+    reason: "kept with the run's worktree",
+  });
+  for (const state of ["live", "failed"] as const) {
+    expect(await refusal(home, [{ kind: "worktree", state }])).toEqual({
+      state: "live",
+      reason: "waits for the run's worktree",
+    });
+  }
+  expect(await refusal(home, [{ kind: "worktree", state: "released" }])).toBeNull();
 });
 
-test("recorded-only kinds are never dispatched", async () => {
+test("recorded-only kinds are marked released without anything being deleted", async () => {
   expect(await releaseResource(row("pull-request", "acme/api#1"), [])).toEqual({
-    state: "kept",
+    state: "released",
     reason: "recorded only",
   });
   expect(fetchMock).not.toHaveBeenCalled();
@@ -256,11 +265,8 @@ test("a branch contained in the default branch is deleted", async () => {
   expect((await releaseResource(branch, [])).state).toBe("released");
 });
 
-test("a branch already deleted on GitHub is released", async () => {
-  github({
-    [HEAD]: () => json({ message: "Not Found" }, 404),
-    [DELETE]: () => json({ message: "Reference does not exist" }, 422),
-  });
+test("a branch already deleted on GitHub is released without a delete", async () => {
+  github({ [HEAD]: () => json({ message: "Not Found" }, 404) });
 
   expect(await releaseResource(branch, [])).toEqual({
     state: "released",
@@ -268,8 +274,81 @@ test("a branch already deleted on GitHub is released", async () => {
   });
 });
 
-test("a GitHub outage is a failed release, never a deletion", async () => {
+test("a merged pull request at an older head falls through to the ancestry check", async () => {
+  github({
+    [HEAD]: () => json({ object: { sha: "abc" } }),
+    [PULLS]: () =>
+      json([
+        {
+          number: 7,
+          state: "closed",
+          merged_at: "2026-09-25",
+          head: { ref: "feature/x", sha: "old" },
+        },
+      ]),
+    "GET /repos/acme/api/compare/main...abc": () => json({ ahead_by: 1 }),
+    "GET /repos/acme/api": () => json({ default_branch: "main" }),
+  });
+
+  expect(await releaseResource(branch, [])).toEqual({
+    state: "kept",
+    reason: "1 commit(s) are not on main",
+  });
+});
+
+const mergedAtHead = (heads: string[], remove: () => Response) => {
+  github({
+    // Each read of the head takes the next SHA; once they run out the branch is gone.
+    [HEAD]: () => {
+      const sha = heads.shift();
+      return sha === undefined ? json({ message: "Not Found" }, 404) : json({ object: { sha } });
+    },
+    [PULLS]: () =>
+      json([
+        {
+          number: 7,
+          state: "closed",
+          merged_at: "2026-09-25",
+          head: { ref: "feature/x", sha: "abc" },
+        },
+      ]),
+    [DELETE]: remove,
+  });
+};
+
+test("a branch that moved after its check is left live, never deleted", async () => {
+  const remove = vi.fn(() => new Response(null, { status: 204 }));
+  mergedAtHead(["abc", "def"], remove);
+
+  expect(await releaseResource(branch, [])).toEqual({
+    state: "live",
+    reason: "the branch moved after it was checked",
+  });
+  expect(remove).not.toHaveBeenCalled();
+});
+
+test("a delete GitHub refuses keeps the branch with GitHub's reason", async () => {
+  mergedAtHead(["abc", "abc", "abc"], () =>
+    json({ message: "Cannot delete a protected branch" }, 422),
+  );
+
+  expect(await releaseResource(branch, [])).toEqual({
+    state: "kept",
+    reason: 'GitHub refused the delete: {"message":"Cannot delete a protected branch"}',
+  });
+});
+
+test("a 422 for a branch gone meanwhile is released", async () => {
+  mergedAtHead(["abc", "abc"], () => json({ message: "Reference does not exist" }, 422));
+
+  expect(await releaseResource(branch, [])).toEqual({
+    state: "released",
+    reason: "already absent on GitHub",
+  });
+});
+
+test("a GitHub outage throws, never deletes", async () => {
   github({ [HEAD]: () => json({ message: "boom" }, 502) });
 
-  expect((await releaseResource(branch, [])).state).toBe("failed");
+  await expect(releaseResource(branch, [])).rejects.toThrow("502");
 });

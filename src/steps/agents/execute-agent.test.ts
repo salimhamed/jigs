@@ -87,7 +87,7 @@ function makeDeps(
     captured.options = options;
     return { text: "done", ...generation };
   };
-  const preparePiHome: PiDriverDependencies["preparePiHome"] = (runId, model) => {
+  const preparePiHome: PiDriverDependencies["preparePiHome"] = async (runId, model) => {
     captured.piHome = { runId, model };
     const home = path.join(tmp, "pi-home", runId, crypto.randomUUID());
     const sessionDir = path.join(tmp, "pi-home", runId, "sessions");
@@ -106,7 +106,7 @@ function makeDeps(
     ...drivers,
     claude: createClaudeDriver({ sessionMessages: async () => [{ type: "user" }] }),
     codex: createCodexDriver({
-      prepareCodexHome: (runId) => {
+      prepareCodexHome: async (runId) => {
         captured.homeRunIds.push(runId);
         const home = path.join(tmp, "codex-home", runId, crypto.randomUUID());
         const sessionDir = path.join(tmp, "codex-home", runId, "sessions");

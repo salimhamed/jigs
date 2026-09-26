@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { git, makeClonedBinding } from "../workspaces/test-fixtures.ts";
 import type { ResourceRow } from "./registry.ts";
 import { memoryRows } from "./test-fixtures.ts";
 
@@ -15,7 +16,7 @@ vi.mock("./registry.ts", async (original) => ({
   ...(await import("./test-fixtures.ts")).memoryRegistry(),
 }));
 
-const { releaseRun, releaseRunResources } = await import("./release.ts");
+const { MAX_RELEASE_ATTEMPTS, releaseRun, releaseRunResources } = await import("./release.ts");
 
 let data: string;
 const RUN = "wrun_release";
@@ -30,6 +31,7 @@ function row(kind: string, over: Partial<ResourceRow> = {}): ResourceRow {
     url: `file:///${kind}`,
     state: "live",
     reason: null,
+    attempts: 0,
     repoDir: null,
     branch: null,
     createdAt: at,
@@ -60,59 +62,125 @@ afterEach(() => {
   rmSync(data, { recursive: true, force: true });
 });
 
-test("release removes run-owned directories and leaves recorded-only kinds untouched", async () => {
+test("release removes run-owned directories and marks recorded-only kinds released", async () => {
   const scratch = directory("scratch", RUN);
   const codex = directory("codex-homes", RUN);
   seed(row("run-directory"), row("codex-home"), row("pull-request", { identity: "a/b#1" }));
 
-  const records = await releaseRun({} as never, "factory-a", RUN, "release", "kept by policy");
+  const records = await releaseRun({} as never, "factory-a", RUN, "release", "success");
 
   expect(existsSync(scratch)).toBe(false);
   expect(existsSync(codex)).toBe(false);
   expect(states()).toEqual({
     "run-directory": ["released", "removed"],
     "codex-home": ["released", "removed"],
-    "pull-request": ["live", null],
+    "pull-request": ["released", "recorded only"],
   });
-  expect(records.map((record) => record.state)).toEqual(["released", "released", "live"]);
+  expect(records.map((record) => record.state)).toEqual(["released", "released", "released"]);
 });
 
 test("keep marks every releasable resource kept with the policy's reason", async () => {
   const scratch = directory("scratch", RUN);
   seed(row("run-directory"), row("pull-request", { identity: "a/b#1" }));
 
-  await releaseRun({} as never, "factory-a", RUN, "keep", "onFailure policy keeps run resources");
+  await releaseRun({} as never, "factory-a", RUN, "keep", "failure");
 
   expect(existsSync(scratch)).toBe(true);
   expect(states()).toEqual({
     "run-directory": ["kept", "onFailure policy keeps run resources"],
-    "pull-request": ["live", null],
+    "pull-request": ["released", "recorded only"],
   });
 });
 
-test("a kept worktree keeps the harness homes that hold its sessions", async () => {
+function worktreeRow(branch: string, commit = false): ResourceRow {
+  const { repoDir, worktreesDir } = makeClonedBinding(data);
+  const target = path.join(worktreesDir, branch);
+  git(repoDir, "worktree", "add", "-q", target, "-b", branch, "refs/remotes/origin/main");
+  if (commit) {
+    writeFileSync(path.join(target, "work.txt"), "work\n");
+    git(target, "add", "work.txt");
+    git(target, "commit", "-q", "-m", "work");
+  }
+  return row("worktree", { identity: target, repoDir, branch });
+}
+
+test("one pass releases a clean worktree and then the harness homes waiting for it", async () => {
   const pi = directory("pi-homes", RUN);
-  // No clone or branch recorded: the worktree handler refuses it.
-  seed(row("pi-home"), row("worktree", { identity: path.join(data, "tree") }));
+  const tree = worktreeRow("feat");
+  seed(row("pi-home"), tree);
 
-  await releaseRun({} as never, "factory-a", RUN, "release", "kept by policy");
+  await releaseRun({} as never, "factory-a", RUN, "release", "success");
 
+  expect(existsSync(tree.identity)).toBe(false);
+  expect(existsSync(pi)).toBe(false);
+  expect(states()).toEqual({
+    "pi-home": ["released", "removed"],
+    worktree: ["released", "worktree and merged branch removed"],
+  });
+});
+
+test("a dirty worktree is kept, and the harness homes that hold its sessions with it", async () => {
+  const pi = directory("pi-homes", RUN);
+  const tree = worktreeRow("dirty");
+  writeFileSync(path.join(tree.identity, "wip.txt"), "uncommitted\n");
+  seed(row("pi-home"), tree);
+
+  await releaseRun({} as never, "factory-a", RUN, "release", "success");
+
+  expect(existsSync(path.join(tree.identity, "wip.txt"))).toBe(true);
   expect(existsSync(pi)).toBe(true);
   expect(states()).toEqual({
-    worktree: ["kept", "not provisioned by jigs"],
     "pi-home": ["kept", "kept with the run's worktree"],
+    worktree: ["kept", "uncommitted work kept"],
   });
+});
+
+test("a failing worktree leaves the harness homes live until a later attempt", async () => {
+  const codex = directory("codex-homes", RUN);
+  const tree = worktreeRow("locked");
+  git(tree.repoDir as string, "worktree", "lock", tree.identity);
+  seed(row("codex-home"), tree);
+
+  await releaseRun({} as never, "factory-a", RUN, "release", "success");
+
+  expect(existsSync(codex)).toBe(true);
+  expect(memoryRows.find((entry) => entry.kind === "worktree")).toMatchObject({
+    state: "failed",
+    attempts: 1,
+  });
+  expect(memoryRows.find((entry) => entry.kind === "codex-home")).toMatchObject({
+    state: "live",
+    reason: "waits for the run's worktree",
+  });
+});
+
+test("a failed resource is retried until the attempt cap, then kept with its last error", async () => {
+  const tree = worktreeRow("stuck");
+  git(tree.repoDir as string, "worktree", "lock", tree.identity);
+  seed(tree);
+
+  for (let attempt = 1; attempt < MAX_RELEASE_ATTEMPTS; attempt += 1) {
+    await releaseRun({} as never, "factory-a", RUN, "release", "success");
+    expect(memoryRows[0]).toMatchObject({ state: "failed", attempts: attempt });
+  }
+  await releaseRun({} as never, "factory-a", RUN, "release", "success");
+
+  expect(memoryRows[0]?.state).toBe("kept");
+  expect(memoryRows[0]?.reason).toMatch(
+    new RegExp(`^release failed: .*\\(gave up after ${MAX_RELEASE_ATTEMPTS} attempts\\)$`, "s"),
+  );
+  expect(existsSync(tree.identity)).toBe(true);
 });
 
 test("kept and released records are final; failed ones are tried again", async () => {
   directory("scratch", RUN);
   seed(
-    row("run-directory", { state: "failed", reason: "release failed: EBUSY" }),
+    row("run-directory", { state: "failed", reason: "release failed: EBUSY", attempts: 2 }),
     row("codex-home", { state: "kept", reason: "onSuccess policy keeps run resources" }),
     row("pi-home", { state: "released", reason: "removed" }),
   );
 
-  await releaseRun({} as never, "factory-a", RUN, "release", "kept by policy");
+  await releaseRun({} as never, "factory-a", RUN, "release", "success");
 
   expect(states()).toEqual({
     "run-directory": ["released", "removed"],
@@ -125,7 +193,7 @@ test("another factory's records are never visited", async () => {
   const scratch = directory("scratch", RUN);
   seed(row("run-directory", { factory: "factory-b" }));
 
-  await releaseRun({} as never, "factory-a", RUN, "release", "kept by policy");
+  await releaseRun({} as never, "factory-a", RUN, "release", "success");
 
   expect(existsSync(scratch)).toBe(true);
   expect(memoryRows[0]?.state).toBe("live");

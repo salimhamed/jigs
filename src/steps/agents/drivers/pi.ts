@@ -68,7 +68,7 @@ function promptFor(request: AgentRequest): string {
 }
 
 export interface PiDriverDependencies {
-  preparePiHome(runId: string, plan: PiModelPlan): PreparedPiHome | Promise<PreparedPiHome>;
+  preparePiHome(runId: string, plan: PiModelPlan): Promise<PreparedPiHome>;
   executePi(options: PiExecutionOptions): Promise<ExecutorGeneration>;
 }
 

@@ -80,6 +80,8 @@ test("a relaunched ticket adopts the leftover worktree and the old record steps 
   expect(git(second.path, "rev-parse", "HEAD")).toBe(head);
   expect(await states("run_first")).toEqual([["worktree", "released", "reused by run run_second"]]);
   expect(await states("run_second")).toEqual([["worktree", "live", null]]);
+  // The first run's lock, taken for the adoption, ended with the second run's.
+  await withRunResourceLock(sql(), "run_first", async () => undefined);
 });
 
 test("a live owner read back from the registry refuses the second run by name", async () => {
@@ -106,7 +108,7 @@ test("explicit release keeps, then removes, through the real registry", async ()
   const directory = await createRunDirectory({ workflowRunId: runId });
   const release = (action: "release" | "keep") =>
     withRunResourceLock(sql(), runId, (locked) =>
-      releaseRun(locked, currentFactory(), runId, action, "onSuccess policy keeps run resources"),
+      releaseRun(locked, currentFactory(), runId, action, "success"),
     );
 
   await release("keep");
@@ -132,9 +134,13 @@ test("automatic release uses the same release and preserves dirty work", async (
   writeFileSync(path.join(tree.path, "uncommitted.txt"), "keep me\n");
   const readState = (id: string) =>
     readRunState(sql(), currentFactory(), id, async () => ({
-      status: "completed",
-      workflowName: "workflow//./workflows/ship//ship",
-      tokens: [],
+      run: {
+        status: "completed",
+        workflowName: "workflow//./workflows/ship//ship",
+        trigger: "manual",
+        ticket: null,
+        createdAt: new Date(),
+      },
     }));
   const deps: AutomaticReleaseDeps = {
     pendingRuns: async () => [await readState(runId)],
@@ -143,8 +149,8 @@ test("automatic release uses the same release and preserves dirty work", async (
     hasActiveStep: async () => false,
     policy: () => "release",
     withLock: (id, action) => withRunResourceLock(sql(), id, action),
-    release: (locked, run, action, keepReason) =>
-      releaseRun(locked, currentFactory(), run.runId, action, keepReason),
+    release: (locked, runId, action, outcome) =>
+      releaseRun(locked, currentFactory(), runId, action, outcome),
     ready: () => true,
     log: () => undefined,
     warn: () => undefined,

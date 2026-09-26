@@ -19,6 +19,8 @@ export interface RunListRun {
   lastStep: { name: string; status: string; at: string | null } | null;
   suspended: boolean;
   suspensions: RunListSuspension[];
+  /** Every resource the run recorded, released ones included. */
+  resources: ResourceRecord[];
 }
 
 export interface RunListSchedule {
@@ -31,8 +33,6 @@ export interface RunListSchedule {
 
 export interface RunListResult {
   runs: RunListRun[];
-  /** Resources release has not removed, across every run. */
-  resources: ResourceRecord[];
   schedules: RunListSchedule[];
 }
 
@@ -82,11 +82,14 @@ export async function showRuns(
     }
   }
 
-  if (result.resources.length > 0) {
+  const unreleased = result.runs.flatMap((run) =>
+    run.resources.filter((resource) => resource.state !== "released"),
+  );
+  if (unreleased.length > 0) {
     deps.out("");
     for (const line of formatTable(
       ["RESOURCE", "KIND", "STATE", "RUN", "REASON"],
-      result.resources.map((resource) => [
+      unreleased.map((resource) => [
         resource.identity,
         resource.kind,
         resource.state,

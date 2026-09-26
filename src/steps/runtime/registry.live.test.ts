@@ -5,6 +5,7 @@ import { afterAll, beforeAll, expect, test } from "vitest";
 import { ticketToken } from "../../workflow/linear/claim.ts";
 import { pullRequestToken } from "../../workflow/pull-requests/pull-request.ts";
 import {
+  alsoLockRun,
   connectRegistry,
   ensureRegistry,
   listResources,
@@ -34,14 +35,28 @@ async function freshDatabase(): Promise<{ url: string; db: RegistrySql }> {
 }
 
 let db: RegistrySql;
+let dbUrl: string;
+const adminUrlFor = (_db: RegistrySql) => dbUrl;
 beforeAll(async () => {
-  ({ db } = await freshDatabase());
+  ({ db, url: dbUrl } = await freshDatabase());
   await ensureRegistry(db);
 });
 afterAll(async () => {
   await db.$client.end();
   for (const name of created) await admin.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
   await admin.end();
+});
+
+test("a failed attempt's count is kept until the record is live again", async () => {
+  const counted = { ...key, factory: "factory-attempts" };
+  await recordResource(db, { ...counted, url: "file:///w/feat", repoDir: "/r", branch: "feat" });
+  await setResourceState(db, counted, "failed", "release failed: EBUSY", 3);
+  expect((await listResources(db, { factory: "factory-attempts" }))[0]?.attempts).toBe(3);
+  await recordResource(db, { ...counted, url: "file:///w/feat" });
+  expect((await listResources(db, { factory: "factory-attempts" }))[0]).toMatchObject({
+    state: "live",
+    attempts: 0,
+  });
 });
 
 const tables = async (target: RegistrySql) =>
@@ -168,15 +183,28 @@ test("a run's state is its records plus the hooks the World holds", async () => 
   const watch = pullRequestToken({ owner: "acme", repo: "api", number: 41 });
 
   const state = await readRunState(db, "factory-a", "run_1", async () => ({
-    status: "running",
-    workflowName: "workflow//./workflows/ship//ship",
+    run: {
+      status: "running",
+      workflowName: "workflow//./workflows/ship//ship",
+      trigger: "manual",
+      ticket: "AGE-12",
+      createdAt: new Date("2026-09-26T00:00:00.000Z"),
+    },
     tokens: [claim, watch],
+    steps: [],
   }));
 
   expect(state).toEqual({
     runId: "run_1",
-    status: "running",
+    status: "suspended",
     workflowName: "workflow//./workflows/ship//ship",
+    trigger: "manual",
+    ticket: "AGE-12",
+    createdAt: "2026-09-26T00:00:00.000Z",
+    lastActivityAt: "2026-09-26T00:00:00.000Z",
+    steps: 0,
+    lastStep: null,
+    suspended: true,
     resources: [
       {
         runId: "run_1",
@@ -198,7 +226,7 @@ test("a run's state is its records plus the hooks the World holds", async () => 
       },
     ],
     claim,
-    waitingOn: [
+    suspensions: [
       {
         token: watch,
         kind: "pull-request",
@@ -228,4 +256,17 @@ test("the run lock serializes holders of the same run", async () => {
   release();
   await Promise.all([first, second]);
   expect(order).toEqual(["first", "first done", "second"]);
+});
+
+test("a run locked alongside another is freed when the outer lock ends", async () => {
+  await withRunResourceLock(db, "run_outer", (locked) => alsoLockRun(locked, "run_inner"));
+  const other = connectRegistry(adminUrlFor(db), { max: 1 });
+  try {
+    const { rows } = await other.$client.query(
+      "select pg_try_advisory_lock(hashtextextended('run_inner', 464)) as free",
+    );
+    expect(rows[0].free).toBe(true);
+  } finally {
+    await other.$client.end();
+  }
 });

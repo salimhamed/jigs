@@ -5,40 +5,74 @@ import {
   currentFactory,
   listResources,
   type RegistrySql,
+  type ResourceRow,
   registrySql,
   setResourceState,
   toRecord,
   withRunResourceLock,
 } from "./registry.ts";
 import { resolveReleasePolicy } from "./release-policy.ts";
-import { releasable, releaseOrder, releaseResource } from "./resource-kinds.ts";
+import { decideRelease, type ReleaseDecision, releasable, releaseOrder } from "./resource-kinds.ts";
 import type { NamedRunMetadata } from "./run-context.ts";
+
+/** Failed attempts after which a resource is kept with its last error instead of retried. */
+export const MAX_RELEASE_ATTEMPTS = 5;
+
+export const keepReason = (outcome: "success" | "failure"): string =>
+  `${outcome === "success" ? "onSuccess" : "onFailure"} policy keeps run resources`;
+
+/**
+ * Release one resource and record what happened. `run` is every row of the same run; the row is
+ * updated in place so kinds visited later read its new state. A removal that throws is `failed`,
+ * and the {@link MAX_RELEASE_ATTEMPTS}th failure is kept with its error. Release and prune both
+ * write through here, holding the run's lock.
+ */
+export async function releaseOne(
+  db: RegistrySql,
+  row: ResourceRow,
+  run: readonly ResourceRow[],
+  decision?: ReleaseDecision,
+): Promise<ResourceRow> {
+  let attempts = 0;
+  let outcome: Pick<ResourceRow, "state" | "reason">;
+  try {
+    const decided = decision ?? (await decideRelease(row, run));
+    outcome = typeof decided === "function" ? await decided() : decided;
+  } catch (error) {
+    attempts = row.attempts + 1;
+    const reason = `release failed: ${error instanceof Error ? error.message : String(error)}`;
+    outcome =
+      attempts >= MAX_RELEASE_ATTEMPTS
+        ? { state: "kept", reason: `${reason} (gave up after ${attempts} attempts)` }
+        : { state: "failed", reason };
+  }
+  await setResourceState(db, row, outcome.state, outcome.reason, attempts);
+  return Object.assign(row, outcome, { attempts });
+}
 
 /**
  * Apply one release decision to a run's live and failed resources and return every record.
- * Explicit and automatic release both call this while holding the run's resource lock.
+ * Recorded-only kinds are marked released either way: jigs never held them.
  */
 export async function releaseRun(
   db: RegistrySql,
   factory: string,
   runId: string,
   action: "release" | "keep",
-  keepReason: string,
+  outcome: "success" | "failure",
 ): Promise<ResourceRecord[]> {
   const rows = await listResources(db, { factory, runId });
-  const pending = rows.filter(
-    (row) => releasable(row.kind) && (row.state === "live" || row.state === "failed"),
-  );
-  for (const row of releaseOrder(pending)) {
-    const outcome =
-      action === "keep"
-        ? { state: "kept" as const, reason: keepReason }
-        : await releaseResource(row, rows);
-    // Later kinds read this run's states as they stand, not as they were read.
-    row.state = outcome.state;
-    await setResourceState(db, row, outcome.state, outcome.reason);
+  for (const row of releaseOrder(rows)) {
+    if (row.state !== "live" && row.state !== "failed") continue;
+    const kept = action === "keep" && releasable(row.kind);
+    await releaseOne(
+      db,
+      row,
+      rows,
+      kept ? { state: "kept", reason: keepReason(outcome) } : undefined,
+    );
   }
-  return (await listResources(db, { factory, runId })).map(toRecord);
+  return rows.map(toRecord);
 }
 
 /**
@@ -59,13 +93,7 @@ export async function releaseRunResources(
   const policy = explicit ?? (await resolveReleasePolicy(metadata, definition));
   const runId = metadata.workflowRunId;
   const resources = await withRunResourceLock(registrySql(), runId, (locked) =>
-    releaseRun(
-      locked,
-      currentFactory(),
-      runId,
-      policy.onSuccess,
-      "onSuccess policy keeps run resources",
-    ),
+    releaseRun(locked, currentFactory(), runId, policy.onSuccess, "success"),
   );
   return { policy, resources };
 }

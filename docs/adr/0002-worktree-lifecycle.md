@@ -45,10 +45,13 @@ match the fetched ref counts as no answer. Before deleting, the local branch
 ref is pinned to its current sha and rechecked, so a branch that moved in the
 meantime survives.
 
-The pushed branch is its own `branch` resource, deleted on GitHub with the
-factory's identity. It is kept while it has an open pull request, and deleted
-only when a merged pull request has its exact head or the default branch
-contains it.
+The pushed branch is its own `branch` resource, recorded only when the run's
+push created it, and deleted on GitHub with the factory's identity. It is kept
+while it has an open pull request, and deleted only when a merged pull request
+has its exact head or the default branch contains it. A branch kept for its
+open pull request stays kept; after the merge, `jigs resources prune
+--include-kept` removes it. The local tracking ref of a deleted remote branch
+is dropped the next time a worktree for that branch is cut.
 
 ## Consequences
 

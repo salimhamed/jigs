@@ -3,9 +3,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { RegistrySql, ResourceRow } from "../../steps/runtime/registry.ts";
-import { memoryRows } from "../../steps/runtime/test-fixtures.ts";
+import { readRunState } from "../../steps/runtime/run-state.ts";
+import { memoryLock, memoryRows } from "../../steps/runtime/test-fixtures.ts";
 import { factorySlug } from "../../steps/workspaces/layout.ts";
-import { listResources, runResourcesPrune } from "./resources.ts";
+import { git, makeClonedBinding } from "../../steps/workspaces/test-fixtures.ts";
+import { listResources, offlineFacts, runResourcesPrune } from "./resources.ts";
 import {
   type ServiceProcesses,
   servicePidfilePath,
@@ -35,6 +37,7 @@ beforeEach(() => {
   writeFileSync(path.join(root, ".env"), "WORKFLOW_POSTGRES_URL=postgres://unused/test\n");
   vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
   memoryRows.length = 0;
+  memoryLock.taken = undefined;
   lines = [];
 });
 
@@ -65,6 +68,7 @@ function seed(kind: string, over: Partial<ResourceRow> = {}): ResourceRow {
     url: "file:///scratch",
     state: "live",
     reason: null,
+    attempts: 0,
     repoDir: null,
     branch: null,
     createdAt: new Date(),
@@ -86,6 +90,9 @@ const deps = (statuses?: Record<string, string>) => ({
   out: (line: string) => lines.push(line),
   connect: () => database(statuses),
 });
+
+const UNAPPLIED =
+  "the release policy has not been applied; start the service to apply it, or pass --include-kept";
 
 test("list shows this factory's unreleased records with what prune would do", async () => {
   seed("run-directory");
@@ -109,7 +116,7 @@ test("list shows this factory's unreleased records with what prune would do", as
       entry.decision,
     ]),
   ).toEqual([
-    [RUN, "run-directory", "live", true, "would be released"],
+    [RUN, "run-directory", "live", false, UNAPPLIED],
     [RUN, "codex-home", "kept", false, "kept; pass --include-kept to consider it"],
     [RUN, "pull-request", "live", false, "recorded only"],
     [LIVE, "run-directory", "live", false, "the run is not finished"],
@@ -117,7 +124,27 @@ test("list shows this factory's unreleased records with what prune would do", as
   expect(JSON.parse(lines.join("\n"))).toEqual(report);
 });
 
-test("prune releases only eligible records, and kept ones only when included", async () => {
+test("--include-kept considers live, kept and failed records of finished runs alike", async () => {
+  seed("run-directory");
+  seed("codex-home", { state: "kept", reason: "onFailure policy keeps run resources" });
+  seed("pi-home", { state: "failed", reason: "release failed: EBUSY", attempts: 2 });
+
+  const report = await listResources(deps(), { includeKept: true });
+
+  expect(report.entries.map((entry) => [entry.kind, entry.eligible])).toEqual([
+    ["run-directory", true],
+    ["codex-home", true],
+    ["pi-home", true],
+  ]);
+});
+
+const pruneAll = (statuses: Record<string, string> = { [RUN]: "cancelled" }) =>
+  runResourcesPrune(
+    { ...deps(statuses), processes: machine() },
+    { apply: true, includeKept: true },
+  );
+
+test("apply releases finished runs' records and never a running run's", async () => {
   const done = scratch();
   const live = scratch(LIVE);
   seed("run-directory");
@@ -126,10 +153,7 @@ test("prune releases only eligible records, and kept ones only when included", a
   const codex = path.join(tmp, "data", "jigs", "codex-homes", RUN);
   mkdirSync(codex, { recursive: true });
 
-  const report = await runResourcesPrune(
-    { ...deps({ [RUN]: "cancelled", [LIVE]: "running" }), processes: machine() },
-    { apply: true, includeKept: true },
-  );
+  const report = await pruneAll({ [RUN]: "cancelled", [LIVE]: "running" });
 
   expect(
     report.entries.map((entry) => [entry.runId, entry.kind, entry.state, entry.action]),
@@ -141,19 +165,148 @@ test("prune releases only eligible records, and kept ones only when included", a
   expect(existsSync(done)).toBe(false);
   expect(existsSync(codex)).toBe(false);
   expect(existsSync(live)).toBe(true);
-  expect(memoryRows.find((row) => row.runId === LIVE)?.state).toBe("live");
   expect(lines.at(-1)).toBe("2 removed, 0 failed, 1 retained");
+});
+
+test("without --include-kept, apply leaves records whose policy was never applied", async () => {
+  const done = scratch();
+  seed("run-directory");
+
+  await runResourcesPrune({ ...deps(), processes: machine() }, { apply: true });
+
+  expect(existsSync(done)).toBe(true);
+  expect(memoryRows[0]?.state).toBe("live");
 });
 
 test("a preview never changes anything", async () => {
   const done = scratch();
   seed("run-directory");
 
-  await runResourcesPrune(deps(), {});
+  await runResourcesPrune(deps(), { includeKept: true });
 
   expect(existsSync(done)).toBe(true);
   expect(memoryRows[0]?.state).toBe("live");
   expect(lines.at(-1)).toBe("1 proposed removal, 0 retained; preview only");
+});
+
+test("apply never touches another factory's records", async () => {
+  const theirs = scratch();
+  seed("run-directory", { factory: "another-factory" });
+
+  const report = await pruneAll();
+
+  expect(report.entries).toEqual([]);
+  expect(existsSync(theirs)).toBe(true);
+  expect(memoryRows[0]?.state).toBe("live");
+});
+
+test("a run the World no longer knows counts as finished", async () => {
+  const lost = scratch();
+  seed("run-directory");
+
+  await pruneAll({});
+
+  expect(existsSync(lost)).toBe(false);
+  expect(memoryRows[0]?.state).toBe("released");
+});
+
+test("apply decides again under the run's lock: a run that resumed keeps its records", async () => {
+  const done = scratch();
+  seed("run-directory");
+  const statuses: Record<string, string> = { [RUN]: "cancelled" };
+  memoryLock.taken = () => {
+    statuses[RUN] = "running";
+  };
+
+  const report = await runResourcesPrune(
+    { ...deps(statuses), processes: machine() },
+    { apply: true, includeKept: true },
+  );
+
+  expect(report.entries[0]).toMatchObject({ action: "skip", decision: "the run is not finished" });
+  expect(existsSync(done)).toBe(true);
+});
+
+test("a record released between listing and the lock is not visited again", async () => {
+  seed("run-directory");
+  memoryLock.taken = () => {
+    Object.assign(memoryRows[0] as ResourceRow, { state: "released", reason: "removed" });
+  };
+
+  expect((await pruneAll()).entries).toEqual([]);
+});
+
+function worktree(branch: string, runId = RUN): ResourceRow {
+  const parent = path.join(tmp, `clone-${branch}`);
+  mkdirSync(parent);
+  const { repoDir, worktreesDir } = makeClonedBinding(parent);
+  const target = path.join(worktreesDir, branch);
+  git(repoDir, "worktree", "add", "-q", target, "-b", branch, "refs/remotes/origin/main");
+  return seed("worktree", { runId, identity: target, repoDir, branch });
+}
+
+test("a failure is reported and prune carries on with independent resources", async () => {
+  const stuck = worktree("stuck");
+  git(stuck.repoDir as string, "worktree", "lock", stuck.identity);
+  const other = scratch(LIVE);
+  seed("run-directory", { runId: LIVE });
+
+  const report = await pruneAll({ [RUN]: "failed", [LIVE]: "failed" });
+
+  expect(report.complete).toBe(false);
+  expect(report.errors).toEqual([expect.stringContaining(`${stuck.identity}: release failed:`)]);
+  expect(report.entries.map((entry) => [entry.kind, entry.state])).toEqual([
+    ["worktree", "failed"],
+    ["run-directory", "released"],
+  ]);
+  expect(existsSync(stuck.identity)).toBe(true);
+  expect(existsSync(other)).toBe(false);
+});
+
+test("--include-kept keeps a dirty worktree and keeps an unmerged branch's commits", async () => {
+  const dirty = worktree("dirty");
+  writeFileSync(path.join(dirty.identity, "wip.txt"), "uncommitted\n");
+  const unmerged = worktree("unmerged", LIVE);
+  writeFileSync(path.join(unmerged.identity, "work.txt"), "work\n");
+  git(unmerged.identity, "add", "work.txt");
+  git(unmerged.identity, "commit", "-q", "-m", "work");
+
+  await pruneAll({ [RUN]: "failed", [LIVE]: "failed" });
+
+  expect(existsSync(path.join(dirty.identity, "wip.txt"))).toBe(true);
+  expect(memoryRows.find((row) => row.branch === "dirty")).toMatchObject({
+    state: "kept",
+    reason: "uncommitted work kept",
+  });
+  expect(existsSync(unmerged.identity)).toBe(false);
+  expect(git(unmerged.repoDir as string, "branch", "--list", "unmerged")).toContain("unmerged");
+});
+
+test("one apply releases a worktree and then the harness homes that waited for it", async () => {
+  const tree = worktree("clean");
+  seed("pi-home");
+  const pi = path.join(tmp, "data", "jigs", "pi-homes", RUN);
+  mkdirSync(pi, { recursive: true });
+
+  const preview = await listResources(deps({ [RUN]: "failed" }), { includeKept: true });
+  expect(preview.entries.map((entry) => [entry.kind, entry.eligible])).toEqual([
+    ["worktree", true],
+    ["pi-home", true],
+  ]);
+  await pruneAll({ [RUN]: "failed" });
+
+  expect(existsSync(tree.identity)).toBe(false);
+  expect(existsSync(pi)).toBe(false);
+});
+
+test("the offline read has the run's status and nothing it cannot see", async () => {
+  const state = await readRunState(database(), factorySlug(root), RUN, offlineFacts(database()));
+  expect(state).toMatchObject({
+    status: "completed",
+    claim: null,
+    suspended: false,
+    suspensions: [],
+  });
 });
 
 test("--run names a run the World does not know and points at jigs status", async () => {

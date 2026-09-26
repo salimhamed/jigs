@@ -117,9 +117,9 @@ _Avoid_: teardown (for the request), gc
 safety check refused, such as a worktree with uncommitted work.
 _Avoid_: orphan, abandoned
 
-**Resource prune**: `jigs resources prune`: previews this factory's live and
-kept resources of finished runs, and with `--apply` releases those that pass
-the same safety checks as release.
+**Resource prune**: `jigs resources prune --include-kept`: previews what
+release kept, failed or never decided for this factory's finished runs, and
+with `--apply` releases what passes the same safety checks as release.
 _Avoid_: sweep, cleanup job
 
 ## Agents

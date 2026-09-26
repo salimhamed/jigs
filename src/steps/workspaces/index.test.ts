@@ -147,6 +147,7 @@ test("a registry row whose directory is gone is cut afresh and re-owned", async 
     url: `file://${target}`,
     state: "kept",
     reason: "onFailure policy keeps run resources",
+    attempts: 0,
     repoDir,
     branch: request.branch,
     createdAt: new Date(),

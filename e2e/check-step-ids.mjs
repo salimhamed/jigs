@@ -385,11 +385,11 @@ function withFakeVersion(packJigs) {
 // start exits the service.)
 //
 // The service refuses to start without a WORKFLOW_POSTGRES_URL, though: the
-// worktree registry gate creates its tables there before the World starts. So
-// the boot runs only when the runner's environment carries one — CI's
-// step-ids job brings a Postgres service container for it — and says so and
-// skips when it does not. The registry needs no bootstrap: its ensure is a
-// CREATE TABLE IF NOT EXISTS, so an empty database will do.
+// registry gate applies jigs' Drizzle migrations (the jigs_resources table)
+// there before the World starts. So the boot runs only when the runner's
+// environment carries one — CI's step-ids job brings a Postgres service
+// container for it — and says so and skips when it does not. The migrations
+// need no bootstrap, so an empty database will do.
 //
 // Then the exit. Nothing under the service ends the process on SIGTERM —
 // nitro wires no close hook, srvx only closes its listener, and

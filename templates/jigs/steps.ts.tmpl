@@ -193,8 +193,9 @@ export async function createRunDirectory() {
  * Register anything a person may need to find in `jigs status`. Kind and identity
  * together name the record; registering again updates its URL. Create external
  * resources in a separate step when creation is not safe to repeat, then register
- * them here so registration retries cannot repeat creation. jigs releases only the
- * kinds it creates itself; any other kind is recorded, never deleted.
+ * them here so registration retries cannot repeat creation. The record is observation
+ * only: jigs never deletes what it names. The kinds jigs records and releases itself
+ * (`worktree`, `branch`, `run-directory`, `codex-home`, `pi-home`) are reserved.
  */
 export async function registerResource(resource: RunResource) {
   "use step";

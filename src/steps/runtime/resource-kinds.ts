@@ -11,62 +11,72 @@ import type { ResourceState } from "../../workflow/runtime/resources.ts";
 import { codexRunStatePath } from "../agents/harnesses/codex-home.ts";
 import { piRunStatePath } from "../agents/harnesses/pi-home.ts";
 import { fetchOriginDefault } from "../workspaces/create.ts";
-import { countUnmergedCommits, isWorktreeDirty } from "../workspaces/teardown.ts";
+import { countUnmergedCommits, isWorktreeDirty } from "../workspaces/git-safety.ts";
 import type { ResourceRow } from "./registry.ts";
 import { runDirectory } from "./run-directory/index.ts";
 
-/**
- * How jigs releases one kind of resource. Explicit and automatic release and prune all
- * go through {@link releaseResource}, so every kind has one set of safety rules.
- *
- * @remarks
- * Handlers read only what jigs itself recorded: the run ID, the identity, and a worktree's
- * clone and branch. A factory-supplied URL never names what gets deleted.
- */
-interface ResourceKind {
-  /** Why the resource must stay for now, or null when it may be removed. */
-  refusal?(row: ResourceRow, run: readonly RunRow[]): Promise<string | null>;
-  /** Remove the resource, tolerating one already gone, and say what happened. */
-  remove(row: ResourceRow): Promise<string>;
+interface ReleaseOutcome {
+  state: Exclude<ResourceState, "failed">;
+  reason: string;
 }
 
-/** What a refusal may read about the run's other resources. */
-type RunRow = Pick<ResourceRow, "kind" | "state">;
+/** What release would do now: leave the resource with a reason, or run the removal. */
+export type ReleaseDecision = ReleaseOutcome | (() => Promise<ReleaseOutcome>);
 
-const removeDirectory = (directory: (runId: string) => string): ResourceKind => ({
-  async remove(row) {
+/** What a decision may read about the run's other resources, as they stand now. */
+type RunResourceState = Pick<ResourceRow, "kind" | "state">;
+
+/**
+ * How jigs releases one kind of resource. Explicit and automatic release and prune all go
+ * through {@link decideRelease}, so every kind has one set of safety rules.
+ *
+ * @remarks
+ * Only jigs records these kinds (`registerResource` refuses them), and handlers read only what
+ * it recorded: the run ID, the identity, and a worktree's clone and branch. A decision's checks
+ * change nothing; the removal it returns acts on exactly what they checked.
+ */
+type ResourceKind = (
+  row: ResourceRow,
+  run: readonly RunResourceState[],
+) => Promise<ReleaseDecision>;
+
+const keep = (reason: string): ReleaseOutcome => ({ state: "kept", reason });
+const released = (reason: string): ReleaseOutcome => ({ state: "released", reason });
+
+const removeDirectory =
+  (directory: (runId: string) => string): ResourceKind =>
+  async (row) =>
+  async () => {
     await rm(directory(row.runId), { recursive: true, force: true });
-    return "removed";
-  },
-});
+    return released("removed");
+  };
 
-const worktree: ResourceKind = {
-  async refusal(row) {
-    if (row.repoDir === null || row.branch === null) return "not provisioned by jigs";
-    if (existsSync(row.identity) && (await isWorktreeDirty(row.identity))) {
-      return "uncommitted work kept";
-    }
-    return null;
-  },
-  async remove(row) {
-    const repoDir = row.repoDir as string;
-    const branch = row.branch as string;
+function worktreeOf(row: ResourceRow): { path: string; repoDir: string; branch: string } {
+  if (row.repoDir === null || row.branch === null) {
+    throw new Error(`worktree record ${row.identity} has no clone or branch`);
+  }
+  return { path: row.identity, repoDir: row.repoDir, branch: row.branch };
+}
+
+const worktree: ResourceKind = async (row) => {
+  const { path, repoDir, branch } = worktreeOf(row);
+  if (existsSync(path) && (await isWorktreeDirty(path))) return keep("uncommitted work kept");
+  return async () => {
     const unmerged = await fetchOriginDefault(repoDir).then(
       () => countUnmergedCommits(repoDir, branch),
       () => null,
     );
     // Forced only when merged, where nothing left in the tree can be lost.
-    if (existsSync(row.identity)) {
-      await git(
-        ["worktree", "remove", row.identity, ...(unmerged === 0 ? ["--force"] : [])],
-        repoDir,
-      );
+    if (existsSync(path)) {
+      await git(["worktree", "remove", path, ...(unmerged === 0 ? ["--force"] : [])], repoDir);
     }
     await git(["worktree", "prune"], repoDir);
     if (unmerged !== 0) {
-      return unmerged === null
-        ? "worktree removed; branch kept because its ancestry could not be verified"
-        : `worktree removed; branch kept with ${unmerged} unmerged commit(s)`;
+      return released(
+        unmerged === null
+          ? "worktree removed; branch kept because its ancestry could not be verified"
+          : `worktree removed; branch kept with ${unmerged} unmerged commit(s)`,
+      );
     }
     // Pin and recheck the ref so an independently advanced branch stays.
     const ref = `refs/heads/${branch}`;
@@ -74,81 +84,84 @@ const worktree: ResourceKind = {
     if (sha !== null && (await countUnmergedCommits(repoDir, sha)) === 0) {
       await git(["update-ref", "-d", ref, sha], repoDir);
     }
-    return "worktree and merged branch removed";
-  },
+    return released("worktree and merged branch removed");
+  };
 };
 
-interface GithubBranch {
-  owner: string;
-  repo: string;
-  name: string;
-  api: string;
-}
-
-function githubBranch(identity: string): GithubBranch | null {
+function githubBranch(identity: string) {
   const parsed = /^([^/:]+)\/([^/:]+):(.+)$/.exec(identity);
-  if (parsed === null) return null;
+  if (parsed === null) throw new Error(`branch record ${identity} is not owner/repo:branch`);
   const [, owner = "", repo = "", name = ""] = parsed;
   const encoded = name.split("/").map(encodeURIComponent).join("/");
-  return { owner, repo, name, api: `/repos/${owner}/${repo}/git/refs/heads/${encoded}` };
+  return { owner, repo, name, ref: `/repos/${owner}/${repo}/git/ref/heads/${encoded}` };
 }
 
-const absent = (error: unknown): boolean =>
-  error instanceof GithubApiError && (error.status === 404 || error.status === 422);
+/** The branch's head SHA on GitHub, or null when it does not exist. */
+async function headOf(ref: string): Promise<string | null> {
+  try {
+    return (await githubGet<{ object: { sha: string } }>(ref)).object.sha;
+  } catch (error) {
+    if (error instanceof GithubApiError && error.status === 404) return null;
+    throw error;
+  }
+}
 
-const branch: ResourceKind = {
-  async refusal(row) {
-    const target = githubBranch(row.identity);
-    if (target === null) return "not a GitHub branch identity";
-    const { owner, repo, name } = target;
-    const head = await githubGet<{ object: { sha: string } }>(
-      target.api.replace("/git/refs/", "/git/ref/"),
-    ).catch((error: unknown) => {
-      if (absent(error)) return null;
-      throw error;
-    });
-    if (head === null) return null;
-    const sha = head.object.sha;
-    const pulls = await githubGetAll<{
-      number: number;
-      state: string;
-      merged_at: string | null;
-      head: { ref: string; sha: string };
-    }>(`/repos/${owner}/${repo}/pulls?state=all&head=${encodeURIComponent(`${owner}:${name}`)}`);
-    const own = pulls.filter((pull) => pull.head.ref === name);
-    const open = own.find((pull) => pull.state === "open");
-    if (open !== undefined) return `pull request #${open.number} is still open`;
-    // A squash merge leaves the branch's commits off the default branch, so a
-    // merged pull request at this exact head is the other proof of merged work.
-    if (own.some((pull) => pull.merged_at !== null && pull.head.sha === sha)) return null;
+const branch: ResourceKind = async (row) => {
+  const { owner, repo, name, ref } = githubBranch(row.identity);
+  const sha = await headOf(ref);
+  if (sha === null) return released("already absent on GitHub");
+  const pulls = await githubGetAll<{
+    number: number;
+    state: string;
+    merged_at: string | null;
+    head: { ref: string; sha: string };
+  }>(`/repos/${owner}/${repo}/pulls?state=all&head=${encodeURIComponent(`${owner}:${name}`)}`);
+  const own = pulls.filter((pull) => pull.head.ref === name);
+  const open = own.find((pull) => pull.state === "open");
+  if (open !== undefined) return keep(`pull request #${open.number} is still open`);
+  // A squash merge leaves the branch's commits off the default branch, so a
+  // merged pull request at this exact head is the other proof of merged work.
+  if (!own.some((pull) => pull.merged_at !== null && pull.head.sha === sha)) {
     const { default_branch } = await githubGet<{ default_branch: string }>(
       `/repos/${owner}/${repo}`,
     );
     const { ahead_by } = await githubGet<{ ahead_by: number }>(
       `/repos/${owner}/${repo}/compare/${encodeURIComponent(default_branch)}...${sha}`,
     );
-    return ahead_by === 0 ? null : `${ahead_by} commit(s) are not on ${default_branch}`;
-  },
-  async remove(row) {
-    const target = githubBranch(row.identity) as GithubBranch;
-    try {
-      await githubRequest("DELETE", target.api);
-      return "deleted on GitHub";
-    } catch (error) {
-      if (absent(error)) return "already absent on GitHub";
-      throw error;
+    if (ahead_by > 0) return keep(`${ahead_by} commit(s) are not on ${default_branch}`);
+  }
+  return async () => {
+    // GitHub has no conditional delete, so the head is read again just before it.
+    if ((await headOf(ref)) !== sha) {
+      return { state: "live", reason: "the branch moved after it was checked" };
     }
-  },
+    try {
+      await githubRequest("DELETE", ref.replace("/git/ref/", "/git/refs/"));
+      return released("deleted on GitHub");
+    } catch (error) {
+      if (!(error instanceof GithubApiError && (error.status === 404 || error.status === 422))) {
+        throw error;
+      }
+      // 422 is both "no such ref" and a refusal, such as a protected branch.
+      return (await headOf(ref)) === null
+        ? released("already absent on GitHub")
+        : keep(`GitHub refused the delete: ${error.body}`);
+    }
+  };
 };
 
-// Harness homes hold the agent sessions that resume work in a kept worktree.
-const harnessHome = (directory: (runId: string) => string): ResourceKind => ({
-  ...removeDirectory(directory),
-  async refusal(_row, run) {
-    const kept = run.some((other) => other.kind === "worktree" && other.state !== "released");
-    return kept ? "kept with the run's worktree" : null;
-  },
-});
+// Harness homes hold the agent sessions that resume work in the run's worktree,
+// so they wait for its outcome and stay when it stays.
+const harnessHome =
+  (directory: (runId: string) => string): ResourceKind =>
+  async (row, run) => {
+    const trees = run.filter((other) => other.kind === "worktree");
+    if (trees.some((tree) => tree.state === "kept")) return keep("kept with the run's worktree");
+    if (trees.some((tree) => tree.state !== "released")) {
+      return { state: "live", reason: "waits for the run's worktree" };
+    }
+    return removeDirectory(directory)(row, run);
+  };
 
 // Release visits kinds in this order, so a worktree's outcome is known before
 // the harness homes that depend on it.
@@ -160,7 +173,7 @@ const KINDS: Record<string, ResourceKind> = {
   "pi-home": harnessHome((runId) => piRunStatePath(runId)),
 };
 
-/** Whether jigs can release this kind; pull requests and factory kinds are recorded only. */
+/** Whether jigs releases this kind; pull requests and factory kinds are recorded only. */
 export const releasable = (kind: string): boolean => Object.hasOwn(KINDS, kind);
 
 /** Order rows the way release must visit them, recorded-only kinds last. */
@@ -170,37 +183,12 @@ export const releaseOrder = (rows: readonly ResourceRow[]): ResourceRow[] => {
   return rows.toSorted((left, right) => rank(left.kind) - rank(right.kind));
 };
 
-export interface ReleaseOutcome {
-  state: Exclude<ResourceState, "live">;
-  reason: string;
-}
-
-/** Why release would keep this resource right now, or null when it would remove it. */
-export async function releaseRefusal(
+/** Decide what release would do with one releasable resource, changing nothing. */
+export async function decideRelease(
   row: ResourceRow,
-  run: readonly RunRow[],
-): Promise<string | null> {
-  return (await KINDS[row.kind]?.refusal?.(row, run)) ?? null;
-}
-
-/**
- * Remove one releasable resource unless a safety check keeps it; errors become `failed`.
- * `run` is every resource of the same run, with states as they stand now.
- */
-export async function releaseResource(
-  row: ResourceRow,
-  run: readonly RunRow[],
-): Promise<ReleaseOutcome> {
+  run: readonly RunResourceState[],
+): Promise<ReleaseDecision> {
   const kind = KINDS[row.kind];
-  if (kind === undefined) return { state: "kept", reason: "recorded only" };
-  try {
-    const refusal = await releaseRefusal(row, run);
-    if (refusal !== null) return { state: "kept", reason: refusal };
-    return { state: "released", reason: await kind.remove(row) };
-  } catch (error) {
-    return {
-      state: "failed",
-      reason: `release failed: ${error instanceof Error ? error.message : String(error)}`,
-    };
-  }
+  if (kind === undefined) return released("recorded only");
+  return kind(row, run);
 }

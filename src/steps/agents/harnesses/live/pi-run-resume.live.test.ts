@@ -34,7 +34,8 @@ beforeAll(() => {
   tmp = makeTmpDir();
   piHomes = path.join(tmp, "pi-homes");
   const pi = createPiDriver({
-    preparePiHome: (runId, source) => preparePiInvocationHome(runId, source, { baseDir: piHomes }),
+    preparePiHome: async (runId, source) =>
+      preparePiInvocationHome(runId, source, { baseDir: piHomes }),
     executePi,
   });
   deps = {

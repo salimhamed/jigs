@@ -153,7 +153,8 @@ generated `registerResource({ kind, identity, url })` step from `#jigs/steps`. K
 plus identity is stable: retrying the same URL is idempotent, while a later URL
 updates that identity. `jigs status <run-id>` reads these records independently of the
 workflow's result. jigs records its own worktrees, run directories, agent homes and
-pushed branches itself.
+pushed branches itself, and those kinds (`worktree`, `branch`, `run-directory`,
+`codex-home`, `pi-home`) are reserved: `registerResource` refuses them.
 
 Keep a non-idempotent external creator and registration as two durable steps.
 Await the creator, then register what it returned; replay reuses the creator's
@@ -161,9 +162,9 @@ recorded result and retries registration without recreating the external
 resource. An idempotent custom step may instead import `registerResource` from
 `@jigs-ai/jigs/steps/runtime` and call it before returning.
 
-Use a short stable identity and an absolute URL. A kind jigs does not release
-itself is recorded only: `jigs status` and `jigs resources list` show it, and
-nothing ever deletes it. A recorded URL never names what jigs deletes.
+Use a short stable identity and an absolute URL. A registered resource is recorded
+only: `jigs status` and `jigs resources list` show it, it is marked released with
+the run's other resources, and nothing ever deletes it.
 
 For delivery, run `jigs recipe add linear-ticket-to-pr`; it registers the workflow. The copied
 `workflows/linear-ticket-to-pr/` holds the workflow file and `delivery/`: the three phases
