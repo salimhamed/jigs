@@ -27,11 +27,12 @@ export async function cancelRun(runId: string, deps: CancelDeps): Promise<Cancel
   const run = (await lookup.json()) as {
     runId: string;
     status: string;
+    suspensions: unknown[];
   };
 
-  // A suspended run (status `suspended`) holds no process, so there is nothing
-  // to destroy and nothing to ask about. Only work actually in flight earns the prompt.
-  if (run.status === "running" && deps.force !== true) {
+  // A parked run holds no process, so there is nothing to destroy and nothing
+  // to ask about. Only work actually in flight earns the prompt.
+  if (run.status === "running" && run.suspensions.length === 0 && deps.force !== true) {
     if (deps.confirm === undefined) {
       throw new JigsError(
         "refusing to cancel an in-flight run without confirmation",

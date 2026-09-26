@@ -12,7 +12,7 @@ import { z } from "zod";
 import { ensureRegistry, registrySql } from "../steps/runtime/registry.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { createApp } from "./app.ts";
-import { listJobRunIds, listRunDeadJobs } from "./queue.ts";
+import { listRunDeadJobs } from "./queue.ts";
 
 const adminUrl = new URL(
   process.env.WORKFLOW_POSTGRES_URL ?? "postgres://jigs:jigs@localhost:5439/jigs",
@@ -295,7 +295,6 @@ test("delayed and exhausted deliveries remain visible and do not retry after can
     (await eventsFor(runId)).filter((event) => event.eventType === "run_cancelled"),
   ).toHaveLength(1);
   expect(await jobsFor(runId)).toHaveLength(2);
-  expect(await listJobRunIds(registrySql())).toMatchObject({ dead: [runId], live: [runId] });
   expect(await listRunDeadJobs(registrySql(), runId)).toHaveLength(1);
 
   await wake(delayed);

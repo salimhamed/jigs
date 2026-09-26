@@ -116,7 +116,7 @@ Anything else is **external** and prints its own token.
 ## Diagnosing
 
 ```sh
-jigs status          # which run, and what status it is really in
+jigs status          # which run, and what status it is in
 jigs status <run-id> # the run itself
 jigs service logs  # the service process's own stdout, which is a different thing
 ```
@@ -126,17 +126,12 @@ jigs service logs  # the service process's own stdout, which is a different thin
 holding the run's resume, each with the SQL that puts it back on the queue.
 Print the SQL to the human; do not run it for them.
 
-Statuses worth knowing:
-
-- **suspended** — the run is parked on a satisfier and is fine. See below.
-- **stalled** — the queue gave up on a job of this run's, holds no live one to
-  replace it, and no step is in flight. Nothing is coming to move it. This is
-  the status that means the run is genuinely stuck, and `jigs status <run-id>` names the
-  dead job.
-- **running** with no step in flight is an ordinary gap between steps, not a
-  stall.
-
-A run that is suspended is not stuck; a run that is stalled is.
+The status is the Workflow SDK's own: `pending`, `running`, `completed`,
+`failed` or `cancelled`. A parked run stays `running`; its `WAITING` column
+(`suspensions` in `--json`) says what it is parked on, and it is fine. A
+`running` run with nothing in `WAITING` whose `ACTIVITY` age keeps growing with
+no step in flight may be stuck: `jigs status <run-id>` lists any queue job that
+died holding its resume.
 
 ## Needs-human halts
 
@@ -146,8 +141,8 @@ without one, the ticket's creator) and its assignee, each once. The
 comment says in plain words what paused and why, what the ticket is about, and
 either numbered questions to choose between or what to repair before retrying;
 its footer names the run, where it paused, and links its dashboard page.
-`jigs status` shows the run as `suspended`; `jigs status <run-id>` prints the question
-itself and the comment URL.
+`jigs status` shows the run as `running` with the halt in `WAITING`;
+`jigs status <run-id>` prints the question itself and the comment URL.
 
 The answer goes **on the ticket**, in that comment thread — with option letters
 like `1a, 2b`, or in plain words. Unless the operator has delegated that to you,
@@ -248,7 +243,7 @@ Confirm these actions when the current request has not already authorized them:
 - `jigs resources prune --apply` — it removes the preview's eligible local
   resources after proving the factory service and everything it started are stopped.
 - `jigs service restart`, `jigs service stop`, `jigs down`, `jigs up --restart-service` or
-  `jigs upgrade` while `jigs status` shows a running or suspended run. `up` and
+  `jigs upgrade` while `jigs status` shows a pending or running run. `up` and
   `upgrade` ask before restarting over one; `--force` is the human's call.
 - Editing the `bindings` section in `jigs.config.ts` — changing a `remote:` repoints
   that binding's clone, and a new binding is not cloned until the next

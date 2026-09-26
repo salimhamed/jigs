@@ -108,7 +108,6 @@ beforeEach(() => {
   vi.spyOn(sql, "registrySql").mockReturnValue({} as never);
   vi.spyOn(sql, "currentFactory").mockReturnValue("factory-test");
   vi.spyOn(sql, "listResources").mockResolvedValue([]);
-  vi.spyOn(queue, "listJobRunIds").mockResolvedValue({ dead: [], live: [] });
   vi.spyOn(queue, "listRunDeadJobs").mockResolvedValue([]);
   vi.stubEnv("WORKFLOW_LOCAL_DATA_DIR", dataDir);
   vi.stubEnv("XDG_DATA_HOME", path.join(dataDir, "resources"));
@@ -706,29 +705,6 @@ test("a steps request for a run nobody launched is a 404", async () => {
   expect(res.status).toBe(404);
 });
 
-test("GET /api/runs/:runId reports a stalled run as stalled, like `jigs status` does", async () => {
-  // Status list and detail must not disagree about the same run, so both
-  // read the one derivation in runs.ts.
-  setWorld({
-    specVersion: SPEC_VERSION_CURRENT,
-    runs: { get: async () => ({ status: "running", createdAt: new Date() }) },
-    steps: { list: async () => ({ data: [] }) },
-    hooks: { list: async () => ({ data: [] }) },
-  } as unknown as Parameters<typeof setWorld>[0]);
-  vi.spyOn(queue, "listJobRunIds").mockResolvedValue({
-    dead: [RUN],
-    live: [],
-  });
-
-  const res = await app.request(`/api/runs/${RUN}`);
-
-  expect(res.status).toBe(200);
-  expect(await res.json()).toMatchObject({
-    runId: RUN,
-    status: "stalled",
-  });
-});
-
 test("GET /api/runs/:runId reports the run's resources and claim from its state read", async () => {
   const row = {
     factory: "factory-test",
@@ -819,7 +795,7 @@ test("GET /api/runs/:runId says what each park is waiting for, and where to act"
   // The claim is held for the run's whole life, so it is no suspension and
   // never appears; the other two explain themselves without a metadata read.
   expect(await res.json()).toMatchObject({
-    status: "suspended",
+    status: "running",
     suspensions: [
       {
         token: MARKER,
@@ -855,7 +831,7 @@ test("a halt whose comment Linear will not hand back keeps the park it can state
   ]);
 });
 
-test("a run holding only its ticket claim is running, not suspended", async () => {
+test("a run holding only its ticket claim is not parked", async () => {
   runHolding(CLAIM);
 
   const res = await app.request(`/api/runs/${RUN}`);

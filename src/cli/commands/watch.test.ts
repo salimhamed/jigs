@@ -49,7 +49,6 @@ test("a run first seen already finished is loud, not just new", () => {
 test("a finished step and the park that follows it are two lines, in that order", () => {
   const before = run();
   const after = run({
-    status: "suspended",
     steps: 2,
     lastStep: { name: "openPullRequest", status: "completed", at: "2026-08-26T12:00:00.000Z" },
     suspensions: [
@@ -69,10 +68,26 @@ test("a finished step and the park that follows it are two lines, in that order"
   );
 });
 
-test("a woken run resumes, and an unchanged one says nothing", () => {
-  const parked = run({ status: "suspended" });
-  expect(names(runEvents(parked, run(), AT))).toEqual(["resumed"]);
+const parked = run({
+  suspensions: [
+    { token: "github:pr:acme/api#41", kind: "pull-request", reason: "waiting on acme/api#41" },
+  ],
+});
+
+test("parking and waking come from the run's suspensions, not its status", () => {
+  const suspended = runEvents(run(), parked, AT);
+  expect(names(suspended)).toEqual(["suspended"]);
+  expect(suspended[0]?.status).toBe("running");
+  const resumed = runEvents(parked, run(), AT);
+  expect(names(resumed)).toEqual(["resumed"]);
+  expect(resumed[0]?.detail).toBe("running");
   expect(runEvents(parked, parked, AT)).toEqual([]);
+});
+
+test("a parked run that finishes reports only that it finished", () => {
+  expect(names(runEvents(parked, run({ status: "cancelled", suspensions: [] }), AT))).toEqual([
+    "finished",
+  ]);
 });
 
 test("a finished event carries only the run status", () => {
@@ -93,10 +108,13 @@ const deps = () => ({
 
 test("the first poll states what is in play, then only what changed", async () => {
   respond([run(), run({ runId: "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ", status: "completed" })]);
-  respond([run({ status: "stalled" })]);
+  respond([run({ status: "failed" })]);
   await watchRuns(deps(), { polls: 2 });
   // The completed run is history, not something to follow.
-  expect(lines).toEqual([`${AT} ${RUN} AGE-317 watching -`, `${AT} ${RUN} AGE-317 status stalled`]);
+  expect(lines).toEqual([
+    `${AT} ${RUN} AGE-317 watching -`,
+    `${AT} ${RUN} AGE-317 finished failed`,
+  ]);
 });
 
 test("--json emits one JSON event per line", async () => {

@@ -31,8 +31,6 @@ export interface RunFacts {
   tokens?: readonly string[];
   /** The run's steps, oldest first, where the caller read them. */
   steps?: readonly RunStepFact[];
-  /** Whether the queue gave up on the run's resume with nothing in flight. */
-  stalled?: boolean;
 }
 
 export interface RunStep {
@@ -41,13 +39,10 @@ export interface RunStep {
   at: string | null;
 }
 
-/** One run as plain data: the World's run with jigs' overlays, its hooks and its resources. */
+/** One run as plain data: the World's run, its hooks and its resources. */
 export interface RunState {
   runId: string;
-  /**
-   * The World's status, overlaid with `suspended` (parked on a hook other than its claim) and
-   * `stalled` (its resume job died); null when the World has no such run.
-   */
+  /** The World's status, as the SDK reports it; null when the World has no such run. */
   status: string | null;
   /** The workflow ID the World stores, or null where it was not read. */
   workflowName: string | null;
@@ -61,7 +56,10 @@ export interface RunState {
   /** How many steps the run recorded, or null where nothing read them. */
   steps: number | null;
   lastStep: RunStep | null;
-  /** What the run is parked on: a pull request watch, a needs-human halt, or another event. */
+  /**
+   * What the run is parked on: a pull request watch, a needs-human halt, or another event. A
+   * parked run's status stays `running`; a non-empty list is what says it is waiting.
+   */
   suspensions: RunSuspension[];
   /** The ticket claim hook the run holds for its whole life, or null. */
   claim: string | null;
@@ -81,12 +79,7 @@ const latest = (times: Array<string | null>): string | null =>
     null,
   );
 
-/**
- * Describe one run from what the World said and the rows it recorded. The SDK has neither
- * `suspended` nor `stalled`, so a parked run reads `running` while it waits, and one whose
- * resume job died reads `running` forever; this is where both are named. Suspended wins over
- * stalled: a parked run is waiting on the world, not on a job nobody is going to deliver.
- */
+/** Describe one run from what the World said and the rows it recorded. */
 export function describeRunState(
   runId: string,
   facts: RunFacts,
@@ -113,23 +106,19 @@ export function describeRunState(
     claim: null,
     resources,
   };
-  // A finished run's ordinary hooks are already deleted, and a dead job it
-  // left behind does not restate its status.
+  // A finished run's ordinary hooks are already deleted.
   if (run === null || TERMINAL_RUN_STATUSES.has(run.status)) return stored;
 
   const tokens = facts.tokens ?? [];
-  const live: RunState = {
+  return {
     ...stored,
     lastActivityAt: latest([
       iso(run.updatedAt) ?? createdAt,
       ...(steps ?? []).flatMap((step) => [step.completedAt, step.startedAt]),
     ]),
     claim: tokens.find((token) => token.startsWith(TICKET_TOKEN_PREFIX)) ?? null,
+    suspensions: tokens.flatMap((token) => describeSuspension(token, run.ticket) ?? []),
   };
-  const suspensions = tokens.flatMap((token) => describeSuspension(token, run.ticket) ?? []);
-  if (suspensions.length > 0) return { ...live, status: "suspended", suspensions };
-  // Only a running run can be stalled: nothing was handed to the queue for a pending one.
-  return run.status === "running" && facts.stalled === true ? { ...live, status: "stalled" } : live;
 }
 
 /**
@@ -139,7 +128,7 @@ export function describeRunState(
  * @example
  * ```ts
  * await readRunState(registrySql(), currentFactory(), runId, worldRunFacts);
- * // { runId: "wrun_01K…", status: "suspended", workflowName: "workflow//./workflows/ship//ship",
+ * // { runId: "wrun_01K…", status: "running", workflowName: "workflow//./workflows/ship//ship",
  * //   trigger: "manual", ticket: "<ticket>", …,
  * //   suspensions: [{ kind: "pull-request", reason: "waiting for pull request activity on acme/api#41", … }],
  * //   claim: "linear:ticket:…",

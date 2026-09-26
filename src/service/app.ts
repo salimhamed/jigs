@@ -24,9 +24,8 @@ import { UNRELEASED_STATES } from "../workflow/runtime/resources.ts";
 import { verifyGithubSignature, verifyLinearSignature } from "./ingress.ts";
 import { listRunDeadJobs } from "./queue.ts";
 import { bootPhase, isReady } from "./readiness.ts";
-import { enrichSuspensions, listRuns, runExists, worldRunFacts } from "./runs.ts";
+import { enrichSuspensions, listRunSteps, listRuns, runExists, worldRunFacts } from "./runs.ts";
 import { listSchedules, scheduleChecks } from "./schedules.ts";
-import { listRunSteps } from "./stalls.ts";
 import { startRun } from "./trigger.ts";
 import { noteWake, recordWake } from "./wake-note.ts";
 
@@ -223,8 +222,7 @@ export function createApp(factory: Factory): Hono {
   });
 
   // What the run's own status cannot say: which steps ran, and whether a queue
-  // job died holding its resume. Both are what `jigs status <run-id>` renders as a
-  // timeline, and the second is the only sign of a stall.
+  // job died holding its resume. `jigs status <run-id>` renders both.
   app.get("/api/runs/:runId/steps", async (c) => {
     const runId = c.req.param("runId");
     if (!(await runExists(runId))) return c.json({ error: "not found" }, 404);

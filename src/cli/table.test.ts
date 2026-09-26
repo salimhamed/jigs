@@ -6,8 +6,8 @@ test("columns are padded to the widest cell and the last column is not", () => {
     ["RUN", "STATUS"],
     [
       ["01K3", "running"],
-      ["01K3ANBZ", "suspended"],
+      ["01K3ANBZ", "completed"],
     ],
   );
-  expect(lines).toEqual(["RUN       STATUS", "01K3      running", "01K3ANBZ  suspended"]);
+  expect(lines).toEqual(["RUN       STATUS", "01K3      running", "01K3ANBZ  completed"]);
 });

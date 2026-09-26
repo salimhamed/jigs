@@ -71,8 +71,9 @@ blocker saying no checks have reported, either CI has not started on that
 commit yet or the repository has none. jigs never merges without CI: add a CI
 workflow to the repository, or merge it yourself.
 
-If `jigs status` reports a run as `stalled`, nothing is going to move it; its
-detail view shows the step or queue job that died and how to requeue it.
+A run that shows `running` but whose `ACTIVITY` age keeps growing with no step
+in flight may be stuck. `pnpm exec jigs status <run>` lists any dead queue job
+and how to requeue it.
 
 ## Doctor reports webhook deliveries rejected with 401
 

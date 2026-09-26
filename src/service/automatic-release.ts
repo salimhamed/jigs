@@ -21,9 +21,8 @@ import type { Factory } from "../workflow/factory.ts";
 import type { ReleaseAction, ReleasePolicy, RunOutcome } from "../workflow/runtime/release.ts";
 import { RELEASABLE_KINDS, type ResourceRecord } from "../workflow/runtime/resources.ts";
 import { isReady } from "./readiness.ts";
-import { worldRunFacts } from "./runs.ts";
+import { runsWithActiveStep, worldRunFacts } from "./runs.ts";
 import { onShutdown } from "./shutdown.ts";
-import { runsWithActiveStep } from "./stalls.ts";
 
 /** Recovery interval for discovering terminal runs that still need cleanup. */
 export const AUTOMATIC_RELEASE_INTERVAL_MS = 60_000;

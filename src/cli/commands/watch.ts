@@ -119,20 +119,21 @@ export function runEvents(
       event(next, at, "step", `${next.steps} ${next.lastStep.name} ${next.lastStep.status}`),
     );
   }
-  if (next.status !== previous.status) events.push(statusEvent(previous, next, at));
+  if (TERMINAL_RUN_STATUSES.has(next.status)) {
+    if (next.status !== previous.status)
+      events.push(event(next, at, "finished", finishedDetail(next)));
+    return events;
+  }
+  if (next.status !== previous.status) events.push(event(next, at, "status", next.status));
+  if (parked(next) && !parked(previous)) {
+    events.push(event(next, at, "suspended", next.suspensions.map(suspensionLine).join("; ")));
+  } else if (parked(previous) && !parked(next)) {
+    events.push(event(next, at, "resumed", next.status));
+  }
   return events;
 }
 
-function statusEvent(previous: RunListRun, next: RunListRun, at: string): WatchEvent {
-  if (TERMINAL_RUN_STATUSES.has(next.status)) {
-    return event(next, at, "finished", finishedDetail(next));
-  }
-  if (next.status === "suspended") {
-    return event(next, at, "suspended", next.suspensions.map(suspensionLine).join("; "));
-  }
-  if (previous.status === "suspended") return event(next, at, "resumed", next.status);
-  return event(next, at, "status", next.status);
-}
+const parked = (run: RunListRun): boolean => run.suspensions.length > 0;
 
 const finishedDetail = (run: RunListRun): string => run.status;
 
