@@ -131,14 +131,18 @@ with each answer. The unit tests use a stubbed `executeJev`.
      `watchPullRequest` drops snapshots that did not change. It is also the
      first Jev call outside a workflow, so it calls the driver directly. A
      wrongly skipped wake is covered by polling nudges.
-7. **Builder model choice**
+7. **Ticket size: model routing and budgets**
    - **Where:** `recipes/linear-ticket-to-pr/linear-ticket-to-pr.ts`, after
      `reviewTicket`.
    - **Decides:** a score of the ticket and brief on the scale trivial, small,
      medium, large.
-   - **Acts:** trivial and small use a lighter builder. The `agents` map gains a
-     `builderLight` entry.
-   - **Fallback:** the default builder.
+   - **Acts:**
+     - Trivial and small tickets use `builderLight` and `reviewerLight`, new
+       entries in the recipe's `agents` map. By default those are Claude Sonnet.
+     - The size sets `budget.reviewRounds` (1, 2, 3, 3) and
+       `budget.attemptsPerUpdate` (1, 2, 3, 3). A budget passed as a run input
+       still wins.
+   - **Fallback:** the default agents and budgets.
 8. **Failure triage**
    - **Where:** the recipe's error handling, for an agent or step error that is
      not `DeliveryStopped`.
@@ -178,10 +182,10 @@ Then decide which sites to keep, move to shadow mode, or drop.
 
 ## Open questions
 
-- **Site 7:** whether it is worth doing at all. Routing easy tickets to a
-  cheaper model only pays off if a cheaper model is acceptable for them.
-
 ## Resolved
+
+- **Site 7:** do both model routing and budgets. Use Jev as aggressively as
+  possible.
 
 - **Factory dependency in CI:** the factory pins prereleases of this branch
   published to GitHub Packages, versioned `<next>-jev.N`.
