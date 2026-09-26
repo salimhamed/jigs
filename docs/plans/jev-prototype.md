@@ -103,16 +103,21 @@ with each answer. The unit tests use a stubbed `executeJev`.
      candidate reply is found. `checkForTicketHumanReply` is a step, so the
      question is asked from the workflow side.
    - **Decides:** yes/no, "does this comment answer what we asked?"
-   - **Acts:** no advances the cursor past the comment and keeps waiting.
+   - **Acts:** no excludes that comment by ID and reads again on the same wake.
+     The cursor stays put, because a real answer may be in the same read.
    - **Fallback:** accept the comment, as today.
+   - **Status:** done. The questions live in `src/workflow/linear/decisions.ts`,
+     and `bindLinearSteps` takes `executeJev`.
 4. **Ticket readiness**
-   - **Where:** `reviewTicket` in `src/workflow/linear/review.ts`, before the
-     reviewer agent runs.
+   - **Where:** `reviewTicket` in `src/workflow/linear/review.ts`, once, before
+     the first reviewer turn. The reviewer judges the human's reply, so Jev and
+     the human cannot loop.
    - **Decides:** a choice of reason: ready, no acceptance criteria, missing
      reproduction, conflicting requirements, or too large for one PR.
    - **Acts:** any reason other than ready halts for a human, with fixed text
      for that reason, because Jev cannot write the question itself.
    - **Fallback:** the reviewer agent runs as today.
+   - **Status:** done.
 5. **Review convergence**
    - **Where:** `implementAndReview`, from round 2 onward.
    - **State:** the ledger of rounds: how many findings each round had, and
@@ -125,8 +130,13 @@ with each answer. The unit tests use a stubbed `executeJev`.
      `resumeAndLog`.
    - **Decides:** yes/no, "could this event change what the waiting run should
      do?"
-   - **Acts:** no records the event and does not wake the run.
-   - **Fallback:** wake the run.
+   - **Acts:** no logs `reason=not-relevant` and does not wake the run.
+   - **Never asked:** pull request closed, reopened, synchronize and
+     ready_for_review; completed check suites; `status` events; Linear removals.
+   - **Fallback:** wake the run. A missing `OPENROUTER_API_KEY` or a failed
+     call also wakes.
+   - **Status:** done, in `src/service/wake-relevance.ts`. Decisions are logged
+     under the run directory named `ingress`.
    - **Why it is the least valuable site:** wakes are already cheap, because
      `watchPullRequest` drops snapshots that did not change. It is also the
      first Jev call outside a workflow, so it calls the driver directly. A
@@ -152,6 +162,28 @@ with each answer. The unit tests use a stubbed `executeJev`.
      - needs a human: note on the ticket and move it to Todo.
      - a jigs bug: rethrow.
    - **Fallback:** rethrow, as today.
+
+### More candidates
+
+These were found while building sites 3, 4 and 6 and are not built yet.
+
+- **Agent start failures** (`runAgentOrHalt`): today only failed tool checks
+  halt. Jev could sort any other agent error into transient (retry), needs a
+  human (halt with the error), or bug (throw). This overlaps site 8 and may be
+  the better home for it, since every workflow calls this routine.
+- **Abandoned halts** (`haltForHuman`): a choice on the accepted reply between
+  "answered" and "stop this work". A confident "stop" would end the run instead
+  of feeding "never mind, closing this" to the next agent.
+- **Risky assumptions** (`reviewTicket`): a yes/no on whether the reviewer's
+  assumptions are risky enough to ask about first, rather than posting them as
+  a note and going ahead.
+- **Stalled runs** (`src/service/stalls.ts`): a choice on a run's recent steps
+  and errors between healthy, slow and stuck, shown by `jigs status`.
+- **Poll cadence** (`src/service/nudge.ts`): a score of how soon a parked run is
+  likely to have something to do, to poll more often while CI is running and
+  less often while waiting on a person.
+- **Workflow routing** (`src/service/trigger.ts`): a choice of which workflow a
+  new ticket should start, for factories with several.
 
 ## Phase 3: factory sites (jigs-factory-js)
 
