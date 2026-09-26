@@ -151,7 +151,8 @@ with each answer. The unit tests use a stubbed `executeJev`.
 
 ## Phase 3: factory sites (jigs-factory-js)
 
-These run on a branch of the factory that depends on this jigs branch.
+These run on a branch of the factory that pins a GitHub Packages prerelease of
+this jigs branch.
 
 9. **`fix-ci-loop`:** a choice between caused by the change, flaky or
    infrastructure, and base branch broken. Flaky reruns the checks without
@@ -177,7 +178,10 @@ Then decide which sites to keep, move to shadow mode, or drop.
 
 ## Open questions
 
-- **Lighter builder (site 7):** which model?
-- **Factory dependency in CI:** how the factory depends on this unreleased jigs
-  branch there. Either a git dependency on the branch, or a prerelease
-  published to GitHub Packages.
+- **Site 7:** whether it is worth doing at all. Routing easy tickets to a
+  cheaper model only pays off if a cheaper model is acceptable for them.
+
+## Resolved
+
+- **Factory dependency in CI:** the factory pins prereleases of this branch
+  published to GitHub Packages, versioned `<next>-jev.N`.
