@@ -202,7 +202,10 @@ function configuredProviders(): Record<Integration, boolean> {
         Object.keys(bindings).length > 0 ||
         (webhooks?.github.enabled ?? false) ||
         github.identities.some((identity) => identity.mode === "app"),
-      linear: (webhooks?.linear.enabled ?? false) || linear.identity.mode === "app",
+      linear:
+        (webhooks?.linear.enabled ?? false) ||
+        linear.identity.mode === "app" ||
+        linear.operator !== undefined,
     };
   } catch {
     return { github: false, linear: false };
@@ -217,6 +220,10 @@ export function doctorChecks(workflows: WorkflowManifests): Check[] {
     ...(requires.aws ? (["aws"] as const) : []),
   ]);
   const configured = configuredProviders();
+  // An operator override asks for Linear even where no workflow requires it.
+  if (Object.values(workflows).some((entry) => entry.linear?.operator !== undefined)) {
+    configured.linear = true;
+  }
   const provider = (name: Integration, checks: () => Check[]): Check[] => {
     const needing = users.get(name) ?? [];
     return needing.length > 0 || configured[name] ? neededByWorkflows(checks(), needing) : [];

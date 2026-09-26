@@ -59,3 +59,59 @@ test("no operator anywhere reads as none", async () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("a run whose workflow is no longer in the factory warns and uses the factory's operator", async () => {
+  const root = factory("salim@example.com");
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    expect(
+      await runOperator({ workflowRunId: "r", workflowName: "compiled-renamed" }, definition),
+    ).toBe("salim@example.com");
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("compiled-renamed"));
+  } finally {
+    warn.mockRestore();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a workflow module that throws on import reads as an unknown operator, not a failure", async () => {
+  const root = factory("salim@example.com");
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    const broken = {
+      ...definition,
+      workflows: {
+        ...definition.workflows,
+        broken: async () => {
+          throw new Error("syntax error in broken.ts");
+        },
+      },
+    };
+    expect(
+      await runOperator({ workflowRunId: "r", workflowName: "compiled-own" }, broken),
+    ).toBeNull();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("syntax error in broken.ts"));
+  } finally {
+    warn.mockRestore();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("an unreadable factory config reads as an unknown operator", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "jigs-mentions-"));
+  vi.stubEnv("JIGS_FACTORY_ROOT", root);
+  writeFileSync(path.join(root, "jigs.config.ts"), "export default { linear: { operator: 1 } };");
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    expect(
+      await runOperator({ workflowRunId: "r", workflowName: "compiled-plain" }, definition),
+    ).toBeNull();
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("could not read the Linear operator"),
+    );
+  } finally {
+    warn.mockRestore();
+    rmSync(root, { recursive: true, force: true });
+  }
+});

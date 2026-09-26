@@ -2,6 +2,7 @@
 // its repair instruction, so preflight, JIT checks and `jigs doctor` render
 // the same text at launch and mid-run.
 
+import type { WorkflowLinearDefinition } from "../workflow/factory.ts";
 import type { WorkflowRequires } from "./index.ts";
 
 /**
@@ -90,7 +91,7 @@ export function failedCheck(id: string, label: string, reason: string, repair: s
 /** A factory's workflows by name, as far as the check catalog reads them. */
 export type WorkflowManifests = Record<
   string,
-  { requires?: WorkflowRequires; linear?: { operator?: string } }
+  { requires?: WorkflowRequires; linear?: WorkflowLinearDefinition }
 >;
 
 /** Map each requirement `pick` reads from a workflow's `requires` to the workflows that name it. */

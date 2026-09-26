@@ -175,3 +175,23 @@ test("in key mode, an operator who is someone else passes without a warning", as
 test("no operator configured means no operator check", () => {
   expect(linearOperatorChecks({ mode: "key" }, [], operatorProbes({}))).toEqual([]);
 });
+
+test("in app mode, an operator who is the viewer gets no key-mode warning", async () => {
+  const salim = { id: "u2", name: "Salim" };
+  const [outcome] = await operatorOutcomes(
+    { mode: "app" },
+    [{ email: "salim@example.com" }],
+    operatorProbes({ "salim@example.com": salim }, salim),
+  );
+  expect(outcome).toMatchObject({ ok: true, detail: "mentions Salim" });
+});
+
+test("in key mode, a viewer lookup that fails still passes the found operator", async () => {
+  const [outcome] = await operatorOutcomes({ mode: "key" }, [{ email: "salim@example.com" }], {
+    viewer: async () => {
+      throw new Error("Linear API 500");
+    },
+    userByEmail: async () => ({ id: "u2", name: "Salim" }),
+  });
+  expect(outcome).toMatchObject({ ok: true, detail: "mentions Salim" });
+});

@@ -4,7 +4,7 @@ import type { Halt } from "../../workflow/linear/halt-for-human.ts";
 
 const { createComment, findUserByEmail, getIssueParticipants, listCommentsSince, runOperator } =
   vi.hoisted(() => ({
-    runOperator: vi.fn(async (): Promise<string | undefined> => undefined),
+    runOperator: vi.fn(async (): Promise<string | null | undefined> => undefined),
     findUserByEmail: vi.fn(
       async (_email: string): Promise<{ id: string; name: string } | null> => null,
     ),
@@ -336,6 +336,35 @@ test("without an operator, extra mentions join the creator and assignee", async 
   );
   expect(findUserByEmail).toHaveBeenCalledTimes(1);
   expect(greeting()).toBe("@[Salim](user-1) @[Dana](user-2) @[Kim](user-5)");
+});
+
+test("an operator that could not be read still posts, mentioning the assignee and extras", async () => {
+  runOperator.mockResolvedValue(null);
+  findUserByEmail.mockImplementation(byEmail);
+  await postTicketNote(
+    "issue-1",
+    { headline: "Done.", notes: [], closing: "", mention: ["kim@example.com"] },
+    context,
+    definition,
+  );
+  expect(greeting()).toBe("@[Dana](user-2) @[Kim](user-5)");
+});
+
+test("a ticket whose people cannot be read still posts, mentioning the operator and extras", async () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  runOperator.mockResolvedValue("op@example.com");
+  findUserByEmail.mockImplementation(byEmail);
+  getIssueParticipants.mockRejectedValueOnce(new Error("Linear API 502"));
+  await postTicketHumanInputRequest(
+    "issue-1",
+    { ...questions, mention: ["kim@example.com"] },
+    context,
+    definition,
+  );
+  expect(createComment).toHaveBeenCalledTimes(1);
+  expect(greeting()).toBe("@[Olu](user-9) @[Kim](user-5)");
+  expect(warn).toHaveBeenCalledWith(expect.stringContaining("Linear API 502"));
+  warn.mockRestore();
 });
 
 test("a custom renderer receives the resolved mentions", async () => {

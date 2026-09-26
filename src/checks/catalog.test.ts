@@ -267,6 +267,20 @@ test("doctor checks the factory's and each workflow's Linear operator, preflight
   expect(preflightIds(linear)).toEqual(["linear.identity"]);
 });
 
+test("doctor checks a set Linear operator even when no workflow requires Linear", () => {
+  factoryWith(
+    '{ service: { dashboardPort: 9090 }, linear: { identity: { mode: "key" }, operator: "salim@example.com" } }',
+  );
+  expect(doctorChecks({ hello: {} }).map((check) => check.id)).toEqual([
+    "linear.identity",
+    "linear.operator",
+  ]);
+  factoryWith('{ service: { dashboardPort: 9090 }, linear: { identity: { mode: "key" } } }');
+  expect(
+    doctorChecks({ hello: { linear: { operator: "dana@example.com" } } }).map((check) => check.id),
+  ).toEqual(["linear.identity", "linear.operator.hello"]);
+});
+
 test("doctor checks a provider the factory configuration asks for", () => {
   const ids = () => doctorChecks({ hello: {} }).map((check) => check.id);
   factoryWith(

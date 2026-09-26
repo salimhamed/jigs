@@ -10,13 +10,27 @@ import type { NamedRunMetadata } from "../runtime/run-context.ts";
 import { loadRunWorkflow } from "../runtime/run-workflow.ts";
 import type { TicketParticipants } from "./render-comment.ts";
 
-/** The operator email this run's comments mention: the workflow's own, else the factory's. */
+/**
+ * The operator email this run's comments mention: the workflow's own, else the
+ * factory's. Undefined when neither sets one; null when the configuration
+ * could not be read, which the comment treats like an operator Linear cannot find.
+ */
 export async function runOperator(
   metadata: NamedRunMetadata,
   definition: FactoryDefinition,
-): Promise<string | undefined> {
-  const workflow = await loadRunWorkflow(metadata, definition);
-  return workflow?.linear?.operator ?? readFactoryConfig(factoryRoot()).linear.operator;
+): Promise<string | null | undefined> {
+  try {
+    const workflow = await loadRunWorkflow(metadata, definition);
+    if (workflow === undefined) {
+      console.warn(
+        `[mentions] no workflow in the factory matches ${metadata.workflowName}; using the factory's linear.operator`,
+      );
+    }
+    return workflow?.linear?.operator ?? readFactoryConfig(factoryRoot()).linear.operator;
+  } catch (err) {
+    console.warn(`[mentions] could not read the Linear operator; skipping: ${err}`);
+    return null;
+  }
 }
 
 async function lookup(email: string, role: "operator" | "mention"): Promise<LinearUser | null> {
@@ -32,6 +46,19 @@ async function lookup(email: string, role: "operator" | "mention"): Promise<Line
   }
 }
 
+async function ticketPeople(
+  issueId: string,
+): Promise<{ creator: LinearUser | null; assignee: LinearUser | null }> {
+  try {
+    return await getIssueParticipants(issueId);
+  } catch (err) {
+    console.warn(
+      `[mentions] could not read the creator and assignee of ${issueId}; skipping: ${err}`,
+    );
+    return { creator: null, assignee: null };
+  }
+}
+
 function once(users: Array<LinearUser | null>): LinearUser[] {
   const seen = new Set<string>();
   return users.filter((user): user is LinearUser => {
@@ -44,15 +71,16 @@ function once(users: Array<LinearUser | null>): LinearUser[] {
 /**
  * Resolve who a comment on the issue mentions: the operator, or the creator
  * when there is no operator, then the assignee, then the extra emails, each
- * person once. An operator Linear cannot find leaves the assignee and extras.
+ * person once. An operator Linear cannot find, or a null operator, leaves the
+ * assignee and extras; a ticket whose people cannot be read leaves the rest.
  */
 export async function resolveParticipants(
   issueId: string,
-  who: { operator?: string | undefined; mention?: readonly string[] | undefined },
+  who: { operator?: string | null | undefined; mention?: readonly string[] | undefined },
 ): Promise<TicketParticipants> {
-  const { creator, assignee } = await getIssueParticipants(issueId);
-  const [operator, ...extra] = await Promise.all([
-    who.operator === undefined ? null : lookup(who.operator, "operator"),
+  const [{ creator, assignee }, operator, ...extra] = await Promise.all([
+    ticketPeople(issueId),
+    typeof who.operator === "string" ? lookup(who.operator, "operator") : null,
     ...(who.mention ?? []).map((email) => lookup(email, "mention")),
   ]);
   const lead = who.operator === undefined ? creator : (operator ?? null);
