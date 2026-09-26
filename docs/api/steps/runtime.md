@@ -1,12 +1,12 @@
-# @jigs-ai/jigs v0.74.0
+# @jigs-ai/jigs v0.75.0
 
 Run directories, resource records and release operations for factory-owned steps.
 Workflow code normally calls the generated `#jigs/steps` wrappers.
 
 A run directory is scratch space owned by one run, kept across waits and retries
-until released. Resource records help people find what a run created; a record
-alone never authorizes deletion. The generated `release` step can release early
-or return a report; the service applies configured release policy when runs end.
+until released. Every resource a run records shows in `jigs status` with its state;
+jigs releases only the kinds it creates itself. The generated `release` step can
+release early or return a report; the service applies release policy when runs end.
 
 ## Run directories
 
@@ -50,11 +50,12 @@ Remove this run's working directory after its work is finished, never while paus
 
 > **registerResource**(`resource`): `Promise`\<`RunResource`\>
 
-Register one resource on the active run.
+Register one resource on the active run so `jigs status` shows it.
 
-Repeating kind + identity is idempotent. A new URL for that identity
-replaces the old URL; concurrent updates are last-committed-wins. Distinct
-identities occupy distinct atomic keys.
+Repeating kind + identity is idempotent; a new URL for that identity replaces the old one.
+The record is observation only: it stays `live` as the run's history and jigs never deletes
+what it names. The kinds jigs records itself (`worktree`, `run-directory`, `branch`,
+`codex-home`, `pi-home`) are reserved.
 
 #### Parameters
 
@@ -88,13 +89,13 @@ Release this run's resources on its success path and return what was removed or 
 
 ###### onFailure
 
-`"release"` \| `"keep"` = `...`
+`"release"` \| `"keep"` = `releaseAction`
 
 What to do with eligible resources after a failed or cancelled run.
 
 ###### onSuccess
 
-`"release"` \| `"keep"` = `...`
+`"release"` \| `"keep"` = `releaseAction`
 
 What to do with eligible resources after a completed run.
 
@@ -105,8 +106,8 @@ What to do with eligible resources after a completed run.
 #### Remarks
 
 Without a policy, uses the workflow's `release`, then the factory's, then the default of
-releasing successful runs and keeping failed ones. The success action is recorded first, so
-automatic cleanup after the run ends never reverses it.
+releasing successful runs and keeping failed ones. Kept records are final: automatic release
+after the run ends only visits records that are still live or failed.
 
 ## Advanced run context
 
