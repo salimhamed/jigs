@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.74.0](https://github.com/salimhamed/jigs/compare/jigs-v0.73.0...jigs-v0.74.0) (2026-09-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* post each ticket note and halt question at most once per run ([#429](https://github.com/salimhamed/jigs/issues/429))
+
+### Bug Fixes
+
+* post each ticket note and halt question at most once per run ([#429](https://github.com/salimhamed/jigs/issues/429)) ([881a28b](https://github.com/salimhamed/jigs/commit/881a28ba3974777fd7329422f66e10fe0f1cd934))
+
 ## [0.73.0](https://github.com/salimhamed/jigs/compare/jigs-v0.72.0...jigs-v0.73.0) (2026-09-26)
 
 
