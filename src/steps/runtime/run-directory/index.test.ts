@@ -2,7 +2,15 @@ import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { createRunDirectory, removeRunDirectory } from "./index.ts";
+
+const registry = vi.hoisted(() => ({ recordRunDirectory: vi.fn(), setResourceState: vi.fn() }));
+vi.mock("../registry.ts", () => ({
+  ...registry,
+  currentFactory: () => "factory-a",
+  registrySql: () => ({}),
+}));
+
+const { createRunDirectory, removeRunDirectory } = await import("./index.ts");
 
 let root: string;
 beforeEach(async () => {
@@ -32,6 +40,22 @@ test("re-entering a run preserves its files while other runs stay isolated", asy
   await removeRunDirectory(first);
   await removeRunDirectory(first);
   await expect(stat(firstDirectory)).rejects.toThrow();
+});
+
+test("the directory is recorded when made and marked released when the workflow removes it", async () => {
+  const directory = await createRunDirectory({ workflowRunId: "wrun_record" });
+  expect(registry.recordRunDirectory).toHaveBeenCalledWith(
+    "run-directory",
+    "wrun_record",
+    directory,
+  );
+  await removeRunDirectory({ workflowRunId: "wrun_record" });
+  expect(registry.setResourceState).toHaveBeenCalledWith(
+    {},
+    { factory: "factory-a", runId: "wrun_record", kind: "run-directory", identity: "wrun_record" },
+    "released",
+    "removed by the workflow",
+  );
 });
 
 test.each(["", "..", "../other", "/tmp/other", "run/other", "run\\other"])(

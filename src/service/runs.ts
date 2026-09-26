@@ -6,16 +6,16 @@ import { getWorld } from "workflow/runtime";
 import type { PullRequestRef } from "../providers/github.ts";
 import { getComment } from "../providers/linear.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
-import type { RunSuspension } from "../run-suspension.ts";
+import {
+  describeSuspension,
+  needsHumanParts,
+  prFromToken,
+  type RunSuspension,
+} from "../run-suspension.ts";
 import { readPullRequestSnapshot } from "../steps/pull-requests/fetch-state.ts";
-import { registrySql } from "../steps/workspaces/sql.ts";
+import { registrySql } from "../steps/runtime/registry.ts";
 import type { Factory } from "../workflow/factory.ts";
-import { TICKET_TOKEN_PREFIX } from "../workflow/linear/claim.ts";
-import { NEEDS_HUMAN_TOKEN_PREFIX } from "../workflow/linear/halt-for-human.ts";
 import { mergeRefusal } from "../workflow/pull-requests/merge-ready.ts";
-import { PULL_REQUEST_TOKEN_PREFIX } from "../workflow/pull-requests/pull-request.ts";
-import { type CleanupView, cleanupFromAttributes } from "../workflow/runtime/cleanup.ts";
-import { type RunResource, resourcesFromAttributes } from "../workflow/runtime/resources.ts";
 import { type JobRunIds, listJobRunIds } from "./queue.ts";
 import { hasActiveStep, listRunSteps, listStepsByRun, type StepView } from "./stalls.ts";
 import { lastWake } from "./wake-note.ts";
@@ -38,7 +38,6 @@ export interface WorldRun {
   /** The run's own arguments and return value, in the world's serialized form. */
   input?: unknown;
   output?: unknown;
-  attributes?: Record<string, string>;
   // Lifted out of the run's stored inputs by the listing below, so callers
   // (and their fakes) never handle the world's serialized form.
   triggerId?: string;
@@ -66,70 +65,7 @@ export function triggerLabel(triggerId: string | undefined): string {
   return scheduleTriggerLabel(end === -1 ? rest : rest.slice(0, end));
 }
 
-export type { RunSuspension } from "../run-suspension.ts";
-
-/**
- * What a run holding this hook is waiting for, or null when the hook is no
- * park at all. The token is the whole answer: it names what the run is waiting
- * on, so nothing has to be written down beside it. The ticket claim is held for
- * the run's whole life and so says nothing about waiting; every other hook is
- * something the run waits on, including a token jigs has never seen. `jigs status`,
- * `jigs watch` and `jigs cancel` all read this one function, or a run one calls
- * suspended is one another refuses to confirm.
- *
- * `ticket` is the identifier the run was launched with, so a halt names the
- * ticket an operator knows rather than the issue UUID inside the token.
- */
-export function describeSuspension(token: string, ticket?: string | null): RunSuspension | null {
-  if (token.startsWith(TICKET_TOKEN_PREFIX)) return null;
-  const pr = prFromToken(token);
-  if (pr !== null) {
-    return {
-      token,
-      kind: "pull-request",
-      reason: `waiting for pull request activity on ${pr.slug}`,
-      url: pr.url,
-    };
-  }
-  // The prefix alone decides the kind: a marker jigs minted is a halt even
-  // when the rest of it is unreadable, and calling that external would point
-  // an operator at the wrong thing to do about it.
-  if (token.startsWith(NEEDS_HUMAN_TOKEN_PREFIX)) {
-    const where = ticket ?? needsHumanParts(token)?.issueId;
-    return {
-      token,
-      kind: "needs-human",
-      reason:
-        where === undefined
-          ? `waiting for a human reply, on a ticket this halt marker does not name (${token})`
-          : `waiting for a human reply on ${where}`,
-    };
-  }
-  return { token, kind: "external", reason: `waiting for an external event (${token})` };
-}
-
-/** `github:pr:owner/repo#N` as the two things an operator needs from it. A
- *  slug this shape does not fit names no page to link to. */
-function prFromToken(token: string): { slug: string; url?: string; pr?: PullRequestRef } | null {
-  if (!token.startsWith(PULL_REQUEST_TOKEN_PREFIX)) return null;
-  const slug = token.slice(PULL_REQUEST_TOKEN_PREFIX.length);
-  const parsed = /^([^/]+)\/([^#]+)#(\d+)$/.exec(slug);
-  if (parsed === null) return { slug };
-  const [, owner, repo, number] = parsed;
-  if (owner === undefined || repo === undefined || number === undefined) return { slug };
-  return {
-    slug,
-    url: `https://github.com/${owner}/${repo}/pull/${number}`,
-    pr: { owner, repo, number: Number(number) },
-  };
-}
-
-/** `jigs:needs-human:<issue>:<comment>` — the halt marker, taken apart. */
-function needsHumanParts(token: string): { issueId: string; commentId: string } | null {
-  if (!token.startsWith(NEEDS_HUMAN_TOKEN_PREFIX)) return null;
-  const [issueId, commentId] = token.slice(NEEDS_HUMAN_TOKEN_PREFIX.length).split(":");
-  return issueId === undefined || commentId === undefined ? null : { issueId, commentId };
-}
+export { describeSuspension, type RunSuspension };
 
 /**
  * What the providers say about one run's suspensions: the pull request the
@@ -378,16 +314,6 @@ async function worldRuns(): Promise<WorldRun[]> {
 
 const worldRun = async (runId: string): Promise<WorldRun> =>
   withTriggerId(await (await getWorld()).runs.get(runId, { resolveData: "all" }));
-
-/** Resources are an observability read, independent of workflow output. */
-export async function listRunResources(runId: string): Promise<RunResource[]> {
-  return resourcesFromAttributes((await worldRun(runId)).attributes);
-}
-
-/** Persistent automatic-cleanup progress, independent of workflow output. */
-export async function readRunCleanup(runId: string): Promise<CleanupView> {
-  return cleanupFromAttributes((await worldRun(runId)).attributes);
-}
 
 // `resolveData: "all"` above is what makes the trigger readable at all — a
 // run's triggerId lives in its stored inputs and the world has no index on

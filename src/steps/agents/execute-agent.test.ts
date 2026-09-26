@@ -1213,7 +1213,7 @@ test("pi run resumes only after finding the real session file", async () => {
     resume: { harness: "pi", id: sessionId, descriptor: "" },
   });
   const { deps, captured, piDeps } = makeDeps();
-  const prepared = piDeps.preparePiHome("run-pi-resume", planPiModel(harness));
+  const prepared = await piDeps.preparePiHome("run-pi-resume", planPiModel(harness));
   writeFileSync(path.join(prepared.sessionDir, `2026-09-21T00-00-00_${sessionId}.jsonl`), "");
   piDeps.executePi = async (options) => {
     captured.piOptions = options;
@@ -1257,7 +1257,7 @@ test("a Pi execution failure during resume still throws", async () => {
     resume: { harness: "pi", id: sessionId, descriptor: "" },
   });
   const { deps, piDeps } = makeDeps();
-  const prepared = piDeps.preparePiHome(
+  const prepared = await piDeps.preparePiHome(
     "run-pi-execution-failure",
     planPiModel(harnesses.pi(source)),
   );
@@ -1281,7 +1281,7 @@ test("a resumed Pi session-id mismatch still throws after launch", async () => {
     resume: { harness: "pi", id: sessionId, descriptor: "" },
   });
   const { deps, piDeps } = makeDeps();
-  const prepared = piDeps.preparePiHome(
+  const prepared = await piDeps.preparePiHome(
     "run-pi-resume-mismatch",
     planPiModel(harnesses.pi(source)),
   );

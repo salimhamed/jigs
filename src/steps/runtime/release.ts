@@ -1,21 +1,53 @@
-import { getWorld } from "workflow/runtime";
 import type { FactoryDefinition } from "../../workflow/factory.ts";
 import type { ReleasePolicy, ReleaseReport } from "../../workflow/runtime/release.ts";
-import { resourcesFromAttributes } from "../../workflow/runtime/resources.ts";
-import { withRunResourceLock } from "../workspaces/registry.ts";
-import { releaseRunResources as applyRelease } from "../workspaces/release.ts";
-import { registrySql } from "../workspaces/sql.ts";
-import { writeCleanupDirective, writeCleanupProgress } from "./cleanup-state.ts";
+import type { ResourceRecord } from "../../workflow/runtime/resources.ts";
+import {
+  currentFactory,
+  listResources,
+  type RegistrySql,
+  registrySql,
+  setResourceState,
+  toRecord,
+  withRunResourceLock,
+} from "./registry.ts";
 import { resolveReleasePolicy } from "./release-policy.ts";
+import { releasable, releaseOrder, releaseResource } from "./resource-kinds.ts";
 import type { NamedRunMetadata } from "./run-context.ts";
+
+/**
+ * Apply one release decision to a run's live and failed resources and return every record.
+ * Explicit and automatic release both call this while holding the run's resource lock.
+ */
+export async function releaseRun(
+  db: RegistrySql,
+  factory: string,
+  runId: string,
+  action: "release" | "keep",
+  keepReason: string,
+): Promise<ResourceRecord[]> {
+  const rows = await listResources(db, { factory, runId });
+  const pending = rows.filter(
+    (row) => releasable(row.kind) && (row.state === "live" || row.state === "failed"),
+  );
+  for (const row of releaseOrder(pending)) {
+    const outcome =
+      action === "keep"
+        ? { state: "kept" as const, reason: keepReason }
+        : await releaseResource(row, rows);
+    // Later kinds read this run's states as they stand, not as they were read.
+    row.state = outcome.state;
+    await setResourceState(db, row, outcome.state, outcome.reason);
+  }
+  return (await listResources(db, { factory, runId })).map(toRecord);
+}
 
 /**
  * Release this run's resources on its success path and return what was removed or kept.
  *
  * @remarks
  * Without a policy, uses the workflow's `release`, then the factory's, then the default of
- * releasing successful runs and keeping failed ones. The success action is recorded first, so
- * automatic cleanup after the run ends never reverses it.
+ * releasing successful runs and keeping failed ones. Kept records are final: automatic release
+ * after the run ends only visits records that are still live or failed.
  *
  * @group Release
  */
@@ -25,42 +57,15 @@ export async function releaseRunResources(
   explicit?: ReleasePolicy,
 ): Promise<ReleaseReport> {
   const policy = explicit ?? (await resolveReleasePolicy(metadata, definition));
-  const action = policy.onSuccess;
-  await writeCleanupDirective(metadata.workflowRunId, action);
-  await writeCleanupProgress(metadata.workflowRunId, {
-    status: "pending",
-    outcome: "success",
-    action,
-  });
-  const sql = registrySql();
-  return withRunResourceLock(sql, metadata.workflowRunId, async (lockedSql) => {
-    await writeCleanupProgress(metadata.workflowRunId, {
-      status: "running",
-      outcome: "success",
-      action,
-    });
-    const report = await applyRelease(policy, metadata, lockedSql, "success");
-    const run = await (await getWorld()).runs.get(metadata.workflowRunId, { resolveData: "none" });
-    const resources = resourcesFromAttributes(run.attributes);
-    const failed = report.worktrees.filter((resource) =>
-      resource.reason.startsWith("release incomplete"),
-    ).length;
-    const released =
-      report.worktrees.filter((resource) => resource.removed).length +
-      (report.runDirectory.removed ? 1 : 0);
-    const kept =
-      report.worktrees.length - failed - report.worktrees.filter((r) => r.removed).length;
-    await writeCleanupProgress(metadata.workflowRunId, {
-      status: failed > 0 ? "failed" : action === "keep" ? "kept" : "complete",
-      outcome: "success",
-      action,
-      released,
-      kept,
-      failed,
-      unknown: resources.filter(
-        (resource) => resource.kind !== "worktree" && resource.kind !== "run-directory",
-      ).length,
-    });
-    return report;
-  });
+  const runId = metadata.workflowRunId;
+  const resources = await withRunResourceLock(registrySql(), runId, (locked) =>
+    releaseRun(
+      locked,
+      currentFactory(),
+      runId,
+      policy.onSuccess,
+      "onSuccess policy keeps run resources",
+    ),
+  );
+  return { policy, resources };
 }

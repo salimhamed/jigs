@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ResourceRecord } from "./resources.ts";
 
 export const releaseSchema = z.strictObject({
   /** What to do with eligible resources after a completed run. */
@@ -17,37 +18,14 @@ export const defaultReleasePolicy = (): ReleasePolicy => ({
   onFailure: "keep",
 });
 
-export interface ReleasedResource {
-  /** The local filesystem path of the managed resource. */
-  path: string;
-  /** Whether the resource was removed. */
-  removed: boolean;
-  /** Why the resource was removed or retained. */
-  reason: string;
-}
-
 /**
- * The result of applying a release policy to one run's managed resources.
+ * The result of applying a release policy to one run's resources.
  *
  * @group Runtime and resources
  */
 export interface ReleaseReport {
   /** The policy applied by this release attempt. */
   policy: ReleasePolicy;
-  /**
-   * Results for the run's worktrees, including paths, branches, removal flags, unmerged commit
-   * counts and reasons for anything retained.
-   */
-  worktrees: (ReleasedResource & {
-    /** The Git branch checked while releasing this worktree. */
-    branch: string;
-    /** Whether the local branch was deleted. */
-    localBranchDeleted: boolean;
-    /** Whether the remote branch was deleted. */
-    remoteBranchDeleted: boolean;
-    /** Commits not proven merged, or `null` when ancestry could not be verified. */
-    unmergedCommits: number | null;
-  })[];
-  /** The scratch directory's local path, removal flag and reason for the result. */
-  runDirectory: ReleasedResource;
+  /** Every resource the run recorded, with its state and reason after this attempt. */
+  resources: ResourceRecord[];
 }

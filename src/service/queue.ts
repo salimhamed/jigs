@@ -2,7 +2,7 @@
 // read-only stall diagnosis owns this small private-schema adapter.
 
 import { sql } from "drizzle-orm";
-import type { RegistrySql } from "../steps/workspaces/registry.ts";
+import type { RegistrySql } from "../steps/runtime/registry.ts";
 
 export interface DeadJobView {
   id: string;

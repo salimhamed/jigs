@@ -83,7 +83,8 @@ the current secret.
 ## An old worktree or directory is still there
 
 That is often on purpose: failed runs, waiting runs and unfinished Git work
-keep their resources. Inspect them with `pnpm exec jigs resources list`, then
+keep their resources. `pnpm exec jigs status <run>` says why each one was kept.
+Inspect them with `pnpm exec jigs resources list`, then
 preview `pnpm exec jigs resources prune` before you remove anything. See
 [CLI commands](/guide/cli#cleaning-up-resources).
 

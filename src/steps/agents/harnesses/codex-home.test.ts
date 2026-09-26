@@ -6,7 +6,6 @@ import {
   codexRunStatePath,
   codexSessionFile,
   prepareCodexInvocationHome,
-  removeCodexRunState,
 } from "./codex-home.ts";
 import { codexInvocationHomeState, makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
@@ -97,15 +96,4 @@ test("a missing real login fails before creating invocation configuration", () =
     }),
   ).toThrow(/no Codex login found.*codex login/);
   expect(existsSync(codexRunStatePath("run-1", options))).toBe(false);
-});
-
-test("removeCodexRunState deletes durable rollouts with the run", () => {
-  const prepared = prepareCodexInvocationHome("run-1", options);
-  rollout(prepared.sessionDir, "0199-thread");
-  prepared.cleanup();
-
-  removeCodexRunState("run-1", options);
-
-  expect(existsSync(codexRunStatePath("run-1", options))).toBe(false);
-  expect(existsSync(realAuthPath)).toBe(true);
 });

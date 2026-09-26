@@ -2,13 +2,13 @@ import { afterEach, expect, test, vi } from "vitest";
 import { WorkflowRunNotFoundError } from "workflow/errors";
 import type { HarnessKind, HarnessRuntime } from "../../checks/harness-runtime.ts";
 import { JigsError } from "../../errors.ts";
-import type { RegistrySql } from "../../steps/workspaces/registry.ts";
+import type { RegistrySql } from "../../steps/runtime/registry.ts";
 import {
   fenceTerminalWorkflowDeliveries,
   gateOnBindingClones,
   gateOnHarnessRuntimes,
+  gateOnRegistry,
   gateOnWebhookSecrets,
-  gateOnWorktreeRegistry,
   gateOnWorldStart,
 } from "./start-world.ts";
 
@@ -140,7 +140,7 @@ test("a rejected ensure exits the process instead of leaving the service up", as
   const exits: number[] = [];
   const errors: string[] = [];
 
-  const proceed = await gateOnWorktreeRegistry({
+  const proceed = await gateOnRegistry({
     sql: connected,
     ensure: () => Promise.reject(new Error("jigs_worktrees predates repo_dir")),
     exit: (code) => exits.push(code),
@@ -157,7 +157,7 @@ test("a connection that cannot be opened exits too, rather than throwing past th
   const exits: number[] = [];
   const errors: string[] = [];
 
-  const proceed = await gateOnWorktreeRegistry({
+  const proceed = await gateOnRegistry({
     // What a malformed WORKFLOW_POSTGRES_URL does: postgres() throws
     // synchronously, before there is anything to ensure.
     sql: () => {
@@ -178,7 +178,7 @@ test("a healthy registry lets the World start", async () => {
   const exits: number[] = [];
   const logs: string[] = [];
 
-  const proceed = await gateOnWorktreeRegistry({
+  const proceed = await gateOnRegistry({
     sql: connected,
     ensure: () => Promise.resolve(),
     exit: (code) => exits.push(code),
@@ -187,7 +187,7 @@ test("a healthy registry lets the World start", async () => {
 
   expect(proceed).toBe(true);
   expect(exits).toEqual([]);
-  expect(logs.join("\n")).toContain("worktree registry ensured");
+  expect(logs.join("\n")).toContain("jigs registry ensured");
 });
 
 test("no configured Postgres exits at the gate instead of starting a registry-less service", async () => {
@@ -195,7 +195,7 @@ test("no configured Postgres exits at the gate instead of starting a registry-le
   const exits: number[] = [];
   const errors: string[] = [];
 
-  const proceed = await gateOnWorktreeRegistry({
+  const proceed = await gateOnRegistry({
     ensure: () => Promise.reject(new Error("never reached")),
     exit: (code) => exits.push(code),
     error: (line) => errors.push(line),

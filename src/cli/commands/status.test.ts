@@ -36,7 +36,7 @@ const result = (over: Partial<StatusResult> = {}): StatusResult => ({
   suspensions: [],
   dashboard: "",
   resources: [],
-  cleanup: { status: "waiting", directive: "automatic" },
+  claim: null,
   ...over,
 });
 
@@ -91,30 +91,42 @@ test("a failed run prints its status without a pull request header", async () =>
   expect(lines.some((line) => line.startsWith("pull request "))).toBe(false);
 });
 
-test("cleanup progress and all resource counts remain visible", async () => {
+test("each resource shows its state and the reason release recorded", async () => {
+  const record = { runId: RUN, updatedAt: "2026-09-04T10:09:00.000Z" };
   respond(
     result({
       status: "completed",
-      cleanup: {
-        status: "failed",
-        directive: "release",
-        outcome: "success",
-        released: 1,
-        kept: 2,
-        failed: 1,
-        unknown: 1,
-        detail: "temporary\nGit failure",
-      },
+      resources: [
+        {
+          ...record,
+          kind: "worktree",
+          identity: "/w/age-1",
+          url: "file:///w/age-1",
+          state: "kept",
+          reason: "uncommitted work\nkept",
+        },
+        {
+          ...record,
+          kind: "run-directory",
+          identity: RUN,
+          url: "file:///s/run",
+          state: "released",
+          reason: "removed",
+        },
+      ],
     }),
   );
   respond({ steps: [], deadJobs: [] });
 
   await showRunStatus(RUN, deps(), { now: NOW });
 
-  expect(lines).toContain(
-    "cleanup failed (release, success; 1 released, 2 kept, 1 failed, 1 unknown)",
-  );
-  expect(lines).toContain("  temporary\\nGit failure");
+  expect(lines.slice(4, 9)).toEqual([
+    "resources:",
+    "  worktree /w/age-1 → file:///w/age-1",
+    "    kept (uncommitted work\\nkept)",
+    `  run-directory ${RUN} → file:///s/run`,
+    "    released (removed)",
+  ]);
 });
 
 test("status prints live pull-request gate state under its suspension", async () => {
@@ -253,24 +265,34 @@ test("resources are listed independently of the workflow return shape", async ()
       returnValue: "done",
       resources: [
         {
+          runId: RUN,
           kind: "pull-request",
           identity: "acme/api#41",
           url: "https://github.com/acme/api/pull/41",
+          state: "live",
+          reason: null,
+          updatedAt: "2026-09-04T10:09:00.000Z",
         },
         {
+          runId: RUN,
           kind: "custom-report",
           identity: "quarterly\nsummary",
           url: "https://example.test/report\nunsafe",
+          state: "live",
+          reason: null,
+          updatedAt: "2026-09-04T10:09:00.000Z",
         },
       ],
     }),
   );
   respond({ steps: [], deadJobs: [] });
   await showRunStatus(RUN, deps(), { now: NOW });
-  expect(lines.slice(4, 7)).toEqual([
+  expect(lines.slice(4, 9)).toEqual([
     "resources:",
     "  pull-request acme/api#41 → https://github.com/acme/api/pull/41",
+    "    live",
     "  custom-report quarterly\\nsummary → https://example.test/report\\nunsafe",
+    "    live",
   ]);
   expect(lines).toContain("result: done");
 });

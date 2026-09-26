@@ -1,11 +1,11 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, type TestContext, test } from "vitest";
 import { harnesses, models } from "../../../../workflow/agents/harness-config.ts";
 import { buildAgentRequest } from "../../../../workflow/agents/plan.ts";
 import { executeAgentWith } from "../../execute-agent.ts";
-import { piRunStatePath, piSessionsDir, removePiRunState } from "../pi-home.ts";
+import { piRunStatePath, piSessionsDir } from "../pi-home.ts";
 import { factorylessDeps, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 
 const LINEAR_SERVER = "linear-personal";
@@ -58,7 +58,7 @@ let tmp: string | undefined;
 let runId: string | undefined;
 afterEach(() => {
   if (tmp !== undefined) removeTmpDir(tmp);
-  if (runId !== undefined) removePiRunState(runId);
+  if (runId !== undefined) rmSync(piRunStatePath(runId), { recursive: true, force: true });
 });
 
 test.skipIf(!existsSync(globalMcpPath) || !localConfigured || !localReachable)(

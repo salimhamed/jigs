@@ -80,16 +80,18 @@ terminal. The default is `{ onSuccess: "release", onFailure: "keep" }`; set
 `release` on the factory config or in `defineWorkflow`. Failed and cancelled runs
 both use `onFailure`. Live and suspended runs retain their resources.
 
-Release never throws away work: dirty or unmerged worktrees stay, and branches
-are deleted only when their commits are proven present on the remote default
-branch, so squash merges may retain branches. Failed cleanup stays visible in
-`jigs status <run-id>`, is retried by the service, and remains inspectable with
-`jigs resources list` and preview-first `jigs resources prune`.
+Release never throws away work: dirty worktrees stay, local branches go only
+when their commits are on the remote default branch, and a pushed branch is
+deleted on GitHub only when it is merged and has no open pull request. Each
+resource's state (`live`, `kept`, `released`, `failed`) and reason stays visible
+in `jigs status <run-id>`; failed releases are retried by the service, and
+leftovers are inspectable with `jigs resources list` and preview-first
+`jigs resources prune`.
 
 A workflow never needs to release its own resources. To release early or read
 the report, call `await release()` from `#jigs/steps` on the success path;
-`release(policy)` records that success choice, so automatic cleanup does not
-reverse an explicit keep.
+`release(policy)` applies that success choice, and the resources it keeps stay
+kept: automatic release does not reverse it.
 
 Configuration values vary by factory; requirements belong to the workflow
 declaration next to its input schema.
@@ -150,7 +152,8 @@ After a workflow creates something an operator may need to find, call the
 generated `registerResource({ kind, identity, url })` step from `#jigs/steps`. Kind
 plus identity is stable: retrying the same URL is idempotent, while a later URL
 updates that identity. `jigs status <run-id>` reads these records independently of the
-workflow's result.
+workflow's result. jigs records its own worktrees, run directories, agent homes and
+pushed branches itself.
 
 Keep a non-idempotent external creator and registration as two durable steps.
 Await the creator, then register what it returned; replay reuses the creator's
@@ -158,12 +161,9 @@ recorded result and retries registration without recreating the external
 resource. An idempotent custom step may instead import `registerResource` from
 `@jigs-ai/jigs/steps/runtime` and call it before returning.
 
-Use a short stable identity and an absolute URL. The SDK allows 64 total run
-attributes, including other user and reserved keys, a 256-character encoded
-key, and a 256 UTF-8-byte value. Registration reports these constraints and
-preserves the original strings. Treat the record as observability only:
-deletion requires separate kind-specific ownership and policy; a recorded URL
-does not authorize cleanup.
+Use a short stable identity and an absolute URL. A kind jigs does not release
+itself is recorded only: `jigs status` and `jigs resources list` show it, and
+nothing ever deletes it. A recorded URL never names what jigs deletes.
 
 For delivery, run `jigs recipe add linear-ticket-to-pr`; it registers the workflow. The copied
 `workflows/linear-ticket-to-pr/` holds the workflow file and `delivery/`: the three phases

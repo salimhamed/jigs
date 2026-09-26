@@ -6,11 +6,10 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { createWorld } from "@workflow/world-postgres";
 import { Pool } from "pg";
-import { afterAll, beforeAll, expect, test } from "vitest";
+import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
-import { ensureWorktreeRegistry } from "../steps/workspaces/registry.ts";
-import { registrySql } from "../steps/workspaces/sql.ts";
+import { ensureRegistry, registrySql } from "../steps/runtime/registry.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { createApp } from "./app.ts";
 import { listJobRunIds, listRunDeadJobs } from "./queue.ts";
@@ -60,16 +59,19 @@ beforeAll(async () => {
   oldPostgresUrl = process.env.WORKFLOW_POSTGRES_URL;
   process.env.WORKFLOW_LOCAL_BASE_URL = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   process.env.WORKFLOW_POSTGRES_URL = testUrl.toString();
+  // The cancel route lists the run's worktrees under this factory's slug.
+  vi.stubEnv("JIGS_FACTORY_ROOT", "/nonexistent/jigs-cancel-factory");
   world = createWorld({
     connectionString: testUrl.toString(),
     queueConcurrency: 1,
   });
   setWorld(world);
   await world.start();
-  await ensureWorktreeRegistry(registrySql());
+  await ensureRegistry(registrySql());
 });
 
 afterAll(async () => {
+  vi.unstubAllEnvs();
   deliveryHandlers.clear();
   await world?.close?.();
   await registrySql().$client.end();

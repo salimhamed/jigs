@@ -84,7 +84,7 @@ test("a finished event carries only the run status", () => {
 
 const respond = (runs: RunListRun[]) =>
   fetchMock.mockResolvedValueOnce(
-    new Response(JSON.stringify({ runs, worktrees: [], schedules: [] })),
+    new Response(JSON.stringify({ runs, resources: [], schedules: [] })),
   );
 
 const deps = () => ({

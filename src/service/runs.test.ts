@@ -7,18 +7,16 @@ import * as config from "../config/factory-config.ts";
 import * as root from "../config/factory-root.ts";
 import * as github from "../providers/github.ts";
 import type { RunSuspension } from "../run-suspension.ts";
-import * as sql from "../steps/workspaces/sql.ts";
+import * as sql from "../steps/runtime/registry.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { ticketToken } from "../workflow/linear/claim.ts";
 import { needsHumanToken } from "../workflow/linear/halt-for-human.ts";
 import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
-import { resourceAttribute } from "../workflow/runtime/resources.ts";
 import * as queue from "./queue.ts";
 import {
   describeRun,
   describeSuspension,
   enrichSuspensions,
-  listRunResources,
   listRuns,
   runExists,
   scheduleTriggerId,
@@ -235,27 +233,6 @@ test("a ticket names no run, even the one launched for it", async () => {
 test("a full-length run ID nobody minted names no run", async () => {
   world({ runs: [worldRun()] });
   expect(await runExists("wrun_01ZZZZZZZZZZZZZZZZZZZZZZZZ")).toBe(false);
-});
-
-test("run resources are decoded from attributes without reading workflow output", async () => {
-  const resource = {
-    kind: "custom-report",
-    identity: "quarter:2026-Q3",
-    url: "https://example.test/reports/2026-Q3",
-  };
-  const attribute = resourceAttribute(resource);
-  world({
-    runs: [
-      worldRun({
-        attributes: {
-          phase: "complete",
-          $parentRunId: RUN_B,
-          [attribute.key]: attribute.value,
-        },
-      }),
-    ],
-  });
-  expect(await listRunResources(RUN_A)).toEqual([resource]);
 });
 
 // Read through the minters, never through a token spelled out here: a reason

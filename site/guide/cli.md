@@ -75,7 +75,7 @@ jigs keeps each binding's clone and worktrees under
 
 | Command | What it does |
 | --- | --- |
-| `jigs resources list` | List each run's worktrees, scratch directories and recorded resources. Changes nothing. |
+| `jigs resources list` | List what finished and running runs still hold, with each item's state and reason. Changes nothing. |
 | `jigs resources prune` | Preview what could be safely removed. |
 | `jigs resources prune --apply` | Remove it. Needs `jigs service stop` first. |
 
@@ -231,18 +231,23 @@ worktrees it leaves behind.
 
 ## Cleaning up resources
 
-Resource cleanup is conservative. jigs removes only finished-run resources it
-can prove it owns and can safely remove. `jigs resources prune` previews unless
+jigs records every worktree, scratch directory, agent session home, pushed
+branch and pull request a run creates, and keeps the record after release, so
+`jigs status <run>` shows what the run had and what happened to each item:
+`live`, `kept`, `released` or `failed`, with the reason. Release runs by itself
+when a run ends; `jigs resources prune` handles what it left. It previews unless
 you add `--apply`. To apply:
 
 1. Run `jigs service stop`.
 2. Check the preview, optionally for one run with `--run <run>`.
 3. Run `jigs resources prune --apply`.
 
-Only resources of finished runs owned by this factory are removed. A worktree
-with uncommitted changes, an unmerged branch, a waiting run's resources and
-anything jigs cannot prove it owns are always kept. Resources a release policy
-chose to keep need `--include-kept`, which relaxes nothing else.
+Only resources of finished runs recorded by this factory are removed. A
+worktree with uncommitted changes, an unmerged branch, a branch with an open
+pull request and a waiting run's resources are always kept. Resources a release
+policy chose to keep need `--include-kept`, which relaxes nothing else. Pull
+requests and resources a workflow registers itself are listed but never
+removed.
 
 Applying works on macOS and Linux. It never stops or kills anything itself: it
 refuses, and tells you to run `jigs service stop`, while the service or any

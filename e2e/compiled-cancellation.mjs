@@ -222,9 +222,9 @@ export async function runCompiledCancellationMatrix({
     await assertCancelled(pendingRunId, ports.service);
     await assertCancelled(turboRunId, ports.service);
     const active = await assertCancelled(activeRunId, ports.service);
-    assert.equal(active.cleanup.status, "waiting");
     assert.equal(active.resources.length, 1);
     assert.equal(active.resources[0].kind, "run-directory");
+    assert.equal(active.resources[0].state, "live");
     const activeDirectory = fileURLToPath(active.resources[0].url);
     assert.equal(existsSync(activeDirectory), true);
     assert.deepEqual(lines(activeMarker), ["active-entered"]);
@@ -251,7 +251,7 @@ await (await getWorld()).close?.();`,
     );
     assert.equal(existsSync(activeDirectory), true);
     console.log("cancellation matrix: cleanup and prune fenced while work is active");
-    assert.equal((await runtimeRun(activeRunId, ports.service)).cleanup.status, "waiting");
+    assert.equal((await runtimeRun(activeRunId, ports.service)).resources[0].state, "live");
 
     const activeApply = runCli(
       ["resources", "prune", "--run", activeRunId, "--include-kept", "--apply", "--json"],
@@ -333,7 +333,7 @@ await (await getWorld()).close?.();`,
       `automatic cleanup did not retain the cancelled resource: ${JSON.stringify(reconciled)}`,
     );
     await until(
-      async () => (await runtimeRun(activeRunId, ports.service)).cleanup.status === "kept",
+      async () => (await runtimeRun(activeRunId, ports.service)).resources[0].state === "kept",
       "automatic cleanup did not record the keep decision",
     );
     assert.equal(existsSync(activeDirectory), true);
@@ -653,7 +653,7 @@ function assertResourceReport(report, runId, eligible, action) {
   assert.equal(report.entries.length, 1);
   assert.equal(report.entries[0].runId, runId);
   assert.equal(report.entries[0].kind, "run-directory");
-  assert.equal(report.entries[0].kept, true);
+  assert.equal(report.entries[0].state, action === "remove" ? "released" : "kept");
   assert.equal(report.entries[0].eligible, eligible);
   if (action !== undefined) assert.equal(report.entries[0].action, action);
 }

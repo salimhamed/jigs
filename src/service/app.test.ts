@@ -11,13 +11,11 @@ import { z } from "zod";
 import { resetGithubAuth } from "../providers/github-auth.ts";
 import * as linear from "../providers/linear.ts";
 import { resetLinearAuth } from "../providers/linear-auth.ts";
-import * as sql from "../steps/workspaces/sql.ts";
-import { makeFakeSql } from "../steps/workspaces/test-fixtures.ts";
+import * as sql from "../steps/runtime/registry.ts";
 import { type Factory, ticketInputSchema } from "../workflow/factory.ts";
 import { ticketToken } from "../workflow/linear/claim.ts";
 import { needsHumanToken } from "../workflow/linear/halt-for-human.ts";
 import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
-import { resourceAttribute } from "../workflow/runtime/resources.ts";
 import * as queue from "./queue.ts";
 import { clearWakes, lastWake } from "./wake-note.ts";
 
@@ -105,9 +103,11 @@ afterAll(() => {
 
 beforeEach(() => {
   vi.unstubAllEnvs();
-  // The registry is a hard dependency now, so every route that reads it is
-  // pointed at an empty in-memory one rather than the operator's database.
-  vi.spyOn(sql, "registrySql").mockReturnValue(makeFakeSql(new Map()));
+  // Every route that reads the registry gets an empty one rather than the
+  // operator's database.
+  vi.spyOn(sql, "registrySql").mockReturnValue({} as never);
+  vi.spyOn(sql, "currentFactory").mockReturnValue("factory-test");
+  vi.spyOn(sql, "listResources").mockResolvedValue([]);
   vi.spyOn(queue, "listJobRunIds").mockResolvedValue({ dead: [], live: [] });
   vi.spyOn(queue, "listRunDeadJobs").mockResolvedValue([]);
   vi.stubEnv("WORKFLOW_LOCAL_DATA_DIR", dataDir);
@@ -606,12 +606,12 @@ test("health outside a factory reports a null root rather than failing liveness"
   }
 });
 
-test("GET /api/runs answers with empty runs and worktrees when nothing has launched", async () => {
+test("GET /api/runs answers with empty runs and resources when nothing has launched", async () => {
   const res = await app.request("/api/runs");
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({
     runs: [],
-    worktrees: [],
+    resources: [],
     schedules: [],
   });
 });
@@ -684,37 +684,53 @@ test("GET /api/runs/:runId reports a stalled run as stalled, like `jigs status` 
   });
 });
 
-test("GET /api/runs/:runId includes zero or many resources independently of output", async () => {
-  const first = {
+test("GET /api/runs/:runId reports the run's resources and claim from its state read", async () => {
+  const row = {
+    factory: "factory-test",
+    runId: RUN,
     kind: "pull-request",
     identity: "acme/api#41",
     url: "https://github.com/acme/api/pull/41",
+    state: "live" as const,
+    reason: null,
+    repoDir: null,
+    branch: null,
+    createdAt: new Date("2026-09-04T10:00:00.000Z"),
+    updatedAt: new Date("2026-09-04T10:00:00.000Z"),
   };
-  const second = {
-    kind: "custom-report",
-    identity: "audit-7",
-    url: "https://example.test/reports/audit-7",
-  };
-  const a = resourceAttribute(first);
-  const b = resourceAttribute(second);
+  const listed = vi.spyOn(sql, "listResources").mockResolvedValue([row]);
+  const claim = ticketToken("68bc9696-35d5-442d-ab56-214c8cfefbec");
   setWorld({
     specVersion: SPEC_VERSION_CURRENT,
     runs: {
       get: async () => ({
+        runId: RUN,
         status: "running",
+        workflowName: "wf",
         createdAt: new Date(),
-        attributes: { unrelated: "kept", [a.key]: a.value, [b.key]: b.value },
       }),
     },
     steps: { list: async () => ({ data: [] }) },
-    hooks: { list: async () => ({ data: [] }) },
+    hooks: { list: async () => ({ data: [{ runId: RUN, token: claim }] }) },
   } as unknown as Parameters<typeof setWorld>[0]);
 
   const res = await app.request(`/api/runs/${RUN}`);
-  const body = (await res.json()) as { resources: unknown };
+  const body = (await res.json()) as { resources: unknown; claim: unknown };
 
   expect(res.status).toBe(200);
-  expect(body.resources).toEqual([second, first]);
+  expect(listed).toHaveBeenCalledWith({}, { factory: "factory-test", runId: RUN });
+  expect(body.claim).toBe(claim);
+  expect(body.resources).toEqual([
+    {
+      runId: RUN,
+      kind: "pull-request",
+      identity: "acme/api#41",
+      url: "https://github.com/acme/api/pull/41",
+      state: "live",
+      reason: null,
+      updatedAt: "2026-09-04T10:00:00.000Z",
+    },
+  ]);
 });
 
 const CLAIM = ticketToken("68bc9696-35d5-442d-ab56-214c8cfefbec");
