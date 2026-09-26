@@ -101,7 +101,7 @@ test("a comment Jev is sure does not answer is passed over by id, and the next o
   });
 });
 
-test("an unsure answer accepts the comment, as without Jev", async () => {
+test("an unsure answer accepts the comment", async () => {
   const chatter = { ...REPLY, body: "+1" };
   const check = vi
     .fn<CheckForTicketHumanReply>()

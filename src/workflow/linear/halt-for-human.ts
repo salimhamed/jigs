@@ -9,7 +9,7 @@ import { decide } from "../agents/decide.ts";
 import type { ExecuteJevStep } from "../agents/jev.ts";
 import type { HaltQuestion } from "../human/questions.ts";
 import type { TicketClaim } from "./claim.ts";
-import { LINEAR_DECISION_CUTOFF, ticketReply, ticketReplyState } from "./decisions.ts";
+import { ticketReply, ticketReplyState } from "./decisions.ts";
 
 // The halt's marker hook. It names no external resource and nothing resumes
 // it: the reply that ends the halt lands on the ticket claim.
@@ -86,8 +86,8 @@ export type HaltForHumanFn = (claim: TicketClaim, halt: Halt) => Promise<HumanRe
 // service's poll or, with Linear webhooks on, a comment delivery, and either
 // carries nothing: each one re-reads the comment thread from Linear and
 // re-suspends when no human has replied — no agent step executes on an
-// unsatisfied wake. A comment Jev is confident does not answer the question is
-// passed over, and the wait goes on.
+// unsatisfied wake. A comment Jev is sure does not answer the question is passed
+// over, and the wait goes on.
 /** Post a ticket question and suspend until a human replies to the claim hook. */
 export async function haltForHuman(
   claim: TicketClaim,
@@ -121,16 +121,15 @@ export async function haltForHuman(
           cursor = check.cursor;
           break;
         }
-        const answers = await decide(
+        const { answers } = await decide(
           {
             site: "ticket-reply",
             state: ticketReplyState(halt, check.reply.body),
-            question: ticketReply,
-            cutoff: LINEAR_DECISION_CUTOFF,
+            questions: { answers: { question: ticketReply, whenUnsure: true } },
           },
           executeJev,
         );
-        if (!answers.confident || answers.yes) return check.reply;
+        if (answers) return check.reply;
         console.log(
           `[haltForHuman] ${claim.identifier} passed over comment=${check.reply.commentId}: not an answer`,
         );

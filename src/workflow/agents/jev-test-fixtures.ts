@@ -3,16 +3,20 @@ import type { ExecuteJevStep, JevQuestion } from "./jev.ts";
 
 type Request = { site?: string; state: unknown; questions: Record<string, JevQuestion> };
 
-/** A Jev step that answers every `decide` call from `respond`, keyed by site. */
-export function jevAnswering(respond: (site: string | undefined, state: unknown) => unknown) {
+/** A Jev step that answers every question from `respond`, given the site, state and question key. */
+export function jevAnswering(
+  respond: (site: string | undefined, state: unknown, key: string) => unknown,
+) {
   const step = vi.fn(async (request: Request) => ({
-    answers: { decision: respond(request.site, request.state) },
+    answers: Object.fromEntries(
+      Object.keys(request.questions).map((key) => [key, respond(request.site, request.state, key)]),
+    ),
   }));
   // A mock cannot keep the step's generic signature.
   return step as unknown as ExecuteJevStep & typeof step;
 }
 
-/** A Jev step too unsure to change anything: every site falls back to its behaviour without Jev. */
+/** A Jev step too unsure of everything: every decision resolves to its `whenUnsure`. */
 export function unsureJev() {
   const step = vi.fn(async (request: Request) => ({
     answers: Object.fromEntries(

@@ -1,9 +1,6 @@
 // The Jev decisions delivery makes, each a question plus the state it is asked about.
 
-import { choice, score } from "@jigs-ai/jigs";
-
-/** Every delivery decision acts only on an answer at least this sure. */
-export const CUTOFF = 0.9;
+import { choice } from "@jigs-ai/jigs";
 
 /** A comment added since the builder last assessed the pull request. */
 export type NewComment = {
@@ -11,9 +8,10 @@ export type NewComment = {
   user: string;
   body: string;
   path?: string;
-  /** The comment triage label, when triage was confident. */
-  kind?: CommentKind;
 };
+
+/** A new comment with its triage label. */
+export type TriagedComment = NewComment & { kind: CommentKind };
 
 /** What changed on the pull request since the builder last assessed it. */
 export type PullRequestWakeState = {
@@ -21,7 +19,7 @@ export type PullRequestWakeState = {
   failingChecks: { name: string }[];
   approval: "approved" | "changes-requested" | "stale" | "none";
   mergeState: string;
-  newComments: Omit<NewComment, "id">[];
+  newComments: Omit<TriagedComment, "id">[];
   newReviews: { user: string; state: string; body: string }[];
 };
 
@@ -51,7 +49,7 @@ const commentKinds = {
 export type CommentKind = keyof typeof commentKinds;
 
 /** Comment kinds that owe the builder no work. */
-export const quietKinds: ReadonlySet<string> = new Set<CommentKind>([
+export const quietKinds: ReadonlySet<CommentKind> = new Set<CommentKind>([
   "fyi",
   "praise",
   "automated",
@@ -64,27 +62,3 @@ export const commentKind = (id: number) =>
     `Classify the pull request comment with id ${id} in the state's comments list.`,
     commentKinds,
   );
-
-/** The review rounds so far, for judging whether another round is worth spending. */
-export type ReviewConvergenceState = {
-  budget: number;
-  rounds: {
-    round: number;
-    blocking: string[];
-    nonBlocking: number;
-    responses: { finding: string; changed: boolean }[];
-  }[];
-};
-
-/** The `reviewConvergence` level that stops the review loop early. */
-export const STALLED = 2;
-
-/** Asked after a blocked review round, before spending another. */
-export const reviewConvergence = score(
-  "An AI builder and an AI reviewer alternate rounds until the reviewer raises no blocking finding. Given each round's blocking findings and the builder's responses, is the work converging on approval, or are the same findings coming back?",
-  [
-    "Converging: blocking findings are shrinking or new, and the builder is addressing them",
-    "Slow: progress is being made but some findings recur",
-    "Stalled: the same blocking findings recur or the builder keeps declining them",
-  ],
-);

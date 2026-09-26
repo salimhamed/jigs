@@ -200,6 +200,7 @@ test("the factory template pins the same versions this package peers on", async 
 const BARREL_EXPORTS: Record<string, string[]> = {
   "index.ts": [
     "ClaimConflictError",
+    "DECISION_CUTOFF",
     "JigsError",
     "JitCheckError",
     "choice",

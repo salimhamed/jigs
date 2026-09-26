@@ -78,16 +78,13 @@ function answer(schema: unknown, ...outputs: unknown[]) {
   answers.set(schema, [...(answers.get(schema) ?? []), ...outputs]);
 }
 // Jev answers are queued by decision site. An unqueued decision is unsure, so
-// the site behaves exactly as it did before Jev.
+// it resolves to its rule's whenUnsure.
 let decisions: Map<string, unknown[]>;
 function jev(site: string, ...replies: unknown[]) {
   decisions.set(site, [...(decisions.get(site) ?? []), ...replies]);
 }
 const sure = (choice: string) => ({
-  decision: { choice, probabilities: { [choice]: 0.97 }, confidence: 0.97 },
-});
-const scored = (score: number, confidence = 0.95) => ({
-  decision: { score, probabilities: {}, legend: {}, confidence },
+  wake: { choice, probabilities: { [choice]: 0.97 }, confidence: 0.97 },
 });
 function unsure(questions: JevQuestions) {
   return Object.fromEntries(
@@ -668,46 +665,6 @@ test("maintenance failure note names the retained path once and directs takeover
 
 // ---- Jev decisions ------------------------------------------------------------
 
-test("a stalled review stops early instead of spending the rest of the budget", async () => {
-  const blocked = {
-    verdict: "changes-requested",
-    findings: [{ summary: "Broken", blocking: true }],
-  };
-  answer(implementationReport, { responses: [] }, { responses: [] });
-  answer(reviewVerdict, blocked, blocked);
-  jev("review-convergence", scored(2));
-
-  const error = await stopped(
-    implementAndReview({ ...delivery, budget: { ...delivery.budget, reviewRounds: 4 } }, builder()),
-  );
-
-  expect(error.message).toContain("after 2 of 4 review round(s)");
-  expect(error.findings).toEqual(["Broken"]);
-  expect(calls).toHaveLength(4);
-  const [[wire]] = asked("review-convergence") as unknown as [[{ state: { rounds: unknown[] } }]];
-  expect(wire.state.rounds).toHaveLength(2);
-});
-
-test.each([
-  ["converging", scored(0)],
-  ["an unsure stall", scored(2, 0.5)],
-])("%s keeps reviewing until the budget is spent", async (_, reply) => {
-  const blocked = {
-    verdict: "changes-requested",
-    findings: [{ summary: "Broken", blocking: true }],
-  };
-  answer(implementationReport, { responses: [] }, { responses: [] }, { responses: [] });
-  answer(reviewVerdict, blocked, blocked, blocked);
-  jev("review-convergence", reply);
-
-  const error = await stopped(
-    implementAndReview({ ...delivery, budget: { ...delivery.budget, reviewRounds: 3 } }, builder()),
-  );
-
-  expect(error.message).toContain("after 3 review round(s)");
-  expect(asked("review-convergence")).toHaveLength(1);
-});
-
 test("an idle wake runs no builder turn and is not assessed again", async () => {
   mergesBy("jigs");
   jev("pull-request-wake", sure("idle"));
@@ -792,24 +749,23 @@ test("new comments triaged as asking nothing, on unchanged facts, skip the wake 
   expect(asked("comment-triage")).toHaveLength(1);
 });
 
-test("triage labels reach the builder, and only comments it has not seen are triaged", async () => {
+test("an unsure label counts as a question, and only comments not seen before are triaged", async () => {
   mergesBy("human");
   const first = { ...snapshot, conversationComments: [comment(1, "Thanks!")] };
   const second = {
     ...first,
     conversationComments: [...first.conversationComments, comment(2, "Why no retry here?")],
   };
-  answer(maintenanceReport, finished, finished);
+  answer(maintenanceReport, finished, finished, finished);
   jev(
     "comment-triage",
     { c1: { choice: "praise", probabilities: {}, confidence: 0.4 } },
     { c2: { choice: "question", probabilities: {}, confidence: 0.95 } },
   );
-  watch(first, second, closed);
+  watch(snapshot, first, second, closed);
   await follow();
-  expect(calls).toHaveLength(2);
-  expect(calls[0]?.prompt).not.toContain("fast classifier");
-  expect(calls[1]?.prompt).toContain("- comment 2 by dana: question");
+  // The unsure praise still asks the wake question rather than skipping it.
+  expect(asked("pull-request-wake")).toHaveLength(3);
   const triaged = asked("comment-triage").map(([wire]) => Object.keys(wire.questions));
   expect(triaged).toEqual([["c1"], ["c2"]]);
 });

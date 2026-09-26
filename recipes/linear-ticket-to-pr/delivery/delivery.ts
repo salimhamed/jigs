@@ -7,7 +7,6 @@ import {
   type Harness,
   isPullRequestMergeReady,
   JigsError,
-  jevModel,
   type PullRequestRef,
   type PullRequestSnapshot,
   pullRequestSnapshotKey,
@@ -16,14 +15,7 @@ import {
 } from "@jigs-ai/jigs";
 import { sleep } from "workflow";
 import { z } from "zod";
-import {
-  agentSession,
-  askJev,
-  committedWork,
-  decide,
-  runAgent,
-  watchPullRequest,
-} from "#jigs/routines";
+import { agentSession, committedWork, decide, runAgent, watchPullRequest } from "#jigs/routines";
 import {
   fetchPullRequestState,
   mergePullRequest,
@@ -35,15 +27,12 @@ import {
   registerResource,
 } from "#jigs/steps";
 import {
-  CUTOFF,
   commentKind,
   type NewComment,
   type PullRequestWakeState,
   pullRequestWake,
   quietKinds,
-  type ReviewConvergenceState,
-  reviewConvergence,
-  STALLED,
+  type TriagedComment,
 } from "./decisions.ts";
 import * as prompts from "./prompts.ts";
 import {
@@ -172,21 +161,6 @@ export async function implementAndReview(
       findings,
     });
     if (!blocking) return { reviewedCommit: state.headSha, ledger };
-
-    if (round >= 2 && round < budget.reviewRounds) {
-      const progress = await decide({
-        site: "review-convergence",
-        state: convergenceState(ledger, budget.reviewRounds),
-        question: reviewConvergence,
-        cutoff: CUTOFF,
-      });
-      if (progress.confident && Math.round(progress.answer.score) === STALLED)
-        return stop(
-          delivery,
-          `jigs stopped work on ${task.key} after ${round} of ${budget.reviewRounds} review round(s): the same blocking findings keep coming back.`,
-          findings.map(renderFinding),
-        );
-    }
   }
 
   return stop(
@@ -194,18 +168,6 @@ export async function implementAndReview(
     `jigs stopped work on ${task.key} after ${budget.reviewRounds} review round(s) without an approved change.`,
     findings.map(renderFinding),
   );
-}
-
-function convergenceState(ledger: ReviewRound[], budget: number): ReviewConvergenceState {
-  return {
-    budget,
-    rounds: ledger.map((round) => ({
-      round: round.round,
-      blocking: round.findings.filter((f) => f.blocking).map((f) => f.summary),
-      nonBlocking: round.findings.filter((f) => !f.blocking).length,
-      responses: round.responses.map((r) => ({ finding: r.finding, changed: r.changed })),
-    })),
-  };
 }
 
 // ---- phase 2: publish the reviewed commit ------------------------------------
@@ -273,7 +235,7 @@ export async function followPullRequest(
       continue;
     }
     if (wake === "human") {
-      const latest = triaged.filter((comment) => !quietKinds.has(comment.kind ?? "")).at(-1);
+      const latest = triaged.filter((comment) => !quietKinds.has(comment.kind)).at(-1);
       return maintenanceStopped(
         delivery,
         pr,
@@ -304,7 +266,7 @@ export async function followPullRequest(
     for (let attempt = 1; attempt <= budget.attemptsPerUpdate; attempt++) {
       const report = await builder.run({
         output: maintenanceReport,
-        resume: prompts.maintenance.resume(pr, assessed, recovery, triaged),
+        resume: prompts.maintenance.resume(pr, assessed, recovery),
         fresh: async () =>
           prompts.maintenance.fresh(
             task,
@@ -313,7 +275,6 @@ export async function followPullRequest(
             pr,
             assessed,
             recovery,
-            triaged,
           ),
       });
       let local = await readBranchState(worktree);
@@ -407,7 +368,7 @@ const TRIAGE_LIMIT = 20;
 async function judgeWake(
   snapshot: PullRequestSnapshot,
   before: PullRequestSnapshot | undefined,
-): Promise<{ wake: Wake; triaged: NewComment[] }> {
+): Promise<{ wake: Wake; triaged: TriagedComment[] }> {
   const triaged = await triageComments(newComments(snapshot, before));
   const reviews = newReviews(snapshot, before);
 
@@ -416,12 +377,12 @@ async function judgeWake(
     before !== undefined &&
     triaged.length > 0 &&
     reviews.length === 0 &&
-    triaged.every((comment) => comment.kind !== undefined && quietKinds.has(comment.kind)) &&
+    triaged.every((comment) => quietKinds.has(comment.kind)) &&
     sameFacts(snapshot, before)
   )
     return { wake: "idle", triaged };
 
-  const wake = await decide({
+  const { wake } = await decide({
     site: "pull-request-wake",
     state: {
       ci: snapshot.ci,
@@ -431,17 +392,15 @@ async function judgeWake(
       newComments: triaged.map(({ id: _, ...comment }) => comment),
       newReviews: reviews.map(({ user, state, body }) => ({ user, state, body })),
     } satisfies PullRequestWakeState,
-    question: pullRequestWake,
-    cutoff: CUTOFF,
+    questions: { wake: { question: pullRequestWake, whenUnsure: "builder" } },
   });
-  return { wake: wake.confident ? wake.answer.choice : "builder", triaged };
+  return { wake, triaged };
 }
 
-/** Label each comment in one Jev call; a label below the cutoff is left off. */
-async function triageComments(comments: NewComment[]): Promise<NewComment[]> {
+/** Label each comment in one Jev call; an unsure label is a question, which owes an answer. */
+async function triageComments(comments: NewComment[]): Promise<TriagedComment[]> {
   if (comments.length === 0) return [];
-  const { answers } = await askJev({
-    model: jevModel,
+  const kinds = await decide({
     site: "comment-triage",
     state: {
       comments: comments.map(({ id, user, body, path }) => ({
@@ -452,15 +411,13 @@ async function triageComments(comments: NewComment[]): Promise<NewComment[]> {
       })),
     },
     questions: Object.fromEntries(
-      comments.map((comment) => [`c${comment.id}`, commentKind(comment.id)]),
+      comments.map((comment) => [
+        `c${comment.id}`,
+        { question: commentKind(comment.id), whenUnsure: "question" as const },
+      ]),
     ),
   });
-  return comments.map((comment) => {
-    const answer = answers[`c${comment.id}`];
-    return answer !== undefined && answer.confidence >= CUTOFF
-      ? { ...comment, kind: answer.choice }
-      : comment;
-  });
+  return comments.map((comment) => ({ ...comment, kind: kinds[`c${comment.id}`] ?? "question" }));
 }
 
 function newComments(

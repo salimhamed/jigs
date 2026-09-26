@@ -11,8 +11,7 @@ overwrites them.
 | File | What it holds |
 | --- | --- |
 | `linear-ticket-to-pr.ts` | The workflow: its agents, inputs, and the ticket status it sets between phases. |
-| `decisions.ts` | The Jev questions the workflow asks: ticket size and failure triage. |
-| `delivery/decisions.ts` | The Jev questions delivery asks: pull request wake, comment triage and review convergence. |
+| `delivery/decisions.ts` | The Jev questions delivery asks: pull request wake and comment triage. |
 | `delivery/delivery.ts` | The three phases and `DeliveryStopped`. |
 | `delivery/prompts.ts` | Every prompt the agents are sent. |
 | `delivery/review.ts` | What a review returns and how it is rendered. |
@@ -54,9 +53,7 @@ pnpm exec jigs watch
 ```
 
 A run picks its builder and reviewer by name. By default the `builder` agent
-builds and the `reviewer` agent reviews, except that a ticket Jev sizes as
-trivial or small gets `builderLight` and `reviewerLight`. A name the run passes
-always wins. To have Claude Code build too:
+builds and the `reviewer` agent reviews. To have Claude Code build too:
 
 ```sh
 pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input binding=app --input builder=reviewer
@@ -68,11 +65,8 @@ A run cannot type a model name. To change a model, edit its line in `agents`.
 
 | Budget | One unit buys | Default |
 | --- | --- | --- |
-| `reviewRounds` | One build plus one review of what it committed | 3, or by ticket size |
-| `attemptsPerUpdate` | Builder attempts to handle each changed PR snapshot, including immediate recovery | 3, or by ticket size |
-
-When Jev sizes the ticket confidently, trivial to large, a budget the run does
-not set is 1, 2, 3 or 3.
+| `reviewRounds` | One build plus one review of what it committed | 3 |
+| `attemptsPerUpdate` | Builder attempts to handle each changed PR snapshot, including immediate recovery | 3 |
 
 ```sh
 pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input binding=app --input 'budget={"reviewRounds":5}'
@@ -121,24 +115,18 @@ unavailable, a fresh prompt supplies the ticket, current diff, and PR facts.
 
 ## Jev decisions
 
-The workflow asks Jev, a fast decision model, short typed questions through
-`decide`. Each answer counts only at 0.9 confidence or above; below that, the
-workflow does what it would have done without Jev.
+Delivery asks Jev, a fast decision model, short typed questions through
+`decide`. Each question names the answer to act on when Jev is less than 0.9
+sure, so an unsure answer does what the workflow would have done without Jev.
 
-- **Ticket size** picks the agents and default budgets above.
 - **Pull request wake** runs before every builder turn in `followPullRequest`.
   `idle` skips the turn, `human` stops maintenance, and `merge` merges only
   when fresh GitHub facts pass the same readiness gate a builder-finished merge
-  needs. With `mergedBy: "human"`, `merge` skips the turn.
-- **Comment triage** labels each new comment in one call. The labels reach the
-  builder's prompt, and new comments that ask nothing on unchanged facts skip
-  the wake question and the turn.
-- **Review convergence** runs after each blocked review round from the second
-  on, and stops early when the same findings keep coming back.
-- **Failure triage** runs when a phase throws anything but `DeliveryStopped`.
-  Steps have already retried themselves by then, so an outage waits five
-  minutes and retries the phase once; one a person must fix becomes a ticket
-  note and `Todo`.
+  needs. With `mergedBy: "human"`, `merge` skips the turn. Unsure means
+  `builder`.
+- **Comment triage** labels each new comment in one call; an unsure label is
+  `question`. New comments that ask nothing, on unchanged facts, skip the wake
+  question and the turn.
 
 Each answered decision is appended to `decisions.jsonl` in the run's directory.
 

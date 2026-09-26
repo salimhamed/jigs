@@ -65,3 +65,17 @@ test("a decision log that cannot be written leaves the decision intact", async (
 
   expect(result.answers.decision.choice).toBe("idle");
 });
+
+test("a decide call's rules record how each answer resolved", async () => {
+  const metadata = { workflowRunId: "wrun_resolved" };
+  await executeJevWith(
+    { ...request, rules: { decision: { whenUnsure: "builder", cutoff: 0.95 } } },
+    metadata,
+    { ...executionSeams, evaluate },
+  );
+
+  const entry = JSON.parse((await readFile(decisionLogPath(metadata), "utf8")).trim());
+  expect(entry.resolved).toEqual({
+    decision: { value: "builder", confidence: 0.9, unsure: true },
+  });
+});
