@@ -38,11 +38,6 @@ exited is what a binding whose clone fails does, and the error names the log.
 A start that gives up after five minutes leaves the process running, so check
 `jigs service status` before repairing anything.
 
-On Linux with systemd, `jigs doctor` also verifies logout-safe supervision and
-linger. Follow its `loginctl enable-linger $USER` repair when linger is off. If
-systemd user scopes are unavailable, it warns that the detached service is
-unsupervised and dies on logout.
-
 `jigs service status` is also where the dashboard URL comes from. Do not guess
 the port. A service that is down comes back with `jigs up`, which also
 rebuilds if the factory's code changed since the running bundle was built.
@@ -205,11 +200,22 @@ runs `jigs doctor` and typechecks the factory; see **Confirm first** when runs a
 A suspended run holds its worktree because it will return to it. Automatic
 release handles terminal runs when its policy and Git safety checks allow it.
 For leftovers, inspect `jigs resources list` and `jigs resources prune`; both
-are read-only. To apply a preview, first establish that the service and its
-agents are stopped, then run `jigs resources prune --apply`. Policy-kept
-resources also need `--include-kept`. Apply refuses when the current jigs
-service command has not yet recorded systemd scope supervision; start and stop
-the factory service once, then retry. Dirty and unmerged work remains.
+are read-only. To apply a preview, run `jigs service stop`, then
+`jigs resources prune --apply`; this works on macOS and Linux. Policy-kept
+resources also need `--include-kept`. Apply never stops anything: it refuses
+while the service or any process in its recorded process group is still
+running. Dirty and unmerged work remains.
+
+`jigs service stop`, `restart`, `jigs down` and a restart inside `jigs up` stop
+the service and every process it started, killing what is still running after
+10 seconds; interrupted steps retry after the next start. A stop that fails
+lists each surviving pid and command; show them to the human rather than
+killing them yourself. A service command that says a pid cannot be verified as
+the service has signalled nothing: another program probably has that pid now.
+Show the human the pid and command; deleting the named pidfile and service
+record is their call. A process an agent fully detached (`setsid`, double
+fork) can survive a stop, and Docker containers an agent started are never
+stopped.
 
 Parked runs are also why the names in `jigs/steps.ts` and `workflows/` matter —
 see the never list.
@@ -233,7 +239,7 @@ Confirm these actions when the current request has not already authorized them:
   Minimum-retention hooks can remain claimed and are printed as `retained`;
   local resources remain for automatic release or offline maintenance.
 - `jigs resources prune --apply` — it removes the preview's eligible local
-  resources after proving the factory service and child scope are stopped.
+  resources after proving the factory service and everything it started are stopped.
 - `jigs service restart`, `jigs service stop`, `jigs down`, `jigs up --restart-service` or
   `jigs upgrade` while `jigs status` shows a running or suspended run. `up` and
   `upgrade` ask before restarting over one; `--force` is the human's call.

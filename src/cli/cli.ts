@@ -418,7 +418,7 @@ service
 
 service
   .command("stop")
-  .description("stop this factory's service process, dashboard included")
+  .description("stop this factory's service process and everything it started, dashboard included")
   .action(async () => {
     await stopService({ cwd: process.cwd(), out });
   });

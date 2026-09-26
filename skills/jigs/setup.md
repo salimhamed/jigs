@@ -15,8 +15,6 @@ person can judge.
   that runs `jigs up` must have it on `PATH`: the service is spawned with the
   CLI's own node.
 - Docker, with the daemon running. Each factory brings up its own Postgres.
-- On Linux with systemd, `loginctl enable-linger "$USER"` once, so factory
-  services survive the last login session ending.
 - Only for the harnesses the factory's workflows use, each logged in to its
   subscription and on the `PATH` of whatever starts the service:
   Claude Code (`claude auth login`), Codex (`codex login`), Pi (`pi`, then
@@ -89,7 +87,12 @@ my-factory is up
 
 Give the human the dashboard URL and have them open it. `jigs down` stops the
 service and Postgres together and keeps the data; `jigs service stop` stops only
-the service.
+the service. Both stop everything the service started, running agents
+included. The service runs until it is stopped, the human logs out or the
+machine restarts. To start it at login,
+`https://salimhamed.github.io/jigs/guide/cli#service-lifetime` has a macOS
+LaunchAgent and a Linux systemd user unit that run `jigs up` once. Never set up launchd `KeepAlive` or systemd `Restart=` for the
+service itself.
 
 The first failing step prints `FAIL <step>: <why>` with its repair on the next
 line, and `up` stops there. Show both lines, follow the repair, then run

@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
   appendFileSync,
-  chmodSync,
   existsSync,
-  mkdirSync,
   readdirSync,
   readFileSync,
   rmSync,
@@ -114,11 +112,8 @@ export async function runCompiledCancellationMatrix({
   let serviceRunning = false;
   const fixtureRoot = path.join(scratch, "compiled-cancel");
   const dataHome = path.join(fixtureRoot, "data");
-  const bin = path.join(fixtureRoot, "bin");
-  const env = runtimeEnv(testUrl.toString(), dataHome, bin, ports);
+  const env = runtimeEnv(testUrl.toString(), dataHome, ports);
 
-  mkdirSync(bin, { recursive: true });
-  installSystemdFixture(bin);
   writeFileSync(
     path.join(factory, ".env"),
     `WORKFLOW_POSTGRES_URL=${testUrl.toString()}\nWORKFLOW_TARGET_WORLD=@workflow/world-postgres\nWORKFLOW_POSTGRES_WORKER_CONCURRENCY=1\nWORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN=1\n`,
@@ -663,10 +658,9 @@ function assertResourceReport(report, runId, eligible, action) {
   if (action !== undefined) assert.equal(report.entries[0].action, action);
 }
 
-function runtimeEnv(postgresUrl, dataHome, bin, ports) {
+function runtimeEnv(postgresUrl, dataHome, ports) {
   return {
     ...process.env,
-    PATH: `${bin}:${process.env.PATH ?? ""}`,
     XDG_DATA_HOME: dataHome,
     PORT: String(ports.service),
     JIGS_DASHBOARD_PORT: String(ports.dashboard),
@@ -676,31 +670,6 @@ function runtimeEnv(postgresUrl, dataHome, bin, ports) {
     WORKFLOW_POSTGRES_WORKER_CONCURRENCY: "1",
     WORKFLOW_TARGET_WORLD: "@workflow/world-postgres",
   };
-}
-
-function installSystemdFixture(bin) {
-  const systemdRun = path.join(bin, "systemd-run");
-  writeFileSync(
-    systemdRun,
-    `#!/bin/sh
-if [ "$1" = "--version" ]; then exit 0; fi
-shift 3
-exec "$@"
-`,
-  );
-  chmodSync(systemdRun, 0o755);
-  const systemctl = path.join(bin, "systemctl");
-  writeFileSync(
-    systemctl,
-    `#!/bin/sh
-case "$*" in
-  *show-environment*) exit 0 ;;
-  *is-active*) echo inactive; exit 0 ;;
-  *) exit 0 ;;
-esac
-`,
-  );
-  chmodSync(systemctl, 0o755);
 }
 
 function lines(file) {

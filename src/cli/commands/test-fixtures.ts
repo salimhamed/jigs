@@ -108,6 +108,23 @@ export function fakeExec(fail?: (call: Call) => Error | undefined) {
 export const execError = (code: number | string, stderr = "") =>
   Object.assign(new Error(`exit ${code}`), { code, stdout: "", stderr });
 
+// How the fakes below describe the service jigs started, and the record that
+// vouches for it.
+export const SERVICE_COMMAND = `${process.execPath} ${SERVICE_ENTRY}`;
+export const FAKE_BOOT = "boot-1";
+export const FAKE_START = "Thu Jan 1 00:00:00 2026";
+
+export function serviceRecord(pid: number, overrides: Record<string, unknown> = {}): string {
+  const record = {
+    processGroup: pid,
+    bootId: FAKE_BOOT,
+    startTime: FAKE_START,
+    command: SERVICE_COMMAND,
+    ...overrides,
+  };
+  return `${JSON.stringify(record)}\n`;
+}
+
 export interface FakeProcesses {
   processes: ServiceProcesses;
   spawns: SpawnSpec[];
@@ -139,9 +156,13 @@ export function fakeProcesses(): FakeProcesses {
     },
     signal(pid, sig) {
       state.signals.push({ pid, sig });
-      if (sig === "SIGTERM") state.alive.delete(pid);
+      if (sig === "SIGTERM" || sig === "SIGKILL") state.alive.delete(pid);
       return state.alive.has(pid);
     },
+    snapshot: () =>
+      [...state.alive].map((pid) => `${pid} 1 ${pid} S ${SERVICE_COMMAND}\n`).join(""),
+    bootId: () => FAKE_BOOT,
+    startTime: (pid) => (state.alive.has(pid) ? FAKE_START : undefined),
   };
   return state;
 }

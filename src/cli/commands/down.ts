@@ -11,7 +11,8 @@ export interface DownDeps {
 }
 
 /**
- * The inverse of `up`: stops the service process, then the Postgres container.
+ * The inverse of `up`: stops the service and everything it started, then the
+ * Postgres container.
  * `docker compose down` runs without `-v`, so the volume and every run's
  * history survive for the next `up`.
  */
