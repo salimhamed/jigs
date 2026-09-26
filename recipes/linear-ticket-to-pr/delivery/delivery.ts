@@ -78,7 +78,7 @@ export class DeliveryStopped extends JigsError {
     message: string,
     findings: string[],
     worktree: Worktree,
-    closing = "Nothing is waiting on a reply here. Start another run to continue, or take the branch over by hand.",
+    closing = "Nothing is waiting on a reply here. Another run starts over on a new branch; to keep this work, take the branch (and its pull request, if any) over by hand.",
   ) {
     super(message, findings.length === 0 ? undefined : findings.join("\n"));
     this.name = "DeliveryStopped";

@@ -75,7 +75,7 @@ import type {
   TicketStatusResult,
 } from "./steps/linear/index.ts";
 import type { MergeOutcome, OpenedPullRequest } from "./steps/pull-requests/index.ts";
-import type { ProvisionWorktreeDependencies, WorktreeRequest } from "./steps/workspaces/index.ts";
+import type { WorktreeRequest } from "./steps/workspaces/index.ts";
 
 type RootTypeSurface = {
   agentRequest: AgentRequest;
@@ -145,7 +145,6 @@ type StepsTypeSurface = {
   openedPullRequest: OpenedPullRequest;
   linearIssueMatch: LinearIssueMatch;
   needsHumanContext: NeedsHumanContext;
-  provisionRunWorktreeDeps: ProvisionWorktreeDependencies;
   renderNeedsHumanComment: RenderNeedsHumanComment;
   renderTicketNote: RenderTicketNote;
   ticketParticipants: TicketParticipants;

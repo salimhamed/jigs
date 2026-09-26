@@ -183,8 +183,10 @@ nothing else. Holding it:
   against. Finish or cancel it first.
 - **Take over a delivery that stopped short.** The run fails after jigs pushes
   the branch and notes it on the ticket. `jigs status <run-id>` shows the failure
-  message naming the branch. Settle the findings there by hand; relaunching the
-  ticket starts the work over and leaves the first worktree behind.
+  message naming the branch. To keep that work, settle the findings on that
+  branch and its pull request by hand. Relaunching the ticket starts fresh on a
+  new branch and opens a new pull request; an older pull request stays open
+  until someone closes it, and the first worktree stays behind.
 - **Escalate design-level surprises** as a question to the human rather than
   deciding: a question the ticket and the factory's docs do not answer, a diff doing
   something the ticket never asked for, a change to a contract.

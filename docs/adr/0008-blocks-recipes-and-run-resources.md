@@ -107,8 +107,6 @@ both.
   each run's lock, reads the run afresh and handles it as a unit in release
   order. It reads only the run's status from the World's table, because the
   offline CLI cannot open the World. Dirty or unmerged work has no bypass.
-- Provisioning that adopts a finished run's worktree also takes that run's
-  lock, so a release of it already under way cannot race the adoption.
 - The schema is Drizzle, with hand-written migrations in `migrations/`; there
   is no `drizzle-kit`. Upgrading from run attributes kept no old records: runs
   had to finish and be pruned first.

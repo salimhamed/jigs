@@ -159,7 +159,7 @@ test("an exhausted review budget pushes the branch and stops with the open findi
   expect(error.note()).toEqual({
     headline: "jigs stopped work on ABC-1 after 2 review round(s) without an approved change.",
     notes: ["Broken", "The work is on branch `acme/abc-1`, in the worktree at `/tmp/wt`."],
-    closing: expect.stringContaining("Start another run"),
+    closing: expect.stringContaining("Another run starts over on a new branch"),
   });
 });
 
@@ -618,6 +618,6 @@ test("maintenance failure note names the retained path once and directs takeover
   expect(rendered).toContain(pr.url);
   expect(note.closing).toContain("existing pull request");
   expect(note.closing).toContain("take over");
-  expect(note.closing).not.toContain("Start another run");
+  expect(note.closing).not.toContain("Another run");
   expect(note.closing).not.toContain("resume");
 });

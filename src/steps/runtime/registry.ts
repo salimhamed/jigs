@@ -209,11 +209,3 @@ export async function withRunResourceLock<T>(
     );
   }
 }
-
-/**
- * Also hold another run's lock on a connection {@link withRunResourceLock} gave out, until that
- * outer lock ends. Only a run that is finished may be locked this way, so nothing waits in reverse.
- */
-export async function alsoLockRun(locked: RegistrySql, runId: string): Promise<void> {
-  await locked.$client.query("select pg_advisory_lock(hashtextextended($1, 464))", [runId]);
-}
