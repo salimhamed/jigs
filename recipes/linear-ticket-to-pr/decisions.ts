@@ -31,12 +31,17 @@ export type FailureState = {
   hint: string | null;
 };
 
-/** Asked when a phase throws anything other than DeliveryStopped. */
+/**
+ * Asked when a phase throws anything other than DeliveryStopped. Each step already retried itself
+ * three times before its error reached the workflow, so a passing blip never gets here.
+ */
 export const failureTriage = choice(
-  "A phase of an automated ticket-to-pull-request workflow failed with this error. What kind of failure is it?",
+  "A phase of an automated ticket-to-pull-request workflow failed with this error. Every step " +
+    "retries itself three times within seconds before its error reaches the workflow; such an " +
+    "error's message begins 'Step \"<name>\" failed after 3 retries'. What kind of failure is it?",
   {
-    transient:
-      "Likely to pass on a retry: a network error, timeout, rate limit, 5xx response or a briefly unavailable service",
+    outage:
+      "A service outage, rate limit or network failure that outlasted those quick retries and is likely to clear within minutes",
     "needs-human":
       "A person must fix something outside the code first: missing credentials or permissions, a deleted branch or repository, exhausted quota, or a tool that is not installed",
     bug: "A defect in the workflow or its library: a type error, failed invariant, or unexpected state that a retry would repeat",

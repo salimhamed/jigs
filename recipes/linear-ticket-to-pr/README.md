@@ -136,8 +136,9 @@ workflow does what it would have done without Jev.
 - **Review convergence** runs after each blocked review round from the second
   on, and stops early when the same findings keep coming back.
 - **Failure triage** runs when a phase throws anything but `DeliveryStopped`.
-  A transient failure retries the phase once; one a person must fix becomes a
-  ticket note and `Todo`.
+  Steps have already retried themselves by then, so an outage waits five
+  minutes and retries the phase once; one a person must fix becomes a ticket
+  note and `Todo`.
 
 Each answered decision is appended to `decisions.jsonl` in the run's directory.
 
