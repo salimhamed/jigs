@@ -188,22 +188,22 @@ test("a ticket with nobody on it gets the headline without a dangling dash", asy
 test("a note greets the participants, bullets its lines, and closes with what to do", async () => {
   await postTicketNote("issue-1", {
     headline:
-      "jigs is starting work on AI-659. Before writing code, the reviewer read the ticket and is going ahead on these assumptions:",
+      "jigs is starting work on AI-659. Before writing code, the reviewer read the ticket and made these assumptions:",
     notes: [
       "Only the validate script changes.",
       "The build folder is created before Docker starts.",
     ],
     closing:
-      "If one of these is wrong, reply here now, or comment on the pull request when it opens.",
+      "jigs is going ahead with these assumptions. To change one, comment on the pull request once it opens.",
   });
 
   expect(body()).toBe(
-    `@[Salim](user-1) @[Dana](user-2) — jigs is starting work on AI-659. Before writing code, the reviewer read the ticket and is going ahead on these assumptions:
+    `@[Salim](user-1) @[Dana](user-2) — jigs is starting work on AI-659. Before writing code, the reviewer read the ticket and made these assumptions:
 
 - Only the validate script changes.
 - The build folder is created before Docker starts.
 
-If one of these is wrong, reply here now, or comment on the pull request when it opens.
+jigs is going ahead with these assumptions. To change one, comment on the pull request once it opens.
 `,
   );
 });
