@@ -16,7 +16,7 @@ import type { ResourceRow } from "./registry.ts";
 import { runDirectory } from "./run-directory/index.ts";
 
 /**
- * How jigs releases one kind of resource. Status, explicit and automatic release, and prune all
+ * How jigs releases one kind of resource. Explicit and automatic release and prune all
  * go through {@link releaseResource}, so every kind has one set of safety rules.
  *
  * @remarks

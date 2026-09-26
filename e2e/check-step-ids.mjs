@@ -882,19 +882,24 @@ async function runtimeScenario(postgresUrl) {
   }
 }
 
-function assertRuntimeResources(resources, runId, stage) {
+function assertRuntimeResources(records, runId, stage) {
   const expected = [
     {
       kind: "custom-dashboard",
       identity: "operations",
       url: "https://example.test/dashboards/operations",
+      state: "live",
     },
     {
       kind: "custom-report",
       identity: "audit/7",
       url: "https://example.test/reports/audit-7-final",
+      state: "live",
     },
   ];
+  const resources = records
+    .map(({ kind, identity, url, state }) => ({ kind, identity, url, state }))
+    .sort((left, right) => left.kind.localeCompare(right.kind));
   if (JSON.stringify(resources) !== JSON.stringify(expected)) {
     throw new Error(
       `runtime workflow ${runId} resources ${stage} were ${JSON.stringify(resources)}, expected ${JSON.stringify(expected)}`,
