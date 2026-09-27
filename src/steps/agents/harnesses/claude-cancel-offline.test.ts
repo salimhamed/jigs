@@ -15,7 +15,8 @@ const skipOnWindows = process.platform === "win32";
 
 // Speaks just enough of Claude Code's stream-json protocol for the provider.
 // `hang` starts a child that ignores SIGTERM and never answers the turn;
-// `linger` answers, then leaves such a child behind when it exits.
+// `linger` answers, then leaves such a child behind when it exits; `escape`
+// answers after starting a child in a new session that holds its stdout.
 const fakeClaude = `#!${process.execPath}
 const { spawn } = require("node:child_process");
 const { writeFileSync } = require("node:fs");
@@ -43,7 +44,15 @@ createInterface({ input: process.stdin }).on("line", (line) => {
   if (message.type !== "user") return;
   send({ type: "system", subtype: "init", session_id: "fake-session", cwd: process.cwd(), tools: [], mcp_servers: [] });
   if (mode === "hang") return record(ignoringTerm());
-  record(mode === "linger" ? ignoringTerm() : undefined);
+  if (mode === "escape") {
+    const escaped = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+      detached: true,
+      stdio: ["ignore", "inherit", "ignore"],
+    });
+    escaped.unref();
+    record(escaped);
+  }
+  else record(mode === "linger" ? ignoringTerm() : undefined);
   send({
     type: "assistant",
     session_id: "fake-session",
@@ -247,3 +256,42 @@ for (const how of ["the SDK's kill", "the SDK's abort signal"] as const) {
     20_000,
   );
 }
+
+test.skipIf(skipOnWindows)(
+  "a Claude Code that exits while a process outside its group holds stdout still reports its exit",
+  async () => {
+    const spawner = claudeProcessSpawner(
+      {
+        PATH: process.env.PATH ?? "",
+        JIGS_TEST_CLAUDE_PIDS: pidFile,
+        JIGS_TEST_CLAUDE_MODE: "escape",
+      },
+      { host: {} },
+    );
+    const launched = spawner({
+      command: executable,
+      args: [],
+      cwd: worktree,
+      env: {},
+      signal: new AbortController().signal,
+    });
+    const exit = new Promise((resolve) => launched.once("exit", resolve));
+    launched.stdin.end(`${JSON.stringify({ type: "user" })}\n`);
+    const { leader, child: escaped } = await started();
+    try {
+      await expect.poll(() => pidIsRunning(leader)).toBe(false);
+      expect(pidIsRunning(escaped)).toBe(true);
+      const exitedAt = Date.now();
+
+      launched.kill("SIGTERM");
+      await spawner.close();
+      await exit;
+
+      expect(Date.now() - exitedAt).toBeLessThan(1_000);
+      expect(isTrackedProcessGroup(leader)).toBe(false);
+    } finally {
+      process.kill(escaped, "SIGKILL");
+    }
+  },
+  20_000,
+);

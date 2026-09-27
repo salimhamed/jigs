@@ -3,12 +3,12 @@ import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import type { ClaudeCodeSettings, SpawnedProcess, SpawnOptions } from "ai-sdk-provider-claude-code";
 import { resolveClaudeExecutable } from "../harnesses/executables.ts";
-import { stopProcessGroup, trackProcessGroup } from "../harnesses/process-group.ts";
+import { groupReaper, OWN_GROUP } from "../harnesses/process-group.ts";
 
 const STDERR_LIMIT = 4_000;
-// After a stop has ended, a pipe still held open by a process outside the
-// group is not waited on.
-const STDIO_AFTER_STOP_MS = 200;
+// Once the group is gone, a pipe still held open by a process that left it is
+// not waited on for longer than this, as the SDK itself does after an exit.
+const STDIO_AFTER_REAP_MS = 200;
 // Close gives a CLI still running this long to exit on its own, as the SDK
 // does before it kills one.
 const CLOSE_GRACE_MS = 2_000;
@@ -26,18 +26,16 @@ function spawnClaudeCode(
   owner: string,
   cancel: AbortSignal | undefined,
 ): ClaudeLaunch {
-  const grouped = process.platform !== "win32";
   const child = spawn(options.command, options.args, {
     cwd: options.cwd,
     env,
     // Claude Code's stdio MCP servers join its private group, so a stop
     // reaches them even when Claude itself cannot shut them down.
-    detached: grouped,
+    detached: OWN_GROUP,
     stdio: ["pipe", "pipe", "pipe"],
     windowsHide: true,
   });
-  const pgid = grouped ? child.pid : undefined;
-  if (pgid !== undefined) trackProcessGroup(pgid, owner);
+  const reapGroup = groupReaper(child, owner);
   const events = new EventEmitter();
   const stdout = new PassThrough();
   let stderr = "";
@@ -47,9 +45,9 @@ function spawnClaudeCode(
   let stdoutEnded = false;
   let stderrClosed = false;
   let stopRequested = false;
+  let reaping = false;
   let reaped = false;
   let abandoned = false;
-  let reaping: Promise<void> | undefined;
   let report!: () => void;
   const reported = new Promise<void>((resolve) => {
     report = resolve;
@@ -58,20 +56,16 @@ function spawnClaudeCode(
   // Leader exit does not mean the group is gone, so every path stops it
   // before the exit is reported.
   const reap = () => {
-    if (reaping !== undefined) return;
-    if (pgid === undefined) {
-      if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
-      reaping = Promise.resolve();
-    } else reaping = stopProcessGroup(pgid).then(() => {});
-    void reaping.then(() => {
+    if (reaping) return;
+    reaping = true;
+    void reapGroup().then(() => {
       reaped = true;
-      if (stopRequested)
-        setTimeout(() => {
-          abandoned = true;
-          child.stdout.destroy();
-          child.stderr.destroy();
-          finish();
-        }, STDIO_AFTER_STOP_MS);
+      setTimeout(() => {
+        abandoned = true;
+        child.stdout.destroy();
+        child.stderr.destroy();
+        finish();
+      }, STDIO_AFTER_REAP_MS);
       finish();
     });
   };
