@@ -27,7 +27,6 @@ async function ask(request: AgentRequest | ModelRequest, context: DriverContext)
     prompt: request.prompt,
     ...("system" in request && request.system !== undefined ? { system: request.system } : {}),
     ...(context.output === undefined ? {} : { output: context.output }),
-    abortSignal: context.signal,
   });
 }
 
