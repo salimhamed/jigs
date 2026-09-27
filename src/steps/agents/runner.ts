@@ -105,7 +105,9 @@ export interface OpenedAgentRunner extends AgentRunner {
 // the SDK records no retry.
 export function forFactoryStep(runner: OpenedAgentRunner): AgentRunner {
   const { model, signal } = runner;
-  const failure = (error: unknown) => (signal.aborted ? signal.reason : error);
+  const rethrow = (error: unknown): never => {
+    throw signal.aborted ? signal.reason : error;
+  };
   return {
     model:
       typeof model === "string"
@@ -120,35 +122,18 @@ export function forFactoryStep(runner: OpenedAgentRunner): AgentRunner {
                     ? signal
                     : AbortSignal.any([params.abortSignal, signal]),
               }),
-              wrapGenerate: async ({ doGenerate }) => {
-                try {
-                  return await doGenerate();
-                } catch (error) {
-                  throw failure(error);
-                }
-              },
+              wrapGenerate: ({ doGenerate }) => doGenerate().then(undefined, rethrow),
               wrapStream: async ({ doStream }) => {
-                let result: Awaited<ReturnType<typeof doStream>>;
-                try {
-                  result = await doStream();
-                } catch (error) {
-                  throw failure(error);
-                }
+                const result = await doStream().then(undefined, rethrow);
                 const parts = result.stream.getReader();
+                // The SDK turns an error part into an empty result, so a
+                // cancelled stream fails as a stream instead.
                 const stream: typeof result.stream = new ReadableStream({
                   async pull(controller) {
-                    try {
-                      const { done, value } = await parts.read();
-                      if (done) controller.close();
-                      else
-                        controller.enqueue(
-                          value.type === "error"
-                            ? { ...value, error: failure(value.error) }
-                            : value,
-                        );
-                    } catch (error) {
-                      controller.error(failure(error));
-                    }
+                    const { done, value } = await parts.read().catch(rethrow);
+                    if (signal.aborted) throw signal.reason;
+                    if (done) controller.close();
+                    else controller.enqueue(value);
                   },
                   cancel: (reason) => parts.cancel(reason),
                 });

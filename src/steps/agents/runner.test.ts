@@ -209,20 +209,14 @@ test("a factory step's generate call fails with the cancellation whatever the pr
 });
 
 for (const how of ["part", "reject"] as const) {
-  test(`a factory step's stream fails with the cancellation when the provider errors by ${how}`, async () => {
+  test(`a factory step's streamed text rejects with the cancellation when the provider errors by ${how}`, async () => {
     const status = cancellableRun();
     const runner = await factoryRunner(losingProvider(status, how), status);
     try {
-      const errors: unknown[] = [];
       const result = streamText({ model: runner.model, prompt: "go", onError: () => {} });
-      try {
-        for await (const part of result.fullStream)
-          if (part.type === "error") errors.push(part.error);
-      } catch (error) {
-        errors.push(error);
-      }
-      expect(errors.length).toBeGreaterThan(0);
-      for (const error of errors) expect(error).toBeInstanceOf(RunCancelledError);
+      await expect(result.text).rejects.toSatisfy(
+        (error) => error instanceof RunCancelledError && FatalError.is(error),
+      );
     } finally {
       await runner.close();
     }

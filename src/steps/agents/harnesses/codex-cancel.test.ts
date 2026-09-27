@@ -170,23 +170,13 @@ test("a factory step streaming from Codex fails with the cancellation, not the p
   );
   try {
     const result = streamText({ model: runner.model, prompt: "Wait.", onError: () => {} });
-    const errors: unknown[] = [];
-    const consumed = (async () => {
-      try {
-        for await (const part of result.fullStream)
-          if (part.type === "error") errors.push(part.error);
-      } catch (error) {
-        errors.push(error);
-      }
-    })();
+    const text = expect(result.text).rejects.toSatisfy(
+      (error) => error instanceof RunCancelledError && FatalError.is(error),
+    );
     const pids = await started();
 
     run.cancel();
-    await consumed;
-
-    expect(errors.length).toBeGreaterThan(0);
-    for (const error of errors)
-      expect(error instanceof RunCancelledError && FatalError.is(error)).toBe(true);
+    await text;
     await expect.poll(() => pidIsRunning(pids.server), { timeout: 5_000 }).toBe(false);
   } finally {
     run.cancel();
