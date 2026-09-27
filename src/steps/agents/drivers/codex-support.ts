@@ -20,7 +20,7 @@ const shellQuote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
 // The provider launches the app server under the whole host environment plus
 // ours, with no hook to replace it. This launcher keeps only the variables the
 // step names, by reference, so no value is written to disk. It runs Codex
-// under the supervisor, which records the launch's process group for jigs.
+// under the supervisor, which stops Codex's process group.
 export function writeCodexLauncher(dir: string, codex: string, names: readonly string[]): string {
   const unique = [...new Set([...names, ...PROVIDER_ENV])];
   const invalid = unique.filter((name) => !ENV_NAME.test(name));
@@ -34,13 +34,7 @@ export function writeCodexLauncher(dir: string, codex: string, names: readonly s
   const launcher = path.join(dir, "jigs-codex-launch");
   writeFileSync(
     launcher,
-    [
-      "#!/bin/sh",
-      `record=${shellQuote(supervisor.groups)}/$$`,
-      ': > "$record"',
-      `exec /usr/bin/env -i ${kept.join(" ")} ${shellQuote(process.execPath)} ${shellQuote(supervisor.script)} "$record" ${shellQuote(codex)} "$@"`,
-      "",
-    ].join("\n"),
+    `#!/bin/sh\nexec /usr/bin/env -i ${kept.join(" ")} ${shellQuote(process.execPath)} ${shellQuote(supervisor)} ${shellQuote(codex)} "$@"\n`,
     { mode: 0o700 },
   );
   return launcher;

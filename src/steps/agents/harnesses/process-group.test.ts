@@ -167,7 +167,7 @@ test("a tracked group that ends without a stop is retired, so its id is never si
     stdio: "ignore",
   });
   const pgid = leader.pid as number;
-  trackProcessGroup(pgid, "Codex for run wrun_3");
+  trackProcessGroup(pgid, "Pi for run wrun_3");
   await new Promise((resolve) => leader.once("exit", resolve));
 
   await expect.poll(() => isTrackedProcessGroup(pgid), { timeout: 3_000 }).toBe(false);

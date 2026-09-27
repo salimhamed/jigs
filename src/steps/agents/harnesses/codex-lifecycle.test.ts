@@ -42,7 +42,7 @@ function lifecycle(
       },
       { metadata: { workflowRunId: "run-1" }, env: {}, signal: run.signal },
     );
-  return { open, close, cleanup, createAppServer };
+  return { open, close, cleanup, createAppServer, run };
 }
 
 test("closing the opened model stops the app server and removes the private home", async () => {
@@ -72,5 +72,15 @@ test("a cancellation while the home is prepared never starts an app server", asy
   const { open, cleanup, createAppServer } = lifecycle({ abortWhilePreparing: true });
   await expect(open()).rejects.toThrow("run cancelled");
   expect(createAppServer).not.toHaveBeenCalled();
+  expect(cleanup).toHaveBeenCalledTimes(1);
+});
+
+test("a cancellation closes the app server at once, and close still removes the home", async () => {
+  const { open, close, cleanup, run } = lifecycle();
+  const opened = await open();
+  run.abort(new Error("run cancelled"));
+  expect(close).toHaveBeenCalledTimes(1);
+  expect(cleanup).not.toHaveBeenCalled();
+  await opened?.close();
   expect(cleanup).toHaveBeenCalledTimes(1);
 });

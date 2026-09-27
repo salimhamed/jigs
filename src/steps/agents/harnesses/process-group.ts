@@ -108,9 +108,9 @@ function report(owner: string, outcome: GroupStopOutcome, timings: StopTimings):
     );
 }
 
-// A group can end without a stop through here, such as Codex's once the
-// provider closes it, or one whose stop failed. Retire it as soon as it is
-// gone, so a later stop or shutdown never signals a reused id.
+// A group can end without a stop through here, such as a harness that exits
+// on its own, or one whose stop failed. Retire it as soon as it is gone, so a
+// later stop or shutdown never signals a reused id.
 function sweep(state: Registry): void {
   for (const [pgid, tracked] of state.groups) {
     if (tracked.stopping !== null) continue;

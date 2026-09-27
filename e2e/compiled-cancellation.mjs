@@ -61,9 +61,9 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
   const prompt = params.input.map((item) => item.text ?? "").join("");
   const { mode, dir } = JSON.parse(prompt.slice(prompt.indexOf("{"), prompt.lastIndexOf("}") + 1));
   fs.appendFileSync(path.join(dir, "launches"), "launch\\n");
-  const child = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"], { stdio: "ignore" });
+  const child = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); console.log('up'); setInterval(() => {}, 1000)"], { stdio: ["ignore", "pipe", "ignore"] });
   send({ id, result: { turn: { id: "turn-e2e", items: [], status: "inProgress" } } });
-  fs.writeFileSync(path.join(dir, "pids"), [process.ppid, process.pid, child.pid].join(" "));
+  child.stdout.once("data", () => fs.writeFileSync(path.join(dir, "pids"), [process.ppid, process.pid, child.pid].join(" ")));
   const timer = setInterval(() => {
     if (mode !== "finish" || !fs.existsSync(path.join(dir, "release"))) return;
     clearInterval(timer);
@@ -958,9 +958,11 @@ await (await getWorld()).close?.();`,
       async () => (await runtimeRun(survivor.runId, ports.service)).status === "completed",
       "the other Codex run did not complete after the cancellation",
     );
-    assert.ok(
-      !survivorPids.some(alive),
-      "the finished Codex app server or child outlived its step",
+    // The supervisor stops the group after the step closes the provider.
+    await until(
+      () => !survivorPids.some(alive),
+      "the finished Codex launcher, app server or child outlived its step",
+      PI_STOP_BUDGET_MS,
     );
     assert.deepEqual(lines(path.join(survivorDir, "successor")), ["codex-successor"]);
 

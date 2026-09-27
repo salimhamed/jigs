@@ -3,8 +3,6 @@ import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { writeCodexLauncher } from "../drivers/codex-support.ts";
-import { watchCodexProcessGroups } from "./codex-process.ts";
-import { isTrackedProcessGroup, stopProcessGroup } from "./process-group.ts";
 import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
 let tmp: string;
@@ -28,8 +26,13 @@ function exited(child: ChildProcess) {
   );
 }
 
-function recordOf(launcher: ChildProcess): string {
-  return path.join(tmp, "jigs-codex-groups", String(launcher.pid));
+function groupIsGone(pgid: number): boolean {
+  try {
+    process.kill(-pgid, 0);
+    return false;
+  } catch {
+    return true;
+  }
 }
 
 test("the launcher passes stdio straight through and exits with Codex's code", async () => {
@@ -49,7 +52,6 @@ test("the launcher passes stdio straight through and exits with Codex's code", a
 
   expect(await exit).toEqual({ code: 7, signal: null });
   expect(output).toBe(lines);
-  expect(Number(readFileSync(recordOf(launcher), "utf8"))).toBeGreaterThan(0);
 });
 
 test("a SIGTERM to the launcher reaches Codex, and the launcher ends as Codex did", async () => {
@@ -91,7 +93,7 @@ test("a Codex killed by a signal Node ignores still fails the launcher", async (
   expect(await exited(launcher)).toEqual({ code: 141, signal: null });
 });
 
-test("a Codex that cannot start leaves a group-less launch that stop does not wait on", async () => {
+test("a Codex that cannot start fails the launcher with 127", async () => {
   const launcher = spawn(writeCodexLauncher(tmp, path.join(tmp, "missing"), ["PATH"]), [], {
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -101,71 +103,71 @@ test("a Codex that cannot start leaves a group-less launch that stop does not wa
   });
   expect(await exited(launcher)).toEqual({ code: 127, signal: null });
   expect(stderr).toContain("ENOENT");
-  expect(readFileSync(recordOf(launcher), "utf8")).toBe("");
-
-  const startedAt = Date.now();
-  await expect(watchCodexProcessGroups(tmp, "Codex test").close()).resolves.toEqual([]);
-  expect(Date.now() - startedAt).toBeLessThan(500);
 });
 
-// A stand-in for a launch caught between spawning Codex and recording it:
-// its record stays empty until it spawns a group leader and writes its id.
-test("stop waits for a launch still starting, then stops the group it records", async () => {
-  writeCodexLauncher(tmp, "/unused", []);
-  const groups = path.join(tmp, "jigs-codex-groups");
-  const launch = spawn(
+// Codex prints its pid, which is its group's id, then the pid of a child that
+// ignores SIGTERM, as an MCP server might.
+const CODEX_WITH_STUBBORN_CHILD = `const { spawn } = require("node:child_process");
+const mcp = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); console.log('up'); setInterval(() => {}, 1e6)"], { stdio: ["ignore", "pipe", "ignore"] });
+mcp.stdout.once("data", () => console.log(process.pid + " " + mcp.pid));
+setInterval(() => {}, 1e6);`;
+
+async function pidsOf(child: ChildProcess): Promise<[number, number]> {
+  const line = await new Promise<string>((resolve) =>
+    child.stdout?.setEncoding("utf8").once("data", resolve),
+  );
+  const [codex, mcp] = line.trim().split(" ").map(Number);
+  return [codex as number, mcp as number];
+}
+
+test("a SIGTERM to the launcher stops Codex's whole group, TERM-ignoring children too", async () => {
+  const launcher = spawn(
+    writeCodexLauncher(tmp, fakeCodex(CODEX_WITH_STUBBORN_CHILD), ["PATH"]),
+    [],
+    {
+      stdio: ["pipe", "pipe", "inherit"],
+    },
+  );
+  const [codex] = await pidsOf(launcher);
+  const exit = exited(launcher);
+  launcher.kill("SIGTERM");
+
+  expect(await exit).toEqual({ code: null, signal: "SIGTERM" });
+  expect(groupIsGone(codex)).toBe(true);
+});
+
+test("a supervisor whose parent dies stops Codex's group", async () => {
+  const launcher = writeCodexLauncher(tmp, fakeCodex(CODEX_WITH_STUBBORN_CHILD), ["PATH"]);
+  // A parent that starts the launcher, reports the pids, then dies abruptly.
+  const parent = spawn(
     process.execPath,
     [
       "-e",
-      `const { spawn } = require("node:child_process");
-const fs = require("node:fs");
-const record = require("node:path").join(${JSON.stringify(groups)}, String(process.pid));
-fs.writeFileSync(record, "");
-process.stdout.write("ready\\n");
-setTimeout(() => {
-  const leader = spawn(process.execPath, ["-e", "setInterval(() => {}, 1e6)"], { detached: true, stdio: "ignore" });
-  fs.writeFileSync(record, String(leader.pid));
-  process.stdout.write(leader.pid + "\\n");
-}, 300);
-setInterval(() => {}, 1e6);`,
+      `const launcher = require("node:child_process").spawn(${JSON.stringify(launcher)}, [], { stdio: ["pipe", "pipe", "inherit"] });
+launcher.stdout.once("data", (line) => { process.stdout.write(line); process.kill(process.pid, "SIGKILL"); });`,
     ],
     { stdio: ["ignore", "pipe", "inherit"] },
   );
-  let output = "";
-  launch.stdout?.setEncoding("utf8").on("data", (chunk: string) => {
-    output += chunk;
-  });
-  await expect.poll(() => output.startsWith("ready")).toBe(true);
-  const watch = watchCodexProcessGroups(tmp, "Codex test");
-  try {
-    const [outcome] = await watch.stop();
-    const leader = Number(output.split("\n")[1]);
-    expect(outcome).toEqual({ kind: "stopped", pgid: leader });
-    expect(isTrackedProcessGroup(leader)).toBe(false);
-    expect(() => process.kill(-leader, 0)).toThrow();
-    // A retired group is never tracked again from its old record.
-    await watch.stop();
-    expect(isTrackedProcessGroup(leader)).toBe(false);
-  } finally {
-    await watch.close();
-    launch.kill("SIGKILL");
-  }
+  const [codex, mcp] = await pidsOf(parent);
+  await exited(parent);
+
+  await expect.poll(() => groupIsGone(codex), { timeout: 5_000 }).toBe(true);
+  expect(groupIsGone(mcp)).toBe(true);
 });
 
-test("a recorded group is tracked while the invocation runs, so shutdown reaches it", async () => {
-  writeCodexLauncher(tmp, "/unused", []);
-  const leader = spawn(process.execPath, ["-e", "setInterval(() => {}, 1e6)"], {
-    detached: true,
-    stdio: "ignore",
+test("a Codex that exits on its own takes its group's leftovers with it", async () => {
+  const codex = fakeCodex(
+    `const { spawn } = require("node:child_process");
+const mcp = spawn(process.execPath, ["-e", "setInterval(() => {}, 1e6)"], { stdio: "ignore" });
+console.log(process.pid + " " + mcp.pid);
+setTimeout(() => process.exit(3), 100);`,
+  );
+  const launcher = spawn(writeCodexLauncher(tmp, codex, ["PATH"]), [], {
+    stdio: ["pipe", "pipe", "inherit"],
   });
-  const pgid = leader.pid as number;
-  writeFileSync(path.join(tmp, "jigs-codex-groups", String(process.pid)), String(pgid));
-  const watch = watchCodexProcessGroups(tmp, "Codex test", { pollMs: 20, startupMs: 1_000 });
-  try {
-    await expect.poll(() => isTrackedProcessGroup(pgid)).toBe(true);
-  } finally {
-    await watch.close();
-    await stopProcessGroup(pgid);
-  }
-  expect(isTrackedProcessGroup(pgid)).toBe(false);
+  const exit = exited(launcher);
+  const [leader] = await pidsOf(launcher);
+
+  expect(await exit).toEqual({ code: 3, signal: null });
+  expect(groupIsGone(leader)).toBe(true);
 });

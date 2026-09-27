@@ -18,9 +18,12 @@ watch and change nothing.
   records cancellation first, so a stop can never race a run that finished
   another way.
 - **Every harness owns a process group.** Pi and Claude Code are spawned
-  detached by jigs. The Codex provider spawns its app server itself, so the
-  launcher execs a small Node supervisor that starts Codex in its own group and
-  records the group ID in the invocation home for the driver to track.
+  detached by jigs. The Codex provider spawns its app server itself and its
+  close signals only that child, so the launcher execs a small Node supervisor
+  that starts Codex in its own group and stops the group itself when it is
+  signalled, when its parent goes, or when Codex exits. Cancellation closes the
+  provider at once; the step still settles only once the provider gives up on
+  the interrupted turn, about five seconds later.
 - **`OpenContext.signal` and `DriverContext.signal` carry the stop** to drivers,
   and `createAgentRunner` models pass it on every call and turn any failure
   after the cancellation into the fatal error, so a factory's own step is
@@ -29,7 +32,8 @@ watch and change nothing.
   SIGKILL can run no more code, so it is logged and cleanup proceeds. A signal
   that cannot be delivered is logged with the run and group, and the group
   stays registered for service shutdown. A once-a-second sweep retires any
-  tracked group that is gone, so a reused id is never signalled.
+  tracked Pi or Claude Code group that is gone, so a reused id is never
+  signalled.
 - A failed first status read throws an ordinary error, so the SDK retries the
   step rather than launch an agent for a run it cannot see.
 - Out of scope: processes that leave the group, agents orphaned by a killed
