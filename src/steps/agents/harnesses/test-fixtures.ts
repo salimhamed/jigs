@@ -4,14 +4,55 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { type CodexAppServerProvider, createCodexAppServer } from "ai-sdk-provider-codex-cli";
 import semver from "semver";
+import type { RunStatusReader } from "../run-cancellation.ts";
 import { type ExecutionSeams, executionSeams } from "../seams.ts";
 import { MIN_PI_VERSION, resolvePiExecutable } from "./executables.ts";
+
+// Tests run outside any run, so no World holds a status to watch; this one
+// stays running for as long as a test watches it.
+export const runningRunStatus: RunStatusReader = {
+  read: async () => "running",
+  waitForTerminal: (_runId, timeoutMs, signal) =>
+    new Promise((resolve) => {
+      const timer = setTimeout(() => resolve("running"), timeoutMs);
+      timer.unref();
+      signal.addEventListener("abort", () => {
+        clearTimeout(timer);
+        resolve("running");
+      });
+    }),
+};
+
+// A run the test cancels by hand: the status watch sees it on its next wait.
+export function cancellableRun(initial = "running"): RunStatusReader & { cancel(): void } {
+  let status = initial;
+  const waiting = new Set<() => void>();
+  return {
+    read: async () => status,
+    waitForTerminal: (_runId, timeoutMs, signal) =>
+      new Promise((resolve) => {
+        const answer = () => {
+          clearTimeout(timer);
+          waiting.delete(answer);
+          resolve(status);
+        };
+        const timer = setTimeout(answer, timeoutMs);
+        waiting.add(answer);
+        signal.addEventListener("abort", answer);
+      }),
+    cancel: () => {
+      status = "cancelled";
+      for (const answer of [...waiting]) answer();
+    },
+  };
+}
 
 // Tests run outside any factory, so there is no jigs.config.ts declaring
 // agent variables to read.
 export const factorylessDeps: ExecutionSeams = {
   ...executionSeams,
   factoryEnv: () => [],
+  runStatus: runningRunStatus,
 };
 
 // For tests that drive the provider directly, outside a driver.

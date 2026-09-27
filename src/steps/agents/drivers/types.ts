@@ -69,13 +69,16 @@ export type DriverRequest =
   | HarnessTarget;
 
 /**
- * What a driver's `open` receives: the run and the harness environment jigs built.
+ * What a driver's `open` receives: the run, the harness environment jigs built, and a signal
+ * that aborts once the run is cancelled.
  *
  * @group Advanced driver contracts
  */
 export interface OpenContext {
   metadata: RunMetadata;
   env: Record<string, string>;
+  /** Aborts once the run is cancelled, until the opened model is closed. Stop what `open` started. */
+  signal: AbortSignal;
 }
 
 /**
@@ -103,6 +106,7 @@ export interface DriverDependencies {
     system?: string;
     output?: OutputInterface<unknown, unknown, never>;
     providerOptions?: Parameters<typeof generateText>[0]["providerOptions"];
+    abortSignal?: AbortSignal | undefined;
   }): Promise<ExecutorGeneration>;
   evaluate<const QUESTIONS extends Record<string, Experimental_EvaluationQuestion>>(options: {
     model: Experimental_EvaluationModel;
@@ -113,8 +117,9 @@ export interface DriverDependencies {
 
 /**
  * What a driver receives for one call: the run it belongs to, the harness
- * environment jigs built for it, and, for a structured call, the output spec a
- * provider model consumes. `deps` is jigs' own wiring, not part of the contract.
+ * environment jigs built for it, for a structured call the output spec a
+ * provider model consumes, and for a harness call a signal that aborts once the
+ * run is cancelled. `deps` is jigs' own wiring, not part of the contract.
  *
  * @group Advanced driver contracts
  */
@@ -124,6 +129,11 @@ export interface DriverContext {
   deps: DriverDependencies;
   env: Record<string, string>;
   output?: OutputInterface<unknown, unknown, never>;
+  /**
+   * Aborts once the run is cancelled. jigs sets it for every harness call; a model-source call,
+   * which starts no process, has none.
+   */
+  signal?: AbortSignal;
 }
 
 /**

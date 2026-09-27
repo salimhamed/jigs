@@ -11,6 +11,7 @@ import { executeAgentWith } from "../../../execute-agent.ts";
 import { executionSeams } from "../../../seams.ts";
 import { executePi } from "../../pi.ts";
 import { preparePiInvocationHome } from "../../pi-home.ts";
+import { runningRunStatus } from "../../test-fixtures.ts";
 
 type Input = {
   baseDir: string;
@@ -42,6 +43,7 @@ const result = await executeAgentWith(
   { workflowRunId: input.runId },
   {
     ...executionSeams,
+    runStatus: runningRunStatus,
     factoryEnv: () => [],
     resolveDriver: ((kind) => (kind === "pi" ? pi : driverFor(kind))) as DriverResolver,
   },

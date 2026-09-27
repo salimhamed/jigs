@@ -17,7 +17,7 @@ import { type DriverResolver, driverFor } from "../drivers/index.ts";
 import { executeAgentWith } from "../execute-agent.ts";
 import { codexSessionFile, prepareCodexInvocationHome } from "../harnesses/codex-home.ts";
 import { assertLivePreconditions } from "../harnesses/live/fixtures/live-env.ts";
-import { makeTmpDir, removeTmpDir } from "../harnesses/test-fixtures.ts";
+import { makeTmpDir, removeTmpDir, runningRunStatus } from "../harnesses/test-fixtures.ts";
 import { type ExecutionSeams, executionSeams } from "../seams.ts";
 
 let tmp: string;
@@ -34,6 +34,7 @@ beforeAll(() => {
   });
   deps = {
     ...executionSeams,
+    runStatus: runningRunStatus,
     factoryEnv: () => [],
     resolveDriver: ((kind) => (kind === "codex" ? codex : driverFor(kind))) as DriverResolver,
   };

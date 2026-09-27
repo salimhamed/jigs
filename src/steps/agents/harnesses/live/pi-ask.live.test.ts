@@ -10,6 +10,7 @@ import { type ExecutionSeams, executionSeams } from "../../seams.ts";
 import { executePi, type PiExecutionOptions } from "../pi.ts";
 import { SUBMIT_RESULT_TOOL } from "../pi-extension.ts";
 import { preparePiInvocationHome, realPiAuthPath } from "../pi-home.ts";
+import { runningRunStatus } from "../test-fixtures.ts";
 
 const baseUrl = process.env.JIGS_TEST_OPENAI_COMPATIBLE_BASE_URL;
 const localModel = process.env.JIGS_TEST_OPENAI_COMPATIBLE_MODEL;
@@ -51,6 +52,7 @@ function recordingDeps(): { deps: ExecutionSeams; launches: PiExecutionOptions[]
     launches,
     deps: {
       ...executionSeams,
+      runStatus: runningRunStatus,
       factoryEnv: () => [],
       resolveDriver: ((kind) => (kind === "pi" ? pi : driverFor(kind))) as DriverResolver,
     },

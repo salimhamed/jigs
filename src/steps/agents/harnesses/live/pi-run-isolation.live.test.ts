@@ -13,7 +13,7 @@ import { harnessEnv } from "../env.ts";
 import { executePi } from "../pi.ts";
 import { preparePiInvocationHome } from "../pi-home.ts";
 import { planPiModel } from "../pi-model.ts";
-import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import { makeTmpDir, removeTmpDir, runningRunStatus } from "../test-fixtures.ts";
 import { makeScratchRepo } from "./fixtures/live-env.ts";
 
 const baseUrl = process.env.JIGS_TEST_OPENAI_COMPATIBLE_BASE_URL;
@@ -40,6 +40,7 @@ beforeAll(() => {
   });
   deps = {
     ...executionSeams,
+    runStatus: runningRunStatus,
     factoryEnv: () => [],
     resolveDriver: ((kind) => (kind === "pi" ? pi : driverFor(kind))) as DriverResolver,
   };

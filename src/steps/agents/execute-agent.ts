@@ -11,6 +11,7 @@ import {
 import type { RunMetadata } from "../runtime/run-context.ts";
 import type { ExecutorGeneration, RunRequest } from "./drivers/index.ts";
 import { harnessEnv } from "./harnesses/env.ts";
+import { withRunCancellation } from "./run-cancellation.ts";
 import { openAgentRunner, prepareAgentRun } from "./runner.ts";
 import { type ExecutionSeams, executionSeams } from "./seams.ts";
 import { AgentSessionError } from "./session-error.ts";
@@ -73,7 +74,11 @@ async function runAgent(
     try {
       const run = prepared.driver.run;
       if (run === undefined) throw new JigsError(`the ${wire.harness.kind} driver cannot run`);
-      const generation = await run(wire, { metadata, deps: seams, env: prepared.env });
+      const generation = await withRunCancellation(
+        metadata.workflowRunId,
+        (signal) => run(wire, { metadata, deps: seams, env: prepared.env, signal }),
+        seams.runStatus,
+      );
       const session = extractAgentSession(
         wire.harness,
         generation.providerMetadata,
@@ -94,6 +99,7 @@ async function runAgent(
     const result = seams.streamText({
       model: runner.model,
       prompt: wire.prompt,
+      abortSignal: runner.signal,
       ...(output === undefined ? {} : { output }),
     });
     await teeAgentStream(result.fullStream, seams.openStepStream(), {
@@ -107,6 +113,8 @@ async function runAgent(
       ...(output === undefined ? {} : { output: await result.output }),
     };
     return resultOf(wire, generation, runner.sessionFrom(generation));
+  } catch (err) {
+    throw runner.classify(err);
   } finally {
     await runner.close();
   }
@@ -126,13 +134,20 @@ async function askAgent(
   if (driver.ask === undefined) throw new JigsError(`the ${wire.harness.kind} driver cannot ask`);
   const requestReport = await runChecks(driver.requestChecks(wire));
   if (!requestReport.ok) throw new JigsError(formatFailures(requestReport));
-  const generation = await driver.ask(wire, {
-    metadata,
-    deps: seams,
-    env,
-    // Pi reads the schema from the request for its result tool.
-    output: wire.harness.kind === "pi" ? undefined : outputSpec(wire.outputSchema),
-  });
+  const ask = driver.ask;
+  const generation = await withRunCancellation(
+    metadata.workflowRunId,
+    (signal) =>
+      ask(wire, {
+        metadata,
+        deps: seams,
+        env,
+        // Pi reads the schema from the request for its result tool.
+        output: wire.harness.kind === "pi" ? undefined : outputSpec(wire.outputSchema),
+        signal,
+      }),
+    seams.runStatus,
+  );
   return toModelResult(generation, wire.outputSchema === undefined ? undefined : generation.output);
 }
 

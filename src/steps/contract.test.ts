@@ -149,6 +149,7 @@ test("the types a driver reaches keep their published shapes", () => {
   expectTypeOf<OpenContext>().toEqualTypeOf<{
     metadata: RunMetadata;
     env: Record<string, string>;
+    signal: AbortSignal;
   }>();
   expectTypeOf<OpenedModel>().toEqualTypeOf<{ model: LanguageModel; close(): Promise<void> }>();
   expectTypeOf<ExecutorGeneration>().toEqualTypeOf<
@@ -161,13 +162,16 @@ test("the types a driver reaches keep their published shapes", () => {
 });
 
 test("DriverContext keeps its published shape", () => {
-  expectTypeOf<keyof DriverContext>().toEqualTypeOf<"metadata" | "deps" | "env" | "output">();
+  expectTypeOf<keyof DriverContext>().toEqualTypeOf<
+    "metadata" | "deps" | "env" | "output" | "signal"
+  >();
   expectTypeOf<RequiredKeys<DriverContext>>().toEqualTypeOf<"metadata" | "deps" | "env">();
   expectTypeOf<DriverContext["metadata"]>().toEqualTypeOf<RunMetadata>();
   expectTypeOf<DriverContext["env"]>().toEqualTypeOf<Record<string, string>>();
   expectTypeOf<DriverContext["output"]>().toEqualTypeOf<
     OutputInterface<unknown, unknown, never> | undefined
   >();
+  expectTypeOf<DriverContext["signal"]>().toEqualTypeOf<AbortSignal | undefined>();
 });
 
 test("AgentRunner keeps its published shape", () => {

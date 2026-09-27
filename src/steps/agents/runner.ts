@@ -1,4 +1,4 @@
-import type { LanguageModel } from "ai";
+import { type LanguageModel, wrapLanguageModel } from "ai";
 import { formatFailures, runChecks } from "../../checks/catalog.ts";
 import { JigsError } from "../../errors.ts";
 import { JitCheckError } from "../../workflow/agents/agent.ts";
@@ -8,6 +8,7 @@ import type { RunMetadata } from "../runtime/run-context.ts";
 import type { Driver, HarnessTarget } from "./drivers/index.ts";
 import { harnessEnv } from "./harnesses/env.ts";
 import { acquireFileLock, FileLockTimeoutError, lockPathFor } from "./lock.ts";
+import { type RunCancellation, watchRunCancellation } from "./run-cancellation.ts";
 import { type ExecutionSeams, executionSeams } from "./seams.ts";
 import { AgentSessionError } from "./session-error.ts";
 
@@ -89,11 +90,44 @@ export async function prepareAgentRun(
   }
 }
 
+// The runner as jigs' own agent step holds it: the signal and error
+// classification of the run's cancellation watch, which lives until `close`.
+// The step passes the signal to the AI SDK itself.
+export interface OpenedAgentRunner extends AgentRunner {
+  signal: AbortSignal;
+  classify(error: unknown): unknown;
+}
+
+// A factory's step hands the model to the AI SDK itself, without our signal, so
+// the model carries it into every provider call.
+export function forFactoryStep(runner: OpenedAgentRunner): AgentRunner {
+  const { model, signal } = runner;
+  return {
+    model:
+      typeof model === "string"
+        ? model
+        : wrapLanguageModel({
+            model,
+            middleware: {
+              transformParams: async ({ params }) => ({
+                ...params,
+                abortSignal:
+                  params.abortSignal === undefined
+                    ? signal
+                    : AbortSignal.any([params.abortSignal, signal]),
+              }),
+            },
+          }),
+    sessionFrom: runner.sessionFrom,
+    close: runner.close,
+  };
+}
+
 export async function openAgentRunner(
   harness: Harness,
   options: AgentRunnerOptions,
   seams: ExecutionSeams,
-): Promise<AgentRunner> {
+): Promise<OpenedAgentRunner> {
   if (harness.kind === "pi")
     throw new JigsError(
       "createAgentRunner cannot open a Pi harness: Pi has no AI SDK provider model. Run Pi with runAgent from #jigs/routines",
@@ -101,22 +135,35 @@ export async function openAgentRunner(
   const target: HarnessTarget = { harness, cwd: options.cwd, resume: options.resume };
   const prepared = await prepareAgentRun(target, seams);
   const { driver } = prepared;
+  let watch: RunCancellation | undefined;
   try {
     if (driver.open === undefined) throw new JigsError(`the ${harness.kind} driver cannot run`);
-    const opened = await driver.open(target, { metadata: options.run, env: prepared.env });
+    watch = await watchRunCancellation(options.run.workflowRunId, seams.runStatus);
+    const cancellation = watch;
+    const opened = await driver.open(target, {
+      metadata: options.run,
+      env: prepared.env,
+      signal: cancellation.signal,
+    });
     let closing: Promise<void> | undefined;
     return {
       model: opened.model,
+      signal: cancellation.signal,
+      classify: cancellation.classify,
       sessionFrom: (result) =>
         extractAgentSession(harness, result.providerMetadata, driver.sessionPointer),
       close: () => {
-        closing ??= opened.close().finally(() => prepared.release());
+        closing ??= opened.close().finally(() => {
+          cancellation.dispose();
+          prepared.release();
+        });
         return closing;
       },
     };
   } catch (err) {
+    watch?.dispose();
     prepared.release();
-    throw err;
+    throw watch === undefined ? err : watch.classify(err);
   }
 }
 
@@ -134,6 +181,10 @@ export async function openAgentRunner(
  * It throws `JitCheckError` when a just-in-time check fails, and {@link AgentSessionError} when
  * `resume` names a session this harness cannot resume. Pi has no provider model, so a Pi
  * descriptor throws: run Pi with `runAgent`.
+ *
+ * It reads the run's status before opening the harness and watches it until `close`. It throws
+ * a fatal error instead of opening on a cancelled run, and once the run is cancelled every
+ * provider call through `model` is aborted.
  *
  * @example
  * ```ts
@@ -165,9 +216,9 @@ export async function openAgentRunner(
  *
  * @group Agent runner
  */
-export function createAgentRunner(
+export async function createAgentRunner(
   harness: Harness,
   options: AgentRunnerOptions,
 ): Promise<AgentRunner> {
-  return openAgentRunner(harness, options, executionSeams);
+  return forFactoryStep(await openAgentRunner(harness, options, executionSeams));
 }

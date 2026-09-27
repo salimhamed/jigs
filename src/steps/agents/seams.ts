@@ -22,6 +22,7 @@ import {
   type HarnessTarget,
 } from "./drivers/index.ts";
 import { factoryAgentEnv } from "./harnesses/env.ts";
+import { type RunStatusReader, worldRunStatus } from "./run-cancellation.ts";
 import { openStepStream, type StepStream } from "./step-stream.ts";
 
 /** The parts of a `streamText` result an agent run reads. */
@@ -39,6 +40,7 @@ export interface ExecutionSeams extends DriverDependencies {
     model: LanguageModel;
     prompt: string;
     output?: OutputInterface<unknown, unknown, never>;
+    abortSignal?: AbortSignal | undefined;
   }): AgentTextStream;
   openStepStream(): StepStream | undefined;
   resolveDriver: DriverResolver;
@@ -48,6 +50,8 @@ export interface ExecutionSeams extends DriverDependencies {
     target: HarnessTarget,
     env: Record<string, string>,
   ): Promise<FailedCheck[] | undefined>;
+  /** Where an agent call reads its run's status to watch for cancellation. */
+  runStatus: RunStatusReader;
 }
 
 export const executionSeams: ExecutionSeams = {
@@ -62,4 +66,5 @@ export const executionSeams: ExecutionSeams = {
     const report = await runChecks(jitChecks(target, env), JIT_TIMEOUT_MS);
     return report.ok ? undefined : failedChecks(report);
   },
+  runStatus: worldRunStatus,
 };

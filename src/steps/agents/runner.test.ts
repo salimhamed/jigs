@@ -1,13 +1,22 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
+import { generateText } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
+import { FatalError } from "workflow";
 import { JigsError } from "../../errors.ts";
 import { JitCheckError } from "../../workflow/agents/agent.ts";
 import { harnesses, models } from "../../workflow/agents/harness-config.ts";
 import type { Driver, DriverResolver } from "./drivers/index.ts";
-import { makeTmpDir, removeTmpDir } from "./harnesses/test-fixtures.ts";
-import { createAgentRunner, openAgentRunner } from "./runner.ts";
+import type { OpenContext } from "./drivers/types.ts";
+import {
+  cancellableRun,
+  makeTmpDir,
+  removeTmpDir,
+  runningRunStatus,
+} from "./harnesses/test-fixtures.ts";
+import { RunCancelledError } from "./run-cancellation.ts";
+import { createAgentRunner, forFactoryStep, openAgentRunner } from "./runner.ts";
 import { type ExecutionSeams, executionSeams } from "./seams.ts";
 import { AgentSessionError } from "./session-error.ts";
 
@@ -26,12 +35,16 @@ afterAll(() => {
   else process.env.XDG_DATA_HOME = savedDataHome;
 });
 
-function fakeClaude() {
+function fakeClaude(model = new MockLanguageModelV4()) {
   const closed = vi.fn(async () => {});
+  const opened: OpenContext[] = [];
   const driver: Driver<"claude"> = {
     kind: "claude",
     family: "harness",
-    open: async () => ({ model: new MockLanguageModelV4(), close: closed }),
+    open: async (_target, context) => {
+      opened.push(context);
+      return { model, close: closed };
+    },
     installationChecks: () => [],
     requestChecks: () => [],
     envAllowlist: () => [],
@@ -44,8 +57,9 @@ function fakeClaude() {
     resolveDriver: (() => driver) as unknown as DriverResolver,
     factoryEnv: () => [],
     jitFailures: async () => undefined,
+    runStatus: runningRunStatus,
   };
-  return { seams, closed };
+  return { seams, closed, opened };
 }
 
 const claude = harnesses.claude({ model: "sonnet" });
@@ -109,4 +123,53 @@ test("a session recorded on another harness is an AgentSessionError", async () =
       seams,
     ),
   ).rejects.toBeInstanceOf(AgentSessionError);
+});
+
+test("a cancelled run is refused before the harness opens, and the worktree is released", async () => {
+  const { seams, opened } = fakeClaude();
+  seams.runStatus = cancellableRun("cancelled");
+
+  const opening = openAgentRunner(claude, { cwd: worktree, run }, seams);
+
+  await expect(opening).rejects.toBeInstanceOf(RunCancelledError);
+  await expect(opening).rejects.toSatisfy((error) => FatalError.is(error));
+  expect(opened).toHaveLength(0);
+  seams.runStatus = runningRunStatus;
+  await (await openAgentRunner(claude, { cwd: worktree, run }, seams)).close();
+});
+
+test("a factory step's model aborts its provider call once the run is cancelled", async () => {
+  const status = cancellableRun();
+  const model = new MockLanguageModelV4({
+    doGenerate: async ({ abortSignal }) => {
+      status.cancel();
+      await new Promise((resolve) => abortSignal?.addEventListener("abort", resolve));
+      throw abortSignal?.reason;
+    },
+  });
+  const { seams, opened } = fakeClaude(model);
+  seams.runStatus = status;
+  const runner = forFactoryStep(await openAgentRunner(claude, { cwd: worktree, run }, seams));
+
+  try {
+    await expect(generateText({ model: runner.model, prompt: "go" })).rejects.toSatisfy((error) =>
+      FatalError.is(error),
+    );
+    expect(opened[0]?.signal.aborted).toBe(true);
+  } finally {
+    await runner.close();
+  }
+});
+
+test("closing the runner ends its watch on the run", async () => {
+  const status = cancellableRun();
+  const { seams, opened } = fakeClaude();
+  seams.runStatus = status;
+  const runner = await openAgentRunner(claude, { cwd: worktree, run }, seams);
+  await runner.close();
+
+  status.cancel();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  expect(opened[0]?.signal.aborted).toBe(false);
 });

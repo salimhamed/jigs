@@ -34,7 +34,7 @@ function lifecycle(options: { sessionFound?: boolean; providerThrows?: boolean }
           ? {}
           : { resume: { harness: "codex", id: resume.id, descriptor: "" } }),
       },
-      { metadata: { workflowRunId: "run-1" }, env: {} },
+      { metadata: { workflowRunId: "run-1" }, env: {}, signal: new AbortController().signal },
     );
   return { open, close, cleanup, createAppServer };
 }

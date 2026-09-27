@@ -10,7 +10,7 @@ import { executionSeams } from "../../seams.ts";
 import type { AgentStreamPart } from "../../step-stream.ts";
 import { executePi } from "../pi.ts";
 import { preparePiInvocationHome, realPiAuthPath } from "../pi-home.ts";
-import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import { makeTmpDir, removeTmpDir, runningRunStatus } from "../test-fixtures.ts";
 import { makeScratchRepo } from "./fixtures/live-env.ts";
 
 function hasOpenaiCodexLogin(): boolean {
@@ -66,6 +66,7 @@ test.skipIf(!hasOpenaiCodexLogin())(
       { workflowRunId: `live-pi-stream-${crypto.randomUUID()}` },
       {
         ...executionSeams,
+        runStatus: runningRunStatus,
         factoryEnv: () => [],
         resolveDriver: ((kind) => (kind === "pi" ? pi : driverFor(kind))) as DriverResolver,
       },

@@ -12,7 +12,12 @@ import { harnessEnv } from "./env.ts";
 import { executePi } from "./pi.ts";
 import { piMcpToolNames } from "./pi-extension.ts";
 import { piRunStatePath, preparePiInvocationHome } from "./pi-home.ts";
-import { makeTmpDir, removeTmpDir, skipWithoutSupportedPi } from "./test-fixtures.ts";
+import {
+  makeTmpDir,
+  removeTmpDir,
+  runningRunStatus,
+  skipWithoutSupportedPi,
+} from "./test-fixtures.ts";
 
 let tmp: string;
 beforeEach(() => {
@@ -195,6 +200,7 @@ test.skipIf(skipPi || process.platform !== "linux")(
         {
           ...executionSeams,
           factoryEnv: () => declared,
+          runStatus: runningRunStatus,
           resolveDriver: ((kind) => (kind === "pi" ? pi : driverFor(kind))) as DriverResolver,
         },
       );

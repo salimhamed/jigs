@@ -69,6 +69,10 @@ function promptFor(request: AgentRequest): string {
   return `${prompt}\n\nCall ${SUBMIT_RESULT_TOOL} with the final answer.`;
 }
 
+function owner(context: DriverContext): string {
+  return `Pi for run ${context.metadata.workflowRunId}`;
+}
+
 export interface PiDriverDependencies {
   openStepStream(): StepStream | undefined;
   preparePiHome(runId: string, plan: PiModelPlan): Promise<PreparedPiHome>;
@@ -120,6 +124,8 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
         cwd: scratch,
         env: { ...modelEnvironment(model, context.env), PI_CODING_AGENT_DIR: prepared.home },
         requireResult: outputSchema !== undefined,
+        signal: context.signal,
+        owner: owner(context),
       });
     } finally {
       if (scratch !== undefined) rmSync(scratch, { recursive: true, force: true });
@@ -196,6 +202,8 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
           PI_CODING_AGENT_DIR: prepared.home,
         },
         requireResult: request.outputSchema !== undefined,
+        signal: context.signal,
+        owner: owner(context),
       });
       const reported = generation.providerMetadata?.pi?.sessionId;
       if (reported !== sessionId) {

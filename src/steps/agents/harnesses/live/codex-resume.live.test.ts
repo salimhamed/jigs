@@ -8,7 +8,7 @@ import { type DriverResolver, driverFor } from "../../drivers/index.ts";
 import { executeAgentWith } from "../../execute-agent.ts";
 import { type ExecutionSeams, executionSeams } from "../../seams.ts";
 import { codexSessionFile, prepareCodexInvocationHome } from "../codex-home.ts";
-import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import { makeTmpDir, removeTmpDir, runningRunStatus } from "../test-fixtures.ts";
 import { assertLivePreconditions, makeScratchRepo } from "./fixtures/live-env.ts";
 
 // The staleness half of the resume contract, against the real harnesses: a
@@ -31,6 +31,7 @@ beforeAll(() => {
   });
   deps = {
     ...executionSeams,
+    runStatus: runningRunStatus,
     factoryEnv: () => [],
     resolveDriver: ((kind) => (kind === "codex" ? codex : driverFor(kind))) as DriverResolver,
   };

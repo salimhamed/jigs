@@ -14,7 +14,7 @@ import { type DriverResolver, driverFor } from "../drivers/index.ts";
 import { executeAgentWith } from "../execute-agent.ts";
 import { codexSessionFile, prepareCodexInvocationHome } from "../harnesses/codex-home.ts";
 import { assertLivePreconditions, makeScratchRepo } from "../harnesses/live/fixtures/live-env.ts";
-import { makeTmpDir, removeTmpDir } from "../harnesses/test-fixtures.ts";
+import { makeTmpDir, removeTmpDir, runningRunStatus } from "../harnesses/test-fixtures.ts";
 import { type ExecutionSeams, executionSeams } from "../seams.ts";
 import type { AgentStreamPart, StepStream } from "../step-stream.ts";
 
@@ -33,6 +33,7 @@ beforeAll(() => {
   });
   deps = {
     ...executionSeams,
+    runStatus: runningRunStatus,
     factoryEnv: () => [],
     // Run state under the test tmp dir, not ~/.local/share.
     resolveDriver: ((kind) => (kind === "codex" ? codex : driverFor(kind))) as DriverResolver,

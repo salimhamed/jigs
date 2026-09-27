@@ -103,6 +103,7 @@ test("the real provider launch isolates ask and run and preserves stderr auth cl
         ...harnessEnv([...claudeDriver.envAllowlist(testCase.request), "SYNTHETIC_DECLARED"]),
         JIGS_CLAUDE_TEST_RECORD: record,
       },
+      signal: new AbortController().signal,
     };
 
     let error: unknown;
@@ -165,6 +166,7 @@ test("descriptor settings reach the CLI and jigs' policy wins over a smuggled po
       {
         metadata: { workflowRunId: "run-settings" },
         env: { ...harnessEnv([]), JIGS_CLAUDE_TEST_RECORD: record },
+        signal: new AbortController().signal,
       },
     );
     await expect(generateText({ model: opened.model, prompt: "work" })).rejects.toThrow();

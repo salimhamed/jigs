@@ -5,6 +5,7 @@ import { convertArrayToReadableStream, MockLanguageModelV4 } from "ai/test";
 import type { ClaudeCodeSettings } from "ai-sdk-provider-claude-code";
 import type { CodexAppServerProvider, CodexAppServerSettings } from "ai-sdk-provider-codex-cli";
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
+import { FatalError } from "workflow";
 import { z } from "zod";
 import { unwrapAgentStep } from "../../workflow/agents/agent.ts";
 import { bindAgentSession, type RunAgentFn } from "../../workflow/agents/agent-session.ts";
@@ -23,7 +24,13 @@ import { createPiDriver, type PiDriverDependencies } from "./drivers/pi.ts";
 import { type ExecutorGeneration, executeAgentWith } from "./execute-agent.ts";
 import { executePi, type PiExecutionOptions } from "./harnesses/pi.ts";
 import { planPiModel } from "./harnesses/pi-model.ts";
-import { makeTmpDir, removeTmpDir } from "./harnesses/test-fixtures.ts";
+import {
+  cancellableRun,
+  makeTmpDir,
+  removeTmpDir,
+  runningRunStatus,
+} from "./harnesses/test-fixtures.ts";
+import { RunCancelledError } from "./run-cancellation.ts";
 import { type ExecutionSeams, executionSeams } from "./seams.ts";
 import type { AgentStreamPart, StepStream } from "./step-stream.ts";
 
@@ -167,6 +174,7 @@ function makeDeps(
     // The probe itself is covered in ./jit-marker.test.ts, against a server
     // that really cannot start.
     jitFailures: async () => undefined,
+    runStatus: runningRunStatus,
   };
   return { deps, captured, piDeps };
 }
@@ -1465,6 +1473,7 @@ test("the JIT checks and the harness get the same environment, built from the ba
   };
   const deps: ExecutionSeams = {
     ...executionSeams,
+    runStatus: runningRunStatus,
     streamText: () => streamOf({ text: "done" }),
     resolveDriver: (() => driver) as unknown as DriverResolver,
     factoryEnv: () => ["FACTORY_VAR"],
@@ -1513,6 +1522,7 @@ function sdkSeams(model: MockLanguageModelV4, stream?: StepStream): ExecutionSea
   };
   return {
     ...executionSeams,
+    runStatus: runningRunStatus,
     openStepStream: () => stream,
     resolveDriver: (() => driver) as unknown as DriverResolver,
     factoryEnv: () => [],
@@ -1776,4 +1786,176 @@ const timer = setInterval(() => {
   expect(parts.map((part) => part.type)).toContain("tool-result");
   expect(parts.at(-1)).toEqual({ type: "finish", finishReason: "stop" });
   expect(stream.writable.locked).toBe(false);
+});
+
+const piSource = models.openaiCompatible({
+  name: "studio",
+  baseUrl: "http://127.0.0.1:1234/v1",
+  model: "local-model",
+});
+
+test("Pi run and ask get the run's cancellation signal and name the run in stop diagnostics", async () => {
+  const { deps, captured, piDeps } = makeDeps();
+  const signals: (AbortSignal | undefined)[] = [];
+  piDeps.executePi = async (options) => {
+    captured.piOptions = options;
+    signals.push(options.signal);
+    const id = options.args[options.args.indexOf("--session-id") + 1];
+    return { text: "done", providerMetadata: { pi: { sessionId: id } } };
+  };
+
+  const ran = await agentStep(
+    buildAgentRequest({ harness: harnesses.pi(piSource), cwd: worktree, prompt: "go" }),
+    { workflowRunId: "run-pi-signal" },
+    deps,
+  );
+  expect(captured.piOptions?.owner).toBe("Pi for run run-pi-signal");
+  await agentStep(
+    buildAskAgentRequest({ harness: harnesses.pi(piSource), prompt: "judge" }),
+    { workflowRunId: "run-pi-signal" },
+    deps,
+  );
+
+  expect(ran.text).toBe("done");
+  expect(signals).toHaveLength(2);
+  for (const signal of signals) {
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(signal?.aborted).toBe(false);
+  }
+});
+
+test.each(["run", "ask"] as const)(
+  "a Pi %s on an already cancelled run never launches Pi and fails fatally",
+  async (verb) => {
+    const { deps, piDeps } = makeDeps();
+    const launched = vi.fn(piDeps.executePi);
+    piDeps.executePi = launched;
+    deps.runStatus = cancellableRun("cancelled");
+    const wire =
+      verb === "run"
+        ? buildAgentRequest({ harness: harnesses.pi(piSource), cwd: worktree, prompt: "go" })
+        : buildAskAgentRequest({ harness: harnesses.pi(piSource), prompt: "judge" });
+
+    const attempt = executeAgentWith(wire, { workflowRunId: "run-gone" }, deps);
+
+    await expect(attempt).rejects.toBeInstanceOf(RunCancelledError);
+    await expect(attempt).rejects.toSatisfy((error) => FatalError.is(error));
+    expect(launched).not.toHaveBeenCalled();
+    // The worktree lock was released: the next agent in the worktree starts.
+    deps.runStatus = runningRunStatus;
+    if (verb === "run") {
+      piDeps.executePi = async (options) => ({
+        text: "done",
+        providerMetadata: {
+          pi: { sessionId: options.args[options.args.indexOf("--session-id") + 1] },
+        },
+      });
+      await expect(agentStep(wire, { workflowRunId: "run-next" }, deps)).resolves.toMatchObject({
+        text: "done",
+      });
+    }
+  },
+);
+
+test("an unreadable run status never launches Pi and leaves the step retryable", async () => {
+  const { deps, piDeps } = makeDeps();
+  const launched = vi.fn(piDeps.executePi);
+  piDeps.executePi = launched;
+  deps.runStatus = {
+    read: async () => {
+      throw new Error('Workflow run "run-missing" not found');
+    },
+    waitForTerminal: async () => "running",
+  };
+
+  const attempt = executeAgentWith(
+    buildAgentRequest({ harness: harnesses.pi(piSource), cwd: worktree, prompt: "go" }),
+    { workflowRunId: "run-missing" },
+    deps,
+  );
+
+  await expect(attempt).rejects.toThrow("could not read run run-missing before starting its agent");
+  await expect(attempt).rejects.toSatisfy((error) => !FatalError.is(error));
+  expect(launched).not.toHaveBeenCalled();
+});
+
+test("cancelling a run mid-Pi aborts it, cleans up, and fails the step fatally", async () => {
+  const { deps, captured, piDeps } = makeDeps();
+  const run = cancellableRun();
+  deps.runStatus = run;
+  piDeps.executePi = (options) => {
+    captured.piOptions = options;
+    return new Promise((_, reject) => {
+      options.signal?.addEventListener("abort", () =>
+        reject(new Error("pi terminated by signal SIGTERM: stopping")),
+      );
+      run.cancel();
+    });
+  };
+
+  const attempt = executeAgentWith(
+    buildAgentRequest({ harness: harnesses.pi(piSource), cwd: worktree, prompt: "go" }),
+    { workflowRunId: "run-cancelled-mid" },
+    deps,
+  );
+
+  await expect(attempt).rejects.toSatisfy(
+    (error) =>
+      error instanceof RunCancelledError &&
+      FatalError.is(error) &&
+      (error.cause as Error).message === "pi terminated by signal SIGTERM: stopping",
+  );
+  expect(existsSync(captured.piOptions?.env.PI_CODING_AGENT_DIR ?? "")).toBe(false);
+});
+
+test("a Claude run and ask pass the cancellation signal to the AI SDK", async () => {
+  const { deps, captured } = makeDeps();
+
+  await agentStep(
+    buildAgentRequest({
+      harness: harnesses.claude({ model: "sonnet" }),
+      cwd: worktree,
+      prompt: "go",
+    }),
+    { workflowRunId: "run-claude-signal" },
+    deps,
+  );
+  const runSignal = captured.options?.abortSignal;
+  await agentStep(
+    buildAskAgentRequest({ harness: harnesses.claude({ model: "sonnet" }), prompt: "judge" }),
+    { workflowRunId: "run-claude-signal" },
+    deps,
+  );
+
+  const askSignal = captured.options?.abortSignal;
+
+  expect(runSignal).toBeInstanceOf(AbortSignal);
+  expect(askSignal).toBeInstanceOf(AbortSignal);
+  expect(askSignal).not.toBe(runSignal);
+  expect(askSignal?.aborted).toBe(false);
+});
+
+test("cancelling a run mid-stream aborts the provider call and fails the step fatally", async () => {
+  const run = cancellableRun();
+  const model = new MockLanguageModelV4({
+    doStream: async ({ abortSignal }) => {
+      run.cancel();
+      await new Promise((resolve) => abortSignal?.addEventListener("abort", resolve));
+      throw new Error("claude was stopped");
+    },
+  });
+  const seams = { ...sdkSeams(model), runStatus: run };
+
+  const attempt = executeAgentWith(
+    buildAgentRequest({
+      harness: harnesses.claude({ model: "sonnet" }),
+      cwd: worktree,
+      prompt: "go",
+    }),
+    { workflowRunId: "run-claude-cancelled" },
+    seams,
+  );
+
+  await expect(attempt).rejects.toBeInstanceOf(RunCancelledError);
+  await expect(attempt).rejects.toSatisfy((error) => FatalError.is(error));
 });
