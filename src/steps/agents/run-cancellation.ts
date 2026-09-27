@@ -1,4 +1,5 @@
 import { getWorld } from "workflow/runtime";
+import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 
 /** How an agent invocation reads its run's persisted status. Tests replace it. */
 export interface RunStatusReader {
@@ -16,8 +17,12 @@ export interface RunStatusReader {
 // need the SDK's value at module load, which factory tests commonly mock away.
 export class RunCancelledError extends Error {
   readonly fatal = true;
-  constructor(runId: string, options?: { cause?: unknown }) {
-    super(`run ${runId} was cancelled, so jigs stopped its agent`);
+  constructor(runId: string, options?: { cause?: unknown; beforeStart?: boolean }) {
+    super(
+      options?.beforeStart
+        ? `run ${runId} was cancelled, so jigs did not start its agent`
+        : `run ${runId} was cancelled, so jigs stopped its agent`,
+    );
     this.name = "RunCancelledError";
     if (options?.cause !== undefined) this.cause = options.cause;
   }
@@ -36,7 +41,6 @@ export interface RunCancellation {
 const WATCH_MS = 1_000;
 const RETRY_MIN_MS = 250;
 const RETRY_MAX_MS = 5_000;
-const TERMINAL = new Set(["completed", "failed", "cancelled"]);
 
 export const worldRunStatus: RunStatusReader = {
   read: async (runId) => (await (await getWorld()).runs.get(runId, { resolveData: "none" })).status,
@@ -87,7 +91,7 @@ export async function watchRunCancellation(
       cause: error,
     });
   }
-  if (status === "cancelled") throw new RunCancelledError(runId);
+  if (status === "cancelled") throw new RunCancelledError(runId, { beforeStart: true });
 
   const cancelled = new AbortController();
   const disposal = new AbortController();
@@ -115,12 +119,13 @@ export async function watchRunCancellation(
         cancelled.abort(new RunCancelledError(runId));
         return;
       }
-      if (TERMINAL.has(seen)) return;
+      if (TERMINAL_RUN_STATUSES.has(seen)) return;
       // A World may answer early with a running status; pace so that is not a busy loop.
-      await delay(WATCH_MS - (Date.now() - started), disposal.signal);
+      const remaining = WATCH_MS - (Date.now() - started);
+      if (remaining > 0) await delay(remaining, disposal.signal);
     }
   };
-  if (!TERMINAL.has(status)) void watch();
+  if (!TERMINAL_RUN_STATUSES.has(status)) void watch();
 
   return {
     signal: cancelled.signal,

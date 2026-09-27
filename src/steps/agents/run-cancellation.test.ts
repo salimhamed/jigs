@@ -119,6 +119,44 @@ test("nonterminal timeouts keep watching, paced to the watch interval", async ()
   watch.dispose();
 });
 
+test("an answer slower than the watch interval waits again at once, with no negative timer", async () => {
+  const reader = controlledReader();
+  const watch = await watchRunCancellation("run_a", reader);
+  await flush();
+  const timers = vi.spyOn(globalThis, "setTimeout");
+
+  await vi.advanceTimersByTimeAsync(1_500);
+  reader.waits[0]?.resolve("running");
+  await flush();
+
+  expect(reader.waits).toHaveLength(2);
+  for (const [, ms] of timers.mock.calls) expect(ms ?? 0).toBeGreaterThanOrEqual(0);
+  watch.dispose();
+});
+
+test("the error says whether the agent was stopped or never started", async () => {
+  const refused = withRunCancellation(
+    "run_a",
+    async () => "ran",
+    controlledReader({ run_a: "cancelled" }),
+  );
+  await expect(refused).rejects.toThrow("run run_a was cancelled, so jigs did not start its agent");
+
+  const reader = controlledReader();
+  const stopped = withRunCancellation(
+    "run_a",
+    (signal) =>
+      new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason))),
+    reader,
+  );
+  const failure = expect(stopped).rejects.toThrow(
+    "run run_a was cancelled, so jigs stopped its agent",
+  );
+  await flush();
+  reader.waits[0]?.resolve("cancelled");
+  await failure;
+});
+
 test("another terminal status ends the watch without aborting", async () => {
   const reader = controlledReader();
   const watch = await watchRunCancellation("run_a", reader);
