@@ -1959,3 +1959,28 @@ test("cancelling a run mid-stream aborts the provider call and fails the step fa
   await expect(attempt).rejects.toBeInstanceOf(RunCancelledError);
   await expect(attempt).rejects.toSatisfy((error) => FatalError.is(error));
 });
+
+test("a provider error in an uncancelled run leaves the step retryable", async () => {
+  const model = new MockLanguageModelV4({
+    doStream: async () => {
+      throw new Error("claude exited with code 1");
+    },
+  });
+
+  const attempt = executeAgentWith(
+    buildAgentRequest({
+      harness: harnesses.claude({ model: "sonnet" }),
+      cwd: worktree,
+      prompt: "go",
+    }),
+    { workflowRunId: "run-claude-failed" },
+    { ...sdkSeams(model), runStatus: cancellableRun() },
+  );
+
+  await expect(attempt).rejects.toSatisfy(
+    (error) =>
+      !(error instanceof RunCancelledError) &&
+      !FatalError.is(error) &&
+      String(error).includes("claude exited with code 1"),
+  );
+});
