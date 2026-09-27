@@ -80,6 +80,17 @@ test("a launcher whose Codex dies by a signal dies by the same signal", async ()
   expect(await exit).toEqual({ code: null, signal: "SIGTERM" });
 });
 
+test("a Codex killed by a signal Node ignores still fails the launcher", async () => {
+  const codex = path.join(tmp, "codex");
+  writeFileSync(codex, "#!/bin/sh\nkill -PIPE $$\n");
+  chmodSync(codex, 0o755);
+  const launcher = spawn(writeCodexLauncher(tmp, codex, ["PATH"]), [], {
+    stdio: ["pipe", "pipe", "inherit"],
+  });
+
+  expect(await exited(launcher)).toEqual({ code: 141, signal: null });
+});
+
 test("a Codex that cannot start leaves a group-less launch that stop does not wait on", async () => {
   const launcher = spawn(writeCodexLauncher(tmp, path.join(tmp, "missing"), ["PATH"]), [], {
     stdio: ["pipe", "pipe", "pipe"],

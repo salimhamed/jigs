@@ -6,23 +6,29 @@ const SUPERVISOR = "jigs-codex-supervise.mjs";
 const GROUPS = "jigs-codex-groups";
 
 // Codex inherits this process's stdio, so the provider speaks JSON-RPC to
-// Codex directly and nothing here relays or buffers it. Everything before the
-// first await runs before any forwarded signal is handled, so a SIGTERM during
-// startup still reaches the new group, and its id is on disk by then.
+// Codex directly and nothing here relays or buffers it. The handlers go on
+// before Codex starts: without them a signal kills this process outright and
+// orphans the new group. Node runs them only once this synchronous startup is
+// done, so a signal that lands during it reaches a group already recorded.
+// Node ignores or intercepts some signals, such as SIGPIPE and SIGUSR1, so a
+// re-raise that does not end this process exits with the code a shell reports
+// for that signal.
 const SUPERVISOR_SOURCE = `import { spawn } from "node:child_process";
 import { renameSync, writeFileSync } from "node:fs";
+import { constants } from "node:os";
 const [record, command, ...args] = process.argv.slice(2);
-const child = spawn(command, args, { stdio: "inherit", detached: true });
-if (child.pid !== undefined) {
-  writeFileSync(record + ".tmp", String(child.pid));
-  renameSync(record + ".tmp", record);
-}
+let child;
 for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"])
   process.on(signal, () => {
     try {
       process.kill(-child.pid, signal);
     } catch {}
   });
+child = spawn(command, args, { stdio: "inherit", detached: true });
+if (child.pid !== undefined) {
+  writeFileSync(record + ".tmp", String(child.pid));
+  renameSync(record + ".tmp", record);
+}
 child.on("error", (error) => {
   process.stderr.write("jigs could not start Codex: " + error.message + "\\n");
   process.exit(127);
@@ -31,6 +37,7 @@ child.on("exit", (code, signal) => {
   if (signal === null) process.exit(code ?? 1);
   process.removeAllListeners(signal);
   process.kill(process.pid, signal);
+  setImmediate(() => process.exit(128 + constants.signals[signal]));
 });
 `;
 
