@@ -1263,24 +1263,34 @@ test("pi run resumes only after finding the real session file", async () => {
   expect(result.session).toMatchObject({ harness: "pi", id: sessionId });
 });
 
-test("pi run rejects a different session id reported by Pi", async () => {
+test("a pi session mismatch ends its stream with an error and releases the writer", async () => {
   const wire = buildAgentRequest({
     harness: harnesses.pi(models.openrouter("openai/gpt-oss")),
     cwd: worktree,
     prompt: "implement it",
   });
   const { deps, piDeps } = makeDeps();
-  piDeps.executePi = async () => ({
-    text: "done",
-    providerMetadata: { pi: { sessionId: "different-session" } },
-  });
+  const { stream, parts } = recordingStream();
+  piDeps.openStepStream = () => stream;
+  piDeps.executePi = async (options) => {
+    options.onStdout?.(
+      `${JSON.stringify({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "done" } })}\n`,
+    );
+    return { text: "done", providerMetadata: { pi: { sessionId: "different-session" } } };
+  };
 
   await expect(executeAgentWith(wire, { workflowRunId: "run-pi-mismatch" }, deps)).rejects.toThrow(
     /Pi reported session.*different-session.*jigs-/,
   );
+  expect(parts.map((part) => part.type)).toEqual(["attempt-start", "text", "error"]);
+  expect(parts.at(-1)).toEqual({
+    type: "error",
+    message: expect.stringMatching(/Pi reported session.*different-session.*jigs-/),
+  });
+  expect(stream.writable.locked).toBe(false);
 });
 
-test("a Pi execution failure during resume still throws", async () => {
+test("a Pi execution failure during resume preserves its error and ends its stream", async () => {
   const sessionId = "existing-session";
   const source = models.openrouter("openai/gpt-oss");
   const wire = buildAgentRequest({
@@ -1295,13 +1305,19 @@ test("a Pi execution failure during resume still throws", async () => {
     planPiModel(harnesses.pi(source)),
   );
   writeFileSync(path.join(prepared.sessionDir, `2026_${sessionId}.jsonl`), "");
+  const { stream, parts } = recordingStream();
+  piDeps.openStepStream = () => stream;
+  const failure = new Error("Pi stopped after launch");
   piDeps.executePi = async () => {
-    throw new Error("Pi stopped after launch");
+    throw failure;
   };
 
   await expect(
     executeAgentWith(wire, { workflowRunId: "run-pi-execution-failure" }, deps),
-  ).rejects.toThrow("Pi stopped after launch");
+  ).rejects.toBe(failure);
+  expect(parts.map((part) => part.type)).toEqual(["attempt-start", "error"]);
+  expect(parts.at(-1)).toEqual({ type: "error", message: failure.message });
+  expect(stream.writable.locked).toBe(false);
 });
 
 test("a resumed Pi session-id mismatch still throws after launch", async () => {
@@ -1642,6 +1658,59 @@ test("asks open no step stream, including pi asks", async () => {
   );
   expect(openStepStream).toHaveBeenCalledOnce();
 });
+
+test.each(["recording", "failing", "stalled", "locked"] as const)(
+  "a pi agent step returns the identical result with a %s stream",
+  async (mode) => {
+    const sessionId = "existing-session";
+    const harness = harnesses.pi(models.openrouter("openai/gpt-oss"));
+    const wire = buildAgentRequest({
+      harness,
+      cwd: worktree,
+      prompt: "continue",
+      resume: { harness: "pi", id: sessionId, descriptor: "" },
+    });
+    const metadata = { workflowRunId: `run-pi-stream-${mode}` };
+    const { deps, piDeps } = makeDeps();
+    const prepared = await piDeps.preparePiHome(metadata.workflowRunId, planPiModel(harness));
+    writeFileSync(path.join(prepared.sessionDir, `2026_${sessionId}.jsonl`), "");
+    piDeps.executePi = async (options) => {
+      options.onStdout?.(
+        `${JSON.stringify({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "continued" } })}\n`,
+      );
+      return { text: "continued", providerMetadata: { pi: { sessionId } } };
+    };
+    const expected = await agentStep(wire, metadata, deps);
+    const parts: AgentStreamPart[] = [];
+    const stream: StepStream = {
+      attempt: 2,
+      writable: new WritableStream<AgentStreamPart>({
+        write(part) {
+          parts.push(part);
+          if (mode === "failing") throw new Error("World unavailable");
+          if (mode === "stalled") return new Promise<void>(() => {});
+        },
+      }),
+    };
+    piDeps.openStepStream = () => stream;
+    const lock = mode === "locked" ? stream.writable.getWriter() : undefined;
+    try {
+      await expect(agentStep(wire, metadata, deps)).resolves.toEqual(expected);
+      if (mode !== "locked") expect(stream.writable.locked).toBe(false);
+      if (mode === "recording") {
+        expect(parts).toEqual([
+          { type: "attempt-start", attempt: 2, harness: "pi", cwd: worktree, resume: true },
+          { type: "text", text: "continued" },
+          { type: "finish", finishReason: "stop" },
+        ]);
+      }
+      if (mode === "failing" || mode === "stalled") expect(parts).toHaveLength(1);
+      if (mode === "locked") expect(parts).toHaveLength(0);
+    } finally {
+      lock?.releaseLock();
+    }
+  },
+);
 
 test("a pi agent step writes several stream parts before the harness returns", async () => {
   const { deps, piDeps } = makeDeps();

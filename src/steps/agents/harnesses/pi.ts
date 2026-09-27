@@ -1,17 +1,14 @@
 import { spawn } from "node:child_process";
 import type { ExecutorGeneration } from "../drivers/types.ts";
-import type { StepStream } from "../step-stream.ts";
 import { resolvePiExecutable } from "./executables.ts";
 import { type PiReduceOptions, reducePiJsonl } from "./pi-jsonl.ts";
-import { createPiStreamTap } from "./pi-stream.ts";
 
 export type PiExecutionOptions = PiReduceOptions & {
   args: string[];
   cwd: string;
   env: Record<string, string>;
   signal?: AbortSignal;
-  stream?: StepStream;
-  resume?: boolean;
+  onStdout?: (chunk: string) => void;
 };
 
 const FORCE_KILL_DELAY_MS = 1_000;
@@ -98,14 +95,6 @@ export async function stopPiProcesses(): Promise<void> {
 export function executePi(options: PiExecutionOptions): Promise<ExecutorGeneration> {
   if (options.signal?.aborted)
     return Promise.reject(options.signal.reason ?? new Error("Pi execution was aborted"));
-  const tap =
-    options.stream === undefined
-      ? undefined
-      : createPiStreamTap(options.stream, {
-          harness: "pi",
-          cwd: options.cwd,
-          resume: options.resume === true,
-        });
   return new Promise<ExecutorGeneration>((resolve, reject) => {
     const grouped = process.platform !== "win32";
     const child = spawn(resolvePiExecutable(options.env), options.args, {
@@ -128,7 +117,11 @@ export function executePi(options: PiExecutionOptions): Promise<ExecutorGenerati
     let stderr = "";
     child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
       stdout += chunk;
-      tap?.write(chunk);
+      try {
+        options.onStdout?.(chunk);
+      } catch {
+        // Observers cannot change the buffered output or the process result.
+      }
     });
     child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
       stderr += chunk;
@@ -162,14 +155,5 @@ export function executePi(options: PiExecutionOptions): Promise<ExecutorGenerati
         );
       }
     });
-  }).then(
-    async (result) => {
-      await tap?.end();
-      return result;
-    },
-    async (error: unknown) => {
-      await tap?.end(error);
-      throw error;
-    },
-  );
+  });
 }

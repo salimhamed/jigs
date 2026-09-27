@@ -1,10 +1,14 @@
-import type { TextStreamPart, ToolSet } from "ai";
-import { type AttemptStart, type StepStream, teeAgentStream } from "../step-stream.ts";
+import {
+  type AgentSourcePart,
+  type AttemptStart,
+  type StepStream,
+  teeAgentStream,
+} from "../step-stream.ts";
 
 /** Observe Pi's JSONL output without participating in its result reduction. */
 export function createPiStreamTap(stream: StepStream, start: AttemptStart) {
-  let controller: ReadableStreamDefaultController<TextStreamPart<ToolSet>>;
-  const parts = new ReadableStream<TextStreamPart<ToolSet>>({
+  let controller: ReadableStreamDefaultController<AgentSourcePart>;
+  const parts = new ReadableStream<AgentSourcePart>({
     start(c) {
       controller = c;
     },
@@ -29,24 +33,7 @@ export function createPiStreamTap(stream: StepStream, start: AttemptStart) {
       write("\n");
       try {
         controller.enqueue(
-          error === undefined
-            ? {
-                type: "finish",
-                finishReason: "stop",
-                rawFinishReason: undefined,
-                totalUsage: {
-                  inputTokens: undefined,
-                  outputTokens: undefined,
-                  totalTokens: undefined,
-                  inputTokenDetails: {
-                    noCacheTokens: undefined,
-                    cacheReadTokens: undefined,
-                    cacheWriteTokens: undefined,
-                  },
-                  outputTokenDetails: { textTokens: undefined, reasoningTokens: undefined },
-                },
-              }
-            : { type: "error", error },
+          error === undefined ? { type: "finish", finishReason: "stop" } : { type: "error", error },
         );
         controller.close();
       } catch {}
@@ -59,14 +46,13 @@ function record(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
 }
 
-function* partsOf(value: unknown): Generator<TextStreamPart<ToolSet>> {
+function* partsOf(value: unknown): Generator<AgentSourcePart> {
   const event = record(value);
   const delta = record(event.assistantMessageEvent);
   if (event.type === "message_update" && typeof delta.delta === "string") {
     if (delta.type === "text_delta" || delta.type === "thinking_delta") {
       yield {
         type: delta.type === "text_delta" ? "text-delta" : "reasoning-delta",
-        id: String(delta.contentIndex),
         text: delta.delta,
       };
     }
@@ -100,7 +86,7 @@ function* partsOf(value: unknown): Generator<TextStreamPart<ToolSet>> {
     typeof event.toolCallId === "string" &&
     typeof event.toolName === "string"
   ) {
-    const call = { toolCallId: event.toolCallId, toolName: event.toolName, input: undefined };
+    const call = { toolCallId: event.toolCallId, toolName: event.toolName };
     yield event.isError === true
       ? { type: "tool-error", ...call, error: JSON.stringify(event.result) }
       : { type: "tool-result", ...call, output: event.result };

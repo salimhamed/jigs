@@ -13,6 +13,22 @@ export type AgentStreamPart =
   | { type: "finish"; finishReason: string }
   | { type: "error"; message: string };
 
+/** The SDK event fields the step stream reads; other event types are ignored. */
+export type AgentSourcePart<P extends TextStreamPart<ToolSet> = TextStreamPart<ToolSet>> =
+  P extends { type: "text-delta" | "reasoning-delta" }
+    ? Pick<P, "type" | "text">
+    : P extends { type: "tool-call" }
+      ? Pick<P, "type" | "toolCallId" | "toolName" | "input">
+      : P extends { type: "tool-result" }
+        ? Pick<P, "type" | "toolCallId" | "toolName" | "output">
+        : P extends { type: "tool-error" }
+          ? Pick<P, "type" | "toolCallId" | "toolName" | "error">
+          : P extends { type: "finish" }
+            ? Pick<P, "type" | "finishReason">
+            : P extends { type: "error" }
+              ? Pick<P, "type" | "error">
+              : Pick<P, "type">;
+
 export interface StepStream {
   attempt: number;
   writable: WritableStream<AgentStreamPart>;
@@ -50,7 +66,7 @@ export function openStepStream(): StepStream | undefined {
  * stream, and throw the provider's error the way `generateText` would.
  */
 export async function teeAgentStream(
-  parts: AsyncIterable<TextStreamPart<ToolSet>>,
+  parts: AsyncIterable<AgentSourcePart>,
   stream: StepStream | undefined,
   start: AttemptStart,
 ): Promise<void> {
@@ -98,7 +114,7 @@ export async function teeAgentStream(
   }
 }
 
-function recordOf(part: TextStreamPart<ToolSet>): AgentStreamPart | undefined {
+function recordOf(part: AgentSourcePart): AgentStreamPart | undefined {
   switch (part.type) {
     case "tool-call":
       return {
