@@ -225,9 +225,17 @@ where.
 ## Cancelling
 
 `jigs cancel` ends a waiting run immediately, and asks first when the run is in
-the middle of a step (`--force` skips the question). A step already running may
-still finish its outside work, but the run does not continue. Cancel lists any
+the middle of a step (`--force` skips the question). It returns once the run is
+recorded as cancelled. An agent the run started through `runAgent`, `askAgent`
+or `createAgentRunner` stops a few seconds later, along with the MCP servers
+it launched; the agent's step then fails and is not retried. Other work a step
+is doing may still finish, but the run does not continue. Cancel lists any
 worktrees it leaves behind.
+
+Stopping covers Pi, Claude Code and Codex on Linux and macOS. It does not reach
+a process that moved itself out of the agent's process group, or an agent whose
+service was killed before the cancel. If an agent cannot be stopped, the service
+log says so with the run ID.
 
 ## Cleaning up resources
 

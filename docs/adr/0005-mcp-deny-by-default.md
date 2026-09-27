@@ -39,9 +39,10 @@ world from the same worktree.
   the adapter already holds; headless runs never start a login flow.
 - MCP availability checks make a real tool call: agents misreport their own
   server list.
-- Pi and its MCP children run in a private process group, stopped when Pi
-  exits, when the service shuts down and when the process exits. `jigs cancel`
-  does not yet reach a running Pi step.
+- Every harness and its MCP children run in a private process group, stopped
+  when the harness exits, when its run is cancelled
+  ([0012](./0012-cancellation-stops-agents.md)), when the service shuts down
+  and when the process exits.
 - Rejected: disabling unwanted Codex servers one by one (a blocklist, blind to
   layers it cannot read and racy against hot reload), `codex exec
   --ignore-user-config` (the resume path runs on app-server, which has no
