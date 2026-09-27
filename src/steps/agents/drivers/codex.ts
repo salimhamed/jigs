@@ -20,6 +20,7 @@ import {
   type PreparedCodexHome,
   prepareCodexInvocationHome,
 } from "../harnesses/codex-home.ts";
+import { watchCodexProcessGroups } from "../harnesses/codex-process.ts";
 import { resolveCodexExecutable } from "../harnesses/executables.ts";
 import { AgentSessionError } from "../session-error.ts";
 import { codexAppServerStepSettings } from "./codex-support.ts";
@@ -73,17 +74,30 @@ export function createCodexDriver(
   deps: CodexDriverDependencies = defaultDependencies,
 ): Driver<"codex"> {
   // Each step gets its own app server and private home; closing the model
-  // stops the one and removes the other.
+  // stops the one and removes the other. The app server runs in its own
+  // process group with its MCP servers, which cancellation and close stop
+  // whole: the provider's close signals only the launcher.
   async function open(target: HarnessTarget, context: OpenContext): Promise<OpenedModel> {
     const harness = descriptor(target);
     const { resume } = target;
-    const prepared = await deps.prepareCodexHome(context.metadata.workflowRunId);
+    context.signal.throwIfAborted();
+    const runId = context.metadata.workflowRunId;
+    const prepared = await deps.prepareCodexHome(runId);
+    const groups = watchCodexProcessGroups(prepared.home, `Codex for run ${runId}`);
+    // close stops again, awaiting the same attempt, and surfaces any error.
+    const onAbort = () => void groups.stop().catch(() => {});
+    context.signal.addEventListener("abort", onAbort, { once: true });
     let provider: CodexAppServerProvider | undefined;
     const close = async () => {
+      context.signal.removeEventListener("abort", onAbort);
       try {
         await provider?.close();
       } finally {
-        prepared.cleanup();
+        try {
+          await groups.close();
+        } finally {
+          prepared.cleanup();
+        }
       }
     };
     try {
