@@ -1,3 +1,5 @@
+import type { ChildProcess } from "node:child_process";
+
 /**
  * How one stop attempt on a process group ended. `not-confirmed` means the group was still
  * visible after SIGKILL and the post-kill wait: its members can run no more code, so callers
@@ -157,4 +159,26 @@ export function stopProcessGroups(): Promise<GroupStopOutcome[]> {
 /** Whether a group is still registered. For tests. */
 export function isTrackedProcessGroup(pgid: number): boolean {
   return registry().groups.has(pgid);
+}
+
+/** Whether a harness is spawned as the leader of its own process group: everywhere but Windows. */
+export const OWN_GROUP = process.platform !== "win32";
+
+/**
+ * Track a child spawned with `detached: OWN_GROUP`, and return how to reap it: stop its group, or
+ * on Windows SIGTERM the child itself. Every call shares the first attempt.
+ */
+export function groupReaper(child: ChildProcess, owner: string): () => Promise<void> {
+  const pgid = OWN_GROUP ? child.pid : undefined;
+  if (pgid !== undefined) trackProcessGroup(pgid, owner);
+  let reaping: Promise<void> | undefined;
+  return () => {
+    if (reaping !== undefined) return reaping;
+    if (pgid !== undefined) reaping = stopProcessGroup(pgid).then(() => {});
+    else {
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
+      reaping = Promise.resolve();
+    }
+    return reaping;
+  };
 }

@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import type { ExecutorGeneration } from "../drivers/types.ts";
 import { resolvePiExecutable } from "./executables.ts";
 import { type PiReduceOptions, reducePiJsonl } from "./pi-jsonl.ts";
-import { type GroupStopOutcome, stopProcessGroup, trackProcessGroup } from "./process-group.ts";
+import { groupReaper, OWN_GROUP } from "./process-group.ts";
 
 export type PiExecutionOptions = PiReduceOptions & {
   args: string[];
@@ -29,29 +29,17 @@ export function executePi(options: PiExecutionOptions): Promise<ExecutorGenerati
   const { signal } = options;
   if (signal?.aborted) return Promise.reject(abortReason(signal));
   return new Promise<ExecutorGeneration>((resolve, reject) => {
-    const grouped = process.platform !== "win32";
     const child = spawn(resolvePiExecutable(options.env), options.args, {
       cwd: options.cwd,
       env: options.env,
       // A private process group lets jigs reap adapter-owned MCP descendants
       // even when Pi itself is killed before the adapter can dispose them.
-      detached: grouped,
+      detached: OWN_GROUP,
       stdio: ["ignore", "pipe", "pipe"],
     });
-    const pgid = grouped ? child.pid : undefined;
-    if (pgid !== undefined) trackProcessGroup(pgid, options.owner ?? "Pi");
-    let stopping: Promise<GroupStopOutcome | undefined> | undefined;
     // Leader exit and closed stdio do not mean the group is gone, so every
     // path waits on this before settling.
-    const reap = () => {
-      if (stopping !== undefined) return stopping;
-      if (pgid !== undefined) stopping = stopProcessGroup(pgid);
-      else {
-        if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
-        stopping = Promise.resolve(undefined);
-      }
-      return stopping;
-    };
+    const reap = groupReaper(child, options.owner ?? "Pi");
     let settled = false;
     const finish = async (outcome: () => ExecutorGeneration) => {
       await reap();
