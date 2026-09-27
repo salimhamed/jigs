@@ -99,9 +99,13 @@ export interface OpenedAgentRunner extends AgentRunner {
 }
 
 // A factory's step hands the model to the AI SDK itself, without our signal, so
-// the model carries it into every provider call.
+// the model carries it into every provider call. A provider stopped by the
+// cancellation fails in its own words, such as Codex's "app-server exited";
+// once the run is cancelled every failure becomes the fatal cancellation, so
+// the SDK records no retry.
 export function forFactoryStep(runner: OpenedAgentRunner): AgentRunner {
   const { model, signal } = runner;
+  const failure = (error: unknown) => (signal.aborted ? signal.reason : error);
   return {
     model:
       typeof model === "string"
@@ -116,6 +120,40 @@ export function forFactoryStep(runner: OpenedAgentRunner): AgentRunner {
                     ? signal
                     : AbortSignal.any([params.abortSignal, signal]),
               }),
+              wrapGenerate: async ({ doGenerate }) => {
+                try {
+                  return await doGenerate();
+                } catch (error) {
+                  throw failure(error);
+                }
+              },
+              wrapStream: async ({ doStream }) => {
+                let result: Awaited<ReturnType<typeof doStream>>;
+                try {
+                  result = await doStream();
+                } catch (error) {
+                  throw failure(error);
+                }
+                const parts = result.stream.getReader();
+                const stream: typeof result.stream = new ReadableStream({
+                  async pull(controller) {
+                    try {
+                      const { done, value } = await parts.read();
+                      if (done) controller.close();
+                      else
+                        controller.enqueue(
+                          value.type === "error"
+                            ? { ...value, error: failure(value.error) }
+                            : value,
+                        );
+                    } catch (error) {
+                      controller.error(failure(error));
+                    }
+                  },
+                  cancel: (reason) => parts.cancel(reason),
+                });
+                return { ...result, stream };
+              },
             },
           }),
     sessionFrom: runner.sessionFrom,
@@ -184,7 +222,7 @@ export async function openAgentRunner(
  *
  * It reads the run's status before opening the harness and watches it until `close`. It throws
  * a fatal error instead of opening on a cancelled run, and once the run is cancelled every
- * provider call through `model` is aborted.
+ * provider call through `model` is aborted and fails with that fatal error.
  *
  * @example
  * ```ts

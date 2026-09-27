@@ -1,5 +1,6 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { streamText } from "ai";
 import { createCodexAppServer } from "ai-sdk-provider-codex-cli";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { FatalError } from "workflow";
@@ -9,6 +10,7 @@ import { createCodexDriver } from "../drivers/codex.ts";
 import { type DriverResolver, driverFor } from "../drivers/index.ts";
 import { executeAgentWith } from "../execute-agent.ts";
 import { RunCancelledError } from "../run-cancellation.ts";
+import { forFactoryStep, openAgentRunner } from "../runner.ts";
 import { executionSeams } from "../seams.ts";
 import { codexSessionFile, prepareCodexInvocationHome } from "./codex-home.ts";
 import { isTrackedProcessGroup } from "./process-group.ts";
@@ -67,7 +69,7 @@ function pidIsRunning(pid: number): boolean {
   }
 }
 
-function startStep(run: ReturnType<typeof cancellableRun>) {
+function codexSetup(run: ReturnType<typeof cancellableRun>) {
   const worktree = path.join(tmp, "worktree");
   mkdirSync(worktree);
   const auth = path.join(tmp, "auth.json");
@@ -81,22 +83,14 @@ function startStep(run: ReturnType<typeof cancellableRun>) {
     sessionFile: codexSessionFile,
     createAppServer: () => createCodexAppServer(),
   });
+  const seams = {
+    ...executionSeams,
+    runStatus: run,
+    factoryEnv: () => [],
+    jitFailures: async () => undefined,
+    resolveDriver: ((kind) => (kind === "codex" ? codex : driverFor(kind))) as DriverResolver,
+  };
   const pids = path.join(worktree, "pids.json");
-  const step = executeAgentWith(
-    buildAgentRequest({
-      harness: harnesses.codex({ model: "gpt-5.5" }),
-      cwd: worktree,
-      prompt: "Wait.",
-    }),
-    { workflowRunId: "codex-cancel" },
-    {
-      ...executionSeams,
-      runStatus: run,
-      factoryEnv: () => [],
-      jitFailures: async () => undefined,
-      resolveDriver: ((kind) => (kind === "codex" ? codex : driverFor(kind))) as DriverResolver,
-    },
-  );
   const started = async () => {
     await expect.poll(() => existsSync(pids), { timeout: 10_000, interval: 25 }).toBe(true);
     return JSON.parse(readFileSync(pids, "utf8")) as {
@@ -105,6 +99,20 @@ function startStep(run: ReturnType<typeof cancellableRun>) {
       mcp: number;
     };
   };
+  return { worktree, seams, started };
+}
+
+function startStep(run: ReturnType<typeof cancellableRun>) {
+  const { worktree, seams, started } = codexSetup(run);
+  const step = executeAgentWith(
+    buildAgentRequest({
+      harness: harnesses.codex({ model: "gpt-5.5" }),
+      cwd: worktree,
+      prompt: "Wait.",
+    }),
+    { workflowRunId: "codex-cancel" },
+    seams,
+  );
   return { step, started };
 }
 
@@ -147,4 +155,41 @@ test("a Codex turn that finishes leaves nothing running or tracked", async () =>
   expect(pidIsRunning(pids.server)).toBe(false);
   expect(pidIsRunning(pids.mcp)).toBe(false);
   expect(isTrackedProcessGroup(pids.server)).toBe(false);
+}, 30_000);
+
+test("a factory step streaming from Codex fails with the cancellation, not the provider's error", async () => {
+  installFakeCodex(undefined);
+  const run = cancellableRun();
+  const { worktree, seams, started } = codexSetup(run);
+  const runner = forFactoryStep(
+    await openAgentRunner(
+      harnesses.codex({ model: "gpt-5.5" }),
+      { cwd: worktree, run: { workflowRunId: "codex-factory-cancel" } },
+      seams,
+    ),
+  );
+  try {
+    const result = streamText({ model: runner.model, prompt: "Wait.", onError: () => {} });
+    const errors: unknown[] = [];
+    const consumed = (async () => {
+      try {
+        for await (const part of result.fullStream)
+          if (part.type === "error") errors.push(part.error);
+      } catch (error) {
+        errors.push(error);
+      }
+    })();
+    const pids = await started();
+
+    run.cancel();
+    await consumed;
+
+    expect(errors.length).toBeGreaterThan(0);
+    for (const error of errors)
+      expect(error instanceof RunCancelledError && FatalError.is(error)).toBe(true);
+    await expect.poll(() => pidIsRunning(pids.server), { timeout: 5_000 }).toBe(false);
+  } finally {
+    run.cancel();
+    await runner.close();
+  }
 }, 30_000);

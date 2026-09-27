@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { generateText } from "ai";
+import { generateText, streamText } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { FatalError } from "workflow";
@@ -156,6 +156,96 @@ test("a factory step's model aborts its provider call once the run is cancelled"
       FatalError.is(error),
     );
     expect(opened[0]?.signal.aborted).toBe(true);
+  } finally {
+    await runner.close();
+  }
+});
+
+// A provider whose own error wins the race with the SDK's abort handling, as
+// Codex's "app-server exited" can once its process group is stopped.
+function losingProvider(status: ReturnType<typeof cancellableRun>, how: "part" | "reject") {
+  const stopped = () => new Error("Client closed while request in flight");
+  return new MockLanguageModelV4({
+    doGenerate: async () => {
+      status.cancel();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      throw stopped();
+    },
+    doStream: async () => {
+      status.cancel();
+      return {
+        stream: new ReadableStream({
+          async start(controller) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            if (how === "reject") return controller.error(stopped());
+            controller.enqueue({ type: "error", error: stopped() });
+            controller.close();
+          },
+        }),
+      };
+    },
+  });
+}
+
+async function factoryRunner(
+  model: MockLanguageModelV4,
+  status: ReturnType<typeof cancellableRun>,
+) {
+  const { seams } = fakeClaude(model);
+  seams.runStatus = status;
+  return forFactoryStep(await openAgentRunner(claude, { cwd: worktree, run }, seams));
+}
+
+test("a factory step's generate call fails with the cancellation whatever the provider throws", async () => {
+  const status = cancellableRun();
+  const runner = await factoryRunner(losingProvider(status, "part"), status);
+  try {
+    await expect(generateText({ model: runner.model, prompt: "go" })).rejects.toSatisfy(
+      (error) => error instanceof RunCancelledError && FatalError.is(error),
+    );
+  } finally {
+    await runner.close();
+  }
+});
+
+for (const how of ["part", "reject"] as const) {
+  test(`a factory step's stream fails with the cancellation when the provider errors by ${how}`, async () => {
+    const status = cancellableRun();
+    const runner = await factoryRunner(losingProvider(status, how), status);
+    try {
+      const errors: unknown[] = [];
+      const result = streamText({ model: runner.model, prompt: "go", onError: () => {} });
+      try {
+        for await (const part of result.fullStream)
+          if (part.type === "error") errors.push(part.error);
+      } catch (error) {
+        errors.push(error);
+      }
+      expect(errors.length).toBeGreaterThan(0);
+      for (const error of errors) expect(error).toBeInstanceOf(RunCancelledError);
+    } finally {
+      await runner.close();
+    }
+  });
+}
+
+test("a factory step's provider error with no cancellation stays ordinary and retryable", async () => {
+  const status = cancellableRun();
+  const model = new MockLanguageModelV4({
+    doGenerate: async () => {
+      throw new Error("rate limited");
+    },
+  });
+  const runner = await factoryRunner(model, status);
+  try {
+    await expect(
+      generateText({ model: runner.model, prompt: "go", maxRetries: 0 }),
+    ).rejects.toSatisfy(
+      (error) =>
+        !(error instanceof RunCancelledError) &&
+        !FatalError.is(error) &&
+        (error as Error).message.includes("rate limited"),
+    );
   } finally {
     await runner.close();
   }
