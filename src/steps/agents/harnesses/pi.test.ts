@@ -4,7 +4,8 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "n
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { executePi, stopPiProcesses } from "./pi.ts";
+import { executePi } from "./pi.ts";
+import { stopProcessGroups } from "./process-group.ts";
 import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
 let tmp: string;
@@ -156,7 +157,7 @@ test("stopping Pi processes terminates every live Pi and its descendants", async
   const rejection = expect(execution).rejects.toThrow("pi terminated by signal SIGTERM");
   await expect.poll(() => existsSync(descendantPidFile)).toBe(true);
 
-  await stopPiProcesses();
+  await stopProcessGroups();
 
   await rejection;
   expect(pidIsRunning(Number(readFileSync(descendantPidFile, "utf8")))).toBe(false);
@@ -245,4 +246,114 @@ test("a malformed line still fails the Pi result with a stdout observer", async 
     executePi({ ...options, onStdout: (chunk) => void chunks.push(chunk) }),
   ).rejects.toThrow(withoutTap as string);
   expect(chunks.join("")).toContain("{broken");
+});
+
+const ignoringTerm = `'${process.execPath}' -e 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)'`;
+
+test("Pi execution settles only after a child that outlives Pi is gone", async () => {
+  const childPidFile = path.join(tmp, "outliving.pid");
+  const bin = writePi([
+    `${descendant} &`,
+    `printf '%s' "$!" > '${childPidFile}'`,
+    ...successEvents,
+    "exit 0",
+  ]);
+
+  await expect(executePi({ args: [], cwd: tmp, env: { PATH: bin } })).resolves.toMatchObject({
+    text: "finished",
+  });
+
+  expect(pidIsRunning(Number(readFileSync(childPidFile, "utf8")))).toBe(false);
+});
+
+test("Pi execution reaps a child that closed its stdio but stayed alive", async () => {
+  const childPidFile = path.join(tmp, "quiet.pid");
+  const bin = writePi([
+    `${descendant} < /dev/null > /dev/null 2>&1 &`,
+    `printf '%s' "$!" > '${childPidFile}'`,
+    ...successEvents,
+    "exit 0",
+  ]);
+
+  await expect(executePi({ args: [], cwd: tmp, env: { PATH: bin } })).resolves.toMatchObject({
+    text: "finished",
+  });
+
+  expect(pidIsRunning(Number(readFileSync(childPidFile, "utf8")))).toBe(false);
+});
+
+test("an aborted Pi that ignores SIGTERM is killed before execution settles", async () => {
+  const piPidFile = path.join(tmp, "stubborn-pi.pid");
+  const childPidFile = path.join(tmp, "stubborn-child.pid");
+  const bin = writePi([
+    "trap '' TERM",
+    `printf '%s' "$$" > '${piPidFile}'`,
+    `${ignoringTerm} &`,
+    `printf '%s' "$!" > '${childPidFile}'`,
+    "wait",
+  ]);
+  const controller = new AbortController();
+  const execution = executePi({
+    args: [],
+    cwd: tmp,
+    env: { PATH: bin },
+    signal: controller.signal,
+  });
+  const rejection = expect(execution).rejects.toThrow("run cancelled");
+  await expect.poll(() => existsSync(childPidFile)).toBe(true);
+  const started = Date.now();
+
+  controller.abort(new Error("run cancelled"));
+  await rejection;
+
+  expect(Date.now() - started).toBeGreaterThanOrEqual(1_000);
+  expect(pidIsRunning(Number(readFileSync(piPidFile, "utf8")))).toBe(false);
+  expect(pidIsRunning(Number(readFileSync(childPidFile, "utf8")))).toBe(false);
+});
+
+test("an aborted Pi settles even when a process outside its group keeps stdout open", async () => {
+  const escapedPidFile = path.join(tmp, "escaped.pid");
+  // A new session leaves Pi's group but inherits its stdout, so `close` never comes.
+  const escaper = `require("node:fs").writeFileSync(${JSON.stringify(escapedPidFile)}, String(require("node:child_process").spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: ["ignore", "inherit", "inherit"] }).pid))`;
+  const bin = writePi([`'${process.execPath}' -e '${escaper}'`, "wait", "sleep 60"]);
+  const controller = new AbortController();
+  const execution = executePi({
+    args: [],
+    cwd: tmp,
+    env: { PATH: bin },
+    signal: controller.signal,
+  });
+  const rejection = expect(execution).rejects.toThrow("run cancelled");
+  await expect.poll(() => existsSync(escapedPidFile)).toBe(true);
+  const escaped = Number(readFileSync(escapedPidFile, "utf8"));
+
+  try {
+    controller.abort(new Error("run cancelled"));
+    await rejection;
+    expect(pidIsRunning(escaped)).toBe(true);
+  } finally {
+    process.kill(escaped, "SIGKILL");
+  }
+});
+
+test("an abort racing service shutdown stops Pi once and both see it gone", async () => {
+  const childPidFile = path.join(tmp, "raced.pid");
+  const bin = writePi([`${descendant} &`, `printf '%s' "$!" > '${childPidFile}'`, "wait"]);
+  const controller = new AbortController();
+  const execution = executePi({
+    args: [],
+    cwd: tmp,
+    env: { PATH: bin },
+    signal: controller.signal,
+  });
+  const rejection = expect(execution).rejects.toThrow("run cancelled");
+  await expect.poll(() => existsSync(childPidFile)).toBe(true);
+
+  controller.abort(new Error("run cancelled"));
+  const outcomes = await stopProcessGroups();
+  await rejection;
+
+  expect(outcomes).toHaveLength(1);
+  expect(outcomes[0]?.kind).toBe("stopped");
+  expect(pidIsRunning(Number(readFileSync(childPidFile, "utf8")))).toBe(false);
 });

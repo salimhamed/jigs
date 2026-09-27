@@ -2,99 +2,32 @@ import { spawn } from "node:child_process";
 import type { ExecutorGeneration } from "../drivers/types.ts";
 import { resolvePiExecutable } from "./executables.ts";
 import { type PiReduceOptions, reducePiJsonl } from "./pi-jsonl.ts";
+import { type GroupStopOutcome, stopProcessGroup, trackProcessGroup } from "./process-group.ts";
 
 export type PiExecutionOptions = PiReduceOptions & {
   args: string[];
   cwd: string;
   env: Record<string, string>;
   signal?: AbortSignal;
+  /** Names this Pi in stop diagnostics, such as `Pi for run wrun_123`. */
+  owner?: string;
   onStdout?: (chunk: string) => void;
 };
 
-const FORCE_KILL_DELAY_MS = 1_000;
-const GROUP_POLL_MS = 50;
-
-type PiProcessGroups = { groups: Map<number, Promise<void> | null>; exitHook: boolean };
-
-// Keyed on globalThis because the service and a factory's step bundle can each
-// load their own copy of this module, and shutdown must see every live group.
-const REGISTRY = Symbol.for("jigs.pi.processGroups");
-
-function processGroups(): PiProcessGroups {
-  const holder = globalThis as { [REGISTRY]?: PiProcessGroups };
-  holder[REGISTRY] ??= { groups: new Map(), exitHook: false };
-  return holder[REGISTRY];
-}
-
-function groupAlive(pgid: number): boolean {
-  try {
-    process.kill(-pgid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function signalGroup(pgid: number, signal: NodeJS.Signals): void {
-  try {
-    process.kill(-pgid, signal);
-  } catch {
-    // The group already exited.
-  }
-}
-
-function trackGroup(pgid: number): void {
-  const registry = processGroups();
-  registry.groups.set(pgid, null);
-  if (registry.exitHook) return;
-  registry.exitHook = true;
-  // Pi runs in its own process group, so a signal or crash that ends this
-  // process no longer reaches it. `exit` handlers cannot wait, so kill outright.
-  process.on("exit", () => {
-    for (const group of registry.groups.keys()) signalGroup(group, "SIGKILL");
-  });
-}
-
-// The SIGKILL is sent only after checking the group still exists, so a group
-// that is gone (and whose id could be reused) is never signalled again.
-function stopGroup(pgid: number): Promise<void> {
-  const { groups } = processGroups();
-  const pending = groups.get(pgid);
-  if (pending) return pending;
-  if (!groupAlive(pgid)) {
-    groups.delete(pgid);
-    return Promise.resolve();
-  }
-  signalGroup(pgid, "SIGTERM");
-  const stopping = new Promise<void>((resolve) => {
-    const deadline = Date.now() + FORCE_KILL_DELAY_MS;
-    const poll = setInterval(() => {
-      if (groupAlive(pgid)) {
-        if (Date.now() < deadline) return;
-        signalGroup(pgid, "SIGKILL");
-      }
-      clearInterval(poll);
-      groups.delete(pgid);
-      resolve();
-    }, GROUP_POLL_MS);
-    poll.unref();
-  });
-  groups.set(pgid, stopping);
-  return stopping;
+function abortReason(signal: AbortSignal): unknown {
+  return signal.reason ?? new Error("Pi execution was aborted");
 }
 
 /**
- * Stop every Pi process group this process started: SIGTERM, then SIGKILL
- * whatever is left after a short grace period.
+ * Execute one Pi JSON-mode turn and reduce its event stream.
+ *
+ * @remarks
+ * It settles only after Pi's process group is gone or a bounded stop attempt has ended. An abort
+ * settles it with the signal's reason once that attempt ends, even if Pi's stdio never closes.
  */
-export async function stopPiProcesses(): Promise<void> {
-  await Promise.all([...processGroups().groups.keys()].map(stopGroup));
-}
-
-/** Execute one Pi JSON-mode turn and reduce its event stream. */
 export function executePi(options: PiExecutionOptions): Promise<ExecutorGeneration> {
-  if (options.signal?.aborted)
-    return Promise.reject(options.signal.reason ?? new Error("Pi execution was aborted"));
+  const { signal } = options;
+  if (signal?.aborted) return Promise.reject(abortReason(signal));
   return new Promise<ExecutorGeneration>((resolve, reject) => {
     const grouped = process.platform !== "win32";
     const child = spawn(resolvePiExecutable(options.env), options.args, {
@@ -105,17 +38,43 @@ export function executePi(options: PiExecutionOptions): Promise<ExecutorGenerati
       detached: grouped,
       stdio: ["ignore", "pipe", "pipe"],
     });
-    if (grouped && child.pid !== undefined) trackGroup(child.pid);
-    const terminateTree = () => {
-      const pid = child.pid;
-      if (pid === undefined) return;
-      if (grouped) void stopGroup(pid);
-      else child.kill("SIGTERM");
+    const pgid = grouped ? child.pid : undefined;
+    if (pgid !== undefined) trackProcessGroup(pgid, options.owner ?? "Pi");
+    let stopping: Promise<GroupStopOutcome | undefined> | undefined;
+    // Leader exit and closed stdio do not mean the group is gone, so every
+    // path waits on this before settling.
+    const reap = () => {
+      if (stopping !== undefined) return stopping;
+      if (pgid !== undefined) stopping = stopProcessGroup(pgid);
+      else {
+        if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
+        stopping = Promise.resolve(undefined);
+      }
+      return stopping;
     };
-    options.signal?.addEventListener("abort", terminateTree, { once: true });
+    let settled = false;
+    const finish = async (outcome: () => ExecutorGeneration) => {
+      await reap();
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener("abort", onAbort);
+      try {
+        if (signal?.aborted) throw abortReason(signal);
+        resolve(outcome());
+      } catch (error) {
+        reject(error);
+      }
+    };
+    const onAbort = () => {
+      void finish(() => {
+        throw abortReason(signal as AbortSignal);
+      });
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
     let stdout = "";
     let stderr = "";
     child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
+      if (settled) return;
       stdout += chunk;
       try {
         options.onStdout?.(chunk);
@@ -124,36 +83,32 @@ export function executePi(options: PiExecutionOptions): Promise<ExecutorGenerati
       }
     });
     child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
-      stderr += chunk;
+      if (!settled) stderr += chunk;
     });
     child.once("error", (error) => {
-      options.signal?.removeEventListener("abort", terminateTree);
-      terminateTree();
-      reject(error);
+      void finish(() => {
+        throw error;
+      });
     });
     // `close` waits for inherited stdio handles. Reap the process group as
     // soon as its leader exits so an orphan cannot keep those handles open.
-    child.once("exit", terminateTree);
-    child.once("close", (code, signal) => {
-      options.signal?.removeEventListener("abort", terminateTree);
-      terminateTree();
-      try {
-        if (options.signal?.aborted)
-          throw options.signal.reason ?? new Error("Pi execution was aborted");
-        if (signal !== null) throw new Error(`pi terminated by signal ${signal}`);
-        if (code === 143) throw new Error("pi was cancelled by SIGTERM (exit code 143)");
-        if (code === 129) throw new Error("pi was cancelled by SIGHUP (exit code 129)");
-        if (code !== 0) throw new Error(`pi exited with code ${code ?? "unknown"}`);
-        resolve(reducePiJsonl(stdout, options));
-      } catch (error) {
-        reject(
-          stderr.trim() === ""
+    child.once("exit", () => void reap());
+    child.once("close", (code, exitSignal) => {
+      void finish(() => {
+        try {
+          if (exitSignal !== null) throw new Error(`pi terminated by signal ${exitSignal}`);
+          if (code === 143) throw new Error("pi was cancelled by SIGTERM (exit code 143)");
+          if (code === 129) throw new Error("pi was cancelled by SIGHUP (exit code 129)");
+          if (code !== 0) throw new Error(`pi exited with code ${code ?? "unknown"}`);
+          return reducePiJsonl(stdout, options);
+        } catch (error) {
+          throw stderr.trim() === ""
             ? error
             : new Error(
                 `${error instanceof Error ? error.message : String(error)}: ${stderr.trim()}`,
-              ),
-        );
-      }
+              );
+        }
+      });
     });
   });
 }
