@@ -44,6 +44,49 @@ setInterval(() => {
 }, 50);
 `;
 
+// A stand-in for the Codex app server: speaks enough JSON-RPC for one turn,
+// whose prompt carries its mode and directory. Once the turn starts it records
+// its launch, its supervisor's pid, its own and a SIGTERM-ignoring child's,
+// then hangs or waits for a release file and finishes the turn.
+const controlledCodex = `const { spawn } = require("node:child_process");
+const fs = require("node:fs");
+const path = require("node:path");
+const readline = require("node:readline");
+const send = (message) => process.stdout.write(JSON.stringify(message) + "\\n");
+readline.createInterface({ input: process.stdin }).on("line", (line) => {
+  const { id, method, params } = JSON.parse(line);
+  if (method === "initialize") send({ id, result: { userAgent: "codex_cli_rs/0.200.0", capabilities: {} } });
+  if (method === "thread/start") send({ id, result: { thread: { id: "thread-e2e" } } });
+  if (method !== "turn/start") return;
+  const prompt = params.input.map((item) => item.text ?? "").join("");
+  const { mode, dir } = JSON.parse(prompt.slice(prompt.indexOf("{"), prompt.lastIndexOf("}") + 1));
+  fs.appendFileSync(path.join(dir, "launches"), "launch\\n");
+  const child = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"], { stdio: "ignore" });
+  send({ id, result: { turn: { id: "turn-e2e", items: [], status: "inProgress" } } });
+  fs.writeFileSync(path.join(dir, "pids"), [process.ppid, process.pid, child.pid].join(" "));
+  const timer = setInterval(() => {
+    if (mode !== "finish" || !fs.existsSync(path.join(dir, "release"))) return;
+    clearInterval(timer);
+    const turn = { threadId: "thread-e2e", turnId: "turn-e2e" };
+    send({ method: "item/agentMessage/delta", params: { ...turn, itemId: "msg-e2e", delta: "finished" } });
+    send({ method: "turn/completed", params: { threadId: "thread-e2e", turn: { id: "turn-e2e", items: [], status: "completed" } } });
+  }, 50);
+});
+`;
+
+function writeControlledCodex(root) {
+  const bin = path.join(root, "bin");
+  mkdirSync(bin, { recursive: true });
+  const executable = path.join(bin, "codex");
+  writeFileSync(executable, `#!${process.execPath}\n${controlledCodex}`);
+  chmodSync(executable, 0o755);
+  // The Codex driver links the login into each invocation home; the stand-in never reads it.
+  const home = path.join(root, "home");
+  mkdirSync(path.join(home, ".codex"), { recursive: true });
+  writeFileSync(path.join(home, ".codex", "auth.json"), "{}");
+  return { bin, home };
+}
+
 function writeControlledPi(root) {
   const bin = path.join(root, "bin");
   mkdirSync(bin, { recursive: true });
@@ -83,6 +126,7 @@ export const cancelE2eInputs = z.object({
   marker: z.string(),
   mode: z.enum([
     "active",
+    "codex",
     "fatal",
     "observe",
     "ordinary",
@@ -154,6 +198,12 @@ export async function cancelE2eWorkflow(inputs: WorkflowInputs<typeof cancelE2eI
     // The controlled pi on the service's PATH reads its behaviour from the prompt.
     await runAgent({ harness: harnesses.pi(models.openrouter("e2e/fake")), cwd, prompt: inputs.marker });
     await record(inputs.gate, "pi-successor");
+    return;
+  }
+  if (inputs.mode === "codex") {
+    const cwd = await createRunDirectory();
+    await runAgent({ harness: harnesses.codex({ model: "e2e/fake" }), cwd, prompt: inputs.marker });
+    await record(inputs.gate, "codex-successor");
     return;
   }
   if (inputs.mode === "observe") {
@@ -508,6 +558,7 @@ await (await getWorld()).close?.();`,
     assert.deepEqual(await historySnapshot(db, activeRunId), beforePrune);
 
     await provePiCancellation();
+    await proveCodexCancellation();
 
     const elapsedMs = Date.now() - startedAt;
     console.log(
@@ -699,6 +750,105 @@ await (await getWorld()).close?.();`,
     serviceEnv = env;
     console.log(
       `cancellation matrix: CLI cancel stopped a real Pi driver's pi and child in ${stopMs}ms; the agent step failed once with no retry or successor, a repeated cancel was safe, and another Pi run finished`,
+    );
+  }
+
+  // CLI cancel -> service -> World -> generated step -> real Codex driver and
+  // provider -> the launcher, a controlled app server and its child, beside a
+  // second Codex run that must not notice.
+  async function proveCodexCancellation() {
+    const codexRoot = path.join(fixtureRoot, "codex");
+    const { bin, home } = writeControlledCodex(codexRoot);
+    const cancelledDir = path.join(codexRoot, "cancelled");
+    const survivorDir = path.join(codexRoot, "survivor");
+    mkdirSync(cancelledDir, { recursive: true });
+    mkdirSync(survivorDir, { recursive: true });
+    writeFileSync(
+      path.join(factory, ".env"),
+      `WORKFLOW_POSTGRES_URL=${testUrl.toString()}\nWORKFLOW_TARGET_WORLD=@workflow/world-postgres\nWORKFLOW_POSTGRES_WORKER_CONCURRENCY=2\nWORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN=1\n`,
+    );
+    serviceEnv = {
+      ...env,
+      HOME: home,
+      PATH: `${bin}${path.delimiter}${env.PATH}`,
+      WORKFLOW_POSTGRES_WORKER_CONCURRENCY: "2",
+    };
+    service("start");
+    serviceRunning = true;
+
+    const cancelled = await launchInlineRun(
+      {
+        mode: "codex",
+        marker: JSON.stringify({ mode: "hang", dir: cancelledDir }),
+        gate: path.join(cancelledDir, "successor"),
+      },
+      ports.service,
+      db,
+    );
+    const cancelledPids = await piPids(cancelledDir);
+    const survivor = await launchInlineRun(
+      {
+        mode: "codex",
+        marker: JSON.stringify({ mode: "finish", dir: survivorDir }),
+        gate: path.join(survivorDir, "successor"),
+      },
+      ports.service,
+      db,
+    );
+    const survivorPids = await piPids(survivorDir);
+
+    cancel(cancelled.runId);
+    const cancelledAt = Date.now();
+    await until(
+      () => !cancelledPids.some(alive),
+      "the cancelled run's Codex launcher, app server or child outlived the 5s budget",
+      PI_STOP_BUDGET_MS,
+    );
+    const stopMs = Date.now() - cancelledAt;
+    cancel(cancelled.runId);
+    await assertCancelled(cancelled.runId, ports.service);
+    assert.ok(survivorPids.every(alive), "stopping one run's Codex reached another run's Codex");
+    await until(
+      async () => (await jobsFor(db, cancelled.runId)).length === 0,
+      "the cancelled Codex run's deliveries did not drain",
+    );
+
+    appendFileSync(path.join(survivorDir, "release"), "release\n");
+    await until(
+      async () => (await runtimeRun(survivor.runId, ports.service)).status === "completed",
+      "the other Codex run did not complete after the cancellation",
+    );
+    assert.ok(
+      !survivorPids.some(alive),
+      "the finished Codex app server or child outlived its step",
+    );
+    assert.deepEqual(lines(path.join(survivorDir, "successor")), ["codex-successor"]);
+
+    await new Promise((resolve) => setTimeout(resolve, DRAIN_MS * 2));
+    assert.deepEqual(
+      lines(path.join(cancelledDir, "launches")),
+      ["launch"],
+      "Codex was relaunched",
+    );
+    assert.deepEqual(lines(path.join(cancelledDir, "successor")), []);
+    const timeline = await runtimeTimeline(cancelled.runId, ports.service);
+    const agentSteps = timeline.steps.filter((step) => /agent/i.test(step.name));
+    assert.equal(agentSteps.length, 1, JSON.stringify(timeline.steps));
+    assert.equal(agentSteps[0].status, "failed");
+    assert.equal(agentSteps[0].attempt, 1);
+    assert.match(
+      serviceLogs(dataHome),
+      new RegExp(
+        `RunCancelledError: run ${cancelled.runId} was cancelled, so jigs stopped its agent`,
+      ),
+    );
+    await Promise.all([cancelled.completion, survivor.completion]);
+
+    service("stop");
+    serviceRunning = false;
+    serviceEnv = env;
+    console.log(
+      `cancellation matrix: CLI cancel stopped a real Codex driver's launcher, app server and child in ${stopMs}ms; the agent step failed once with no retry or successor, and another Codex run finished`,
     );
   }
 
