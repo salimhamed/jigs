@@ -349,7 +349,9 @@ program
 
 program
   .command("cancel")
-  .description("cancel a run; a running agent stops within seconds, other step work may still finish")
+  .description(
+    "cancel a run; a running agent stops within seconds, other step work may still finish",
+  )
   .argument("<run-id>", RUN_ID_HELP)
   .option("--force", "skip the confirmation for an in-flight run")
   .addOption(serviceOption())
