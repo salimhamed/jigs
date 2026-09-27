@@ -53,6 +53,53 @@ function writeControlledPi(root) {
   return bin;
 }
 
+// A stand-in for Claude Code: speaks enough of its stream-json protocol for
+// the provider, reads its behaviour from the prompt, records its launch and
+// pid, starts a child that ignores SIGTERM, then hangs, or waits for a release
+// file and answers.
+const controlledClaude = `const { spawn } = require("node:child_process");
+const fs = require("node:fs");
+const path = require("node:path");
+const readline = require("node:readline");
+const send = (message) => process.stdout.write(JSON.stringify(message) + "\\n");
+readline.createInterface({ input: process.stdin }).on("line", (line) => {
+  const message = JSON.parse(line);
+  if (message.type === "control_request") {
+    send({ type: "control_response", response: { subtype: "success", request_id: message.request_id, response: {} } });
+    return;
+  }
+  if (message.type !== "user") return;
+  const content = message.message.content;
+  const text = typeof content === "string" ? content : content.map((part) => part.text ?? "").join("");
+  const { mode, dir } = JSON.parse(text.slice(text.indexOf("{")));
+  fs.appendFileSync(path.join(dir, "launches"), "launch\\n");
+  const child = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"], { stdio: "ignore" });
+  fs.writeFileSync(path.join(dir, "pids"), process.pid + " " + child.pid);
+  send({ type: "system", subtype: "init", session_id: "e2e-session", cwd: process.cwd(), tools: [], mcp_servers: [] });
+  const timer = setInterval(() => {
+    if (mode !== "finish" || !fs.existsSync(path.join(dir, "release"))) return;
+    clearInterval(timer);
+    send({ type: "assistant", session_id: "e2e-session", message: { role: "assistant", content: [{ type: "text", text: "finished" }] } });
+    send({ type: "result", subtype: "success", is_error: false, result: "finished", session_id: "e2e-session", num_turns: 1, duration_ms: 1, duration_api_ms: 1, total_cost_usd: 0, usage: { input_tokens: 1, output_tokens: 1 } });
+  }, 50);
+});
+`;
+
+function writeControlledClaude(root) {
+  const bin = path.join(root, "bin");
+  mkdirSync(bin, { recursive: true });
+  const executable = path.join(bin, "claude");
+  writeFileSync(executable, `#!${process.execPath}\n${controlledClaude}`);
+  chmodSync(executable, 0o755);
+  return bin;
+}
+
+async function agentPids(dir) {
+  const file = path.join(dir, "pids");
+  await until(() => existsSync(file), `controlled agent never started in ${dir}`);
+  return readFileSync(file, "utf8").trim().split(" ").map(Number);
+}
+
 async function piPids(dir) {
   const file = path.join(dir, "pids");
   await until(() => existsSync(file), `controlled pi never started in ${dir}`);
@@ -83,6 +130,7 @@ export const cancelE2eInputs = z.object({
   marker: z.string(),
   mode: z.enum([
     "active",
+    "claude",
     "fatal",
     "observe",
     "ordinary",
@@ -154,6 +202,13 @@ export async function cancelE2eWorkflow(inputs: WorkflowInputs<typeof cancelE2eI
     // The controlled pi on the service's PATH reads its behaviour from the prompt.
     await runAgent({ harness: harnesses.pi(models.openrouter("e2e/fake")), cwd, prompt: inputs.marker });
     await record(inputs.gate, "pi-successor");
+    return;
+  }
+  if (inputs.mode === "claude") {
+    const cwd = await createRunDirectory();
+    // The controlled claude on the service's PATH reads its behaviour from the prompt.
+    await runAgent({ harness: harnesses.claude({ model: "sonnet" }), cwd, prompt: inputs.marker });
+    await record(inputs.gate, "claude-successor");
     return;
   }
   if (inputs.mode === "observe") {
@@ -508,10 +563,11 @@ await (await getWorld()).close?.();`,
     assert.deepEqual(await historySnapshot(db, activeRunId), beforePrune);
 
     await provePiCancellation();
+    await proveClaudeCancellation();
 
     const elapsedMs = Date.now() - startedAt;
     console.log(
-      `compiled cancellation matrix passed in ${elapsedMs}ms: pending, retry-scheduled, exhausted, active inline, default-turbo race, resilient first delivery, restart/redelivery, cleanup fencing, step errors after cancel, first-step run visibility, Pi agent stop, and offline kept-resource prune`,
+      `compiled cancellation matrix passed in ${elapsedMs}ms: pending, retry-scheduled, exhausted, active inline, default-turbo race, resilient first delivery, restart/redelivery, cleanup fencing, step errors after cancel, first-step run visibility, Pi agent stop, Claude Code agent stop, and offline kept-resource prune`,
     );
     return { elapsedMs };
   } finally {
@@ -699,6 +755,96 @@ await (await getWorld()).close?.();`,
     serviceEnv = env;
     console.log(
       `cancellation matrix: CLI cancel stopped a real Pi driver's pi and child in ${stopMs}ms; the agent step failed once with no retry or successor, a repeated cancel was safe, and another Pi run finished`,
+    );
+  }
+
+  // CLI cancel -> service -> World -> generated step -> real Claude driver and
+  // provider -> a controlled claude and its child, beside a second Claude run
+  // that must not notice and whose leftover child is stopped when it finishes.
+  async function proveClaudeCancellation() {
+    const claudeRoot = path.join(fixtureRoot, "claude");
+    const bin = writeControlledClaude(claudeRoot);
+    const cancelledDir = path.join(claudeRoot, "cancelled");
+    const survivorDir = path.join(claudeRoot, "survivor");
+    mkdirSync(cancelledDir, { recursive: true });
+    mkdirSync(survivorDir, { recursive: true });
+    serviceEnv = {
+      ...env,
+      PATH: `${bin}${path.delimiter}${env.PATH}`,
+      WORKFLOW_POSTGRES_WORKER_CONCURRENCY: "2",
+    };
+    service("start");
+    serviceRunning = true;
+
+    const cancelled = await launchInlineRun(
+      {
+        mode: "claude",
+        marker: JSON.stringify({ mode: "hang", dir: cancelledDir }),
+        gate: path.join(cancelledDir, "successor"),
+      },
+      ports.service,
+      db,
+    );
+    const cancelledPids = await agentPids(cancelledDir);
+    const survivor = await launchInlineRun(
+      {
+        mode: "claude",
+        marker: JSON.stringify({ mode: "finish", dir: survivorDir }),
+        gate: path.join(survivorDir, "successor"),
+      },
+      ports.service,
+      db,
+    );
+    const survivorPids = await agentPids(survivorDir);
+
+    cancel(cancelled.runId);
+    const cancelledAt = Date.now();
+    await until(
+      () => !cancelledPids.some(alive),
+      "the cancelled run's claude or its child outlived the 5s budget",
+      PI_STOP_BUDGET_MS,
+    );
+    const stopMs = Date.now() - cancelledAt;
+    await assertCancelled(cancelled.runId, ports.service);
+    assert.ok(survivorPids.every(alive), "stopping one run's claude reached another run's claude");
+    await until(
+      async () => (await jobsFor(db, cancelled.runId)).length === 0,
+      "the cancelled claude run's deliveries did not drain",
+    );
+
+    appendFileSync(path.join(survivorDir, "release"), "release\n");
+    await until(
+      async () => (await runtimeRun(survivor.runId, ports.service)).status === "completed",
+      "the other claude run did not complete after the cancellation",
+    );
+    assert.ok(!survivorPids.some(alive), "the finished claude's child outlived its step");
+    assert.deepEqual(lines(path.join(survivorDir, "successor")), ["claude-successor"]);
+
+    await new Promise((resolve) => setTimeout(resolve, DRAIN_MS * 2));
+    assert.deepEqual(
+      lines(path.join(cancelledDir, "launches")),
+      ["launch"],
+      "claude was relaunched",
+    );
+    assert.deepEqual(lines(path.join(cancelledDir, "successor")), []);
+    const timeline = await runtimeTimeline(cancelled.runId, ports.service);
+    const agentSteps = timeline.steps.filter((step) => /agent/i.test(step.name));
+    assert.equal(agentSteps.length, 1, JSON.stringify(timeline.steps));
+    assert.equal(agentSteps[0].status, "failed");
+    assert.equal(agentSteps[0].attempt, 1);
+    assert.match(
+      serviceLogs(dataHome),
+      new RegExp(
+        `RunCancelledError: run ${cancelled.runId} was cancelled, so jigs stopped its agent`,
+      ),
+    );
+    await Promise.all([cancelled.completion, survivor.completion]);
+
+    service("stop");
+    serviceRunning = false;
+    serviceEnv = env;
+    console.log(
+      `cancellation matrix: CLI cancel stopped a real Claude driver's claude and child in ${stopMs}ms; the agent step failed once with no retry or successor, and another Claude run finished without leaving its child behind`,
     );
   }
 
