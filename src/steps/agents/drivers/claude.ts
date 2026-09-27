@@ -10,6 +10,7 @@ import {
   claudePolicyKeys,
   type McpServerConfig,
 } from "../../../workflow/agents/harness-config.ts";
+import type { RunMetadata } from "../../runtime/run-context.ts";
 import { resolveClaudeExecutable } from "../harnesses/executables.ts";
 import { AgentSessionError } from "../session-error.ts";
 import { CLAUDE_ENV, claudeStepSettings } from "./claude-support.ts";
@@ -36,6 +37,10 @@ function mcpServers(
           },
     ]),
   );
+}
+
+function owner(run: RunMetadata): string {
+  return `Claude Code for run ${run.workflowRunId}`;
 }
 
 function descriptor(request: DriverRequest): ClaudeHarness {
@@ -70,43 +75,49 @@ export function createClaudeDriver(
       if (resume !== undefined && (await deps.sessionMessages(resume.id, cwd)).length === 0) {
         throw new AgentSessionError(`Claude session ${resume.id} is missing for ${cwd}`);
       }
-      const model = claudeCode(
-        harness.model,
-        claudeStepSettings({
-          ...descriptorSettings(harness, claudePolicyKeys),
-          cwd,
-          env: context.env,
-          strictMcpConfig: true,
-          settingSources: ["project"],
-          permissionMode: "bypassPermissions",
-          allowDangerouslySkipPermissions: true,
-          ...(resume === undefined ? {} : { resume: resume.id }),
-          ...(harness.mcpServers === undefined
-            ? {}
-            : { mcpServers: mcpServers(harness.mcpServers) }),
-        }),
-      );
-      return { model, close: async () => {} };
+      const settings = claudeStepSettings({
+        ...descriptorSettings(harness, claudePolicyKeys),
+        cwd,
+        env: context.env,
+        signal: context.signal,
+        owner: owner(context.metadata),
+        strictMcpConfig: true,
+        settingSources: ["project"],
+        permissionMode: "bypassPermissions",
+        allowDangerouslySkipPermissions: true,
+        ...(resume === undefined ? {} : { resume: resume.id }),
+        ...(harness.mcpServers === undefined ? {} : { mcpServers: mcpServers(harness.mcpServers) }),
+      });
+      return {
+        model: claudeCode(harness.model, settings),
+        close: () => settings.spawnClaudeCodeProcess.close(),
+      };
     },
     ask: async (request, context): Promise<ExecutorGeneration> => {
       const harness = descriptor(request);
-      return context.deps.generateText({
-        model: claudeCode(
-          harness.model,
-          claudeStepSettings({
-            // An empty MCP universe still leaves Claude Code's built-in tools.
-            tools: [],
-            strictMcpConfig: true,
-            mcpServers: {},
-            settingSources: [],
-            env: context.env,
-          }),
-        ),
-        prompt: request.prompt,
-        ...("system" in request && request.system !== undefined ? { system: request.system } : {}),
-        ...(context.output === undefined ? {} : { output: context.output }),
-        abortSignal: context.signal,
+      const settings = claudeStepSettings({
+        // An empty MCP universe still leaves Claude Code's built-in tools.
+        tools: [],
+        strictMcpConfig: true,
+        mcpServers: {},
+        settingSources: [],
+        env: context.env,
+        ...(context.signal === undefined ? {} : { signal: context.signal }),
+        owner: owner(context.metadata),
       });
+      try {
+        return await context.deps.generateText({
+          model: claudeCode(harness.model, settings),
+          prompt: request.prompt,
+          ...("system" in request && request.system !== undefined
+            ? { system: request.system }
+            : {}),
+          ...(context.output === undefined ? {} : { output: context.output }),
+          abortSignal: context.signal,
+        });
+      } finally {
+        await settings.spawnClaudeCodeProcess.close();
+      }
     },
     installationChecks: () => [harnessRuntimeCheck("claude"), claudeAuthCheck()],
     requestChecks: () => [],

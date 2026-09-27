@@ -189,10 +189,7 @@ function launchFixture(
   args: readonly string[] = [fixture],
   host: NodeJS.ProcessEnv = {},
 ) {
-  return claudeProcessSpawner(
-    stepEnv,
-    host,
-  )({
+  return claudeProcessSpawner(stepEnv, { host })({
     command: process.execPath,
     args: [...args],
     cwd: process.cwd(),
