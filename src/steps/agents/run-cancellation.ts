@@ -1,4 +1,3 @@
-import { FatalError } from "workflow";
 import { getWorld } from "workflow/runtime";
 
 /** How an agent invocation reads its run's persisted status. Tests replace it. */
@@ -13,7 +12,10 @@ export interface RunStatusReader {
 }
 
 /** The step's error once its run was cancelled: fatal, so the SDK records no retry. */
-export class RunCancelledError extends FatalError {
+// `fatal` is what the SDK's FatalError.is reads. Extending FatalError would
+// need the SDK's value at module load, which factory tests commonly mock away.
+export class RunCancelledError extends Error {
+  readonly fatal = true;
   constructor(runId: string, options?: { cause?: unknown }) {
     super(`run ${runId} was cancelled, so jigs stopped its agent`);
     this.name = "RunCancelledError";

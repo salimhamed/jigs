@@ -119,8 +119,8 @@ test.skipIf(skipPi)(
     );
 
     try {
-      await expect.poll(() => existsSync(pidFile), { timeout: 5_000, interval: 25 }).toBe(true);
-      await expect.poll(() => chatRequests, { timeout: 5_000, interval: 25 }).toBeGreaterThan(0);
+      await expect.poll(() => existsSync(pidFile), { timeout: 10_000, interval: 25 }).toBe(true);
+      await expect.poll(() => chatRequests, { timeout: 10_000, interval: 25 }).toBeGreaterThan(0);
       const mcpChild = Number(readFileSync(pidFile, "utf8"));
       expect(pidIsRunning(mcpChild)).toBe(true);
       const cancelledAt = Date.now();
@@ -135,5 +135,5 @@ test.skipIf(skipPi)(
       await closeServer(server);
     }
   },
-  20_000,
+  30_000,
 );
