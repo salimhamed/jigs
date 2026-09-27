@@ -1,6 +1,7 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import type { CodexAppServerSettings } from "ai-sdk-provider-codex-cli";
+import { writeCodexSupervisor } from "../harnesses/codex-process.ts";
 import { resolveCodexExecutable } from "../harnesses/executables.ts";
 
 export type CodexAppServerStepOptions = CodexAppServerSettings & {
@@ -18,7 +19,8 @@ const shellQuote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
 
 // The provider launches the app server under the whole host environment plus
 // ours, with no hook to replace it. This launcher keeps only the variables the
-// step names, by reference, so no value is written to disk.
+// step names, by reference, so no value is written to disk. It runs Codex
+// under the supervisor, which records the launch's process group for jigs.
 export function writeCodexLauncher(dir: string, codex: string, names: readonly string[]): string {
   const unique = [...new Set([...names, ...PROVIDER_ENV])];
   const invalid = unique.filter((name) => !ENV_NAME.test(name));
@@ -28,10 +30,17 @@ export function writeCodexLauncher(dir: string, codex: string, names: readonly s
       `refusing to launch Codex: ${invalid.length} variable name(s) are not shell-safe`,
     );
   const kept = unique.map((name) => `${name}="$${name}"`);
+  const supervisor = writeCodexSupervisor(dir);
   const launcher = path.join(dir, "jigs-codex-launch");
   writeFileSync(
     launcher,
-    `#!/bin/sh\nexec /usr/bin/env -i ${kept.join(" ")} ${shellQuote(codex)} "$@"\n`,
+    [
+      "#!/bin/sh",
+      `record=${shellQuote(supervisor.groups)}/$$`,
+      ': > "$record"',
+      `exec /usr/bin/env -i ${kept.join(" ")} ${shellQuote(process.execPath)} ${shellQuote(supervisor.script)} "$record" ${shellQuote(codex)} "$@"`,
+      "",
+    ].join("\n"),
     { mode: 0o700 },
   );
   return launcher;
