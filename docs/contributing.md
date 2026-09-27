@@ -7,11 +7,12 @@ Requires Node 24 or newer, pnpm and Docker.
 ```sh
 pnpm install
 pnpm dev           # run the CLI from source
-pnpm check         # lint, typecheck, test, build, and the doc-comment gate
+pnpm check         # lint, typecheck, tests (including documentation examples), build, doc comments
 pnpm e2e           # bare and linear-ticket-to-pr factories from packed installs; diffs durable IDs
 pnpm test:live     # live provider tests, each with its own auth setup
 pnpm docs:site     # build the website into docs-site/ (fails on dead links)
 pnpm docs:preview  # serve the built site; open the printed /jigs/ URL
+pnpm docs:examples # type-check displayed TypeScript examples in isolation
 ```
 
 With `WORKFLOW_POSTGRES_URL` set, `pnpm e2e` also boots the linear-ticket-to-pr
@@ -93,6 +94,18 @@ unreleased changes on `main` never reach the site. Each deploy replaces the
 whole site. To rebuild by hand, run the Pages workflow on `main` from Actions.
 Pages' source is **GitHub Actions**; the `github-pages` environment allows
 `main` and `jigs-v*` tags.
+
+TypeScript fences in the website, READMEs, skills, templates and source
+`@example` comments are checked directly by `pnpm test` and `pnpm docs:examples`. Show every import and
+every variable's source; the checker supplies no missing declarations. Give
+cooperating files a first-line comment such as `// workflows/my-flow/steps.ts`.
+Relative imports can then resolve another displayed file on the same page.
+Examples can also import the actual generated `#jigs` modules and recipe files.
+
+For configuration excerpts, label the fence `ts factory-options` and explain
+that its properties belong inside `defineFactory({ ... })` in `jigs.config.ts`.
+The checker wraps only these fragments in an object checked against
+`Partial<FactoryDefinition>`; it adds no imports or variables to their scope.
 
 ## ADRs
 

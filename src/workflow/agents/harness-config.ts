@@ -417,7 +417,9 @@ function piHarness(model: ModelSource, options: PiHarnessOptions = {}): PiHarnes
  *
  * @example
  * ```ts
- * harnesses.claude({ model: "opus", effort: "high", maxTurns: 40 });
+ * import { harnesses } from "@jigs-ai/jigs";
+ *
+ * const builder = harnesses.claude({ model: "opus", effort: "high", maxTurns: 40 });
  * ```
  */
 function claudeHarness<O extends ClaudeHarnessSettings>(
@@ -433,7 +435,9 @@ function claudeHarness(settings: ClaudeHarnessSettings): ClaudeHarness {
  *
  * @example
  * ```ts
- * harnesses.codex({ model: "gpt-5.6-sol", personality: "pragmatic" });
+ * import { harnesses } from "@jigs-ai/jigs";
+ *
+ * const builder = harnesses.codex({ model: "gpt-5.6-sol", personality: "pragmatic" });
  * ```
  */
 function codexHarness<O extends CodexHarnessSettings>(
@@ -463,6 +467,9 @@ export const harnesses = {
  *
  * @example
  * ```ts
+ * import { harnessKinds } from "@jigs-ai/jigs";
+ * import { z } from "zod";
+ *
  * const inputs = z.object({ harness: z.enum(harnessKinds) });
  * ```
  *

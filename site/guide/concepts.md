@@ -77,14 +77,18 @@ Step inputs and outputs cross the durable boundary and are persisted, so they
 must be serializable. Plain JSON data is the simplest starting point: strings,
 numbers, booleans, `null`, arrays and plain objects containing those values.
 
-For example, a step can return:
+For example, this step returns only plain data. It could live in a workflow's
+`steps.ts` file:
 
 ```ts
-return {
-  id: "ENG-123",
-  files: ["auth.ts", "session.ts"],
-  approved: true,
-};
+export async function exampleReview() {
+  "use step";
+
+  return {
+    files: ["auth.ts", "session.ts"],
+    approved: true,
+  };
+}
 ```
 
 The SDK also supports types such as `Date`, `Map` and `Set`; it is not limited

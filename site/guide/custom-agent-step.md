@@ -58,13 +58,42 @@ export async function runWithTemperature(request: {
 }
 ```
 
-The workflow calls it like any step, with a descriptor from its `agents`:
+Create the caller beside the step as `workflows/my-flow/my-flow.ts`. It uses an
+`app` [repository binding](/guide/build-a-workflow#_1-connect-a-repository),
+provisions its own worktree, and passes the agent descriptor into the custom
+step. Authenticate Claude Code, then
+[register `my-flow` in the factory](/guide/build-a-workflow#_3-register-the-workflow).
+Run `pnpm exec jigs up`, then
+`pnpm exec jigs run my-flow --input question="Why does saving a draft twice lose its title?"`.
 
 ```ts
-const answer = await runWithTemperature({
-  harness: agents.builder,
-  cwd: worktree.path,
-  prompt: "Explain the failing test.",
+// workflows/my-flow/my-flow.ts
+import { defineWorkflow, harnesses, type WorkflowInputs } from "@jigs-ai/jigs";
+import { z } from "zod";
+import { provisionWorktree } from "#jigs/steps";
+import { runWithTemperature } from "./steps.ts";
+
+const inputs = z.object({ question: z.string().min(1) });
+const agents = { investigator: harnesses.claude({ model: "sonnet" }) };
+
+export async function myFlow(input: WorkflowInputs<typeof inputs>) {
+  "use workflow";
+  const worktree = await provisionWorktree({
+    binding: "app",
+    branch: `investigate/${input.triggerId}`,
+  });
+  const answer = await runWithTemperature({
+    harness: agents.investigator,
+    cwd: worktree.path,
+    prompt: `Investigate without changing files: ${input.question}`,
+  });
+  return answer.text;
+}
+
+export default defineWorkflow({
+  inputs,
+  requires: { agents, bindings: ["app"] },
+  workflow: myFlow,
 });
 ```
 

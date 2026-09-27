@@ -9,9 +9,12 @@ configuration file.
 | Workflow code or `jigs.config.ts` | `pnpm exec jigs up` |
 | `.env` | `pnpm exec jigs service restart` |
 
-The service reads `.env` when it starts.
+The service reads `.env` when it starts. Here is a complete `jigs.config.ts`
+for a factory with the generated `hello` workflow and an `app` binding. Replace
+the repository URL with your own:
 
 ```ts
+// jigs.config.ts
 import { defineFactory } from "@jigs-ai/jigs";
 
 export default defineFactory({
@@ -27,14 +30,21 @@ export default defineFactory({
 });
 ```
 
+The sections below show properties to add or replace **inside the existing
+`defineFactory({ ... })` object** in `jigs.config.ts`. Keep the other properties
+from your configuration. These smaller blocks are configuration excerpts.
+
 ## `workflows`
 
 A map from a workflow's name to a deferred import of its file. The name is what
-`jigs run` takes. See [Build a workflow](/guide/build-a-workflow).
+`jigs run` takes. After creating `workflows/triage/triage.ts` in
+[Build a workflow](/guide/build-a-workflow), add its loader alongside `hello`:
 
-```ts
+```ts factory-options
+// Inside defineFactory({ ... }) in jigs.config.ts
 workflows: {
-  triage: () => import("./workflows/triage.ts"),
+  hello: () => import("./workflows/hello/hello.ts"),
+  triage: () => import("./workflows/triage/triage.ts"),
 },
 ```
 
@@ -49,7 +59,8 @@ The clone and its worktrees live in
 when that is set). That folder belongs to jigs and is separate from the
 factory's own `bindings/<name>/` folder described below.
 
-```ts
+```ts factory-options
+// Inside defineFactory({ ... }) in jigs.config.ts
 bindings: {
   app: {
     remote: "git@github.com:owner/app.git",
@@ -102,14 +113,17 @@ dashboard ports are separate settings in `jigs.config.ts`.
 
 ## `schedules` {#schedules}
 
-Fire a workflow on a cron schedule:
+This schedules the `triage` workflow from [Build a workflow](/guide/build-a-workflow)
+every Monday. Register `triage` in `workflows` as shown above and use its
+`binding` and `report` inputs:
 
-```ts
+```ts factory-options
+// Inside defineFactory({ ... }) in jigs.config.ts
 schedules: {
-  "monday-report": {
-    workflow: "weekly-report",
+  "monday-triage": {
+    workflow: "triage",
     cron: "0 9 * * 1",
-    inputs: { audience: "team" },
+    inputs: { binding: "app", report: "Saving a draft twice loses its title." },
   },
 },
 ```
@@ -126,7 +140,8 @@ schedules: {
 Release policy controls what happens to run-owned worktrees and scratch
 directories after the run ends:
 
-```ts
+```ts factory-options
+// Inside defineFactory({ ... }) in jigs.config.ts
 release: { onSuccess: "release", onFailure: "keep" },
 ```
 
@@ -149,7 +164,8 @@ base set: `PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL`, `TERM`, locale variables,
 settings, plus the variables its own harness needs. Give agents anything else
 by name:
 
-```ts
+```ts factory-options
+// Inside defineFactory({ ... }) in jigs.config.ts
 agents: { env: ["SSH_AUTH_SOCK", "MISE_DATA_DIR"] },
 ```
 
@@ -168,7 +184,8 @@ the factory, with `jigs init --github-identity-mode pat` (the default) or `app`.
 
 #### PAT: jigs acts as you
 
-```ts
+```ts factory-options
+// Inside defineFactory({ ... }) in jigs.config.ts
 github: { identities: [{ mode: "pat" }] },
 ```
 
@@ -180,7 +197,8 @@ pull request. A classic token needs `repo` (or `public_repo`), plus
 
 #### App: jigs acts as a bot
 
-```ts
+```ts factory-options
+// Inside defineFactory({ ... }) in jigs.config.ts
 github: {
   identities: [{
     mode: "app",
@@ -270,7 +288,8 @@ never changes branch protection.
   URL will do). Put its ID and secret in `.env` as `LINEAR_CLIENT_ID` and
   `LINEAR_CLIENT_SECRET`.
 
-```ts
+```ts factory-options
+// Inside defineFactory({ ... }) in jigs.config.ts
 linear: { identity: { mode: "app" } },
 ```
 
@@ -286,7 +305,8 @@ it leaves, such as the assumptions a ticket review made.
   mentions you and the ticket's assignee instead. Set it when colleagues create
   tickets for the factory, so its questions reach you rather than them.
 
-```ts
+```ts factory-options
+// Inside defineFactory({ ... }) in jigs.config.ts
 linear: { identity: { mode: "app" }, operator: "you@example.com" },
 ```
 
@@ -315,7 +335,8 @@ and Linear waits continue to poll at [`pollIntervalSeconds`](#service). A lost
 webhook delivery only delays the next check. See
 [Waiting and external events](/guide/waiting-and-events) for how runs wait.
 
-```ts
+```ts factory-options
+// Inside defineFactory({ ... }) in jigs.config.ts
 webhooks: {
   url: "https://my-machine.my-tailnet.ts.net",
   github: { enabled: true },

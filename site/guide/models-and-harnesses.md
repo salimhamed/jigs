@@ -31,20 +31,39 @@ A workflow declares the agents and model sources it requires. jigs uses those
 declarations for preflight checks, catching missing CLIs, credentials and model
 endpoints before the run begins:
 
-```ts
-import { defineWorkflow, harnesses, models } from "@jigs-ai/jigs";
+This complete workflow asks Claude Code to suggest a plan, then asks a direct
+model to summarize it. Save it as `workflows/plan/plan.ts` and
+[register it in the factory](/guide/build-a-workflow#_3-register-the-workflow).
+Authenticate Claude Code and set `OPENROUTER_API_KEY`, then run
+`pnpm exec jigs up` and `pnpm exec jigs run plan --input task="Add draft autosave"`.
 
-const agents = {
-  builder: harnesses.codex({ model: "gpt-5.6-sol" }),
-  reviewer: harnesses.claude({ model: "opus" }),
-};
+```ts
+// workflows/plan/plan.ts
+import { defineWorkflow, harnesses, models, type WorkflowInputs } from "@jigs-ai/jigs";
+import { z } from "zod";
+import { askAgent, askModel } from "#jigs/routines";
+
+const inputs = z.object({ task: z.string().min(1) });
+const agents = { planner: harnesses.claude({ model: "opus" }) };
 const summarizer = models.openrouter("google/gemini-2.5-flash-lite");
 
-// inputs and ship are the workflow's schema and function.
+export async function plan(input: WorkflowInputs<typeof inputs>) {
+  "use workflow";
+  const proposal = await askAgent({
+    harness: agents.planner,
+    prompt: `Suggest an implementation plan for: ${input.task}`,
+  });
+  const summary = await askModel({
+    model: summarizer,
+    prompt: `Summarize this plan in three bullet points:\n${proposal.text}`,
+  });
+  return summary.text;
+}
+
 export default defineWorkflow({
   inputs,
   requires: { agents, models: [summarizer] },
-  workflow: ship,
+  workflow: plan,
 });
 ```
 
@@ -59,23 +78,62 @@ Each turn provides two prompts: `resume` is the new information for an existing
 session, and `fresh` supplies enough context to reconstruct the task if that
 session is gone. jigs falls back to `fresh` when it cannot resume the session.
 
+This workflow provisions a worktree, implements the input task, gets a review
+from a second agent, then resumes the builder with that review. It assumes an
+`app` [repository binding](/guide/build-a-workflow#_1-connect-a-repository), plus
+Codex and Claude Code authentication. Register it as `build` in the factory,
+then run `pnpm exec jigs up` and
+`pnpm exec jigs run build --input task="Add a regression test for saving a draft twice"`.
+The example commits locally and returns the worktree path, review and final
+diff. It leaves publishing to you. Its `release` policy keeps the worktree after
+the run so you can inspect the result; see
+[`release`](/guide/configuration#release) for cleanup options.
+
 ```ts
-import { agentSession } from "#jigs/routines";
-import { readWorktreeDiff } from "#jigs/steps";
+// workflows/build/build.ts
+import { defineWorkflow, harnesses, type WorkflowInputs } from "@jigs-ai/jigs";
+import { z } from "zod";
+import { agentSession, runAgent } from "#jigs/routines";
+import { provisionWorktree, readWorktreeDiff } from "#jigs/steps";
 
-// task and review are text prepared earlier in the workflow.
-const builder = agentSession({
-  name: "builder",
-  harness: agents.builder,
-  cwd: worktree.path,
-});
+const inputs = z.object({ task: z.string().min(1) });
+const agents = {
+  builder: harnesses.codex({ model: "gpt-5.6-sol" }),
+  reviewer: harnesses.claude({ model: "opus" }),
+};
 
-await builder.run({ resume: task, fresh: task });
-// After an independent reviewer has checked the work:
-await builder.run({
-  resume: `Address this review: ${review}`,
-  fresh: async () =>
-    `${task}\nCurrent changes: ${await readWorktreeDiff(worktree)}\nReview: ${review}`,
+export async function build(input: WorkflowInputs<typeof inputs>) {
+  "use workflow";
+  const worktree = await provisionWorktree({
+    binding: "app",
+    branch: `build/${input.triggerId}`,
+  });
+  const task = `Implement this task, run checks, and commit the changes locally: ${input.task}`;
+  const builder = agentSession({
+    name: "builder",
+    harness: agents.builder,
+    cwd: worktree.path,
+  });
+
+  await builder.run({ resume: task, fresh: task });
+  const review = await runAgent({
+    harness: agents.reviewer,
+    cwd: worktree.path,
+    prompt: `Review commits since ${worktree.baseSha} for this task. Do not edit files.\n${input.task}`,
+  });
+  await builder.run({
+    resume: `Address this review, run checks, and commit any changes locally: ${review.text}`,
+    fresh: async () =>
+      `${task}\nCurrent changes: ${await readWorktreeDiff(worktree)}\nReview: ${review.text}`,
+  });
+  return { path: worktree.path, review: review.text, diff: await readWorktreeDiff(worktree) };
+}
+
+export default defineWorkflow({
+  inputs,
+  requires: { agents, bindings: ["app"] },
+  release: { onSuccess: "keep", onFailure: "keep" },
+  workflow: build,
 });
 ```
 
@@ -94,6 +152,8 @@ Claude Code and Codex descriptors use the provider's own JSON-serializable
 settings, except for execution policy and lifecycle settings owned by jigs:
 
 ```ts
+import { harnesses } from "@jigs-ai/jigs";
+
 harnesses.claude({ model: "opus", effort: "high" });
 harnesses.codex({ model: "gpt-5.6-sol", personality: "pragmatic" });
 ```
@@ -145,6 +205,8 @@ Use `models.openaiCompatible(...)` for a server that exposes an OpenAI-compatibl
 API, including local model servers:
 
 ```ts
+import { models } from "@jigs-ai/jigs";
+
 const local = models.openaiCompatible({
   name: "local",
   baseUrl: "http://localhost:1234/v1",
@@ -162,15 +224,24 @@ the run. If the server requires a key, set `apiKeyEnv` to its `.env` variable na
 It asks named questions about one state and returns probabilities; your workflow
 decides what confidence is enough to act:
 
+The following helper belongs in a workflow module. Call
+`await classifyReport(input.report)` inside a `"use workflow"` function whose
+input schema has a `report` string, and include the exported `decisionModel`
+in that workflow's `requires.models`. Set `OPENROUTER_API_KEY` in `.env`.
+
 ```ts
 import { models, yesNo } from "@jigs-ai/jigs";
 import { askJev } from "#jigs/routines";
 
-const result = await askJev({
-  model: models.openrouter("typesafe/jev-1.13"),
-  state: { report: "Saving a draft twice loses its title." },
-  questions: { dataLoss: yesNo("Does this report describe lost user data?") },
-});
+export const decisionModel = models.openrouter("typesafe/jev-1.13");
+
+export async function classifyReport(report: string) {
+  return askJev({
+    model: decisionModel,
+    state: { report },
+    questions: { dataLoss: yesNo("Does this report describe lost user data?") },
+  });
+}
 ```
 
 See [decision types](/api/jigs#decision-models) for choice and score questions.

@@ -25,6 +25,7 @@ needs no repository can skip this and use `createRunDirectory()` from
 Create `workflows/triage/triage.ts`:
 
 ```ts
+// workflows/triage/triage.ts
 import { defineWorkflow, harnesses, JigsError, models, type WorkflowInputs } from "@jigs-ai/jigs";
 import { z } from "zod";
 import { askModel, runAgent } from "#jigs/routines";
@@ -116,9 +117,12 @@ the person inspecting it.
 
 ## 3. Register the workflow
 
-Add the workflow to the `workflows` map in `jigs.config.ts`:
+Inside the existing `defineFactory({ ... })` object in `jigs.config.ts`, add
+`triage` to the `workflows` map. A factory with only the starter `hello` workflow
+will look like this; keep any other workflows you have registered:
 
-```ts
+```ts factory-options
+// Inside defineFactory({ ... }) in jigs.config.ts
 workflows: {
   hello: () => import("./workflows/hello/hello.ts"),
   triage: () => import("./workflows/triage/triage.ts"),

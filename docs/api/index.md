@@ -264,17 +264,19 @@ everything listed before every run. List only what the workflow uses.
 
 ###### Example
 
+Pass this value as `requires` when calling `defineWorkflow`.
 ```ts
+import { harnesses, type WorkflowDefinition } from "@jigs-ai/jigs";
+
 const agents = {
   builder: harnesses.claude({ model: "opus" }),
   reviewer: harnesses.codex({ model: "gpt-5.6-sol" }),
 };
 
-export default defineWorkflow({
-  inputs,
-  requires: { agents, integrations: ["linear", "github"] },
-  workflow: shipTicket,
-});
+const requires = {
+  agents,
+  integrations: ["linear", "github"],
+} satisfies WorkflowDefinition["requires"];
 ```
 
 ##### workflow()
@@ -302,14 +304,15 @@ is provisioned, and the merge method jigs uses there.
 
 #### Example
 
+Use this value for `bindings.api` in `jigs.config.ts`.
 ```ts
-bindings: {
-  api: {
-    remote: "git@github.com:acme/api.git",
-    postCreate: ["pnpm install"],
-    mergeMethod: "rebase",
-  },
-},
+import type { BindingDefinition } from "@jigs-ai/jigs";
+
+const api = {
+  remote: "git@github.com:acme/api.git",
+  postCreate: ["pnpm install"],
+  mergeMethod: "rebase",
+} satisfies BindingDefinition;
 ```
 
 ***
@@ -329,8 +332,14 @@ their own pull request.
 
 #### Example
 
+Use this value for `github` in `jigs.config.ts`.
 ```ts
-github: { identities: [{ mode: "pat" }], mergeApproval: "label" },
+import type { GitHubDefinition } from "@jigs-ai/jigs";
+
+const github = {
+  identities: [{ mode: "pat" }],
+  mergeApproval: "label",
+} satisfies GitHubDefinition;
 ```
 
 ***
@@ -355,8 +364,14 @@ a change takes effect after a rebuild, which `jigs up` does.
 
 #### Example
 
+Use this value for `linear` in `jigs.config.ts`.
 ```ts
-linear: { identity: { mode: "app" }, operator: "salim@example.com" },
+import type { LinearDefinition } from "@jigs-ai/jigs";
+
+const linear = {
+  identity: { mode: "app" },
+  operator: "salim@example.com",
+} satisfies LinearDefinition;
 ```
 
 ***
@@ -384,12 +399,15 @@ Without this section the service still wakes parked runs by polling.
 
 #### Example
 
+Use this value for `webhooks` in `jigs.config.ts`.
 ```ts
-webhooks: {
+import type { WebhooksDefinition } from "@jigs-ai/jigs";
+
+const webhooks = {
   url: "https://factory.example.ts.net",
   github: { enabled: true },
   linear: { enabled: false },
-},
+} satisfies WebhooksDefinition;
 ```
 
 ***
@@ -467,11 +485,14 @@ parameter against the input schema.
 #### Example
 
 ```ts
-const inputs = z.object({ binding: z.string() });
+import { defineWorkflow, type WorkflowInputs } from "@jigs-ai/jigs";
+import { z } from "zod";
+
+const inputs = z.object({ name: z.string() });
 
 export async function hello(input: WorkflowInputs<typeof inputs>) {
   "use workflow";
-  // ...
+  return `Hello, ${input.name}!`;
 }
 
 export default defineWorkflow({ inputs, workflow: hello });
@@ -980,7 +1001,9 @@ Build a Claude Code harness from the model and any Claude Code settings. Without
 ###### Example
 
 ```ts
-harnesses.claude({ model: "opus", effort: "high", maxTurns: 40 });
+import { harnesses } from "@jigs-ai/jigs";
+
+const builder = harnesses.claude({ model: "opus", effort: "high", maxTurns: 40 });
 ```
 
 ##### codex()
@@ -1009,7 +1032,9 @@ has no mode without tools.
 ###### Example
 
 ```ts
-harnesses.codex({ model: "gpt-5.6-sol", personality: "pragmatic" });
+import { harnesses } from "@jigs-ai/jigs";
+
+const builder = harnesses.codex({ model: "gpt-5.6-sol", personality: "pragmatic" });
 ```
 
 ##### pi()
@@ -1117,6 +1142,9 @@ appears without editing the input.
 #### Example
 
 ```ts
+import { harnessKinds } from "@jigs-ai/jigs";
+import { z } from "zod";
+
 const inputs = z.object({ harness: z.enum(harnessKinds) });
 ```
 

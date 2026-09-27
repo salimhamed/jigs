@@ -79,17 +79,19 @@ export interface WorkflowDefinition<S extends z.ZodType = z.ZodType> {
    * everything listed before every run. List only what the workflow uses.
    *
    * @example
+   * Pass this value as `requires` when calling `defineWorkflow`.
    * ```ts
+   * import { harnesses, type WorkflowDefinition } from "@jigs-ai/jigs";
+   *
    * const agents = {
    *   builder: harnesses.claude({ model: "opus" }),
    *   reviewer: harnesses.codex({ model: "gpt-5.6-sol" }),
    * };
    *
-   * export default defineWorkflow({
-   *   inputs,
-   *   requires: { agents, integrations: ["linear", "github"] },
-   *   workflow: shipTicket,
-   * });
+   * const requires = {
+   *   agents,
+   *   integrations: ["linear", "github"],
+   * } satisfies WorkflowDefinition["requires"];
    * ```
    */
   requires?: WorkflowRequires;
@@ -104,11 +106,14 @@ export interface WorkflowDefinition<S extends z.ZodType = z.ZodType> {
  *
  * @example
  * ```ts
- * const inputs = z.object({ binding: z.string() });
+ * import { defineWorkflow, type WorkflowInputs } from "@jigs-ai/jigs";
+ * import { z } from "zod";
+ *
+ * const inputs = z.object({ name: z.string() });
  *
  * export async function hello(input: WorkflowInputs<typeof inputs>) {
  *   "use workflow";
- *   // ...
+ *   return `Hello, ${input.name}!`;
  * }
  *
  * export default defineWorkflow({ inputs, workflow: hello });
@@ -161,8 +166,14 @@ export interface Factory {
  * their own pull request.
  *
  * @example
+ * Use this value for `github` in `jigs.config.ts`.
  * ```ts
- * github: { identities: [{ mode: "pat" }], mergeApproval: "label" },
+ * import type { GitHubDefinition } from "@jigs-ai/jigs";
+ *
+ * const github = {
+ *   identities: [{ mode: "pat" }],
+ *   mergeApproval: "label",
+ * } satisfies GitHubDefinition;
  * ```
  *
  * @group Factory and workflows
@@ -184,8 +195,14 @@ export type GitHubDefinition = z.input<typeof githubSchema>;
  * a change takes effect after a rebuild, which `jigs up` does.
  *
  * @example
+ * Use this value for `linear` in `jigs.config.ts`.
  * ```ts
- * linear: { identity: { mode: "app" }, operator: "salim@example.com" },
+ * import type { LinearDefinition } from "@jigs-ai/jigs";
+ *
+ * const linear = {
+ *   identity: { mode: "app" },
+ *   operator: "salim@example.com",
+ * } satisfies LinearDefinition;
  * ```
  *
  * @group Factory and workflows
@@ -197,12 +214,15 @@ export type LinearDefinition = z.input<typeof linearSchema>;
  * Without this section the service still wakes parked runs by polling.
  *
  * @example
+ * Use this value for `webhooks` in `jigs.config.ts`.
  * ```ts
- * webhooks: {
+ * import type { WebhooksDefinition } from "@jigs-ai/jigs";
+ *
+ * const webhooks = {
  *   url: "https://factory.example.ts.net",
  *   github: { enabled: true },
  *   linear: { enabled: false },
- * },
+ * } satisfies WebhooksDefinition;
  * ```
  *
  * @group Factory and workflows
@@ -214,14 +234,15 @@ export type WebhooksDefinition = z.input<typeof webhooksSchema>;
  * is provisioned, and the merge method jigs uses there.
  *
  * @example
+ * Use this value for `bindings.api` in `jigs.config.ts`.
  * ```ts
- * bindings: {
- *   api: {
- *     remote: "git@github.com:acme/api.git",
- *     postCreate: ["pnpm install"],
- *     mergeMethod: "rebase",
- *   },
- * },
+ * import type { BindingDefinition } from "@jigs-ai/jigs";
+ *
+ * const api = {
+ *   remote: "git@github.com:acme/api.git",
+ *   postCreate: ["pnpm install"],
+ *   mergeMethod: "rebase",
+ * } satisfies BindingDefinition;
  * ```
  *
  * @group Factory and workflows

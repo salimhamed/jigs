@@ -47,6 +47,7 @@ import {
   installCompiledCancellationFixture,
   runCompiledCancellationMatrix,
 } from "./compiled-cancellation.mjs";
+import { staticModuleSpecifiers } from "./module-imports.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.join(here, "..");
@@ -162,9 +163,7 @@ function cliBundleImports() {
   const visit = (file) => {
     if (seen.has(file)) return;
     seen.add(file);
-    for (const [, spec] of readFileSync(file, "utf8").matchAll(
-      /(?:from|import)\s*["']([^"']+)["']/g,
-    )) {
+    for (const spec of staticModuleSpecifiers(readFileSync(file, "utf8"))) {
       if (spec.startsWith(".")) visit(path.resolve(path.dirname(file), spec));
       else if (!spec.startsWith("node:")) {
         bare.add(spec.startsWith("@") ? spec.split("/").slice(0, 2).join("/") : spec.split("/")[0]);

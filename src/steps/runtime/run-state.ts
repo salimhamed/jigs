@@ -126,13 +126,13 @@ export function describeRunState(
  * runs through this, and it is the snapshot later decisions are asked over.
  *
  * @example
- * ```ts
- * await readRunState(registrySql(), currentFactory(), runId, worldRunFacts);
- * // { runId: "wrun_01K…", status: "running", workflowName: "workflow//./workflows/ship//ship",
- * //   trigger: "manual", ticket: "<ticket>", …,
- * //   suspensions: [{ kind: "pull-request", reason: "waiting for pull request activity on acme/api#41", … }],
- * //   claim: "linear:ticket:…",
- * //   resources: [{ kind: "worktree", identity: "/…/worktrees/<branch>", state: "live", reason: null, … }] }
+ * A partial snapshot of a run waiting for pull-request activity:
+ * ```text
+ * { runId: "wrun_01K…", status: "running", workflowName: "workflow//./workflows/ship//ship",
+ *   trigger: "manual", ticket: "<ticket>", …,
+ *   suspensions: [{ kind: "pull-request", reason: "waiting for pull request activity on acme/api#41", … }],
+ *   claim: "linear:ticket:…",
+ *   resources: [{ kind: "worktree", identity: "/…/worktrees/<branch>", state: "live", reason: null, … }] }
  * ```
  */
 export async function readRunState(

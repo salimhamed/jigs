@@ -14,26 +14,43 @@ run as waiting, then continues the same run when a person replies there. It
 requires [Linear credentials](/guide/configuration#linear-identity) and a claimed
 ticket. Claiming prevents multiple runs from independently owning the same ticket.
 
-Declare a `ticket` input and `requires: { integrations: ["linear"] }` in the
-workflow definition. Add these imports at file scope and the calls inside the
-workflow function:
+This complete workflow resolves its `ticket` input, claims the ticket, then
+returns the person's answer. Save it as `workflows/ask-scope/ask-scope.ts` and
+[register `ask-scope` in the factory](/guide/build-a-workflow#_3-register-the-workflow).
+Rebuild with `pnpm exec jigs up`, then run
+`pnpm exec jigs run ask-scope --input ticket=ENG-123`, replacing
+`ENG-123` with your ticket identifier.
 
 ```ts
+// workflows/ask-scope/ask-scope.ts
+import { defineWorkflow, ticketInputSchema, type WorkflowInputs } from "@jigs-ai/jigs";
+import { z } from "zod";
 import { claimTicket, haltForHuman } from "#jigs/routines";
 import { resolveLinearIssue } from "#jigs/steps";
 
-const issue = await resolveLinearIssue(input.ticket);
-const claim = await claimTicket(issue.id, issue.identifier);
-const reply = await haltForHuman(claim, {
-  headline: "A decision is needed before work continues.",
-  where: "scope",
-  questions: [{
-    question: "Should the fix include archived drafts?",
-    options: [{ label: "Active drafts only" }, { label: "Include archived drafts" }],
-  }],
-  onReply: "continue",
+const inputs = z.object({ ticket: ticketInputSchema });
+
+export async function askScope(input: WorkflowInputs<typeof inputs>) {
+  "use workflow";
+  const issue = await resolveLinearIssue(input.ticket);
+  const claim = await claimTicket(issue.id, issue.identifier);
+  const reply = await haltForHuman(claim, {
+    headline: "A decision is needed before work continues.",
+    where: "scope",
+    questions: [{
+      question: "Should the fix include archived drafts?",
+      options: [{ label: "Active drafts only" }, { label: "Include archived drafts" }],
+    }],
+    onReply: "continue",
+  });
+  return reply.body;
+}
+
+export default defineWorkflow({
+  inputs,
+  requires: { integrations: ["linear"] },
+  workflow: askScope,
 });
-// reply.body contains the person's answer.
 ```
 
 The comment mentions the ticket's creator and assignee, or your
@@ -46,19 +63,41 @@ it. The [routine reference](/api/factory/routines#haltforhuman) covers the optio
 ## Watch a pull request
 
 **`watchPullRequest` reports facts. It does not decide what the facts mean or
-what the workflow should do next.** Pass a `PullRequestRef`, such as the result
-of opening a pull request:
+what the workflow should do next.** This complete workflow watches an existing
+pull request identified by its owner, repository and number. It requires
+[GitHub credentials](/guide/configuration#github-identity). Save it as
+`workflows/watch-pr/watch-pr.ts` and register `watch-pr` in the factory. Rebuild
+with `pnpm exec jigs up`, then run `pnpm exec jigs run watch-pr --input owner=acme --input repo=app --input number=42`
+with your pull request's details.
 
 ```ts
+// workflows/watch-pr/watch-pr.ts
+import { defineWorkflow, type PullRequestRef, type WorkflowInputs } from "@jigs-ai/jigs";
+import { z } from "zod";
 import { watchPullRequest } from "#jigs/routines";
 
-for await (const snapshot of watchPullRequest(pr)) {
-  if (snapshot.state === "closed") {
-    return { merged: snapshot.merged };
-  }
+const inputs = z.object({
+  owner: z.string().min(1),
+  repo: z.string().min(1),
+  number: z.coerce.number().int().positive(),
+});
 
-  // Decide what this workflow should do with the current facts.
+export async function watchPr(input: WorkflowInputs<typeof inputs>) {
+  "use workflow";
+  const pr: PullRequestRef = { owner: input.owner, repo: input.repo, number: input.number };
+  for await (const snapshot of watchPullRequest(pr)) {
+    if (snapshot.state === "closed") {
+      return { merged: snapshot.merged };
+    }
+    // Add this workflow's reactions to open snapshots here.
+  }
 }
+
+export default defineWorkflow({
+  inputs,
+  requires: { integrations: ["github"] },
+  workflow: watchPr,
+});
 ```
 
 The watcher reads GitHub on its first call and after each wake. It yields only
@@ -75,25 +114,35 @@ come from `#jigs/routines`; the generated routines supply the durable steps.
 
 ### Reply to a review
 
-Once the workflow has chosen feedback to answer, send the reply with the thread
-from the snapshot. In this example, `selectedThread` is one of
-`snapshot.reviewThreads`:
+Add this helper at file scope in a workflow module. It takes the `pr` and
+`snapshot` from the watcher above, the root ID of a thread the workflow has
+chosen to answer, and the reply text. Call it inside the watch loop after your
+workflow has decided what to say. It finds the thread in the current snapshot
+and fails if that thread is absent.
 
 ```ts
+import { JigsError, type PullRequestRef, type PullRequestSnapshot } from "@jigs-ai/jigs";
 import { postReviewAnswers } from "#jigs/routines";
 
-await postReviewAnswers({
-  pr,
-  scope: "delivery",
-  threads: [selectedThread],
-  answers: {
-    answers: [{
-      threadId: selectedThread.rootId,
-      body: "Added a regression test for saving a draft twice.",
-    }],
-    commitExplanation: null,
-  },
-});
+export async function answerReview(
+  pr: PullRequestRef,
+  snapshot: PullRequestSnapshot,
+  threadId: number,
+  body: string,
+) {
+  const selectedThread = snapshot.reviewThreads.find((thread) => thread.rootId === threadId);
+  if (!selectedThread) throw new JigsError("The selected review thread is absent from this snapshot.");
+
+  await postReviewAnswers({
+    pr,
+    scope: "delivery",
+    threads: [selectedThread],
+    answers: {
+      answers: [{ threadId: selectedThread.rootId, body }],
+      commitExplanation: null,
+    },
+  });
+}
 ```
 
 The routine sends the answer to the right GitHub thread and marks which
@@ -102,18 +151,25 @@ The [reference](/api/factory/routines#postreviewanswers) lists those options.
 
 ### Post a commit update
 
-Use `postPullRequestNote` for a status message about the current commit:
+Use `postPullRequestNote` for a status message about the current commit. Add
+this helper at file scope in the watcher module, then call
+`await reportFailingCi(pr, snapshot)` inside the loop after the closed-state
+check. Both arguments come from that loop; the helper posts only when CI is red.
 
 ```ts
+import type { PullRequestRef, PullRequestSnapshot } from "@jigs-ai/jigs";
 import { postPullRequestNote } from "#jigs/routines";
 
-await postPullRequestNote({
-  pr,
-  scope: "delivery",
-  headSha: snapshot.headSha,
-  reason: "ci",
-  body: "CI still fails on this commit. The failing test needs investigation.",
-});
+export async function reportFailingCi(pr: PullRequestRef, snapshot: PullRequestSnapshot) {
+  if (snapshot.ci !== "red") return;
+  await postPullRequestNote({
+    pr,
+    scope: "delivery",
+    headSha: snapshot.headSha,
+    reason: "ci",
+    body: "CI fails on this commit. The failing checks need investigation.",
+  });
+}
 ```
 
 It checks the pull request before posting and skips a note already recorded for

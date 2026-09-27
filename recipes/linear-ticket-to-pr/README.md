@@ -14,7 +14,6 @@ overwrites them.
 | `delivery/delivery.ts` | The three phases and `DeliveryStopped`. |
 | `delivery/prompts.ts` | Every prompt the agents are sent. |
 | `delivery/review.ts` | What a review returns and how it is rendered. |
-| `doc-examples.types.test.ts` | Compiles every example on this page. Change one and change the other. |
 
 ## What it needs
 
@@ -92,9 +91,14 @@ committed work by pushing; a failed preservation push is included in the note.
 
 The agents are a plain object, and the names a run may pick are a hand-written
 enum beside it. TypeScript checks the two against each other where the workflow
-reads `agents[input.builder]`.
+reads `agents[input.builder]`. In `linear-ticket-to-pr.ts`, replace the
+`agents` and `agentName` declarations with these; the imports are shown for
+context and already exist in that file.
 
 ```ts
+import { harnesses } from "@jigs-ai/jigs";
+import { z } from "zod";
+
 const agents = {
   builder: harnesses.codex({ model: "gpt-5.6-sol" }),
   reviewer: harnesses.claude({ model: "opus" }),
@@ -114,28 +118,54 @@ unavailable, a fresh prompt supplies the ticket, current diff, and PR facts.
 ## The three phases
 
 The workflow calls three phases from `delivery/delivery.ts` in order and sets
-the ticket status between them:
+the ticket status between them. Before these calls,
+[`linear-ticket-to-pr.ts`](./linear-ticket-to-pr.ts) acquires the ticket with
+`acquireTicket` (returning `claim` and `snapshot`), provisions a worktree, and
+reviews the requirements. It assembles `delivery` from that worktree, the
+reviewed task, selected agents, budgets and merge policy.
+
+The following helper isolates the phase sequence from that setup. It could live
+beside `linear-ticket-to-pr.ts`; call `deliverTicket(delivery, claim, snapshot)`
+inside the workflow after preparing those values. The shipped workflow keeps
+these calls inline so you can insert your own checks between phases.
 
 ```ts
-const builder = agentSession({
-  name: "builder",
-  harness: delivery.builder,
-  cwd: delivery.worktree.path,
-});
+import type { TicketClaim, TicketSnapshot } from "@jigs-ai/jigs";
+import { agentSession, noteOnTicket } from "#jigs/routines";
+import { setTicketStatus } from "#jigs/steps";
+import {
+  type Delivery,
+  DeliveryStopped,
+  followPullRequest,
+  implementAndReview,
+  publish,
+} from "./delivery/delivery.ts";
 
-try {
-  const approved = await implementAndReview(delivery, builder);
-  const pr = await publish(delivery, approved);
-  await setTicketStatus(snapshot.id, "In Review");
-  await followPullRequest(delivery, pr, builder);
-  await setTicketStatus(snapshot.id, "Done");
-  return { pr: pr.url };
-} catch (error) {
-  if (error instanceof DeliveryStopped) {
-    await noteOnTicket(claim, error.note());
-    await setTicketStatus(snapshot.id, "Todo");
+export async function deliverTicket(
+  delivery: Delivery,
+  claim: TicketClaim,
+  snapshot: TicketSnapshot,
+) {
+  const builder = agentSession({
+    name: "builder",
+    harness: delivery.builder,
+    cwd: delivery.worktree.path,
+  });
+
+  try {
+    const approved = await implementAndReview(delivery, builder);
+    const pr = await publish(delivery, approved);
+    await setTicketStatus(snapshot.id, "In Review");
+    await followPullRequest(delivery, pr, builder);
+    await setTicketStatus(snapshot.id, "Done");
+    return { pr: pr.url };
+  } catch (error) {
+    if (error instanceof DeliveryStopped) {
+      await noteOnTicket(claim, error.note());
+      await setTicketStatus(snapshot.id, "Todo");
+    }
+    throw error;
   }
-  throw error;
 }
 ```
 
@@ -172,14 +202,36 @@ agent is told, edit the function.
 Each turn has two forms, because an agent session resumes the harness session
 it holds when it can and starts fresh when it cannot. `resume` is sent to an
 agent that already holds the earlier turns, so it says only what is new.
-`fresh` is sent to an agent starting from nothing, so it says everything:
+`fresh` is sent to an agent starting from nothing, so it says everything.
+For example, replace the `maintenance` export in `delivery/prompts.ts` with this
+shorter prompt. Its arguments come from `followPullRequest`: the task and
+worktree in `delivery`, the current diff, the published PR, the GitHub snapshot,
+and an optional instruction to recover unfinished local work.
 
 ```ts
+// delivery/prompts.ts
+import type { PullRequestRef, PullRequestSnapshot, Worktree } from "@jigs-ai/jigs";
+import type { WorkItem } from "./delivery.ts";
+
 export const maintenance = {
-  resume: (pr: PullRequestRef, snapshot: PullRequestSnapshot) =>
-    `Attend ${pr.owner}/${pr.repo}#${pr.number}. Read these facts and decide whether anything needs attention:\n${JSON.stringify(snapshot)}`,
-  fresh: (task: WorkItem, pr: PullRequestRef, snapshot: PullRequestSnapshot) =>
-    `${task.instructions}\n\n${maintenance.resume(pr, snapshot)}`,
+  resume: (pr: PullRequestRef, snapshot: PullRequestSnapshot, recovery?: string) => [
+    `Attend ${pr.owner}/${pr.repo}#${pr.number}. Read these facts:\n${JSON.stringify(snapshot)}`,
+    recovery ?? "",
+    "Address needed changes, run checks, commit and push. Do not merge or approve.",
+    "Return finished if no work remains, pending only for external waits, or needs-human if blocked.",
+  ].join("\n\n"),
+  fresh: (
+    task: WorkItem,
+    worktree: Worktree,
+    diff: string,
+    pr: PullRequestRef,
+    snapshot: PullRequestSnapshot,
+    recovery?: string,
+  ) => [
+    task.instructions,
+    `Worktree: ${worktree.path}\nCurrent diff:\n${diff}`,
+    maintenance.resume(pr, snapshot, recovery),
+  ].join("\n\n"),
 };
 ```
 
