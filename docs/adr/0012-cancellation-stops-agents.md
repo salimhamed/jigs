@@ -22,12 +22,14 @@ watch and change nothing.
   launcher execs a small Node supervisor that starts Codex in its own group and
   records the group ID in the invocation home for the driver to track.
 - **`OpenContext.signal` and `DriverContext.signal` carry the stop** to drivers,
-  and `createAgentRunner` models pass it on every call, so a factory's own step
-  is covered too.
+  and `createAgentRunner` models pass it on every call and turn any failure
+  after the cancellation into the fatal error, so a factory's own step is
+  covered too.
 - **A stop is bounded and never trusted blindly.** A group still visible after
   SIGKILL can run no more code, so it is logged and cleanup proceeds. A signal
   that cannot be delivered is logged with the run and group, and the group
-  stays registered for service shutdown.
+  stays registered for service shutdown. A once-a-second sweep retires any
+  tracked group that is gone, so a reused id is never signalled.
 - A failed first status read throws an ordinary error, so the SDK retries the
   step rather than launch an agent for a run it cannot see.
 - Out of scope: processes that leave the group, agents orphaned by a killed
