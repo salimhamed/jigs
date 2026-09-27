@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { generateText, type TextStreamPart, type ToolSet } from "ai";
 import { convertArrayToReadableStream, MockLanguageModelV4 } from "ai/test";
@@ -21,7 +21,7 @@ import { createCodexDriver } from "./drivers/codex.ts";
 import { type DriverResolver, driverFor, drivers } from "./drivers/index.ts";
 import { createPiDriver, type PiDriverDependencies } from "./drivers/pi.ts";
 import { type ExecutorGeneration, executeAgentWith } from "./execute-agent.ts";
-import type { PiExecutionOptions } from "./harnesses/pi.ts";
+import { executePi, type PiExecutionOptions } from "./harnesses/pi.ts";
 import { planPiModel } from "./harnesses/pi-model.ts";
 import { makeTmpDir, removeTmpDir } from "./harnesses/test-fixtures.ts";
 import { type ExecutionSeams, executionSeams } from "./seams.ts";
@@ -102,6 +102,7 @@ function makeDeps(
     return { home, sessionDir, cleanup: () => rmSync(home, { recursive: true, force: true }) };
   };
   const piDeps: PiDriverDependencies = {
+    openStepStream: () => undefined,
     preparePiHome,
     executePi: async (options) => {
       captured.piOptions = options;
@@ -1605,10 +1606,11 @@ test("a provider error reaches the caller as the same error generateText raises"
   ).rejects.toBe(broken);
 });
 
-test("asks and pi runs open no step stream", async () => {
+test("asks open no step stream, including pi asks", async () => {
   const openStepStream = vi.fn(() => undefined);
   const { deps, piDeps } = makeDeps();
   deps.openStepStream = openStepStream;
+  piDeps.openStepStream = openStepStream;
   piDeps.executePi = async (options) => {
     const id = options.args[options.args.indexOf("--session-id") + 1];
     return { text: "done", providerMetadata: { pi: { sessionId: id } } };
@@ -1620,10 +1622,9 @@ test("asks and pi runs open no step stream", async () => {
     deps,
   );
   await agentStep(
-    buildAgentRequest({
+    buildAskAgentRequest({
       harness: harnesses.pi(models.openaiCodex("gpt-5.5")),
-      cwd: worktree,
-      prompt: "implement it",
+      prompt: "summarize",
     }),
     { workflowRunId: "run-pi-stream" },
     deps,
@@ -1640,4 +1641,70 @@ test("asks and pi runs open no step stream", async () => {
     deps,
   );
   expect(openStepStream).toHaveBeenCalledOnce();
+});
+
+test("a pi agent step writes several stream parts before the harness returns", async () => {
+  const { deps, piDeps } = makeDeps();
+  const { stream, parts } = recordingStream();
+  piDeps.openStepStream = () => stream;
+  const bin = path.join(tmp, "streaming-pi-bin");
+  mkdirSync(bin);
+  const release = path.join(tmp, "release-streaming-pi");
+  const executable = path.join(bin, "pi");
+  writeFileSync(
+    executable,
+    `#!${process.execPath}
+const { existsSync } = require("node:fs");
+const emit = (event) => process.stdout.write(JSON.stringify(event) + "\\n");
+const id = process.argv[process.argv.indexOf("--session-id") + 1];
+emit({ type: "session", id });
+emit({ type: "agent_start" });
+emit({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "working" } });
+emit({ type: "message_end", message: { role: "assistant", content: [{ type: "toolCall", id: "read-1", name: "read", arguments: { path: "README.md" } }], stopReason: "toolUse" } });
+emit({ type: "tool_execution_start", toolCallId: "read-1", toolName: "read", args: { path: "README.md" } });
+const timer = setInterval(() => {
+  if (!existsSync(${JSON.stringify(release)})) return;
+  clearInterval(timer);
+  emit({ type: "tool_execution_end", toolCallId: "read-1", toolName: "read", result: { content: [{ type: "text", text: "hello" }] }, isError: false });
+  emit({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "finished" }], stopReason: "stop" } });
+  emit({ type: "agent_end", messages: [], willRetry: false });
+  emit({ type: "agent_settled" });
+}, 10);
+`,
+  );
+  chmodSync(executable, 0o755);
+  piDeps.executePi = (options) => executePi({ ...options, env: { PATH: bin } });
+  let returned = false;
+  const result = agentStep(
+    buildAgentRequest({
+      harness: harnesses.pi(models.openaiCodex("gpt-5.5")),
+      cwd: worktree,
+      prompt: "read the file",
+    }),
+    { workflowRunId: "run-pi-streaming" },
+    deps,
+  ).finally(() => {
+    returned = true;
+  });
+  void result.catch(() => {});
+  try {
+    await expect
+      .poll(() => parts.map((part) => part.type))
+      .toEqual(["attempt-start", "text", "tool-call"]);
+    expect(returned).toBe(false);
+    expect(parts[0]).toEqual({
+      type: "attempt-start",
+      attempt: 1,
+      harness: "pi",
+      cwd: worktree,
+      resume: false,
+    });
+  } finally {
+    writeFileSync(release, "go");
+    await result;
+  }
+  expect(await result).toMatchObject({ text: "finished", session: { harness: "pi" } });
+  expect(parts.map((part) => part.type)).toContain("tool-result");
+  expect(parts.at(-1)).toEqual({ type: "finish", finishReason: "stop" });
+  expect(stream.writable.locked).toBe(false);
 });

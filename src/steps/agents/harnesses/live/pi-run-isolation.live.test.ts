@@ -33,6 +33,7 @@ beforeAll(() => {
   tmp = makeTmpDir();
   worktree = makeScratchRepo(tmp, "pi-run-isolation");
   const pi = createPiDriver({
+    openStepStream: () => undefined,
     preparePiHome: async (runId, source) =>
       preparePiInvocationHome(runId, source, { baseDir: path.join(tmp, "managed-pi-homes") }),
     executePi,

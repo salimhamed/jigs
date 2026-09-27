@@ -34,6 +34,7 @@ beforeAll(() => {
   tmp = makeTmpDir();
   piHomes = path.join(tmp, "pi-homes");
   const pi = createPiDriver({
+    openStepStream: () => undefined,
     preparePiHome: async (runId, source) =>
       preparePiInvocationHome(runId, source, { baseDir: piHomes }),
     executePi,

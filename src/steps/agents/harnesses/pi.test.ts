@@ -4,6 +4,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "n
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, expect, test } from "vitest";
+import type { AgentStreamPart, StepStream } from "../step-stream.ts";
 import { executePi, stopPiProcesses } from "./pi.ts";
 import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
@@ -213,4 +214,59 @@ test("Pi execution rejects a malformed successful stream", async () => {
   await expect(executePi({ args: [], cwd: tmp, env: { PATH: bin } })).rejects.toThrow(
     "invalid JSON event on line 1",
   );
+});
+
+test.each(["recording", "failing", "stalled", "locked"] as const)(
+  "Pi returns the identical result with a %s stream",
+  async (mode) => {
+    const bin = writePi([...successEvents, "exit 0"]);
+    const options = { args: [], cwd: tmp, env: { PATH: bin } };
+    const expected = await executePi(options);
+    const parts: AgentStreamPart[] = [];
+    const stream: StepStream = {
+      attempt: 2,
+      writable: new WritableStream<AgentStreamPart>({
+        write(part) {
+          parts.push(part);
+          if (mode === "failing") throw new Error("World unavailable");
+          if (mode === "stalled") return new Promise<void>(() => {});
+        },
+      }),
+    };
+    const lock = mode === "locked" ? stream.writable.getWriter() : undefined;
+    try {
+      await expect(executePi({ ...options, stream, resume: true })).resolves.toEqual(expected);
+      if (mode !== "locked") expect(stream.writable.locked).toBe(false);
+      if (mode === "recording") {
+        expect(parts[0]).toEqual({
+          type: "attempt-start",
+          attempt: 2,
+          harness: "pi",
+          cwd: tmp,
+          resume: true,
+        });
+        expect(parts.at(-1)).toEqual({ type: "finish", finishReason: "stop" });
+      }
+      if (mode === "failing" || mode === "stalled") expect(parts).toHaveLength(1);
+    } finally {
+      lock?.releaseLock();
+    }
+  },
+);
+
+test("a malformed line still fails the Pi result when streaming is enabled", async () => {
+  const bin = writePi([...successEvents, "printf '%s\\n' '{broken'", "exit 0"]);
+  const parts: AgentStreamPart[] = [];
+  const stream: StepStream = {
+    attempt: 1,
+    writable: new WritableStream({
+      write: (part) => {
+        parts.push(part);
+      },
+    }),
+  };
+  const options = { args: [], cwd: tmp, env: { PATH: bin } };
+  const withoutTap = await executePi(options).catch((error: Error) => error.message);
+  await expect(executePi({ ...options, stream })).rejects.toThrow(withoutTap as string);
+  expect(stream.writable.locked).toBe(false);
 });

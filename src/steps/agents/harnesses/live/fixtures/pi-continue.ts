@@ -25,6 +25,7 @@ type Input = {
 
 const input = JSON.parse(process.argv[2] ?? "") as Input;
 const pi = createPiDriver({
+  openStepStream: () => undefined,
   preparePiHome: async (runId, plan) =>
     preparePiInvocationHome(runId, plan, { baseDir: input.baseDir }),
   executePi,

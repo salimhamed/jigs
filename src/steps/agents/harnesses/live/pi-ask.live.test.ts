@@ -40,6 +40,7 @@ const answer = z.object({ word: z.string(), count: z.number() });
 function recordingDeps(): { deps: ExecutionSeams; launches: PiExecutionOptions[] } {
   const launches: PiExecutionOptions[] = [];
   const pi = createPiDriver({
+    openStepStream: () => undefined,
     preparePiHome: async (runId, plan) => preparePiInvocationHome(runId, plan),
     executePi: (options) => {
       launches.push(options);

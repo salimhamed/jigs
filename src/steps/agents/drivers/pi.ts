@@ -27,6 +27,7 @@ import {
 } from "../harnesses/pi-home.ts";
 import { type PiModelPlan, planPiModel } from "../harnesses/pi-model.ts";
 import { AgentSessionError } from "../session-error.ts";
+import { openStepStream, type StepStream } from "../step-stream.ts";
 import type {
   Driver,
   DriverContext,
@@ -68,11 +69,13 @@ function promptFor(request: AgentRequest): string {
 }
 
 export interface PiDriverDependencies {
+  openStepStream(): StepStream | undefined;
   preparePiHome(runId: string, plan: PiModelPlan): Promise<PreparedPiHome>;
   executePi(options: PiExecutionOptions): Promise<ExecutorGeneration>;
 }
 
 const defaultDependencies: PiDriverDependencies = {
+  openStepStream,
   preparePiHome: async (runId, source) => {
     await recordRunDirectory("pi-home", runId, piRunStatePath(runId));
     return preparePiInvocationHome(runId, source);
@@ -157,6 +160,8 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
             ];
       const mcpEnvironment = new Set(piMcpEnvironmentVariables(harness.mcpServers ?? {}));
       const generation = await deps.executePi({
+        stream: deps.openStepStream(),
+        resume: resume !== undefined,
         args: [
           "--mode",
           "json",
