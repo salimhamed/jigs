@@ -101,6 +101,8 @@ export function createCodexDriver(
       }
     };
     try {
+      // The listener above cannot see an abort that landed while the home was prepared.
+      context.signal.throwIfAborted();
       if (resume !== undefined && deps.sessionFile(prepared.sessionDir, resume.id) === undefined) {
         throw new AgentSessionError(
           `Codex session ${resume.id} is missing from ${prepared.sessionDir}`,

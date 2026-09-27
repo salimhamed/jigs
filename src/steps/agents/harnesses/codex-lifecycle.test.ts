@@ -9,7 +9,10 @@ vi.mock("./executables.ts", async (importOriginal) => ({
   resolveCodexExecutable: () => "/fake/codex",
 }));
 
-function lifecycle(options: { sessionFound?: boolean; providerThrows?: boolean } = {}) {
+function lifecycle(
+  options: { sessionFound?: boolean; providerThrows?: boolean; abortWhilePreparing?: boolean } = {},
+) {
+  const run = new AbortController();
   const close = vi.fn(async () => {});
   const cleanup = vi.fn();
   const provider = Object.assign(
@@ -21,7 +24,10 @@ function lifecycle(options: { sessionFound?: boolean; providerThrows?: boolean }
   ) as unknown as CodexAppServerProvider;
   const createAppServer = vi.fn(() => provider);
   const driver = createCodexDriver({
-    prepareCodexHome: async () => ({ home: "/tmp", sessionDir: "/tmp/sessions", cleanup }),
+    prepareCodexHome: async () => {
+      if (options.abortWhilePreparing === true) run.abort(new Error("run cancelled"));
+      return { home: "/tmp", sessionDir: "/tmp/sessions", cleanup };
+    },
     sessionFile: () => (options.sessionFound === false ? undefined : "/rollout.jsonl"),
     createAppServer,
   });
@@ -34,7 +40,7 @@ function lifecycle(options: { sessionFound?: boolean; providerThrows?: boolean }
           ? {}
           : { resume: { harness: "codex", id: resume.id, descriptor: "" } }),
       },
-      { metadata: { workflowRunId: "run-1" }, env: {}, signal: new AbortController().signal },
+      { metadata: { workflowRunId: "run-1" }, env: {}, signal: run.signal },
     );
   return { open, close, cleanup, createAppServer };
 }
@@ -59,5 +65,12 @@ test("a provider that rejects its settings is still closed", async () => {
   const { open, close, cleanup } = lifecycle({ providerThrows: true });
   await expect(open()).rejects.toThrow("bad settings");
   expect(close).toHaveBeenCalledTimes(1);
+  expect(cleanup).toHaveBeenCalledTimes(1);
+});
+
+test("a cancellation while the home is prepared never starts an app server", async () => {
+  const { open, cleanup, createAppServer } = lifecycle({ abortWhilePreparing: true });
+  await expect(open()).rejects.toThrow("run cancelled");
+  expect(createAppServer).not.toHaveBeenCalled();
   expect(cleanup).toHaveBeenCalledTimes(1);
 });
