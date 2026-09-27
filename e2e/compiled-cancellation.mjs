@@ -21,13 +21,23 @@ const fixtureSource = `import { appendFileSync, existsSync } from "node:fs";
 import { setTimeout as wait } from "node:timers/promises";
 import { defineWorkflow, type WorkflowInputs } from "@jigs-ai/jigs";
 import { createRunDirectory } from "#jigs/steps";
-import { RetryableError, sleep } from "workflow";
+import { FatalError, getWorkflowMetadata, RetryableError, sleep } from "workflow";
+import { getWorld } from "workflow/runtime";
 import { z } from "zod";
 
 export const cancelE2eInputs = z.object({
   gate: z.string(),
   marker: z.string(),
-  mode: z.enum(["active", "pending", "resilient", "retry", "turbo"]),
+  mode: z.enum([
+    "active",
+    "fatal",
+    "observe",
+    "ordinary",
+    "pending",
+    "resilient",
+    "retry",
+    "turbo",
+  ]),
 });
 
 async function record(marker: string, line: string): Promise<void> {
@@ -40,6 +50,29 @@ async function gatedEffect(marker: string, gate: string): Promise<void> {
   appendFileSync(marker, "active-entered\\n");
   while (!existsSync(gate)) await wait(20);
   appendFileSync(marker, "active-effect\\n");
+}
+
+async function gatedThrow(marker: string, gate: string, fatal: boolean): Promise<void> {
+  "use step";
+  appendFileSync(marker, "throw-entered\\n");
+  while (!existsSync(gate)) await wait(20);
+  appendFileSync(marker, "throw-raised\\n");
+  if (fatal) throw new FatalError("synthetic step error after cancellation");
+  throw new Error("synthetic step error after cancellation");
+}
+
+async function observeRun(marker: string, label: string): Promise<void> {
+  "use step";
+  const { workflowRunId } = getWorkflowMetadata();
+  let seen: string;
+  try {
+    seen = (await (await getWorld()).runs.get(workflowRunId, { resolveData: "none" })).status;
+  } catch (error) {
+    seen = \`missing:\${error instanceof Error ? error.name : String(error)}\`;
+  }
+  appendFileSync(marker, \`\${label} run=\${seen}\\n\`);
+  // What an agent step does when its first status read cannot find the run.
+  if (seen.startsWith("missing:")) throw new Error("run not visible yet");
 }
 
 async function retryLater(marker: string): Promise<void> {
@@ -56,6 +89,16 @@ export async function cancelE2eWorkflow(inputs: WorkflowInputs<typeof cancelE2eI
     await record(inputs.marker, "active-successor");
     return;
   }
+  if (inputs.mode === "ordinary" || inputs.mode === "fatal") {
+    await createRunDirectory();
+    await gatedThrow(inputs.marker, inputs.gate, inputs.mode === "fatal");
+    await record(inputs.marker, "throw-successor");
+    return;
+  }
+  if (inputs.mode === "observe") {
+    await observeRun(inputs.marker, "observe-first-step");
+    return;
+  }
   if (inputs.mode === "retry") {
     await retryLater(inputs.marker);
     await record(inputs.marker, "retry-successor");
@@ -67,7 +110,7 @@ export async function cancelE2eWorkflow(inputs: WorkflowInputs<typeof cancelE2eI
     return;
   }
   if (inputs.mode === "resilient") {
-    await record(inputs.marker, "resilient-first-effect");
+    await observeRun(inputs.marker, "resilient-first-effect");
     return;
   }
   await record(inputs.marker, "turbo-first-effect");
@@ -280,7 +323,7 @@ await (await getWorld()).close?.();`,
       "active delivery did not finish after cancellation",
     );
     await until(
-      () => lines(resilientMarker).includes("resilient-first-effect"),
+      () => lines(resilientMarker).some((line) => line.startsWith("resilient-first-effect")),
       "runInput delivery did not recreate and execute its missing run",
     );
     await until(
@@ -306,7 +349,12 @@ await (await getWorld()).close?.();`,
     assert.deepEqual(lines(activeMarker), ["active-entered", "active-effect"]);
     assert.deepEqual(lines(pendingMarker), []);
     assert.deepEqual(lines(turboMarker), []);
-    assert.deepEqual(lines(resilientMarker), ["resilient-first-effect"]);
+    const resilientSeen = lines(resilientMarker);
+    assert.match(resilientSeen.at(-1), /^resilient-first-effect run=(pending|running)$/);
+    for (const line of resilientSeen.slice(0, -1)) assert.match(line, /run=missing:/);
+    console.log(
+      `cancellation matrix: resilient first step observed ${resilientSeen.map((line) => line.split(" ")[1]).join(", ")}; an ordinary error retried it once the run existed`,
+    );
     assert.equal((await runtimeRun(resilientRunId, ports.service)).status, "completed");
     const activeTimeline = await runtimeTimeline(activeRunId, ports.service);
     assert.equal(
@@ -344,7 +392,7 @@ await (await getWorld()).close?.();`,
     assert.deepEqual(lines(activeMarker), ["active-entered", "active-effect"]);
     assert.deepEqual(lines(pendingMarker), []);
     assert.deepEqual(lines(turboMarker), []);
-    assert.deepEqual(lines(resilientMarker), ["resilient-first-effect"]);
+    assert.deepEqual(lines(resilientMarker), resilientSeen);
     assert.equal((await jobsFor(db, delayed.runId)).length, 0);
     assert.equal((await jobsFor(db, pendingRunId)).length, 0);
     assert.equal((await jobsFor(db, turboRunId)).length, 0);
@@ -372,6 +420,10 @@ await (await getWorld()).close?.();`,
     assert.equal(exhaustedTimeline.deadJobs.length, 1);
     assert.equal(exhaustedTimeline.deadJobs[0].attempts, exhaustedBefore.maxAttempts);
 
+    await proveStepErrorAfterCancel("ordinary");
+    await proveStepErrorAfterCancel("fatal");
+    await proveFirstStepVisibility();
+
     service("stop");
     serviceRunning = false;
     assertNoRecordedProcess(dataHome);
@@ -395,7 +447,7 @@ await (await getWorld()).close?.();`,
 
     const elapsedMs = Date.now() - startedAt;
     console.log(
-      `compiled cancellation matrix passed in ${elapsedMs}ms: pending, retry-scheduled, exhausted, active inline, default-turbo race, resilient first delivery, restart/redelivery, cleanup fencing, and offline kept-resource prune`,
+      `compiled cancellation matrix passed in ${elapsedMs}ms: pending, retry-scheduled, exhausted, active inline, default-turbo race, resilient first delivery, restart/redelivery, cleanup fencing, step errors after cancel, first-step run visibility, and offline kept-resource prune`,
     );
     return { elapsedMs };
   } finally {
@@ -410,6 +462,78 @@ await (await getWorld()).close?.();`,
     await db?.end().catch(() => undefined);
     await admin.query(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`).catch(() => undefined);
     await admin.end().catch(() => undefined);
+  }
+
+  // What the SDK records when the executing step throws after its run was
+  // cancelled. The agent step's cancellation error classification rests on it.
+  async function proveStepErrorAfterCancel(mode) {
+    const marker = path.join(fixtureRoot, `${mode}.markers`);
+    const gate = path.join(fixtureRoot, `${mode}.release`);
+    const launch = await launchInlineRun({ mode, marker, gate }, ports.service, db);
+    await until(
+      () => lines(marker).includes("throw-entered"),
+      `${mode} step did not reach its gate`,
+    );
+    cancel(launch.runId);
+    await assertCancelled(launch.runId, ports.service);
+    appendFileSync(gate, "release\n");
+    await until(
+      async () => (await jobsFor(db, launch.runId)).length === 0,
+      `${mode} deliveries did not drain after the step threw`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, DRAIN_MS * 2));
+    assert.equal((await jobsFor(db, launch.runId)).length, 0);
+    assert.deepEqual(lines(marker), ["throw-entered", "throw-raised"]);
+    await assertCancelled(launch.runId, ports.service);
+    const timeline = await runtimeTimeline(launch.runId, ports.service);
+    const thrown = timeline.steps.filter((step) => step.name.includes("gatedThrow"));
+    assert.equal(thrown.length, 1);
+    assert.equal(
+      timeline.steps.some((step) => step.name.includes("record")),
+      false,
+    );
+    reconcile();
+    const resource = (await runtimeRun(launch.runId, ports.service)).resources[0];
+    if (mode === "fatal") {
+      assert.equal(thrown[0].status, "failed");
+      assert.equal(resource.state, "kept", "a failed step leaves release free to decide");
+    } else {
+      assert.equal(thrown[0].status, "pending", "an ordinary error schedules a retry");
+      assert.equal(resource.state, "live", "a pending retry keeps release fenced as busy");
+    }
+    console.log(
+      `cancellation matrix: ${mode} error after cancel leaves the step ${thrown[0].status} (attempt ${thrown[0].attempt}), no second attempt, resource ${resource.state}`,
+    );
+  }
+
+  // Whether an agent step's status read can find its own run from the first
+  // step of a default-turbo start.
+  async function proveFirstStepVisibility() {
+    const seen = [];
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const marker = path.join(fixtureRoot, `observe-${attempt}.markers`);
+      const runId = await startRun({ mode: "observe", marker, gate: "unused" }, ports.service);
+      await until(
+        async () => (await runtimeRun(runId, ports.service)).status === "completed",
+        "observe run did not complete",
+      );
+      assert.equal(lines(marker).length, 1);
+      seen.push(lines(marker)[0].split(" ")[1]);
+    }
+    console.log(`cancellation matrix: default-turbo first steps observed ${seen.join(", ")}`);
+  }
+
+  function reconcile() {
+    return JSON.parse(
+      runNode(
+        `import { reconcileAutomaticRelease } from "@jigs-ai/jigs/automatic-release";
+import { getWorld } from "workflow/runtime";
+const report = await reconcileAutomaticRelease({ workflows: {} });
+console.log(JSON.stringify(report));
+await (await getWorld()).close?.();`,
+        env,
+      ),
+    );
   }
 
   function service(action) {
