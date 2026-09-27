@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.77.2](https://github.com/salimhamed/jigs/compare/jigs-v0.77.1...jigs-v0.77.2) (2026-09-27)
+
+
+### Features
+
+* stream pi agent output into workflow streams ([#438](https://github.com/salimhamed/jigs/issues/438)) ([f77347f](https://github.com/salimhamed/jigs/commit/f77347fde3384db3b516693deb14543169422b9c))
+
 ## [0.77.1](https://github.com/salimhamed/jigs/compare/jigs-v0.77.0...jigs-v0.77.1) (2026-09-26)
 
 
