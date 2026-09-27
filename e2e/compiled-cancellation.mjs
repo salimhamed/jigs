@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
   appendFileSync,
+  chmodSync,
   existsSync,
+  mkdirSync,
   readdirSync,
   readFileSync,
   rmSync,
@@ -16,10 +18,61 @@ const POLL_MS = 25;
 const TIMEOUT_MS = 30_000;
 const SERVICE_TIMEOUT_MS = 90_000;
 const DRAIN_MS = 1_000;
+const PI_STOP_BUDGET_MS = 5_000;
+
+// A stand-in for pi: records its launch and pid, starts a child that ignores
+// SIGTERM, then hangs, or waits for a release file and answers like Pi does.
+const controlledPi = `const { spawn } = require("node:child_process");
+const fs = require("node:fs");
+const path = require("node:path");
+const args = process.argv.slice(2);
+const { mode, dir } = JSON.parse(args.at(-1));
+fs.appendFileSync(path.join(dir, "launches"), "launch\\n");
+process.on("SIGTERM", () => {});
+const child = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"], { stdio: "ignore" });
+fs.writeFileSync(path.join(dir, "pids"), process.pid + " " + child.pid);
+const sessionId = args[args.indexOf("--session-id") + 1];
+const emit = (event) => process.stdout.write(JSON.stringify(event) + "\\n");
+setInterval(() => {
+  if (mode !== "finish" || !fs.existsSync(path.join(dir, "release"))) return;
+  emit({ type: "session", id: sessionId });
+  emit({ type: "agent_start" });
+  emit({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "finished" }], stopReason: "stop" } });
+  emit({ type: "agent_end", messages: [], willRetry: false });
+  emit({ type: "agent_settled" });
+  process.exit(0);
+}, 50);
+`;
+
+function writeControlledPi(root) {
+  const bin = path.join(root, "bin");
+  mkdirSync(bin, { recursive: true });
+  const executable = path.join(bin, "pi");
+  writeFileSync(executable, `#!${process.execPath}\n${controlledPi}`);
+  chmodSync(executable, 0o755);
+  return bin;
+}
+
+async function piPids(dir) {
+  const file = path.join(dir, "pids");
+  await until(() => existsSync(file), `controlled pi never started in ${dir}`);
+  return readFileSync(file, "utf8").trim().split(" ").map(Number);
+}
+
+function alive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error.code === "ESRCH") return false;
+    throw error;
+  }
+}
 
 const fixtureSource = `import { appendFileSync, existsSync } from "node:fs";
 import { setTimeout as wait } from "node:timers/promises";
-import { defineWorkflow, type WorkflowInputs } from "@jigs-ai/jigs";
+import { defineWorkflow, harnesses, models, type WorkflowInputs } from "@jigs-ai/jigs";
+import { runAgent } from "#jigs/routines";
 import { createRunDirectory } from "#jigs/steps";
 import { FatalError, getWorkflowMetadata, RetryableError, sleep } from "workflow";
 import { getWorld } from "workflow/runtime";
@@ -34,6 +87,7 @@ export const cancelE2eInputs = z.object({
     "observe",
     "ordinary",
     "pending",
+    "pi",
     "resilient",
     "retry",
     "turbo",
@@ -93,6 +147,13 @@ export async function cancelE2eWorkflow(inputs: WorkflowInputs<typeof cancelE2eI
     await createRunDirectory();
     await gatedThrow(inputs.marker, inputs.gate, inputs.mode === "fatal");
     await record(inputs.marker, "throw-successor");
+    return;
+  }
+  if (inputs.mode === "pi") {
+    const cwd = await createRunDirectory();
+    // The controlled pi on the service's PATH reads its behaviour from the prompt.
+    await runAgent({ harness: harnesses.pi(models.openrouter("e2e/fake")), cwd, prompt: inputs.marker });
+    await record(inputs.gate, "pi-successor");
     return;
   }
   if (inputs.mode === "observe") {
@@ -156,6 +217,7 @@ export async function runCompiledCancellationMatrix({
   const fixtureRoot = path.join(scratch, "compiled-cancel");
   const dataHome = path.join(fixtureRoot, "data");
   const env = runtimeEnv(testUrl.toString(), dataHome, ports);
+  let serviceEnv = env;
 
   writeFileSync(
     path.join(factory, ".env"),
@@ -445,9 +507,11 @@ await (await getWorld()).close?.();`,
     assert.equal(existsSync(activeDirectory), false);
     assert.deepEqual(await historySnapshot(db, activeRunId), beforePrune);
 
+    await provePiCancellation();
+
     const elapsedMs = Date.now() - startedAt;
     console.log(
-      `compiled cancellation matrix passed in ${elapsedMs}ms: pending, retry-scheduled, exhausted, active inline, default-turbo race, resilient first delivery, restart/redelivery, cleanup fencing, step errors after cancel, first-step run visibility, and offline kept-resource prune`,
+      `compiled cancellation matrix passed in ${elapsedMs}ms: pending, retry-scheduled, exhausted, active inline, default-turbo race, resilient first delivery, restart/redelivery, cleanup fencing, step errors after cancel, first-step run visibility, Pi agent stop, and offline kept-resource prune`,
     );
     return { elapsedMs };
   } finally {
@@ -536,8 +600,110 @@ await (await getWorld()).close?.();`,
     );
   }
 
+  // CLI cancel -> service -> World -> generated step -> real Pi driver -> a
+  // controlled pi and its child, beside a second Pi run that must not notice.
+  async function provePiCancellation() {
+    const piRoot = path.join(fixtureRoot, "pi");
+    const bin = writeControlledPi(piRoot);
+    const cancelledDir = path.join(piRoot, "cancelled");
+    const survivorDir = path.join(piRoot, "survivor");
+    mkdirSync(cancelledDir, { recursive: true });
+    mkdirSync(survivorDir, { recursive: true });
+    // Two workers, so the survivor's step runs beside the cancelled one.
+    writeFileSync(
+      path.join(factory, ".env"),
+      `WORKFLOW_POSTGRES_URL=${testUrl.toString()}\nWORKFLOW_TARGET_WORLD=@workflow/world-postgres\nWORKFLOW_POSTGRES_WORKER_CONCURRENCY=2\nWORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN=1\n`,
+    );
+    serviceEnv = {
+      ...env,
+      PATH: `${bin}${path.delimiter}${env.PATH}`,
+      OPENROUTER_API_KEY: "e2e-never-sent",
+      WORKFLOW_POSTGRES_WORKER_CONCURRENCY: "2",
+    };
+    service("start");
+    serviceRunning = true;
+
+    const cancelled = await launchInlineRun(
+      {
+        mode: "pi",
+        marker: JSON.stringify({ mode: "hang", dir: cancelledDir }),
+        gate: path.join(cancelledDir, "successor"),
+      },
+      ports.service,
+      db,
+    );
+    const cancelledPids = await piPids(cancelledDir);
+    const survivor = await launchInlineRun(
+      {
+        mode: "pi",
+        marker: JSON.stringify({ mode: "finish", dir: survivorDir }),
+        gate: path.join(survivorDir, "successor"),
+      },
+      ports.service,
+      db,
+    );
+    const survivorPids = await piPids(survivorDir);
+
+    cancel(cancelled.runId);
+    const cancelledAt = Date.now();
+    await until(
+      () => !cancelledPids.some(alive),
+      "the cancelled run's pi or its child outlived the 5s budget",
+      PI_STOP_BUDGET_MS,
+    );
+    const stopMs = Date.now() - cancelledAt;
+    cancel(cancelled.runId);
+    await assertCancelled(cancelled.runId, ports.service);
+    assert.ok(survivorPids.every(alive), "stopping one run's pi reached another run's pi");
+    await until(
+      async () => (await jobsFor(db, cancelled.runId)).length === 0,
+      "the cancelled pi run's deliveries did not drain",
+    );
+
+    appendFileSync(path.join(survivorDir, "release"), "release\n");
+    await until(
+      async () => (await runtimeRun(survivor.runId, ports.service)).status === "completed",
+      "the other pi run did not complete after the cancellation",
+    );
+    assert.ok(!survivorPids.some(alive), "the finished pi's child outlived its step");
+    assert.deepEqual(lines(path.join(survivorDir, "successor")), ["pi-successor"]);
+
+    await new Promise((resolve) => setTimeout(resolve, DRAIN_MS * 2));
+    assert.deepEqual(lines(path.join(cancelledDir, "launches")), ["launch"], "pi was relaunched");
+    assert.deepEqual(lines(path.join(cancelledDir, "successor")), []);
+    assert.equal((await jobsFor(db, cancelled.runId)).length, 0);
+    await assertCancelled(cancelled.runId, ports.service);
+    const timeline = await runtimeTimeline(cancelled.runId, ports.service);
+    const agentSteps = timeline.steps.filter((step) => /agent/i.test(step.name));
+    assert.equal(agentSteps.length, 1, JSON.stringify(timeline.steps));
+    assert.equal(agentSteps[0].status, "failed");
+    assert.equal(agentSteps[0].attempt, 1);
+    assert.match(
+      serviceLogs(dataHome),
+      new RegExp(
+        `RunCancelledError: run ${cancelled.runId} was cancelled, so jigs stopped its agent`,
+      ),
+    );
+    reconcile();
+    assert.equal(
+      (await runtimeRun(cancelled.runId, ports.service)).resources.find(
+        (resource) => resource.kind === "run-directory",
+      )?.state,
+      "kept",
+      "the failed agent step left release free to decide",
+    );
+    await Promise.all([cancelled.completion, survivor.completion]);
+
+    service("stop");
+    serviceRunning = false;
+    serviceEnv = env;
+    console.log(
+      `cancellation matrix: CLI cancel stopped a real Pi driver's pi and child in ${stopMs}ms; the agent step failed once with no retry or successor, a repeated cancel was safe, and another Pi run finished`,
+    );
+  }
+
   function service(action) {
-    const result = runCli(["service", action], env, {
+    const result = runCli(["service", action], serviceEnv, {
       allowFailure: true,
       timeout: SERVICE_TIMEOUT_MS,
     });
