@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.77.1
+# @jigs-ai/jigs v0.77.2
 
 Factory and workflow definitions, harness and model descriptors, types and pure helpers.
 
