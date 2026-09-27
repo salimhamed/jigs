@@ -160,3 +160,15 @@ test("an untracked or retired group is never signalled", async () => {
 
   expect(kill).not.toHaveBeenCalled();
 });
+
+test("a tracked group that ends without a stop is retired, so its id is never signalled", async () => {
+  const leader = spawn(process.execPath, ["-e", "setTimeout(() => {}, 50)"], {
+    detached: true,
+    stdio: "ignore",
+  });
+  const pgid = leader.pid as number;
+  trackProcessGroup(pgid, "Codex for run wrun_3");
+  await new Promise((resolve) => leader.once("exit", resolve));
+
+  await expect.poll(() => isTrackedProcessGroup(pgid), { timeout: 3_000 }).toBe(false);
+});

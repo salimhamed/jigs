@@ -21,9 +21,14 @@ export interface StopTimings {
 }
 
 const TIMINGS: StopTimings = { graceMs: 1_000, postKillMs: 1_000, pollMs: 50 };
+const SWEEP_MS = 1_000;
 
 type Tracked = { owner: string; stopping: Promise<GroupStopOutcome> | null };
-type Registry = { groups: Map<number, Tracked>; exitHook: boolean };
+type Registry = {
+  groups: Map<number, Tracked>;
+  exitHook: boolean;
+  sweep: NodeJS.Timeout | undefined;
+};
 
 // Keyed on globalThis because the service and a factory's step bundle can each
 // load their own copy of this module, and shutdown must see every live group.
@@ -31,7 +36,7 @@ const REGISTRY = Symbol.for("jigs.processGroups");
 
 function registry(): Registry {
   const holder = globalThis as { [REGISTRY]?: Registry };
-  holder[REGISTRY] ??= { groups: new Map(), exitHook: false };
+  holder[REGISTRY] ??= { groups: new Map(), exitHook: false, sweep: undefined };
   return holder[REGISTRY];
 }
 
@@ -103,6 +108,23 @@ function report(owner: string, outcome: GroupStopOutcome, timings: StopTimings):
     );
 }
 
+// A group can end without a stop through here, such as Codex's once the
+// provider closes it, or one whose stop failed. Retire it as soon as it is
+// gone, so a later stop or shutdown never signals a reused id.
+function sweep(state: Registry): void {
+  for (const [pgid, tracked] of state.groups) {
+    if (tracked.stopping !== null) continue;
+    try {
+      process.kill(-pgid, 0);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ESRCH") state.groups.delete(pgid);
+    }
+  }
+  if (state.groups.size > 0) return;
+  clearInterval(state.sweep);
+  state.sweep = undefined;
+}
+
 /**
  * Register a process group this process started with `detached: true`, so
  * {@link stopProcessGroups} and process exit reach it. `owner` names it in diagnostics, such as
@@ -111,6 +133,7 @@ function report(owner: string, outcome: GroupStopOutcome, timings: StopTimings):
 export function trackProcessGroup(pgid: number, owner: string): void {
   const state = registry();
   state.groups.set(pgid, { owner, stopping: null });
+  state.sweep ??= setInterval(() => sweep(state), SWEEP_MS).unref();
   if (state.exitHook) return;
   state.exitHook = true;
   // A signal or crash that ends this process no longer reaches a private
