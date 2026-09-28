@@ -289,6 +289,16 @@ export async function openPullRequest(request: {
 }
 
 /**
+ * Read the repository's default pull request template from the worktree, if it has one.
+ *
+ * @group Pull requests
+ */
+export async function readPullRequestTemplate(worktree: Worktree) {
+  "use step";
+  return pullRequestsOperations.readPullRequestTemplate(worktree);
+}
+
+/**
  * Reply to an existing code-review thread on a pull request.
  *
  * @group Pull requests

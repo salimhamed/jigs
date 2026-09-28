@@ -20,3 +20,4 @@ export {
   replyToPullRequestReviewThread,
   reviewPullRequest,
 } from "./pr.ts";
+export { readPullRequestTemplate } from "./template.ts";

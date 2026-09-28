@@ -1,6 +1,7 @@
 import { describeHarness, type Harness, harnesses, type PullRequestSnapshot } from "@jigs-ai/jigs";
 import { beforeEach, expect, test, vi } from "vitest";
 import { createHook, sleep } from "workflow";
+import { z } from "zod";
 import * as routines from "#jigs/routines";
 import * as steps from "#jigs/steps";
 import {
@@ -33,6 +34,7 @@ vi.mock("#jigs/steps", async (importOriginal) => ({
   pushApprovedChange: vi.fn(),
   pushBranch: vi.fn(),
   readBranchState: vi.fn(),
+  readPullRequestTemplate: vi.fn(async () => undefined),
   readWorktreeDiff: vi.fn(async () => "diff --git a/x b/x"),
   registerResource: vi.fn(),
 }));
@@ -90,7 +92,9 @@ beforeEach(() => {
   }) => {
     calls.push({ ...options, resumed: options.resume !== undefined });
     const queued = answers.get(options.output)?.shift();
-    const output = typeof queued === "function" ? queued() : queued;
+    const raw = typeof queued === "function" ? queued() : queued;
+    // The real runAgent parses the answer with the caller's schema.
+    const output = raw === undefined ? raw : (options.output as z.ZodType).parse(raw);
     const session = {
       harness: options.harness.kind,
       id: `s${calls.length}`,
@@ -214,6 +218,81 @@ test("publish pushes the reviewed commit and appends the reviewer's notes", asyn
   expect(steps.registerResource).toHaveBeenCalledWith(
     expect.objectContaining({ kind: "pull-request", identity: "acme/app#7" }),
   );
+});
+
+test("the repository's pull request template reaches the description prompt", async () => {
+  vi.mocked(steps.readPullRequestTemplate).mockResolvedValueOnce("## Summary\n\n## Testing");
+  answer(pullRequestDescription, { title: "Add a flag", body: "## Summary\nAdds it." });
+  vi.mocked(steps.openPullRequest).mockResolvedValue(pr);
+
+  await publish(delivery, { reviewedCommit: "h1", ledger: [] });
+
+  expect(steps.readPullRequestTemplate).toHaveBeenCalledWith(worktree);
+  expect(calls[0]?.prompt).toContain(
+    "The repository's pull request template:\n## Summary\n\n## Testing",
+  );
+  expect(calls[0]?.prompt).toContain("filling in this template");
+});
+
+test("without a template the description prompt mentions none", async () => {
+  answer(pullRequestDescription, { title: "Add a flag", body: "Adds it." });
+  vi.mocked(steps.openPullRequest).mockResolvedValue(pr);
+
+  await publish(delivery, { reviewedCommit: "h1", ledger: [] });
+
+  expect(calls[0]?.prompt).not.toContain("template");
+});
+
+test.each([
+  ["a multi-line title", "Tidy setup\nand more"],
+  ["a markdown heading", "# Tidy local setup files"],
+  ["bold markdown", "**Tidy local setup files**"],
+  ["a Title: label", "Title: Tidy local setup files"],
+  ["an overly long title", "Tidy ".repeat(21)],
+])("the description schema rejects %s", (_, title) => {
+  expect(pullRequestDescription.safeParse({ title, body: "Adds it." }).success).toBe(false);
+});
+
+test("the description schema rejects a body that carries its own title label", () => {
+  const body = "**Title:**\nTidy local setup files\n\n**Description:**\n## Summary";
+  expect(pullRequestDescription.safeParse({ title: "PR title and body", body }).success).toBe(
+    false,
+  );
+});
+
+test("a rejected description is asked for once more, with the reasons", async () => {
+  answer(
+    pullRequestDescription,
+    { title: "# Add a flag", body: "Adds it." },
+    { title: "Add a flag", body: "Adds it." },
+  );
+  vi.mocked(steps.openPullRequest).mockResolvedValue(pr);
+
+  await publish(delivery, { reviewedCommit: "h1", ledger: [] });
+
+  expect(calls).toHaveLength(2);
+  expect(calls[1]?.prompt).toContain(calls[0]?.prompt);
+  expect(calls[1]?.prompt).toContain("Your previous answer was rejected:");
+  expect(calls[1]?.prompt).toContain("The title must be plain text, not markdown.");
+  expect(steps.openPullRequest).toHaveBeenCalledWith({
+    worktree,
+    title: "Add a flag",
+    body: "Adds it.",
+  });
+});
+
+test("a description rejected twice fails before any pull request opens", async () => {
+  answer(
+    pullRequestDescription,
+    { title: "Title: Add a flag", body: "Adds it." },
+    { title: "Title: Add a flag", body: "Adds it." },
+  );
+
+  await expect(publish(delivery, { reviewedCommit: "h1", ledger: [] })).rejects.toBeInstanceOf(
+    z.ZodError,
+  );
+  expect(calls).toHaveLength(2);
+  expect(steps.openPullRequest).not.toHaveBeenCalled();
 });
 
 const snapshot: PullRequestSnapshot = {

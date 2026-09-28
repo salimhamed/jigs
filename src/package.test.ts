@@ -260,6 +260,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "markPullRequestReady",
     "mergePullRequest",
     "openPullRequest",
+    "readPullRequestTemplate",
     "replyToPullRequestReviewThread",
     "reviewPullRequest",
   ],

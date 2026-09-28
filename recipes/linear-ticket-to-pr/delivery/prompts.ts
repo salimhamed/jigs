@@ -116,9 +116,21 @@ export const maintenance = {
     ]),
 };
 
-export const description = (task: WorkItem, worktree: Worktree, diff: string) =>
-  join([
-    taskBrief(task, worktree),
-    `Current diff:\n${diff}`,
-    "Write a concise pull request title and body explaining the change and its validation. Include the task link when available. Follow the repository's pull request conventions. Do not modify files.",
-  ]);
+export const description = {
+  job: 'Write the pull request\'s title and body, explaining the change and its validation. The title is the title itself: one line of plain text, 72 characters or fewer, with no markdown and no "Title:" label. The body is markdown; it does not repeat the title or label its parts "Title:" or "Description:". Include the task link when available. Follow the repository\'s pull request conventions. Do not modify files.',
+
+  /** `template` is the repository's pull request template, when it has one. */
+  fresh: (task: WorkItem, worktree: Worktree, diff: string, template: string | undefined) =>
+    join([
+      taskBrief(task, worktree),
+      `Current diff:\n${diff}`,
+      template === undefined
+        ? ""
+        : `The repository's pull request template:\n${template}\n\nWrite the body by filling in this template: keep its headings and order, and replace its comments and placeholders with content.`,
+      description.job,
+    ]),
+
+  /** The same request again, after an answer the schema rejected. */
+  retry: (prompt: string, problems: string) =>
+    join([prompt, `Your previous answer was rejected:\n${problems}`, "Answer again, fixing that."]),
+};

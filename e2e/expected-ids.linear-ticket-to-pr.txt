@@ -23,6 +23,7 @@ step//./jigs/steps//pushBranch
 step//./jigs/steps//readBranchState
 step//./jigs/steps//readChange
 step//./jigs/steps//readPatch
+step//./jigs/steps//readPullRequestTemplate
 step//./jigs/steps//readWorktreeDiff
 step//./jigs/steps//registerResource
 step//./jigs/steps//release
