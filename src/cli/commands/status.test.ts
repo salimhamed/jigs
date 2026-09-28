@@ -233,6 +233,13 @@ test("a failed run's error is printed above the log pointer", async () => {
   ]);
 });
 
+test("a multi-line run error stays on its row in the facts block", async () => {
+  respond(result({ status: "failed", error: "Error: boom\n  at run (agent.ts:12)" }));
+  respond({ steps: [], deadJobs: [] });
+  await showRunStatus(RUN, deps(), { now: NOW });
+  expect(lines[3]).toBe("  error          Error: boom\\n  at run (agent.ts:12)");
+});
+
 test("a completed run prints a compact object result", async () => {
   respond(
     result({

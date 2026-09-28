@@ -26,7 +26,7 @@ import {
 import { ensureRepoWebhook, parseGithubRemote } from "../../providers/github-webhook.ts";
 import { hasBindingClone } from "../../steps/workspaces/clone.ts";
 import { bindingFilesDir, cloneDir, cloneRepoDir } from "../../steps/workspaces/layout.ts";
-import { command, displayPath, note, tone } from "../output.ts";
+import { command, displayPath, note } from "../output.ts";
 
 const BINDING_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
@@ -183,7 +183,7 @@ async function ensureJigsLabels(
         );
       },
     );
-    deps.out(`label ${tone(outcome)}: ${slug}#${label.name}`);
+    deps.out(`label ${outcome}: ${slug}#${label.name}`);
   }
 }
 
@@ -299,8 +299,8 @@ async function ensureWebhook({
   });
   deps.out(
     ensured.outcome === "created"
-      ? `webhook ${tone("created")}: ${slug}`
-      : `webhook ${tone(ensured.outcome)}: ${slug} ${note("(signing secret re-sent)")}`,
+      ? `webhook created: ${slug}`
+      : `webhook ${ensured.outcome}: ${slug} ${note("(signing secret re-sent)")}`,
   );
   if (ensured.outcome === "updated") {
     deps.out(

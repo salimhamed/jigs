@@ -134,10 +134,13 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
 
   deps.out("");
   deps.out(heading("next, in this directory:"));
+  // Outside the aligned block, so a long key path doesn't push every comment right.
+  if (identity.mode === "app") {
+    deps.out(
+      `  ${command(`chmod 600 ${identity.privateKeyPath}`)}  ${note("# and keep it out of git")}`,
+    );
+  }
   const next: Array<[string, string?]> = [
-    ...(identity.mode === "app"
-      ? [[`chmod 600 ${identity.privateKeyPath}`, "and keep it out of git"] as [string, string]]
-      : []),
     ["pnpm install"],
     ["cp .env.example .env", "then fill in what your workflows need"],
     ["pnpm exec jigs up", "start Postgres and the service; ends by running doctor"],

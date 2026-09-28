@@ -70,7 +70,7 @@ export async function showRunStatus(
       "last activity",
       `${age(result.lastActivityAt, now)} ago ${note(`(${result.lastActivityAt})`)}`,
     ],
-    ...(result.error === undefined ? [] : [["error", result.error]]),
+    ...(result.error === undefined ? [] : [["error", singleLine(result.error)]]),
     ...(result.resources.length === 0 ? [["resources", "none"]] : []),
     ...scalarResult(result),
     ...(result.dashboard === "" ? [] : [["dashboard", result.dashboard]]),
