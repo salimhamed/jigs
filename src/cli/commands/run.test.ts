@@ -202,9 +202,9 @@ test("a started run prints its id, workflow and log pointer", async () => {
   await launchRun("deliver-feature", ["ticket=AGE-346"], deps());
   expect(lines).toEqual([
     "run wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
-    "workflow deliver-feature",
-    "inspect: pnpm exec jigs status wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
-    "dashboard: http://localhost:9090/run/wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
+    "  workflow   deliver-feature",
+    "  inspect    pnpm exec jigs status wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
+    "  dashboard  http://localhost:9090/run/wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
   ]);
   const [, trigger] = fetchMock.mock.calls;
   expect(trigger?.[0]).toBe("http://svc.test:8990/api/workflows/deliver-feature/runs");

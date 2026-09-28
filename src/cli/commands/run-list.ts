@@ -1,7 +1,7 @@
 import { JigsError } from "../../errors.ts";
 import type { RunSuspension } from "../../run-suspension.ts";
 import { type ResourceRecord, unreleased } from "../../workflow/runtime/resources.ts";
-import { formatTable } from "../output.ts";
+import { displayPath, formatTable, tone } from "../output.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 export type RunListSuspension = RunSuspension;
@@ -70,7 +70,7 @@ export async function showRuns(
         run.runId,
         run.workflow,
         run.ticket ?? "-",
-        run.status,
+        tone(run.status),
         run.trigger,
         age(run.createdAt, now),
         age(run.lastActivityAt, now),
@@ -87,9 +87,9 @@ export async function showRuns(
     for (const line of formatTable(
       ["RESOURCE", "KIND", "STATE", "RUN", "REASON"],
       held.map((resource) => [
-        resource.identity,
+        displayPath(resource.identity),
         resource.kind,
-        resource.state,
+        tone(resource.state),
         resource.runId,
         resource.reason ?? "-",
       ]),

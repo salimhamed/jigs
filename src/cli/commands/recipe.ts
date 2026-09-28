@@ -4,6 +4,7 @@ import { addWorkflow, workflowEntry } from "../../config/config-edit.ts";
 import { FACTORY_CONFIG_FILE } from "../../config/factory-config.ts";
 import { JigsError } from "../../errors.ts";
 import { copyFiles, reportCopied } from "../copy-files.ts";
+import { command, heading, note } from "../output.ts";
 import { packageRoot } from "../templates.ts";
 
 const recipesRoot = () => path.join(packageRoot(), "recipes");
@@ -48,9 +49,9 @@ export function addRecipe(name: string, deps: { cwd: string; out: (line: string)
     deps.out(`registered ${name} in ${FACTORY_CONFIG_FILE} by adding ${entry}`);
   }
   deps.out("");
-  deps.out("next:");
+  deps.out(heading("next:"));
   deps.out(
-    `  pnpm exec jigs up       # build and restart with ${name}; doctor lists what it still needs`,
+    `  ${command("pnpm exec jigs up")}       ${note(`# build and restart with ${name}; doctor lists what it still needs`)}`,
   );
   return result;
 }

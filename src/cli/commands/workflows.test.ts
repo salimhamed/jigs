@@ -41,9 +41,11 @@ test("lists registered launch names with existing schema guidance", async () => 
   await listWorkflows(deps());
 
   expect(fetchMock).toHaveBeenCalledWith("http://svc.test:8990/api/workflows", undefined);
-  expect(lines[0]).toBe("WORKFLOW  INPUTS");
-  expect(lines[1]).toContain("ticket (string, required) — Linear ticket to deliver");
-  expect(lines[1]).toContain("attempts (number, optional, default 3)");
+  expect(lines).toEqual([
+    "WORKFLOW  INPUTS",
+    "ship      ticket (string, required) — Linear ticket to deliver",
+    "          attempts (number, optional, default 3)",
+  ]);
 });
 
 test("an empty registry is explicit", async () => {

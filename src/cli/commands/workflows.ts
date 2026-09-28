@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import { JigsError } from "../../errors.ts";
-import { formatTable } from "../output.ts";
+import { formatTable, note } from "../output.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 export interface WorkflowSummary {
@@ -20,31 +20,38 @@ export async function listWorkflows(deps: ServiceDeps): Promise<WorkflowSummary[
   }
   for (const line of formatTable(
     ["WORKFLOW", "INPUTS"],
-    result.workflows.map((workflow) => [workflow.name, inputSummary(workflow.inputs)]),
+    result.workflows.flatMap((workflow) =>
+      inputSummary(workflow.inputs).map((input, index) => [
+        index === 0 ? workflow.name : "",
+        input,
+      ]),
+    ),
   )) {
     deps.out(line);
   }
   return result.workflows;
 }
 
-function inputSummary(schema: z.core.JSONSchema.BaseSchema): string {
-  if (typeof schema.properties !== "object" || schema.properties === null)
-    return "schema available";
+// One line per input, so a workflow with many reads down rather than across.
+function inputSummary(schema: z.core.JSONSchema.BaseSchema): string[] {
+  if (typeof schema.properties !== "object" || schema.properties === null) {
+    return ["schema available"];
+  }
   const required = new Set(Array.isArray(schema.required) ? schema.required : []);
   const fields = Object.entries(schema.properties);
-  if (fields.length === 0) return "none";
-  return fields
-    .map(([name, raw]) => {
-      const property = raw as Record<string, unknown>;
-      const type = typeof property.type === "string" ? property.type : "value";
-      const necessity = required.has(name) ? "required" : "optional";
-      const defaultValue =
-        property.default === undefined ? "" : `, default ${JSON.stringify(property.default)}`;
-      const description =
-        typeof property.description === "string" ? ` — ${singleLine(property.description)}` : "";
-      return `${name} (${type}, ${necessity}${defaultValue})${description}`;
-    })
-    .join("; ");
+  if (fields.length === 0) return ["none"];
+  return fields.map(([name, raw]) => {
+    const property = raw as Record<string, unknown>;
+    const type = typeof property.type === "string" ? property.type : "value";
+    const necessity = required.has(name) ? "required" : "optional";
+    const defaultValue =
+      property.default === undefined ? "" : `, default ${JSON.stringify(property.default)}`;
+    const description =
+      typeof property.description === "string"
+        ? ` ${note(`— ${singleLine(property.description)}`)}`
+        : "";
+    return `${name} (${type}, ${necessity}${defaultValue})${description}`;
+  });
 }
 
 const singleLine = (value: string): string => value.replace(/[\r\n\u2028\u2029]+/g, " ");

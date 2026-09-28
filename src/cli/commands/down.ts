@@ -1,5 +1,6 @@
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { type ExecFile, nodeExecFile } from "../exec.ts";
+import { command, heading, note } from "../output.ts";
 import { dockerCompose, factoryName, postgresNames } from "./compose.ts";
 import { type ServiceProcesses, stopService } from "./service-lifecycle.ts";
 
@@ -24,8 +25,10 @@ export async function downFactory(deps: DownDeps): Promise<void> {
   const { container, volume } = await postgresNames(execFile, factoryRoot);
   await dockerCompose(execFile, factoryRoot, ["down"], deps.out);
   deps.out(
-    `stopped postgres container${container === undefined ? "" : ` ${container}`}${volume === undefined ? "" : `  (data kept in volume ${volume})`}`,
+    `stopped postgres container${container === undefined ? "" : ` ${container}`}${volume === undefined ? "" : `  ${note(`(data kept in volume ${volume})`)}`}`,
   );
   deps.out("");
-  deps.out(`${factoryName(factoryRoot)} is down — start again with pnpm exec jigs up`);
+  deps.out(
+    `${heading(`${factoryName(factoryRoot)} is down`)} — start again with ${command("pnpm exec jigs up")}`,
+  );
 }

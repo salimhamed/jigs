@@ -9,6 +9,7 @@ import {
 import { JigsError } from "../../errors.ts";
 import { interpolate } from "../../workflow/interpolate.ts";
 import { copyFiles, reportCopied } from "../copy-files.ts";
+import { columns, command, heading, note } from "../output.ts";
 import { locateTemplates, packageRoot, TEMPLATE_SUFFIX } from "../templates.ts";
 
 // Scaffolds infrastructure, editable factory code, and the committed generated
@@ -132,15 +133,27 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   reportCopied({ created, skipped }, deps.out);
 
   deps.out("");
-  deps.out("next, in this directory:");
+  deps.out(heading("next, in this directory:"));
+  // Outside the aligned block, so a long key path doesn't push every comment right.
   if (identity.mode === "app") {
-    deps.out(`  chmod 600 ${identity.privateKeyPath}   # and keep it out of git`);
+    deps.out(
+      `  ${command(`chmod 600 ${identity.privateKeyPath}`)}  ${note("# and keep it out of git")}`,
+    );
   }
-  deps.out("  pnpm install");
-  deps.out("  cp .env.example .env    # then fill in what your workflows need");
-  deps.out("  pnpm exec jigs up       # start Postgres and the service; ends by running doctor");
-  deps.out("  pnpm exec jigs run hello");
-  deps.out("  pnpm exec jigs doctor   # re-check what your workflows need, any time");
+  const next: Array<[string, string?]> = [
+    ["pnpm install"],
+    ["cp .env.example .env", "then fill in what your workflows need"],
+    ["pnpm exec jigs up", "start Postgres and the service; ends by running doctor"],
+    ["pnpm exec jigs run hello"],
+    ["pnpm exec jigs doctor", "re-check what your workflows need, any time"],
+  ];
+  for (const line of columns(
+    next.map(([run, why]) =>
+      why === undefined ? [command(run)] : [command(run), note(`# ${why}`)],
+    ),
+  )) {
+    deps.out(`  ${line}`);
+  }
 
   return { created, skipped, ...ports };
 }

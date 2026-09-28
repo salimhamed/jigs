@@ -1,4 +1,5 @@
 import { JigsError } from "../../errors.ts";
+import { note, tone } from "../output.ts";
 
 // One line per step, stopping at the first that fails: what `init` bought by
 // printing the commands instead of running them — a failure the human can
@@ -36,7 +37,7 @@ export function stepRunner<Name extends string>(out: (line: string) => void): Ru
         const durationMs = Date.now() - started;
         steps.push({ name, status: "ok", durationMs, detail });
         out(
-          `ok   ${name} (${formatDuration(durationMs)})${detail === undefined ? "" : ` — ${detail}`}`,
+          `${tone("ok")}   ${name} ${note(`(${formatDuration(durationMs)})`)}${detail === undefined ? "" : ` — ${detail}`}`,
         );
         return value;
       } catch (err) {
@@ -50,14 +51,14 @@ export function stepRunner<Name extends string>(out: (line: string) => void): Ru
           detail: message,
           repair,
         });
-        out(`FAIL ${name}: ${message.split("\n")[0]}`);
+        out(`${tone("FAIL")} ${name}: ${message.split("\n")[0]}`);
         if (repair !== undefined) out(`  → ${repair}`);
         throw new StepFailed(message);
       }
     },
     skip(name, detail) {
       steps.push({ name, status: "skipped", durationMs: 0, detail });
-      out(`skip ${name} — ${detail}`);
+      out(`${tone("skip")} ${name} — ${note(detail)}`);
     },
   };
 }

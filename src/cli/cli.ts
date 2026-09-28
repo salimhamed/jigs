@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import readline from "node:readline/promises";
+import { styleText } from "node:util";
 import { Command, Option } from "commander";
 import type { LinearIdentity } from "../config/factory-config.ts";
 import { JigsError } from "../errors.ts";
@@ -466,8 +467,10 @@ if (process.argv.length === 2) {
   // action-handler failures (parseAsync wraps even synchronous throws).
   program.parseAsync().catch((err: unknown) => {
     if (err instanceof JigsError) {
-      console.error(`jigs: ${err.message}`);
-      if (err.hint !== undefined) console.error(`  ${err.hint}`);
+      // Errors go to stderr, so stderr decides whether they get color.
+      const style = { stream: process.stderr, validateStream: true };
+      console.error(styleText("red", `jigs: ${err.message}`, style));
+      if (err.hint !== undefined) console.error(styleText("dim", `  ${err.hint}`, style));
     } else {
       console.error(err);
     }

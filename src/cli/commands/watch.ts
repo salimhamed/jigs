@@ -1,5 +1,6 @@
 import { JigsError } from "../../errors.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
+import { note, tone } from "../output.ts";
 import { listFactoryRuns, type RunListRun, suspensionLine, waitingCell } from "./run-list.ts";
 import { runNotFound, type ServiceDeps, serviceFetch } from "./service-client.ts";
 
@@ -169,7 +170,7 @@ function emit(deps: WatchDeps, options: WatchOptions, watched: WatchEvent): void
 /** One line per event, fields first so a reader can cut on spaces. */
 export function formatEvent(watched: WatchEvent): string {
   const subject = watched.ticket ?? watched.workflow;
-  return [watched.at, watched.runId, subject, watched.event, watched.detail]
+  return [note(watched.at), watched.runId, subject, tone(watched.event), watched.detail]
     .filter((field) => field !== "")
     .join(" ");
 }

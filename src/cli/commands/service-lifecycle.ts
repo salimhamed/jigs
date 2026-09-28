@@ -22,6 +22,7 @@ import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { jigsDataDir } from "../../config/paths.ts";
 import { JigsError } from "../../errors.ts";
 import { stringEnv } from "../../steps/agents/harnesses/env.ts";
+import { columns, command, displayPath, note } from "../output.ts";
 import {
   judgeRecord,
   type ProcessControl,
@@ -450,8 +451,12 @@ export async function startService(
     writeFileSync(serviceBundlePath(slug), `${builtBundleHash(factoryRoot)}\n`);
     if (options.awaitReady !== false) await awaitReady(deps, slug, serviceUrl, pid);
     out(`started ${slug}: pid ${pid} at ${serviceUrl}`);
-    out(`dashboard: ${dashboardUrl}`);
-    out(`logs: ${logFile}`);
+    for (const line of columns([
+      ["dashboard:", dashboardUrl],
+      ["logs:", displayPath(logFile)],
+    ])) {
+      out(line);
+    }
   } finally {
     releaseExclusion();
   }
@@ -495,7 +500,7 @@ async function awaitReady(
     if (health?.ready) return;
     if (health !== null && health.phase !== phase) {
       phase = health.phase;
-      out(`booting: ${phase}`);
+      out(note(`booting: ${phase}`));
     }
     if (!processes.signal(pid, 0)) throw failedBoot(slug, pid, out);
     if (Date.now() >= deadline) {
@@ -651,8 +656,12 @@ export function serviceStatus(deps: ServiceLifecycleDeps): void {
       ? deadServiceStatus(slug, serviceUrl, now)
       : `${slug}: running pid ${pid} at ${serviceUrl}`,
   );
-  out(`dashboard: ${dashboardUrl}`);
-  out(`factory ${factoryRoot}`);
+  for (const line of columns([
+    ["dashboard:", dashboardUrl],
+    ["factory:", displayPath(factoryRoot)],
+  ])) {
+    out(line);
+  }
 }
 
 function deadServiceStatus(slug: string, serviceUrl: string, now: () => Date): string {
@@ -712,7 +721,7 @@ export function serviceLogs(deps: ServiceLifecycleDeps, options: { lines?: numbe
     );
   }
   for (const line of tailLines(file, options.lines ?? LOG_LINES)) out(line);
-  out(`(follow: tail -f ${file})`);
+  out(note(`(follow: ${command(`tail -f ${displayPath(file)}`)})`));
 }
 
 function tailLines(file: string, count: number): string[] {

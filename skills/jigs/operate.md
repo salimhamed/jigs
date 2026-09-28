@@ -44,8 +44,8 @@ rebuilds if the factory's code changed since the running bundle was built.
 
 ```
 my-factory-2286ac2a: running pid 3343834 at http://localhost:8990
-dashboard: http://localhost:9090
-factory /home/you/my-factory
+dashboard:  http://localhost:9090
+factory:    ~/my-factory
 ```
 
 ## Naming a run
@@ -85,8 +85,8 @@ and green CI on acme/api#41 → <pull request url>`. A needs-human halt reads
 `waiting for a human reply on AGE-123` with no link, because the comment URL
 costs a Linear round trip the listing will not pay per poll. `jigs status <run-id>`
 is where that URL and the question the halt asked come from; it also prints the
-run's error, its resources as kind/identity/URL rows with each one's state and
-reason, and the step timeline. Released resources stay listed as history.
+run's error, its resources as a KIND/STATE/RESOURCE table with each one's URL and reason
+below it, and the step timeline. Released resources stay listed as history.
 `resources none` is an explicit empty set; `jigs status <run-id> --json` carries the same
 records in `resources`, and the ticket claim in `claim`, independently of `returnValue`.
 

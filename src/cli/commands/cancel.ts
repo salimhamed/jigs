@@ -1,4 +1,5 @@
 import { JigsError } from "../../errors.ts";
+import { command, displayPath, note, tone } from "../output.ts";
 import { runNotFound, type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 // The escape hatch for a zombie claim owner: cancelling releases every
@@ -55,7 +56,7 @@ export async function cancelRun(runId: string, deps: CancelDeps): Promise<Cancel
     throw new JigsError(body.error ?? `cancel failed: HTTP ${res.status}`);
   }
   const result = (await res.json()) as CancelResult;
-  deps.out(`cancelled ${result.runId}`);
+  deps.out(`${tone("cancelled")} ${result.runId}`);
   for (const token of result.releasedTokens) deps.out(`released ${token}`);
   for (const token of result.retainedTokens) deps.out(`retained ${token}`);
   const worktrees = result.worktrees;
@@ -63,7 +64,7 @@ export async function cancelRun(runId: string, deps: CancelDeps): Promise<Cancel
   // every child stopped before it considers local resources.
   for (const path of worktrees) {
     deps.out(
-      `worktree kept at ${path} — pnpm exec jigs resources prune --run ${result.runId} to review`,
+      `worktree ${tone("kept")} at ${displayPath(path)} ${note("—")} ${command(`pnpm exec jigs resources prune --run ${result.runId}`)} ${note("to review")}`,
     );
   }
   return result;
