@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.78.2
+# @jigs-ai/jigs v0.78.3
 
 APIs for implementing a factory-owned custom agent step. Most workflows use
 `runAgent` and other generated routines instead.
@@ -491,7 +491,8 @@ A live provider model and what closing it releases.
 
 > **CheckResult** = \{ `detail?`: `string`; `ok`: `true`; \} \| \{ `ok`: `false`; `reason`: `string`; `repair`: `string`; \}
 
-A check's outcome: a pass with an optional `detail`, or a failure with its repair.
+A check's outcome: a pass with an optional `detail`, or a failure with its repair. A repair
+quotes each command to run in backticks.
 
 ***
 

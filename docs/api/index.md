@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.78.2
+# @jigs-ai/jigs v0.78.3
 
 Factory and workflow definitions, harness and model descriptors, types and pure helpers.
 
@@ -3010,6 +3010,9 @@ An operator-readable failure that is safe to construct inside a workflow.
 ##### hint?
 
 > `readonly` `optional` **hint**: `string`
+
+What the reader can do about it. Quote each command to run in backticks, as in
+``stop the service first: `pnpm exec jigs service stop` ``: the CLI prints it on its own line.
 
 ***
 
