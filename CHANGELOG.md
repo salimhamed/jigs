@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.78.1](https://github.com/salimhamed/jigs/compare/jigs-v0.78.0...jigs-v0.78.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* fail a factory's install on a node older than jigs supports ([#443](https://github.com/salimhamed/jigs/issues/443)) ([cec5046](https://github.com/salimhamed/jigs/commit/cec50464699acf23fa2437888953ee612184d391))
+
 ## [0.78.0](https://github.com/salimhamed/jigs/compare/jigs-v0.77.2...jigs-v0.78.0) (2026-09-28)
 
 
