@@ -1009,7 +1009,7 @@ await (await getWorld()).close?.();`,
       ["cancel", runId, "--force", "--service-url", `http://127.0.0.1:${ports.service}`],
       env,
     );
-    assert.match(result.output, new RegExp(`cancelled ${runId}`));
+    assert.match(result.output, new RegExp(`${runId}  cancelled`));
   }
 
   function runCli(args, commandEnv, options = {}) {
